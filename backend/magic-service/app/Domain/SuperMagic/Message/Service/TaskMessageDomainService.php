@@ -35,6 +35,16 @@ class TaskMessageDomainService
         return $this->messageRepository->getNextSeqId($topicId, $taskId);
     }
 
+    /**
+     * 获取任务完成结果所需的消息。
+     *
+     * @return TaskMessageEntity[]
+     */
+    public function findCompletedResultMessages(int $topicId, int $taskId): array
+    {
+        return $this->messageRepository->findCompletedResultMessages($topicId, $taskId);
+    }
+
     public function updateProcessingStatus(int $id, string $processingStatus, ?string $errorMessage = null, int $retryCount = 0): void
     {
         $this->messageRepository->updateProcessingStatus($id, $processingStatus, $errorMessage, $retryCount);

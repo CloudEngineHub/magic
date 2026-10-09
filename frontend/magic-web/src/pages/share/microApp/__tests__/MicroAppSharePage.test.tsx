@@ -77,6 +77,10 @@ describe("MicroAppSharePage", () => {
 			"data-project-id",
 			"project-1",
 		)
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-is-share-preview",
+			"true",
+		)
 		expect(screen.queryByTestId("micro-app-share-safety-notice")).not.toBeInTheDocument()
 	})
 
@@ -232,16 +236,28 @@ describe("MicroAppSharePage", () => {
 		expect(screen.queryByTestId("micro-app-share-cover")).not.toBeInTheDocument()
 	})
 
-	it("sets the share context before loading app.json", async () => {
+	it("loads app.json with explicit share access and does not set window identity", async () => {
 		mocks.getTemporaryDownloadUrl.mockImplementation(async () => {
-			expect(window.temporary_token).toBe("token-1")
-			expect(window.project_id).toBe("project-1")
+			expect(window.temporary_token).toBeUndefined()
+			expect(window.project_id).toBeUndefined()
 			return [{ url: "https://example.com/app.json" }]
 		})
 
 		renderPage()
 
 		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(mocks.getTemporaryDownloadUrl).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["app-json-1"],
+				access: expect.objectContaining({
+					kind: "share",
+					token: "token-1",
+					projectId: "project-1",
+				}),
+			}),
+		)
+		expect(window.temporary_token).toBeUndefined()
+		expect(window.project_id).toBeUndefined()
 	})
 
 	it("replaces the current preview across repeated html navigation", async () => {

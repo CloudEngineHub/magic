@@ -16,6 +16,11 @@ import {
 	useOverlayInteractionScopeAttributes,
 	useOverlayInteractionScopeContentAttributes,
 } from "./overlay-interaction-scope"
+import {
+	OverlayZIndexProvider,
+	resolveEffectiveOverlayZIndex,
+	useCurrentOverlayZIndex,
+} from "@/utils/overlayZIndex"
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
 	return <DialogPrimitive.Root data-slot="dialog" {...props} />
@@ -104,7 +109,9 @@ const DialogContent = React.forwardRef<
 	forwardedRef,
 ) {
 	// PROJECT OVERRIDE — sync overlay z-index with content style for stacking.
-	const zIndex = style?.zIndex
+	const currentOverlayZIndex = useCurrentOverlayZIndex()
+	const effectiveZIndex = resolveEffectiveOverlayZIndex(currentOverlayZIndex, style?.zIndex, 10)
+	const zIndex = effectiveZIndex ?? style?.zIndex
 	const overlayScopeAttributes = useOverlayInteractionScopeContentAttributes()
 	const contentRef = React.useRef<HTMLDivElement>(null)
 	const ref = useComposedRef(contentRef, forwardedRef)
@@ -112,7 +119,10 @@ const DialogContent = React.forwardRef<
 
 	return (
 		<DialogPortal data-slot="dialog-portal" container={container}>
-			<DialogOverlay className={overlayClassName} style={{ ...overlayStyle, zIndex }} />
+			<DialogOverlay
+				className={cn(effectiveZIndex == null && "z-modal", overlayClassName)}
+				style={{ ...overlayStyle, ...(zIndex != null ? { zIndex } : {}) }}
+			/>
 			<DialogPrimitive.Content
 				ref={ref}
 				data-slot="dialog-content"
@@ -122,12 +132,17 @@ const DialogContent = React.forwardRef<
 					// --tw-* vars align anim translate with centering; avoids corner skew.
 					// 窗口几何必须立即跟手；transition-none 不影响开关时的淡入淡出 animation。
 					// 边缘热区向外延伸，避免覆盖内容滚动条；内容裁剪由窗口内部布局负责。
+					effectiveZIndex == null && "z-modal",
 					windowOptions
-						? "fixed z-modal grid gap-4 rounded-lg border bg-background p-4 shadow-lg transition-none duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-						: "fixed left-[50%] top-[50%] z-modal grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-4 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:[--tw-enter-translate-x:-50%] data-[state=open]:[--tw-enter-translate-y:-50%] data-[state=closed]:[--tw-exit-translate-x:-50%] data-[state=closed]:[--tw-exit-translate-y:-50%] sm:max-w-lg",
+						? "fixed grid gap-4 rounded-lg border bg-background p-4 shadow-lg transition-none duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+						: "fixed left-[50%] top-[50%] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-4 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=open]:[--tw-enter-translate-x:-50%] data-[state=open]:[--tw-enter-translate-y:-50%] data-[state=closed]:[--tw-exit-translate-x:-50%] data-[state=closed]:[--tw-exit-translate-y:-50%] sm:max-w-lg",
 					className,
 				)}
-				style={{ ...style, ...windowInteraction.style }}
+				style={{
+					...style,
+					...windowInteraction.style,
+					...(zIndex != null ? { zIndex } : {}),
+				}}
 				{...props}
 				{...overlayScopeAttributes}
 				onPointerDown={(event) => {
@@ -148,7 +163,7 @@ const DialogContent = React.forwardRef<
 				}}
 				onLostPointerCapture={(event) => {
 					onLostPointerCapture?.(event)
-					windowInteraction.onPointerCancel(event)
+					// 丢失 capture 不中断拖拽交互，全局 window 监听器会保证平滑跟手直至正常松手
 				}}
 				onEscapeKeyDown={(event) => {
 					// Esc 先取消正在进行的窗口手势，下一次 Esc 才交回原关闭行为。
@@ -156,7 +171,26 @@ const DialogContent = React.forwardRef<
 					if (!event.defaultPrevented) onEscapeKeyDown?.(event)
 				}}
 			>
-				{children}
+				{effectiveZIndex != null ? (
+					<OverlayZIndexProvider value={effectiveZIndex}>
+						{children}
+					</OverlayZIndexProvider>
+				) : (
+					children
+				)}
+				{/* 交互期间覆盖透明遮罩，防止 iframe 偷取光标事件、防止文字误选中及按钮误 hover */}
+				{windowOptions && windowInteraction.isInteracting && (
+					<div
+						aria-hidden="true"
+						className="fixed inset-0 z-modal select-none"
+						style={{
+							cursor:
+								windowInteraction.activeGesture === "move"
+									? "grabbing"
+									: `${windowInteraction.activeGesture}-resize`,
+						}}
+					/>
+				)}
 				{windowOptions?.resizable &&
 					Object.entries(resizeHandles).map(([direction, handleClassName]) => (
 						<div

@@ -8,12 +8,14 @@ import {
 	getContextViewport,
 	getMeasuredToolbarSize,
 } from "./contextPanelPosition"
-import { TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
+import { HTML_EDITOR_Z_INDEX, TAILWIND_Z_INDEX_CLASSES } from "../../constants/z-index"
 import { cn } from "@/utils/cn"
 import {
 	CONTEXT_TOOLBAR_PANEL_MAX_WIDTH,
 	getContextToolbarPanelMaxWidth,
 } from "../StylePanel/utils/contextToolbarPartition"
+import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
+import { OverlayZIndexProvider, useCurrentOverlayZIndex } from "@/utils/overlayZIndex"
 
 interface Props {
 	editorRef: React.RefObject<HTMLEditorV2Ref>
@@ -82,6 +84,25 @@ export function ElementContextPanel({
 	const wasVisibleRef = useRef(false)
 	const hasVisibleAnchor = intersectsViewport(anchor, boundaryRef)
 	const shouldShowPanel = hasAnchor && hasVisibleAnchor
+
+	const parentOverlayZIndex = useCurrentOverlayZIndex()
+	const hasParentOverlay = parentOverlayZIndex != null
+	const { overlayZIndex, releaseOverlayZIndex } = useOverlayZIndex({
+		open: shouldRender,
+		zIndexManaged: hasParentOverlay,
+		zIndex: hasParentOverlay
+			? parentOverlayZIndex + 10
+			: HTML_EDITOR_Z_INDEX.EDITOR_FLOATING.CONTEXT_PANEL,
+	})
+	// Fullscreen can change the parent layer while this toolbar stays mounted.
+	// Release its old allocation before the hook registers the new layer.
+	useEffect(() => releaseOverlayZIndex, [releaseOverlayZIndex])
+
+	useEffect(() => {
+		if (shouldRender) return
+		releaseOverlayZIndex()
+	}, [releaseOverlayZIndex, shouldRender])
+
 	useEffect(() => {
 		if (typeof window === "undefined") return
 		if (!shouldShowPanel) {
@@ -191,36 +212,39 @@ export function ElementContextPanel({
 	)
 		return null
 	return createPortal(
-		<div
-			ref={panelRef}
-			data-html-context-panel="true"
-			data-testid="html-editor-context-panel"
-			// overflow-x:auto would compute overflow-y to auto and show a
-			// first-frame scrollbar while child motion still uses translate-y.
-			className={cn(
-				"group/context-toolbar pointer-events-none fixed box-border flex h-auto w-fit max-w-[calc(100vw_-_16px)] translate-y-2 scale-[0.99] items-start overflow-visible rounded-lg border border-border/60 bg-card/95 p-1.5 opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.14)] blur-[2px] backdrop-blur transition-[transform,opacity,filter] [transition-duration:160ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[open=true]:pointer-events-auto data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:blur-0 motion-reduce:transition-none",
-				TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_PANEL,
-			)}
-			data-open={isOpen}
-			style={{
-				left: position.left,
-				top: position.top,
-				maxWidth: position.maxWidth,
-			}}
-		>
-			<div ref={toolbarContentRef} className="w-fit min-w-min max-w-full">
-				<StylePanel
-					editorRef={editorRef}
-					variant="context"
-					disabled={disabled}
-					contextToolbarOpen={isOpen}
-					selectionRect={anchor}
-					boundaryRef={boundaryRef}
-					availableWidth={position.maxWidth}
-					onRevealMoreStyles={onRevealMoreStyles}
-				/>
+		<OverlayZIndexProvider value={overlayZIndex}>
+			<div
+				ref={panelRef}
+				data-html-context-panel="true"
+				data-testid="html-editor-context-panel"
+				// overflow-x:auto would compute overflow-y to auto and show a
+				// first-frame scrollbar while child motion still uses translate-y.
+				className={cn(
+					"group/context-toolbar pointer-events-none fixed box-border flex h-auto w-fit max-w-[calc(100vw_-_16px)] translate-y-2 scale-[0.99] items-start overflow-visible rounded-lg border border-border/60 bg-card/95 p-1.5 opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.14)] blur-[2px] backdrop-blur transition-[transform,opacity,filter] [transition-duration:160ms] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[open=true]:pointer-events-auto data-[open=true]:translate-y-0 data-[open=true]:scale-100 data-[open=true]:opacity-100 data-[open=true]:blur-0 motion-reduce:transition-none",
+					!hasParentOverlay && TAILWIND_Z_INDEX_CLASSES.EDITOR_FLOATING.CONTEXT_PANEL,
+				)}
+				data-open={isOpen}
+				style={{
+					left: position.left,
+					top: position.top,
+					maxWidth: position.maxWidth,
+					zIndex: overlayZIndex,
+				}}
+			>
+				<div ref={toolbarContentRef} className="w-fit min-w-min max-w-full">
+					<StylePanel
+						editorRef={editorRef}
+						variant="context"
+						disabled={disabled}
+						contextToolbarOpen={isOpen}
+						selectionRect={anchor}
+						boundaryRef={boundaryRef}
+						availableWidth={position.maxWidth}
+						onRevealMoreStyles={onRevealMoreStyles}
+					/>
+				</div>
 			</div>
-		</div>,
+		</OverlayZIndexProvider>,
 		document.body,
 	)
 }

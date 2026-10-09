@@ -13,9 +13,15 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { userStore } from "@/models/user"
 import type { ShareRange, ShareTarget } from "@/pages/superMagic/components/Share/ShareFields"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateSharePassword } from "@/pages/superMagic/components/Share/utils"
 import { useShareTypePermissions } from "@/pages/superMagic/components/Share/hooks/useShareTypePermissions"
+import {
+	canCreateShareType,
+	isFreePlanFromSubscription,
+	pickDefaultShareType,
+} from "@/pages/superMagic/components/Share/utils/sharePlanRestrictions"
 import { clipboard } from "@/utils/clipboard-helpers"
 import { isMicroAppPublished } from "../utils/microAppPublish"
 import {
@@ -50,7 +56,9 @@ interface MicroAppPublishDialogProps {
 	mobile?: boolean
 	onProjectNameChange?: (projectName: string) => void
 	onPublishStatusChange?: (published: boolean) => void
+	onDefaultOpenFileChange?: (fileId: string | null) => void
 	onOpenChange: (open: boolean) => void
+	attachmentList?: AttachmentItem[]
 }
 
 function MicroAppPublishDialog({
@@ -60,13 +68,16 @@ function MicroAppPublishDialog({
 	mobile = false,
 	onProjectNameChange,
 	onPublishStatusChange,
+	onDefaultOpenFileChange,
 	onOpenChange,
+	attachmentList = [],
 }: MicroAppPublishDialogProps) {
 	const { t } = useTranslation("super")
 	const isPersonalOrganization = userStore.user.isPersonalOrganization
+	const isFreePlan = isFreePlanFromSubscription(userStore.user.organizationSubscriptionInfo)
 	const microAppSharePermissions = useShareTypePermissions("microApp")
 	const [formState, setFormState] = useState<MicroAppPublishFormState>(() =>
-		createDefaultFormState("", isPersonalOrganization),
+		createDefaultFormState("", isPersonalOrganization, isFreePlan),
 	)
 	const [publishedItem, setPublishedItem] = useState<PublishedMicroAppProjectItem | null>(null)
 	const [publishedFormState, setPublishedFormState] = useState<MicroAppPublishFormState | null>(
@@ -146,6 +157,7 @@ function MicroAppPublishDialog({
 					nextItem,
 					detail.project?.project_name || projectName,
 					isPersonalOrganization,
+					isFreePlan,
 				)
 				const nextPublishedFormState = nextItem
 					? createFormStateFromPublishedItem(
@@ -173,7 +185,9 @@ function MicroAppPublishDialog({
 				if (ignore) return
 				console.error("Failed to load micro app publish info:", error)
 				setPublishedItem(null)
-				setFormState(createDefaultFormState(projectName, isPersonalOrganization))
+				setFormState(
+					createDefaultFormState(projectName, isPersonalOrganization, isFreePlan),
+				)
 				setPublishedFormState(null)
 				magicToast.error(t("microAppPage.publish.loadFailed"))
 			} finally {
@@ -186,7 +200,7 @@ function MicroAppPublishDialog({
 		return () => {
 			ignore = true
 		}
-	}, [appId, clearCoverUploadError, isPersonalOrganization, open, projectName, t])
+	}, [appId, clearCoverUploadError, isFreePlan, isPersonalOrganization, open, projectName, t])
 
 	useEffect(() => {
 		if (open) return
@@ -215,8 +229,17 @@ function MicroAppPublishDialog({
 		}
 
 		setFormState((prev) => {
-			if (permittedMicroAppShareTypes.includes(prev.shareType)) return prev
-			const nextShareType = permittedMicroAppShareTypes[0]
+			// A method the administrator allows but the plan forbids must not survive here: the row
+			// would be hidden by `ShareTypeField` while the payload still carried it.
+			if (
+				permittedMicroAppShareTypes.includes(prev.shareType) &&
+				canCreateShareType(prev.shareType, isFreePlan)
+			) {
+				return prev
+			}
+			// Nothing satisfies both gates: keep the current method and let the dialog explain it.
+			const nextShareType = pickDefaultShareType(permittedMicroAppShareTypes, isFreePlan)
+			if (nextShareType === undefined) return prev
 			return {
 				...prev,
 				shareType: nextShareType,
@@ -226,13 +249,15 @@ function MicroAppPublishDialog({
 						: prev.password,
 			}
 		})
-	}, [formState.shareType, hasPublished, open, permittedMicroAppShareTypes])
+	}, [formState.shareType, hasPublished, isFreePlan, open, permittedMicroAppShareTypes])
 
 	const handleShareTypeChange = useCallback(
 		(shareType: ShareType) => {
 			if (permittedMicroAppShareTypes && !permittedMicroAppShareTypes.includes(shareType)) {
 				return
 			}
+			// `ShareTypeField` already refuses the click; this keeps the handler safe on its own.
+			if (!canCreateShareType(shareType, isFreePlan)) return
 			setFormState((prev) => {
 				const nextShareType = normalizeMicroAppPublishShareType(
 					shareType as MicroAppPublishShareType,
@@ -248,7 +273,7 @@ function MicroAppPublishDialog({
 				}
 			})
 		},
-		[isPersonalOrganization, permittedMicroAppShareTypes],
+		[isFreePlan, isPersonalOrganization, permittedMicroAppShareTypes],
 	)
 
 	const handleAppNameChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -282,6 +307,14 @@ function MicroAppPublishDialog({
 
 	const handleFullScreenChange = useCallback((fullScreen: boolean) => {
 		setFormState((prev) => ({ ...prev, fullScreen }))
+	}, [])
+
+	const handleShareExpiryChange = useCallback((shareExpiry: number | null) => {
+		setFormState((prev) => ({ ...prev, shareExpiry }))
+	}, [])
+
+	const handleDefaultOpenFileChange = useCallback((defaultOpenFileId: string | null) => {
+		setFormState((prev) => ({ ...prev, defaultOpenFileId }))
 	}, [])
 
 	const resolvePublishedPasswordForCopy = useCallback((): string | null => {
@@ -335,6 +368,9 @@ function MicroAppPublishDialog({
 			magicToast.error(t("share.currentShareMethodUnavailable"))
 			return
 		}
+		// Backstop for the paid-plan gate: a micro app that is not published yet must never be
+		// published with a method the plan forbids. An already published app keeps its own method.
+		if (!hasPublished && !canCreateShareType(formState.shareType, isFreePlan)) return
 		const nextValidationError = getMicroAppPublishValidationError(formState)
 		if (nextValidationError) {
 			magicToast.error(t(`microAppPage.publish.${nextValidationError}`))
@@ -344,14 +380,23 @@ function MicroAppPublishDialog({
 
 		setSaving(true)
 		try {
-			const response = await SuperMagicApi.publishMicroAppProject(
-				appId,
-				buildMicroAppPublishPayload(formState, isPersonalOrganization),
-			)
+			const payload = buildMicroAppPublishPayload(formState, isPersonalOrganization)
+			if (formState.shareExpiry === null && publishedItem?.expire_days != null) {
+				payload.expire_days = null
+			}
+			if (
+				formState.defaultOpenFileId === null &&
+				publishedItem?.default_open_file_id != null
+			) {
+				payload.default_open_file_id = null
+			}
+			const response = await SuperMagicApi.publishMicroAppProject(appId, payload)
 			const nextItem = getPublishedItemFromResponse(response)
 			const savedAppName = nextItem.app_name || nextAppName
 			const savedCoverFileKey = nextItem.cover_file_key ?? formState.coverFileKey
 			const savedCoverUrl = nextItem.cover_url || formState.coverUrl
+			const savedShareExpiry =
+				nextItem.expire_days !== undefined ? nextItem.expire_days : formState.shareExpiry
 			const savedShareType = normalizeMicroAppPublishShareType(
 				nextItem.share_type || formState.shareType,
 				isPersonalOrganization,
@@ -362,6 +407,8 @@ function MicroAppPublishDialog({
 				shareType: savedShareType,
 				coverFileKey: savedCoverFileKey,
 				coverUrl: savedCoverUrl,
+				shareExpiry: savedShareExpiry ?? null,
+				defaultOpenFileId: nextItem.default_open_file_id ?? formState.defaultOpenFileId,
 			}
 			setPublishedItem({
 				...nextItem,
@@ -369,6 +416,7 @@ function MicroAppPublishDialog({
 				app_name: savedAppName,
 				cover_file_key: savedCoverFileKey,
 				cover_url: savedCoverUrl,
+				expire_days: savedShareExpiry,
 				extra: {
 					...nextItem.extra,
 					pure_mode: formState.fullScreen,
@@ -377,10 +425,12 @@ function MicroAppPublishDialog({
 				share_range: nextItem.share_range || formState.shareRange,
 				target_ids: nextItem.target_ids || formState.targets,
 				password: nextItem.password || formState.password,
+				default_open_file_id: nextItem.default_open_file_id ?? formState.defaultOpenFileId,
 			})
 			setFormState(savedFormState)
 			setPublishedFormState(savedFormState)
 			onProjectNameChange?.(savedAppName)
+			onDefaultOpenFileChange?.(savedFormState.defaultOpenFileId)
 			onPublishStatusChange?.(true)
 			magicToast.success(t("microAppPage.publish.saveSuccess"))
 		} catch (error) {
@@ -391,9 +441,14 @@ function MicroAppPublishDialog({
 		}
 	}, [
 		appId,
+		onDefaultOpenFileChange,
+		publishedItem?.expire_days,
+		publishedItem?.default_open_file_id,
 		coverUploadError,
 		coverUploading,
 		formState,
+		hasPublished,
+		isFreePlan,
 		isPersonalOrganization,
 		isSelectedShareTypePermitted,
 		onProjectNameChange,
@@ -418,7 +473,7 @@ function MicroAppPublishDialog({
 					setPublishedItem(null)
 					setPublishedFormState(null)
 					setFormState((prev) => ({
-						...createDefaultFormState(prev.appName, isPersonalOrganization),
+						...createDefaultFormState(prev.appName, isPersonalOrganization, isFreePlan),
 						coverFileKey: prev.coverFileKey,
 						coverUrl: prev.coverUrl,
 					}))
@@ -432,7 +487,7 @@ function MicroAppPublishDialog({
 				}
 			},
 		})
-	}, [appId, isPersonalOrganization, onPublishStatusChange, t, unpublishing])
+	}, [appId, isFreePlan, isPersonalOrganization, onPublishStatusChange, t, unpublishing])
 
 	const closeDialog = () => onOpenChange(false)
 	const isBusy = saving || unpublishing || coverUploading
@@ -463,6 +518,9 @@ function MicroAppPublishDialog({
 			onCoverFile={handleCoverFile}
 			onClearCover={handleClearCover}
 			onFullScreenChange={handleFullScreenChange}
+			onShareExpiryChange={handleShareExpiryChange}
+			attachmentList={attachmentList}
+			onDefaultOpenFileChange={handleDefaultOpenFileChange}
 			onShareTypeChange={handleShareTypeChange}
 			onShareRangeChange={handleShareRangeChange}
 			onTargetsChange={handleTargetsChange}
@@ -508,7 +566,7 @@ function MicroAppPublishDialog({
 			title={t("microAppPage.publish.title")}
 			onCancel={closeDialog}
 			footer={null}
-			width={560}
+			width={900}
 			classNames={{ body: "!p-0" }}
 			destroyOnClose
 		>

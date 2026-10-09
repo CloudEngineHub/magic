@@ -15,8 +15,6 @@ import TopicFilesPanel, { TopicFilesPanelRef } from "./TopicFilesPanel"
 import type { AttachmentItem } from "./hooks/types"
 import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
-import { useIsMobile } from "@/hooks/useIsMobile"
-import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 import magicToast from "@/components/base/MagicToaster/utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
@@ -73,6 +71,8 @@ export interface TopicFilesButtonProps {
 	allowDownload?: boolean
 	// 是否允许只读场景复制文件到当前用户的项目
 	allowCopyTo?: boolean
+	/** Controls whether this file surface exposes the manual refresh action. */
+	showRefresh?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
@@ -125,6 +125,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
 			allowCopyTo = false,
+			showRefresh,
 			resolveTopicFileRowDecoration,
 			fileHelpContext,
 			mobileViewVariant = "default",
@@ -141,8 +142,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 	) {
 		const { styles, cx } = useStyles()
 		const { t } = useTranslation("super")
-		const isMobile = useIsMobile()
-		const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
+		const effectiveAllowDownload = allowDownload !== false
 		const panelRef = useRef<TopicFilesPanelRef>(null)
 		const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 		const [saveDialogTemplates, setSaveDialogTemplates] = useState<SlidesTemplateItem[]>([])
@@ -284,6 +284,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 					allowDownload={effectiveAllowDownload}
 					allowCopyTo={allowCopyTo}
+					showRefresh={showRefresh}
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 					fileHelpContext={fileHelpContext}
 					mobileViewVariant={mobileViewVariant}

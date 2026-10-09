@@ -1,8 +1,9 @@
+import { useFileAccess as useFilePermissions } from "@/pages/superMagic/providers/FileAccessProvider"
 import { createElement, useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./types"
 import { createShareHandler } from "../utils/createShareHandler"
-import { getTemporaryDownloadUrl, downloadFileContent } from "../../../utils/api"
+import { downloadFileContent } from "../../../utils/api"
 import { UploadSource, useFileUpload } from "../../MessageEditor/hooks/useFileUpload"
 import { handleShareFunction } from "../../../utils/share"
 import { ShareType, ResourceType } from "../../Share/types"
@@ -22,6 +23,8 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { uploadLogger } from "../utils/uploadLogger"
 import {
 	prepareExportSlides,
+	prepareFileExportSlides,
+	resolvePptExportSlides,
 	iterateExportSlides,
 	iterateSingleExportSlide,
 	prepareSingleSlideExport,
@@ -67,6 +70,11 @@ import {
 	supportsStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
 import type { FileScope } from "@/apis/modules/fileScope"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { getShareAccessToken } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 import { toUserAttachment } from "../../UserSpace/services/userSpaceFileService"
 
@@ -197,13 +205,16 @@ const downloadOnlyOfficeFile = async (
 	fileId: string,
 	fileExtension: string,
 	attachments: AttachmentItem[] | undefined,
-	mode?: DownloadImageMode,
+	mode: DownloadImageMode | undefined,
+	access: FileAccessContext | null | undefined,
+	fileApi: FileApi,
 ): Promise<void> => {
-	// 获取文件下载 URL
-	const res = await getTemporaryDownloadUrl({
+	// 获取文件下载 URL；fileApi 已绑定环境身份，access 仍作为逐次调用覆盖保留
+	const res = await fileApi.getTemporaryDownloadUrl({
 		file_ids: [fileId],
 		download_mode: mode,
 		is_download: true,
+		access: access ?? undefined,
 	})
 	if (!res[0]?.url) {
 		throw new Error("无法获取文件下载地址")
@@ -294,6 +305,12 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		downloadProgress,
 	} = options
 	const { t } = useTranslation("super")
+	const { permissions: access } = useFilePermissions()
+	const fileAccess = useFileAccess()
+	// Bind the ambient share/session identity for the download-url leaves; the
+	// export services below still receive the legacy `access` override.
+	const fileApi = useFileApi()
+	const shareToken = getShareAccessToken(fileAccess)
 	const waitForAttachmentMutation = useMemoizedFn(
 		(options: {
 			fileIds?: string[]
@@ -897,6 +914,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	// 分享操作
 	const handleShareItem = useCallback(
 		(item: AttachmentItem) => {
+			if (!access.share) return
 			if (!selectedItems || !filteredFiles) {
 				// 如果没有选中项或文件列表，只分享当前文件
 				const clickedItemId = item.file_id || ""
@@ -921,7 +939,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[selectedItems, filteredFiles, getItemId, selectedProject?.project_name],
+		[access.share, selectedItems, filteredFiles, getItemId, selectedProject?.project_name],
 	)
 
 	// 处理分享保存
@@ -1048,6 +1066,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// Registered dependency parsers make linked resources part of the default download.
 	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
+		if (!access.download) return
 		if (fileScope !== "user" && supportsStaticDependencies(item)) {
 			await downloadDocumentWithDependencies(item)
 			return
@@ -1068,6 +1087,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	// 下载PDF格式（Markdown 走 markdown 导出；HTML 走 exportPDF；仅 display_config.type === "slide" 时传 pptMode）
 	const handleDownloadPdf = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const documentExporter = documentExportService.get()
@@ -1124,6 +1144,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 								fileId: entryFileId,
 								fileName: entryFileName,
 								attachmentList: attachments ?? [],
+								access: fileAccess ?? undefined,
+								fileApi,
 							})
 						: await prepareExportSlides({
 								slidePaths,
@@ -1131,6 +1153,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 								mainFileId: entryFileId,
 								mainFileName: entryFileName,
 								displayConfig: mergedDisplayConfig,
+								access: fileAccess ?? undefined,
+								fileApi,
 							})
 
 					if (!result.htmlSlides.some(Boolean)) {
@@ -1149,6 +1173,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						fileName: entryFileName,
 						attachmentList: attachments ?? [],
 						displayConfig: mergedDisplayConfig,
+						access: fileAccess ?? undefined,
+						fileApi,
 					})
 
 					const handle = documentExporter.exportPages(preparedHtmlSlides, {
@@ -1194,6 +1220,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							fileId: item.file_id,
 							fileName: item.file_name,
 							attachmentList: attachments ?? [],
+							access: fileAccess ?? undefined,
+							fileApi,
 						})
 
 						if (!result.htmlSlides.some(Boolean)) {
@@ -1212,6 +1240,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							fileName: item.file_name,
 							attachmentList: attachments ?? [],
 							displayConfig: mergedDisplayConfig,
+							access: fileAccess ?? undefined,
+							fileApi,
 						})
 
 						await documentExporter.exportPages(preparedHtmlSlides, {
@@ -1264,12 +1294,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 导出 PPTX（前端 html2pptx streaming-only）
 	const handleDownloadPptx = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const toastId = createRandomUuidV4()
@@ -1278,12 +1309,24 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const metadata = item.metadata as
 				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const mergedDisplayConfig = displayConfig || metadata
-			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
+			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
 				: []
+			const isSlideProject = mergedDisplayConfig?.type === "slide" || slidePaths.length > 0
 			const isSingleFile = !slidePaths.length
 			const autoSize = !hasPPTMetadata(item)
-			const fileId = item.file_id || ""
+			const attachmentScope = folderChildren?.length
+				? folderChildren
+				: item.children?.length
+					? item.children
+					: (attachments ?? [])
+			// A slide folder owns display_config, but its entry HTML owns the readable file id.
+			// Preserve both instead of replacing the project with index.html and losing slidePaths.
+			const entryFile = isSlideProject
+				? getAppEntryFile(attachmentScope, mergedDisplayConfig)
+				: item
+			const fileId = entryFile?.file_id || ""
+			const sourceFileName = String(entryFile?.file_name || item.file_name || "index.html")
 			const fileName = String(
 				mergedDisplayConfig?.name || item.file_name || "export",
 			).replace(/\.html?$/i, "")
@@ -1311,6 +1354,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
 
 			try {
+				if (!fileId) {
+					magicToast.error(t("topicFiles.entryFileNotFound"))
+					return
+				}
+
 				assertPptxExportAvailable({ pageCount: isSingleFile ? 1 : slidePaths.length })
 				destinationLease = await openPptxDestination({
 					suggestedName: String(
@@ -1319,6 +1367,18 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 				if (!destinationLease) return
 
+				if (!isSingleFile) {
+					const resolved = await resolvePptExportSlides({
+						slidePaths,
+						displayConfig: mergedDisplayConfig,
+						attachmentList: attachmentScope,
+						mainFileId: fileId,
+						fileApi,
+						access: fileAccess ?? undefined,
+					})
+					slidePaths = resolved.slidePaths
+					if (!slidePaths.length) throw new Error("No visible slides to export")
+				}
 				magicToast.loading({
 					key: toastId,
 					content: getExportToastContent(t("topicFiles.exporting")),
@@ -1326,9 +1386,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 
 				{
-					const attachmentScope = folderChildren?.length
-						? folderChildren
-						: (attachments ?? [])
 					const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
 					const destination = destinationLease.destination
 					const streamingHandle = startPptxStreamingExportFromFactory(
@@ -1336,22 +1393,27 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							const source = isSingleFile
 								? iterateSingleExportSlide({
 										fileId,
-										fileName: item.file_name,
+										fileName: sourceFileName,
 										attachmentList: attachments ?? [],
+										access: fileAccess ?? undefined,
+										fileApi,
 										signal,
 									})
 								: iterateExportSlides({
 										slidePaths,
+										configResolved: true,
 										attachmentList: attachmentScope,
 										mainFileId: fileId,
-										mainFileName: item.file_name,
+										mainFileName: sourceFileName,
 										displayConfig: mergedDisplayConfig,
+										access: fileAccess ?? undefined,
+										fileApi,
 										signal,
 									})
 							return iteratePreparedPptxPages(source, {
 								attachments: attachments ?? [],
 								fileId,
-								fileName: item.file_name,
+								fileName: sourceFileName,
 								attachmentList: attachments ?? [],
 								displayConfig: mergedDisplayConfig,
 								signal,
@@ -1429,12 +1491,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 导出 HTML / 文本类文件 为图片（PNG / JPEG）
 	const handleDownloadImage = useCallback(
 		async (item: AttachmentItem, format: "png" | "jpeg" = "png") => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const toastId = createRandomUuidV4()
@@ -1452,7 +1515,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				if (!isHtml) {
 					// 文本类文件（md, txt, code）使用 exportTextToImage
 					const [urlItem] =
-						(await getTemporaryDownloadUrl({ file_ids: [item.file_id] })) ?? []
+						(await fileApi.getTemporaryDownloadUrl({
+							file_ids: [item.file_id],
+						})) ?? []
 					if (!urlItem?.url) {
 						magicToast.error({
 							key: toastId,
@@ -1493,10 +1558,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					}).promise
 				} else {
 					// HTML 文件使用原有逻辑
-					const result = await prepareSingleSlideExport({
+					const result = await prepareFileExportSlides({
 						fileId: item.file_id,
+						displayConfig: (item.display_config || item.metadata) as any,
 						fileName: item.file_name,
 						attachmentList: attachments ?? [],
+						access: fileAccess ?? undefined,
+						fileApi,
 					})
 
 					if (!result.htmlSlides.some(Boolean)) {
@@ -1512,8 +1580,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						pages: result.htmlSlides,
 						attachments: attachments ?? [],
 						fileId: item.file_id,
+						displayConfig: (item.display_config || item.metadata) as any,
 						fileName: item.file_name,
 						attachmentList: attachments ?? [],
+						access: fileAccess ?? undefined,
+						fileApi,
 					})
 
 					await exportHtmlToImage({
@@ -1560,7 +1631,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 文件下载功能 - 支持单个文件或多个文件
@@ -1572,6 +1643,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			isFolder?: boolean,
 			downloadName?: string,
 		) => {
+			if (!access.download) return
 			const fileIds = Array.isArray(file_id) ? file_id : [file_id]
 			const folderDownloadToastId = isFolder ? createRandomUuidV4() : undefined
 
@@ -1595,12 +1667,19 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 					// 如果是 OnlyOffice 文件，使用专门的下载方法
 					if (isOnlyOfficeFile) {
-						await downloadOnlyOfficeFile(fileIds[0], ext, attachments, mode)
+						await downloadOnlyOfficeFile(
+							fileIds[0],
+							ext,
+							attachments,
+							mode,
+							fileAccess,
+							fileApi,
+						)
 						return
 					}
 
 					// 非 OnlyOffice 文件，使用原来的下载方式
-					const res = await getTemporaryDownloadUrl({
+					const res = await fileApi.getTemporaryDownloadUrl({
 						file_ids: fileIds,
 						download_mode: mode,
 						is_download: true,
@@ -1653,6 +1732,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					SuperMagicApi.createBatchDownload({
 						project_id: projectId,
 						file_ids: fileIds,
+						token: shareToken || undefined,
 					})
 						.then((data) => {
 							if (data.status === "ready" && data.download_url) {
@@ -1675,6 +1755,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 										const checkData =
 											await SuperMagicApi.checkBatchDownloadStatus(
 												data.batch_key,
+												shareToken || undefined,
 											)
 										if (checkData?.status === "ready") {
 											clearInterval(timer)
@@ -1751,6 +1832,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const result = await resolveSingleDocumentStaticDependencies({
 				fileIds: [item.file_id],
 				attachments: attachments || [],
+				fileApi,
 			})
 			const effectiveFileIds = mergeStaticDependencyFileIds(
 				[item.file_id],
@@ -1918,7 +2000,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		handleOpenFile,
 		handleMoveFile,
 		// 分享相关
-		shareModalVisible,
+		shareModalVisible: shareModalVisible && access.share,
 		setShareModalVisible,
 		shareFileInfo,
 		setShareFileInfo,

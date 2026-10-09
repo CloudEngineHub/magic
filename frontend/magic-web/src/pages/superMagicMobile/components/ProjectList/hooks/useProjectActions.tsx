@@ -706,6 +706,7 @@ export function useProjectListActions({
 					icon: <IconX />,
 					ariaLabel: t("common.cancel"),
 					onClick: () => setRenameModalVisible(false),
+					testId: isChatMode ? "chat-rename-popup-close" : "project-rename-popup-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
@@ -719,6 +720,9 @@ export function useProjectListActions({
 					},
 					disabled: !currentActionItem?.project_name?.trim(),
 					tone: "primary",
+					testId: isChatMode
+						? "chat-rename-popup-confirm"
+						: "project-rename-popup-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-0"
 			>

@@ -2,12 +2,44 @@ import { z } from "zod"
 import type {
 	PlatformInfoFormState,
 	PlatformLocale,
+	PlatformWatermarkDepth,
+	PlatformWatermarkField,
 } from "@magic-admin-v2/features/platform-info/types"
 import { Language } from "@magic-admin-v2/i18n/resources"
 import type { ApiError } from "@magic-admin-v2/api/types"
 
 export const platformLocales: PlatformLocale[] = [Language.ZhCN, Language.EnUS]
 export const GLOBAL_SYSTEM_PROMPT_MAX_LENGTH = 5000
+
+/**
+ * 水印可选内容与展示顺序。这个 `as const` 元组同时作为类型约束、zod 枚举
+ * 和界面渲染顺序的唯一来源，避免多处维护同一份字段清单。
+ */
+export const platformWatermarkFields = [
+	"real_name",
+	"employee_no",
+	"visit_time",
+	"department",
+	"phone",
+	"email",
+] as const satisfies readonly PlatformWatermarkField[]
+
+/** 水印深浅档位顺序，与后端 `watermark.depth` 一致。 */
+export const platformWatermarkDepths = [
+	"light",
+	"standard",
+	"strong",
+] as const satisfies readonly PlatformWatermarkDepth[]
+
+/**
+ * 预览层文字色需要与前台水印渲染保持一致，属于渲染参数而不是语义色，
+ * 因此不能替换成主题 token。
+ */
+export const platformWatermarkDepthTextColors: Record<PlatformWatermarkDepth, string> = {
+	light: "rgba(0, 0, 0, 0.03)",
+	standard: "rgba(0, 0, 0, 0.045)",
+	strong: "rgba(0, 0, 0, 0.06)",
+}
 
 export const formSetValueOptions = {
 	shouldDirty: true,
@@ -27,6 +59,7 @@ export type PlatformInfoSectionId =
 	| "agentPrompt"
 	| "globalSystemPrompt"
 	| "footer"
+	| "watermark"
 
 export const platformInfoSectionTitleKeys: Record<PlatformInfoSectionId, string> = {
 	basic: "platformInfo.section.basic",
@@ -34,6 +67,25 @@ export const platformInfoSectionTitleKeys: Record<PlatformInfoSectionId, string>
 	agentPrompt: "platformInfo.section.agentPrompt",
 	globalSystemPrompt: "platformInfo.section.globalSystemPrompt",
 	footer: "platformInfo.section.footer",
+	watermark: "platformInfo.section.watermark",
+}
+
+/** 只有按语言维护内容的 section 才展示内容语言切换条。 */
+export function showsPlatformInfoContentLocale(section: PlatformInfoSectionId) {
+	return section === "seo" || section === "agentPrompt" || section === "footer"
+}
+
+/**
+ * 分区说明文案。预览态和编辑态共用，避免两处口径不一致；
+ * 按语言维护内容的分区统一使用内容语言说明。
+ */
+export const platformInfoSectionDescriptionKeys: Record<PlatformInfoSectionId, string> = {
+	basic: "nav.desc.platformInfo",
+	seo: "platformInfo.contentLanguage.description",
+	agentPrompt: "platformInfo.contentLanguage.description",
+	globalSystemPrompt: "platformInfo.sectionDesc.globalSystemPrompt",
+	footer: "platformInfo.contentLanguage.description",
+	watermark: "platformInfo.sectionDesc.watermark",
 }
 
 export const sharedImageFields = [
@@ -69,6 +121,20 @@ export function getContentLocaleCompletion(value: PlatformInfoFormState): Locale
 		zh_CN: isContentLocaleComplete(value, Language.ZhCN),
 		en_US: isContentLocaleComplete(value, Language.EnUS),
 	}
+}
+
+/**
+ * 按固定顺序把已选水印内容拼成预览文案。
+ * 未选择任何内容时返回空串，由调用方决定兜底文案。
+ */
+export function buildPlatformWatermarkPreviewText(
+	fields: readonly PlatformWatermarkField[],
+	samples: Record<PlatformWatermarkField, string>,
+) {
+	return fields
+		.map((field) => samples[field].trim())
+		.filter(Boolean)
+		.join(" · ")
 }
 
 export function createPlatformInfoSchema(
@@ -143,12 +209,31 @@ export function createPlatformInfoSchema(
 			),
 	}
 	const footerShape = { footer: footerSchema }
+	const watermarkShape = {
+		watermark: z
+			.object({
+				enabled: z.boolean(),
+				fields: z.array(z.enum(platformWatermarkFields)),
+				depth: z.enum(platformWatermarkDepths),
+			})
+			.superRefine((value, context) => {
+				// 水印开启时必须有内容，否则前台会渲染出空白水印。
+				if (value.enabled && value.fields.length === 0) {
+					context.addIssue({
+						code: "custom",
+						message: t("platformInfo.validation.watermarkContentRequired"),
+						path: ["fields"],
+					})
+				}
+			}),
+	}
 	const sectionSchemas = {
 		basic: z.object(basicShape),
 		seo: z.object(seoShape),
 		agentPrompt: z.object(agentPromptShape),
 		globalSystemPrompt: z.object(globalSystemPromptShape),
 		footer: z.object(footerShape),
+		watermark: z.object(watermarkShape),
 	}
 
 	if (section) {
@@ -164,6 +249,7 @@ export function createPlatformInfoSchema(
 		...agentPromptShape,
 		...globalSystemPromptShape,
 		...footerShape,
+		...watermarkShape,
 	})
 }
 

@@ -77,8 +77,14 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		[mentionPanelStore],
 	)
 
-	const selectedProject = editorContext?.selectedProject ?? projectStore.selectedProject
-	const selectedTopic = editorContext?.selectedTopic ?? _topicStore.selectedTopic
+	const selectedProject =
+		editorContext?.selectedProject !== undefined
+			? editorContext.selectedProject
+			: projectStore.selectedProject
+	const selectedTopic =
+		editorContext?.selectedTopic !== undefined
+			? editorContext.selectedTopic
+			: _topicStore.selectedTopic
 	const effectiveTopicMode = editorContext?.topicMode ?? roleStore.currentRole
 	const effectiveSetTopicMode = editorContext?.setTopicMode ?? roleStore.setCurrentRole
 	const effectiveSetSelectedWorkspace =
@@ -104,7 +110,11 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			const editor = tiptapEditorRef.current?.editor
 			if (editor && !editor.isDestroyed) {
 				try {
-					tiptapEditorRef.current?.focus?.({ enableWhenIsMobile: true })
+					tiptapEditorRef.current?.focus?.({
+						enableWhenIsMobile: true,
+						// Desktop chat-home autofocus must not scroll the tabs out of position.
+						preventScroll: !isMobile && editorContext?.deferProjectCreationUntilSend,
+					})
 					return
 				} catch {
 					// view not mounted yet, fall through to retry
@@ -121,7 +131,12 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		return () => {
 			if (focusTimer != null) window.clearTimeout(focusTimer)
 		}
-	}, [editorContext?.autoFocus, tiptapEditorRef])
+	}, [
+		editorContext?.autoFocus,
+		editorContext?.deferProjectCreationUntilSend,
+		isMobile,
+		tiptapEditorRef,
+	])
 
 	useEffect(() => {
 		if (!editorContext?.initialContent) return
@@ -239,7 +254,11 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			: defaultParams
 		const finalParams: HandleSendParams = mergedParams
 
-		if (queueContext && tiptapEditorRef.current?.getQueueDraft()) {
+		if (
+			params.shouldClearEditorAfterSend !== false &&
+			queueContext &&
+			tiptapEditorRef.current?.getQueueDraft()
+		) {
 			isPreparingSendRef.current = true
 			setIsSending(true)
 			try {
@@ -260,14 +279,15 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
 
 		if (shouldQueue) {
-			// Clear editor immediately to prevent duplicate queue entries on rapid Enter presses.
-			tiptapEditorRef.current?.clearContentAfterSend()
+			// Programmatic requests have their own content and must preserve the current draft.
+			const shouldClearDraft = params.shouldClearEditorAfterSend !== false
+			if (shouldClearDraft) tiptapEditorRef.current?.clearContentAfterSend()
 			const queueId = await queueContext.addToQueue(
 				buildQueueMessageInput(finalParams, params.value),
 			)
 			if (!queueId) {
 				// Queue add failed — restore editor content so the user can retry
-				if (finalParams.value ?? params.value) {
+				if (shouldClearDraft && (finalParams.value ?? params.value)) {
 					tiptapEditorRef.current?.setContent?.(finalParams.value ?? params.value)
 				}
 				if (params.throwOnError) throw new Error(ERR_QUEUE_ADD_FAILED)
@@ -279,12 +299,12 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		}
 
 		const selectedWorkspace =
-			editorContext?.selectedWorkspace ??
-			workspaceStore.selectedWorkspace ??
-			workspaceStore.firstWorkspace
+			editorContext?.selectedWorkspace !== undefined
+				? editorContext.selectedWorkspace
+				: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 
 		if (
-			!editorContext?.selectedWorkspace &&
+			editorContext?.selectedWorkspace === undefined &&
 			!workspaceStore.selectedWorkspace &&
 			selectedWorkspace
 		) {
@@ -387,11 +407,13 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	})
 
 	const selectedWorkspace =
-		editorContext?.selectedWorkspace ??
-		workspaceStore.selectedWorkspace ??
-		workspaceStore.firstWorkspace
+		editorContext?.selectedWorkspace !== undefined
+			? editorContext.selectedWorkspace
+			: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 
 	const handleEnsureProject = useMemoizedFn(async () => {
+		// Long pasted text uses the same temporary upload flow as normal attachments here.
+		if (editorContext?.deferProjectCreationUntilSend) return selectedProject ?? null
 		const ensuredProject = await ensureProjectForMessageContext({
 			context: {
 				selectedProject,

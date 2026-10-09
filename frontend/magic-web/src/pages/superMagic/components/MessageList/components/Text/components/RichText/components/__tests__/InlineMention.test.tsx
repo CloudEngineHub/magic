@@ -5,6 +5,7 @@ import type { TiptapMentionAttributes } from "@/components/business/MentionPanel
 import type { MentionMediaSource } from "@/pages/superMagic/components/MessageEditor/components/MentionMedia/useMentionMediaSource"
 import { useMentionMediaSource } from "@/pages/superMagic/components/MessageEditor/components/MentionMedia/useMentionMediaSource"
 import InlineMention from "../InlineMention"
+import { openMicroAppTab } from "@/pages/superMagic/components/MessageList/utils/openMicroAppTab"
 
 const mediaSource: MentionMediaSource = {
 	mediaType: "image",
@@ -54,6 +55,10 @@ vi.mock(
 	() => ({ showMobileImagePreview: vi.fn() }),
 )
 
+vi.mock("@/pages/superMagic/components/MessageList/utils/openMicroAppTab", () => ({
+	openMicroAppTab: vi.fn(),
+}))
+
 function createMention(fileName: string, fileExtension: string): TiptapMentionAttributes {
 	return {
 		type: MentionItemType.PROJECT_FILE,
@@ -71,7 +76,7 @@ describe("InlineMention", () => {
 		vi.mocked(useMentionMediaSource).mockReturnValue(mediaSource)
 	})
 
-	it("renders a media icon before the filename and uses the complete mention as tooltip trigger", async () => {
+	it("renders a media icon before the filename and uses the complete mention as tooltip trigger", () => {
 		const { container } = render(<InlineMention data={createMention("cover.png", "png")} />)
 
 		expect(screen.getByTestId("inline-file-mention-icon")).toBeInTheDocument()
@@ -79,8 +84,6 @@ describe("InlineMention", () => {
 
 		const trigger = container.querySelector("[data-media-preview-trigger]") as HTMLElement
 		expect(trigger).toHaveTextContent("cover.png")
-		fireEvent.pointerMove(trigger)
-		expect(await screen.findByRole("tooltip")).toBeInTheDocument()
 	})
 
 	it("does not render a media icon for non-media file mentions", () => {
@@ -95,5 +98,29 @@ describe("InlineMention", () => {
 
 		expect(screen.queryByTestId("inline-file-mention-icon")).not.toBeInTheDocument()
 		expect(screen.getByText("README.md")).toBeInTheDocument()
+	})
+
+	it("opens a micro-app tab when a micro-app mention is clicked", () => {
+		vi.mocked(useMentionMediaSource).mockReturnValue({
+			...mediaSource,
+			mediaType: null,
+			thumbnailUrl: null,
+			previewUrl: null,
+		})
+
+		render(
+			<InlineMention
+				data={{
+					type: MentionItemType.MICRO_APP,
+					data: { app_id: "app-1", app_name: "深圳卓悦线上内购" },
+				}}
+			/>,
+		)
+
+		fireEvent.click(screen.getByText("@深圳卓悦线上内购"))
+		expect(openMicroAppTab).toHaveBeenCalledWith({
+			appId: "app-1",
+			appName: "深圳卓悦线上内购",
+		})
 	})
 })

@@ -78,8 +78,7 @@ function AttachmentHoverButton({ attachments, t, className }: AttachmentHoverBut
 				<div className="flex w-full flex-col gap-1">
 					{attachments.map((mention) => {
 						const mentionData = mention.attrs?.data as
-							| ProjectFileMentionData
-							| UploadFileMentionData
+							ProjectFileMentionData | UploadFileMentionData
 						const fileName = mentionData?.file_name || ""
 						const fileId = mentionData?.file_id || ""
 						const fileExtension = mentionData?.file_extension || ""

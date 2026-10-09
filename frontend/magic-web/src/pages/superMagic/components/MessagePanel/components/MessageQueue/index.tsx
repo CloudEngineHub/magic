@@ -6,7 +6,6 @@ import type { MessageEditorRef } from "../../../MessageEditor/types"
 import type { QueuedMessage } from "../../hooks/useMessageQueue"
 import MobileMessageQueue from "./MobileMessageQueue"
 import MessageQueueItems from "./MessageQueueItems"
-import ConversationInputResizeHandle from "../../../ConversationInputResize/ConversationInputResizeHandle"
 import { useConversationInputLayout } from "../../../ConversationInputResize/context"
 import { useMessageQueueHeight } from "./useMessageQueueHeight"
 
@@ -84,20 +83,6 @@ function MessageQueue({
 
 	return (
 		<div className={cn("relative self-stretch rounded-xl bg-card/80", className)}>
-			{canResize && (
-				<ConversationInputResizeHandle
-					label={t("messageQueue.resizeQueueHeight")}
-					positionClassName="-top-1.5"
-					value={queueHeight.height}
-					min={queueHeight.minHeight}
-					max={queueHeight.maxHeight}
-					onResizeStart={queueHeight.startResize}
-					onResize={queueHeight.resize}
-					onResizeEnd={queueHeight.finishResize}
-					onResizeStateChange={queueHeight.onResizeStateChange}
-					onDoubleClick={queueHeight.restoreAutoHeight}
-				/>
-			)}
 			{/* Queue header */}
 			<div className="flex items-center justify-between gap-2.5 p-2.5">
 				<div className="flex flex-1 items-center gap-2.5">

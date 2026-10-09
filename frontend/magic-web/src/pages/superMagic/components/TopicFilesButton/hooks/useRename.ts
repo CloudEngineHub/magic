@@ -14,6 +14,7 @@ import {
 } from "../utils/canvasProjectOperationRisk"
 import {
 	formatCanvasPathRepairFailures,
+	resolveCanvasOperationConfirmTitleKey,
 	syncCanvasProjectNameAfterFileOperation,
 } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
@@ -408,7 +409,12 @@ export function useRename(options: UseRenameOptions = {}) {
 						: ""
 					return new Promise<boolean>((resolve) => {
 						MagicModal.confirm({
-							title: t("topicFiles.canvasOperationRisk.title"),
+							title: t(
+								resolveCanvasOperationConfirmTitleKey({
+									requiresCanvasRisk: canvasRisk.shouldWarn,
+									hasPathRepairFailures: Boolean(repairPlan?.hasFailures),
+								}),
+							),
 							content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 							okButtonProps: {
 								color: "danger",

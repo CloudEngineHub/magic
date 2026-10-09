@@ -141,6 +141,9 @@ const FilesViewer = memo(
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
 				isKnowledgeBaseTab,
+				openMicroAppTab,
+				closeMicroAppTab,
+				isPublishedMicroAppTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
 				enterPreviewFullscreen,
@@ -149,7 +152,11 @@ const FilesViewer = memo(
 				getTabFileContext,
 				getFileManagerState,
 				updateFileManagerState,
+				isShareRoute,
+				isMagicShareRoute,
 			} = useFilesViewer(props)
+			// Route state covers topic/pure/Magic shares; the prop covers file-share callers during setup.
+			const shouldRenderQuickOpen = !isShareRoute && !isMagicShareRoute && !props.isFileShare
 			const tabsRef = useRef(tabs)
 			tabsRef.current = tabs
 			const closingBatchTabsRef = useRef(false)
@@ -450,6 +457,8 @@ const FilesViewer = memo(
 				// Knowledge base tab相关方法
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
+				openMicroAppTab,
+				closeMicroAppTab,
 				enterPreviewFullscreen,
 				exitPreviewFullscreen,
 				// Website tab相关方法
@@ -734,6 +743,8 @@ const FilesViewer = memo(
 					// 判断是否是知识库tab
 					const isKbTab = isKnowledgeBaseTab(tab.id)
 					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
+					const isMicroAppTab = isPublishedMicroAppTab(tab.id)
+					const microAppData = isMicroAppTab ? (tab as any).data : undefined
 					return {
 						isActive,
 						node: (
@@ -761,7 +772,9 @@ const FilesViewer = memo(
 								playbackProps={playbackProps}
 								hideTabBar={props.hideTabBar}
 								knowledgeBaseData={knowledgeBaseData}
+								microAppData={microAppData}
 								fillPortalSurface={!isDocumentFlowFullscreen}
+								onCloseTab={handleTabClose}
 							/>
 						),
 					}
@@ -778,10 +791,13 @@ const FilesViewer = memo(
 				shouldRenderTab,
 				cachedTabIds,
 				isPlaybackTab,
+				isKnowledgeBaseTab,
+				isPublishedMicroAppTab,
 				props,
 				props.autoDetail,
 				props.userSelectDetail,
 				openFileTab,
+				handleTabClose,
 			])
 			const inlineCachedTabs = cachedTabRenders
 				.filter(() => isDocumentFlowFullscreen)
@@ -846,7 +862,14 @@ const FilesViewer = memo(
 									{tabs.map(renderTabItem)}
 								</HeadlessHorizontalScroll>
 
-								<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
+								{shouldRenderQuickOpen ? (
+									<WebsitePresetMenu
+										onOpenWebsiteTab={openWebsiteTab}
+										onOpenMicroAppTab={openMicroAppTab}
+										onOpenFileTab={openFileTab}
+										fileAttachments={tabAttachments}
+									/>
+								) : null}
 
 								{/* 展开按钮 */}
 								<DropdownMenu

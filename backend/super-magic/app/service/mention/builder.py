@@ -3,8 +3,13 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from app.service.image_ref_normalizer import ImageRefNormalizer
 from app.service.mention.base import BaseMentionHandler
+from app.service.mention.utils.micro_app_prompt import (
+    extract_micro_app_mentions,
+    sync_micro_app_scope_from_mentions,
+)
 from app.service.mention.handlers import (
     AgentHandler,
+    MicroAppHandler,
     AssistantHandler,
     DesignMarkerHandler,
     FileHandler,
@@ -37,6 +42,7 @@ class MentionContextBuilder:
         # 其他处理器
         handlers['mcp'] = MCPHandler()
         handlers['agent'] = AgentHandler()
+        handlers['micro_app'] = MicroAppHandler()
         handlers['assistant'] = AssistantHandler()
         handlers['tool'] = ToolHandler()
         handlers['design_marker'] = DesignMarkerHandler()
@@ -60,6 +66,8 @@ class MentionContextBuilder:
             return ""
 
         handlers = self._create_handlers()
+        micro_app_mentions = extract_micro_app_mentions(mentions)
+        bound_scopes = await sync_micro_app_scope_from_mentions(mentions)
 
         # 初始化上下文行
         context_lines = [
@@ -67,10 +75,27 @@ class MentionContextBuilder:
             "Referenced files and resources:",
         ]
 
-
-
         # 收集所有 tip 文本（保留顺序，后续去重）
         tip_texts = []
+        mentioned_app_ids = [
+            str(mention.get("app_id") or mention.get("id") or "").strip()
+            for mention in micro_app_mentions
+        ]
+        mentioned_app_ids = [app_id for app_id in mentioned_app_ids if app_id]
+        unresolved_app_ids = [
+            app_id for app_id in mentioned_app_ids if app_id not in bound_scopes
+        ]
+        if unresolved_app_ids:
+            unresolved = ", ".join(unresolved_app_ids)
+            tip_texts.append(
+                f"Micro-app '{unresolved}' could not be resolved. "
+                "Pass app_id for a resolved micro-app. Do not call MagicBase for unresolved apps."
+            )
+        elif len(micro_app_mentions) == 1 and not bound_scopes:
+            app_id = mentioned_app_ids[0] if mentioned_app_ids else "unknown"
+            tip_texts.append(
+                f"Micro-app '{app_id}' could not be resolved. Do not call MagicBase."
+            )
         used_handlers = []
         used_handler_ids = set()
 
@@ -98,6 +123,33 @@ class MentionContextBuilder:
             else:
                 # 未知类型的mention
                 context_lines.append(f"{i}. reference: {mention}")
+
+        extra_index = len(mentions) + 1
+        extra_bound = [
+            (app_id, entry)
+            for app_id, entry in bound_scopes.items()
+            if app_id not in mentioned_app_ids
+        ]
+        if extra_bound:
+            handler = handlers["micro_app"]
+            handler_id = id(handler)
+            if handler_id not in used_handler_ids:
+                used_handler_ids.add(handler_id)
+                used_handlers.append(handler)
+            for app_id, entry in extra_bound:
+                synthetic = {
+                    "type": "micro_app",
+                    "app_id": app_id,
+                    "app_name": str(entry.get("app_name") or app_id).strip(),
+                    "project_id": str(entry.get("project_id") or "").strip(),
+                }
+                tip_text = await handler.get_tip(synthetic, agent_context)
+                if tip_text:
+                    tip_texts.append(tip_text)
+                context_lines.extend(
+                    await handler.handle(synthetic, extra_index, agent_context)
+                )
+                extra_index += 1
 
         # handler 完成本轮所有 mention 后，收集需要统一生成的提示文本
         for handler in used_handlers:

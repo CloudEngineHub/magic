@@ -66,6 +66,7 @@ import dayjs from "@/infrastructure/vendors/dayjs"
 import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
 import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
 import { useSlidesTemplateNavigation } from "../../hooks/useSlidesTemplateNavigation"
+import { HostConversationProvider } from "../../contexts/HostConversationContext"
 
 /** 任务消息状态变化后延迟拉工作区/项目详情，减轻后端尚未落库时单次请求仍返回 running 的问题 */
 const WORKSPACE_PROJECT_STATUS_REFRESH_DELAY_MS = 1000
@@ -519,7 +520,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	useDeepCompareEffect(() => {
 		setUserSelectDetail(null)
-		clearActiveDetailTabType()
+		// Published micro-app tabs belong to the project rather than a topic. Keep
+		// their preview open when createTopicAndSend selects a new host topic.
+		clearActiveDetailTabType({ preservePublishedMicroApp: true })
 	}, [selectedTopic?.id, selectedTopic?.chat_topic_id])
 
 	useProjectAttachmentsChangeRealtime({
@@ -799,102 +802,105 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				isHistoryPanelOpen={isHistoryPanelOpen}
 				onToggleHistoryPanel={onToggleHistoryPanel}
 				trailingActions={isSingleTopicChat ? <ChatConversationActionsSlot /> : undefined}
+				isChatDetail={isSingleTopicChat}
 			/>
 		),
 	)
 
 	return (
-		<TopicDesktopPanels
-			containerClassName={styles.container}
-			detailPanelClassName={styles.detailPanel}
-			isDetailPanelFullscreen={isDetailPanelFullscreen}
-			enableProjectCollapse={!isReadOnly && !hideProjectCard}
-			sidebar={({ onCollapse, isCollapsed }) => (
-				<TopicSidebar
-					onCollapse={onCollapse}
-					isCollapsed={isCollapsed}
-					selectedProject={selectedProject}
-					selectedWorkspace={selectedWorkspace}
-					selectedTopic={selectedTopic}
-					isReadOnly={isReadOnly}
-					topicFilesProps={topicFilesPropsWithPanel}
-					hideProjectCard={hideProjectCard}
-					siderVariant={isSingleTopicChat ? "chat" : "default"}
-				/>
-			)}
-			detailPanel={(fileSidebarControl) => (
-				<Detail
-					fileSidebarControl={fileSidebarControl}
-					attachmentLoadState={projectFilesStore.attachmentLoadState}
-					ref={detailRef}
-					disPlayDetail={disPlayDetail}
-					userSelectDetail={userSelectDetail}
-					setUserSelectDetail={setUserSelectDetail}
-					attachments={attachments}
-					attachmentList={attachmentList}
-					topicId={selectedTopic?.id}
-					baseShareUrl={`${window.location.origin}/share`}
-					currentTopicStatus={currentTopicStatus}
-					messages={messages}
-					autoDetail={autoDetail}
-					allowEdit={!isReadOnly}
-					selectedTopic={selectedTopic}
-					selectedProject={selectedProject}
-					activeFileId={activeFileId}
-					onActiveFileChange={setActiveFileId}
-					onActiveTabChange={handleActiveDetailTabChange}
-					onPreviewCollapse={isReadOnly ? undefined : collapseDetailPanel}
-					onPreviewOpen={expandDetailPanel}
-					isPreviewCollapsed={isDetailPanelCollapsed}
-					canLocateFile={!isReadOnly}
-					onFullscreenChange={setIsDetailPanelFullscreen}
-					onFileTabsCacheLoaded={onFileTabsCacheLoaded}
-				/>
-			)}
-			isReadOnly={isReadOnly}
-			keepDetailMountedWhenHidden
-			historyLayout={
-				isSingleTopicChat
-					? undefined
-					: {
-							isOpen: isTopicHistoryPanelOpen,
-							resize:
-								!isReadOnly && !hideProjectCard
-									? {
-											width: topicHistoryWidth,
-											onWidthCommit: commitTopicHistoryWidth,
-											projectId: selectedProject?.id || "",
-										}
-									: undefined,
-							onClose: closeTopicHistoryPanel,
-							onToggle: toggleTopicHistoryPanel,
-							renderPanel: ({
-								isConversationPanelCollapsed,
-								onExpandConversationPanel,
-								onClose,
-								closeButtonRef,
-								onCollapse,
-								isPanelVisible,
-							}) => (
-								<MessageHeaderTopicHistoryPanel
-									onCollapse={onCollapse}
-									isPanelVisible={isPanelVisible}
-									selectedProject={selectedProject}
-									topicStore={topicStore}
-									topicActions={topicActions}
-									isConversationPanelCollapsed={isConversationPanelCollapsed}
-									onExpandConversationPanel={onExpandConversationPanel}
-									onClose={onClose}
-									closeButtonRef={closeButtonRef}
-								/>
-							),
-						}
-			}
-			shouldShowDetailPanel={shouldShowDetailPanel}
-			isDetailPanelCollapsed={isDetailPanelCollapsed}
-			onExpandDetailPanel={expandDetailPanel}
-			renderMessagePanel={renderMessagePanel}
-		/>
+		<HostConversationProvider selectedProject={selectedProject} topicStore={topicStore}>
+			<TopicDesktopPanels
+				containerClassName={styles.container}
+				detailPanelClassName={styles.detailPanel}
+				isDetailPanelFullscreen={isDetailPanelFullscreen}
+				enableProjectCollapse={!isReadOnly && !hideProjectCard}
+				sidebar={({ onCollapse, isCollapsed }) => (
+					<TopicSidebar
+						onCollapse={onCollapse}
+						isCollapsed={isCollapsed}
+						selectedProject={selectedProject}
+						selectedWorkspace={selectedWorkspace}
+						selectedTopic={selectedTopic}
+						isReadOnly={isReadOnly}
+						topicFilesProps={topicFilesPropsWithPanel}
+						hideProjectCard={hideProjectCard}
+						siderVariant={isSingleTopicChat ? "chat" : "default"}
+					/>
+				)}
+				detailPanel={(fileSidebarControl) => (
+					<Detail
+						fileSidebarControl={fileSidebarControl}
+						attachmentLoadState={projectFilesStore.attachmentLoadState}
+						ref={detailRef}
+						disPlayDetail={disPlayDetail}
+						userSelectDetail={userSelectDetail}
+						setUserSelectDetail={setUserSelectDetail}
+						attachments={attachments}
+						attachmentList={attachmentList}
+						topicId={selectedTopic?.id}
+						baseShareUrl={`${window.location.origin}/share`}
+						currentTopicStatus={currentTopicStatus}
+						messages={messages}
+						autoDetail={autoDetail}
+						allowEdit={!isReadOnly}
+						selectedTopic={selectedTopic}
+						selectedProject={selectedProject}
+						activeFileId={activeFileId}
+						onActiveFileChange={setActiveFileId}
+						onActiveTabChange={handleActiveDetailTabChange}
+						onPreviewCollapse={isReadOnly ? undefined : collapseDetailPanel}
+						onPreviewOpen={expandDetailPanel}
+						isPreviewCollapsed={isDetailPanelCollapsed}
+						canLocateFile={!isReadOnly}
+						onFullscreenChange={setIsDetailPanelFullscreen}
+						onFileTabsCacheLoaded={onFileTabsCacheLoaded}
+					/>
+				)}
+				isReadOnly={isReadOnly}
+				keepDetailMountedWhenHidden
+				historyLayout={
+					isSingleTopicChat
+						? undefined
+						: {
+								isOpen: isTopicHistoryPanelOpen,
+								resize:
+									!isReadOnly && !hideProjectCard
+										? {
+												width: topicHistoryWidth,
+												onWidthCommit: commitTopicHistoryWidth,
+												projectId: selectedProject?.id || "",
+											}
+										: undefined,
+								onClose: closeTopicHistoryPanel,
+								onToggle: toggleTopicHistoryPanel,
+								renderPanel: ({
+									isConversationPanelCollapsed,
+									onExpandConversationPanel,
+									onClose,
+									closeButtonRef,
+									onCollapse,
+									isPanelVisible,
+								}) => (
+									<MessageHeaderTopicHistoryPanel
+										onCollapse={onCollapse}
+										isPanelVisible={isPanelVisible}
+										selectedProject={selectedProject}
+										topicStore={topicStore}
+										topicActions={topicActions}
+										isConversationPanelCollapsed={isConversationPanelCollapsed}
+										onExpandConversationPanel={onExpandConversationPanel}
+										onClose={onClose}
+										closeButtonRef={closeButtonRef}
+									/>
+								),
+							}
+				}
+				shouldShowDetailPanel={shouldShowDetailPanel}
+				isDetailPanelCollapsed={isDetailPanelCollapsed}
+				onExpandDetailPanel={expandDetailPanel}
+				renderMessagePanel={renderMessagePanel}
+			/>
+		</HostConversationProvider>
 	)
 }
 

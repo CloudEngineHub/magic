@@ -13,7 +13,8 @@ export interface TopicHistoryTriggerProps {
 	triggerRef?: RefObject<HTMLButtonElement>
 }
 
-const headerIconButtonClassName = "!size-6 !min-h-6 !min-w-6 !rounded-md !p-0"
+const headerIconButtonClassName =
+	"!size-[var(--conversation-header-button-size,24px)] !min-h-6 !min-w-6 !rounded-md !p-0"
 
 export function TopicHistoryTrigger({
 	mode,
@@ -23,25 +24,26 @@ export function TopicHistoryTrigger({
 	renderDropdown,
 	triggerRef,
 }: TopicHistoryTriggerProps) {
-	const trigger = (
+	const button = (
+		<Button
+			ref={triggerRef}
+			aria-label={tooltipTitle}
+			variant="ghost"
+			size="icon-sm"
+			className={cn(headerIconButtonClassName, isActive && "bg-accent")}
+			data-testid="message-header-history-button"
+			onClick={mode === "layout" ? onToggle : undefined}
+		>
+			<History size={16} className="shrink-0 text-foreground" />
+		</Button>
+	)
+	// Radix DropdownMenuTrigger must receive the ref-forwarding Button directly;
+	// placing MagicTooltip between them drops the injected pointer and keyboard handlers.
+	const trigger = mode === "dropdown" ? (renderDropdown?.(button) ?? button) : button
+
+	return (
 		<MagicTooltip title={tooltipTitle}>
-			<span>
-				<Button
-					ref={triggerRef}
-					aria-label={tooltipTitle}
-					variant="ghost"
-					size="icon-sm"
-					className={cn(headerIconButtonClassName, isActive && "bg-accent")}
-					data-testid="message-header-history-button"
-					onClick={mode === "layout" ? onToggle : undefined}
-				>
-					<History size={16} className="shrink-0 text-foreground" />
-				</Button>
-			</span>
+			<span>{trigger}</span>
 		</MagicTooltip>
 	)
-
-	// `layout` 是当前主路径；`dropdown` 仅保留给遗留兼容场景。
-	if (mode === "layout") return trigger
-	return renderDropdown?.(trigger) ?? trigger
 }

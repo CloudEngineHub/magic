@@ -16,7 +16,7 @@ function ProjectNavigationTabs({
 	disabled: boolean
 	onOpenManager: () => void
 }) {
-	const { t } = useTranslation("super")
+	const { t } = useTranslation(["super", "sidebar"])
 	const recent = t("projectNavigation.recent")
 	const workspaces = t("projectNavigation.workspaces")
 	const tabs: Tab<NavigationSection>[] = [
@@ -37,24 +37,25 @@ function ProjectNavigationTabs({
 	]
 	return (
 		<div
-			className="sticky top-0 z-20 flex items-center gap-2 bg-sidebar px-2"
+			className="sticky top-0 z-30 flex h-9 items-center gap-2 bg-sidebar px-2 pb-1"
 			data-sidebar-navigation-header="tabs"
 		>
-			{/* Native fieldset disabling preserves the existing busy-state behavior for both tab buttons. */}
+			{/* Native fieldset disabling preserves the existing busy-state behavior for all tab buttons. */}
 			<fieldset
 				disabled={disabled}
 				role="group"
 				aria-label={t("sidebarPanels.projectManager")}
 				className="m-0 min-w-0 flex-1 border-0 p-0 [container-name:project-navigation-tabs] [container-type:inline-size]"
 			>
+				{/* Narrow tabs omit decorative icons to keep their labels readable. */}
 				<div className="w-full min-w-0">
 					<SmoothTabs
 						tabs={tabs}
 						value={sidebarStore.expandedNavigationSection}
 						onChange={sidebarStore.selectNavigationSection}
 						variant="background"
-						className="h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:190px)]:[&>button>span:last-child]:hidden"
-						buttonClassName="h-[28px] py-0 text-[13px] font-normal"
+						className="h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:240px)]:[&>button>span:has(svg)]:hidden"
+						buttonClassName="h-[28px] min-w-0 px-1 py-0 text-[13px] font-normal focus-visible:bg-sidebar-accent focus-visible:ring-1"
 						indicatorClassName="inset-y-[3px] h-[28px]"
 						data-testid="sidebar-navigation-tabs"
 					/>

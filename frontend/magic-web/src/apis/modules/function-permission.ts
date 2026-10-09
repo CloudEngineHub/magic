@@ -15,6 +15,9 @@ export const FUNCTION_PERMISSION_CODE = {
 	ProjectSharePublic: "project.share_public",
 	ProjectSharePassword: "project.share_password",
 	ProjectShareTeam: "project.share_team",
+	/** Topic shares are governed on their own, and have no team share method. */
+	TopicSharePublic: "topic.share_public",
+	TopicSharePassword: "topic.share_password",
 } as const
 
 /** Platform-level permission group used by super administrators. */

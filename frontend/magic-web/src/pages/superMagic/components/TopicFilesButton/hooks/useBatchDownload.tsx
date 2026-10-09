@@ -1,3 +1,5 @@
+import { useFileAccess as useFilePermissions } from "@/pages/superMagic/providers/FileAccessProvider"
+import { filterFileAccessMenuItems } from "../utils/file-access-menu"
 import { createElement, useState, useMemo, useRef } from "react"
 import type { AttachmentItem, ConfirmFileOperation } from "./types"
 import { Button } from "antd"
@@ -26,10 +28,12 @@ import { MagicSystemFolderIcon } from "../components/MagicSystemFolderIcon"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { SuperMagicApi } from "@/apis"
+import { getShareAccessToken } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import useShareRoute from "../../../hooks/useShareRoute"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { createRandomUuidV4 } from "@/utils/create-random-uuid-v4"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 import { normalizeMenuItems } from "../utils/menu-items"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
@@ -132,7 +136,12 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	const isChatProject = isCachedChatWorkspaceProject(selectedProject)
 	const { deleteConfirmNode, openDeleteConfirm } = useMobileDeleteConfirmSheet()
 	const { isShareRoute, isFileShare } = useShareRoute()
-	const { hideCopyTo, hideMoveTo, hideShareFile } = useFileActionVisibility()
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
+	const {
+		permissions: access,
+		options: { copyTo, moveTo },
+	} = useFilePermissions()
 	const canDownload = allowDownload !== false
 
 	// 退出多选模式的辅助函数
@@ -390,6 +399,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量下载选中文件
 	const handleBatchDownload = async () => {
+		if (!access.download) return
 		if (!canDownload || selectedItems.size === 0 || (!projectId && !options.onDownloadSelected))
 			return
 		setBatchLoading(true)
@@ -413,7 +423,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 			const token =
 				isShareRoute || isFileShare
-					? ((window as unknown as { temporary_token?: string }).temporary_token ?? "")
+					? getShareAccessToken(fileAccess) || undefined
 					: undefined
 
 			if (downloadProgress) {
@@ -475,6 +485,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					try {
 						const checkData = await SuperMagicApi.checkBatchDownloadStatus(
 							data.batch_key,
+							token,
 						)
 						if (checkData.status === "ready" && checkData.download_url) {
 							downloadFileWithAnchor(checkData.download_url)
@@ -530,6 +541,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	}
 
 	const handleExportDocument = async (format: "pdf" | "pptx" = "pdf") => {
+		if (!access.export) return
 		if (!canDownload || selectedItems.size === 0) return
 		// Always resolve against the complete attachment tree. The filtered tree can omit
 		// folder resources while a search is active, which would produce incomplete exports.
@@ -602,6 +614,8 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				targets,
 				attachments: sourceItems,
 				projectName: selectedProject?.project_name,
+				access: fileAccess ?? undefined,
+				fileApi,
 				signal: exportController?.signal,
 				onProgress: (progress) => {
 					magicToast.loading({
@@ -674,6 +688,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 
 	// 批量分享选中文件
 	const handleBatchShare = () => {
+		if (!access.share) return
 		if (selectedItems.size === 0 || !onBatchShareClick) return
 
 		// PC multi-select stores the folder row ID itself, so share must preserve direct selections.
@@ -714,9 +729,9 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 	}
 
 	// 创建下拉菜单项配置
-	const batchMenuItems = normalizeMenuItems([
+	const rawBatchMenuItems = [
 		// 分享文件（仅在项目内显示）
-		...(isInProject && allowEdit && allowShare && onBatchShareClick && !hideShareFile
+		...(isInProject && allowEdit && allowShare && onBatchShareClick && access.share
 			? [
 					{
 						key: "share",
@@ -827,7 +842,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					]
 				: []),
 		// 批量移动（仅在允许编辑时显示）
-		...((isInProject || options.fileScope === "user") && allowEdit && allowMove && !hideMoveTo
+		...((isInProject || options.fileScope === "user") && allowEdit && allowMove && moveTo
 			? [
 					{
 						key: "move",
@@ -843,7 +858,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 				]
 			: []),
 		// 批量复制（仅在允许编辑时显示）
-		...(((isInProject && allowEdit) || allowCopyTo) && allowCopy && !hideCopyTo
+		...(((isInProject && allowEdit) || allowCopyTo) && allowCopy && copyTo
 			? [
 					{
 						key: "copy",
@@ -892,7 +907,10 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 					},
 				]
 			: []),
-	]).filter(
+	]
+	const batchMenuItems = normalizeMenuItems(
+		filterFileAccessMenuItems(rawBatchMenuItems, access),
+	).filter(
 		(item) =>
 			options.fileScope !== "user" ||
 			!item ||

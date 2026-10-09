@@ -1,7 +1,8 @@
 """原生视觉禁用监听器。
 
-监听大模型重试前事件：当带原生图片的请求连续返回 HTTP 400 并达到阈值时，
-在当前沙箱关闭该模型的原生视觉能力，并要求重试循环立刻再试一次。
+监听大模型重试前事件：当带原生图片的请求连续返回 HTTP 4xx 并达到阈值时，
+在当前沙箱关闭该模型的原生视觉能力，把历史中的原生视觉 user 消息全部关掉，
+并要求重试循环立刻再试一次。
 
 成功清零走独立的请求成功事件，不和重试事件混在一起。
 """
@@ -31,8 +32,13 @@ class NativeVisualDisableListenerService:
         logger.info("已为代理上下文注册原生视觉禁用监听器")
 
     @staticmethod
+    def _is_client_error_status(status_code: int | None) -> bool:
+        """4xx 都视为客户端错误，带图请求连续命中后降级为非视觉。"""
+        return isinstance(status_code, int) and 400 <= status_code < 500
+
+    @staticmethod
     def _resolve_failure_threshold() -> int:
-        """读取连续视觉 400 的降级阈值，非法配置回退到默认值。"""
+        """读取连续视觉 4xx 的降级阈值，非法配置回退到默认值。"""
         threshold = config.get(
             "llm.native_visual_400_failure_threshold",
             NativeVisualDisableListenerService._DEFAULT_NATIVE_VISUAL_400_FAILURE_THRESHOLD,
@@ -46,7 +52,7 @@ class NativeVisualDisableListenerService:
     async def _handle_after_llm_request_succeeded(
         event: Event[AfterLlmRequestSucceededEventData],
     ) -> None:
-        """大模型请求成功后清理原生视觉 400 计数。"""
+        """大模型请求成功后清理原生视觉 4xx 计数。"""
         event.data.agent_context.model_context.reset_native_visual_400_state()
 
     @staticmethod
@@ -58,7 +64,9 @@ class NativeVisualDisableListenerService:
         if data.is_context_window_exceeded:
             return
 
-        if not data.request_contains_native_images or data.status_code != 400:
+        if not data.request_contains_native_images or not NativeVisualDisableListenerService._is_client_error_status(
+            data.status_code
+        ):
             model_context.reset_native_visual_400_state()
             return
 
@@ -74,7 +82,7 @@ class NativeVisualDisableListenerService:
         if failure_count < threshold:
             data.reason = "native_visual_400_retry"
             logger.warning(
-                f"原生视觉请求收到 HTTP 400，允许重试: "
+                f"原生视觉请求收到 HTTP {data.status_code}，允许重试: "
                 f"model={data.model_id}, failure_count={failure_count}, threshold={threshold}"
             )
             return
@@ -83,6 +91,15 @@ class NativeVisualDisableListenerService:
         model_context.mark_native_visual_fallback_applied()
         data.reason = "native_visual_400_fallback"
         logger.warning(
-            f"原生视觉请求连续收到 HTTP 400，当前沙箱关闭模型视觉能力并重试: "
-            f"model={data.model_id}, failure_count={failure_count}, threshold={threshold}"
+            f"原生视觉请求连续收到 HTTP 4xx，当前沙箱关闭模型视觉能力并重试: "
+            f"model={data.model_id}, status_code={data.status_code}, "
+            f"failure_count={failure_count}, threshold={threshold}"
+        )
+        chat_history = getattr(data.agent_context, "chat_history", None)
+        if chat_history is None:
+            return
+        updated = await chat_history.disable_native_visual_messages()
+        logger.warning(
+            f"原生视觉降级已关闭历史消息中的原生视觉: "
+            f"model={data.model_id}, updated={updated}"
         )

@@ -10,7 +10,6 @@ import useShareRoute from "../../hooks/useShareRoute"
 import { cn } from "@/utils/cn"
 import { observer } from "mobx-react-lite"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 
 // Define the Detail component props interface
@@ -99,6 +98,7 @@ export interface DetailRef {
 		knowledgeBaseName?: string
 		fileExtension?: string
 	}) => void
+	openMicroAppTab: (data: { appId: string; appName?: string }) => void
 	/** Promotes the active preview without reopening its tab. */
 	enterPreviewFullscreen: () => void
 	/** Restores the active preview without dismissing its cached content. */
@@ -154,7 +154,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 
 	const { isShareRoute } = useShareRoute()
 	const isMobile = useIsMobile()
-	const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
+	const effectiveAllowDownload = allowDownload !== false
 
 	// Use hooks to encapsulate operation logic - only keep what FilesViewer needs
 	const { handleDownload, handleViewModeChange, getFileViewMode } = useDetailActions({
@@ -207,6 +207,11 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		openKnowledgeBaseTab: (data) => {
 			if (filesViewerRef.current) {
 				filesViewerRef.current.openKnowledgeBaseTab(data)
+			}
+		},
+		openMicroAppTab: (data) => {
+			if (filesViewerRef.current) {
+				filesViewerRef.current.openMicroAppTab(data)
 			}
 		},
 		enterPreviewFullscreen: () => {

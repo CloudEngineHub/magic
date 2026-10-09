@@ -47,8 +47,7 @@ function DefaultTool(props: DefaultToolProps) {
 	const filesStore = useMessageListProjectFilesStore()
 	const { onMouseEnter, onMouseLeave, loading, classNames } = props
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| ToolMessageNode
-		| undefined
+		ToolMessageNode | undefined
 	const tool = props.toolData || node?.tool
 	const interactionTarget = useMemo(
 		() => getToolCardInteractionTarget(tool?.name, tool?.detail),

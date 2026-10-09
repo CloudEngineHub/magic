@@ -13,6 +13,12 @@ from app.core.context.agent_context import AgentContext
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.core.skill_manager import find_skill
 from app.core.skill_utils.constants import SKILL_MAX_TOKENS, SKILL_READ_LIMIT_NOTICE
+from app.core.skill_utils.referenced_project_skills import (
+    find_referenced_project_skill,
+    get_referenced_project_skills_dir,
+    is_referenced_project_bound,
+    missing_workspace_skill_hint,
+)
 from app.core.skill_utils.skill_sources import get_personal_skills_dir
 from app.i18n import i18n
 from app.tools.core import AutoMount, BaseTool, BaseToolParams, tool
@@ -42,6 +48,12 @@ The list of skill names to read, e.g., ["canvas-design", "audio-chat"]""",
 Whether to check for skill version updates. Defaults to true. If the user has explicitly declined or ignored the update reminder, pass false in subsequent calls to skip the version check.""",
     )
 
+    project_id: Optional[str] = Field(
+        default=None,
+        description="""<!--zh: 读取 @micro_app / @project 业务 skill 时必填。从 mention 复制已绑定/已挂载的引用项目 ID；第一次调用就必须带上。传入后只读取该项目 `.magic/skills/`，不回退到当前工作区（含微应用 runtime project）同名 skill。系统或当前工作区 skill 不要传。禁止编造。-->
+Required when loading a companion skill from a `@micro_app` or `@project` mention: copy the bound/mounted referenced-project id and pass it on the first call. When set, read only that project's `.magic/skills/` and never fall back to a same-named skill in the current workspace, including a micro-app runtime project. Omit this for system or current-workspace skills. Do not invent it.""",
+    )
+
     @field_validator("skill_names", mode="before")
     @classmethod
     def normalize_skill_names(cls, value: Any) -> Any:
@@ -51,6 +63,14 @@ Whether to check for skill version updates. Defaults to true. If the user has ex
             if names:
                 return names
         return value
+
+    @field_validator("project_id", mode="before")
+    @classmethod
+    def normalize_project_id(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
 
 # hook 在返回前执行，必须交付完整指令；此豁免不代表已有安全预算。
@@ -80,6 +100,14 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
         """
         if not params.skill_names:
             error_msg = "skill_names must not be empty"
+            return ToolResult(ok=False, content=error_msg)
+
+        project_id = params.project_id
+        if project_id and not await is_referenced_project_bound(project_id):
+            error_msg = (
+                f"project_id '{project_id}' is not in the bound or mounted referenced-project set. "
+                "Copy project_id from a @micro_app or @project mention; do not invent IDs."
+            )
             return ToolResult(ok=False, content=error_msg)
 
         # 获取当前 agent 的 excluded_skills，确保被禁用的 skill 无法通过任何方式加载
@@ -117,13 +145,46 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                     logger.info(f"拒绝读取被禁用的 skill: {skill_name}")
                     continue
                 try:
-                    skill = await find_skill(skill_name, agent_name=agent_name)
+                    if project_id:
+                        skill = await find_referenced_project_skill(skill_name, project_id)
+                    else:
+                        skill = await find_skill(skill_name, agent_name=agent_name)
 
                     # s3 挂载有延迟，首次找不到时等待 2s 后重试一次
                     if not skill:
-                        logger.warning(f"Skill 未找到，2s 后重试: {skill_name}")
-                        await asyncio.sleep(2)
-                        skill = await find_skill(skill_name, agent_name=agent_name)
+                        should_retry = True
+                        if project_id and await get_referenced_project_skills_dir(project_id) is not None:
+                            should_retry = False
+                        if should_retry:
+                            logger.warning(f"Skill 未找到，2s 后重试: {skill_name}")
+                            await asyncio.sleep(2)
+                            if project_id:
+                                skill = await find_referenced_project_skill(skill_name, project_id)
+                            else:
+                                skill = await find_skill(skill_name, agent_name=agent_name)
+
+                    # A market-declared skill may be installed lazily on first read.
+                    if not skill and not project_id:
+                        from app.core.skill_utils.skill_references import install_market_reference
+
+                        try:
+                            declared = await install_market_reference(
+                                skill_name, agent_name or "", agent_context, tool_context
+                            )
+                            if declared:
+                                skill = await find_skill(skill_name, agent_name=agent_name)
+                        except Exception:
+                            results.append({
+                                "skill_name": skill_name,
+                                "success": False,
+                                "error": (
+                                    f"Skill '{skill_name}' is declared but could not be fetched. "
+                                    "Access may have changed or the package may be unavailable."
+                                ),
+                            })
+                            failure_count += 1
+                            failed_skills.append(skill_name)
+                            continue
 
                     if (
                         skill is not None
@@ -136,7 +197,14 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                         continue
 
                     if not skill:
-                        error_msg = f"Skill '{skill_name}' was not found"
+                        if project_id:
+                            error_msg = (
+                                f"Skill '{skill_name}' was not found in referenced project "
+                                f"'{project_id}' .magic/skills/. Do not fall back to workspace "
+                                "or system skills with the same name."
+                            )
+                        else:
+                            error_msg = await missing_workspace_skill_hint(skill_name)
                         results.append({"skill_name": skill_name, "success": False, "error": error_msg})
                         failure_count += 1
                         failed_skills.append(skill_name)
@@ -221,7 +289,8 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
 
             # 并发检查版本更新，有更新时推送 horizon 通知
             # 若调用方明确传入 check_updates=False（用户已忽略或拒绝更新），则跳过检查
-            if params.check_updates and tool_context is not None:
+            # 引用项目 skill 只读、无安装来源，跳过版本检查
+            if params.check_updates and not project_id and tool_context is not None:
                 skill_update_targets: List[Tuple[str, Path]] = [
                     (r["skill_name"], r["skill_dir_path"])
                     for r in results

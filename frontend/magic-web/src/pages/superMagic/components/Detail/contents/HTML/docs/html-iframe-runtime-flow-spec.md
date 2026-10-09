@@ -396,10 +396,10 @@ sequenceDiagram
 | `window.Magic.setInputMessage(message)` | 设置聊天输入框文本 | 发送 `MAGIC_SET_INPUT_MESSAGE`。 |
 | `window.Magic.i18n.subscribe(callback)` | 订阅语言变化 | 宿主发送当前语言和后续 `languageChanged`。 |
 | `window.Magic.project.uploadFiles(files)` | 上传浏览器 File 到 workspace | `useMagicFiles` 走现有上传链路。 |
-| `window.Magic.project.addFilesToMessage(paths)` | 将 workspace 文件加入消息输入 | `useMagicFiles` 查附件并调用 topic 相关逻辑。 |
+| `window.Magic.project.addFilesToMessage(paths)` | 将文件加入消息输入；单话题宿主复用当前话题并忽略 `agentMode` | `useMagicFiles` 查附件并调用 topic 相关逻辑。 |
 | `window.Magic.project.downloadFiles(paths)` | 触发浏览器下载 workspace 文件 | `useMagicFiles` 获取临时下载 URL。 |
 | `window.Magic.agent.getAgents()` | 获取当前 Agent 列表 | `IframeAgentService` 返回宿主列表。 |
-| `window.Magic.project.createTopicAndSend()` | 新建话题并发送 | `IframeAgentService`，受 `enableWriteOperations` 控制。 |
+| `window.Magic.project.createTopicAndSend()` | 发送消息；多话题会新建，单话题宿主复用当前话题并忽略 `agentId` | `IframeAgentService`，受 `enableWriteOperations` 控制。 |
 | `window.Magic.project.sendMessage()` | 当前话题发送消息 | `IframeAgentService`，受 `enableWriteOperations` 控制。 |
 
 部分旧 API 仍保留根级别别名，例如 `window.Magic.uploadFiles`、`window.Magic.getAgents`，但新代码应使用命名空间 API。

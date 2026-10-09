@@ -35,9 +35,11 @@ import { loadProjectAttachments } from "../../services"
 import { isAbortError, useLatestAbortableRequest } from "../../hooks/useLatestAbortableRequest"
 import { useProjectFirstAttachmentRender } from "../../hooks/useProjectFirstAttachmentRender"
 import { isAudioProjectMode } from "../AudioRecordings/utils/is-audio-project-mode"
+import { HostConversationProvider } from "../../contexts/HostConversationContext"
 import type {
 	SuperMagicOpenFileTabPayload,
 	SuperMagicOpenKnowledgeBaseTabPayload,
+	SuperMagicOpenMicroAppTabPayload,
 } from "../../events/openFileTab"
 import type { SuperMagicOpenPlaybackTabPayload } from "../../events/openPlaybackTab"
 import { useSlidesTemplateNavigation } from "../../hooks/useSlidesTemplateNavigation"
@@ -132,15 +134,22 @@ function ProjectPage() {
 				detailRef.current?.openKnowledgeBaseTab?.(data)
 			}, 100)
 		}
+		const handleOpenMicroAppTab = (data: SuperMagicOpenMicroAppTabPayload) => {
+			setTimeout(() => {
+				detailRef.current?.openMicroAppTab?.(data)
+			}, 100)
+		}
 
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 		pubsub.subscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+		pubsub.subscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+			pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
 		}
 	}, [])
 
@@ -371,79 +380,84 @@ function ProjectPage() {
 	const renderMessagePanel = useMemoizedFn(() => null)
 
 	return (
-		<TopicDesktopPanels
-			containerClassName={styles.container}
-			detailPanelClassName={styles.detailPanel}
-			isDetailPanelFullscreen={false}
-			enableProjectCollapse={!hideProjectCard}
-			sidebar={({ onCollapse, isCollapsed }) => (
-				<div className="flex h-full flex-col gap-2" data-testid="workspace-sidebar-wrapper">
-					{hideProjectCard ? null : (
-						<ProjectCardContainer
-							onCollapse={onCollapse}
-							isPanelVisible={!isCollapsed}
-							selectedProject={selectedProject}
-							selectedWorkspace={selectedWorkspace}
+		<HostConversationProvider selectedProject={selectedProject} topicStore={topicStore}>
+			<TopicDesktopPanels
+				containerClassName={styles.container}
+				detailPanelClassName={styles.detailPanel}
+				isDetailPanelFullscreen={false}
+				enableProjectCollapse={!hideProjectCard}
+				sidebar={({ onCollapse, isCollapsed }) => (
+					<div
+						className="flex h-full flex-col gap-2"
+						data-testid="workspace-sidebar-wrapper"
+					>
+						{hideProjectCard ? null : (
+							<ProjectCardContainer
+								onCollapse={onCollapse}
+								isPanelVisible={!isCollapsed}
+								selectedProject={selectedProject}
+								selectedWorkspace={selectedWorkspace}
+							/>
+						)}
+						<ProjectSider
+							items={[
+								{
+									key: "topicFiles",
+									title: t("topicFiles.title"),
+									icon: <Files size={16} />,
+									content: (
+										<TopicFilesButton
+											attachments={attachments as any}
+											setUserSelectDetail={(detail: any) => {
+												console.log("到顶层了", detail)
+												setUserSelectDetail(detail)
+											}}
+											onFileClick={handleFileClick}
+											projectId={selectedProject?.id}
+											activeFileId={activeFileId}
+											selectedTopic={selectedTopic}
+											onAttachmentsChange={setAttachments}
+											selectedProject={selectedProject}
+											selectedWorkspace={selectedWorkspace}
+											allowEdit={false}
+											isInProject
+										/>
+									),
+								},
+							]}
+							className="flex-1 overflow-hidden rounded-lg border border-border bg-background"
 						/>
-					)}
-					<ProjectSider
-						items={[
-							{
-								key: "topicFiles",
-								title: t("topicFiles.title"),
-								icon: <Files size={16} />,
-								content: (
-									<TopicFilesButton
-										attachments={attachments as any}
-										setUserSelectDetail={(detail: any) => {
-											console.log("到顶层了", detail)
-											setUserSelectDetail(detail)
-										}}
-										onFileClick={handleFileClick}
-										projectId={selectedProject?.id}
-										activeFileId={activeFileId}
-										selectedTopic={selectedTopic}
-										onAttachmentsChange={setAttachments}
-										selectedProject={selectedProject}
-										selectedWorkspace={selectedWorkspace}
-										allowEdit={false}
-										isInProject
-									/>
-								),
-							},
-						]}
-						className="flex-1 overflow-hidden rounded-lg border border-border bg-background"
+					</div>
+				)}
+				detailPanel={(fileSidebarControl) => (
+					<Detail
+						fileSidebarControl={fileSidebarControl}
+						attachmentLoadState={projectFilesStore.attachmentLoadState}
+						ref={detailRef}
+						disPlayDetail={disPlayDetail}
+						userSelectDetail={userSelectDetail}
+						setUserSelectDetail={setUserSelectDetail}
+						attachments={attachments}
+						attachmentList={attachmentList}
+						topicId={selectedTopic?.id}
+						baseShareUrl={`${window.location.origin}/share`}
+						currentTopicStatus={currentTopicStatus}
+						messages={[]}
+						autoDetail={autoDetail}
+						allowEdit={false}
+						selectedTopic={selectedTopic}
+						selectedProject={selectedProject}
+						activeFileId={activeFileId}
+						onActiveFileChange={setActiveFileId}
+						showFallbackWhenEmpty
 					/>
-				</div>
-			)}
-			detailPanel={(fileSidebarControl) => (
-				<Detail
-					fileSidebarControl={fileSidebarControl}
-					attachmentLoadState={projectFilesStore.attachmentLoadState}
-					ref={detailRef}
-					disPlayDetail={disPlayDetail}
-					userSelectDetail={userSelectDetail}
-					setUserSelectDetail={setUserSelectDetail}
-					attachments={attachments}
-					attachmentList={attachmentList}
-					topicId={selectedTopic?.id}
-					baseShareUrl={`${window.location.origin}/share`}
-					currentTopicStatus={currentTopicStatus}
-					messages={[]}
-					autoDetail={autoDetail}
-					allowEdit={false}
-					selectedTopic={selectedTopic}
-					selectedProject={selectedProject}
-					activeFileId={activeFileId}
-					onActiveFileChange={setActiveFileId}
-					showFallbackWhenEmpty
-				/>
-			)}
-			isReadOnly={isReadOnly}
-			showProjectResizeHandle={showProjectResizeHandle}
-			shouldShowDetailPanel={shouldShowDetailPanel}
-			renderMessagePanel={renderMessagePanel}
-		/>
+				)}
+				isReadOnly={isReadOnly}
+				showProjectResizeHandle={showProjectResizeHandle}
+				shouldShowDetailPanel={shouldShowDetailPanel}
+				renderMessagePanel={renderMessagePanel}
+			/>
+		</HostConversationProvider>
 	)
 }
 

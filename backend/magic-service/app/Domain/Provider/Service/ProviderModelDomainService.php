@@ -148,6 +148,20 @@ class ProviderModelDomainService
         $this->providerModelRepository->updateStatus($dataIsolation, $id, $status);
     }
 
+    /**
+     * 批量禁用模型.
+     *
+     * @param string[] $modelIds 模型标识数组
+     */
+    public function disableModels(ProviderDataIsolation $dataIsolation, array $modelIds): void
+    {
+        if ($modelIds === []) {
+            return;
+        }
+
+        $this->providerModelRepository->updateStatusByModelIds($dataIsolation, $modelIds, Status::Disabled);
+    }
+
     public function deleteByModelParentId(ProviderDataIsolation $dataIsolation, string $modelParentId): void
     {
         $this->providerModelRepository->deleteByModelParentId($dataIsolation, $modelParentId);

@@ -78,6 +78,7 @@ export interface I18nTexts {
 		digitalEmployees: string
 		flows: string
 		agents: string
+		microApps: string
 		skills: string
 		tools: string
 		canvasElements: string

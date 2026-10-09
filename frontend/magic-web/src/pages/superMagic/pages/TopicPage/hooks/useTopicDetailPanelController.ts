@@ -4,8 +4,8 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import type { DetailRef } from "../../../components/Detail"
 import type { ActiveDetailTabType } from "../../../components/Detail/components/FilesViewer/types"
 import type { AttachmentItem } from "../../../components/TopicFilesButton/hooks/types"
-import { getTemporaryDownloadUrl } from "../../../utils/api"
 import { downloadFileWithAnchor } from "../../../utils/handleFIle"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 interface UseTopicDetailPanelControllerOptions {
 	detailRef: RefObject<DetailRef>
@@ -19,10 +19,13 @@ interface UseTopicDetailPanelControllerOptions {
 	}
 	/** 附件列表，用于 Open_File_Tab_By_Path 事件中按路径查找文件 */
 	attachmentList?: AttachmentItem[]
+	/** 为 false 时由移动端 popup 消费 Open_Micro_App_Tab */
+	subscribeMicroAppTab?: boolean
 }
 
 interface UseTopicDetailPanelControllerReturn {
 	shouldShowDetailPanel: boolean
+	hasActiveDetailTab: boolean
 	isDetailPanelCollapsed: boolean
 	collapseDetailPanel: () => void
 	expandDetailPanel: () => void
@@ -32,7 +35,7 @@ interface UseTopicDetailPanelControllerReturn {
 		[key: string]: unknown
 	}
 	handleActiveDetailTabChange: (tabType: DetailTabType) => void
-	clearActiveDetailTabType: () => void
+	clearActiveDetailTabType: (options?: { preservePublishedMicroApp?: boolean }) => void
 }
 
 type DetailTabType = ActiveDetailTabType
@@ -48,7 +51,9 @@ export function useTopicDetailPanelController({
 	handleFileClick,
 	topicFilesProps,
 	attachmentList = [],
+	subscribeMicroAppTab = true,
 }: UseTopicDetailPanelControllerOptions): UseTopicDetailPanelControllerReturn {
+	const fileApi = useFileApi()
 	const [activeDetailTabType, setActiveDetailTabType] = useState<DetailTabType>(null)
 	// 收起只改变布局，不清空活动文件；展开继续使用原标签和编辑实例。
 	const [isDetailPanelCollapsed, setIsDetailPanelCollapsed] = useState(false)
@@ -56,6 +61,10 @@ export function useTopicDetailPanelController({
 	const activeFileIdRef = useRef<string | null>(activeFileId)
 	const activeDetailTabTypeRef = useRef<DetailTabType>(null)
 
+	const hasActiveDetailTab = useMemo(
+		() => Boolean(activeFileId) || Boolean(activeDetailTabType),
+		[activeDetailTabType, activeFileId],
+	)
 	const shouldShowDetailPanel = useMemo(() => {
 		if (isReadOnly) {
 			return true
@@ -152,12 +161,14 @@ export function useTopicDetailPanelController({
 			)
 			if (matched?.file_id) {
 				if (payload.action === "download") {
-					getTemporaryDownloadUrl({
-						file_ids: [matched.file_id],
-						is_download: true,
-					}).then((res: any) => {
-						downloadFileWithAnchor(res[0]?.url)
-					})
+					fileApi
+						.getTemporaryDownloadUrl({
+							file_ids: [matched.file_id],
+							is_download: true,
+						})
+						.then((res: any) => {
+							downloadFileWithAnchor(res[0]?.url)
+						})
 				} else {
 					window.setTimeout(() => {
 						detailRef.current?.openFileTab?.(matched)
@@ -205,30 +216,68 @@ export function useTopicDetailPanelController({
 			}, DETAIL_OPEN_DELAY_MS)
 		}
 
+		const handleOpenMicroAppTab = (data: unknown) => {
+			const payload = data as { appId?: string; appName?: string }
+			const appId = payload.appId?.trim()
+			if (!appId) return
+
+			setActiveDetailTabType("micro_app")
+			window.setTimeout(() => {
+				detailRef.current?.openMicroAppTab?.({
+					appId,
+					appName: payload.appName,
+				})
+			}, DETAIL_OPEN_DELAY_MS)
+		}
+
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 		pubsub.subscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
 		pubsub.subscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+		if (subscribeMicroAppTab) {
+			pubsub.subscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
+		}
 
 		return () => {
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 			pubsub.unsubscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 			pubsub.unsubscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
 			pubsub.unsubscribe(PubSubEvents.Open_Knowledge_Base_Tab, handleOpenKnowledgeBaseTab)
+			if (subscribeMicroAppTab) {
+				pubsub.unsubscribe(PubSubEvents.Open_Micro_App_Tab, handleOpenMicroAppTab)
+			}
 		}
-	}, [detailRef, scheduleFileOpenFallback, setActiveFileId, attachmentList])
+	}, [
+		attachmentList,
+		detailRef,
+		fileApi,
+		scheduleFileOpenFallback,
+		setActiveFileId,
+		subscribeMicroAppTab,
+	])
 
 	const handleActiveDetailTabChange = useMemoizedFn((tabType: DetailTabType) => {
 		setActiveDetailTabType(tabType)
 	})
 
-	const clearActiveDetailTabType = useMemoizedFn(() => {
-		setActiveDetailTabType(null)
-		setIsDetailPanelCollapsed(false)
-	})
+	const clearActiveDetailTabType = useMemoizedFn(
+		(options?: { preservePublishedMicroApp?: boolean }) => {
+			// Published micro-app previews are project-scoped, so keep them visible
+			// when a host topic changes while still clearing other preview types.
+			if (
+				options?.preservePublishedMicroApp &&
+				activeDetailTabTypeRef.current === "micro_app"
+			) {
+				return
+			}
+			setActiveDetailTabType(null)
+			setIsDetailPanelCollapsed(false)
+		},
+	)
 
 	return {
 		shouldShowDetailPanel,
+		hasActiveDetailTab,
 		isDetailPanelCollapsed:
 			!isReadOnly &&
 			isDetailPanelCollapsed &&

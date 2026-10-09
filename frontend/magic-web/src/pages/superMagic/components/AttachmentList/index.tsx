@@ -10,10 +10,15 @@ import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { IconChevronDown, IconChevronRight, IconDownload } from "@tabler/icons-react"
 import { Button, Input, Tooltip, Typography } from "antd"
 import { useMemo, useState } from "react"
-import { useLocation } from "react-router"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import useStyles from "./style"
 import { SuperMagicApi } from "@/apis"
+import {
+	getAccessProjectId,
+	getAccessTopicId,
+	getShareAccessToken,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useTranslation } from "react-i18next"
 
@@ -55,8 +60,8 @@ export default function AttachmentList({
 }) {
 	const { t } = useTranslation("super")
 	const { styles, cx } = useStyles()
-	const { pathname } = useLocation()
 	const isMobile = useIsMobile()
+	const fileAccess = useFileAccess()
 
 	const [isFileListCollapsed, setIsFileListCollapsed] = useState(false)
 	const [fileSearchText, setFileSearchText] = useState("")
@@ -110,12 +115,9 @@ export default function AttachmentList({
 	const handleDownloadFile = (file_id: string, e: MouseEvent<HTMLSpanElement>) => {
 		e.stopPropagation()
 		SuperMagicApi.getTemporaryDownloadUrlForAdmin({
-			// @ts-ignore 使用 window 添加临时的 topic_id
-			topic_id: window.topic_id,
-			// @ts-ignore 使用 window 添加临时的 project_id
-			project_id: window.project_id,
-			// @ts-ignore 使用 window 添加临时的 token
-			temporary_token: window.temporary_token,
+			topic_id: getAccessTopicId(fileAccess),
+			project_id: getAccessProjectId(fileAccess),
+			temporary_token: getShareAccessToken(fileAccess),
 			file_ids: [file_id],
 		}).then((res: any) => {
 			window.open(res[0]?.url, "_blank")
@@ -320,12 +322,6 @@ export default function AttachmentList({
 		})
 	}
 
-	const showDownloadAll = useMemo(() => {
-		// 检查是否在分享场景，如果是分享场景则不显示下载全部文件按钮
-		const isShareRoute = pathname.includes("/share/")
-		return attachments?.length > 0 && !isShareRoute
-	}, [attachments, pathname])
-
 	return (
 		<div className={cx(styles.section, isFileListCollapsed && styles.collapsed)}>
 			<div className={styles.header}>
@@ -363,14 +359,7 @@ export default function AttachmentList({
 						/>
 					</div>
 					{!!filteredFiles.length && (
-						<div
-							className={cx(
-								styles.listContainer,
-								showDownloadAll && styles.showDownloadAll,
-							)}
-						>
-							{renderItems(filteredFiles, 0)}
-						</div>
+						<div className={styles.listContainer}>{renderItems(filteredFiles, 0)}</div>
 					)}
 					{!!attachments?.length && !filteredFiles.length && fileSearchText && (
 						<div className={styles.emptyText}>
@@ -394,29 +383,6 @@ export default function AttachmentList({
 							{t("attachmentList.empty")}
 						</div>
 					)}
-					{/* {showDownloadAll && (
-						<div className={styles.batchDownloadLayer}>
-							<button
-								className={styles.batchDownloadButton}
-								onClick={handleDownloadAll}
-								type="button"
-								disabled={allLoading}
-							>
-								{allLoading ? (
-									<Spin
-										size="small"
-										style={{ marginRight: 4, width: 14, height: 14 }}
-									/>
-								) : null}
-								<IconDownload
-									size={14}
-									stroke={1.5}
-									color="rgba(28, 29, 35, 0.8)"
-								/>
-								<span>{t("attachmentList.downloadAll")}</span>
-							</button>
-						</div>
-					)} */}
 				</div>
 			)}
 		</div>

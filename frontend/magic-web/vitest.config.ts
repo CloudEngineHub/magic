@@ -2,6 +2,7 @@ import { resolve } from "path"
 import { defaultClientConditions } from "vite"
 import { defineConfig, mergeConfig } from "vitest/config"
 import { getOverlayViteConfig } from "./vite/overlay"
+import vitePluginIframeRuntime from "./plugins/vite-plugin-iframe-runtime"
 
 const fixAntdLocaleImportExtensions = () => ({
 	name: "fix-antd-locale-import-extensions",
@@ -33,7 +34,10 @@ const fixAntdLocaleImportExtensions = () => ({
 
 const getVitestBaseConfig = () => {
 	return {
-		plugins: [fixAntdLocaleImportExtensions()],
+		plugins: [
+			fixAntdLocaleImportExtensions(),
+			vitePluginIframeRuntime({ projectRoot: __dirname }),
+		],
 		resolve: {
 			// Match application resolution so tests do not depend on a previously built dist.
 			conditions: ["magic-web-source", ...defaultClientConditions],
@@ -142,6 +146,14 @@ const getVitestBaseConfig = () => {
 				{
 					find: "@dtyq/x-markdown",
 					replacement: resolve(__dirname, "packages/x-markdown/src/index.ts"),
+				},
+				{
+					find: "@magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src"),
+				},
+				{
+					find: "@dtyq/magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src/index.ts"),
 				},
 			],
 		},

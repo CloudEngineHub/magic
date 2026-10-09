@@ -1,3 +1,6 @@
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { TextFileSession } from "../../types"
 import DetailEmpty from "../../components/DetailEmpty"
 import type {
@@ -5,7 +8,6 @@ import type {
 	SourceReplacement,
 } from "./components/EditorBody/source-location"
 import { useMarkdownSelection } from "./hooks/useMarkdownSelection"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
@@ -197,6 +199,8 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
+	const fileAccess = useFileAccess()
+	const fileApi = useFileApi()
 
 	/** 使用分享按钮可见性控制 Hook，用于控制导出按钮和下载按钮 */
 	const { shouldHideByPermission } = useShareButtonVisibility({
@@ -217,7 +221,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		isNewestVersion,
 		isDeleted,
 	} = useFileData({
-		enabled: !textFileSession,
+		enabled: true,
+		loadContent: !textFileSession,
+		isTabActive,
 		file_id: displayData?.file_id || "",
 		updatedAt,
 		isEditing: isEditMode,
@@ -248,7 +254,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
 	const currentContent =
-		textFileSession?.content ?? (savedContent || displayData?.content || fileData || "")
+		fileVersion !== undefined
+			? (fileData ?? textFileSession?.content ?? "")
+			: (textFileSession?.content ?? (savedContent || displayData?.content || fileData || ""))
 	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(currentContent), [currentContent])
 	const wasEditingLargeMarkdownRef = useRef(false)
 
@@ -324,9 +332,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	const data = useMemo(() => {
 		return {
 			...displayData,
-			content: displayData?.content || fileData,
+			content: currentContent,
 		}
-	}, [displayData, fileData])
+	}, [displayData, currentContent])
 
 	const [sourceSnapshot, setSourceSnapshot] = useState<MarkdownSourceSnapshot | null>(null)
 	const processedContent = sourceSnapshot?.content ?? ""
@@ -446,6 +454,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			setSourceSnapshot({ source: currentContent, content, replacements })
 		}
 		const processImages = async () => {
+			if (shouldWaitForShareAccess(fileAccess)) return
 			setIsLoading(true)
 			setImageUrlMap(new Map())
 
@@ -507,7 +516,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 				try {
 					// Batch fetch temporary download URLs
 					const downloadUrls =
-						(await getTemporaryDownloadUrl({
+						(await fileApi.getTemporaryDownloadUrl({
 							file_ids: Array.from(imagesToProcess),
 							options: {
 								xMagicImageProcess: {
@@ -543,7 +552,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			disposed = true
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [currentContent, relativeFilePath])
+	}, [currentContent, relativeFilePath, fileAccess, fileApi])
 
 	const handleEdit = useMemoizedFn(() => {
 		markdownSelection.stop()

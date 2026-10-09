@@ -1,3 +1,4 @@
+import { useChatSidebarSelection } from "../hooks/useChatSidebarSelection"
 import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { Ellipsis } from "lucide-react"
@@ -36,7 +37,8 @@ function ProjectItem({
 	onInteractionChange,
 }: ProjectItemProps) {
 	const { t } = useTranslation("super")
-	const isSelected = projectStore.selectedProject?.id === project.id
+	const { isChatRoute } = useChatSidebarSelection()
+	const isSelected = !isChatRoute && projectStore.selectedProject?.id === project.id
 	const isWorkspaceShortcut = isWorkspaceShortcutProject(project)
 	const isCollaborationProjectStatus = isCollaborationProject(project)
 	const showCollaborationTag = isWorkspaceShortcut || isCollaborationProjectStatus

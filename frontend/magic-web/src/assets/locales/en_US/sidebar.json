@@ -15,6 +15,7 @@
 	},
 	"chats": {
 		"empty": "No conversations",
+		"myChats": "My chats",
 		"newChat": "New chat",
 		"refresh": "Refresh conversations",
 		"title": "Chats"
@@ -36,7 +37,7 @@
 		"upgradeNow": "Upgrade"
 	},
 	"home": {
-		"title": "Home"
+		"title": "New task"
 	},
 	"mobileShell": {
 		"themeToggle": {
@@ -101,7 +102,7 @@
 		"upgrade": "Upgrade"
 	},
 	"skillsLibrary": {
-		"title": "Skills · Connectors"
+		"title": "Crew · Skills · Connectors"
 	},
 	"slidesTemplates": {
 		"compactCount": "{{value}} templates",

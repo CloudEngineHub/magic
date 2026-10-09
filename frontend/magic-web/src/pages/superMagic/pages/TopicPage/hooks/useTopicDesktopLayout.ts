@@ -11,6 +11,8 @@ interface UseTopicDesktopLayoutOptions {
 	allowConversationPanelResize?: boolean
 	/** Controls whether conversation collapse state survives remounts. */
 	persistConversationPanelState?: boolean
+	/** Initial state used when a page owns a temporary conversation layout. */
+	initialConversationPanelCollapsed?: boolean
 }
 
 interface UseTopicDesktopLayoutReturn {
@@ -48,6 +50,7 @@ export function useTopicDesktopLayout({
 	isReadOnly,
 	allowProjectSiderResize = !isReadOnly,
 	persistConversationPanelState = true,
+	initialConversationPanelCollapsed = false,
 	enableProjectCollapse = false,
 	onHistoryDragEnd,
 	allowConversationPanelResize = !isReadOnly,
@@ -58,6 +61,7 @@ export function useTopicDesktopLayout({
 	if (!storeRef.current) {
 		storeRef.current = new TopicLayoutStore({
 			persistConversationPanelState,
+			initialConversationPanelCollapsed,
 			bufferedMessageCollapse: enableProjectCollapse,
 			allowConversationPanelResize,
 		})

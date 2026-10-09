@@ -478,6 +478,9 @@ importers:
       '@zumer/snapdom':
         specifier: ^2.24.17
         version: 2.24.17
+      acorn:
+        specifier: 8.18.0
+        version: 8.18.0
       ahooks:
         specifier: ^3.7.11
         version: 3.9.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -541,6 +544,9 @@ importers:
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@18.3.1)
+      entities:
+        specifier: ^6.0.1
+        version: 6.0.1
       excel-js-preview:
         specifier: 1.7.15
         version: 1.7.15
@@ -667,6 +673,9 @@ importers:
       pako:
         specifier: ^2.1.0
         version: 2.2.0
+      parse5:
+        specifier: ^7.3.0
+        version: 7.3.0
       pathe:
         specifier: ^2.0.3
         version: 2.0.3

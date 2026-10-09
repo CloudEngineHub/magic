@@ -22558,25 +22558,25 @@ index 143dfa3e7fb54054153bad16b6c991697c0d31e7..88d87079754fa7e985522a4c5901c6c5
 +        let reqsClosingFontSize = false;
 +        // A: Start paragraph, add paraProps
 +        strSlideXml += '<a:p>';
-+        // NOTE: `rtlMode` is like other opts, its propagated up to each text:options, so just check the 1st one
-+        let paragraphPropXml = `<a:pPr ${((_a = line[0].options) === null || _a === void 0 ? void 0 : _a.rtlMode) ? ' rtl="1" ' : ''}`;
-+        // B: Start paragraph, loop over lines and add text runs
++        // B: Normalize paragraph-level options before serializing the paragraph.
++        // Paragraph properties belong to the <a:p> itself and must be emitted
++        // exactly once, before any <a:r>/<a:br> children.
 +        line.forEach((textObj, idx) => {
-+            // A: Set line index
 +            textObj.options._lineIdx = idx;
-+            // A.1: Add soft break if not the first run of the line.
-+            if (idx > 0 && textObj.options.softBreakBefore) {
-+                strSlideXml += '<a:br/>';
-+            }
-+            // B: Inherit pPr-type options from parent shape's `options`
 +            textObj.options.align = textObj.options.align || opts.align;
 +            textObj.options.lineSpacing = textObj.options.lineSpacing || opts.lineSpacing;
 +            textObj.options.lineSpacingMultiple = textObj.options.lineSpacingMultiple || opts.lineSpacingMultiple;
 +            textObj.options.indentLevel = textObj.options.indentLevel || opts.indentLevel;
 +            textObj.options.paraSpaceBefore = textObj.options.paraSpaceBefore || opts.paraSpaceBefore;
 +            textObj.options.paraSpaceAfter = textObj.options.paraSpaceAfter || opts.paraSpaceAfter;
-+            paragraphPropXml = genXmlParagraphProperties(textObj, false);
-+            strSlideXml += paragraphPropXml.replace('<a:pPr></a:pPr>', ''); // IMPORTANT: Empty "pPr" blocks will generate needs-repair/corrupt msg
++        });
++        strSlideXml += genXmlParagraphProperties(line[0], false).replace('<a:pPr></a:pPr>', '');
++        // C: Loop over the line and add text runs
++        line.forEach((textObj, idx) => {
++            // Add soft break if not the first run of the line.
++            if (idx > 0 && textObj.options.softBreakBefore) {
++                strSlideXml += '<a:br/>';
++            }
 +            // C: Inherit any main options (color, fontSize, etc.)
 +            // NOTE: We only pass the text.options to genXmlTextRun (not the Slide.options),
 +            // so the run building function cant just fallback to Slide.color, therefore, we need to do that here before passing options below.
@@ -58632,25 +58632,25 @@ index 449038cbf3d367c7e5a51bf692793a25bd06a86e..e25cf5671817b2dff270d1bc795af648
 +        let reqsClosingFontSize = false;
 +        // A: Start paragraph, add paraProps
 +        strSlideXml += '<a:p>';
-+        // NOTE: `rtlMode` is like other opts, its propagated up to each text:options, so just check the 1st one
-+        let paragraphPropXml = `<a:pPr ${((_a = line[0].options) === null || _a === void 0 ? void 0 : _a.rtlMode) ? ' rtl="1" ' : ''}`;
-+        // B: Start paragraph, loop over lines and add text runs
++        // B: Normalize paragraph-level options before serializing the paragraph.
++        // Paragraph properties belong to the <a:p> itself and must be emitted
++        // exactly once, before any <a:r>/<a:br> children.
 +        line.forEach((textObj, idx) => {
-+            // A: Set line index
 +            textObj.options._lineIdx = idx;
-+            // A.1: Add soft break if not the first run of the line.
-+            if (idx > 0 && textObj.options.softBreakBefore) {
-+                strSlideXml += '<a:br/>';
-+            }
-+            // B: Inherit pPr-type options from parent shape's `options`
 +            textObj.options.align = textObj.options.align || opts.align;
 +            textObj.options.lineSpacing = textObj.options.lineSpacing || opts.lineSpacing;
 +            textObj.options.lineSpacingMultiple = textObj.options.lineSpacingMultiple || opts.lineSpacingMultiple;
 +            textObj.options.indentLevel = textObj.options.indentLevel || opts.indentLevel;
 +            textObj.options.paraSpaceBefore = textObj.options.paraSpaceBefore || opts.paraSpaceBefore;
 +            textObj.options.paraSpaceAfter = textObj.options.paraSpaceAfter || opts.paraSpaceAfter;
-+            paragraphPropXml = genXmlParagraphProperties(textObj, false);
-+            strSlideXml += paragraphPropXml.replace('<a:pPr></a:pPr>', ''); // IMPORTANT: Empty "pPr" blocks will generate needs-repair/corrupt msg
++        });
++        strSlideXml += genXmlParagraphProperties(line[0], false).replace('<a:pPr></a:pPr>', '');
++        // C: Loop over the line and add text runs
++        line.forEach((textObj, idx) => {
++            // Add soft break if not the first run of the line.
++            if (idx > 0 && textObj.options.softBreakBefore) {
++                strSlideXml += '<a:br/>';
++            }
 +            // C: Inherit any main options (color, fontSize, etc.)
 +            // NOTE: We only pass the text.options to genXmlTextRun (not the Slide.options),
 +            // so the run building function cant just fallback to Slide.color, therefore, we need to do that here before passing options below.
@@ -92671,25 +92671,25 @@ index 0000000000000000000000000000000000000000..e25cf5671817b2dff270d1bc795af648
 +        let reqsClosingFontSize = false;
 +        // A: Start paragraph, add paraProps
 +        strSlideXml += '<a:p>';
-+        // NOTE: `rtlMode` is like other opts, its propagated up to each text:options, so just check the 1st one
-+        let paragraphPropXml = `<a:pPr ${((_a = line[0].options) === null || _a === void 0 ? void 0 : _a.rtlMode) ? ' rtl="1" ' : ''}`;
-+        // B: Start paragraph, loop over lines and add text runs
++        // B: Normalize paragraph-level options before serializing the paragraph.
++        // Paragraph properties belong to the <a:p> itself and must be emitted
++        // exactly once, before any <a:r>/<a:br> children.
 +        line.forEach((textObj, idx) => {
-+            // A: Set line index
 +            textObj.options._lineIdx = idx;
-+            // A.1: Add soft break if not the first run of the line.
-+            if (idx > 0 && textObj.options.softBreakBefore) {
-+                strSlideXml += '<a:br/>';
-+            }
-+            // B: Inherit pPr-type options from parent shape's `options`
 +            textObj.options.align = textObj.options.align || opts.align;
 +            textObj.options.lineSpacing = textObj.options.lineSpacing || opts.lineSpacing;
 +            textObj.options.lineSpacingMultiple = textObj.options.lineSpacingMultiple || opts.lineSpacingMultiple;
 +            textObj.options.indentLevel = textObj.options.indentLevel || opts.indentLevel;
 +            textObj.options.paraSpaceBefore = textObj.options.paraSpaceBefore || opts.paraSpaceBefore;
 +            textObj.options.paraSpaceAfter = textObj.options.paraSpaceAfter || opts.paraSpaceAfter;
-+            paragraphPropXml = genXmlParagraphProperties(textObj, false);
-+            strSlideXml += paragraphPropXml.replace('<a:pPr></a:pPr>', ''); // IMPORTANT: Empty "pPr" blocks will generate needs-repair/corrupt msg
++        });
++        strSlideXml += genXmlParagraphProperties(line[0], false).replace('<a:pPr></a:pPr>', '');
++        // C: Loop over the line and add text runs
++        line.forEach((textObj, idx) => {
++            // Add soft break if not the first run of the line.
++            if (idx > 0 && textObj.options.softBreakBefore) {
++                strSlideXml += '<a:br/>';
++            }
 +            // C: Inherit any main options (color, fontSize, etc.)
 +            // NOTE: We only pass the text.options to genXmlTextRun (not the Slide.options),
 +            // so the run building function cant just fallback to Slide.color, therefore, we need to do that here before passing options below.

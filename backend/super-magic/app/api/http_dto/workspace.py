@@ -121,6 +121,9 @@ Relative path within the workspace root to export (e.g. 'skills/my-skill'). Defa
         description="Optional ZIP file name to upload. Defaults to '{code}_{timestamp}.zip'.",
     )
 
+    exclude_paths: list[str] = Field(default_factory=list, description="Paths relative to the exported directory to omit.")
+    skills_md_hash: str | None = Field(None, description="Expected SHA-256 of SKILLS.md for a reference-only employee export.")
+
 
 class WorkspaceExportData(BaseModel):
     """Workspace export response payload."""

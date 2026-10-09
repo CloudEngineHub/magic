@@ -28,6 +28,10 @@ import ConversationInputResizeHandle from "@/pages/superMagic/components/Convers
 import { ConversationInputLayoutProvider } from "@/pages/superMagic/components/ConversationInputResize/context"
 import { useConversationInputHeight } from "@/pages/superMagic/components/ConversationInputResize/useConversationInputHeight"
 
+/** Reuse the project composer chrome with a slightly tighter toolbar rhythm for opt-in panels. */
+const DESKTOP_COMPOSER_SHELL_CLASSNAME =
+	"flex-none items-start gap-1.5 self-stretch rounded-2xl border border-border bg-sidebar p-2"
+
 interface ConversationPanelScaffoldProps {
 	scope: string
 	header?: ReactNode
@@ -38,6 +42,7 @@ interface ConversationPanelScaffoldProps {
 	messages: Array<SuperMagicMessageItem>
 	selectedTopic: Topic | null
 	setSelectedDetail?: (detail: unknown) => void
+	onFileClick?: (fileItem: unknown) => void
 	isConversationPanelCollapsed?: boolean
 	detailPanelVisible?: boolean
 	showLoading?: boolean
@@ -72,6 +77,8 @@ interface ConversationPanelScaffoldProps {
 	editorNodes?: SceneEditorNodes
 	/** Optional page-specific offset for the desktop input resize handle. */
 	resizeHandlePositionClassName?: string
+	/** Wrap this desktop composer with the same shell used by project topics. */
+	desktopComposerShell?: boolean
 }
 
 interface AnimatedEmptyStateProps {
@@ -106,6 +113,7 @@ function ConversationPanelScaffold({
 	messages,
 	selectedTopic,
 	setSelectedDetail,
+	onFileClick,
 	isConversationPanelCollapsed = false,
 	detailPanelVisible = true,
 	showLoading,
@@ -127,6 +135,7 @@ function ConversationPanelScaffold({
 	revokedEditorContext,
 	editorNodes,
 	resizeHandlePositionClassName,
+	desktopComposerShell = false,
 }: ConversationPanelScaffoldProps) {
 	/** 与全局移动端判定一致，用于在窄屏下去掉根容器多余底边距，避免与全屏输入区叠出双份留白 */
 	const isMobile = useIsMobile()
@@ -427,9 +436,18 @@ function ConversationPanelScaffold({
 				>
 					<MessageListProvider value={messageListProviderValue}>
 						<MessageList
+							// The scaffold owns responsive spacing and its panel surface.
+							className={
+								isMobile
+									? "[--message-list-sticky-fade-height:0px] [--message-list-surface:rgb(var(--mobile-background-rgb))]"
+									: "[--message-list-surface:rgb(var(--sidebar-rgb))]"
+							}
+							classNames={{ content: isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[10px]" }}
+							scrollEdgeFade={isMobile}
 							data={messages}
 							selectedTopic={selectedTopic}
 							setSelectedDetail={setSelectedDetail}
+							onFileClick={onFileClick}
 							handlePullMoreMessage={handlePullMoreMessage}
 							showLoading={showLoading}
 							currentTopicStatus={currentTopicStatus}
@@ -480,8 +498,16 @@ function ConversationPanelScaffold({
 						<div
 							className={cn(
 								"relative z-[1] flex w-full flex-col items-center",
+								desktopComposerShell &&
+									!isMobile &&
+									DESKTOP_COMPOSER_SHELL_CLASSNAME,
 								inputHeight.fillHeight && "h-full min-h-0",
 							)}
+							data-testid={
+								desktopComposerShell && !isMobile
+									? `${scope}-composer-shell`
+									: undefined
+							}
 						>
 							<div
 								className="flex w-full shrink-0 flex-col gap-2 [&:empty]:hidden"

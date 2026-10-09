@@ -514,6 +514,7 @@ def test_user_message_positional_arguments_remain_compatible():
 def test_default_processing_limit_keeps_bounded_expanded_caches():
     """默认每批只处理前 10 张图片，内存缓存仍应保持扩大的硬上限。"""
     assert LLMMessageRenderer.MAX_NATIVE_IMAGE_REFS == 10
+    assert LLMMessageRenderer.MAX_HISTORY_NATIVE_IMAGE_REFS == 20
     assert LLMMessageRenderer.MAX_NATIVE_IMAGE_BYTES == -1
     assert LLMMessageRenderer.MAX_CACHE_ENTRIES == 32
     assert LLMMessageRenderer.MAX_CACHE_BYTES == 128 * 1024 * 1024
@@ -523,6 +524,7 @@ def test_renderer_loads_native_visual_limits_from_config(tmp_path, monkeypatch):
     """渲染器应从统一配置中加载图片和缓存限额。"""
     values = {
         "llm.native_visual_max_image_refs": 6,
+        "llm.native_visual_max_history_image_refs": 20,
         "llm.native_visual_max_image_bytes": 8_000_000,
         "llm.native_visual_cache_max_entries": 12,
         "llm.native_visual_cache_max_bytes": 64_000_000,
@@ -535,6 +537,7 @@ def test_renderer_loads_native_visual_limits_from_config(tmp_path, monkeypatch):
     renderer = LLMMessageRenderer(workspace_dir=tmp_path)
 
     assert renderer.max_native_image_refs == 6
+    assert renderer.max_history_image_refs == 20
     assert renderer.max_native_image_bytes == 8_000_000
     assert renderer.max_cache_entries == 12
     assert renderer.max_cache_bytes == 64_000_000
@@ -561,6 +564,7 @@ def test_renderer_falls_back_for_invalid_native_visual_config(tmp_path, monkeypa
     """非法配置不应关闭缓存边界或改变默认请求策略。"""
     values = {
         "llm.native_visual_max_image_refs": -2,
+        "llm.native_visual_max_history_image_refs": -3,
         "llm.native_visual_max_image_bytes": "invalid",
         "llm.native_visual_cache_max_entries": 0,
         "llm.native_visual_cache_max_bytes": -1,
@@ -573,6 +577,53 @@ def test_renderer_falls_back_for_invalid_native_visual_config(tmp_path, monkeypa
     renderer = LLMMessageRenderer(workspace_dir=tmp_path)
 
     assert renderer.max_native_image_refs == LLMMessageRenderer.MAX_NATIVE_IMAGE_REFS
+    assert renderer.max_history_image_refs == LLMMessageRenderer.MAX_HISTORY_NATIVE_IMAGE_REFS
     assert renderer.max_native_image_bytes == LLMMessageRenderer.MAX_NATIVE_IMAGE_BYTES
     assert renderer.max_cache_entries == LLMMessageRenderer.MAX_CACHE_ENTRIES
     assert renderer.max_cache_bytes == LLMMessageRenderer.MAX_CACHE_BYTES
+
+
+@pytest.mark.asyncio
+async def test_renderer_skips_messages_marked_out_of_native_visual(
+    tmp_path,
+    monkeypatch,
+):
+    """已经关闭原生视觉的历史消息不应再把图片送进请求。"""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "old.png").write_bytes(b"image")
+    (workspace / "new.png").write_bytes(b"image")
+
+    async def fake_base64(self, image_path, *args, **kwargs):
+        encoded_path = base64.b64encode(str(image_path).encode()).decode()
+        return f"data:image/png;base64,{encoded_path}"
+
+    monkeypatch.setattr(
+        "app.service.multimodal_message_renderer.ImageCompressionService.get_base64",
+        fake_base64,
+    )
+    renderer = LLMMessageRenderer(workspace_dir=workspace)
+    old_message = UserMessage(
+        content="old",
+        content_parts=[
+            UserMessageContentPart.text_part("old"),
+            UserMessageContentPart.image_ref("old.png"),
+        ],
+        include_in_native_visual=False,
+    )
+    current = UserMessage(
+        content="new",
+        content_parts=[
+            UserMessageContentPart.text_part("new"),
+            UserMessageContentPart.image_ref("new.png"),
+        ],
+    )
+
+    result = await renderer.render_messages_with_horizon_hint(
+        [old_message, current],
+        supports_multimodal=True,
+    )
+
+    assert result.messages[0]["content"] == "old"
+    assert isinstance(result.messages[1]["content"], list)
+    assert sum(item["type"] == "image_url" for item in result.messages[1]["content"]) == 1

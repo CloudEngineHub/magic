@@ -18,7 +18,6 @@ interface StoreSkillCardMobileProps {
 	language: string
 	showFeaturedTag?: boolean
 	onAdd?: (id: string) => void
-	onUpgrade?: (id: string) => void
 	onOpenDetail?: (skill: StoreSkillView) => void
 }
 
@@ -48,7 +47,6 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 	language,
 	showFeaturedTag = false,
 	onAdd,
-	onUpgrade,
 	onOpenDetail,
 }: StoreSkillCardMobileProps) {
 	const { t } = useTranslation("crew/market")
@@ -69,18 +67,9 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 	const showInstallCount = skill.publisherType !== "OFFICIAL_BUILTIN"
 
 	const isAdded = skill.status === "added"
-	const buttonLabel = isAdded
-		? skill.needUpgrade
-			? t("skillsLibrary.upgrade")
-			: t("skillsLibrary.added")
-		: t("skillsLibrary.addToMySkills")
+	const buttonLabel = isAdded ? t("skillsLibrary.added") : t("skillsLibrary.addToMySkills")
 
 	function handleAction() {
-		if (isAdded && skill.needUpgrade) {
-			onUpgrade?.(skill.id)
-			return
-		}
-
 		if (!isAdded) onAdd?.(skill.id)
 	}
 
@@ -168,7 +157,7 @@ export const StoreSkillCardMobile = observer(function StoreSkillCardMobile({
 					event.stopPropagation()
 					handleAction()
 				}}
-				disabled={isAdded && !skill.needUpgrade}
+				disabled={isAdded}
 				data-testid="skills-library-mobile-card-action"
 			>
 				{buttonLabel}

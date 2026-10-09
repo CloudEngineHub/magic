@@ -69,9 +69,13 @@ class GatewayResult
             || ! is_string($agfsImage) || trim($agfsImage) === '') {
             return null;
         }
+
         return ['agent_image' => $agentImage, 'agfs_image' => $agfsImage];
     }
 
+    /**
+     * Check if successful.
+     */
     public function isSuccess(): bool
     {
         return ResponseCode::isSuccess($this->code);

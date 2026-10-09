@@ -27,17 +27,23 @@ describe("generateFetchInterceptorScript", () => {
 	let originalFetch: typeof window.fetch
 	let originalXhrOpen: typeof XMLHttpRequest.prototype.open
 	let originalXhrSend: typeof XMLHttpRequest.prototype.send
+	let originalXhrAbort: typeof XMLHttpRequest.prototype.abort
+	let originalXhrSetRequestHeader: typeof XMLHttpRequest.prototype.setRequestHeader
 
 	beforeEach(() => {
 		originalFetch = window.fetch
 		originalXhrOpen = XMLHttpRequest.prototype.open
 		originalXhrSend = XMLHttpRequest.prototype.send
+		originalXhrAbort = XMLHttpRequest.prototype.abort
+		originalXhrSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader
 	})
 
 	afterEach(() => {
 		window.fetch = originalFetch
 		XMLHttpRequest.prototype.open = originalXhrOpen
 		XMLHttpRequest.prototype.send = originalXhrSend
+		XMLHttpRequest.prototype.abort = originalXhrAbort
+		XMLHttpRequest.prototype.setRequestHeader = originalXhrSetRequestHeader
 		vi.restoreAllMocks()
 	})
 

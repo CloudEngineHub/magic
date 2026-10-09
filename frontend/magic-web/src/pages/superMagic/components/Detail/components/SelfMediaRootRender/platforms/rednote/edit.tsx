@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
 } from "../../../../contents/HTML/IsolatedHTMLRenderer"
@@ -73,6 +73,7 @@ const RednoteEditView = observer(function RednoteEditView({
 	onAddCardToCurrentChat,
 }: RednoteEditViewProps) {
 	const { t } = useTranslation("super")
+	const fileApi = useFileApi()
 	const store = useSelfMediaStore()
 	const { activePost, activeCardIndex } = store
 	const cards = activePost?.cards ?? []
@@ -219,7 +220,7 @@ const RednoteEditView = observer(function RednoteEditView({
 		setCardContent(null)
 		;(async () => {
 			try {
-				const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
+				const urls = await fileApi.getTemporaryDownloadUrl({ file_ids: [fileId] })
 				const url = urls?.[0]?.url
 				if (!url) throw new Error("noCardUrl")
 				if (cancelled) return
@@ -240,6 +241,7 @@ const RednoteEditView = observer(function RednoteEditView({
 						fileName: currentFile?.file_name,
 						html_relative_path: relativeFolderPath,
 						xMagicImageProcess: CARD_IMAGE_PROCESS,
+						fileApi,
 					})
 					processedContent = result.processedContent || html
 					mapping = result.filePathMapping || new Map()
@@ -270,6 +272,7 @@ const RednoteEditView = observer(function RednoteEditView({
 		contentReloadVersion,
 		currentFile?.file_name,
 		relativeFolderPath,
+		fileApi,
 	])
 
 	// ===== Auto-enter edit mode when content is loaded =====

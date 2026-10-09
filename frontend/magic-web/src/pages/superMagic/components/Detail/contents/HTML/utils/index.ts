@@ -1,5 +1,6 @@
 import { env } from "@/utils/env"
 import { normalizeConflictingBackgroundDeclarations } from "./background-style"
+import { restoreHtmlLocationHref } from "./location-href-restore"
 import valueParser from "postcss-value-parser"
 // import { getEditingScript } from "./editing-script"
 
@@ -226,7 +227,7 @@ interface ResourceFileTypeInfo {
 	relative_file_path?: string
 }
 
-function getResourceContentType(file: ResourceFileTypeInfo, fallbackPath: string): string {
+export function getResourceContentType(file: ResourceFileTypeInfo, fallbackPath: string): string {
 	return getContentTypeFromExtension(
 		file.file_extension || file.file_name || file.relative_file_path || fallbackPath,
 	)
@@ -1048,6 +1049,7 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		// 使用DOMParser解析HTML字符串
 		const parser = new DOMParser()
 		const doc = parser.parseFromString(htmlString, "text/html")
+		restoreHtmlLocationHref(doc)
 
 		// 移除所有带有 data-injected 或历史 data-runtime 标记的元素
 		const injectedElements = doc.querySelectorAll("[data-injected], [data-runtime]")

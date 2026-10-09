@@ -11,6 +11,7 @@ use App\Interfaces\SuperMagic\Agent\Facade\OpenApi\OpenSuperMagicAgentApi;
 use App\Interfaces\SuperMagic\Agent\Facade\Sandbox\SkillSandboxApi;
 use App\Interfaces\SuperMagic\Agent\Facade\Sandbox\SuperMagicAgentSandboxApi;
 use App\Interfaces\SuperMagic\Common\Share\Facade\ShareApi;
+use App\Interfaces\SuperMagic\Design\Facade\Sandbox\HtmlDesignStyleSandboxApi;
 use App\Interfaces\SuperMagic\File\Facade\InternalApi\FileApi;
 use App\Interfaces\SuperMagic\File\Facade\OpenApi\OpenFileApi;
 use App\Interfaces\SuperMagic\Message\Facade\OpenApi\OpenMessageScheduleApi;
@@ -151,6 +152,11 @@ Router::addGroup(
         Router::addGroup('/skill-market', static function () {
             // 获取市场技能库列表
             Router::post('/queries', [SkillSandboxApi::class, 'queriesMarket']);
+        });
+
+        // HTML 设计风格源文，供 super-magic 内部 Skill 调用
+        Router::addGroup('/html-design-styles', static function () {
+            Router::get('/{styleCode}/source', [HtmlDesignStyleSandboxApi::class, 'getSource']);
         });
     },
     ['middleware' => [SandboxUserAuthMiddleware::class]]

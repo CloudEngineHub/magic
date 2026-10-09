@@ -32,6 +32,7 @@ import {
 	deleteMagicBaseRow,
 	getMagicBaseRelations,
 } from "../magicBaseApi"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 
 export interface IframeDatabaseConfig {
 	/** 向 iframe 发送消息的函数 */
@@ -40,6 +41,7 @@ export interface IframeDatabaseConfig {
 	getProjectId: () => string | undefined
 	/** 项目上下文不可用时返回给 iframe 的语义化错误。 */
 	projectContextUnavailableError?: string
+	getFileAccess?: () => FileAccessContext | null
 }
 
 export class IframeDatabaseService {
@@ -101,11 +103,15 @@ export class IframeDatabaseService {
 		return projectId
 	}
 
+	private getFileAccess() {
+		return this.cfg.getFileAccess?.() ?? null
+	}
+
 	private async handleGetTables(req: DBGetTablesRequest) {
 		const { requestId } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			const tables = await getMagicBaseTables(projectId)
+			const tables = await getMagicBaseTables(projectId, this.getFileAccess())
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.GET_TABLES_RESPONSE,
 				requestId,
@@ -126,7 +132,7 @@ export class IframeDatabaseService {
 		const { requestId } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			const access = await getMagicBaseProjectAdminAccess(projectId)
+			const access = await getMagicBaseProjectAdminAccess(projectId, this.getFileAccess())
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.GET_PROJECT_ADMIN_ACCESS_RESPONSE,
 				requestId,
@@ -148,7 +154,7 @@ export class IframeDatabaseService {
 		const { requestId, tableId } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			const table = await getMagicBaseTable(projectId, tableId)
+			const table = await getMagicBaseTable(projectId, tableId, this.getFileAccess())
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.GET_TABLE_RESPONSE,
 				requestId,
@@ -169,7 +175,13 @@ export class IframeDatabaseService {
 		const { requestId, tableId, data, select } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			const row = await createMagicBaseRow(projectId, tableId, data, select)
+			const row = await createMagicBaseRow(
+				projectId,
+				tableId,
+				data,
+				select,
+				this.getFileAccess(),
+			)
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.CREATE_ROW_RESPONSE,
 				requestId,
@@ -190,7 +202,7 @@ export class IframeDatabaseService {
 		const { requestId, tableId, query } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			const result = await queryMagicBaseRows(projectId, tableId, query)
+			const result = await queryMagicBaseRows(projectId, tableId, query, this.getFileAccess())
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.QUERY_ROWS_RESPONSE,
 				requestId,
@@ -211,7 +223,13 @@ export class IframeDatabaseService {
 		const { requestId, tableId, recordId, select } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			const row = await getMagicBaseRow(projectId, tableId, recordId, select)
+			const row = await getMagicBaseRow(
+				projectId,
+				tableId,
+				recordId,
+				select,
+				this.getFileAccess(),
+			)
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.GET_ROW_RESPONSE,
 				requestId,
@@ -232,7 +250,14 @@ export class IframeDatabaseService {
 		const { requestId, tableId, recordId, data, select } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			const row = await updateMagicBaseRow(projectId, tableId, recordId, data, select)
+			const row = await updateMagicBaseRow(
+				projectId,
+				tableId,
+				recordId,
+				data,
+				select,
+				this.getFileAccess(),
+			)
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.UPDATE_ROW_RESPONSE,
 				requestId,
@@ -253,7 +278,7 @@ export class IframeDatabaseService {
 		const { requestId, tableId, recordId } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			await deleteMagicBaseRow(projectId, tableId, recordId)
+			await deleteMagicBaseRow(projectId, tableId, recordId, this.getFileAccess())
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.DELETE_ROW_RESPONSE,
 				requestId,
@@ -273,7 +298,7 @@ export class IframeDatabaseService {
 		const { requestId } = req
 		try {
 			const projectId = this.getProjectIdOrThrow()
-			const relations = await getMagicBaseRelations(projectId)
+			const relations = await getMagicBaseRelations(projectId, this.getFileAccess())
 			this.cfg.postToIframe({
 				type: DB_MESSAGE_TYPES.GET_RELATIONS_RESPONSE,
 				requestId,

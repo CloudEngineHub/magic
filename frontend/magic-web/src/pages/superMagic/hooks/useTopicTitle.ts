@@ -51,6 +51,10 @@ export function useProjectTitle() {
 	const { t } = useTranslation("super")
 
 	useEffect(() => {
+		if (matchPath(`/:clusterCode${RoutePath.SuperChatHome}`, pathname)) {
+			setMeta({ title: t("chatList.newChat") })
+			return
+		}
 		return reaction(
 			() =>
 				[

@@ -1,6 +1,10 @@
 import Dexie from "dexie"
 import type { TableSchema } from "./types"
 import { logger as Logger } from "@/infrastructure/logger"
+import {
+	STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
+	STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
+} from "@/app/services/storage/storageFailure"
 
 const logger = Logger.createLogger("database")
 
@@ -186,10 +190,11 @@ export class DatabaseManager {
 		const storageStatus = await checkStorageQuota()
 		if (!storageStatus.available) {
 			logger.error({
-				eventKey: "storage_quota_insufficient_failed",
-				errorKind: "quota",
+				eventKey: STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
+				errorKind: STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
 				message: "storageQuotaInsufficient",
 				context: {
+					source: "database_manager_estimate",
 					usage: storageStatus.usage,
 					quota: storageStatus.quota,
 					usageRatio:

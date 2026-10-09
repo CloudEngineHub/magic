@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, it, expect, vi } from "vitest"
 import TabCache from "../components/TabCache"
@@ -34,6 +34,16 @@ vi.mock("../components/PlaybackTabContent", () => ({
 
 vi.mock("../components/KnowledgeBaseTabContent", () => ({
 	default: () => <div data-testid="knowledge-base-tab-content" />,
+}))
+
+vi.mock("../components/MicroAppTabContent", () => ({
+	default: ({ onLeave }: { onLeave?: () => void }) => (
+		<div data-testid="micro-app-tab-content">
+			{onLeave ? (
+				<button type="button" data-testid="micro-app-tab-leave" onClick={onLeave} />
+			) : null}
+		</div>
+	),
 }))
 
 // Mock dependencies
@@ -143,6 +153,36 @@ describe("TabCache", () => {
 
 		expect(screen.queryByTestId("render-component")).not.toBeInTheDocument()
 		expect(screen.getByTitle("Unsplash")).toHaveAttribute("src", "https://unsplash.com")
+	})
+
+	it("renders micro-app tabs through preview content instead of file Render", () => {
+		render(
+			<TabCache
+				tab={{ id: "__micro_app__app-1", title: "内购", type: "micro_app" }}
+				isActive={true}
+				renderProps={mockRenderProps}
+				microAppData={{ appId: "app-1", appName: "内购" }}
+			/>,
+		)
+
+		expect(screen.queryByTestId("render-component")).not.toBeInTheDocument()
+		expect(screen.getByTestId("micro-app-tab-content")).toBeInTheDocument()
+	})
+
+	it("closes a micro-app tab from the safety notice leave action", () => {
+		const onCloseTab = vi.fn()
+		render(
+			<TabCache
+				tab={{ id: "__micro_app__app-1", title: "内购", type: "micro_app" }}
+				isActive={true}
+				renderProps={mockRenderProps}
+				microAppData={{ appId: "app-1", appName: "内购" }}
+				onCloseTab={onCloseTab}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("micro-app-tab-leave"))
+		expect(onCloseTab).toHaveBeenCalledWith("__micro_app__app-1")
 	})
 
 	it("uses the legacy browser fullscreen content layer outside Magic App", () => {

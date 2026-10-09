@@ -50,6 +50,8 @@ export function inferRootEntryIdFromItem(item: MentionItem): string | null {
 			return (item.data as AgentMentionData | undefined)?.agent_source === "digital_employee"
 				? BuiltinRootId.DIGITAL_EMPLOYEES
 				: BuiltinRootId.AGENTS
+		case MentionItemType.MICRO_APP:
+			return BuiltinRootId.MICRO_APPS
 		case MentionItemType.SKILL:
 			return BuiltinRootId.SKILLS
 		case MentionItemType.TOOL:

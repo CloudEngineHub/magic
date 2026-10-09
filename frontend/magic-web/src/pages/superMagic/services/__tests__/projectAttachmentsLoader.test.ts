@@ -167,6 +167,34 @@ describe("loadProjectAttachments scope", () => {
 		)
 	})
 
+	it("does not inherit window share token for workspace attachment loads", async () => {
+		;(window as Window & { temporary_token?: string }).temporary_token = "share-token"
+		superMagicApiMock.getProjectAttachmentsCount.mockResolvedValue({ total: 0 })
+		superMagicApiMock.getProjectAttachmentsV2Page.mockResolvedValue({
+			list: [],
+			next_parent_ids: null,
+			has_more: false,
+		})
+
+		await loadProjectAttachments({ projectId: "host-project" })
+
+		expect(superMagicApiMock.getProjectAttachmentsCount).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectId: "host-project",
+				temporaryToken: "",
+			}),
+			expect.any(Object),
+		)
+		expect(superMagicApiMock.getProjectAttachmentsV2Page).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectId: "host-project",
+				temporaryToken: "",
+			}),
+			expect.any(Object),
+		)
+		delete (window as Window & { temporary_token?: string }).temporary_token
+	})
+
 	it("uses V2 by default and forwards memory scope to every page request", async () => {
 		superMagicApiMock.getProjectAttachmentsCount.mockResolvedValue({ total: 0 })
 		superMagicApiMock.getProjectAttachmentsV2Page.mockResolvedValue({

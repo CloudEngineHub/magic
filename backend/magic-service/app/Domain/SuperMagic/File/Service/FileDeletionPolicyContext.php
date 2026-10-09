@@ -52,9 +52,23 @@ final class FileDeletionPolicyContext
             $file = $this->files[$fileId];
             $parentId = $file->getParentId();
             if ($parentId === null || $parentId <= 0) {
-                $hidden = $file->getIsDirectory() && WorkFileUtil::isHiddenFileName($file->getFileName());
                 break;
             }
+
+            $parent = $this->files[$parentId] ?? null;
+            if ($parent === null) {
+                break;
+            }
+
+            // Project files are rooted at the synthetic "/" directory. The
+            // hidden rule applies to its direct child, not to the root node.
+            if ($parent->getParentId() === null
+                && $parent->getFileName() === '/'
+                && $file->getIsDirectory()) {
+                $hidden = WorkFileUtil::isHiddenFileName($file->getFileName());
+                break;
+            }
+
             $fileId = $parentId;
         }
         // Missing ancestors and cycles cannot prove membership in a hidden root.

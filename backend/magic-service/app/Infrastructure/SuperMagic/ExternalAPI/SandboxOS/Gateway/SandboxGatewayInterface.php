@@ -197,7 +197,7 @@ interface SandboxGatewayInterface
     ): GatewayResult;
 
     /**
-     * 挂载引用项目（被 @ 艾特的外部项目）到指定沙箱作为只读空间.
+     * 挂载引用项目；读写权限由文件服务校验。
      */
     public function mountReferencedProject(
         DataIsolation $dataIsolation,
@@ -205,4 +205,11 @@ interface SandboxGatewayInterface
         string $projectId,
         string $projectSpaceRootFileId
     ): GatewayResult;
+
+    /**
+     * 获取沙箱当前全部引用项目，包括尚未实际加载的挂载。
+     */
+    public function listReferencedProjects(DataIsolation $dataIsolation, string $sandboxId): GatewayResult;
+
+    public function unmountReferencedProject(DataIsolation $dataIsolation, string $sandboxId, string $projectId): GatewayResult;
 }

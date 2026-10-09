@@ -15,10 +15,10 @@ export class MagicReloadApi extends BaseRuntimeBridgeApiPlugin {
 
 	install(): void {
 		if (!window.Magic) window.Magic = {}
-		if (window.Magic.reload) return
+		if (window.Magic.reload && (window as any).reload) return
 		this.logger.info("install")
 
-		window.Magic.reload = () => {
+		const reload = () => {
 			this.logger.info("reload")
 			window.parent.postMessage(
 				{
@@ -28,5 +28,8 @@ export class MagicReloadApi extends BaseRuntimeBridgeApiPlugin {
 				getParentOrigin(),
 			)
 		}
+
+		window.Magic.reload = reload
+		;(window as any).reload = reload
 	}
 }

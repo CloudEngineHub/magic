@@ -72,6 +72,8 @@ interface ModeToggleProps {
 	/** When true, confirm popup copy uses chat (对话) instead of topic (话题). */
 	useChatTerminology?: boolean
 	onModeChange?: (mode: TopicMode) => void
+	/** Optional scoped topic creation used by embedded conversations. */
+	onCreateTopic?: (mode: TopicMode) => void
 	size?: MessageEditorSize
 	/** Controls which mobile viewport edge owns the crew selector sheet. */
 	mobilePopupPosition?: "bottom" | "top"
@@ -100,6 +102,7 @@ function ModeToggle({
 	onModeChange,
 	size = "default",
 	mobilePopupPosition = "top",
+	onCreateTopic,
 }: ModeToggleProps) {
 	const { t } = useTranslation("super")
 	const { t: tCrewCreate } = useTranslation("crew/create")
@@ -279,6 +282,11 @@ function ModeToggle({
 
 		setTimeout(() => {
 			document.body.style.removeProperty("pointer-events")
+			if (onCreateTopic) {
+				onCreateTopic(targetMode)
+				return
+			}
+
 			pubsub.publish(PubSubEvents.Create_New_Topic, { topicMode: targetMode })
 			onModeChange?.(targetMode)
 		}, 0)

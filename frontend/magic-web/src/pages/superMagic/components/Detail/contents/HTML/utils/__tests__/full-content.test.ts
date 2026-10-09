@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { createIframeRuntimeScript } from "../../iframe-runtime/create-script"
 
 vi.mock("../nested-iframe-content", () => ({
 	getNestedIframeInterceptorScript: () => "",
@@ -255,9 +256,26 @@ describe("getFullContent", () => {
 		)
 
 		expect(result).toContain('data-injected="html-navigation"')
-		expect(result).toContain('search: "?mode=preview"')
-		expect(result).toContain('hash: "#summary"')
-		expect(result).toContain('requestId: "file-1:1"')
+		const navigationScript =
+			new DOMParser()
+				.parseFromString(result, "text/html")
+				.querySelector('script[data-injected="html-navigation"]')?.textContent || ""
+		const target = {
+			location: { pathname: "/preview" },
+			history: { replaceState: vi.fn() },
+			__MAGIC_HTML_NAVIGATION__: undefined,
+		}
+		new Function("window", navigationScript)(target)
+		expect(target.__MAGIC_HTML_NAVIGATION__).toEqual({
+			search: "?mode=preview",
+			hash: "#summary",
+			requestId: "file-1:1",
+		})
+		expect(target.history.replaceState).toHaveBeenCalledWith(
+			null,
+			"",
+			"/preview?mode=preview#summary",
+		)
 		expect(result).not.toContain('data-injected="sandbox-html-navigation"')
 		expect(result).toContain("getInternalNavigationHref: getInternalNavigationHref")
 		expect(result).toContain("__magicGetFetchPostMessageTarget")
@@ -379,9 +397,11 @@ describe("getFullContent", () => {
 		)
 
 		expect(result).toContain("__MAGIC_DOCUMENT_FLOW_METRICS__")
-		expect(result).toContain('type: "contentMetrics"')
-		expect(result).toContain('var parentOrigin = "https://magic.example.com"')
-		expect(result).toContain("}, parentOrigin);")
+		expect(result).toContain(
+			createIframeRuntimeScript("content-metrics", {
+				parentOrigin: "https://magic.example.com",
+			}),
+		)
 	})
 
 	it("skips serviceWorker mock script when disabled", async () => {
@@ -394,7 +414,8 @@ describe("getFullContent", () => {
 			},
 		)
 
-		expect(result).not.toContain("setupServiceWorkerMock")
+		expect(result).not.toContain(createIframeRuntimeScript("service-worker", { mode: "off" }))
+		expect(result).not.toContain(createIframeRuntimeScript("service-worker", { mode: "auto" }))
 	})
 
 	it("injects serviceWorker mock script when force enabled", async () => {
@@ -407,8 +428,7 @@ describe("getFullContent", () => {
 			},
 		)
 
-		expect(result).toContain("setupServiceWorkerMock")
-		expect(result).toContain("serviceWorkerMockMode")
+		expect(result).toContain(createIframeRuntimeScript("service-worker", { mode: "on" }))
 	})
 
 	it("places environment prelude before magic-api prelude and original head scripts", async () => {

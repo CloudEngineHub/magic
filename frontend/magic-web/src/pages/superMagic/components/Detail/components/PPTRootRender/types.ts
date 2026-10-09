@@ -42,6 +42,8 @@ export interface PPTRootRenderProps {
 	onActiveFileChange?: (fileId: string | null) => void
 	isTabActive?: boolean
 	allowDownload?: boolean
+	/** Controls whether PPT slide content exposes the manual refresh action. */
+	showRefresh?: boolean
 	projectId?: string
 	onRegisterCheckBeforeClose?: (fileId: string, callback: () => Promise<boolean>) => void
 	onUnregisterCheckBeforeClose?: (fileId: string) => void

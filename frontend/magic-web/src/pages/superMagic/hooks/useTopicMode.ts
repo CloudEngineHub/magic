@@ -10,9 +10,11 @@ import SuperMagicService from "@/pages/superMagic/services"
 function useTopicMode({
 	selectedTopic,
 	selectedProject,
+	fallbackTopicMode,
 }: {
 	selectedTopic: Topic | undefined | null
 	selectedProject: ProjectListItem | undefined | null
+	fallbackTopicMode?: TopicMode
 }) {
 	const resolveTopicMode = () =>
 		selectedTopic?.topic_mode ||
@@ -20,12 +22,13 @@ function useTopicMode({
 			selectedProject?.workspace_id || "",
 			selectedProject?.id || "",
 		) ||
+		fallbackTopicMode ||
 		getFallbackTopicModeIdentifier()
 	const [topicMode, setTopicModeState] = useState<TopicMode>(resolveTopicMode)
 
 	useDeepCompareEffect(() => {
 		setTopicModeState(resolveTopicMode())
-	}, [selectedTopic, selectedProject])
+	}, [selectedTopic, selectedProject, fallbackTopicMode])
 
 	useEffect(() => {
 		if (selectedTopic?.topic_mode) return
@@ -36,9 +39,15 @@ function useTopicMode({
 					selectedProject?.workspace_id || "",
 					selectedProject?.id || "",
 				),
-			(mode) => setTopicModeState(mode || getFallbackTopicModeIdentifier()),
+			(mode) =>
+				setTopicModeState(mode || fallbackTopicMode || getFallbackTopicModeIdentifier()),
 		)
-	}, [selectedProject?.id, selectedProject?.workspace_id, selectedTopic?.topic_mode])
+	}, [
+		selectedProject?.id,
+		selectedProject?.workspace_id,
+		selectedTopic?.topic_mode,
+		fallbackTopicMode,
+	])
 
 	const recoverTopicMode = useMemoizedFn((mode: TopicMode) => {
 		setTopicModeState(mode)

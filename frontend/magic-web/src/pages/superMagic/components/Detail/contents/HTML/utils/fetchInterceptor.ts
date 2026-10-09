@@ -11,6 +11,8 @@
  * - AI_OPTIMIZATION_ACTION, DashboardCardsChange
  */
 
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { env } from "@/utils/env"
 import { rewriteHtmlCdnWithHost } from "./index"
@@ -279,6 +281,19 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 		// 原生 fetch 支持 string、URL 和 Request。未改写 URL 时必须透传原始 input，
 		// 否则 Request 中的 method、headers、body 等配置会在退化为 URL 字符串后丢失。
 		const isRequestInput = typeof Request !== 'undefined' && input instanceof Request;
+		const signal = init && init.signal !== undefined ? init.signal : isRequestInput ? input.signal : undefined;
+		if (signal && signal.aborted) throw signal.reason;
+		// Each caller owns its cancellation; the shared URL lookup remains usable by other callers.
+		const waitForUrl = (promise) => {
+			if (!signal) return promise;
+			return new Promise((resolve, reject) => {
+				const onAbort = () => { cleanup(); reject(signal.reason); };
+				const cleanup = () => signal.removeEventListener('abort', onAbort);
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+				promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+			});
+		};
 		let url = typeof input === 'string' ? input : isRequestInput ? input.url : String(input);
 		const originalUrl = url;
 		const executeOriginalFetch = (resolvedUrl) => {
@@ -310,9 +325,10 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 			if (isRelativePath(url) && pendingRequests.has(url)) {
 				try {
 					// 等待正在进行的请求完成
-					const resolvedUrl = await pendingRequests.get(url);
+					const resolvedUrl = await waitForUrl(pendingRequests.get(url));
 					url = resolvedUrl;
 				} catch (error) {
+					if (signal && signal.aborted) throw signal.reason;
 					// 如果pending请求失败，返回404响应
 					return Promise.resolve(new Response(null, {
 						status: 404,
@@ -328,10 +344,11 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 					const requestPromise = requestUrlFromParent(url);
 					pendingRequests.set(url, requestPromise);
 					
-					const resolvedUrl = await requestPromise;
+					const resolvedUrl = await waitForUrl(requestPromise);
 					if (pendingRequests.get(url) === requestPromise) pendingRequests.delete(url);
 					url = resolvedUrl;
 				} catch (error) {
+					if (signal && signal.aborted) throw signal.reason;
 					// 请求失败，缓存错误标记并返回404响应
 					urlCache.set(url, { url: '__NOT_FOUND__' });
 					return Promise.resolve(new Response(null, {
@@ -364,6 +381,7 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 					// 非成功响应，直接返回
 					return response;
 				} catch (error) {
+					if (signal && signal.aborted) throw signal.reason;
 					console.error('处理 HTML 内容失败:', error);
 					// 失败时调用原始 fetch
 					return executeOriginalFetch(url);
@@ -385,8 +403,47 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 	// 拦截 XMLHttpRequest (AJAX)
 	const OriginalXHR = window.XMLHttpRequest;
 	const originalOpen = OriginalXHR.prototype.open;
+	const originalSetRequestHeader = OriginalXHR.prototype.setRequestHeader;
+	const originalAbort = OriginalXHR.prototype.abort;
+	const xhrRequests = new WeakMap();
+	const nativeDispatchEvent = EventTarget.prototype.dispatchEvent;
+	OriginalXHR.prototype.setRequestHeader = function(name, value) {
+		const request = xhrRequests.get(this);
+		if (request && request.sending) throw new DOMException('The object is in an invalid state.', 'InvalidStateError');
+		const result = originalSetRequestHeader.call(this, name, value);
+		if (request) request.headers.push([String(name), String(value)]);
+		return result;
+	};
+	OriginalXHR.prototype.abort = function() {
+		// Invalidating before native abort also covers the interval before native send starts.
+		const request = xhrRequests.get(this);
+		const wasResolving = request && request.resolving;
+		clearSyntheticResponse(this, request);
+		xhrRequests.delete(this);
+		const result = originalAbort.call(this);
+		// Before native send starts, native abort has no in-flight operation to notify.
+		if (wasResolving) {
+			nativeDispatchEvent.call(this, new ProgressEvent('abort'));
+			nativeDispatchEvent.call(this, new ProgressEvent('loadend'));
+		}
+		return result;
+	};
 	
+	function clearSyntheticResponse(xhr, request) {
+		if (!request || !request.syntheticProperties) return;
+		request.syntheticProperties.forEach(entry => {
+			const current = Object.getOwnPropertyDescriptor(xhr, entry.name);
+			// Do not remove an application override installed after our synthetic response.
+			if (!current || current.get !== entry.get) return;
+			if (entry.previous) Object.defineProperty(xhr, entry.name, entry.previous);
+			else delete xhr[entry.name];
+		});
+	}
 	OriginalXHR.prototype.open = function(method, url, async, user, password) {
+		clearSyntheticResponse(this, xhrRequests.get(this));
+		// Install metadata before open fires synchronous readystatechange callbacks.
+		xhrRequests.set(this, { headers: [], method: method, async: async !== false, user: user, password: password });
+		this._needsInterception = false;
 		// 保存原始URL
 		this._originalUrl = url;
 		
@@ -406,111 +463,79 @@ export function generateFetchInterceptorScript(config: FetchInterceptorConfig = 
 	
 	const originalSend = OriginalXHR.prototype.send;
 	
-	OriginalXHR.prototype.send = async function(body) {
-		// 如果不需要拦截，直接发送
-		if (!this._needsInterception) {
-			return originalSend.call(this, body);
+	OriginalXHR.prototype.send = function(body) {
+		if (!this._needsInterception) return originalSend.call(this, body);
+		const request = xhrRequests.get(this);
+		if (this.readyState !== 1 || !request || request.sending) {
+			throw new DOMException('The object is in an invalid state.', 'InvalidStateError');
 		}
-		
 		const interceptedUrl = this._interceptedUrl;
-		
-		try {
-			// 1. 检查缓存
-			if (urlCache.has(interceptedUrl)) {
-				const cachedUrl = takeFreshCacheEntry(interceptedUrl);
-				
-				// 如果缓存的是错误标记，返回404
-				if (cachedUrl && cachedUrl.url === '__NOT_FOUND__') {
-					try {
-						Object.defineProperty(this, 'status', { value: 404, writable: false });
-						Object.defineProperty(this, 'statusText', { value: 'Not Found', writable: false });
-						Object.defineProperty(this, 'responseText', { value: '', writable: false });
-						Object.defineProperty(this, 'response', { value: '', writable: false });
-						Object.defineProperty(this, 'readyState', { value: 4, writable: false });
-					} catch (e) {}
-					// 触发事件
-					setTimeout(() => {
-						if (this.onreadystatechange) this.onreadystatechange();
-						if (this.onload) this.onload();
-					}, 0);
-					return;
-				}
-				
-				if (cachedUrl) {
-					// 使用缓存的URL重新open
-					const method = this._method || 'GET';
-					const async = this._async !== false;
-					originalOpen.call(this, method, cachedUrl.url, async);
-					return originalSend.call(this, body);
-				}
-			}
-			
-			// 2. 检查pending请求
-			if (pendingRequests.has(interceptedUrl)) {
-				try {
-					const resolvedUrl = await pendingRequests.get(interceptedUrl);
-					const method = this._method || 'GET';
-					const async = this._async !== false;
-					originalOpen.call(this, method, resolvedUrl, async);
-					return originalSend.call(this, body);
-				} catch (error) {
-					try {
-						Object.defineProperty(this, 'status', { value: 404, writable: false });
-						Object.defineProperty(this, 'statusText', { value: 'Not Found', writable: false });
-						Object.defineProperty(this, 'responseText', { value: '', writable: false });
-						Object.defineProperty(this, 'response', { value: '', writable: false });
-						Object.defineProperty(this, 'readyState', { value: 4, writable: false });
-					} catch (e) {}
-					setTimeout(() => {
-						if (this.onreadystatechange) this.onreadystatechange();
-						if (this.onload) this.onload();
-					}, 0);
-					return;
-				}
-			}
-			
-			// 3. 发起新的请求
-			try {
-				const requestPromise = requestUrlFromParent(interceptedUrl);
-				pendingRequests.set(interceptedUrl, requestPromise);
-				
-				const resolvedUrl = await requestPromise;
-				if (pendingRequests.get(interceptedUrl) === requestPromise) {
-					pendingRequests.delete(interceptedUrl);
-				}
-				const method = this._method || 'GET';
-				const async = this._async !== false;
-				originalOpen.call(this, method, resolvedUrl, async);
-				return originalSend.call(this, body);
-			} catch (error) {
-				urlCache.set(interceptedUrl, { url: '__NOT_FOUND__' });
-				try {
-					Object.defineProperty(this, 'status', { value: 404, writable: false });
-					Object.defineProperty(this, 'statusText', { value: 'Not Found', writable: false });
-					Object.defineProperty(this, 'responseText', { value: '', writable: false });
-					Object.defineProperty(this, 'response', { value: '', writable: false });
-					Object.defineProperty(this, 'readyState', { value: 4, writable: false });
-				} catch (e) {}
-				setTimeout(() => {
-					if (this.onreadystatechange) this.onreadystatechange();
-					if (this.onload) this.onload();
-				}, 0);
-				return;
-			}
-		} catch (error) {
-			// 发生错误，使用原始URL发送
+		const isCurrent = () => xhrRequests.get(this) === request;
+		const sendResolved = (resolvedUrl) => {
+			if (!isCurrent()) return;
+			request.resolving = false;
+			originalOpen.call(this, request.method, resolvedUrl, request.async, request.user, request.password);
+			if (!isCurrent()) return;
+			// open() clears native author headers; replay successful calls in their original order.
+			request.headers.forEach(header => originalSetRequestHeader.apply(this, header));
 			return originalSend.call(this, body);
+		};
+		const failLookup = () => {
+			if (!isCurrent()) return;
+			request.resolving = false;
+			request.sending = false;
+			request.syntheticProperties = [];
+			const response = { status: 404, statusText: 'Not Found', responseText: '', response: '', readyState: 4 };
+			Object.keys(response).forEach(name => {
+				const previous = Object.getOwnPropertyDescriptor(this, name);
+				const get = () => response[name];
+				try {
+					Object.defineProperty(this, name, { get, configurable: true });
+					request.syntheticProperties.push({ name, get, previous });
+				} catch (e) {}
+			});
+			setTimeout(() => {
+				if (!isCurrent()) return;
+				nativeDispatchEvent.call(this, new Event('readystatechange'));
+				if (!isCurrent()) return;
+				nativeDispatchEvent.call(this, new ProgressEvent('load'));
+				if (!isCurrent()) return;
+				nativeDispatchEvent.call(this, new ProgressEvent('loadend'));
+			}, 0);
+		};
+
+		request.sending = true;
+		const cachedUrl = takeFreshCacheEntry(interceptedUrl);
+		if (cachedUrl) {
+			if (cachedUrl.url === '__NOT_FOUND__') return failLookup();
+			try {
+				return sendResolved(cachedUrl.url);
+			} catch (error) {
+				request.sending = false;
+				throw error;
+			}
 		}
+
+		request.resolving = true;
+		let requestPromise = pendingRequests.get(interceptedUrl);
+		if (!requestPromise) {
+			requestPromise = requestUrlFromParent(interceptedUrl);
+			pendingRequests.set(interceptedUrl, requestPromise);
+		}
+		// Keep asynchronous URL resolution internal: XMLHttpRequest.send returns undefined.
+		void requestPromise.then(sendResolved, () => {
+			if (!isCurrent()) return;
+			urlCache.set(interceptedUrl, { url: '__NOT_FOUND__' });
+			failLookup();
+		}).catch(() => {
+			if (!isCurrent()) return;
+			request.resolving = false;
+			request.sending = false;
+			nativeDispatchEvent.call(this, new ProgressEvent('error'));
+			nativeDispatchEvent.call(this, new ProgressEvent('loadend'));
+		});
 	};
-	
-	// 保存method和async参数供send使用
-	const originalOpenWithParams = OriginalXHR.prototype.open;
-	OriginalXHR.prototype.open = function(method, url, async, user, password) {
-		this._method = method;
-		this._async = async;
-		return originalOpenWithParams.call(this, method, url, async, user, password);
-	};
-	
+
 })();
 `
 }
@@ -544,6 +569,8 @@ export type OnFetchIntercepted = (
  * @param htmlRelativeFolderPath HTML文件的相对文件夹路径
  * @param fileId 文件ID，用于验证请求来源
  * @param onFetchIntercepted 拦截记录回调函数，用于记录拦截的相对路径和文件信息
+ * @param access legacy share/session override; prefer `fileApi` when available
+ * @param fileApi bound file client closed over at the React/iframe boundary
  * @returns 消息处理函数
  */
 export function createParentMessageHandler(
@@ -551,6 +578,8 @@ export function createParentMessageHandler(
 	htmlRelativeFolderPath: string,
 	fileId: string,
 	onFetchIntercepted?: OnFetchIntercepted,
+	access?: FileAccessContext | null,
+	fileApi?: Pick<FileApi, "getTemporaryDownloadUrl">,
 ) {
 	return async (event: MessageEvent) => {
 		// 验证消息来源和类型
@@ -575,7 +604,11 @@ export function createParentMessageHandler(
 
 			if (matchedFile) {
 				// 使用 getTemporaryDownloadUrl 获取OSS URL
-				const response = await getTemporaryDownloadUrl({ file_ids: [matchedFile.file_id] })
+				const fetchUrls = fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+				const response = await fetchUrls({
+					file_ids: [matchedFile.file_id],
+					access: access ?? undefined,
+				})
 
 				if (response && response.length > 0 && response[0].url) {
 					const ossUrl = response[0].url

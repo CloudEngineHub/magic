@@ -12,7 +12,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
 } from "../../../../contents/HTML/IsolatedHTMLRenderer"
@@ -70,6 +70,7 @@ function WechatEditView({
 	onRequestRefreshCurrentPostReady,
 }: WechatEditViewProps) {
 	const { t } = useTranslation("super")
+	const fileApi = useFileApi()
 	const article = post.article
 	const fileId = article?.fileId
 
@@ -168,7 +169,7 @@ function WechatEditView({
 		setContent(null)
 		;(async () => {
 			try {
-				const urls = await getTemporaryDownloadUrl({ file_ids: [fileId] })
+				const urls = await fileApi.getTemporaryDownloadUrl({ file_ids: [fileId] })
 				const url = urls?.[0]?.url
 				if (!url) throw new Error("noArticleUrl")
 				if (cancelled) return
@@ -189,6 +190,7 @@ function WechatEditView({
 						fileName: currentFile?.file_name,
 						html_relative_path: relativeFolderPath,
 						xMagicImageProcess: CARD_IMAGE_PROCESS,
+						fileApi,
 					})
 					processedContent = result.processedContent || html
 					mapping = result.filePathMapping || new Map()
@@ -211,7 +213,14 @@ function WechatEditView({
 		}
 		// Intentionally exclude isEditMode & content to avoid re-fetch during editing
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [fileId, attachmentList, contentReloadVersion, currentFile?.file_name, relativeFolderPath])
+	}, [
+		fileId,
+		attachmentList,
+		contentReloadVersion,
+		currentFile?.file_name,
+		relativeFolderPath,
+		fileApi,
+	])
 
 	useEffect(() => {
 		if (content && fileId && !isEditMode) {

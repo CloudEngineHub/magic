@@ -99,9 +99,9 @@ final class AgentCategoryIdRemovalContractTest extends TestCase
             id: 1,
             agentCode: 'agent-code',
             userCode: null,
-            name: 'Agent name',
-            role: 'Agent role',
-            description: 'Agent description',
+            nameI18n: ['default' => 'Agent name'],
+            roleI18n: ['default' => ['Agent role']],
+            descriptionI18n: ['default' => 'Agent description'],
             icon: null,
             iconType: 1,
             playbooks: [],
@@ -119,12 +119,9 @@ final class AgentCategoryIdRemovalContractTest extends TestCase
 
         $this->assertArrayNotHasKey('category_id', $market->toArray());
         $this->assertArrayNotHasKey('category', $market->toArray());
-        $this->assertSame('Agent name', $market->toArray()['name']);
-        $this->assertSame('Agent role', $market->toArray()['role']);
-        $this->assertSame('Agent description', $market->toArray()['description']);
-        $this->assertArrayNotHasKey('name_i18n', $market->toArray());
-        $this->assertArrayNotHasKey('role_i18n', $market->toArray());
-        $this->assertArrayNotHasKey('description_i18n', $market->toArray());
+        $this->assertSame(['default' => 'Agent name'], $market->toArray()['name_i18n']);
+        $this->assertSame(['default' => ['Agent role']], $market->toArray()['role_i18n']);
+        $this->assertSame(['default' => 'Agent description'], $market->toArray()['description_i18n']);
 
         $prefill = new AgentPublishPrefillResponseDTO('1.0.0', [], 'MARKET', null, [10, 20]);
         $this->assertArrayNotHasKey('category_id', $prefill->toArray());
@@ -148,15 +145,15 @@ final class AgentCategoryIdRemovalContractTest extends TestCase
         $this->assertArrayNotHasKey('category_id', $detail->toArray());
     }
 
-    public function testAgentQueryListResponseUsesResolvedFieldsWithoutLegacyI18nFields(): void
+    public function testAgentQueryListResponseUsesLocalizedFields(): void
     {
         $agent = new AgentListItemDTO(
             id: 1,
             code: 'agent-code',
             projectId: null,
-            name: 'Agent name',
-            role: 'Agent role',
-            description: 'Agent description',
+            nameI18n: ['default' => 'Agent name'],
+            roleI18n: ['default' => ['Agent role']],
+            descriptionI18n: ['default' => 'Agent description'],
             icon: null,
             iconType: 1,
             playbooks: [],
@@ -176,15 +173,12 @@ final class AgentCategoryIdRemovalContractTest extends TestCase
 
         $payload = $agent->toArray();
 
-        $this->assertSame('Agent name', $payload['name']);
-        $this->assertSame('Agent role', $payload['role']);
-        $this->assertSame('Agent description', $payload['description']);
-        $this->assertArrayNotHasKey('name_i18n', $payload);
-        $this->assertArrayNotHasKey('role_i18n', $payload);
-        $this->assertArrayNotHasKey('description_i18n', $payload);
+        $this->assertSame(['default' => 'Agent name'], $payload['name_i18n']);
+        $this->assertSame(['default' => ['Agent role']], $payload['role_i18n']);
+        $this->assertSame(['default' => 'Agent description'], $payload['description_i18n']);
     }
 
-    public function testAgentMarketQueryResolvesLocalizedScalarFields(): void
+    public function testAgentMarketQueryPreservesLocalizedFields(): void
     {
         CoContext::setLanguage('zh_CN');
         $market = new AgentMarketEntity([
@@ -209,11 +203,8 @@ final class AgentCategoryIdRemovalContractTest extends TestCase
             1,
         )->toArray()['list'][0];
 
-        $this->assertSame('中文名称', $payload['name']);
-        $this->assertSame('中文角色', $payload['role']);
-        $this->assertSame('中文描述', $payload['description']);
-        $this->assertArrayNotHasKey('name_i18n', $payload);
-        $this->assertArrayNotHasKey('role_i18n', $payload);
-        $this->assertArrayNotHasKey('description_i18n', $payload);
+        $this->assertSame(['default' => 'Default name', 'zh_CN' => '中文名称'], $payload['name_i18n']);
+        $this->assertSame(['default' => ['Default role'], 'zh_CN' => ['中文角色']], $payload['role_i18n']);
+        $this->assertSame(['default' => 'Default description', 'zh_CN' => '中文描述'], $payload['description_i18n']);
     }
 }

@@ -51,7 +51,7 @@ import {
 	shouldSyncChatConversationName,
 	syncChatProjectNameOnly,
 } from "../../services/chatConversationNameSync"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import {
 	resolveMessageHeaderEditableTitle,
 	resolveMessageHeaderTitle,
@@ -68,6 +68,8 @@ interface MessageHeaderProps {
 	isConversationPanelCollapsed?: boolean
 	onToggleConversationPanel?: () => void
 	onExpandConversationPanel?: () => void
+	/** Some shells render the panel toggle in an outer header. */
+	hideConversationPanelToggle?: boolean
 	/** Closes the layout history panel only when the user is collapsing the conversation pane. */
 	onCloseHistoryPanelWhenCollapsing?: () => void
 	detailPanelVisible?: boolean
@@ -112,7 +114,8 @@ interface MessageHeaderTopicHistoryPanelProps {
 	closeButtonRef?: RefObject<HTMLButtonElement | null>
 }
 
-const headerIconButtonClassName = "!size-6 !min-h-6 !min-w-6 !rounded-md !p-0"
+const headerIconButtonClassName =
+	"!size-[var(--conversation-header-button-size,24px)] !min-h-6 !min-w-6 !rounded-md !p-0"
 const renameInputClassName =
 	"h-6 min-w-0 flex-1 rounded-lg border-border bg-background px-3 text-sm leading-5 text-foreground placeholder:text-muted-foreground"
 
@@ -124,8 +127,10 @@ function useTopicHistoryPanelController({
 	onExpandConversationPanel,
 }: MessageHeaderTopicHistoryPanelProps) {
 	const { t } = useTranslation("super")
-	const { hideCreateNewTopic } = useFileActionVisibility()
-	const shouldHideTopicEntry = hideCreateNewTopic
+	const {
+		options: { createNewTopic },
+	} = useFileAccess()
+	const shouldHideTopicEntry = !createNewTopic
 	const topics = topicStore.topics
 	const selectedTopic = topicStore.selectedTopic
 	const messages = useMemo(
@@ -349,6 +354,7 @@ function MessageHeader({
 	isConversationPanelCollapsed = false,
 	onToggleConversationPanel,
 	onExpandConversationPanel,
+	hideConversationPanelToggle = false,
 	onCloseHistoryPanelWhenCollapsing,
 	detailPanelVisible = true,
 	selectedProject,
@@ -362,7 +368,9 @@ function MessageHeader({
 	trailingActions,
 }: MessageHeaderProps) {
 	const { t } = useTranslation("super")
-	const { hideShareTopic } = useFileActionVisibility()
+	const {
+		options: { shareTopic },
+	} = useFileAccess()
 	const {
 		messages,
 		topics,
@@ -559,20 +567,22 @@ function MessageHeader({
 		<>
 			<div
 				className={cn(
-					"absolute z-[30] mb-2.5 flex h-10 w-full items-center justify-between gap-2 px-1.5 py-2",
+					// Expanded headers own their height; message viewports begin below them.
+					"relative z-[30] flex h-10 w-full shrink-0 items-center justify-between gap-2 px-1.5 py-2",
 					"bg-sidebar",
 					// 两侧各预留一个恢复按钮和原有间距，内容列保持居中且不会与入口重叠。
 					alignWithContent &&
 						"grid grid-cols-[theme(spacing.6)_minmax(0,1fr)_theme(spacing.6)]",
 					// 预览可见时与 44px 文件标签栏等高，保证两侧按钮的中心线一致。
 					detailPanelVisible && !isConversationPanelCollapsed && "h-11",
-					isConversationPanelCollapsed && "h-full flex-col px-0 py-1.5",
+					isConversationPanelCollapsed &&
+						"absolute h-full flex-col px-0 py-[var(--conversation-header-padding,6px)]",
 				)}
 				data-testid="message-header-container"
 			>
 				{isConversationPanelCollapsed ? (
 					<div
-						className="flex w-full flex-col items-center gap-4"
+						className="flex w-full flex-col items-center gap-[var(--conversation-header-gap,16px)]"
 						data-testid="message-header-collapsed-topic-group"
 					>
 						{detailPanelVisible && (
@@ -652,7 +662,7 @@ function MessageHeader({
 								</Button>
 							</MagicTooltip>
 						)}
-						{detailPanelVisible && (
+						{detailPanelVisible && !hideConversationPanelToggle && (
 							<MagicTooltip title={t("messageHeader.collapseConversationPanel")}>
 								<span className="flex">
 									<Button
@@ -750,7 +760,7 @@ function MessageHeader({
 									</div>
 								) : null}
 
-								{!hideShareTopic ? (
+								{shareTopic ? (
 									<TopicSharePopover
 										open={sharePopoverVisible}
 										onOpenChange={(open) => {

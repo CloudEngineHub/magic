@@ -141,6 +141,7 @@ function MobileRecycleBinPanel() {
 					icon: <X />,
 					ariaLabel: t("common.close"),
 					onClick: () => setFilterSheetOpen(false),
+					testId: "mobile-recycle-bin-filter-sheet-close",
 				}}
 				className="flex h-[90dvh] flex-col gap-0 overflow-hidden rounded-t-[20px] border-0 bg-muted p-0"
 				bodyClassName="flex-1 overflow-y-auto bg-muted px-4 py-4"

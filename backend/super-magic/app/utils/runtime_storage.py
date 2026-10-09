@@ -169,6 +169,38 @@ owner：     SlideTemplateBuilder
 配置：      `runtime_cleanup.slide_template_maker`（目录最长保留时间和目录数量）。
 实现归属：  owner 自己的目录淘汰 helper，不使用通用 evict_runtime_directories()。
 
+-------------------------------------------------------------------------------
+[10] micro-app
+-------------------------------------------------------------------------------
+路径：      .runtime/micro-app/scope.json
+内容：      本会话累积的 @micro_app MagicBase project 范围。
+owner：     app/service/mention/utils/micro_app_prompt.py
+立即处理：  无。无 @ 或 SDK 全部失败时保留已有文件。
+延后处理：  无。0–1 个文件，不接入 runtime_cleanup。
+活动保护：  当前会话正在使用的 scope 即该文件本身。
+淘汰规则：  新 @ 增量合并；沙箱重建后丢失。不按年龄/数量清理。
+配置：      无
+实现归属：  owner 自己的 persist/clear，不使用通用 evict_runtime_files()。
+
+-------------------------------------------------------------------------------
+[11] native_visual_cache
+-------------------------------------------------------------------------------
+路径：      .runtime/native_visual_cache/<cache-key-sha256>.json
+内容：      原生视觉图片压缩后的 Base64 Data URL，用于跨 run 复用同一张图的处理结果。
+            一个 JSON 记录 version、完整缓存键（源文件路径/mtime/size 与压缩参数）、
+            data_url、图片宽高、产出体积和创建时间。缓存键任一字段变化都视为 miss，
+            所以图片被替换或压缩参数变化时不需要额外失效逻辑。
+owner：     ImageBase64Cache、ImageCompressionService
+立即处理：  不即时删除；缓存本身就是为后续 run 复用而保留。
+延后处理：  写入新缓存项后机会式清理。
+活动保护：  当前没有额外保护集合；只处理直接子文件中的 JSON。
+淘汰规则：  超过 7 天删除；文件数 512 个触发，删除到 384 个；容量 256 MiB 触发，
+            删除到 192 MiB。
+配置：      `runtime_cleanup.native_visual_cache`（年龄、文件数和容量）。
+实现归属：  通用 evict_runtime_files()。
+说明：      缓存只是加速手段，不是业务依赖。目录不可用、文件损坏或权限不足时，
+            owner 静默降级为"未命中"，由调用方照常重新压缩，不影响图片处理结果。
+
 ===============================================================================
 二、目录树与删除单位
 ===============================================================================
@@ -189,6 +221,8 @@ owner：     SlideTemplateBuilder
     │   │   └── <temporary>.py
     │   └── run_sdk/                      直接子文件，临时 SDK 脚本
     │       └── <temporary>.py
+    ├── native_visual_cache/              直接子文件，图片 Base64 复用缓存
+    │   └── <cache-key-sha256>.json
     ├── llm_requests/                     直接子文件，LLM 调试日志
     │   └── <model>_<time>_<status>.log
     ├── background_compact/               一个目录代表一次后台压缩运行
@@ -205,8 +239,10 @@ owner：     SlideTemplateBuilder
     │       └── ...
     ├── verification/real_compaction/     owner 自己清理的验证目录
     │   └── <verification-run-id>/
-    └── slide-template-maker/             owner 自己清理的模板工作目录
-        └── <template-id>/
+    ├── slide-template-maker/             owner 自己清理的模板工作目录
+    │   └── <template-id>/
+    └── micro-app/                        累积 @micro_app MagicBase 范围
+        └── scope.json
 
 通用 helper 的扫描范围：
 
@@ -430,6 +466,7 @@ config/config.yaml 中线上 `.runtime` 的清理配置统一位于 `runtime_cle
     runtime_cleanup.mcp_outputs
     runtime_cleanup.oauth2_callback
     runtime_cleanup.snippets
+    runtime_cleanup.native_visual_cache
     runtime_cleanup.llm_request
     runtime_cleanup.background_compact
     runtime_cleanup.memory_after_run

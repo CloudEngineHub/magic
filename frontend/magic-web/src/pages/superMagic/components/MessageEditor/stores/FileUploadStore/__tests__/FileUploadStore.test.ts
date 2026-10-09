@@ -67,6 +67,7 @@ vi.mock("../../../services/UploadTokenService", () => ({
 }))
 
 import { FileUploadStore } from "../index"
+import type { UploadTokenService } from "../../../services/UploadTokenService"
 import type { FileData } from "../../../types"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 
@@ -81,6 +82,14 @@ function createMockFileData(id: string): FileData {
 }
 
 describe("FileUploadStore", () => {
+	it("uses the injected home upload scope when preparing a new project", () => {
+		const consume = vi.fn(() => "task-home-files")
+		const scopedStore = new FileUploadStore({
+			uploadTokenService: { getLastWorkDir: consume } as unknown as UploadTokenService,
+		})
+		expect(scopedStore.getTemporaryWorkdir()).toBe("task-home-files")
+		expect(consume).toHaveBeenCalledOnce()
+	})
 	let store: FileUploadStore
 	let onFileRemoved: ReturnType<typeof vi.fn>
 	let onFileUpload: ReturnType<typeof vi.fn>

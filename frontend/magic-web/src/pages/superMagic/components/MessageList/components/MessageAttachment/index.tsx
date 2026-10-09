@@ -1,6 +1,7 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { useState } from "react"
 import type { AttachmentProps } from "./type"
@@ -35,6 +36,7 @@ export const Attachment = observer(function Attachment({
 	const { t } = useTranslation("super")
 	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
 	const isMobile = useIsMobile()
+	const { permissions: access } = useFileAccess()
 	const handleDownload = useMessageAttachmentDownload(attachments)
 	const [expanded, setExpanded] = useState(false)
 
@@ -55,19 +57,20 @@ export const Attachment = observer(function Attachment({
 		)
 
 	const handleOpenFile = (item: any) => {
+		if (!access.view || !access.preview) return
 		const fileName = item.display_filename || item.file_name || item.filename
 		const magicProjectResolution = isMagicProjectConfigFile(fileName)
 			? resolveMagicProject(item)
 			: undefined
 		const openTarget = magicProjectResolution?.projectDirectory || item
 
-		if (!isMobile && openTarget.file_id) {
-			openMessageFile(openTarget)
+		if (onFileClick && openTarget.file_id) {
+			onFileClick(openTarget)
 			return
 		}
 
-		if (onFileClick && openTarget.file_id) {
-			onFileClick(openTarget)
+		if (!isMobile && openTarget.file_id) {
+			openMessageFile(openTarget)
 			return
 		}
 
@@ -164,8 +167,7 @@ export const Attachment = observer(function Attachment({
 									<FileResourceIcon
 										presentation={resolveFilePresentation(
 											(magicProjectResolution?.projectDirectory as
-												| AttachmentItem
-												| undefined) ?? {
+												AttachmentItem | undefined) ?? {
 												...item,
 												is_directory: item.is_directory ?? isFolder,
 											},
@@ -188,17 +190,19 @@ export const Attachment = observer(function Attachment({
 									>
 										{attachmentName}
 									</span>
-									<MagicIcon
-										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
-										onClick={(e: any) => {
-											e.stopPropagation()
-											handleOpenFile(item)
-										}}
-										component={IconEye}
-										stroke={2}
-										size={18}
-									/>
-									{isEmpty(attachmentDisplayConfig) && (
+									{access.view && access.preview && (
+										<MagicIcon
+											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
+											onClick={(e: any) => {
+												e.stopPropagation()
+												handleOpenFile(item)
+											}}
+											component={IconEye}
+											stroke={2}
+											size={18}
+										/>
+									)}
+									{access.download && isEmpty(attachmentDisplayConfig) && (
 										<MagicIcon
 											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
 											onClick={(e: any) => {

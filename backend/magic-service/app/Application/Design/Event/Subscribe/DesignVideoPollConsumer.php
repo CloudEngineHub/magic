@@ -48,6 +48,8 @@ use function Hyperf\Translation\trans;
 )]
 class DesignVideoPollConsumer extends ConsumerMessage
 {
+    private const int ARCHIVE_RETRY_MAX_AGE_SECONDS = 12 * 60 * 60;
+
     public function __construct(
         private readonly DesignGenerationTaskDomainService $domainService,
         private readonly VideoGatewayClientInterface $videoGatewayClient,
@@ -57,7 +59,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
         private readonly ProjectDomainService $projectDomainService,
         private readonly DesignGeneratedVideoFileNameTool $generatedVideoFileNameTool,
         private readonly LoggerInterface $logger,
-        private readonly ?DesignVideoSubmissionDomainService $submissionDomainService = null,
+        private readonly DesignVideoSubmissionDomainService $submissionDomainService,
     ) {
     }
 
@@ -130,7 +132,7 @@ class DesignVideoPollConsumer extends ConsumerMessage
 
         try {
             $result = $entity->isCanvasComposition()
-                ? ($this->submissionDomainService ?? di(DesignVideoSubmissionDomainService::class))->query($dataIsolation, $entity)
+                ? $this->submissionDomainService->query($dataIsolation, $entity)
                 : $this->videoGatewayClient->queryVideo($operationId, [
                     'organization_code' => $entity->getOrganizationCode(),
                     'user_id' => $entity->getUserId(),
@@ -202,16 +204,24 @@ class DesignVideoPollConsumer extends ConsumerMessage
                 'operation_id' => $operationId,
                 'error' => $throwable->getMessage(),
             ]);
-            $this->logger->error('design video poll mark failed', [
-                'reason' => 'archive_failed',
-                'video_id' => $entity->getGenerationId(),
-                'project_id' => $entity->getProjectId(),
-                'organization_code' => $entity->getOrganizationCode(),
-                'sandbox_id' => $sandboxId,
-                'operation_id' => $operationId,
-                'error' => $throwable->getMessage(),
-            ]);
-            $this->domainService->markAsFailed($dataIsolation, $entity, $throwable->getMessage());
+
+            // 如果重试超过期限还是失败，则默认同意
+            if (time() - $entity->getCreatedAt()->getTimestamp() > self::ARCHIVE_RETRY_MAX_AGE_SECONDS) {
+                $this->logger->error('design video poll archive retry expired, mark failed', [
+                    'reason' => 'archive_retry_expired',
+                    'video_id' => $entity->getGenerationId(),
+                    'project_id' => $entity->getProjectId(),
+                    'organization_code' => $entity->getOrganizationCode(),
+                    'operation_id' => $operationId,
+                    'created_at' => $entity->getCreatedAt()->format(DATE_ATOM),
+                    'error' => $throwable->getMessage(),
+                ]);
+                $this->domainService->markAsFailed($dataIsolation, $entity, $throwable->getMessage());
+                return Result::ACK;
+            }
+
+            $this->producer->produce(new DesignVideoPollDelayPublisher($msg));
+            return Result::ACK;
         }
 
         return Result::ACK;

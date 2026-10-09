@@ -20,12 +20,20 @@ import { type PresetFileType } from "../constant"
 import { cn } from "@/utils/cn"
 import HeaderTrailingAction from "./HeaderTrailingAction"
 import { SidebarRow, type SidebarSectionOptions } from "../../SidebarSection"
+import {
+	PROJECT_PANEL_HEADER_CLASSNAME,
+	PROJECT_PANEL_TITLE_CLASSNAME,
+} from "../../ProjectSider/panelChrome"
 import { useFileHeaderOverflow } from "../hooks/useFileHeaderOverflow"
 import { MagicDropdown } from "@/components/base/MagicDropdown"
 
 interface NormalModeHeaderProps {
 	title?: string
+	/** Hide the section label; keep search and refresh actions. */
+	showTitle?: boolean
 	isShareRoute: boolean
+	/** Explicit refresh visibility; defaults to hidden on share routes. */
+	showRefresh?: boolean
 	refreshLoading: boolean
 	allowEdit: boolean
 	showMobileActions?: boolean
@@ -51,7 +59,9 @@ interface NormalModeHeaderProps {
 
 function NormalModeHeader({
 	title,
+	showTitle = true,
 	isShareRoute,
+	showRefresh,
 	refreshLoading,
 	allowEdit,
 	showMobileActions = false,
@@ -81,6 +91,7 @@ function NormalModeHeader({
 	const toggleAllFoldersLabel = allFoldersExpanded
 		? t("fileTree.collapseAll")
 		: (expandAllLabel ?? t("fileTree.expandAll"))
+	const shouldShowRefresh = showRefresh ?? !isShareRoute
 
 	const actions = (
 		<div
@@ -181,7 +192,7 @@ function NormalModeHeader({
 					</MagicTooltip>
 				</div>
 			)}
-			{!isShareRoute && (
+			{shouldShowRefresh && (
 				<MagicTooltip title={t("topicFiles.refreshList")}>
 					<button
 						className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent transition-colors hover:bg-accent"
@@ -264,19 +275,21 @@ function NormalModeHeader({
 					className,
 				)}
 			>
-				<h3
-					className={cn(
-						"min-w-0 flex-1 text-[13px] font-medium leading-5",
-						overflow && "basis-full",
-					)}
-				>
-					<span
-						ref={labelRef}
-						className="inline-block break-words [overflow-wrap:anywhere]"
+				{showTitle ? (
+					<h3
+						className={cn(
+							"min-w-0 flex-1 text-[13px] font-medium leading-5",
+							overflow && "basis-full",
+						)}
 					>
-						{title || t("topicFiles.title")}
-					</span>
-				</h3>
+						<span
+							ref={labelRef}
+							className="inline-block break-words [overflow-wrap:anywhere]"
+						>
+							{title || t("topicFiles.title")}
+						</span>
+					</h3>
+				) : null}
 				{actions}
 			</div>
 		)
@@ -298,12 +311,18 @@ function NormalModeHeader({
 			className={section.headerClassName}
 		/>
 	) : (
-		<div ref={rowRef} className={cn("flex h-8 w-full items-center gap-1 pl-4 pr-2", className)}>
-			<p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-foreground">
-				<span ref={labelRef} className="inline-block whitespace-nowrap">
-					{title || t("topicFiles.title")}
-				</span>
-			</p>
+		<div
+			ref={rowRef}
+			className={cn(PROJECT_PANEL_HEADER_CLASSNAME, className)}
+			data-slot="project-panel-header"
+		>
+			{showTitle ? (
+				<p className={PROJECT_PANEL_TITLE_CLASSNAME} data-slot="project-panel-title">
+					<span ref={labelRef} className="inline-block whitespace-nowrap">
+						{title || t("topicFiles.title")}
+					</span>
+				</p>
+			) : null}
 			{actions}
 		</div>
 	)

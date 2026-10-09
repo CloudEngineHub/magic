@@ -1,11 +1,48 @@
 import { defaultMagicClient as magicClient } from "@/infrastructure/network/http/runtime"
 import { DownloadImageMode } from "../pages/Workspace/types"
+import {
+	getAccessProjectId,
+	getAccessTopicId,
+	getShareAccessToken,
+	isSharePageLocation,
+	shouldWaitForShareAccess,
+	type FileAccessContext,
+} from "../fileAccess/fileAccessContext"
 import { getSuperIdState } from "./query"
 import { WorkspaceStateCache } from "./superMagicCache"
 import { userStore } from "@/models/user"
 import { ImageProcessOptions, buildImageProcessQuery } from "@/utils/image-processing"
 import { getFileUrlDownloadModeForNoWatermark } from "@/utils/aiWatermarkPreviewFileUrlMode"
 import { stringifyUnknownError } from "@/utils/error"
+
+function resolveSessionFileIdentity() {
+	const workspaceState = WorkspaceStateCache.get(userStore.user.userInfo)
+	const superIdState = getSuperIdState()
+	return {
+		projectId: workspaceState?.projectId || superIdState?.projectId || "",
+		topicId: workspaceState?.topicId || superIdState?.topicId || "",
+	}
+}
+
+function resolveFileRequestIdentity(access?: FileAccessContext) {
+	if (access?.kind === "share") {
+		return {
+			token: access.token,
+			projectId: access.projectId,
+			topicId: access.topicId ?? "",
+		}
+	}
+	// Share pages must not inherit the host session after SPA navigation.
+	if (!access && isSharePageLocation()) {
+		return { token: "", projectId: "", topicId: "" }
+	}
+	const session = resolveSessionFileIdentity()
+	return {
+		token: "",
+		projectId: getAccessProjectId(access, session.projectId),
+		topicId: getAccessTopicId(access, session.topicId),
+	}
+}
 
 // import { REMOTE_HTTP_URL } from "../constans"
 // export const getWorkspaces = async ({ page, page_size }: { page: number; page_size: number }) => {
@@ -87,7 +124,13 @@ import { stringifyUnknownError } from "@/utils/error"
 // }
 
 // 通过话题id获取附件列表
-export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
+export const getAttachmentsByThreadId = async ({
+	id,
+	access,
+}: {
+	id: string
+	access?: FileAccessContext
+}) => {
 	const isMagicShare = window?.location?.pathname?.includes("magic-share")
 	const url = isMagicShare
 		? "/api/v1/super-agent/admin/topic/user-attachments"
@@ -96,8 +139,7 @@ export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
 		page: 1,
 		page_size: 999,
 		file_type: ["user_upload", "user_create", "process", "system_auto_upload"],
-		// @ts-ignore 使用window添加临时的token
-		token: window.temporary_token || "",
+		token: getShareAccessToken(access),
 		topic_id: id,
 	})
 }
@@ -108,8 +150,7 @@ export const getAttachmentsByThreadId = async ({ id }: { id: string }) => {
 // 		page: 1,
 // 		page_size: 999,
 // 		file_type: ["user_upload", "user_create", "process", "system_auto_upload", "directory"],
-// 		// @ts-ignore 使用window添加临时的token
-// 		token: window.temporary_token || "",
+// 		token: "",
 // 	})
 // }
 
@@ -169,6 +210,7 @@ export interface GetFileContentOptions {
 	download_mode?: DownloadImageMode
 	xMagicImageProcess?: ImageProcessOptions
 	forceRefresh?: boolean
+	access?: FileAccessContext
 }
 
 export interface BatchFileContentResult {
@@ -195,6 +237,7 @@ export const getTemporaryDownloadUrl = async ({
 	cache,
 	options,
 	enableErrorMessagePrompt = true,
+	access,
 }: {
 	file_ids: string[]
 	file_versions?: Record<string, number>
@@ -207,8 +250,14 @@ export const getTemporaryDownloadUrl = async ({
 		xMagicImageProcess?: ImageProcessOptions
 	}
 	enableErrorMessagePrompt?: boolean
+	access?: FileAccessContext
 }) => {
+	// Share pages require explicit access; runtime conversations deliberately use session access.
+	if (shouldWaitForShareAccess(access)) {
+		return []
+	}
 	const isMagicShare = window?.location?.pathname?.includes("magic-share")
+	const identity = resolveFileRequestIdentity(access)
 
 	const effectiveDownloadMode =
 		!isMagicShare && download_mode === undefined
@@ -216,8 +265,7 @@ export const getTemporaryDownloadUrl = async ({
 			: download_mode
 
 	const apiPath = isMagicShare
-		? // @ts-ignore
-			`/api/v1/admin/ai/content-audit/topic/${window?.topic_id}/attachment-urls`
+		? `/api/v1/admin/ai/content-audit/topic/${identity.topicId}/attachment-urls`
 		: effectiveDownloadMode === DownloadImageMode.HighQuality
 			? "/api/v1/super-agent/tasks/high-quality-image/queries"
 			: "/api/v1/super-agent/tasks/get-file-url"
@@ -235,18 +283,11 @@ export const getTemporaryDownloadUrl = async ({
 		localStorage.setItem("saved_file_ids", JSON.stringify(remainingFileIds))
 	}
 
-	const workspaceState = WorkspaceStateCache.get(userStore.user.userInfo)
-
-	const superIdState = getSuperIdState()
-
 	const requestBody = {
 		file_ids,
-		// @ts-ignore 使用window添加临时的token
-		token: window.temporary_token || "",
-		// @ts-ignore
-		topic_id: window?.topic_id || workspaceState?.topicId || superIdState?.topicId || "",
-		// @ts-ignore 使用window添加临时的project_id
-		project_id: window.project_id || workspaceState?.projectId || superIdState?.projectId || "",
+		token: identity.token,
+		topic_id: identity.topicId,
+		project_id: identity.projectId,
 		...(cache !== undefined ? { cache } : hasSavedFile ? { cache: false } : {}),
 		...(file_versions && !isMagicShare && { file_versions }),
 		...(effectiveDownloadMode && { download_mode: effectiveDownloadMode }),
@@ -289,6 +330,7 @@ export const getFileContentsByIds = async (
 			options: options.xMagicImageProcess
 				? { xMagicImageProcess: options.xMagicImageProcess }
 				: undefined,
+			access: options.access,
 		})
 	} catch (error) {
 		const failure =

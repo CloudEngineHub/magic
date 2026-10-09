@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { getFileContentById, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AudioProjectListItem } from "@/types/audioProject"
 import type { LoadedRecordingTextFile, RecordingDetailFileMap } from "../types/recording-detail"
@@ -39,6 +42,9 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 	const [refreshing, setRefreshing] = useState(false)
 	const loadedRequestKeyRef = useRef("")
 	const requestSequenceRef = useRef(0)
+	const fileAccess = useFileAccess()
+	// Bound to the ambient FileAccessProvider identity so share reads carry the share access.
+	const fileApi = useFileApi()
 	const targetRef = useRef(target)
 	const attachmentsRef = useRef(attachments)
 	targetRef.current = target
@@ -61,6 +67,7 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 	/** Resolves every readonly detail dependency from the already-authorized share attachment snapshot. */
 	const loadDetail = useCallback(
 		async ({ silent = false }: { silent?: boolean } = {}) => {
+			if (shouldWaitForShareAccess(fileAccess)) return
 			if (!projectId) {
 				setLoading(false)
 				setError(true)
@@ -101,7 +108,7 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 					bundleRootPath,
 				)
 				const magicProjectContent = magicProjectFile
-					? await readTextFile(magicProjectFile.file_id)
+					? await readTextFile(fileApi, magicProjectFile.file_id)
 					: undefined
 				if (!isCurrentRequest()) return
 
@@ -124,8 +131,8 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 					Boolean(entry.file?.file_id),
 				)
 				const [nextTexts, nextAudioUrl] = await Promise.all([
-					loadTextFiles(nextFileMap, magicProjectContent),
-					loadAudioUrl(nextFileMap.audio),
+					loadTextFiles(fileApi, nextFileMap, magicProjectContent),
+					loadAudioUrl(fileApi, nextFileMap.audio),
 				])
 				if (!nextFileMap.audio?.file_id || !nextAudioUrl) {
 					throw new Error("Recording bundle is missing a playable audio attachment")
@@ -138,9 +145,7 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 						resourceName,
 						fileMap: nextFileMap,
 						audioDisplayConfig: audioDirectory?.display_config as
-							| ShareRecordingDisplayConfig
-							| null
-							| undefined,
+							ShareRecordingDisplayConfig | null | undefined,
 					}),
 				)
 				setFileMap(nextFileMap)
@@ -160,7 +165,7 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 		// attachmentsKey intentionally recreates the loader for real attachment updates;
 		// the latest arrays are read from refs to avoid unstable object dependencies.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[attachmentsKey, projectId, resourceName, targetKey],
+		[attachmentsKey, fileAccess, fileApi, projectId, resourceName, targetKey],
 	)
 
 	useEffect(() => {
@@ -201,9 +206,14 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 }
 
 /** Reads a text attachment by file id inside the already-authorized share route session. */
-async function readTextFile(fileId?: string): Promise<LoadedRecordingTextFile | undefined> {
+async function readTextFile(
+	fileApi: FileApi,
+	fileId?: string,
+): Promise<LoadedRecordingTextFile | undefined> {
 	if (!fileId) return undefined
-	const content = await getFileContentById(fileId, { responseType: "text" })
+	const content = await fileApi.getFileContentById(fileId, {
+		responseType: "text",
+	})
 	return {
 		fileId,
 		content: typeof content === "string" ? content : "",
@@ -212,6 +222,7 @@ async function readTextFile(fileId?: string): Promise<LoadedRecordingTextFile | 
 
 /** Loads transcript, notes, summary files, and preserves a preloaded magic.project.js when one was already read upstream. */
 async function loadTextFiles(
+	fileApi: FileApi,
 	fileMap: RecordingDetailFileMap,
 	preloadedMagicProject?: LoadedRecordingTextFile,
 ): Promise<ShareRecordingDetailTextState> {
@@ -219,7 +230,7 @@ async function loadTextFiles(
 		fileMap.summaryFiles.map(async (entry) => {
 			if (!entry.file?.file_id) return [entry.type, undefined] as const
 			try {
-				return [entry.type, await readTextFile(entry.file.file_id)] as const
+				return [entry.type, await readTextFile(fileApi, entry.file.file_id)] as const
 			} catch (error) {
 				console.warn(`Failed to load share recording summary file ${entry.type}:`, error)
 				return [entry.type, undefined] as const
@@ -228,8 +239,8 @@ async function loadTextFiles(
 	)
 
 	const [transcript, notes] = await Promise.all([
-		readTextFile(fileMap.transcript?.file_id).catch(() => undefined),
-		readTextFile(fileMap.notes?.file_id).catch(() => undefined),
+		readTextFile(fileApi, fileMap.transcript?.file_id).catch(() => undefined),
+		readTextFile(fileApi, fileMap.notes?.file_id).catch(() => undefined),
 	])
 
 	return {
@@ -238,7 +249,7 @@ async function loadTextFiles(
 		magicProject:
 			preloadedMagicProject ||
 			(fileMap.magicProject?.file_id
-				? await readTextFile(fileMap.magicProject.file_id).catch(() => undefined)
+				? await readTextFile(fileApi, fileMap.magicProject.file_id).catch(() => undefined)
 				: undefined),
 		summary: Object.fromEntries(
 			summaryEntries.filter((entry): entry is readonly [string, LoadedRecordingTextFile] =>
@@ -249,9 +260,11 @@ async function loadTextFiles(
 }
 
 /** Resolves a temporary playable OSS url for the share detail audio bar. */
-async function loadAudioUrl(file?: AttachmentItem): Promise<string> {
+async function loadAudioUrl(fileApi: FileApi, file?: AttachmentItem): Promise<string> {
 	if (!file?.file_id) return ""
-	const [urlItem] = await getTemporaryDownloadUrl({ file_ids: [file.file_id] })
+	const [urlItem] = await fileApi.getTemporaryDownloadUrl({
+		file_ids: [file.file_id],
+	})
 	return urlItem?.url ?? ""
 }
 

@@ -94,7 +94,6 @@ export default function TopicHistorySidebar({
 					{hasOpenedRef.current && (
 						<>
 							<TopicResizeHandle
-								gripVariant="dots"
 								className="h-full shrink-0"
 								dragging={isDragging}
 								disabled={!isVisible || maxWidth < TOPIC_HISTORY_RESIZE.min}

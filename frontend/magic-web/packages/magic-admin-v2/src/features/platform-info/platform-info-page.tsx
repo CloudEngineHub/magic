@@ -1,6 +1,7 @@
 import {
 	AlertCircle,
 	Bot,
+	Droplets,
 	Edit3,
 	FileText,
 	Info,
@@ -75,6 +76,11 @@ const platformInfoSections = [
 		id: "footer",
 		titleKey: platformInfoSectionTitleKeys.footer,
 		icon: FileText,
+	},
+	{
+		id: "watermark",
+		titleKey: platformInfoSectionTitleKeys.watermark,
+		icon: Droplets,
 	},
 ] satisfies Array<SectionNavigationItem<PlatformInfoSectionId>>
 

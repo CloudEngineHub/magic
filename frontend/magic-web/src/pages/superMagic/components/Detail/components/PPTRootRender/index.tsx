@@ -11,12 +11,17 @@ import type { PPTRootRenderProps } from "./types"
 import { flattenAttachments } from "../../contents/HTML/utils"
 import { isHtmlPreviewShellNavigation } from "../../contents/HTML/utils/html-navigation"
 import { cn } from "@/utils/cn"
-import { getFileContentById } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { parseMagicProjectJsContent } from "../../contents/HTML/utils/magicProjectParser"
+import { normalizeHiddenSlides } from "@/pages/superMagic/utils/pptHiddenSlides"
 
 const MAGIC_PROJECT_FILE_NAME = "magic.project.js"
 
 interface PendingLocalSlidePaths {
 	slidePaths: string[]
+	hiddenSlides?: string[]
 }
 
 interface PPTEntryData {
@@ -135,10 +140,16 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		onUnregisterCheckBeforeClose,
 		slideStructureAdapter,
 		disableMagicProjectLookup = false,
+		showRefresh,
 	} = props
 
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
+	// PPT directory preview appears on share pages; bind the ambient identity so
+	// the magic.project.js read is not blocked by the share guard.
+	const fileApi = useFileApi()
+	const fileAccess = useFileAccess()
 	const [originalSlidesPaths, setOriginalSlidesPaths] = useState<string[]>([])
+	const [parsedHiddenSlides, setParsedHiddenSlides] = useState<string[] | undefined>()
 	const [renderKey] = useState(0)
 	const [entryFileData, setEntryFileData] = useState<any>({})
 	const [currentAttachmentList, setCurrentAttachmentList] = useState<any>([])
@@ -226,6 +237,15 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 	])
 
 	const entryContentFileId = entryData?.is_directory ? "" : displayData?.file_id || ""
+	const effectiveDisplayConfig = useMemo(() => {
+		if (disableMagicProjectLookup) return displayConfig
+		return {
+			...displayConfig,
+			slides: derivedSlidePaths,
+			// Once parsed, an absent hidden_slides means visible, not stale metadata fallback.
+			hidden_slides: parsedHiddenSlides ?? displayConfig?.hidden_slides,
+		}
+	}, [disableMagicProjectLookup, displayConfig, derivedSlidePaths, parsedHiddenSlides])
 	const { fileData: htmlFileData, loading } = useFileData({
 		file_id: entryContentFileId,
 		isEditing: false,
@@ -238,6 +258,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 
 	useEffect(() => {
 		pendingLocalSlidePathsRef.current = null
+		setParsedHiddenSlides(undefined)
 	}, [displayData?.file_id, magicProjectFile?.file_id])
 
 	useEffect(() => {
@@ -249,9 +270,14 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		}
 
 		let cancelled = false
+		if (shouldWaitForShareAccess(fileAccess)) {
+			setMagicProjectLoading(true)
+			return
+		}
 		setMagicProjectLoading(true)
 
-		getFileContentById(fileId, { responseType: "text" })
+		fileApi
+			.getFileContentById(fileId, { responseType: "text" })
 			.then((content) => {
 				if (cancelled) return
 				const nextContent = typeof content === "string" ? content : ""
@@ -269,7 +295,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		return () => {
 			cancelled = true
 		}
-	}, [magicProjectFile?.file_id, magicProjectFile?.updated_at])
+	}, [magicProjectFile?.file_id, magicProjectFile?.updated_at, fileApi, fileAccess])
 
 	/** Update HTML file data content */
 	const updateDataContent = useMemoizedFn((fileData: any) => {
@@ -288,6 +314,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 
 	// Create message handler and register/remove listener
 	useEffect(() => {
+		if (shouldWaitForShareAccess(fileAccess)) return
 		let htmlRelativeFolderPath = "/"
 		const currentFileId = displayData?.file_id
 		if (currentFileId && pptAttachmentList.length > 0) {
@@ -306,12 +333,15 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 			allFiles,
 			htmlRelativeFolderPath,
 			currentFileId || "",
+			undefined,
+			fileAccess,
+			fileApi,
 		)
 		window.addEventListener("message", messageHandler)
 		return () => {
 			window.removeEventListener("message", messageHandler)
 		}
-	}, [pptAttachmentList, displayData?.file_id])
+	}, [pptAttachmentList, displayData?.file_id, fileAccess, fileApi])
 
 	const processContent = useMemoizedFn(async () => {
 		try {
@@ -319,6 +349,12 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 				magicProjectFile?.file_id && magicProjectContent !== undefined,
 			)
 			const content = shouldUseMagicProject ? magicProjectContent : entryFileData?.content
+			const parsedConfig = !disableMagicProjectLookup
+				? parseMagicProjectJsContent(content || "")
+				: null
+			const nextHiddenSlides = parsedConfig
+				? normalizeHiddenSlides(parsedConfig.slides, parsedConfig.config.hidden_slides)
+				: undefined
 			const result = await processHtmlContent({
 				content,
 				attachments: processAttachments,
@@ -328,13 +364,17 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 					: entryFileData?.file_name,
 				attachmentList: pptAttachmentList,
 				displayConfig,
+				fileApi,
 			})
 
 			if (shouldUseMagicProject && pendingLocalSlidePathsRef.current) {
 				const pendingLocalSlidePaths = pendingLocalSlidePathsRef.current
 				const isMagicProjectCaughtUp =
 					getSlidesSignature(result.originalSlidesPaths) ===
-					getSlidesSignature(pendingLocalSlidePaths.slidePaths)
+						getSlidesSignature(pendingLocalSlidePaths.slidePaths) &&
+					(pendingLocalSlidePaths.hiddenSlides === undefined ||
+						getSlidesSignature(nextHiddenSlides) ===
+							getSlidesSignature(pendingLocalSlidePaths.hiddenSlides))
 
 				if (!isMagicProjectCaughtUp) {
 					return
@@ -345,6 +385,7 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 
 			setFilePathMapping(result.filePathMapping)
 			setOriginalSlidesPaths(result.originalSlidesPaths)
+			if (nextHiddenSlides !== undefined) setParsedHiddenSlides(nextHiddenSlides)
 		} catch (error) {
 			console.error("Error processing HTML content for PPT:", error)
 			setOriginalSlidesPaths([])
@@ -384,6 +425,15 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 			slidePaths: newSlidesPaths,
 		}
 		setOriginalSlidesPaths(newSlidesPaths)
+	}, [])
+
+	const handleDeckConfigSaved = useCallback((config: Record<string, unknown>) => {
+		if (!Array.isArray(config.slides)) return
+		const slidePaths = config.slides.filter((path): path is string => typeof path === "string")
+		const hiddenSlides = normalizeHiddenSlides(slidePaths, config.hidden_slides)
+		pendingLocalSlidePathsRef.current = { slidePaths, hiddenSlides }
+		setOriginalSlidesPaths(slidePaths)
+		setParsedHiddenSlides(hiddenSlides)
 	}, [])
 
 	const handleDownload = useMemoizedFn(
@@ -469,19 +519,22 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 					mainFileName={displayData?.file_name}
 					filePathMapping={filePathMapping}
 					selectedProject={selectedProject}
-					displayConfig={displayConfig}
+					displayConfig={effectiveDisplayConfig}
 					isPlaybackMode={isPlaybackMode}
 					allowEdit={allowEdit}
 					saveEditContent={saveEditContent}
 					onSortSave={handleSortSave}
+					onDeckConfigSaved={handleDeckConfigSaved}
 					openNewTab={openNewTab}
 					onDownload={handleDownload}
 					onFullscreen={onFullscreen}
+					isFileFullscreen={props.isFullscreen}
 					onActiveIndexChange={(_index, fileId) => {
 						props.onActiveFileChange?.(fileId)
 					}}
 					isTabActive={props.isTabActive}
 					allowDownload={allowDownload}
+					showRefresh={showRefresh}
 					onRegisterCheckBeforeClose={onRegisterCheckBeforeClose}
 					onUnregisterCheckBeforeClose={onUnregisterCheckBeforeClose}
 					slideStructureAdapter={slideStructureAdapter}

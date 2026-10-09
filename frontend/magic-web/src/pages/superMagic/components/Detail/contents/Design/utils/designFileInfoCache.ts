@@ -20,6 +20,7 @@ import {
 	requestSharedMediaUrls,
 } from "@/pages/superMagic/services/sharedMediaUrlCache"
 import projectFilesStore from "@/stores/projectFiles"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { resolveDesignCanvasResourceReference } from "./designResourceReferenceResolver"
 import { GetFileInfoResponseWithFileId } from "./uploadCallbacks"
 import { getPreviewFileUrlWatermarkSignature } from "@/utils/aiWatermarkPreviewFileUrlMode"
@@ -81,6 +82,8 @@ interface FileUrlRequestGroup {
 	priority: FileUrlRequestPriority
 	forceRefresh: boolean
 	resourceVersion?: string
+	/** Identity captured at the request boundary; never batched across share/session. */
+	fileApi?: FileApi
 	status: "queued" | "admitted" | "in-flight"
 	promise: Promise<GetTemporaryDownloadUrlItem & { url: string }>
 	resolve: (value: GetTemporaryDownloadUrlItem & { url: string }) => void
@@ -187,9 +190,10 @@ function buildScopedPathKey(
 	normalizedPath: string,
 	designProjectId?: string,
 	rendition: FileUrlRendition = "raw",
+	identityKey = "none",
 ): string {
 	const namespace = designProjectId || "__global__"
-	return `${namespace}\0${normalizedPath}\0${getRenditionCacheIdentity(rendition)}`
+	return `${namespace}\0${normalizedPath}\0${identityKey}\0${getRenditionCacheIdentity(rendition)}`
 }
 
 function resolveFileUrlRendition(
@@ -245,7 +249,9 @@ function parseScopedPathKey(scopedPathKey: string): {
 		possibleRendition === currentImageProcessIdentity
 	return {
 		namespace: parts[0] || "__global__",
-		normalizedPath: parts.slice(1, hasRendition ? -1 : undefined).join("\0"),
+		normalizedPath: parts
+			.slice(1, hasRendition ? (parts.length >= 4 ? -2 : -1) : undefined)
+			.join("\0"),
 		rendition:
 			possibleRendition === "image-process" ||
 			possibleRendition === currentImageProcessIdentity
@@ -485,8 +491,11 @@ function buildFileUrlIdentityKey(
 	rendition: FileUrlRendition,
 	designProjectId?: string,
 	resourceVersion?: string,
+	fileApi?: FileApi,
 ): string {
-	return `${buildNamespaceKey(designProjectId)}\0${fileId}\0${getRenditionCacheIdentity(rendition)}\0${resourceVersion ?? ""}`
+	// The identity suffix keeps share and host-session in-flight groups apart so a
+	// batch never mixes file requests bound to different tokens.
+	return `${buildNamespaceKey(designProjectId)}\0${fileId}\0${getRenditionCacheIdentity(rendition)}\0${resourceVersion ?? ""}\0${fileApi?.identityKey ?? "none"}`
 }
 
 function invalidateFileUrlResultsForFileId(fileId: string, designProjectId?: string): void {
@@ -587,17 +596,18 @@ async function requestFileUrlChunk(
 				fileResourceVersionMap.set(group.fileId, group.resourceVersion)
 			}
 		})
-		const downloadUrls = await requestSharedMediaUrls(
-			[...new Set(groups.map((group) => group.fileId))],
-			{
-				imageProcess:
-					rendition === "image-process"
-						? IMAGE_PROCESS_OPTIONS.xMagicImageProcess
-						: undefined,
-				forceRefresh: !cacheEnabled || groups.some((group) => group.forceRefresh),
-				fileResourceVersionMap,
-			},
-		)
+		const requestUrls = groups[0]?.fileApi?.requestSharedMediaUrls ?? requestSharedMediaUrls
+		const downloadUrls = await requestUrls([...new Set(groups.map((group) => group.fileId))], {
+			imageProcess:
+				rendition === "image-process"
+					? IMAGE_PROCESS_OPTIONS.xMagicImageProcess
+					: undefined,
+			forceRefresh: !cacheEnabled || groups.some((group) => group.forceRefresh),
+			fileResourceVersionMap,
+			// Every group in a chunk shares one identity (see requestFileUrlGroups),
+			// so the bound access is unambiguous.
+			identityKey: groups[0]?.fileApi?.identityKey,
+		})
 		const urlItemByFileId = new Map<string, GetTemporaryDownloadUrlItem & { url: string }>()
 		downloadUrls?.forEach((urlItem) => {
 			if (urlItem.file_id && urlItem.url) {
@@ -635,8 +645,12 @@ async function requestFileUrlGroups(
 		const chunkFileIds = new Set<string>()
 		const chunkResourceVersionByFileId = new Map<string, string>()
 		const chunkForceRefresh = orderedGroups[0]?.forceRefresh ?? false
+		// Never batch groups bound to different identities, or a share request
+		// could ride the host session's token and vice versa.
+		const chunkAccessKey = orderedGroups[0]?.fileApi?.identityKey ?? "none"
 		orderedGroups.forEach((group) => {
 			if (group.forceRefresh !== chunkForceRefresh) return
+			if ((group.fileApi?.identityKey ?? "none") !== chunkAccessKey) return
 			const resourceVersionKey = group.resourceVersion ?? ""
 			if (chunkFileIds.has(group.fileId)) {
 				if (chunkResourceVersionByFileId.get(group.fileId) !== resourceVersionKey) return
@@ -687,9 +701,10 @@ function promoteFileUrlRequest(
 	priority: FileUrlRequestPriority,
 	designProjectId?: string,
 	resourceVersion?: string,
+	fileApi?: FileApi,
 ): void {
 	const group = fileUrlRequestGroups.get(
-		buildFileUrlIdentityKey(fileId, rendition, designProjectId, resourceVersion),
+		buildFileUrlIdentityKey(fileId, rendition, designProjectId, resourceVersion, fileApi),
 	)
 	if (!group || group.status === "in-flight") return
 	if (FILE_URL_PRIORITY_RANK[priority] >= FILE_URL_PRIORITY_RANK[group.priority]) return
@@ -704,6 +719,7 @@ function requestFileUrl(options: {
 	designProjectId?: string
 	forceRefresh?: boolean
 	resourceVersion?: string
+	fileApi?: FileApi
 }): Promise<GetTemporaryDownloadUrlItem & { url: string }> {
 	const priority = options.priority ?? "visible"
 	const baseIdentityKey = buildFileUrlIdentityKey(
@@ -711,6 +727,7 @@ function requestFileUrl(options: {
 		options.rendition,
 		options.designProjectId,
 		options.resourceVersion,
+		options.fileApi,
 	)
 	const existingGroup = fileUrlRequestGroups.get(baseIdentityKey)
 
@@ -725,6 +742,7 @@ function requestFileUrl(options: {
 			priority,
 			options.designProjectId,
 			options.resourceVersion,
+			options.fileApi,
 		)
 		return existingGroup.promise
 	}
@@ -741,6 +759,7 @@ function requestFileUrl(options: {
 					options.resourceVersion === undefined
 						? undefined
 						: { [options.fileId]: options.resourceVersion },
+				identityKey: options.fileApi?.identityKey,
 			},
 		}).cached.find((item) => item.file_id === options.fileId && item.url)
 		if (cachedResult?.url) {
@@ -763,6 +782,7 @@ function requestFileUrl(options: {
 		priority,
 		forceRefresh: options.forceRefresh === true,
 		resourceVersion: options.resourceVersion,
+		fileApi: options.fileApi,
 		status: "queued",
 		promise,
 		resolve: resolveRequest,
@@ -787,6 +807,8 @@ export async function getFileInfoByPath(
 		attachmentsSnapshotKeyOverride?: string
 		hasAttachmentSnapshot?: boolean
 		priority?: FileUrlRequestPriority
+		/** Request identity bound at the React boundary; part of the in-flight key. */
+		fileApi?: FileApi
 	},
 ): Promise<GetFileInfoResponse | null> {
 	const storeFiles = getStoreFiles(filesList)
@@ -827,6 +849,7 @@ export async function getFileInfoByPath(
 				target.normalizedPath,
 				options?.designProjectId,
 				rendition,
+				options?.fileApi?.identityKey,
 			)
 			const cachedEntry = fileInfoCache.get(cacheKey)
 			if (cachedEntry?.resolvedFileId) {
@@ -851,6 +874,7 @@ export async function getFileInfoByPath(
 			target.normalizedPath,
 			options?.designProjectId,
 			rendition,
+			options?.fileApi?.identityKey,
 		)
 		const cachedEntry = fileInfoCache.get(cacheKey)
 		if (cachedEntry) {
@@ -883,6 +907,7 @@ export async function getFileInfoByPath(
 			target.normalizedPath,
 			options?.designProjectId,
 			rendition,
+			options?.fileApi?.identityKey,
 		)
 		const requestCacheKey = buildRequestCacheKey(cacheKey, rendition)
 		const cachedRequest = fileInfoRequestCache.get(requestCacheKey)
@@ -904,6 +929,7 @@ export async function getFileInfoByPath(
 					options?.priority ?? "visible",
 					options?.designProjectId,
 					cachedRequest.resourceVersion,
+					options?.fileApi,
 				)
 
 				return cachedRequest.promise.then((result) =>
@@ -976,7 +1002,12 @@ export async function getFileInfoByPath(
 
 	const { fileItem, normalizedPath } = resolvedTarget
 	const rendition = resolveFileUrlRendition(options?.useImageProcess, fileItem.file_size)
-	const cacheKey = buildScopedPathKey(normalizedPath, options?.designProjectId, rendition)
+	const cacheKey = buildScopedPathKey(
+		normalizedPath,
+		options?.designProjectId,
+		rendition,
+		options?.fileApi?.identityKey,
+	)
 	const requestCacheKey = buildRequestCacheKey(cacheKey, rendition)
 	const requestToken = forceRefreshToken ?? Symbol(requestCacheKey)
 	if (forceRefreshToken && !forceRefreshCacheKeys.has(cacheKey)) {
@@ -992,6 +1023,7 @@ export async function getFileInfoByPath(
 		designProjectId: options?.designProjectId,
 		forceRefresh: shouldBypassCache,
 		resourceVersion,
+		fileApi: options?.fileApi,
 	}).then(
 		(urlItem): GetFileInfoResponse => {
 			const result: GetFileInfoResponse = {
@@ -1182,6 +1214,8 @@ export async function getFileInfoById(
 		filesList?: FileItem[]
 		priority?: FileUrlRequestPriority
 		designProjectId?: string
+		/** Request identity bound at the React boundary; part of the in-flight key. */
+		fileApi?: FileApi
 	},
 ): Promise<GetFileInfoResponseWithFileId> {
 	if (!fileId) {
@@ -1202,6 +1236,7 @@ export async function getFileInfoById(
 		priority: options?.priority ?? "critical",
 		designProjectId: options?.designProjectId,
 		resourceVersion,
+		fileApi: options?.fileApi,
 	})
 	const result: GetFileInfoResponse = mergeFileItemMetaIntoFileInfo(
 		{

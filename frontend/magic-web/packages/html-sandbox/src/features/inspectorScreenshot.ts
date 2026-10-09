@@ -15,6 +15,8 @@ export interface ScreenshotRequest {
 	requestId: string
 	selection: { top: number; left: number; width: number; height: number }
 	outputSize: { width: number; height: number }
+	/** Prefer this element as the snapdom root instead of cloning document.body. */
+	selector?: string
 }
 
 export interface ScreenshotCaptureHooks {
@@ -164,14 +166,6 @@ async function encodeSmallCanvasFallback(
 		throw new Error("Failed to encode iframe screenshot")
 	}
 	const dataUrl = canvas.toDataURL("image/png")
-	if (typeof fetch === "function") {
-		try {
-			const response = await fetch(dataUrl)
-			if (response.ok) return await response.blob()
-		} catch {
-			// jsdom and some workers cannot fetch data: URLs.
-		}
-	}
 	const separatorIndex = dataUrl.indexOf(",")
 	if (separatorIndex < 0) throw new Error("Failed to encode iframe screenshot")
 	const bytes = Uint8Array.from(atob(dataUrl.slice(separatorIndex + 1)), (char) =>
@@ -238,13 +232,34 @@ export async function encodeCanvasToPngBlob(
 export async function encodeCanvasToScreenshotBlob(
 	canvas: HTMLCanvasElement,
 	shouldAbort?: () => boolean,
+	onProgress?: () => void,
 ): Promise<Blob> {
+	// Tiny canvases can stall in Chromium toBlob after document.write. Use a
+	// synchronous data-URL encode so iframe captures can finish inside the
+	// parent result timeout.
+	if (getCanvasPixelCount(canvas) <= SYNC_PNG_ENCODE_MAX_PIXELS) {
+		onProgress?.()
+		return encodeSmallCanvasFallback(canvas, shouldAbort)
+	}
+	onProgress?.()
 	const webpBlob = await encodeCanvasWithWebp(canvas, shouldAbort)
 	if (webpBlob) return webpBlob
+	onProgress?.()
 	return encodeCanvasToPngBlob(canvas, shouldAbort)
 }
 
-export function resolveCaptureRoot(selection: ScreenshotRequest["selection"]): HTMLElement {
+export function resolveCaptureRoot(
+	selection: ScreenshotRequest["selection"],
+	selector?: string,
+): HTMLElement {
+	if (selector) {
+		try {
+			const selected = document.querySelector(selector)
+			if (selected instanceof HTMLElement) return selected
+		} catch {
+			// Invalid selectors must not break capture.
+		}
+	}
 	const explicitRoot = document.querySelector<HTMLElement>("[data-magic-capture-root]")
 	if (explicitRoot) return explicitRoot
 
@@ -272,6 +287,54 @@ interface CaptureClipRect {
 	y: number
 	width: number
 	height: number
+}
+
+export function usesSelectorCaptureRoot(root: HTMLElement, selector?: string): boolean {
+	if (!selector) return false
+	try {
+		return document.querySelector(selector) === root
+	} catch {
+		return false
+	}
+}
+
+/** Clip is root-local. Selector captures the whole matched element. */
+export function buildCaptureClip(
+	rootRect: Pick<DOMRect, "left" | "top" | "width" | "height">,
+	selection: ScreenshotRequest["selection"],
+	captureFullRoot: boolean,
+): CaptureClipRect {
+	const source = captureFullRoot
+		? {
+				left: rootRect.left,
+				top: rootRect.top,
+				width: rootRect.width,
+				height: rootRect.height,
+			}
+		: selection
+	const selectionLeft = Math.max(0, source.left - rootRect.left)
+	const selectionTop = Math.max(0, source.top - rootRect.top)
+	const selectionRight = Math.min(rootRect.width, source.left - rootRect.left + source.width)
+	const selectionBottom = Math.min(rootRect.height, source.top - rootRect.top + source.height)
+	return {
+		x: selectionLeft,
+		y: selectionTop,
+		width: Math.max(1, selectionRight - selectionLeft),
+		height: Math.max(1, selectionBottom - selectionTop),
+	}
+}
+
+/** snapdom clip uses page coordinates, not root-local boxes. */
+export function toSnapdomPageClip(
+	rootRect: Pick<DOMRect, "left" | "top">,
+	clip: CaptureClipRect,
+): CaptureClipRect {
+	return {
+		x: rootRect.left + clip.x + (window.scrollX || window.pageXOffset || 0),
+		y: rootRect.top + clip.y + (window.scrollY || window.pageYOffset || 0),
+		width: clip.width,
+		height: clip.height,
+	}
 }
 
 type VideoFrameCallbackTarget = {
@@ -636,6 +699,54 @@ function resolveVideoAlignedClip(
 	}
 }
 
+type AnimationState = {
+	animation: Animation
+	currentTime: CSSNumberish | null
+	playState: AnimationPlayState
+}
+
+function restoreAnimationState({ animation, currentTime, playState }: AnimationState) {
+	try {
+		animation.currentTime = currentTime
+		if (playState === "running") animation.play()
+		else if (playState === "paused") animation.pause()
+		else if (playState === "finished") animation.finish()
+	} catch {
+		// An animation can disappear while snapdom waits for remote resources.
+	}
+}
+
+/** Pause motion without resetting every CSS transition on the live page. */
+export function freezeIframeMotion(): () => void {
+	const animations =
+		typeof document.getAnimations === "function"
+			? document.getAnimations({ subtree: true }).map<AnimationState>((animation) => ({
+					animation,
+					currentTime: animation.currentTime,
+					playState: animation.playState,
+				}))
+			: []
+	for (const { animation } of animations) {
+		try {
+			animation.pause()
+		} catch {
+			// Ignore animations whose timeline is no longer active.
+		}
+	}
+	const scrollTargets = [document.documentElement, document.body].filter(
+		(element): element is HTMLElement => element instanceof HTMLElement,
+	)
+	const scrollBehavior = scrollTargets.map((element) => ({
+		element,
+		value: element.style.scrollBehavior,
+	}))
+	for (const { element } of scrollBehavior) element.style.scrollBehavior = "auto"
+	return () => {
+		for (const { element, value } of scrollBehavior) element.style.scrollBehavior = value
+		for (const state of animations) restoreAnimationState(state)
+	}
+}
+
 async function waitForCaptureFrame(): Promise<void> {
 	const fontsReady = document.fonts?.ready
 	if (fontsReady) {
@@ -681,53 +792,39 @@ export async function captureScreenshotBlob(
 		Math.max(Math.round(request.outputSize.height), 1),
 		MAX_SCREENSHOT_OUTPUT_EDGE,
 	)
-	const root = resolveCaptureRoot(request.selection)
+	const root = resolveCaptureRoot(request.selection, request.selector)
 	const rootRect = root.getBoundingClientRect()
 	if (rootRect.width <= 0 || rootRect.height <= 0) {
 		throw new Error("Capture root has no size")
 	}
-	const selectionLeft = Math.max(0, request.selection.left - rootRect.left)
-	const selectionTop = Math.max(0, request.selection.top - rootRect.top)
-	const selectionRight = Math.min(
-		rootRect.width,
-		request.selection.left - rootRect.left + request.selection.width,
-	)
-	const selectionBottom = Math.min(
-		rootRect.height,
-		request.selection.top - rootRect.top + request.selection.height,
-	)
-	let clip: CaptureClipRect = {
-		x: selectionLeft,
-		y: selectionTop,
-		width: Math.max(1, selectionRight - selectionLeft),
-		height: Math.max(1, selectionBottom - selectionTop),
-	}
-	const style = document.createElement("style")
-	style.setAttribute("data-magic-inspector-screenshot", "true")
-	style.textContent = `
-		*, *::before, *::after {
-			animation: none !important;
-			transition: none !important;
-			caret-color: transparent !important;
-		}
-	`
-	;(document.head ?? document.documentElement).appendChild(style)
+	const captureFullRoot = usesSelectorCaptureRoot(root, request.selector)
+	const clipSelection = captureFullRoot
+		? {
+				left: rootRect.left,
+				top: rootRect.top,
+				width: rootRect.width,
+				height: rootRect.height,
+			}
+		: request.selection
+	let clip = buildCaptureClip(rootRect, request.selection, captureFullRoot)
+	const restoreMotion = freezeIframeMotion()
 	let restoreCaptureVideos: () => void = () => {}
 	try {
 		throwIfAborted(hooks.shouldAbort)
 		await waitForCaptureFrame()
 		throwIfAborted(hooks.shouldAbort)
-		clip = resolveVideoAlignedClip(root, request.selection, clip)
+		clip = resolveVideoAlignedClip(root, clipSelection, clip)
 		throwIfAborted(hooks.shouldAbort)
 		restoreCaptureVideos = await waitForCaptureVideosInClip(root, clip)
 		throwIfAborted(hooks.shouldAbort)
 		hooks.onProgress?.()
+		const snapdomClip = toSnapdomPageClip(rootRect, clip)
 		const result = await snapdom(root, {
 			width: clip.width,
 			height: clip.height,
 			dpr: Math.min(Math.max(window.devicePixelRatio || 1, 1), 3),
 			backgroundColor: "#ffffff",
-			clip,
+			clip: snapdomClip,
 		})
 		throwIfAborted(hooks.shouldAbort)
 		hooks.onProgress?.()
@@ -751,9 +848,9 @@ export async function captureScreenshotBlob(
 		)
 		hooks.onProgress?.()
 		throwIfAborted(hooks.shouldAbort)
-		return await encodeCanvasToScreenshotBlob(outputCanvas, hooks.shouldAbort)
+		return await encodeCanvasToScreenshotBlob(outputCanvas, hooks.shouldAbort, hooks.onProgress)
 	} finally {
 		restoreCaptureVideos()
-		style.remove()
+		restoreMotion()
 	}
 }

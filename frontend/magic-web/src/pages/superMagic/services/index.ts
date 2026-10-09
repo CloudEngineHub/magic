@@ -575,12 +575,22 @@ class SuperMagicService {
 		if (optimisticTopicId && navigationWorkspaceId) {
 			// Navigate to topic optimistically
 			this.topicStore.setSelectedTopic(null) // Clear first, wait for background data
-			this.route.navigateToTopic({
-				workspaceId: navigationWorkspaceId,
-				projectId: resolvedProject.id,
-				topicId: optimisticTopicId,
-				state: navigationState,
-			})
+			if (interfaceStore.isMobile) {
+				// Mobile has a dedicated project-topic route. navigateToTopic intentionally
+				// resolves to the project page there, so use the detail route directly.
+				this.route.navigateToProjectTopicOnMobile({
+					workspaceId: navigationWorkspaceId,
+					projectId: resolvedProject.id,
+					topicId: optimisticTopicId,
+				})
+			} else {
+				this.route.navigateToTopic({
+					workspaceId: navigationWorkspaceId,
+					projectId: resolvedProject.id,
+					topicId: optimisticTopicId,
+					state: navigationState,
+				})
+			}
 			navigatedToTopic = true
 		} else {
 			// Navigate to project optimistically
@@ -1192,17 +1202,25 @@ class SuperMagicService {
 	handleCreateProject = async (
 		params: HandleCreateProjectParams,
 	): Promise<CreatedProject | null> => {
-		const { projectMode, isAutoSelect = true, isEditProject, workdir, projectName } = params
+		const {
+			projectMode,
+			isAutoSelect = true,
+			isEditProject,
+			workdir,
+			projectName,
+			workspaceId,
+		} = params
 		// Note: isEditProject is kept for backward compatibility but editing state
 		// is now managed within ProjectsMenu component via useProjectEditing hook
 		void isEditProject
 
-		const selectedWorkspace = workspaceStore.selectedWorkspace
-		if (!selectedWorkspace) return null
+		// Prefer an explicit workspaceId so route-scoped pages are not bound to store selection.
+		const resolvedWorkspaceId = workspaceId || workspaceStore.selectedWorkspace?.id
+		if (!resolvedWorkspaceId) return null
 
 		try {
 			const res = await this.project.createProject({
-				workspaceId: selectedWorkspace.id,
+				workspaceId: resolvedWorkspaceId,
 				projectMode,
 				workdir,
 				projectName,
@@ -1261,7 +1279,7 @@ class SuperMagicService {
 					} else {
 						topicStore.setSelectedTopic(res.topic)
 						this.route.navigateToTopic({
-							workspaceId: selectedWorkspace.id,
+							workspaceId: resolvedWorkspaceId,
 							projectId: res.project.id,
 							topicId: res.topic.id,
 						})

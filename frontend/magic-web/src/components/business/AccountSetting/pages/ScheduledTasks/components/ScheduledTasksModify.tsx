@@ -95,7 +95,6 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 
 		const workspaceId = Form.useWatch("workspace_id", form)
 		const projectId = Form.useWatch("project_id", form)
-		const topicId = Form.useWatch("topic_id", form)
 		const projectEnabled = Form.useWatch("project_enabled", form)
 		const deadlineEnabled = Form.useWatch("deadline_enabled", form)
 		const timeConfig = Form.useWatch("time_config", form)
@@ -334,21 +333,6 @@ export const ScheduledTasksModify = forwardRef<ScheduledTasksModifyRef, Schedule
 				setSelectedTopic(null)
 			}
 		}, [projectId])
-
-		useEffect(() => {
-			const taskContextWindow = window as Window & {
-				project_id?: string
-				topic_id?: string
-			}
-
-			if (projectId) taskContextWindow.project_id = projectId
-			if (topicId) taskContextWindow.topic_id = topicId
-
-			return () => {
-				taskContextWindow.project_id = ""
-				taskContextWindow.topic_id = ""
-			}
-		}, [projectId, topicId])
 
 		const handleWorkspaceSelect = useMemoizedFn((item?: OptionItem) => {
 			if (!item) {

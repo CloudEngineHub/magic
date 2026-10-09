@@ -777,6 +777,12 @@ describe("SuperMagicModeService", () => {
 		expect(superMagicModeService.isModeVisible("hidden-agent")).toBe(false)
 	})
 
+	it("keeps the internal micro-app mode available without a crew-list entry", () => {
+		superMagicModeService._modeMap.clear()
+
+		expect(superMagicModeService.isModeValid(TopicMode.MicroApp)).toBe(true)
+	})
+
 	it("reuses fresh mode list in the same user context", async () => {
 		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
 			list: [
