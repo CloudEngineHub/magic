@@ -208,8 +208,10 @@ export function useToolCreationDrag() {
 				<div
 					className="pointer-events-none fixed z-[1100] flex select-none items-center gap-2 rounded-lg border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-lg"
 					style={{
-						left: preview.x + 16,
-						top: preview.y + 16,
+						// 使用自身尺寸居中，让拖拽提示随鼠标移动，不偏移到右下方。
+						left: preview.x,
+						top: preview.y,
+						transform: "translate(-50%, -50%)",
 						opacity: preview.canDrop ? 1 : 0.5,
 					}}
 					aria-hidden

@@ -32,6 +32,7 @@ import {
 import { getLoadedImageElements } from "../../../runtime/shared/ids"
 import { getActiveImageContent } from "../../../runtime/document/elementContent"
 import { getCreateElementMenuItems, type CreateElementMenuKind } from "./createElementMenuItems"
+import styles from "./index.module.css"
 
 export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	const { children } = props
@@ -663,8 +664,8 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent
-					className="box-border data-[state=closed]:hidden data-[state=closed]:!animate-none data-[state=closed]:!transition-none data-[state=closed]:!duration-0"
-					style={{ width: MENU_WIDTH, minWidth: MENU_WIDTH }}
+					className={`box-border data-[state=closed]:hidden data-[state=closed]:!animate-none data-[state=closed]:!transition-none data-[state=closed]:!duration-0 ${isCanvasMenu ? styles.canvasMenu : ""}`}
+					style={isCanvasMenu ? undefined : { width: MENU_WIDTH, minWidth: MENU_WIDTH }}
 					data-canvas-ui-component
 					onCloseAutoFocus={(event) => {
 						event.preventDefault()
