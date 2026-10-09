@@ -16,6 +16,7 @@ use App\Domain\Notification\Repository\Facade\NotificationRepositoryInterface;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\Database\Query\Builder;
 use Hyperf\DbConnection\Db;
+use InvalidArgumentException;
 use Throwable;
 
 final class NotificationRepository implements NotificationRepositoryInterface
@@ -265,10 +266,16 @@ final class NotificationRepository implements NotificationRepositoryInterface
         $decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
         $data = $decoded === false ? json_decode($cursor, true) : json_decode($decoded, true);
         if (! is_array($data) || ! isset($data['created_at'], $data['id'])) {
-            return null;
+            throw new InvalidArgumentException('cursor is invalid');
         }
 
-        return ['created_at' => (string) $data['created_at'], 'id' => (string) $data['id']];
+        $createdAt = (string) $data['created_at'];
+        $id = (string) $data['id'];
+        if ($createdAt === '' || $id === '' || ! preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $createdAt)) {
+            throw new InvalidArgumentException('cursor is invalid');
+        }
+
+        return ['created_at' => $createdAt, 'id' => $id];
     }
 
     private function encodeCursor(NotificationEntity $entity): string
