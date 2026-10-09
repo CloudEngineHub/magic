@@ -2,6 +2,7 @@ import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum } from "../../document/types"
 import { BaseLabelManager, type BaseLabelManagerConfig, type LabelSize } from "./BaseLabelManager"
+import type { MediaLabelLayout } from "./mediaLabelLayout"
 
 /**
  * 尺寸标签配置
@@ -24,7 +25,7 @@ const SIZE_LABEL_CONFIG = {
  * 职责：
  * 1. 在独立的 Layer 上渲染所有元素的尺寸标签（width x height）
  * 2. 监听元素变化，同步更新尺寸标签
- * 3. 管理尺寸标签的可见性（Frame 一直显示，Image 只在 hover 时显示）
+ * 3. 管理尺寸标签的可见性（媒体标签默认按 hover/选中显示，可通过画布设置常驻）
  * 4. 处理尺寸标签的位置和缩放
  * 5. 标签显示在元素右上角
  */
@@ -87,8 +88,12 @@ export class SizeLabelManager extends BaseLabelManager {
 		return result
 	}
 
-	protected override updateLabelVisibility(elementId: string, skipBatchDraw = false): boolean {
-		const visibilityChanged = super.updateLabelVisibility(elementId, skipBatchDraw)
+	protected override updateLabelVisibility(
+		elementId: string,
+		skipBatchDraw = false,
+		mediaLayout?: MediaLabelLayout | null,
+	): boolean {
+		const visibilityChanged = super.updateLabelVisibility(elementId, skipBatchDraw, mediaLayout)
 		if (
 			visibilityChanged &&
 			this.labelMap.has(elementId) &&
@@ -171,7 +176,19 @@ export class SizeLabelManager extends BaseLabelManager {
 		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
 		labelGroup: Konva.Group,
 		baseVisibility: boolean,
+		mediaLayout?: MediaLabelLayout | null,
 	): boolean | null {
+		const resolvedMediaLayout = mediaLayout ?? this.getMediaRowLayout(elementId)
+		if (resolvedMediaLayout)
+			return baseVisibility && resolvedMediaLayout.hasSpace && resolvedMediaLayout.showSize
+		const elementType = element?.getData().type
+		if (
+			this.isMediaLabelsAlwaysVisible() &&
+			(elementType === ElementTypeEnum.Image || elementType === ElementTypeEnum.Video)
+		) {
+			return null
+		}
+
 		// 如果基础可见性为 false，不需要检查自定义逻辑
 		if (!baseVisibility) {
 			return null
