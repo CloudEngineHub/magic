@@ -169,13 +169,12 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 统一查询一次已存在的分享（如果存在），避免重复查询
         // 用于区分创建场景和更新场景，以及获取数据库中的原值
-        // Existing shares are scoped by resource type and organization. A resource ID
-        // alone is caller-controlled and must not select another tenant's share.
-        $existingShare = $this->shareDomainService->getShareByResourceIdWithTrashed(
-            $dto->resourceId,
-            $resourceType->value,
-            $organizationCode,
-        );
+        // Match the record saveShare will update, including type conversions and
+        // deleted shares, and authorize it before any file collection is changed.
+        $existingShare = $this->shareDomainService->getShareByResourceIdWithTrashed($dto->resourceId);
+        if ($existingShare) {
+            $this->shareDomainService->assertShareOwnership($existingShare, $userId, $organizationCode);
+        }
 
         // 校验 file_ids 必填条件（问题2修复：使用 hasField() 判断，区分"不传"和"传空数组"）
         $isFileCollectionType = $resourceType === ResourceType::FileCollection;
@@ -297,12 +296,6 @@ class ResourceShareAppService extends AbstractShareAppService
         // different real resource (notably project_id for Project shares).
         if (! $factory->hasSharePermission($realResourceId, $userId, $organizationCode)) {
             ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.no_permission_to_share', [$resourceId]);
-        }
-
-        if ($existingShare) {
-            if ($existingShare->getCreatedUid() !== $userId) {
-                ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.no_permission_to_share', [$resourceId]);
-            }
         }
 
         // 5. 校验 share_type=5 时密码必填
