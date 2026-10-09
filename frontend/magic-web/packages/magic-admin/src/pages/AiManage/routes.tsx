@@ -11,7 +11,6 @@ import {
 	AI_APP_MENU,
 	AI_DATA_DASHBOARD,
 } from "@admin/const/common"
-import { useAdminStore } from "@admin/stores/admin"
 import { DataDashboardView } from "./DataDashboard/consts"
 
 /**
@@ -28,11 +27,6 @@ const EmployeeReviewPage = lazy(() => import("./EmployeeReview/index.page"))
 const SkillReviewPage = lazy(() => import("./SkillReview/index.page"))
 const AppMenuPage = lazy(() => import("./AppMenu/index.page"))
 const DataDashboardPage = lazy(() => import("./DataDashboard/index.page"))
-
-const hasAdminAllPermissions = (permissions: string[]) =>
-	permissions.includes(PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS) ||
-	permissions.includes(PERMISSION_KEY_MAP.MAGIC_ALL_PERMISSIONS) ||
-	permissions.includes(PERMISSION_KEY_MAP.MAGIC_PERSON_PERMISSIONS)
 
 const canAccessAIModel = (permissions: string[], isSuperAdmin?: boolean) =>
 	isSuperAdmin ||
@@ -83,88 +77,6 @@ const canAccessConsumptionAnalysis = (permissions: string[], isSuperAdmin?: bool
 const canAccessFileProductionAnalysis = (permissions: string[], isSuperAdmin?: boolean) =>
 	isSuperAdmin || permissions.includes(PERMISSION_KEY_MAP.DATA_DASHBOARD_FILE_QUERY)
 
-// 首页重定向
-function AIIndexRedirect() {
-	const { isPermissionInitialized, isOfficialOrg, isPersonalOrganization, userPermissions } =
-		useAdminStore()
-
-	if (!isPermissionInitialized) return null
-
-	const isSuperAdmin = hasAdminAllPermissions(userPermissions)
-	const targetPath = [
-		!isOfficialOrg && canAccessAICustomModel(userPermissions, isSuperAdmin)
-			? RoutePath.AIModel
-			: null,
-		canAccessAIEmployeeReview(userPermissions, isSuperAdmin)
-			? RoutePath.AIEmployeeReview
-			: null,
-		canAccessAISkillReview(userPermissions, isSuperAdmin) ? RoutePath.AISkillReview : null,
-		!isPersonalOrganization && canAccessMemberAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardMemberAnalysis
-			: null,
-		!isPersonalOrganization && canAccessOrganizationAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardOrganizationAnalysis
-			: null,
-		!isPersonalOrganization && canAccessDigitalEmployeeAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardDigitalEmployeeAnalysis
-			: null,
-		!isPersonalOrganization && canAccessConsumptionAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardConsumptionAnalysis
-			: null,
-		!isPersonalOrganization && canAccessFileProductionAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardFileProductionAnalysis
-			: null,
-		!isOfficialOrg && canAccessAIAppMenu(userPermissions, isSuperAdmin)
-			? RoutePath.AIAppMenu
-			: null,
-	].find(Boolean)
-
-	return <Navigate to={targetPath ?? RoutePath.AdminNoAuthorized} replace />
-}
-
-function InternalEmployeeSkillIndexRedirect() {
-	const { isPermissionInitialized, userPermissions } = useAdminStore()
-
-	if (!isPermissionInitialized) return null
-
-	const isSuperAdmin = hasAdminAllPermissions(userPermissions)
-	const targetPath = [
-		canAccessAIEmployeeReview(userPermissions, isSuperAdmin)
-			? RoutePath.AIEmployeeReview
-			: null,
-		canAccessAISkillReview(userPermissions, isSuperAdmin) ? RoutePath.AISkillReview : null,
-	].find(Boolean)
-
-	return <Navigate to={targetPath ?? RoutePath.AdminNoAuthorized} replace />
-}
-
-function DataStatisticsIndexRedirect() {
-	const { isPermissionInitialized, userPermissions } = useAdminStore()
-
-	if (!isPermissionInitialized) return null
-
-	const isSuperAdmin = hasAdminAllPermissions(userPermissions)
-	const targetPath = [
-		canAccessMemberAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardMemberAnalysis
-			: null,
-		canAccessOrganizationAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardOrganizationAnalysis
-			: null,
-		canAccessDigitalEmployeeAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardDigitalEmployeeAnalysis
-			: null,
-		canAccessConsumptionAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardConsumptionAnalysis
-			: null,
-		canAccessFileProductionAnalysis(userPermissions, isSuperAdmin)
-			? RoutePath.AIDataDashboardFileProductionAnalysis
-			: null,
-	].find(Boolean)
-
-	return <Navigate to={targetPath ?? RoutePath.AdminNoAuthorized} replace />
-}
-
 export default {
 	name: RouteName.AdminAILayout,
 	path: RoutePath.AI,
@@ -176,10 +88,11 @@ export default {
 	children: [
 		{
 			index: true,
-			element: <AIIndexRedirect />,
+			element: <Navigate to={RoutePath.AIModel} replace />,
 		},
 		{
 			name: RouteName.AdminAICustomModel,
+			validateOrganization: ({ isOfficialOrg }) => !isOfficialOrg,
 			path: RoutePath.AICustomModel,
 			title: "nav.aiSubMenu.customModel",
 			validate: canAccessAICustomModel,
@@ -231,13 +144,14 @@ export default {
 		},
 		{
 			name: RouteName.AdminAIInternalEmployeeSkill,
+			validateOrganization: ({ isPersonalOrganization }) => !isPersonalOrganization,
 			path: RoutePath.AIInternalEmployeeSkill,
 			title: "nav.aiSubMenu.internalEmployeeSkill",
 			validate: canAccessAIInternalEmployeeSkill,
 			children: [
 				{
 					index: true,
-					element: <InternalEmployeeSkillIndexRedirect />,
+					element: <Navigate to={RoutePath.AIEmployeeReview} replace />,
 				},
 				{
 					name: RouteName.AdminAIEmployeeReview,
@@ -257,13 +171,14 @@ export default {
 		},
 		{
 			name: RouteName.AdminAIDataStatistics,
+			validateOrganization: ({ isPersonalOrganization }) => !isPersonalOrganization,
 			path: RoutePath.AIDataStatistics,
 			title: "nav.aiSubMenu.dataStatistics",
 			validate: canAccessAIDataStatistics,
 			children: [
 				{
 					index: true,
-					element: <DataStatisticsIndexRedirect />,
+					element: <Navigate to={RoutePath.AIDataDashboardMemberAnalysis} replace />,
 				},
 				{
 					name: RouteName.AdminAIDataDashboardMemberAnalysis,
@@ -314,6 +229,7 @@ export default {
 				},
 				{
 					name: RouteName.AdminAIAppMenu,
+					validateOrganization: ({ isOfficialOrg }) => !isOfficialOrg,
 					path: RoutePath.AIAppMenu,
 					element: <AppMenuPage />,
 					title: "nav.aiSubMenu.applicationMenu",
