@@ -4,7 +4,7 @@ import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessConte
 import { downloadFileContent, type GetTemporaryDownloadUrlItem } from "@/pages/superMagic/utils/api"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDebounceEffect, useMemoizedFn } from "ahooks"
-import { FileHistoryVersion, Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { useTranslation } from "react-i18next"
 import useShareRoute from "./useShareRoute"
@@ -35,8 +35,6 @@ export const useFileData = ({
 	enabled = true,
 	loadContent = true,
 	isTabActive,
-	useSharedMediaUrlCache = false,
-	skipContentDownload = false,
 }: {
 	file_id: string
 	responseType?: "text" | "arrayBuffer" | "blob"
@@ -58,10 +56,6 @@ export const useFileData = ({
 	loadContent?: boolean
 	/** Whether this renderer is the active file tab. */
 	isTabActive?: boolean
-	/** Use the shared expiring URL cache for previews that keep the URL mounted. */
-	useSharedMediaUrlCache?: boolean
-	/** Resolve the URL without downloading the file body into memory. */
-	skipContentDownload?: boolean
 }) => {
 	const { t } = useTranslation("super")
 	const { isShareRoute } = useShareRoute()
