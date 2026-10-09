@@ -7,8 +7,8 @@ import { saveMediaSpeakersAndMagicProjectJs } from "../../contents/HTML/media/ut
 import HTML from "../../contents/HTML"
 import { useRecordingAudioPlayer } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingAudioPlayer"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
-import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { useShareRecordingDetailData } from "@/pages/superMagic/pages/AudioRecordings/hooks/useShareRecordingDetailData"
+import { useRecordingDetailTranscriptPanelState } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingDetailTranscriptPanelState"
 import type { RecordingTranscriptSegment } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
 import {
 	FOLDER_RECORDING_DETAIL_CAPABILITIES,
@@ -16,6 +16,7 @@ import {
 } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail-capabilities"
 import { collectSpeakerIdsFromText } from "@/pages/superMagic/pages/AudioRecordings/utils/markdownTimeLinks"
 import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
+import { hasRecordingDetailTabStrip } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
 import { playTranscriptFromSegment } from "@/pages/superMagic/pages/AudioRecordings/utils/transcript-playback"
 import { RecordingDetailProvider } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailProvider"
 import { RecordingDetailWorkbench } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailWorkbench"
@@ -170,12 +171,26 @@ function AudioFolderWorkbench({
 	const [speakerDraft, setSpeakerDraft] = useState<Record<string, string>>({})
 	const [speakerNameOverrides, setSpeakerNameOverrides] = useState<Record<string, string>>({})
 	const [selectedActiveKey, setSelectedActiveKey] = useState<string>()
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const summaryReady = Boolean(fileMap?.summaryFiles.length)
+	// Folder previews collapse the transcript column only when the right panel still offers a tab-strip expand entry.
+	const canCollapseTranscript = summaryReady && hasRecordingDetailTabStrip(fileMap, showNotesTab)
+	const {
+		isTranscriptPanelCollapsed,
+		transcriptPanelWidth,
+		workbenchGridRef,
+		expandTranscriptPanel,
+		collapseTranscriptPanel,
+		setTranscriptPanelWidth,
+	} = useRecordingDetailTranscriptPanelState()
+
+	/** Routes a finished transcript drag to the matching persisted transition. */
+	const handleTranscriptDragCommit = useCallback(
+		(result: { collapsed: boolean; width: number }) => {
+			if (result.collapsed) collapseTranscriptPanel()
+			else setTranscriptPanelWidth(result.width)
+		},
+		[collapseTranscriptPanel, setTranscriptPanelWidth],
+	)
 	const summaryContent = useMemo(
 		() =>
 			Object.fromEntries(
@@ -259,7 +274,8 @@ function AudioFolderWorkbench({
 		})
 		setSpeakerNameOverrides(nextSpeakers)
 		setSpeakerSettingsOpen(false)
-		void refresh()
+		// Keep the embedded workbench mounted while persisted speaker metadata syncs in the background.
+		void refresh({ silent: true })
 	}, [canEditSpeakers, refresh, speakerDraft, speakerNameMap, texts.magicProject])
 
 	/** Seeks summary time links in the shared inline audio player. */
@@ -326,6 +342,11 @@ function AudioFolderWorkbench({
 				<RecordingDetailPageSkeleton />
 			) : (
 				<RecordingDetailWorkbench
+					transcriptCollapsed={isTranscriptPanelCollapsed}
+					transcriptWidth={transcriptPanelWidth}
+					canCollapseTranscript={canCollapseTranscript}
+					onTranscriptDragCommit={handleTranscriptDragCommit}
+					gridRef={workbenchGridRef}
 					compactHorizontalPadding
 					left={
 						<RecordingDetailLeftColumn
@@ -333,7 +354,7 @@ function AudioFolderWorkbench({
 							audioRef={player.audioRef}
 							audioUrl={audioUrl}
 							transcriptMarkdown={texts.transcript?.content}
-							currentSec={playerCurrentSec}
+							currentSec={player.currentTime}
 							currentTime={player.currentTime}
 							duration={player.duration}
 							playing={player.playing}
@@ -370,6 +391,8 @@ function AudioFolderWorkbench({
 							onTimeClick={handleSummaryTimeClick}
 							activeKey={activeKey}
 							onActiveKeyChange={setSelectedActiveKey}
+							transcriptCollapsed={isTranscriptPanelCollapsed}
+							onExpandTranscript={expandTranscriptPanel}
 						/>
 					}
 				/>

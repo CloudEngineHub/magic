@@ -25,7 +25,7 @@ export interface RecordingMarkdownComponentOptions {
 	relativeFilePath?: string
 }
 
-/** Test hook for time chip class — styles live in `.recording-time-chip` (index.css). */
+/** Test hook for time chip class — click affordance lives in `.recording-time-chip` (index.css). */
 export const RECORDING_TIME_CHIP_CLASS = "recording-time-chip"
 
 export interface RecordingSpeakerChipProps {
@@ -310,7 +310,7 @@ export function resolveSpeakerLabel(
 	return speakerNameMap[speakerId]?.trim() || speakerId
 }
 
-/** Renders a prototype-style time chip that seeks playback on click. */
+/** Renders an inline time control that seeks playback. Visual click cues live on `.recording-time-chip`. */
 export function RecordingTimeChip({
 	label,
 	seconds,
@@ -331,7 +331,11 @@ export function RecordingTimeChip({
 			onClick={handleClick}
 			data-testid={testId}
 		>
-			{label}
+			{/* Same flex row as the speaker chip: mark and label are separate items so they share one center line. */}
+			<svg aria-hidden viewBox="0 0 8 8" className="recording-time-chip-icon">
+				<path d="M1.2 0.7 7 4 1.2 7.3Z" fill="currentColor" />
+			</svg>
+			<span className="recording-time-chip-label">{label}</span>
 		</button>
 	)
 }

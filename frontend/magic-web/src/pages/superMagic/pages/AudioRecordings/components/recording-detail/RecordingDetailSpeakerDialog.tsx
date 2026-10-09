@@ -31,7 +31,14 @@ export function RecordingDetailSpeakerDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-md" data-testid="recording-detail-speaker-dialog">
+			<DialogContent
+				className="sm:max-w-md"
+				data-testid="recording-detail-speaker-dialog"
+				onOpenAutoFocus={(event) => {
+					// Keep the desktop trigger focused while preserving Radix's normal focus restoration.
+					event.preventDefault()
+				}}
+			>
 				<DialogHeader>
 					<DialogTitle>{t("detail.speakerSettingsTitle")}</DialogTitle>
 				</DialogHeader>

@@ -5,8 +5,8 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { useRecordingAudioPlayer } from "../../hooks/useRecordingAudioPlayer"
 import { useRecordingColorSegments } from "../../hooks/useRecordingColorSegments"
-import { useRecordingPlayerCurrentSec } from "../../hooks/useRecordingPlayerCurrentSec"
 import { useShareRecordingDetailData } from "../../hooks/useShareRecordingDetailData"
+import { useRecordingDetailTranscriptPanelState } from "../../hooks/useRecordingDetailTranscriptPanelState"
 import type { RecordingTranscriptSegment } from "../../types/recording-detail"
 import { buildShareRecordingCapabilities } from "../../utils/share-recording-detail"
 import { collectExportableFileIds } from "../../utils/download-recording-batch"
@@ -14,7 +14,10 @@ import { downloadRecordingAudioFile } from "../../utils/download-recording-audio
 import { downloadRecordingAttachmentFile } from "../../utils/download-recording-attachment"
 import { collectSpeakerIdsFromText } from "../../utils/markdownTimeLinks"
 import { normalizeSpeakerSelection } from "../../utils/speaker-filter"
-import { getAttachmentFileName } from "../../utils/recording-detail-files"
+import {
+	getAttachmentFileName,
+	hasRecordingDetailTabStrip,
+} from "../../utils/recording-detail-files"
 import { playTranscriptFromSegment } from "../../utils/transcript-playback"
 import { RecordingDetailProvider } from "./RecordingDetailProvider"
 import { RecordingDetailHeader } from "./RecordingDetailHeader"
@@ -64,12 +67,27 @@ export function RecordingDetailShareDesktop({
 	)
 	const player = useRecordingAudioPlayer(audioUrl)
 	const [playerExpanded, setPlayerExpanded] = useState(false)
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const summaryReady = Boolean(fileMap?.summaryFiles.length)
+	// Share views only render a tab strip when summary/notes content is present, so collapse follows that.
+	const canCollapseTranscript =
+		summaryReady && hasRecordingDetailTabStrip(fileMap, Boolean(fileMap?.notes?.file_id))
+	const {
+		isTranscriptPanelCollapsed,
+		transcriptPanelWidth,
+		workbenchGridRef,
+		expandTranscriptPanel,
+		collapseTranscriptPanel,
+		setTranscriptPanelWidth,
+	} = useRecordingDetailTranscriptPanelState()
+
+	/** Routes a finished transcript drag to the matching persisted transition. */
+	const handleTranscriptDragCommit = useCallback(
+		(result: { collapsed: boolean; width: number }) => {
+			if (result.collapsed) collapseTranscriptPanel()
+			else setTranscriptPanelWidth(result.width)
+		},
+		[collapseTranscriptPanel, setTranscriptPanelWidth],
+	)
 	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
 	const summaryContent = useMemo(
 		() =>
@@ -221,13 +239,18 @@ export function RecordingDetailShareDesktop({
 
 				{!loading && !error ? (
 					<RecordingDetailWorkbench
+						transcriptCollapsed={isTranscriptPanelCollapsed}
+						transcriptWidth={transcriptPanelWidth}
+						canCollapseTranscript={canCollapseTranscript}
+						onTranscriptDragCommit={handleTranscriptDragCommit}
+						gridRef={workbenchGridRef}
 						left={
 							<RecordingDetailLeftColumn
 								searchScopeKey={projectId}
 								audioRef={player.audioRef}
 								audioUrl={audioUrl}
 								transcriptMarkdown={texts.transcript?.content}
-								currentSec={playerCurrentSec}
+								currentSec={player.currentTime}
 								currentTime={player.currentTime}
 								duration={player.duration}
 								playing={player.playing}
@@ -263,6 +286,8 @@ export function RecordingDetailShareDesktop({
 								speakerNameMap={speakerNameMap}
 								onOpenSpeakerSettings={() => undefined}
 								onTimeClick={handleSummaryTimeClick}
+								transcriptCollapsed={isTranscriptPanelCollapsed}
+								onExpandTranscript={expandTranscriptPanel}
 							/>
 						}
 					/>
