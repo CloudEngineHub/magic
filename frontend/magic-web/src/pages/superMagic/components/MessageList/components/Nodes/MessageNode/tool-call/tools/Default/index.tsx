@@ -4,6 +4,8 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import { useCallback, useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useToolTooltip } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/hooks/useToolTooltip"
+import ToolGenerationProgress from "@/pages/superMagic/components/MessageList/components/shared/ToolGenerationProgress"
+import ToolWaitCountdown from "@/pages/superMagic/components/MessageList/components/shared/ToolWaitCountdown"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
@@ -26,7 +28,10 @@ interface ToolDataLike {
 	action?: string | ReactNode
 	remark?: string
 	status?: string
+	/** 工具调用的原始 arguments 字符串；等待工具的 sleep 时长要从这里读。 */
+	rawArguments?: string
 	detail?: {
+		type?: string
 		data?: Record<string, unknown>
 	}
 	interactionTarget?: ToolCardInteractionTarget
@@ -142,6 +147,11 @@ function DefaultTool(props: DefaultToolProps) {
 							{tool?.action}
 						</span>
 					)}
+					<ToolGenerationProgress
+						toolCallId={tool?.id}
+						status={tool?.status}
+						detail={tool?.detail}
+					/>
 					{tool?.remark && (
 						<span
 							{...tooltipProps}
@@ -164,6 +174,13 @@ function DefaultTool(props: DefaultToolProps) {
 					renderSuffixIcon
 				)}
 			</div>
+			<ToolWaitCountdown
+				toolCallId={tool?.id}
+				toolName={tool?.name}
+				status={tool?.status}
+				rawArguments={tool?.rawArguments}
+				detail={tool?.detail}
+			/>
 			{renderTooltip()}
 		</div>
 	)

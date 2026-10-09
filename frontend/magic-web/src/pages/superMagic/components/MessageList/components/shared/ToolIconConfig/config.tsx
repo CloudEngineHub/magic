@@ -30,6 +30,7 @@ import {
 	Layers3,
 	LayoutGrid,
 	CandlestickChart,
+	ImagePlus,
 } from "lucide-react"
 import type { ToolIconConfig } from "./types"
 import { AgentIcon, WechatIcon, ImageSearch, SkillIcon, DefaultIcon } from "./CustomIcons"
@@ -386,12 +387,20 @@ export const toolIconMap: Record<string, ToolIconConfig> = {
 		icon: Shapes,
 		bgColor: "#3D74FF",
 	},
+	add_canvas_elements: {
+		icon: ImagePlus,
+		bgColor: "#3D74FF",
+	},
+	add_canvas_contents: {
+		icon: ImagePlus,
+		bgColor: "#3D74FF",
+	},
 	generate_images_to_canvas: {
-		icon: Shapes,
+		icon: ImagePlus,
 		bgColor: "#3D74FF",
 	},
 	generate_canvas_images: {
-		icon: Shapes,
+		icon: ImagePlus,
 		bgColor: "#3D74FF",
 	},
 	search_images_to_canvas: {

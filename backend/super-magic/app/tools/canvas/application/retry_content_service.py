@@ -131,8 +131,11 @@ class RetryContentService:
                             idempotent_replay=True,
                         ))
                         continue
-                if content.fields.generation_status != "failed":
-                    raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only failed generated Content can be retried.")
+                if content.fields.generation_status not in {"failed", "terminated"}:
+                    raise CanvasDomainError(
+                        "CONTENT_RETRY_NOT_ALLOWED",
+                        "Only failed or terminated generated Content can be retried.",
+                    )
                 if detail.get("source") != "generated":
                     raise CanvasDomainError("CONTENT_RETRY_NOT_ALLOWED", "Only generated Content can be retried.")
                 retry_count = int(detail.get("retryCount", 0))

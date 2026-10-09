@@ -22,14 +22,27 @@ async def test_generic_image_generation_port_converts_project_reference_path(mon
         def __init__(self, base_dir):
             self.base_dir = base_dir
 
-        async def execute_purely(self, tool_context, params, *, model_id=None):
+        async def execute_purely(
+            self,
+            tool_context,
+            params,
+            *,
+            model_id=None,
+            on_task_created=None,
+            report_progress=True,
+        ):
             captured["task"] = params.tasks[0]
+            captured["on_task_created"] = on_task_created
+            captured["report_progress"] = report_progress
             return SimpleNamespace(
                 ok=True,
                 extra_info={"saved_images": [str(tmp_path / "Canvas" / "Demo" / "images" / "output.png")]},
             )
 
     monkeypatch.setattr("app.tools.generate_images.GenerateImages", FakeGenerateImages)
+
+    async def on_task_created(task_id, expected_finished_at, started_at):
+        """请求上的建单回调必须原样透传给生图工具。"""
 
     result = await GenericImageGenerationPort(tmp_path).submit(
         GenerationRequest(
@@ -43,9 +56,13 @@ async def test_generic_image_generation_port_converts_project_reference_path(mon
                 name="产品/主视觉",
                 reference_images=("./images/reference.png",),
             ),
+            on_task_created=on_task_created,
         ),
         None,
     )
+
+    assert captured["on_task_created"] is on_task_created
+    assert captured["report_progress"] is False
 
     assert result.status == "completed"
     assert captured["task"].reference_images == ["Canvas/Demo/images/reference.png"]

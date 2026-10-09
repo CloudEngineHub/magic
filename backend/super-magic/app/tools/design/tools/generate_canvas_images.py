@@ -7,7 +7,7 @@
 import asyncio
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,11 +15,22 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.core.entity.message.server_message import (
+    DisplayType,
+    OperationResultItem,
+    OperationResultListContent,
+    OperationResultStatus,
+    OperationResultTarget,
+    OperationResultTargetType,
+    ToolDetail,
+)
 from app.i18n import i18n
+from app.tools.canvas.presentation.generation_feedback import CanvasGenerationFeedback
 from app.tools.core import BaseToolParams, tool
+from app.tools.design.manager.canvas_manager_factory import get_canvas_manager
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
     ElementDetail,
@@ -125,6 +136,16 @@ class GeneratedImageInfo:
     height: Optional[float]
     generate_request: Dict[str, Any]
 
+
+@dataclass
+class ImageGenerationProgressState:
+    """保存一次批量调用的逐项进度，避免把状态挂在可复用工具实例上。"""
+
+    project_path: str = ""
+    placeholders: List[ElementDetail] = field(default_factory=list)
+    timing_by_index: Dict[int, Tuple[Optional[str], Optional[str]]] = field(default_factory=dict)
+    outcome_by_index: Dict[int, Tuple[bool, str]] = field(default_factory=dict)
+    report_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
 
 class ImageTaskSpec(BaseModel):
@@ -369,6 +390,23 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             element_type="image",
         )
 
+    def _build_initial_placeholder_update(
+        self,
+        task: ImageTaskSpec,
+        idx: int,
+        element_id: str,
+    ) -> dict[str, object]:
+        # 占位出现即可查看本次参数；重试覆盖整份请求，不继承旧任务 ID 和完成时间。
+        request: dict[str, str | list[str]] = {
+            "prompt": task.prompt,
+            "size": task.size,
+            "reference_images": list(task.reference_images),
+            "mode": "edit" if task.reference_images else "generate",
+        }
+        if self._image_model_id:
+            request["model_id"] = self._image_model_id
+        return {"generateImageRequest": request}
+
     async def _execute_task_item(
         self,
         idx: int,
@@ -376,6 +414,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         placeholder: ElementDetail,
         tool_context: ToolContext,
         project_path: Path,
+        progress_state: ImageGenerationProgressState,
         timestamp: str = "",
         output_path: str = "",
         workspace_path: Optional[Path] = None,
@@ -388,11 +427,13 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         result = await self._generate_single(
             idx=idx,
             task=task,
+            placeholder=placeholder,
             timestamp=timestamp,
             output_path=output_path,
             project_path=project_path,
             tool_context=tool_context,
             image_model_id=kwargs.get("image_model_id"),
+            progress_state=progress_state,
         )
 
         if result.success:
@@ -412,6 +453,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             success=result.success,
             placeholder_update=update,
             error_message=result.error_message,
+            metadata={"progress_state": progress_state},
         )
 
     # ------------------------------------------------------------------
@@ -433,6 +475,7 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "output_path": output_path,
             "workspace_path": workspace_path,
             "image_model_id": self._image_model_id,
+            "progress_state": ImageGenerationProgressState(),
         }
 
     def _build_created_element_dict(
@@ -446,6 +489,8 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "name": placeholder.name,
             "width": placeholder.width,
             "height": placeholder.height,
+            "status": "completed" if task_result.is_success else "failed",
+            "error": task_result.error_message or "",
         }
         if placeholder.content_id:
             d["content_id"] = placeholder.content_id
@@ -453,6 +498,11 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             update = task_result.placeholder_update
             if isinstance(update, ImagePlaceholderUpdate) and update.src:
                 d["src"] = update.src
+        generate_request = getattr(task_result.placeholder_update, "generateImageRequest", None) or {}
+        if generate_request.get("start_time"):
+            d["started_at"] = generate_request["start_time"]
+        if generate_request.get("expected_finished_at"):
+            d["expected_finished_at"] = generate_request["expected_finished_at"]
         return d
 
     def _build_result_content(
@@ -532,10 +582,12 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         self,
         idx: int,
         task: ImageTaskSpec,
+        placeholder: ElementDetail,
         timestamp: str,
         output_path: str,
         project_path: Path,
         tool_context: ToolContext,
+        progress_state: ImageGenerationProgressState,
         image_model_id: Optional[str] = None,
     ) -> ImageGenerationResult:
         """生成单张图片，委托 generate_images 执行（含重试、下载、保存）"""
@@ -552,8 +604,62 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         )
         gen_params = GenerateImagesParams(tasks=[gen_task])
 
-        _start_dt = datetime.now()
+        _start_dt = datetime.now().astimezone()
         _t0 = time.monotonic()
+        timing: Dict[str, Optional[str]] = {
+            "started_at": _start_dt.isoformat(timespec="milliseconds"),
+            "expected_finished_at": None,
+        }
+
+        async def on_task_created(
+            _task_id: str,
+            expected_finished_at: Optional[str],
+            started_at: Optional[str],
+        ) -> None:
+            """建单后立即把后端任务时间写回占位 Content。"""
+            if not expected_finished_at or timing["expected_finished_at"] is not None:
+                return
+            shared_started_at = started_at or timing["started_at"]
+            timing["started_at"] = shared_started_at
+            timing["expected_finished_at"] = expected_finished_at
+            progress_state.timing_by_index[idx] = (shared_started_at, expected_finished_at)
+
+            try:
+                manager = await get_canvas_manager(str(project_path))
+                config_file = self._get_magic_project_js_path(project_path)
+                generate_request: Dict[str, Any] = {
+                    "prompt": task.prompt,
+                    "size": task.size,
+                    "mode": mode,
+                    "start_time": shared_started_at,
+                    "expected_finished_at": expected_finished_at,
+                }
+                if task.reference_images:
+                    generate_request["reference_images"] = task.reference_images
+
+                async def update(config: Any) -> bool:
+                    return await manager.update_element(
+                        placeholder.id,
+                        {"generateImageRequest": generate_request},
+                        config=config,
+                        content_id=placeholder.content_id,
+                    )
+
+                await manager.run_write_transaction(
+                    update,
+                    before_write=lambda: self._dispatch_file_event(
+                        tool_context, str(config_file), EventType.BEFORE_FILE_UPDATED
+                    ),
+                    after_write=lambda _: self._dispatch_file_event(
+                        tool_context, str(config_file), EventType.FILE_UPDATED
+                    ),
+                )
+            except Exception as error:
+                # 时间同步失败不能中断真实生图；前端仍可用本地兜底进度继续展示。
+                logger.warning(f"写入画布生图时间失败: {error}")
+            async with progress_state.report_lock:
+                await self._report_progress_state(tool_context, progress_state)
+
         try:
             generate_tool = GenerateImages(
                 base_dir=self._get_runtime_workspace_dir(tool_context),
@@ -562,12 +668,14 @@ Expand brief user descriptions into full prompts covering subject, style, compos
                 tool_context,
                 gen_params,
                 model_id=image_model_id,
+                on_task_created=on_task_created,
+                report_progress=False,
             )
         except Exception as exc:
             error_msg = f"Task {idx + 1} 异常: {exc!s}"
             logger.error(error_msg, exc_info=True)
             return ImageGenerationResult(index=idx, success=False, error_message=error_msg)
-        _end_dt = datetime.now()
+        _end_dt = datetime.now().astimezone()
         _duration_ms = int((time.monotonic() - _t0) * 1000)
 
         extra = gen_result.extra_info or {}
@@ -596,10 +704,12 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "size": size_value,
             "image_id": image_id,
             "mode": mode,
-            "start_time": _start_dt.isoformat(timespec="milliseconds"),
+            "start_time": timing["started_at"],
             "end_time": _end_dt.isoformat(timespec="milliseconds"),
             "duration_ms": _duration_ms,
         }
+        if timing["expected_finished_at"]:
+            generate_request["expected_finished_at"] = timing["expected_finished_at"]
         model_id = task_info.get("model")
         if model_id:
             generate_request["model_id"] = model_id
@@ -780,6 +890,89 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "remark": self._get_remark_content(result, arguments),
         }
 
+    async def _after_placeholders_prepared(
+        self,
+        tool_context: ToolContext,
+        project_path_str: str,
+        placeholders: List[ElementDetail],
+        progress_state: ImageGenerationProgressState,
+        **kwargs: Any,
+    ) -> None:
+        """旧生图入口也用真实占位 ID 更新卡片，不按任务名称猜测目标。"""
+        if not placeholders:
+            return
+        progress_state.project_path = project_path_str
+        progress_state.placeholders = placeholders
+        async with progress_state.report_lock:
+            await self._report_progress_state(tool_context, progress_state)
+
+    async def _after_placeholder_updated(
+        self,
+        result: TaskExecutionResult,
+        task: ImageTaskSpec,
+        placeholder: ElementDetail,
+        tool_context: ToolContext,
+        project_path: Path,
+    ) -> None:
+        """画布写入终态后，立即同步当前图片在 Agent 卡片中的状态。"""
+        progress_state = result.metadata.get("progress_state")
+        if not isinstance(progress_state, ImageGenerationProgressState):
+            return
+        progress_state.outcome_by_index[result.index] = (
+            result.is_success,
+            result.error_message or "",
+        )
+        async with progress_state.report_lock:
+            await self._report_progress_state(tool_context, progress_state)
+
+    async def _report_progress_state(
+        self,
+        tool_context: ToolContext,
+        progress_state: ImageGenerationProgressState,
+    ) -> None:
+        """用同一张可展开卡片更新逐项时间，不再发送独立进度详情。"""
+        items: List[OperationResultItem] = []
+        for index, placeholder in enumerate(progress_state.placeholders):
+            outcome = progress_state.outcome_by_index.get(index)
+            is_completed = outcome is not None and outcome[0]
+            is_failed = outcome is not None and not outcome[0]
+            if is_failed:
+                status = OperationResultStatus.ERROR
+                message_key = "canvas.generate_item_status.failed"
+            elif is_completed:
+                status = OperationResultStatus.SUCCESS
+                message_key = "canvas.generate_item_status.completed"
+            else:
+                status = OperationResultStatus.SUCCESS
+                message_key = "canvas.generate_item_status.processing"
+            started_at, expected_finished_at = progress_state.timing_by_index.get(index, (None, None))
+            items.append(
+                OperationResultItem(
+                    label=placeholder.name,
+                    kind="text",
+                    status=status,
+                    message=i18n.translate(message_key, category="tool.messages"),
+                    description=outcome[1] if is_failed else "",
+                    target=OperationResultTarget(
+                        type=OperationResultTargetType.CANVAS_ELEMENT,
+                        project_path=progress_state.project_path,
+                        element_id=placeholder.id,
+                        content_id=placeholder.content_id,
+                        content_type="image",
+                    ),
+                    started_at=started_at,
+                    expected_finished_at=expected_finished_at,
+                    is_processing=not is_completed and not is_failed,
+                )
+            )
+        pending_detail = ToolDetail(
+            type=DisplayType.OPERATION_RESULT_LIST,
+            data=OperationResultListContent(items=items),
+        )
+        await CanvasGenerationFeedback.report_pending_detail(
+            self, tool_context, tool_context.arguments, pending_detail,
+        )
+
     async def get_tool_detail(
         self,
         tool_context: ToolContext,
@@ -787,22 +980,62 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         arguments: Dict[str, Any] = None,
     ) -> Optional[ToolDetail]:
         if not result.ok:
+            extra_info = result.extra_info or {}
+            project_path = extra_info.get("project_path", "")
+            placeholders = extra_info.get("created_elements", [])
+            if project_path and placeholders:
+                # 全部失败仍保留真实占位目标，用终态明细替换此前的 processing 进度。
+                return ToolDetail(
+                    type=DisplayType.OPERATION_RESULT_LIST,
+                    data=OperationResultListContent(items=[
+                        OperationResultItem(
+                            label=placeholder["name"],
+                            kind="text",
+                            status=OperationResultStatus.ERROR,
+                            message=i18n.translate("canvas.generate_item_status.failed", category="tool.messages"),
+                            description=placeholder.get("error") or "",
+                            target=OperationResultTarget(
+                                type=OperationResultTargetType.CANVAS_ELEMENT,
+                                project_path=project_path,
+                                element_id=placeholder["id"],
+                                content_id=placeholder.get("content_id"),
+                                content_type="image",
+                            ),
+                        )
+                        for placeholder in placeholders
+                    ]),
+                )
             return None
 
         try:
-            from app.core.entity.message.server_message import DesignElementContent
-
             extra_info = result.extra_info or {}
             project_path = extra_info.get("project_path", "")
-            elements = extra_info.get("elements", [])
+            elements = extra_info.get("created_elements", [])
 
             return ToolDetail(
-                type=DisplayType.DESIGN,
-                data=DesignElementContent(
-                    type="element",
-                    project_path=project_path,
-                    elements=elements,
-                )
+                type=DisplayType.OPERATION_RESULT_LIST,
+                data=OperationResultListContent(items=[
+                    OperationResultItem(
+                        label=element["name"],
+                        kind="text",
+                        status=OperationResultStatus.SUCCESS if element["status"] == "completed" else OperationResultStatus.ERROR,
+                        message=i18n.translate(
+                            "canvas.generate_item_status.completed" if element["status"] == "completed" else "canvas.generate_item_status.failed",
+                            category="tool.messages",
+                        ),
+                        description=element.get("error") or "",
+                        target=OperationResultTarget(
+                            type=OperationResultTargetType.CANVAS_ELEMENT,
+                            project_path=project_path,
+                            element_id=element["id"],
+                            content_id=element.get("content_id"),
+                            content_type="image",
+                        ),
+                        started_at=element.get("started_at"),
+                        expected_finished_at=element.get("expected_finished_at"),
+                    )
+                    for element in elements
+                ]),
             )
         except Exception as e:
             logger.error(f"生成工具详情失败: {e!s}")

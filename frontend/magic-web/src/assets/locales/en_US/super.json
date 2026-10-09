@@ -760,6 +760,12 @@
 			"description": "You can continue editing and saving the canvas after the network reconnects.",
 			"title": "Network disconnected. Canvas is read-only"
 		},
+		"rename": {
+			"fileChanged": "The file changed. Reopen the naming panel.",
+			"fileRenamedSaveFailed": "The file was renamed, but canvas references could not be updated. Refresh and check the result.",
+			"fileUnavailable": "Cannot resolve a writable project file. Refresh and try again.",
+			"verifyResult": "The rename result could not be confirmed. Refresh the file list before retrying."
+		},
 		"saved": "Saved",
 		"saving": "Saving",
 		"upgrade": {
@@ -4850,6 +4856,28 @@
 		"uploadImageCountLimit": "It supports adding up to 10 JPG or PNG images.",
 		"uploadImageSizeLimit": "The file size should be less than 2MB."
 	},
+	"operationResultList": {
+		"detailsShort": "Details",
+		"directory": "Folder",
+		"file": "File",
+		"generationDetails": "Generation details",
+		"interrupted": "Operation interrupted",
+		"itemCount": "{{count}} results",
+		"itemCount_one": "{{count}} result",
+		"locateCanvasElement": "Locate canvas element: {{label}}",
+		"locateShort": "Locate",
+		"openGenerationDetails": "View generation details: {{label}}",
+		"running": "Processing",
+		"summary": "{{success}} succeeded · {{error}} failed",
+		"summaryCompleted": "{{count}} completed",
+		"summaryFailed": "{{count}} failed",
+		"summaryProcessing": "Processing {{count}} items",
+		"summaryProcessing_one": "Processing {{count}} item",
+		"summarySucceeded": "{{count}} succeeded",
+		"title": "Operation results",
+		"unavailable": "Operation results are unavailable",
+		"viewInCanvas": "View in canvas"
+	},
 	"personalPet": {
 		"collapse": "Collapse pet",
 		"contextMenu": {
@@ -7432,6 +7460,9 @@
 	"tool": {
 		"callTool": "Call Tool",
 		"initPlugin": "Initialize Plugin"
+	},
+	"toolWaitCountdown": {
+		"elapsed": "Waited {{seconds}}s of {{total}}s"
 	},
 	"tools": {
 		"analysis_slide_webpage": "Analysis Slide Webpage",
@@ -10347,6 +10378,7 @@
 		"deleteWorkspaceConfirmTitle": "Delete Workspace?",
 		"deleteWorkspaceDescription": "\"{{name}}\" will be moved to Trash, along with all projects, topics, and files. You can restore it or delete it permanently from Trash.",
 		"deleteWorkspaceDescriptionWithoutName": "will be moved to Trash, along with all projects, topics, and files. You can restore it or delete it permanently from Trash.",
+		"executing": "Executing...",
 		"expandAllFiles": "Expand All Files",
 		"expandUserMessage": "Expand",
 		"filePreviewNotSupported": "File preview not supported, please download the file",

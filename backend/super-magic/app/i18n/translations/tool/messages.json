@@ -1043,6 +1043,14 @@
         "zh_CN": "部分图片生成成功（{{succeeded_count}}/{{total_count}}）",
         "en_US": "Images partially generated ({{succeeded_count}}/{{total_count}} succeeded)"
     },
+    "generate_images.item_status.completed": {
+        "zh_CN": "{{name}}已生成",
+        "en_US": "{{name}} generated"
+    },
+    "generate_images.item_status.failed": {
+        "zh_CN": "{{name}}生成失败",
+        "en_US": "{{name}} generation failed"
+    },
     "task_progress.queued_message": {
         "zh_CN": "{{task_label}}排队中（{{percentage}}%）",
         "en_US": "{{task_label}} queued ({{percentage}}%)"
@@ -3425,6 +3433,14 @@
         "zh_CN": "遇到问题，正在尝试其他方式",
         "en_US": "Encountered an issue, trying another approach"
     },
+    "tool.call_cancelled_remark": {
+        "zh_CN": "已终止",
+        "en_US": "Terminated"
+    },
+    "tool.call_cancelled_content": {
+        "zh_CN": "工具调用 '{{tool_name}}' 被用户中断，未执行完成。",
+        "en_US": "Tool call '{{tool_name}}' was interrupted by the user and did not finish."
+    },
     "tool.error": {
         "zh_CN": "操作失败: {{error}}",
         "en_US": "Operation failed: {{error}}"
@@ -3533,9 +3549,53 @@
         "zh_CN": "未知",
         "en_US": "Unknown"
     },
-    "delete_file.error": {
-        "zh_CN": "删除文件 {{file_path}} 时出错",
-        "en_US": "Error deleting file {{file_path}}"
+    "delete_file.deleted": {
+        "zh_CN": "已删除",
+        "en_US": "Deleted"
+    },
+    "delete_file.not_deleted": {
+        "zh_CN": "未删除",
+        "en_US": "Not deleted"
+    },
+    "delete_file.single_result": {
+        "zh_CN": "{{file_name}} · {{status}}",
+        "en_US": "{{file_name}} · {{status}}"
+    },
+    "delete_file.deleted_count": {
+        "zh_CN": "{{count}} 项已删除",
+        "en_US": "{{count}} items deleted"
+    },
+    "delete_file.failed_count": {
+        "zh_CN": "{{count}} 项未删除",
+        "en_US": "{{count}} items not deleted"
+    },
+    "delete_file.partial_result": {
+        "zh_CN": "{{deleted}} 项已删除 · {{failed}} 项未删除",
+        "en_US": "{{deleted}} items deleted · {{failed}} not deleted"
+    },
+    "delete_file.detail_title": {
+        "zh_CN": "删除结果",
+        "en_US": "Deletion results"
+    },
+    "delete_file.detail_unavailable": {
+        "zh_CN": "未能获取完整的删除结果，请检查文件当前状态。",
+        "en_US": "Complete deletion results are unavailable. Please check the current file state."
+    },
+    "delete_file.reason_not_found": {
+        "zh_CN": "文件或文件夹不存在",
+        "en_US": "The file or folder does not exist"
+    },
+    "delete_file.reason_permission_denied": {
+        "zh_CN": "没有访问权限",
+        "en_US": "Access denied"
+    },
+    "delete_file.reason_invalid_path": {
+        "zh_CN": "路径无效",
+        "en_US": "Invalid path"
+    },
+    "delete_file.reason_failed": {
+        "zh_CN": "删除未完成，请检查文件状态后重试。",
+        "en_US": "Deletion did not complete. Check the file state before retrying."
     },
     "video.project_config_create_failed": {
         "zh_CN": "配置文件创建失败，将尝试解决...",
@@ -5712,6 +5772,30 @@
     "canvas.generate_status.failed": {
         "zh_CN": "{{count}} 个{{media}}生成失败",
         "en_US": "{{count}} {{media}} failed"
+    },
+    "canvas.generate_item_status.processing": {
+        "zh_CN": "正在生成",
+        "en_US": "Generating"
+    },
+    "canvas.generate_item_status.completed": {
+        "zh_CN": "已生成",
+        "en_US": "Generated"
+    },
+    "canvas.generate_item_status.failed": {
+        "zh_CN": "生成失败",
+        "en_US": "Generation failed"
+    },
+    "canvas.generate_named_item_status.processing": {
+        "zh_CN": "{{name}}正在生成",
+        "en_US": "{{name}} is generating"
+    },
+    "canvas.generate_named_item_status.completed": {
+        "zh_CN": "{{name}}已生成",
+        "en_US": "{{name}} generated"
+    },
+    "canvas.generate_named_item_status.failed": {
+        "zh_CN": "{{name}}生成失败",
+        "en_US": "{{name}} generation failed"
     },
     "canvas.detail.title.connections": {
         "zh_CN": "画布连线",

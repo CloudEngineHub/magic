@@ -432,6 +432,13 @@ export default function LayersDrawer() {
 								onDoubleClick={(event) => {
 									event.stopPropagation()
 									if (!canWrite) return
+									if (
+										canvas?.elementManager.getElementData(node.id)?.type ===
+										"image"
+									) {
+										canvas.elementRenameManager.startRename(node.id, true)
+										return
+									}
 									setLayerRenamingElementId(node.id)
 								}}
 							>

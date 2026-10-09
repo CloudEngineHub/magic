@@ -7,12 +7,10 @@ import { useToolTooltip } from "../../hooks/useToolTooltip"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
+import ToolGenerationProgress from "@/pages/superMagic/components/MessageList/components/shared/ToolGenerationProgress"
 import { MonitorPlay } from "lucide-react"
 import { MagicTooltip, VerticalLine } from "@/components/base"
-import {
-	getToolDesignProjectInfo,
-	type ToolDesignProjectData,
-} from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
+import { getToolDesignProjectInfo } from "@/pages/superMagic/components/Detail/contents/Design/utils/toolDesignProjectInfo"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { getToolCardInteractionTarget, selectToolDetail } from "../../../toolDetailSelection"
 import type { ReactNode } from "react"
@@ -27,6 +25,7 @@ export interface ToolDataLike {
 	status?: string
 	rawArguments?: string
 	detail?: {
+		type?: string
 		data?: Record<string, unknown>
 	}
 	attachments?: FileItem[]
@@ -39,7 +38,7 @@ export interface DefaultToolProps extends Partial<NodeProps> {
 }
 
 interface ToolMessageNode {
-	tool?: ToolDesignProjectData
+	tool?: ToolDataLike
 }
 
 function DefaultTool(props: DefaultToolProps) {
@@ -133,6 +132,11 @@ function DefaultTool(props: DefaultToolProps) {
 					<span className="w-fit flex-none text-xs font-normal leading-4 text-foreground">
 						{tool?.action}
 					</span>
+					<ToolGenerationProgress
+						toolCallId={tool?.id}
+						status={tool?.status}
+						detail={tool?.detail}
+					/>
 					<span
 						{...tooltipProps}
 						className={cn(

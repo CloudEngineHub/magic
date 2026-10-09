@@ -38,7 +38,13 @@ vi.mock("../../../../app/providers/CanvasProvider", () => ({
 
 vi.mock("../../../../app/hooks/canvas", () => ({
 	useCanvasEvent: (event: string, listener: (event: { data: { elementId: string } }) => void) => {
-		mocks.eventHandlers[event] = listener
+		const previous = mocks.eventHandlers[event]
+		mocks.eventHandlers[event] = previous
+			? (payload) => {
+					previous(payload)
+					listener(payload)
+				}
+			: listener
 	},
 	useGenerationRuntime: vi.fn(() => null),
 	useIsMediaReplacing: () => mocks.isReplacing,
@@ -211,5 +217,38 @@ describe("media editor replacement gating", () => {
 		mocks.selectedElements = [{ ...imageWithVersions, activeContentId: "image-content-1" }]
 		view.rerender(<ImageMessageEditor />)
 		expect(screen.getByText("image-second-edit")).toBeInTheDocument()
+	})
+
+	it("opens the image request editor when retrying a terminated generation", () => {
+		mocks.selectedElements = [
+			{
+				id: "image-1",
+				type: ElementTypeEnum.Image,
+				contents: [
+					{
+						contentId: "image-content-1",
+						status: GenerationStatus.Terminated,
+						generateImageRequest: {
+							image_id: "image-task-1",
+							model_id: "image-model",
+							prompt: "create an image",
+						},
+					},
+				],
+				activeContentId: "image-content-1",
+				mainContentId: "image-content-1",
+			},
+		]
+
+		render(<ImageMessageEditor />)
+		expect(screen.queryByText("image-create-editor")).toBeNull()
+
+		act(() => {
+			mocks.eventHandlers["element:image:retryClick"]?.({
+				data: { elementId: "image-1" },
+			})
+		})
+
+		expect(screen.getByText("image-create-editor")).toBeInTheDocument()
 	})
 })

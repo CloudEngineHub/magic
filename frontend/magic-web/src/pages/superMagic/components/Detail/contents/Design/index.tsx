@@ -87,6 +87,7 @@ import {
 	bindMediaContentToAsset,
 	type ImageContentAssetBindingParams,
 } from "@/components/CanvasDesign/runtime/resources/asset/imageContentAssetBinding"
+import { useTerminateGeneratingImages } from "./hooks/useTerminateGeneratingImages"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -745,6 +746,7 @@ function DesignViewer(props: DesignViewerProps) {
 		getFallbackDocument: getLatestCanvasDocument,
 		resolveFileBySrc: resolveCanvasResourceFile,
 	})
+	useTerminateGeneratingImages(canvasDesignRef)
 
 	const videoPointsEstimateCacheScope = useMemo(
 		() =>
@@ -886,7 +888,7 @@ function DesignViewer(props: DesignViewerProps) {
 	}, [])
 
 	// 使用 hook 获取 methods 方法集合
-	const methods = useDesignMethods({
+	const baseMethods = useDesignMethods({
 		getContentViewElement,
 		projectId,
 		designProjectId,
@@ -905,14 +907,15 @@ function DesignViewer(props: DesignViewerProps) {
 		openEditAssetDialog,
 		ensureAssetAgreementSigned,
 	})
+	const getBaseFileInfo = baseMethods.getFileInfo
 
 	const getSaveAssetPreviewUrl = useCallback(
 		async (path: string) => {
 			const isVideo = /\.(mp4|mov|webm)(?:$|[?#])/i.test(path)
-			const fileInfo = await methods.getFileInfo(path, { useImageProcess: !isVideo })
+			const fileInfo = await getBaseFileInfo(path, { useImageProcess: !isVideo })
 			return fileInfo?.src
 		},
-		[methods],
+		[getBaseFileInfo],
 	)
 	const bindSavedAssetToImageContent = useCallback((params: ImageContentAssetBindingParams) => {
 		const canvas = canvasDesignRef.current?.getCanvasInstance()
@@ -932,10 +935,10 @@ function DesignViewer(props: DesignViewerProps) {
 					canvasDesignRef.current?.getElementImageInfo(elementId) ?? Promise.resolve(null)
 				)
 			},
-			getFileInfo: methods.getFileInfo,
-			getAssetResourceInfo: methods.getAssetResourceInfo,
-			uploadPrivateFiles: methods.uploadPrivateFiles,
-			identifyImageMark: methods.identifyImageMark,
+			getFileInfo: baseMethods.getFileInfo,
+			getAssetResourceInfo: baseMethods.getAssetResourceInfo,
+			uploadPrivateFiles: baseMethods.uploadPrivateFiles,
+			identifyImageMark: baseMethods.identifyImageMark,
 			publishToMessageEditor: (event, payload) => pubsub.publish(event, payload),
 			projectId,
 			topicId: selectedTopic?.id,
@@ -946,10 +949,10 @@ function DesignViewer(props: DesignViewerProps) {
 		markerManager,
 		designProjectId,
 		designData.canvas?.elements,
-		methods.getFileInfo,
-		methods.getAssetResourceInfo,
-		methods.uploadPrivateFiles,
-		methods.identifyImageMark,
+		baseMethods.getFileInfo,
+		baseMethods.getAssetResourceInfo,
+		baseMethods.uploadPrivateFiles,
+		baseMethods.identifyImageMark,
 		projectId,
 		selectedTopic?.id,
 	])
@@ -958,7 +961,7 @@ function DesignViewer(props: DesignViewerProps) {
 	const { handleMarkerCreated, handleMarkerDeleted, handleMarkerUpdated, handleMarkerRestored } =
 		useDesignMarker({
 			canvas: designData.canvas,
-			methods,
+			methods: baseMethods,
 			projectId,
 			designProjectId,
 			markerManager,
@@ -1213,18 +1216,19 @@ function DesignViewer(props: DesignViewerProps) {
 		handleVersionRollback: handleVersionRollbackWithLoading,
 	})
 
-	const { handleCanvasDesignDataChange: syncCanvasImageFileRename } =
-		useCanvasImageFileRenameSync({
-			canvasDesignRef,
-			currentCanvasData: designData.canvas,
-			flatAttachments,
-			attachmentsReady,
-			attachmentIndex,
-			designProjectBasePath,
-			projectId,
-			persistCanvasData,
-			updateAttachments,
-		})
+	const imageRename = useCanvasImageFileRenameSync({
+		canvasDesignRef,
+		currentCanvasData: designData.canvas,
+		flatAttachments,
+		attachmentsReady,
+		attachmentIndex,
+		designProjectBasePath,
+		projectId,
+		persistCanvasData,
+		updateAttachments,
+	})
+
+	const methods = useMemo(() => ({ ...baseMethods, imageRename }), [baseMethods, imageRename])
 
 	// 处理画布数据变化（用户编辑，触发自动保存）
 	const handleCanvasDesignDataChange = useCallback(
@@ -1251,19 +1255,17 @@ function DesignViewer(props: DesignViewerProps) {
 				...latestDesignDataRef.current,
 				canvas: canvasData,
 			})
-			syncCanvasImageFileRename(canvasData, meta)
 		},
 		[
 			isOffline,
 			persistCanvasData,
 			persistCanvasDataLocally,
 			resolveEditedElementConflictsWithLocal,
-			syncCanvasImageFileRename,
 		],
 	)
 
 	const handleCanvasDesignDataPatchChange = useCallback(
-		(patch: CanvasDesignDataPatch, meta?: CanvasDesignDataChangeMeta) => {
+		(patch: CanvasDesignDataPatch) => {
 			mentionPanelStore.invalidateActiveCanvasElementsCache()
 			if (isApplyingRemoteCanvasUpdateRef.current) {
 				return
@@ -1276,16 +1278,12 @@ function DesignViewer(props: DesignViewerProps) {
 
 			const nextCanvasData = persistCanvasDataPatch(patch)
 			resolveEditedElementConflictsFromPatch(patch, nextCanvasData)
-			if (nextCanvasData) {
-				syncCanvasImageFileRename(nextCanvasData, meta)
-			}
 		},
 		[
 			isOffline,
 			persistCanvasDataPatch,
 			persistCanvasPatchLocally,
 			resolveEditedElementConflictsFromPatch,
-			syncCanvasImageFileRename,
 		],
 	)
 

@@ -1,6 +1,6 @@
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -49,6 +49,8 @@ class DisplayType(str, Enum):
     DESIGN = 'design'
     ASK_USER = "ask_user"  # ask_user 问答结果展示
     PLAN = "plan"  # 开发计划确认展示
+    GENERATION_PROGRESS = "generation_progress"  # 生成进度：只带预期完成时间，百分比由前端换算
+    OPERATION_RESULT_LIST = "operation_result_list"  # 简短操作结果，在消息卡片内展开
 
 
 class BrowserDetailStatus(str, Enum):
@@ -319,6 +321,51 @@ class PlanToolContent(BaseModel):
     expires_at: int = 0
 
 
+class OperationResultKind(str, Enum):
+    FILE = "file"
+    DIRECTORY = "directory"
+    TEXT = "text"
+
+
+class OperationResultStatus(str, Enum):
+    SUCCESS = "success"
+    ERROR = "error"
+
+
+class OperationResultTargetType(str, Enum):
+    CANVAS_ELEMENT = "canvas_element"
+
+
+class OperationResultTarget(BaseModel):
+    """结果项的可选导航目标。"""
+
+    type: OperationResultTargetType
+    project_path: str
+    element_id: str
+    content_id: str | None = None
+    content_type: Literal["image", "video", "audio"] | None = None
+
+
+class OperationResultItem(BaseModel):
+    """已执行对象的展示结果；target 仅在工具提供可靠导航目标时存在。"""
+
+    label: str
+    kind: OperationResultKind
+    status: OperationResultStatus
+    message: str
+    description: str = ""
+    target: OperationResultTarget | None = None
+    started_at: str | None = None
+    expected_finished_at: str | None = None
+    is_processing: bool | None = None
+
+
+class OperationResultListContent(BaseModel):
+    """有限的逐项结果随消息保存；大报告仍使用原有文件正文持久化。"""
+
+    items: list[OperationResultItem] = Field(min_length=1)
+
+
 class ToolDetail(BaseModel):
     """工具详情模型"""
 
@@ -326,7 +373,7 @@ class ToolDetail(BaseModel):
     data: Union[
         FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
         ScriptExecutionContent, DeepWriteContent, TodoContent, DesignCanvasContent, DesignElementContent,
-        AskUserQuestionContent, AskUserResultContent, PlanToolContent, Dict[str, Any]
+        AskUserQuestionContent, AskUserResultContent, PlanToolContent, OperationResultListContent, Dict[str, Any]
     ]  # 展示内容，根据type动态展示
 
     model_config = ConfigDict(use_enum_values=True)

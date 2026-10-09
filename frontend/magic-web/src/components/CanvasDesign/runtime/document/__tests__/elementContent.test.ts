@@ -8,6 +8,7 @@ import {
 	getActiveContent,
 	getContentById,
 	getContentGenerationState,
+	getContentState,
 	getElementContentFields,
 	getMainContent,
 	getPendingVideoGenerationContent,
@@ -164,5 +165,20 @@ describe("elementContent", () => {
 		})
 		expect(activePendingState.activeContentIsGenerating).toBe(true)
 		expect(activePendingState.hasSiblingGenerating).toBe(false)
+	})
+
+	it("treats terminated generation content as terminal and retryable", () => {
+		const content: ImageElementContent = {
+			contentId: "terminated",
+			status: "terminated",
+			generateImageRequest: {
+				image_id: "image-task-1",
+				model_id: "image-model",
+				prompt: "create an image",
+			},
+		}
+
+		expect(getContentState(content)).toBe("failed")
+		expect(isContentGenerationPending(content)).toBe(false)
 	})
 })

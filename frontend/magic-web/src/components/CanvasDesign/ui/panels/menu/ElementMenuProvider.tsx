@@ -329,6 +329,11 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 			if (!canvas) return
 
 			if (source === "layers") {
+				if (canvas.elementManager.getElementData(elementId)?.type === "image") {
+					setLayerRenamingElementId(null)
+					canvas.elementRenameManager.startRename(elementId, true)
+					return
+				}
 				canvas.elementRenameManager.cancelRename()
 				setCanvasRenamingElementId(null)
 				setLayerRenamingElementId(elementId)

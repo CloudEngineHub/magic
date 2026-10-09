@@ -3,12 +3,7 @@ import type { ImageGenerationTaskType } from "../../../public/magic-types"
 
 /** 图片元素面向展示层的统一状态。 */
 export type ImageDisplayStatus =
-	| "empty"
-	| "uploading"
-	| "generating"
-	| "loading"
-	| "completed"
-	| "failed"
+	"empty" | "uploading" | "generating" | "loading" | "completed" | "failed" | "terminated"
 
 export type ImageDisplayFailureSource = "generation" | "resource"
 
@@ -67,6 +62,11 @@ export function resolveImageDisplayState(
 
 	if (isReplacementUploading) {
 		return { ...base, status: "uploading", surface: "placeholder" }
+	}
+
+	// 终止态优先于运行态：sandbox 迟到把 Content 写回 completed 时不应盖掉用户已终止的语义。
+	if (content.status === "terminated") {
+		return { ...base, status: "terminated", surface: "error", failureSource: "generation" }
 	}
 
 	const hasPersistedActiveGeneration =

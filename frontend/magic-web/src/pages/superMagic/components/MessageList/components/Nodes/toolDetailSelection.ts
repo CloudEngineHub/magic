@@ -1,6 +1,7 @@
 import projectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { DisabledDetailToolTypes } from "@/pages/superMagic/components/Detail/constants"
+import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
 import { reaction } from "mobx"
 import magicToast from "@/components/base/MagicToaster/utils"
 import i18n from "i18next"
@@ -30,6 +31,7 @@ type ToolDetail = Record<string, unknown> & {
 
 export type ToolCardInteractionTarget =
 	| { type: "disabled" }
+	| { type: "inline" }
 	| { type: "playback" }
 	| { type: "file"; fileId: string }
 	| { type: "file-reference"; fileId?: string; filePath?: string }
@@ -97,6 +99,7 @@ export function getToolCardInteractionTarget(
 	if (toolName && DisabledDetailToolTypes.includes(toolName)) {
 		return { type: "disabled" }
 	}
+	if (isInlineToolDetail(detail)) return { type: "inline" }
 	if (toolName && DESIGN_TOOL_NAMES.has(toolName)) {
 		return { type: "design" }
 	}
@@ -104,6 +107,10 @@ export function getToolCardInteractionTarget(
 	const detailRecord = detail as Record<string, unknown>
 	if (detailRecord.type === "browser") {
 		return { type: "playback" }
+	}
+	// 生成进度详情只承载预期完成时间，没有可预览的内容，不能因为卡片在生成中就变成可点。
+	if (detailRecord.type === "generation_progress") {
+		return { type: "disabled" }
 	}
 	const data = detailRecord.data
 	if (data && typeof data === "object" && !Array.isArray(data)) {
@@ -286,6 +293,7 @@ export function selectSourceFileFromTool({
 }
 
 export function selectToolDetail({ detail, onSelectDetail }: SelectToolDetailOptions) {
+	if (isInlineToolDetail(detail)) return
 	pubsub.publish(PubSubEvents.Open_Playback_Tab, detail)
 	onSelectDetail?.(markSelectionTarget(detail, "detail"))
 }
