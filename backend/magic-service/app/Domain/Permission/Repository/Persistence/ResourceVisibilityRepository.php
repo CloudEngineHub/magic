@@ -245,32 +245,4 @@ class ResourceVisibilityRepository extends MagicAbstractRepository implements Re
         return $list;
     }
 
-    public function listResourceCodesWithOtherPrincipals(
-        PermissionDataIsolation $dataIsolation,
-        ResourceType $resourceType,
-        array $resourceCodes,
-        string $userId,
-    ): array {
-        $resourceCodes = array_values(array_unique(array_filter(array_map('strval', $resourceCodes))));
-        if ($resourceCodes === []) {
-            return [];
-        }
-
-        $builder = $this->createBuilder($dataIsolation, ResourceVisibilityModel::query());
-        return $builder
-            ->where('resource_type', $resourceType->value)
-            ->whereIn('resource_code', $resourceCodes)
-            ->where(static function ($query) use ($userId): void {
-                $query->where('principal_type', '!=', PrincipalType::USER->value)
-                    ->orWhere(static function ($userQuery) use ($userId): void {
-                        $userQuery->where('principal_type', PrincipalType::USER->value)
-                            ->where('principal_id', '!=', $userId);
-                    });
-            })
-            ->distinct()
-            ->pluck('resource_code')
-            ->map(static fn (mixed $resourceCode): string => (string) $resourceCode)
-            ->values()
-            ->toArray();
-    }
 }

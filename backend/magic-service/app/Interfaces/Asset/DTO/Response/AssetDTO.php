@@ -50,6 +50,8 @@ class AssetDTO extends AbstractDTO
     /** PERSONAL=当前用户自己的素材，TEAM=团队分享素材。 */
     public string $source = 'PERSONAL';
 
+    public string $visibilityType = 'PERSONAL';
+
     /** @var array<int, array<string, mixed>> */
     public array $tags = [];
 
@@ -176,6 +178,11 @@ class AssetDTO extends AbstractDTO
     public function setSource(string $source): void
     {
         $this->source = $source;
+    }
+
+    public function setVisibilityType(string $visibilityType): void
+    {
+        $this->visibilityType = $visibilityType;
     }
 
     public function setTags(array $tags): void

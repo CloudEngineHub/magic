@@ -10,6 +10,7 @@ namespace App\Domain\Asset\Repository\Persistence;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
+use App\Domain\Asset\Entity\ValueObject\AssetVisibilityType;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
@@ -290,15 +291,21 @@ class AssetRepository implements AssetRepositoryInterface
                 $builder->whereNull('user_id');
                 return;
             case AssetScope::PERSONAL:
-                $builder->where('owner_uid', $currentUserId);
+                $builder->where('owner_uid', $currentUserId)
+                    ->where('visibility_type', AssetVisibilityType::PERSONAL->value);
                 return;
             case AssetScope::TEAM:
                 // 归属人如果把素材授权给部门/其他用户，也应在“团队可见”中看到；
                 // 仅本人可见的素材不会进入 sharedAssetIds。
-                $builder->whereIn('id', $sharedAssetIds);
+                $builder->whereIn('id', $sharedAssetIds)
+                    ->where('visibility_type', AssetVisibilityType::TEAM->value);
                 return;
             case AssetScope::ALL:
-                $builder->whereIn('id', $query->getAccessibleAssetIds());
+                $builder->whereIn('id', $query->getAccessibleAssetIds())
+                    ->whereIn('visibility_type', [
+                        AssetVisibilityType::PERSONAL->value,
+                        AssetVisibilityType::TEAM->value,
+                    ]);
                 return;
         }
     }

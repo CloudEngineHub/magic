@@ -129,6 +129,7 @@ class AssetAppService extends AbstractAssetAppService
         $dataIsolation = $this->createAssetDataIsolation($authorization);
         $contentHash = $this->materializeProjectFileIfNeeded($dataIsolation, $requestDTO);
         $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
+        $asset->setVisibilityType($requestDTO->getVisibilityType());
         if ($contentHash !== null) {
             $asset->setContentHash($contentHash);
         }
@@ -262,6 +263,10 @@ class AssetAppService extends AbstractAssetAppService
             }
             if ($requestDTO->getDescription() !== null) {
                 $asset->setDescriptionI18n(['default' => $requestDTO->getDescription()]);
+            }
+            if ($requestDTO->getVisibility() !== null) {
+                $visibility = $requestDTO->getVisibility();
+                $asset->setVisibilityType(strtoupper((string) ($visibility['visibility_type'] ?? 'PERSONAL')));
             }
             $updated = $this->assetDomainService->update($dataIsolation, $asset);
             if ($updated === null) {
@@ -566,11 +571,7 @@ class AssetAppService extends AbstractAssetAppService
         $query = new AssetQuery();
         $scope = $requestDTO->getScope();
         $query->setScope($scope);
-        $sharedAssetIds = match ($scope) {
-            AssetScope::TEAM => $this->teamVisibleAssetIdsForQuery($dataIsolation),
-            AssetScope::ALL => $this->sharedAssetIds($dataIsolation),
-            default => [],
-        };
+        $sharedAssetIds = $scope->includesSharedAssets() ? $this->sharedAssetIds($dataIsolation) : [];
         $query->setSharedAssetIds($sharedAssetIds);
         if ($scope === AssetScope::ALL) {
             $query->setAccessibleAssetIds(array_merge(
@@ -589,24 +590,6 @@ class AssetAppService extends AbstractAssetAppService
         $query->setTagIds($requestDTO->getTagIds());
         $query->setTagMatch($requestDTO->getTagMatch());
         return $query;
-    }
-
-    /** @return array<string> */
-    private function teamVisibleAssetIdsForQuery(AssetDataIsolation $dataIsolation): array
-    {
-        $sharedAssetIds = $this->sharedAssetIds($dataIsolation);
-        $ownedAssetIds = array_map(
-            'strval',
-            $this->assetDomainService->findIdsByOwnerUid($dataIsolation, $dataIsolation->getCurrentUserId()),
-        );
-        // 只对当前归属人的素材进一步判断是否存在本人之外的可见主体，
-        // 同时复用已解析的可访问 ID，避免重复查询权限主体。
-        $accessibleAssetIds = array_values(array_unique(array_merge($sharedAssetIds, $ownedAssetIds)));
-        return $this->teamVisibleAssetIds(
-            $dataIsolation,
-            null,
-            $accessibleAssetIds,
-        );
     }
 
     private function enrichAssets(AssetDataIsolation $isolation, array $assets, string $scope): void

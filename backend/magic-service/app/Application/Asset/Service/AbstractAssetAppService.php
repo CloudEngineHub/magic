@@ -112,22 +112,6 @@ abstract class AbstractAssetAppService extends AbstractKernelAppService
         );
     }
 
-    /** @return array<string> */
-    protected function teamVisibleAssetIds(
-        AssetDataIsolation $dataIsolation,
-        ?array $assetIds = null,
-        ?array $accessibleAssetIds = null,
-    ): array
-    {
-        return $this->resourceVisibilityDomainService->getUserAccessibleTeamResourceCodes(
-            $this->permissionDataIsolation($dataIsolation),
-            $dataIsolation->getCurrentUserId(),
-            ResourceType::ASSET,
-            $assetIds,
-            $accessibleAssetIds,
-        );
-    }
-
     protected function permissionDataIsolation(AssetDataIsolation $dataIsolation): PermissionDataIsolation
     {
         return PermissionDataIsolation::createByBaseDataIsolation($dataIsolation);

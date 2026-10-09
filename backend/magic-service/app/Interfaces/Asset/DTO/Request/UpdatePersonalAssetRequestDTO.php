@@ -77,6 +77,7 @@ class UpdatePersonalAssetRequestDTO extends AbstractRequestDTO
             'visibility' => 'nullable|array',
             'visibility.user_ids' => 'nullable|array',
             'visibility.department_ids' => 'nullable|array',
+            'visibility.visibility_type' => 'nullable|in:PERSONAL,TEAM',
             'tag_ids' => 'nullable|array',
             'tags' => 'nullable|array',
         ];

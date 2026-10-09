@@ -75,6 +75,7 @@ class AssetAssembler
         $dto->setOwner($ownerUid, $entity->getOwnerName());
         $dto->setOwnerUid($ownerUid);
         $dto->setSource($entity->getSource());
+        $dto->setVisibilityType($entity->getVisibilityType()->value);
         $dto->setTags($entity->getTags());
         if ($admin) {
             $dto->setStatus($entity->getStatus()->value);

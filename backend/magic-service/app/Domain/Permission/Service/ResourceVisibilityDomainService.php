@@ -211,32 +211,6 @@ readonly class ResourceVisibilityDomainService
     }
 
     /**
-     * 获取用户可访问且不是“仅本人可见”的资源编码。
-     *
-     * 资源归属人默认也会写入一条本人授权记录，不能仅凭
-     * getUserAccessibleResourceCodes 判断团队可见，否则个人素材会混入团队列表。
-     */
-    public function getUserAccessibleTeamResourceCodes(
-        PermissionDataIsolation $dataIsolation,
-        string $userId,
-        ResourceType $resourceType,
-        ?array $resourceIds = null,
-        ?array $accessibleCodes = null,
-    ): array {
-        $accessibleCodes ??= $this->getUserAccessibleResourceCodes($dataIsolation, $userId, $resourceType, $resourceIds);
-        if ($accessibleCodes === []) {
-            return [];
-        }
-
-        return $this->resourceVisibilityRepository->listResourceCodesWithOtherPrincipals(
-            $dataIsolation,
-            $resourceType,
-            $accessibleCodes,
-            $userId,
-        );
-    }
-
-    /**
      * 保存可见性配置(高层封装).
      *
      * @param BaseDataIsolation|PermissionDataIsolation $dataIsolation 数据隔离对象

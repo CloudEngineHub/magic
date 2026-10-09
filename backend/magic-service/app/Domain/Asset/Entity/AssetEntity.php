@@ -10,6 +10,7 @@ namespace App\Domain\Asset\Entity;
 use App\Domain\Asset\Entity\ValueObject\AssetKind;
 use App\Domain\Asset\Entity\ValueObject\AssetMediaType;
 use App\Domain\Asset\Entity\ValueObject\AssetStatus;
+use App\Domain\Asset\Entity\ValueObject\AssetVisibilityType;
 use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Infrastructure\Core\AbstractEntity;
 
@@ -51,6 +52,8 @@ class AssetEntity extends AbstractEntity
     protected ?string $contentHash = null;
 
     protected AssetStatus $status = AssetStatus::ENABLED;
+
+    protected AssetVisibilityType $visibilityType = AssetVisibilityType::PERSONAL;
 
     protected ?array $metadata = null;
 
@@ -275,6 +278,16 @@ class AssetEntity extends AbstractEntity
         $this->status = $value instanceof AssetStatus ? $value : AssetStatus::from((int) $value);
     }
 
+    public function getVisibilityType(): AssetVisibilityType
+    {
+        return $this->visibilityType;
+    }
+
+    public function setVisibilityType(AssetVisibilityType|string $value): void
+    {
+        $this->visibilityType = $value instanceof AssetVisibilityType ? $value : AssetVisibilityType::from($value);
+    }
+
     public function getMetadata(): ?array
     {
         return $this->metadata;
@@ -318,6 +331,7 @@ class AssetEntity extends AbstractEntity
             'file_url' => $this->fileUrl,
             'content_hash' => $this->contentHash,
             'status' => $this->status->value,
+            'visibility_type' => $this->visibilityType->value,
             'metadata' => $this->metadata,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,

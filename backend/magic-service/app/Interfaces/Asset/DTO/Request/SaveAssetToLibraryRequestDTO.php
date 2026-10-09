@@ -17,7 +17,7 @@ use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
  */
 class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
 {
-    /** @var array{user_ids?: array<string>, department_ids?: array<string>} */
+    /** @var array{visibility_type?: string, user_ids?: array<string>, department_ids?: array<string>} */
     public array $visibility = [];
 
     public function setName(mixed $value): void
@@ -31,6 +31,11 @@ class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
             (array) ($this->visibility['user_ids'] ?? []),
             (array) ($this->visibility['department_ids'] ?? []),
         );
+    }
+
+    public function getVisibilityType(): string
+    {
+        return strtoupper((string) ($this->visibility['visibility_type'] ?? 'PERSONAL'));
     }
 
     public function setVisibility(mixed $value): void
@@ -64,6 +69,7 @@ class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
             'visibility' => 'nullable|array',
             'visibility.user_ids' => 'nullable|array',
             'visibility.department_ids' => 'nullable|array',
+            'visibility.visibility_type' => 'nullable|in:PERSONAL,TEAM',
         ];
     }
 

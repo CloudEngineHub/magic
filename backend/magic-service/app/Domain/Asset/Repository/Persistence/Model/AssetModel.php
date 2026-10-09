@@ -28,7 +28,7 @@ class AssetModel extends AbstractModel
     protected array $fillable = [
         'id', 'organization_code', 'user_id', 'owner_uid', 'search_text', 'asset_kind', 'asset_business_type', 'parent_id', 'asset_media_type',
         'name_i18n', 'description_i18n', 'file_key', 'content_hash', 'status',
-        'metadata', 'created_at', 'updated_at', 'deleted_at',
+        'metadata', 'visibility_type', 'created_at', 'updated_at', 'deleted_at',
     ];
 
     protected array $casts = [
@@ -36,7 +36,7 @@ class AssetModel extends AbstractModel
         'asset_kind' => 'string', 'asset_business_type' => 'string', 'parent_id' => 'integer', 'asset_media_type' => 'string',
         'name_i18n' => 'array', 'description_i18n' => 'array', 'file_key' => 'string',
         'content_hash' => 'string', 'status' => 'boolean',
-        'metadata' => 'array', 'created_at' => 'datetime', 'updated_at' => 'datetime', 'deleted_at' => 'datetime',
+        'metadata' => 'array', 'visibility_type' => 'string', 'created_at' => 'datetime', 'updated_at' => 'datetime', 'deleted_at' => 'datetime',
     ];
 
     /**
