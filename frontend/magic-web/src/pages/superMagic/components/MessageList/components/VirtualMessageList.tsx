@@ -125,8 +125,12 @@ const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 	renderNode: VirtualMessageListProps["renderNode"]
 }) {
 	if (item.kind === "process-toggle") {
+		// 过程入口也属于 AI 消息时间线，复用正文行样式，让头像下方的虚线连续穿过入口。
 		return (
-			<div data-message-id={item.key} className="relative w-full pb-2 pl-6">
+			<div
+				data-message-id={item.key}
+				className={cn("relative w-full", ASSISTANT_MESSAGE_ROW_CLASS)}
+			>
 				{renderNode({ item })}
 			</div>
 		)
