@@ -145,9 +145,7 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 						resourceName,
 						fileMap: nextFileMap,
 						audioDisplayConfig: audioDirectory?.display_config as
-							| ShareRecordingDisplayConfig
-							| null
-							| undefined,
+							ShareRecordingDisplayConfig | null | undefined,
 					}),
 				)
 				setFileMap(nextFileMap)

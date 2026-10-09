@@ -27,16 +27,19 @@ import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFl
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import projectFilesStore from "@/stores/projectFiles"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import ChatProjectMessageLayout from "@/pages/superMagic/pages/ChatProjectPage/components/ChatProjectMessageLayout"
 import { resolveComposerMinInputHeight } from "@/pages/superMagic/components/ConversationInputResize/constants"
 import { isSelfMediaComposerContext } from "@/pages/superMagic/components/MainInputContainer/utils/selfMediaComposerConfig"
 import { isVideoProductionContext } from "@/pages/superMagic/components/MainInputContainer/utils/videoProductionConfig"
+import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
 const ProjectPageInputContainer = lazy(
 	() => import("../../../components/ProjectPageInputContainer"),
 )
+
+const noopTopicModeChange = () => undefined
 
 interface RetryMessageNode {
 	content?: string
@@ -127,6 +130,8 @@ interface TopicMessagePanelProps {
 	mentionPanelStore?: MentionPanelStore
 	/** Controls whether the recording-summary editor can expose recording controls. */
 	allowRecordingMode?: boolean
+	/** Chat detail composers use the featured default employee and hide employee switching. */
+	isChatDetail?: boolean
 }
 
 function TopicMessagePanel({
@@ -160,12 +165,15 @@ function TopicMessagePanel({
 	projectFilesStore: projectFilesStoreProp,
 	mentionPanelStore,
 	allowRecordingMode,
+	isChatDetail = false,
 }: TopicMessagePanelProps) {
 	const scopedTopicStore = topicStoreProp ?? topicStore
 	const scopedProjectFilesStore = projectFilesStoreProp ?? projectFilesStore
-	// Chat detail route hides branch-topic actions via FileActionVisibilityProvider.
-	const { hideCreateNewTopic } = useFileActionVisibility()
-	const allowTopicBranchActions = !hideCreateNewTopic
+	// Chat detail route hides branch-topic actions via FileAccessProvider.
+	const {
+		options: { createNewTopic },
+	} = useFileAccess()
+	const allowTopicBranchActions = createNewTopic
 
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
@@ -174,13 +182,20 @@ function TopicMessagePanel({
 		selectedTopic,
 		selectedProject,
 	})
+	const defaultAgentSelection = isChatDetail ? resolveDefaultAgentSelection() : undefined
+	// Chat details intentionally ignore the historical topic employee: their composer is locked to
+	// the currently featured default employee, while task details retain their topic configuration.
+	const composerTopicMode = defaultAgentSelection?.topicPattern ?? topicMode
+	const composerAgentCode =
+		defaultAgentSelection?.agentCode ?? (!isChatDetail ? selectedTopic?.agent_code : undefined)
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
 	const { topicModelStore } = useTopicModel({
 		selectedTopic,
 		selectedProject,
-		topicMode,
+		topicMode: composerTopicMode,
+		agentCode: composerAgentCode,
 		topicModelStore: sharedTopicModelStore,
 	})
 	const shouldScrollAfterRetryRef = useRef(false)
@@ -361,25 +376,31 @@ function TopicMessagePanel({
 			mentionPanelStore={mentionPanelStore}
 			topicStore={scopedTopicStore}
 			allowRecordingMode={allowRecordingMode}
+			agentCode={isChatDetail ? (composerAgentCode ?? null) : composerAgentCode}
 			isShowLoadingInit={isShowLoadingInit}
 			topicModeLogic={{
-				topicMode,
-				setTopicMode,
-				recoverTopicMode,
+				topicMode: composerTopicMode,
+				setTopicMode: isChatDetail ? noopTopicModeChange : setTopicMode,
+				recoverTopicMode: isChatDetail ? noopTopicModeChange : recoverTopicMode,
 			}}
+			showModeToggle={isChatDetail ? false : undefined}
 			size={detailPanelVisible ? "small" : "default"}
 		/>
 	)
 	// Keep extra-UI capability checks explicit so specialized composers cannot silently use a floor
 	// that is smaller than the controls rendered below their editor.
 	const inputMinHeight = resolveComposerMinInputHeight({
-		isPptMode: topicMode === TopicMode.PPT,
-		isVideoProductionMode: isVideoProductionContext({ topicMode, selectedTopic }),
+		isPptMode: composerTopicMode === TopicMode.PPT,
+		isVideoProductionMode: isVideoProductionContext({
+			topicMode: composerTopicMode,
+			agentCode: composerAgentCode,
+			selectedTopic,
+		}),
 		isSpecializedMode:
-			topicMode === TopicMode.RecordSummary ||
+			composerTopicMode === TopicMode.RecordSummary ||
 			isSelfMediaComposerContext({
-				topicMode,
-				agentCode: selectedTopic?.agent_code ?? undefined,
+				topicMode: composerTopicMode,
+				agentCode: composerAgentCode,
 			}),
 	})
 
@@ -419,7 +440,7 @@ function TopicMessagePanel({
 					input={inputNode}
 					isConversationPanelCollapsed={isConversationPanelCollapsed}
 					inputMinHeight={inputMinHeight}
-					layoutKey={`${String(topicMode)}:${selectedTopic?.agent_code ?? ""}`}
+					layoutKey={`${String(composerTopicMode)}:${composerAgentCode ?? ""}`}
 				/>
 			)}
 		</div>

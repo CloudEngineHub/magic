@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { IconFolder, IconGitFork, IconMaximize } from "@tabler/icons-react"
 import { useMemoizedFn, useDebounceEffect, useDeepCompareEffect, useUpdateEffect } from "ahooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -1129,4 +1130,10 @@ function Share() {
 	)
 }
 
-export default Share
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<Share />
+		</FileAccessProvider>
+	)
+}

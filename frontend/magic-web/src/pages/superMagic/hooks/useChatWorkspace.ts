@@ -14,6 +14,8 @@ import type {
 } from "@/pages/superMagic/pages/Workspace/types"
 
 interface UseChatWorkspaceOptions {
+	/** Skip the initial workspace lookup for actions that only need it after an explicit user click. */
+	workspaceEnabled?: boolean
 	projectsEnabled?: boolean
 	projectPageSize?: number
 	projectKeyword?: string
@@ -144,7 +146,12 @@ export async function ensureChatWorkspaceId(): Promise<string | null> {
 }
 
 export function useChatWorkspace(options: UseChatWorkspaceOptions = {}): UseChatWorkspaceResult {
-	const { projectsEnabled = false, projectPageSize = 100, projectKeyword = "" } = options
+	const {
+		workspaceEnabled = true,
+		projectsEnabled = false,
+		projectPageSize = 100,
+		projectKeyword = "",
+	} = options
 	const [chatWorkspace, setChatWorkspace] = useState<Workspace | null>(null)
 	const [chatProjects, setChatProjects] = useState<ProjectListItem[]>([])
 	const [chatProjectsTotal, setChatProjectsTotal] = useState(0)
@@ -300,12 +307,12 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions = {}): UseChat
 
 	useEffect(() => {
 		isMountedRef.current = true
-		void ensureChatWorkspace()
+		if (workspaceEnabled) void ensureChatWorkspace()
 
 		return () => {
 			isMountedRef.current = false
 		}
-	}, [ensureChatWorkspace])
+	}, [ensureChatWorkspace, workspaceEnabled])
 
 	useEffect(() => {
 		if (!projectsEnabled) return

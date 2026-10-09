@@ -1547,12 +1547,14 @@ class LLMAppService extends AbstractLLMAppService
         $imageGenerateParamsVO->setImageGenerationConfig($proxyModelRequest->getImageGenerationConfig());
         $imageGenerateParamsVO->setReferenceImages($proxyModelRequest->getImages());
         $imageGenerateParamsVO->setOutputFormat($proxyModelRequest->getOutputFormat());
+        $imageGenerateParamsVO->setExtra($proxyModelRequest->getExtra());
 
         // 直接透传原始 size 参数，让各服务商根据自己的需求处理
         $imageGenerateParamsVO->setSize($proxyModelRequest->getSize(''));
 
         $data = $imageGenerateParamsVO->toArray();
         $data['organization_code'] = $organizationCode;
+        $data['user_id'] = (string) $creator;
 
         // 图片水印处理
         $modelId = $imageModel->getModelId() ?: $proxyModelRequest->getModel();

@@ -24,7 +24,11 @@ import { cn } from "@/utils/cn"
 
 interface DefaultInputContainerProps extends ScenePanelComponentBaseProps {}
 
-function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputContainerProps) {
+function DefaultInputContainer({
+	editorContext,
+	editorNodes,
+	inputContainerId,
+}: DefaultInputContainerProps) {
 	const { placeholder, panels, isLoading } = useCurrentSceneConfig({
 		topicMode: editorContext?.topicMode,
 	})
@@ -62,7 +66,8 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 	}, [selectedTopicId])
 
 	const editorPortalTarget = usePortalTarget({
-		portalId: SCENE_INPUT_IDS.INPUT_CONTAINER,
+		portalId: inputContainerId ?? SCENE_INPUT_IDS.INPUT_CONTAINER,
+		resolveBeforePaint: variant === ScenePanelVariant.HomePage && !isMobile,
 	})
 
 	const handleTemplateSelect = (template: OptionItem | null) => {
@@ -148,7 +153,7 @@ function DefaultInputContainer({ editorContext, editorNodes }: DefaultInputConta
 						className={cn("flex flex-col gap-2", shouldFillHeight && "h-full min-h-0")}
 					>
 						<div
-							className={cn(shouldFillHeight && "min-h-0 flex-1")}
+							className={cn(shouldFillHeight && "min-h-0 flex-1 [&>div]:h-full")}
 							onDragEnterCapture={handleEditorRandomDragOver}
 							onDragOverCapture={handleEditorRandomDragOver}
 							onDropCapture={handleEditorRandomDrop}

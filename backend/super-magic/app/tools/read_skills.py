@@ -163,6 +163,29 @@ class ReadSkills(BaseTool[ReadSkillsParams]):
                             else:
                                 skill = await find_skill(skill_name, agent_name=agent_name)
 
+                    # A market-declared skill may be installed lazily on first read.
+                    if not skill and not project_id:
+                        from app.core.skill_utils.skill_references import install_market_reference
+
+                        try:
+                            declared = await install_market_reference(
+                                skill_name, agent_name or "", agent_context, tool_context
+                            )
+                            if declared:
+                                skill = await find_skill(skill_name, agent_name=agent_name)
+                        except Exception:
+                            results.append({
+                                "skill_name": skill_name,
+                                "success": False,
+                                "error": (
+                                    f"Skill '{skill_name}' is declared but could not be fetched. "
+                                    "Access may have changed or the package may be unavailable."
+                                ),
+                            })
+                            failure_count += 1
+                            failed_skills.append(skill_name)
+                            continue
+
                     if (
                         skill is not None
                         and skill.name.strip().casefold() in excluded_skills

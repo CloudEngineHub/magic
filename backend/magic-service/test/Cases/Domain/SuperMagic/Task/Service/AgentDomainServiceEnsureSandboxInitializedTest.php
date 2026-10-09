@@ -7,8 +7,14 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Domain\SuperMagic\Task\Service;
 
+use App\Application\Chat\Service\MagicUserInfoAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
+use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicProductContext;
+use App\Domain\SuperMagic\Message\Repository\Facade\TaskMessageRepositoryInterface;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
@@ -17,10 +23,11 @@ use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentInitContext;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Repository\Facade\TopicRepositoryInterface;
+use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
+use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Constant\WorkspaceStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResponse;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\SandboxAgentInterface;
-use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
@@ -28,8 +35,8 @@ use App\Infrastructure\Util\Locker\LockerInterface;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
-use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 /**
@@ -212,17 +219,17 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
             $loggerFactory,
             $gateway,
             $agent,
-            $this->createMock(\App\Application\Chat\Service\MagicUserInfoAppService::class),
-            $this->createMock(\App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface::class),
-            $this->createMock(\App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager::class),
-            $this->createMock(\App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface::class),
-            $this->createMock(\App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface::class),
-            $this->createMock(\App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface::class),
+            $this->createMock(MagicUserInfoAppService::class),
+            $this->createMock(CloudFileRepositoryInterface::class),
+            $this->createMock(DynamicConfigManager::class),
+            $this->createMock(MagicClawRepositoryInterface::class),
+            $this->createMock(SuperMagicAgentRepositoryInterface::class),
+            $this->createMock(MagicTokenRepositoryInterface::class),
             $locker,
             $this->createMock(ProjectRepositoryInterface::class),
             $topicRepository,
-            $this->createMock(\App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface::class),
-            $this->createMock(\App\Domain\SuperMagic\Message\Repository\Facade\TaskMessageRepositoryInterface::class),
+            $this->createMock(WorkspaceRepositoryInterface::class),
+            $this->createMock(TaskMessageRepositoryInterface::class),
         );
     }
 
@@ -284,7 +291,7 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
     }
 }
 
-class EnsureSandboxFakeContainer implements \Psr\Container\ContainerInterface
+class EnsureSandboxFakeContainer implements ContainerInterface
 {
     /** @var array<string, mixed> */
     public array $services = [];

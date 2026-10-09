@@ -104,15 +104,6 @@ function SkillsLibraryMobile({
 		[skillsStore, t],
 	)
 
-	const handleUpgrade = useCallback(
-		(id: string) => {
-			void skillsStore.upgradeSkill(id).catch(() => {
-				toast.error(t("skillsLibrary.actionFailed"))
-			})
-		},
-		[skillsStore, t],
-	)
-
 	const handleCategoryChange = useCallback(
 		(categoryIds: string[], isFeatured?: 0 | 1) => {
 			void skillsStore
@@ -132,32 +123,27 @@ function SkillsLibraryMobile({
 
 	const selectedSkillId = selectedSkill?.id
 	const selectedSkillStatus = selectedSkill?.status
-	const selectedSkillNeedUpgrade = selectedSkill?.needUpgrade ?? false
 	const detailPrimaryAction = useMemo(
 		() =>
 			selectedSkillId
 				? {
 						label:
 							selectedSkillStatus === "added"
-								? selectedSkillNeedUpgrade
-									? t("skillsLibrary.upgrade")
-									: t("skillsLibrary.added")
+								? t("skillsLibrary.added")
 								: t("skillsLibrary.addToMySkills"),
 						onClick: async () => {
 							if (selectedSkillStatus === "added") {
-								if (selectedSkillNeedUpgrade)
-									await skillsStore.upgradeSkill(selectedSkillId)
 								return
 							}
 
 							await skillsStore.addSkill(selectedSkillId)
 						},
 						onError: () => toast.error(t("skillsLibrary.actionFailed")),
-						disabled: selectedSkillStatus === "added" && !selectedSkillNeedUpgrade,
+						disabled: selectedSkillStatus === "added",
 						testId: "skill-detail-dialog-primary-action",
 					}
 				: undefined,
-		[selectedSkillId, selectedSkillNeedUpgrade, selectedSkillStatus, skillsStore, t],
+		[selectedSkillId, selectedSkillStatus, skillsStore, t],
 	)
 
 	return (
@@ -305,7 +291,6 @@ function SkillsLibraryMobile({
 											skill={skill}
 											language={i18n.language}
 											onAdd={handleAdd}
-											onUpgrade={handleUpgrade}
 											onOpenDetail={handleOpenDetail}
 										/>
 									))}

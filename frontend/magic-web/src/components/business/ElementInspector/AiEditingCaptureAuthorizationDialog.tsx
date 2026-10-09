@@ -35,6 +35,7 @@ export function AiEditingCaptureAuthorizationDialog({
 				showCloseButton={false}
 				className="w-[calc(100%-24px)] max-w-[420px] gap-5 rounded-2xl p-5"
 				data-testid="ai-editing-capture-authorization-dialog"
+				data-element-inspector-capture-authorization="true"
 			>
 				<DialogHeader className="gap-3 text-left">
 					<div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">

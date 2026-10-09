@@ -292,6 +292,12 @@ class ServiceShutdownCoordinator:
 
     async def _stop_workers(self) -> None:
         await self._process_manager.stop_all()
+        try:
+            from agentlang.streaming.drivers.socketio.driver import shutdown_shared_socketio_driver
+
+            await shutdown_shared_socketio_driver()
+        except Exception as error:
+            self.record_cleanup_error("socketio_driver", error)
 
     def _record_event(
         self,

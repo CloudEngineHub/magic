@@ -62,7 +62,7 @@ function ClawConversationPanelHeaderComponent({
 		<div
 			className={cn(
 				// Reserve header height in layout rather than offsetting the message list.
-				"relative z-30 flex h-10 shrink-0 w-full items-center gap-2 px-2 py-1.5",
+				"relative z-30 flex h-10 w-full shrink-0 items-center gap-2 px-2 py-1.5",
 				"bg-sidebar/95 backdrop-blur-lg",
 				isConversationPanelCollapsed && "absolute h-full flex-col px-0 py-1.5",
 			)}

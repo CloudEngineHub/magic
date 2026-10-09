@@ -8,6 +8,7 @@ import ConditionalTooltip from "./ConditionalTooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { runGuardedAction } from "../../utils/actionGuard"
 import type { BeforeAction } from "../../utils/actionGuard"
+import { cn } from "@/utils/cn"
 
 interface FileEditButtonsProps {
 	/** Stable test id scope for the edit actions rendered by this component. */
@@ -32,6 +33,8 @@ interface FileEditButtonsProps {
 	onSaveAndExit?: () => void | Promise<void>
 	/** 取消按钮点击回调 */
 	onCancel?: () => void
+	/** 全屏等场景下将 Tooltip 挂载到指定容器内 */
+	getPopupContainer?: () => HTMLElement | null
 }
 
 function FileEditButtons({
@@ -46,6 +49,7 @@ function FileEditButtons({
 	onSave,
 	onSaveAndExit,
 	onCancel,
+	getPopupContainer,
 }: FileEditButtonsProps) {
 	const { t } = useTranslation("super")
 	const [isSavingLocal, setIsSavingLocal] = useState(false)
@@ -121,6 +125,8 @@ function FileEditButtons({
 
 	const showSaving = isSaving || isSavingLocal
 	const resolvedEditLabel = editLabel ?? t("fileViewer.edit")
+	const outlineButtonClassName = getOutlineActionButtonClassName(showButtonText)
+	const primaryButtonClassName = getPrimaryActionButtonClassName(showButtonText)
 
 	return (
 		<div
@@ -129,14 +135,18 @@ function FileEditButtons({
 			data-testid={testIdPrefix ? `${testIdPrefix}-file-actions` : undefined}
 		>
 			{!isEditMode ? (
-				<ConditionalTooltip showText={showButtonText} title={resolvedEditLabel}>
+				<ConditionalTooltip
+					showText={showButtonText}
+					title={resolvedEditLabel}
+					getPopupContainer={getPopupContainer}
+				>
 					<Button
 						data-testid={testIdPrefix ? `${testIdPrefix}-edit-button` : undefined}
 						variant="outline"
 						size="sm"
 						onClick={handleEdit}
 						disabled={interactionDisabled}
-						className={outlineActionButtonClassName}
+						className={outlineButtonClassName}
 					>
 						<FilePenLine size={16} />
 						{showButtonText && <span>{resolvedEditLabel}</span>}
@@ -147,6 +157,7 @@ function FileEditButtons({
 					<ConditionalTooltip
 						showText={showButtonText}
 						title={showSaving ? t("fileViewer.saving") : t("fileViewer.save")}
+						getPopupContainer={getPopupContainer}
 					>
 						<Button
 							data-testid={testIdPrefix ? `${testIdPrefix}-save-button` : undefined}
@@ -154,7 +165,7 @@ function FileEditButtons({
 							size="sm"
 							onClick={handleSave}
 							disabled={interactionDisabled || showSaving}
-							className={primaryActionButtonClassName}
+							className={primaryButtonClassName}
 						>
 							{showSaving ? (
 								<Loader2 size={16} className="animate-spin" />
@@ -166,7 +177,7 @@ function FileEditButtons({
 									{showSaving ? t("fileViewer.saving") : t("fileViewer.save")}
 								</span>
 							)}
-							{!isMobile && (
+							{!isMobile && showButtonText && (
 								<div className="flex h-4 items-center gap-0.5">
 									<Kbd className={primaryShortcutKbdClassName}>
 										{isMac ? "⌘" : "Ctrl"}
@@ -180,6 +191,7 @@ function FileEditButtons({
 						<ConditionalTooltip
 							showText={showButtonText}
 							title={t("fileViewer.saveAndExit")}
+							getPopupContainer={getPopupContainer}
 						>
 							<Button
 								data-testid={
@@ -191,10 +203,10 @@ function FileEditButtons({
 								size="sm"
 								onClick={handleSaveAndExit}
 								disabled={interactionDisabled || showSaving}
-								className={outlineActionButtonClassName}
+								className={outlineButtonClassName}
 							>
 								{showButtonText && <span>{t("fileViewer.saveAndExit")}</span>}
-								{!isMobile && (
+								{!isMobile && showButtonText && (
 									<div className="flex h-4 items-center gap-0.5">
 										<Kbd className={outlineShortcutKbdClassName}>
 											{isMac ? "⇧" : "Shift"}
@@ -208,14 +220,18 @@ function FileEditButtons({
 							</Button>
 						</ConditionalTooltip>
 					)}
-					<ConditionalTooltip showText={showButtonText} title={t("fileViewer.cancel")}>
+					<ConditionalTooltip
+						showText={showButtonText}
+						title={t("fileViewer.cancel")}
+						getPopupContainer={getPopupContainer}
+					>
 						<Button
 							data-testid={testIdPrefix ? `${testIdPrefix}-cancel-button` : undefined}
 							variant="outline"
 							size="sm"
 							onClick={handleCancel}
 							disabled={interactionDisabled || showSaving}
-							className={outlineActionButtonClassName}
+							className={outlineButtonClassName}
 						>
 							{showButtonText ? (
 								<span>{t("fileViewer.cancel")}</span>
@@ -230,11 +246,17 @@ function FileEditButtons({
 	)
 }
 
-const primaryActionButtonClassName =
-	"h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal shadow-xs"
+const getPrimaryActionButtonClassName = (showButtonText: boolean) =>
+	cn(
+		"h-6 rounded-[8px] py-0 text-xs font-normal shadow-xs",
+		showButtonText ? "gap-1.5 px-3" : "gap-0 px-1.5",
+	)
 
-const outlineActionButtonClassName =
-	"h-6 gap-1.5 rounded-[8px] px-3 py-0 text-xs font-normal text-foreground shadow-xs"
+const getOutlineActionButtonClassName = (showButtonText: boolean) =>
+	cn(
+		"h-6 rounded-[8px] py-0 text-xs font-normal text-foreground shadow-xs",
+		showButtonText ? "gap-1.5 px-3" : "gap-0 px-1.5",
+	)
 
 const primaryShortcutKbdClassName =
 	"h-4 min-w-5 rounded-[4px] border-0 bg-primary-foreground/20 px-1 text-xs font-normal leading-4 text-primary-foreground shadow-none"

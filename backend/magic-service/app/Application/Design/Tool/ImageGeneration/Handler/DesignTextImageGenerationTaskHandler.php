@@ -53,6 +53,9 @@ class DesignTextImageGenerationTaskHandler extends AbstractDesignImageGeneration
         if ($entity->getImageGenerationConfig() !== null) {
             $dto->setImageGenerationConfig($entity->getImageGenerationConfig());
         }
+        if ($entity->getExtra() !== null) {
+            $dto->setExtra($entity->getExtra());
+        }
 
         return $this->narrowToOpenAiFormatImageResponse($this->llmAppService->textGenerateImageV2($dto));
     }

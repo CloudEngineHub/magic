@@ -125,7 +125,7 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
         return $this->expireDays;
     }
 
-    public function setExpireDays(int|string|null $expireDays): void
+    public function setExpireDays(null|int|string $expireDays): void
     {
         $this->expireDaysProvided = true;
         $this->expireDays = $expireDays === null || $expireDays === '' ? null : (int) $expireDays;
@@ -141,7 +141,7 @@ class PublishMicroAppRequestDTO extends AbstractRequestDTO
         return $this->defaultOpenFileId;
     }
 
-    public function setDefaultOpenFileId(int|string|null $defaultOpenFileId): void
+    public function setDefaultOpenFileId(null|int|string $defaultOpenFileId): void
     {
         $this->defaultOpenFileIdProvided = true;
         $value = trim((string) ($defaultOpenFileId ?? ''));

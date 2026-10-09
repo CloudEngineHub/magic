@@ -125,11 +125,13 @@ function TopicPage({
 	onInitialMessagesReadyChange,
 }: TopicPageProps = {}) {
 	const { t } = useTranslation("super")
+	const { t: tMainInput } = useTranslation("super/mainInput")
 	const { styles, cx } = useStyles()
 	const isMobile = useIsMobile()
 	const location = useLocation()
 	const routeName = routesMatch(location.pathname)?.route.name as RouteName | undefined
 	const resolvedPageKind = pageKind ?? resolveMobileTopicPageKind(routeName)
+	const isSingleTopicChat = resolvedPageKind === MobileTopicPageKind.SingleTopicChat
 	const capabilities = getMobileTopicPageCapabilities(resolvedPageKind)
 	const isStandaloneProjectTopicPage = routeName === RouteName.SuperWorkspaceProjectTopicState
 	// 独立项目话题子页由壳层头部承载返回与标题，避免与页内 ChatHeader 叠成双头部。
@@ -649,6 +651,14 @@ function TopicPage({
 							setSelectedTopic={topicStore.setSelectedTopic}
 							onFileClick={onFileClick}
 							selectedWorkspace={selectedWorkspace}
+							// Chat details use the same model-only selector as the chat home.
+							showModeToggle={isSingleTopicChat ? false : undefined}
+							showModelSelector={isSingleTopicChat ? true : undefined}
+							placeholder={
+								isSingleTopicChat
+									? tMainInput("mobileHome.chatPlaceholder")
+									: undefined
+							}
 							attachments={attachments}
 							isShowLoadingInit={isShowLoadingInit}
 							enableReEditMessageFromPubSub

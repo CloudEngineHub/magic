@@ -15,8 +15,6 @@ import TopicFilesPanel, { TopicFilesPanelRef } from "./TopicFilesPanel"
 import type { AttachmentItem } from "./hooks/types"
 import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
-import { useIsMobile } from "@/hooks/useIsMobile"
-import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 import magicToast from "@/components/base/MagicToaster/utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
@@ -144,8 +142,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 	) {
 		const { styles, cx } = useStyles()
 		const { t } = useTranslation("super")
-		const isMobile = useIsMobile()
-		const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
+		const effectiveAllowDownload = allowDownload !== false
 		const panelRef = useRef<TopicFilesPanelRef>(null)
 		const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 		const [saveDialogTemplates, setSaveDialogTemplates] = useState<SlidesTemplateItem[]>([])

@@ -228,11 +228,6 @@ class SuperMagicAgentMarketAssembler
         return [];
     }
 
-    private static function resolveLocalizedRole(?array $i18n, string $language): string
-    {
-        return implode(', ', self::resolveLocalizedList($i18n, $language));
-    }
-
     /**
      * @param array<mixed> $values
      * @return array<int, string>

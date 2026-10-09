@@ -17,6 +17,7 @@ import { generateGlobalApi } from "./modules/global"
 import { generateScheduledTaskApi } from "./modules/scheduledTask"
 import { generateSuperMagicApi } from "./modules/superMagic"
 import { generateSkillsApi } from "./modules/skills"
+import { generateHtmlDesignStylesApi } from "./modules/htmlDesignStyles"
 import { generateCrewApi } from "./modules/crew"
 import { generateOrgAiModelProviderApi } from "./modules/org-ai-model-provider"
 import { generateRecycleBinApi } from "./modules/recycle-bin"
@@ -53,6 +54,8 @@ export const SuperMagicApi = generateSuperMagicApi(magicClient)
 export const SlidesTemplateUploadApi = generateSlidesTemplateUploadApi(magicClient)
 /** Skills */
 export const SkillsApi = generateSkillsApi(magicClient)
+/** HTML design styles */
+export const HtmlDesignStylesApi = generateHtmlDesignStylesApi(magicClient)
 /** Crew */
 export const CrewApi = generateCrewApi(magicClient)
 

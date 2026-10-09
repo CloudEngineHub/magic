@@ -20,9 +20,24 @@ vi.mock("../../hooks/useFileUpload", () => ({
 	UploadSource: { Home: 1 },
 }))
 
-import { superMagicUploadTokenService } from "../UploadTokenService"
+import { superMagicUploadTokenService, UploadTokenService } from "../UploadTokenService"
 
 describe("UploadTokenService", () => {
+	it("consumes a home directory without adopting the other mode's attachments", () => {
+		const chat = new UploadTokenService()
+		const task = new UploadTokenService()
+		chat.uploadTokenMap.set("", {
+			customCredentials: { temporary_credential: { dir: "chat-files" } } as never,
+			expireTime: Date.now() + 60000,
+		})
+		task.uploadTokenMap.set("", {
+			customCredentials: { temporary_credential: { dir: "task-files" } } as never,
+			expireTime: Date.now() + 60000,
+		})
+		expect(chat.getLastWorkDir()).toBe("chat-files")
+		expect(chat.getLastWorkDir()).toBeUndefined()
+		expect(task.getLastWorkDir()).toBe("task-files")
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})

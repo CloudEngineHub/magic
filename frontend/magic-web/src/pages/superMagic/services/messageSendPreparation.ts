@@ -36,6 +36,8 @@ interface CreateTopicParams {
 }
 
 export interface MessageSendPreparationContext {
+	/** Consume only the active composer's temporary uploads when creating its project. */
+	getTemporaryWorkdir?: () => string | undefined
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
 	selectedWorkspace?: Workspace | null
@@ -112,13 +114,19 @@ export function releaseHtmlScreenshotsAfterSend(
 export function resolveMessageSendContext(
 	context?: MessageSendPreparationContext,
 ): ResolvedPreparationContext {
-	const selectedProject = context?.selectedProject ?? projectStore.selectedProject
+	// Local blank composers deliberately pass null to exclude the previous global conversation.
+	const selectedProject =
+		context?.selectedProject !== undefined
+			? context.selectedProject
+			: projectStore.selectedProject
 	const selectedTopic =
-		context?.selectedTopic ?? context?.topicStore?.selectedTopic ?? topicStore.selectedTopic
+		context?.selectedTopic !== undefined
+			? context.selectedTopic
+			: (context?.topicStore?.selectedTopic ?? topicStore.selectedTopic)
 	const selectedWorkspace =
-		context?.selectedWorkspace ??
-		workspaceStore.selectedWorkspace ??
-		workspaceStore.firstWorkspace
+		context?.selectedWorkspace !== undefined
+			? context.selectedWorkspace
+			: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 
 	const setSelectedProject = context?.setSelectedProject ?? projectStore.setSelectedProject
 	const setSelectedTopic =
@@ -210,7 +218,10 @@ export async function preparePanelSend({
 	if (!currentProject?.id) {
 		const createdProject = await resolvedContext.createProject({
 			projectMode: tabPattern,
-			workdir: superMagicUploadTokenService.getLastWorkDir(),
+			workdir: (
+				context?.getTemporaryWorkdir ??
+				(() => superMagicUploadTokenService.getLastWorkDir())
+			)(),
 		})
 
 		if (!createdProject?.project || !createdProject.topic) {
@@ -295,7 +306,7 @@ export async function preparePanelSend({
 			selectedWorkspace: resolvedContext.selectedWorkspace,
 			// Preserve the scoped store so dispatchMessage can update the visible Topic immediately.
 			topicStore: resolvedContext.topicStore,
-			workspaceId: resolvedContext.workspaceId,
+			workspaceId: resolvedContext.workspaceId ?? currentProject.workspace_id,
 			updateTopicName: resolvedContext.updateTopicName,
 			refreshProjectAfterTopicRename: resolvedContext.refreshProjectAfterTopicRename,
 			renameProject: resolvedContext.renameProject,

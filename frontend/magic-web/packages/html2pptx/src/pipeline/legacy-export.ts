@@ -17,6 +17,7 @@ import { prepareSlideNodes } from "./render-slide"
 import { sliceByPageHeight } from "./slice-nodes"
 import { createPresentation, ensureFileName } from "../packaging/pptx-document"
 import { drawByRegistry } from "../registry/drawer-registry"
+import { materializeLegacyPptImageNodes } from "../materialize/legacy-images"
 import type { PPTNode } from "../ir/node"
 import type { SerializablePPTNode } from "../ir/serialize"
 import type { Html2PptxRuntime } from "../runtime"
@@ -156,6 +157,7 @@ async function runLegacyExport(
 			const slide = presentation.addSlide()
 			const background = backgrounds[index]
 			if (background) slide.background = { color: background }
+			await materializeLegacyPptImageNodes(slides[index], signal, options.onResourceLoadError)
 			for (const node of slides[index]) {
 				throwIfAborted(signal)
 				await drawByRegistry(slide, node as unknown as SerializablePPTNode, signal)
@@ -197,7 +199,8 @@ async function* normalizePages(
 	}
 	let fallbackIndex = 0
 	for await (const input of content as
-		Iterable<StreamingHtmlPageInput> | AsyncIterable<StreamingHtmlPageInput>) {
+		| Iterable<StreamingHtmlPageInput>
+		| AsyncIterable<StreamingHtmlPageInput>) {
 		throwIfAborted(signal)
 		if (typeof input === "string") yield { index: fallbackIndex, html: input }
 		else if (input && typeof input.html === "string") yield input

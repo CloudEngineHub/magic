@@ -236,10 +236,7 @@ const BaseLayoutPc = observer(() => {
 									: "opacity-100 hover:bg-primary/30",
 							)}
 						>
-							<ResizeGrip
-								orientation="vertical"
-								className="rounded-md border border-gray-200 bg-white px-0.5 py-1"
-							/>
+							<ResizeGrip orientation="vertical" />
 							<ResizableCollapseFeedback
 								dragging={resizeDrag.dragging}
 								collapseProgress={resizeDrag.progress}

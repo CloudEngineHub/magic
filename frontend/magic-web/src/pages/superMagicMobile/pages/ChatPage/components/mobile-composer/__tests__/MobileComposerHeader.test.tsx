@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import MobileComposerHeader from "../MobileComposerHeader"
 
 vi.mock("@/pages/superMagic/components/MainInputContainer/stores", () => ({
+	useOptionalSceneStateStore: () => null,
 	sceneStateStore: {
 		currentScene: null,
 		setCurrentScene: vi.fn(),

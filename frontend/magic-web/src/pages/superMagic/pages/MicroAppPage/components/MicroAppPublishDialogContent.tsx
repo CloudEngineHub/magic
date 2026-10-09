@@ -8,13 +8,6 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Label } from "@/components/shadcn-ui/label"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/shadcn-ui/select"
 import { Separator } from "@/components/shadcn-ui/separator"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { cn } from "@/utils/cn"
@@ -26,7 +19,8 @@ import {
 	type ShareTarget,
 } from "@/pages/superMagic/components/Share/ShareFields"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
-import { collectRootHtmlFiles, getAttachmentId } from "../utils/microAppFiles"
+import MicroAppEntryFileSelect from "./MicroAppEntryFileSelect"
+import MicroAppMobileExpiryField from "./MicroAppMobileExpiryField"
 
 import type {
 	MicroAppPublishFormState,
@@ -83,7 +77,6 @@ const MICRO_APP_PUBLISH_TYPES = [
 const PERSONAL_MICRO_APP_PUBLISH_TYPES = MICRO_APP_PUBLISH_TYPES.filter(
 	(type) => type !== ShareType.Organization,
 )
-const AUTO_DEFAULT_OPEN_FILE_VALUE = "__auto__"
 
 /** 发布表单展示层，桌面弹窗和移动端底部弹窗共用同一份字段与操作。 */
 export default function MicroAppPublishDialogContent({
@@ -128,7 +121,6 @@ export default function MicroAppPublishDialogContent({
 }: MicroAppPublishDialogContentProps) {
 	const { t } = useTranslation("super")
 	const isBusy = saving || unpublishing || coverUploading
-	const htmlEntries = collectRootHtmlFiles(attachmentList)
 	// 全部分享方式被管理员管控关闭时，分享设置里只有方式与提示有意义，其余项不再渲染。
 	const hasNoPermittedShareType = permittedShareTypes?.length === 0
 	const handleCoverPaste: ClipboardEventHandler<HTMLDivElement> = (event) => {
@@ -160,7 +152,8 @@ export default function MicroAppPublishDialogContent({
 			className={cn(
 				mobile
 					? "flex min-h-0 flex-1 flex-col overflow-hidden"
-					: "grid h-[80dvh] max-h-[80dvh] min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden",
+					: "grid max-h-[80dvh] min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden",
+				!mobile && (loading || hasPublished) && "h-[80dvh]",
 			)}
 			data-testid="micro-app-publish-dialog"
 			data-mobile={mobile ? "true" : undefined}
@@ -168,7 +161,14 @@ export default function MicroAppPublishDialogContent({
 		>
 			{/* 顶部发布状态和下方设置共用单列轨道，避免跨列元素生成隐式空白列。 */}
 			{!mobile ? (
-				<div className="grid h-full min-h-0 min-w-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
+				<div
+					className={cn(
+						"grid min-h-0 min-w-0 grid-cols-1 gap-4 p-5",
+						loading || hasPublished
+							? "grid-rows-[auto_minmax(0,1fr)]"
+							: "grid-rows-[minmax(0,1fr)]",
+					)}
+				>
 					{loading ? (
 						<div
 							className="h-[156px] rounded-lg border border-emerald-200/70 bg-emerald-50/40"
@@ -185,10 +185,10 @@ export default function MicroAppPublishDialogContent({
 						/>
 					) : null}
 					<div
-						className="grid h-full min-h-0 min-w-0 grid-cols-2 items-start gap-4"
+						className="grid min-h-0 min-w-0 grid-cols-2 items-start gap-4"
 						data-testid="micro-app-publish-basic-settings"
 					>
-						{/* 两个面板共享固定轨道高度，内容只在各自 ScrollArea 内滚动，避免遮挡底部操作区。 */}
+						{/* 两个面板共享受限轨道高度，内容只在各自 ScrollArea 内滚动，避免遮挡底部操作区。 */}
 						<ScrollArea
 							className="h-full min-h-0 min-w-0 self-stretch rounded-lg bg-muted/60"
 							data-testid="micro-app-publish-scroll-area"
@@ -237,7 +237,7 @@ export default function MicroAppPublishDialogContent({
 												{t("microAppPage.publish.coverUpload")}
 											</Button>
 											{formState.coverFileKey !== undefined ||
-												formState.coverUrl ? (
+											formState.coverUrl ? (
 												<Button
 													type="button"
 													variant="ghost"
@@ -275,43 +275,13 @@ export default function MicroAppPublishDialogContent({
 									<Label htmlFor="micro-app-default-open-file">
 										{t("microAppPage.publish.defaultOpenFile")}
 									</Label>
-									<Select
-										value={
-											formState.defaultOpenFileId ??
-											AUTO_DEFAULT_OPEN_FILE_VALUE
-										}
-										onValueChange={(value) =>
-											onDefaultOpenFileChange(
-												value === AUTO_DEFAULT_OPEN_FILE_VALUE
-													? null
-													: value,
-											)
-										}
-									>
-										<SelectTrigger
-											id="micro-app-default-open-file"
-											data-testid="micro-app-default-open-file"
-											className="mt-2 h-9 w-full bg-background"
-										>
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent align="start" className="max-h-72">
-											<SelectItem value={AUTO_DEFAULT_OPEN_FILE_VALUE}>
-												{t("microAppPage.publish.defaultOpenFileAuto")}
-											</SelectItem>
-											{htmlEntries.map((item) => {
-												const id = String(getAttachmentId(item))
-												return (
-													<SelectItem key={id} value={id}>
-														{item.file_name ||
-															item.filename ||
-															item.name ||
-															id}
-													</SelectItem>
-												)
-											})}
-										</SelectContent>
-									</Select>
+									<MicroAppEntryFileSelect
+										attachmentList={attachmentList}
+										value={formState.defaultOpenFileId}
+										onChange={onDefaultOpenFileChange}
+										disabled={isBusy || loading}
+										mobile={mobile}
+									/>
 									<p className="mt-1 text-xs text-muted-foreground">
 										{t("microAppPage.publish.defaultOpenFileDescription")}
 									</p>
@@ -373,7 +343,7 @@ export default function MicroAppPublishDialogContent({
 									{!hasNoPermittedShareType && (
 										<>
 											{!isPersonalOrganization &&
-												formState.shareType === ShareType.Organization ? (
+											formState.shareType === ShareType.Organization ? (
 												<ShareRangeField
 													value={formState.shareRange}
 													onChange={onShareRangeChange}
@@ -392,7 +362,7 @@ export default function MicroAppPublishDialogContent({
 									)}
 								</div>
 								{!hasNoPermittedShareType &&
-									formState.shareType === ShareType.PasswordProtected ? (
+								formState.shareType === ShareType.PasswordProtected ? (
 									<div>
 										<Label htmlFor="micro-app-publish-password">
 											{t("microAppPage.publish.password")}
@@ -504,7 +474,7 @@ export default function MicroAppPublishDialogContent({
 												{t("microAppPage.publish.coverUpload")}
 											</Button>
 											{formState.coverFileKey !== undefined ||
-												formState.coverUrl ? (
+											formState.coverUrl ? (
 												<Button
 													type="button"
 													variant="ghost"
@@ -580,7 +550,7 @@ export default function MicroAppPublishDialogContent({
 										{!hasNoPermittedShareType ? (
 											<>
 												{!isPersonalOrganization &&
-													formState.shareType === ShareType.Organization ? (
+												formState.shareType === ShareType.Organization ? (
 													<ShareRangeField
 														value={formState.shareRange}
 														onChange={onShareRangeChange}
@@ -590,7 +560,7 @@ export default function MicroAppPublishDialogContent({
 													/>
 												) : null}
 
-												<ShareExpiryField
+												<MicroAppMobileExpiryField
 													value={formState.shareExpiry}
 													onChange={onShareExpiryChange}
 												/>
@@ -599,7 +569,7 @@ export default function MicroAppPublishDialogContent({
 									</div>
 
 									{!hasNoPermittedShareType &&
-										formState.shareType === ShareType.PasswordProtected ? (
+									formState.shareType === ShareType.PasswordProtected ? (
 										<div
 											className={cn(
 												"flex flex-col gap-2",
@@ -646,53 +616,13 @@ export default function MicroAppPublishDialogContent({
 											<Label htmlFor="micro-app-default-open-file">
 												{t("microAppPage.publish.defaultOpenFile")}
 											</Label>
-											<Select
-												value={
-													formState.defaultOpenFileId ??
-													AUTO_DEFAULT_OPEN_FILE_VALUE
-												}
-												onValueChange={(value) =>
-													onDefaultOpenFileChange(
-														value === AUTO_DEFAULT_OPEN_FILE_VALUE
-															? null
-															: value,
-													)
-												}
+											<MicroAppEntryFileSelect
+												attachmentList={attachmentList}
+												value={formState.defaultOpenFileId}
+												onChange={onDefaultOpenFileChange}
 												disabled={isBusy || loading}
-											>
-												<SelectTrigger
-													id="micro-app-default-open-file"
-													className={cn(
-														"w-full bg-background",
-														mobile ? "h-11" : "h-9",
-													)}
-													data-testid="micro-app-default-open-file"
-												>
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent align="start" className="max-h-72">
-													<SelectItem
-														value={AUTO_DEFAULT_OPEN_FILE_VALUE}
-													>
-														{t(
-															"microAppPage.publish.defaultOpenFileAuto",
-														)}
-													</SelectItem>
-													{htmlEntries.map((item) => {
-														const id = String(getAttachmentId(item))
-														const name =
-															item.file_name ||
-															item.filename ||
-															item.name ||
-															id
-														return (
-															<SelectItem key={id} value={id}>
-																{name}
-															</SelectItem>
-														)
-													})}
-												</SelectContent>
-											</Select>
+												mobile={mobile}
+											/>
 											<p className="mt-1 text-xs text-muted-foreground">
 												{t(
 													"microAppPage.publish.defaultOpenFileDescription",

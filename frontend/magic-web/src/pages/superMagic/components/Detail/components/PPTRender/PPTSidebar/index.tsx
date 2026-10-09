@@ -4,6 +4,8 @@ import { toast } from "sonner"
 import { Plus, PanelLeftClose } from "lucide-react"
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual"
 import SortableSlideItem from "./SortableSlideItem"
+import PPTDeckToolbar from "./PPTDeckToolbar"
+import { moveSelectedToGap } from "../utils/slideSelection"
 import DropIndicator from "./DropIndicator"
 import type { PPTSidebarProps, SlideItem } from "./types"
 import {
@@ -38,6 +40,9 @@ const DRAG_AUTO_SCROLL_EDGE_SIZE = 56
 const DRAG_AUTO_SCROLL_MAX_SPEED = 20
 
 function PPTSidebar({
+	tools,
+	hiddenPaths,
+	onOpenFile,
 	onSlideClick,
 	onSortChange,
 	onInsertSlide,
@@ -93,7 +98,9 @@ function PPTSidebar({
 	const lastPointerRef = useRef<{ clientX: number; clientY: number } | null>(null)
 	const autoScrollFrameRef = useRef<number | null>(null)
 	const dragStartItemIdsRef = useRef<string[]>([])
+	const dragStartFileIdsRef = useRef<string[]>([])
 	const dragStartSlidesRef = useRef<SlideItem[] | null>(null)
+	const dragSelectionRef = useRef<ReadonlySet<string>>(new Set())
 
 	// Store updates must not replace the local ordering while the native drag source is active.
 	useEffect(() => {
@@ -212,6 +219,7 @@ function PPTSidebar({
 		stopAutoScroll()
 		draggedIdRef.current = null
 		dragStartItemIdsRef.current = []
+		dragStartFileIdsRef.current = []
 		dragStartSlidesRef.current = null
 		lastPointerRef.current = null
 		setDraggedId(null)
@@ -265,8 +273,25 @@ function PPTSidebar({
 	})
 
 	const handleSlideDragStart = useMemoizedFn((e: React.DragEvent, slideId: string) => {
+		if (!allowEdit || tools?.busy) {
+			e.preventDefault()
+			return
+		}
+		const draggedSlide = itemsRef.current.find((slide) => slide.id === slideId)
+		const fileId = draggedSlide ? store.getFileIdByPath(draggedSlide.path) : undefined
+		if (tools && !fileId) {
+			e.preventDefault()
+			return
+		}
+		// Freeze file identities at drag start; later selection edits cannot change this move.
+		dragSelectionRef.current = new Set(
+			tools && fileId && tools.selected.has(fileId) ? tools.selected : fileId ? [fileId] : [],
+		)
 		draggedIdRef.current = slideId
 		dragStartItemIdsRef.current = itemsRef.current.map((item) => item.id)
+		dragStartFileIdsRef.current = itemsRef.current.map(
+			(item) => store.getFileIdByPath(item.path) || "",
+		)
 		dragStartSlidesRef.current = latestSlidesRef.current
 		setDraggedId(slideId)
 		updateDropTarget(null)
@@ -302,6 +327,10 @@ function PPTSidebar({
 
 		e.preventDefault()
 		e.stopPropagation()
+		if (tools?.busy) {
+			clearDragState()
+			return
+		}
 		if (!currentDropTarget) {
 			clearDragState()
 			return
@@ -312,7 +341,13 @@ function PPTSidebar({
 		const storeStructureIsUnchanged =
 			currentStoreSlides === dragStartSlidesRef.current &&
 			currentStoreSlides.length === dragStartItemIds.length &&
-			currentStoreSlides.every((slide, index) => slide.id === dragStartItemIds[index])
+			currentStoreSlides.every(
+				(slide, index) =>
+					slide.id === dragStartItemIds[index] &&
+					(!tools ||
+						(store.getFileIdByPath(slide.path) || "") ===
+							dragStartFileIdsRef.current[index]),
+			)
 		if (!storeStructureIsUnchanged) {
 			// Avoid overwriting a concurrent insert/delete/reorder with the frozen drag snapshot.
 			itemsRef.current = currentStoreSlides
@@ -322,6 +357,21 @@ function PPTSidebar({
 		}
 
 		const currentItems = itemsRef.current
+		if (tools) {
+			const nextItems = moveSelectedToGap(
+				currentItems,
+				dragSelectionRef.current,
+				(slide) => store.getFileIdByPath(slide.path) || "",
+				currentDropTarget.gapIndex,
+			)
+			// The ordinary-deck write owner updates the list only after confirmed save.
+			// Keeping the old list here also preserves it after a failed manifest write.
+			if (nextItems.some((slide, index) => slide.id !== currentItems[index]?.id)) {
+				void tools.reorder(nextItems.map((slide) => slide.path))
+			}
+			clearDragState()
+			return
+		}
 		const nextItems = moveItemToGap(currentItems, currentDraggedId, currentDropTarget.gapIndex)
 		if (nextItems !== currentItems) {
 			itemsRef.current = nextItems
@@ -349,12 +399,12 @@ function PPTSidebar({
 	// Handle insert slide
 	function handleInsertSlide(position: number, direction: "before" | "after") {
 		if (!onInsertSlide) return
-		onInsertSlide(position, direction)
+		return onInsertSlide(position, direction)
 	}
 
 	function handleDuplicateSlide(index: number) {
 		if (!onDuplicateSlide) return
-		onDuplicateSlide(index)
+		return onDuplicateSlide(index)
 	}
 
 	// Handle delete slide
@@ -370,13 +420,13 @@ function PPTSidebar({
 	// Handle rename slide
 	function handleRenameSlide(index: number, newFileName: string) {
 		if (!onRenameSlide) return
-		onRenameSlide(index, newFileName)
+		return onRenameSlide(index, newFileName)
 	}
 
 	// Handle refresh slide
 	function handleRefreshSlide(index: number) {
 		if (!onRefreshSlide) return
-		onRefreshSlide(index)
+		return onRefreshSlide(index)
 	}
 
 	// Handle regenerate screenshot only
@@ -412,6 +462,25 @@ function PPTSidebar({
 		<TooltipProvider>
 			<div
 				data-testid="ppt-sidebar"
+				onKeyDown={(event) => {
+					if (
+						!tools ||
+						tools.busy ||
+						!(event.target instanceof HTMLElement) ||
+						!event.currentTarget.contains(event.target) ||
+						event.target.closest("input,textarea,select,[contenteditable=true]")
+					)
+						return
+					if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+						event.preventDefault()
+						event.stopPropagation()
+						tools.selectAll()
+					} else if (event.key === "Escape" && tools.selecting) {
+						event.preventDefault()
+						event.stopPropagation()
+						tools.clearSelection()
+					}
+				}}
 				className={cn(
 					"relative flex border-border bg-background",
 					TAILWIND_Z_INDEX_CLASSES.BASE.SIDEBAR,
@@ -455,7 +524,7 @@ function PPTSidebar({
 											size={"sm"}
 											data-testid="ppt-sidebar-add-slide-button"
 											onClick={handleAddNewSlide}
-											disabled={!onInsertSlide}
+											disabled={!onInsertSlide || tools?.busy}
 											className={cn(
 												"border border-border text-foreground",
 												"w-full flex-1",
@@ -477,6 +546,15 @@ function PPTSidebar({
 					</div>
 				)}
 
+				{/* Mobile keeps the thumbnail strip without the selection toolbar's column. */}
+				{tools && !isMobile ? (
+					<PPTDeckToolbar
+						tools={tools}
+						allowEdit={allowEdit}
+						slideCount={slides.length}
+						isMobile={isMobile}
+					/>
+				) : null}
 				{/* Slides list */}
 				<ScrollArea
 					data-testid="ppt-sidebar-slides-list"
@@ -540,7 +618,56 @@ function PPTSidebar({
 										<SortableSlideItem
 											item={item}
 											isActive={item.index === activeIndex}
-											onClick={() => onSlideClick(item.index)}
+											onClick={(event) => {
+												const fileId = store.getFileIdByPath(item.path)
+												if (
+													tools &&
+													!tools.busy &&
+													(tools.selecting ||
+														event?.metaKey ||
+														event?.ctrlKey ||
+														event?.shiftKey)
+												) {
+													if (fileId)
+														tools.select(
+															fileId,
+															Boolean(event?.shiftKey),
+														)
+													return
+												}
+												onSlideClick(item.index)
+											}}
+											selectionMode={tools?.selecting}
+											removeOnly={Boolean(tools)}
+											isSelected={tools?.selected.has(
+												store.getFileIdByPath(item.path) || "",
+											)}
+											onSelect={
+												tools && !tools.busy
+													? (range) =>
+															tools.select(
+																store.getFileIdByPath(item.path) ||
+																	"",
+																range,
+															)
+													: undefined
+											}
+											isHidden={hiddenPaths?.has(item.path)}
+											onToggleHidden={
+												tools && allowEdit && !tools.busy
+													? () => {
+															const fileId = store.getFileIdByPath(
+																item.path,
+															)
+															if (fileId)
+																return tools.setHidden(
+																	!hiddenPaths?.has(item.path),
+																	new Set([fileId]),
+																)
+														}
+													: undefined
+											}
+
 											totalSlides={items.length}
 											slideFileId={store.getFileIdByPath(item.path)}
 											slideFullRelativePath={store.getFullRelativePath(
@@ -577,13 +704,14 @@ function PPTSidebar({
 													? () => onReplaceSlideTemplate(item.index)
 													: undefined
 											}
+											onOpenFile={onOpenFile}
 											onLocateFile={() => handleLocateFile(item.index)}
 											isMobile={isMobile}
 											className={cn(
 												isMobile ? "h-full" : "min-h-[120px]",
 												draggedId === item.id && "opacity-50",
 											)}
-											allowEdit={allowEdit}
+											allowEdit={allowEdit && !tools?.busy}
 											onSlideDragStart={handleSlideDragStart}
 										/>
 									</div>

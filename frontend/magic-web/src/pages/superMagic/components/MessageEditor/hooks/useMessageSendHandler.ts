@@ -24,6 +24,8 @@ interface UseMessageSendHandlerParams {
 	collectMentionItemsFromEditor: () => MentionListItem[]
 	promoteCanvasPendingMentions?: () => void
 	onSendStart?: () => void
+	/** Blank home creation may fail before dispatch; keep its draft until success is confirmed. */
+	awaitSendSuccess?: boolean
 	isMountedRef: MutableRefObject<boolean>
 }
 
@@ -40,6 +42,7 @@ export default function useMessageSendHandler({
 	collectMentionItemsFromEditor,
 	promoteCanvasPendingMentions,
 	onSendStart,
+	awaitSendSuccess = false,
 	isMountedRef,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
@@ -104,6 +107,7 @@ export default function useMessageSendHandler({
 		if (!isQueueDraft) store.draftStore.startSendingGuard()
 		const mentionItems = collectMentionItemsFromEditor()
 
+		const draftValue = store.editorStore.value
 		const sendResult = onSend?.({
 			value: content,
 			topicMode,
@@ -118,9 +122,21 @@ export default function useMessageSendHandler({
 			await sendResult
 			return
 		}
+		if (awaitSendSuccess) {
+			let success = false
+			try {
+				success = (await sendResult) === true
+			} finally {
+				if (!success) {
+					store.draftStore.resetSendingGuard()
+					store.draftStore.saveDraft({ value: store.editorStore.value })
+				}
+			}
+			if (!success) return
+		}
 
 		store.draftStore.createSentDraft({
-			value: store.editorStore.value,
+			value: awaitSendSuccess ? draftValue : store.editorStore.value,
 			onError: (error) => {
 				if (isMountedRef.current) {
 					console.error("Failed to clear draft:", error)
