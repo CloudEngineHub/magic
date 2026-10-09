@@ -1,13 +1,19 @@
 import { observer } from "mobx-react-lite"
+import { reaction } from "mobx"
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router"
 import { X } from "lucide-react"
 import { useNavigateToSuperHome } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/useNavigateToSuperHome"
+import type { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { topicStore } from "@/pages/superMagic/stores/core"
+import { projectVisibleMessagesByRevokedTail } from "@/pages/superMagic/utils/project-visible-messages-by-revoked-tail"
 import {
+	HOME_ONBOARDING_RUN_EVENT,
+	HOME_ONBOARDING_STATE_EVENT,
 	getHomeOnboardingRewardList,
 	hasHomeOnboardingTasks,
 	HOME_ONBOARDING_TASK_CODE,
@@ -27,28 +33,59 @@ interface HomeOnboardingFirstWorkCongratsProps {
 }
 
 /**
+ * What the topic's conversation has come to rest on.
+ *
+ * Read out of the store the way the rest of the workspace reads it — the canonical message list for
+ * the topic, its revoked-tail projection, and the assistant's own last message — because that
+ * message is the one whose `status` carries the *topic's* execution status rather than its own
+ * (`stores/decision.md`, LF-03): the loading hook and the read-progress hook both read it there for
+ * that reason. A tool message is skipped rather than accepted as the authority, since a tool that
+ * finished says nothing about whether the work did.
+ *
+ * The node behind the message answers first because it is the live field — the store's merge writes
+ * the item's `superStatus` from it, not the other way round — and the item is the fallback for a
+ * conversation that arrived without one.
+ */
+function readConversationTailStatus(chatTopicId: string): string | undefined {
+	const messages = projectVisibleMessagesByRevokedTail(
+		(superMagicStore.messages?.get(chatTopicId) || []) as SuperMagicMessageItem[],
+	)
+	const lastAssistant = messages.findLast((message) => message?.role === "assistant")
+	const nodeStatus = superMagicStore.getMessageNode(lastAssistant?.super_message_id)?.status
+	const status = nodeStatus ?? lastAssistant?.superStatus
+	return status == null ? undefined : String(status)
+}
+
+/**
  * The congratulations a new account gets the first time one of its topics finishes.
  *
- * **What opens it.** The store announces a topic's execution ending once per execution, with the
- * authority of the assistant's own final message — a signal that is deliberately silent about
- * replays, history and quiet recoveries, so opening an old topic cannot congratulate anybody. That
- * is the event this listens to, and it only listens to the topic it is on: the route names the
- * project and the topic, and the subscription is scoped to the latter's chat id, so a task finishing
- * somewhere else in the workspace is not this page's news.
+ * **What opens it.** The conversation the page is on, read rather than listened to: its last
+ * assistant message carries the topic's own execution status, so a tail that has come to rest on
+ * `finished` is this app's word for "the work is done". Reading the state instead of waiting to be
+ * told about it is the point, and the reason this was rebuilt. The store's end-of-execution event
+ * is a *notification*: it is raised once, at the moment the status lands, and it reaches only
+ * whoever was already asking — so a page opened a moment later never hears it, and a topic whose
+ * ending arrives as part of the history it hydrates is deliberately silent about it
+ * (`eventPolicy: "silent_hydration"`). Either way the dialog simply never opened, while the status
+ * sat in the list the whole time.
  *
  * **The three answers it needs before it opens.** The account has to still be a new one, which is the
  * backend's task list rather than anything local (`hasHomeOnboardingTasks`: the list arrived, and it
  * carries something) — the same test the delivered-file tour makes, for the same reason. This
  * browser must not have congratulated this account already, which is the one-shot flag below. And no
  * guided run may be on screen: a run owns the whole window for its own reasons, and a dialog landing
- * on top of one would be two overlays fighting over the same moment. That last one is read at the
- * moment the event arrives rather than watched, and a run it finds is a moment this dialog declines
- * rather than defers — it is spent by being shown, so postponing it would mean remembering when.
+ * on top of one would be two overlays fighting over the same moment.
+ *
+ * All three are asked again from scratch every time anything changes, rather than decided once when
+ * the conversation ends. That is what lets a run be waited out instead of declined: the moment is
+ * still owed, the conversation is still finished, and the run giving the screen back is simply
+ * another moment to ask again — as is the backend's list landing after the work was already done.
  *
  * **What it is spent by.** Being shown, not being answered, and it is written before the first paint
  * of the dialog for the reason the introduction dialog writes its own flag the same way: coming back
  * to a reload with the dialog still up has shown it just as much as clicking it away has, and the
- * write must win the race against either exit.
+ * write must win the race against either exit. Being spent is also what makes asking repeatedly
+ * harmless: the answers above can only open it once.
  *
  * **What it deliberately does not do.** It does not complete the AI-work task. That one the backend
  * finishes by itself — the client's own claim path skips it on purpose — so the only thing left for
@@ -90,7 +127,7 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 	/*
 	 * The project page is the route that carries both ids, and it is the only page this dialog
 	 * belongs to. A topic without its chat id is a topic the store has not finished loading, and
-	 * subscribing without the scope would answer for every topic in the workspace.
+	 * asking about one would mean asking about every topic in the workspace.
 	 */
 	const onProjectPage = Boolean(projectId && topicId)
 	const chatTopicId = selectedTopic?.chat_topic_id
@@ -98,36 +135,65 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 	useEffect(() => {
 		if (!onProjectPage || !chatTopicId) return
 
-		return superMagicStore.subscribe(
-			"topic.execution.ended",
-			({ payload }) => {
-				// Only a run that ended well is a piece of work to congratulate anybody on; the other
-				// two terminal states are the topic telling the user something went wrong.
-				if (payload.status !== "finished") return
-				if (isHomeOnboardingFirstWorkCongratsSpent(userMagicId)) return
-				if (!hasHomeOnboardingTasks(userMagicId)) return
-				if (isHomeOnboardingRunActive()) return
+		/**
+		 * Whether the moment is owed, asked from scratch — the conversation, the backend's list and
+		 * the run are all read here rather than remembered. Asking repeatedly is safe because being
+		 * shown is what spends it.
+		 */
+		const openIfEarned = () => {
+			/*
+			 * `finished` is a topic that stopped well, which is the whole of what there is to
+			 * congratulate. `error` and `suspended` are the same topic telling the user that
+			 * something went wrong, and `waiting_for_user` is not an ending at all — the topic has
+			 * handed control back and may be about to carry on.
+			 */
+			if (readConversationTailStatus(chatTopicId) !== TaskStatus.FINISHED) return
+			if (isHomeOnboardingFirstWorkCongratsSpent(userMagicId)) return
+			if (!hasHomeOnboardingTasks(userMagicId)) return
+			if (isHomeOnboardingRunActive()) return
 
-				/*
-				 * The figure is the backend's for the task just finished, read off the reward row
-				 * rather than written down here: the row is the same one the benefits card draws its
-				 * own totals from, and a second copy of the number is a second thing to keep in step.
-				 * A list that has not carried the row leaves the badge off rather than guessing at it.
-				 *
-				 * Read before the list is asked for again, and before the dialog is on screen — see
-				 * `points` above for why the order matters.
-				 */
-				setPoints(
-					getHomeOnboardingRewardList(userMagicId).rewards.find(
-						(row) => row.code === HOME_ONBOARDING_TASK_CODE["first-ai-work"],
-					)?.points,
-				)
-				spendHomeOnboardingFirstWorkCongrats(userMagicId)
-				void refreshHomeOnboardingRewardList(userMagicId)
-				setShown(true)
-			},
-			{ scope: { topicId: chatTopicId } },
+			/*
+			 * The figure is the backend's for the task just finished, read off the reward row
+			 * rather than written down here: the row is the same one the benefits card draws its
+			 * own totals from, and a second copy of the number is a second thing to keep in step.
+			 * A list that has not carried the row leaves the badge off rather than guessing at it.
+			 *
+			 * Read before the list is asked for again, and before the dialog is on screen — see
+			 * `points` above for why the order matters.
+			 */
+			setPoints(
+				getHomeOnboardingRewardList(userMagicId).rewards.find(
+					(row) => row.code === HOME_ONBOARDING_TASK_CODE["first-ai-work"],
+				)?.points,
+			)
+			spendHomeOnboardingFirstWorkCongrats(userMagicId)
+			void refreshHomeOnboardingRewardList(userMagicId)
+			setShown(true)
+		}
+
+		/*
+		 * The conversation is watched rather than listened to: a reaction over the store's own list,
+		 * which answers for a topic that finishes while the page is up — and, because it is asked
+		 * immediately, for one that had already finished before the page got here.
+		 *
+		 * The two events are the other half of the same question, and they are not about the
+		 * conversation at all: the state can already be the finished one while what changed is one of
+		 * the reasons not to open yet. The backend's list landing is the first, and a guided run
+		 * giving the screen back is the second — neither of them moves the conversation, so nothing
+		 * would ask again without them.
+		 */
+		const stopWatchingConversation = reaction(
+			() => readConversationTailStatus(chatTopicId),
+			openIfEarned,
+			{ fireImmediately: true },
 		)
+		window.addEventListener(HOME_ONBOARDING_STATE_EVENT, openIfEarned)
+		window.addEventListener(HOME_ONBOARDING_RUN_EVENT, openIfEarned)
+		return () => {
+			stopWatchingConversation()
+			window.removeEventListener(HOME_ONBOARDING_STATE_EVENT, openIfEarned)
+			window.removeEventListener(HOME_ONBOARDING_RUN_EVENT, openIfEarned)
+		}
 	}, [chatTopicId, onProjectPage, userMagicId])
 
 	if (!shown) return null
