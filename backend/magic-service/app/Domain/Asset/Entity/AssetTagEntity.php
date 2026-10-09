@@ -8,11 +8,14 @@ declare(strict_types=1);
 namespace App\Domain\Asset\Entity;
 
 use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
+use App\Domain\SuperMagic\Common\Entity\ResolvesI18nText;
 use App\Infrastructure\Core\AbstractEntity;
 
 /** 素材标签组/标签。官方标签 owner_uid 为空，自定义标签归属当前用户。 */
 class AssetTagEntity extends AbstractEntity
 {
+    use ResolvesI18nText;
+
     protected ?int $id = null;
 
     protected string $organizationCode = '';
@@ -99,6 +102,11 @@ class AssetTagEntity extends AbstractEntity
     {
         $this->nameI18n = $value;
         return $this;
+    }
+
+    public function getI18nName(string $language): string
+    {
+        return $this->resolveI18nText($this->nameI18n, $language);
     }
 
     public function getStatus(): int

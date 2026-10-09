@@ -38,7 +38,7 @@ class AssetAssembler
             'id' => (string) $tag->getId(),
             'parentId' => (string) $tag->getParentId(),
             'nodeType' => $tag->getNodeType()->value,
-            'name' => self::localizedTagName($tag),
+            'name' => $tag->getI18nName(self::language()),
             'ownerUid' => $tag->getOwnerUid(),
             'isOfficial' => $tag->getOwnerUid() === null,
         ];
@@ -118,10 +118,4 @@ class AssetAssembler
         return CoContext::getLanguage();
     }
 
-    private static function localizedTagName(AssetTagEntity $tag): string
-    {
-        $nameI18n = $tag->getNameI18n();
-        $language = self::language();
-        return (string) ($nameI18n[$language] ?? $nameI18n['default'] ?? '');
-    }
 }
