@@ -825,25 +825,14 @@ class RecycleBinRestoreDomainService
             $restored->setUpdatedAt(date('Y-m-d H:i:s'));
             $this->taskFileRepository->updateById($restored, 'restore', false);
 
-            // 8. Bump the restored row and both directory chains.  Resolve
-            // the union after the row is active so the target receives a new
-            // metadata_version; suppress only its intermediate event because
-            // the final restore snapshot is appended below.
-            $chainEntities = $this->taskFileRepository->getFilesWithParentsByIds(
-                array_values(array_filter([
-                    $fileId,
-                    $oldParentId,
-                    $targetParentId,
-                ], static fn (?int $id): bool => $id !== null && $id > 0))
-            );
-            $chainIds = array_values(array_unique(array_map(
-                static fn (TaskFileEntity $chainEntity): int => (int) $chainEntity->getFileId(),
-                $chainEntities
-            )));
-            $this->taskFileRepository->incrementMetadataVersionByIdsWithJournal(
-                $chainIds,
-                [$fileId]
-            );
+            // 8. Move the restored row's version (the final restore snapshot
+            // is appended below and must carry the post-bump value) plus both
+            // directory listings that the restore changed.
+            $this->taskFileRepository->bumpMetadataVersions(array_values(array_filter([
+                $fileId,
+                $oldParentId,
+                $targetParentId,
+            ], static fn (?int $id): bool => $id !== null && $id > 0)));
 
             // Publish exactly one restore event after the parent revision bump
             // so the snapshot is the final committed representation.

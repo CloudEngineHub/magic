@@ -1107,11 +1107,10 @@ class TaskFileDomainService
             // Save to database
             $taskFileEntity = $this->insertOrUpdate($taskFileEntity);
 
-            // A new child changes the contents of its parent directory and all
-            // ancestor directory listings. Keep the MagicFS metadata cache
-            // invalidation generic; .magic is not a special case here.
+            // A new child changes its containing directory's listing; the
+            // child's own row was appended by insertOrUpdate above.
             if ($parentId > 0) {
-                $this->incrementVersionChain((string) $parentId);
+                $this->bumpFileTreeVersions([$parentId]);
             }
 
             Db::commit();
@@ -1211,11 +1210,12 @@ class TaskFileDomainService
 
         $taskFileEntity = $this->insertOrUpdate($taskFileEntity);
 
-        // Keep project-file creation consistent with createFile(): creating a
-        // child invalidates the parent-to-root metadata version chain.
-        // Idempotent existing files return above, so this runs only for new rows.
+        // Keep project-file creation consistent with createFile(): a new child
+        // changes the containing directory's listing. The child's own row is
+        // appended by insertOrUpdate above; idempotent existing files return
+        // before this, so it runs only for new rows.
         if ($parentId > 0) {
-            $this->incrementVersionChain((string) $parentId);
+            $this->bumpFileTreeVersions([$parentId]);
         }
 
         return $taskFileEntity;
@@ -2482,20 +2482,24 @@ class TaskFileDomainService
             return;
         }
 
-        if ($oldParentId !== null) {
-            $this->incrementVersionChain((string) $oldParentId);
-        }
-        $this->incrementVersionChain((string) $newParentId);
+        // Both directories' listings changed; the moved node's own row is
+        // appended by whoever performed the move.
+        $this->bumpFileTreeVersions(
+            $oldParentId === null ? [$newParentId] : [$oldParentId, $newParentId]
+        );
     }
 
     /**
-     * 外部复制操作后同步目标父目录链的元数据版本号.
+     * 外部复制操作后同步目标父目录的元数据版本号.
+     *
+     * 复制进来的节点由调用方各自落 journal 行；这里只让目标目录的列表版本
+     * 前移，使目录版本做缓存键的读者看到它已过期。
      *
      * @param int $targetParentId 目标父目录ID
      */
     public function syncVersionAfterExternalCopy(int $targetParentId): void
     {
-        $this->incrementVersionChain((string) $targetParentId);
+        $this->bumpFileTreeVersions([$targetParentId]);
     }
 
     /**
@@ -3878,21 +3882,19 @@ class TaskFileDomainService
                     : $this->taskFileRepository->updateById($fileEntity, $wasRestored ? 'restore' : null, false);
 
                 if ($isNewFile) {
-                    $this->incrementVersionChain((string) $parentId);
+                    // The child's own row was appended by insertOrUpdate.
+                    $this->bumpFileTreeVersions([$parentId]);
                 } else {
                     $parentChanged = $oldParentId !== $parentId;
-                    if ($parentChanged) {
-                        // A move mutates the node and both directory
-                        // listings. Merge their ancestor chains so common
-                        // ancestors are bumped once; the final move/restore
-                        // event below carries the target's post-bump version.
-                        $this->incrementVersionChains(
-                            [$saved->getFileId(), $oldParentId, $parentId],
-                            [(int) $saved->getFileId()]
-                        );
-                    } else {
-                        $this->incrementVersionChain((string) $saved->getFileId(), false);
-                    }
+                    // A move mutates the node and both directory listings; a
+                    // plain update mutates only the node. All of them get a
+                    // fresh version before the single final snapshot below so
+                    // the row a reader sees matches the version it carries.
+                    $this->bumpFileTreeVersions(
+                        $parentChanged
+                            ? [$saved->getFileId(), $oldParentId, $parentId]
+                            : [$saved->getFileId()]
+                    );
                 }
 
                 if (! $isNewFile) {
@@ -3927,26 +3929,17 @@ class TaskFileDomainService
     }
 
     /**
-     * Update the parent chain and publish precise snapshots without walking
-     * descendants. The optional flag is used by mutation paths that publish a
-     * final operation for the starting row themselves.
-     */
-    public function incrementVersionChain(string $fileId, bool $emitSelfEvent = true): void
-    {
-        $this->getMagicFSFileDomainService()->incrementVersionChain($fileId, $emitSelfEvent);
-    }
-
-    /**
-     * Increment the deduplicated union of several parent chains.  This is
-     * used by move/restore paths that must update the target and both old/new
-     * directory listings atomically without duplicate ancestor revisions.
+     * Advance the metadata versions of the nodes a mutation just touched.
      *
-     * @param array<int|string|null> $fileIds
-     * @param array<int|string> $excludeJournalIds
+     * Delegates to the MagicFS domain service because MagicFS owns what a
+     * metadata version means for a mounted tree; see
+     * MagicFSFileDomainService::bumpFileTreeVersions() for the contract.
+     *
+     * @param array<null|int|string> $fileIds
      */
-    public function incrementVersionChains(array $fileIds, array $excludeJournalIds = []): void
+    public function bumpFileTreeVersions(array $fileIds): void
     {
-        $this->getMagicFSFileDomainService()->incrementVersionChains($fileIds, $excludeJournalIds);
+        $this->getMagicFSFileDomainService()->bumpFileTreeVersions($fileIds);
     }
 
     /**
@@ -4071,7 +4064,9 @@ class TaskFileDomainService
             $before = $this->taskFileRepository->getById($originalFile->getFileId());
 
             $this->taskFileRepository->updateById($originalFile, null, false);
-            $this->incrementVersionChain((string) $fileId, false);
+            // The replacement's own row is appended below; only the version
+            // has to move first so that row carries the post-bump value.
+            $this->bumpFileTreeVersions([$fileId]);
 
             $final = $this->taskFileRepository->getById($originalFile->getFileId());
             if ($final === null) {
@@ -4304,7 +4299,7 @@ class TaskFileDomainService
         $newFileEntity = $this->taskFileRepository->insert($newFileEntity);
 
         if ($targetParentIdInt !== null) {
-            $this->incrementVersionChain((string) $targetParentIdInt);
+            $this->bumpFileTreeVersions([$targetParentIdInt]);
         }
 
         return $newFileEntity;

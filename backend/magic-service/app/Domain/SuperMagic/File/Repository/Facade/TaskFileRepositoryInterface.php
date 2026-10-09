@@ -675,36 +675,18 @@ interface TaskFileRepositoryInterface
     public function getVersionsByIds(array $fileIds): array;
 
     /**
-     * 递增指定文件的元数据版本号（原子操作）.
-     * 用于 MagicFS，在文件重命名、移动、权限修改等元数据操作时调用.
+     * Advance the metadata version of the given nodes.
      *
-     * @param int $fileId 文件ID
-     * @return int 更新后的元数据版本号
-     */
-    public function incrementMetadataVersionById(int $fileId): int;
-
-    /**
-     * 批量递增多个文件的元数据版本号（原子操作）.
-     * 用于优化版本链更新性能，一次 SQL 操作更新多个文件.
+     * Cache invalidation only: a version is a cache key, and moving it is not a
+     * change event. Journal rows are appended by the mutation that changed the
+     * node (insert / update / delete / move / restore), never by a bump, so a
+     * reader's window stays one row per changed node instead of one row per
+     * ancestor per change. See the implementation for the full rationale.
      *
-     * @param array $fileIds 文件ID数组
+     * @param array<null|int|string> $fileIds
+     * @return int rows whose version actually advanced
      */
-    public function incrementMetadataVersionByIds(array $fileIds): void;
-
-    /**
-     * Increment metadata versions and publish one precise update snapshot for
-     * every active MagicFS row in the chain. The file update, root head
-     * revision and journal rows are committed in the caller's transaction.
-     *
-     * @param int[] $fileIds
-     * @param int[] $excludeJournalIds rows that are still bumped but whose
-     *                                 final mutation event will be published
-     *                                 by the caller after all related writes
-     */
-    public function incrementMetadataVersionByIdsWithJournal(
-        array $fileIds,
-        array $excludeJournalIds = []
-    ): void;
+    public function bumpMetadataVersions(array $fileIds): int;
 
     /**
      * 批量获取文件元数据版本号.

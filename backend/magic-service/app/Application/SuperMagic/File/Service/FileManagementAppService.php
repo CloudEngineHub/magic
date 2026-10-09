@@ -2332,8 +2332,9 @@ class FileManagementAppService extends AbstractAppService
             array_values($newWavFiles)
         );
 
-        // Bump metadata version chain so MagicFS clients detect the directory change
-        $this->magicFSFileDomainService->incrementVersionChain((string) $dirEntity->getFileId());
+        // The inserted rows announced themselves; the directory only needs its
+        // listing version moved so MagicFS clients see the directory as stale.
+        $this->magicFSFileDomainService->bumpFileTreeVersions([$dirEntity->getFileId()]);
 
         return [
             'scanned' => count($wavFileList),

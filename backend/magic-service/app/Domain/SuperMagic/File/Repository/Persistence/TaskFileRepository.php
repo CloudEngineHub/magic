@@ -2538,106 +2538,53 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
-     * 递增指定文件的元数据版本号（原子操作）.
-     * 用于 MagicFS，在文件重命名、移动、权限修改等元数据操作时调用.
+     * Advance the metadata version of the given nodes.
+     *
+     * # This is cache invalidation, not a change event
+     *
+     * A metadata version is a node's cache key: a reader that cached the node
+     * compares versions to decide whether its copy is stale, so the server must
+     * move the version whenever a node's representation changes. Telling
+     * subscribers *what* changed is the journal's job, and the two acts are not
+     * the same one.
+     *
+     * Deriving a journal row from a version bump is what made the feed's size a
+     * function of tree depth: every create/delete/move bumped its whole ancestor
+     * chain and announced each level, so one file written at depth ten produced
+     * eleven rows, roughly two thirds of a busy tree's journal was directory
+     * bookkeeping, and a reader that could not name a single one of those rows
+     * had to discard the whole delta — while the information they carried ("this
+     * directory's listing changed") is derivable from the child row's
+     * `parent_id`, which every mutation already publishes.
+     *
+     * Rows therefore come from the mutation itself: insert / update / delete /
+     * move / restore each append exactly one self-describing row for the node
+     * they changed (see appendFileTreeChange). Nothing here writes a row.
+     *
+     * @param array<null|int|string> $fileIds
+     * @return int rows whose version actually advanced
      */
-    public function incrementMetadataVersionById(int $fileId): int
+    public function bumpMetadataVersions(array $fileIds): int
     {
-        // Route the convenience method through the same precise journal path
-        // so no metadata-version caller can silently invalidate a resident
-        // MagicFS cache.
-        $this->incrementMetadataVersionByIdsWithJournal([$fileId]);
-
-        // 返回更新后的元数据版本号
-        $metadataVersion = $this->model::query()
-            ->where('file_id', $fileId)
-            ->value('metadata_version');
-
-        return (int) ($metadataVersion ?? 1);
-    }
-
-    /**
-     * 批量递增多个文件的元数据版本号（原子操作）.
-     * 用于优化版本链更新性能，一次 SQL 操作更新多个文件.
-     */
-    public function incrementMetadataVersionByIds(array $fileIds): void
-    {
-        $this->incrementMetadataVersionByIdsWithJournal($fileIds);
-    }
-
-    /**
-     * Increment a metadata-version chain and publish the post-update image of
-     * each active row.  A caller may exclude a row when it is about to publish
-     * a different operation (for example a move or restore) after all version
-     * bumps have completed; this prevents duplicate revisions for one logical
-     * mutation while retaining the final metadata_version in that event.
-     */
-    public function incrementMetadataVersionByIdsWithJournal(
-        array $fileIds,
-        array $excludeJournalIds = []
-    ): void {
         $ids = array_values(array_unique(array_filter(
             array_map('intval', $fileIds),
             static fn (int $id): bool => $id > 0
         )));
         if ($ids === []) {
-            return;
+            return 0;
         }
 
-        $excluded = array_fill_keys(array_map('intval', $excludeJournalIds), true);
-        $write = function () use ($ids, $excluded): void {
-            $beforeModels = $this->model::query()
-                ->whereIn('file_id', $ids)
-                ->whereNull('deleted_at')
-                ->orderBy('file_id', 'ASC')
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('file_id');
-            if ($beforeModels->isEmpty()) {
-                return;
-            }
-
-            $now = date('Y-m-d H:i:s');
-            $this->model::query()
-                ->whereIn('file_id', $beforeModels->keys()->all())
-                ->whereNull('deleted_at')
-                ->update([
-                    'metadata_version' => Db::raw('metadata_version + 1'),
-                    'updated_at' => $now,
-                ]);
-
-            $afterModels = $this->model::query()
-                ->whereIn('file_id', $beforeModels->keys()->all())
-                ->whereNull('deleted_at')
-                ->get()
-                ->keyBy('file_id');
-            $pending = [];
-            foreach ($beforeModels as $beforeModel) {
-                $fileId = (int) $beforeModel->file_id;
-                if (isset($excluded[$fileId])) {
-                    continue;
-                }
-                $afterModel = $afterModels->get($beforeModel->file_id);
-                if ($afterModel === null) {
-                    continue;
-                }
-                $this->recordFileTreeMutation(
-                    new TaskFileEntity($beforeModel->toArray()),
-                    new TaskFileEntity($afterModel->toArray()),
-                    'update',
-                    null,
-                    null,
-                    $pending
-                );
-            }
-            $this->appendFileTreeChanges($pending);
-        };
-
-        if (Db::transactionLevel() > 0) {
-            $write();
-        } else {
-            Db::transaction($write);
-        }
+        // One statement, no lock: the increment is atomic, and there is no
+        // longer a before/after image to read for a journal row. Removing the
+        // SELECT ... FOR UPDATE also removes the contention it created on hot
+        // directories, where every sibling write queued behind the same rows.
+        return $this->model::query()
+            ->whereIn('file_id', $ids)
+            ->whereNull('deleted_at')
+            ->update([
+                'metadata_version' => Db::raw('metadata_version + 1'),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
     }
 
     /**
@@ -3265,16 +3212,46 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * Task-file storage also contains transient task attachments; recording
      * those under a synthetic project=0 file tree would grow the feed without
      * helping any mount and could make unrelated cursors appear active.
+     *
+     * # Which column identifies the tree (and which one must not)
+     *
+     * `space_type` + `project_id` / `topic_id` are the tree identity: a project
+     * tree is (project_id, topic_id = 0), a topic tree is (project_id, topic_id
+     * > 0), a user tree is (project_id = 0, user_id). `topic_id` on a project
+     * row is therefore *identity*, not "the conversation that wrote it", and a
+     * project row carrying a conversation topic belongs to no tree at all.
+     *
+     * That state used to be produced by the write path itself: sandbox clients
+     * (AGFS) attach the pod's `/app/.credentials/metadata.json` to every create
+     * request, so `MagicFSFileDomainService::createFile` stamped the *session*
+     * topic onto new project rows. This gate then dropped those rows — no
+     * error, no row — so a directory created inside a sandbox was never
+     * announced to any other mount. Files created under it stayed unlocatable
+     * forever, because the only row naming their parent was the one that had
+     * been dropped. The write path no longer stamps that column (see
+     * createFile), but rows written before that fix still exist, so the gate
+     * must not treat the annotation as identity either: a project row with a
+     * non-zero topic_id still resolves to a real project tree through its
+     * parent chain, and that is what a mount needs.
+     *
+     * The columns that carry provenance are `task_id`,
+     * `latest_modified_topic_id` and `latest_modified_task_id`; nothing here
+     * reads them.
      */
     private function shouldJournalFileTree(TaskFileEntity $entity): bool
     {
         return match ($entity->getSpaceType()) {
-            FileSpaceType::PROJECT->value => $entity->getProjectId() > 0 && $entity->getTopicId() === 0,
+            // A project tree is identified by its project; topic_id is an
+            // annotation on these rows and must not exclude them from the feed.
+            FileSpaceType::PROJECT->value => $entity->getProjectId() > 0,
+            // A topic tree does need its topic: without one the row has no tree
+            // identity to journal under.
             FileSpaceType::TOPIC->value => $entity->getProjectId() > 0 && $entity->getTopicId() > 0,
+            // A user tree is identified by its owner; topic_id (if any) is the
+            // same kind of annotation as above.
             FileSpaceType::USER->value => $entity->getProjectId() === 0
                 && $entity->getUserId() !== ''
-                && $entity->getOrganizationCode() !== ''
-                && $entity->getTopicId() === 0,
+                && $entity->getOrganizationCode() !== '',
             default => false,
         };
     }

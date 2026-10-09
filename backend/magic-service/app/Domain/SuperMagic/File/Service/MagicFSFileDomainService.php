@@ -314,23 +314,44 @@ class MagicFSFileDomainService
             $entity->setSort($sortValue);
         }
 
-        // 8. 设置 task_id 和 topic_id（如果提供了 superMagicTaskId）
+        // 8. 归属：树身份由空间决定，会话来源只写 provenance 列。
+        //
+        // topic_id 是**树身份**，不是"谁写的"：
+        //   - project / user 空间的树按 topic_id = 0 定义（列目录的按父游标查询、
+        //     按 (space, parent, name) 的精确查找、durable journal 的准入判定
+        //     shouldJournalFileTree() 都以此为前提），所以这里恒为 0；
+        //   - topic 空间的树按 topic_id = <话题> 定义，取 resolveSpaceContext
+        //     校验过的 $resolvedTopicId（它本身来自父目录，且已确认 > 0），
+        //     与 file_key 的 runtime/topic_{topicId}/ 边界同源。
+        //
+        // 刻意不写成「取父目录的 topic_id」：历史上被污染的行（沙箱建的目录带着
+        // 会话 topic）会把污染继续传给子孙，而 project/user 空间的答案与父目录无关。
+        //
+        // 曾经的写法把请求信封里的会话 topic 直接落到新行上：AGFS 会把沙箱
+        // /app/.credentials/metadata.json 的 topic_id 塞进每次建目录/建文件请求，
+        // 于是沙箱建出来的目录带着话题 id 落进 project 空间 —— 既不属于 project 树
+        // （topic_id = 0 的查询看不见），也不属于 topic 树（space_type 不是 topic），
+        // 还会被 journal 准入整行丢弃。后果是远端挂载永远不知道这个目录存在，
+        // 目录下新建的文件因父节点无从而解析不出路径（见
+        // TaskFileRepository::shouldJournalFileTree 的说明）。
+        $entity->setTopicId($spaceType === FileSpaceType::TOPIC->value ? $resolvedTopicId : 0);
+
+        // 会话/任务来源写进专门为此存在的列（"最新版本 topic/task"），信息不丢，
+        // 也不再与树身份混用；与 TaskFileDomainService 建版本时的写法一致。
         if (! empty($superMagicTaskId)) {
             $taskEntity = $this->taskRepository->getTaskById((int) $superMagicTaskId);
             if ($taskEntity) {
                 $entity->setTaskId($taskEntity->getId());
-                $entity->setTopicId($taskEntity->getTopicId());
+                $entity->setLatestModifiedTaskId($taskEntity->getId());
+                if ($taskEntity->getTopicId() > 0) {
+                    $entity->setLatestModifiedTopicId($taskEntity->getTopicId());
+                }
             }
         }
 
-        // Fallback: if topic_id is still 0 (no task found), use the explicitly passed topicId
-        if ($entity->getTopicId() === 0 && $topicId > 0) {
-            $entity->setTopicId($topicId);
-        }
-
-        // 话题空间：topic_id 与 file_key 文件树边界保持一致（以父目录解析结果为准）
-        if ($spaceType === FileSpaceType::TOPIC->value) {
-            $entity->setTopicId($resolvedTopicId);
+        // Fallback：任务查不到时，调用方显式传入的会话 id 仍是不该丢的来源信息。
+        if ($topicId > 0 && $entity->getLatestModifiedTopicId() === null) {
+            $entity->setLatestModifiedTopicId($topicId);
         }
 
         // 9. 设置文件类型（如果调用方指定了 fileType 则使用，否则根据 isDirectory 自动推断）
@@ -408,9 +429,11 @@ class MagicFSFileDomainService
         return Db::transaction(function () use ($entity, $parentId): TaskFileEntity {
             $entity = $this->taskFileRepository->insert($entity);
 
-            // Creating a child changes the direct listing of every ancestor.
+            // The new node announced itself with the row insert() just
+            // appended; the containing directory only needs its version moved
+            // so a reader caching the listing sees it as stale.
             if ($parentId !== '' && $parentId !== '0') {
-                $this->incrementVersionChain($parentId);
+                $this->bumpFileTreeVersions([$parentId]);
             }
 
             return $entity;
@@ -700,14 +723,11 @@ class MagicFSFileDomainService
             // merge all three chains so shared ancestors are bumped once and
             // the target receives a fresh metadata_version before its single
             // final move snapshot is appended below.
-            if ($parentChanged) {
-                $this->incrementVersionChains(
-                    [$fileId, $oldParentId, $newParentIdInt],
-                    [(int) $fileId]
-                );
-            } else {
-                $this->incrementVersionChain($fileId, false);
-            }
+            $this->bumpFileTreeVersions(
+                $parentChanged
+                    ? [$fileId, $oldParentId, $newParentIdInt]
+                    : [$fileId]
+            );
 
             if ($hiddenChanged && $file->getIsDirectory()) {
                 $descendantIds = $this->taskFileRepository->getAllDescendantIds(
@@ -808,17 +828,11 @@ class MagicFSFileDomainService
 
             $this->taskFileRepository->deleteByIds($deleteIds, false, $projectId);
 
-            if (! empty($parentIds)) {
-                $parentIdArray = array_keys($parentIds);
-                $ancestorEntities = $this->taskFileRepository->getFilesWithParentsByIds($parentIdArray);
-                $allAncestorIds = array_map(
-                    fn ($entity) => $entity->getFileId(),
-                    $ancestorEntities
-                );
-
-                if (! empty($allAncestorIds)) {
-                    $this->taskFileRepository->incrementMetadataVersionByIdsWithJournal($allAncestorIds);
-                }
+            // The deleted nodes announced themselves with their own `delete`
+            // rows; the directories that contained them only need their
+            // listing version moved.
+            if ($parentIds !== []) {
+                $this->bumpFileTreeVersions(array_keys($parentIds));
             }
 
             return $files;
@@ -910,71 +924,41 @@ class MagicFSFileDomainService
     }
 
     /**
-     * Increment the union of the parent chains rooted at the supplied IDs.
+     * Advance the metadata versions of the nodes a mutation just touched.
      *
-     * A rename only has one chain, while a move has three relevant roots:
-     * the moved node itself, its old parent and its new parent.  Resolving all
-     * roots first and issuing one deduplicated repository update avoids
-     * bumping common ancestors multiple times (which would otherwise create
-     * duplicate feed revisions) and lets callers suppress the target's
-     * intermediate update event in favour of one final move/restore event.
+     * The caller names the nodes whose cached representation became stale:
      *
-     * @param array<null|int|string> $fileIds seed IDs whose ancestor chains
-     *                                        should be included
-     * @param array<int|string> $excludeJournalIds IDs that are still bumped
-     *                                             but whose event is published
-     *                                             by the caller afterwards
+     *   - the mutated node itself, when its journal row is appended after the
+     *     bump so the row carries the post-bump version (a reader compares the
+     *     version in the snapshot with the one it holds);
+     *   - every directory whose *direct* listing changed, i.e. the parent of a
+     *     created, removed or moved child, and both parents of a move.
+     *
+     * Ancestors above that set are deliberately absent. A child's change makes
+     * its grandparent's *recursive* view stale, but POSIX moves only the
+     * containing directory for a one-level change, and reporting the deeper
+     * levels is what turned a feed of node changes into a feed of directory
+     * bookkeeping: consumers derive "this listing changed" from the child row's
+     * `parent_id`, which the mutation already publishes, so the ancestor rows
+     * carried nothing they could not compute while multiplying the window by
+     * tree depth (see TaskFileRepository::bumpMetadataVersions).
+     *
+     * Nothing here writes a journal row: a bump is cache invalidation, the row
+     * belongs to the mutation.
+     *
+     * @param array<null|int|string> $fileIds nodes whose version must advance
      */
-    public function incrementVersionChains(array $fileIds, array $excludeJournalIds = []): void
+    public function bumpFileTreeVersions(array $fileIds): void
     {
-        $seedIds = array_values(array_unique(array_filter(
+        $ids = array_values(array_unique(array_filter(
             array_map(static fn ($id): int => (int) $id, $fileIds),
             static fn (int $id): bool => $id > 0
         )));
-        if ($seedIds === []) {
+        if ($ids === []) {
             return;
         }
 
-        $excludedIds = array_values(array_unique(array_filter(
-            array_map(static fn ($id): int => (int) $id, $excludeJournalIds),
-            static fn (int $id): bool => $id > 0
-        )));
-
-        $work = function () use ($seedIds, $excludedIds): void {
-            // Traverse only parent chains; descendants are never materialised.
-            $chainEntities = $this->taskFileRepository->getFilesWithParentsByIds($seedIds);
-            if ($chainEntities === []) {
-                return;
-            }
-
-            $chainIds = array_values(array_unique(array_map(
-                static fn (TaskFileEntity $entity): int => (int) $entity->getFileId(),
-                $chainEntities
-            )));
-            $this->taskFileRepository->incrementMetadataVersionByIdsWithJournal(
-                $chainIds,
-                $excludedIds
-            );
-        };
-
-        if (Db::transactionLevel() > 0) {
-            $work();
-        } else {
-            Db::transaction($work);
-        }
-    }
-
-    /**
-     * Update one metadata-version chain and publish precise snapshots.
-     * The lookup, row bumps and journal append share one transaction and never
-     * enumerate descendants.
-     */
-    public function incrementVersionChain(string $fileId, bool $emitSelfEvent = true): void
-    {
-        $this->incrementVersionChains(
-            [(int) $fileId],
-            $emitSelfEvent ? [] : [(int) $fileId]
-        );
+        $this->taskFileRepository->bumpMetadataVersions($ids);
     }
 
     /**
@@ -1095,13 +1079,10 @@ class MagicFSFileDomainService
             $file->setUpdatedAt(date('Y-m-d H:i:s'));
 
             $this->taskFileRepository->updateById($file, 'restore', false);
-            // The restored row itself is a metadata mutation too.  Bump it
-            // together with the containing directory chain, but defer its
-            // feed event until the final post-bump snapshot is available.
-            $this->incrementVersionChains(
-                [$fileIdInt, $file->getParentId()],
-                [$fileIdInt]
-            );
+            // The restored row is a metadata mutation too, so its version
+            // moves before the final restore snapshot is appended below; the
+            // containing directory only needs its listing version moved.
+            $this->bumpFileTreeVersions([$fileIdInt, $file->getParentId()]);
             $restored = $this->getFileById($fileId);
             $this->taskFileRepository->appendFileTreeMutation($before, $restored, 'restore');
             return $restored;
