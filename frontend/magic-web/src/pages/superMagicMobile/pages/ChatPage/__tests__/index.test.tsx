@@ -57,15 +57,18 @@ vi.mock("@/components/shadcn-ui/smooth-tabs", () => ({
 		tabs,
 		value,
 		onChange,
+		"data-testid": dataTestId,
 	}: {
-		tabs: { value: string; label: string }[]
+		tabs: { value: string; label: string; "data-testid"?: string }[]
 		value: string
 		onChange: (value: string) => void
+		"data-testid"?: string
 	}) => (
-		<div role="tablist">
+		<div role="tablist" data-testid={dataTestId}>
 			{tabs.map((tab) => (
 				<button
 					role="tab"
+					data-testid={tab["data-testid"]}
 					aria-selected={tab.value === value}
 					key={tab.value}
 					onClick={() => onChange(tab.value)}
@@ -421,6 +424,16 @@ describe("MobileHomePage", () => {
 	it("defaults to task mode with workspace selection", () => {
 		refreshFeaturedModeListMock.mockResolvedValue([])
 		render(<MobileHomePage />)
+		expect(screen.getByTestId("mobile-home-mode-controls")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-home-mode-tabs")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-home-mode-chat-tab")).toHaveAttribute(
+			"aria-selected",
+			"false",
+		)
+		expect(screen.getByTestId("mobile-home-mode-task-tab")).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
 		expect(screen.getByRole("tab", { name: "homeMode.task" })).toHaveAttribute(
 			"aria-selected",
 			"true",
