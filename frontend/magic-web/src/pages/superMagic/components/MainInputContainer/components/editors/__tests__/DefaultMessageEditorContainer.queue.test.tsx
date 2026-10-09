@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 const mocks = vi.hoisted(() => ({
+	ensureProject: vi.fn(),
+	editorProps:
+		{} as import("@/pages/superMagic/components/MessageEditor/types").MessageEditorProps,
 	addToQueue: vi.fn(),
 	clearContentAfterSend: vi.fn(),
 	setContent: vi.fn(),
@@ -22,7 +25,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("@/pages/superMagic/components/MessageEditor/MessageEditor", () => ({
-	default: forwardRef((_, ref) => {
+	default: forwardRef((props, ref) => {
+		mocks.editorProps = props
 		useImperativeHandle(ref, () => ({
 			clearContentAfterSend: mocks.clearContentAfterSend,
 			setContent: mocks.setContent,
@@ -95,7 +99,7 @@ vi.mock("@/pages/superMagic/services/messageSendFlowService", () => ({
 
 vi.mock("@/pages/superMagic/services/messageSendPreparation", () => ({
 	createTopicForMessageContext: vi.fn(),
-	ensureProjectForMessageContext: vi.fn(),
+	ensureProjectForMessageContext: mocks.ensureProject,
 	preparePanelSend: mocks.preparePanelSend,
 	releaseHtmlScreenshotsAfterSend: mocks.releaseHtmlScreenshotsAfterSend,
 }))
@@ -107,6 +111,23 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils", () => ({
 import DefaultMessageEditorContainer from "../DefaultMessageEditorContainer"
 
 describe("DefaultMessageEditorContainer queue sending", () => {
+	it("keeps long pasted text on temporary uploads until a blank chat is sent", async () => {
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: null,
+					selectedTopic: null,
+					selectedWorkspace: null,
+					topicMode: TopicMode.General,
+					deferProjectCreationUntilSend: true,
+				}}
+			/>,
+		)
+		await act(async () => {
+			expect(await mocks.editorProps.onEnsureProject?.()).toBeNull()
+		})
+		expect(mocks.ensureProject).not.toHaveBeenCalled()
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mocks.handleSend = undefined
@@ -384,3 +405,41 @@ it.each(["queue-1", undefined])(
 		expect(mocks.setContent).not.toHaveBeenCalled()
 	},
 )
+
+it("queues a message while the topic remains running after loading briefly clears", async () => {
+	render(
+		<DefaultMessageEditorContainer
+			editorContext={{
+				selectedProject: { id: "project-1" } as never,
+				selectedTopic: { id: "topic-1", task_status: "running" } as never,
+				topicMode: TopicMode.Default,
+				showLoading: false,
+				isTaskRunning: true,
+				queueContext: {
+					editorRef: { current: null },
+					editingQueueItem: null,
+					queueDraft: null,
+					cancelEditQueueItem: vi.fn(async () => undefined),
+					onEditorReady: vi.fn(),
+					retryQueueDraftRemoval: vi.fn(async () => undefined),
+					isQueueOperationPending: false,
+					addToQueue: mocks.addToQueue,
+					finishEditQueueItem: vi.fn(),
+				},
+				onMessageSendReady: (send) => {
+					mocks.handleSend = send as typeof mocks.handleSend
+				},
+			}}
+		/>,
+	)
+
+	await act(async () => {
+		await mocks.handleSend?.({
+			value: { type: "doc" },
+			mentionItems: [],
+			topicMode: TopicMode.Default,
+		})
+	})
+
+	expect(mocks.addToQueue).toHaveBeenCalled()
+})

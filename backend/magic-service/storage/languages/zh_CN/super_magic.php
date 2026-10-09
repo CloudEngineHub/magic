@@ -152,6 +152,7 @@ return [
             'extract_failed' => '压缩包解压失败，请确认文件完整性后重试',
         ],
         'publish' => [
+            'skills_sync_failed' => '发布失败：技能引用同步失败（:reason）。请检查该员工绑定的技能后再重试。',
             'identity_md_not_found' => '发布失败：根目录下缺少 :path 文件，请补充该文件后再重试。',
         ],
         'export_failed' => '智能体导出失败，请稍后重试',
@@ -162,8 +163,9 @@ return [
         'sandbox_init_failed' => '运行环境异常，请稍后重试。',
         'chat_task_start_failed' => '任务启动失败，请稍后重试。',
         'question_expired' => '该问题已超时或已被处理，您的回答未能送达。您可以直接发送新消息继续对话。',
-        'project_file_count_exceeded' => '当前项目空间的文件数已达 :limit 个，无法继续执行任务，请联系管理员处理。',
-        'user_space_file_count_exceeded' => '当前用户空间的文件数已达 :limit 个，无法继续执行任务，请联系管理员处理。',
+        'question_recovery_failed' => '暂时无法继续处理，请稍后再试。您刚才填写的内容已保留。',
+        'project_file_count_exceeded' => '当前项目空间需要先整理文件，建议清理部分不再需要的文件后重试。',
+        'user_space_file_count_exceeded' => '当前个人文件空间需要先整理文件，建议清理部分不再需要的文件后重试。',
     ],
     'magic_claw' => [
         'create_system_error' => '系统出现异常，请稍后重试。',

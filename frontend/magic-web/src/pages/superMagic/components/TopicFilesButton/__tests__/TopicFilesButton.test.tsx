@@ -20,9 +20,6 @@ vi.mock("../style", () => ({
 }))
 
 vi.mock("@/hooks/useIsMobile", () => ({ useIsMobile: () => false }))
-vi.mock("@/pages/superMagic/hooks/useDownloadVisibility", () => ({
-	useDownloadVisibility: (enabled: boolean) => enabled,
-}))
 vi.mock("@/components/base/MagicToaster/utils", () => ({
 	default: { error: vi.fn(), info: infoMock, success: vi.fn() },
 }))

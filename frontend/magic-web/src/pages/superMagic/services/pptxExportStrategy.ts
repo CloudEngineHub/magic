@@ -29,9 +29,10 @@ export const PPTX_EXPORT_ROUTING_LIMITS = {
 
 export type PptxMediaSourceReliability = "local" | "stable-url" | "signed-url" | "unknown"
 
-export type PptxExportRoute = "streaming" | "unavailable"
+export type PptxExportRoute = "streaming" | "legacy-blob" | "unavailable"
 export type PptxExportStrategyReasonCode =
 	| "streaming"
+	| "legacy-blob"
 	| "streaming-disabled"
 	| "zipjs-disabled"
 	| "zip64-disabled"
@@ -51,6 +52,8 @@ export interface PptxExportStrategyInput {
 	outputPolicy?: LargeExportOutputPolicy
 	fileStreamingAvailable?: boolean
 	flags?: Partial<PptxExportFeatureFlags>
+	/** Whether the host can create a Blob and trigger a normal browser download. */
+	bufferedDownloadAvailable?: boolean
 }
 
 export interface PptxExportStrategyDecision {
@@ -62,6 +65,7 @@ export interface PptxExportStrategyDecision {
 	mediaPolicyMode: ResolvedPptxMediaPolicyMode
 	fileStreamingAvailable: boolean
 	featureFlags: PptxExportFeatureFlags
+	bufferedDownloadAvailable: boolean
 }
 
 /**
@@ -100,14 +104,16 @@ export function resolvePptxExportFeatureFlags(
 /**
  * Decide whether an export may use the new streaming path.
  *
- * Large/unknown-risk exports never silently fall back to a Blob. They return `unavailable`, which
- * lets the caller show a capability message before opening a picker or doing expensive work.
+ * When File System Access is unavailable, supported browsers use the independent legacy Blob
+ * exporter instead of entering the streaming/OPFS pipeline.
  */
 export function resolvePptxExportStrategy(
 	input: PptxExportStrategyInput = {},
 ): PptxExportStrategyDecision {
 	const featureFlags = resolvePptxExportFeatureFlags(input.flags)
 	const fileStreamingAvailable = input.fileStreamingAvailable ?? detectFileStreamingCapability()
+	const bufferedDownloadAvailable =
+		input.bufferedDownloadAvailable ?? detectBufferedDownloadCapability()
 	const isLargeExport =
 		input.hasLargeMedia === true ||
 		isAtLeastZip32(input.estimatedBytes) ||
@@ -128,6 +134,7 @@ export function resolvePptxExportStrategy(
 			mediaPolicyMode,
 			fileStreamingAvailable,
 			featureFlags,
+			bufferedDownloadAvailable,
 		)
 	}
 	if (!featureFlags.zipJsPackageWriter) {
@@ -139,6 +146,7 @@ export function resolvePptxExportStrategy(
 			mediaPolicyMode,
 			fileStreamingAvailable,
 			featureFlags,
+			bufferedDownloadAvailable,
 		)
 	}
 	if (requiresZip64 && !featureFlags.zip64) {
@@ -150,17 +158,32 @@ export function resolvePptxExportStrategy(
 			mediaPolicyMode,
 			fileStreamingAvailable,
 			featureFlags,
+			bufferedDownloadAvailable,
 		)
 	}
 	if (!fileStreamingAvailable) {
+		if (bufferedDownloadAvailable) {
+			return createDecision({
+				route: "legacy-blob",
+				reasonCode: "legacy-blob",
+				reason: "This browser uses the compatibility Blob exporter for PPTX export.",
+				isLargeExport,
+				requiresZip64,
+				mediaPolicyMode,
+				fileStreamingAvailable,
+				featureFlags,
+				bufferedDownloadAvailable,
+			})
+		}
 		return unavailableDecision(
 			"file-stream-unavailable",
-			"This browser cannot provide a writable file destination for a large PPTX.",
+			"This browser cannot provide a writable file destination or a client-side download for PPTX.",
 			isLargeExport,
 			requiresZip64,
 			mediaPolicyMode,
 			fileStreamingAvailable,
 			featureFlags,
+			bufferedDownloadAvailable,
 		)
 	}
 
@@ -173,17 +196,19 @@ export function resolvePptxExportStrategy(
 		mediaPolicyMode,
 		fileStreamingAvailable,
 		featureFlags,
+		bufferedDownloadAvailable,
 	})
 }
 
 function unavailableDecision(
-	reasonCode: Exclude<PptxExportStrategyReasonCode, "streaming">,
+	reasonCode: Exclude<PptxExportStrategyReasonCode, "streaming" | "legacy-blob">,
 	reason: string,
 	isLargeExport: boolean,
 	requiresZip64: boolean,
 	mediaPolicyMode: ResolvedPptxMediaPolicyMode,
 	fileStreamingAvailable: boolean,
 	featureFlags: PptxExportFeatureFlags,
+	bufferedDownloadAvailable: boolean,
 ): PptxExportStrategyDecision {
 	return createDecision({
 		route: "unavailable",
@@ -194,6 +219,7 @@ function unavailableDecision(
 		mediaPolicyMode,
 		fileStreamingAvailable,
 		featureFlags,
+		bufferedDownloadAvailable,
 	})
 }
 
@@ -218,6 +244,16 @@ function isAtLeastZip32(value?: number | bigint): boolean {
 
 function detectFileStreamingCapability(): boolean {
 	return typeof (globalThis as { showSaveFilePicker?: unknown }).showSaveFilePicker === "function"
+}
+
+function detectBufferedDownloadCapability(): boolean {
+	return (
+		typeof Blob === "function" &&
+		typeof URL !== "undefined" &&
+		typeof URL.createObjectURL === "function" &&
+		typeof document !== "undefined" &&
+		typeof document.createElement === "function"
+	)
 }
 
 function readRuntimeFeatureFlags(): Partial<PptxExportFeatureFlags> {

@@ -176,6 +176,7 @@
 		}
 	},
 	"agentThink": {
+		"interrupted": "思考已中断",
 		"thinkDone": "已完成思考",
 		"thinking": "思考中..."
 	},
@@ -189,29 +190,30 @@
 			"submit": "提交"
 		},
 		"answersTitle": "回答",
-		"defaultValueHint": "超时后将使用默认值：{{defaultValue}}",
+		"defaultValueHint": "你不选择时，将自动使用：{{defaultValue}}",
 		"otherPlaceholder": "其它",
 		"placeholder": "请输入你的回答",
 		"questionCount": "共 {{count}} 题",
 		"remarkLabel": "备注",
-		"remarkPlaceholder": "补充说明、限制条件或其他想告诉 Agent 的信息",
+		"remarkPlaceholder": "补充说明、限制条件或其他信息",
 		"status": {
-			"alreadyProcessed": "该问题已取消",
+			"alreadyProcessed": "这个问题已经结束，无法再提交。",
 			"answered": "已回答",
 			"answeredWithValue": "已回答：{{answer}}",
-			"autoSubmitIn": "{{time}} 后自动提交",
-			"autoSubmitInFixed": "{{minutes}} 分钟后自动提交",
+			"autoSubmitIn": "将在 {{time}} 后按默认选项继续",
+			"autoSubmitInFixed": "将在 {{minutes}} 分钟后按默认选项继续",
 			"cancelled": "已取消",
 			"emptyAnswer": "未填写",
-			"expiredPending": "已过期，等待服务端确认最终状态",
+			"expiredPending": "正在处理，请稍候",
 			"processingFailed": "处理失败，请稍后重试",
-			"processingInProgress": "正在处理中，请勿重复提交",
+			"processingInProgress": "正在提交，请稍候。",
+			"recoveryFailed": "暂时无法继续处理，请稍后再试。你刚才填写的内容已保留。",
 			"skipped": "已跳过",
 			"submitFailed": "提交失败，请稍后重试",
-			"taskNotFound": "任务不存在或已结束，请刷新页面重试",
-			"timeout": "已超时",
-			"timeoutWithDefault": "已超时，Agent 已按默认值继续：{{defaultValue}}",
-			"timeoutWithDefaultItem": "{{question}}：已按默认值继续（{{defaultValue}}）"
+			"taskNotFound": "这个问题已经结束，请刷新页面后继续",
+			"timeout": "回答时间已结束",
+			"timeoutWithDefault": "未收到你的选择，已按默认选项继续：{{defaultValue}}",
+			"timeoutWithDefaultItem": "{{question}}：未收到选择，已按默认选项继续（{{defaultValue}}）"
 		},
 		"subQuestionLabel": "问题 {{index}}",
 		"title": "需要你的确认",
@@ -293,6 +295,7 @@
 		"emptyTitle": "暂无对话",
 		"minutesAgo": "{{count}} 分钟前",
 		"newChat": "新建对话",
+		"newConversation": "新的对话",
 		"searchPlaceholder": "搜索",
 		"swipeDelete": "删除",
 		"swipeMore": "更多",
@@ -470,6 +473,7 @@
 			"reload": "重新加载",
 			"title": "页面加载失败"
 		},
+		"fileCannotOpen": "无法打开此文件：{{path}}",
 		"fileNotFoundOrLoadFailed": "文件不存在或加载错误",
 		"fileUrlFetchFailed": "文件链接获取失败",
 		"generalMode": "通用模式",
@@ -677,6 +681,7 @@
 			"parseFileFailed": "解析 magic.project.js 文件失败",
 			"projectIdNotExists": "项目 ID 不存在，无法上传图片",
 			"projectIdNotExistsForGenerate": "项目 ID 不存在，无法生成图片",
+			"projectUnavailable": "当前项目不可用，请刷新后重试",
 			"refreshFailed": "刷新失败，请稍后重试",
 			"removeBackgroundImagesDirUnresolved": "无法解析设计项目的 images 目录，请确认设计文件已在话题附件中打开",
 			"removeBackgroundParamsIncomplete": "去背景失败：请提供图片任务 ID 与源文件路径",
@@ -708,6 +713,12 @@
 		"offlineNotice": {
 			"description": "网络恢复后可继续编辑并保存画布内容",
 			"title": "网络已断开，画布已切换为只读"
+		},
+		"rename": {
+			"fileChanged": "文件已被修改，请重新打开命名面板。",
+			"fileRenamedSaveFailed": "文件已改名，但画布引用更新未完成，请刷新后检查。",
+			"fileUnavailable": "无法确认可重命名的项目文件，请刷新后重试。",
+			"verifyResult": "未能确认文件改名结果，请刷新文件列表后重试。"
 		},
 		"saved": "保存成功",
 		"saving": "正在保存",
@@ -2382,9 +2393,35 @@
 		"generatedBy": "由{{platformName}}生成",
 		"platformFallback": "平台"
 	},
+	"feedback": {
+		"processing": "正在处理"
+	},
+	"fileDownload": {
+		"cancelled": "已取消下载",
+		"download": "打包下载",
+		"downloadFile": "下载 {{name}}",
+		"downloadOne": "单独下载",
+		"downloading": "正在打包下载",
+		"downloadingFile": "正在准备下载 {{name}}",
+		"failed": "未能获取全部文件，未生成压缩包。请重试。",
+		"fileCount": "{{count}} 个文件",
+		"fileFailed": "无法下载此文件，请重试。",
+		"files": "查看文件清单",
+		"noWatermark": "高清无水印",
+		"preparing": "正在准备文件清单",
+		"retry": "重试下载",
+		"started": "已发起下载",
+		"title": "文件打包",
+		"tooLarge": "文件集合超出浏览器打包容量，请减少文件，或在文件管理中下载。",
+		"unavailable": "文件清单暂不可用，请让 AI 重新创建下载入口。",
+		"view": "查看"
+	},
 	"fileManager": {
 		"back": "后退",
 		"browseFolder": "浏览文件夹",
+		"checkItem": "选择 {{name}}",
+		"checkSelectionHint": "勾选文件，展开目录可继续选择",
+		"clearSelection": "清空",
 		"clipboard": {
 			"copied": "已复制 {{count}} 项，可前往目标位置粘贴",
 			"cut": "已剪切 {{count}} 项，粘贴后确认移动",
@@ -2441,9 +2478,13 @@
 		"copyTarget": "复制 {{count}} 项到「{{target}}」",
 		"cut": "剪切",
 		"empty": "此文件夹为空",
+		"entry": "文件管理器",
+		"entryHint": "浏览和管理当前项目文件",
 		"files": "文件",
 		"forward": "前进",
 		"itemCount": "{{count}} 项",
+		"locateSelectedFile": "定位文件：{{path}}",
+		"locateUnavailable": "无法定位此文件，可能已删除或无权访问",
 		"memory": {
 			"current": "当前",
 			"noMatches": "没有匹配的项目",
@@ -2456,6 +2497,7 @@
 		"name": "名称",
 		"newFolder": "新建文件夹",
 		"noMatches": "此文件夹中没有匹配的文件",
+		"openSelectedProject": "返回项目：{{name}}",
 		"operationProgress": "处理中 {{progress}}%",
 		"paste": "粘贴",
 		"path": "文件路径",
@@ -2467,14 +2509,26 @@
 			"target": "已选 {{count}} 项 · 目标：{{target}}"
 		},
 		"processing": "正在处理…",
+		"recent": "最近更新",
+		"recentEmpty": "暂无最近更新的文件",
 		"recycle": {
 			"back": "返回文件",
+			"backToProject": "返回项目文件",
 			"permanentPhrase": "永久删除 {{count}} 项",
 			"permanentWarning": "永久删除后无法恢复。请逐项核对文件及原路径。",
+			"projectEntryHint": "查看当前项目中你有权限访问的已删除文件",
+			"projectHeading": "项目回收站 · {{name}}",
+			"projectTitle": "项目回收站",
 			"scope": "所有可访问文件的回收记录，包含其他项目和个人空间；此处不按当前项目筛选。",
 			"title": "文件回收站"
 		},
+		"removeSelected": "移除 {{name}}",
 		"restoredDirectoryUnavailable": "上次浏览的目录已不可用，已打开最近的可用目录。",
+		"searchProjectFiles": "搜索项目中的文件或路径",
+		"selectedCount": "已选择 {{count}} 项",
+		"selectedFiles": "已选文件",
+		"selectionEmpty": "还没有选择文件",
+		"selectionEmptyHint": "勾选左侧文件，已选内容会显示在这里",
 		"selectionHint": "单击选择，双击打开",
 		"sort": "排序",
 		"sortModified": "按修改时间",
@@ -2483,6 +2537,21 @@
 		"type": "类型",
 		"up": "上一级",
 		"uploadTarget": "上传到「{{target}}」"
+	},
+	"filePreview": {
+		"downloadFailed": "图片下载失败",
+		"downloadImage": "下载图片",
+		"expandImage": "放大预览",
+		"retry": "重试"
+	},
+	"fileSpaceLimit": {
+		"cleanupCount": "建议至少清理约 {{count}} 个不再需要的文件",
+		"description": "为保证任务稳定运行，请先整理文件空间。",
+		"feedback": "反馈问题",
+		"feedbackDefault": "当前任务因文件空间需要整理而无法继续。建议至少清理约 {{count}} 个不再需要的文件后重试；如果清理后仍无法运行，请协助处理。",
+		"openFiles": "去整理文件",
+		"temporaryNotice": "我们正在优化更大规模文件的支持。",
+		"title": "文件空间需要整理"
 	},
 	"fileTree": {
 		"collapseAll": "一键折叠",
@@ -2620,6 +2689,7 @@
 		"newSlidePromptSuffix": "，请帮我补充内容：",
 		"nextPage": "下一页",
 		"noSlidesTitle": "暂无演示文稿",
+		"openCorrespondingFile": "打开对应文件",
 		"openInNewWindow": "新窗口打开",
 		"openUrl": "新窗口打开",
 		"outline": "大纲",
@@ -2780,6 +2850,12 @@
 			"continueUpload": "继续上传",
 			"expand": "展开",
 			"hideCompleted": "隐藏已完成",
+			"locate": "定位",
+			"locateDirectory": "定位文件夹",
+			"locateFile": "定位文件",
+			"mention": "@ 引用",
+			"mentionCurrentChat": "@ 到当前对话",
+			"noEditableChat": "当前没有可编辑的对话输入框",
 			"pause": "暂停",
 			"pauseAll": "全部暂停",
 			"pauseAllTasks": "全部暂停",
@@ -2788,6 +2864,10 @@
 			"resumeAll": "全部继续",
 			"retry": "重试",
 			"retryFailed": "重试失败的文件",
+			"scrollDown": "查看下面的文件",
+			"scrollUp": "查看上面的文件",
+			"switchProjectFirst": "先定位到该项目，再引用文件",
+			"targetUnavailable": "文件已上传，但暂时无法在文件列表中找到，请刷新列表后重试",
 			"viewDetails": "查看详情",
 			"viewFailedFiles": "查看失败文件"
 		},
@@ -2836,6 +2916,15 @@
 			"viewProject": "查看项目"
 		},
 		"globalSummary": "总计 {{count}} 个上传任务",
+		"hint": {
+			"close": "关闭上传引导",
+			"directory": "展开上传记录，可定位上传的文件夹。",
+			"disable": "不再提示",
+			"expand": "展开查看",
+			"locate": "展开上传记录，可前往所属项目并定位文件。",
+			"locateAndMention": "展开上传记录，可定位文件，或 @ 引用到当前对话。",
+			"title": "查看上传的文件"
+		},
 		"labels": {
 			"uploadTo": "上传至: {{path}}"
 		},
@@ -3015,6 +3104,176 @@
 		"sloganTitle": "今天需要我帮你做些什么？"
 	},
 	"htmlEditor": {
+		"designStyle": {
+			"apply": "添加到对话",
+			"browseCategories": "按分类浏览",
+			"buttons": "按钮",
+			"cancel": "取消",
+			"categories": {
+				"ai": "AI 与大模型",
+				"all": "全部",
+				"automotive": "汽车品牌",
+				"commerce": "电商与零售",
+				"design": "设计与创意工具",
+				"developer": "开发者工具",
+				"featured": "推荐",
+				"finance": "金融与数字货币",
+				"media": "媒体与消费电子",
+				"other": "其他",
+				"productivity": "软件与效率工具",
+				"retro": "复古网页",
+				"scenario": "页面场景"
+			},
+			"categoryLabel": "风格分类",
+			"colorCount": "{{count}} 个颜色",
+			"colorSystem": "颜色与用途",
+			"colorSystemDescription": "展示页面背景、内容区域、强调内容和文字的颜色。",
+			"componentStates": "组件效果",
+			"componentStatesDescription": "用当前配色观察控件状态；具体组件定义见设计规范。",
+			"contentArea": "内容区域",
+			"copied": "已复制",
+			"copy": "复制",
+			"copyAllTokens": "复制全部样式值",
+			"copyColor": "复制颜色值 {{value}}",
+			"copyFontStack": "复制字体",
+			"copyRawSource": "复制源文",
+			"copyToken": "复制样式值",
+			"copyTokenValue": "复制值",
+			"dangerState": "错误",
+			"defaultState": "默认",
+			"definedComponents": "规范定义的组件",
+			"description": "找到适合这份内容的视觉表达。",
+			"detailSectionsLabel": "风格详情分区",
+			"disabledState": "禁用",
+			"empty": "没有找到匹配的风格",
+			"errorState": "输入有误",
+			"featured": "推荐",
+			"focusState": "聚焦状态",
+			"formStates": "输入框",
+			"fullGuidelines": "完整规范说明",
+			"gallery": {
+				"applyHint": "应用后会将要求填入对话框，由你确认并发送。",
+				"back": "返回风格库",
+				"clearFilters": "清除筛选",
+				"exampleNotice": "这是风格示例，不代表当前页面已经应用。",
+				"styleExample": "风格示例",
+				"viewportLabel": "示例页面尺寸"
+			},
+			"guidelinesTitle": "布局、组件与设计规范",
+			"inputState": "默认状态",
+			"layoutTitle": "布局与视觉特征",
+			"layouts": {
+				"centered": "居中布局",
+				"grid": "网格布局",
+				"magazine": "杂志式布局",
+				"sidebar": "侧栏布局",
+				"split": "左右分栏",
+				"stacked": "纵向布局"
+			},
+			"libraryLabel": "风格库",
+			"loadError": "风格加载失败",
+			"loading": "正在加载风格…",
+			"mainColor": "主色",
+			"noColorTokens": "暂无颜色",
+			"noRadiusValues": "暂无圆角设置",
+			"noSpacingValues": "暂无间距设置",
+			"noTypographyTokens": "暂无文字样式",
+			"open": "更换风格",
+			"originalLanguage": "保留源文件的原始语言，展开标题阅读。",
+			"outlineState": "描边",
+			"pageBackground": "页面背景",
+			"pagePreview": "页面预览",
+			"previewLoadError": "预览生成失败",
+			"previewLoading": "正在生成预览…",
+			"promptFile": "将以下 HTML 文件应用为指定设计风格：",
+			"promptPreserve": "保留现有内容、数据请求、交互逻辑、表单、权限、导航和响应式行为。",
+			"promptReport": "完成后说明修改结果、已验证的行为，以及仍存在的视觉或响应式风险。",
+			"promptSkill": "请使用 `html-design-style` skill 完成以下任务：",
+			"promptStyle": "目标风格：「{{styleName}}」（style_code: {{styleCode}}）。",
+			"promptUpdateOriginal": "直接更新原文件，不创建副本。",
+			"promptVisualOnly": "仅调整视觉风格。",
+			"rawMode": "DESIGN.md",
+			"rawSource": "DESIGN.md 源文",
+			"rawSourceDescription": "{{code}} 的原始源文文档",
+			"rawSourceEmpty": "源文内容为空",
+			"rawSourceError": "源文加载失败",
+			"rawSourceLoading": "正在加载源文…",
+			"rawSourceRetry": "重试",
+			"readFullSource": "查看完整 DESIGN.md",
+			"resultCount": "{{count}} 种风格",
+			"retry": "重试",
+			"scene": {
+				"active": "进行中",
+				"activity": "动态",
+				"all": "全部",
+				"brand": "设计探索",
+				"chart": "数据趋势图",
+				"collection": "精选系列",
+				"commerceDescription": "把注意力交给作品本身，在细节中发现新的选择。",
+				"commerceTitle": "发现日常，\n值得留下的美。",
+				"complete": "已完成",
+				"components": "组件构成",
+				"dashboardDescription": "聚合团队状态、重要指标和近期进展，帮助每个人快速作出判断。",
+				"dashboardTitle": "让信息，\n清楚地呈现。",
+				"editorialDescription": "让文字、图像与留白，共同表达内容的气质。",
+				"editorialTitle": "留一点空间，\n给新的想法。",
+				"email": "邮箱地址",
+				"empty": "暂无内容",
+				"explore": "查看详情",
+				"illustration": "场景插图",
+				"landingDescription": "从色彩到空间，每个细节都服务于内容。",
+				"landingTitle": "让表达，\n有自己的风格。",
+				"latest": "全新发布",
+				"metricOne": "活跃项目",
+				"metricThree": "按时完成",
+				"metricTwo": "团队效率",
+				"name": "项目",
+				"navigation": "示例页面导航",
+				"newsletter": "订阅编辑精选",
+				"notifications": "通知",
+				"overview": "概览",
+				"portfolioDescription": "选择少量代表作品，展示过程、观点和最终成果。",
+				"portfolioTitle": "以作品，\n表达不同。",
+				"progress": "进度",
+				"projectOne": "品牌焕新",
+				"projectThree": "产品发布",
+				"projectTwo": "增长实验",
+				"projects": "项目",
+				"readTime": "阅读 6 分钟",
+				"save": "收藏",
+				"saved": "已收藏",
+				"search": "搜索",
+				"settings": "设置",
+				"sort": "排序",
+				"status": "状态",
+				"subscribe": "订阅",
+				"subscribed": "已订阅",
+				"terminalDescription": "为构建、调试和发布提供清晰、快速的工作界面。",
+				"terminalTitle": "把想法，\n变成作品。"
+			},
+			"searchPlaceholder": "搜索风格名称或标签",
+			"semanticRoles": "颜色用途",
+			"shape": "圆角设置",
+			"shapeAppliedDescription": "查看不同圆角在按钮和输入框上的效果。",
+			"sourceFrontmatterOnly": "规范位于文件头的结构化数据中，可通过源文件查看全部内容。",
+			"spacing": "间距",
+			"spacingAppliedDescription": "通过内容区域周围的留白展示不同间距。",
+			"statusStates": "提示信息",
+			"successState": "成功",
+			"textColor": "文字",
+			"title": "选择设计风格",
+			"tokenDetails": "设计规范",
+			"typography": "文字样式",
+			"typographyCount": "{{count}} 种文字样式",
+			"typographyDescription": "字体声明与文字层级；未安装的字体使用替代字体展示。",
+			"typographySample": "中文示例 · 文字效果 · 012345",
+			"viewports": {
+				"desktop": "桌面",
+				"mobile": "手机",
+				"tablet": "平板"
+			},
+			"warningState": "警告"
+		},
 		"dropOverlay": {
 			"hint": "释放以插入图片"
 		},
@@ -3112,6 +3371,10 @@
 			"updateDurationSuccess": "授权时长已更新",
 			"version": "应用版本"
 		},
+		"previewRefreshFailed": "预览未能更新，当前内容可能不是最新版本。",
+		"previewRefreshTooltip": "重新加载最新内容，并重新运行页面。",
+		"previewRetry": "重试",
+		"previewUpdating": "正在更新预览…",
 		"projectContextUnavailable": "分享场景下，该功能暂不支持，可尝试通过协作的方式进行分享。",
 		"projectFileOperationConfirm": {
 			"cancel": "取消",
@@ -3129,6 +3392,7 @@
 			},
 			"title": "确认{{operation}}项目文件"
 		},
+		"serverUpdateTooltip": "服务端已有新内容。先比较版本，当前未保存的编辑会保留。",
 		"specifiedAgentUnavailable": "当前无法使用指定员工，已沿用本会话员工",
 		"userInfoAuthorizationConfirm": {
 			"allow": "允许",
@@ -3246,6 +3510,7 @@
 			"unknownProviderTypeWithCode": "未知服务商类型（{{providerTypeId}}）"
 		},
 		"at": "引用",
+		"copyMention": "复制标签",
 		"deleteUploadedFileConfirm": {
 			"cancel": "取消",
 			"confirm": "删除",
@@ -3379,6 +3644,14 @@
 		"refreshTopics": "刷新话题",
 		"rename": "重命名",
 		"renameTopicSuccess": "重命名话题成功",
+		"restartSandbox": "重启虚拟机",
+		"restartSandboxBusy": "虚拟机正在处理中，请稍后再试",
+		"restartSandboxFailed": "虚拟机重启失败，请稍后再试",
+		"restartSandboxLoading": "正在重启虚拟机，请稍候…",
+		"restartSandboxNetworkError": "暂时无法确认虚拟机重启结果，请稍后查看",
+		"restartSandboxNotFound": "未找到虚拟机，请刷新页面后再试",
+		"restartSandboxPermissionDenied": "你没有权限重启这个虚拟机",
+		"restartSandboxSuccess": "虚拟机已准备好，可以继续使用",
 		"searchHistoryTopics": "搜索",
 		"share": "分享",
 		"today": "今天",
@@ -3799,6 +4072,7 @@
 		"previewToolbar": {
 			"address": "当前预览地址",
 			"aiEdit": "AI 编辑",
+			"closePage": "关闭页面",
 			"desktop": "电脑端预览",
 			"disableDebug": "关闭调试",
 			"enableDebug": "开启调试",
@@ -3806,6 +4080,10 @@
 			"fullscreen": "全屏预览",
 			"more": "更多",
 			"noHtml": "暂无可预览的 HTML 文件",
+			"noOpenPages": "未打开页面",
+			"openPage": "打开 HTML 页面",
+			"openPageHint": "使用顶部的 + 选择 HTML 页面进行预览。",
+			"pages": "已打开页面",
 			"phone": "手机端预览",
 			"refresh": "刷新预览",
 			"title": "预览"
@@ -3827,7 +4105,9 @@
 			"coverUploadFailed": "封面上传失败，请重试",
 			"defaultOpenFile": "默认入口",
 			"defaultOpenFileAuto": "自动选择",
-			"defaultOpenFileDescription": "仅显示项目根目录下的 HTML 文件。文件失效后会自动回退。",
+			"defaultOpenFileDescription": "可选择项目中任意目录的 HTML 文件。文件失效后会自动回退。",
+			"defaultOpenFileEmpty": "未找到匹配的 HTML 文件",
+			"defaultOpenFileSearch": "搜索文件名或路径",
 			"description": "配置访问范围后，其他人可以通过发布链接使用这个微应用。",
 			"displaySettings": "高级选项",
 			"fullScreen": "全屏显示",
@@ -4570,6 +4850,11 @@
 		"unfavorite": "取消收藏",
 		"unfavoriteSuccess": "已取消收藏"
 	},
+	"noSend": {
+		"description": "此段内容保留在网页，不发送到微信",
+		"invalidClosing": "回复中有未配对的发送标记，其他内容仍正常发送",
+		"unclosed": "此段内容保留在网页，不发送到微信；发送标记未完整结束"
+	},
 	"notification": {
 		"superMagicTitle": "$t(common:platform.name)通知",
 		"taskCompleteBody": "🟢 「{{taskName}}」任务已完成，点击查看"
@@ -4613,6 +4898,76 @@
 		"submitSuccess": "提交成功",
 		"uploadImageCountLimit": "最多支持添加 10 张图",
 		"uploadImageSizeLimit": "请上传大小小于 2MB 的 JPG 或 PNG"
+	},
+	"operationResultList": {
+		"added": "新增",
+		"collapse": "收起结果清单",
+		"deleted": "删除",
+		"detailsShort": "详情",
+		"directory": "文件夹",
+		"download": {
+			"batch": "整批下载进度",
+			"cancelled": "已停止",
+			"completed": "已下载",
+			"downloading": "下载中",
+			"estimated": "按已处理文件数估算的整批进度",
+			"failed": "下载失败",
+			"more": "还有 {{count}} 个文件，完整结果在下载结束后查看",
+			"noFileProgress": "暂时没有逐文件进度",
+			"pending": "等待下载",
+			"processed": "已处理 {{completed}} 个，共 {{total}} 个文件",
+			"retrying": "重试中",
+			"skipped": "已存在",
+			"unknownSize": "总大小未知，下载中"
+		},
+		"expand": "展开结果清单",
+		"failedCount": "{{count}} 个未完成",
+		"file": "文件",
+		"generationDetails": "生成详情",
+		"interrupted": "操作已中断",
+		"itemCount": "{{count}} 项结果",
+		"itemCount_one": "{{count}} 项结果",
+		"lines": "行",
+		"locateCanvasElement": "定位到画布元素：{{label}}",
+		"locateShort": "定位",
+		"modifiedLines": "修改 {{count}} 行",
+		"moreWebpages": "再看 {{count}} 个网页",
+		"omitted": "另有 {{count}} 个结果，可在详情中查看",
+		"openGenerationDetails": "查看生成详情：{{label}}",
+		"openImage": "查看图片：{{label}}",
+		"openReport": "查看工具详情",
+		"openWebpage": "打开网页",
+		"readFailed": "未读取成功",
+		"running": "正在处理",
+		"searchCount": "找到 {{count}} 条结果",
+		"skipped": "已跳过",
+		"stages": {
+			"analyze": "已分析",
+			"completed": "已完成",
+			"download": "已下载",
+			"edit": "已修改",
+			"find": "已找到",
+			"load": "已载入",
+			"read": "已读取",
+			"transcribed": "转写完成"
+		},
+		"summary": "{{success}} 项成功 · {{error}} 项失败",
+		"summaryCompleted": "已完成 {{count}} 项",
+		"summaryFailed": "{{count}} 项失败",
+		"summaryProcessing": "正在处理 {{count}} 项",
+		"summaryProcessing_one": "正在处理 {{count}} 项",
+		"summarySucceeded": "{{count}} 项成功",
+		"title": "操作结果",
+		"unavailable": "暂时无法显示操作结果",
+		"units": {
+			"files": "{{count}} 个文件",
+			"images": "{{count}} 张图片",
+			"videos": "{{count}} 个视频",
+			"webpages": "{{count}} 个网页"
+		},
+		"viewFile": "查看文件",
+		"viewImage": "查看图片",
+		"viewInCanvas": "在画布中查看"
 	},
 	"personalPet": {
 		"collapse": "收起宠物",
@@ -4715,6 +5070,33 @@
 		"viewProcess": "查看过程"
 	},
 	"ppt": {
+		"batch": {
+			"actions": "页面操作",
+			"cancel": "取消",
+			"clear": "清空",
+			"copy": "复制选中页面",
+			"filesRetained": "已保留 {{count}} 个新建文件，可在项目文件中查看",
+			"hidden": "已隐藏",
+			"hide": "隐藏页面",
+			"moveFirst": "移到开头",
+			"moveLast": "移到末尾",
+			"operationConflict": "页面有新修改，请刷新后重试",
+			"operationFailed": "操作未完成，请刷新文稿核对后重试",
+			"operationUnknown": "结果待核实，请刷新文稿后确认",
+			"page": "第 {{page}} 页",
+			"remove": "从演示文稿移除",
+			"removeDescription": "仅从演示文稿移除，源 HTML 文件和资源将保留。",
+			"removeTitle": "移除选中的 {{count}} 页？",
+			"saveNotesFirst": "请先保存或重试未保存的讲稿，再操作页面",
+			"saved": "页面已更新",
+			"search": "搜索",
+			"select": "选择",
+			"selectAll": "全选",
+			"selectPage": "选择第 {{page}} 页",
+			"selectedCount": "已选 {{count}} 页",
+			"show": "取消隐藏",
+			"stop": "停止后续操作"
+		},
 		"codeVersionCompare": {
 			"description": "检测到服务端有新的源码版本。请对比当前编辑内容与服务端版本，选择您想要保留的版本。",
 			"title": "源码版本对比"
@@ -4742,22 +5124,94 @@
 		"fileNotFound": "文件找不到",
 		"fitToWindow": "适应窗口",
 		"fullscreen": "全屏",
+		"hiddenPageSkipped": "该页面已隐藏，放映时跳过",
+		"hiddenSlide": "已隐藏",
+		"includeHiddenSlides": "包含隐藏页面",
 		"initializing": "正在初始化...",
 		"loadError": "加载失败",
 		"loading": "加载中",
 		"navigationConfirmDescription": "当前页面编辑尚未保存，是否保存后切换至第 {{page}} 页？",
 		"navigationConfirmTitle": "保存并跳转",
 		"noSlidesAvailable": "暂无 PPT 页面",
+		"noVisibleSlides": "所有页面均已隐藏，请先取消隐藏再放映",
 		"pageNumber": "第 {{page}} 页",
 		"pleaseSelectSlides": "请选择至少一页幻灯片",
+		"presenter": {
+			"elapsedTime": "已用时间",
+			"endOfPresentation": "放映结束",
+			"endSlideShow": "结束放映",
+			"enterFullscreen": "进入全屏",
+			"frameTitle": "PPT 放映画面",
+			"loadNextSlideFailed": "下一页加载失败",
+			"loadingNextSlide": "正在加载下一页…",
+			"nextSlide": "下一页",
+			"primarySuffix": "（主屏幕）",
+			"resetTimer": "重置计时",
+			"resizeColumns": "调整左右区域宽度",
+			"resizeFilmstrip": "调整主预览和缩略图高度",
+			"resizeNotes": "调整下一页和备注高度",
+			"retryFullscreen": "未能开启演示者模式，请再次点击「开始放映」进入普通放映。",
+			"screen": "切换屏幕",
+			"screenOption": "屏幕 {{index}}",
+			"scrollNext": "向后浏览缩略图",
+			"scrollPrevious": "向前浏览缩略图",
+			"selectScreen": "切换屏幕",
+			"slideNumber": "第 {{number}} 页",
+			"slideTitle": "第 {{page}} 页 · 演示者放映",
+			"slides": "幻灯片导航",
+			"title": "演示者放映"
+		},
 		"refreshCurrentSlide": "刷新",
-		"reloadAllSlides": "重载全部",
-		"reloadCurrentSlide": "重载当前",
+		"reloadAllSlides": "全部刷新",
+		"reloadCurrentSlide": "刷新",
 		"saveAndNavigate": "保存",
 		"saveChanges": "保存更改",
 		"saveWithServerUpdate": "检测到服务端有新版本，保存将覆盖服务端的最新版本，是否继续？",
 		"saveWithServerUpdateTitle": "确认保存",
 		"saving": "保存中",
+		"search": {
+			"after": "替换后",
+			"allPages": "所有页面",
+			"back": "返回搜索",
+			"before": "替换前",
+			"cancel": "停止后续替换",
+			"cancelled": "未提交",
+			"cancelling": "等待当前保存结束",
+			"cannotReplace": "无法安全替换",
+			"caseSensitive": "区分大小写",
+			"complete": "已完成 {{success}} 页；{{conflict}} 页有新修改；{{failed}} 页失败",
+			"confirm": "确认替换",
+			"conflict": "页面有新修改，未替换",
+			"description": "搜索静态正文，包含隐藏页面；不含讲稿、属性、脚本和图表运行时文字。",
+			"emptyReplacement": "删除此处文字",
+			"error": "操作未完成，请重新搜索后重试",
+			"failed": "替换失败",
+			"hidden": "已隐藏",
+			"matchCount": "{{count}} 处匹配",
+			"next": "下一处",
+			"noMatches": "未找到匹配文字",
+			"noScannedMatches": "已检索页面未找到匹配，部分页面未检索",
+			"notScanned": "第 {{page}} 页未检索，请刷新重试",
+			"page": "第 {{page}} 页",
+			"preview": "将替换 {{pages}} 页的 {{count}} 处文字",
+			"previous": "上一处",
+			"progress": "已检索 {{done}} / {{total}} 页",
+			"query": "查找",
+			"refresh": "重新搜索",
+			"refreshFailed": "保存已完成，部分页面预览未刷新，请刷新页面查看",
+			"replaceAll": "全部替换",
+			"replaceOne": "替换此处",
+			"replacement": "替换为",
+			"resultCount": "在 {{pages}} 页找到 {{count}} 处",
+			"saved": "已完成",
+			"scope": "搜索范围",
+			"selectedPages": "选中页面",
+			"start": "输入要查找的文字",
+			"title": "搜索页面正文",
+			"unknown": "结果待核实",
+			"unknownHelp": "部分保存结果待核实，已停止后续替换。请重新搜索核对结果后再操作。",
+			"unsupported": "{{count}} 处无法可靠映射到源码，请逐处处理其他结果"
+		},
 		"selectAll": "全选",
 		"selectSlidesToExport": "选择要导出的幻灯片",
 		"selectedCount": "已选择 {{count}} 页",
@@ -4770,23 +5224,34 @@
 		"slideLoadError": "第 {{index}} 页加载失败",
 		"slideLoading": "正在加载第 {{index}} 页...",
 		"speakerNotes": {
+			"allPages": "全部页面（{{count}}）",
+			"currentPage": "当前页",
+			"currentPageTitle": "当前页 · 备注",
+			"decreaseFontSize": "缩小字体",
 			"empty": "暂无备注",
 			"generate": "写讲稿",
 			"generatePrompt": "请为这页 PPT 生成适合演讲时使用的备注。",
 			"generatePromptSuffix": "请使用 Markdown 编写讲稿（按需使用段落、列表和加粗），将结果写入该页面已有的 data-magic-slide-notes 备注区域，沿用现有存储格式，不要改动幻灯片视觉内容。",
+			"increaseFontSize": "增大字体",
+			"loadFailed": "此页备注加载失败",
+			"loading": "正在加载备注…",
+			"overviewPlaceholder": "点击这里，记下这页要讲的内容。",
 			"pageTitle": "第 {{page}} 页 · 备注",
 			"placeholder": "点击这里，记下这页要讲的内容。也可以点击「写讲稿」，让 AI 帮你起草。",
 			"polish": "润色",
 			"polishPrompt": "请润色这页 PPT 已有的讲稿，让表达自然流畅、适合口头讲述，保留原意、事实与数据。",
 			"resize": "调整备注区高度",
+			"retry": "重试",
 			"save": "保存",
 			"saveFailed": "保存失败，请重试",
 			"saved": "已保存",
 			"saving": "保存中",
 			"shorten": "精简",
 			"shortenPrompt": "请精简这页 PPT 已有的讲稿，保留核心观点和关键数据，删除重复及冗余表达。",
-			"title": "备注"
+			"title": "备注",
+			"unsaved": "未保存"
 		},
+		"startSlideshow": "开始放映",
 		"templateReplacement": {
 			"button": "更换模板",
 			"confirm": "确认使用",
@@ -4965,6 +5430,19 @@
 		"workspaces": "工作空间",
 		"workspacesShort": "空间"
 	},
+	"projectResources": {
+		"allTypes": "全部类型",
+		"createTime": "创建时间",
+		"filterType": "筛选项目类型",
+		"generalType": "普通项目",
+		"lastActiveTime": "最近活动",
+		"role": "角色：{{role}}",
+		"statusUnknown": "状态未知",
+		"updateTime": "更新时间",
+		"updatedAt": "更新于 {{date}}",
+		"version": "版本 {{version}}",
+		"workspaceOrder": "工作区顺序"
+	},
 	"projectShare": {
 		"advancedSettings": "高级设置",
 		"copyLink": "复制链接",
@@ -5014,6 +5492,14 @@
 		"typePasswordDescription": "需要正确密码才能访问",
 		"typePublic": "公开",
 		"typePublicDescription": "互联网上任何人均可通过链接访问"
+	},
+	"projectTypeTag": {
+		"agent": "数字员工项目",
+		"audio": "音频项目",
+		"chat": "对话项目",
+		"magicClaw": "龙虾项目",
+		"microApp": "微应用项目",
+		"skill": "技能项目"
 	},
 	"recordingSummary": {
 		"actions": {
@@ -5467,6 +5953,7 @@
 			"loadFailed": "加载失败，请重试",
 			"retry": "重试"
 		},
+		"globalTitle": "全局回收站",
 		"item": {
 			"deletedOn": "删除于 {{date}}",
 			"more": "更多操作",
@@ -5483,6 +5970,11 @@
 		},
 		"loader": {
 			"noMoreData": "没有更多数据了"
+		},
+		"preview": {
+			"open": "预览",
+			"readonly": "已删除文件，仅可预览",
+			"unavailable": "文件已不可用或你已无权访问。"
 		},
 		"project": {
 			"applyRange": "应用",
@@ -5661,6 +6153,16 @@
 		"weeklyAt": "每周 {{day}} · {{time}} 执行",
 		"workspaceDescription": "让工作按计划自动执行，随时查看任务状态"
 	},
+	"scriptExecution": {
+		"code": "执行代码",
+		"copyCode": "复制代码",
+		"noCodeToCopy": "没有可复制的代码",
+		"noOutput": "无输出",
+		"output": "输出结果",
+		"stderr": "标准错误",
+		"stdout": "标准输出",
+		"title": "Python 脚本"
+	},
 	"search": {
 		"batchSummary": "本次 {{count}} 组搜索",
 		"collapseSnippet": "收起摘要",
@@ -5680,8 +6182,10 @@
 		"all": "全部",
 		"cannotSelectCurrentFolder": "不能选择当前已选中的文件夹作为移动目标",
 		"chatCount": "{{count}} 个对话",
+		"collaboratedMicroApps": "我协作的",
 		"completeFolderCreation": "请完成文件夹创建",
 		"confirm": "确认",
+		"createdMicroApps": "我创建的",
 		"createdSuccessfully": "创建成功",
 		"defaultFolderName": "新建文件夹",
 		"defaultProjectName": "新建项目",
@@ -5708,7 +6212,10 @@
 		"mentionEmptyProject": "当前项目暂无文件",
 		"mentionOtherProjectFiles": "选择其它项目/文件",
 		"mentionProjectLimit": "最多只能选择 10 个不同项目中的项目或文件",
+		"microAppSourceFiles": "微应用项目与文件",
+		"microApps": "微应用",
 		"myAgents": "我的数字员工",
+		"myMicroApps": "我的微应用",
 		"mySkills": "我的技能",
 		"myWorkspaces": "我的工作区",
 		"newProject": "新建项目",
@@ -5721,8 +6228,13 @@
 		"onlySelectableAdministratorDocument": "仅可选择有管理员权限的文档",
 		"pleaseSelectFile": "请选择文件",
 		"preserveParentPath": "保留文件夹层级关系",
-		"preserveParentPathConfirmTitle": "确认跨项目操作",
+		"preserveParentPathConfirmTitle": "保留原文件夹路径？",
 		"preserveParentPathDescription": "是否需要在目标项目中按原上级文件夹路径创建层级？不勾选将直接放入所选目录。",
+		"preserveParentPathExamples": "文件夹路径保留方式对比",
+		"preserveParentPathFlatDescription": "所选文件将直接存储到当前目录。",
+		"preserveParentPathFlatTitle": "直接放入当前目录",
+		"preserveParentPathKeepDescription": "所选文件将按原有文件夹路径存储到目标项目。",
+		"preserveParentPathKeepTitle": "保留文件夹路径",
 		"projects": "项目",
 		"returnSearch": "退出搜索",
 		"rootDirectory": "根目录",
@@ -5733,6 +6245,7 @@
 		"searchResult": "搜索结果",
 		"searchWorkspace": "搜索工作区",
 		"selectMentionResource": "选择项目或文件",
+		"selectProject": "选择项目 {{name}}",
 		"selectSourceFiles": "存储位置",
 		"selectSpaceOrFolder": "请选择空间或文件夹",
 		"selectStorageLocation": "存储位置",
@@ -6227,6 +6740,8 @@
 		"viewShortcuts": "查看快捷键"
 	},
 	"sidebarPanels": {
+		"absoluteTime": "完整时间",
+		"activityTimeFormat": "最近活动，当前为{{format}}，选择时间格式",
 		"browseWorkspaces": "工作区",
 		"clearSearch": "清除搜索",
 		"collapseFiles": "收起文件栏",
@@ -6239,6 +6754,7 @@
 		"loadMore": "加载更多",
 		"loadedProjects": "已显示 {{count}} / {{total}} 个项目",
 		"noMatchingProjects": "未找到匹配项目",
+		"projectLocation": "位置",
 		"projectManager": "项目管理器",
 		"projectManagerDescription": "浏览与管理所有工作区的项目",
 		"projectName": "项目名称",
@@ -6247,6 +6763,7 @@
 		"pullLeftToCollapse": "继续向左拉动以收起",
 		"pullRightToCancel": "向右回拉可取消",
 		"pullRightToCollapse": "继续向右拉动以收起",
+		"relativeTime": "人性化时间",
 		"releaseKeepsOpen": "松手后仍保持展开",
 		"releaseToCollapse": "松开即可收起",
 		"renameCancel": "取消（Esc）",
@@ -6280,6 +6797,18 @@
 		"replaceFile": "替换文件",
 		"searchBoard": "搜索看板",
 		"shareBoard": "分享看板"
+	},
+	"simpleMode": {
+		"collapse": "收起执行过程",
+		"description": "任务完成后收起过程，保留最后回复。",
+		"dismiss": "知道了",
+		"enable": "启用简洁模式",
+		"enabled": "已开启",
+		"expand": "查看执行过程",
+		"guideHelp": "可在「更多」里随时关闭。",
+		"guideTitle": "试试简洁模式",
+		"messageCount": "{{count}} 条消息",
+		"title": "简洁模式"
 	},
 	"slidesTemplatePreview": {
 		"save": {
@@ -6937,6 +7466,19 @@
 		"zoomIn": "放大",
 		"zoomOut": "缩小"
 	},
+	"subagents": {
+		"durationHours": "{{hours}} 小时 {{minutes}} 分",
+		"durationMinutes": "{{minutes}} 分 {{seconds}} 秒",
+		"durationSeconds": "{{seconds}} 秒",
+		"settled": "等待结束",
+		"status": {
+			"done": "已完成",
+			"error": "失败",
+			"interrupted": "已停止",
+			"notFound": "未找到",
+			"running": "处理中"
+		}
+	},
 	"superMagicMessageListFallback": {
 		"cardMarketingSlogan": "创意营销口号",
 		"cardProductIntro": "摄写产品介绍",
@@ -7099,7 +7641,7 @@
 		"backup_dashboard_template": "仪表盘模板备份恢复",
 		"batch_create_canvas_elements": "批量创建画布元素",
 		"batch_update_canvas_elements": "批量更新画布元素",
-		"call_subagent": "调用子代理",
+		"call_subagent": "调用智能体",
 		"compact_chat_history": "压缩聊天历史",
 		"connect_dingtalk_bot": "连接钉钉机器人",
 		"connect_lark_bot": "连接飞书机器人",
@@ -7128,6 +7670,7 @@
 		"edit_file": "编辑文件",
 		"edit_file_range": "按范围编辑文件",
 		"file_search": "文件搜索",
+		"find_file_range": "查找文件范围",
 		"generate_canvas_images": "画布生成图片",
 		"generate_canvas_videos": "画布生成视频",
 		"generate_image": "生成图片",
@@ -7213,6 +7756,7 @@
 			"moveMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
 			"moveOpenFailureContent": "该操作会移动画布项目入口文件，可能导致画布无法打开。是否继续？",
 			"pathRepairFailureContent": "部分画布资源路径未能在本次操作前修复：\n{{failures}}\n是否仍要继续？",
+			"pathRepairFailureTitle": "画布路径预检",
 			"pathRepairSaveFailed": "画布路径修复失败，请重试",
 			"renameContentLossContent": "该操作会重命名画布内容依赖的数据或资源，可能导致画布内容显示丢失。是否继续？",
 			"renameMixedContent": "该操作会影响画布项目入口文件以及内容依赖的数据或资源，可能导致画布无法打开或内容显示丢失。是否继续？",
@@ -8319,7 +8863,7 @@
 							}
 						]
 					},
-					"note": "文件描述分工，不等于系统已经启动多个协作者。",
+					"note": "文件描述分工，不等于系统已经启动多个协作者。灰色人物文件夹标识协作角色说明，不是当前项目的成员列表。",
 					"preview": [
 						"例如一个角色整理资料，另一个角色检查来源，再汇总成报告。",
 						"文件描述分工，不等于系统已经启动多个协作者。"
@@ -8361,7 +8905,7 @@
 							}
 						]
 					},
-					"note": "它们用于制作或处理内容，不是所有任务都要读进提示词。",
+					"note": "它们用于制作或处理内容，不是所有任务都要读进提示词。黄色图片文件夹表示素材集合，不限于图片，也可以包含数据或其他资源。",
 					"preview": [
 						"例如做报告时使用团队Logo，或根据已有模板生成内容。",
 						"它们用于制作或处理内容，不是所有任务都要读进提示词。"
@@ -8447,7 +8991,7 @@
 						"steps": [],
 						"title": "把一项工作教给 AI，以后可以反复用"
 					},
-					"note": "标准文件名是 SKILL.md。小写或混合大小写的名称在区分大小写的文件系统上可能无法加载；同一目录出现多个名称变体时，应保留一个明确的标准入口。技能说明负责教方法，scripts 放执行程序，assets 放制作结果时使用的素材。",
+					"note": "标准文件名是 SKILL.md。小写或混合大小写的名称在区分大小写的文件系统上可能无法加载；同一目录出现多个名称变体时，应保留一个明确的标准入口。技能说明负责教方法，scripts 放执行程序，assets 放制作结果时使用的素材。圆角拼图标识技能的主要说明，与保存整个技能包的拼图文件夹区分。",
 					"preview": [
 						"保留经常使用的流程和交付要求。",
 						"低频、细分的内容通过渐进说明按需阅读。"
@@ -8478,7 +9022,7 @@
 							}
 						]
 					},
-					"note": "它是检查要求，不是评估结果。",
+					"note": "它是检查要求，不是评估结果。左侧 JSON 图标表示数据格式，右侧用例标签表示它在评估中的用途。",
 					"preview": [
 						"例如「根据三份资料生成报告，必须保留来源并区分未确认信息」。",
 						"它是检查要求，不是评估结果。"
@@ -8520,7 +9064,7 @@
 							}
 						]
 					},
-					"note": "输入资料与输出结果分开，不把示例答案当作真实输入。",
+					"note": "输入资料与输出结果分开，不把示例答案当作真实输入。绿色输入箭头标识交给评估的材料，不是下载按钮。",
 					"preview": [
 						"例如一组待整理的文档。",
 						"输入资料与输出结果分开，不把示例答案当作真实输入。"
@@ -8562,7 +9106,7 @@
 							}
 						]
 					},
-					"note": "有评估文件不代表已经运行或通过；日常使用技能不要求先学会编写评估。",
+					"note": "有评估文件不代表已经运行或通过；日常使用技能不要求先学会编写评估。绿色烧瓶文件夹标识检查方法和用例，颜色只区分用途。",
 					"preview": [
 						"例如准备几种常见报告任务，比较技能修改前后是否更完整、更符合要求。",
 						"有评估文件不代表已经运行或通过；日常使用技能不要求先学会编写评估。"
@@ -8594,7 +9138,7 @@
 							}
 						]
 					},
-					"note": "示例用于学习方法，不代表已经执行了当前任务。",
+					"note": "示例用于学习方法，不代表已经执行了当前任务。青色灯泡文件夹标识供学习和对照的示例。",
 					"preview": [
 						"第一次用技能时，先看一个完整例子，可以更容易理解要准备哪些资料。",
 						"示例用于学习方法，不代表已经执行了当前任务。"
@@ -8685,7 +9229,7 @@
 						"tipsTitle": "技能可以共享，个人凭据不要打包进去",
 						"title": "项目里可以使用哪些技能，在这里查看"
 					},
-					"note": "项目技能是保存在这里的技能，不是 AI 全部能力的清单。安装完成也不等于相关账号已经登录或获得授权；涉及外部服务时，还需要完成相应配置。",
+					"note": "项目技能是保存在这里的技能，不是 AI 全部能力的清单。安装完成也不等于相关账号已经登录或获得授权；涉及外部服务时，还需要完成相应配置。四格文件夹表示技能集合，拼图文件夹表示其中的一项技能。",
 					"preview": [
 						"项目成员可以在项目任务中使用这些能力。",
 						"需要个人凭据时，在个人空间完成相应配置。"
@@ -8716,7 +9260,7 @@
 							}
 						]
 					},
-					"note": "具体条件以许可内容为准，文件名本身不代表已经获得所有使用权限。",
+					"note": "具体条件以许可内容为准，文件名本身不代表已经获得所有使用权限。左侧保留普通文件图标，右侧许可标签帮助你识别授权说明。",
 					"preview": [
 						"准备把外部技能分享给团队或用于某项工作前，可以先查看许可正文。",
 						"具体条件以许可内容为准，文件名本身不代表已经获得所有使用权限。"
@@ -8748,7 +9292,7 @@
 							}
 						]
 					},
-					"note": "选好发布内容与完成发布是两件事。",
+					"note": "选好发布内容与完成发布是两件事。配置文件图标与发布配置标签用于识别发布范围，不是发布按钮。",
 					"preview": [
 						"项目里可能有多项技能，发布前选择需要交付的部分，避免把临时内容混入发布范围。",
 						"选好发布内容与完成发布是两件事。"
@@ -8779,7 +9323,7 @@
 							}
 						]
 					},
-					"note": "README偏向教人使用；SKILL.md主要教AI执行。",
+					"note": "README偏向教人使用；SKILL.md主要教AI执行。左侧 Markdown 图标表示文件格式，右侧说明标签表示它面向使用者的用途。",
 					"preview": [
 						"不清楚一个技能适不适合自己时，先看它能做什么、需要哪些输入以及使用示例。",
 						"README偏向教人使用；SKILL.md主要教AI执行。"
@@ -8847,7 +9391,7 @@
 						"steps": [],
 						"title": "常用方法先读，专门细节用到再读"
 					},
-					"note": "需要在 SKILL.md 中写清「什么情况下，读取哪份文件」。仅创建 references 文件夹，不会让其中的内容自动按规则加载。每次任务都必须遵守的关键要求，仍应留在主要说明中。",
+					"note": "需要在 SKILL.md 中写清「什么情况下，读取哪份文件」。仅创建 references 文件夹，不会让其中的内容自动按规则加载。每次任务都必须遵守的关键要求，仍应留在主要说明中。蓝色书本文件夹表示参考资料，右侧「资料」是用途标注。",
 					"preview": [
 						"先读主要方法，遇到相关问题再读对应内容。",
 						"由 SKILL.md 写清什么时候读取哪份文件。"
@@ -8879,7 +9423,7 @@
 							}
 						]
 					},
-					"note": "程序是实际执行步骤；渐进说明是需要阅读的知识。文件放在这里不等于已经运行。",
+					"note": "程序是实际执行步骤；渐进说明是需要阅读的知识。文件放在这里不等于已经运行。橙色代码文件夹表示可执行程序，图标和用途标签本身不会运行脚本。",
 					"preview": [
 						"例如把一批表格合并成一份，程序可以按确定步骤重复处理；SKILL.md说明何时运行、需要什么输入。",
 						"程序是实际执行步骤；渐进说明是需要阅读的知识。"
@@ -8930,7 +9474,7 @@
 							}
 						]
 					},
-					"note": "一项技能解决一类工作；技能库汇集多项技能。",
+					"note": "一项技能解决一类工作；技能库汇集多项技能。拼图文件夹表示整个技能包，进入后再看 SKILL.md 和按需使用的资源。",
 					"preview": [
 						"例如报告整理技能，包含流程、行业细则和模板。",
 						"一项技能解决一类工作；技能库汇集多项技能。"
@@ -8961,7 +9505,7 @@
 							}
 						]
 					},
-					"note": "模板提供结构，不能把示例中的数字和结论当作本次事实。",
+					"note": "模板提供结构，不能把示例中的数字和结论当作本次事实。暖橙色布局文件夹表示可复用的内容结构，与已经生成的成品区分。",
 					"preview": [
 						"例如报告始终包含结论、依据和建议，可以先准备结构模板，再放入本次真实内容。",
 						"模板提供结构，不能把示例中的数字和结论当作本次事实。"
@@ -8999,7 +9543,7 @@
 				"license": "许可说明",
 				"publishConfig": "发布配置",
 				"readme": "使用说明",
-				"references": "渐进说明",
+				"references": "参考资料",
 				"scripts": "执行脚本",
 				"skill": "技能",
 				"templates": "模板"
@@ -9082,7 +9626,7 @@
 						]
 					},
 					"label": "龙虾技能",
-					"note": "技能教做事方法，实际执行仍需要相应工具和授权。",
+					"note": "技能教做事方法，实际执行仍需要相应工具和授权。四格文件夹表示当前作用范围内的技能集合。",
 					"preview": [
 						"你可以根据经常需要的工作准备相应技能，让龙虾遇到任务时有方法可用。",
 						"技能教做事方法，实际执行仍需要相应工具和授权。"
@@ -9174,7 +9718,7 @@
 						"title": "让数字员工掌握适合自己岗位的方法"
 					},
 					"label": "员工技能",
-					"note": "员工编辑区用于准备和调整内容；供他人使用的员工按已发布版本工作。仅把文件放进目录，并不等于已经完成技能配置和发布。",
+					"note": "员工编辑区用于准备和调整内容；供他人使用的员工按已发布版本工作。仅把文件放进目录，并不等于已经完成技能配置和发布。四格文件夹表示当前作用范围内的技能集合。",
 					"preview": [
 						"配置并发布后，可与员工的内置能力一起使用。",
 						"技能内容围绕员工的岗位和职责组织。"
@@ -9261,7 +9805,7 @@
 						"title": "在这里查找可复用的做事方法"
 					},
 					"label": "技能库",
-					"note": "文件放在目录中，不代表已经完成安装、账号授权或员工发布。",
+					"note": "文件放在目录中，不代表已经完成安装、账号授权或员工发布。四格文件夹表示当前作用范围内的技能集合。",
 					"preview": [
 						"每项技能提供一套可复用的做事方法。",
 						"使用对象需要结合文件所属空间确认。"
@@ -9353,7 +9897,7 @@
 						"title": "换个项目，也能沿用自己的做事方法"
 					},
 					"label": "个人技能",
-					"note": "个人技能属于当前组织和账号的个人空间，不会因为其他人加入项目就自动共享给他们。需要团队共同使用的方法，应明确放到项目或配置给数字员工。",
+					"note": "个人技能属于当前组织和账号的个人空间，不会因为其他人加入项目就自动共享给他们。需要团队共同使用的方法，应明确放到项目或配置给数字员工。四格文件夹表示当前作用范围内的技能集合。",
 					"preview": ["结合你的长期习惯和当前任务使用。", "不会随项目成员关系自动共享。"],
 					"scope": "个人空间 · 当前组织与账号",
 					"summary": "保存可以在不同项目复用的个人方法。",
@@ -9985,6 +10529,7 @@
 		"deleteWorkspaceConfirmTitle": "删除工作区?",
 		"deleteWorkspaceDescription": "「{{name}}」将移入回收站，其中所有项目、话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
 		"deleteWorkspaceDescriptionWithoutName": "将移入回收站，其中所有项目、话题和文件也会一并移入。你可以在回收站中恢复或彻底删除。",
+		"executing": "正在执行中...",
 		"expandAllFiles": "展开全部文件",
 		"expandUserMessage": "展开",
 		"filePreviewNotSupported": "暂不支持预览该文件,请下载该文件",
@@ -10047,10 +10592,164 @@
 		"taskSuspended": "任务已终止",
 		"thinking": "正在思考中...",
 		"tokenUsage": {
-			"compressContext": "整理对话内容",
-			"contextUsage": "对话容量",
-			"contextUsageDescription": "当前对话已占用的容量。接近上限时，AI 可能无法继续参考较早的内容。",
-			"highContextWarning": "对话内容较多，继续发送消息可能会增加响应成本",
+			"approximate": "约 {{count}}",
+			"autoCompactThreshold": "自动整理阈值：{{threshold}} Tokens",
+			"automatic": "系统会自动整理",
+			"breakdownNote": "按最近一次请求中的文本估算。",
+			"breakdownTitle": "输入文本构成 · 估算",
+			"categories": {
+				"conversation": "对话消息",
+				"mcp": "MCP 输出",
+				"other": "其他工具",
+				"skills": "技能说明",
+				"system": "系统指令",
+				"tools": "工具定义"
+			},
+			"categoryDescriptions": {
+				"conversation": "你的提问、AI 回答、调用参数与任务摘要",
+				"mcp": "来源明确、实际提供给 AI 的 MCP 调用输出",
+				"other": "文件阅读、普通工具结果，以及无法单独归类的混合输出",
+				"skills": "实际加载的技能目录、方法与步骤",
+				"system": "角色与工作规则，已识别的技能说明另列",
+				"tools": "本次提供给 AI 的工具说明和参数"
+			},
+			"closeCard": "收起用量卡片",
+			"compressContext": "立即整理",
+			"contextUsage": "上下文用量",
+			"contextUsageDescription": "接近上限时，系统会自动整理，为后面的对话腾出空间。你无需操作，也不用一直盯着用量。",
+			"currentUsage": "当前用量",
+			"guide": {
+				"articles": {
+					"compaction": "自动整理",
+					"memory": "长期记忆",
+					"skills": "技能说明",
+					"usage": "上下文用量"
+				},
+				"content": {
+					"actionContinue": "同一个任务仍在继续时，通常直接继续即可，系统会自动处理较早内容。你也可以选择「立即整理」提前整理一次，但它不是自动整理的开关。",
+					"actionMaterials": "给 AI 清楚的目标、必要资料和明确的文件位置，比重复粘贴同一大段内容更有帮助。需要核对具体数据时，让它读取对应文件，而不是要求它仅凭对话摘要回忆。",
+					"actionTitle": "5. 用量高，需要我做什么？",
+					"actionTopic": "如果要开始一个独立的新任务，可以新建话题并说明必要背景。新话题和上下文整理分别解决不同问题，不需要为了追求更低的数字而反复切换。",
+					"autoIntro": "不用一直盯着用量，也不用点击「立即整理」才能继续。系统会把较早内容整理成摘要，为后面的对话腾出空间。",
+					"autoLead": "对话快满时，系统会自动整理，你无需操作。",
+					"budgetTitle": "用量与自动整理阈值，一起看",
+					"exampleCapacity": "总容量 200K",
+					"exampleCaption": "示例：122K / 200K = 61%。输入文本约 120K，其中技能说明约 12K、MCP 输出约 24K。颜色表示文本的大致构成；总用量仍以模型回报为准。",
+					"examplePercent": "已使用 61%",
+					"exampleThreshold": "180K 时自动整理",
+					"exampleUsed": "已使用 122K",
+					"filesKept": "自动整理不会删除已经生成的文件，也不会撤销已经完成的操作。你仍然可以使用之前的报告、表格和其他成果。",
+					"filesNote": "文件存放在项目里，不意味着它的全文每次都会进入上下文。只有实际为本次回答准备的内容，才属于这次请求的输入。",
+					"filesNoteTitle": "一个容易混淆的地方",
+					"filesReread": "变化的是 AI 接下来回答时参考的对话内容：较早的长篇讨论会被摘要替代。如果需要重新核对文件里的细节，告诉 AI 文件名和要核对的位置，它可以重新读取资料。",
+					"filesTitle": "3. 我的文件和已经做完的事情会丢吗？",
+					"flowCaption": "整理示意",
+					"flowTitle": "让当前任务继续进行",
+					"historyCompleted": "已经完成的工作",
+					"historyFiles": "读过的资料",
+					"historyLimit": "可参考的内容接近上限",
+					"historyLimits": "历史聊天适合核对「我们之前说过什么」，原始文件适合核对「资料里到底写了什么」。历史查找依赖仍可访问的记录，并不等于所有内容都会永久保存、每个细节都一定能恢复。重要资料和需要长期使用的要求，仍建议保留在文件或长期记忆中。",
+					"historyRequirements": "你的要求与讨论",
+					"historyTitle": "对话越来越长",
+					"inputsCaption": "内容关系示意",
+					"inputsLessonDescription": "AI 理解任务时，参考内容不只有你看到的聊天。系统需要提供工作规则、可用工具说明，以及本次任务中已经读取的资料和工具返回结果。",
+					"inputsLessonGrowth": "所以，聊天里只显示了几条简短消息，用量也可能已经增加。比如让 AI 阅读一份很长的报告，报告正文会成为任务参考内容；让 AI 查询数据，返回结果也可能需要占用空间。",
+					"inputsLessonTitle": "1. 上下文为什么比聊天文字更多？",
+					"inputsPurpose": "这些内容共同帮助 AI 理解任务，再生成回答。",
+					"inputsTitle": "一次回答会参考哪些内容？",
+					"keepFiles": "整理不会删除文件，也不会撤销已经完成的操作。",
+					"keepFilesTitle": "已经做好的文件保留",
+					"limitCost": "使用能处理更多内容的模型，可以容纳更长的对话，但也有上限。每次处理的内容越多，通常需要更多计算、产生更高的费用，回答和任务执行也可能变慢。因此，长任务仍然需要整理，无法一直保留无限多的内容。",
+					"limitDescription": "AI 一次能参考的内容有上限。聊天越久，读过的资料和工具返回的内容越多，剩余空间就会减少。接近上限时，系统会自动把较早内容整理成摘要，为后面的对话腾出空间。",
+					"limitTitle": "1. 为什么不能一直保留全部对话？",
+					"manualDescription": "它让你主动提前发起一次整理，是可选操作。即使一次都不点击，系统也会在需要时自动整理。这个按钮不负责开启或关闭自动整理。",
+					"manualOptional": "「立即整理」只是提前整理的可选操作。不点击，系统也会自动处理。",
+					"manualTitle": "5. 那「立即整理」是做什么的？",
+					"manualTopic": "如果原来的任务还没完成，可以继续当前话题；如果要开始完全不同的任务，可以新建话题并说明必要背景。无需为了让用量数字更低，反复整理或新建话题。",
+					"memoryDescription": "自动整理主要帮助你继续当前任务，不等于把整段聊天保存成永久记忆。希望以后也能参考的重要偏好或背景，可以明确告诉 AI 保存什么，并查看「长期记忆」中的说明。",
+					"memoryExample": "例如，「这份报告还差结论」是当前任务的进展；「我的报告习惯先写结论，再写依据」可能是值得长期保存的偏好。准确数字和需要逐字引用的材料，仍建议保留在原始文件里。",
+					"memoryTitle": "6. 整理后，以后的任务也会记得这些内容吗？",
+					"nearLimitDescription": "系统会自动整理较早内容，为后面的对话腾出空间。",
+					"nearLimitTitle": "接近上限，也无需操作",
+					"numbersColors": "颜色在已使用区域中表示文本的大致构成，不是每一类占总容量的精确比例。图片、音频等非文本内容不能靠这种字符估算得到精确分布；总用量仍以模型返回的数据为准，分项不能作为账单。",
+					"numbersColumn": "卡片信息",
+					"numbersDifference": "示例中，模型回报的总用量是 122K，输入文本估算合计约 120K。两者不需要完全相等：总量与文本分项采用不同口径，模型也会按自己的规则计量内容。卡片用「约」和「≈」表示分项估算。",
+					"numbersInput": "输入文本构成",
+					"numbersInputMeaning": "各类文字大致有多少 Token？例如技能说明约 12K、MCP 输出约 24K。",
+					"numbersMeaningColumn": "它回答的问题",
+					"numbersThreshold": "自动整理阈值",
+					"numbersThresholdMeaning": "系统判断需要整理时采用什么用量依据？它来自当前会话配置，不是前端写死的比例。",
+					"numbersTitle": "3. 总用量、分项估算、整理阈值，怎么一起读？",
+					"numbersUsage": "总用量 61%",
+					"numbersUsageMeaning": "当前已经使用了总容量的多少？例如 122K / 200K = 61%。",
+					"recover": "摘要可能遗漏细节，AI 可以按需查找历史聊天。准确数据也可以重新查看原始资料。",
+					"recoverTitle": "遗漏细节，可以查找历史",
+					"recoveryHistory": "AI 还可以主动查找历史聊天，在已保存的记录里找回之前的要求、讨论和结论。某个细节没有出现在摘要中，不代表只能靠你重新讲一遍；需要时，AI 可以查找并阅读相关记录，再继续任务。",
+					"recoverySummary": "整理会尽量保留你的任务目标、重要要求、已经确认的结论和还没做完的事情，让 AI 继续当前任务。较早的讨论会被缩短，一些原话、数字和细节可能不再完整保留。",
+					"recoveryTitle": "2. 摘要里少了细节，怎么办？",
+					"recoveryTradeoff": "这也是整理的代价：摘要占用的空间更少，但不能保留原文里的所有信息。自动整理能帮助长任务继续进行，也不代表 AI 从此可以记住无限长的对话。",
+					"reportContinue": "你们已经确定按地区分析，也已经做好表格。整理后，你可以接着说「继续写主要结论」，不需要自己先把整段聊天整理一遍。",
+					"reportHistory": "如果 AI 不确定之前的分组要求，它可以查找历史聊天进行核对。你也可以提醒一句：「查一下我们之前确定的分组方式，再继续。」无需重新粘贴整段对话。",
+					"reportOriginal": "如果要引用报告里的某个准确数字或一句原话，可以说「请重新查看这份报告，核对这一项」。重新读取原始资料，比让 AI 凭摘要回忆更可靠。",
+					"reportTitle": "比如，你正在和 AI 一起写一份报告",
+					"sourcesExampleInstalled": "技能已经安装但没有加载正文，就不把它的整份文件算进来。如果它的名称和简介出现在本次技能目录里，这部分说明仍会占用少量空间。",
+					"sourcesExampleOutput": "MCP 返回了 1,000 条记录，脚本只输出其中 10 条的汇总。占用上下文的是这份汇总，而不是全部 1,000 条记录。",
+					"sourcesExampleTitle": "查询数据时 · 教学示例",
+					"sourcesMcp": "MCP 是连接外部工具和服务的一种方式。这里的「MCP 输出」估算来源明确、实际交给 AI 的调用输出。系统执行脚本时，可能先获取很多数据，再筛选出一小部分输出给 AI；没有进入上下文的中间数据不计入。",
+					"sourcesMixed": "有些脚本同时使用 MCP、读取文件和执行其他操作，最后输出一份合并结果。为了避免猜错，这类混合输出归入「其他工具」。所以 MCP 的分项为零，也不能据此判断本次完全没有调用过 MCP。",
+					"sourcesOther": "其他工具还包含普通文件阅读和工具返回。工具定义则是直接提供给 AI 的工具说明和参数。子智能体独立处理的全部历史不会直接加到主对话中；主对话实际收到的结果，才作为它的参考内容。",
+					"sourcesSkills": "技能提供方法、步骤和使用说明。AI 实际收到的技能目录、预加载正文，以及后续读取的技能说明，归入「技能说明」。同一段说明不会再重复计入「系统指令」或「其他工具」。安装了多少技能，和本次加载了多少内容，是两回事。",
+					"sourcesTitle": "4. 技能和 MCP 的数字，具体包含什么？",
+					"summaryConclusions": "已有结论",
+					"summaryContinue": "腾出空间，继续当前任务",
+					"summaryGoal": "要做什么",
+					"summaryNext": "接着做什么",
+					"summaryRequirements": "你的要求",
+					"summaryTitle": "系统自动整理成摘要",
+					"tokenDescription": "文字、图片等会按模型规则占用空间。用量不等于消息条数。",
+					"tokenTitle": "Token 是内容的计量单位",
+					"tokensLessonDescription": "Token 是模型用来计量内容的单位，可以理解为内容被划分后的一小段。它和字数不是固定的一对一关系，不同语言、代码、格式和模型都会影响数量。",
+					"tokensLessonK": "K 表示千。例如 122K 约为 122,000 个 Token。图片等非文本内容也可能占用模型空间，所以不能只数屏幕上有多少个字。",
+					"tokensLessonReading": "你无需手动换算每句话的 Token。看总用量、容量上限和自动整理说明，就能判断当前对话的空间情况。",
+					"tokensLessonTitle": "2. Token 是什么？K 又是什么意思？",
+					"updatesBreakdown": "分项统计跟随当前请求中仍在参考的内容更新，不累计历史上读过多少文件、调用过多少工具。早期工具结果被整理成任务摘要后，摘要作为对话内容计入，不再沿用早期结果的分项数字。",
+					"updatesRemaining": "另外，系统仍需要保留任务重点和部分对话，后续读取新资料也会重新占用空间。因此，整理不是把用量清零，也不能保证每次都降到同一个百分比。",
+					"updatesTiming": "卡片显示最近一次模型回报的用量。整理完成、后续请求使用新上下文、模型返回新用量，这几个动作不是同一时刻发生的。",
+					"updatesTitle": "6. 为什么整理后数字没有立刻下降？",
+					"usageIntro": "上下文是 AI 这次回答会参考的内容。用量越高，剩余空间越少。",
+					"waitingDescription": "不需要额外操作。系统会自动准备整理结果，你通常可以继续当前任务。如果需要等待整理完成，任务可能稍作停顿；这时等待即可，不用为了腾出空间反复点击按钮。",
+					"waitingThreshold": "卡片上的「自动整理」刻度是系统处理用量的参考。系统可能提前开始准备，不一定等到那个数字才整理。你无需一直盯着百分比，也不必担心忘记点击「立即整理」。",
+					"waitingTitle": "4. 整理时，我需要做什么？",
+					"waitingUsage": "整理后的新用量可能要等下一次回答完成才显示。数字没有立刻下降，并不能单凭这一点判断系统没有整理。"
+				},
+				"conversation": "理解对话",
+				"label": "这是什么？",
+				"navigationHint": "按主题了解对话如何工作",
+				"readingDescriptions": {
+					"compaction": "无需操作，也能继续任务；了解整理的作用与限制。",
+					"memory": "哪些信息用于当前任务，哪些值得长期保存？",
+					"usage": "了解容量、内容构成和自动整理刻度。"
+				},
+				"readingTitles": {
+					"compaction": "看看自动整理如何工作",
+					"memory": "整理与长期记忆的区别",
+					"usage": "如何读懂用量"
+				},
+				"recommended": "推荐阅读",
+				"related": "相关主题",
+				"subtitle": "了解上下文、自动整理与记忆",
+				"title": "对话指南"
+			},
+			"help": {
+				"summary": "接近上限时，系统会自动整理，你无需操作。",
+				"title": "自动整理"
+			},
+			"highContextWarning": "对话内容较多，系统会自动整理重点后继续任务，无需手动操作。",
+			"manualNote": "也可以提前整理一次",
+			"mixedNote": "混合或来源不明的输出归入其他工具。",
+			"noActionNeeded": "无需手动操作",
+			"nonTextNote": "图片、音频等不在文本分项中。",
+			"thresholdMarker": "{{threshold}} 自动整理",
 			"tokenCount": "已使用 {{used}} / {{max}}"
 		},
 		"usedImageModel": "图像模型：",
@@ -10934,6 +11633,65 @@
 		"imageUnavailable": "暂无预览",
 		"loadingImage": "加载图片中...",
 		"tryNow": "立即试用"
+	},
+	"wechatChat": {
+		"actions": "聊天区块操作",
+		"append": "追加聊天记录",
+		"attachment": "附件",
+		"close": "关闭",
+		"command": "/微信聊天记录",
+		"commandDescription": "粘贴并预览，添加到当前输入框",
+		"commandHint": "搜索命令 · Enter 选择 · Esc 关闭",
+		"commands": "斜杠命令",
+		"confirm": "确认并返回",
+		"confirmHint": "确认只返回输入框；点击发送后，聊天记录和处理要求才会交给当前 Agent。",
+		"copyGuideTitle": "如何多选并复制聊天",
+		"delete": "删除区块",
+		"desktopGuide": "在微信里右键消息，选择「多选」，勾选消息后点击底部「复制」，回来按 {{shortcut}} 粘贴。",
+		"desktopGuideAlt": "电脑微信：右键消息，多选，勾选消息后复制",
+		"desktopPasteHint": "复制后点击这里，再按 {{shortcut}} 粘贴；文字、图片和文件可一起导入。",
+		"edit": "编辑",
+		"editorHint": "左侧可以编辑，右侧同步更新。",
+		"enlargeGuide": "点击放大",
+		"filesGuideAlt": "微信多选示例：文字、图片、PDF、Word 和 Excel 文件一起选中，点击底部复制",
+		"filesGuideTitle": "图片和文件也能一起导入",
+		"guideTitle": "第一次导入？看这里",
+		"importGroup": "导入材料",
+		"instructionPlaceholder": "告诉 AI 怎么处理这段聊天，例如：总结重点、列出待办和负责人",
+		"link": "链接",
+		"linksGuideAlt": "微信多选示例：小红书与知乎分享卡片、普通链接一起选中，点击底部复制",
+		"linksGuideTitle": "分享卡片和链接也可以",
+		"markerOnly": "此次粘贴仅提供了附件标记，没有对应的文件内容。",
+		"mediaGuide": "文字、图片、文件和分享链接，都可以一起选择、复制和导入。",
+		"mediaLoadFailed": "附件无法加载或无权读取，原引用已保留。",
+		"mediaLoading": "正在加载附件",
+		"messageCount": "{{count}} 条消息",
+		"mobileGuide": "在微信里长按消息，选择「多选」，勾选消息后点击底部「复制」，回来长按粘贴。",
+		"mobileGuideAlt": "手机微信：长按消息，多选，勾选消息后复制",
+		"mobilePasteHint": "点击这里后，在聊天原文区域长按粘贴；文字、图片和文件可一起导入。",
+		"noCommand": "没有匹配的命令",
+		"pasteHere": "点击这里粘贴微信聊天记录",
+		"pause": "暂停",
+		"play": "播放",
+		"playbackProgress": "播放进度",
+		"prepareFailed": "附件上传准备失败。聊天原文已保留，请检查上传提示后重试粘贴。",
+		"preview": "预览",
+		"previewAttachment": "预览附件：{{name}}",
+		"previewTitle": "聊天记录预览",
+		"provenance": "联系人名称来自聊天原文，头像为示意。",
+		"retry": "重试",
+		"searchCommands": "搜索命令",
+		"simulatedAvatar": "模拟头像：{{name}}",
+		"syncScroll": "同步滚动",
+		"title": "微信聊天记录",
+		"titleGroup": "{{first}}等{{count}}人的聊天记录",
+		"titlePair": "{{first}}和{{second}}的聊天记录",
+		"titleSingle": "{{name}}的聊天记录",
+		"unlinkedMedia": "附件尚未关联。请检查上传状态或重新粘贴包含附件的完整记录。",
+		"unmatchedMedia": "附件无法可靠对应到此消息，已作为独立资料保留在输入框。",
+		"unrecognized": "部分文字未识别为聊天消息，已保留在编辑区。",
+		"uploadFailed": "附件上传失败",
+		"uploading": "正在上传 {{progress}}%"
 	},
 	"workspace": {
 		"addWorkspace": "新增工作区",

@@ -306,6 +306,9 @@ enum SuperAgentErrorCode: int
     #[ErrorMessage('super_magic.agent.publish.identity_md_not_found')]
     case PUBLISH_IDENTITY_MD_NOT_FOUND = 51243;
 
+    #[ErrorMessage('super_magic.agent.publish.skills_sync_failed')]
+    case PUBLISH_SKILLS_SYNC_FAILED = 51244;
+
     // Import related error codes (51239-51242)
     #[ErrorMessage('super_magic.agent.import.invalid_file_type')]
     case IMPORT_INVALID_FILE_TYPE = 51239;

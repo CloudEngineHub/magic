@@ -33,9 +33,16 @@ Do not dispatch merely because a resource is mentioned. Dispatch only when the u
 <!--zh
 ### 2. 内联引用
 消息文本中的 Markdown 文件链接；普通路径不要添加 `< >`，只有路径包含空格时才使用 `<...>`；遇到历史 `[@file_path:...]` 时按原语义理解，但不要主动生成
+
+消息中的项目文件链接以工作区根目录为基准；写入 Markdown 文件的文件链接和图片路径以该 Markdown 所在目录为基准。根据源文档和目标文件的实际位置计算，不直接照搬消息链接，不把 `./` 路径称为绝对路径。例如文档为 `project/docs/guide.md`、图片为 `project/images/photo.png`：消息使用 `[图片](./project/images/photo.png)`，文档使用 `[图片](../images/photo.png)` 或 `![图片](../images/photo.png)`。
 -->
 ### 2. Inline References
 Use Markdown file links in message text, including when a file mention appears inside the user's sentence. Keep the original sentence structure and the file's root: `./` for the workspace, the confirmed absolute sandbox path for user space, or the exact absolute cross-project mount path. Keep `./` for project `.magic/` paths as well: use `./.magic/...`, not a bare `.magic/...`. Do not add `@` to labels or `.workspace/` to destinations. If the path contains spaces, enclose the destination in angle brackets; do not add angle brackets to ordinary paths. Understand historical `[@file_path:...]` and `[@memory_file:...]` / `[@memory_directory:...]` references with their existing meaning, but do not generate them.
+
+Project file links in messages are relative to the workspace root. File links and image paths written inside a Markdown file are relative to that file's directory. Compute them from the actual document and target locations; do not copy a message link unchanged into a file or call a `./` path absolute. For `project/docs/guide.md` referencing `project/images/photo.png`, use `[image](./project/images/photo.png)` in messages and `[image](../images/photo.png)` or `![image](../images/photo.png)` inside the document.
+
+<!--zh: 带空格路径的尖括号规则同样适用于 Markdown 正文和表格中的文件链接及嵌入图片。修复未渲染引用时，检查实际受影响文档的链接语法与文档相对路径，并重新读取修正后的源码再报告完成。-->
+The space-handling rule also applies to file links and embedded images in Markdown documents, including tables: `[asset](<../images/asset name.png>)` and `![asset](<../images/asset name.png>)`. When repairing an unrendered reference, check the affected document's actual link syntax and document-relative path; reread the corrected source before reporting completion.
 
 <!--zh
 ### 处理要点

@@ -7,40 +7,12 @@ vi.mock("@/models/config", () => ({
 }))
 
 import { getFullContent, getLinkHandlingScript } from "../full-content"
+import { normalizeHtmlPreviewPath, parseHtmlNavigationRequest } from "../html-navigation"
 import { filterInjectedTags } from "../index"
 import { rewriteLocationHref } from "../location-href-rewrite"
 import { restoreLocationHref } from "../location-href-restore"
 
-function createRuntime() {
-	const postMessage = vi.fn()
-	const nativeNavigate = vi.fn()
-	const location = {
-		origin: "https://preview.test",
-		pathname: "/sandbox.html",
-		search: "",
-		hash: "",
-		assign: vi.fn(),
-		replace: vi.fn(),
-	}
-	Object.defineProperty(location, "href", {
-		get: () => "https://preview.test/sandbox.html",
-		set: nativeNavigate,
-		configurable: false,
-	})
-	const frame = { location, postMessage, open: vi.fn() }
-	Object.assign(frame, { parent: frame, self: frame })
-	const doc = { addEventListener: vi.fn(), baseURI: "https://preview.test/sandbox.html" }
-	const run = (code: string) =>
-		new Function("window", "document", "globalThis", "location", "self", code)(
-			frame,
-			doc,
-			frame,
-			location,
-			frame,
-		)
-	run(getLinkHandlingScript("pages/index.html"))
-	return { run, postMessage, nativeNavigate, frame }
-}
+import { createRuntime } from "./html-navigation.test-helpers"
 
 function getUserScript(source: string): string {
 	const html = getFullContent(`<html><head><script id="user">${source}</script></head></html>`)
@@ -52,6 +24,11 @@ function getUserScript(source: string): string {
 describe("HTML location.href navigation", () => {
 	it.each([
 		"window.location.href",
+		"window.location",
+		"location",
+		"document.location",
+		"self.location",
+		'globalThis["location"]',
 		"location.href",
 		'window["location"]["href"]',
 		"window . location . href",
@@ -69,6 +46,74 @@ describe("HTML location.href navigation", () => {
 				"*",
 			)
 			expect(runtime.nativeNavigate).not.toHaveBeenCalled()
+		},
+	)
+
+	it.each(["location.assign", "window.location.replace", 'document["location"]["assign"]'])(
+		"rewrites unforgeable %s methods",
+		(method) => {
+			const runtime = createRuntime()
+			runtime.run(getUserScript(`${method}('detail.html')`))
+			expect(runtime.postMessage).toHaveBeenCalledExactlyOnceWith(
+				expect.objectContaining({
+					href: "/pages/detail.html",
+					target: "_self",
+					history: method.includes("replace") ? "replace" : "push",
+				}),
+				"*",
+			)
+			expect(runtime.nativeNavigate).not.toHaveBeenCalled()
+			expect(runtime.frame.location.replace).not.toHaveBeenCalled()
+		},
+	)
+
+	it("preserves shadowed Location method receivers and saved author source", () => {
+		const runtime = createRuntime()
+		const source =
+			"return (function(location) { return location.replace('local') })({ replace(value) { return value } })"
+		const rewritten = rewriteLocationHref(source)
+		expect(runtime.run(rewritten)).toBe("local")
+		expect(restoreLocationHref(rewritten)).toBe(source)
+		expect(rewriteLocationHref(rewritten)).toBe(rewritten)
+		expect(runtime.postMessage).not.toHaveBeenCalled()
+	})
+
+	it("keeps hash assign/replace in the current document and preserves replace intent", () => {
+		const runtime = createRuntime()
+		runtime.run(getUserScript("location.assign('#/route')"))
+		expect(runtime.frame.location.hash).toBe("#/route")
+		runtime.run(getUserScript("location.replace('#summary')"))
+		expect(runtime.frame.location.replace).toHaveBeenCalledWith(
+			"https://preview.test/sandbox.html#summary",
+		)
+		expect(runtime.postMessage).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		"return (function(location) { location = 'local'; return location; })({})",
+		"return (function(window) { window.location = 'local'; return window.location; })({location: {}})",
+		"return (function(document) { document.location = 'local'; return document.location; })({location: {}})",
+	])("preserves local variables in direct Location assignments: %s", (source) => {
+		const runtime = createRuntime()
+		const rewritten = rewriteLocationHref(source)
+		expect(runtime.run(rewritten)).toBe("local")
+		expect(restoreLocationHref(rewritten)).toBe(source)
+		expect(runtime.postMessage).not.toHaveBeenCalled()
+	})
+
+	it.each(["location", "window.location", "document.location"])(
+		"restores direct %s assignments and evaluates once",
+		(target) => {
+			const source = `return (${target} = window.value)`
+			const rewritten = rewriteLocationHref(source)
+			const runtime = createRuntime()
+			const value = { toString: vi.fn(() => "detail.html") }
+			Object.assign(runtime.frame, { value })
+			expect(runtime.run(rewritten)).toBe(value)
+			expect(value.toString).toHaveBeenCalledTimes(1)
+			expect(runtime.postMessage).toHaveBeenCalledOnce()
+			expect(restoreLocationHref(rewritten)).toBe(source)
+			expect(rewriteLocationHref(rewritten)).toBe(rewritten)
 		},
 	)
 
@@ -120,6 +165,71 @@ previewwindow.location.href = 'other.html';`
 		expect(runtime.run(getUserScript(`return ${code}`))).toBe("local")
 		expect(runtime.postMessage).not.toHaveBeenCalled()
 		expect(runtime.nativeNavigate).not.toHaveBeenCalled()
+	})
+
+	it("resolves UTF-8 paths from a Chinese folder to project files", () => {
+		const runtime = createRuntime()
+		runtime.run(getLinkHandlingScript("中文场景/index.html"))
+
+		function postedPath(source: string) {
+			runtime.postMessage.mockClear()
+			runtime.run(getUserScript(source))
+			const href = runtime.postMessage.mock.calls[0]?.[0]?.href as string
+			const parsed = parseHtmlNavigationRequest(href)
+			return {
+				filePath: normalizeHtmlPreviewPath(parsed?.filePath),
+				search: parsed?.search,
+				hash: parsed?.hash,
+			}
+		}
+
+		expect(postedPath("location.href = './目标页面.html'")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.href = './目标页面.html?keyword=测试#section-a'")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "?keyword=%E6%B5%8B%E8%AF%95",
+			hash: "#section-a",
+		})
+		expect(postedPath("location.href = './子文件夹/深层页面.html'")).toEqual({
+			filePath: "中文场景/子文件夹/深层页面.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.href = '../detail.html'")).toEqual({
+			filePath: "detail.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.href = '?from=chinese-folder'")).toEqual({
+			filePath: "中文场景/index.html",
+			search: "?from=chinese-folder",
+			hash: "",
+		})
+		expect(postedPath("window.open('./目标页面.html')")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.replace('./目标页面.html')")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "",
+			hash: "",
+		})
+		expect(postedPath("location.assign('./目标页面.html')")).toEqual({
+			filePath: "中文场景/目标页面.html",
+			search: "",
+			hash: "",
+		})
+
+		runtime.run(getLinkHandlingScript("中文场景/子文件夹/深层页面.html"))
+		expect(postedPath("location.href = '../../index.html'")).toEqual({
+			filePath: "index.html",
+			search: "",
+			hash: "",
+		})
 	})
 
 	it("uses the new file directory when the same preview window is reused", () => {

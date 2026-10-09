@@ -17,8 +17,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, ToolDetail
+from app.core.entity.message.server_message import (
+    DisplayType,
+    OperationResultItem,
+    OperationResultListContent,
+    OperationResultStatus,
+    OperationResultTarget,
+    OperationResultTargetType,
+    ToolDetail,
+)
 from app.i18n import i18n
+from app.tools.canvas.presentation.generation_feedback import CanvasGenerationFeedback
 from app.tools.core import BaseToolParams, tool
 from app.tools.design.tools.base_generate_canvas_elements import (
     BaseGenerateCanvasElements,
@@ -138,8 +147,8 @@ class ImageTaskSpec(BaseModel):
     """
     prompt: str = Field(
         ...,
-        description="""<!--zh: 图片生成提示词。建议包含主体、风格、构图、光线、色调。-->
-Image generation prompt. Include subject, style, composition, lighting, and color tone for best results."""
+        description="""<!--zh: 图片生成提示词。建议包含主体、风格、构图、光线、色调；有参考图时，写清每张图参考什么，不要复述参考图里已有的外观。-->
+Image generation prompt. Include subject, style, composition, lighting, and color tone for best results; with reference images, state what each image governs instead of restating its appearance."""
     )
     name: str = Field(
         ...,
@@ -153,8 +162,8 @@ Output image dimensions in 'WxH' format. Optional when reference_images is non-e
     )
     reference_images: List[str] = Field(
         ...,
-        description="""<!--zh: 参考图路径列表。无参考图时传 []。参考图提供视觉锚点（结构、风格、构图），模型以其为起点创作而非复制。-->
-Reference image paths. Pass [] for text-only generation. Reference images serve as a visual anchor — structure, style, or composition — that the model builds upon rather than copies."""
+        description="""<!--zh: 参考图路径列表，prompt 中按此顺序称为图片1、图片2。无参考图时传 []。每张图提供什么（人物形象、服装、产品外形、构图、风格等）、严格程度（完全一致或仅作参考），由 prompt 说明。-->
+Reference image paths; the prompt cites them in this order as Image 1, Image 2. Pass [] for text-only generation. The prompt states what each image provides (identity, outfit, product shape, composition, style, and so on) and how strictly (exact match or loose reference)."""
     )
     element_id: Optional[str] = Field(
         None,
@@ -283,6 +292,8 @@ class GenerateCanvasImages(BaseGenerateCanvasElements[GenerateCanvasImagesParams
 -->
 Each task is a self-contained description of one image. Three things to know:
 
+Image generation, retries, and additional candidates may consume points or money. After a successful image, let the user review it; a successful image you personally dislike is not a failure. Follow the core user-confirmation rule before any additional image call.
+
 [reference_images — always required]
 The question is not whether the user said "reference image" but whether they want the output to have visual continuity with an existing image:
 - Uploaded a file, mentioned a canvas asset, or expressed "based on this / reference this / in this style" → include those paths
@@ -369,6 +380,23 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             element_type="image",
         )
 
+    def _build_initial_placeholder_update(
+        self,
+        task: ImageTaskSpec,
+        idx: int,
+        element_id: str,
+    ) -> dict[str, object]:
+        # 占位出现即可查看本次参数；重试覆盖整份请求，不继承旧任务 ID 和完成时间。
+        request: dict[str, str | list[str]] = {
+            "prompt": task.prompt,
+            "size": task.size,
+            "reference_images": list(task.reference_images),
+            "mode": "edit" if task.reference_images else "generate",
+        }
+        if self._image_model_id:
+            request["model_id"] = self._image_model_id
+        return {"generateImageRequest": request}
+
     async def _execute_task_item(
         self,
         idx: int,
@@ -446,6 +474,8 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "name": placeholder.name,
             "width": placeholder.width,
             "height": placeholder.height,
+            "status": "completed" if task_result.is_success else "failed",
+            "error": task_result.error_message or "",
         }
         if placeholder.content_id:
             d["content_id"] = placeholder.content_id
@@ -780,6 +810,38 @@ Expand brief user descriptions into full prompts covering subject, style, compos
             "remark": self._get_remark_content(result, arguments),
         }
 
+    async def _after_placeholders_prepared(
+        self,
+        tool_context: ToolContext,
+        project_path_str: str,
+        placeholders: List[ElementDetail],
+    ) -> None:
+        """旧生图入口也用真实占位 ID 更新卡片，不按任务名称猜测目标。"""
+        if not placeholders:
+            return
+        pending_detail = ToolDetail(
+            type=DisplayType.OPERATION_RESULT_LIST,
+            data=OperationResultListContent(items=[
+                OperationResultItem(
+                    label=placeholder.name,
+                    kind="text",
+                    status=OperationResultStatus.SUCCESS,
+                    message=i18n.translate("canvas.generate_item_status.processing", category="tool.messages"),
+                    target=OperationResultTarget(
+                        type=OperationResultTargetType.CANVAS_ELEMENT,
+                        project_path=project_path_str,
+                        element_id=placeholder.id,
+                        content_id=placeholder.content_id,
+                        content_type="image",
+                    ),
+                )
+                for placeholder in placeholders
+            ]),
+        )
+        await CanvasGenerationFeedback.report_pending_detail(
+            self, tool_context, tool_context.arguments, pending_detail,
+        )
+
     async def get_tool_detail(
         self,
         tool_context: ToolContext,
@@ -787,22 +849,60 @@ Expand brief user descriptions into full prompts covering subject, style, compos
         arguments: Dict[str, Any] = None,
     ) -> Optional[ToolDetail]:
         if not result.ok:
+            extra_info = result.extra_info or {}
+            project_path = extra_info.get("project_path", "")
+            placeholders = extra_info.get("created_elements", [])
+            if project_path and placeholders:
+                # 全部失败仍保留真实占位目标，用终态明细替换此前的 processing 进度。
+                return ToolDetail(
+                    type=DisplayType.OPERATION_RESULT_LIST,
+                    data=OperationResultListContent(items=[
+                        OperationResultItem(
+                            label=placeholder["name"],
+                            kind="text",
+                            status=OperationResultStatus.ERROR,
+                            message=i18n.translate("canvas.generate_item_status.failed", category="tool.messages"),
+                            description=placeholder.get("error") or "",
+                            target=OperationResultTarget(
+                                type=OperationResultTargetType.CANVAS_ELEMENT,
+                                project_path=project_path,
+                                element_id=placeholder["id"],
+                                content_id=placeholder.get("content_id"),
+                                content_type="image",
+                            ),
+                        )
+                        for placeholder in placeholders
+                    ]),
+                )
             return None
 
         try:
-            from app.core.entity.message.server_message import DesignElementContent
-
             extra_info = result.extra_info or {}
             project_path = extra_info.get("project_path", "")
-            elements = extra_info.get("elements", [])
+            elements = extra_info.get("created_elements", [])
 
             return ToolDetail(
-                type=DisplayType.DESIGN,
-                data=DesignElementContent(
-                    type="element",
-                    project_path=project_path,
-                    elements=elements,
-                )
+                type=DisplayType.OPERATION_RESULT_LIST,
+                data=OperationResultListContent(items=[
+                    OperationResultItem(
+                        label=element["name"],
+                        kind="text",
+                        status=OperationResultStatus.SUCCESS if element["status"] == "completed" else OperationResultStatus.ERROR,
+                        message=i18n.translate(
+                            "canvas.generate_item_status.completed" if element["status"] == "completed" else "canvas.generate_item_status.failed",
+                            category="tool.messages",
+                        ),
+                        description=element.get("error") or "",
+                        target=OperationResultTarget(
+                            type=OperationResultTargetType.CANVAS_ELEMENT,
+                            project_path=project_path,
+                            element_id=element["id"],
+                            content_id=element.get("content_id"),
+                            content_type="image",
+                        ),
+                    )
+                    for element in elements
+                ]),
             )
         except Exception as e:
             logger.error(f"生成工具详情失败: {e!s}")

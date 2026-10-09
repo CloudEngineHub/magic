@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Skill\Service;
 
+use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
 use App\Application\SuperMagic\Publish\PublishAsyncStatusManager;
 use App\Application\SuperMagic\Skill\DTO\PublishSkillResultDTO;
@@ -137,6 +138,7 @@ class SkillAppService extends AbstractSkillAppService
         protected SkillCategoryDomainService $skillCategoryDomainService,
         protected SkillPackageParser $skillPackageParser,
         protected PublishAsyncStatusManager $publishAsyncStatusManager,
+        protected SuperMagicAgentAppService $agentAppService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -1173,6 +1175,14 @@ class SkillAppService extends AbstractSkillAppService
         $requestedCodes = array_values(array_unique(array_filter($filterCodes)));
 
         $accessibleSkillCodes = $this->getAccessibleSkillCodes($dataIsolation);
+        if ($requestDTO->agentCode !== null && $requestDTO->agentCode !== '') {
+            $boundCodes = $this->agentAppService->getDownloadableBoundSkillCodes(
+                $userAuthorization,
+                $requestDTO->agentCode,
+                $requestDTO->agentDraft
+            );
+            $accessibleSkillCodes = array_values(array_unique(array_merge($accessibleSkillCodes, $boundCodes)));
+        }
 
         if ($requestedCodes) {
             $accessibleSkillCodes = array_values(array_intersect($requestedCodes, $accessibleSkillCodes));

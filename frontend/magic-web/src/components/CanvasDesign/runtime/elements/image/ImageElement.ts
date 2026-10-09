@@ -38,7 +38,10 @@ import type {
 } from "../../../public/magic-types"
 import { GenerationStatus, ImageGenerationTaskTypeMap } from "../../../public/magic-types"
 import { generateUUID, collectElementsByType, type Rect } from "../../shared/ids"
-import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
+import {
+	areCanvasHostResourceReferencesSame,
+	getCanvasResourceFileName,
+} from "../../shared/path/canvasResourcePath"
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { Canvas } from "../../core/Canvas"
@@ -65,7 +68,8 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
-import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
+import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator"
+import { DiscardedImageDecorator } from "../decorators/DiscardedImageDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
 import type { TransformContext } from "../core/BaseElement"
@@ -109,7 +113,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private pollingManager: ImagePollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
-	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
+	private mainVersionTagDecorator?: MediaVersionTagDecorator
+	private discardedImageDecorator?: DiscardedImageDecorator
 
 	// 生成相关：Runtime manager 是并发状态的唯一事实来源；legacy 标记只兼容
 	// 尚未建立 Runtime target 的测试和初始化生命周期。
@@ -217,6 +222,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 				this.rerender()
 			},
 		})
+		this.canvas.eventEmitter.on(
+			"element:image:displayStateChanged",
+			this.handleDisplayStateChanged,
+		)
 
 		const activeContent = this.getActiveContentData()
 		// active 有 src：先监听资源事件，实际加载交给 CanvasVisibilityManager 调度。
@@ -302,7 +311,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const taskMeta = this.getActiveImageGenerationTaskMeta()
 
 		return resolveImageDisplayState({
-			content: activeContent,
+			generationTiming: this.pollingManager.getGenerationTiming(activeContent.contentId),
+			content: {
+				...activeContent,
+				generateImageRequest: generationRequest,
+				imageGenerationTaskMeta: taskMeta,
+			},
 			isTemporary: this.canvas?.elementManager?.isTemporary?.(this.data.id) ?? false,
 			hasActiveGeneration: this.hasActiveGeneration(activeContent.contentId),
 			hasActiveGenerationTask: Boolean(generationRequest?.image_id || taskMeta?.image_id),
@@ -316,8 +330,16 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 	}
 
+	private handleDisplayStateChanged = (event: { data: { elementId: string } }): void => {
+		if (event.data.elementId === this.data.id) this.rerenderWhenTransformIdle()
+	}
+
 	public getContentData(contentId: string): ImageElementContent | undefined {
 		return getImageContentById(this.getData(), contentId)
+	}
+
+	public getGenerationTiming(contentId: string): ImageElementContent["generationTiming"] {
+		return this.pollingManager.getGenerationTiming(contentId)
 	}
 
 	public updateActiveContentData(
@@ -465,6 +487,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator = undefined
 		this.mainVersionTagDecorator?.destroy()
 		this.mainVersionTagDecorator = undefined
+		this.discardedImageDecorator?.destroy()
+		this.discardedImageDecorator = undefined
 
 		// 调用父类的 rerender
 		return super.rerender()
@@ -485,10 +509,15 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.mediaReplaceStateUnsubscribe?.()
 		this.mediaReplaceStateUnsubscribe = undefined
 		this.pollingManager.destroy()
+		this.canvas.eventEmitter.off(
+			"element:image:displayStateChanged",
+			this.handleDisplayStateChanged,
+		)
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
 		this.mainVersionTagDecorator?.destroy()
 		this.removeContentUpdateListener()
+		this.discardedImageDecorator?.destroy()
 		// 清理缓存的图片对象
 		this.clearLoadedImageReference()
 		// 清理 ossSrc Promise
@@ -2033,7 +2062,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	 * 获取渲染名称（用于显示的默认名称，支持多语言）
 	 */
 	public getRenderName(): string {
-		return this.getText("image.defaultName", "图片生成器")
+		// 与音频名称展示一致：已存在图片但元素未命名时，使用真实文件名，空占位保留默认名称。
+		const fileName = getCanvasResourceFileName(this.getActiveContentData().src)
+		const baseName = fileName.replace(/\.[^/.]+$/, "")
+		return baseName || this.getText("image.defaultName", "图片生成器")
 	}
 
 	/**
@@ -2044,6 +2076,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const displayState = this.getDisplayState()
 
 		switch (displayState.status) {
+			case "timed-out":
+				return `${baseName}${this.getText("image.nameSuffix.timedOut", "(超时)")}`
 			case "generating":
 				return `${baseName}${this.getGeneratingNameSuffix(displayState)}`
 			case "uploading":
@@ -2180,6 +2214,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		if (displayState.surface === "error") {
+			if (displayState.status === "timed-out") {
+				return this.renderError(this.getText("image.timedOut", "生成已超时"))
+			}
 			const errorMessage =
 				displayState.failureSource === "resource"
 					? this.getImageLoadErrorText()
@@ -2214,6 +2251,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 					this.data.mainContentId !== newData.mainContentId))
 		const needsRerender =
 			contentControlsChanged ||
+			Boolean(currentContent.generateImageRequest) !==
+				Boolean(nextContent.generateImageRequest) ||
 			currentContent.contentId !== nextContent.contentId ||
 			currentContent.generateImageRequest?.image_id !==
 				nextContent.generateImageRequest?.image_id ||
@@ -2221,6 +2260,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			currentTaskMeta?.type !== nextTaskMeta?.type ||
 			currentContent.src !== nextContent.src ||
 			currentContent.status !== nextContent.status ||
+			currentContent.discarded !== nextContent.discarded ||
+			currentContent.generationTiming?.startedAt !==
+				nextContent.generationTiming?.startedAt ||
 			!this.isPersistedCropConfigEqual(currentContent.crop, nextContent.crop)
 
 		// Effective Content 切换时，元素级 decoded image / failure reason 不能跨版本复用。
@@ -2576,6 +2618,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		})
 
 		group.add(imageNode)
+		if (this.getActiveContentData().discarded === true) {
+			this.discardedImageDecorator = new DiscardedImageDecorator(
+				imageNode,
+				this.canvas,
+				this.data.id,
+			)
+		}
 
 		// 创建边框
 		this.createBorder(group, width, height, false)
@@ -2714,6 +2763,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		if (!actions.length) return
 
 		this.cornerActionsDecorator = new ElementCornerActionsDecorator(group, {
+			showOnSelection:
+				this.getDisplayState().status === "generating" ||
+				this.getDisplayState().status === "timed-out",
 			elementId: this.data.id,
 			canvas: this.canvas,
 			width,
@@ -2724,11 +2776,11 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	}
 
 	private shouldShowInfoButton(): boolean {
-		return !!this.getActiveGenerateImageRequest()
+		return !!this.getActiveGenerateImageRequest() || this.isActiveGenerationPlaceholder()
 	}
 
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
-		this.mainVersionTagDecorator = new MediaMainVersionTagDecorator(group, {
+		this.mainVersionTagDecorator = new MediaVersionTagDecorator(group, {
 			canvas: this.canvas,
 			width,
 			height,

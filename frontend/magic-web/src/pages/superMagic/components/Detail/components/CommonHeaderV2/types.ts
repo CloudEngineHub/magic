@@ -53,6 +53,8 @@ export interface ActionContext {
 	showRefreshButton: boolean
 	isNewestFileVersion: boolean
 	allowEdit: boolean
+	/** Allows the share action in read-only previews without granting edit permission. */
+	shareInReadOnly?: boolean
 	currentFile?: CurrentFileInfo
 	attachments?: AttachmentItem[]
 	fileContent?: string

@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import React, { useState, useEffect } from "react"
 import {
 	ChevronRight,
@@ -154,6 +155,8 @@ export function MobileRecordingShareExportSheet({
 	onCopyProject,
 	onLogin,
 }: MobileRecordingShareExportSheetProps) {
+	const { permissions: access } = useFileAccess()
+	const effectiveAllowDownload = access.download && allowDownload
 	const { t } = useTranslation(["audioRecordings", "super"])
 	const [view, setView] = useState<"main" | "exportSummary">("main")
 	const [selectedSummaryTypes, setSelectedSummaryTypes] = useState<Set<string>>(new Set())
@@ -169,6 +172,7 @@ export function MobileRecordingShareExportSheet({
 
 	/** Instantly downloads the original transcript Markdown file. */
 	async function handleDownloadTranscript() {
+		if (!effectiveAllowDownload) return
 		if (!fileMap?.transcript?.file_id) return
 		const fileName =
 			getAttachmentFileName(fileMap.transcript) || `${recordingName}_transcript.md`
@@ -181,6 +185,7 @@ export function MobileRecordingShareExportSheet({
 
 	/** Instantly downloads the original notes Markdown file. */
 	async function handleDownloadNotes() {
+		if (!effectiveAllowDownload) return
 		if (!fileMap?.notes?.file_id) return
 		const fileName = getAttachmentFileName(fileMap.notes) || `${recordingName}_notes.md`
 		const ok = await downloadRecordingAttachmentFile({
@@ -192,6 +197,7 @@ export function MobileRecordingShareExportSheet({
 
 	/** Downloads all checked summary files (single download directly, multi-select triggers backend batch download). */
 	async function handleDownloadSummary() {
+		if (!effectiveAllowDownload) return
 		if (selectedSummaryTypes.size === 0) {
 			toast.info(t("detail.noExportFilesSelected"))
 			return
@@ -330,7 +336,7 @@ export function MobileRecordingShareExportSheet({
 							</div>
 						</div>
 					) : null}
-					{showShareSection ? (
+					{showShareSection && access.share ? (
 						<div className="flex flex-col gap-2">
 							<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
 								{t("detail.shareSection")}
@@ -340,13 +346,15 @@ export function MobileRecordingShareExportSheet({
 									label={t("detail.shareLink")}
 									testId="mobile-recording-share-share-link-action"
 									icon={<Link2 />}
-									onClick={onShareLink}
+									onClick={() => {
+										if (access.share) onShareLink()
+									}}
 								/>
 							</div>
 						</div>
 					) : null}
 
-					{allowDownload ? (
+					{effectiveAllowDownload ? (
 						<div className="flex flex-col gap-2">
 							<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
 								{t("detail.exportSection")}
@@ -356,7 +364,9 @@ export function MobileRecordingShareExportSheet({
 									label={t("detail.exportRecording")}
 									testId="mobile-recording-share-export-recording-action"
 									icon={<Music />}
-									onClick={onDownloadRecording}
+									onClick={() => {
+										if (effectiveAllowDownload) onDownloadRecording()
+									}}
 									disabled={!fileMap?.audio}
 									showDivider
 								/>
@@ -411,7 +421,7 @@ export function MobileRecordingShareExportSheet({
 						<button
 							type="button"
 							onClick={handleDownloadSummary}
-							disabled={selectedSummaryTypes.size === 0}
+							disabled={!effectiveAllowDownload || selectedSummaryTypes.size === 0}
 							className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-[16px] font-medium text-primary-foreground transition-opacity active:opacity-80 disabled:opacity-40"
 							data-testid="mobile-recording-share-export-summary-button"
 						>

@@ -1,3 +1,5 @@
+import MentionContextMenu from "./components/MentionContextMenu"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { EditorContent, type Editor } from "@/infrastructure/editors/tiptap/react"
 import FlexBox from "@/components/base/FlexBox"
 import DragOverlay from "./components/DragOverlay"
@@ -19,12 +21,15 @@ import {
 import AiCompletionTip from "@/pages/chatNew/components/MessageEditor/components/AiCompletionTip"
 import { SummaryGuideDOMId } from "@/pages/superMagic/components/MessagePanel/components/TopicExamples/SummaryGuide"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 interface MessageEditorViewProps {
 	className?: string
 	containerClassName?: string
 	headerContent?: ReactNode
 	size: MessageEditorSize
+	getWorkspaceFilesList?: () => AttachmentItem[]
+	getCurrentProjectId?: () => string | undefined
 	tiptapEditor: Editor | null
 	domRef: RefObject<HTMLDivElement>
 	isDragOver: boolean
@@ -48,6 +53,8 @@ interface MessageEditorViewProps {
 	taskDataNode?: ReactNode
 	messageQueueNode?: ReactNode
 	showAiCompletion: boolean
+	previewActiveId?: string | null
+	wechatScrollRef?: RefObject<HTMLDivElement>
 }
 
 function MessageEditorView({
@@ -56,6 +63,8 @@ function MessageEditorView({
 	headerContent,
 	size,
 	tiptapEditor,
+	getWorkspaceFilesList,
+	getCurrentProjectId,
 	domRef,
 	isDragOver,
 	dragEvents,
@@ -71,6 +80,8 @@ function MessageEditorView({
 	uploadModal,
 	promptCarouselNode,
 	showAiCompletion,
+	previewActiveId,
+	wechatScrollRef,
 }: MessageEditorViewProps) {
 	const isMobile = useIsMobile()
 
@@ -90,6 +101,7 @@ function MessageEditorView({
 							mobile: isMobile,
 						}),
 						containerClassName,
+						previewActiveId && "h-full max-h-none min-h-0",
 					)}
 					onDragEnter={dragEvents.onDragEnter}
 					onDragLeave={dragEvents.onDragLeave}
@@ -123,15 +135,33 @@ function MessageEditorView({
 							className={cn(messageEditorTextContainerVariants({ size }))}
 							data-guide-anchor="message-editor-content"
 						>
-							<EditorContent
-								ref={domRef}
+							<MentionContextMenu
 								editor={tiptapEditor}
-								className={cn(messageEditorContentVariants({ size }), className)}
-								onCompositionStart={onCompositionStart}
-								onCompositionEnd={onCompositionEnd}
-								data-testid="super-message-editor-content"
-								id={SummaryGuideDOMId.MessageEditorContent}
-							/>
+								getWorkspaceFilesList={getWorkspaceFilesList}
+								getCurrentProjectId={getCurrentProjectId}
+							>
+								{/* Radix 内容层默认为 table，无法承接视口高度；短内容铺满可点击区，长内容自然增长并滚动。 */}
+								<ScrollArea
+									className="min-h-0 flex-1"
+									viewportRef={wechatScrollRef}
+									viewportClassName="h-full [&>div]:!flex [&>div]:min-h-full [&>div]:flex-col"
+								>
+									<EditorContent
+										ref={domRef}
+										editor={tiptapEditor}
+										className={cn(
+											messageEditorContentVariants({ size }),
+											"flex h-auto flex-col overflow-visible [&_.ProseMirror]:h-auto [&_.ProseMirror]:flex-1",
+											className,
+											previewActiveId && "[&_.ProseMirror>p]:hidden",
+										)}
+										onCompositionStart={onCompositionStart}
+										onCompositionEnd={onCompositionEnd}
+										data-testid="super-message-editor-content"
+										id={SummaryGuideDOMId.MessageEditorContent}
+									/>
+								</ScrollArea>
+							</MentionContextMenu>
 							{promptCarouselNode}
 						</div>
 						{showAiCompletion && <AiCompletionTip icon={TabIcon as string} />}

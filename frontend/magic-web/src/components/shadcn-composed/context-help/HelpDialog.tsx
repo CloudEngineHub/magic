@@ -19,6 +19,7 @@ import {
 	DialogTitle,
 } from "@/components/shadcn-ui/dialog"
 import { cn } from "@/utils/cn"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import type {
 	HelpDefinition,
 	HelpDialogProps,
@@ -52,8 +53,9 @@ export function HelpDialogFrame({
 	help,
 	onCloseAutoFocus,
 	hasNavigation,
+	header,
 	children,
-}: Pick<HelpDialogProps, "id" | "help" | "onCloseAutoFocus"> & {
+}: Pick<HelpDialogProps, "id" | "help" | "onCloseAutoFocus" | "header"> & {
 	hasNavigation: boolean
 	children: ReactNode
 }) {
@@ -80,18 +82,26 @@ export function HelpDialogFrame({
 					<BookOpen size={18} aria-hidden />
 				</span>
 				<div className="min-w-0 flex-1 space-y-0.5 pr-12">
-					<DialogTitle className="text-sm leading-5">
-						{t("contextHelp.guideTitle")}
+					<DialogTitle className="text-sm leading-5 text-foreground">
+						{header?.title ?? t("contextHelp.guideTitle")}
 					</DialogTitle>
-					<DialogDescription className="text-xs">
-						{t("contextHelp.guideSubtitle")}
+					<DialogDescription
+						className={header && !header.description ? "sr-only" : "text-xs"}
+					>
+						{header
+							? (header.description ?? header.title)
+							: t("contextHelp.guideSubtitle")}
 					</DialogDescription>
 				</div>
 				<DialogClose asChild>
 					<Button
 						variant="ghost"
 						size="icon-lg"
-						aria-label={t("contextHelp.dismiss")}
+						aria-label={
+							header
+								? t("contextHelp.dismissWithTitle", { title: header.title })
+								: t("contextHelp.dismiss")
+						}
 						className="group size-10 shrink-0 cursor-pointer rounded-lg bg-muted/40 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:bg-accent motion-reduce:transition-none [@media(pointer:coarse)]:size-11"
 					>
 						<X
@@ -235,9 +245,10 @@ export function HelpDialogContent({
 							narrow && showNavigation && "hidden",
 						)}
 					>
-						<div
-							ref={contentRef}
-							className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+						<ScrollArea
+							viewportRef={contentRef}
+							className="min-h-0 flex-1"
+							viewportClassName="overscroll-contain"
 						>
 							{/* 外框提供留白，正文保持适中行长；窄屏按可用宽度排版。 */}
 							<div className="mx-auto max-w-[790px] space-y-8 break-words px-5 py-8 text-[15px] leading-[1.75] [container-name:help-article] [container-type:inline-size] sm:px-[38px] sm:py-9">
@@ -286,7 +297,7 @@ export function HelpDialogContent({
 											<h2
 												data-help-heading
 												tabIndex={-1}
-												className="mb-6 text-xl font-semibold outline-none"
+												className="mb-6 text-xl font-semibold text-foreground outline-none"
 											>
 												{help.title}
 											</h2>
@@ -295,7 +306,7 @@ export function HelpDialogContent({
 									</Suspense>
 								</ErrorBoundary>
 							</div>
-						</div>
+						</ScrollArea>
 					</ResizablePanel>
 				</ResizablePanelGroup>
 			</div>

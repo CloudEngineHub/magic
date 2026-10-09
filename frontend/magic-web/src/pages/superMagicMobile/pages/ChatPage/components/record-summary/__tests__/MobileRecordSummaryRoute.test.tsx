@@ -8,6 +8,9 @@ const testState = vi.hoisted(() => ({
 	savedEditorMode: "recording" as "recording" | "editing",
 }))
 
+/** Props the route hands to the composer header (the crew selector's data source). */
+const headerProps = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }))
+
 vi.mock("@/pages/superMagic/components/MessagePanel/hooks/useRecordingSummaryEditorMode", () => ({
 	default: () => ({
 		editorMode: testState.savedEditorMode,
@@ -55,7 +58,10 @@ vi.mock("../../mobile-composer/MobileComposer", () => ({
 }))
 
 vi.mock("../../mobile-composer/MobileComposerHeader", () => ({
-	default: () => <div data-testid="mobile-composer-header" />,
+	default: (props: Record<string, unknown>) => {
+		headerProps.current = props
+		return <div data-testid="mobile-composer-header" />
+	},
 }))
 
 vi.mock("../../mobile-composer/MobileScenePanels", () => ({
@@ -84,6 +90,7 @@ function createEditorContext(overrides: Partial<SceneEditorContext> = {}): Scene
 describe("MobileRecordSummaryRoute", () => {
 	beforeEach(() => {
 		testState.savedEditorMode = RecordingSummaryEditorMode.Recording
+		headerProps.current = null
 	})
 
 	it("keeps the employee switcher when recording mode is disabled", () => {
@@ -106,5 +113,34 @@ describe("MobileRecordSummaryRoute", () => {
 		expect(screen.getByTestId("mobile-record-summary-route")).toBeInTheDocument()
 		expect(screen.queryByTestId("mobile-record-summary-route-editing")).not.toBeInTheDocument()
 		expect(screen.getByTestId("record-summary-editor-container")).toBeInTheDocument()
+	})
+
+	it("keeps the employee switcher when the summary editor is in editing mode", () => {
+		testState.savedEditorMode = RecordingSummaryEditorMode.Editing
+
+		render(
+			<MobileRecordSummaryRoute editorContext={createEditorContext({ messagesLength: 2 })} />,
+		)
+
+		// The header selector is the only driver of the composer's topic model store, so the
+		// editing branch must keep rendering it or sending fails with "please select a model".
+		expect(screen.getByTestId("mobile-record-summary-route-editing")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-composer-header")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-message-editor")).toBeInTheDocument()
+		expect(screen.queryByTestId("mobile-record-summary-route")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("record-summary-editor-container")).not.toBeInTheDocument()
+	})
+
+	it("forwards the message count that keeps a non-empty topic on its own crew", () => {
+		testState.savedEditorMode = RecordingSummaryEditorMode.Editing
+
+		render(
+			<MobileRecordSummaryRoute editorContext={createEditorContext({ messagesLength: 2 })} />,
+		)
+
+		// Desktop ModeToggle stops switching crews once the topic has messages and asks for a new
+		// topic instead; the mobile selector applies the same rule from messagesLength, so dropping
+		// this prop would let a summary topic be handed over to an unrelated crew in place.
+		expect(headerProps.current?.messagesLength).toBe(2)
 	})
 })

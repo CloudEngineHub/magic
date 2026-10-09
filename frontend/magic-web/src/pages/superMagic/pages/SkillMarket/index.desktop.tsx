@@ -26,6 +26,8 @@ function SkillMarketDesktopPage() {
 							<SkillsLibrary
 								marketTabValue={SKILL_MARKET_TAB_VALUES.skills}
 								onMarketTabChange={(value) => {
+									if (value === SKILL_MARKET_TAB_VALUES.crew)
+										navigate({ name: RouteName.CrewMarketCrew })
 									if (value === SKILL_MARKET_TAB_VALUES.connectors)
 										navigate({ name: RouteName.CrewMarketMcp })
 								}}

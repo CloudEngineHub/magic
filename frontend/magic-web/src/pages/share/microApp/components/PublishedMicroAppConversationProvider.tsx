@@ -33,6 +33,7 @@ import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConver
 import { userStore } from "@/models/user"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { useDefaultModeModelListRefreshOnMount } from "@/pages/superMagic/hooks/useFeaturedModeListRefresh"
 
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createSessionFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
@@ -451,7 +452,6 @@ const PublishedMicroAppConversationSurface = observer(
 					initialConversationPanelCollapsed
 					collapsedConversationPanelWidth={COLLAPSED_RAIL_WIDTH_PX}
 					persistConversationPanelState={false}
-					conversationResizeHandleGripVariant="dots"
 					historyOverlayScope="container"
 					historyLayout={{
 						isOpen: isTopicHistoryPanelOpen,
@@ -541,7 +541,18 @@ function PublishedMicroAppConversationProvider({
 		</PublishedMicroAppConversationSurface>
 	)
 	if (existingStore) return surface
-	return <AppStoreProvider>{surface}</AppStoreProvider>
+	// Share page has no MicroAppPageController; prefetch default models here.
+	return (
+		<AppStoreProvider>
+			<PublishedMicroAppDefaultModelPrefetch />
+			{surface}
+		</AppStoreProvider>
+	)
+}
+
+function PublishedMicroAppDefaultModelPrefetch() {
+	useDefaultModeModelListRefreshOnMount()
+	return null
 }
 
 export default PublishedMicroAppConversationProvider

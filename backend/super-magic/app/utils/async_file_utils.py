@@ -1460,6 +1460,33 @@ async def set_content_version_to_xattr(filepath: Union[str, Path], version: str)
     await asyncio.to_thread(_write_magicfs_content_version, str(filepath), version)
 
 
+def _list_xattr_names(filepath: str) -> list[str]:
+    """Synchronous xattr name listing, intended to run in a thread pool."""
+    try:
+        return os.listxattr(filepath)  # type: ignore[attr-defined]
+    except (OSError, AttributeError):
+        return []
+
+
+async def async_list_xattr_names(filepath: Union[str, Path]) -> list[str]:
+    """
+    List extended attribute names of a path (e.g. ["user.magicfs.file_id", ...]).
+
+    Runs in a thread pool via ``asyncio.to_thread`` because AGFS plugins are
+    FUSE-based and xattr calls involve user-space IPC.
+
+    Only available on Linux; returns an empty list on other platforms, when the
+    path does not exist, or when the filesystem does not support xattrs.
+
+    Args:
+        filepath: path to the file or directory
+
+    Returns:
+        list[str]: attribute names, possibly empty
+    """
+    return await asyncio.to_thread(_list_xattr_names, str(filepath))
+
+
 async def async_iterdir(path: Union[str, Path]) -> list[Path]:
     """
     异步遍历目录内容，返回 Path 对象列表

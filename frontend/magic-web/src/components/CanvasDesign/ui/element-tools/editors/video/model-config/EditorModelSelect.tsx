@@ -23,6 +23,7 @@ export interface EditorModelSelectGroup {
 }
 
 export interface EditorModelSelectProps {
+	disabled?: boolean
 	selectedModelId: string
 	modelOptions: EditorModelSelectOption[]
 	modelOptionGroups: EditorModelSelectGroup[]
@@ -41,7 +42,7 @@ export default function EditorModelSelect(props: EditorModelSelectProps) {
 	}
 
 	return (
-		<Select value={selectedModelId} onValueChange={onModelChange}>
+		<Select value={selectedModelId} onValueChange={onModelChange} disabled={props.disabled}>
 			<SelectTrigger className={styles.selectTrigger}>
 				<div className={styles.modelOptionItemContent}>
 					{selectedModelOption.model.model_icon && (

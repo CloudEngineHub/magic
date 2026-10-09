@@ -1,4 +1,5 @@
 import { htmlToClipboardMarkdown } from "../../MessageList/utils/clipboardMarkdown"
+import { isWechatChatText } from "../extensions/wechat-chat-history/parser"
 
 export type MixedClipboardPart =
 	{ type: "text"; text: string } | { type: "file"; file: File; originalText: string }
@@ -57,7 +58,7 @@ export function parseWeChatMixedClipboard(
 	for (const [index, header] of headers.entries()) {
 		const start = header.index + header[0].length
 		const body = text.slice(start, headers[index + 1]?.index ?? text.length).trimEnd()
-		const media = body.match(/^\[(图片|文件)\][ \t]+([^\n]+)$/)
+		const media = body.match(/^\[(图片|视频|文件)\][ \t]+([^\n]+)$/)
 		if (!media) continue
 		const file = files[markers.length]
 		if (!file) return null
@@ -67,7 +68,10 @@ export function parseWeChatMixedClipboard(
 			if (!isImage || (name !== file.name && !/^微信图片_[\d_]+\.dat$/i.test(name))) {
 				return null
 			}
-		} else if (name !== file.name) {
+		} else if (
+			name !== file.name ||
+			(media[1] === "视频" && !file.type.toLowerCase().startsWith("video/"))
+		) {
 			return null
 		}
 		markers.push({ start, end: start + body.length, file })
@@ -165,6 +169,18 @@ export function parseMixedClipboard(
 	if (isFileList) normalizedText = ""
 	const wechat = parseWeChatMixedClipboard(normalizedText, files)
 	if (wechat) return wechat
+	// 微信头和消息正文以原始文本为准；HTML 退化不能把日期头或未匹配文件静默改写。
+	if (isWechatChatText(normalizedText))
+		return {
+			parts: [
+				{ type: "text", text: normalizedText },
+				...files.flatMap((file): MixedClipboardPart[] => [
+					{ type: "text", text: "\n" },
+					{ type: "file", file, originalText: "" },
+				]),
+			],
+			ordered: files.length === 0,
+		}
 	const htmlFiles = parseHtmlFiles(html, files)
 	if (htmlFiles) return htmlFiles
 

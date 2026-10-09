@@ -572,6 +572,12 @@ export function useTopicMessages({
 			| "recoveryAnchorAppMessageId"
 			| "callback"
 		>): Promise<AuthoritativeTailPullResult> => {
+			// 终态轮询也需要覆盖旧临时卡；不能只让 watchdog 请求携带较早锚点。
+			recoveryAnchorAppMessageId = superMagicStore.resolveStreamRecoveryRequest({
+				topicId: chat_topic_id,
+				correlationId: "",
+				anchorAppMessageId: recoveryAnchorAppMessageId,
+			})?.anchorAppMessageId
 			const activeStreamIdsAtRequestStart = new Set<string>()
 			const topicContent = superMagicStore.topicMeta.get(chat_topic_id)?.content
 			topicContent?.forEach((_state, superMessageId) =>
@@ -580,7 +586,11 @@ export function useTopicMessages({
 			const localStableIdentities = new Set(
 				(superMagicStore.messages.get(chat_topic_id) || []).flatMap((message: any) => {
 					const superMessageId = getStoredMessageSuperMessageId(message)
-					if (!superMessageId || activeStreamIdsAtRequestStart.has(superMessageId))
+					if (
+						!superMessageId ||
+						message.is_stream_placeholder ||
+						activeStreamIdsAtRequestStart.has(superMessageId)
+					)
 						return []
 					if (optimisticMessageStore.getStatus(chat_topic_id, message?.app_message_id))
 						return []
@@ -661,12 +671,11 @@ export function useTopicMessages({
 								recoveryAnchorAppMessageId,
 						)
 					: -1
-				const anchorIndex =
-					requestedAnchorIndex >= 0
-						? requestedAnchorIndex
-						: aggregatedPulledItems.findIndex((item) =>
-								localStableIdentities.has(getFetchedMessageSuperMessageId(item)),
-							)
+				const anchorIndex = recoveryAnchorAppMessageId
+					? requestedAnchorIndex
+					: aggregatedPulledItems.findIndex((item) =>
+							localStableIdentities.has(getFetchedMessageSuperMessageId(item)),
+						)
 				if (anchorIndex >= 0) {
 					const anchorSuperMessageId = getFetchedMessageSuperMessageId(
 						aggregatedPulledItems[anchorIndex],
@@ -1281,8 +1290,8 @@ export function useTopicMessages({
 					...(writeMode === "replace_tail" ? { anchorSuperMessageId } : {}),
 					...(writeMode !== "merge" ? { preserveStreamSuperMessageIds } : {}),
 					syncGeneration,
-					toolProjectionPolicy:
-						writeMode === "merge" ? "preserve_live" : "historical_terminal",
+					// replace/replace_tail 只决定列表覆盖范围，不能证明工具已执行结束。
+					toolProjectionPolicy: "preserve_live",
 				},
 			})
 			reconcileActiveRevokedAnchorFromHttp(

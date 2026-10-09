@@ -327,19 +327,6 @@ class MicroAppProjectAppService extends AbstractAppService
         ];
     }
 
-    /**
-     * Runtime projects are user-owned special projects, but the role remains
-     * part of the response so every client can fail closed before rendering
-     * file write actions.
-     */
-    private function formatRuntimeProject(ProjectEntity $project, MagicUserAuthorization $authorization): array
-    {
-        $formatted = $this->responseFormatter->formatProject($project);
-        $formatted['user_role'] = $this->resolveUserRole($project, $authorization);
-
-        return $formatted;
-    }
-
     public function showByProject(RequestContext $requestContext, int $projectId): array
     {
         $authorization = $requestContext->getUserAuthorization();
@@ -530,6 +517,19 @@ class MicroAppProjectAppService extends AbstractAppService
         $this->microAppVisitRepository->recordVisit($record->getId(), $authorization->getId(), $authorization->getOrganizationCode());
 
         return ['recorded' => true];
+    }
+
+    /**
+     * Runtime projects are user-owned special projects, but the role remains
+     * part of the response so every client can fail closed before rendering
+     * file write actions.
+     */
+    private function formatRuntimeProject(ProjectEntity $project, MagicUserAuthorization $authorization): array
+    {
+        $formatted = $this->responseFormatter->formatProject($project);
+        $formatted['user_role'] = $this->resolveUserRole($project, $authorization);
+
+        return $formatted;
     }
 
     /**
@@ -885,13 +885,9 @@ class MicroAppProjectAppService extends AbstractAppService
         }
 
         $file = $this->taskFileRepository->getFilesByIds([(int) $fileId], $projectId)[0] ?? null;
-        $root = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
-        $rootId = $root?->getFileId();
-        $isRootChild = $file?->getParentId() === null || $file?->getParentId() === $rootId;
         if ($file === null
             || $file->getProjectId() !== $projectId
             || $file->getDeletedAt() !== null
-            || ! $isRootChild
             || $file->getIsHidden()
             || $file->getIsDirectory()
             || ! in_array(strtolower($file->getFileExtension()), ['html', 'htm'], true)) {

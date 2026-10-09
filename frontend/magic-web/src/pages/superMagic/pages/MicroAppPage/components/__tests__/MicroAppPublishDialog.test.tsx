@@ -210,7 +210,7 @@ describe("MicroAppPublishDialog", () => {
 		expect(settings).toContainElement(screen.getByTestId("micro-app-cover-upload"))
 	})
 
-	it("uses the shadcn select for the default entry", async () => {
+	it("uses a searchable combobox for the default entry", async () => {
 		renderDialog({
 			attachmentList: [
 				{
@@ -222,7 +222,7 @@ describe("MicroAppPublishDialog", () => {
 		})
 
 		const trigger = await screen.findByTestId("micro-app-default-open-file")
-		expect(trigger).toHaveAttribute("data-slot", "select-trigger")
+		expect(trigger).toHaveAttribute("data-slot", "popover-trigger")
 		expect(trigger).toHaveAttribute("role", "combobox")
 		expect(trigger).toHaveTextContent("microAppPage.publish.defaultOpenFileAuto")
 	})

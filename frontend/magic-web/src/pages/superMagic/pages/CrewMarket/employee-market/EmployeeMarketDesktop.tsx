@@ -11,6 +11,9 @@ import { Button } from "@/components/shadcn-ui/button"
 import { userStore } from "@/models/user"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
+import SkillMarketTabs, {
+	SKILL_MARKET_TAB_VALUES,
+} from "@/pages/superMagic/pages/SkillMarket/components/SkillMarketTabs"
 import { FUNCTION_PERMISSION_CODE } from "@/apis"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
 import { CrewDetailDialog } from "@/pages/superMagic/components/CrewDetailDialog"
@@ -251,10 +254,16 @@ function EmployeeMarketDesktop({ scrollViewportRef }: EmployeeMarketDesktopProps
 			{dialog}
 			<div className="flex min-w-0 flex-col pt-5 sm:pt-6">
 				<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-					<div className="flex min-w-0 flex-1 flex-col gap-2">
-						<h1 className="h-8 break-words bg-gradient-to-br from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-lg font-semibold leading-8 text-transparent sm:h-9 sm:text-xl sm:leading-9 lg:h-10 lg:text-2xl lg:leading-10">
-							{t("title")}
-						</h1>
+					<div className="flex min-w-0 flex-1 flex-col gap-2.5">
+						<SkillMarketTabs
+							value={SKILL_MARKET_TAB_VALUES.crew}
+							onValueChange={(value) => {
+								if (value === SKILL_MARKET_TAB_VALUES.skills)
+									navigate({ name: RouteName.CrewMarketSkills })
+								if (value === SKILL_MARKET_TAB_VALUES.connectors)
+									navigate({ name: RouteName.CrewMarketMcp })
+							}}
+						/>
 						<p className="max-w-2xl break-words text-sm text-muted-foreground">
 							{t("subtitle")}
 						</p>

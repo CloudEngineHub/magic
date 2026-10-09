@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn, useRequest } from "ahooks"
 import { RecycleBinApi } from "@/apis"
@@ -23,6 +23,9 @@ import { useRecycleBinSearch } from "./useRecycleBinSearch"
 import { RecycleBinSearchForm } from "./RecycleBinSearchForm"
 import { buildRecycleBinGroups, type RecycleBinFileView } from "./recycle-bin-file-view"
 
+import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
+import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
+
 const RECYCLE_BIN_PAGE_SIZE = 50
 export function RecycleBinContent({
 	activeTab,
@@ -30,8 +33,70 @@ export function RecycleBinContent({
 	onMutationComplete,
 	requireDeleteConfirmation = false,
 	projectId,
+	onPreview,
+	onPreviewRemoved,
 }: RecycleBinContentProps) {
 	const { t } = useTranslation("super")
+	const previewRequests = useRef(new Map<string, AbortController>())
+	const previewIntent = useRef(0)
+	useEffect(
+		() => () => {
+			previewRequests.current.forEach((controller) => controller.abort())
+			previewRequests.current.clear()
+		},
+		[projectId],
+	)
+	const openPreview = useMemoizedFn(async (item: RecycleBinItem) => {
+		if (
+			!onPreview ||
+			item.category !== "files" ||
+			item.fileKind === "folder" ||
+			projectId === ""
+		)
+			return
+		const identityKey = getFileReferenceIdentityKey()
+		if (!identityKey) return
+		const intent = ++previewIntent.current
+		previewRequests.current.get(item.id)?.abort()
+		const controller = new AbortController()
+		previewRequests.current.set(item.id, controller)
+		try {
+			const data = await RecycleBinApi.previewFile(item.id, projectId, controller.signal)
+			if (controller.signal.aborted || getFileReferenceIdentityKey() !== identityKey) return
+			const file: FileItem = {
+				...data,
+				file_url: data.url,
+				recycleBin: { id: data.recycle_bin_id, identityKey, projectId },
+				display_config: {
+					previewPolicy: {
+						standalone: true,
+						readonly: true,
+						editingPresence: false,
+						allowShare: false,
+						allowVersionHistory: false,
+						syncWithAttachments: false,
+						persistTab: false,
+						restoreAsActive: false,
+					},
+				},
+			}
+			onPreview(file, intent === previewIntent.current)
+		} catch {
+			if (!controller.signal.aborted) magicToast.error(t("recycleBin.preview.unavailable"))
+		} finally {
+			if (previewRequests.current.get(item.id) === controller)
+				previewRequests.current.delete(item.id)
+		}
+	})
+	const handleRecordsChanged = useMemoizedFn(
+		({ recordIds }: { kind: "restore" | "permanent-delete"; recordIds: string[] }) => {
+			for (const id of recordIds) {
+				previewRequests.current.get(id)?.abort()
+				previewRequests.current.delete(id)
+			}
+			onPreviewRemoved?.(recordIds)
+		},
+	)
 	const getTabLabel = useRecycleBinTabLabel("pc")
 	const [searchValue, setSearchValue] = useState("")
 	const [globalItems, setGlobalItems] = useState<RecycleBinItem[]>([])
@@ -152,6 +217,7 @@ export function RecycleBinContent({
 		resetKey: isProject ? projectQuery.scopeKey : undefined,
 	})
 	const actions = useRecycleBinActions({
+		onRecordsChanged: handleRecordsChanged,
 		onMutationComplete,
 		items,
 		setItems,
@@ -229,6 +295,7 @@ export function RecycleBinContent({
 
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-border bg-card">
 				<RecycleBinList
+					onPreview={onPreview ? openPreview : undefined}
 					project={
 						isProject
 							? {
@@ -302,6 +369,8 @@ export function RecycleBinContent({
 }
 
 interface RecycleBinContentProps {
+	onPreview?: (file: FileItem, activate: boolean) => void
+	onPreviewRemoved?: (recordIds: string[]) => void
 	/** undefined 保留全局入口；项目入口缺失 ID 时传空串并阻止全局回退。 */
 	projectId?: string
 	onMutationComplete?: () => void

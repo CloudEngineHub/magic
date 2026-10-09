@@ -431,6 +431,7 @@ export interface DraftServiceInterface {
 export enum ToolbarButton {
 	DRAFT_BOX = "draftBox",
 	AT = "at",
+	SLASH_COMMAND = "slashCommand",
 	MODEL_SWITCH = "modelSwitch",
 	INTERNET_SEARCH = "internetSearch",
 	MCP = "mcp",

@@ -77,6 +77,7 @@ return [
         'publisher_type_invalid' => 'Invalid publisher type',
         'publish_target_value_required' => 'publish_target_value is required for current publish target type',
         'publish' => [
+            'skills_sync_failed' => 'Xuất bản thất bại: đồng bộ tham chiếu kỹ năng không thành công (:reason). Vui lòng kiểm tra các kỹ năng đã gắn với agent này rồi thử lại.',
             'identity_md_not_found' => 'Xuất bản thất bại: không tìm thấy tệp bắt buộc :path dưới thư mục gốc của dự án. Vui lòng thêm tệp này rồi thử lại.',
         ],
     ],
@@ -84,8 +85,8 @@ return [
         'prompt_length_exceeded' => 'Văn bản nhập vào quá dài. Vui lòng tải lên dưới dạng tệp và tham chiếu trong hộp thoại.',
         'sandbox_init_failed' => 'Môi trường chạy gặp lỗi. Vui lòng thử lại sau.',
         'chat_task_start_failed' => 'Không thể bắt đầu tác vụ. Vui lòng thử lại sau.',
-        'project_file_count_exceeded' => 'Không gian dự án hiện tại đã đạt giới hạn :limit tệp, không thể tiếp tục tác vụ. Vui lòng liên hệ quản trị viên.',
-        'user_space_file_count_exceeded' => 'Không gian người dùng hiện tại đã đạt giới hạn :limit tệp, không thể tiếp tục tác vụ. Vui lòng liên hệ quản trị viên.',
+        'project_file_count_exceeded' => 'Không gian dự án cần được dọn dẹp trước khi tiếp tục tác vụ. Hãy xóa các tệp không còn cần thiết rồi thử lại.',
+        'user_space_file_count_exceeded' => 'Không gian tệp cá nhân cần được dọn dẹp trước khi tiếp tục tác vụ. Hãy xóa các tệp không còn cần thiết rồi thử lại.',
     ],
     'magic_claw' => [
         'create_system_error' => 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.',

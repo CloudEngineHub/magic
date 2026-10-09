@@ -69,12 +69,16 @@ class MagicClawRepository extends SuperMagicAbstractRepository implements MagicC
             ->delete();
     }
 
-    public function getList(string $userId, string $organizationCode, int $page, int $pageSize): array
+    public function getList(string $userId, string $organizationCode, int $page, int $pageSize, string $keyword = ''): array
     {
         $builder = $this->magicClawModel::query()
             ->where('user_id', $userId)
             ->where('organization_code', $organizationCode)
             ->orderByDesc('created_at');
+
+        if ($keyword !== '') {
+            $builder->where('name', 'like', '%' . $keyword . '%');
+        }
 
         $total = $builder->count();
 

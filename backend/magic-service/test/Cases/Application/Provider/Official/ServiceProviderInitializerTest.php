@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\Provider\Official;
 
-use App\Application\Provider\Official\ServiceProviderInitializer;
+use App\Application\Provider\Initializer\ServiceProviderInitializer;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\DbConnection\Db;

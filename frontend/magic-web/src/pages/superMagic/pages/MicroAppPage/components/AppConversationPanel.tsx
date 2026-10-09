@@ -18,6 +18,7 @@ import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import {
+	isTopicTaskRunning,
 	isTopicWaitingForUser,
 	type ProjectListItem,
 } from "@/pages/superMagic/pages/Workspace/types"
@@ -42,7 +43,10 @@ import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTo
 import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import { useAppStore } from "../context"
-import { resolveMicroAppModelSelectionMode } from "../utils/microAppModelMode"
+import {
+	resolveMicroAppModelSelectionMode,
+	resolveMicroAppRuntimeModelSelectionMode,
+} from "../utils/microAppModelMode"
 import type { RevokedMessageEditorContext } from "@/pages/superMagic/components/MessageList/revoked-editor-context"
 import MessageListFallback from "@/pages/superMagic/components/MessageList/components/MessageListFallback"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
@@ -106,10 +110,12 @@ function AppConversationPanel({
 	const selectedTopic = topicStore.selectedTopic
 	const selectableTopicMode = useTopicMode({ selectedTopic, selectedProject })
 	const topicMode = lockToMicroAppMode ? TopicMode.MicroApp : selectableTopicMode.topicMode
-	const modelTopicMode = lockToMicroAppMode ? resolveMicroAppModelSelectionMode() : topicMode
 	const agentCode = lockToMicroAppMode
 		? undefined
 		: resolveAgentSelection(topicMode, selectedTopic?.agent_code).agentCode
+	const modelTopicMode = lockToMicroAppMode
+		? resolveMicroAppModelSelectionMode()
+		: resolveMicroAppRuntimeModelSelectionMode(topicMode, agentCode)
 	// Development conversations are always handled by the micro-app agent. Keep shared editor
 	// callbacks scoped so project-level employee preferences cannot change this runtime.
 	const keepMicroAppMode = useMemoizedFn((mode: TopicMode) => void mode)
@@ -160,12 +166,13 @@ function AppConversationPanel({
 		onConversationGeneratingChange: conversation.setConversationGenerating,
 		onTopicMessagesChange: handleTopicMessagesChange,
 	})
+	const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 
 	const messageQueue = useMessageQueue({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode,
-		isTaskRunning: showLoading,
+		isTaskRunning,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,

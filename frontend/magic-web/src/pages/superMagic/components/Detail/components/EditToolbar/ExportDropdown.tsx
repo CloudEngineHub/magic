@@ -14,10 +14,12 @@ interface ExportDropdownProps {
 	supportPptx?: boolean
 	supportSpecificPages?: boolean
 	slides?: SlideItem[]
+	hiddenSlides?: unknown
 	onExportPptx?: () => void
 	onExportSpecificPages?: (
 		filePaths: string[],
 		format: "source" | "pdf" | "pptx" | "image_png" | "image_jpeg",
+		includeHiddenSlides?: boolean,
 	) => void
 	onGenerateScreenshot?: (index: number) => Promise<void>
 	beforeAction?: BeforeAction
@@ -30,6 +32,7 @@ function ExportDropdown({
 	supportPptx = true,
 	supportSpecificPages = false,
 	slides = [],
+	hiddenSlides,
 	onExportPptx,
 	onExportSpecificPages,
 	onGenerateScreenshot,
@@ -53,8 +56,9 @@ function ExportDropdown({
 	function handleConfirmExport(
 		filePaths: string[],
 		format: "source" | "pdf" | "pptx" | "image_png" | "image_jpeg",
+		includeHiddenSlides?: boolean,
 	) {
-		onExportSpecificPages?.(filePaths, format)
+		onExportSpecificPages?.(filePaths, format, includeHiddenSlides)
 		setSlideDialogOpen(false)
 	}
 
@@ -65,6 +69,7 @@ function ExportDropdown({
 					open={slideDialogOpen}
 					onOpenChange={setSlideDialogOpen}
 					slides={slides}
+					hiddenSlides={hiddenSlides}
 					onConfirm={handleConfirmExport}
 					isExporting={isExporting}
 					onGenerateScreenshot={onGenerateScreenshot}

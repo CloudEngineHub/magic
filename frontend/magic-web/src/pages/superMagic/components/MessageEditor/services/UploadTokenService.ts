@@ -11,7 +11,7 @@ import { getFileReferenceIdentityKey } from "../../../services/userFileReference
 
 const TEMP_UPLOAD_DIR_NAME = ".tmp"
 
-class UploadTokenService {
+export class UploadTokenService {
 	private readonly baseUrl = env("MAGIC_SERVICE_BASE_URL")
 	private readonly logger = Logger.createLogger("SuperMagicUploadTokenService")
 	private readonly tempUploadDirectoryIds = new Map<string, string>()

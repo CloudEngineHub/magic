@@ -84,6 +84,8 @@ describe("share MessageList", () => {
 						super_message_id: "tool-1",
 						role: "tool",
 						content: "shared tool result",
+						// Only tool rows with renderable attachments enter the flat projection.
+						attachments: [{ filename: "result.html" }],
 						debug: { status: "finished" },
 					},
 				]}

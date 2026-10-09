@@ -96,4 +96,22 @@ describe("FileEditButtons", () => {
 		fireEvent.click(screen.getByTestId("html-editor-cancel-button"))
 		expect(onCancel).toHaveBeenCalledTimes(1)
 	})
+
+	it("adapts button padding based on showButtonText", () => {
+		const { rerender } = render(
+			<FileEditButtons testIdPrefix="html-editor" showButtonText={true} onEdit={vi.fn()} />,
+		)
+
+		const editBtnWithText = screen.getByTestId("html-editor-edit-button")
+		expect(editBtnWithText.className).toContain("px-3")
+		expect(editBtnWithText.className).toContain("gap-1.5")
+
+		rerender(
+			<FileEditButtons testIdPrefix="html-editor" showButtonText={false} onEdit={vi.fn()} />,
+		)
+
+		const editBtnIconOnly = screen.getByTestId("html-editor-edit-button")
+		expect(editBtnIconOnly.className).toContain("px-1.5")
+		expect(editBtnIconOnly.className).toContain("gap-0")
+	})
 })

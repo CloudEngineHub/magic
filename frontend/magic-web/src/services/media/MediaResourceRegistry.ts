@@ -140,8 +140,18 @@ class MediaResourceRegistry {
 	 * resource managers use this to expose their existing lifecycle/cache through
 	 * the shared facade while retaining their own release semantics.
 	 */
-	prime(ref: MediaResourceRef, snapshot: Partial<MediaResourceSnapshot>) {
+	prime(
+		ref: MediaResourceRef,
+		snapshot: Partial<MediaResourceSnapshot>,
+		options: { cancelPending?: boolean } = {},
+	) {
 		const entry = this.getOrCreateEntry(ref)
+		if (options.cancelPending) {
+			// 获取层开始强制续期时终止旧请求，保留当前快照，旧响应不能覆盖新地址。
+			Object.values(entry.controllers).forEach((controller) => controller?.abort())
+			entry.controllers = {}
+			entry.inFlight = {}
+		}
 		const next: MediaResourceSnapshot = {
 			...snapshot,
 			identity: ref.identity,

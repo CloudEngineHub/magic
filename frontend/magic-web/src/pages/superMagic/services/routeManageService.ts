@@ -657,6 +657,22 @@ class RouteManageService {
 		})
 	}
 
+	navigateToClawPlayground(clawCode: string, replace?: boolean) {
+		this.safeNavigate({
+			name: RouteName.ClawPlayground,
+			params: { code: clawCode },
+			replace,
+		})
+	}
+
+	navigateToMicroApp(appId: string, replace?: boolean) {
+		this.safeNavigate({
+			name: RouteName.MicroApp,
+			params: { appId },
+			replace,
+		})
+	}
+
 	navigateToChatProject(
 		project: ProjectListItem,
 		topicId?: string,

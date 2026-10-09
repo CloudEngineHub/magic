@@ -77,7 +77,7 @@ The template is not complete when authoring finishes. Call `finalize_slide_templ
 
 **CHECKPOINT:** Before `create_slide_template_project`, call `ask_user` once for missing direction. These questions are about the target template, not the source, so ask them from the user's request alone: do not open, convert, or render the deck first. Do not put `ask_user` inside `run_sdk_snippet` or Code Mode.
 
-Ask only what the user did not already answer, and only when the answer would change the finished template. Write questions in the user's language. Prefer `select`. Set `default` on every question and `timeout` to `900`. If the user skips, times out, or says to decide, continue with those defaults. If `ask_user` is blocked, use the same defaults without asking.
+Ask only what the user did not already answer, and only when the answer would change the finished template. Write questions in the user's language. Prefer `select`. Set `default` on every question. Omit `timeout` because these choices affect the finished template; use `timeout=60` only for a simple choice where the default is safe and continuing without the user is acceptable. If the user skips or says to decide, continue with those defaults. If `ask_user` is blocked, use the same defaults without asking.
 
 Drop a question when the user already specified it:
 

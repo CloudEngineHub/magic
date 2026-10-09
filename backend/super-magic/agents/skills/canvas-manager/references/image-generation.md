@@ -5,17 +5,19 @@ Load this reference for image generation, image revision, reference images, or i
 ## Workflow
 
 1. Query the Canvas and any exact reference Elements.
-2. Call `visual_understanding` first when you need to understand the subject, composition, dimensions, or what to preserve.
+2. Look at the reference images when you need to decide what each one governs, where the change goes, or what to preserve. An image already visible in your context needs no tool call; call `visual_understanding` only for images you cannot see yet.
 3. Confirm the creative direction when the direction is ambiguous.
-4. New logical image → `add_canvas_elements`.
-5. New candidate on an existing image → `add_canvas_contents`.
+4. New image or image revision → `add_canvas_elements`, one independent Element per image; preserve the original and use its actual path as a reference.
+5. Only when the user explicitly requests versions inside one existing image Element → `add_canvas_contents`.
 6. Failed and the user agrees → `retry_canvas_content_generation`.
 7. The first Content of any Element is automatically main; the user confirms a later candidate → `select_canvas_main_content`.
+
+Image generation, editing, retries, and additional candidates may consume points or money. After a successful image, let the user review it; a successful image you personally dislike is not a failure. Follow the core user-confirmation rule before any additional image call.
 
 ## Tool choice
 
 - New logical image: `add_canvas_elements`, `element_type=image`, Content `source=generated`, `content_type=image`.
-- New candidate on an existing image: `add_canvas_contents` — appends, never overwrites.
+- Revised image: `add_canvas_elements` by default, even for "another version" or a small change. Use `add_canvas_contents` only for an explicit request to keep versions in the same Element; append without overwriting.
 - In-place retry: `retry_canvas_content_generation` with the exact Element ID and failed Content ID.
 - After the user confirms a later candidate: `select_canvas_main_content`. Do not call it for the first Content of any Element.
 
@@ -51,7 +53,7 @@ print(result.content)
 - Text-to-image: `size` is required when `reference_images` is empty.
 - Image-to-image: pass the reference path(s) in `reference_images`. When `size` is omitted, the tool auto-reads dimensions from the largest reference image; set `size` explicitly only for a different output size.
 - Images inside the current project use project-relative paths and must begin with `./` (e.g. `./images/cat.jpg`); images outside the current project use workspace-relative paths (e.g. `other-project/images/style.jpg`). `visual_understanding` is workspace-anchored, so convert a returned Canvas path such as `./images/cat.jpg` to `<exact project_path>/images/cat.jpg` before calling it. Never guess a path — use one you already know or obtained from a query result.
-- Before image-to-image, call `visual_understanding` on the reference image to get its content description and dimensions; use the description to write the prompt.
+- Before image-to-image, look at each reference to assign its role and locate the change (see Reference roles). What you observe guides the prompt; it is not text to copy into it.
 
 ```python
 result = tool.call("add_canvas_elements", {
@@ -64,7 +66,7 @@ result = tool.call("add_canvas_elements", {
             "source": "generated",
             "content_type": "image",
             "name": "cat with red ear",
-            "prompt": "Based on the reference image, change only the ear in the upper-right area to bright red. Preserve the cat's face, body, pose, background, and every other detail exactly as they appear.",
+            "prompt": "In Image 1, change only the ear in the upper-right area to bright red. Keep the cat's face, body, pose, background, and every other detail exactly as in Image 1.",
             "reference_images": ["./images/cat.jpg"],
         },
     }],
@@ -76,6 +78,15 @@ print(result.content)
 
 Follow the retry, waiting, and version rules in SKILL.md. A failed image Content is retried in place with `retry_canvas_content_generation`, using the exact Element ID and Content ID.
 
+## Output format
+
+Honor a format the user already chose. If the user has not chosen between a direct image, an HTML page, and an SVG file, explain the relevant tradeoffs briefly, recommend an option, and let the user decide before generating anything.
+
+- Direct image generation suits concise copy and compositions where text and artwork should be designed together. Preserve requested wording in the image prompt; do not remove it because of outdated assumptions about image-model text rendering.
+- HTML suits long or structured content and frequent revisions. Keep the copy as editable page text and generate only the supporting images needed by the page.
+- An explicit SVG request is a direct file-authoring request, not Canvas image generation. Write the `.svg` file with the existing file-writing capability. Do not call image-generation tools, use scripts or code generators, create a raster intermediate, or convert PNG/JPG to SVG. Keep the SVG's vector elements, text, styles, and `viewBox` editable and self-contained.
+- A supporting illustration, background, or other pure-image request does not require this format question.
+
 ## Writing a high-quality prompt
 
 A prompt is a creative brief, not a keyword list. State what must stay fixed and what may change.
@@ -85,7 +96,7 @@ A prompt is a creative brief, not a keyword list. State what must stay fixed and
 - **Content (what)** — the subject: shape, color, texture, quantity, identity. Must not drift.
 - **Style (how)** — photography, background, lighting, color grade, mood. May change.
 
-When the user says "redesign this in a dark moody style", they mean: keep the subject unchanged, change the presentation. Make that split explicit.
+When the user says "redesign this in a dark moody style", they mean: keep the subject unchanged, change the presentation. Make that split explicit. When a reference supplies the content, lock it by pointing to that reference (see Reference roles) and spend the description on what changes.
 
 ### Specificity over adjectives
 
@@ -127,22 +138,35 @@ Apply selectively — for food or beverages, textured materials, atmospheric sce
 
 ### Reference roles
 
-Every reference carries subject, composition, palette, lighting, texture, and style. Assign each attribute explicitly: which reference it comes from, locked or free, and which part of the output it governs. Cite references by position — "the first image", "the second image" — since filenames are not visible.
+The generation model sees each reference image's pixels directly. Your prompt is a second channel that it also obeys. Words that match the image add nothing; words that misread it or say it more strongly pull the result away from the reference. Your own reading of an image can be wrong (glasses that are not there) or coarse ("dark skin", "blemishes"), and the model amplifies it.
+
+So spend words on what the image cannot say:
+
+- **Which image governs what.** Cite references by order — Image 1, Image 2 (图片1, 图片2 in a Chinese prompt) — since filenames are not visible. For each, name the aspects it controls — identity and face, hairstyle, outfit, expression, pose, product shape and label, composition, palette, lighting, style — and how strictly: exact match, or loose inspiration.
+- **What changes and what is new** — the scene, action, camera, lighting, and the edit itself. Describe these fully.
+
+Leave the reference's own appearance to the image. Point at a detail when it matters: the user mentioned it, it is the thing being changed, it is small or easily lost and must survive (a logo, a mole, label text), or you must say which of several subjects you mean. Point to it in the reference instead of re-describing it, and keep the user's own wording as given.
+
+| Intent | [Wrong] | [Right] |
+|---|---|---|
+| Same person in a new scene | "A man with dark skin, a beard, and glasses sits in a café" | "The man from Image 1, face and hairstyle exactly as in Image 1, sits in a café" |
+| Outfit from one image, person from another | "A woman in a beige trench coat with gold buttons" | "The woman from Image 1 wearing the outfit from Image 2" |
+| Keep a small detail | "He has a small dark mole" | "Keep the mole on his left cheek from Image 1" |
 
 ### Positive framing, negative constraints
 
-Describe what should be present. Use negative constraints only to block known failures that have no positive equivalent: "no text or watermarks", "the product shape and proportions must not be altered".
+Describe what should be present. Use negative constraints only to block known failures that have no positive equivalent. Use "no text or watermarks" only when the user wants a text-free supporting image; when the user asks for a poster, notice, diagram, or other image with wording, preserve that wording in the positive prompt instead.
 
 ### Scene quick reference
 
 | Scene | Technical anchors | Common negatives |
 |---|---|---|
-| Product / commercial | Medium-format rendering, studio softbox, seamless backdrop, macro surface detail | Product must not be distorted or redesigned; no text or watermarks |
+| Product / commercial | Medium-format rendering, studio softbox, seamless backdrop, macro surface detail | Product must not be distorted or redesigned; no text or watermarks for a text-free supporting product image |
 | Portrait | 85mm f/1.4, shallow DOF, catch-light in eyes, skin-tone accuracy | Preserve facial features exactly; do not alter identity |
-| Food / beverage | 45° overhead or 30° side angle, diffused side light, textured surface, steam or condensation details | No utensil clutter; no text |
+| Food / beverage | 45° overhead or 30° side angle, diffused side light, textured surface, steam or condensation details | No utensil clutter; no text only for a text-free food image, not for a food poster with requested copy |
 | Cinematic / film | Anamorphic lens, film grain, letterbox crop, practical motivated lighting | — |
 | Japanese / minimal | High-key exposure, wabi-sabi negative space, diffused natural light, desaturated warm tones | No neon colours; no artificial studio glow |
-| Design / poster | Grid-based layout, flat graphic style, limited colour palette | Clear visual hierarchy; no decorative noise |
+| Design / poster | Grid-based layout, flat graphic style, limited colour palette | Clear visual hierarchy; preserve requested wording and legibility; no decorative noise |
 | Lifestyle / environmental | Wide-angle environmental framing, natural available light, subject in context | No artificial product distortion |
 | Concept / atmospheric | Volumetric light, environmental haze, scale cues for depth, sensory stacking | — |
 
@@ -159,14 +183,15 @@ When the user asks for an image, you translate intent into a visual specificatio
 Format: simple single-subject scenes with no strict preservation → connected prose. Complex scenes with several elements, strict preservation, or multiple references → structured groups with short labels:
 
 ```
-Subject: [what must be preserved]
+References: [Image N → the aspects it governs, exact or loose]
+Subject: [what is new or changed; leave what a reference shows to the reference]
 Lighting: [setup, direction, quality]
 Background / environment: [what to change or keep]
 Style: [colour grade, aesthetic reference]
 Constraints: [what must not appear or change]
 ```
 
-Use only the labels that carry real information; not every prompt needs all five.
+Use only the labels that carry real information; not every prompt needs all of them.
 
 ### Handling user-provided prompts
 

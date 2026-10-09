@@ -1,6 +1,10 @@
 import { slugify } from "@/utils/slug"
 
 export interface HtmlNavigationRequest {
+	/** Browser target intent; the host owns tab reuse and activation. */
+	target?: string
+	background?: boolean
+	history?: "push" | "replace"
 	/** Path used for attachment matching. It never contains query or hash. */
 	filePath: string
 	/** Complete query string, including the leading `?` when present. */
@@ -9,6 +13,17 @@ export interface HtmlNavigationRequest {
 	hash: string
 	/** Normalized anchor used by the existing scroll implementation. */
 	anchor: string
+}
+
+export type HtmlNavigationIntent = Pick<HtmlNavigationRequest, "target" | "background" | "history">
+
+/** Message payloads are untrusted even after the iframe source/origin checks. */
+export function getHtmlNavigationIntent(value: Record<string, unknown>): HtmlNavigationIntent {
+	return {
+		target: typeof value.target === "string" && value.target ? value.target : "_self",
+		background: value.background === true,
+		history: value.history === "replace" ? "replace" : "push",
+	}
 }
 
 /**
@@ -151,9 +166,22 @@ export function isHtmlPreviewShellNavigation(href: string, shellUrl = "/husky.ht
 
 const ROOT_INDEX_NAME = /^index\.html?$/i
 
+/**
+ * URL.pathname percent-encodes UTF-8. Project paths stay Unicode.
+ * decodeURI leaves "/" "?" "#" encoded, so %2F is not a new segment.
+ */
+function decodeHtmlPreviewPath(path: string): string {
+	if (!path.includes("%")) return path
+	try {
+		return decodeURI(path)
+	} catch {
+		return path
+	}
+}
+
 /** Normalize preview paths: slashes, leading /, and repeated ./ prefixes. */
 export function normalizeHtmlPreviewPath(path?: string): string {
-	let value = (path || "").replace(/\\/g, "/")
+	let value = decodeHtmlPreviewPath(path || "").replace(/\\/g, "/")
 	while (value.startsWith("./")) {
 		value = value.slice(2)
 	}

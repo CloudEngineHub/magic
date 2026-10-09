@@ -14,6 +14,10 @@ export enum HttpStatusCode {
 	Forbidden = 403,
 	/** 404 Not Found - Resource does not exist */
 	NotFound = 404,
+	/** 409 Conflict - Request conflicts with the current resource state */
+	Conflict = 409,
+	/** 429 Too Many Requests - Request rate limit exceeded */
+	TooManyRequests = 429,
 	/** 500 Internal Server Error - Internal server error */
 	InternalServerError = 500,
 }

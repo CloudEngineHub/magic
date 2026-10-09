@@ -28,7 +28,8 @@ final class ReferencedProjectMountGuard
 {
     public function __construct(
         private readonly ReferencedProjectMountAuthorizer $authorizer,
-    ) {}
+    ) {
+    }
 
     /**
      * @param list<ReferencedProjectMount> $mounts

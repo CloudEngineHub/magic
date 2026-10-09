@@ -474,8 +474,11 @@ export function useIframeScaling(config: IframeScalingConfig): IframeScalingResu
 		// Use ResizeObserver to monitor container size changes
 		const container = scaleViewportRef.current
 		if (!container) return
+		// ResizeObserver already batches layout changes. A trailing debounce can be
+		// postponed throughout a splitter drag, leaving the slide at an old scale
+		// until it jumps to the latest size. Fit each delivered viewport size instead.
 		const resizeObserver = new ResizeObserver(() => {
-			calculateScaleAndDimensions()
+			calculateScaleAndDimensionsSync()
 		})
 		resizeObserver.observe(container)
 
@@ -483,7 +486,7 @@ export function useIframeScaling(config: IframeScalingConfig): IframeScalingResu
 			resizeObserver.disconnect()
 		}
 	}, [
-		calculateScaleAndDimensions,
+		calculateScaleAndDimensionsSync,
 		isPptRender,
 		hasSlideContainer,
 		scaleContentDimensions,

@@ -1,6 +1,7 @@
 import ConversationPanelScaffold from "@/pages/superMagic/components/ConversationPanelScaffold"
 import { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import {
+	isTopicTaskRunning,
 	isTopicWaitingForUser,
 	type ProjectListItem,
 } from "@/pages/superMagic/pages/Workspace/types"
@@ -108,12 +109,13 @@ function CrewTopicPanel({
 		onConversationGeneratingChange: conversation.setConversationGenerating,
 		onTopicMessagesChange: handleTopicMessagesChange,
 	})
+	const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 
 	const messageQueue = useMessageQueue({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode: crewId,
-		isTaskRunning: showLoading,
+		isTaskRunning,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,

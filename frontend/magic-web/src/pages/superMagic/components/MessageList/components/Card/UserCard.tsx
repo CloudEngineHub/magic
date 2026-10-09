@@ -1,3 +1,5 @@
+import { restoreWechatChatContent } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/transform"
+import { WechatChatHistoryExtension } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/extension"
 import { useEffect, useMemo, useRef, useState, memo, ComponentType } from "react"
 import { useTranslation } from "react-i18next"
 import { getSuperIdState } from "@/pages/superMagic/utils/query"
@@ -15,7 +17,10 @@ import { Editor } from "@/infrastructure/editors/tiptap/core"
 import { Document } from "@/infrastructure/editors/tiptap/extension-document"
 import { Paragraph } from "@/infrastructure/editors/tiptap/extension-paragraph"
 import { Text as TiptapText } from "@/infrastructure/editors/tiptap/extension-text"
-import { HardBlock } from "@/pages/superMagic/components/MessageEditor/extensions"
+import {
+	HardBlock,
+	SuperPlaceholderExtension,
+} from "@/pages/superMagic/components/MessageEditor/extensions"
 import {
 	InspectorDetailExtension,
 	transformInspectorContent,
@@ -220,7 +225,9 @@ export function withUserNode<
 						const richTextContent =
 							messageNode?.content || messageNode?.rich_text?.content
 						editor = new Editor({
-							content: transformInspectorContent(JSON.parse(richTextContent)),
+							content: restoreWechatChatContent(
+								transformInspectorContent(JSON.parse(richTextContent)),
+							),
 							extensions: [
 								Document,
 								Paragraph,
@@ -228,6 +235,8 @@ export function withUserNode<
 								HardBlock,
 								MentionExtension,
 								InspectorDetailExtension,
+								WechatChatHistoryExtension,
+								SuperPlaceholderExtension,
 							],
 						})
 

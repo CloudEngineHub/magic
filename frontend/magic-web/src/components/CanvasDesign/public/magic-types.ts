@@ -177,18 +177,11 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	| "standard"
-	| "image_reference"
-	| "omni_reference"
-	| "video_edit"
-	| "keyframe_guided"
+	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	| "reference_images"
-	| "reference_videos"
-	| "reference_audios"
-	| "frames"
+	"reference_images" | "reference_videos" | "reference_audios" | "frames"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -513,6 +506,8 @@ export interface DefaultGenerateVideoConfig {
  * 发起图片生成请求参数
  */
 export interface GenerateImageRequest {
+	/** 该版本的生成名称；最终文件名仍由生成结果确定。 */
+	name?: string
 	/** 项目 id */
 	project_id?: string
 	/** 图片 id */
@@ -1325,8 +1320,7 @@ export interface IdentifyImageMarkAreaResponse extends IdentifyImageMarkResponse
  * 识别图片标记响应类型
  */
 export type IdentifyImageMarkResponse =
-	| IdentifyImageMarkPointResponse
-	| IdentifyImageMarkAreaResponse
+	IdentifyImageMarkPointResponse | IdentifyImageMarkAreaResponse
 
 /**
  * Storage 数据结构
@@ -1335,6 +1329,8 @@ export interface CanvasDesignStorageData {
 	viewport?: ViewportState
 	/** 当前设计项目的小地图面板是否展开 */
 	minimapOpen?: boolean
+	/** 当前设计项目是否常驻显示图片和视频的标题、分辨率标签 */
+	mediaLabelsAlwaysVisible?: boolean
 	expandedElementIds?: string[]
 	layersCollapsed?: boolean
 	layersWidth?: number
@@ -1456,8 +1452,38 @@ export interface CanvasDesignConfirmModalOptions {
 	cancelText?: string
 	okButtonProps?: Record<string, unknown>
 	cancelButtonProps?: Record<string, unknown>
+	variant?: "default" | "destructive"
+	showIcon?: boolean
 	onOk?: () => void | Promise<void>
 	onCancel?: () => void
+}
+
+export interface CanvasImageRenameFile {
+	fileId: string
+	fileName: string
+	sourcePath: string
+	parentPath: string
+}
+
+export interface CanvasImageFileRename {
+	elementId: string
+	contentId: string
+	fileId: string
+	expectedName: string
+	targetName: string
+}
+
+export interface CanvasImageRenameMethods {
+	resolveImageRenameFile: (path: string) => CanvasImageRenameFile | undefined
+	validateImageFileRenames: (changes: readonly CanvasImageFileRename[]) => Record<string, string>
+	renameImageFile: (change: CanvasImageFileRename) => Promise<CanvasImageRenameFile>
+}
+
+export interface CanvasDesignConfirmModalHandle {
+	/** 范围切换只更新确认按钮，不重建弹窗或触发删除。 */
+	update: (
+		options: Pick<CanvasDesignConfirmModalOptions, "content" | "okText" | "okButtonProps">,
+	) => void
 }
 
 /**
@@ -1466,6 +1492,8 @@ export interface CanvasDesignConfirmModalOptions {
  * 注意：此接口完全独立，不依赖外部类型
  */
 export interface CanvasDesignMethods {
+	/** 手动图片命名由宿主处理实际文件；自动标题更新不触发文件改名。 */
+	imageRename?: CanvasImageRenameMethods
 	/**
 	 * 获取生图模型列表
 	 * @param mode 模式标识，如果不传则使用当前模式
@@ -1587,6 +1615,10 @@ export interface CanvasDesignMethods {
 		fileName?: string
 		locateInTree?: boolean
 	}) => Promise<void> | void
+	/** 将项目文件移入回收站，并返回服务端确认已处理的文件 ID。 */
+	deleteProjectFiles?: (params: {
+		fileIds: readonly string[]
+	}) => Promise<{ deletedFileIds: string[] }>
 	/**
 	 * 上传文件
 	 * @param uploadFiles 待上传文件数组
@@ -1704,7 +1736,7 @@ export interface CanvasDesignMethods {
 	 * 确认弹窗（可选）
 	 * 注入后 CanvasDesign 可复用宿主弹窗样式；未注入时由内部组件自行降级实现
 	 */
-	confirmModal?: (options: CanvasDesignConfirmModalOptions) => void
+	confirmModal?: (options: CanvasDesignConfirmModalOptions) => CanvasDesignConfirmModalHandle
 	/**
 	 * 剪贴板读写方法（可选）
 	 * 注入后 CanvasDesign 使用注入实现，否则降级到 navigator.clipboard

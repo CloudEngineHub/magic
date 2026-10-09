@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { lazy, Suspense } from "react"
 import { useMemoizedFn } from "ahooks"
@@ -84,4 +85,10 @@ function MainLayout() {
 	)
 }
 
-export default MainLayout
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<MainLayout />
+		</FileAccessProvider>
+	)
+}

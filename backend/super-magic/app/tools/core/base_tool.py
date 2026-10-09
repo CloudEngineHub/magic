@@ -76,6 +76,9 @@ class ToolResultContentMode(StrEnum):
     INSTRUCTION = "instruction"
 
 
+_FILE_EDIT_TOOL_NAMES = frozenset({"edit_file", "multi_edit_file", "edit_file_range"})
+
+
 class BaseTool(Generic[T], ABC):
     """工具基类
 
@@ -880,6 +883,13 @@ class BaseTool(Generic[T], ABC):
             return f"Tool '{tool_name}' parameter validation failed."
 
         result = "Tool call failed\n\n" + "\n\n".join(pretty_msg_parts)
+
+        if tool_name in _FILE_EDIT_TOOL_NAMES:
+            result += (
+                "\n\nThis tool call was rejected before execution. "
+                "No file was changed and no edit from this call was applied. "
+                "Correct the parameters and retry with the current tool schema."
+            )
 
         return result
 

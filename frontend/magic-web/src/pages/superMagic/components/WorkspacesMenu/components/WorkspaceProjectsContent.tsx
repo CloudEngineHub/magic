@@ -3,21 +3,37 @@ import { useMemoizedFn, useDebounce } from "ahooks"
 import { reaction } from "mobx"
 import { useTranslation } from "react-i18next"
 import { Plus } from "lucide-react"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { SuperMagicApi } from "@/apis"
 import MagicEmpty from "@/components/base/MagicEmpty"
 import { Button } from "@/components/shadcn-ui/button"
 import CreateProjectInput from "@/layouts/BaseLayout/components/MagicSidebar/WorkspaceList/CreateProjectInput"
-import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import { type Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import projectStore from "@/pages/superMagic/stores/core/project"
 import recentProjectsStore from "@/pages/superMagic/stores/core/recentProjects"
 import RecentProjectItem from "./RecentProjectItem"
-import { SortType, ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
+import { ProjectResourceItem } from "../../SelectPathModal/components/ProjectResourceSelectorModal/ProjectResourceItem"
+import {
+	getResourceProjectType,
+	type ResourceProject,
+} from "../../SelectPathModal/resourceProjectTypes"
+import ProjectItem, { SortType, ViewMode } from "../../EmptyWorkspacePanel/components/ProjectItem"
 import useProjectItemActionProps from "../../EmptyWorkspacePanel/hooks/useProjectItemActionProps"
-import { ViewToggle } from "./CollaborationProjectsPanel/components"
+import { SortSelector, ViewToggle } from "./CollaborationProjectsPanel/components"
 import { useViewTogglePersistValue } from "./CollaborationProjectsPanel/components/ViewToggle/hooks"
+import { ProjectsPanelToolbar } from "./ProjectsPanelToolbar"
+import { ProjectTypeFilter, type RecentProjectType } from "./ProjectTypeFilter"
+import type { ChangeEventHandler } from "react"
 import { ProjectsPanelList } from "./ProjectsPanel"
+import {
+	isResourceWorkspace,
+	loadResourceProjectPage,
+} from "../../SelectPathModal/utils/resourceProjects"
+import magicToast from "@/components/base/MagicToaster/utils"
 
 interface WorkspaceProjectsContentProps {
+	location: string
+	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
 	searchValue: string
 	onClearSearch: () => void
 	open: boolean
@@ -31,6 +47,8 @@ interface WorkspaceProjectsContentProps {
 const PAGE_SIZE = 100
 
 export default function WorkspaceProjectsContent({
+	location,
+	onSearchValueChange,
 	searchValue,
 	onClearSearch,
 	open,
@@ -40,14 +58,21 @@ export default function WorkspaceProjectsContent({
 	onCancelCreating,
 }: WorkspaceProjectsContentProps) {
 	const { t } = useTranslation("super")
+	const isMobile = useIsMobile()
 	const workspaceId = workspace?.id
 	const recent = !workspace
+	const [sortType, setSortType] = useState<SortType>(
+		recent ? SortType.MY_LAST_ACTIVE_TIME : SortType.WORKSPACE_ORDER,
+	)
+	const [projectType, setProjectType] = useState<RecentProjectType>("all")
 	const debouncedSearchValue = useDebounce(searchValue, { wait: 500 })
-	const { viewMode, setViewMode } = useViewTogglePersistValue({
+	const { viewMode: preferredViewMode, setViewMode } = useViewTogglePersistValue({
 		localStorageKey: "workspace_projects_panel_view_toggle_value",
 		defaultValue: ViewMode.LIST,
 	})
-	const [projects, setProjects] = useState<ProjectListItem[]>(() =>
+	// 手机始终使用列表，但不改写用户在桌面保存的视图偏好。
+	const viewMode = isMobile ? ViewMode.LIST : preferredViewMode
+	const [projects, setProjects] = useState<ResourceProject[]>(() =>
 		workspaceId ? projectStore.getProjectsByWorkspace(workspaceId) : [],
 	)
 	const [loading, setLoading] = useState(open)
@@ -71,25 +96,40 @@ export default function WorkspaceProjectsContent({
 		setLoading(true)
 		setFailed(false)
 		try {
-			const result = await SuperMagicApi.getProjectsWithCollaboration(
-				{
-					workspace_id: workspaceId,
-					sort_mode: recent ? "recent" : "workspace",
-					project_name: debouncedSearchValue,
-					page: nextPage,
-					page_size: PAGE_SIZE,
-					show_collaboration: 1,
-				},
-				{ signal: controller.signal },
-			)
+			const result =
+				workspace && isResourceWorkspace(workspace)
+					? await loadResourceProjectPage({
+							workspace,
+							page: nextPage,
+							pageSize: PAGE_SIZE,
+							keyword: debouncedSearchValue,
+							signal: controller.signal,
+						})
+					: await SuperMagicApi.getProjectsWithCollaboration(
+							{
+								workspace_id: workspaceId,
+								sort_mode: recent ? "recent" : "workspace",
+								project_name: debouncedSearchValue,
+								page: nextPage,
+								page_size: PAGE_SIZE,
+								show_collaboration: 1,
+								include_special: recent ? 1 : 0,
+								project_type: recent ? projectType : undefined,
+								sort_field:
+									sortType === SortType.WORKSPACE_ORDER ? undefined : sortType,
+								sort_direction: "desc",
+							},
+							{ signal: controller.signal },
+						)
 			if (id !== requestId.current || controller.signal.aborted) return
 			// 搜索和分页只更新本面板；全局导航缓存继续由项目 service 维护。
+			const visibleList = result.list
 			setProjects((previous) =>
 				nextPage === 1
-					? result.list
+					? visibleList
 					: [
 							...previous,
-							...result.list.filter(
+							...visibleList.filter(
 								(item) => !previous.some((existing) => existing.id === item.id),
 							),
 						],
@@ -121,7 +161,7 @@ export default function WorkspaceProjectsContent({
 			request.current?.abort()
 			isOpenRef.current = false
 		}
-	}, [open, workspaceId, debouncedSearchValue, load])
+	}, [open, workspaceId, debouncedSearchValue, sortType, projectType, load])
 
 	// 普通目录订阅自己的缓存；最近分类订阅 service 的失效版本，搜索／分页不会改写侧栏快照。
 	useEffect(() => {
@@ -170,6 +210,7 @@ export default function WorkspaceProjectsContent({
 		<>
 			<ProjectsPanelList
 				projects={projects}
+				listLayout={workspace && isResourceWorkspace(workspace) ? "resource" : "project"}
 				selectedProjectId={projectStore.selectedProject?.id}
 				total={total}
 				emptyContent={
@@ -184,10 +225,57 @@ export default function WorkspaceProjectsContent({
 				}
 				loading={loading}
 				viewMode={viewMode}
-				renderItem={recent ? (props) => <RecentProjectItem {...props} /> : undefined}
+				renderItem={(props) => {
+					const resourceType = workspace
+						? getResourceProjectType(props.project)
+						: undefined
+					if (resourceType) {
+						const resourceProject: ResourceProject = {
+							...props.project,
+							resourceType,
+						}
+						return (
+							<ProjectResourceItem
+								project={resourceProject}
+								viewMode={props.viewMode}
+								onClick={(project) => {
+									if (!project.project_id) {
+										magicToast.info(t("fileManager.locateUnavailable"))
+										return
+									}
+									props.onClick(project)
+								}}
+							/>
+						)
+					}
+					return recent ? <RecentProjectItem {...props} /> : <ProjectItem {...props} />
+				}}
 				toolbar={
-					<>
+					<ProjectsPanelToolbar
+						location={location}
+						total={total}
+						searchValue={searchValue}
+						onSearchValueChange={onSearchValueChange}
+						viewToggle={<ViewToggle value={viewMode} onChange={setViewMode} />}
+					>
+						{recent && (
+							<ProjectTypeFilter
+								value={projectType}
+								onChange={setProjectType}
+								responsive
+							/>
+						)}
+						{(!workspace || !isResourceWorkspace(workspace)) && (
+							<SortSelector
+								value={sortType}
+								onChange={setSortType}
+								includeWorkspaceOrder={!recent}
+								compact
+								responsive
+							/>
+						)}
 						{workspace &&
+							!isResourceWorkspace(workspace) &&
 							(creating ? (
 								<CreateProjectInput
 									workspaceId={workspace.id}
@@ -203,11 +291,11 @@ export default function WorkspaceProjectsContent({
 									{t("sidebarPanels.createProject")}
 								</Button>
 							))}
-						<ViewToggle value={viewMode} onChange={setViewMode} />
-					</>
+					</ProjectsPanelToolbar>
 				}
 				itemProps={{
-					sortType: recent ? SortType.MY_LAST_ACTIVE_TIME : SortType.PROJECT_UPDATE_TIME,
+					mobileLayout: isMobile,
+					sortType,
 					onClick: (project) => {
 						if (project.id !== projectStore.selectedProject?.id)
 							actions.handleProjectClick(project)

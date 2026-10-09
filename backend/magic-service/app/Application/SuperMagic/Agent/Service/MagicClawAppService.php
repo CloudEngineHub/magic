@@ -167,7 +167,7 @@ class MagicClawAppService extends AbstractSuperMagicAppService
      *
      * @return array{total: int, list: array<array{entity: MagicClawEntity, status: null|string, topic_id: null|int, need_upgrade: null|bool}>, page: int, page_size: int}
      */
-    public function queries(Authenticatable $authorization, int $page, int $pageSize): array
+    public function queries(Authenticatable $authorization, int $page, int $pageSize, string $keyword = ''): array
     {
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
 
@@ -175,7 +175,8 @@ class MagicClawAppService extends AbstractSuperMagicAppService
             $dataIsolation->getCurrentUserId(),
             $dataIsolation->getCurrentOrganizationCode(),
             $page,
-            $pageSize
+            $pageSize,
+            $keyword
         );
 
         $entities = $result['list'];

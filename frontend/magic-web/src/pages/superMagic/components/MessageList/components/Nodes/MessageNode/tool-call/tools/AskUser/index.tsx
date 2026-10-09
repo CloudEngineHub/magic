@@ -10,6 +10,7 @@ import {
 	isAskUserTaskSuspended,
 	normalizeAskUserRemark,
 	resolveAskUserLocaleFromAction,
+	ASK_USER_RECOVERY_FAILED_EVENT,
 } from "@/pages/superMagic/components/MessageList/utils/askUser"
 import {
 	buildAskUserDraftCacheKey,
@@ -184,6 +185,29 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 		[detailData?.remark],
 	)
 	const toolId = tool?.id
+	const expiresAt =
+		typeof detailData?.expires_at === "number" ? (detailData.expires_at as number) : undefined
+	const expiryToastKey = useMemo(
+		() => `ask-user-expiry-${selectedTopic?.chat_topic_id || "topic"}-${toolId || "tool"}`,
+		[selectedTopic?.chat_topic_id, toolId],
+	)
+	const showExpiryTip = useCallback(() => {
+		magicToast.warning({
+			key: expiryToastKey,
+			content: t("askUser.status.expiredPending"),
+			duration: 0,
+		})
+	}, [expiryToastKey, t])
+	const showClosedTip = useCallback(() => {
+		magicToast.warning({
+			key: expiryToastKey,
+			content: t("askUser.status.alreadyProcessed"),
+			duration: 4000,
+		})
+	}, [expiryToastKey, t])
+	const clearExpiryTip = useCallback(() => {
+		magicToast.destroy(expiryToastKey)
+	}, [expiryToastKey])
 	const replyStateKey = useMemo(
 		() =>
 			buildAskUserReplyStateKey({
@@ -205,6 +229,8 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 		(typeof tool?.status === "string" ? tool.status : "")
 	const normalizedAskUserStatus = normalizeAskUserStatus(toolStatus)
 	const isTaskSuspended = isAskUserTaskSuspended(selectedTopic)
+	const hasAuthoritativeTerminalStatus =
+		isTaskSuspended || normalizedAskUserStatus !== ASK_USER_CARD_STATUS.pending
 	const askUserStatus =
 		replyState?.status === "answered" || replyState?.status === "skipped"
 			? replyState.status
@@ -233,6 +259,40 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 		questionId: typeof detailQuestionId === "string" ? detailQuestionId : "",
 		topicId: selectedTopic?.chat_topic_id,
 	})
+	const isExpiredAtNow = useCallback(
+		() => typeof expiresAt === "number" && expiresAt > 0 && Date.now() / 1000 >= expiresAt,
+		[expiresAt],
+	)
+
+	useEffect(() => {
+		if (!selectedTopic?.chat_topic_id || !toolId) return
+		return superMagicStore.subscribe(
+			"message.committed",
+			({ payload }) => {
+				if (
+					payload.message.event !== ASK_USER_RECOVERY_FAILED_EVENT ||
+					payload.message.toolCallId !== toolId
+				)
+					return
+				clearAskUserReply(replyStateKey)
+				setReplyState(null)
+				setPendingAction(null)
+			},
+			{ scope: { topicId: selectedTopic.chat_topic_id } },
+		)
+	}, [replyStateKey, selectedTopic?.chat_topic_id, toolId])
+
+	useEffect(() => {
+		if (normalizedAskUserStatus === ASK_USER_CARD_STATUS.pending) return
+		markAskUserReply(replyStateKey, normalizedAskUserStatus)
+		setReplyState(readAskUserReplyState(replyStateKey))
+		clearAskUserDraftAnswers(draftCacheKey)
+	}, [draftCacheKey, normalizedAskUserStatus, replyStateKey])
+
+	useEffect(() => {
+		if (hasAuthoritativeTerminalStatus) clearExpiryTip()
+		return clearExpiryTip
+	}, [clearExpiryTip, hasAuthoritativeTerminalStatus])
 
 	const submitReply = useCallback(
 		async (
@@ -286,10 +346,9 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 					toolCallId: toolId,
 					toolName: ASK_USER_TOOL.name,
 				})
-				markAskUserReply(replyStateKey, isAnswered ? "answered" : "skipped")
-				setReplyState(readAskUserReplyState(replyStateKey))
 			} catch (error) {
 				if (isTerminalAskUserReplyError(error)) {
+					showClosedTip()
 					markAskUserReply(replyStateKey, "cancelled")
 					setReplyState(readAskUserReplyState(replyStateKey))
 					clearAskUserDraftAnswers(draftCacheKey)
@@ -304,25 +363,31 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 				setReplyState(null)
 				throw error
 			}
-			clearAskUserDraftAnswers(draftCacheKey)
 			clearAskUserV2BrowserNotification({
 				topicId,
 				notificationKey: resolvedQuestionId || toolId,
 			})
+			clearExpiryTip()
 		},
 		[
+			clearExpiryTip,
 			toolId,
 			draftCacheKey,
 			replyStateKey,
 			resolvedQuestionId,
 			selectedTopic?.chat_conversation_id,
 			selectedTopic?.chat_topic_id,
+			showClosedTip,
 		],
 	)
 
 	const handleSubmit = useCallback<(answers: AskUserAnswers, remark: string) => void>(
 		async (answers, remark) => {
 			if (pendingAction || replyState?.status === "sending") return
+			if (isExpiredAtNow()) {
+				showExpiryTip()
+				return
+			}
 			try {
 				setPendingAction("submit")
 				await submitReply(ASK_USER_RESPONSE_STATUS.answered, answers, remark)
@@ -333,11 +398,15 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 				magicToast.error(t("askUser.status.submitFailed"))
 			}
 		},
-		[pendingAction, replyState?.status, submitReply, t],
+		[isExpiredAtNow, pendingAction, replyState?.status, showExpiryTip, submitReply, t],
 	)
 
 	const handleSkip = useCallback<(answers: AskUserAnswers) => void>(async () => {
 		if (pendingAction || replyState?.status === "sending") return
+		if (isExpiredAtNow()) {
+			showExpiryTip()
+			return
+		}
 		try {
 			setPendingAction("skip")
 			await submitReply(ASK_USER_RESPONSE_STATUS.skipped)
@@ -347,7 +416,7 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 			setPendingAction(null)
 			magicToast.error(t("askUser.status.submitFailed"))
 		}
-	}, [pendingAction, replyState?.status, submitReply, t])
+	}, [isExpiredAtNow, pendingAction, replyState?.status, showExpiryTip, submitReply, t])
 
 	const { renderTooltip } = useToolTooltip({
 		text: tool?.remark,
@@ -423,15 +492,13 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 							disabled={isFrozen}
 							status={askUserStatus}
 							draftCacheKey={draftCacheKey}
-							expiresAt={
-								typeof detailData?.expires_at === "number"
-									? (detailData.expires_at as number)
-									: undefined
-							}
+							expiresAt={expiresAt}
 							submittedAnswers={submittedAnswers}
 							submittedRemark={submittedRemark}
 							onSubmit={handleSubmit}
 							onSkip={handleSkip}
+							onLocalExpire={showExpiryTip}
+							onExpiredInteraction={showExpiryTip}
 							onProgressChange={setAnsweredQuestionCount}
 						/>
 					</div>

@@ -1,3 +1,4 @@
+import { useFileAccess as useFilePermissions } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useState, useRef } from "react"
 import { TFunction } from "i18next"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
@@ -8,7 +9,8 @@ import { isMarkdownFileName } from "@/utils/pdfFileType"
 import {
 	iterateExportSlides,
 	iterateSingleExportSlide,
-	prepareSingleSlideExport,
+	prepareFileExportSlides,
+	resolvePptExportSlides,
 } from "@/pages/superMagic/services/pptService"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import { DownloadImageMode } from "../../../pages/Workspace/types"
@@ -125,6 +127,7 @@ function useFileExport({
 	const [exportProgress, setExportProgress] = useState(0)
 	const toastIdRef = useRef<string | number | null>(null)
 	const fileAccess = useFileAccess()
+	const { permissions: access } = useFilePermissions()
 	// Bind the ambient share/session identity for the direct download-url call; the
 	// export services below still receive the legacy `access` override.
 	const fileApi = useFileApi()
@@ -214,6 +217,7 @@ function useFileExport({
 	}
 
 	const exportFile = async (fileIds: string[], fileVersion?: { [key: string]: number }) => {
+		if (!access.download) return
 		if (!fileIds || fileIds.length === 0) return
 
 		// 检查是否为文件夹
@@ -254,6 +258,7 @@ function useFileExport({
 	}
 
 	const exportPdf = async (fileIds: string[]) => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
 
 		const documentExporter = documentExportService.get()
@@ -284,7 +289,7 @@ function useFileExport({
 					},
 				}).promise
 			} else {
-				const result = await prepareSingleSlideExport({
+				const result = await prepareFileExportSlides({
 					fileId,
 					fileName,
 					attachmentList: (attachments ?? []) as any[],
@@ -322,6 +327,7 @@ function useFileExport({
 	}
 
 	const exportPptx = async (fileIds: string[]) => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
 
 		const fileId = fileIds[0]
@@ -331,8 +337,9 @@ function useFileExport({
 		).replace(/\.html?$/i, "")
 		const displayConfig = ((file as any)?.display_config || (file as any)?.metadata) as
 			{ type?: string; slides?: string[]; name?: string } | undefined
-		const slidePaths = Array.isArray(displayConfig?.slides) ? displayConfig.slides : []
-		const pageCount = slidePaths.length || 1
+		let slidePaths = Array.isArray(displayConfig?.slides) ? displayConfig.slides : []
+		const isDeck = slidePaths.length > 0
+		let pageCount = slidePaths.length || 1
 		let destinationLease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		const resourceErrors = createPptxResourceErrorCollector(t)
 		const exportIssues: ExportIssue[] = []
@@ -344,6 +351,19 @@ function useFileExport({
 			})
 			if (!destinationLease) return
 
+			if (isDeck) {
+				const resolved = await resolvePptExportSlides({
+					slidePaths,
+					displayConfig,
+					attachmentList: (attachments ?? []) as any,
+					mainFileId: fileId,
+					fileApi,
+					access: fileAccess ?? undefined,
+				})
+				slidePaths = resolved.slidePaths
+				pageCount = slidePaths.length
+				if (!pageCount) throw new Error("No visible slides to export")
+			}
 			startExport()
 			const destination = destinationLease.destination
 			const fontResolver = documentExportService.get()?.getPptFontResolver?.()
@@ -352,6 +372,7 @@ function useFileExport({
 					const source = slidePaths.length
 						? iterateExportSlides({
 								slidePaths,
+								configResolved: true,
 								attachmentList: (attachments ?? []) as any,
 								mainFileId: fileId,
 								mainFileName: fileName,
@@ -427,6 +448,7 @@ function useFileExport({
 	}
 
 	const exportImage = async (fileIds: string[], format: ImageExportFormat = "png") => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
 
 		const fileId = fileIds[0]
@@ -435,7 +457,7 @@ function useFileExport({
 
 		startExport()
 		try {
-			const result = await prepareSingleSlideExport({
+			const result = await prepareFileExportSlides({
 				fileId,
 				fileName,
 				attachmentList: (attachments ?? []) as any[],

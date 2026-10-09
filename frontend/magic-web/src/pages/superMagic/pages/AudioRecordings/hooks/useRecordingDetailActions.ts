@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -36,6 +37,7 @@ interface UseRecordingDetailActionsInput {
 /** Facade for owner recording detail mutations shared by PC workbench header actions. */
 export function useRecordingDetailActions(input: UseRecordingDetailActionsInput) {
 	const { projectId, projectItem, fileMap, recordingName, onProjectItemChange, onRefresh } = input
+	const { permissions: access } = useFileAccess()
 	const { t } = useTranslation("audioRecordings")
 	const navigate = useNavigate()
 	const [renaming, setRenaming] = useState(false)
@@ -158,7 +160,7 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 
 	const runDownload = useCallback(
 		async (task: () => Promise<boolean>) => {
-			if (downloading) return false
+			if (!access.download || downloading) return false
 			setDownloading(true)
 			try {
 				const ok = await task()
@@ -169,7 +171,7 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 				setDownloading(false)
 			}
 		},
-		[downloading, t],
+		[access.download, downloading, t],
 	)
 
 	const downloadAudio = useCallback(async () => {

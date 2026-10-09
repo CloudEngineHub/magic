@@ -1,3 +1,4 @@
+import { useFileAccess as useFilePermissions } from "@/pages/superMagic/providers/FileAccessProvider"
 import { createElement, useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./types"
@@ -22,6 +23,8 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { uploadLogger } from "../utils/uploadLogger"
 import {
 	prepareExportSlides,
+	prepareFileExportSlides,
+	resolvePptExportSlides,
 	iterateExportSlides,
 	iterateSingleExportSlide,
 	prepareSingleSlideExport,
@@ -267,7 +270,7 @@ export interface UseFileOperationsOptions {
 	onFileDelete?: (fileId: string) => Promise<void>
 	// 新增：文件创建成功回调
 	onFileCreated?: (fileItem: any) => void
-	onUpdateAttachments?: () => void
+	onUpdateAttachments?: (sourceProjectId?: string) => void
 	// 添加直接更新attachments的回调
 	onAttachmentsChange?: (attachments: AttachmentItem[]) => void
 	selectedProject?: ProjectListItem
@@ -302,6 +305,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		downloadProgress,
 	} = options
 	const { t } = useTranslation("super")
+	const { permissions: access } = useFilePermissions()
 	const fileAccess = useFileAccess()
 	// Bind the ambient share/session identity for the download-url leaves; the
 	// export services below still receive the legacy `access` override.
@@ -377,7 +381,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				uploadType: "file",
 				projectFiles: attachments || [],
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 			const currentProjectFileCount = refreshCoordinator.currentProjectFileCount
 			// 获取父文件夹路径
@@ -497,7 +501,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				uploadType: "folder",
 				projectFiles: attachments || [],
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 			const currentProjectFileCount = refreshCoordinator.currentProjectFileCount
 			// 获取父文件夹ID
@@ -910,6 +914,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	// 分享操作
 	const handleShareItem = useCallback(
 		(item: AttachmentItem) => {
+			if (!access.share) return
 			if (!selectedItems || !filteredFiles) {
 				// 如果没有选中项或文件列表，只分享当前文件
 				const clickedItemId = item.file_id || ""
@@ -934,7 +939,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[selectedItems, filteredFiles, getItemId, selectedProject?.project_name],
+		[access.share, selectedItems, filteredFiles, getItemId, selectedProject?.project_name],
 	)
 
 	// 处理分享保存
@@ -1061,6 +1066,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// Registered dependency parsers make linked resources part of the default download.
 	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
+		if (!access.download) return
 		if (fileScope !== "user" && supportsStaticDependencies(item)) {
 			await downloadDocumentWithDependencies(item)
 			return
@@ -1081,6 +1087,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	// 下载PDF格式（Markdown 走 markdown 导出；HTML 走 exportPDF；仅 display_config.type === "slide" 时传 pptMode）
 	const handleDownloadPdf = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const documentExporter = documentExportService.get()
@@ -1287,12 +1294,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 导出 PPTX（前端 html2pptx streaming-only）
 	const handleDownloadPptx = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const toastId = createRandomUuidV4()
@@ -1301,12 +1309,24 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			const metadata = item.metadata as
 				{ type?: string; slides?: string[]; [key: string]: unknown } | undefined
 			const mergedDisplayConfig = displayConfig || metadata
-			const slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
+			let slidePaths: string[] = Array.isArray(mergedDisplayConfig?.slides)
 				? mergedDisplayConfig.slides
 				: []
+			const isSlideProject = mergedDisplayConfig?.type === "slide" || slidePaths.length > 0
 			const isSingleFile = !slidePaths.length
 			const autoSize = !hasPPTMetadata(item)
-			const fileId = item.file_id || ""
+			const attachmentScope = folderChildren?.length
+				? folderChildren
+				: item.children?.length
+					? item.children
+					: (attachments ?? [])
+			// A slide folder owns display_config, but its entry HTML owns the readable file id.
+			// Preserve both instead of replacing the project with index.html and losing slidePaths.
+			const entryFile = isSlideProject
+				? getAppEntryFile(attachmentScope, mergedDisplayConfig)
+				: item
+			const fileId = entryFile?.file_id || ""
+			const sourceFileName = String(entryFile?.file_name || item.file_name || "index.html")
 			const fileName = String(
 				mergedDisplayConfig?.name || item.file_name || "export",
 			).replace(/\.html?$/i, "")
@@ -1334,6 +1354,11 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			setExportingFiles((prev) => new Set(prev).add(item.file_id || ""))
 
 			try {
+				if (!fileId) {
+					magicToast.error(t("topicFiles.entryFileNotFound"))
+					return
+				}
+
 				assertPptxExportAvailable({ pageCount: isSingleFile ? 1 : slidePaths.length })
 				destinationLease = await openPptxDestination({
 					suggestedName: String(
@@ -1342,6 +1367,18 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 				if (!destinationLease) return
 
+				if (!isSingleFile) {
+					const resolved = await resolvePptExportSlides({
+						slidePaths,
+						displayConfig: mergedDisplayConfig,
+						attachmentList: attachmentScope,
+						mainFileId: fileId,
+						fileApi,
+						access: fileAccess ?? undefined,
+					})
+					slidePaths = resolved.slidePaths
+					if (!slidePaths.length) throw new Error("No visible slides to export")
+				}
 				magicToast.loading({
 					key: toastId,
 					content: getExportToastContent(t("topicFiles.exporting")),
@@ -1349,9 +1386,6 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 
 				{
-					const attachmentScope = folderChildren?.length
-						? folderChildren
-						: (attachments ?? [])
 					const pptFontResolver = documentExportService.get()?.getPptFontResolver?.()
 					const destination = destinationLease.destination
 					const streamingHandle = startPptxStreamingExportFromFactory(
@@ -1359,7 +1393,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							const source = isSingleFile
 								? iterateSingleExportSlide({
 										fileId,
-										fileName: item.file_name,
+										fileName: sourceFileName,
 										attachmentList: attachments ?? [],
 										access: fileAccess ?? undefined,
 										fileApi,
@@ -1367,9 +1401,10 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 									})
 								: iterateExportSlides({
 										slidePaths,
+										configResolved: true,
 										attachmentList: attachmentScope,
 										mainFileId: fileId,
-										mainFileName: item.file_name,
+										mainFileName: sourceFileName,
 										displayConfig: mergedDisplayConfig,
 										access: fileAccess ?? undefined,
 										fileApi,
@@ -1378,7 +1413,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 							return iteratePreparedPptxPages(source, {
 								attachments: attachments ?? [],
 								fileId,
-								fileName: item.file_name,
+								fileName: sourceFileName,
 								attachmentList: attachments ?? [],
 								displayConfig: mergedDisplayConfig,
 								signal,
@@ -1456,12 +1491,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 导出 HTML / 文本类文件 为图片（PNG / JPEG）
 	const handleDownloadImage = useCallback(
 		async (item: AttachmentItem, format: "png" | "jpeg" = "png") => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const toastId = createRandomUuidV4()
@@ -1522,8 +1558,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 					}).promise
 				} else {
 					// HTML 文件使用原有逻辑
-					const result = await prepareSingleSlideExport({
+					const result = await prepareFileExportSlides({
 						fileId: item.file_id,
+						displayConfig: (item.display_config || item.metadata) as any,
 						fileName: item.file_name,
 						attachmentList: attachments ?? [],
 						access: fileAccess ?? undefined,
@@ -1543,6 +1580,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						pages: result.htmlSlides,
 						attachments: attachments ?? [],
 						fileId: item.file_id,
+						displayConfig: (item.display_config || item.metadata) as any,
 						fileName: item.file_name,
 						attachmentList: attachments ?? [],
 						access: fileAccess ?? undefined,
@@ -1593,7 +1631,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments, fileApi],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 文件下载功能 - 支持单个文件或多个文件
@@ -1605,6 +1643,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			isFolder?: boolean,
 			downloadName?: string,
 		) => {
+			if (!access.download) return
 			const fileIds = Array.isArray(file_id) ? file_id : [file_id]
 			const folderDownloadToastId = isFolder ? createRandomUuidV4() : undefined
 
@@ -1961,7 +2000,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		handleOpenFile,
 		handleMoveFile,
 		// 分享相关
-		shareModalVisible,
+		shareModalVisible: shareModalVisible && access.share,
 		setShareModalVisible,
 		shareFileInfo,
 		setShareFileInfo,

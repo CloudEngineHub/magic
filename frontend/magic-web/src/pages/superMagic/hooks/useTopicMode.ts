@@ -49,12 +49,13 @@ function useTopicMode({
 		fallbackTopicMode,
 	])
 
-	const recoverTopicMode = useMemoizedFn((mode: TopicMode) => {
+	const recoverTopicMode = useMemoizedFn((mode: TopicMode, agentCode?: string | null) => {
 		setTopicModeState(mode)
 		// Sync the empty topic patch without persisting user preferences.
 		SuperMagicService.topic.syncTopicFrontendModePatch({
 			topic: selectedTopic,
 			mode,
+			agentCode,
 		})
 	})
 

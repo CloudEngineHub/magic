@@ -12,6 +12,9 @@ import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
 import { transformInspectorContent } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/transform"
+import { restoreWechatChatContent } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/transform"
+import { WECHAT_CHAT_HISTORY } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/types"
+import { createWechatReadOnlyView } from "@/pages/superMagic/components/MessageEditor/components/WechatChatHistory/readOnly"
 import type { InspectorDetailAttrs } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail"
 import InlineMention from "./components/InlineMention"
 import { InspectorDetailReadOnly } from "./components/InspectorDetailReadOnly"
@@ -52,6 +55,7 @@ const RichText = memo(
 		const finalSchema = useMemo(() => new Schema(schemaConfig as SchemaSpec), [])
 		const mentionNodeViews = useMemo(
 			() => ({
+				[WECHAT_CHAT_HISTORY]: createWechatReadOnlyView,
 				mention: (node: Node) => {
 					const dom = document.createElement("span")
 					dom.className = "mention-node-view"
@@ -247,7 +251,9 @@ const RichText = memo(
 					}
 
 					// Transform inspector text paragraphs into collapsible nodes
-					const transformedContent = transformInspectorContent(parsedContent)
+					const transformedContent = restoreWechatChatContent(
+						transformInspectorContent(parsedContent),
+					)
 
 					// 创建 ProseMirror 视图
 					editorViewRef.current = new EditorView(containerRef.current, {

@@ -1,9 +1,11 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { MobileRecordingShareExportSheet } from "../MobileRecordingShareExportSheet"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
 import type { ReactNode } from "react"
+import type { RecordingDetailFileMap } from "../../types"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
@@ -99,18 +101,47 @@ vi.mock("@/pages/superMagic/utils/handleFIle", () => ({
 }))
 
 describe("MobileRecordingShareExportSheet", () => {
-	const mockFileMap = {
+	const mockFileMap: RecordingDetailFileMap = {
 		audio: { file_id: "audio-id", file_name: "audio.wav" },
 		transcript: { file_id: "transcript-id", file_name: "transcript.md" },
 		notes: { file_id: "notes-id", file_name: "notes.md" },
 		summaryFiles: [
-			{ type: "summary", file: { file_id: "sum-id", file_name: "summary.md" } },
-			{ type: "highlights", file: { file_id: "hl-id", file_name: "highlights.md" } },
+			{
+				type: "summary",
+				fileName: "summary.md",
+				file: { file_id: "sum-id", file_name: "summary.md" },
+			},
+			{
+				type: "highlights",
+				fileName: "highlights.md",
+				file: { file_id: "hl-id", file_name: "highlights.md" },
+			},
 		],
 	}
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+	})
+
+	it("applies scope restrictions to download and share entries", () => {
+		const tree = (download: boolean, share: boolean) => (
+			<FileAccessProvider permissions={{ download, share }}>
+				<MobileRecordingShareExportSheet
+					open
+					recordingName="Recording"
+					fileMap={mockFileMap}
+					onOpenChange={vi.fn()}
+					onShareLink={vi.fn()}
+					onDownloadRecording={vi.fn()}
+				/>
+			</FileAccessProvider>
+		)
+		const { rerender } = render(tree(false, true))
+		expect(screen.queryByText("Transcript")).toBeNull()
+		expect(screen.getByText("Share link")).toBeInTheDocument()
+		rerender(tree(true, false))
+		expect(screen.getByText("Transcript")).toBeInTheDocument()
+		expect(screen.queryByText("Share link")).toBeNull()
 	})
 
 	it("renders main share and export menu", () => {
@@ -210,7 +241,11 @@ describe("MobileRecordingShareExportSheet", () => {
 		fireEvent.click(screen.getByText("Transcript"))
 		// Wait for microtasks so async download triggers
 		await Promise.resolve()
-		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({ file_ids: ["transcript-id"] })
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["transcript-id"],
+			is_download: true,
+			download_mode: "download",
+		})
 		expect(downloadFileWithAnchor).toHaveBeenCalledWith(
 			"http://mock-download.com/file",
 			"transcript.md",
@@ -218,7 +253,11 @@ describe("MobileRecordingShareExportSheet", () => {
 
 		fireEvent.click(screen.getByText("Notes"))
 		await Promise.resolve()
-		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({ file_ids: ["notes-id"] })
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["notes-id"],
+			is_download: true,
+			download_mode: "download",
+		})
 		expect(downloadFileWithAnchor).toHaveBeenCalledWith(
 			"http://mock-download.com/file",
 			"notes.md",
@@ -258,8 +297,16 @@ describe("MobileRecordingShareExportSheet", () => {
 		// Should not close popup
 		expect(onOpenChange).not.toHaveBeenCalled()
 		// Only minutes should be downloaded directly
-		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({ file_ids: ["sum-id"] })
-		expect(getTemporaryDownloadUrl).not.toHaveBeenCalledWith({ file_ids: ["hl-id"] })
+		expect(getTemporaryDownloadUrl).toHaveBeenCalledWith({
+			file_ids: ["sum-id"],
+			is_download: true,
+			download_mode: "download",
+		})
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalledWith({
+			file_ids: ["hl-id"],
+			is_download: true,
+			download_mode: "download",
+		})
 	})
 
 	it("performs batch download when multiple summary items are selected", async () => {
@@ -295,3 +342,8 @@ describe("MobileRecordingShareExportSheet", () => {
 		expect(onOpenChange).not.toHaveBeenCalled()
 	})
 })
+
+// UI scope tests control policy explicitly; customer detection has its own integration tests.
+vi.mock("@/pages/superMagic/providers/FileAccessProvider/hooks/useResolveFileAccess", () => ({
+	useResolveFileAccess: () => ({}),
+}))

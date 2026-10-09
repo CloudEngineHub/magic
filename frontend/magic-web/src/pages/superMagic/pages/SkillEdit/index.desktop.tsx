@@ -31,7 +31,7 @@ import { useDeferUntilFileTabsCacheLoaded } from "@/pages/superMagic/hooks/useDe
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import { loadProjectAttachments } from "@/pages/superMagic/services"
+import SuperMagicService, { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
 	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
@@ -48,10 +48,10 @@ import {
 	runAsyncPublish,
 } from "@/pages/superMagic/utils/asyncPublish"
 import {
-	FileActionVisibilityProvider,
-	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
-	VIEWER_FILE_ACTIONS,
-} from "@/pages/superMagic/providers/file-action-visibility-provider"
+	FileAccessProvider,
+	EDITOR_FILE_CONFIG,
+	VIEWER_FILE_CONFIG,
+} from "@/pages/superMagic/providers/FileAccessProvider"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { SkillEditStoreProvider, useSkillEditStore } from "./context"
@@ -392,6 +392,13 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		setIsInitialAttachmentsLoaded(false)
 		void store.initFromSkillCode(skillCode)
 	}, [skillCode, store])
+
+	const visitScope = useRef({})
+	useEffect(() => {
+		if (!store.project || store.loading || store.error || store.currentSkillCode !== skillCode)
+			return
+		SuperMagicService.project.recordProjectVisit(store.project, visitScope.current)
+	}, [skillCode, store, store.project, store.loading, store.error, store.currentSkillCode])
 
 	useEffect(() => {
 		store.projectFilesStore.setSelectedProject(store.project)
@@ -850,9 +857,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 
 	return (
 		<HostConversationProvider selectedProject={selectedProject} topicStore={topicStore}>
-			<FileActionVisibilityProvider
-				value={isViewer ? VIEWER_FILE_ACTIONS : HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}
-			>
+			<FileAccessProvider {...(isViewer ? VIEWER_FILE_CONFIG : EDITOR_FILE_CONFIG)}>
 				<>
 					<TopicDesktopPanels
 						containerClassName="flex h-full w-full min-w-0 items-center overflow-hidden"
@@ -1024,7 +1029,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 					/>
 					{noticeDialog}
 				</>
-			</FileActionVisibilityProvider>
+			</FileAccessProvider>
 		</HostConversationProvider>
 	)
 }

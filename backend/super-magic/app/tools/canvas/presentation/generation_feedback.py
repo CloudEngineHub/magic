@@ -3,14 +3,35 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping, cast
 
+from agentlang.context.tool_context import ToolContext
+from agentlang.event import EventPairType, get_correlation_manager
+from agentlang.event.data import PendingToolCallEventData
+from agentlang.event.event import EventType
+from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import (
+    DisplayType,
+    OperationResultItem,
+    OperationResultListContent,
+    OperationResultStatus,
+    OperationResultTarget,
+    OperationResultTargetType,
+    ToolDetail,
+)
 from app.i18n import i18n
+from app.tools.canvas.application.results.base import CanvasResult
 from app.tools.canvas.domain.content_fields.generated_media_protocol import (
     generated_media_types,
     ordered_generated_media_types,
 )
+
+if TYPE_CHECKING:
+    from app.core.context.agent_context import AgentContext
+    from app.tools.core.base_tool import BaseTool
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -76,6 +97,61 @@ class CanvasGenerationFeedback:
     }
 
     @classmethod
+    async def report_placeholders(
+        cls,
+        tool: BaseTool,
+        tool_context: ToolContext,
+        arguments: dict[str, Any],
+        result: CanvasResult,
+    ) -> None:
+        """把已经保存的占位元素投影为现有工具卡片的进行中明细。"""
+        try:
+            detail = cls.operation_result_detail(ToolResult(content="", data=result.to_dict()), arguments)
+            if detail is not None:
+                await cls.report_pending_detail(tool, tool_context, arguments, detail)
+        except Exception as error:
+            logger.warning("构建 Canvas 占位元素进度失败: %s", error)
+
+    @staticmethod
+    async def report_pending_detail(
+        tool: BaseTool,
+        tool_context: ToolContext,
+        arguments: dict[str, Any],
+        detail: ToolDetail,
+    ) -> None:
+        """复用工具进度事件更新同一张卡片，消息发送失败不阻断实际生成。"""
+        agent_context = cast("AgentContext | None", tool_context.get_extension("agent_context"))
+        if agent_context is None:
+            return
+        try:
+            friendly = await tool.get_before_tool_call_friendly_action_and_remark(
+                tool.name, tool_context, arguments,
+            )
+            correlation_id = get_correlation_manager().get_active_correlation_id(
+                EventPairType.TOOL_CALL, agent_context.context_id,
+            ) or tool_context.tool_call_id
+            detail_data = detail.model_dump(mode="json")
+            # 两代消息工厂都从 detail.data.message 读取 remark；保持工具状态 running，
+            # 例：2 个占位元素已保存，只提供定位入口，不表示 2 张图片已经生成。
+            detail_data["data"]["message"] = friendly.get("remark", "")
+            event_data = PendingToolCallEventData(
+                tool_context=tool_context,
+                tool_name=tool.name,
+                tool_instance=tool,
+                correlation_id=correlation_id,
+                arguments={
+                    "name": tool.name,
+                    "action": friendly.get("action", ""),
+                    "detail": detail_data,
+                    "correlation_id": correlation_id,
+                },
+            )
+            agent_context.update_activity_time()
+            await agent_context.dispatch_event(EventType.PENDING_TOOL_CALL, event_data)
+        except Exception as error:
+            logger.warning("发送 Canvas 占位元素进度失败: %s", error)
+
+    @classmethod
     def from_arguments(cls, arguments: Mapping[str, Any] | None) -> GenerationFeedbackSummary:
         """从工具调用参数统计生成媒体类型和任务总数。"""
         return cls._summarize(arguments=arguments, result_items=None)
@@ -119,10 +195,11 @@ class CanvasGenerationFeedback:
         summary: GenerationFeedbackSummary,
         *,
         pending: bool = False,
+        names: tuple[str, ...] = (),
     ) -> str:
         """将统计结果转换成用户可读的生成反馈。"""
         if pending:
-            return cls._pending_remark(summary)
+            return "、".join(names) if names else cls._pending_remark(summary)
         segments = []
         for media_type in summary.media_types:
             counts = summary.by_type[media_type]
@@ -146,8 +223,17 @@ class CanvasGenerationFeedback:
         return "；".join(segments)
 
     @classmethod
-    def failure_remark(cls, summary: GenerationFeedbackSummary) -> str:
+    def failure_remark(cls, summary: GenerationFeedbackSummary, names: tuple[str, ...] = ()) -> str:
         """构建整批生成调用失败时的具体媒体反馈。"""
+        if names:
+            return "；".join(
+                i18n.translate(
+                    "canvas.generate_named_item_status.failed",
+                    category="tool.messages",
+                    name=name,
+                )
+                for name in names
+            )
         segments = []
         for media_type in summary.media_types:
             counts = summary.by_type[media_type]
@@ -160,6 +246,116 @@ class CanvasGenerationFeedback:
                 )
             )
         return "；".join(segments) or i18n.translate("canvas.operation_failed", category="tool.messages")
+
+    @classmethod
+    def operation_result_detail(
+        cls,
+        result: ToolResult,
+        arguments: Mapping[str, Any] | None,
+    ) -> ToolDetail | None:
+        """把纯生成批次转换为可展开的逐项结果卡片。"""
+        if not cls.is_pure_generated_batch(arguments):
+            return None
+
+        data = result.data or {}
+        raw_items = data.get("items") if isinstance(data, Mapping) else None
+        if not isinstance(raw_items, list) or not raw_items:
+            return None
+
+        project_path = arguments.get("project_path") if isinstance(arguments, Mapping) else None
+        names_by_ref = cls._names_by_item_ref(arguments)
+        display_items: list[OperationResultItem] = []
+        for raw_item in raw_items:
+            if not isinstance(raw_item, Mapping):
+                continue
+            item_ref = str(raw_item.get("item_ref") or "")
+            element_id = str(raw_item.get("element_id") or "")
+            status = str(raw_item.get("status") or "").casefold()
+            label = names_by_ref.get(item_ref) or item_ref or element_id
+            if not label:
+                continue
+
+            is_failed = status not in cls._COMPLETED_STATUSES | cls._PROCESSING_STATUSES
+            operation_status = OperationResultStatus.ERROR if is_failed else OperationResultStatus.SUCCESS
+            if is_failed:
+                message_key = "canvas.generate_item_status.failed"
+            elif status in cls._PROCESSING_STATUSES:
+                message_key = "canvas.generate_item_status.processing"
+            else:
+                message_key = "canvas.generate_item_status.completed"
+
+            target = None
+            if isinstance(project_path, str) and project_path.strip() and element_id:
+                target = OperationResultTarget(
+                    type=OperationResultTargetType.CANVAS_ELEMENT,
+                    project_path=project_path,
+                    element_id=element_id,
+                    content_id=raw_item.get("content_id") or None,
+                    content_type=cls.media_type_for_item(raw_item, arguments),
+                )
+
+            description = ""
+            if is_failed:
+                description = str(
+                    raw_item.get("error")
+                    or raw_item.get("persistence_error")
+                    or raw_item.get("query_error")
+                    or ""
+                )
+            display_items.append(
+                OperationResultItem(
+                    label=label,
+                    kind="text",
+                    status=operation_status,
+                    message=i18n.translate(message_key, category="tool.messages"),
+                    description=description,
+                    target=target,
+                )
+            )
+
+        if not display_items:
+            return None
+        return ToolDetail(
+            type=DisplayType.OPERATION_RESULT_LIST,
+            data=OperationResultListContent(items=display_items),
+        )
+
+    @classmethod
+    def remark_for_result(
+        cls,
+        result: ToolResult,
+        arguments: Mapping[str, Any] | None,
+    ) -> str:
+        """按名称和真实逐项状态构建终态 remark。"""
+        summary = cls.from_result(result, arguments)
+        names_by_ref = cls._names_by_item_ref(arguments)
+        raw_items = (result.data or {}).get("items") if isinstance(result.data, Mapping) else None
+        if isinstance(raw_items, list):
+            segments: list[str] = []
+            for raw_item in raw_items:
+                if not isinstance(raw_item, Mapping):
+                    continue
+                item_ref = str(raw_item.get("item_ref") or "")
+                label = names_by_ref.get(item_ref) or item_ref
+                if not label:
+                    continue
+                status = str(raw_item.get("status") or "").casefold()
+                if status not in cls._COMPLETED_STATUSES | cls._PROCESSING_STATUSES:
+                    key = "canvas.generate_named_item_status.failed"
+                elif status in cls._PROCESSING_STATUSES:
+                    key = "canvas.generate_named_item_status.processing"
+                else:
+                    key = "canvas.generate_named_item_status.completed"
+                segments.append(i18n.translate(key, category="tool.messages", name=label))
+            if segments:
+                return "；".join(segments)
+
+        return cls.remark(summary, names=tuple(names_by_ref.values()))
+
+    @classmethod
+    def item_names(cls, arguments: Mapping[str, Any] | None) -> tuple[str, ...]:
+        """返回按入参顺序排列的生成名称。"""
+        return tuple(cls._names_by_item_ref(arguments).values())
 
     @classmethod
     def detail_title_key(cls, summary: GenerationFeedbackSummary) -> str:
@@ -268,3 +464,18 @@ class CanvasGenerationFeedback:
                 )
             )
         return "；".join(segments)
+
+    @classmethod
+    def _names_by_item_ref(cls, arguments: Mapping[str, Any] | None) -> dict[str, str]:
+        """按入参顺序收集生成名称，名称缺失时回退到 item_ref。"""
+        result: dict[str, str] = {}
+        for item in cls._argument_items(arguments):
+            item_ref = str(item.get("item_ref") or "")
+            if not item_ref:
+                continue
+            content = item.get("content")
+            content_name = content.get("name") if isinstance(content, Mapping) else None
+            name = str(content_name or item.get("name") or item_ref).strip()
+            if name:
+                result[item_ref] = name
+        return result

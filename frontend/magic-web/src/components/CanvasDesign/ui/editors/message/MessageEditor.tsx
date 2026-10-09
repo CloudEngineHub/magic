@@ -49,6 +49,8 @@ interface MentionEditorCommands {
 }
 
 interface MessageEditorProps {
+	/** 禁止编辑但保留文本选择和标准剪贴板复制。 */
+	readOnly?: boolean
 	value?: string
 	onChange?: (value: string) => void
 	placeholder?: string
@@ -196,6 +198,7 @@ export interface MessageEditorRef {
 const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 	function MessageEditor(props, ref) {
 		const {
+			readOnly = false,
 			value,
 			onChange,
 			placeholder,
@@ -225,7 +228,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 		const pinCaretToDocumentEndRef = useRef(autoFocusAtDocumentEnd)
 		const latestFocusedSelectionRangeRef = useRef<MessageEditorSelectionRange | null>(null)
 		const onEnterRef = useRef(onEnter)
-		onEnterRef.current = onEnter
+		onEnterRef.current = readOnly ? undefined : onEnter
 		// useEditor 仅依赖 mentionExtension；其余走 ref，避免整编辑器重建失焦
 		const onChangeRef = useRef(onChange)
 		onChangeRef.current = onChange
@@ -321,6 +324,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 
 		const editor = useEditor(
 			{
+				editable: !readOnly,
 				extensions,
 				content: getContentFromString(value ?? "", matchableItems, mentionBindings),
 				editorProps: {
@@ -343,6 +347,7 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 					},
 				},
 				onUpdate: ({ editor: e, transaction }) => {
+					if (!e.isEditable) return
 					if (isInternalChangeRef.current) return
 					if (transaction.getMeta(PENDING_UPLOAD_MENTION_TRANSACTION_META) === true)
 						return
@@ -376,6 +381,10 @@ const MessageEditor = forwardRef<MessageEditorRef, MessageEditorProps>(
 			// 此处依赖变化会整段销毁 TipTap，仅保留 mentionExtension
 			[mentionExtension],
 		)
+
+		useEffect(() => {
+			editor?.setEditable(!readOnly, false)
+		}, [editor, readOnly])
 
 		const handleCopyCapture = useCallback(
 			(event: ClipboardEvent<HTMLDivElement>) => {

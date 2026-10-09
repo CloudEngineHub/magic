@@ -29,7 +29,9 @@ import SuperMagicService from "../../../services"
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
 import { userStore } from "@/models/user"
 
-interface EditorLayoutProps {
+export interface EditorLayoutProps {
+	editorContext?: Partial<SceneEditorContext>
+	inputContainerId?: string
 	mode?: TopicMode
 	sceneStateStore?: SceneStateStore
 	autoFocus?: boolean
@@ -37,6 +39,8 @@ interface EditorLayoutProps {
 }
 
 function EditorLayout({
+	editorContext: editorContextOverrides,
+	inputContainerId = SCENE_INPUT_IDS.INPUT_CONTAINER,
 	mode,
 	sceneStateStore = defaultSceneStateStore,
 	autoFocus = false,
@@ -48,9 +52,19 @@ function EditorLayout({
 	const [connectorMarketOpen, setConnectorMarketOpen] = useState(false)
 	const [connectorMarketNestedOpen, setConnectorMarketNestedOpen] = useState(false)
 
-	const selectedTopic = topicStore.selectedTopic
-	const selectedProject = projectStore.selectedProject
-	const selectedWorkspace = workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace
+	// Explicit null is an empty composer, not a request to reuse the global selection.
+	const selectedTopic =
+		editorContextOverrides?.selectedTopic !== undefined
+			? editorContextOverrides.selectedTopic
+			: topicStore.selectedTopic
+	const selectedProject =
+		editorContextOverrides?.selectedProject !== undefined
+			? editorContextOverrides.selectedProject
+			: projectStore.selectedProject
+	const selectedWorkspace =
+		editorContextOverrides?.selectedWorkspace !== undefined
+			? editorContextOverrides.selectedWorkspace
+			: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 
 	const scenes = superMagicModeService.getModeConfigWithLegacy(
 		resolvedMode,
@@ -96,8 +110,10 @@ function EditorLayout({
 					confirmDelete: false,
 				},
 			},
+			...editorContextOverrides,
 		}),
 		[
+			editorContextOverrides,
 			resolvedMode,
 			selectedTopic,
 			selectedProject,
@@ -174,7 +190,7 @@ function EditorLayout({
 					{/* skill editor input container with min height to prevent layout shift */}
 					<div
 						ref={editorContainerRef}
-						id={SCENE_INPUT_IDS.INPUT_CONTAINER}
+						id={inputContainerId}
 						style={{ minHeight: INPUT_CONTAINER_MIN_HEIGHT.HomePage }}
 					></div>
 
@@ -205,7 +221,11 @@ function EditorLayout({
 						minHeight: selectedScene ? SCENE_PANEL_MIN_HEIGHT.HomePage : undefined,
 					}}
 				>
-					<LazyScenePanel scenes={scenes} editorContext={editorContext} />
+					<LazyScenePanel
+						scenes={scenes}
+						editorContext={editorContext}
+						inputContainerId={inputContainerId}
+					/>
 					{shouldShowSelfMediaConfig ? <SelfMediaComposerConfigPanel /> : null}
 				</div>
 			</div>

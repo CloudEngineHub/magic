@@ -17,7 +17,9 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 				const shouldUsePendingAttachmentSyncTab =
 					incomingTab.fileData?.display_config?.previewPolicy?.awaitAttachmentSync ===
 					true
+				if (incomingTab.active === false) return state
 				const shouldReplaceFileData =
+					Boolean(incomingTab.fileData?.recycleBin) ||
 					incomingTab.type === "file_manager" ||
 					incomingTab.fileData?.space_type === "user" ||
 					incomingTab.fileData?.display_config?.type === DetailType.SelfMedia ||
@@ -31,6 +33,7 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 						active: true,
 						active_at: now,
 						fileManager: incomingTab.fileManager ?? tab.fileManager,
+						fileManagerAreaRequest: incomingTab.fileManagerAreaRequest,
 						fileManagerState: incomingTab.fileManagerState ?? tab.fileManagerState,
 						returnTabId: incomingTab.returnTabId ?? tab.returnTabId,
 						title: shouldReplaceFileData ? incomingTab.title : tab.title,
@@ -58,7 +61,7 @@ export function tabReducer(state: TabItem[], action: TabAction): TabItem[] {
 
 			const newTab = {
 				...incomingTab,
-				active: true,
+				active: incomingTab.active !== false,
 				filePath: incomingTab.fileData.relative_file_path || incomingTab.filePath,
 				create_at: now,
 				active_at: now,

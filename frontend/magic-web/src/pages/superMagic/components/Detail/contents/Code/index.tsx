@@ -85,9 +85,13 @@ export default function CodeViewer(props: any) {
 		fetchFileVersions,
 		isNewestVersion,
 		isDeleted,
+		loadError: fileLoadError,
+		refreshFile,
 		loading: fileLoading,
 	} = useFileData({
-		enabled: !textFileSession,
+		enabled: true,
+		loadContent: !textFileSession,
+		isTabActive,
 		file_id,
 		updatedAt,
 		isEditing: isEditMode,
@@ -97,7 +101,10 @@ export default function CodeViewer(props: any) {
 	})
 
 	const [localContent, setContent] = useState<string>("")
-	const content = textFileSession?.content ?? localContent
+	const content =
+		fileVersion !== undefined
+			? (fileData ?? textFileSession?.content ?? "")
+			: (textFileSession?.content ?? localContent)
 	const loading = textFileSession?.loading ?? fileLoading
 	const [localDraft, setLocalDraft] = useState<string>("")
 	const editingCodeContent = textFileSession?.draft ?? localDraft
@@ -388,10 +395,10 @@ export default function CodeViewer(props: any) {
 			tabIndex={-1}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{textFileSession?.loadError ? (
+			{textFileSession?.loadError || fileLoadError ? (
 				<DetailEmpty
 					title={t("common.fileNotFoundOrLoadFailed")}
-					onRetry={textFileSession.refresh}
+					onRetry={textFileSession?.refresh ?? refreshFile}
 				/>
 			) : textFileSession && loading ? (
 				<Flex

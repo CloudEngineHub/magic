@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { memo, useCallback, useMemo, useRef } from "react"
 import type { MenuProps } from "antd"
 import {
@@ -31,9 +32,7 @@ import type { BuiltinComposedAction, CommonHeaderV2Props } from "./types"
 import { DetailType } from "../../types"
 import { MagicDropdown } from "@/components/base"
 import { IconShare3 } from "@tabler/icons-react"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
-import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 import { guardMenuClick, guardMenuItems, runGuardedAction } from "../../utils/actionGuard"
 import { cn } from "@/utils/cn"
 
@@ -76,9 +75,12 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	} = props
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
-	const effectiveShowDownload = useDownloadVisibility(showDownload, isMobile)
-	const { hideShareFile, hideFullscreen, hideVersionHistory, showShareFileInReadOnly } =
-		useFileActionVisibility()
+	const {
+		permissions: access,
+		options: { fullscreen, versionHistory, shareInReadOnly },
+	} = useFileAccess()
+	const effectiveShowDownload = access.download && showDownload
+
 	const headerContainerRef = useRef<HTMLDivElement>(null)
 	const rightActionsContainerRef = useRef<HTMLDivElement>(null)
 	const showButtonText = useContainerShowButtonText(rightActionsContainerRef)
@@ -166,17 +168,29 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 	const mergedActionConfig = useMemo(() => {
 		const hideDefaults = new Set(actionConfig?.hideDefaults || [])
 
-		if (hideShareFile) hideDefaults.add("share")
-		if (hideFullscreen) hideDefaults.add("fullscreen")
-		if (hideVersionHistory) hideDefaults.add("versionMenu")
+		if (!access.share) hideDefaults.add("share")
+		if (!access.download) hideDefaults.add("download")
+		if (!access.view || !access.preview) {
+			hideDefaults.add("viewMode")
+			hideDefaults.add("openUrl")
+		}
+		if (!fullscreen) hideDefaults.add("fullscreen")
+		if (!versionHistory) hideDefaults.add("versionMenu")
 
-		if (hideDefaults.size === 0) return actionConfig
+		if (hideDefaults.size === 0 && access.export) return actionConfig
 
 		return {
 			...actionConfig,
 			hideDefaults: Array.from(hideDefaults),
+			// Custom renderers may replace these same operation slots.
+			customActions: actionConfig?.customActions?.filter(
+				(item) =>
+					!(item.key === "share" && !access.share) &&
+					!(item.key === "download" && !access.download) &&
+					!(item.key === "export" && !access.export),
+			),
 		}
-	}, [actionConfig, hideShareFile, hideFullscreen, hideVersionHistory])
+	}, [actionConfig, fullscreen, versionHistory, access])
 
 	const actionContext = useMemo(
 		() => ({
@@ -194,7 +208,8 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			showDownload: effectiveShowDownload,
 			showRefreshButton,
 			isNewestFileVersion,
-			allowEdit: allowEdit || showShareFileInReadOnly,
+			allowEdit,
+			shareInReadOnly,
 			currentFile,
 			attachments,
 			fileContent,
@@ -239,7 +254,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			showButtonText,
 			effectiveShowDownload,
 			showRefreshButton,
-			showShareFileInReadOnly,
+			shareInReadOnly,
 			type,
 			viewMode,
 			getPopupContainer,
@@ -328,7 +343,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 					),
 					onClick: handleLocateFile,
 				},
-				...(isShareRoute || hideVersionHistory ? [] : [historyItem]),
+				...(isShareRoute || !versionHistory ? [] : [historyItem]),
 				...(extraMoreMenuItems ?? []),
 			],
 			beforeAction,
@@ -338,7 +353,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 		fileVersion,
 		handleChangeFileVersion,
 		handleLocateFile,
-		hideVersionHistory,
+		versionHistory,
 		isShareRoute,
 		onCompareVersion,
 		t,
@@ -583,12 +598,12 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 					{actionsNode}
 				</div>
 				<FileShareModals
-					shareModalVisible={shareModalVisible}
+					shareModalVisible={shareModalVisible && access.share}
 					onCloseShareModal={() => {
 						setShareModalVisible(false)
 						setExistingShareInfo(null)
 					}}
-					showSuccessModal={showSuccessModal}
+					showSuccessModal={showSuccessModal && access.share}
 					existingShareInfo={existingShareInfo}
 					currentFile={currentFile}
 					shareFileId={shareFileId}
@@ -599,7 +614,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 						setShowSuccessModal(false)
 						setExistingShareInfo(null)
 					}}
-					showSimilarSharesDialog={showSimilarSharesDialog}
+					showSimilarSharesDialog={showSimilarSharesDialog && access.share}
 					similarShares={similarShares}
 					onSelectSimilarShare={handleSelectSimilarShare}
 					onCreateNewShare={handleCreateNewShare}
@@ -640,12 +655,12 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 			) : null}
 
 			<FileShareModals
-				shareModalVisible={shareModalVisible}
+				shareModalVisible={shareModalVisible && access.share}
 				onCloseShareModal={() => {
 					setShareModalVisible(false)
 					setExistingShareInfo(null)
 				}}
-				showSuccessModal={showSuccessModal}
+				showSuccessModal={showSuccessModal && access.share}
 				existingShareInfo={existingShareInfo}
 				currentFile={currentFile}
 				shareFileId={shareFileId}
@@ -656,7 +671,7 @@ export default memo(function CommonHeaderV2(props: CommonHeaderV2Props) {
 					setShowSuccessModal(false)
 					setExistingShareInfo(null)
 				}}
-				showSimilarSharesDialog={showSimilarSharesDialog}
+				showSimilarSharesDialog={showSimilarSharesDialog && access.share}
 				similarShares={similarShares}
 				onSelectSimilarShare={handleSelectSimilarShare}
 				onCreateNewShare={handleCreateNewShare}

@@ -1,12 +1,16 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Application\SuperMagic\Task\Service;
 
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
@@ -19,6 +23,9 @@ use Psr\Log\NullLogger;
 use ReflectionClass;
 use ReflectionProperty;
 
+/**
+ * @internal
+ */
 final class TopicTaskAppServiceUserToolCallReplyTest extends TestCase
 {
     public function testStaleTaskReplyIsIgnoredBeforeSandboxForwarding(): void
@@ -165,12 +172,15 @@ final class TopicTaskAppServiceUserToolCallReplyTest extends TestCase
     }
 }
 
+/**
+ * @internal
+ */
 final class TopicTaskAppServiceForReplyTest extends TopicTaskAppService
 {
     public function updateTaskStatus(
         DataIsolation $dataIsolation,
         TaskEntity $task,
-        \App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus $status,
+        TaskStatus $status,
         string $errMsg = ''
     ): void {
     }

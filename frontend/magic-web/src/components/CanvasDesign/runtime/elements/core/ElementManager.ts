@@ -1993,7 +1993,9 @@ export class ElementManager {
 	 */
 	private normalizeLayerElementFromSnapshot(data: LayerElement): LayerElement {
 		// v3 快照会整体替换 contents；Content 内缺失 crop 已能自然表达“撤销裁剪”。
-		return data
+		// 完整快照省略 visible 表示可见；例：隐藏后恢复旧快照，应覆盖当前 false。
+		// 普通增量更新缺少 visible 仍表示保留原值，只在快照恢复边界补全默认值。
+		return { ...data, visible: data.visible ?? true }
 	}
 
 	/**

@@ -50,8 +50,9 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => navigateMocks.navigate,
 }))
 
-vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
-	FileActionVisibilityProvider: ({ children }: { children: ReactNode }) => children,
+vi.mock("@/pages/superMagic/providers/FileAccessProvider", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/pages/superMagic/providers/FileAccessProvider")>()),
+	FileAccessProvider: ({ children }: { children: ReactNode }) => children,
 }))
 
 vi.mock("@/pages/superMagic/hooks/useMobileFilePreviewPubSub", () => ({

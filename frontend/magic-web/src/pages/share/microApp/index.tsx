@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useCallback, useEffect, useState } from "react"
 import { useParams } from "react-router"
 import PublishedMicroAppPreviewSurface from "./components/PublishedMicroAppPreviewSurface"
@@ -9,7 +10,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { resolveShareErrorBackNavigation } from "../utils/share-error-back"
 
-export default function MicroAppSharePage() {
+function MicroAppSharePage() {
 	const { appId = "" } = useParams<{ appId: string }>()
 	useMicroAppManifestLinks(appId)
 	const navigate = useNavigate()
@@ -77,5 +78,13 @@ export default function MicroAppSharePage() {
 				/>
 			</main>
 		</div>
+	)
+}
+
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<MicroAppSharePage />
+		</FileAccessProvider>
 	)
 }

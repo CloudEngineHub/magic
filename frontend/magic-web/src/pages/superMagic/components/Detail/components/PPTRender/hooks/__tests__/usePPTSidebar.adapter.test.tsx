@@ -58,6 +58,47 @@ vi.mock("@/pages/superMagic/services/attachmentsTopicSync", () => ({
 }))
 
 describe("usePPTSidebar structure adapter", () => {
+	it.each([true, false])("reports the actual rename result: %s", async (success) => {
+		const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const adapter = {
+			reorder: vi.fn(),
+			insert: vi.fn(),
+			duplicate: vi.fn(),
+			remove: vi.fn(),
+			rename: success
+				? vi.fn().mockResolvedValue("slides/renamed.html")
+				: vi.fn().mockRejectedValue(new Error("rename failed")),
+		}
+		const store = {
+			slides: [{ id: "one", path: "slides/one.html", index: 0 }],
+			slidePaths: ["slides/one.html"],
+			syncManager: { registerSyncFunction: vi.fn() },
+			getFileIdByPath: () => "one",
+			pathMappingService: { getUrlByPath: () => "", setPathFileIdMapping: vi.fn() },
+			setSlides: vi.fn(),
+		}
+		const { result, unmount } = renderHook(() =>
+			usePPTSidebar({
+				slides: store.slides as never,
+				activeIndex: 0,
+				isTransitioning: false,
+				allowEdit: true,
+				setActiveIndex: vi.fn(),
+				setIsTransitioning: vi.fn(),
+				store: store as never,
+				slideStructureAdapter: adapter,
+			}),
+		)
+		try {
+			await act(async () => {
+				expect(await result.current.handleRenameSlide(0, "renamed")).toBe(success)
+			})
+		} finally {
+			unmount()
+			errorLog.mockRestore()
+		}
+	})
+
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mocks.registeredSync = undefined

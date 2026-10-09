@@ -370,6 +370,7 @@ class CallSubagent(BaseTool[CallSubagentParams]):
 
                 new_agent_context = AgentContext(isolated=True)
                 _inherit_parent_context(new_agent_context, parent, depth=current_depth + 1)
+                new_agent_context.set_subagent_forked(params.fork)
                 new_agent_context.set_chat_history_dir(str(target_session.chat_history_dir))
 
                 agent = await AgentRuntime.get_instance().acquire(

@@ -9,6 +9,7 @@ from app.tools.canvas.application.commands import AddElementCommand, FrameElemen
 from app.tools.canvas.application.support import AtomicBatchGuard
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.infrastructure.persistence.canvas_repository_interface import CanvasRepositoryInterface
+from app.tools.canvas.domain.services.spatial_geometry import CanvasSpatialGeometry
 
 AGENT_WRITABLE_ELEMENT_TYPES = (
     "frame",
@@ -69,19 +70,19 @@ class CanvasAgentWritePolicy:
         project_path: str,
         items: Sequence[FrameElementsCommand],
     ) -> None:
-        """拒绝把只读 Element 纳入 Agent 创建的 Frame。"""
+        """框选已有元素只检查存在和锁定状态，不改变内容生成权限。"""
         project = await repository.read(project_path)
 
-        def resolve(item: FrameElementsCommand) -> tuple[str, ...]:
-            element_types: list[str] = []
-            for element_id in item.element_ids:
-                element = project.canvas.get_element(element_id)
-                if element is None:
-                    raise CanvasDomainError("ELEMENT_NOT_FOUND", f"Element {element_id} does not exist.")
-                element_types.append(element.element_type)
-            return tuple(element_types)
-
-        cls._validate_batch(items, resolve)
+        geometry = CanvasSpatialGeometry(project.canvas)
+        current_item_ref: str | None = None
+        try:
+            for item in items:
+                current_item_ref = item.item_ref
+                for element_id in item.element_ids:
+                    # 框选只改变容器和坐标，不能沿用内容生成类型白名单；锁定限制仍然有效。
+                    geometry.assert_mutable(element_id)
+        except CanvasDomainError as error:
+            raise AtomicBatchGuard.map_error(items, current_item_ref, error) from error
 
     @classmethod
     def _validate_batch(

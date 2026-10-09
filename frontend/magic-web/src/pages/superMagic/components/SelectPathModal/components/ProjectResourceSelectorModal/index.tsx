@@ -36,9 +36,6 @@ import EmptyFilesIcon from "@/pages/superMagic/assets/svg/empty-files.svg"
 import { InputWithError } from "@/pages/superMagic/components/TopicFilesButton/components"
 import IconProject from "../../../icons/IconProject"
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
-import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
-import CollaborationProjectTag from "@/pages/superMagic/components/CollaborationProjectTag"
-import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
 
 import type {
 	ProjectResourceSelection,
@@ -47,13 +44,7 @@ import type {
 } from "../../types"
 import { MAX_MENTION_PROJECT_COUNT } from "../../types"
 import type { BreadcrumbItem } from "../../utils/breadcrumbUtils"
-import type {
-	Workspace,
-	ProjectListItem,
-	CollaborationProjectListItem,
-} from "../../../../pages/Workspace/types"
-import { ProjectStatus } from "../../../../pages/Workspace/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import type { Workspace, ProjectListItem } from "../../../../pages/Workspace/types"
 import {
 	SHARE_WORKSPACE_ID,
 	SHARE_WORKSPACE_DATA,
@@ -64,10 +55,7 @@ import {
 	MY_SKILLS_WORKSPACE_DATA,
 	MY_AGENTS_WORKSPACE_DATA,
 	isCollaborationWorkspace,
-	isCollaborationProject,
-	isWorkspaceShortcutProject,
 } from "../../../../constants"
-import { MagicClawApi, type MagicClawItem } from "@/apis"
 import { MagiClaw } from "@/enhance/lucide-react"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MagicEllipseWithTooltip from "@/components/base/MagicEllipseWithTooltip/MagicEllipseWithTooltip"
@@ -86,19 +74,12 @@ import { useCreateProject } from "../../hooks/useCreateProject"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
-import { skillsService, type UserSkillView } from "@/services/skills/SkillsService"
-import { crewService, type MyCrewView } from "@/services/crew/CrewService"
+import { MentionDesktopPicker } from "./MentionDesktopPicker"
+import { useResourceProjects, RESOURCE_WORKSPACE_IDS } from "./useResourceProjects"
+import type { ResourceProject } from "../../resourceProjectTypes"
+import type { FileManagerCheckChange } from "../../../TopicFilesButton/components/FileManager/types"
 
 const FIXED_WORKSPACE_IDS = new Set<string>([SHARE_WORKSPACE_ID, MY_CLAW_WORKSPACE_ID])
-const RESOURCE_WORKSPACE_IDS = new Set<string>([MY_SKILLS_WORKSPACE_ID, MY_AGENTS_WORKSPACE_ID])
-/** Align with MySkills / MyCrew list page size; selector loads more on demand. */
-const RESOURCE_PROJECTS_PAGE_SIZE = 20
-
-type ResourceProject = ProjectListItem & {
-	resourceType?: "skill" | "agent"
-	resourceId?: string
-	project_id?: string | null
-}
 
 function EmptyStateBox({ children }: { children: React.ReactNode }) {
 	return (
@@ -142,6 +123,7 @@ function ProjectResourceSelectorModal({
 	excludeProjectIds = [],
 	emptyDirectoryDescription,
 	emptyDirectoryActionLabel,
+	submitting: externalSubmitting = false,
 	onClose,
 	onSubmit,
 }: ProjectResourceSelectorModalProps) {
@@ -181,23 +163,46 @@ function ProjectResourceSelectorModal({
 	const [viewMode, setViewMode] = useState<ViewMode>("workspace")
 	const effectiveViewMode = isProjectOnly && viewMode === "directory" ? "project" : viewMode
 	const [loading, setLoading] = useState(false)
-	const [loadingMoreResources, setLoadingMoreResources] = useState(false)
-	const [resourceProjectsPage, setResourceProjectsPage] = useState(1)
-	const [hasMoreResourceProjects, setHasMoreResourceProjects] = useState(false)
-	const loadingMoreResourcesRef = useRef(false)
+	const [loadError, setLoadError] = useState(false)
+	const [submitting, setSubmitting] = useState(false)
+	const submittingRef = useRef(false)
+	const submitEpochRef = useRef(0)
 	const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null)
 	const [currentProject, setCurrentProject] = useState<ProjectListItem | null>(null)
 	const [availableWorkspaces, setAvailableWorkspaces] = useState<Workspace[]>(workspaces)
-	const [availableProjects, setAvailableProjects] = useState<ProjectListItem[]>([])
 	const [attachments, setAttachments] = useState<AttachmentItem[]>([])
 	const [path, setPath] = useState<AttachmentItem[]>(initialPath)
 	const [directories, setDirectories] = useState<AttachmentItem[]>([])
 	const [selectedResources, setSelectedResources] = useState<ProjectResourceSelection[]>([])
 	const isMentionMode = selectionMode === "mention"
+	const isResourceSelectionMode = isMentionMode || selectionMode === "import"
+	const allowProjectSelection = isMentionMode
+	const {
+		availableProjects,
+		setAvailableProjects,
+		loadingMoreResources,
+		hasMoreResourceProjects,
+		resetResourceProjectsPagination,
+		fetchProjectsByWorkspace,
+		handleLoadMoreResourceProjects,
+		cancelProjectRequest,
+		resolveSelectionWorkspace,
+	} = useResourceProjects({
+		visible,
+		isMentionMode: isResourceSelectionMode,
+		currentWorkspace,
+		loading,
+		setLoading,
+		setLoadError,
+	})
+	const handleProjectSearch = useMemoizedFn((keyword: string) => {
+		if (currentWorkspace && !currentProject)
+			void fetchProjectsByWorkspace(currentWorkspace.id, keyword)
+	})
 	// This option only applies to multi-file transfers into another project; same-project
 	// operations retain their existing flat target-directory semantics.
 	const showPreserveParentPathOption =
-		!isMentionMode &&
+		!isResourceSelectionMode &&
 		fileIds.length > 1 &&
 		currentProject !== null &&
 		currentProject.id !== (selectedProject?.id || sourceAttachments[0]?.project_id)
@@ -323,9 +328,9 @@ function ProjectResourceSelectorModal({
 		return availableProjects.filter(
 			(project) =>
 				!excludeProjectIds.includes(project.id) &&
-				(isMentionMode || hasEditPermission(project.user_role)),
+				(isResourceSelectionMode || hasEditPermission(project.user_role)),
 		)
-	}, [availableProjects, excludeProjectIds, isMentionMode])
+	}, [availableProjects, excludeProjectIds, isResourceSelectionMode])
 	const shouldBlockPanelForLoading =
 		loading &&
 		((effectiveViewMode === "workspace" && availableWorkspaces.length === 0) ||
@@ -348,184 +353,10 @@ function ProjectResourceSelectorModal({
 		return project.project_name || t("project.unnamedProject")
 	})
 
-	// 获取共享项目列表
-	const fetchCollaborationProjects = useMemoizedFn(async () => {
-		setLoading(true)
-		try {
-			const res = await SuperMagicApi.getCollaborationProjects({
-				page: 1,
-				page_size: 99,
-			})
-			// 将 CollaborationProjectListItem 转换为 ProjectListItem
-			const projects: ProjectListItem[] = (res?.list || []).map(
-				(item: CollaborationProjectListItem) => ({
-					...item,
-					tag: "collaboration" as const,
-				}),
-			)
-			setAvailableProjects(projects)
-		} catch (error) {
-			console.error("Failed to fetch collaboration projects:", error)
-			magicToast.error(t("selectPathModal.fetchProjectsFailed"))
-			setAvailableProjects([])
-		}
-		setLoading(false)
-	})
-
-	// 获取龙虾列表并转换为项目格式
-	const fetchMagicClawProjects = useMemoizedFn(async () => {
-		setLoading(true)
-		try {
-			const res = await MagicClawApi.queryMagicClawList({
-				page: 1,
-				page_size: 99,
-			})
-			// 将 MagicClawItem 转换为 ProjectListItem 格式
-			const projects: ProjectListItem[] = (res?.list || []).map((item: MagicClawItem) => ({
-				id: item.project_id,
-				project_status: ProjectStatus.WAITING,
-				project_mode: TopicMode.MagiClaw,
-				project_description: item.description || undefined,
-				workspace_id: MY_CLAW_WORKSPACE_ID,
-				work_dir: "",
-				workspace_name: t("workspace.myClawWorkspaceName"),
-				project_name: item.name,
-				current_topic_id: "",
-				current_topic_status: "",
-				created_at: "",
-				updated_at: "",
-				tag: "" as const,
-			}))
-			setAvailableProjects(projects)
-		} catch (error) {
-			console.error("Failed to fetch magic claw projects:", error)
-			magicToast.error(t("selectPathModal.fetchClawsFailed"))
-			setAvailableProjects([])
-		}
-		setLoading(false)
-	})
-
-	const mapResourceProject = useMemoizedFn(
-		(
-			item: UserSkillView | MyCrewView,
-			resourceType: "skill" | "agent",
-			workspaceId: string,
-		): ResourceProject => {
-			const projectId = item.projectId || null
-			return {
-				id: projectId || item.id,
-				project_id: projectId,
-				resourceType,
-				resourceId: item.id,
-				project_status: ProjectStatus.WAITING,
-				project_mode: "",
-				workspace_id: workspaceId,
-				work_dir: "",
-				workspace_name: "",
-				project_name: item.name,
-				current_topic_id: "",
-				current_topic_status: "",
-				created_at: "",
-				updated_at: "",
-				tag: "",
-			}
-		},
-	)
-
-	const resetResourceProjectsPagination = useMemoizedFn(() => {
-		setResourceProjectsPage(1)
-		setHasMoreResourceProjects(false)
-		setLoadingMoreResources(false)
-		loadingMoreResourcesRef.current = false
-	})
-
-	const fetchResourceProjects = useMemoizedFn(async (workspaceId: string, page = 1) => {
-		const isLoadMore = page > 1
-		if (isLoadMore) {
-			if (loadingMoreResourcesRef.current || loading || !hasMoreResourceProjects) return
-			loadingMoreResourcesRef.current = true
-			setLoadingMoreResources(true)
-		} else {
-			setLoading(true)
-			resetResourceProjectsPagination()
-		}
-
-		try {
-			const params = { page, page_size: RESOURCE_PROJECTS_PAGE_SIZE }
-			const isSkillsWorkspace = workspaceId === MY_SKILLS_WORKSPACE_ID
-			const response = isSkillsWorkspace
-				? await skillsService.getCreatedSkills(params)
-				: await crewService.getCreatedAgents(params)
-			const mapped = response.list.map((item) =>
-				mapResourceProject(
-					item,
-					isSkillsWorkspace ? "skill" : "agent",
-					isSkillsWorkspace ? MY_SKILLS_WORKSPACE_ID : MY_AGENTS_WORKSPACE_ID,
-				),
-			)
-
-			setAvailableProjects((prev) => {
-				if (!isLoadMore) return mapped
-				const existingIds = new Set(prev.map((project) => project.id))
-				return [...prev, ...mapped.filter((project) => !existingIds.has(project.id))]
-			})
-			setResourceProjectsPage(response.page)
-			setHasMoreResourceProjects(response.page * response.pageSize < response.total)
-		} catch (error) {
-			console.error("Failed to fetch personal resources:", error)
-			magicToast.error(t("selectPathModal.fetchProjectsFailed"))
-			if (!isLoadMore) {
-				setAvailableProjects([])
-				resetResourceProjectsPagination()
-			}
-		} finally {
-			if (isLoadMore) {
-				loadingMoreResourcesRef.current = false
-				setLoadingMoreResources(false)
-			} else {
-				setLoading(false)
-			}
-		}
-	})
-
-	const handleLoadMoreResourceProjects = useMemoizedFn(async () => {
-		if (!currentWorkspace || !RESOURCE_WORKSPACE_IDS.has(currentWorkspace.id)) return
-		await fetchResourceProjects(currentWorkspace.id, resourceProjectsPage + 1)
-	})
-
-	// 获取工作区的项目列表
-	const fetchProjectsByWorkspace = useMemoizedFn(async (workspaceId: string) => {
-		if (RESOURCE_WORKSPACE_IDS.has(workspaceId)) {
-			await fetchResourceProjects(workspaceId, 1)
-			return
-		}
-		resetResourceProjectsPagination()
-		if (workspaceId === SHARE_WORKSPACE_ID) {
-			await fetchCollaborationProjects()
-			return
-		}
-		if (workspaceId === MY_CLAW_WORKSPACE_ID) {
-			await fetchMagicClawProjects()
-			return
-		}
-		setLoading(true)
-		try {
-			const res = await SuperMagicApi.getProjectsWithCollaboration({
-				workspace_id: workspaceId,
-				page: 1,
-				page_size: 99,
-			})
-			setAvailableProjects(res?.list || [])
-		} catch (error) {
-			console.error("Failed to fetch projects:", error)
-			magicToast.error(t("selectPathModal.fetchProjectsFailed"))
-			setAvailableProjects([])
-		}
-		setLoading(false)
-	})
-
 	// 工作区选择处理
 	const handleWorkspaceClick = useMemoizedFn(async (workspace: Workspace) => {
+		attachmentRequestRef.current?.controller.abort()
+		setAvailableProjects([])
 		setCurrentWorkspace(workspace)
 		setViewMode("project")
 		setCurrentProject(null)
@@ -717,17 +548,34 @@ function ProjectResourceSelectorModal({
 
 	// 项目选择处理。Mention 模式把“选中项目”和“进入项目”拆开，移动模式保持原交互。
 	const handleProjectClick = useMemoizedFn(
-		async (project: ProjectListItem, action: "select" | "enter" = "enter") => {
+		async (
+			project: ProjectListItem,
+			action: "select" | "enter" = "enter",
+			workspaceOverride?: Workspace,
+		) => {
+			const selectionWorkspace = workspaceOverride ?? currentWorkspace
+			if (
+				(project as ResourceProject).resourceType &&
+				!(project as ResourceProject).project_id
+			) {
+				magicToast.info(t("fileManager.locateUnavailable"))
+				return
+			}
+			setLoadError(false)
 			if (isMentionMode && action === "select") {
-				if (!currentWorkspace) return
+				if (!selectionWorkspace) return
 				toggleMentionSelection({
 					level: "project",
-					workspace: currentWorkspace,
+					workspace: resolveSelectionWorkspace(selectionWorkspace),
 					project,
 				})
 				return
 			}
+			if (workspaceOverride && workspaceOverride.id !== currentWorkspace?.id) {
+				setCurrentWorkspace(workspaceOverride)
+			}
 
+			cancelProjectRequest()
 			if (isProjectOnly) {
 				attachmentRequestRef.current?.controller.abort()
 				setCurrentProject(project)
@@ -805,6 +653,7 @@ function ProjectResourceSelectorModal({
 				setDirectories(filesSort(dirs))
 			} catch (error) {
 				if (request.controller.signal.aborted) return
+				setLoadError(true)
 				console.error("Failed to fetch attachments:", error)
 				magicToast.error(t("selectPathModal.fetchAttachmentsFailed"))
 			}
@@ -880,6 +729,7 @@ function ProjectResourceSelectorModal({
 
 	// 返回项目列表
 	const handleBackToProject = useMemoizedFn(async () => {
+		attachmentRequestRef.current?.controller.abort()
 		setViewMode("project")
 		setCurrentProject(null)
 		setAttachments([])
@@ -955,8 +805,9 @@ function ProjectResourceSelectorModal({
 	useEffect(() => {
 		return () => {
 			attachmentRequestRef.current?.controller.abort()
+			cancelProjectRequest()
 		}
-	}, [])
+	}, [cancelProjectRequest])
 
 	useEffect(() => {
 		if (!visible) {
@@ -1129,11 +980,11 @@ function ProjectResourceSelectorModal({
 			if (isProjectOnly) return
 			setIsSearch(false)
 
-			if (isMentionMode && action === "select") {
+			if (isResourceSelectionMode && action === "select") {
 				if (!currentWorkspace) return
 				toggleMentionSelection({
 					level: "attachment",
-					workspace: currentWorkspace,
+					workspace: resolveSelectionWorkspace(currentWorkspace),
 					project: currentProject,
 					attachment: item,
 				})
@@ -1175,23 +1026,34 @@ function ProjectResourceSelectorModal({
 	)
 
 	const submit = useMemoizedFn(async () => {
-		if (isMentionMode) {
+		if (isResourceSelectionMode) {
+			if (submittingRef.current || externalSubmitting) return
 			const firstSelection = selectedResources[0]
 			if (!firstSelection) return
-			onSubmit({
-				targetProjectId: firstSelection.project.id,
-				targetWorkspaceId: firstSelection.workspace.id,
-				targetProject: firstSelection.project,
-				targetPath: path,
-				targetAttachments: attachments,
-				sourceAttachments,
-				selection: firstSelection,
-				selections: selectedResources,
-				includeDocumentDependencies,
-				documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
-				preserveParentPath: false,
-			})
-			if (closeOnSubmit) onClose?.()
+			submittingRef.current = true
+			setSubmitting(true)
+			const epoch = submitEpochRef.current
+			try {
+				await onSubmit({
+					targetProjectId: firstSelection.project.id,
+					targetWorkspaceId: firstSelection.workspace.id,
+					targetProject: firstSelection.project,
+					targetPath: path,
+					targetAttachments: attachments,
+					sourceAttachments,
+					selection: firstSelection,
+					selections: selectedResources,
+					includeDocumentDependencies,
+					documentDependencyFileIds: documentStaticDependencies.dependencyTransferFileIds,
+					preserveParentPath: false,
+				})
+				if (closeOnSubmit && epoch === submitEpochRef.current) onClose?.()
+			} finally {
+				if (epoch === submitEpochRef.current) {
+					submittingRef.current = false
+					setSubmitting(false)
+				}
+			}
 			return
 		}
 
@@ -1226,14 +1088,14 @@ function ProjectResourceSelectorModal({
 
 	// Workspace-level submit is opt-in; default file operations still require a target project.
 	const canSubmit = useMemo(() => {
-		if (isMentionMode) return selectedResources.length > 0
+		if (isResourceSelectionMode) return selectedResources.length > 0
 		return (
 			currentWorkspace !== null &&
 			(currentProject !== null ||
 				(allowWorkspaceRootSubmit && effectiveViewMode === "project"))
 		)
 	}, [
-		isMentionMode,
+		isResourceSelectionMode,
 		selectedResources.length,
 		allowWorkspaceRootSubmit,
 		currentWorkspace,
@@ -1263,6 +1125,11 @@ function ProjectResourceSelectorModal({
 
 	useEffect(() => {
 		if (!visible) {
+			submitEpochRef.current += 1
+			submittingRef.current = false
+			setSubmitting(false)
+			cancelProjectRequest()
+			attachmentRequestRef.current?.controller.abort()
 			// 弹窗关闭时重置初始化标记
 			initializedRef.current = false
 			setIsSearchOpen(false)
@@ -1357,7 +1224,7 @@ function ProjectResourceSelectorModal({
 			return t("selectPathModal.searchDirectory")
 		}
 	}, [effectiveViewMode, t])
-	const storageLabel = isMentionMode
+	const storageLabel = isResourceSelectionMode
 		? t("selectPathModal.selectMentionResource")
 		: t("selectPathModal.selectStorageLocation")
 	const emptyStorageDescription =
@@ -1372,7 +1239,7 @@ function ProjectResourceSelectorModal({
 	})
 
 	const createAction = useMemo(() => {
-		if (isMentionMode) return null
+		if (isResourceSelectionMode) return null
 		if (effectiveViewMode === "workspace") {
 			return {
 				onClick: createWorkspaceHook.showCreateWorkspace,
@@ -1396,7 +1263,7 @@ function ProjectResourceSelectorModal({
 		}
 		return null
 	}, [
-		isMentionMode,
+		isResourceSelectionMode,
 		effectiveViewMode,
 		canEdit,
 		t,
@@ -1411,7 +1278,7 @@ function ProjectResourceSelectorModal({
 		onOk: submit,
 		onCancel: handleCancel,
 		okDisabled:
-			(isMentionMode ? false : isSearch) ||
+			(isResourceSelectionMode ? false : isSearch) ||
 			!canSubmit ||
 			documentStaticDependencies.isLoading,
 	}
@@ -1423,13 +1290,13 @@ function ProjectResourceSelectorModal({
 	})
 
 	useEffect(() => {
-		if (visible) {
+		if (visible && !isResourceSelectionMode) {
 			window.addEventListener("keydown", handleKeyDown)
 			return () => window.removeEventListener("keydown", handleKeyDown)
 		} else {
 			window.removeEventListener("keydown", handleKeyDown)
 		}
-	}, [visible, handleKeyDown])
+	}, [visible, handleKeyDown, isResourceSelectionMode])
 
 	// 渲染工作区列表
 	const renderWorkspaceList = () => {
@@ -1631,87 +1498,7 @@ function ProjectResourceSelectorModal({
 					</div>
 				)}
 				{filteredProjects.length > 0 ? (
-					isMentionMode ? (
-						filteredProjects.map((project, index) => {
-							const isSelected = selectedResources.some(
-								(selection) =>
-									selection.level === "project" &&
-									selection.project.id === project.id,
-							)
-
-							return (
-								<div
-									key={project.id || index}
-									className={cn(
-										"mb-0.5 flex min-h-10 cursor-pointer items-center gap-2 rounded-md p-2.5 transition-all hover:bg-fill",
-										isSelected && "bg-fill",
-									)}
-									onClick={() => void handleProjectClick(project, "enter")}
-									data-testid="project-resource-selector-project-item"
-								>
-									<div
-										className={checkboxWrapperClass}
-										onClick={(event) => event.stopPropagation()}
-									>
-										<Checkbox
-											checked={isSelected}
-											onChange={() =>
-												void handleProjectClick(project, "select")
-											}
-											data-testid="project-resource-selector-project-checkbox"
-										/>
-									</div>
-									<div className="flex min-w-0 flex-1 items-center gap-1">
-										<NavigationStatusIcon
-											itemType="project"
-											status={project.project_status}
-											showDefaultIcon={false}
-										/>
-										<div className={folderIconClass}>
-											{(project as ResourceProject).resourceType ===
-											"skill" ? (
-												<Wrench className="size-4" />
-											) : (project as ResourceProject).resourceType ===
-											  "agent" ? (
-												<Bot className="size-4" />
-											) : (
-												<IconProject />
-											)}
-										</div>
-										<MagicEllipseWithTooltip
-											title={getProjectDisplayName(project)}
-											text={getProjectDisplayName(project)}
-											className={nameClass}
-											placement="topLeft"
-										>
-											{getProjectDisplayName(project)}
-										</MagicEllipseWithTooltip>
-										{project.is_pinned && <PinnedTag />}
-										{(isWorkspaceShortcutProject(project) ||
-											isCollaborationProject(project)) && (
-											<CollaborationProjectTag
-												visible
-												project={project}
-												showText={false}
-											/>
-										)}
-									</div>
-									<button
-										type="button"
-										className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-fill-secondary"
-										onClick={(event) => {
-											event.stopPropagation()
-											void handleProjectClick(project, "enter")
-										}}
-										aria-label={t("selectPathModal.enterProject")}
-										data-testid="project-resource-selector-enter-project"
-									>
-										<IconChevronRight size={16} />
-									</button>
-								</div>
-							)
-						})
-					) : isProjectOnly ? (
+					isProjectOnly ? (
 						filteredProjects.map((project, index) => {
 							const isSelected = currentProject?.id === project.id
 							return (
@@ -1916,74 +1703,6 @@ function ProjectResourceSelectorModal({
 					</div>
 				)}
 				{directories.map((directory, index) => {
-					if (isMentionMode) {
-						const isSelected = selectedResources.some(
-							(selection) =>
-								selection.level === "attachment" &&
-								selection.project.id === currentProject?.id &&
-								getItemId(selection.attachment) === getItemId(directory),
-						)
-
-						return (
-							<div
-								key={getItemId(directory) || index}
-								className={cn(
-									textFolderItemClass,
-									"gap-2",
-									isSelected && "bg-fill",
-								)}
-								onClick={() => onDirectoryClick(directory, "select")}
-								data-testid="project-resource-selector-attachment-item"
-							>
-								<div className="pointer-events-none">
-									<Checkbox checked={isSelected} />
-								</div>
-								<div className="flex min-w-0 flex-1 items-center gap-1">
-									<div className={folderIconClass}>
-										<FileResourceIcon
-											presentation={resolveFilePresentation(directory, {
-												index: getFilePresentationIndex(attachments),
-											})}
-											size={14}
-										/>
-									</div>
-									<MagicEllipseWithTooltip
-										title={getItemName(directory)}
-										text={getItemName(directory)}
-										className={nameClass}
-										placement="topLeft"
-									>
-										{getItemName(directory)}
-									</MagicEllipseWithTooltip>
-								</div>
-								{isSearch && directory.relative_file_path && (
-									<MagicEllipseWithTooltip
-										title={directory.relative_file_path}
-										text={directory.relative_file_path}
-										className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-right text-sm leading-5 text-foreground/35"
-										placement="rightTop"
-									>
-										{directory.relative_file_path}
-									</MagicEllipseWithTooltip>
-								)}
-								{directory.is_directory && (
-									<button
-										type="button"
-										className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-fill-secondary"
-										onClick={(event) => {
-											event.stopPropagation()
-											void onDirectoryClick(directory, "enter")
-										}}
-										aria-label={t("selectPathModal.enterDirectory")}
-										data-testid="project-resource-selector-enter-directory"
-									>
-										<IconChevronRight size={16} />
-									</button>
-								)}
-							</div>
-						)
-					}
-
 					const isDisabled =
 						(operationType === "move" &&
 							disabledFolderIds.includes(getItemId(directory))) ||
@@ -2047,6 +1766,141 @@ function ProjectResourceSelectorModal({
 		"inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-sm hover:bg-fill active:bg-fill-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:text-foreground"
 	const breadcrumbItemBase =
 		"relative flex max-w-[150px] cursor-pointer items-center rounded-[4px] text-foreground transition-colors hover:not(.disable):not(.current):text-primary [&.disable]:cursor-not-allowed [&.disable]:opacity-50"
+
+	if (isMobile && isResourceSelectionMode) {
+		return (
+			<MobileFilesMoveSheet
+				visible={visible}
+				submitting={externalSubmitting}
+				title={title}
+				attachments={[]}
+				defaultPath={initialPath}
+				disabledFolderIds={[]}
+				mobileCrossProjectConfig={{
+					currentProject: selectedProject,
+					currentWorkspace: selectedWorkspace,
+					sourceAttachments,
+					initialViewMode: "workspace",
+					workspaces,
+					includeSpecialWorkspaces: includeFixedWorkspaces,
+					selectionMode: selectionMode === "import" ? "import" : "mention",
+					excludeProjectIds,
+				}}
+				rootLabel={t("selectPathModal.rootDirectory")}
+				backLabel={t("back")}
+				homeLabel={t("selectPathModal.rootDirectory")}
+				closeLabel={t("close")}
+				confirmLabel={t("selectPathModal.confirm")}
+				clearSearchAriaLabel={t("clearSearch")}
+				searchPlaceholder={searchPlaceholder}
+				searchEmptyDescription={searchEmptyDescription}
+				emptyTip={emptyDirectoryDescription || t("selectPathModal.emptyDataTip")}
+				closeOnSubmit={closeOnSubmit}
+				onClose={onClose}
+				onSubmit={(params) => {
+					const selections =
+						params.selections || (params.selection ? [params.selection] : [])
+					const firstSelection = selections[0]
+					if (!firstSelection) return
+					onSubmit({
+						targetProjectId: firstSelection.project.id,
+						targetWorkspaceId: firstSelection.workspace.id,
+						targetProject: firstSelection.project,
+						targetPath: params.path,
+						targetAttachments: params.targetAttachments || [],
+						sourceAttachments,
+						selection: firstSelection,
+						selections,
+					})
+				}}
+			/>
+		)
+	}
+
+	if (isResourceSelectionMode) {
+		return visible ? (
+			<MentionDesktopPicker
+				title={title}
+				workspaces={availableWorkspaces}
+				workspace={currentWorkspace}
+				project={currentProject}
+				projects={availableProjects}
+				selectionMode={selectionMode === "import" ? "import" : "mention"}
+				allowProjectSelection={allowProjectSelection}
+				attachments={attachments}
+				loading={loading}
+				error={loadError}
+				submitting={submitting || externalSubmitting}
+				includeFixedWorkspaces={includeFixedWorkspaces}
+				excludeProjectIds={excludeProjectIds}
+				selections={selectedResources}
+				hasMore={hasMoreResourceProjects}
+				loadingMore={loadingMoreResources}
+				onLoadMore={handleLoadMoreResourceProjects}
+				onProjectSearch={handleProjectSearch}
+				onWorkspace={handleWorkspaceClick}
+				onProject={(project, action, workspace) =>
+					handleProjectClick(project, action, workspace)
+				}
+				onRecent={handleBackToWorkspace}
+				onBack={handleBackToProject}
+				onRefresh={() => {
+					if (currentProject) void handleProjectClick(currentProject)
+					else if (currentWorkspace) void fetchProjectsByWorkspace(currentWorkspace.id)
+					else void refreshWorkspaces()
+				}}
+				onCheck={(change: FileManagerCheckChange) => {
+					if (!currentProject || !currentWorkspace) return
+					const projectIds = new Set(
+						selectedResources.map((selection) => selection.project.id),
+					)
+					if (
+						change.added.length &&
+						!projectIds.has(currentProject.id) &&
+						projectIds.size >= MAX_MENTION_PROJECT_COUNT
+					) {
+						magicToast.info(t("selectPathModal.mentionProjectLimit"))
+						return
+					}
+					const workspace = resolveSelectionWorkspace(currentWorkspace)
+					setSelectedResources((previous) => {
+						const next = previous.filter(
+							(selection) =>
+								!(
+									selection.level === "attachment" &&
+									selection.project.id === currentProject.id &&
+									change.removedIds.includes(getItemId(selection.attachment))
+								),
+						)
+						const keys = new Set(next.map(getSelectionKey))
+						for (const attachment of change.added) {
+							const selection: ProjectResourceSelection = {
+								level: "attachment",
+								workspace,
+								project: currentProject,
+								attachment,
+							}
+							const key = getSelectionKey(selection)
+							if (!keys.has(key)) {
+								next.push(selection)
+								keys.add(key)
+							}
+						}
+						return next
+					})
+				}}
+				onRemove={toggleMentionSelection}
+				onClear={() => setSelectedResources([])}
+				onNavigate={(selection) => {
+					setCurrentWorkspace(selection.workspace)
+					void handleProjectClick(selection.project)
+				}}
+				onSubmit={submit}
+				onClose={onClose}
+			/>
+		) : null
+	}
+
 	const modalContent = (
 		<div
 			className={cn(
@@ -2361,55 +2215,6 @@ function ProjectResourceSelectorModal({
 			</div>
 		</div>
 	)
-
-	if (isMobile && isMentionMode) {
-		return (
-			<MobileFilesMoveSheet
-				visible={visible}
-				title={title}
-				attachments={[]}
-				defaultPath={initialPath}
-				disabledFolderIds={[]}
-				mobileCrossProjectConfig={{
-					currentProject: selectedProject,
-					currentWorkspace: selectedWorkspace,
-					sourceAttachments,
-					initialViewMode: "workspace",
-					workspaces,
-					includeSpecialWorkspaces: includeFixedWorkspaces,
-					selectionMode: "mention",
-					excludeProjectIds,
-				}}
-				rootLabel={t("selectPathModal.rootDirectory")}
-				backLabel={t("back")}
-				homeLabel={t("selectPathModal.rootDirectory")}
-				closeLabel={t("close")}
-				confirmLabel={t("selectPathModal.confirm")}
-				clearSearchAriaLabel={t("clearSearch")}
-				searchPlaceholder={searchPlaceholder}
-				searchEmptyDescription={searchEmptyDescription}
-				emptyTip={emptyDirectoryDescription || t("selectPathModal.emptyDataTip")}
-				closeOnSubmit={closeOnSubmit}
-				onClose={onClose}
-				onSubmit={(params) => {
-					const selections =
-						params.selections || (params.selection ? [params.selection] : [])
-					const firstSelection = selections[0]
-					if (!firstSelection) return
-					onSubmit({
-						targetProjectId: firstSelection.project.id,
-						targetWorkspaceId: firstSelection.workspace.id,
-						targetProject: firstSelection.project,
-						targetPath: params.path,
-						targetAttachments: params.targetAttachments || [],
-						sourceAttachments,
-						selection: firstSelection,
-						selections,
-					})
-				}}
-			/>
-		)
-	}
 
 	return (
 		<BaseModal

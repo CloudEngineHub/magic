@@ -142,6 +142,7 @@ function assignForwardedRef<T>(ref: ForwardedRef<T>, value: T | null) {
 }
 
 interface ImageEditorControlsProps {
+	readOnly?: boolean
 	config: ImageEditorConfig
 	hoveredMentionPath?: string | null
 	onSelectSource: (source: ReferenceResourceSourceType) => void
@@ -163,6 +164,7 @@ interface ImageEditorControlsProps {
 export default function ImageEditorControls(props: ImageEditorControlsProps) {
 	const {
 		config,
+		readOnly = false,
 		hoveredMentionPath,
 		onSelectSource,
 		onProjectSelect,
@@ -252,10 +254,11 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 	)
 
 	const canAddReferenceFile =
-		maxReferenceFiles === undefined || effectiveReferenceFileCount < maxReferenceFiles
+		!readOnly &&
+		(maxReferenceFiles === undefined || effectiveReferenceFileCount < maxReferenceFiles)
 
 	const referenceSourceListOptions = useMemo<SourceListOption[]>(() => {
-		if (!maxReferenceFiles || maxReferenceFiles <= 0) {
+		if (!readOnly && (!maxReferenceFiles || maxReferenceFiles <= 0)) {
 			return visibleLinkedMediaItems.map((item, index) =>
 				createLinkedMediaSourceListOption({
 					item,
@@ -275,10 +278,15 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				slotIndex: index,
 				resourcePath: info.path,
 				resourceFileName: info.fileName,
+				readOnly,
 				removeResourceAriaLabel: t("imageEditor.removeReferenceResource", "移除该参考资源"),
-				onRemoveResource: () => {
-					;(onReferenceFileRemove ?? handlers.handleReferenceFileRemove)(info.path)
-				},
+				onRemoveResource: readOnly
+					? undefined
+					: () => {
+							;(onReferenceFileRemove ?? handlers.handleReferenceFileRemove)(
+								info.path,
+							)
+						},
 			}
 		})
 
@@ -323,6 +331,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		canAddReferenceFile,
 		currentReferenceFiles.length,
 		effectiveReferenceFileCount,
+		readOnly,
 	])
 
 	const resolveReferencePopoverState = useCallback(
@@ -446,6 +455,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				<div className={styles.bottom}>
 					<div className={styles.left}>
 						<EditorModelSelect
+							disabled={readOnly}
 							selectedModelId={selectedModelId}
 							modelOptions={modelOptions}
 							modelOptionGroups={modelOptionGroups}
@@ -471,6 +481,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 
 							return (
 								<Select
+									disabled={readOnly}
 									key={setting.key}
 									value={selectedValue}
 									onValueChange={(value) =>
@@ -509,6 +520,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 						})}
 						{/* 分辨率选择 */}
 						<ResolutionSelect
+							disabled={readOnly}
 							options={supportedResolutionOptions}
 							value={config.selectedResolution}
 							onValueChange={handlers.handleResolutionChange}
@@ -516,6 +528,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 						{/* 比例选择 */}
 						{supportedAspectRatioOptions.length > 0 && (
 							<Select
+								disabled={readOnly}
 								value={currentSelectValue || ""}
 								onValueChange={handlers.handleRatioChange}
 							>

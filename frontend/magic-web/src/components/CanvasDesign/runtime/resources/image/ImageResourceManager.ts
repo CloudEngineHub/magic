@@ -760,7 +760,8 @@ export class ImageResourceManager {
 			return this.getDisplayResource(entry, "low")
 		}
 
-		return this.getDisplayResource(entry, "preview") ?? entry.fullResource
+		// preview 必须命中自己的显示槽：full 会被预览目标拒绝，不能据此跳过 preview 解码。
+		return this.getDisplayResource(entry, "preview")
 	}
 
 	private getLoadingPromiseForVariant(
@@ -3289,126 +3290,109 @@ export class ImageResourceManager {
 		}
 
 		const bodyFetchPriority = this.getBodyFetchPriorityForVariant(variant, priority)
-		const pipelineOptions = options ? { ...options, signal: undefined } : undefined
 		const request = new SharedAbortableRequest<MediaResourceBody | null>(
 			(sharedSignal) =>
 				this.canvas.resourceScheduler.run(
 					"image:body-fetch",
 					async (schedulerSignal): Promise<MediaResourceBody | null> => {
-						this.diagnostics.increment("bodyFetchAttemptCount")
-						try {
-							if (this.destroyed) {
-								return null
-							}
-							if (sharedSignal.aborted) {
-								return null
-							}
-							const response = await fetch(ossSrc, {
-								cache: "default",
-								signal: schedulerSignal,
-							})
-							if (this.destroyed) {
-								return null
-							}
-							if (sharedSignal.aborted) {
-								return null
-							}
-							if (!response.ok) {
-								const needsReExchange =
-									response.status === 401 || response.status === 403
-								if (needsReExchange) {
-									this.setFailureReason(entry, "load-error")
-									entry.ossSrc = null
-									entry.ossSrcFromCachedFallback = false
-									entry.expiresAt = null
-									this.clearEntryBody(entry)
-									const fallbackOssSrc =
-										await this.resolveVirtualResourceFallbackOssSrc(
-											path,
-											ossSrc,
+						let currentOssSrc = ossSrc
+						let attempt = retryCount
+						// 换签名但文件版本未变时，缓存键不变。重试留在同一共享请求内，
+						// 避免递归命中自身 Promise，也不额外占用调度槽或破坏请求去重。
+						while (!this.destroyed && !sharedSignal.aborted) {
+							const fetchGeneration = this.getPersistentLowGeneration(path)
+							this.diagnostics.increment("bodyFetchAttemptCount")
+							try {
+								const response = await fetch(currentOssSrc, {
+									cache: "default",
+									signal: schedulerSignal,
+								})
+								if (this.destroyed) {
+									return null
+								}
+								if (sharedSignal.aborted) {
+									return null
+								}
+								if (!response.ok) {
+									const needsReExchange =
+										response.status === 401 || response.status === 403
+									if (needsReExchange) {
+										this.setFailureReason(entry, "load-error")
+										entry.ossSrc = null
+										entry.ossSrcFromCachedFallback = false
+										entry.sourceUrl = null
+										entry.expiresAt = null
+										this.clearEntryBody(entry)
+										const nextOssSrc = await this.resolveImageLoadRetryOssSrc(
+											currentOssSrc,
 											entry,
-											retryCount,
-										)
-									if (this.destroyed) return null
-									const newOssSrc =
-										fallbackOssSrc ??
-										(retryCount === 0
-											? await this.exchangeOssSrc(path, entry, { priority })
-											: null)
-									if (this.destroyed) return null
-									if (newOssSrc) {
-										return this.loadImageBody(
-											path,
-											newOssSrc,
-											entry,
-											variant,
+											attempt,
 											priority,
-											retryCount + 1,
-											{ ...pipelineOptions, signal: sharedSignal },
+										)
+										if (this.destroyed || sharedSignal.aborted) return null
+										if (nextOssSrc) {
+											currentOssSrc = nextOssSrc
+											attempt += 1
+											continue
+										}
+									} else {
+										this.setFailureReason(
+											entry,
+											getFailureReasonFromStatusCode(response.status),
 										)
 									}
-								} else {
-									this.setFailureReason(
-										entry,
-										getFailureReasonFromStatusCode(response.status),
-									)
+									this.diagnostics.increment("bodyFetchFailedCount")
+									return null
 								}
+
+								const blob = await response.blob()
+								if (this.destroyed) {
+									return null
+								}
+								if (sharedSignal.aborted) {
+									return null
+								}
+								if (entry.ossSrc !== currentOssSrc) return null
+								if (this.getPersistentLowGeneration(path) !== fetchGeneration) {
+									return null
+								}
+								const body: MediaResourceBody = {
+									blob,
+									ossSrc: currentOssSrc,
+									cacheKey: this.getBodyCacheKey(path, currentOssSrc, entry),
+									byteSize: blob.size,
+									resourceGeneration: fetchGeneration,
+								}
+								this.bodyCache.storeBody(entry, body)
+								this.setFailureReason(entry, null)
+								this.canvas.mediaResourceOfflineCacheManager.recordVirtualResourceLoadSuccess(
+									currentOssSrc,
+								)
+								this.evictBodyCacheBudget(entry)
+								this.diagnostics.increment("bodyFetchSuccessCount")
+								return body
+							} catch (error) {
+								if (this.isAbortError(error)) {
+									return null
+								}
+								const nextOssSrc = await this.resolveImageLoadRetryOssSrc(
+									currentOssSrc,
+									entry,
+									attempt,
+									priority,
+								)
+								if (this.destroyed || sharedSignal.aborted) return null
+								if (nextOssSrc) {
+									currentOssSrc = nextOssSrc
+									attempt += 1
+									continue
+								}
+								this.setFailureReason(entry, "load-error")
 								this.diagnostics.increment("bodyFetchFailedCount")
 								return null
 							}
-
-							const blob = await response.blob()
-							if (this.destroyed) {
-								return null
-							}
-							if (sharedSignal.aborted) {
-								return null
-							}
-							if (entry.ossSrc !== ossSrc) return null
-							if (this.getPersistentLowGeneration(path) !== resourceGeneration) {
-								return null
-							}
-							const body: MediaResourceBody = {
-								blob,
-								ossSrc,
-								cacheKey,
-								byteSize: blob.size,
-								resourceGeneration,
-							}
-							this.bodyCache.storeBody(entry, body)
-							this.setFailureReason(entry, null)
-							this.canvas.mediaResourceOfflineCacheManager.recordVirtualResourceLoadSuccess(
-								ossSrc,
-							)
-							this.evictBodyCacheBudget(entry)
-							this.diagnostics.increment("bodyFetchSuccessCount")
-							return body
-						} catch (error) {
-							if (this.isAbortError(error)) {
-								return null
-							}
-							const fallbackOssSrc = await this.resolveVirtualResourceFallbackOssSrc(
-								path,
-								ossSrc,
-								entry,
-								retryCount,
-							)
-							if (this.destroyed) return null
-							if (fallbackOssSrc) {
-								return this.loadImageBody(
-									path,
-									fallbackOssSrc,
-									entry,
-									variant,
-									priority,
-									retryCount + 1,
-									{ ...pipelineOptions, signal: sharedSignal },
-								)
-							}
-							this.setFailureReason(entry, "load-error")
-							this.diagnostics.increment("bodyFetchFailedCount")
-							return null
 						}
+						return null
 					},
 					{
 						source: "image-resource:body-fetch",
@@ -3685,18 +3669,24 @@ export class ImageResourceManager {
 		}
 	}
 
-	private async resolveVirtualResourceFallbackOssSrc(
-		path: string,
+	private async resolveImageLoadRetryOssSrc(
 		ossSrc: string,
 		entry: ImageResourceEntry,
 		retryCount: number,
+		priority?: ImageResourceLoadPriority,
 	): Promise<string | null> {
-		return this.urlLifecycle.resolveVirtualResourceFallbackOssSrc(
-			path,
-			ossSrc,
-			entry,
-			retryCount,
-		)
+		if (this.destroyed || retryCount > 0) return null
+		// 内部 workspace identity 只用于缓存；宿主换链必须收到原始文件引用。
+		if (this.canvas.mediaResourceOfflineCacheManager.isVirtualResourceUrl(ossSrc)) {
+			return this.urlLifecycle.resolveVirtualResourceFallbackOssSrc(
+				entry.referencePath,
+				ossSrc,
+				entry,
+				retryCount,
+			)
+		}
+		// 过期签名也可能因跨域策略表现为 fetch 异常；只换链一次，跳过失效 URL 缓存。
+		return this.exchangeOssSrc(entry.referencePath, entry, { forceRefresh: true, priority })
 	}
 
 	private createEntry(referencePath: string, resourceIdentity: string): ImageResourceEntry {

@@ -53,7 +53,7 @@ function collectBindings(pattern: unknown, bindings: Set<string>): void {
 	}
 }
 
-/** Rewrite only assignment targets, never strings/comments or location reads. */
+/** Rewrite href writes and Location method receivers, never strings/comments or reads. */
 export function rewriteLocationHref(source: string, sourceType: "script" | "module" = "script") {
 	if (!source.includes("location")) return source
 	let ast: Node
@@ -64,7 +64,7 @@ export function rewriteLocationHref(source: string, sourceType: "script" | "modu
 		return source
 	}
 
-	const targets: SyntaxNode[] = []
+	const targets: { node: SyntaxNode; adapter: "getLocation" | "getWindow"; bare?: boolean }[] = []
 	const bindings = new Set<string>()
 	const pending: unknown[] = [ast]
 	while (pending.length) {
@@ -88,7 +88,25 @@ export function rewriteLocationHref(source: string, sourceType: "script" | "modu
 			isNode(node.left.object) &&
 			isLocation(node.left.object)
 		) {
-			targets.push(node.left.object)
+			targets.push({ node: node.left.object, adapter: "getLocation" })
+		}
+		if (node.type === "AssignmentExpression" && isNode(node.left) && isLocation(node.left)) {
+			if (node.left.type === "Identifier") {
+				targets.push({ node: node.left, adapter: "getLocation", bare: true })
+			} else if (isNode(node.left.object)) {
+				targets.push({ node: node.left.object, adapter: "getWindow" })
+			}
+		}
+		// Location.assign/replace are unforgeable in browsers too. Rewriting their
+		// receiver works where assigning an instance method silently fails.
+		if (
+			node.type === "CallExpression" &&
+			isNode(node.callee) &&
+			(isProperty(node.callee, "assign") || isProperty(node.callee, "replace")) &&
+			isNode(node.callee.object) &&
+			isLocation(node.callee.object)
+		) {
+			targets.push({ node: node.callee.object, adapter: "getLocation" })
 		}
 		for (const value of Object.values(node)) {
 			if (Array.isArray(value)) {
@@ -100,13 +118,20 @@ export function rewriteLocationHref(source: string, sourceType: "script" | "modu
 	if (!globalObject) return source
 
 	// Replace from right to left so source offsets, formatting and expression values survive.
-	return targets
-		.sort((a, b) => b.start - a.start)
-		.reduce((result, target) => {
-			const original = source.slice(target.start, target.end)
-			const replacement = `/*__MAGIC_LOCATION_START__:${encodeURIComponent(original)}__*/${globalObject}.__MAGIC_HTML_NAVIGATION_RUNTIME__.getLocation(${original})/*__MAGIC_LOCATION_END__*/`
-			return result.slice(0, target.start) + replacement + result.slice(target.end)
-		}, source)
+	return (
+		targets
+			// A bare lexical variable needs its original assignment target. Conservatively
+			// skip bare writes when any local binding exists rather than guessing its scope.
+			.filter((target) => !target.bare || !bindings.has("location"))
+			.sort((a, b) => b.node.start - a.node.start)
+			.reduce((result, target) => {
+				const original = source.slice(target.node.start, target.node.end)
+				const replacement = `/*__MAGIC_LOCATION_START__:${encodeURIComponent(original)}__*/${globalObject}.__MAGIC_HTML_NAVIGATION_RUNTIME__.${target.adapter}(${original})${target.bare ? ".href" : ""}/*__MAGIC_LOCATION_END__*/`
+				return (
+					result.slice(0, target.node.start) + replacement + result.slice(target.node.end)
+				)
+			}, source)
+	)
 }
 
 export function rewriteHtmlLocationHref(doc: Document): void {

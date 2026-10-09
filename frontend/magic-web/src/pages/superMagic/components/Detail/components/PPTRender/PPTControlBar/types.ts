@@ -1,6 +1,8 @@
 export interface PPTControlBarProps {
 	activeIndex: number
 	totalSlides: number
+	canGoPrevious?: boolean
+	canGoNext?: boolean
 	isTransitioning: boolean
 	isMobile: boolean
 	isFullscreen: boolean
@@ -12,6 +14,9 @@ export interface PPTControlBarProps {
 	onRefreshSlides: () => void
 	onJumpToPage: (index: number) => void
 	onToggleFullscreen: () => void
+	presenterScreens?: ReadonlyArray<{ label?: string; isPrimary?: boolean }>
+	selectedPresenterScreen?: number | null
+	onSelectPresenterScreen?: (index: number) => void
 	onReplaceTemplate?: () => void
 	notesVisible?: boolean
 	onToggleNotes?: () => void

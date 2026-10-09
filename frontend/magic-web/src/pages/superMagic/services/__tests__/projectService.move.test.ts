@@ -148,4 +148,37 @@ describe("ProjectService.moveProject", () => {
 
 		expect(mockProjectStore.removeProjectFromCollections).toHaveBeenCalledWith("project-1")
 	})
+
+	it("does not switch selectedWorkspace when the moved project is not currently selected", async () => {
+		const { workspaceStore } = await import("@/pages/superMagic/stores/core")
+		mockProjectStore.selectedProject = null
+
+		await projectService.moveProject({
+			projectId: "project-1",
+			targetWorkspaceId: "workspace-target",
+			sourceWorkspaceId: "workspace-source",
+		})
+
+		expect(workspaceStore.setSelectedWorkspace).not.toHaveBeenCalled()
+	})
+
+	// Navigation/view code owns selectedWorkspace. A list-page move must not
+	// steal the current workspace just because the moved project is still selected.
+	it("does not switch selectedWorkspace even when the moved project is selected", async () => {
+		const { workspaceStore } = await import("@/pages/superMagic/stores/core")
+		mockProjectStore.selectedProject = {
+			id: "project-1",
+			project_name: "Source Project",
+			workspace_id: "workspace-source",
+			workspace_name: "Source Workspace",
+		} as ProjectListItem
+
+		await projectService.moveProject({
+			projectId: "project-1",
+			targetWorkspaceId: "workspace-target",
+			sourceWorkspaceId: "workspace-source",
+		})
+
+		expect(workspaceStore.setSelectedWorkspace).not.toHaveBeenCalled()
+	})
 })

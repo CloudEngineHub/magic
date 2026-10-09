@@ -79,6 +79,15 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 
 	// ===== 编辑快捷键 =====
 	{
+		id: "edit.duplicate",
+		name: "创建副本",
+		key: "d",
+		modifiers: ["mod"],
+		category: "edit",
+		preventDefault: true,
+		description: "为选中元素创建副本",
+	},
+	{
 		id: "edit.delete",
 		name: "删除",
 		key: "delete",

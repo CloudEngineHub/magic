@@ -48,6 +48,7 @@ class RecentProjectsStore {
 					page_size: PAGE_SIZE,
 					show_collaboration: 1,
 					sort_mode: "recent",
+					include_special: 1,
 				},
 				{ signal: controller.signal },
 			)

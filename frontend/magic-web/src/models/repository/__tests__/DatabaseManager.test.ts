@@ -11,6 +11,7 @@ vi.mock("@/infrastructure/logger", () => ({
 			error: vi.fn(),
 			info: vi.fn(),
 		}),
+		report: vi.fn(),
 	},
 }))
 

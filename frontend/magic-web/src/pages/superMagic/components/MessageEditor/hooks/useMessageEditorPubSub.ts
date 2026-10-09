@@ -8,7 +8,12 @@ import type { DraftStore } from "../stores"
 import type { SendMessageByContentPayload } from "../types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
-import type { SuperMagicWidgetEditorCommandPayload } from "@/pages/superMagic/events/message"
+import { projectStore, topicStore } from "@/pages/superMagic/stores/core"
+import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
+import type {
+	SuperMagicAddFileToChatPayload,
+	SuperMagicWidgetEditorCommandPayload,
+} from "@/pages/superMagic/events/message"
 import type {
 	HtmlInspectorScreenshotUpdate,
 	HtmlMultiSelectionRequest,
@@ -361,40 +366,54 @@ function useMessageEditorPubSub({
 	}, [onSendMessageByContent, prepareScreenshot, projectId, topicId])
 
 	useEffect(() => {
-		const handleAddFileToChat = (data: {
-			items: TiptapMentionAttributes[]
-			is_new_topic: boolean
-			autoFocus?: boolean
-		}) => {
-			const { items, autoFocus = false } = data
+		let disposed = false
+		const pendingScopedTimers = new Set<ReturnType<typeof setTimeout>>()
+		const handleAddFileToChat = (data: SuperMagicAddFileToChatPayload) => {
+			const { items, autoFocus = false, targetScope } = data
+			const acceptsTarget = () =>
+				!targetScope ||
+				(!disposed &&
+					targetScope.projectId === projectId &&
+					targetScope.projectId === projectStore.selectedProject?.id &&
+					targetScope.topicId === (topicStore.selectedTopic?.id || null) &&
+					targetScope.topicId === (topicId || null) &&
+					targetScope.identityKey === getFileReferenceIdentityKey() &&
+					Boolean(
+						activeEditorRef.current?.isEditable && !activeEditorRef.current.isDestroyed,
+					))
+			if (!acceptsTarget()) return
+			if (data.checkEditable) {
+				data.checkEditable(Boolean(activeEditorRef.current?.isEditable))
+				return
+			}
 			// Delay insert for new topics to allow draft loading
-			setTimeout(() => {
+			// 范围在接收、延时结束和草稿恢复之后均核对，避免切换话题后误插入。
+			const timeoutId = setTimeout(() => {
+				pendingScopedTimers.delete(timeoutId)
+				if (!acceptsTarget()) return
 				draftStore.waitForLoadDraft().then(() => {
+					if (!acceptsTarget()) return
 					if (Array.isArray(items) && items.length > 0) {
-						const mentions = items.map((item) => ({
-							type: "mention",
-							attrs: item,
-						}))
+						const mentions = items.map((item) => ({ type: "mention", attrs: item }))
 						runActiveEditor(activeEditorRef.current, (activeEditor) => {
 							activeEditor.commands.insertContent(mentions)
 							if (autoFocus) {
 								activeEditor.commands.focus()
-								if (isMobile) {
-									activeEditor.commands.scrollIntoView()
-								}
+								if (isMobile) activeEditor.commands.scrollIntoView()
 							}
 						})
 					}
 				})
 			}, 400)
+			if (targetScope) pendingScopedTimers.add(timeoutId)
 		}
-
 		pubsub.subscribe(PubSubEvents.Add_File_To_Chat, handleAddFileToChat)
-
 		return () => {
+			disposed = true
+			pendingScopedTimers.forEach(clearTimeout)
 			pubsub.unsubscribe(PubSubEvents.Add_File_To_Chat, handleAddFileToChat)
 		}
-	}, [activeEditorRef, isMobile, draftStore])
+	}, [activeEditorRef, isMobile, draftStore, projectId, topicId])
 
 	useEffect(() => {
 		const handleInsertDragDataToEditor = (dragData: unknown) => {

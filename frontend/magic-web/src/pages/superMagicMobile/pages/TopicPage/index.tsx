@@ -1,3 +1,4 @@
+import { SimpleModeGuide } from "@/pages/superMagic/components/MessageHeader/components/SimpleModeGuide"
 import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import {
 	useMemo,
@@ -125,11 +126,13 @@ function TopicPage({
 	onInitialMessagesReadyChange,
 }: TopicPageProps = {}) {
 	const { t } = useTranslation("super")
+	const { t: tMainInput } = useTranslation("super/mainInput")
 	const { styles, cx } = useStyles()
 	const isMobile = useIsMobile()
 	const location = useLocation()
 	const routeName = routesMatch(location.pathname)?.route.name as RouteName | undefined
 	const resolvedPageKind = pageKind ?? resolveMobileTopicPageKind(routeName)
+	const isSingleTopicChat = resolvedPageKind === MobileTopicPageKind.SingleTopicChat
 	const capabilities = getMobileTopicPageCapabilities(resolvedPageKind)
 	const isStandaloneProjectTopicPage = routeName === RouteName.SuperWorkspaceProjectTopicState
 	// 独立项目话题子页由壳层头部承载返回与标题，避免与页内 ChatHeader 叠成双头部。
@@ -184,6 +187,7 @@ function TopicPage({
 
 	// Refs
 	const footerRef = useRef<HTMLDivElement>(null)
+	const simpleModeAnchorRef = useRef<HTMLSpanElement>(null)
 	const { shouldRenderProjectFirstRequest, resetProjectFirstRequestRender } =
 		useProjectFirstAttachmentRender()
 	const { startRequest: startAttachmentsRequest, cancelCurrent: cancelAttachmentsRequest } =
@@ -546,11 +550,14 @@ function TopicPage({
 	})
 
 	// Topic list actions
-	const { openActionsPopup, openShareModal, topicActionComponents } = useTopicListActions()
+	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
+	const simpleModeAvailable = pageKind === MobileTopicPageKind.ProjectTopic && !isReadonly
+	const { openActionsPopup, openShareModal, topicActionComponents } = useTopicListActions({
+		enableSimpleMode: simpleModeAvailable,
+	})
 
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
-	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
 
 	useEffect(() => {
 		// A direct message click may open before the project tree arrives; enrich it afterwards.
@@ -571,19 +578,29 @@ function TopicPage({
 			<div className={cn(styles.container, className)} data-testid="topic-page-root">
 				{projectTopicMorePortalTarget &&
 					createPortal(
-						<Button
-							variant="ghost"
-							className="h-12 w-12 shrink-0 rounded-full p-0 text-foreground hover:bg-transparent active:opacity-70"
-							onClick={openProjectTopicActionSheet}
-							aria-label={t("topic.moreAria")}
-							data-testid="project-topic-header-more-button"
-						>
-							<Ellipsis className="h-[22px] w-[22px]" />
-						</Button>,
+						<>
+							<Button
+								variant="ghost"
+								className="h-12 w-12 shrink-0 rounded-full p-0 text-foreground hover:bg-transparent active:opacity-70"
+								onClick={openProjectTopicActionSheet}
+								aria-label={t("topic.moreAria")}
+								data-testid="project-topic-header-more-button"
+							>
+								<span ref={simpleModeAnchorRef} className="inline-flex size-[22px]">
+									<Ellipsis className="h-[22px] w-[22px]" />
+								</span>
+							</Button>
+							<SimpleModeGuide
+								anchorRef={simpleModeAnchorRef}
+								available={simpleModeAvailable && Boolean(selectedTopic)}
+								menuOpen={projectTopicActionSheetVisible}
+							/>
+						</>,
 						projectTopicMorePortalTarget,
 					)}
 				{shouldRenderInlineHeader && (
 					<ChatHeader
+						enableSimpleMode={simpleModeAvailable}
 						selectedTopic={selectedTopic}
 						openActionsPopup={(topic: Topic) => {
 							openActionsPopup(topic, selectedProject)
@@ -603,10 +620,16 @@ function TopicPage({
 					<MessageListProvider value={value}>
 						{/* MessageList owns pagination, anchor restoration, and auto-follow for this viewport. */}
 						<MessageList
+							enableSimpleMode={simpleModeAvailable}
 							data={messages as any}
 							setSelectedDetail={setUserSelectDetail}
 							selectedTopic={selectedTopic}
-							className={cx(messageListClassName)}
+							className={cx(
+								"[--message-list-surface:rgb(var(--mobile-background-rgb))] [--message-list-sticky-fade-height:0px]",
+								messageListClassName,
+							)}
+							classNames={{ content: "px-4 pt-[10px]" }}
+							scrollEdgeFade
 							handlePullMoreMessage={handlePullMoreMessage}
 							showLoading={showLoading}
 							onFileClick={onFileClick}
@@ -644,6 +667,14 @@ function TopicPage({
 							setSelectedTopic={topicStore.setSelectedTopic}
 							onFileClick={onFileClick}
 							selectedWorkspace={selectedWorkspace}
+							// Chat details use the same model-only selector as the chat home.
+							showModeToggle={isSingleTopicChat ? false : undefined}
+							showModelSelector={isSingleTopicChat ? true : undefined}
+							placeholder={
+								isSingleTopicChat
+									? tMainInput("mobileHome.chatPlaceholder")
+									: undefined
+							}
 							attachments={attachments}
 							isShowLoadingInit={isShowLoadingInit}
 							enableReEditMessageFromPubSub
@@ -662,6 +693,7 @@ function TopicPage({
 						: topicActionComponents)}
 				{isStandaloneProjectTopicPage ? (
 					<ConversationActionsPopup
+						enableSimpleMode={simpleModeAvailable}
 						visible={projectTopicActionSheetVisible}
 						title={projectTopicActionPopupTitle}
 						subtitle={projectTopicActionPopupSubtitle}

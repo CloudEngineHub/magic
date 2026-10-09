@@ -25,6 +25,7 @@ def overview_content(result: dict[str, Any]) -> str:
         pagination.append("has_more=true")
     if pagination:
         lines.append("- " + " | ".join(pagination))
+    lines.append(f"- Returned: {len(result['elements'])}; has_more={str(bool(result.get('has_more'))).lower()}")
     for element in result["elements"]:
         lines.append(_overview_element_line(element))
     lines.append("Next: call query_canvas_element_details with exact Element IDs when full details are needed.")
@@ -39,6 +40,16 @@ def _overview_element_line(element: dict[str, Any]) -> str:
     ]
     if element.get("name"):
         fields.append(f"name={element['name']}")
+    if element.get("active_content_id"):
+        fields.append(f"active_content_id={element['active_content_id']}")
+    if str(element.get("asset_path") or "").startswith("data:"):
+        fields.append("media=embedded data; no file path")
+    elif element.get("asset_path"):
+        fields.append(f"asset_path={element['asset_path']}")
+    else:
+        fields.append("asset_path=none")
+    if element.get("file_name"):
+        fields.append(f"file_name={element['file_name']}")
     if element.get("x") is not None or element.get("y") is not None:
         fields.append(f"position=({element.get('x')}, {element.get('y')})")
     if element.get("width") is not None or element.get("height") is not None:
@@ -52,8 +63,6 @@ def _overview_element_line(element: dict[str, Any]) -> str:
     if element.get("child_count", 0) != 0:
         fields.append(f"child_count={element['child_count']}")
     if element.get("content_count", 1) != 1:
-        if element.get("active_content_id"):
-            fields.append(f"active_content_id={element['active_content_id']}")
         if element.get("main_content_id"):
             fields.append(f"main_content_id={element['main_content_id']}")
     if element.get("status") and element["status"] != "completed":
@@ -118,6 +127,25 @@ def elements_content(result: dict[str, Any]) -> str:
             fields = [
                 f"content_id={content['content_id']}",
             ]
+            fields.append(f"version=V{content.get('version_index', 1)}")
+            if content.get("is_current"):
+                fields.append("current=true")
+            if content.get("is_main"):
+                fields.append("main=true")
+            if content.get("file_name"):
+                fields.append(f"file_name={content['file_name']}")
+            if content.get("file_id"):
+                fields.append(f"file_id={content['file_id']}")
+            if content.get("file_exists") is False:
+                fields.append("file_exists=false")
+            fields.append(f"can_rename_file={str(content.get('can_rename_file', False)).lower()}")
+            if content.get("file_rename_reason"):
+                fields.append(f"file_rename_reason={content['file_rename_reason']}")
+            if content.get("generation_name"):
+                key = "expected_generation_name" if content.get("status") in {"pending", "processing"} else "original_generation_name"
+                fields.append(f"{key}={content['generation_name']}")
+            if content.get("discarded") is True:
+                fields.append("review=discarded draft (main-content selection and connections unchanged)")
             if content.get("status"):
                 fields.append(f"status={content['status']}")
             if content.get("source"):
@@ -128,8 +156,15 @@ def elements_content(result: dict[str, Any]) -> str:
             if content.get("retry_count", 0) != 0:
                 fields.append(f"retry_count={content['retry_count']}")
             parameters = content.get("generation_parameters") or {}
-            if parameters.get("prompt"):
-                fields.append(f"prompt={parameters['prompt']}")
+            if parameters:
+                fields.append("generation_record=recorded")
+                for key in ("prompt", "model_id", "model_name", "size", "resolution", "mode"):
+                    value = parameters.get(key)
+                    if value is not None:
+                        fields.append(f"{key}={value}")
+            else:
+                availability = "unavailable" if result.get("details_complete") is False else "not_recorded"
+                fields.append(f"generation_record={availability}")
             payload = content.get("payload")
             if isinstance(payload, dict):
                 for key in ("videoSequence", "audioSequence"):
@@ -141,6 +176,23 @@ def elements_content(result: dict[str, Any]) -> str:
             if isinstance(runtime, dict):
                 fields.append(f"runtime={_compact_value(runtime, max_length=1200)}")
             lines.append("- content: " + " | ".join(fields))
+            references = parameters.get("reference_images") or []
+            if isinstance(references, list):
+                for index, reference in enumerate(references, 1):
+                    lines.append(f"  - reference [image{index}]: {reference}")
+            options = parameters.get("reference_image_options") or []
+            if isinstance(options, list):
+                for option in options:
+                    if not isinstance(option, dict) or not isinstance(option.get("crop"), dict):
+                        continue
+                    crop = option["crop"]
+                    dimensions = ", ".join(f"{key}={crop[key]}" for key in ("x", "y", "width", "height") if key in crop)
+                    lines.append(f"  - reference crop for {option.get('path', '-')}: {dimensions} (source image pixels)")
+            settings = parameters.get("image_generation_config")
+            if isinstance(settings, dict):
+                for key, value in settings.items():
+                    # 配置来自历史请求，不用当前模型默认值替代；按业务字段展示，不打印原始对象。
+                    lines.append(f"  - generation setting {key}: {value}")
         for child in children:
             lines.append(f"- child={child['element_id']} | type={child['element_type']}")
     connections = result.get("connections") or []
@@ -154,6 +206,7 @@ def elements_content(result: dict[str, Any]) -> str:
             )
     for warning in result.get("warnings", []):
         lines.append(f"- Warning: {warning}")
+    lines.append("An Element has one shared Canvas title; each Content version can reference its own file. Generation names are historical inputs, not current filenames.")
     return "\n".join(lines)
 
 

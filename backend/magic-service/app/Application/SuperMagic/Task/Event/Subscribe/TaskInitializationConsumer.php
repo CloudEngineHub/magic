@@ -246,6 +246,7 @@ class TaskInitializationConsumer extends ConsumerMessage
                 chatConversationId: $agentConversationId,
                 remind: $exception->getMessage(),
                 remindEvent: TaskEventUtil::getRemindTaskEventByCode($exception->getCode()),
+                data: $exception->getData(),
             );
         } catch (Throwable $notificationError) {
             $this->logger->error('Failed to send reminder notification to client', [

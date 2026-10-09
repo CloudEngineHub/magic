@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -631,8 +632,6 @@ function AudioRecordingDetailPage() {
 	return <ObservedAudioRecordingDetailPageDesktop />
 }
 
-export default AudioRecordingDetailPage
-
 /** Collects every speaker id from loaded detail text files for the shared editor. */
 function collectRecordingSpeakerIds(contents: Array<string | undefined>) {
 	return Array.from(
@@ -645,3 +644,11 @@ function collectRecordingSpeakerIds(contents: Array<string | undefined>) {
  * if (isAudioProjectMode(projectMode)) return <RecordingDetailShareShell projectId={...} />
  * See types/recording-detail-capabilities.ts SHARE_RECORDING_DETAIL_CAPABILITIES.
  */
+
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<AudioRecordingDetailPage />
+		</FileAccessProvider>
+	)
+}

@@ -166,7 +166,11 @@ function SlidesTemplateFloatingSelector({
 					toolbarClassName={isMobile ? "px-2 pt-0" : "px-0 pt-0"}
 					gridClassName={cn(
 						"min-h-0 flex-1",
-						isMobile ? "p-2" : "p-0 pt-1 2xl:!grid-cols-4",
+						isMobile
+							? "p-2"
+							: templatePickerContainer
+								? "p-0 pt-1 ![grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]"
+								: "p-0 pt-1 2xl:!grid-cols-4",
 					)}
 					hoverDetailsContainer={hoverDetailsContainer}
 					disableEntryAnimation={isMobile}
@@ -182,6 +186,7 @@ function SlidesTemplateFloatingSelector({
 			isMobile,
 			selectedTemplate,
 			slidesState,
+			templatePickerContainer,
 		],
 	)
 

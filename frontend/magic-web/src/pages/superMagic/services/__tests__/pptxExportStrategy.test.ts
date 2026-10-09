@@ -23,19 +23,27 @@ describe("PPTX export strategy", () => {
 		).toBe("full-stage")
 	})
 
-	it("returns unavailable instead of falling back when file streaming is unavailable", () => {
+	it("uses the client-side buffered route when file streaming is unavailable", () => {
 		expect(
-			resolvePptxExportStrategy({ pageCount: 20, fileStreamingAvailable: false }),
+			resolvePptxExportStrategy({
+				pageCount: 20,
+				fileStreamingAvailable: false,
+				bufferedDownloadAvailable: true,
+			}),
 		).toMatchObject({
-			route: "unavailable",
-			reasonCode: "file-stream-unavailable",
+			route: "legacy-blob",
+			reasonCode: "legacy-blob",
 			isLargeExport: false,
 		})
 	})
 
-	it("returns a structured unavailable reason instead of buffering a large export", () => {
+	it("returns unavailable when neither file streaming nor buffered download is available", () => {
 		expect(
-			resolvePptxExportStrategy({ hasLargeMedia: true, fileStreamingAvailable: false }),
+			resolvePptxExportStrategy({
+				hasLargeMedia: true,
+				fileStreamingAvailable: false,
+				bufferedDownloadAvailable: false,
+			}),
 		).toMatchObject({
 			route: "unavailable",
 			reasonCode: "file-stream-unavailable",

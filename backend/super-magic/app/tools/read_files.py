@@ -10,6 +10,8 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.token_estimator import num_tokens_from_string
+from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
+from app.core.entity.message.server_message import OperationResultStatus
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.tools.abstract_file_tool import AbstractFileTool
@@ -243,6 +245,7 @@ Strongly recommended to use this tool for batch reading multiple reference files
         read_file_tool.base_dir = self.base_dir
         read_failure_count = 0
         has_truncation = False
+        read_results: list[ToolResult | None] = []
 
         # 批量处理每个文件操作，收集结果
         for operation in params.operations:
@@ -261,7 +264,9 @@ Strongly recommended to use this tool for batch reading multiple reference files
                     tool_context, file_params, raw_mode=True,
                     max_tokens=max_tokens, allow_fuzzy_match=allow_fuzzy_match,
                     use_context_budget=use_context_budget,
+                    record_read=False,
                 )
+                read_results.append(result)
 
                 if result.ok:
                     # 直接使用content（已经不包含截断提示了）
@@ -281,10 +286,6 @@ Strongly recommended to use this tool for batch reading multiple reference files
                             "file_path": operation.file_path,
                             "content": safe_raw_content,
                         })
-
-                    # ReadFile 工具已经设置了时间戳，这里不需要重复设置
-                    # 但为了确保一致性，我们记录一下日志
-                    logger.debug(f"文件读取成功，时间戳已由 ReadFile 工具设置: {operation.file_path}")
 
                     # 创建文件读取结果对象
                     # 截断信息通过extra_info获取，不再需要字符串解析
@@ -310,6 +311,8 @@ Strongly recommended to use this tool for batch reading multiple reference files
                     ))
                     read_failure_count += 1
             except Exception as e:
+                if len(read_results) < len(results) + 1:
+                    read_results.append(None)
                 logger.exception(f"读取文件失败: {e!s}")
                 results.append(FileReadingResult(
                     file_path=operation.file_path,
@@ -351,6 +354,19 @@ Strongly recommended to use this tool for batch reading multiple reference files
 
         # 格式化最终结果
         formatted_result = self._format_results(results, summary, has_truncation)
+        # 单项完整不代表批量输出完整；最终截断后才能确认模型实际获得的阅读范围。
+        if tool_context:
+            for operation, item, read_result in zip(params.operations, results, read_results, strict=True):
+                if read_result is not None and item.is_success:
+                    await read_file_tool.record_read_result(
+                        tool_context,
+                        ReadFileParams(file_path=operation.file_path, offset=operation.offset, limit=operation.limit),
+                        read_result,
+                        truncated=item.was_truncated,
+                    )
+                    # ReadFile 工具已经设置了时间戳，这里不需要重复设置
+                    # 但为了确保一致性，我们记录一下日志
+                    logger.debug(f"文件读取成功，时间戳已由 ReadFile 工具设置: {operation.file_path}")
 
         # 记录实际token数
         actual_tokens = num_tokens_from_string(formatted_result)
@@ -675,13 +691,30 @@ Strongly recommended to use this tool for batch reading multiple reference files
         file_paths = [self._get_operation_file_path(op) for op in operations]
         files_data = (result.extra_info or {}).get("files_without_line_numbers") or []
         file_results = (result.extra_info or {}).get("file_results") or []
+        display_results = file_results or [{"file_path": item["file_path"], "is_success": True} for item in files_data]
+        items = []
+        for item in display_results:
+            read_range = item.get("read_range")
+            message = ""
+            if not item.get("is_success"):
+                message = i18n.translate("read_file.failed", category="tool.messages")
+            elif read_range:
+                message = i18n.translate(
+                    "read_file.line_range", category="tool.messages",
+                    start=read_range["start_line"], end=read_range["end_line"],
+                )
+            items.append(ToolDetailFactory.create_file_result_item(
+                str(item["file_path"]), self.base_dir,
+                OperationResultStatus.SUCCESS if item.get("is_success") else OperationResultStatus.ERROR,
+                message=message,
+            ))
         success_count = int((result.extra_info or {}).get("success_count", len(files_data)))
         failure_count = int((result.extra_info or {}).get("failure_count", 0))
 
         # 失败时：展示给人看的简洁失败摘要（走 i18n，不含给 AI 的诊断信息）
         # read_files 在“全部子项失败”时也可能保持 result.ok=True，因此不能只看 result.ok
         if (not result.ok) or (failure_count > 0 and success_count == 0):
-            return self._build_failure_tool_detail(file_results=file_results, success_count=success_count, failure_count=failure_count)
+            return ToolDetailFactory.create_operation_result_detail(items, report=self._build_failure_tool_detail(file_results=file_results, success_count=success_count, failure_count=failure_count), stage="read")
 
         # 单个文件：像 read_file.py 一样处理
         if file_count == 1:
@@ -699,13 +732,15 @@ Strongly recommended to use this tool for batch reading multiple reference files
                     # HTML 截断后结构残缺，display_type 会被降级为 TEXT
                     display_content, display_type = truncate_content_for_display(file_data["content"], display_type)
 
-                    return ToolDetail(
+                    report = ToolDetail(
                         type=display_type,
                         data=FileContent(
                             file_name=file_name,
                             content=display_content
                         )
                     )
+
+                    return ToolDetailFactory.create_operation_result_detail(items, report=report, stage="read")
 
         # 多个文件：使用格式化显示
         display_title = i18n.translate("read_file.multiple_title", category="tool.messages", main_file=os.path.basename(file_paths[0]),
@@ -746,13 +781,15 @@ Strongly recommended to use this tool for batch reading multiple reference files
         else:
             content_for_display = ""
 
-        return ToolDetail(
+        report = ToolDetail(
             type=DisplayType.MD,
             data=FileContent(
                 file_name=display_title,
                 content=content_for_display
             )
         )
+
+        return ToolDetailFactory.create_operation_result_detail(items, report=report, stage="read")
 
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
         """获取备注内容"""

@@ -130,9 +130,12 @@ function processSearches(
 			i === resultIndex
 				? `${searchResultClass} ${searchResultClass}-current`
 				: searchResultClass
-		const decoration: Decoration = Decoration.inline(r.from, r.to, {
-			class: className,
-		})
+		const decoration: Decoration = Decoration.inline(
+			r.from,
+			r.to,
+			{ class: className },
+			{ searchResultClass: className },
+		)
 
 		decorations.push(decoration)
 	}

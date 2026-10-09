@@ -99,8 +99,8 @@ rstrip() / strip() 匹配
 
 - `edit_file`
 - `multi_edit_file`
+- `find_file_range`
 - `edit_file_range`
-- `multi_edit_file_range`
 
 ### 不适用
 
@@ -470,10 +470,10 @@ old_string = "topic:主题"
 
 这个场景对应：
 
-- `edit_file_range`
-- `multi_edit_file_range`
+- `find_file_range`（先定位并返回单次使用的 `range_id`）
+- `edit_file_range`（只接受 `range_id` 和新内容）
 
-这里比普通 `edit_file` 更严格。
+这里比普通 `edit_file` 更严格。`range_id` 绑定当前 AgentContext 和查找时的文件内容，只能成功应用一次；文件变化、沙盒重启或上下文重置后必须重新调用 `find_file_range`。
 
 对于 `replace_start` / `replace_end`：
 
