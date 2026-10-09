@@ -161,7 +161,7 @@ export function BaseModelItemRow({
     >
       <div className="flex min-w-0 items-center gap-2">
         {editable && !deleted ? (
-          <button
+          <button data-testid="platform-official-staff-model-action-button"
             aria-label={t("officialStaff.aria.dragModel")}
             className="flex size-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing"
             type="button"
@@ -179,7 +179,7 @@ export function BaseModelItemRow({
         </div>
       </div>
       {editable ? (
-        <Button className="size-7" onClick={() => onDelete(model.id)} size="icon" variant="ghost">
+        <Button className="size-7" onClick={() => onDelete(model.id)} size="icon" variant="ghost" data-testid="platform-official-staff-delete-button">
           <Trash2 className="size-3.5" />
         </Button>
       ) : null}
@@ -282,7 +282,7 @@ export function DynamicModelItemRow({
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {editable ? (
-              <button
+              <button data-testid="platform-official-staff-model-action-button"
                 aria-label={t("officialStaff.aria.dragModel")}
                 className="flex size-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing"
                 type="button"
@@ -313,10 +313,10 @@ export function DynamicModelItemRow({
                 }}
                 size="icon"
                 variant="ghost"
-              >
+               data-testid="platform-official-staff-delete-button">
                 <Edit3 className="size-3.5" />
               </Button>
-              <Button className="size-7" onClick={() => onDelete(model.id)} size="icon" variant="ghost">
+              <Button className="size-7" onClick={() => onDelete(model.id)} size="icon" variant="ghost" data-testid="platform-official-staff-delete-button">
                 <Trash2 className="size-3.5" />
               </Button>
             </div>
@@ -347,12 +347,12 @@ export function DynamicModelItemRow({
               open={openFloatingId === `dynamic-order-${model.id}`}
               value={order}
             >
-              <SelectTrigger className="h-8 w-32 text-xs">
+              <SelectTrigger className="h-8 w-32 text-xs" data-testid="platform-official-staff-select-trigger">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={staffOrderDirection.asc}>{t("officialStaff.assign.orderAsc")}</SelectItem>
-                <SelectItem value={staffOrderDirection.desc}>{t("officialStaff.assign.orderDesc")}</SelectItem>
+              <SelectContent data-testid="platform-official-staff-select-content">
+                <SelectItem value={staffOrderDirection.asc} data-testid="platform-official-staff-option">{t("officialStaff.assign.orderAsc")}</SelectItem>
+                <SelectItem value={staffOrderDirection.desc} data-testid="platform-official-staff-option">{t("officialStaff.assign.orderDesc")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -13,6 +13,8 @@ export type ProviderModelDataSource = {
     modelCreate: string;
     modelDetail: string;
     modelGroupList: string;
+    /** Legacy admin endpoint used to import an existing model configuration by model_id. */
+    modelImportList?: string;
     modelOriginalIdCreate: string;
     modelOriginalIdDelete: string;
     modelOriginalIds: string;
@@ -32,6 +34,7 @@ export const platformProviderModelDataSource: ProviderModelDataSource = {
     modelCreate: apiEndpoints.providerModelCreate,
     modelDetail: apiEndpoints.providerModelDetail,
     modelGroupList: apiEndpoints.providerModelGroupList,
+    modelImportList: apiEndpoints.packageAllModels,
     modelOriginalIdCreate: apiEndpoints.providerOriginalModelIdCreate,
     modelOriginalIdDelete: apiEndpoints.providerOriginalModelIdDelete,
     modelOriginalIds: apiEndpoints.providerOriginalModelIds,

@@ -21,6 +21,13 @@ import {
 	DropdownMenuTrigger,
 } from "@magic-admin-v2/components/ui/dropdown-menu"
 import { Skeleton } from "@magic-admin-v2/components/ui/skeleton"
+import {
+	Sheet,
+	SheetContent,
+	SheetDescription,
+	SheetHeader,
+	SheetTitle,
+} from "@magic-admin-v2/components/ui/sheet"
 import { usePlatformInfoQuery } from "@magic-admin-v2/features/platform-info/queries"
 import { ShellAccountControls } from "@magic-admin-v2/layouts/components/shell-account-controls"
 import type {
@@ -63,26 +70,6 @@ export default function DashboardLayout() {
 		toggleMobileSidebar,
 		toggleSidebar,
 	} = useAppShellStore()
-	const [isMobileSidebarMounted, setIsMobileSidebarMounted] = useState(false)
-	const [isMobileSidebarEntered, setIsMobileSidebarEntered] = useState(false)
-
-	useEffect(() => {
-		let closeTimer: number | undefined
-		let enterFrame: number | undefined
-
-		if (isMobileSidebarOpen) {
-			setIsMobileSidebarMounted(true)
-			enterFrame = window.requestAnimationFrame(() => setIsMobileSidebarEntered(true))
-		} else {
-			setIsMobileSidebarEntered(false)
-			closeTimer = window.setTimeout(() => setIsMobileSidebarMounted(false), 300)
-		}
-
-		return () => {
-			if (enterFrame !== undefined) window.cancelAnimationFrame(enterFrame)
-			if (closeTimer !== undefined) window.clearTimeout(closeTimer)
-		}
-	}, [isMobileSidebarOpen])
 
 	useEffect(() => {
 		if (!platformBrand.isLoading && platformBrand.name) {
@@ -109,12 +96,16 @@ export default function DashboardLayout() {
 	}, [toggleSidebar])
 
 	return (
-		<div className="flex h-svh min-h-0 w-full overflow-hidden bg-background text-foreground">
+		<div
+			className="flex h-svh min-h-0 w-full overflow-hidden bg-background text-foreground"
+			data-testid="dashboard-layout"
+		>
 			<aside
 				className={cn(
 					"fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-linear lg:flex",
 					isSidebarCollapsed ? "w-12" : "w-64",
 				)}
+				data-testid="dashboard-sidebar"
 			>
 				<AppSidebar
 					activePathname={location.pathname}
@@ -126,28 +117,18 @@ export default function DashboardLayout() {
 				/>
 			</aside>
 
-			{isMobileSidebarMounted ? (
-				<div
-					className={cn(
-						"fixed inset-0 z-[60] isolate lg:hidden",
-						!isMobileSidebarEntered && "pointer-events-none",
-					)}
+			<Sheet open={isMobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+				<SheetContent
+					className="w-[18rem] p-0 sm:max-w-none"
+					data-testid="dashboard-mobile-sidebar"
+					showCloseButton={false}
+					side="left"
 				>
-					<button
-						aria-label={t("aria.closeNavigationOverlay")}
-						className={cn(
-							"absolute inset-0 z-0 bg-black/50 transition-opacity duration-300 ease-out motion-reduce:transition-none",
-							isMobileSidebarEntered ? "opacity-100" : "opacity-0",
-						)}
-						onClick={() => setMobileSidebarOpen(false)}
-						type="button"
-					/>
-					<aside
-						className={cn(
-							"relative z-10 flex h-full w-[18rem] transform bg-sidebar text-sidebar-foreground shadow-xl transition-transform duration-300 ease-out motion-reduce:transition-none",
-							isMobileSidebarEntered ? "translate-x-0" : "-translate-x-full",
-						)}
-					>
+					<SheetHeader className="sr-only">
+						<SheetTitle>{t("aria.primaryNavigation")}</SheetTitle>
+						<SheetDescription>{t("aria.primaryNavigation")}</SheetDescription>
+					</SheetHeader>
+					<div className="flex min-h-0 flex-1 bg-sidebar text-sidebar-foreground">
 						<AppSidebar
 							activePathname={location.pathname}
 							brand={platformBrand}
@@ -156,9 +137,9 @@ export default function DashboardLayout() {
 							navigation={navigation}
 							onCloseMobile={() => setMobileSidebarOpen(false)}
 						/>
-					</aside>
-				</div>
-			) : null}
+					</div>
+				</SheetContent>
+			</Sheet>
 
 			<div
 				className={cn(
@@ -170,6 +151,7 @@ export default function DashboardLayout() {
 					<Button
 						aria-label={t("aria.openNavigation")}
 						className="-ml-1 text-muted-foreground transition-colors hover:text-foreground lg:hidden"
+						data-testid="dashboard-open-navigation-button"
 						onClick={toggleMobileSidebar}
 						size="icon-sm"
 						variant="ghost"
@@ -181,6 +163,7 @@ export default function DashboardLayout() {
 							isSidebarCollapsed ? t("aria.expandSidebar") : t("aria.collapseSidebar")
 						}
 						className="-ml-1 hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+						data-testid="dashboard-toggle-sidebar-button"
 						onClick={toggleSidebar}
 						size="icon-sm"
 						variant="ghost"
@@ -194,7 +177,7 @@ export default function DashboardLayout() {
             className="relative inline-flex h-8 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:pr-12 md:w-36 lg:w-56"
             onClick={() => toast.message(t("common.modulePending"))}
             type="button"
-          >
+           data-testid="admin-layout-search-button">
             <Search className="size-4" aria-hidden="true" />
             <span>{t("appMenu.action.search")}</span>
             <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium sm:flex">
@@ -209,7 +192,10 @@ export default function DashboardLayout() {
 					</div>
 				</header>
 
-				<main className="dashboard-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 pt-0">
+				<main
+					className="dashboard-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 pt-0"
+					data-testid="dashboard-main-content"
+				>
 					<div className="@container/main min-w-0 px-4 py-4 lg:px-6">
 						<Outlet />
 					</div>
@@ -246,7 +232,7 @@ function AppSidebar({
 				<div className="flex items-center gap-2">
 					<BrandMark brand={brand} href={homeHref} isCollapsed={isCollapsed} />
 					{onCloseMobile ? (
-						<Button
+						<Button data-testid="dashboard-mobile-menu-button"
 							aria-label={t("aria.closeNavigation")}
 							className="ml-auto text-muted-foreground"
 							onClick={onCloseMobile}
@@ -265,6 +251,7 @@ function AppSidebar({
 					"dashboard-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden",
 					isCollapsed && "items-center px-1.5 py-2",
 				)}
+				data-testid={isCollapsed ? "dashboard-sidebar-navigation-collapsed" : "dashboard-sidebar-navigation"}
 			>
 				{isCollapsed
 					? navigation.map((section) => (
@@ -299,7 +286,7 @@ function AppSidebar({
 
 			{onToggleSidebar ? (
 				<div className="flex flex-col gap-2 border-t border-sidebar-border p-2">
-					<Button
+					<Button data-testid="dashboard-access-button"
 						aria-label={
 							isCollapsed ? t("aria.expandSidebar") : t("aria.collapseSidebar")
 						}
@@ -421,7 +408,7 @@ function CollapsedPrimaryNavigation({
 
 	return (
 		<DropdownMenu modal={false} onOpenChange={handleMenuOpenChange} open={isMenuOpen}>
-			<DropdownMenuTrigger asChild>
+			<DropdownMenuTrigger data-testid={section.testId} asChild>
 				<Button
 					aria-label={t(section.titleKey)}
 					className={cn(
@@ -429,6 +416,7 @@ function CollapsedPrimaryNavigation({
 						isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 					)}
 					data-collapsed-nav-menu={menuScope}
+					data-testid={section.testId}
 					onPointerEnter={openMenu}
 					onPointerLeave={scheduleCloseMenu}
 					onPointerMove={trackPointerPosition}
@@ -443,6 +431,7 @@ function CollapsedPrimaryNavigation({
 				align="start"
 				className="w-60 p-2"
 				data-collapsed-nav-menu={menuScope}
+				data-testid={`${section.testId}-content`}
 				onPointerEnter={openMenu}
 				onPointerLeave={scheduleCloseMenu}
 				onPointerMove={trackPointerPosition}
@@ -492,7 +481,7 @@ function CollapsedNavigationGroupMenu({
 
 	if (group.href && group.items.length === 0) {
 		return (
-			<DropdownMenuItem asChild className="p-0">
+			<DropdownMenuItem data-testid={group.testId} asChild className="p-0">
 				<NavLink
 					className={({ isActive: isLinkActive }) =>
 						cn(
@@ -500,6 +489,7 @@ function CollapsedNavigationGroupMenu({
 							isLinkActive && "bg-accent text-accent-foreground",
 						)
 					}
+					data-testid={group.testId}
 					onClick={onCloseMobile}
 					to={group.href}
 				>
@@ -520,6 +510,7 @@ function CollapsedNavigationGroupMenu({
 					"h-8 cursor-default rounded-md px-2 text-sm font-medium text-popover-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
 					isActive && "bg-accent text-accent-foreground",
 				)}
+				data-testid={group.testId}
 			>
 				<GroupIcon
 					className="mr-2 size-4 shrink-0 text-muted-foreground"
@@ -531,6 +522,7 @@ function CollapsedNavigationGroupMenu({
 				alignOffset={-4}
 				className="w-60 p-2"
 				data-collapsed-nav-menu={menuScope}
+				data-testid={`${group.testId}-content`}
 				onPointerEnter={onKeepRootMenuOpen}
 				onPointerLeave={onScheduleRootMenuClose}
 				onPointerMove={onTrackPointer}
@@ -545,7 +537,7 @@ function CollapsedNavigationGroupMenu({
 
 						return (
 							<DropdownMenuItem asChild className="p-0" key={item.href}>
-								<NavLink
+								<NavLink data-testid={item.testId}
 									className={({ isActive: isLinkActive }) =>
 										cn(
 											"flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sm font-medium text-popover-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent",
@@ -591,9 +583,10 @@ function SidebarNavigationGroup({
 		return (
 			<NavLink
 				className={cn(
-					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
 					isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 				)}
+			data-testid={group.testId}
 				onClick={onCloseMobile}
 				to={group.href}
 			>
@@ -617,9 +610,10 @@ function SidebarNavigationGroup({
 			<button
 				aria-expanded={isOpen}
 				className={cn(
-					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
 					isActive && "text-sidebar-accent-foreground",
 				)}
+				data-testid={group.testId}
 				onClick={() => setIsOpen((current) => !current)}
 				type="button"
 			>
@@ -638,7 +632,7 @@ function SidebarNavigationGroup({
 			</button>
 			{isOpen ? (
 				<ul
-					className="ml-3.5 flex w-full min-w-0 flex-col gap-1 border-l border-sidebar-border pl-2"
+					className="ml-3.5 flex min-w-0 flex-col gap-1 border-l border-sidebar-border pl-2"
 					data-state="open"
 				>
 					{group.items.map((item) => (
@@ -669,9 +663,10 @@ function SidebarMenuLink({ activePathname, item, onCloseMobile }: SidebarMenuLin
 		<li className="group/menu-item relative min-w-0">
 			<NavLink
 				className={cn(
-					"peer/menu-button relative flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 pl-4 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"peer/menu-button relative flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 pl-4 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
 					isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 				)}
+				data-testid={item.testId}
 				onClick={onCloseMobile}
 				to={item.href}
 			>
@@ -706,6 +701,7 @@ function BrandMark({ brand, href, isCollapsed = false }: BrandMarkProps) {
 				"group/team relative flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent focus-visible:ring-2",
 				isCollapsed && "justify-center px-0",
 			)}
+			data-testid="dashboard-brand-link"
 			to={href}
 		>
 			{brand.isLoading ? (

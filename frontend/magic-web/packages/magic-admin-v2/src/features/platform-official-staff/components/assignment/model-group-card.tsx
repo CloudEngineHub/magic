@@ -160,7 +160,7 @@ export function ModelGroupCard({
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {editable ? (
-              <button
+              <button data-testid="platform-official-staff-model-group-action-button"
                 aria-label={t("officialStaff.aria.dragGroup")}
                 className="flex size-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing"
                 type="button"
@@ -187,13 +187,13 @@ export function ModelGroupCard({
               onOpenChange={(open) => onFloatingOpenChange(open ? `group-more-${entry.group.id}` : null)}
               open={openFloatingId === `group-more-${entry.group.id}`}
             >
-              <DropdownMenuTrigger asChild>
-                <Button aria-label={t("officialStaff.action.more")} size="icon" variant="ghost">
+              <DropdownMenuTrigger asChild data-testid="platform-official-staff-menu-trigger">
+                <Button aria-label={t("officialStaff.action.more")} size="icon" variant="ghost" data-testid="platform-official-staff-edit-button">
                   <MoreHorizontal className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => onEditGroup(entry.group)}>
+              <DropdownMenuContent align="end" data-testid="platform-official-staff-action-button">
+                <DropdownMenuItem onSelect={() => onEditGroup(entry.group)} data-testid="platform-official-staff-menu-item">
                   <Edit3 className="mr-2 size-4" />
                   {t("officialStaff.action.editGroup")}
                 </DropdownMenuItem>
@@ -201,7 +201,7 @@ export function ModelGroupCard({
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onSelect={requestDeleteGroup}
-                >
+                 data-testid="platform-official-staff-menu-item">
                   <Trash2 className="mr-2 size-4" />
                   {t("officialStaff.action.deleteGroup")}
                 </DropdownMenuItem>

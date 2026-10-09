@@ -78,6 +78,11 @@ export type TimeFilterPanelProps = {
 	className?: string
 	/** 是否显示触发器中的清空操作；默认开启。 */
 	clearable?: boolean
+	/** Stable selectors for the trigger and expanded content. */
+	triggerTestId?: string
+	contentTestId?: string
+	clearButtonTestId?: string
+	testIdPrefix?: string
 	/** 非受控模式首次初始化时使用的相对时间预设。 */
 	defaultPresetKey?: TimePresetKey
 	/** 可用的最大自然日；同时作为近 X 天等快捷范围的计算基准和最终输出上限。 */
@@ -98,7 +103,9 @@ export type TimeFilterPanelProps = {
 
 export function TimeFilterPanel({
 	className,
+	clearButtonTestId,
 	clearable = true,
+	contentTestId,
 	defaultPresetKey,
 	maxDate,
 	onChange,
@@ -106,6 +113,8 @@ export function TimeFilterPanel({
 	prefix,
 	supportedRelativeUnits = defaultSupportedRelativeUnits,
 	timePrecision = "second",
+	triggerTestId,
+	testIdPrefix,
 	value,
 }: TimeFilterPanelProps) {
 	const { t } = useTranslation()
@@ -123,6 +132,12 @@ export function TimeFilterPanel({
 		: normalizedSupportedUnits[0]
 	const isRelativeDayOnly = isDayOnlyRelativeUnits(normalizedSupportedUnits)
 	const isAbsoluteDateOnly = timePrecision === "day"
+	const panelTestIdPrefix = testIdPrefix ?? triggerTestId?.replace(/-trigger$/, "")
+	const testId = (suffix: string) =>
+		panelTestIdPrefix ? `${panelTestIdPrefix}-${suffix}` : undefined
+	const resolvedTriggerTestId = triggerTestId ?? testId("trigger")
+	const resolvedContentTestId = contentTestId ?? testId("content")
+	const resolvedClearButtonTestId = clearButtonTestId ?? testId("clear-button")
 	const [internalValue, setInternalValue] = useState<TimeRangeValue | null>(null)
 	const timeRangeValue = isControlled ? value : internalValue
 	const [open, setOpen] = useState(false)
@@ -241,10 +256,16 @@ export function TimeFilterPanel({
 			tab: TimeFilterTab
 			unit?: RelativeUnit
 		}) => {
+			// Normalize every mode through the same precision contract so relative presets
+			// cannot emit minute/second boundaries when a page requires hour buckets.
+			const normalizedStart = normalizeAbsoluteDate(start, timePrecision, "start")
+			const normalizedEnd = normalizeAbsoluteDate(end, timePrecision, "end")
 			const maxRangeEnd = maxDate ? endOf(maxDate, "day") : null
-			if (maxRangeEnd && start.getTime() > maxRangeEnd.getTime()) return
+			if (maxRangeEnd && normalizedStart.getTime() > maxRangeEnd.getTime()) return
 			const boundedEnd =
-				maxRangeEnd && end.getTime() > maxRangeEnd.getTime() ? maxRangeEnd : end
+				maxRangeEnd && normalizedEnd.getTime() > maxRangeEnd.getTime()
+					? maxRangeEnd
+					: normalizedEnd
 
 			const nextValue: TimeRangeValue = {
 				endDate: formatDateTime(boundedEnd),
@@ -252,14 +273,14 @@ export function TimeFilterPanel({
 				mode,
 				...(presetKey ? { presetKey } : {}),
 				...(unit ? { relativeUnit: unit } : {}),
-				startDate: formatDateTime(start),
+				startDate: formatDateTime(normalizedStart),
 				tab,
 			}
 			setTimeRangeValue(nextValue)
 			if (persist) setHistory(upsertHistory(createHistoryEntry(nextValue)))
 			if (closePanel) setOpen(false)
 		},
-		[maxDate, setTimeRangeValue],
+		[maxDate, setTimeRangeValue, timePrecision],
 	)
 
 	useEffect(() => setHistory(loadHistory()), [])
@@ -454,9 +475,10 @@ export function TimeFilterPanel({
 		if (!current || timePrecision === "day") return
 		const [hours = 0, minutes = 0, seconds = 0] = nextValue.split(":").map(Number)
 		const next = new Date(current)
+		const nextMinutes = timePrecision === "hour" ? (boundary === "end" ? 59 : 0) : minutes
 		next.setHours(
 			hours,
-			minutes,
+			nextMinutes,
 			timePrecision === "second" ? seconds : boundary === "end" ? 59 : 0,
 			0,
 		)
@@ -570,13 +592,22 @@ export function TimeFilterPanel({
 		>
 			<div className="border-b px-4">
 				<TabsList className={cn(isInline && "grid w-full grid-cols-3")}>
-					<TabsTrigger value={timeFilterTab.relative}>
+					<TabsTrigger
+						data-testid={testId("relative-tab-trigger")}
+						value={timeFilterTab.relative}
+					>
 						{t("timeFilter.relative")}
 					</TabsTrigger>
-					<TabsTrigger value={timeFilterTab.absolute}>
+					<TabsTrigger
+						data-testid={testId("absolute-tab-trigger")}
+						value={timeFilterTab.absolute}
+					>
 						{t("timeFilter.absolute")}
 					</TabsTrigger>
-					<TabsTrigger value={timeFilterTab.history}>
+					<TabsTrigger
+						data-testid={testId("history-tab-trigger")}
+						value={timeFilterTab.history}
+					>
 						{t("timeFilter.history")}
 					</TabsTrigger>
 				</TabsList>
@@ -598,6 +629,7 @@ export function TimeFilterPanel({
 					standardPresetOptions={availableStandardPresetOptions}
 					supportedUnits={normalizedSupportedUnits}
 					timeRangeValue={timeRangeValue}
+					showAlignToUnit={timePrecision !== "hour"}
 					onAlignToUnitChange={handleAlignToUnitChange}
 					onCustomRelativeApply={handleCustomRelativeApply}
 					onCustomUnitChange={setCustomUnit}
@@ -605,6 +637,7 @@ export function TimeFilterPanel({
 					onCustomValueChange={setCustomValue}
 					onMonthApply={handleMonthApply}
 					onPresetApply={handlePresetApply}
+					testIdPrefix={panelTestIdPrefix}
 				/>
 			</TabsContent>
 
@@ -625,6 +658,7 @@ export function TimeFilterPanel({
 					onAbsolutePresetSelect={handleAbsolutePresetSelect}
 					onAbsoluteTimeChange={handleAbsoluteTimeChange}
 					onMonthChange={(offset) => setVisibleMonth(addMonths(visibleMonth, offset))}
+					testIdPrefix={panelTestIdPrefix}
 				/>
 			</TabsContent>
 
@@ -652,6 +686,7 @@ export function TimeFilterPanel({
 					<span
 						aria-label={t("timeFilter.clear")}
 						className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+						data-testid={resolvedClearButtonTestId}
 						onClick={handleClear}
 						role="button"
 					>
@@ -679,13 +714,17 @@ export function TimeFilterPanel({
 						"flex h-9 w-full min-w-0 max-w-full items-center justify-between gap-3 rounded-md border border-input bg-card px-3 text-sm shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 						!timeRangeValue && "text-muted-foreground",
 					)}
+					data-testid={resolvedTriggerTestId}
 					onClick={() => setOpen((nextOpen) => !nextOpen)}
 					type="button"
 				>
 					{trigger}
 				</button>
 				{open ? (
-					<div className="mt-2 min-w-0 overflow-hidden rounded-lg border bg-card">
+					<div
+						className="mt-2 min-w-0 overflow-hidden rounded-lg border bg-card"
+						data-testid={resolvedContentTestId}
+					>
 						{panelContent}
 					</div>
 				) : null}
@@ -700,12 +739,14 @@ export function TimeFilterPanel({
 					"flex h-9 w-full min-w-0 max-w-full items-center justify-between gap-3 rounded-md border border-input bg-card px-3 text-sm shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-w-64",
 					!timeRangeValue && "text-muted-foreground",
 				)}
+				data-testid={resolvedTriggerTestId}
 			>
 				{trigger}
 			</PopoverTrigger>
 			<PopoverContent
 				align="start"
 				className="w-[min(700px,calc(100vw-1rem))] p-0 sm:w-[min(700px,calc(100vw-2rem))]"
+				data-testid={resolvedContentTestId}
 			>
 				{panelContent}
 			</PopoverContent>

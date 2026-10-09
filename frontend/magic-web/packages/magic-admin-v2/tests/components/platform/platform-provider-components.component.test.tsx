@@ -29,6 +29,13 @@ Object.defineProperty(Element.prototype, "scrollIntoView", {
   value: vi.fn(),
 });
 
+for (const method of ["hasPointerCapture", "setPointerCapture", "releasePointerCapture"] as const) {
+  Object.defineProperty(Element.prototype, method, {
+    configurable: true,
+    value: method === "hasPointerCapture" ? vi.fn(() => false) : vi.fn(),
+  });
+}
+
 const categoryAccess: ProviderCategoryAccessMap = {
   [providerCategory.llm]: { canView: true, canEdit: true },
   [providerCategory.vlm]: { canView: true, canEdit: false },
@@ -86,7 +93,16 @@ function renderList(overrides: Partial<Parameters<typeof ProviderListContent>[0]
     ...overrides,
   };
 
-  return { ...render(<ProviderListContent {...props} />), props };
+  return {
+    ...render(
+      // Radix exposes its structured native select only inside a form; using it here
+      // avoids jsdom-only portal/focus timing while still exercising the real change event.
+      <form onSubmit={(event) => event.preventDefault()}>
+        <ProviderListContent {...props} />
+      </form>,
+    ),
+    props,
+  };
 }
 
 function renderProviderPage(platformProviders: Record<string, ReturnType<typeof vi.fn>>) {
@@ -120,6 +136,18 @@ function renderProviderPage(platformProviders: Record<string, ReturnType<typeof 
       </QueryClientProvider>,
     ),
   };
+}
+
+// Prefer Radix's runtime-generated native select over portal-only option clicks in jsdom.
+function changeNativeSelectOption(optionText: string) {
+  const normalizedText = optionText.replace(/\s+/g, " ").trim();
+  const option = Array.from(document.querySelectorAll<HTMLOptionElement>("select option")).find(
+    (element) => element.textContent?.replace(/\s+/g, " ").trim() === normalizedText,
+  );
+  expect(option).toBeDefined();
+  const select = option?.parentElement;
+  expect(select).toBeInstanceOf(HTMLSelectElement);
+  fireEvent.change(select!, { target: { value: option!.value } });
 }
 
 function renderConfig(
@@ -176,27 +204,23 @@ describe("platform provider components", () => {
     const onStatusChange = vi.fn().mockResolvedValue(undefined);
     const filter = createDefaultProviderFilterDraft();
 
-    renderList({ filter, onFilterChange, onOpenDetail, onStatusChange });
+    const { unmount } = renderList({ filter, onFilterChange, onOpenDetail, onStatusChange });
 
     const desktopFilters = within(screen.getByTestId("provider-desktop-filters"));
     const search = desktopFilters.getByPlaceholderText("providerList.placeholder.search");
     fireEvent.change(search, { target: { value: "open" } });
     expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, name: "open" });
 
-    const comboboxes = desktopFilters.getAllByRole("combobox");
-    fireEvent.click(comboboxes[0]);
-    fireEvent.click(await screen.findByRole("option", { name: "providerList.filter.alias" }));
+    changeNativeSelectOption("providerList.filter.alias");
     expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, search_field: "alias" });
 
-    fireEvent.click(comboboxes[1]);
-    fireEvent.click(await screen.findByRole("option", { name: "providerList.status.enabled" }));
+    changeNativeSelectOption("providerList.status.enabled");
     expect(onFilterChange).toHaveBeenLastCalledWith({
       ...filter,
       status: String(providerStatus.enabled),
     });
 
-    fireEvent.click(comboboxes[2]);
-    fireEvent.click(await screen.findByRole("option", { name: "providerList.providerType.nonOfficial" }));
+    changeNativeSelectOption("providerList.providerType.nonOfficial");
     expect(onFilterChange).toHaveBeenLastCalledWith({
       ...filter,
       provider_type: String(providerType.nonOfficial),
@@ -211,6 +235,7 @@ describe("platform provider components", () => {
     fireEvent.click(screen.getByRole("button", { name: "providerList.action.configure" }));
     expect(onOpenDetail).toHaveBeenCalledWith(enabledProvider);
     expect(screen.getByRole("button", { name: "providerList.action.view" })).toBeInTheDocument();
+    unmount();
   });
 
   it("marks only the requested row as pending", () => {
@@ -277,15 +302,16 @@ describe("platform provider components", () => {
       />,
     );
 
-    const templateTrigger = screen
-      .getByText("providerList.placeholder.template")
-      .closest("button");
-    expect(templateTrigger).not.toBeNull();
-    fireEvent.click(templateTrigger!);
-    fireEvent.click(await screen.findByRole("option", { name: /OpenAI/ }));
+    const templateSelect = Array.from(document.querySelectorAll("select")).find((select) =>
+      Array.from(select.options).some((option) => option.value === template.id),
+    );
+    expect(templateSelect).toBeDefined();
+    fireEvent.change(templateSelect!, { target: { value: template.id } });
 
-    const statusSwitch = screen.getByRole("switch");
-    fireEvent.click(statusSwitch);
+    expect(screen.getByDisplayValue("https://api.openai.com/v1")).toHaveValue(
+      "https://api.openai.com/v1",
+    );
+    fireEvent.click(screen.getByRole("switch"));
     fireEvent.click(screen.getByRole("button", { name: "common.save" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));

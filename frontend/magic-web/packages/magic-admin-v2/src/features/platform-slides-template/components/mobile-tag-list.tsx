@@ -74,7 +74,7 @@ export function MobileTagList({
 	if (tags.length === 0) {
 		return (
 			<div className="md:hidden">
-				<EmptyState icon={Tags} title={t("slidesTemplate.emptyTags")} />
+				<EmptyState icon={Tags} title={t("slidesTemplate.emptyTags")} testId="platform-slides-template-empty" />
 			</div>
 		)
 	}
@@ -102,28 +102,28 @@ export function MobileTagList({
 								</div>
 							</div>
 							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
+								<DropdownMenuTrigger asChild data-testid="platform-slides-template-menu-trigger">
 									<Button
 										aria-label={t("slidesTemplate.actions")}
 										className="-mr-2 -mt-2"
 										size="icon"
 										variant="ghost"
-									>
+									 data-testid="platform-slides-template-edit-button">
 										<MoreHorizontal className="size-4" aria-hidden="true" />
 									</Button>
 								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end">
+								<DropdownMenuContent align="end" data-testid="platform-slides-template-action-button">
 									<DropdownMenuItem
 										disabled={!canEdit}
 										onSelect={() => onEdit(tag)}
-									>
+									 data-testid="platform-slides-template-menu-item">
 										<Pencil className="mr-2 size-4" aria-hidden="true" />
 										{t("common.edit")}
 									</DropdownMenuItem>
 									<DropdownMenuItem
 										disabled={!canEdit || statusPendingIds.has(tag.id)}
 										onSelect={() => onStatusChange(tag, !enabled)}
-									>
+									 data-testid="platform-slides-template-menu-item">
 										{enabled ? (
 											<PowerOff className="mr-2 size-4" aria-hidden="true" />
 										) : (
@@ -138,7 +138,7 @@ export function MobileTagList({
 										className="text-destructive focus:text-destructive"
 										disabled={!canEdit}
 										onSelect={() => onDelete(tag)}
-									>
+									 data-testid="platform-slides-template-menu-item">
 										<Trash2 className="mr-2 size-4" aria-hidden="true" />
 										{t("slidesTemplate.delete")}
 									</DropdownMenuItem>

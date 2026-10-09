@@ -37,7 +37,7 @@ export function TemplatePreviewDialog({
 
 	return (
 		<Dialog onOpenChange={onOpenChange} open={open}>
-			<DialogContent className="sm:max-w-4xl">
+			<DialogContent className="sm:max-w-4xl" data-testid="platform-slides-template-dialog-content" closeButtonTestId="template-preview-dialogs-close-button">
 				<DialogHeader>
 					<DialogTitle>
 						{template
@@ -54,7 +54,7 @@ export function TemplatePreviewDialog({
 							src={urls[index]}
 						/>
 					) : (
-						<EmptyState icon={FileImage} title={t("slidesTemplate.form.noPreview")} />
+						<EmptyState icon={FileImage} title={t("slidesTemplate.form.noPreview")} testId="platform-slides-template-empty" />
 					)}
 				</div>
 				<DialogFooter className="items-center sm:justify-between">
@@ -66,14 +66,14 @@ export function TemplatePreviewDialog({
 							disabled={index <= 0}
 							onClick={() => setIndex((value) => value - 1)}
 							variant="outline"
-						>
+						 data-testid="platform-slides-template-view-button">
 							{t("slidesTemplate.form.previous")}
 						</Button>
 						<Button
 							disabled={index >= urls.length - 1}
 							onClick={() => setIndex((value) => value + 1)}
 							variant="outline"
-						>
+						 data-testid="platform-slides-template-view-button">
 							{t("slidesTemplate.form.next")}
 						</Button>
 					</div>
@@ -92,7 +92,7 @@ export function CoverPreviewDialog({
 
 	return (
 		<Dialog onOpenChange={onOpenChange} open={open}>
-			<DialogContent className="sm:max-w-4xl">
+			<DialogContent className="sm:max-w-4xl" data-testid="platform-slides-template-dialog-content" closeButtonTestId="template-preview-dialogs-close-button">
 				<DialogHeader>
 					<DialogTitle>
 						{template
@@ -109,7 +109,7 @@ export function CoverPreviewDialog({
 							src={template.thumbnail_url}
 						/>
 					) : (
-						<EmptyState icon={FileImage} title={t("slidesTemplate.form.noPreview")} />
+						<EmptyState icon={FileImage} title={t("slidesTemplate.form.noPreview")} testId="platform-slides-template-empty" />
 					)}
 				</div>
 			</DialogContent>

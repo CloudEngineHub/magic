@@ -343,7 +343,7 @@ export function TemplateEditorSheet({
 	return (
 		<Sheet open={open} onOpenChange={handleOpenChange}>
 			<Form {...form}>
-				<SheetContent className="w-full gap-0 p-0 sm:max-w-[min(1180px,96vw)]">
+				<SheetContent data-testid="platform-slides-template-editor-content" closeButtonTestId="platform-slides-template-editor-close-button" className="w-full gap-0 p-0 sm:max-w-[min(1180px,96vw)]">
 					<SheetHeader className="border-b px-6 py-5">
 						<SheetTitle>
 							{template ? t("slidesTemplate.edit") : t("slidesTemplate.add")}
@@ -398,7 +398,7 @@ export function TemplateEditorSheet({
 									}
 									type="button"
 									variant="ghost"
-								>
+								 data-testid="platform-slides-template-cancel-button">
 									<X className="mr-2 size-4" />
 									{t("slidesTemplate.editor.cancelUpload", {
 										count: uploadCount,
@@ -412,14 +412,14 @@ export function TemplateEditorSheet({
 								onClick={() => handleOpenChange(false)}
 								type="button"
 								variant="outline"
-							>
+							 data-testid="platform-slides-template-cancel-button">
 								{t("common.cancel")}
 							</Button>
 							<Button
 								disabled={isBusy || !isDetailReady}
 								form="slides-template-form"
 								type="submit"
-							>
+							 data-testid="platform-slides-template-save-button">
 								{isBusy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
 								{isSaving ? t("common.saving") : t("common.save")}
 							</Button>
@@ -433,7 +433,10 @@ export function TemplateEditorSheet({
 
 function TemplateEditorDetailSkeleton() {
 	return (
-		<div className="absolute inset-0 z-20 grid bg-background lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]">
+		<div
+		className="absolute inset-0 z-20 grid bg-background lg:grid-cols-[minmax(360px,0.9fr)_minmax(480px,1.1fr)]"
+		data-testid="platform-slides-template-editor-loading"
+	>
 			<div className="space-y-4 border-b bg-muted/20 p-6 lg:border-b-0 lg:border-r">
 				<Skeleton className="h-5 w-28" />
 				<Skeleton className="aspect-video w-full rounded-xl" />

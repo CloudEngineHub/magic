@@ -45,6 +45,8 @@ export type ImageUploadFieldProps = {
 	value: string
 	/** card 展示预览区域，inline 仅展示紧凑操作布局。 */
 	variant?: "card" | "inline"
+	uploadButtonTestId?: string
+	inputTestId?: string
 }
 
 export function ImageUploadField({
@@ -64,6 +66,8 @@ export function ImageUploadField({
 	required = false,
 	value,
 	variant = "card",
+	uploadButtonTestId,
+	inputTestId,
 }: ImageUploadFieldProps) {
 	const { t } = useTranslation()
 	const upload = usePublicImageUpload({ value, onUploaded, onUploadingChange })
@@ -76,6 +80,7 @@ export function ImageUploadField({
 	const hasPreview = Boolean(upload.previewUrl && isPreviewable(upload.previewUrl))
 	const uploadButton = (
 		<Button
+			data-testid={uploadButtonTestId}
 			className={cn(variant === "inline" && !hasPreview && "w-fit", buttonClassName)}
 			disabled={disabled || upload.isUploading}
 			onClick={upload.openFilePicker}
@@ -103,6 +108,7 @@ export function ImageUploadField({
 			ref={upload.inputRef}
 			accept={accept}
 			className="hidden"
+			data-testid={inputTestId}
 			disabled={disabled || upload.isUploading}
 			onChange={upload.handleFileChange}
 			type="file"

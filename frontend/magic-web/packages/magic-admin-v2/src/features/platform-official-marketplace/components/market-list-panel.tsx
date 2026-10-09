@@ -72,18 +72,21 @@ export function MarketListPanel<TData>({
 
 	return (
 		<div className="space-y-4">
-			<MarketFilters
-				categoryOptions={categoryOptions}
-				categoryOptionsLoading={categoryOptionsLoading}
-				codeLabel={codeLabel}
-				codePlaceholder={codePlaceholder}
-				filterDraft={filterDraft}
-				kind={kind}
-				onDraftChange={onDraftChange}
-				showCategoryFilter={showCategoryFilter}
-				showPackageName={showPackageName}
-				toolbarActions={toolbarActions}
-			/>
+			{/* Keep marketplace filters aligned with the approval list while the table scrolls. */}
+			<div className="sticky top-0 z-40 -mx-4 bg-background px-4 py-2 lg:-mx-6 lg:px-6">
+				<MarketFilters
+					categoryOptions={categoryOptions}
+					categoryOptionsLoading={categoryOptionsLoading}
+					codeLabel={codeLabel}
+					codePlaceholder={codePlaceholder}
+					filterDraft={filterDraft}
+					kind={kind}
+					onDraftChange={onDraftChange}
+					showCategoryFilter={showCategoryFilter}
+					showPackageName={showPackageName}
+					toolbarActions={toolbarActions}
+				/>
+			</div>
 
 			{queryError ? (
 				<div className="rounded-lg border border-border/50 p-4">
@@ -93,7 +96,7 @@ export function MarketListPanel<TData>({
 						description={
 							queryError.message || t("officialMarketplace.error.loadFailed")
 						}
-					/>
+						testId="platform-official-marketplace-error"/>
 				</div>
 			) : (
 				<DataTable
@@ -105,7 +108,7 @@ export function MarketListPanel<TData>({
 								icon={emptyIcon}
 								title={emptyTitle}
 								description={emptyDescription}
-							/>
+							 testId="platform-official-marketplace-empty"/>
 						</div>
 					}
 					getRowId={(item, index) =>
@@ -116,11 +119,17 @@ export function MarketListPanel<TData>({
 					isLoading={isFetching && data.length === 0}
 					minWidth={minWidth}
 					stickyLeftColumnId={stickyLeftColumnId}
-				/>
+				 containerTestId="platform-official-marketplace-list" loadingTestId="platform-official-marketplace-loading" rowTestId="platform-official-marketplace-row"/>
 			)}
 
 			{!queryError ? (
 				<ListPagination
+					previousButtonTestId="official-marketplace-previous-button"
+					nextButtonTestId="official-marketplace-next-button"
+					pageSizeTriggerTestId="official-marketplace-page-size-trigger"
+					pageSizeOptionTestId="official-marketplace-page-size-option"
+					jumpInputTestId="official-marketplace-jump-input"
+				testId="official-marketplace-pagination"
 					showQuickJumper
 					className="px-1"
 					loading={isFetching}

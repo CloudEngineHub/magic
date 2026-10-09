@@ -113,13 +113,17 @@ export function ReviewListPanel<TData>({
 	}
 
 	return (
-		<div className="space-y-4">
-			<div className="flex min-w-0 flex-wrap items-end gap-2">
+		<div className="flex flex-col gap-4">
+			<div className="sticky top-0 z-40 -mx-4 flex min-w-0 flex-wrap items-end gap-2 bg-background px-4 py-2 lg:-mx-6 lg:px-6">
 				<FilterControlField
 					className="min-w-0 flex-1 md:w-[340px] md:flex-none xl:w-[420px]"
 					label={t("publishReview.filter.searchCondition")}
 				>
 					<FieldSearchControl
+						selectTriggerTestId="platform-publish-review-search-field-trigger"
+						testId="platform-publish-review-search-field"
+						contentTestId="platform-publish-review-search-field-content"
+						optionTestId="platform-publish-review-search-field-option"
 						ariaLabel={t("publishReview.filter.searchField")}
 						clearLabel={t("common.clear")}
 						inputValue={filterDraft.search_value}
@@ -133,6 +137,8 @@ export function ReviewListPanel<TData>({
 						options={getSearchFieldOptions(kind, t, variant)}
 						placeholder={getSearchFieldPlaceholder(filterDraft.search_field, kind, t)}
 						value={filterDraft.search_field}
+						inputTestId="platform-publish-review-advanced-search-input"
+						clearButtonTestId="platform-publish-review-advanced-search-clear-button"
 					/>
 				</FilterControlField>
 				<div className="hidden items-end gap-2 md:flex">
@@ -162,6 +168,7 @@ export function ReviewListPanel<TData>({
 					onClick={() => handleFilterSheetOpenChange(true)}
 					type="button"
 					variant="outline"
+					data-testid="platform-publish-review-reset-button"
 				>
 					<Filter className="size-4" aria-hidden="true" />
 					<span className="hidden md:inline">{t("publishReview.filter.title")}</span>
@@ -169,6 +176,11 @@ export function ReviewListPanel<TData>({
 			</div>
 
 			<FilterSheet
+				contentTestId="platform-publish-review-filter-sheet"
+				bodyTestId="platform-publish-review-filter-body"
+				resetButtonTestId="platform-publish-review-reset-button"
+				applyButtonTestId="platform-publish-review-apply-button"
+				closeButtonTestId="platform-publish-review-filter-close-button"
 				applyLabel={t("publishReview.filter.apply")}
 				onApply={applyAdvancedFilters}
 				onOpenChange={handleFilterSheetOpenChange}
@@ -193,6 +205,7 @@ export function ReviewListPanel<TData>({
 						icon={AlertCircle}
 						title={t("publishReview.error.loadTitle")}
 						description={queryError.message || t("publishReview.error.loadFailed")}
+						testId="platform-publish-review-error"
 					/>
 				</div>
 			) : (
@@ -205,6 +218,7 @@ export function ReviewListPanel<TData>({
 								icon={emptyIcon}
 								title={emptyTitle}
 								description={emptyDescription}
+								testId="platform-publish-review-empty"
 							/>
 						</div>
 					}
@@ -216,11 +230,20 @@ export function ReviewListPanel<TData>({
 					isLoading={isFetching && data.length === 0}
 					minWidth={minWidth}
 					stickyRightColumnId="actions"
+					containerTestId="platform-publish-review-list"
+					loadingTestId="platform-publish-review-loading"
+					rowTestId="platform-publish-review-row"
 				/>
 			)}
 
 			{!queryError ? (
 				<ListPagination
+					previousButtonTestId="publish-review-previous-button"
+					nextButtonTestId="publish-review-next-button"
+					pageSizeTriggerTestId="publish-review-page-size-trigger"
+					pageSizeOptionTestId="publish-review-page-size-option"
+					jumpInputTestId="publish-review-jump-input"
+					testId="publish-review-pagination"
 					showQuickJumper
 					className="px-1"
 					loading={isFetching}

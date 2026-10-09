@@ -18,6 +18,7 @@ export function TimeOptionButton({
 	children,
 	disabled = false,
 	onClick,
+	testId,
 }: {
 	/** 当前选项是否处于选中状态。 */
 	active?: boolean
@@ -27,6 +28,7 @@ export function TimeOptionButton({
 	disabled?: boolean
 	/** 点击选项后的处理函数。 */
 	onClick: () => void
+	testId?: string
 }) {
 	return (
 		<button
@@ -35,6 +37,7 @@ export function TimeOptionButton({
 				active && "bg-accent text-accent-foreground",
 				disabled && "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-inherit",
 			)}
+			data-testid={testId}
 			disabled={disabled}
 			onClick={onClick}
 			type="button"
@@ -51,6 +54,7 @@ export function AbsoluteTimeField({
 	onChange,
 	precision,
 	value,
+	testId,
 }: {
 	/** 是否禁用时间输入；通常在对应日期尚未选择时禁用。 */
 	disabled: boolean
@@ -62,6 +66,7 @@ export function AbsoluteTimeField({
 	precision: TimePrecision
 	/** 当前时间输入值，格式由 precision 决定。 */
 	value: string
+	testId?: string
 }) {
 	return (
 		<label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
@@ -71,6 +76,7 @@ export function AbsoluteTimeField({
 				label={label}
 				onChange={onChange}
 				precision={precision === "day" ? "minute" : precision}
+				testId={testId}
 				value={value}
 			/>
 		</label>
@@ -84,6 +90,7 @@ export function CalendarMonthPanel({
 	month,
 	onSelect,
 	startDate,
+	dateButtonTestId,
 }: {
 	/** 当前范围结束日期，用于渲染结束标记和范围高亮。 */
 	endDate: Date | null
@@ -97,6 +104,7 @@ export function CalendarMonthPanel({
 	onSelect: (date: Date) => void
 	/** 当前范围开始日期，用于渲染开始标记和范围高亮。 */
 	startDate: Date | null
+	dateButtonTestId?: string
 }) {
 	const calendarDays = getCalendarDays(month)
 	const weekdayLabels = getWeekdayLabels(intlLocale)
@@ -135,6 +143,7 @@ export function CalendarMonthPanel({
 					return (
 						<button
 							aria-label={dateKey}
+							data-testid={dateButtonTestId}
 							className={cn(
 								"flex h-8 w-full items-center justify-center rounded-md text-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 								isInRange && !isDisabled && "bg-accent text-accent-foreground",

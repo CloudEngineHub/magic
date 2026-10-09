@@ -4,15 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type { ApiError } from "@magic-admin-v2/api/types"
-import { SearchableMultiSelect } from "@magic-admin-v2/components/searchable-multi-select"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 import { AgentMarketCategoryManagerDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/agent-market-category-manager-dialog"
 import { createSharedMarketColumns } from "@magic-admin-v2/features/platform-official-marketplace/components/market-columns"
 import { MarketListPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/market-list-panel"
+import { MarketCategorySelectCell } from "@magic-admin-v2/features/platform-official-marketplace/components/market-category-select-cell"
 import {
 	EmployeeRoleDescriptionCell,
-	MarketCategoryBadges,
 	MarketNameCell,
 	OrganizationCell,
 } from "@magic-admin-v2/features/platform-official-marketplace/components/market-table-cells"
@@ -80,8 +79,6 @@ export function EmployeeMarketPanel({
 	const refetchCategories = categoryQuery.refetch
 	const updateMutation = useUpdateAgentMarketInfoMutation()
 	const updateCategoryMutation = useUpdateAgentMarketCategoryRelationMutation()
-	const [categoryDraftMap, setCategoryDraftMap] = useState<Record<string, string[]>>({})
-	const [openCategoryId, setOpenCategoryId] = useState<string | null>(null)
 	const [categorySavingIds, setCategorySavingIds] = useState<Set<string>>(new Set())
 	const tableState = useMarketTableState<AgentMarketItem>({
 		canEdit,
@@ -107,28 +104,12 @@ export function EmployeeMarketPanel({
 	}, [categories, items, language])
 	const updateCategoryRelation = updateCategoryMutation.mutateAsync
 
-	const updateCategoryDraft = useCallback((recordId: string, categoryIds: string[]) => {
-		setCategoryDraftMap((previous) => ({
-			...previous,
-			[recordId]: normalizeCategoryIds(categoryIds),
-		}))
-	}, [])
-
 	const saveCategories = useCallback(
 		async (record: AgentMarketItem, nextCategoryIds: string[]) => {
 			if (!canEdit) return
 
 			const categoryIds = normalizeCategoryIds(nextCategoryIds)
-			if (areSameCategoryIds(getAgentMarketCategoryIds(record), categoryIds)) {
-				setCategoryDraftMap((previous) => {
-					if (!(record.id in previous)) return previous
-
-					const next = { ...previous }
-					delete next[record.id]
-					return next
-				})
-				return
-			}
+			if (areSameCategoryIds(getAgentMarketCategoryIds(record), categoryIds)) return
 
 			setCategorySavingIds((previous) => new Set(previous).add(record.id))
 
@@ -138,11 +119,6 @@ export function EmployeeMarketPanel({
 			} catch (error) {
 				toast.error(getApiErrorMessage(error, t("officialMarketplace.error.updateFailed")))
 			} finally {
-				setCategoryDraftMap((previous) => {
-					const next = { ...previous }
-					delete next[record.id]
-					return next
-				})
 				setCategorySavingIds((previous) => {
 					const next = new Set(previous)
 					next.delete(record.id)
@@ -199,48 +175,27 @@ export function EmployeeMarketPanel({
 						header: t("officialMarketplace.column.category"),
 						cell: ({ row }) => {
 							const record = row.original
-							const categoryIds =
-								categoryDraftMap[record.id] ?? getAgentMarketCategoryIds(record)
 							const saving = categorySavingIds.has(record.id)
 
-							if (!categoryOptions.length && !categoryQuery.isLoading) {
-								return (
-									<MarketCategoryBadges
-										labels={getAgentMarketCategoryLabels(
-											record,
-											categoryOptions,
-											language,
-										)}
-									/>
-								)
-							}
-
 							return (
-								<SearchableMultiSelect
+								<MarketCategorySelectCell
 									ariaLabel={t("officialMarketplace.column.category")}
-									className="w-[220px]"
+									canEdit={canEdit}
+									categoryIds={getAgentMarketCategoryIds(record)}
+									categoryLabels={getAgentMarketCategoryLabels(
+										record,
+										categoryOptions,
+										language,
+									)}
+									categoryOptions={categoryOptions}
 									clearLabel={t("officialMarketplace.filter.clearCategories")}
-									disabled={!canEdit || saving || categoryQuery.isLoading}
 									emptyLabel={t("officialMarketplace.filter.uncategorized")}
-									isLoading={saving || categoryQuery.isLoading}
-									maxVisibleItems={1}
+									isLoading={categoryQuery.isLoading}
+									isSaving={saving}
 									noMatchingLabel={t(
 										"officialMarketplace.filter.noMatchingCategories",
 									)}
-									open={openCategoryId === record.id}
-									onChange={(value) => updateCategoryDraft(record.id, value)}
-									onOpenChange={(open) => {
-										if (open) {
-											setOpenCategoryId(record.id)
-											return
-										}
-
-										setOpenCategoryId((previous) =>
-											previous === record.id ? null : previous,
-										)
-										void saveCategories(record, categoryIds)
-									}}
-									options={categoryOptions}
+									onSave={(nextCategoryIds) => saveCategories(record, nextCategoryIds)}
 									searchPlaceholder={t(
 										"officialMarketplace.filter.searchCategories",
 									)}
@@ -249,7 +204,6 @@ export function EmployeeMarketPanel({
 											count,
 										})
 									}
-									value={categoryIds}
 								/>
 							)
 						},
@@ -260,15 +214,12 @@ export function EmployeeMarketPanel({
 			}),
 		],
 		[
-			categoryDraftMap,
 			categoryOptions,
 			categoryQuery.isLoading,
 			categorySavingIds,
 			canEdit,
 			language,
-			openCategoryId,
 			saveCategories,
-			updateCategoryDraft,
 			t,
 			tableState,
 		],
@@ -319,7 +270,7 @@ export function EmployeeMarketPanel({
 						className="h-9 w-9 px-0 md:w-auto md:px-3"
 						onClick={() => setCategoryManagerOpen(true)}
 						variant="outline"
-					>
+					 data-testid="platform-official-marketplace-edit-button">
 						<Tags className="size-4" aria-hidden="true" />
 						<span className="hidden md:inline">
 							{t("officialMarketplace.category.manageButton")}

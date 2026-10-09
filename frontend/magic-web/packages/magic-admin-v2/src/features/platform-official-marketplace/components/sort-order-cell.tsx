@@ -32,7 +32,7 @@ export function SortOrderCell<TRecord extends MarketRecord>({
 					if (event.key === "Enter") event.currentTarget.blur()
 				}}
 				type="number"
-			/>
+			 data-testid="platform-official-marketplace-input"/>
 			{isSaving ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
 		</div>
 	)

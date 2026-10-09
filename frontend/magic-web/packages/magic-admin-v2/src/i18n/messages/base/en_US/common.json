@@ -35,5 +35,8 @@
 	"unconfigured": "Not configured",
 	"upload": "Upload",
 	"viewAll": "View all",
-	"viewDetails": "View details"
+	"viewDetails": "View details",
+	"action.copy": "Copy",
+	"message.copyFailed": "Copy failed. Please try again.",
+	"message.copySuccess": "Copied to clipboard."
 }

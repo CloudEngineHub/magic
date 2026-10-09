@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { TEXT_FILTER_DEBOUNCE_MS } from "@magic-admin-v2/constants/filters"
 import { ProviderAddDialog } from "@magic-admin-v2/features/platform-provider-list/components/provider-add-dialog"
 import { ProviderCategoryTabs } from "@magic-admin-v2/features/platform-provider-list/components/provider-category-controls"
@@ -203,26 +203,30 @@ export default function PlatformProviderListPage() {
 		return (
 			<ListShell
 				actions={
-					<Button onClick={() => listQuery.refetch()} variant="outline">
+					<PageHeaderActionButton
+						data-testid="provider-list-refresh-button"
+						onClick={() => listQuery.refetch()}
+						variant="outline"
+					>
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
-					</Button>
+					</PageHeaderActionButton>
 				}
 				description={t("providerList.description")}
-				showSeparator={false}
+				testId="provider-list-page"
 				title={t("providerList.title")}
 			>
-				<ProviderCategoryTabs
-					activeCategory={activeCategory}
-					categories={accessibleCategories}
-					onChange={setSelectedCategory}
-				/>
-				<div className="mt-5">
+				<div className="space-y-6">
+					<ProviderCategoryTabs
+						activeCategory={activeCategory}
+						categories={accessibleCategories}
+						onChange={setSelectedCategory}
+					/>
 					<EmptyState
 						icon={AlertCircle}
+						testId="provider-list-error"
 						title={t("providerList.error.loadTitle")}
-						description={queryError.message}
-					/>
+						description={queryError.message}/>
 				</div>
 			</ListShell>
 		)
@@ -233,7 +237,8 @@ export default function PlatformProviderListPage() {
 			<ListShell
 				actions={
 					<>
-						<Button
+						<PageHeaderActionButton
+							data-testid="provider-list-refresh-button"
 							disabled={listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
@@ -243,9 +248,10 @@ export default function PlatformProviderListPage() {
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
-						</Button>
+						</PageHeaderActionButton>
 						{currentCategoryAccess.canEdit ? (
-							<Button
+							<PageHeaderActionButton
+								data-testid="provider-list-add-button"
 								onClick={() => {
 									setAddCategory(activeCategory)
 									setIsAddOpen(true)
@@ -253,40 +259,42 @@ export default function PlatformProviderListPage() {
 							>
 								<Plus className="size-4" aria-hidden="true" />
 								{t("providerList.action.add")}
-							</Button>
+							</PageHeaderActionButton>
 						) : null}
 					</>
 				}
 				description={t("providerList.description")}
-				showSeparator={false}
+				testId="provider-list-page"
 				title={t("providerList.title")}
 			>
-				<ProviderCategoryTabs
-					activeCategory={activeCategory}
-					categories={accessibleCategories}
-					onChange={setSelectedCategory}
-				/>
-				<ProviderListContent
-					categoryAccess={categoryAccess}
-					deleting={deleteMutation.isPending}
-					filter={filterDraft}
-					items={pageItems}
-					loading={listQuery.isFetching && !listQuery.data}
-					onDelete={handleDelete}
-					onFilterChange={setFilterDraft}
-					onOpenDetail={(provider) => setDetailId(provider.id)}
-					onPageChange={setPage}
-					onPageSizeChange={(nextPageSize) => {
-						setPageSize(nextPageSize)
-						setPage(1)
-					}}
-					onStatusChange={handleStatusChange}
-					page={currentPage}
-					pageSize={pageSize}
-					stats={statusStats}
-					statusPendingIds={statusPendingIds}
-					total={filteredProviders.length}
-				/>
+				<div className="flex flex-col gap-4">
+					<ProviderCategoryTabs
+						activeCategory={activeCategory}
+						categories={accessibleCategories}
+						onChange={setSelectedCategory}
+					/>
+					<ProviderListContent
+						categoryAccess={categoryAccess}
+						deleting={deleteMutation.isPending}
+						filter={filterDraft}
+						items={pageItems}
+						loading={listQuery.isFetching && !listQuery.data}
+						onDelete={handleDelete}
+						onFilterChange={setFilterDraft}
+						onOpenDetail={(provider) => setDetailId(provider.id)}
+						onPageChange={setPage}
+						onPageSizeChange={(nextPageSize) => {
+							setPageSize(nextPageSize)
+							setPage(1)
+						}}
+						onStatusChange={handleStatusChange}
+						page={currentPage}
+						pageSize={pageSize}
+						stats={statusStats}
+						statusPendingIds={statusPendingIds}
+						total={filteredProviders.length}
+					/>
+				</div>
 			</ListShell>
 
 			<ProviderAddDialog

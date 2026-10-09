@@ -56,7 +56,7 @@ export function PlatformAppMenuFilters({
 
 	return (
 		<>
-			<div className="space-y-3">
+			<div className="space-y-3" data-testid="app-menu-filters">
 				<div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
 					<div className="flex min-w-0 flex-1 gap-2 md:flex-wrap md:items-center">
 						<FilterControlField
@@ -67,6 +67,8 @@ export function PlatformAppMenuFilters({
 								aria-label={t("appMenu.filter.name")}
 								clearLabel={t("common.clear")}
 								containerClassName="min-w-0"
+								clearButtonTestId="app-menu-name-clear-button"
+								inputTestId="app-menu-name-input"
 								onValueChange={onSearchValueChange}
 								placeholder={t("appMenu.placeholder.searchName")}
 								value={value.name}
@@ -74,12 +76,17 @@ export function PlatformAppMenuFilters({
 						</FilterControlField>
 
 						<div className="hidden flex-wrap items-center gap-2 md:flex">
-							<AppMenuFilterSelects filterDraft={value} setFilterDraft={onChange} />
+							<AppMenuFilterSelects
+								filterDraft={value}
+								setFilterDraft={onChange}
+								testId="app-menu-status-trigger"
+							/>
 						</div>
 
 						<div className="shrink-0 self-end md:hidden">
 							<Button
 								aria-label={t("appMenu.filter.title")}
+								data-testid="app-menu-advanced-trigger"
 								onClick={() => handleFilterSheetOpenChange(true)}
 								size="icon"
 								type="button"
@@ -94,12 +101,17 @@ export function PlatformAppMenuFilters({
 
 			<FilterSheet
 				applyLabel={t("appMenu.filter.apply")}
+				applyButtonTestId="app-menu-advanced-apply-button"
+				bodyTestId="app-menu-advanced-body"
+				closeButtonTestId="app-menu-advanced-close-button"
+				contentTestId="app-menu-advanced-content"
 				description={t("appMenu.filter.description")}
 				onApply={applyMobileFilters}
 				onOpenChange={handleFilterSheetOpenChange}
 				onReset={resetMobileFilters}
 				open={isFilterSheetOpen}
 				presentation="mobile-only"
+				resetButtonTestId="app-menu-advanced-reset-button"
 				resetLabel={t("appMenu.action.reset")}
 				title={t("appMenu.filter.title")}
 			>
@@ -108,6 +120,8 @@ export function PlatformAppMenuFilters({
 						aria-label={t("appMenu.filter.name")}
 						clearLabel={t("common.clear")}
 						containerClassName="min-w-0"
+						clearButtonTestId="app-menu-advanced-name-clear-button"
+						inputTestId="app-menu-advanced-name-input"
 						onValueChange={(name) =>
 							setMobileDraft((previous) => ({ ...previous, name }))
 						}
@@ -118,6 +132,7 @@ export function PlatformAppMenuFilters({
 				<AppMenuFilterSelects
 					filterDraft={mobileDraft}
 					setFilterDraft={setMobileDraft}
+					testId="app-menu-advanced-status-trigger"
 					variant="sheet"
 				/>
 			</FilterSheet>
@@ -128,10 +143,12 @@ export function PlatformAppMenuFilters({
 function AppMenuFilterSelects({
 	filterDraft,
 	setFilterDraft,
+	testId,
 	variant = "inline",
 }: {
 	filterDraft: AppMenuFilterDraft
 	setFilterDraft: Dispatch<SetStateAction<AppMenuFilterDraft>>
+	testId?: string
 	variant?: "inline" | "sheet"
 }) {
 	const { t } = useTranslation()
@@ -148,13 +165,17 @@ function AppMenuFilterSelects({
 					setFilterDraft((previous) => ({ ...previous, status }))
 				}
 			>
-				<SelectTrigger aria-label={t("appMenu.filter.status")} className={triggerClassName}>
+				<SelectTrigger
+					aria-label={t("appMenu.filter.status")}
+					className={triggerClassName}
+					data-testid={testId}
+				>
 					<SelectValue />
 				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value={APP_MENU_ALL_VALUE}>{t("appMenu.filter.statusAll")}</SelectItem>
-					<SelectItem value={String(appMenuStatus.enabled)}>{t("appMenu.status.enabled")}</SelectItem>
-					<SelectItem value={String(appMenuStatus.disabled)}>{t("appMenu.status.disabled")}</SelectItem>
+				<SelectContent data-testid="platform-app-menu-filter-content">
+					<SelectItem value={APP_MENU_ALL_VALUE} data-testid="platform-app-menu-option">{t("appMenu.filter.statusAll")}</SelectItem>
+					<SelectItem value={String(appMenuStatus.enabled)} data-testid="platform-app-menu-option">{t("appMenu.status.enabled")}</SelectItem>
+					<SelectItem value={String(appMenuStatus.disabled)} data-testid="platform-app-menu-option">{t("appMenu.status.disabled")}</SelectItem>
 				</SelectContent>
 			</Select>
 		</FilterControlField>

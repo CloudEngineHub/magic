@@ -1,9 +1,9 @@
 import { Card, CardContent } from "@magic-admin-v2/components/ui/card"
 import { Skeleton } from "@magic-admin-v2/components/ui/skeleton"
 
-export function CapabilityListSkeleton() {
+export function CapabilityListSkeleton({ testId }: { testId?: string }) {
 	return (
-		<div className="space-y-4">
+		<div className="space-y-4" data-testid={testId}>
 			<div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-end">
 				<div className="min-w-0 flex-1 space-y-1.5 md:w-[340px] xl:w-[420px]">
 					<Skeleton className="h-3 w-16" />

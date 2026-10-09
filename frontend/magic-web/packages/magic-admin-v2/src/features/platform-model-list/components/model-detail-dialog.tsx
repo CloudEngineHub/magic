@@ -72,7 +72,7 @@ export function ModelDetailDialog({
 
   return (
     <Dialog open={Boolean(item)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-hidden sm:max-w-3xl">
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-hidden sm:max-w-3xl" data-testid="platform-model-list-dialog-content" closeButtonTestId="model-detail-dialog-close-button">
         {item ? (
           <>
             <DialogHeader>
@@ -130,7 +130,7 @@ export function ModelDetailDialog({
                   {item.providers.length ? (
                     <Table className="min-w-[680px]">
                       <TableHeader>
-                        <TableRow className="hover:bg-transparent">
+                        <TableRow className="hover:bg-transparent" data-testid="platform-model-list-header-row">
                           <TableHead>{t("modelList.detail.provider")}</TableHead>
                           <TableHead>{t("modelList.detail.alias")}</TableHead>
                           <TableHead>{t("modelList.detail.providerStatus")}</TableHead>
@@ -161,7 +161,7 @@ export function ModelDetailDialog({
             </div>
 
             <DialogFooter>
-              <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+              <Button onClick={() => onOpenChange(false)} type="button" variant="outline" data-testid="platform-model-list-view-button">
                 {t("modelList.action.closeDetail")}
               </Button>
             </DialogFooter>
@@ -197,7 +197,7 @@ function ProviderDetailRow({
     && providerTypeValue !== providerType.official;
 
   return (
-    <TableRow>
+    <TableRow data-testid="platform-model-list-row">
       <TableCell>
         <div className="flex min-w-0 items-center gap-2.5">
           <EntityAvatarRender

@@ -43,16 +43,21 @@ export function HistoryTimeTab({
 			<EmptyState
 				description={t("timeFilter.emptyHistoryDescription")}
 				icon={History}
+				testId="time-filter-history-empty"
 				title={t("timeFilter.emptyHistory")}
 			/>
 		)
 	}
 
 	return (
-		<div className={cn("grid gap-2", !isInline && "max-h-[360px] overflow-y-auto pr-1")}>
+		<div
+			className={cn("grid gap-2", !isInline && "max-h-[360px] overflow-y-auto pr-1")}
+			data-testid="time-filter-history-list"
+		>
 			{history.map((item) => (
 				<button
 					className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent"
+					data-testid="time-filter-history-item"
 					key={item.id}
 					onClick={() => onSelect(item)}
 					type="button"
@@ -76,6 +81,7 @@ export function HistoryTimeTab({
 					<span
 						aria-label={t("timeFilter.remove")}
 						className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-destructive"
+						data-testid="time-filter-history-remove-button"
 						onClick={(event) => {
 							event.stopPropagation()
 							onRemove(item.id)

@@ -35,5 +35,8 @@
 	"unconfigured": "未配置",
 	"upload": "上传",
 	"viewAll": "查看全部",
-	"viewDetails": "查看详情"
+	"viewDetails": "查看详情",
+	"action.copy": "复制",
+	"message.copyFailed": "复制失败，请重试。",
+	"message.copySuccess": "已复制到剪贴板。"
 }

@@ -91,7 +91,7 @@ export function CategoryDialog({ editing, mutations, onOpenChange, open }: Categ
 
 	return (
 		<Dialog onOpenChange={onOpenChange} open={open}>
-			<DialogContent>
+			<DialogContent data-testid="platform-slides-template-dialog-content" closeButtonTestId="category-dialog-close-button">
 				<DialogHeader>
 					<DialogTitle>
 						{editing
@@ -113,7 +113,7 @@ export function CategoryDialog({ editing, mutations, onOpenChange, open }: Categ
 							id="slides-template-category-name-zh"
 							maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name}
 							{...form.register("name_zh")}
-						/>
+						 data-testid="platform-slides-template-slides-template-category-name-zh-input"/>
 						<FieldError message={form.formState.errors.name_zh?.message} />
 					</DialogFormField>
 					<DialogFormField
@@ -126,7 +126,7 @@ export function CategoryDialog({ editing, mutations, onOpenChange, open }: Categ
 							id="slides-template-category-name-en"
 							maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name}
 							{...form.register("name_en")}
-						/>
+						 data-testid="platform-slides-template-slides-template-category-name-en-input"/>
 						<FieldError message={form.formState.errors.name_en?.message} />
 					</DialogFormField>
 					<div className="grid grid-cols-2 gap-4">
@@ -142,7 +142,7 @@ export function CategoryDialog({ editing, mutations, onOpenChange, open }: Categ
 									setValueAs: (value) => (value === "" ? 0 : Number(value)),
 								})}
 								type="number"
-							/>
+							 data-testid="platform-slides-template-slides-template-category-sort-input"/>
 							<FieldError message={form.formState.errors.sort?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -159,7 +159,7 @@ export function CategoryDialog({ editing, mutations, onOpenChange, open }: Categ
 											disabled={isPending}
 											id="slides-template-category-status"
 											onCheckedChange={field.onChange}
-										/>
+										 data-testid="platform-slides-template-slides-template-category-status-switch"/>
 									)}
 								/>
 							</div>
@@ -167,10 +167,10 @@ export function CategoryDialog({ editing, mutations, onOpenChange, open }: Categ
 					</div>
 					<FieldError message={form.formState.errors.root?.server?.message} />
 					<DialogFooter>
-						<Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+						<Button onClick={() => onOpenChange(false)} type="button" variant="outline" data-testid="platform-slides-template-cancel-button">
 							{t("common.cancel")}
 						</Button>
-						<Button disabled={isPending} type="submit">
+						<Button disabled={isPending} type="submit" data-testid="platform-slides-template-save-button">
 							{t("common.save")}
 						</Button>
 					</DialogFooter>

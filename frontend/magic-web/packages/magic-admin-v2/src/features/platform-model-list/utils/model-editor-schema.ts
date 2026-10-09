@@ -26,6 +26,7 @@ export type ModelEditorValues = {
   vector_size: string;
   temperature_mode: "recommended" | "fixed";
   temperature: string;
+  chat_api: "chat_completions" | "responses";
   support_function: boolean;
   support_multi_modal: boolean;
   support_deep_think: boolean;
@@ -48,6 +49,9 @@ export type ProviderBindingValues = {
   load_balancing_weight: string;
   extra_header: string;
   extra_body: string;
+  visible_organizations?: string[];
+  visible_applications?: string[];
+  visible_packages?: string[];
 };
 
 export type ProviderBindingErrors = Partial<
@@ -57,6 +61,11 @@ export type ProviderBindingErrors = Partial<
 const numberOrEmpty = z.string().trim().refine(
   (value) => !value || (Number.isFinite(Number(value)) && Number(value) >= 0),
   "请输入不小于 0 的数字。",
+);
+
+const integerOrEmpty = numberOrEmpty.refine(
+  (value) => !value || Number.isInteger(Number(value)),
+  "请输入整数。",
 );
 
 const temperatureOrEmpty = z.string().trim().refine(
@@ -127,71 +136,89 @@ const bindingSchema = z.object({
   ),
   extra_header: z.string(),
   extra_body: z.string(),
+  visible_organizations: z.array(z.string()).optional(),
+  visible_applications: z.array(z.string()).optional(),
+  visible_packages: z.array(z.string()).optional(),
 });
 
-export const modelEditorSchema = z.object({
-  model_id: z.string().trim().min(1, "请输入模型标识。"),
-  name: z.string().trim().min(1, "请输入模型展示名称。").max(50, "模型展示名称不能超过 50 个字符。"),
-  name_en: z.string().trim().max(50, "英文展示名称不能超过 50 个字符。"),
-  icon: z.string().trim(),
-  description: z.string().trim(),
-  description_en: z.string().trim(),
-  category: z.enum([
-    providerModelCategory.llm,
-    providerModelCategory.embedding,
-    providerModelCategory.vlm,
-    providerModelCategory.vgm,
-  ]),
-  model_type: z.union([
-    z.literal(providerModelType.textToImage),
-    z.literal(providerModelType.imageToImage),
-    z.literal(providerModelType.imageEnhancement),
-    z.literal(providerModelType.largeLanguageModel),
-    z.literal(providerModelType.embedding),
-    z.literal(providerModelType.textToVideo),
-  ]),
-  max_tokens: numberOrEmpty,
-  max_output_tokens: numberOrEmpty,
-  vector_size: numberOrEmpty,
-  temperature_mode: z.enum(["recommended", "fixed"]),
-  temperature: temperatureOrEmpty,
-  support_function: z.boolean(),
-  support_multi_modal: z.boolean(),
-  support_deep_think: z.boolean(),
-  providers: z.array(bindingSchema).min(1, "至少添加一个服务商配置。"),
-}).superRefine((values, context) => {
-  if (
-    hasCommonRuntimeFields(values.model_type)
-    && values.model_type !== providerModelType.embedding
-    && !values.max_tokens.trim()
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "请输入最大上下文 Tokens。",
-      path: ["max_tokens"],
+export function createModelEditorSchema(isOfficialOrganization: boolean) {
+  return z.object({
+    model_id: z.string().trim().min(1, "请输入模型标识。"),
+    name: z.string().trim().min(1, "请输入模型展示名称。").max(50, "模型展示名称不能超过 50 个字符。"),
+    name_en: z.string().trim().max(50, "英文展示名称不能超过 50 个字符。"),
+    icon: z.string().trim(),
+    description: z.string().trim(),
+    description_en: z.string().trim(),
+    category: z.enum([
+      providerModelCategory.llm,
+      providerModelCategory.embedding,
+      providerModelCategory.vlm,
+      providerModelCategory.vgm,
+    ]),
+    model_type: z.union([
+      z.literal(providerModelType.textToImage),
+      z.literal(providerModelType.imageToImage),
+      z.literal(providerModelType.imageEnhancement),
+      z.literal(providerModelType.largeLanguageModel),
+      z.literal(providerModelType.embedding),
+      z.literal(providerModelType.textToVideo),
+    ]),
+    max_tokens: integerOrEmpty,
+    max_output_tokens: integerOrEmpty,
+    vector_size: integerOrEmpty,
+    temperature_mode: z.enum(["recommended", "fixed"]),
+    temperature: temperatureOrEmpty,
+    chat_api: z.enum(["chat_completions", "responses"]),
+    support_function: z.boolean(),
+    support_multi_modal: z.boolean(),
+    support_deep_think: z.boolean(),
+    providers: z.array(bindingSchema).min(1, "至少添加一个服务商配置。"),
+  }).superRefine((values, context) => {
+    // Legacy Admin only made these two fields required for the official organization.
+    // max_tokens was always optional, including for regular LLM models.
+    if (isOfficialOrganization && hasCommonRuntimeFields(values.model_type)) {
+      if (!values.max_output_tokens.trim()) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "请输入最大输出 Tokens。",
+          path: ["max_output_tokens"],
+        });
+      }
+
+      if (!values.temperature.trim()) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "请输入温度。",
+          path: ["temperature"],
+        });
+      }
+    }
+
+    const bindingIndexByIdentity = new Map<string, number>();
+
+    values.providers.forEach((binding, index) => {
+      const providerId = binding.service_provider_config_id.trim();
+      const deploymentName = binding.model_version.trim();
+
+      if (!providerId || !deploymentName) {
+        return;
+      }
+
+      const identity = `${providerId}:${deploymentName}`;
+      if (bindingIndexByIdentity.has(identity)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "同一服务商下的模型部署名称不能重复。",
+          path: ["providers", index, "model_version"],
+        });
+        return;
+      }
+
+      bindingIndexByIdentity.set(identity, index);
     });
-  }
-
-  const bindingIndexByIdentity = new Map<string, number>();
-
-  values.providers.forEach((binding, index) => {
-    const providerId = binding.service_provider_config_id.trim();
-    const deploymentName = binding.model_version.trim();
-
-    if (!providerId || !deploymentName) {
-      return;
-    }
-
-    const identity = `${providerId}:${deploymentName}`;
-    if (bindingIndexByIdentity.has(identity)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "同一服务商下的模型部署名称不能重复。",
-        path: ["providers", index, "model_version"],
-      });
-      return;
-    }
-
-    bindingIndexByIdentity.set(identity, index);
   });
-});
+}
+
+// Keep a default schema export for pure utility callers and existing tests. The dialog
+// uses the organization-aware factory so official-only required rules are not global.
+export const modelEditorSchema = createModelEditorSchema(false);
