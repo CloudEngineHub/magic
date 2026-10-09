@@ -8,6 +8,12 @@ import {
 	createShareFileAccess,
 } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import { downloadFileContent, getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import {
+	FileSaveQueue,
+	createMemoryFileSavePersistence,
+	getFileSaveQueue,
+	resetFileSaveQueueForTests,
+} from "@/pages/superMagic/components/Detail/services/fileSaveQueue"
 import { useFileData } from "../useFileData"
 
 const isShareRouteState = vi.hoisted(() => ({ current: false }))
@@ -84,6 +90,36 @@ describe("useFileData", () => {
 			{ file_id: "file-1", url: "https://oss.test/file-1" },
 		] as never)
 		downloadFileContentMock.mockResolvedValue("<html></html>")
+		resetFileSaveQueueForTests(
+			new FileSaveQueue({ persistence: createMemoryFileSavePersistence() }),
+		)
+	})
+
+	describe("with an unsynced save draft", () => {
+		function enqueuePendingSave(content: string) {
+			const queue = getFileSaveQueue()
+			queue.enqueue({
+				fileId: "file-1",
+				content,
+				enableShadow: false,
+				persist: () => new Promise(() => undefined),
+			})
+		}
+
+		it("keeps loaded fileData as raw content and prefers the draft text", async () => {
+			enqueuePendingSave("<html>draft</html>")
+			const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
+			await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+			expect(result.current.fileData).toBe("<html>draft</html>")
+			expect(typeof result.current.fileData).toBe("string")
+		})
+
+		it("applies a recovered draft as raw content before the download settles", async () => {
+			downloadFileContentMock.mockReturnValue(new Promise(() => undefined))
+			enqueuePendingSave("<html>recovered</html>")
+			const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
+			await waitFor(() => expect(result.current.fileData).toBe("<html>recovered</html>"))
+		})
 	})
 
 	it.each(["<html></html>", ""])(

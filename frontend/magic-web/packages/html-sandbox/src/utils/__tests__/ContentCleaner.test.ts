@@ -200,6 +200,17 @@ describe("ContentCleaner", () => {
 			expect(doc.querySelectorAll("a")[1]?.getAttribute("href")).toBe("/safe")
 		})
 
+		it("preserves configured click links while stripping unsafe custom links", () => {
+			const cleaned = ContentCleaner.cleanDocument(
+				"<html><body><div data-magic-href=' ../slide-2.html '>Go</div><img data-magic-href='javascript:alert(1)'></body></html>",
+			)
+			const doc = new DOMParser().parseFromString(cleaned, "text/html")
+			expect(doc.querySelector("div")?.getAttribute("data-magic-href")).toBe(
+				"../slide-2.html",
+			)
+			expect(doc.querySelector("img")?.hasAttribute("data-magic-href")).toBe(false)
+		})
+
 		it("should handle empty document", () => {
 			const html = `<!DOCTYPE html><html><body></body></html>`
 			const cleaned = ContentCleaner.cleanDocument(html)

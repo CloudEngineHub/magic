@@ -6,6 +6,7 @@ import type { PPTDeckTools } from "../hooks/usePPTDeckTools"
 export type SlideLoadingState = "idle" | "loading" | "loaded" | "error"
 
 export interface PPTSidebarProps {
+	onOpenTransitions?: (index?: number) => void
 	tools?: PPTDeckTools
 	hiddenPaths?: ReadonlySet<string>
 	onOpenFile?: (fileId: string, path: string) => void
@@ -59,6 +60,7 @@ export interface SlideScreenshot {
 }
 
 export interface SortableSlideItemProps {
+	onOpenTransitions?: () => void
 	item: SlideItem
 	isActive: boolean
 	onClick: (

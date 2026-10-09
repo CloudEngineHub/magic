@@ -1,19 +1,23 @@
+import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
+import { usePPTNotesAI } from "../hooks/usePPTNotesAI"
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
-import { Loader2, NotebookPen, AArrowDown, AArrowUp } from "lucide-react"
+import { Loader2, NotebookPen } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
 import { shadow } from "@/utils/shadow"
 import { extractSlideNotes, upsertSlideNotes } from "../utils/slideNotes"
-import PPTNotesMarkdown from "./PPTNotesMarkdown"
+import PPTNotesMarkdown, { type PPTNotesMarkdownRef } from "./PPTNotesMarkdown"
 import PPTNotesActions from "./PPTNotesActions"
+import NotesSaveControl from "./NotesSaveControl"
 import type { PPTSpeakerNotesPanelProps } from "./pptNotesTypes"
 
 export type SaveState = "idle" | "saving" | "saved" | "error" | "unsaved"
 const MAX_NOTE_SAVE_REBASES = 3
 
 export default function SpeakerNotesEditor({
+	visible = true,
 	slideIndex,
 	rawContent,
 	fileId,
@@ -27,20 +31,21 @@ export default function SpeakerNotesEditor({
 	onDraftSaved,
 	overview = false,
 	fontSize = 13,
-	onFontSizeChange,
 	isCurrentPage,
 	onSaveStateChange,
 }: PPTSpeakerNotesPanelProps & {
 	onSaveStateChange: (state: SaveState | undefined) => void
 	overview?: boolean
 	fontSize?: number
-	onFontSizeChange?: (size: number) => void
 	isCurrentPage: boolean
 	initialDraft?: string
 	onDraftChange: (draft: string | undefined) => void
 	onDraftSaved: (draft: string) => void
 }) {
 	const { t } = useTranslation("super")
+	const markdownRef = useRef<PPTNotesMarkdownRef>(null)
+	const [patchPending, setPatchPending] = useState(false)
+	const [patchError, setPatchError] = useState(false)
 	const savingRef = useRef(false)
 	const activeRef = useRef(true)
 	const lastSyncedRawContentRef = useRef(rawContent)
@@ -49,6 +54,14 @@ export default function SpeakerNotesEditor({
 	const [isEditing, setIsEditing] = useState(initialDraft !== undefined && initialDraft !== notes)
 	const [saveState, setSaveState] = useState<SaveState>("idle")
 	const dirty = draft !== notes
+	const ai = usePPTNotesAI({
+		fileId,
+		draft,
+		rawContent,
+		enabled: visible && allowEdit,
+		generate: onGenerate,
+	})
+
 	const reportSaveState = useMemoizedFn(onSaveStateChange)
 	useEffect(() => {
 		reportSaveState(saveState === "idle" && dirty ? "unsaved" : saveState)
@@ -74,8 +87,8 @@ export default function SpeakerNotesEditor({
 		if (nextNotes !== notes) setSaveState("idle")
 	}, [dirty, isEditing, notes, rawContent])
 
-	const saveNotes = async () => {
-		if (!dirty) {
+	const saveNotes = async (value = draft) => {
+		if (value === notes) {
 			setIsEditing(false)
 			return true
 		}
@@ -86,7 +99,7 @@ export default function SpeakerNotesEditor({
 		setSaveState("saving")
 		try {
 			let latestRawContent = getLatestRawContent?.(fileId) || rawContent
-			let nextContent = upsertSlideNotes(latestRawContent, draft)
+			let nextContent = upsertSlideNotes(latestRawContent, value)
 			for (let attempt = 0; attempt <= MAX_NOTE_SAVE_REBASES; attempt += 1) {
 				const result = await saveEditContent(
 					shadow(nextContent),
@@ -108,13 +121,14 @@ export default function SpeakerNotesEditor({
 					throw new Error("Slide changed repeatedly while saving speaker notes")
 				}
 				latestRawContent = currentRawContent
-				nextContent = upsertSlideNotes(latestRawContent, draft)
+				nextContent = upsertSlideNotes(latestRawContent, value)
 			}
 
 			await onSaved(nextContent, fileId)
 			if (!activeRef.current) return false
-			onDraftSaved(draft)
-			setNotes(draft)
+			onDraftSaved(value)
+			setNotes(value)
+			setDraft(value)
 			setIsEditing(false)
 			setSaveState("saved")
 			return true
@@ -128,7 +142,7 @@ export default function SpeakerNotesEditor({
 	}
 
 	return (
-		<section data-notes-editor className="group/notes flex min-h-0 flex-col">
+		<section data-notes-editor className="group/notes relative flex min-h-0 flex-col">
 			{/* Each page's toolbar stays above its notes until the next page takes over. */}
 			<div className="sticky top-0 z-10 flex shrink-0 flex-wrap items-center justify-between gap-2 bg-background px-4 py-2">
 				<div className="flex min-w-0 items-center gap-2">
@@ -139,33 +153,7 @@ export default function SpeakerNotesEditor({
 							: t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
 					</h2>
 				</div>
-				<div className="flex flex-wrap items-center gap-1">
-					{onFontSizeChange && (
-						<>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								className="size-7 text-muted-foreground"
-								aria-label={t("ppt.speakerNotes.decreaseFontSize")}
-								disabled={fontSize <= 11}
-								onClick={() => onFontSizeChange(Math.max(11, fontSize - 2))}
-							>
-								<AArrowDown size={16} />
-							</Button>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								className="size-7 text-muted-foreground"
-								aria-label={t("ppt.speakerNotes.increaseFontSize")}
-								disabled={fontSize >= 31}
-								onClick={() => onFontSizeChange(Math.min(31, fontSize + 2))}
-							>
-								<AArrowUp size={16} />
-							</Button>
-						</>
-					)}
+				<div className="flex min-h-6 flex-wrap items-center gap-1">
 					{onGenerate && (
 						<div
 							className={cn(
@@ -177,36 +165,68 @@ export default function SpeakerNotesEditor({
 							{/* Keep controls in the tab order; focusing a note or action reveals the group. */}
 							<PPTNotesActions
 								hasNotes={Boolean(draft.trim())}
-								disabled={saveState === "saving" || !allowEdit}
-								onAction={async (action) => {
-									if (dirty && !(await saveNotes())) return
-									// A save can finish after navigation; never apply its action to the new page.
-									if (!activeRef.current) return
-									onGenerate(action, fileId)
+								disabled={
+									saveState === "saving" || !allowEdit || ai.busy || patchPending
+								}
+								onAction={async (action, instruction) => {
+									const snapshot = markdownRef.current?.getSnapshot()
+									if (!snapshot) return
+									setPatchError(false)
+									const result = await ai.run(action, instruction)
+									if (result !== undefined && activeRef.current) {
+										setPatchError(
+											!markdownRef.current?.propose(
+												result,
+												snapshot,
+												pptNotesPreferenceStore.autoApply,
+											),
+										)
+									}
 								}}
 							/>
 						</div>
 					)}
-					{allowEdit && dirty && (
+					{ai.busy && (
 						<Button
 							type="button"
-							variant="outline"
+							variant="ghost"
 							size="sm"
-							disabled={saveState === "saving"}
-							onClick={() => void saveNotes()}
-							className="h-7 px-2 text-xs"
+							className="h-6 gap-1.5 rounded-md px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
+							onClick={ai.cancel}
 						>
-							{saveState === "saving" && (
-								<Loader2 className="mr-1.5 size-3.5 animate-spin" />
-							)}
-							{t("ppt.speakerNotes.save")}
+							<Loader2 className="size-4 animate-spin" />
+							{t("ppt.speakerNotes.cancelGeneration")}
 						</Button>
+					)}
+					{allowEdit && (
+						<NotesSaveControl
+							saveState={saveState}
+							dirty={dirty}
+							onSave={() => void saveNotes()}
+						/>
 					)}
 				</div>
 			</div>
 
+			{(ai.error || patchError) && (
+				<p role="alert" className="px-4 py-1 text-xs text-destructive">
+					{ai.error === "changed" || patchError
+						? t("ppt.speakerNotes.contentChanged")
+						: t("ppt.speakerNotes.generationFailed")}
+				</p>
+			)}
 			<PPTNotesMarkdown
+				ref={markdownRef}
+				active={visible && allowEdit}
+				onPatchPending={setPatchPending}
+				onPatchApplied={(value) => {
+					setIsEditing(true)
+					setDraft(value)
+					onDraftChange(value === notes ? undefined : value)
+					void saveNotes(value)
+				}}
 				fontSize={fontSize}
+				generating={ai.busy}
 				overview={overview}
 				value={isEditing ? draft : notes}
 				readOnly={saveState === "saving" || !allowEdit}

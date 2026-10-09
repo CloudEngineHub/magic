@@ -53,10 +53,30 @@ function escapeHtmlAttributeValue(value: string): string {
 		.replace(/>/g, "&gt;")
 }
 
+function htmlAttributePathPattern(path: string): string {
+	// Match both source HTML and native HTML serialization. CSS/script paths stay raw.
+	const serializedPath = path
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/\u00a0/g, "&nbsp;")
+	return `(?:${Array.from(new Set([path, serializedPath, escapeHtmlAttributeValue(path)]))
+		.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+		.join("|")})`
+}
+
+function readHtmlAttributeValue(quotedValue: string): string | null {
+	return (
+		new DOMParser()
+			.parseFromString(`<div data-value=${quotedValue}></div>`, "text/html")
+			.querySelector("div")
+			?.getAttribute("data-value") ?? null
+	)
+}
+
 function replaceCssUrlReference(content: string, path: string, url: string): string {
 	const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 	const cssUrlRegex = new RegExp(`url\\(\\s*['"]?${escapedPath}['"]?\\s*\\)`, "g")
-	return content.replace(cssUrlRegex, `/*__ORIGINAL_URL__:${path}__*/url('${url}')`)
+	return content.replace(cssUrlRegex, () => `/*__ORIGINAL_URL__:${path}__*/url('${url}')`)
 }
 
 async function resolveHtmlResourceUrls({
@@ -191,14 +211,20 @@ export async function replaceHtmlResourceUrls({
 	// the processed HTML prevents the sandbox browser from resolving relative paths
 	// against its workspace root before host-side URL mapping has run.
 	for (const resource of externalCssResources) {
-		const escapedPath = resource.htmlPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+		const escapedPath = htmlAttributePathPattern(resource.htmlPath)
 		const linkRegex = new RegExp(
 			`<link\\b(?=[^>]*\\brel=["']stylesheet["'])(?=[^>]*\\bhref=["']${escapedPath}["'])[^>]*>`,
 			"gi",
 		)
-		const hrefRegex = new RegExp(`\\bhref=(["'])${escapedPath}\\1`, "i")
+		const hrefRegex = new RegExp(`\\bhref=(["'])(${escapedPath})\\1`, "i")
 		const embeddedCss = resource.content.replace(/<\/style/gi, "<\\/style")
 		content = content.replace(linkRegex, (linkTag) => {
+			const href = linkTag.match(hrefRegex)
+			if (
+				!href ||
+				readHtmlAttributeValue(`${href[1]}${href[2]}${href[1]}`) !== resource.htmlPath
+			)
+				return linkTag
 			// Keep an inert copy of the original link so the save cleanup can restore
 			// its href and discard only the runtime-injected stylesheet.
 			const inertLink = linkTag.replace(
@@ -260,31 +286,35 @@ export async function replaceHtmlResourceUrls({
 
 		if (resourceInfo.attr === "inline-style") {
 			const inlineStyleRegex = new RegExp(
-				`(<${resourceInfo.tag}[^>]*?style=["'])([^"']*?url\\(\\s*['"]?${escapedPath}['"]?\\s*\\)[^"']*?)(["'][^>]*?>)`,
+				`(<${resourceInfo.tag}\\b[^>]*?\\s)style=("[^"]*"|'[^']*')`,
 				"gi",
 			)
-			content = content.replace(
-				inlineStyleRegex,
-				(match, beforeStyle, styleContent, afterStyle) => {
-					const replacedStyleContent = styleContent.replace(
-						new RegExp(`url\\(\\s*['"]?${escapedPath}['"]?\\s*\\)`, "g"),
-						`/*__ORIGINAL_URL__:${resourceInfo.path}__*/url('${item.url}')`,
-					)
-					return `${beforeStyle}${replacedStyleContent}${afterStyle}`
-				},
-			)
+			content = content.replace(inlineStyleRegex, (match, beforeStyle, quotedStyle) => {
+				// Decode this attribute only, then escape the replacement for HTML again.
+				const style = readHtmlAttributeValue(quotedStyle)
+				if (style == null) return match
+				const replaced = replaceCssUrlReference(style, resourceInfo.path, item.url)
+				if (replaced === style) return match
+				return `${beforeStyle}style="${escapeHtmlAttributeValue(replaced)}"`
+			})
 			return
 		}
 
 		const attributeRegex = new RegExp(
-			`<(${resourceInfo.tag})([^>]*?)${resourceInfo.attr}=["']${escapedPath}["']([^>]*?)>`,
+			`<(${resourceInfo.tag})([^>]*?\\s)${resourceInfo.attr}=(["'])(${htmlAttributePathPattern(resourceInfo.path)})\\3([^>]*?)>`,
 			"gi",
 		)
-		content = content.replace(attributeRegex, (match, tagName, beforeAttr, afterAttr) => {
-			const escapedUrl = escapeHtmlAttributeValue(item.url)
-			const escapedOriginalPath = escapeHtmlAttributeValue(resourceInfo.path)
-			return `<${tagName}${beforeAttr}${resourceInfo.attr}="${escapedUrl}" data-original-path="${escapedOriginalPath}"${afterAttr}>`
-		})
+		content = content.replace(
+			attributeRegex,
+			(match, tagName, beforeAttr, quote, path, afterAttr) => {
+				// A literal entity in a filename must not match a different decoded path.
+				if (readHtmlAttributeValue(`${quote}${path}${quote}`) !== resourceInfo.path)
+					return match
+				const escapedUrl = escapeHtmlAttributeValue(item.url)
+				const escapedOriginalPath = escapeHtmlAttributeValue(resourceInfo.path)
+				return `<${tagName}${beforeAttr}${resourceInfo.attr}="${escapedUrl}" data-original-path="${escapedOriginalPath}"${afterAttr}>`
+			},
+		)
 	})
 
 	if (processingMetadata?.type === "dashboard" && Object.keys(magicProjectConfig).length > 0) {

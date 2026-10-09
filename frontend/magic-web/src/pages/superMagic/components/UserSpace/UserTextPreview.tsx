@@ -83,6 +83,7 @@ export default observer(function UserTextPreview({ data, ...props }: UserTextPre
 		loading: editor.loading,
 		loadError: editor.loadError,
 		saving: editor.saving,
+		saveStage: editor.saveStage,
 		setDraft: editor.setDraft,
 		refresh: editor.load,
 		save,

@@ -1,4 +1,6 @@
-import { Loader2, Check, AlertCircle } from "lucide-react"
+import { observer } from "mobx-react-lite"
+import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
+import { AArrowDown, AArrowUp } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -8,22 +10,23 @@ import { useSpeakerNotesResize } from "../hooks/useSpeakerNotesResize"
 import { useNotesOverviewScroll } from "../hooks/useNotesOverviewScroll"
 import SpeakerNotesEditor, { type SaveState } from "./SpeakerNotesEditor"
 import PPTNotesSlideLoading from "./PPTNotesSlideLoading"
+import PPTNotesSettingsDialog from "./PPTNotesSettingsDialog"
 import type { PPTSpeakerNotesPanelProps } from "./pptNotesTypes"
 
 /** One keyed editor per file keeps drafts and pending saves intact across both views. */
-export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
+const PPTSpeakerNotesPanel = observer(function PPTSpeakerNotesPanel(
+	props: PPTSpeakerNotesPanelProps,
+) {
 	const { t } = useTranslation("super")
 	const drafts = useRef(new Map<string, string>())
 	const [overviewSelected, setShowAll] = useState(false)
 	const isPresenter = props.layout === "presenter"
-	const [notesFontSize, setNotesFontSize] = useState(13)
+	const { fontSize: notesFontSize, setFontSize } = pptNotesPreferenceStore
 	const showAll = overviewSelected && !isPresenter
 	const [openedAll, setOpenedAll] = useState(false)
 	const { panelRef, height, overlay, inFlowHeight, resizeHandleProps } = useSpeakerNotesResize()
 	const visible = props.visible !== false
 	const slideKey = props.fileId || String(props.slideIndex)
-	const activeKeyRef = useRef(slideKey)
-	activeKeyRef.current = slideKey
 	const currentSlide = props.slides?.find((slide) => slide.slideIndex === props.slideIndex) ?? {
 		key: slideKey,
 		fileId: props.fileId,
@@ -53,17 +56,6 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 				: states.includes("saved")
 					? "saved"
 					: "idle"
-	const statusLabel =
-		status === "saving"
-			? t("ppt.speakerNotes.saving")
-			: status === "error"
-				? t("ppt.speakerNotes.saveFailed")
-				: status === "unsaved"
-					? t("ppt.speakerNotes.unsaved")
-					: status === "saved"
-						? t("ppt.speakerNotes.saved")
-						: null
-	const StatusIcon = status === "saving" ? Loader2 : status === "error" ? AlertCircle : Check
 	const { onPendingChangesChange } = props
 	// Single-page mode unmounts the old editor, but its draft remains in this panel's cache.
 	// Keep it protected even after that editor's transient save status is removed.
@@ -111,58 +103,64 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 						<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
 					</button>
 				)}
-				{((!isPresenter && props.slides && props.slides.length > 1) || statusLabel) && (
-					<div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-3 py-1">
-						{!isPresenter && props.slides && props.slides.length > 1 && (
-							<>
-								<Button
-									variant={showAll ? "ghost" : "secondary"}
-									size="sm"
-									className="h-7 px-2 text-xs"
-									aria-pressed={!showAll}
-									onClick={() => setShowAll(false)}
-								>
-									{t("ppt.speakerNotes.currentPage")}
-								</Button>
-								<Button
-									variant={showAll ? "secondary" : "ghost"}
-									size="sm"
-									className="h-7 px-2 text-xs"
-									aria-pressed={showAll}
-									onClick={() => {
-										setOpenedAll(true)
-										setShowAll(true)
-									}}
-								>
-									{t("ppt.speakerNotes.allPages", { count: props.slides.length })}
-								</Button>
-							</>
-						)}
-						{statusLabel && (
-							<span
-								role="status"
-								aria-live="polite"
-								data-testid="ppt-notes-save-status"
-								className={cn(
-									"ml-auto flex shrink-0 items-center gap-1.5 text-xs",
-									status === "error"
-										? "text-destructive"
-										: "text-muted-foreground",
-								)}
+				<div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-3 py-1">
+					{!isPresenter && props.slides && props.slides.length > 1 && (
+						<>
+							<Button
+								variant={showAll ? "ghost" : "secondary"}
+								size="sm"
+								className="h-7 px-2 text-xs"
+								aria-pressed={!showAll}
+								onClick={() => setShowAll(false)}
 							>
-								{status !== "unsaved" && (
-									<StatusIcon
-										className={cn(
-											"size-4",
-											status === "saving" && "animate-spin",
-										)}
-									/>
-								)}
-								{statusLabel}
-							</span>
+								{t("ppt.speakerNotes.currentPage")}
+							</Button>
+							<Button
+								variant={showAll ? "secondary" : "ghost"}
+								size="sm"
+								className="h-7 px-2 text-xs"
+								aria-pressed={showAll}
+								onClick={() => {
+									setOpenedAll(true)
+									setShowAll(true)
+								}}
+							>
+								{t("ppt.speakerNotes.allPages", { count: props.slides.length })}
+							</Button>
+						</>
+					)}
+					<div className="ml-auto flex shrink-0 items-center gap-1">
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7"
+							aria-label={t("ppt.speakerNotes.decreaseFontSize")}
+							disabled={notesFontSize <= 11}
+							onClick={() => setFontSize(Math.max(11, notesFontSize - 2))}
+						>
+							<AArrowDown size={16} />
+						</Button>
+						<span
+							className="min-w-6 text-center text-xs tabular-nums"
+							aria-label={t("ppt.speakerNotes.fontSize")}
+						>
+							{notesFontSize}
+						</span>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7"
+							aria-label={t("ppt.speakerNotes.increaseFontSize")}
+							disabled={notesFontSize >= 31}
+							onClick={() => setFontSize(Math.min(31, notesFontSize + 2))}
+						>
+							<AArrowUp size={16} />
+						</Button>
+						{props.allowEdit && props.onGenerate && (
+							<PPTNotesSettingsDialog hintEnabled={visible} />
 						)}
 					</div>
-				)}
+				</div>
 				<ScrollArea
 					viewportRef={viewportRef}
 					className="min-h-0 flex-1"
@@ -187,8 +185,8 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 								<SpeakerNotesEditor
 									{...props}
 									overview={showAll}
-									fontSize={isPresenter ? notesFontSize : 13}
-									onFontSizeChange={isPresenter ? setNotesFontSize : undefined}
+									fontSize={notesFontSize}
+									visible={visible && (showAll || slide.key === currentSlide.key)}
 									isCurrentPage={slide.key === currentSlide.key}
 									onSaveStateChange={(state) =>
 										setSaveStates((previous) => {
@@ -203,18 +201,7 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 									fileId={slide.fileId}
 									rawContent={slide.rawContent}
 									allowEdit={props.allowEdit && Boolean(slide.fileId)}
-									onGenerate={
-										props.allowEdit && slide.fileId && props.onGenerate
-											? (action) => {
-													// Overview actions stay bound to their own file, even if the canvas navigates during save.
-													if (
-														showAll ||
-														activeKeyRef.current === slideKey
-													)
-														props.onGenerate?.(action, slide.fileId)
-												}
-											: undefined
-									}
+									onGenerate={props.allowEdit ? props.onGenerate : undefined}
 									initialDraft={drafts.current.get(slide.key)}
 									onDraftChange={(draft) => {
 										if (draft === undefined) drafts.current.delete(slide.key)
@@ -232,4 +219,6 @@ export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
 			</section>
 		</>
 	)
-}
+})
+
+export default PPTSpeakerNotesPanel

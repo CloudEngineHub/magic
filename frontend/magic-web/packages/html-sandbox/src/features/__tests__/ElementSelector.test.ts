@@ -338,6 +338,17 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("recognizes configured click links on non-anchor elements", () => {
+			container.innerHTML = '<div id="linked" data-magic-href="slide-2.html">Go</div>'
+			selector.selectElement(container.querySelector("#linked") as HTMLElement)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					attributes: expect.objectContaining({ dataMagicHref: "slide-2.html" }),
+				}),
+			)
+		})
+
 		it("should include flex item and parent flex context in computed styles", () => {
 			container.innerHTML = `
 				<div id="layout" style="display: flex; flex-direction: row; justify-content: flex-start; align-items: stretch;">

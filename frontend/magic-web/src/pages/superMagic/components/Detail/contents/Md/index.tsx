@@ -11,6 +11,7 @@ import { useMarkdownSelection } from "./hooks/useMarkdownSelection"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
+import { TextSaveStatus } from "../../components/TextSaveStatus"
 import { cn } from "@/utils/cn"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { useMemoizedFn } from "ahooks"
@@ -87,6 +88,7 @@ interface TextEditorProps {
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
 		shouldExitEditMode?: boolean,
+		options?: { silent?: boolean; awaitPersist?: boolean },
 	) => Promise<void>
 	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
 	viewMode?: "code" | "desktop" | "phone"
@@ -571,7 +573,16 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			}
 			// 调用保存方法
 			if (saveEditContent) {
-				await saveEditContent(editContent, displayData?.file_id, false, fetchFileVersions)
+				// Feedback is the top-right save chip, so skip the centered toast.
+				await saveEditContent(
+					editContent,
+					displayData?.file_id,
+					false,
+					fetchFileVersions,
+					undefined,
+					false,
+					{ silent: true },
+				)
 				// 保存成功后更新原始内容
 				setOriginalContent(editContent)
 				setSavedContent(editContent)
@@ -610,6 +621,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					fetchFileVersions,
 					undefined,
 					true,
+					{ silent: true },
 				)
 				// 保存成功后更新原始内容
 				setOriginalContent(editContent)
@@ -994,6 +1006,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 						extraMoreMenuItems={aiEditMenuItems}
 					/>
 				)}
+				<TextSaveStatus fileId={displayData?.file_id} textFileSession={textFileSession} />
 				{devicePreviewEnabled && (
 					<DevicePreviewToolbar
 						{...devicePreview}

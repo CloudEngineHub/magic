@@ -7164,5 +7164,33 @@
     "canvas.management_error.INTERNAL_ERROR": {
         "zh_CN": "操作未完成，请重新查询当前状态后处理失败项。",
         "en_US": "The operation did not complete. Query the current state before handling failed items."
+    },
+    "update_slide_transitions.before": {
+        "zh_CN": "正在保存过渡动画",
+        "en_US": "Saving slide transitions"
+    },
+    "update_slide_transitions.success": {
+        "zh_CN": "过渡动画已保存",
+        "en_US": "Slide transitions saved"
+    },
+    "update_slide_transitions.error": {
+        "zh_CN": "未能确认过渡动画已保存，请刷新文稿后检查设置",
+        "en_US": "Could not confirm the transition settings were saved. Refresh the deck and check its settings."
+    },
+    "update_slide_transitions.conflict": {
+        "zh_CN": "文稿设置已更新，请刷新后重新设置过渡动画",
+        "en_US": "The deck changed. Refresh it before setting transitions again."
+    },
+    "update_slide_transitions.permission": {
+        "zh_CN": "无法保存过渡动画，请检查登录状态和文稿编辑权限",
+        "en_US": "Cannot save transitions. Check your sign-in and deck editing permission."
+    },
+    "update_slide_transitions.not_saved": {
+        "zh_CN": "过渡动画未保存，请检查配置并等待文稿同步后重试",
+        "en_US": "Transitions were not saved. Check the settings and wait for the deck to synchronize before retrying."
+    },
+    "update_slide_transitions.unknown": {
+        "zh_CN": "暂时无法确认保存结果，请刷新文稿检查过渡动画，避免重复保存",
+        "en_US": "The save result is uncertain. Refresh the deck and check its transitions before saving again."
     }
 }

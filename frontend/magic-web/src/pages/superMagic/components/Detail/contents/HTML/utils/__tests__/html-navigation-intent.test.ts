@@ -82,17 +82,22 @@ describe("HTML navigation intent", () => {
 		})
 	})
 
-	it("preserves external targets and isolates explicit new windows", () => {
-		const runtime = createRuntime()
-		const event = runtime.click('<a href="https://outside.test" target="report">Outside</a>')
-		expect(event.defaultPrevented).toBe(false)
-		expect(runtime.doc.querySelector("a")?.target).toBe("report")
-		runtime.click('<a href="https://outside.test">Outside</a>')
-		expect(runtime.doc.querySelector("a")?.hasAttribute("target")).toBe(false)
-		runtime.click('<a href="https://outside.test" target="_blank">Outside</a>')
-		expect(runtime.doc.querySelector("a")?.rel).toBe("noopener noreferrer")
-		expect(runtime.postMessage).not.toHaveBeenCalled()
-	})
+	it.each(["", "_self", "_parent", "_top", "report", "_blank"])(
+		"opens external links outside the preview regardless of target %s",
+		(target) => {
+			const runtime = createRuntime()
+			const event = runtime.click(
+				`<a href="https://outside.test" target="${target}">Outside</a>`,
+			)
+			expect(event.defaultPrevented).toBe(true)
+			expect(runtime.nativeOpen).toHaveBeenCalledWith(
+				"https://outside.test",
+				"_blank",
+				"noopener,noreferrer",
+			)
+			expect(runtime.postMessage).not.toHaveBeenCalled()
+		},
+	)
 
 	it("keeps window.open targets including its _blank default", () => {
 		const runtime = createRuntime()

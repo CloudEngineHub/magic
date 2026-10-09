@@ -1062,5 +1062,9 @@
     "delete_canvas_elements": {
         "zh_CN": "移除画布元素",
         "en_US": "Remove canvas elements"
+    },
+    "update_slide_transitions": {
+        "zh_CN": "设置过渡动画",
+        "en_US": "Set slide transitions"
     }
 }

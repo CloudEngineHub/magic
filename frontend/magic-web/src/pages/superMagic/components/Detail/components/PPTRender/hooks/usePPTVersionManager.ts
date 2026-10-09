@@ -6,6 +6,7 @@ import { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
 import { downloadFileContent } from "@/pages/superMagic/utils/api"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { ensureFileSavesSynced } from "../../../services/fileSaveQueue"
 
 interface UsePPTVersionManagerProps {
 	/** 用于版本管理的文件 ID */
@@ -154,6 +155,7 @@ export function usePPTVersionManager({
 	 */
 	const handleVersionRollback = useMemoizedFn(async (targetVersion: number) => {
 		if (!fileId || !targetVersion) return
+		if (!(await ensureFileSavesSynced([fileId]))) return
 
 		const loading = magicToast.loading(t("common.rollbacking"))
 

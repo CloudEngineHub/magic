@@ -818,6 +818,7 @@ function EditToolbar({
 					{showFileEditButtons && (
 						<FileEditButtons
 							testIdPrefix={testIdsEnabled ? "ppt-edit-toolbar" : undefined}
+							fileId={fileId}
 							interactionDisabled={interactionDisabled}
 							isEditMode={isEditMode}
 							isSaving={isSaving}
