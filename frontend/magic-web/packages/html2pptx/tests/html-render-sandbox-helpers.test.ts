@@ -1,7 +1,24 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from "vitest"
-import { requiresNativeLoadWait } from "../src/sandbox/htmlRenderSandbox.helpers"
+import {
+	normalizeSandboxHtml,
+	requiresNativeLoadWait,
+} from "../src/sandbox/htmlRenderSandbox.helpers"
+
+describe("export animation normalization", () => {
+	it("freezes animations at their final frame instead of leaving opacity at the initial value", () => {
+		const normalized = normalizeSandboxHtml(
+			"<html><head></head><body><div class='a'>visible</div></body></html>",
+		)
+
+		expect(normalized).not.toContain("animation:none")
+		expect(normalized).toContain("animation-play-state:paused!important")
+		expect(normalized).toContain("animation-delay:-999999s!important")
+		expect(normalized).toContain("animation-iteration-count:1!important")
+		expect(normalized).toContain("animation-fill-mode:both!important")
+	})
+})
 
 describe("native-load readiness classification", () => {
 	it("does not add a fixed grace period to static HTML", () => {
