@@ -99,7 +99,7 @@ readonly class ModelAccessRoleDomainService
         $entity->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
         $entity->setCreatedAt($existing->getCreatedAt());
         $entity->setCreatedUid($existing->getCreatedUid());
-        return $this->save($dataIsolation, $entity);
+        return $this->save($dataIsolation, $entity, $existing->getDeniedModelIds());
     }
 
     public function destroy(PermissionDataIsolation $dataIsolation, int $roleId): PermissionControlStatus
@@ -201,8 +201,14 @@ readonly class ModelAccessRoleDomainService
         );
     }
 
-    private function save(PermissionDataIsolation $dataIsolation, ModelAccessRoleEntity $entity): ModelAccessRoleEntity
-    {
+    /**
+     * @param string[] $existingDeniedModelIds
+     */
+    private function save(
+        PermissionDataIsolation $dataIsolation,
+        ModelAccessRoleEntity $entity,
+        array $existingDeniedModelIds = []
+    ): ModelAccessRoleEntity {
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $entity->setOrganizationCode($organizationCode);
 
@@ -210,7 +216,7 @@ readonly class ModelAccessRoleDomainService
         $this->validateDepartments($organizationCode, $dataIsolation->getCurrentUserId(), $entity->getDepartmentIds());
         $this->validateUsers($organizationCode, $dataIsolation->getCurrentUserId(), $entity->getExcludedUserIds());
         $this->validateDepartments($organizationCode, $dataIsolation->getCurrentUserId(), $entity->getExcludedDepartmentIds());
-        $this->validateModels($dataIsolation, $entity->getDeniedModelIds());
+        $this->validateModels($dataIsolation, $entity->getDeniedModelIds(), $existingDeniedModelIds);
         $this->validateRoleForSave($organizationCode, $entity);
 
         $savedEntity = Db::transaction(function () use ($dataIsolation, $entity, $organizationCode) {
@@ -310,15 +316,23 @@ readonly class ModelAccessRoleDomainService
         }
     }
 
-    private function validateModels(PermissionDataIsolation $dataIsolation, array $modelIds): void
-    {
+    /**
+     * @param string[] $modelIds
+     * @param string[] $existingDeniedModelIds
+     */
+    private function validateModels(
+        PermissionDataIsolation $dataIsolation,
+        array $modelIds,
+        array $existingDeniedModelIds = []
+    ): void {
         if (empty($modelIds)) {
             return;
         }
 
         $availableModelIdMap = array_fill_keys($this->resolveOrganizationAvailableModelIds($dataIsolation), true);
+        $existingDeniedModelIdMap = array_fill_keys($existingDeniedModelIds, true);
         foreach ($modelIds as $modelId) {
-            if (! isset($availableModelIdMap[$modelId])) {
+            if (! isset($availableModelIdMap[$modelId]) && ! isset($existingDeniedModelIdMap[$modelId])) {
                 ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'some models are not available in organization');
             }
         }
