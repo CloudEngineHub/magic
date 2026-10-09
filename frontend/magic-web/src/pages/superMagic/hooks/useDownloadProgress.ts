@@ -144,6 +144,8 @@ export function useDownloadProgress() {
 			magicToast.loading({
 				key: toastId,
 				icon: null,
+				className: "download-progress-toast",
+				dismissible: false,
 				content: createElement(DownloadProgressToast, {
 					progress,
 					text: labelRef.current || t("topicFiles.downloading"),

@@ -73,6 +73,8 @@ export default function MagicToaster({
 					// overrides to prevent inner text nodes from restoring no-wrap behavior.
 					"max-md:[&_[data-sonner-toast]_*]:!whitespace-normal max-md:[&_[data-sonner-toast]_*]:![overflow-wrap:anywhere]",
 				],
+				// 下载表面由内部组件整体拖动，外壳仅参与堆叠，不拦截原位置的页面操作。
+				"[&_[data-sonner-toast].download-progress-toast]:!pointer-events-none [&_[data-sonner-toast].download-progress-toast]:!w-fit [&_[data-sonner-toast].download-progress-toast]:!max-w-[calc(100vw-24px)] [&_[data-sonner-toast].download-progress-toast]:!border-0 [&_[data-sonner-toast].download-progress-toast]:!bg-transparent [&_[data-sonner-toast].download-progress-toast]:!p-0 [&_[data-sonner-toast].download-progress-toast]:!shadow-none",
 				className,
 			)}
 			position={position}
