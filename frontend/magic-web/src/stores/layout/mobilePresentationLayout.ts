@@ -10,7 +10,7 @@ export function subscribeMobilePresentationLayout(listener: () => void) {
 	}
 }
 
-/** Keep every responsive ancestor on the mobile tree while a PPT is presenting. */
+/** Keep responsive ancestors mounted while a mobile preview or its PPT presentation is open. */
 export function retainMobilePresentationLayout() {
 	const owner = Symbol("mobile-presentation")
 	owners.add(owner)
