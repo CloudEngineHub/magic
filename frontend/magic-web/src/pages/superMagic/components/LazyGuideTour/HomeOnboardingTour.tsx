@@ -68,6 +68,11 @@ const ONBOARDING_PAGE_ROUTE_NAME: Partial<Record<HomeOnboardingTaskPage, string>
 const CARD_HEIGHT_FALLBACK = 240
 const ONBOARDING_EXPOSURE_RATIO = 0.01
 const ONBOARDING_EXPOSURE_THRESHOLDS = [0, ONBOARDING_EXPOSURE_RATIO]
+const FIXED_FLOW_STEP_INDEX: Partial<Record<HomeOnboardingFlow, number>> = {
+	"featured-case": 1,
+	"prompt-ready": 2,
+	"task-processing": 3,
+}
 
 /**
  * How much of the card has to stay on screen when it is pushed against a window edge to keep clear
@@ -1351,16 +1356,9 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const showingIntro = runActive && entry.startsWithIntro && !started && !flow
 	// Special flows keep their existing 1/2/3 contract. Configured cards carry their own number,
 	// shared by exposure and generic clicks, so array position never determines event identity.
-	const analyticsStepIndex =
-		flow === "featured-case"
-			? 1
-			: flow === "prompt-ready"
-				? 2
-				: flow === "task-processing"
-					? 3
-					: flow
-						? activeProjectStep?.analyticsStepIndex
-						: primarySteps[stepIndex]?.analyticsStepIndex
+	const analyticsStepIndex = flow
+		? (FIXED_FLOW_STEP_INDEX[flow] ?? activeProjectStep?.analyticsStepIndex)
+		: primarySteps[stepIndex]?.analyticsStepIndex
 	const exposureNodeVisible = useElementVisibility(exposureNode, {
 		enabled: runActive,
 		minimumIntersectionRatio: ONBOARDING_EXPOSURE_RATIO,
