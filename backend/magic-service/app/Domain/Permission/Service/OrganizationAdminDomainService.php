@@ -139,6 +139,21 @@ class OrganizationAdminDomainService
      */
     public function grant(DataIsolation $dataIsolation, string $userId, ?string $grantorUserId, ?string $remarks = null, bool $isOrganizationCreator = false): OrganizationAdminEntity
     {
+        // Do not rely solely on the HTTP permission annotation here.  That
+        // permission can be changed through role management, while the
+        // grantor must be an administrator recorded for this organization.
+        $isBootstrapCreatorGrant = $isOrganizationCreator
+            && $grantorUserId !== null
+            && $grantorUserId !== ''
+            && $grantorUserId === $userId
+            && $this->isOrganizationCreator($dataIsolation, $grantorUserId);
+        if (
+            ($grantorUserId === null || $grantorUserId === '' || ! $this->isOrganizationAdmin($dataIsolation, $grantorUserId))
+            && ! $isBootstrapCreatorGrant
+        ) {
+            ExceptionBuilder::throw(PermissionErrorCode::AccessDenied, 'permission.error.access_denied');
+        }
+
         // 组织校验与限制
         $orgCode = $dataIsolation->getCurrentOrganizationCode();
         $organization = $this->organizationRepository->getByCode($orgCode);
