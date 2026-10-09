@@ -566,7 +566,11 @@ class AssetAppService extends AbstractAssetAppService
         $query = new AssetQuery();
         $scope = $requestDTO->getScope();
         $query->setScope($scope);
-        $sharedAssetIds = $scope->includesSharedAssets() ? $this->sharedAssetIds($dataIsolation) : [];
+        $sharedAssetIds = match ($scope) {
+            AssetScope::TEAM => $this->teamVisibleAssetIdsForQuery($dataIsolation),
+            AssetScope::ALL => $this->sharedAssetIds($dataIsolation),
+            default => [],
+        };
         $query->setSharedAssetIds($sharedAssetIds);
         if ($scope === AssetScope::ALL) {
             $query->setAccessibleAssetIds(array_merge(
@@ -585,6 +589,24 @@ class AssetAppService extends AbstractAssetAppService
         $query->setTagIds($requestDTO->getTagIds());
         $query->setTagMatch($requestDTO->getTagMatch());
         return $query;
+    }
+
+    /** @return array<string> */
+    private function teamVisibleAssetIdsForQuery(AssetDataIsolation $dataIsolation): array
+    {
+        $sharedAssetIds = $this->sharedAssetIds($dataIsolation);
+        $ownedAssetIds = array_map(
+            'strval',
+            $this->assetDomainService->findIdsByOwnerUid($dataIsolation, $dataIsolation->getCurrentUserId()),
+        );
+        // 别人分享给当前用户的素材天然属于团队范围；只对当前归属人的素材
+        // 进一步判断是否存在本人之外的可见主体，避免仅自己可见的素材混入。
+        $sharedByOthers = array_values(array_diff($sharedAssetIds, $ownedAssetIds));
+        $ownedTeamVisible = $this->teamVisibleAssetIds(
+            $dataIsolation,
+            array_values(array_unique(array_merge($sharedAssetIds, $ownedAssetIds))),
+        );
+        return array_values(array_unique(array_merge($sharedByOthers, $ownedTeamVisible)));
     }
 
     private function enrichAssets(AssetDataIsolation $isolation, array $assets, string $scope): void

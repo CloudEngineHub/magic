@@ -293,8 +293,9 @@ class AssetRepository implements AssetRepositoryInterface
                 $builder->where('owner_uid', $currentUserId);
                 return;
             case AssetScope::TEAM:
-                $builder->where('owner_uid', '!=', $currentUserId)
-                    ->whereIn('id', $sharedAssetIds);
+                // 归属人如果把素材授权给部门/其他用户，也应在“团队可见”中看到；
+                // 仅本人可见的素材不会进入 sharedAssetIds。
+                $builder->whereIn('id', $sharedAssetIds);
                 return;
             case AssetScope::ALL:
                 $builder->whereIn('id', $query->getAccessibleAssetIds());
