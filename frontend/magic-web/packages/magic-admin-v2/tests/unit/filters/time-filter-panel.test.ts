@@ -14,6 +14,7 @@ import {
   getQuickPresetGroups,
   getRangeByPreset,
   getCommonAbsolutePresetRanges,
+  getAbsoluteTimeInputValue,
   getTimeRangeDisplayLabel,
   formatTimeRangeByPrecision,
   normalizeAbsoluteDate,
@@ -204,6 +205,14 @@ describe("time filter panel relative-time contract", () => {
       new Date(2026, 7, 31, 9, 30, 59, 0),
     );
     assert.deepEqual(
+      normalizeAbsoluteDate(value, "hour", "start"),
+      new Date(2026, 7, 31, 9, 0, 0, 0),
+    );
+    assert.deepEqual(
+      normalizeAbsoluteDate(value, "hour", "end"),
+      new Date(2026, 7, 31, 9, 59, 59, 0),
+    );
+    assert.deepEqual(
       normalizeAbsoluteDate(value, "second", "start"),
       new Date(2026, 7, 31, 9, 30, 15, 0),
     );
@@ -218,7 +227,22 @@ describe("time filter panel relative-time contract", () => {
       formatTimeRangeByPrecision(start, end, "minute"),
       "2026-08-31 09:30 ~ 2026-08-31 11:45",
     );
+    assert.equal(
+      formatTimeRangeByPrecision(start, end, "hour"),
+      "2026-08-31 09:00 ~ 2026-08-31 11:59",
+    );
     assert.equal(formatTimeRangeByPrecision(start, end, "second"), `${start} ~ ${end}`);
+  });
+
+  it("keeps hour precision boundaries visible in the time fields", () => {
+    assert.equal(
+      getAbsoluteTimeInputValue(new Date(2026, 7, 31, 9, 0, 0), "hour"),
+      "09:00",
+    );
+    assert.equal(
+      getAbsoluteTimeInputValue(new Date(2026, 7, 31, 11, 59, 59), "hour"),
+      "11:59",
+    );
   });
 
   it("renders absolute display labels by precision instead of the stored label", () => {

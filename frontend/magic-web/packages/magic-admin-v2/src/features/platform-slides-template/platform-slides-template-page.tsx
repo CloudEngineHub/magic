@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { useIsFetching, useQueryClient } from "@tanstack/react-query"
 import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import {
@@ -166,58 +166,60 @@ export default function PlatformSlidesTemplatePage() {
 	return (
 		<>
 			<ListShell
+				testId="slides-template-page"
 				actions={
 					<>
-						<Button onClick={refresh} size="sm" variant="outline">
+						<PageHeaderActionButton onClick={refresh} variant="outline" data-testid="platform-slides-template-refresh-button">
 							<RefreshCw
-								className={cn("mr-2 size-4", isFetching && "animate-spin")}
+								className={cn("size-4", isFetching && "animate-spin")}
 							/>
 							{t("slidesTemplate.refresh")}
-						</Button>
-						<Button onClick={resetCurrentTab} size="sm" variant="outline">
-							<RotateCcw className="mr-2 size-4" />
+						</PageHeaderActionButton>
+						<PageHeaderActionButton onClick={resetCurrentTab} variant="outline" data-testid="platform-slides-template-create-button">
+							<RotateCcw className="size-4" />
 							{t("slidesTemplate.reset")}
-						</Button>
-						<Button disabled={createDisabled} onClick={createCurrentTab} size="sm">
-							<Plus className="mr-2 size-4" />
+						</PageHeaderActionButton>
+						<PageHeaderActionButton disabled={createDisabled} onClick={createCurrentTab} data-testid="platform-slides-template-create-button">
+							<Plus className="size-4" />
 							{createLabel}
-						</Button>
+						</PageHeaderActionButton>
 					</>
 				}
 				description={t("slidesTemplate.description")}
-				showSeparator={false}
 				title={t("slidesTemplate.title")}
 			>
-			<Tabs onValueChange={(value) => setTab(value as TabValue)} value={tab}>
-				<TabsList>
-					<TabsTrigger value="library">{t("slidesTemplate.library")}</TabsTrigger>
-					<TabsTrigger value="categories">{t("slidesTemplate.categories")}</TabsTrigger>
-					<TabsTrigger value="tags">{t("slidesTemplate.tags")}</TabsTrigger>
-				</TabsList>
-				<TabsContent className="mt-5" value="library">
-					<TemplateLibrary
-						canEdit={canEdit}
-						onDelete={requestTemplateDelete}
-						onEdit={openEditor}
-						ref={templateLibraryRef}
-					/>
-				</TabsContent>
-				<TabsContent className="mt-5" value="categories">
-					<CategoryManager
-						canEdit={canEdit}
-						onDelete={requestCategoryDelete}
-						ref={categoryManagerRef}
-					/>
-				</TabsContent>
-				<TabsContent className="mt-5" value="tags">
-					<TagManager
-						canEdit={canEdit}
-						onCreateAvailabilityChange={setCanCreateTag}
-						onDelete={requestTagDelete}
-						ref={tagManagerRef}
-					/>
-				</TabsContent>
-			</Tabs>
+				<Tabs onValueChange={(value) => setTab(value as TabValue)} value={tab}>
+					<TabsList>
+						<TabsTrigger value="library" data-testid="platform-slides-template-tab-trigger">{t("slidesTemplate.library")}</TabsTrigger>
+						<TabsTrigger value="categories" data-testid="platform-slides-template-tab-trigger">
+							{t("slidesTemplate.categories")}
+						</TabsTrigger>
+						<TabsTrigger value="tags" data-testid="platform-slides-template-tab-trigger">{t("slidesTemplate.tags")}</TabsTrigger>
+					</TabsList>
+					<TabsContent className="mt-4" value="library">
+						<TemplateLibrary
+							canEdit={canEdit}
+							onDelete={requestTemplateDelete}
+							onEdit={openEditor}
+							ref={templateLibraryRef}
+						/>
+					</TabsContent>
+					<TabsContent className="mt-4" value="categories">
+						<CategoryManager
+							canEdit={canEdit}
+							onDelete={requestCategoryDelete}
+							ref={categoryManagerRef}
+						/>
+					</TabsContent>
+					<TabsContent className="mt-4" value="tags">
+						<TagManager
+							canEdit={canEdit}
+							onCreateAvailabilityChange={setCanCreateTag}
+							onDelete={requestTagDelete}
+							ref={tagManagerRef}
+						/>
+					</TabsContent>
+				</Tabs>
 			</ListShell>
 			<TemplateEditorSheet
 				onOpenChange={setEditorOpen}
@@ -225,6 +227,9 @@ export default function PlatformSlidesTemplatePage() {
 				template={selectedTemplate}
 			/>
 			<DeleteConfirmDialog
+			contentTestId="platform-slides-template-delete-dialog-content"
+			cancelButtonTestId="platform-slides-template-delete-cancel-button"
+			confirmButtonTestId="platform-slides-template-delete-confirm-button"
 				open={Boolean(deleteTarget)}
 				onOpenChange={(open) => !open && setDeleteTarget(null)}
 				title={deleteDialogTitle}

@@ -112,6 +112,10 @@ export function MarketFilters({
 					label={t("officialMarketplace.filter.searchCondition")}
 				>
 					<FieldSearchControl
+						selectTriggerTestId="platform-official-marketplace-search-field-trigger"
+							testId="platform-official-marketplace-search-field"
+						contentTestId="platform-official-marketplace-search-field-content"
+						optionTestId="platform-official-marketplace-search-field-option"
 						ariaLabel={t("officialMarketplace.filter.searchField")}
 						clearLabel={t("common.clear")}
 						inputValue={filterDraft.search_value}
@@ -128,7 +132,7 @@ export function MarketFilters({
 							t,
 						)}
 						value={filterDraft.search_field}
-					/>
+					 inputTestId="platform-official-marketplace-advanced-search-input" clearButtonTestId="platform-official-marketplace-advanced-search-clear-button"/>
 				</FilterControlField>
 
 				<div className="hidden items-end md:flex">
@@ -153,7 +157,7 @@ export function MarketFilters({
 						onClick={() => handleFilterSheetOpenChange(true)}
 						type="button"
 						variant="outline"
-					>
+					 data-testid="platform-official-marketplace-reset-button">
 						<Filter className="size-4" aria-hidden="true" />
 						<span className="hidden md:inline">
 							{t("officialMarketplace.filter.title")}
@@ -166,7 +170,8 @@ export function MarketFilters({
 				) : null}
 			</div>
 
-			<FilterSheet
+			<FilterSheet contentTestId="platform-official-marketplace-filter-sheet" bodyTestId="platform-official-marketplace-filter-body" resetButtonTestId="platform-official-marketplace-reset-button" applyButtonTestId="platform-official-marketplace-apply-button"
+				closeButtonTestId="platform-official-marketplace-filter-close-button"
 				applyLabel={t("officialMarketplace.filter.apply")}
 				bodyClassName="overflow-x-hidden"
 				onApply={applyAdvancedFilters}
@@ -220,7 +225,7 @@ function SearchInput({
 				onValueChange={onChange}
 				placeholder={placeholder}
 				value={value}
-			/>
+			 inputTestId="platform-official-marketplace-advanced-search-input" clearButtonTestId="platform-official-marketplace-advanced-search-clear-button"/>
 		</FilterControlField>
 	)
 }
@@ -307,7 +312,7 @@ function MarketAdvancedFilterControls({
 							t("officialMarketplace.filter.selectedCategoryCount", { count })
 						}
 						value={filterDraft.category_ids}
-					/>
+					 triggerTestId="platform-official-marketplace-multi-select-trigger" contentTestId="platform-official-marketplace-multi-select-content" searchInputTestId="platform-official-marketplace-multi-select-search-input" searchClearButtonTestId="platform-official-marketplace-multi-select-search-clear-button" optionTestId="platform-official-marketplace-multi-select-option" loadingTestId="platform-official-marketplace-multi-select-loading" emptyTestId="platform-official-marketplace-multi-select-empty" clearButtonTestId="platform-official-marketplace-multi-select-clear-button"/>
 				</FilterControlField>
 			) : null}
 			<MarketFilterSelects
@@ -322,7 +327,9 @@ function MarketAdvancedFilterControls({
 			>
 				<TimeFilterPanel
 					className="w-full"
+					testIdPrefix="platform-official-marketplace-time-filter"
 					onChange={(timeRange) =>
+
 						onDraftChange((previous) => ({
 							...previous,
 							end_time: timeRange?.endDate ?? "",
@@ -368,15 +375,15 @@ function MarketFilterSelects({
 							onDraftChange((previous) => ({ ...previous, publish_status: value }))
 						}
 					>
-						<SelectTrigger className={triggerClassName}>
+						<SelectTrigger className={triggerClassName} data-testid="platform-official-marketplace-select-trigger">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value={marketSelectAllValue}>
+						<SelectContent data-testid="platform-official-marketplace-select-content">
+							<SelectItem value={marketSelectAllValue} data-testid="platform-official-marketplace-option">
 								{t("officialMarketplace.filter.all")}
 							</SelectItem>
 							{Object.values(marketPublishStatus).map((value) => (
-								<SelectItem key={value} value={value}>
+								<SelectItem key={value} value={value} data-testid="platform-official-marketplace-option">
 									{getPublishStatusLabel(value, t)}
 								</SelectItem>
 							))}
@@ -395,15 +402,15 @@ function MarketFilterSelects({
 							onDraftChange((previous) => ({ ...previous, publisher_type: value }))
 						}
 					>
-						<SelectTrigger className={triggerClassName}>
+						<SelectTrigger className={triggerClassName} data-testid="platform-official-marketplace-select-trigger">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value={marketSelectAllValue}>
+						<SelectContent data-testid="platform-official-marketplace-select-content">
+							<SelectItem value={marketSelectAllValue} data-testid="platform-official-marketplace-option">
 								{t("officialMarketplace.filter.all")}
 							</SelectItem>
 							{Object.values(marketPublisherType).map((value) => (
-								<SelectItem key={value} value={value}>
+								<SelectItem key={value} value={value} data-testid="platform-official-marketplace-option">
 									{getPublisherTypeLabel(value, t)}
 								</SelectItem>
 							))}
@@ -425,14 +432,14 @@ function MarketFilterSelects({
 							}))
 						}
 					>
-						<SelectTrigger className={triggerClassName}>
+						<SelectTrigger className={triggerClassName} data-testid="platform-official-marketplace-select-trigger">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="desc">
+						<SelectContent data-testid="platform-official-marketplace-select-content">
+							<SelectItem value="desc" data-testid="platform-official-marketplace-option">
 								{t("officialMarketplace.order.desc")}
 							</SelectItem>
-							<SelectItem value="asc">
+							<SelectItem value="asc" data-testid="platform-official-marketplace-option">
 								{t("officialMarketplace.order.asc")}
 							</SelectItem>
 						</SelectContent>

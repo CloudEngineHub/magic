@@ -19,14 +19,17 @@ export type ConfirmDialogProps = {
 	title: ReactNode
 	description: ReactNode
 	children?: ReactNode
+	contentTestId?: string
 	onOpenChange: (open: boolean) => void
 	onCloseAutoFocus?: ComponentProps<typeof AlertDialogContent>["onCloseAutoFocus"]
 	onConfirm: () => void | Promise<void>
 	variant?: ConfirmDialogVariant
 	cancelLabel?: ReactNode
+	cancelButtonTestId?: string
 	confirmDisabled?: boolean
 	confirmIcon?: ReactNode
 	confirmLabel?: ReactNode
+	confirmButtonTestId?: string
 	isPending?: boolean
 }
 
@@ -35,14 +38,17 @@ export function ConfirmDialog({
 	title,
 	description,
 	children,
+	contentTestId,
 	onOpenChange,
 	onCloseAutoFocus,
 	onConfirm,
 	variant = "default",
 	cancelLabel,
+	cancelButtonTestId,
 	confirmDisabled = false,
 	confirmIcon,
 	confirmLabel,
+	confirmButtonTestId,
 	isPending = false,
 }: ConfirmDialogProps) {
 	const { t } = useTranslation()
@@ -55,14 +61,21 @@ export function ConfirmDialog({
 
 	return (
 		<AlertDialog open={open} onOpenChange={handleOpenChange}>
-			<AlertDialogContent aria-busy={isPending} onCloseAutoFocus={onCloseAutoFocus}>
+			<AlertDialogContent
+				aria-busy={isPending}
+				data-testid={contentTestId}
+				onCloseAutoFocus={onCloseAutoFocus}
+			>
 				<AlertDialogHeader>
 					<AlertDialogTitle>{title}</AlertDialogTitle>
 					<AlertDialogDescription>{description}</AlertDialogDescription>
 				</AlertDialogHeader>
 				{children}
 				<AlertDialogFooter>
-					<AlertDialogCancel disabled={isPending}>
+					<AlertDialogCancel
+						data-testid={cancelButtonTestId}
+						disabled={isPending}
+					>
 						{cancelLabel ?? t("common.cancel")}
 					</AlertDialogCancel>
 					<AlertDialogAction
@@ -71,6 +84,7 @@ export function ConfirmDialog({
 								? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
 								: undefined
 						}
+						data-testid={confirmButtonTestId}
 						disabled={confirmDisabled || isPending}
 						onClick={(event) => {
 							event.preventDefault()

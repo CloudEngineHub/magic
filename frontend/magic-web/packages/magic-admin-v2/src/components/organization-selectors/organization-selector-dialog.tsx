@@ -36,6 +36,22 @@ export function OrganizationSelectorDialog({
   cancelLabel,
   confirmLabel,
   convertDepartmentsToMembers = false,
+  dialogContentTestId,
+  searchInputTestId,
+  clearSearchButtonTestId,
+  rootButtonTestId,
+  breadcrumbButtonTestId,
+  backButtonTestId,
+  loadingTestId,
+  errorTestId,
+  emptyTestId,
+  rowTestId,
+  nodeButtonTestId,
+  checkboxTestId,
+  enterButtonTestId,
+  loadMoreButtonTestId,
+  cancelButtonTestId,
+  confirmButtonTestId,
   defaultSelectedValues,
   description,
   disabled,
@@ -283,7 +299,11 @@ export function OrganizationSelectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(700px,calc(100vh-2rem))] flex-col overflow-hidden sm:max-w-3xl">
+      <DialogContent
+      closeButtonTestId="organization-selector-dialog-close-button"
+        className="flex h-[min(700px,calc(100vh-2rem))] flex-col overflow-hidden sm:max-w-3xl"
+        data-testid={dialogContentTestId}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}
@@ -296,6 +316,8 @@ export function OrganizationSelectorDialog({
               onValueChange={setQuery}
               placeholder={searchPlaceholder}
               value={query}
+              inputTestId={searchInputTestId}
+              clearButtonTestId={clearSearchButtonTestId}
             />
 
             <div className="flex min-h-8 items-center gap-1 overflow-x-auto text-sm text-muted-foreground">
@@ -304,6 +326,7 @@ export function OrganizationSelectorDialog({
                 size="sm"
                 className="h-8 shrink-0 px-2 text-muted-foreground"
                 onClick={() => handleBreadcrumbClick(0)}
+                data-testid={rootButtonTestId}
                 disabled={!path.length}
               >
                 {rootName ?? t("organizationSelector.root")}
@@ -315,6 +338,7 @@ export function OrganizationSelectorDialog({
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2"
+                    data-testid={breadcrumbButtonTestId}
                     onClick={() => handleBreadcrumbClick(index + 1)}
                   >
                     {item.name}
@@ -330,6 +354,7 @@ export function OrganizationSelectorDialog({
                 variant="ghost"
                 size="sm"
                 className="mb-1 justify-start gap-2"
+                data-testid={backButtonTestId}
                 onClick={() => setPath((currentPath) => currentPath.slice(0, -1))}
               >
                 <ChevronLeft className="size-4" aria-hidden="true" />
@@ -341,9 +366,10 @@ export function OrganizationSelectorDialog({
               <SelectorState
                 icon={<Loader2 className="size-4 animate-spin" />}
                 label={t("organizationSelector.state.loading")}
+                testId={loadingTestId}
               />
             ) : currentError ? (
-              <SelectorState label={currentError} />
+              <SelectorState label={currentError} testId={errorTestId} />
             ) : visibleItems.length ? (
               <div className="space-y-1">
                 {visibleItems.map((item) => (
@@ -354,6 +380,10 @@ export function OrganizationSelectorDialog({
                     selectable={isNodeSelectable(item, selectableTypes)}
                     onToggle={handleToggle}
                     onEnterDepartment={handleEnterDepartment}
+                    rowTestId={rowTestId}
+                    nodeButtonTestId={nodeButtonTestId}
+                    checkboxTestId={checkboxTestId}
+                    enterButtonTestId={enterButtonTestId}
                   />
                 ))}
                 {isSearchMode && searchHasMore ? (
@@ -362,6 +392,7 @@ export function OrganizationSelectorDialog({
                       variant="outline"
                       size="sm"
                       className="w-full"
+                      data-testid={loadMoreButtonTestId}
                       disabled={isSearching}
                       onClick={handleLoadMore}
                     >
@@ -374,7 +405,10 @@ export function OrganizationSelectorDialog({
                 ) : null}
               </div>
             ) : (
-              <SelectorState label={emptyLabel ?? t("organizationSelector.state.empty")} />
+              <SelectorState
+                label={emptyLabel ?? t("organizationSelector.state.empty")}
+                testId={emptyTestId}
+              />
             )}
           </div>
         </section>
@@ -387,10 +421,19 @@ export function OrganizationSelectorDialog({
             total={selected.length}
           />
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isConfirming}>
+            <Button
+              data-testid={cancelButtonTestId}
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isConfirming}
+            >
               {cancelLabel ?? t("organizationSelector.action.cancel")}
             </Button>
-            <Button onClick={handleConfirm} disabled={disabled || isConfirming}>
+            <Button
+              data-testid={confirmButtonTestId}
+              onClick={handleConfirm}
+              disabled={disabled || isConfirming}
+            >
               {isConfirming ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
               {confirmLabel ?? t("organizationSelector.action.confirm")}
             </Button>

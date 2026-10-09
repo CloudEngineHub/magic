@@ -29,6 +29,8 @@ export type SectionNavigationProps<T extends string> = {
 	mode?: SectionNavigationMode
 	/** 可展示的 section 列表。 */
 	sections: readonly SectionNavigationItem<T>[]
+	/** Stable selector prefix for the rendered navigation controls. */
+	testIdPrefix?: string
 	/** 当前选中的 section。 */
 	value: T
 	/** section 变化回调。 */
@@ -59,6 +61,7 @@ function resolveValue<T extends string>(
 export function SectionNavigation<T extends string>({
 	mode = "responsive",
 	sections,
+	testIdPrefix,
 	value,
 	onValueChange,
 	parseValue,
@@ -78,7 +81,12 @@ export function SectionNavigation<T extends string>({
 						value={value}
 						onValueChange={(nextValue) => onValueChange(parse(nextValue))}
 					>
-						<SelectTrigger className="w-full">
+						<SelectTrigger
+							className="w-full"
+							data-testid={
+								testIdPrefix ? `${testIdPrefix}-select-trigger` : undefined
+							}
+						>
 							<SelectValue>
 								<span className="inline-flex items-center gap-2">
 									<CurrentIcon className="size-4" aria-hidden="true" />
@@ -86,12 +94,18 @@ export function SectionNavigation<T extends string>({
 								</span>
 							</SelectValue>
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent data-testid="section-navigation-filter-content">
 							{sections.map((item) => {
 								const Icon = item.icon
 
 								return (
-									<SelectItem key={item.id} value={item.id}>
+									<SelectItem
+										data-testid={
+											testIdPrefix ? `${testIdPrefix}-${item.id}-option` : undefined
+										}
+										key={item.id}
+										value={item.id}
+									>
 										<span className="inline-flex items-center gap-2">
 											<Icon className="size-4" aria-hidden="true" />
 											{t(item.titleKey)}
@@ -115,7 +129,14 @@ export function SectionNavigation<T extends string>({
 								const Icon = item.icon
 
 								return (
-									<TabsTrigger className="gap-2" key={item.id} value={item.id}>
+									<TabsTrigger
+										className="gap-2"
+										data-testid={
+											testIdPrefix ? `${testIdPrefix}-${item.id}-tab-trigger` : undefined
+										}
+										key={item.id}
+										value={item.id}
+									>
 										<Icon className="size-4" aria-hidden="true" />
 										{t(item.titleKey)}
 									</TabsTrigger>
@@ -145,6 +166,9 @@ export function SectionNavigation<T extends string>({
 										? "bg-muted hover:bg-muted"
 										: "hover:bg-transparent hover:underline",
 								)}
+								data-testid={
+									testIdPrefix ? `${testIdPrefix}-${item.id}-button` : undefined
+								}
 								key={item.id}
 								onClick={() => onValueChange(item.id)}
 								type="button"

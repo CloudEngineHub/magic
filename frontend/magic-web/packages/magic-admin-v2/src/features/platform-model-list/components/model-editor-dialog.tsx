@@ -23,6 +23,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ConfirmDialog } from "@magic-admin-v2/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog";
 import { Button } from "@magic-admin-v2/components/ui/button";
 import {
@@ -67,13 +68,15 @@ import { useProviderModelDataSource } from "@magic-admin-v2/features/platform-mo
 import {
   createBindingValues,
   createEditorValues,
+  createImportedEditorValues,
   createEmptyValues,
   getModelTypeOptions,
   getProviderCategory,
+  getUnpairedLanguageChanges,
   toSaveInputs,
 } from "@magic-admin-v2/features/platform-model-list/utils/model-editor";
 import {
-  modelEditorSchema,
+  createModelEditorSchema,
   type ModelEditorValues,
   type ProviderBindingErrors,
 } from "@magic-admin-v2/features/platform-model-list/utils/model-editor-schema";
@@ -87,12 +90,13 @@ import {
   resolveCanonicalBillingTiers,
   validatePricingEntries,
 } from "@magic-admin-v2/features/platform-model-list/utils/pricing";
+import { providerType } from "@magic-admin-v2/features/platform-provider-list/types";
 import { useProviderListQuery } from "@magic-admin-v2/features/platform-provider-list/queries";
 import {
   Language,
   type Language as LanguageCode,
 } from "@magic-admin-v2/i18n/resources";
-import { useApis } from "@magic-admin-v2/runtime/context";
+import { useApis, useRuntime } from "@magic-admin-v2/runtime/context";
 
 export function ModelEditorDialog({
   allowedCategories,
@@ -111,7 +115,9 @@ export function ModelEditorDialog({
 }) {
   const { t } = useTranslation();
   const dataSource = useProviderModelDataSource();
+  const { access } = useRuntime();
   const { platformModel } = useApis();
+  const isOfficialOrganization = access?.isOfficialOrganization === true;
   const selectableCategories = useMemo(
     () => Array.from(new Set(allowedCategories.map(getProviderCategory))),
     [allowedCategories],
@@ -128,7 +134,7 @@ export function ModelEditorDialog({
       ?? providerModelType.largeLanguageModel;
   const form = useForm<ModelEditorValues>({
     defaultValues: createEmptyValues(),
-    resolver: zodResolver(modelEditorSchema),
+    resolver: zodResolver(createModelEditorSchema(isOfficialOrganization)),
   });
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -154,7 +160,11 @@ export function ModelEditorDialog({
   const [failedLoadRecordIds, setFailedLoadRecordIds] = useState<string[]>([]);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [isIconUploading, setIsIconUploading] = useState(false);
+  const [languageSyncWarningOpen, setLanguageSyncWarningOpen] = useState(false);
+  const [languageSyncWarnings, setLanguageSyncWarnings] = useState<{ name: boolean; description: boolean } | null>(null);
+  const [pendingLanguageSyncValues, setPendingLanguageSyncValues] = useState<ModelEditorValues | null>(null);
   const loadedRecordsRef = useRef<Record<string, ProviderModelRecord>>({});
+  const initialLanguageValuesRef = useRef<Pick<ModelEditorValues, "name" | "name_en" | "description" | "description_en"> | null>(null);
   const loadSessionRef = useRef("");
   const focusRequestIdRef = useRef(0);
   const isEditMode = Boolean(model);
@@ -165,6 +175,20 @@ export function ModelEditorDialog({
   const recordIdsKey = recordIds.join(",");
   const isSaving = saveMutation.isPending || deleteBindingsMutation.isPending;
   const isOperationRunning = progress?.phase === "running";
+  // Keep the large record map out of form state. isEditorReady and failed-load updates
+  // re-render after the ref is written, so this derivation sees the loaded records.
+  const officialSyncedRecords =
+    isOfficialOrganization && isEditorReady
+      ? Object.fromEntries(
+          Object.entries(loadedRecordsRef.current).filter(([, record]) =>
+            (providerQuery.data ?? [])
+              .filter((provider) => provider.provider_type === providerType.official)
+              .some((provider) => provider.id === record.service_provider_config_id),
+          ),
+        )
+      : ({} as Record<string, ProviderModelRecord>);
+  const officialSyncedRecordIds = new Set(Object.keys(officialSyncedRecords));
+  const hasOfficialSyncedBinding = officialSyncedRecordIds.size > 0;
 
   const modelTypeOptions = useMemo(() => getModelTypeOptions(category, t), [category, t]);
   const failedInputs = useMemo(
@@ -189,6 +213,10 @@ export function ModelEditorDialog({
       setFailedLoadRecordIds([]);
       setIsEditorReady(false);
       setIsIconUploading(false);
+      setLanguageSyncWarningOpen(false);
+      setLanguageSyncWarnings(null);
+      setPendingLanguageSyncValues(null);
+      initialLanguageValuesRef.current = null;
       loadedRecordsRef.current = {};
       loadSessionRef.current = "";
     }
@@ -207,6 +235,9 @@ export function ModelEditorDialog({
     setRemovedRecordIds([]);
     setPendingRemoveProviderIndex(null);
     setFailedLoadRecordIds([]);
+    setLanguageSyncWarningOpen(false);
+    setPendingLanguageSyncValues(null);
+    initialLanguageValuesRef.current = null;
     setIsEditorReady(true);
     loadedRecordsRef.current = {};
   }, [form, isEditMode, open, resolvedInitialCategory, resolvedInitialModelType]);
@@ -217,17 +248,26 @@ export function ModelEditorDialog({
       return;
     }
 
-    setProgress({ completed: 0, failed: 0, kind: "load", phase: "running", total: ids.length });
+    // Loading one provider is fast enough to keep inside the editor; only show the
+    // progress modal when editing a model with multiple provider configurations.
+    const shouldShowLoadProgress = allRecordIds.length >= 2;
+    if (shouldShowLoadProgress) {
+      setProgress({ completed: 0, failed: 0, kind: "load", phase: "running", total: ids.length });
+    } else {
+      setProgress(null);
+    }
     const result = await loadDetails({
       recordIds: ids,
       onProgress: (nextProgress) => {
-        setProgress((previous) => ({
-          completed: nextProgress.completed,
-          failed: (previous?.kind === "load" ? previous.failed : 0) + (nextProgress.status === "failed" ? 1 : 0),
-          kind: "load",
-          phase: "running",
-          total: nextProgress.total,
-        }));
+        if (shouldShowLoadProgress) {
+          setProgress((previous) => ({
+            completed: nextProgress.completed,
+            failed: (previous?.kind === "load" ? previous.failed : 0) + (nextProgress.status === "failed" ? 1 : 0),
+            kind: "load",
+            phase: "running",
+            total: nextProgress.total,
+          }));
+        }
       },
     });
 
@@ -237,20 +277,26 @@ export function ModelEditorDialog({
     setFailedLoadRecordIds(result.failedRecordIds);
 
     if (result.failedRecordIds.length) {
-      setProgress({
-        completed: ids.length,
-        failed: result.failedRecordIds.length,
-        kind: "load",
-        phase: "finished",
-        total: ids.length,
-      });
+      if (shouldShowLoadProgress) {
+        setProgress({
+          completed: ids.length,
+          failed: result.failedRecordIds.length,
+          kind: "load",
+          phase: "finished",
+          total: ids.length,
+        });
+      } else {
+        setProgress(null);
+      }
       return;
     }
 
     const records = allRecordIds
       .map((id) => loadedRecordsRef.current[id])
       .filter((record): record is ProviderModelRecord => Boolean(record));
-    form.reset(createEditorValues(records));
+    const editorValues = createEditorValues(records);
+    form.reset(editorValues);
+    initialLanguageValuesRef.current = editorValues;
     setSaveResults({});
     setActiveTab("common");
     setContentLocale(Language.ZhCN);
@@ -364,7 +410,9 @@ export function ModelEditorDialog({
 
   async function resolvePricingTiersForSave(values: ModelEditorValues) {
     const legacyBindings = values.providers.filter((binding) =>
-      !binding.billing_tiers.length && hasLegacyPricing(binding.legacy_pricing),
+      !officialSyncedRecordIds.has(binding.record_id ?? "")
+      && !binding.billing_tiers.length
+      && hasLegacyPricing(binding.legacy_pricing),
     );
     if (!legacyBindings.length) {
       return {} as Record<string, ProviderModelBillingTier[] | null>;
@@ -435,13 +483,24 @@ export function ModelEditorDialog({
     return Object.fromEntries(converted) as Record<string, ProviderModelBillingTier[] | null>;
   }
 
-  async function submit(values: ModelEditorValues) {
-    if (isIconUploading) return;
+  function handleApplyImportedConfig(record: ProviderModelRecord) {
+    const importedValues = createImportedEditorValues(record);
+    form.reset(importedValues);
+    setActiveTab("common");
+    setContentLocale(Language.ZhCN);
+    setSaveResults({});
+    setRemovedRecordIds([]);
+    initialLanguageValuesRef.current = null;
+    setLanguageSyncWarnings(null);
+  }
 
+  async function submitValues(values: ModelEditorValues) {
     const invalidPricing = values.providers
       .map((binding, index) => ({
         index,
-        validation: validatePricingEntries(binding.pricing_template, binding.pricing_entries),
+        validation: officialSyncedRecordIds.has(binding.record_id ?? "")
+          ? undefined
+          : validatePricingEntries(binding.pricing_template, binding.pricing_entries),
       }))
       .find((item) => Boolean(item.validation));
     if (invalidPricing?.validation) {
@@ -467,11 +526,29 @@ export function ModelEditorDialog({
       await save(toSaveInputs(
         values,
         dataSource.supportsLoadBalancing ?? true,
+        isOfficialOrganization,
         canonicalPricingTiers,
+        officialSyncedRecords,
       ));
     } catch {
       toast.error(t("modelList.editor.pricingTemplateLoadFailed"));
     }
+  }
+
+  async function submit(values: ModelEditorValues) {
+    if (isIconUploading) return;
+
+    if (isEditMode && initialLanguageValuesRef.current) {
+      const warnings = getUnpairedLanguageChanges(initialLanguageValuesRef.current, values);
+      if (warnings.name || warnings.description) {
+        setPendingLanguageSyncValues(values);
+        setLanguageSyncWarnings(warnings);
+        setLanguageSyncWarningOpen(true);
+        return;
+      }
+    }
+
+    await submitValues(values);
   }
 
   function requestEditorFocus(target: Omit<ModelEditorFocusRequest, "id">) {
@@ -659,9 +736,10 @@ export function ModelEditorDialog({
       }}
     >
       <DialogContent
+      closeButtonTestId="model-editor-dialog-close-button"
         className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
         showCloseButton={!progress}
-      >
+       data-testid="platform-model-list-dialog-content">
         <DialogHeader className="shrink-0 border-b px-6 pb-4 pt-6">
           <DialogTitle>{t(isEditMode ? "modelList.editor.editTitle" : "modelList.editor.title")}</DialogTitle>
           <DialogDescription>{t(isEditMode ? "modelList.editor.editDescription" : "modelList.editor.description")}</DialogDescription>
@@ -687,13 +765,19 @@ export function ModelEditorDialog({
                 <ModelEditorCommonTab
                   category={category}
                   contentLocale={contentLocale}
-                  disabled={isSaving}
+                  disabled={isSaving || hasOfficialSyncedBinding}
                   form={form}
                   modelType={modelType}
                   modelTypeOptions={modelTypeOptions}
+                  onApplyImportedConfig={handleApplyImportedConfig}
                   onCategoryChange={handleCategoryChange}
                   onIconUploadingChange={setIsIconUploading}
                   onLocaleChange={setContentLocale}
+                  showImportConfig={
+                    isOfficialOrganization &&
+                    !isEditMode &&
+                    Boolean(dataSource.endpoints.modelImportList)
+                  }
                   selectableCategories={selectableCategories}
                 />
               </TabsContent>
@@ -704,8 +788,9 @@ export function ModelEditorDialog({
                     <ModelEditorRuntimeFields
                       control={form.control}
                       setValue={form.setValue}
-                      disabled={isSaving}
+                      disabled={isSaving || hasOfficialSyncedBinding}
                       errors={form.formState.errors}
+                      isOfficialOrganization={isOfficialOrganization}
                       modelType={modelType}
                     />
                   ) : (
@@ -720,10 +805,12 @@ export function ModelEditorDialog({
                 <ModelEditorProvidersTab
                   category={category}
                   disabled={isSaving}
+                  hasOfficialSyncedBinding={hasOfficialSyncedBinding}
                   fields={fields}
                   focusRequest={focusRequest}
                   form={form}
                   modelType={modelType}
+                  officialSyncedRecordIds={officialSyncedRecordIds}
                   onAdd={() => append(createBindingValues())}
                   onRemove={setPendingRemoveProviderIndex}
                   saveResults={saveResults}
@@ -735,7 +822,7 @@ export function ModelEditorDialog({
           <DialogFooter className="shrink-0 gap-2 border-t px-6 py-4 sm:justify-between">
             <div>
               {canRetrySave ? (
-                <Button disabled={isSaving} onClick={retryFailed} type="button" variant="outline">
+                <Button disabled={isSaving} onClick={retryFailed} type="button" variant="outline" data-testid="platform-model-list-edit-button">
                   {isSaving ? <Loader2 className="size-4 animate-spin" /> : <AlertCircle className="size-4" />}
                   {t("modelList.editor.action.retryFailed", {
                     count: failedInputs.length,
@@ -744,10 +831,10 @@ export function ModelEditorDialog({
               ) : null}
             </div>
             <div className="flex gap-2">
-              <Button disabled={isSaving} onClick={() => onOpenChange(false)} type="button" variant="outline">
+              <Button disabled={isSaving} onClick={() => onOpenChange(false)} type="button" variant="outline" data-testid="platform-model-list-cancel-button">
                 {t("common.cancel")}
               </Button>
-              <Button disabled={isSaving || isIconUploading} type="submit">
+              <Button disabled={isSaving || isIconUploading} type="submit" data-testid="platform-model-list-save-button">
                 {isSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
                 {isSaving ? t("common.saving") : t(isEditMode ? "modelList.editor.action.update" : "modelList.editor.action.create")}
               </Button>
@@ -757,7 +844,45 @@ export function ModelEditorDialog({
         ) : (
           <div className="min-h-80 flex-1" />
         )}
+        <ConfirmDialog
+          open={languageSyncWarningOpen}
+          title={t("modelList.editor.languageSync.title")}
+          description={
+            languageSyncWarnings ? (
+              <div className="space-y-1">
+                {languageSyncWarnings.name ? (
+                  <div>{t("modelList.editor.languageSync.name")}</div>
+                ) : null}
+                {languageSyncWarnings.description ? (
+                  <div>{t("modelList.editor.languageSync.description")}</div>
+                ) : null}
+              </div>
+            ) : (
+              t("modelList.editor.languageSync.name")
+            )
+          }
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              setLanguageSyncWarningOpen(false);
+              setLanguageSyncWarnings(null);
+              setPendingLanguageSyncValues(null);
+            }
+          }}
+          onConfirm={async () => {
+            const values = pendingLanguageSyncValues;
+            setLanguageSyncWarningOpen(false);
+            setLanguageSyncWarnings(null);
+            setPendingLanguageSyncValues(null);
+            if (values) {
+              await submitValues(values);
+            }
+          }}
+          confirmLabel={t("common.confirm")}
+         contentTestId="platform-model-list-confirm-dialog-content" cancelButtonTestId="platform-model-list-confirm-dialog-cancel-button" confirmButtonTestId="platform-model-list-confirm-dialog-confirm-button"/>
 		<DeleteConfirmDialog
+			contentTestId="model-editor-delete-dialog-content"
+			cancelButtonTestId="model-editor-delete-cancel-button"
+			confirmButtonTestId="model-editor-delete-confirm-button"
 			open={pendingRemoveProviderIndex !== null}
 			title={t("modelList.editor.removeProviderTitle")}
 			description={t("modelList.editor.removeProviderDescription")}
@@ -794,7 +919,7 @@ function EditorTab({
     <TabsTrigger
       className="mb-0 h-10 shrink-0 justify-start gap-2 rounded-md border-0 px-3 data-[state=active]:bg-muted data-[state=active]:shadow-sm sm:w-full"
       value={value}
-    >
+     data-testid="platform-model-list-tab-trigger">
       {icon}
       {label}
     </TabsTrigger>

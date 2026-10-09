@@ -1,8 +1,6 @@
-import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { Copy } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { toast } from "sonner";
 import { Badge } from "@magic-admin-v2/components/ui/badge";
 import { PortalThemeScope } from "@magic-admin-v2/components/ui/portal-theme-scope";
 import {
@@ -15,7 +13,7 @@ import {
   getPublisherTypeLabel,
 } from "@magic-admin-v2/features/platform-official-marketplace/utils";
 import { useTranslation } from "react-i18next";
-import { clipboard } from "@magic-admin-v2/utils/clipboard-helpers";
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value";
 import { cn } from "@magic-admin-v2/utils/cn";
 
 export function MarketCategoryBadges({ labels }: { labels: string[] }) {
@@ -59,24 +57,6 @@ export function MarketNameCell({
   secondaryLabel?: string;
   secondaryValue?: string;
 }) {
-  const { t } = useTranslation();
-  const hasSecondaryValue = Boolean(secondaryValue);
-  const secondaryText = `${secondaryLabel}: ${secondaryValue || t("common.emptyValue")}`;
-
-  async function handleCopy(event: MouseEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (!secondaryValue) return;
-
-    try {
-      await clipboard.writeText(secondaryValue);
-      toast.success(t("officialMarketplace.message.copySuccess"));
-    } catch {
-      toast.error(t("officialMarketplace.message.copyFailed"));
-    }
-  }
-
   return (
     <div className="flex h-10 min-w-0 items-center gap-3">
       <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background text-muted-foreground">
@@ -85,20 +65,12 @@ export function MarketNameCell({
       <div className="min-w-0">
         <div className="truncate font-medium text-foreground">{name}</div>
         {secondaryLabel ? (
-          <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-            <span className="truncate">{secondaryText}</span>
-            {hasSecondaryValue ? (
-              <button
-                aria-label={secondaryCopyLabel || t("officialMarketplace.action.copy")}
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                onClick={handleCopy}
-                title={secondaryCopyLabel || t("officialMarketplace.action.copy")}
-                type="button"
-              >
-                <Copy className="size-3.5" aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
+          <CopyableValue
+            className="max-w-full"
+            copyLabel={secondaryCopyLabel}
+            label={secondaryLabel}
+            value={secondaryValue}
+          />
         ) : null}
       </div>
     </div>
@@ -111,9 +83,11 @@ export function OrganizationCell({ code, name }: { code?: string; name?: string 
   return (
     <div className="flex h-10 min-w-0 flex-col justify-center">
       <div className="truncate text-sm text-foreground">{name || t("common.emptyValue")}</div>
-      <div className="truncate text-xs text-muted-foreground">
-        {t("officialMarketplace.column.organizationCode")}: {code || t("common.emptyValue")}
-      </div>
+      <CopyableValue
+        className="max-w-full"
+        label={t("officialMarketplace.column.organizationCode")}
+        value={code}
+      />
     </div>
   );
 }

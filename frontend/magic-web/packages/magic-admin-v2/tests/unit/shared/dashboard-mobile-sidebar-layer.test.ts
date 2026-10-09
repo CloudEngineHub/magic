@@ -9,25 +9,21 @@ const accountControlsSource = readFileSync(
 )
 const languageSwitcherSource = readFileSync("src/components/language-switcher.tsx", "utf8")
 
-describe("dashboard mobile sidebar layering", () => {
-	it("keeps the mobile navigation above the sticky header", () => {
-		assert.match(source, /fixed inset-0 z-\[60\] isolate lg:hidden/)
-		assert.match(source, /sticky top-0 z-50/)
+describe("dashboard mobile sidebar", () => {
+	it("uses the shared Sheet/Dialog primitive for mobile navigation", () => {
+		assert.match(source, /<Sheet open=\{isMobileSidebarOpen\} onOpenChange=\{setMobileSidebarOpen\}>/)
+		assert.match(source, /<SheetContent[\s\S]*side="left"/)
+		assert.match(source, /className="w-\[18rem\] p-0 sm:max-w-none"/)
+		assert.match(source, /<SheetHeader className="sr-only">/)
+		assert.match(source, /<SheetTitle>\{t\("aria\.primaryNavigation"\)\}<\/SheetTitle>/)
+		assert.match(source, /<SheetDescription>\{t\("aria\.primaryNavigation"\)\}<\/SheetDescription>/)
 	})
 
-	it("keeps the navigation panel above its own backdrop", () => {
-		assert.match(source, /absolute inset-0 z-0 bg-black\/50/)
-		assert.match(source, /relative z-10 flex h-full w-\[18rem\]/)
-	})
-
-	it("animates both entering and exiting instead of unmounting immediately", () => {
-		assert.match(source, /const \[isMobileSidebarMounted, setIsMobileSidebarMounted\]/)
-		assert.match(source, /const \[isMobileSidebarEntered, setIsMobileSidebarEntered\]/)
-		assert.match(source, /requestAnimationFrame\(\(\) => setIsMobileSidebarEntered\(true\)\)/)
-		assert.match(source, /setIsMobileSidebarMounted\(false\), 300\)/)
-		assert.match(source, /transition-opacity duration-300/)
-		assert.match(source, /transition-transform duration-300/)
-		assert.match(source, /translate-x-0.*-translate-x-full/s)
+	it("lets the shared primitive own overlay lifecycle and closes from navigation", () => {
+		assert.doesNotMatch(source, /isMobileSidebarMounted|isMobileSidebarEntered/)
+		assert.doesNotMatch(source, /requestAnimationFrame|transition-transform duration-300/)
+		assert.match(source, /onCloseMobile=\{\(\) => setMobileSidebarOpen\(false\)\}/)
+		assert.match(source, /<AppSidebar[\s\S]*onCloseMobile=/)
 	})
 
 	it("keeps organization switching available and account actions compact on mobile", () => {

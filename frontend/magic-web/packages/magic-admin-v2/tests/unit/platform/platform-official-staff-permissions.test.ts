@@ -60,11 +60,11 @@ describe("platform official staff write permissions", () => {
   it("hides employee create and edit actions from query-only users", () => {
     assert.match(
       staffFeatureSource,
-      /\{hasEditRight \? \(\s*<Button onClick=\{\(\) => setStaffDialog\(\{ open: true, staff: null \}\)\}/,
+      /\{hasEditRight \? \(\s*<(?:Button|PageHeaderActionButton)[^>]*onClick=\{\(\) => setStaffDialog\(\{ open: true, staff: null \}\)\}/,
     );
     assert.match(
       staffFeatureSource,
-      /\{canEdit \? \(\s*<DropdownMenu[\s\S]*?onSelect=\{\(\) => onEdit\(item\)\}/,
+      /\{canEdit \? \(\s*<(?:Button|DropdownMenu)[^>]*?(?:onClick|onSelect)=\{\(\) => onEdit\(item\)\}/,
     );
     assert.match(
       staffFeatureSource,
@@ -89,11 +89,9 @@ describe("platform official staff write permissions", () => {
       staffFeatureSource,
       /const handleSave = async \(\) => \{\s*if \(!canEdit \|\| !staff \|\| !detail\) return;/,
     );
-    assert.equal(
-      staffFeatureSource.includes(
-        "<Button disabled={!canEdit || !detail || saveConfigPending} onClick={handleSave}>",
-      ),
-      true,
+    assert.match(
+      staffFeatureSource,
+      /<Button(?=[^>]*disabled=\{!canEdit \|\| !detail \|\| saveConfigPending\})(?=[^>]*onClick=\{handleSave\})[^>]*>/u,
     );
   });
 

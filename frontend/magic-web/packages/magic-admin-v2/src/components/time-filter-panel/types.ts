@@ -77,7 +77,7 @@ export type TimeFilterTab = (typeof timeFilterTab)[keyof typeof timeFilterTab]
 export type TimeFilterPresentation = "inline" | "popover"
 
 /** 时间范围的精度；day 会隐藏时间选择器并按自然日处理。 */
-export type TimePrecision = "day" | "minute" | "second"
+export type TimePrecision = "day" | "hour" | "minute" | "second"
 
 /** 持久化记录使用的范围模式，用于恢复相应的 Tab 和展示状态。 */
 export type HistoryMode = (typeof historyMode)[keyof typeof historyMode]

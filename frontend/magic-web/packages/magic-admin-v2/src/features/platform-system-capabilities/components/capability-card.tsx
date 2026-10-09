@@ -10,6 +10,7 @@ import {
 	type LucideIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import { Card, CardContent } from "@magic-admin-v2/components/ui/card"
 import { Switch } from "@magic-admin-v2/components/ui/switch"
@@ -44,16 +45,22 @@ const capabilityIconMap: Partial<Record<string, LucideIcon>> = {
 }
 
 export const CapabilityCard = memo(function CapabilityCard({
+	cardTestId,
 	canEdit,
+	configButtonTestId,
 	item,
 	onConfig,
 	onStatusChange,
+	statusSwitchTestId,
 	statusPending,
 }: {
+	cardTestId?: string
 	canEdit: boolean
+	configButtonTestId?: string
 	item: AiPower
 	onConfig: (item: AiPower) => void
 	onStatusChange: (item: AiPower, checked: boolean) => void
+	statusSwitchTestId?: string
 	statusPending: boolean
 }) {
 	const { t } = useTranslation()
@@ -63,7 +70,7 @@ export const CapabilityCard = memo(function CapabilityCard({
 	const displayDescription = getCapabilityDisplayText(item.description)
 
 	return (
-		<Card className="h-full overflow-hidden border-border/50 py-0">
+		<Card className="h-full overflow-hidden border-border/50 py-0" data-testid={cardTestId}>
 			<CardContent className="flex h-full flex-col gap-4 p-4">
 				<div className="flex min-w-0 items-start gap-3">
 					<div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-background">
@@ -73,9 +80,7 @@ export const CapabilityCard = memo(function CapabilityCard({
 						<h2 className="min-w-0 truncate text-base font-semibold">
 							{displayName || t("common.emptyValue")}
 						</h2>
-						<p className="truncate font-mono text-xs text-muted-foreground">
-							{item.code}
-						</p>
+						<CopyableValue className="max-w-full" value={item.code} />
 					</div>
 				</div>
 
@@ -83,10 +88,11 @@ export const CapabilityCard = memo(function CapabilityCard({
 					{displayDescription || t("common.emptyValue")}
 				</p>
 
-				<div className="mt-auto flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+				<div className="mt-auto flex gap-3 border-t pt-4 flex-row items-center justify-between">
 					<div className="flex items-center gap-2">
 						<Switch
 							checked={enabled}
+							data-testid={statusSwitchTestId}
 							disabled={!canEdit || statusPending}
 							onCheckedChange={(checked) => onStatusChange(item, checked)}
 						/>
@@ -95,7 +101,7 @@ export const CapabilityCard = memo(function CapabilityCard({
 						</span>
 					</div>
 					<Button
-						className="shrink-0"
+						data-testid={configButtonTestId}
 						disabled={!canEdit}
 						onClick={() => onConfig(item)}
 						size="sm"

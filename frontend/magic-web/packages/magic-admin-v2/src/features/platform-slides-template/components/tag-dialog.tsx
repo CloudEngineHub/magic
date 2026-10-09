@@ -96,7 +96,7 @@ export function TagDialog({
 
 	return (
 		<Dialog onOpenChange={onOpenChange} open={open}>
-			<DialogContent>
+			<DialogContent data-testid="platform-slides-template-dialog-content" closeButtonTestId="tag-dialog-close-button">
 				<DialogHeader>
 					<DialogTitle>
 						{editing
@@ -125,7 +125,7 @@ export function TagDialog({
 							id={`slides-template-${mode}-code`}
 							maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.code}
 							{...form.register("code")}
-						/>
+						 data-testid="platform-slides-template-input"/>
 						<FieldError message={form.formState.errors.code?.message} />
 					</DialogFormField>
 					{mode === "tag" ? (
@@ -142,12 +142,12 @@ export function TagDialog({
 										<SelectTrigger
 											className="w-full"
 											id="slides-template-tag-parent-group"
-										>
+										 data-testid="platform-slides-template-slides-template-tag-parent-group-trigger">
 											<SelectValue />
 										</SelectTrigger>
-										<SelectContent>
+										<SelectContent data-testid="platform-slides-template-slides-template-tag-parent-group-content">
 											{groups.map((group) => (
-												<SelectItem key={group.id} value={String(group.id)}>
+												<SelectItem key={group.id} value={String(group.id)} data-testid="platform-slides-template-option">
 													{resolveSlidesTemplateTagName(group)}
 												</SelectItem>
 											))}
@@ -169,7 +169,7 @@ export function TagDialog({
 								id={`slides-template-${mode}-name-zh`}
 								maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name}
 								{...form.register("name_zh")}
-							/>
+							 data-testid="platform-slides-template-input"/>
 							<FieldError message={form.formState.errors.name_zh?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -182,7 +182,7 @@ export function TagDialog({
 								id={`slides-template-${mode}-name-en`}
 								maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name}
 								{...form.register("name_en")}
-							/>
+							 data-testid="platform-slides-template-input"/>
 							<FieldError message={form.formState.errors.name_en?.message} />
 						</DialogFormField>
 					</div>
@@ -197,7 +197,7 @@ export function TagDialog({
 								maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.description}
 								rows={3}
 								{...form.register("description_zh")}
-							/>
+							 data-testid="platform-slides-template-textarea-input"/>
 							<FieldError message={form.formState.errors.description_zh?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -210,7 +210,7 @@ export function TagDialog({
 								maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.description}
 								rows={3}
 								{...form.register("description_en")}
-							/>
+							 data-testid="platform-slides-template-textarea-input"/>
 							<FieldError message={form.formState.errors.description_en?.message} />
 						</DialogFormField>
 					</div>
@@ -227,7 +227,7 @@ export function TagDialog({
 									setValueAs: (value) => (value === "" ? 0 : Number(value)),
 								})}
 								type="number"
-							/>
+							 data-testid="platform-slides-template-input"/>
 							<FieldError message={form.formState.errors.sort?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -244,7 +244,7 @@ export function TagDialog({
 											disabled={isPending}
 											id={`slides-template-${mode}-status`}
 											onCheckedChange={field.onChange}
-										/>
+										 data-testid="platform-slides-template-switch"/>
 									)}
 								/>
 							</div>
@@ -252,10 +252,10 @@ export function TagDialog({
 					</div>
 					<FieldError message={form.formState.errors.root?.server?.message} />
 					<DialogFooter>
-						<Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+						<Button onClick={() => onOpenChange(false)} type="button" variant="outline" data-testid="platform-slides-template-cancel-button">
 							{t("common.cancel")}
 						</Button>
-						<Button disabled={isPending} type="submit">
+						<Button disabled={isPending} type="submit" data-testid="platform-slides-template-save-button">
 							{t("common.save")}
 						</Button>
 					</DialogFooter>

@@ -29,17 +29,20 @@ export function ModelEditorRuntimeFields({
 	control,
 	disabled,
 	errors,
+	isOfficialOrganization,
 	modelType,
 	setValue,
 }: {
 	control: Control<ModelEditorValues>
 	disabled: boolean
 	errors: FieldErrors<ModelEditorValues>
+	isOfficialOrganization: boolean
 	modelType: ProviderModelType
 	setValue: UseFormSetValue<ModelEditorValues>
 }) {
 	const { t } = useTranslation()
-	const visibility = getCommonRuntimeFieldVisibility(modelType)
+	const visibility = getCommonRuntimeFieldVisibility(modelType, isOfficialOrganization)
+
 	// 订阅表单值，使已有固定温度零在重新打开编辑器时也显示为关闭。
 	const [temperatureMode, temperature] = useWatch({
 		control,
@@ -94,7 +97,6 @@ export function ModelEditorRuntimeFields({
 						description={t("modelList.editor.fieldDesc.maxTokens")}
 						error={getErrorMessage(errors.max_tokens?.message)}
 						label={t("modelList.editor.field.maxTokens")}
-						required
 						name="max_tokens"
 						placeholder={t("modelList.editor.placeholder.maxTokens")}
 					/>
@@ -106,9 +108,42 @@ export function ModelEditorRuntimeFields({
 						description={t("modelList.editor.fieldDesc.maxOutputTokens")}
 						error={getErrorMessage(errors.max_output_tokens?.message)}
 						label={t("modelList.editor.field.maxOutputTokens")}
+						required
 						name="max_output_tokens"
 						placeholder={t("modelList.editor.placeholder.maxOutputTokens")}
 					/>
+				) : null}
+				{visibility.chatApi ? (
+					<DialogFormField
+						description={t("modelList.editor.fieldDesc.chatApi")}
+						descriptionMode="text"
+						fieldId="chat-api"
+						label={t("modelList.editor.field.chatApi")}
+					>
+						<Controller
+							control={control}
+							name="chat_api"
+							render={({ field }) => (
+								<Select
+									disabled={disabled}
+									onValueChange={field.onChange}
+									value={field.value}
+								>
+									<SelectTrigger className="w-full" id="chat-api" data-testid="platform-model-list-chat-api-trigger">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent data-testid="platform-model-list-chat-api-content">
+										<SelectItem value="chat_completions" data-testid="platform-model-list-option">
+											{t("modelList.editor.chatApi.chatCompletions")}
+										</SelectItem>
+										<SelectItem value="responses" data-testid="platform-model-list-option">
+											{t("modelList.editor.chatApi.responses")}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							)}
+						/>
+					</DialogFormField>
 				) : null}
 				{visibility.temperature ? (
 					<>
@@ -127,14 +162,14 @@ export function ModelEditorRuntimeFields({
 										onValueChange={handleTemperatureModeChange}
 										value={isTemperatureDisabled ? "disabled" : field.value}
 									>
-										<SelectTrigger className="w-full" id="temperature-mode">
+										<SelectTrigger className="w-full" id="temperature-mode" data-testid="platform-model-list-temperature-mode-trigger">
 											<SelectValue />
 										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="recommended">
+										<SelectContent data-testid="platform-model-list-temperature-mode-content">
+											<SelectItem value="recommended" data-testid="platform-model-list-option">
 												{t("modelList.editor.temperature.recommended")}
 											</SelectItem>
-											<SelectItem value="fixed">
+											<SelectItem value="fixed" data-testid="platform-model-list-option">
 												{t("modelList.editor.temperature.fixed")}
 											</SelectItem>
 											<SelectItem value="disabled">
@@ -233,7 +268,7 @@ function NumberField({
 						step={step}
 						type="number"
 						value={field.value}
-					/>
+					 data-testid="platform-model-list-input"/>
 				)}
 			/>
 			<FieldError className="text-sm" message={error} />
@@ -268,7 +303,7 @@ function ToggleField({
 						checked={field.value}
 						disabled={disabled}
 						onCheckedChange={field.onChange}
-					/>
+					 data-testid="platform-model-list-switch"/>
 				)}
 			/>
 		</div>

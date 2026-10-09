@@ -69,7 +69,7 @@ export function ModelEditorProgressDialog({
         }}
         ref={contentRef}
         tabIndex={-1}
-      >
+       data-testid="platform-model-list-alert-dialog-content">
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>
@@ -106,12 +106,12 @@ export function ModelEditorProgressDialog({
         {!isRunning ? (
           <AlertDialogFooter>
             {progress.failed ? (
-              <Button onClick={onRetry} type="button" variant="outline">
+              <Button onClick={onRetry} type="button" variant="outline" data-testid="platform-model-list-refresh-button">
                 <RefreshCw className="size-4" aria-hidden="true" />
                 {t("modelList.editor.progress.retry")}
               </Button>
             ) : null}
-            <Button onClick={onClose} type="button">
+            <Button onClick={onClose} type="button" data-testid="platform-model-list-cancel-button">
               {t("modelList.editor.progress.close")}
             </Button>
           </AlertDialogFooter>

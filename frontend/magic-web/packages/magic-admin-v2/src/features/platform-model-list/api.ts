@@ -26,6 +26,21 @@ export function createPlatformModelApi(client: HttpClient) {
         options,
       );
     },
+    getProviderModelImportSources(
+      category: string,
+      dataSource: ProviderModelDataSource = platformProviderModelDataSource,
+      options?: RequestOptions,
+    ) {
+      if (!dataSource.endpoints.modelImportList) {
+        return Promise.resolve([] as ProviderModelRecord[]);
+      }
+
+      return client.post<ProviderModelRecord[]>(
+        dataSource.endpoints.modelImportList,
+        { category },
+        options,
+      );
+    },
     getProviderOriginalModelIds(
       dataSource: ProviderModelDataSource = platformProviderModelDataSource,
       options?: RequestOptions,

@@ -6,7 +6,7 @@ import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
 import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import {
 	Select,
 	SelectContent,
@@ -92,63 +92,61 @@ export default function PlatformSystemCapabilitiesPage() {
 	return (
 		<>
 			<ListShell
+			testId="platform-system-capabilities-page"
 				actions={
-					<Button
+					<PageHeaderActionButton
 						disabled={listQuery.isFetching}
 						onClick={() => listQuery.refetch()}
 						variant="outline"
-					>
+					 data-testid="platform-system-capabilities-refresh-button">
 						<RefreshCw
 							aria-hidden="true"
 							className={cn("size-4", listQuery.isFetching && "animate-spin")}
 						/>
 						{t("common.refresh")}
-					</Button>
+					</PageHeaderActionButton>
 				}
 				description={t("nav.desc.systemCapabilities")}
 				title={t("nav.item.systemCapabilities")}
+				contentHeader={
+					<div className="flex min-w-0 items-end gap-2">
+						<FilterControlField
+							className="min-w-0 flex-1 md:w-[280px] md:flex-none xl:w-[360px]"
+							label={t("systemCapabilities.filter.keyword")}
+						>
+							<FilterSearchInput
+								clearLabel={t("common.clear")}
+								onValueChange={setKeyword}
+								placeholder={t("systemCapabilities.placeholder.keyword")}
+								value={keyword}
+							 inputTestId="platform-system-capabilities-search-input" clearButtonTestId="platform-system-capabilities-search-clear-button"/>
+						</FilterControlField>
+						<FilterControlField
+							className="w-[112px] shrink-0 md:w-fit"
+							label={t("systemCapabilities.filter.status")}
+						>
+							<Select onValueChange={setStatusFilter} value={statusFilter}>
+								<SelectTrigger className="w-full md:w-fit md:max-w-full" data-testid="platform-system-capabilities-select-trigger">
+									<SelectValue
+										placeholder={t("systemCapabilities.filter.status")}
+									/>
+								</SelectTrigger>
+								<SelectContent data-testid="platform-system-capabilities-select-content">
+									<SelectItem value={ALL_VALUE} data-testid="platform-system-capabilities-option">
+										{t("systemCapabilities.filter.allStatuses")}
+									</SelectItem>
+									<SelectItem value="enabled" data-testid="platform-system-capabilities-option">{t("common.enabled")}</SelectItem>
+									<SelectItem value="disabled" data-testid="platform-system-capabilities-option">{t("common.disabled")}</SelectItem>
+								</SelectContent>
+							</Select>
+						</FilterControlField>
+					</div>
+				}
 			>
 				{listQuery.isLoading ? (
-					<CapabilityListSkeleton />
+					<CapabilityListSkeleton testId="platform-system-capabilities-loading" />
 				) : (
 					<div className="space-y-4 pb-6">
-						<div className="flex min-w-0 items-end gap-2">
-							<FilterControlField
-								className="min-w-0 flex-1 md:w-[280px] md:flex-none xl:w-[360px]"
-								label={t("systemCapabilities.filter.keyword")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={setKeyword}
-									placeholder={t("systemCapabilities.placeholder.keyword")}
-									value={keyword}
-								/>
-							</FilterControlField>
-							<FilterControlField
-								className="w-[112px] shrink-0 md:w-fit"
-								label={t("systemCapabilities.filter.status")}
-							>
-								<Select onValueChange={setStatusFilter} value={statusFilter}>
-									<SelectTrigger className="w-full md:w-fit md:max-w-full">
-										<SelectValue
-											placeholder={t("systemCapabilities.filter.status")}
-										/>
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={ALL_VALUE}>
-											{t("systemCapabilities.filter.allStatuses")}
-										</SelectItem>
-										<SelectItem value="enabled">
-											{t("common.enabled")}
-										</SelectItem>
-										<SelectItem value="disabled">
-											{t("common.disabled")}
-										</SelectItem>
-									</SelectContent>
-								</Select>
-							</FilterControlField>
-						</div>
-
 						{listQuery.error ? (
 							<div className="rounded-lg border border-border/50 p-4">
 								<EmptyState
@@ -158,7 +156,7 @@ export default function PlatformSystemCapabilitiesPage() {
 									)}
 									icon={AlertCircle}
 									title={t("systemCapabilities.error.loadTitle")}
-								/>
+								 testId="platform-system-capabilities-error"/>
 							</div>
 						) : items.length ? (
 							<CapabilityCardList
@@ -174,7 +172,7 @@ export default function PlatformSystemCapabilitiesPage() {
 									description={t("systemCapabilities.empty.description")}
 									icon={Cpu}
 									title={t("systemCapabilities.empty.title")}
-								/>
+								 testId="platform-system-capabilities-empty"/>
 							</div>
 						)}
 					</div>

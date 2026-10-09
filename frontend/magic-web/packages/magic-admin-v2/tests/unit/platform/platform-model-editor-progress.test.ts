@@ -8,6 +8,21 @@ const editorSource = readFileSync(
 );
 
 describe("platform model editor progress dialog", () => {
+  it("only shows the provider loading progress for models with multiple providers", () => {
+    assert.equal(
+      editorSource.includes("const shouldShowLoadProgress = allRecordIds.length >= 2;"),
+      true,
+    );
+    assert.equal(
+      editorSource.includes("if (shouldShowLoadProgress) {\n      setProgress({"),
+      true,
+    );
+    assert.equal(
+      editorSource.includes("if (shouldShowLoadProgress) {\n        setProgress({"),
+      true,
+    );
+  });
+
   it("unmounts the nested progress dialog before closing the editor", () => {
     const functionStart = editorSource.indexOf("function closeProgressDialog()");
     const functionEnd = editorSource.indexOf("function handleRemoveProvider", functionStart);

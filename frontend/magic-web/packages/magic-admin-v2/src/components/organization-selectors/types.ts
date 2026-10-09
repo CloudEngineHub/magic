@@ -112,6 +112,23 @@ export interface BaseSelectorDialogProps {
   maxSelected?: number;
   /** 是否禁用选择和确认操作。 */
   disabled?: boolean;
+  /** Stable selectors for the dialog and organization tree controls. */
+  dialogContentTestId?: string;
+  searchInputTestId?: string;
+  clearSearchButtonTestId?: string;
+  rootButtonTestId?: string;
+  breadcrumbButtonTestId?: string;
+  backButtonTestId?: string;
+  loadingTestId?: string;
+  errorTestId?: string;
+  emptyTestId?: string;
+  rowTestId?: string;
+  nodeButtonTestId?: string;
+  checkboxTestId?: string;
+  enterButtonTestId?: string;
+  loadMoreButtonTestId?: string;
+  cancelButtonTestId?: string;
+  confirmButtonTestId?: string;
 }
 
 /** 仅选择部门的弹窗属性。 */
@@ -192,6 +209,10 @@ export interface SelectorRowProps {
   selectable: boolean;
   /** 当前节点是否已选择。 */
   selected: boolean;
+  rowTestId?: string;
+  nodeButtonTestId?: string;
+  checkboxTestId?: string;
+  enterButtonTestId?: string;
 }
 
 /** 节点头像组件的属性。 */
