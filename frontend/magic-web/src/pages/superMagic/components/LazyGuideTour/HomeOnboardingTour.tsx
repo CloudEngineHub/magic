@@ -192,6 +192,115 @@ const PAGE_PREPARE_TIMEOUT_MS = 8000
 const ANCHOR_APPEAR_TIMEOUT_MS = 2000
 
 /**
+ * How far a box has to move between two frames to be worth measuring again. Sub-pixel, so that a
+ * page holding still is measured once and left alone rather than redrawn every frame.
+ *
+ * Small enough to matter, though. A decelerating curve covers most of its distance early and then
+ * creeps: over the last third of the micro-app composer's 20px rise it moves by a fraction of a
+ * pixel a frame, so a tolerance of half a pixel calls it settled with two or three pixels still to
+ * go — the same misalignment this follow exists to remove, only smaller. At this tolerance what is
+ * left when it lets go is under a tenth of a pixel.
+ */
+const ANCHOR_MOVE_EPSILON = 0.05
+
+/**
+ * How many frames of stillness, after the anchor has been seen to move, end the follow — a
+ * twentieth of a second at 60Hz, which no easing curve's last step spans.
+ */
+const ANCHOR_STILL_FRAMES = 3
+
+/**
+ * How long an anchor is followed at most, entrance or not. A page whose anchor never holds still is
+ * animating it on purpose, and a guide that keeps chasing it is worse than one that stays where it
+ * was put; it is also what caps the follow for the many steps whose anchor never moves at all,
+ * since a page that has not started moving yet cannot be told from one that has nothing to move.
+ */
+const ANCHOR_FOLLOW_TIMEOUT_MS = 2000
+
+/** Whether a box has moved, on any edge, by more than the follow bothers to chase. */
+function boxMoved(previous: DOMRect, next: DOMRect): boolean {
+	return (
+		Math.abs(previous.left - next.left) > ANCHOR_MOVE_EPSILON ||
+		Math.abs(previous.top - next.top) > ANCHOR_MOVE_EPSILON ||
+		Math.abs(previous.width - next.width) > ANCHOR_MOVE_EPSILON ||
+		Math.abs(previous.height - next.height) > ANCHOR_MOVE_EPSILON
+	)
+}
+
+/**
+ * Following an anchor that is still on its way in.
+ *
+ * A step's box used to be measured once, the moment its anchor turned up — an anchor on screen
+ * taken to be an anchor in place. The micro-app page does not oblige: it brings its composer in
+ * with a transform, the card rising its last 20px over the second after it mounts, and a box
+ * measured at the start of that move leaves the mask and the card where the composer no longer is.
+ * Measured again once the move is over, they are right.
+ *
+ * So the box is followed frame by frame until it stops changing, and no further. Bounded on three
+ * sides: it ends once the anchor has moved and then held still, it ends after
+ * `ANCHOR_FOLLOW_TIMEOUT_MS` even if it never holds still, and it ends when the anchor goes.
+ *
+ * The move comes first, and that ordering is the whole of it. That entrance is armed with a fifth
+ * of a second of delay, so the page is perfectly still for its first twelve frames — stillness
+ * that cannot be told apart from a page with nothing to animate, and that a still-anchored end to
+ * the follow therefore reads as the anchor having arrived. It has not: it has not set off. Waiting
+ * for movement before accepting the absence of it is what makes the difference, and the deadline
+ * is what keeps that wait bounded for the many steps whose anchor never moves at all. Those pay a
+ * loop that measures a box and leaves it alone, which is what keeps this the tail of the wait that
+ * found the anchor rather than a subscription to the page.
+ *
+ * `apply` runs only for a box that really moved, so a page that holds still is measured once and
+ * left alone. Returns the function that ends the follow early — a step change, generally — and
+ * `onSettled` is left uncalled in that case, because an interrupted follow says nothing about where
+ * the anchor ended up.
+ */
+function followAnchorUntilStill(
+	measure: () => DOMRect | null,
+	apply: () => void,
+	onSettled: () => void,
+): () => void {
+	let previous = measure()
+	let applied = previous
+	let stillFrames = 0
+	let moved = false
+	let frame = 0
+	const startedAt = Date.now()
+
+	const tick = () => {
+		const box = measure()
+		// Nothing left to follow is a settle of its own.
+		if (!box) {
+			onSettled()
+			return
+		}
+		if (!applied || boxMoved(applied, box)) {
+			applied = box
+			moved = true
+			apply()
+		}
+		stillFrames = previous && boxMoved(previous, box) ? 0 : stillFrames + 1
+		previous = box
+		/*
+		 * Until the anchor has been seen to move, a frame of stillness says nothing about whether it
+		 * is in place — see above. It is the anchor that has moved and then stopped, not the one
+		 * that has never started, that this ends on.
+		 */
+		if (moved && stillFrames >= ANCHOR_STILL_FRAMES) {
+			onSettled()
+			return
+		}
+		if (Date.now() - startedAt >= ANCHOR_FOLLOW_TIMEOUT_MS) {
+			onSettled()
+			return
+		}
+		frame = window.requestAnimationFrame(tick)
+	}
+	frame = window.requestAnimationFrame(tick)
+
+	return () => window.cancelAnimationFrame(frame)
+}
+
+/**
  * One highlighted step of a task. `action` replaces the shared "next" wording of the primary button
  * when a step hands over to a particular part of the page; a step without one advances generically,
  * and the run's last step closes with the label its own state calls for.
@@ -886,6 +995,13 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const [dismissed, setDismissed] = useState(false)
 	const [waitingForTarget, setWaitingForTarget] = useState(false)
 	/**
+	 * Whether the anchor of the step on screen has stopped moving. False while it is being followed
+	 * in — see `followAnchorUntilStill` — which is also when the highlight must sit exactly where
+	 * the anchor is instead of easing its way there: the two animations would otherwise be racing,
+	 * and the one the user is meant to read the step off would be the loser.
+	 */
+	const [anchorSettled, setAnchorSettled] = useState(true)
+	/**
 	 * The step the hosting page has finished preparing. Read from the manager as well as followed,
 	 * because the page may answer before this instance is listening — the two mount in whichever
 	 * order the entry's navigation and the tour's own mount happen to take.
@@ -1309,8 +1425,12 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		setRect(null)
 		setEditorRect(null)
 		setWaitingForTarget(true)
+		// A step change leaves no follow behind, and a follow that was cut short by one must not
+		// leave the highlight without its easing — see `anchorSettled` below.
+		setAnchorSettled(true)
 		const selector = `[data-guide-anchor="${activeAnchor}"]`
 		let timeout: number | null = null
+		let stopFollowing: (() => void) | null = null
 		/*
 		 * Observe only the short transition into a step. This avoids a long-lived animation-frame
 		 * poll that could surface the guide during user actions.
@@ -1325,7 +1445,11 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		 * couple of seconds later and walked the run past a step the user was still reading. A step
 		 * whose anchor is there from the first frame returns above and is never armed at all, which
 		 * is why only the steps that arrive late — the ones the page has to build — were skipped.
-		 * The canvas holds still once focused, so there is nothing left to follow afterwards.
+		 *
+		 * Its box is then followed until it holds still. An anchor that exists is not the same as an
+		 * anchor in place: the micro-app page animates its composer in over the second after it
+		 * mounts, so the one measurement taken here would leave the mask where the card started. See
+		 * `followAnchorUntilStill`.
 		 */
 		const resolveTarget = () => {
 			if (!document.querySelector(selector)) return false
@@ -1335,9 +1459,16 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				timeout = null
 			}
 			updateRect()
+			setAnchorSettled(false)
+			stopFollowing = followAnchorUntilStill(
+				() =>
+					document.querySelector<HTMLElement>(selector)?.getBoundingClientRect() ?? null,
+				updateRect,
+				() => setAnchorSettled(true),
+			)
 			return true
 		}
-		if (resolveTarget()) return undefined
+		if (resolveTarget()) return () => stopFollowing?.()
 
 		observer.observe(document.body, { childList: true, subtree: true })
 		const giveUp = () => {
@@ -1362,6 +1493,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		return () => {
 			observer.disconnect()
 			if (timeout != null) window.clearTimeout(timeout)
+			stopFollowing?.()
 		}
 	}, [
 		abort,
@@ -2061,7 +2193,17 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			})}
 		>
 			<div
-				className="pointer-events-none fixed z-[1201] rounded-xl border-2 border-white/95 bg-transparent shadow-[0_0_0_4px_rgba(255,255,255,0.16),0_0_0_9999px_rgba(52,52,52,0.62),0_12px_32px_rgba(17,19,24,0.18)] transition-[left,top,width,height] duration-300 ease-out motion-reduce:transition-none"
+				className={cn(
+					"pointer-events-none fixed z-[1201] rounded-xl border-2 border-white/95 bg-transparent shadow-[0_0_0_4px_rgba(255,255,255,0.16),0_0_0_9999px_rgba(52,52,52,0.62),0_12px_32px_rgba(17,19,24,0.18)] motion-reduce:transition-none",
+					/*
+					 * The easing is what gives a step change its move, and it is only ever wanted
+					 * then. While the anchor is being followed the ring has to be where the anchor
+					 * is, frame for frame — a transition against a moving target is a second
+					 * animation on the same pixels, and the lag it leaves behind is the very
+					 * misalignment this is here to avoid.
+					 */
+					anchorSettled && "transition-[left,top,width,height] duration-300 ease-out",
+				)}
 				style={{
 					left: rect.left - 4,
 					top: rect.top - 4,
