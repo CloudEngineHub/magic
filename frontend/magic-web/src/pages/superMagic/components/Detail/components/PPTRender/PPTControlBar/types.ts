@@ -12,6 +12,7 @@ export interface PPTControlBarProps {
 	onNextSlide: () => void
 	onGoToFirstSlide: () => void
 	onRefreshSlides: () => void
+	refreshAllProgress?: { done: number; total: number } | null
 	onJumpToPage: (index: number) => void
 	onToggleFullscreen: () => void
 	presenterScreens?: ReadonlyArray<{ label?: string; isPrimary?: boolean }>
@@ -20,10 +21,12 @@ export interface PPTControlBarProps {
 	onReplaceTemplate?: () => void
 	notesVisible?: boolean
 	onToggleNotes?: () => void
+	onOpenTransitions?: () => void
 	scaleRatio: number
 	isAutoScale: boolean
 	portalContainer: HTMLElement | null
 	onScaleChange: (scale: number) => void
 	onResetScale: () => void
 	className?: string
+	currentFileId?: string
 }

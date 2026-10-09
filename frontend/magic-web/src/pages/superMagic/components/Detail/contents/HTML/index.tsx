@@ -57,6 +57,8 @@ import { HTMLGuideTourElementId, useHTMLGuideTour } from "@/pages/superMagic/hoo
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MagicSpin from "@/components/base/MagicSpin"
 import DashboardIsolatedHTMLRenderer from "./dashboard/DashboardIsolatedHTMLRenderer"
+import { usePreviewFrameSwap } from "./hooks/usePreviewFrameSwap"
+import { useSaveConfirmation } from "./hooks/useSaveConfirmation"
 import { inlineDashboardDataJs } from "./dashboard/resourceVersioning"
 import { useDashboardVersioning } from "./dashboard/useDashboardVersioning"
 import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
@@ -145,6 +147,9 @@ interface HTMLProps {
 		fileId?: string,
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
+		isPPTEditMode?: boolean,
+		shouldExitEditMode?: boolean,
+		options?: { silent?: boolean },
 	) => Promise<boolean | void>
 	allowEdit?: boolean
 	// New props for ActionButtons functionality
@@ -260,7 +265,7 @@ export default memo(function HTML(props: HTMLProps) {
 		attachmentList,
 		isEditMode,
 		setIsEditMode,
-		saveEditContent,
+		saveEditContent: saveEditContentWithToast,
 		allowEdit,
 		viewMode,
 		onViewModeChange,
@@ -324,6 +329,7 @@ export default memo(function HTML(props: HTMLProps) {
 		previewPolicy?.keepLocalContent === true ? "" : displayData?.file_id || ""
 
 	const [processedContent, setProcessedContent] = useState<string>("")
+	const [isProcessedEditVariant, setIsProcessedEditVariant] = useState(false)
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map()) // 记录文件的相对路径和替换后的url映射关系
 	// 跨域 shell 渲染下，数据加载完成 ≠ iframe 内容已画出来；
 	// 用 iframe 上报的渲染就绪信号来控制预览 loading 收起时机，避免"loading 没了但页面空白"。
@@ -337,9 +343,13 @@ export default memo(function HTML(props: HTMLProps) {
 		rendering: markPreviewRendering,
 	} = previewFreshness
 	const [previewRenderGeneration, setPreviewRenderGeneration] = useState(0)
+	// Generation that produced the document now sent to the iframe. A newer load
+	// may start before that document acknowledges, so this is not `isCurrent`.
+	const displayedPreviewGenerationRef = useRef(0)
 	const forcePreviewRestartRef = useRef(false)
 	const readyPreviewContentRef = useRef<string | null>(null)
 	useEffect(() => {
+		displayedPreviewGenerationRef.current = 0
 		readyPreviewContentRef.current = null
 		forcePreviewRestartRef.current = false
 		setIsPreviewRenderReady(false)
@@ -365,6 +375,9 @@ export default memo(function HTML(props: HTMLProps) {
 	const editSessionBaselineContentRef = useRef<string | null>(null)
 	// Tracks the last successful local save so the follow-up refresh is not treated as an external update.
 	const lastLocalSavedContentRef = useRef<string | null>(null)
+	// Set between adopting the saved content and the parent leaving edit mode, so
+	// the still-open editor iframe is not reloaded with content it already shows.
+	const isExitingAfterSaveRef = useRef(false)
 	const pendingSaveIntentRef = useRef<"save" | "save-and-exit" | null>(null)
 	const scaleContentDimensions = useMemo(
 		() =>
@@ -1018,10 +1031,12 @@ export default memo(function HTML(props: HTMLProps) {
 					finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
 				}
 
-				if (!isCurrentPreview(request)) return
+				const isStaleRequest = !isCurrentPreview(request)
+				if (isStaleRequest) return
 				const shouldRestart = forcePreviewRestartRef.current
 				forcePreviewRestartRef.current = false
 				setPreviewRenderGeneration(request)
+				displayedPreviewGenerationRef.current = request
 				if (
 					isDataAnalysis ||
 					(finalProcessedContent === readyPreviewContentRef.current && !shouldRestart)
@@ -1036,6 +1051,7 @@ export default memo(function HTML(props: HTMLProps) {
 					setRenderKey((current) => current + 1)
 				}
 				setProcessedContent(finalProcessedContent)
+				setIsProcessedEditVariant(Boolean(isEditMode && !isDataAnalysis))
 				setFilePathMapping(result.filePathMapping)
 			} catch (error) {
 				console.error("Error processing HTML content:", error)
@@ -1082,6 +1098,8 @@ export default memo(function HTML(props: HTMLProps) {
 		if (typeof data?.content !== "string") return
 		if (isSharePreview && !isShareFileAccess(fileAccess)) return
 		if (isDataAnalysis && !activeHistory.isPreviewReady) return
+		if (isEditMode && isExitingAfterSaveRef.current) return
+		isExitingAfterSaveRef.current = false
 		processContent()
 	}, [
 		data,
@@ -1138,11 +1156,36 @@ export default memo(function HTML(props: HTMLProps) {
 		}
 	})
 
+	// Save feedback lives in the preview notice, so the generic toast is muted.
+	const saveEditContent = useMemoizedFn(
+		(
+			content: any,
+			fileId?: string,
+			enableShadow?: boolean,
+			fetchFileVersions?: (fileId: string) => void,
+			isPPTEditMode?: boolean,
+		) =>
+			saveEditContentWithToast?.(
+				content,
+				fileId,
+				enableShadow,
+				fetchFileVersions,
+				isPPTEditMode,
+				false,
+				{ silent: !isDataAnalysis },
+			),
+	)
+	const hasSaveEditContent = Boolean(saveEditContentWithToast)
+	const saveStage = useSaveConfirmation(
+		displayData?.file_id,
+		isEditMode || previewFreshness.phase === "idle",
+	)
+
 	const performSave = useMemoizedFn(async (): Promise<boolean> => {
 		setIsEditingAfter(true)
 		if (viewMode === "code" && editingCodeContent) {
 			// 保存代码编辑内容
-			const saveResult = await saveEditContent?.(
+			const saveResult = await saveEditContent(
 				shadow(editingCodeContent),
 				displayData?.file_id,
 				true,
@@ -1177,10 +1220,16 @@ export default memo(function HTML(props: HTMLProps) {
 	})
 
 	const exitEditModeAfterSave = useMemoizedFn(() => {
+		// Adopt what was just saved instead of refreshing the tab: a refresh
+		// remounts the whole preview and repaints it from scratch.
+		const savedContent = lastLocalSavedContentRef.current
+		if (typeof savedContent === "string") {
+			isExitingAfterSaveRef.current = true
+			setData((prev: any) => ({ ...prev, content: savedContent }))
+		}
 		if (setIsEditMode) {
 			setIsEditMode(false)
 		}
-		onRefreshFile?.()
 	})
 
 	const runSaveAttempt = useMemoizedFn(async (intent: "save" | "save-and-exit") => {
@@ -1289,11 +1338,13 @@ export default memo(function HTML(props: HTMLProps) {
 	)
 
 	const handlePreviewRenderReady = useCallback(() => {
-		if (!isCurrentPreview(previewRenderGeneration)) return
+		if (displayedPreviewGenerationRef.current !== previewRenderGeneration) return
 		readyPreviewContentRef.current = processedContent
 		setIsPreviewRenderReady(true)
+		// No-op when a newer load superseded this request; that load then
+		// matches `readyPreviewContentRef` and acknowledges itself.
 		acknowledgePreview(previewRenderGeneration)
-	}, [isCurrentPreview, acknowledgePreview, previewRenderGeneration, processedContent])
+	}, [acknowledgePreview, previewRenderGeneration, processedContent])
 
 	// 当 viewMode 变化时，退出编辑模式
 	useEffect(() => {
@@ -1833,6 +1884,46 @@ export default memo(function HTML(props: HTMLProps) {
 		],
 	}
 
+	const rendererStaticProps = {
+		className: isImmersiveLayout ? undefined : "!bg-[#eeeeee] dark:!bg-[#2b2b2b]",
+		devicePreview: {
+			...devicePreview,
+			active: htmlTestIdsEnabled,
+			enabled: devicePreviewEnabled,
+		},
+		rawSourceCode: data?.content,
+		sandboxType: "iframe" as const,
+		isPptRender: isInPPTMode,
+		scaleContentDimensions,
+		isFullscreen,
+		documentFlowFullscreen,
+		documentFlowContentHeight,
+		isEditMode,
+		saveEditContent: hasSaveEditContent ? saveEditContent : undefined,
+		fileId: displayData?.file_id,
+		htmlNavigation: data?.htmlNavigation,
+		virtualStorageMarkerId,
+		filePathMapping,
+		openNewTab,
+		htmlRelativeFolderPath: currentHtmlFileInfo.htmlRelativeFolderPath,
+		projectId: runtimeProjectId,
+		microAppId,
+		microAppName,
+		devConsoleEnabled,
+		permissionController: htmlPermissionController,
+		attachmentList,
+		isPlaybackMode,
+		isVisible: htmlTestIdsEnabled,
+		isTabActive: htmlTestIdsEnabled,
+	}
+	const previewFrameSwap = usePreviewFrameSwap({
+		token: `${displayData?.file_id}:${renderKey}`,
+		content: processedContent,
+		isEditing: Boolean(isEditMode),
+		contentIsEditVariant: isProcessedEditVariant,
+		props: rendererStaticProps,
+	})
+
 	return (
 		<div
 			className={cx(styles.htmlContainer, className, {
@@ -1901,10 +1992,12 @@ export default memo(function HTML(props: HTMLProps) {
 							[styles.documentFlowPreviewInner]: documentFlowFullscreen,
 						})}
 					>
-						{!isEditMode && !isDataAnalysis && (
+						{!isDataAnalysis && (
 							<HtmlPreviewFreshness
 								key={displayData?.file_id}
 								phase={previewFreshness.phase}
+								saveStage={saveStage}
+								previewStatusEnabled={!isEditMode}
 								hasRendered={previewFreshness.hasRendered}
 								onRetry={() => void refreshHtmlPreview()}
 							/>
@@ -1941,69 +2034,65 @@ export default memo(function HTML(props: HTMLProps) {
 							<Deleted data={displayData} showHeader={false} />
 						) : (
 							<>
-								<IsolatedHTMLRenderer
-									ref={htmlRendererRef}
-									className={
-										isImmersiveLayout
-											? undefined
-											: "!bg-[#eeeeee] dark:!bg-[#2b2b2b]"
-									}
-									devicePreview={{
-										...devicePreview,
-										active: htmlTestIdsEnabled,
-										enabled: devicePreviewEnabled,
-									}}
-									onDeviceContentScaledChange={setDeviceContentScaled}
-									key={`html-${renderKey}`}
-									content={processedContent}
-									rawSourceCode={data?.content}
-									sandboxType="iframe"
-									isPptRender={isInPPTMode}
-									scaleContentDimensions={scaleContentDimensions}
-									isFullscreen={isFullscreen}
-									documentFlowFullscreen={documentFlowFullscreen}
-									documentFlowContentHeight={documentFlowContentHeight}
-									isEditMode={isEditMode}
-									saveEditContent={saveEditContent}
-									onSaveReady={onSaveReady}
-									fileId={displayData?.file_id}
-									htmlNavigation={data?.htmlNavigation}
-									virtualStorageMarkerId={virtualStorageMarkerId}
-									filePathMapping={filePathMapping}
-									openNewTab={openNewTab}
-									htmlRelativeFolderPath={
-										currentHtmlFileInfo.htmlRelativeFolderPath
-									}
-									projectId={runtimeProjectId}
-									microAppId={microAppId}
-									microAppName={microAppName}
-									devConsoleEnabled={devConsoleEnabled}
-									permissionController={htmlPermissionController}
-									attachmentList={attachmentList}
-									isPlaybackMode={isPlaybackMode}
-									isVisible={htmlTestIdsEnabled}
-									isTabActive={htmlTestIdsEnabled}
-									onRenderReady={handlePreviewRenderReady}
-									onContentMetrics={(
-										metrics: IsolatedHTMLRendererContentMetrics,
-									) => {
-										if (!documentFlowFullscreen) return
-										const nextHeight = Math.ceil(metrics.contentHeight)
-										if (!Number.isFinite(nextHeight) || nextHeight <= 0) return
+								{previewFrameSwap.frames.map((frame) => (
+									<div
+										key={`${renderKey}-${frame.id}`}
+										className={
+											frame.isVisible
+												? "contents"
+												: "pointer-events-none invisible absolute inset-0"
+										}
+									>
+										{frame.isLive ? (
+											<IsolatedHTMLRenderer
+												{...rendererStaticProps}
+												ref={htmlRendererRef}
+												onDeviceContentScaledChange={setDeviceContentScaled}
+												content={frame.content}
+												onSaveReady={onSaveReady}
+												onRenderReady={() => {
+													handlePreviewRenderReady()
+													previewFrameSwap.markReady(frame.id)
+												}}
+												onContentMetrics={(
+													metrics: IsolatedHTMLRendererContentMetrics,
+												) => {
+													if (!documentFlowFullscreen) return
+													const nextHeight = Math.ceil(
+														metrics.contentHeight,
+													)
+													if (
+														!Number.isFinite(nextHeight) ||
+														nextHeight <= 0
+													)
+														return
 
-										setDocumentFlowContentHeight((currentHeight) =>
-											currentHeight === nextHeight
-												? currentHeight
-												: nextHeight,
-										)
-									}}
-									onDevConsoleClose={() => updateDevConsoleEnabled(false)}
-									onAppendPickingChange={setIsAppendPicking}
-									onQuickSelectionChange={setIsQuickSelecting}
-								/>
+													setDocumentFlowContentHeight((currentHeight) =>
+														currentHeight === nextHeight
+															? currentHeight
+															: nextHeight,
+													)
+												}}
+												onDevConsoleClose={() =>
+													updateDevConsoleEnabled(false)
+												}
+												onAppendPickingChange={setIsAppendPicking}
+												onQuickSelectionChange={setIsQuickSelecting}
+											/>
+										) : (
+											frame.frozenProps && (
+												<IsolatedHTMLRenderer
+													{...frame.frozenProps}
+													content={frame.content}
+												/>
+											)
+										)}
+									</div>
+								))}
 								{/* 跨域 shell 渲染期间用 loading 覆盖层填补"数据已就绪但 iframe 内容未画出"的空窗 */}
 								{Boolean(processedContent) &&
 									!isPreviewRenderReady &&
+									!previewFrameSwap.holdsPreviousFrame &&
 									previewFreshness.phase !== "failed" &&
 									!documentFlowFullscreen && (
 										<Flex

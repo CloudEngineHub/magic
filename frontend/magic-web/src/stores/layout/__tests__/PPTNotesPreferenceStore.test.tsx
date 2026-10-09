@@ -24,6 +24,24 @@ describe("PPTNotesPreferenceStore", () => {
 		},
 	)
 
+	it("persists font size and review mode across presentations", () => {
+		const store = new PPTNotesPreferenceStore()
+		expect(store.fontSize).toBe(13)
+		expect(store.autoApply).toBe(true)
+		store.setFontSize(21)
+		store.setAutoApply(false)
+		const restored = new PPTNotesPreferenceStore()
+		expect(restored.fontSize).toBe(21)
+		expect(restored.autoApply).toBe(false)
+	})
+	it.each(["NaN", "Infinity", "10", "32", "13.5", "bad"])(
+		"ignores invalid stored font size %s",
+		(value) => {
+			localStorage.setItem("supermagic-ppt-notes-font-size", value)
+			expect(new PPTNotesPreferenceStore().fontSize).toBe(13)
+		},
+	)
+
 	it("defaults to collapsed and restores both choices after reload", () => {
 		const store = new PPTNotesPreferenceStore()
 		expect(store.visible).toBe(false)
@@ -64,5 +82,9 @@ describe("PPTNotesPreferenceStore", () => {
 		expect(store.visible).toBe(true)
 		expect(() => store.setHeight(220)).not.toThrow()
 		expect(store.height).toBe(220)
+		expect(() => store.setFontSize(19)).not.toThrow()
+		expect(store.fontSize).toBe(19)
+		expect(() => store.setAutoApply(false)).not.toThrow()
+		expect(store.autoApply).toBe(false)
 	})
 })

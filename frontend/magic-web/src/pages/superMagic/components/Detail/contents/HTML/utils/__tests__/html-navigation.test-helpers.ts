@@ -26,13 +26,14 @@ export function createRuntime(withNavigation = false) {
 		})
 	}
 	const nativeNavigation = vi.fn()
+	const nativeOpen = vi.fn()
 	const navigation = { navigate: nativeNavigation, addEventListener: vi.fn() }
 	const listeners = new Map<string, (event: Event) => void>()
 	const frame = {
 		location,
 		navigation: withNavigation ? navigation : undefined,
 		postMessage,
-		open: vi.fn(),
+		open: nativeOpen,
 		addEventListener: vi.fn((name, handler) => listeners.set(name, handler)),
 		removeEventListener: vi.fn((name) => listeners.delete(name)),
 	}
@@ -56,10 +57,15 @@ export function createRuntime(withNavigation = false) {
 		)
 
 	run(getLinkHandlingScript("pages/index.html"))
-	const click = (markup: string, options: MouseEventInit = {}, type = "click") => {
+	const click = (
+		markup: string,
+		options: MouseEventInit = {},
+		type = "click",
+		targetSelector = "a, [data-magic-href]",
+	) => {
 		doc.body.innerHTML = markup
 		const event = new MouseEvent(type, { cancelable: true, ...options })
-		Object.defineProperty(event, "target", { value: doc.querySelector("a") })
+		Object.defineProperty(event, "target", { value: doc.querySelector(targetSelector) })
 		listeners.get(type)?.(event)
 		return event
 	}
@@ -78,6 +84,7 @@ export function createRuntime(withNavigation = false) {
 		run,
 		postMessage,
 		nativeNavigate,
+		nativeOpen,
 		frame,
 		doc,
 		click,

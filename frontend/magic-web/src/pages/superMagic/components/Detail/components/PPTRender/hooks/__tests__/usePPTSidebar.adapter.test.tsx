@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
 	findMagicProjectJsFile: vi.fn(),
 	updateSlidesOrder: vi.fn(),
 	duplicateSlide: vi.fn(),
+	renameSlide: vi.fn(),
 	getTemporaryDownloadUrl: vi.fn(),
 	registeredSync: undefined as undefined | ((slides: Array<{ path: string }>) => Promise<void>),
 }))
@@ -39,7 +40,7 @@ vi.mock("../../../../contents/HTML/utils/magicProjectUpdater", () => ({
 	duplicateSlide: mocks.duplicateSlide,
 	insertSlide: vi.fn(),
 	deleteSlide: vi.fn(),
-	renameSlide: vi.fn(),
+	renameSlide: mocks.renameSlide,
 }))
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getTemporaryDownloadUrl: mocks.getTemporaryDownloadUrl,
@@ -58,6 +59,90 @@ vi.mock("@/pages/superMagic/services/attachmentsTopicSync", () => ({
 }))
 
 describe("usePPTSidebar structure adapter", () => {
+	it.each([true, false])(
+		"migrates transition overrides only after a confirmed ordinary rename: %s",
+		async (success) => {
+			const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined)
+			const originalTransitions = {
+				default: { effect: "fade", duration_ms: 400 },
+				slides: {
+					"slides/one.html": { effect: "push", duration_ms: 450, direction: "left" },
+				},
+			}
+			let config = { slides: ["slides/one.html"], transitions: originalTransitions }
+			const store = {
+				slides: [{ id: "one", path: "slides/one.html", index: 0 }],
+				get slidePaths() {
+					return this.slides.map((slide) => slide.path)
+				},
+				syncManager: { registerSyncFunction: vi.fn() },
+				getFileIdByPath: () => "one",
+				pathMappingService: { getUrlByPath: () => "", setPathFileIdMapping: vi.fn() },
+				setSlides: vi.fn((slides: Array<{ id: string; path: string; index: number }>) => {
+					store.slides = slides
+				}),
+				getConfigForExport: () => ({ displayConfig: config }),
+				updateConfig: vi.fn(async ({ displayConfig }: { displayConfig: typeof config }) => {
+					config = displayConfig
+				}),
+			}
+			let resolveRename!: (value: { newFilePath: string; newSlides: string[] }) => void
+			let rejectRename!: (error: Error) => void
+			mocks.findMagicProjectJsFile.mockResolvedValue({ fileId: "manifest" })
+			mocks.renameSlide.mockReturnValue(
+				new Promise((resolve, reject) => {
+					resolveRename = resolve
+					rejectRename = reject
+				}),
+			)
+			const { result, unmount } = renderHook(() =>
+				usePPTSidebar({
+					slides: store.slides,
+					activeIndex: 0,
+					isTransitioning: false,
+					allowEdit: true,
+					setActiveIndex: vi.fn(),
+					setIsTransitioning: vi.fn(),
+					store: store as never,
+				}),
+			)
+			try {
+				await act(async () => {
+					const pending = result.current.handleRenameSlide(0, "requested")
+					await Promise.resolve()
+					expect(store.updateConfig).not.toHaveBeenCalled()
+					expect(config.transitions).toBe(originalTransitions)
+					// Use the confirmed path rather than the optimistic/requested spelling.
+					if (success)
+						resolveRename({
+							newFilePath: "slides/confirmed.html",
+							newSlides: ["slides/confirmed.html"],
+						})
+					else rejectRename(new Error("conflict"))
+					expect(await pending).toBe(success)
+				})
+				if (success) {
+					expect(store.updateConfig).toHaveBeenCalledOnce()
+					expect(config.slides).toEqual(["slides/confirmed.html"])
+					expect(config.transitions).toEqual({
+						default: originalTransitions.default,
+						slides: {
+							"slides/confirmed.html": originalTransitions.slides["slides/one.html"],
+						},
+					})
+				} else {
+					expect(store.updateConfig).not.toHaveBeenCalled()
+					expect(config.transitions).toBe(originalTransitions)
+					expect(store.slidePaths).toEqual(["slides/one.html"])
+				}
+				expect(Object.keys(originalTransitions.slides)).toEqual(["slides/one.html"])
+			} finally {
+				unmount()
+				errorLog.mockRestore()
+			}
+		},
+	)
+
 	it.each([true, false])("reports the actual rename result: %s", async (success) => {
 		const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined)
 		const adapter = {

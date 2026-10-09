@@ -4,6 +4,7 @@ import DetailEmpty from "../../components/DetailEmpty"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { cn } from "@/utils/cn"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
+import { TextSaveStatus } from "../../components/TextSaveStatus"
 import { Input } from "antd"
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useMemoizedFn } from "ahooks"
@@ -132,7 +133,16 @@ export default function Text(props: any) {
 		if ((editingContent || editingContent === "") && editingContent !== content) {
 			// 保存文本编辑内容，使用 shadow 函数加密
 			const enable_shadow = true
-			await saveEditContent?.(editingContent, file_id, enable_shadow, fetchFileVersions)
+			// Feedback is the top-right save chip, so skip the centered toast.
+			await saveEditContent?.(
+				editingContent,
+				file_id,
+				enable_shadow,
+				fetchFileVersions,
+				undefined,
+				false,
+				{ silent: true },
+			)
 			// 更新 content 状态
 			setContent(editingContent)
 		}
@@ -369,6 +379,9 @@ export default function Text(props: any) {
 			)}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
+			{!readOnlyPreview && (
+				<TextSaveStatus fileId={file_id} textFileSession={textFileSession} />
+			)}
 			{textFileSession?.loadError || fileLoadError ? (
 				<DetailEmpty
 					title={t("common.fileNotFoundOrLoadFailed")}

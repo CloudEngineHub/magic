@@ -81,6 +81,23 @@ describe("FileEditButtons", () => {
 		expect(onCancel).toHaveBeenCalledTimes(1)
 	})
 
+	it("re-enables saving after a handler throws synchronously", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const onSave = vi
+			.fn<() => void | Promise<void>>()
+			.mockImplementationOnce(() => {
+				throw new Error("sync failure")
+			})
+			.mockResolvedValue(undefined)
+		render(<FileEditButtons isEditMode showButtonText onSave={onSave} />)
+
+		fireEvent.keyDown(document, { key: "s", ctrlKey: true })
+		await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+
+		fireEvent.keyDown(document, { key: "s", ctrlKey: true })
+		await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
+	})
+
 	it("cancels from the button without throwing when Escape has no mouse event", () => {
 		const onCancel = vi.fn()
 		render(
@@ -114,4 +131,29 @@ describe("FileEditButtons", () => {
 		expect(editBtnIconOnly.className).toContain("px-1.5")
 		expect(editBtnIconOnly.className).toContain("gap-0")
 	})
+})
+
+it("does not paint saving while the handler is in flight", async () => {
+	let resolveSave: (() => void) | undefined
+	const onSave = vi.fn(
+		() =>
+			new Promise<void>((resolve) => {
+				resolveSave = resolve
+			}),
+	)
+	render(
+		<FileEditButtons
+			testIdPrefix="html-editor"
+			isEditMode
+			showButtonText
+			onSave={onSave}
+			onCancel={vi.fn()}
+		/>,
+	)
+	fireEvent.click(screen.getByTestId("html-editor-save-button"))
+	expect(onSave).toHaveBeenCalledTimes(1)
+	expect(screen.getByTestId("html-editor-save-button")).toHaveTextContent("fileViewer.save")
+	expect(screen.queryByText("fileViewer.saving")).toBeNull()
+	resolveSave?.()
+	await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
 })

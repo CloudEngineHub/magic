@@ -513,6 +513,7 @@ export interface ElementSelectedPayload {
 	/** 常用 HTML 属性 */
 	attributes?: {
 		href?: string
+		dataMagicHref?: string
 		target?: string
 		rel?: string
 		download?: string

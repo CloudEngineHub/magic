@@ -36,6 +36,16 @@ export function extractSlideNotes(html: string): string {
 
 export function upsertSlideNotes(html: string, notes: string): string {
 	const block = `${NOTES_OPEN_TAG}\n${escapeSlideNotes(notes)}\n</template>`
+	return writeSlideNotesBlock(html, block)
+}
+
+/** Visual editors own the slide body; the source owns separately saved inert notes. */
+export function preserveSlideNotesFromSource(editedHtml: string, sourceHtml: string): string {
+	const block = sourceHtml.match(NOTES_BLOCK_PATTERN)?.[0]
+	return block ? writeSlideNotesBlock(editedHtml, block) : stripSlideNotes(editedHtml)
+}
+
+function writeSlideNotesBlock(html: string, block: string): string {
 	if (NOTES_BLOCK_PATTERN.test(html)) {
 		let hasWrittenBlock = false
 		return html.replace(NOTES_BLOCK_GLOBAL_PATTERN, () => {

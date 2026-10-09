@@ -138,6 +138,7 @@ describe("MoreStylesTabs", () => {
 			"stylePanel.border",
 			"stylePanel.shadow",
 			"stylePanel.imageSettings",
+			"stylePanel.clickLink",
 			"stylePanel.layout",
 			"stylePanel.customCSS.title",
 		])

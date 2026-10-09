@@ -35,6 +35,7 @@ import {
 	publishPptxExportIssues,
 } from "@/pages/superMagic/utils/pptxExportIssues"
 import type { ExportIssue } from "@magic/html2pptx"
+import { ensureFileSavesSynced } from "../services/fileSaveQueue"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import {
 	createPptxSlideConfig,
@@ -219,6 +220,7 @@ function useFileExport({
 	const exportFile = async (fileIds: string[], fileVersion?: { [key: string]: number }) => {
 		if (!access.download) return
 		if (!fileIds || fileIds.length === 0) return
+		if (!(await ensureFileSavesSynced(fileIds))) return
 
 		// 检查是否为文件夹
 		const fileId = fileIds[0]
@@ -260,6 +262,7 @@ function useFileExport({
 	const exportPdf = async (fileIds: string[]) => {
 		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
+		if (!(await ensureFileSavesSynced(fileIds))) return
 
 		const documentExporter = documentExportService.get()
 		if (!documentExporter) {
@@ -329,6 +332,7 @@ function useFileExport({
 	const exportPptx = async (fileIds: string[]) => {
 		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
+		if (!(await ensureFileSavesSynced(fileIds))) return
 
 		const fileId = fileIds[0]
 		const file = attachments?.find((item) => item.file_id === fileId)
@@ -450,6 +454,7 @@ function useFileExport({
 	const exportImage = async (fileIds: string[], format: ImageExportFormat = "png") => {
 		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
+		if (!(await ensureFileSavesSynced(fileIds))) return
 
 		const fileId = fileIds[0]
 		const file = attachments?.find((item) => item.file_id === fileId)

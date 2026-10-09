@@ -10,6 +10,7 @@ import { shadow } from "@/utils/shadow"
 import { useMemoizedFn } from "ahooks"
 import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import CommonFooter from "../../components/CommonFooter"
+import { TextSaveStatus } from "../../components/TextSaveStatus"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
@@ -134,11 +135,15 @@ export default function CodeViewer(props: any) {
 		if (editingCodeContent && editingCodeContent !== content) {
 			// 保存代码编辑内容，使用 shadow 函数加密
 			const enable_shadow = true
+			// Feedback is the top-right save chip, so skip the centered toast.
 			await saveEditContent?.(
 				shadow(editingCodeContent),
 				file_id,
 				enable_shadow,
 				fetchFileVersions,
+				undefined,
+				false,
+				{ silent: true },
 			)
 			// 更新 content 状态
 			setContent(editingCodeContent)
@@ -395,6 +400,7 @@ export default function CodeViewer(props: any) {
 			tabIndex={-1}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
+			<TextSaveStatus fileId={file_id} textFileSession={textFileSession} />
 			{textFileSession?.loadError || fileLoadError ? (
 				<DetailEmpty
 					title={t("common.fileNotFoundOrLoadFailed")}

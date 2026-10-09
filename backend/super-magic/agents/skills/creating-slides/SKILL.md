@@ -1,6 +1,6 @@
 ---
 name: creating-slides
-description: Slide/PPT creation skill that provides complete slide creation, editing, and management capabilities. Use when users need to create slides, make presentations, edit slide content, or manage slide projects. CRITICAL - When user message contains [@slide_project:...] mention, you MUST load this skill first before any operations.
+description: Slide/PPT creation skill that provides complete slide creation, editing, and management capabilities. Use when users need to create slides, make presentations, edit slide content, configure slide transitions, or manage slide projects. CRITICAL - When user message contains [@slide_project:...] mention, you MUST load this skill first before any operations.
 
 ---
 
@@ -22,6 +22,11 @@ Provides complete HTML slide creation capabilities, including project creation, 
 ## Code Execution Method (Critical)
 
 All Python code examples in this skill **must be executed via the `run_sdk_snippet` tool** in Agent environment.
+
+`create_slide_project` and `create_slide` are Code Mode only. Call them with
+`sdk.tool.call`, never as directly mounted tools. Before executing, read
+[slide tool contracts](references/slide-tools.md) for overwrite behavior, notes,
+page registration, and the difference between a saved file and successful layout QA.
 
 **Correct example**:
 
@@ -52,6 +57,15 @@ When user has no explicit requirements, follow these defaults:
 - **Business minimalist style**, follow font size specifications, Tailwind mandatory priority
 
 ---
+
+## Slide transitions
+
+When the user requests page transitions, read [slide-transitions.md](references/slide-transitions.md)
+and the current magic.project.js, then call update_slide_transitions through
+`sdk.tool.call` inside `run_sdk_snippet` (Code Mode only). Keep slide HTML static.
+Do not add transitions without a request. Preserve existing settings, including explicit none,
+during content editing, template replacement, and regeneration. These settings apply to the
+online player; do not promise native PowerPoint transitions or standalone index.html playback.
 
 ## Technical Specifications
 
@@ -93,7 +107,7 @@ Generate concise, presentation-ready notes from the page purpose, visible conten
 - **File generation**: Only generate static HTML files
 - **Responsive design prohibited**: Strictly no media queries, pages don't change with screen size
 - **Content overload prohibited**: Avoid excessively long text, too many list items, oversized images; split into multiple pages when single page has too much content
-- **Dynamic effects prohibited**: Page switching controlled by outer system, single pages focus on static display; disable transition, keyframes, dynamic data display animations; disable sound effects, only keep static visuals (CSS hover, shadows, gradients, borders and other style effects can be used normally)
+- **Dynamic effects prohibited**: Page switching controlled by outer system, single pages focus on static display; disable in-page transitions, keyframes, dynamic data display animations; disable sound effects, only keep static visuals (CSS hover, shadows, gradients, borders and other style effects can be used normally)
 - **Don't use server-side code, local file resources, complex interactive features**
 - **Unless user requests, don't use unverified external images**
 - **JavaScript code inline at `<body>` bottom, CSS inline in `<head>`, SVG graphics inline directly**
@@ -311,6 +325,10 @@ Reference the following template to create slide pages. Each page is an independ
 
 ### Create Slide Project
 
+For the planned project example, first prepare `production_plan` as the complete
+Markdown described in [Production plan format](references/slide-tools.md#production-plan-format).
+Its three page entries must match `cover.html`, `product-intro.html`, and `key-features.html`.
+
 ```python
 from sdk.tool import tool
 
@@ -322,7 +340,7 @@ result = tool.call('create_slide_project', {
     "todo_list": ""
 })
 
-# Create complete project (with images and outline)
+# Create a project skeleton with images and a complete design plan
 result = tool.call('create_slide_project', {
     "project_path": "Product-Launch",
     "slides_array": ["cover.html", "product-intro.html", "key-features.html"],
@@ -344,25 +362,9 @@ result = tool.call('create_slide_project', {
 - Use Case: Cover hero image
 - Search Keywords: product hero image modern technology
 """,
-    "todo_list": """# Slide Production Plan
-
-## Project Info
-- Project name: Product Launch
-- Theme: New product release and feature showcase
-- Pages: 3
-- Keywords: product, technology, innovation
-
-## Content Outline
-### Cover (cover.html)
-Display product name and hero visual
-
-### Product Introduction (product-intro.html)
-Introduce product background and core value
-
-### Key Features (key-features.html)
-Showcase the three core product features
-"""
+    "todo_list": production_plan
 })
+print(result.content)
 ```
 
 ### Create Single Slide Page
@@ -510,8 +512,8 @@ print(search_result.content)
 | Parameter              | Required | Type   | Description                                                                     |
 | ---------------------- | -------- | ------ | ------------------------------------------------------------------------------- |
 | `project_path`         | Yes      | string | Project relative path (folder name), e.g., `"ChatGPT-Development-Report"`       |
-| `slide_count`          | No       | number | Slide page count, default 0 (empty project or determined by slides_array)       |
-| `slides_array`         | Yes      | array  | List of slide filenames, can be empty array `[]`                                |
+| `slide_count`          | No       | number | Requested page count, default 0; does not create page HTML                     |
+| `slides_array`         | No       | array  | Ordered slide filenames; defaults to empty array `[]`                          |
 | `slide_images_content` | No       | string | Image material library content (Markdown format), empty means not creating file |
 | `todo_list`            | No       | string | Task planning content (Markdown format), empty means not creating file          |
 
@@ -530,6 +532,7 @@ print(search_result.content)
 | -------------------- | -------- | ------ | --------------------------------------------------------------------------------- |
 | `file_path`          | Yes      | string | Slide file path (relative to working directory), e.g., `"project-name/page.html"` |
 | `content`            | Yes      | string | Complete HTML content                                                             |
+| `speaker_notes`      | No       | string | Omit to preserve existing notes or create an empty block; `""` clears notes; text replaces them |
 | `max_width`          | Yes      | number | Expected max width (usually 1920)                                                 |
 | `max_height`         | Yes      | number | Expected max height (usually 1080)                                                |
 | `analysis_js`        | Yes      | string | Layout analysis JavaScript function body (without function declaration)           |
@@ -763,39 +766,17 @@ The `slide_images_content` parameter should contain complete slide-images.md fil
 
 #### todo_list Format Requirements
 
-The `todo_list` parameter should contain complete slide-todo.md file content for recording slide content planning and task breakdown.
+Pass the complete `slide-todo.md` Markdown, with project information, an overall
+design scheme, and a content plan and design specification for every page.
+An outline alone is insufficient. Record the palette, typography, shared layout,
+decorations, and reusable styling; for each page specify its content, layout,
+media and asset readiness, static emphasis, text limits, and visual hierarchy.
 
-Recommended format:
-
-```markdown
-# Slide Production Task Planning
-
-## Project Information
-
-- Project Name: ChatGPT Development Report
-- Theme: ChatGPT Evolution and Impact Analysis
-- Pages: 10
-- Key Keywords: ChatGPT, OpenAI, GPT-4, Artificial Intelligence
-
-## Content Outline
-
-### Cover (OpenAI Milestones.html)
-
-Introduce OpenAI's important development nodes and breakthrough achievements
-
-### Table of Contents (AI Revolution Timeline.html)
-
-Display key time points and milestone events in artificial intelligence development
-
-### GPT Series Evolution (GPT-4 Technological Breakthrough.html)
-
-Detail GPT-4's technical innovations and performance improvements compared to previous generations
-
-### Commercialization Process (ChatGPT Business Miracle.html)
-
-Analyze how ChatGPT reached billion-level user scale in short time
-...
-```
+When using a template, derive colors and decorations from its actual `theme.css`
+and ensure text and accent colors contrast with the selected backgrounds.
+Read [Production plan format](references/slide-tools.md#production-plan-format)
+for the complete example before preparing this parameter. Adapt it to the user's
+language, selected theme, content, and actual page count.
 
 #### magic.project.js Format Description (slide type)
 
@@ -913,7 +894,7 @@ If user requests creating specific slides or requests imitating/referencing to g
 - **When user already provided images**: No need to use image_search tool to search images, instead use visual_understanding tool to analyze image info, write image info into slide_images_content per format requirements
 - **When user already provided outline or specific text**: No need to use web_search tool to search webpages, directly extract todo_list content
 
-#### 2. Directly Use create_slide to Create Slides
+#### 2. Use create_slide Through Code Mode to Create Slides
 
 - Create slides based on user-provided information
 - Insist on using create_slide tool, use analysis_js to analyze layout
@@ -1024,7 +1005,7 @@ If user requests modifying slide file names or paths, reference the following wo
 
 1. Use list_dir tool to get complete project folder hierarchy, determine reasonable adjustment plan
 2. View magic.project.js file in slide project, understand slides array content
-3. Use shell_exec(command="mv old_path new_path") command to move or rename files, use edit_file to update slides array in magic.project.js
+3. Use shell_exec(command="mv old_path new_path") command to move or rename files, use edit_file to update slides array in magic.project.js. In the same configuration update, migrate the matching transitions.slides key from the old path to the new path. Deletion removes its override; copying copies only an explicit override, while an inherited setting stays inherited.
 
 ---
 

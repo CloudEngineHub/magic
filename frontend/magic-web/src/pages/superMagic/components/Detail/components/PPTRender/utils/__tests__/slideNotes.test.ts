@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { extractSlideNotes, stripSlideNotes, upsertSlideNotes } from "../slideNotes"
+import {
+	extractSlideNotes,
+	preserveSlideNotesFromSource,
+	stripSlideNotes,
+	upsertSlideNotes,
+} from "../slideNotes"
 
 describe("slide notes html contract", () => {
 	it("reads escaped plain text from the inert template", () => {
@@ -45,5 +50,36 @@ describe("slide notes html contract", () => {
 		expect(upsertSlideNotes(html, "New")).toBe(
 			'<main>Slide</main><template data-magic-slide-notes data-format="plain-text" data-version="1">\nNew\n</template>',
 		)
+	})
+
+	it("preserves the exact saved notes block while keeping visual edits", () => {
+		const savedBlock =
+			'<template data-version="2" data-magic-slide-notes data-format="plain-text">\n中文 &amp; &#60;talk&#62;\n</template>'
+		const edited =
+			"<main>Edited body</main><template data-magic-slide-notes>Old</template><template data-magic-slide-notes>Duplicate</template>"
+		expect(preserveSlideNotesFromSource(edited, `<main>Original</main>${savedBlock}`)).toBe(
+			`<main>Edited body</main>${savedBlock}`,
+		)
+	})
+
+	it("does not restore old notes when the source has removed the block", () => {
+		expect(
+			preserveSlideNotesFromSource(
+				"<main>Edited body</main><template data-magic-slide-notes>Old</template>",
+				"<main>Original</main>",
+			),
+		).toBe("<main>Edited body</main>")
+	})
+
+	it("inserts separately saved notes when the iframe never had a notes block", () => {
+		const edited = "<html><body><main>Edited body</main></body></html>"
+		const source = upsertSlideNotes(
+			"<html><body><main>Original</main></body></html>",
+			"New notes",
+		)
+		const saved = preserveSlideNotesFromSource(edited, source)
+		expect(extractSlideNotes(saved)).toBe("New notes")
+		expect(saved).toContain("<main>Edited body</main>")
+		expect(stripSlideNotes(saved)).toBe(edited.replace("</body>", "\n</body>"))
 	})
 })

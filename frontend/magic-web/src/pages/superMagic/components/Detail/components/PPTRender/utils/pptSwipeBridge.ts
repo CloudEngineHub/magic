@@ -1,3 +1,5 @@
+import { appendBodyScript } from "./appendBodyScript"
+
 /** Preview-only bridge: iframe touch events cannot bubble across origins. */
 export function injectPPTSwipeBridge(content: string, parentOrigin: string): string {
 	const origin = JSON.stringify(parentOrigin).replace(/</g, "\\u003c")
@@ -33,7 +35,5 @@ export function injectPPTSwipeBridge(content: string, parentOrigin: string): str
 	};
 })();
 </script>`
-	return /<\/body\s*>/i.test(content)
-		? content.replace(/<\/body\s*>/i, () => `${script}</body>`)
-		: `${content}${script}`
+	return appendBodyScript(content, script)
 }
