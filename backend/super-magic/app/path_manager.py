@@ -52,6 +52,7 @@ class PathManager(BasePathManager):
             llm_requests/   ← LLM 调试日志
             slide-template-maker/ ← 幻灯片模板作者中间文件
             micro-app/      ← 累积 @micro_app MagicBase 范围
+            follow_up_suggestions/ ← 追加问题本地查询副本
         .box/                ← Agent 自由使用的本地工作目录（预创建，0700，沙盒重建清空，不做时间淘汰）
         app/i18n/            ← 语言翻译（源码只读目录）
         .checkpoints/        ← 检查点（getter 内按需创建）

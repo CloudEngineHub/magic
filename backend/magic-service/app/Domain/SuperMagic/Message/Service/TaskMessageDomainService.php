@@ -22,14 +22,6 @@ class TaskMessageDomainService
     ) {
     }
 
-    /**
-     * follow-up：按 topic 拉取最近 $roundLimit 轮原始消息候选集.
-     */
-    public function findFollowUpContextMessages(int $topicId, int $roundLimit = 3): array
-    {
-        return $this->messageRepository->findFollowUpContextMessages($topicId, $roundLimit);
-    }
-
     public function getNextSeqId(int $topicId, int $taskId): int
     {
         return $this->messageRepository->getNextSeqId($topicId, $taskId);

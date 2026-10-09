@@ -10,7 +10,9 @@ namespace App\Application\SuperMagic\Task\Service;
 use App\Application\Contact\UserSetting\PersonalPreferencesKeys;
 use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\SuperMagic\Task\DTO\SandboxInfoDTO;
+use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\SuperMagic\File\Event\CheckpointRollbackFilesChangedEvent;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -53,6 +55,7 @@ readonly class AgentAppService
         private readonly TaskDomainService $taskDomainService,
         private readonly SandboxVersionDomainService $sandboxVersionDomainService,
         private readonly MagicUserSettingDomainService $magicUserSettingDomainService,
+        private readonly MagicUserDomainService $magicUserDomainService,
         private readonly EventDispatcherInterface $eventDispatcher,
     ) {
         $this->logger = $this->loggerFactory->get('sandbox');
@@ -696,6 +699,17 @@ readonly class AgentAppService
      */
     private function getAgentPersonalPreferences(DataIsolation $dataIsolation): array
     {
+        return [
+            PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED => $this->readLongTermMemoryEnabled($dataIsolation),
+            PersonalPreferencesKeys::SHOW_FOLLOW_UP_SUGGESTIONS => $this->readShowFollowUpSuggestions($dataIsolation),
+        ];
+    }
+
+    /**
+     * 长期记忆开关来自用户设置。读取失败时默认开启，不中断聊天。
+     */
+    private function readLongTermMemoryEnabled(DataIsolation $dataIsolation): bool
+    {
         try {
             $setting = $this->magicUserSettingDomainService->get(
                 $dataIsolation,
@@ -704,21 +718,43 @@ readonly class AgentAppService
             $preferences = $setting?->getValue() ?? [];
             $longTermMemoryEnabled = $preferences[PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED] ?? true;
 
-            return [
-                PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED => is_bool($longTermMemoryEnabled)
-                    ? $longTermMemoryEnabled
-                    : true,
-            ];
+            return is_bool($longTermMemoryEnabled) ? $longTermMemoryEnabled : true;
         } catch (Throwable $throwable) {
-            // 个人偏好是可选配置，读取失败时必须保持聊天主链路可用。
             $this->logger->warning('[Sandbox][App] Failed to load personal preferences, using defaults', [
                 'exception_class' => $throwable::class,
                 'user_id' => $dataIsolation->getCurrentUserId(),
             ]);
 
-            return [
-                PersonalPreferencesKeys::LONG_TERM_MEMORY_ENABLED => true,
-            ];
+            return true;
+        }
+    }
+
+    /**
+     * 追问开关来自当前组织用户资料，不写入 magic_user_settings。
+     * 明确 false 原样下发；读不到用户时默认开启。
+     */
+    private function readShowFollowUpSuggestions(DataIsolation $dataIsolation): bool
+    {
+        try {
+            $userId = $dataIsolation->getCurrentUserId();
+            if (! is_string($userId) || $userId === '') {
+                return true;
+            }
+
+            $users = $this->magicUserDomainService->getByUserIds($dataIsolation, [$userId]);
+            $user = $users[$userId] ?? null;
+            if (! $user instanceof MagicUserEntity) {
+                return true;
+            }
+
+            return $user->getPreferences()->isShowFollowUpSuggestions();
+        } catch (Throwable $throwable) {
+            $this->logger->warning('[Sandbox][App] Failed to load follow-up preference, using default', [
+                'exception_class' => $throwable::class,
+                'user_id' => $dataIsolation->getCurrentUserId(),
+            ]);
+
+            return true;
         }
     }
 

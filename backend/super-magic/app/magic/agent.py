@@ -29,12 +29,15 @@ from agentlang.chat_history.chat_history import ChatHistory
 from agentlang.chat_history.chat_history_models import UserMessage, ToolMessage, ContextSource
 from agentlang.context.tool_context import ToolContext
 from agentlang.event.data import (
+    AfterAgentLoopEventData,
     AfterAgentReplyEventData,
     AfterLlmRequestSucceededEventData,
     AfterMainAgentRunEventData,
+    AgentLoopOutcome,
     BeforeLlmRetryEventData,
     BeforeMainAgentRunEventData,
     ErrorEventData,
+    resolve_completed_loop_outcome,
 )
 from agentlang.event.event import EventType
 from agentlang.config.config import config
@@ -154,6 +157,9 @@ class AgentLoopState:
     reactive_compact_attempted: bool = False
     # LLM 两阶梯重试状态
     retry_state: LLMRetryState = field(default_factory=LLMRetryState)
+    # 当前 run 内的循环序号和正常有效轮数，只用于轮次事件
+    loop_index: int = 0
+    effective_loop_count: int = 0
 
 
 @dataclass
@@ -214,6 +220,8 @@ class ToolExecutionResult:
     inject_horizon_after_tools: bool = True
     # 检测到某个工具因超长参数导致校验失败（参数有效但缺字段，通常是模型输出过长导致）
     has_long_args_failure: bool = False
+    # 本轮执行了历史压缩，不计入正常有效轮
+    has_compact_history: bool = False
 
 
 @dataclass
@@ -379,6 +387,8 @@ class Agent(BaseAgent):
             self.agent_context.chat_history_dir,
             self.agent_context.get_event_dispatcher(),  # 传递事件分发器
         )
+        # 轮次监听器从上下文读取当前历史，避免再查全局消息。
+        self.agent_context.chat_history = self.chat_history
 
         # Token usage 文件必须跟随当前 Agent 的聊天历史目录，不能复用全局 mutable prefix。
         token_usage_report_manager = TokenUsageReport.for_session(
@@ -1234,6 +1244,9 @@ class Agent(BaseAgent):
         loop_state = AgentLoopState()
 
         while loop_state.should_continue:
+            loop_state.loop_index += 1
+            round_outcome = AgentLoopOutcome.ERROR
+            round_restored = False
             # 更新活动时间，用于活动追踪
             self.agent_context.update_activity_time()
 
@@ -1268,6 +1281,7 @@ class Agent(BaseAgent):
                         break
 
                     loop_state.last_llm_message = restored_context.llm_response  # 也更新last_llm_message
+                    round_restored = True
 
                     # 创建LLM上下文用于后续处理
                     llm_context = LLMResponseContext(
@@ -1331,6 +1345,7 @@ class Agent(BaseAgent):
                             "The output may be incomplete. Any tool calls in that response were not executed.",
                             source="max_output_tokens_recovery",
                         )
+                        round_outcome = AgentLoopOutcome.MAINTENANCE
                         continue
 
                     # 预处理工具参数：修复畸形 JSON、检测截断
@@ -1361,6 +1376,7 @@ class Agent(BaseAgent):
                                 "No tool calls from that response were executed.",
                                 source="tool_args_truncation_recovery",
                             )
+                            round_outcome = AgentLoopOutcome.MAINTENANCE
                             continue
                         for candidate in preprocess_result.json_repair_candidates:
                             validation = await tool_argument_json_repair_validation_service.validate(
@@ -1417,9 +1433,13 @@ class Agent(BaseAgent):
                     if not llm_context.has_tool_calls and llm_context.message.role == "assistant":
                         await self._handle_no_tool_calls(llm_context, loop_state)
                         if not loop_state.should_continue:
+                            # todo都完成了，退出循环
+                            round_outcome = AgentLoopOutcome.NORMAL
                             # 没有追加提醒，按模型本次结束意图退出，不代表所有事项都已完成。
                             break
                         else:
+                            # 还有未完成的todo，继续循环让大模型继续处理
+                            round_outcome = AgentLoopOutcome.NORMAL
                             # 提醒已进入上下文，继续调用模型，由模型处理未完成事项。
                             continue
 
@@ -1472,11 +1492,17 @@ class Agent(BaseAgent):
                         source="tool_args_truncation_recovery",
                     )
 
+                round_outcome = resolve_completed_loop_outcome(
+                    restored=round_restored,
+                    waiting_for_user=self.agent_state == AgentState.WAITING_FOR_USER,
+                    maintenance=tool_result.has_long_args_failure or tool_result.has_compact_history,
+                )
                 if tool_result.should_exit:
                     loop_state.final_response = tool_result.final_response
                     break
 
             except Exception as e:
+                round_outcome = AgentLoopOutcome.ERROR
                 # 处理非 LLM 异常（工具执行失败等）
                 exception_result = await self._handle_agent_loop_exception(
                     e,
@@ -1486,9 +1512,31 @@ class Agent(BaseAgent):
                     loop_state.final_response = exception_result.final_response
                 if not exception_result.should_continue:
                     break
+            finally:
+                await self._emit_after_agent_loop(loop_state, round_outcome)
 
         # 完成循环后的清理工作
         return await self._finalize_agent_loop(loop_state)
+
+    async def _emit_after_agent_loop(self, loop_state: AgentLoopState, outcome: AgentLoopOutcome) -> None:
+        """发出本轮结束事件。取消时不投递，避免拖延退出；投递失败不回到主循环重试。"""
+        if isinstance(sys.exc_info()[1], asyncio.CancelledError):
+            return
+        if outcome == AgentLoopOutcome.NORMAL:
+            loop_state.effective_loop_count += 1
+        try:
+            await self.agent_context.dispatch_event(
+                EventType.AFTER_AGENT_LOOP,
+                AfterAgentLoopEventData(
+                    agent_context=self.agent_context,
+                    agent_name=self.agent_name,
+                    loop_index=loop_state.loop_index,
+                    effective_loop_count=loop_state.effective_loop_count,
+                    outcome=outcome,
+                ),
+            )
+        except Exception as error:
+            logger.warning(f"派发循环结束事件失败: {error.__class__.__name__}")
 
     async def _check_and_restore_session(self) -> SessionRestoreContext:
         """
@@ -3264,6 +3312,10 @@ Since your subsequent output will be merged with pre-interruption content and di
             final_response=final_response,
             inject_horizon_after_tools=inject_horizon_after_tools,
             has_long_args_failure=has_long_args_failure,
+            has_compact_history=any(
+                result is not None and result.system == "COMPACT_HISTORY"
+                for result in tool_call_results
+            ),
         )
 
     # 工具参数长度阈值：超过此值的失败工具调用被视为"超长参数导致的校验失败"

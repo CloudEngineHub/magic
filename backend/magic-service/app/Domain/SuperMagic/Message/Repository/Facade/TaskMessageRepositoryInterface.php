@@ -57,18 +57,6 @@ interface TaskMessageRepositoryInterface
     public function findCompletedResultMessages(int $topicId, int $taskId): array;
 
     /**
-     * 从 magic_super_agent_message 单表提取最近 N 轮原始消息候选集。
-     *
-     * 轮次规则：
-     * - sender_type = user 且 event 为空 视为一轮开始
-     * - 该轮结束于下一条满足上述条件的用户消息之前
-     * - 返回该范围内的问题消息与 assistant after_agent_reply 候选消息
-     *
-     * @return TaskMessageEntity[]
-     */
-    public function findFollowUpContextMessages(int $topicId, int $roundLimit): array;
-
-    /**
      * 根据话题ID获取消息列表，支持分页.
      * @param int $topicId 话题ID
      * @param int $page 页码

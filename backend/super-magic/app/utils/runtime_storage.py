@@ -217,6 +217,20 @@ owner：     find_file_range、edit_file_range、edit_file、AgentRuntimeResetSe
 说明：      模型只看到 8 位短 ID；记录同时绑定上下文、文件路径和源内容摘要。文件变化、
             沙盒重启、上下文重置或范围成功应用后，原 ID 都不能继续使用。
 
+-------------------------------------------------------------------------------
+[12] follow_up_suggestions
+-------------------------------------------------------------------------------
+路径：      .runtime/follow_up_suggestions/<task-id>.json
+内容：      一次任务的追加问题状态和问题列表。同一份结果仍上报 magic-service。
+owner：     FollowUpSuggestionStore、FollowUpSuggestionService
+立即处理：  不即时删除。完成或失败后保留，供调试客户端在聊天结束后查询。
+延后处理：  每次写入后机会式清理。
+活动保护：  本次写入的文件通过 protected_paths 保护。
+淘汰规则：  超过 7 天删除；文件数 64 个触发，删除到 48 个。
+配置：      `runtime_cleanup.follow_up_suggestions`（年龄和文件数）。
+实现归属：  通用 evict_runtime_files()。
+说明：      终态文件不会被后到的生成中状态覆盖。产品前端不读这个目录。
+
 ===============================================================================
 二、目录树与删除单位
 ===============================================================================
@@ -241,6 +255,8 @@ owner：     find_file_range、edit_file_range、edit_file、AgentRuntimeResetSe
     │   └── <cache-key-sha256>.json
     ├── file_edits/                       直接子文件，两阶段文件编辑记录
     │   └── <range-id 或 replacement-id>.json
+    ├── follow_up_suggestions/            直接子文件，追加问题本地查询副本
+    │   └── <task-id>.json
     ├── llm_requests/                     直接子文件，LLM 调试日志
     │   └── <model>_<time>_<status>.log
     ├── background_compact/               一个目录代表一次后台压缩运行

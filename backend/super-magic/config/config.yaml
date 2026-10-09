@@ -631,6 +631,12 @@ runtime_cleanup:
     max_age_days: 3
     max_directory_count: 16
 
+  # 追加问题的本地查询副本。产品查询仍走 magic-service。
+  follow_up_suggestions:
+    max_age_days: 7
+    max_file_count: 64
+    target_file_count: 48
+
 # 启动任务：每次沙盒启动后在后台按顺序执行 .workspace/.magic/startup/ 下登记的脚本。
 startup_task:
   # 单个任务默认与最大运行时长（秒）；最大值不能超过后台 shell 任务 1 小时的存活上限。
@@ -690,6 +696,13 @@ memory:
     extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-5}
     # 未达到阈值时，连续 10 分钟无操作后触发一次完整 fork 提取
     extraction_idle_timeout_seconds: ${MEMORY_AFTER_RUN_EXTRACTION_IDLE_TIMEOUT_SECONDS:-600}
+
+# 追加问题是允许失败的辅助生成，超时只限制后台请求，不推迟主任务完成通知。
+follow_up_suggestions:
+  # 达到 10 个有效循环迭代后提前生成；未达阈值的短任务在正常完成时生成。
+  min_effective_loops: ${FOLLOW_UP_SUGGESTIONS_MIN_EFFECTIVE_LOOPS:-10}
+  model_timeout_seconds: ${FOLLOW_UP_SUGGESTIONS_MODEL_TIMEOUT_SECONDS:-60}
+  report_timeout_seconds: ${FOLLOW_UP_SUGGESTIONS_REPORT_TIMEOUT_SECONDS:-5}
 
 # =====================================================
 # AI Ability Configuration (AI能力配置)

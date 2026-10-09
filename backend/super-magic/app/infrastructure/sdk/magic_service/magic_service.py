@@ -12,6 +12,7 @@ from .api.agent_api import AgentApi
 from .api.ai_ability_api import AiAbilityApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
 from .api.html_design_style_api import HtmlDesignStyleApi
+from .api.follow_up_suggestion_api import FollowUpSuggestionApi
 from .api.magicbase_api import MagicBaseApi
 from .api.mcp_authorization_credential_api import MCPAuthorizationCredentialApi
 from .api.message_schedule_api import MessageScheduleApi
@@ -58,6 +59,7 @@ class MagicService:
             'mcp_authorization_credential': MCPAuthorizationCredentialApi,
             'skill': SkillApi,
             'share': ShareApi,
+            'follow_up_suggestion': FollowUpSuggestionApi,
         }
 
         # Initialize fetched API instances
@@ -138,6 +140,11 @@ class MagicService:
     def share(self) -> 'ShareApi':
         """Get share API instance"""
         return self._fetched_definitions['share']
+
+    @property
+    def follow_up_suggestion(self) -> 'FollowUpSuggestionApi':
+        """获取追加问题上报 API。"""
+        return self._fetched_definitions['follow_up_suggestion']
 
     def get_host(self) -> str:
         """
