@@ -66,6 +66,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private iconHoverElementId: string | null = null
 	private readonly iconResolver?: NameLabelIconResolver
 	private readonly labelLayoutStates = new WeakMap<Konva.Group, NameLabelLayoutState>()
+	private domLabelElementId: string | null = null
 
 	constructor(options: { canvas: Canvas; iconResolver?: NameLabelIconResolver }) {
 		const { canvas } = options
@@ -108,6 +109,51 @@ export class NameLabelManager extends BaseLabelManager {
 
 	public canStartRename(elementId: string): boolean {
 		return this.shouldShowLabel(elementId)
+	}
+
+	/** 铅笔使用名称的屏幕坐标；沿用同一权限和工具条件，不为 DOM 入口绕过限制。 */
+	public getRenameButtonLayout(elementId: string): { x: number; y: number } | null {
+		if (
+			this.renamingElementId ||
+			!this.areNameLabelsInteractive() ||
+			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image ||
+			!this.canvas.elementRenameManager.canRename(elementId)
+		)
+			return null
+		const layout = this.getDisplayLabelLayout(elementId)
+		if (!layout || !this.labelMap.get(elementId)?.visible()) return null
+		if (!this.getMediaRowLayout(elementId)?.showOperation) return null
+		const bounds = this.canvas.elementManager.getElementInstance(elementId)?.getBoundingRect()
+		if (!bounds || layout.width + 24 > bounds.width * this.canvas.stage.scaleX()) return null
+		return { x: layout.x + layout.width, y: layout.y + layout.height - 24 }
+	}
+
+	/** 只把当前可交互图片的名称交给 DOM；布局和其它元素标签仍由原管理器维护。 */
+	public getImageNameLabelLayout(
+		elementId: string,
+	): ReturnType<NameLabelManager["getRenameInputLayout"]> {
+		if (
+			this.renamingElementId ||
+			!this.areNameLabelsInteractive() ||
+			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
+		)
+			return null
+		const layout = this.getDisplayLabelLayout(elementId)
+		return layout && this.labelMap.get(elementId)?.visible() ? layout : null
+	}
+
+	public setDOMLabelElementId(elementId: string | null): void {
+		if (this.domLabelElementId === elementId) return
+		const previous = this.domLabelElementId
+		this.domLabelElementId = elementId
+		// DOM 文字支持原生选中复制，只隐藏同一标签的 Konva 文字，避免双份文字重叠。
+		if (previous) this.labelMap.get(previous)?.findOne<Konva.Text>("Text")?.opacity(1)
+		if (elementId) this.labelMap.get(elementId)?.findOne<Konva.Text>("Text")?.opacity(0)
+		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
+			source: "NameLabelManager",
+			reason: "dom-name-label",
+			priority: "input",
+		})
 	}
 
 	/** 浏览文字使用最终屏幕比例；编辑入口继续通过 getRenameInputLayout 读取全文。 */
@@ -212,6 +258,14 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 	}
 
+	protected override getLabelOperationScreenWidth(elementId: string): number {
+		return this.canvas.elementManager.getElementData(elementId)?.type ===
+			ElementTypeEnum.Image &&
+			(this.canvas.elementRenameManager?.canRename(elementId) ?? false)
+			? 24
+			: 0
+	}
+
 	protected override createLabel(elementId: string): Konva.Group {
 		const labelText = this.getLabelText(elementId)
 		const labelGroup = new Konva.Group({
@@ -228,6 +282,7 @@ export class NameLabelManager extends BaseLabelManager {
 			wrap: "none",
 			ellipsis: true,
 			listening: false,
+			opacity: this.domLabelElementId === elementId ? 0 : 1,
 		})
 		const hitRect = new Konva.Rect({
 			name: NAME_LABEL_HIT_NAME,
@@ -279,7 +334,6 @@ export class NameLabelManager extends BaseLabelManager {
 		inverseScale: number,
 		mediaLayout?: MediaLabelLayout | null,
 	): boolean {
-		void element
 		void boundingRect.x
 		void boundingRect.y
 		void boundingRect.height
@@ -300,9 +354,22 @@ export class NameLabelManager extends BaseLabelManager {
 		)
 		const siblingGap =
 			explicitSizeReservation > 0 ? 0 : reservedWidth > 0 ? NAME_LABEL_CONFIG.LABEL_GAP : 0
+		// 图片名称为 24px 铅笔命中区预留空间。媒体整行布局已经扣除操作区，
+		// 普通标签在这里保留同样的安全间距。
+		const buttonWidth =
+			element?.getData().type === ElementTypeEnum.Image &&
+			(this.canvas.permissionManager?.canRename(element.getData()) ?? false)
+				? 24
+				: 0
 		const availableLabelWidth = resolvedMediaLayout
 			? Math.max(0, resolvedMediaLayout.nameWidth)
-			: Math.max(0, boundingRect.width / safeInverseScale - reservedWidth - siblingGap)
+			: Math.max(
+					0,
+					boundingRect.width / safeInverseScale -
+						reservedWidth -
+						siblingGap -
+						buttonWidth,
+				)
 		const hasIcon = state.iconKey !== null
 		const fullIconWidth = hasIcon ? state.iconWidth + state.iconGap : 0
 		const iconCanFit =
@@ -372,8 +439,8 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 	}
 
-	private getTextNode(labelGroup: Konva.Group): Konva.Text | null {
-		return labelGroup.findOne(`.${NAME_LABEL_TEXT_NAME}`) as Konva.Text | null
+	private getTextNode(labelGroup: Konva.Group | null | undefined): Konva.Text | null {
+		return (labelGroup?.findOne(`.${NAME_LABEL_TEXT_NAME}`) as Konva.Text | undefined) ?? null
 	}
 
 	private measureNaturalTextWidth(textNode: Konva.Text): number {
@@ -533,6 +600,7 @@ export class NameLabelManager extends BaseLabelManager {
 	public override destroy(): void {
 		this.clearPointerHover()
 		this.iconHoverElementId = null
+		this.domLabelElementId = null
 		for (const unsubscribe of this.interactionUnsubscribers) {
 			unsubscribe()
 		}
@@ -723,10 +791,16 @@ export class NameLabelManager extends BaseLabelManager {
 			stopPointerEvent(e)
 			this.selectElementFromLabel(elementId)
 		})
-		labelGroup.on("mouseup click tap", stopPointerEvent)
+		labelGroup.on("mouseup", stopPointerEvent)
+		labelGroup.on("click tap", (e) => {
+			stopPointerEvent(e)
+		})
 		labelGroup.on("dblclick dbltap", (e) => {
 			stopPointerEvent(e)
-			this.canvas.elementRenameManager?.startRename(elementId)
+			if (
+				this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
+			)
+				this.canvas.elementRenameManager?.startRename(elementId)
 		})
 		labelGroup.on("contextmenu", (e) => {
 			e.evt.preventDefault()

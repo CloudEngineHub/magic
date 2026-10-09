@@ -7,16 +7,17 @@ import {
 	ElementTypeEnum,
 	type ImageElement,
 	type VideoElement,
+	type VideoElementContent,
 } from "../../../runtime/document/types"
 import MediaResourceFullscreenPreview, {
 	type MediaResourceFullscreenPreviewItem,
 } from "../../fullscreen/media-resource/index"
-import { getActiveContent, getActiveImageContent } from "../../../runtime/document/elementContent"
+import { getActiveContent } from "../../../runtime/document/elementContent"
 import { useFloatingUI } from "../../../app/providers/FloatingUIProvider"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 
 export default function MessageHistory() {
-	const { messageHistoryElementId } = useCanvasPanelUI()
+	const { messageHistoryElementId, messageHistoryContentId } = useCanvasPanelUI()
 	const { canvas } = useCanvas()
 	const { activateFloatingComponent } = useFloatingUI()
 	const [previewingMediaResource, setPreviewingMediaResource] =
@@ -24,7 +25,7 @@ export default function MessageHistory() {
 	const previewOwnerIdRef = useRef<string | null>(null)
 
 	const element = useCanvasElement(messageHistoryElementId)
-	const generationRuntime = useGenerationRuntime(messageHistoryElementId)
+	const generationRuntime = useGenerationRuntime(messageHistoryElementId, messageHistoryContentId)
 	const historySurfaceId =
 		element?.type === ElementTypeEnum.Image
 			? "image-message-history"
@@ -53,25 +54,18 @@ export default function MessageHistory() {
 	useEffect(() => {
 		setPreviewingMediaResource(null)
 		previewOwnerIdRef.current = null
-	}, [messageHistoryElementId])
+	}, [messageHistoryElementId, messageHistoryContentId])
 
 	const panel = useMemo(() => {
 		if (!messageHistoryElementId || !element) return null
 		if (element.id !== messageHistoryElementId) return null
 
-		if (
-			element.type === ElementTypeEnum.Image &&
-			(generationRuntime?.generateImageRequest ||
-				(
-					(canvas?.getEffectiveContent(element.id) as
-						| ReturnType<typeof getActiveImageContent>
-						| undefined) ?? getActiveImageContent(element)
-				).generateImageRequest)
-		) {
+		if (element.type === ElementTypeEnum.Image) {
 			return (
 				<ImageMessageHistoryRender
 					key={element.id}
 					imageElement={element as ImageElement}
+					contentId={messageHistoryContentId}
 					onPreviewMediaResource={handlePreviewMediaResource}
 				/>
 			)
@@ -81,9 +75,8 @@ export default function MessageHistory() {
 			element.type === ElementTypeEnum.Video &&
 			(generationRuntime?.generateVideoRequest ||
 				(
-					(canvas?.getEffectiveContent(element.id) as
-						| ReturnType<typeof getActiveContent>
-						| undefined) ?? getActiveContent(element)
+					canvas?.getEffectiveContent<VideoElementContent>(element.id) ??
+					getActiveContent(element)
 				)?.generateVideoRequest)
 		) {
 			return (
@@ -96,7 +89,14 @@ export default function MessageHistory() {
 		}
 
 		return null
-	}, [canvas, messageHistoryElementId, element, generationRuntime, handlePreviewMediaResource])
+	}, [
+		canvas,
+		messageHistoryElementId,
+		messageHistoryContentId,
+		element,
+		generationRuntime,
+		handlePreviewMediaResource,
+	])
 
 	if (!panel) return null
 

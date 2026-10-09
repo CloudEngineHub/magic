@@ -647,6 +647,8 @@ export class KeyboardManager {
 	 * @param target 目标元素
 	 */
 	private isInputElement(target: EventTarget | null): boolean {
+		// 图片标题是只读 DOM 文字：复制所选文字时不能被画布的复制元素快捷键截获。
+		if (target instanceof Element && target.closest("[data-canvas-name-label]")) return true
 		if (!target || !(target instanceof HTMLElement)) {
 			return false
 		}

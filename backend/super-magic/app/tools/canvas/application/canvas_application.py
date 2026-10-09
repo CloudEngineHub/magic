@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.add_elements_service import AddElementsService
 from app.tools.canvas.application.commands import (
@@ -92,17 +94,27 @@ class CanvasApplication:
         """返回精确 Element 的模型友好业务 DTO 和关联连线。"""
         return await self.query_service.elements(project_path, element_ids)
 
-    async def add_elements(self, project_path: str, items: list[AddElementCommand], tool_context: ToolContext | None = None) -> AddElementsResult:
+    async def add_elements(
+        self, project_path: str, items: list[AddElementCommand], tool_context: ToolContext | None = None,
+        *, on_placeholders_created: Callable[[AddElementsResult], Awaitable[None]] | None = None,
+    ) -> AddElementsResult:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
-        return await self.add_elements_service.add_elements(project_path, items, tool_context)
+        return await self.add_elements_service.add_elements(
+            project_path, items, tool_context, on_placeholders_created=on_placeholders_created,
+        )
 
     async def frame_elements(self, project_path: str, items: list[FrameElementsCommand]) -> FrameElementsResult:
         """将符合条件的同层级节点框选为新 Frame。"""
         return await self.frame_elements_service.frame_elements(project_path, items)
 
-    async def add_contents(self, project_path: str, items: list[AddContentCommand], tool_context: ToolContext | None = None) -> AddContentsResult:
+    async def add_contents(
+        self, project_path: str, items: list[AddContentCommand], tool_context: ToolContext | None = None,
+        *, on_placeholders_created: Callable[[AddContentsResult], Awaitable[None]] | None = None,
+    ) -> AddContentsResult:
         """向已有 Element 追加 Content 版本。"""
-        return await self.content_service.add_contents(project_path, items, tool_context)
+        return await self.content_service.add_contents(
+            project_path, items, tool_context, on_placeholders_created=on_placeholders_created,
+        )
 
     async def select_main(self, project_path: str, items: list[SelectMainContentCommand]) -> SelectMainContentsResult:
         """只修改用户明确选择的 main Content 指针。"""

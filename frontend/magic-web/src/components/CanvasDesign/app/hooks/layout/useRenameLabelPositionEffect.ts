@@ -9,6 +9,8 @@ export interface UseRenameLabelPositionEffectOptions {
 	value: string
 	/** 当前重命名元素被删除时回调 */
 	onTargetDeleted: () => void
+	/** 图片使用固定宽度面板；普通元素继续与原名称行对齐。 */
+	panel?: boolean
 }
 
 /**
@@ -16,7 +18,7 @@ export interface UseRenameLabelPositionEffectOptions {
  * 与 useElementPositionEffect 相同：直接更新 DOM transform，避免无关节点重渲染。
  */
 export default function useRenameLabelPositionEffect(options: UseRenameLabelPositionEffectOptions) {
-	const { elementId, inputRef, value, onTargetDeleted } = options
+	const { elementId, inputRef, value, onTargetDeleted, panel = false } = options
 	const { canvas } = useCanvas()
 	const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -27,6 +29,31 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 
 		const layout = canvas.nameLabelManager.getRenameInputLayout(elementId)
 		if (!layout) {
+			return
+		}
+		if (panel) {
+			const node = containerRef.current
+			const { clientWidth: width, clientHeight: height } = canvas.container
+			const margin = 8
+			node.style.width = `${Math.max(0, Math.min(384, width - margin * 2))}px`
+			node.style.maxHeight = `${Math.max(0, height - margin * 2)}px`
+			const bounds = canvas.elementManager.getElementInstance(elementId)?.getBoundingRect()
+			const scale = canvas.stage.scaleX()
+			const right = bounds
+				? (bounds.x + bounds.width) * scale + canvas.stage.x() + 12
+				: layout.x
+			const left = layout.x - node.offsetWidth - 12
+			const x =
+				right + node.offsetWidth <= width - margin
+					? right
+					: left >= margin
+						? left
+						: layout.x
+			const y =
+				right + node.offsetWidth <= width - margin || left >= margin
+					? layout.y - 16
+					: layout.y + layout.height + 8
+			node.style.transform = `translate(${Math.max(margin, Math.min(x, width - node.offsetWidth - margin))}px, ${Math.max(margin, Math.min(y, height - node.offsetHeight - margin))}px)`
 			return
 		}
 
@@ -46,10 +73,11 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 			layout.width + 16,
 			72,
 		)}px`
-	}, [canvas, elementId, inputRef])
+	}, [canvas, elementId, inputRef, panel])
 
 	useCanvasEvents(
 		[
+			"canvas:resize",
 			"viewport:scale",
 			"viewport:pan",
 			"element:updated",
@@ -59,6 +87,7 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 			"element:deleted",
 		] as const,
 		(
+			resizeEvent,
 			scaleEvent,
 			panEvent,
 			updatedEvent,
@@ -67,6 +96,7 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 			anchorDragMoveEvent,
 			deletedEvent,
 		) => {
+			void resizeEvent
 			void scaleEvent
 			void panEvent
 
@@ -123,6 +153,15 @@ export default function useRenameLabelPositionEffect(options: UseRenameLabelPosi
 
 		updatePosition()
 	}, [elementId, value, updatePosition])
+
+	useLayoutEffect(() => {
+		if (!panel || !containerRef.current || !canvas) return
+		// 长名称和错误提示会改变面板高度；仍须留在画布视口内。
+		const observer = new ResizeObserver(updatePosition)
+		observer.observe(containerRef.current)
+		observer.observe(canvas.container)
+		return () => observer.disconnect()
+	}, [canvas, panel, updatePosition])
 
 	return {
 		containerRef,

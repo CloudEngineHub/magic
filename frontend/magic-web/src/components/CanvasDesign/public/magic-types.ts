@@ -506,6 +506,8 @@ export interface DefaultGenerateVideoConfig {
  * 发起图片生成请求参数
  */
 export interface GenerateImageRequest {
+	/** 该版本的生成名称；最终文件名仍由生成结果确定。 */
+	name?: string
 	/** 项目 id */
 	project_id?: string
 	/** 图片 id */
@@ -1454,12 +1456,35 @@ export interface CanvasDesignConfirmModalOptions {
 	onCancel?: () => void
 }
 
+export interface CanvasImageRenameFile {
+	fileId: string
+	fileName: string
+	sourcePath: string
+	parentPath: string
+}
+
+export interface CanvasImageFileRename {
+	elementId: string
+	contentId: string
+	fileId: string
+	expectedName: string
+	targetName: string
+}
+
+export interface CanvasImageRenameMethods {
+	resolveImageRenameFile: (path: string) => CanvasImageRenameFile | undefined
+	validateImageFileRenames: (changes: readonly CanvasImageFileRename[]) => Record<string, string>
+	renameImageFile: (change: CanvasImageFileRename) => Promise<CanvasImageRenameFile>
+}
+
 /**
  * CanvasDesign 方法集合
  * 用于代理数据请求和存储操作，所有方法都是异步的
  * 注意：此接口完全独立，不依赖外部类型
  */
 export interface CanvasDesignMethods {
+	/** 手动图片命名由宿主处理实际文件；自动标题更新不触发文件改名。 */
+	imageRename?: CanvasImageRenameMethods
 	/**
 	 * 获取生图模型列表
 	 * @param mode 模式标识，如果不传则使用当前模式

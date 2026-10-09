@@ -333,7 +333,7 @@ class ContentMetadataService:
             "prompt": str(parameters.get("prompt") or ""),
         }
         generic_keys = (
-            ("size", "image_id", "mode", "start_time", "end_time", "duration_ms", "model_id")
+            ("name", "size", "image_id", "mode", "start_time", "end_time", "duration_ms", "model_id")
             if element_type == "image"
             else ("model_id",)
         )
