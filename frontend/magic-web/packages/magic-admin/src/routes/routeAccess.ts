@@ -11,6 +11,7 @@ import {
 } from "@admin/utils/routeMeta"
 
 type AccessRoute = RouteWithMeta & {
+	isAccessibleIndexRedirect?: boolean
 	validate?: (permissions: string[], isSuperAdmin: boolean) => boolean
 	validateEnvironment?: (env: EnvironmentAccessContext) => boolean
 }
@@ -78,7 +79,11 @@ export function isRouteChainFullyAccessible(
 }
 
 export function isRedirectRoute(route: RouteObject) {
-	return isValidElement(route.element) && "to" in route.element.props
+	const candidate = route as AccessRoute
+	return (
+		candidate.isAccessibleIndexRedirect === true ||
+		(isValidElement(candidate.element) && "to" in candidate.element.props)
+	)
 }
 
 function getFirstAccessibleLeaf(

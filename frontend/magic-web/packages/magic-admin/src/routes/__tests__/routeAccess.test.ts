@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { PERMISSION_KEY_MAP } from "@admin/const/common"
-import { isRoutePathAccessible } from "../routeAccess"
+import { findFirstAccessibleRoutePath, isRoutePathAccessible } from "../routeAccess"
 
 const personalSuperAdmin = {
 	isOfficialOrg: false,
@@ -71,5 +71,39 @@ describe("route organization access", () => {
 			const block = routesSource.slice(start, start + 240)
 			expect(block).toContain(personalOrganizationCheck)
 		}
+	})
+	it("skips a transformed empty group and uses the next accessible sibling", () => {
+		const transformedIndexRedirect = {
+			index: true,
+			isAccessibleIndexRedirect: true,
+		} as const
+		const routes = [
+			{
+				path: "/admin",
+				children: [
+					{
+						path: "/admin/empty-group",
+						title: "empty-group",
+						children: [
+							transformedIndexRedirect,
+							{
+								path: "/admin/empty-group/hidden",
+								title: "hidden",
+								validate: () => false,
+							},
+						],
+					},
+					{
+						path: "/admin/usable",
+						title: "usable",
+						validate: () => true,
+					},
+				],
+			},
+		]
+
+		expect(
+			findFirstAccessibleRoutePath(routes[0].children ?? [], personalSuperAdmin, [routes[0]]),
+		).toBe("/admin/usable")
 	})
 })

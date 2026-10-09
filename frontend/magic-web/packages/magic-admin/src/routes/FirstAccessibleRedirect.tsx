@@ -74,6 +74,9 @@ export function withAccessibleIndexRedirect<T extends RouteObject>(routes: T[]):
 			if (ancestors.length < 2 || !route.index || !isRedirectRoute(route)) return route
 			return {
 				...route,
+				// Keep the redirect identity after replacing Navigate so access lookup can
+				// still skip groups whose redirect target has no accessible descendant.
+				isAccessibleIndexRedirect: true,
 				element: <FirstAccessibleRedirect routes={transformed} ancestors={ancestors} />,
 			} as T
 		})
