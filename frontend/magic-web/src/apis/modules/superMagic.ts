@@ -890,16 +890,25 @@ export interface ShareResourceSettings {
 export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	getSlidesTemplates(
 		params: SlidesTemplateQueryParams,
-		options?: { xMagicImageProcess?: ImageProcessOptions },
+		options?: {
+			xMagicImageProcess?: ImageProcessOptions
+			temporaryToken?: string
+		},
 	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch
 			.get<SlidesTemplateRawListResponse>("/api/v1/slides-templates", {
-				params: { scope: "official", ...params },
+				params: {
+					scope: "official",
+					...params,
+					...(temporaryToken ? { token: temporaryToken } : {}),
+				},
 				headers: {
 					...(options?.xMagicImageProcess && {
 						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
 					}),
 				},
+				...getShareModeRequestConfig(temporaryToken),
 			})
 			.then(normalizeSlidesTemplateResponse)
 	},
@@ -954,9 +963,17 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		return fetch.delete<[]>(`/api/v1/slides-templates/${code}`)
 	},
 
-	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
+	getSlidesTemplateCategories(
+		params: SlidesTemplateCategoryQueryParams,
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateCategoryListResponse>("/api/v1/slides-template-categories", {
-			params: { ...params },
+			params: {
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
@@ -966,15 +983,32 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		})
 	},
 
-	getSlidesTemplateTagGroups(params: { category_code?: string } = {}) {
+	getSlidesTemplateTagGroups(
+		params: { category_code?: string } = {},
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateTagGroupItem[]>("/api/v1/slides-template/tags/groups", {
-			params: { ...params },
+			params: {
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
-	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
+	getSlidesTemplateCount(
+		params: SlidesTemplateQueryParams,
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateCountResponse>("/api/v1/slides-templates/count", {
-			params: { scope: "official", ...params },
+			params: {
+				scope: "official",
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
