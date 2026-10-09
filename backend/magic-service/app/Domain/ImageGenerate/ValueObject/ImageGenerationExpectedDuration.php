@@ -17,9 +17,9 @@ final class ImageGenerationExpectedDuration
         }
 
         return match ($resolution) {
-            '4k' => 100,
-            '2k' => 70,
-            default => 45,
+            '4k' => 120,
+            '2k' => 90,
+            default => 60,
         };
     }
 
