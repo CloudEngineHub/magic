@@ -585,14 +585,18 @@ function Topic({
 		setActiveFileId(null)
 	}, [projectId])
 
-	// 同步 attachments.tree 到 projectFilesStore，确保 ToolCall 组件能正确获取 fileTree
+	// Sync attachments into projectFilesStore so ToolCall and TopicFilesCore can reuse the
+	// store list path instead of re-flattening the full tree on every incremental commit.
 	useEffect(() => {
 		if (attachments?.tree && attachments.tree.length > 0) {
-			projectFilesStore.setWorkspaceFileTree(attachments.tree)
+			projectFilesStore.setWorkspaceFileTree(attachments.tree, {
+				list: attachments.list,
+				source: "ShareTopic.attachments",
+			})
 		} else {
 			projectFilesStore.setWorkspaceFileTree([])
 		}
-	}, [attachments?.tree])
+	}, [attachments?.tree, attachments?.list])
 
 	const isAtBottomRef = useRef(true) // 👈 用 ref 保存旧的 isAtBottom 状态
 	const virtualizerRef = useRef<MessageListScrollAdapter | null>(null)

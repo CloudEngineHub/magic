@@ -303,6 +303,21 @@ export interface GetProjectAttachmentsV2Params {
 	temporaryToken?: string
 }
 
+export type ShareFilesV2NextParentState = ProjectAttachmentsV2NextParentState
+
+export interface GetShareResourceFilesV2Response {
+	list: AttachmentItem[]
+	next_parent_ids: ShareFilesV2NextParentState[] | null
+	has_more: boolean
+}
+
+export interface GetShareResourceFilesV2Params {
+	resourceId: string
+	password?: string
+	pageSize?: number
+	nextParentIds: ShareFilesV2NextParentState[]
+}
+
 export interface BatchSavePayload {
 	project_id: string
 	parent_id?: string // 父目录ID，为空表示根目录
@@ -875,16 +890,25 @@ export interface ShareResourceSettings {
 export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	getSlidesTemplates(
 		params: SlidesTemplateQueryParams,
-		options?: { xMagicImageProcess?: ImageProcessOptions },
+		options?: {
+			xMagicImageProcess?: ImageProcessOptions
+			temporaryToken?: string
+		},
 	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch
 			.get<SlidesTemplateRawListResponse>("/api/v1/slides-templates", {
-				params: { scope: "official", ...params },
+				params: {
+					scope: "official",
+					...params,
+					...(temporaryToken ? { token: temporaryToken } : {}),
+				},
 				headers: {
 					...(options?.xMagicImageProcess && {
 						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
 					}),
 				},
+				...getShareModeRequestConfig(temporaryToken),
 			})
 			.then(normalizeSlidesTemplateResponse)
 	},
@@ -939,9 +963,17 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		return fetch.delete<[]>(`/api/v1/slides-templates/${code}`)
 	},
 
-	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
+	getSlidesTemplateCategories(
+		params: SlidesTemplateCategoryQueryParams,
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateCategoryListResponse>("/api/v1/slides-template-categories", {
-			params: { ...params },
+			params: {
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
@@ -951,15 +983,32 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		})
 	},
 
-	getSlidesTemplateTagGroups(params: { category_code?: string } = {}) {
+	getSlidesTemplateTagGroups(
+		params: { category_code?: string } = {},
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateTagGroupItem[]>("/api/v1/slides-template/tags/groups", {
-			params: { ...params },
+			params: {
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
-	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
+	getSlidesTemplateCount(
+		params: SlidesTemplateQueryParams,
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateCountResponse>("/api/v1/slides-templates/count", {
-			params: { scope: "official", ...params },
+			params: {
+				scope: "official",
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
@@ -1765,16 +1814,24 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	/**
-	 * @description 获取分享资源的文件列表
-	 * @param resource_id 资源ID
-	 * @param password 密码（可选）
+	 * @description get share resource files v2 page
 	 */
-	getShareResourceFiles({ resource_id, password }: { resource_id: string; password?: string }) {
-		return fetch.post(`/api/v1/share/resources/${resource_id}/files/queries`, {
-			pwd: password,
-			page: 1,
-			page_size: 999,
-		})
+	getShareResourceFilesV2Page(
+		params: GetShareResourceFilesV2Params,
+		requestConfig?: Omit<RequestConfig, "url" | "body">,
+	) {
+		return fetch.post<GetShareResourceFilesV2Response>(
+			`/api/v2/share/resources/${params.resourceId}/files/queries`,
+			{
+				page_size: params.pageSize ?? 1000,
+				...(params.password !== undefined ? { pwd: params.password } : {}),
+				next_parent_ids: params.nextParentIds,
+			},
+			{
+				enableRequestUnion: false,
+				...requestConfig,
+			},
+		)
 	},
 
 	/**

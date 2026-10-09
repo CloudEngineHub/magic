@@ -54,8 +54,8 @@ describe("MicroAppSharePage", () => {
 				resource_id: "resource-1",
 				password: undefined,
 			})
-			expect(mocks.getShareResourceFiles).toHaveBeenCalledWith({
-				resource_id: "resource-1",
+			expect(mocks.loadShareFilesV2).toHaveBeenCalledWith({
+				resourceId: "resource-1",
 				password: undefined,
 			})
 		})
@@ -261,7 +261,7 @@ describe("MicroAppSharePage", () => {
 	})
 
 	it("replaces the current preview across repeated html navigation", async () => {
-		mocks.getShareResourceFiles.mockResolvedValue({
+		mocks.loadShareFilesV2.mockResolvedValue({
 			tree: [
 				{
 					file_id: "app-json-1",
@@ -329,7 +329,7 @@ describe("MicroAppSharePage", () => {
 	})
 
 	it("shows empty state when published files do not contain a root html entry", async () => {
-		mocks.getShareResourceFiles.mockResolvedValue({
+		mocks.loadShareFilesV2.mockResolvedValue({
 			tree: [
 				{
 					file_id: "app-json-1",

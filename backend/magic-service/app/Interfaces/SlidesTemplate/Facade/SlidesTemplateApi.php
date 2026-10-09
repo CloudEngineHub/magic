@@ -8,8 +8,11 @@ declare(strict_types=1);
 namespace App\Interfaces\SlidesTemplate\Facade;
 
 use App\Application\SlidesTemplate\Service\SlidesTemplateAppService;
+use App\Application\SuperMagic\Common\Service\AccessTokenAuthorizationService;
 use App\Domain\SlidesTemplate\Entity\ValueObject\SlidesTemplateQueryScope;
+use App\ErrorCode\GenericErrorCode;
 use App\Infrastructure\Core\AbstractApi;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SlidesTemplate\Assembler\SlidesTemplateAssembler;
 use App\Interfaces\SlidesTemplate\DTO\Request\PublicQuerySlidesTemplateRequest;
@@ -18,19 +21,21 @@ use App\Interfaces\SlidesTemplate\DTO\Request\QueryFavoriteSlidesTemplateRequest
 use App\Interfaces\SlidesTemplate\DTO\Request\QueryUsedSlidesTemplateRequest;
 use App\Interfaces\SlidesTemplate\DTO\Request\SaveUserSlidesTemplateRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use Qbhy\HyperfAuth\Authenticatable;
 
 #[ApiResponse('low_code')]
 class SlidesTemplateApi extends AbstractApi
 {
     public function __construct(
         private readonly SlidesTemplateAppService $slidesTemplateAppService,
+        private readonly AccessTokenAuthorizationService $accessTokenAuthorizationService,
     ) {
     }
 
     public function queries(PublicQuerySlidesTemplateRequest $request): array
     {
         $request->validated();
-        $result = $this->slidesTemplateAppService->queries($this->getAuthorization(), $request);
+        $result = $this->slidesTemplateAppService->queries($this->resolveAuthorization($request), $request);
 
         return SlidesTemplateAssembler::createPublicListPageDTO(
             $result['list'],
@@ -43,7 +48,7 @@ class SlidesTemplateApi extends AbstractApi
     public function count(PublicQuerySlidesTemplateRequest $request): array
     {
         $request->validated();
-        $result = $this->slidesTemplateAppService->count($this->getAuthorization(), $request);
+        $result = $this->slidesTemplateAppService->count($this->resolveAuthorization($request), $request);
 
         return SlidesTemplateAssembler::createCountDTO(
             $result['total'],
@@ -119,5 +124,20 @@ class SlidesTemplateApi extends AbstractApi
     {
         $this->slidesTemplateAppService->deleteUserTemplate($this->getAuthorization(), $code);
         return [];
+    }
+
+    private function resolveAuthorization(PublicQuerySlidesTemplateRequest $request): Authenticatable
+    {
+        $token = $request->getToken();
+        if ($token === '') {
+            return $this->getAuthorization();
+        }
+
+        // A share token must never expose the share creator's personal template scope.
+        if ($request->getScope() !== SlidesTemplateQueryScope::Official->value) {
+            ExceptionBuilder::throw(GenericErrorCode::AccessDenied, 'access_denied');
+        }
+
+        return $this->accessTokenAuthorizationService->validateTokenAndCreateUserAuthorization($token);
     }
 }

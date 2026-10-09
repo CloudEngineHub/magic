@@ -54,7 +54,7 @@ const mocks = vi.hoisted(() => ({
 	resolvePublishedMicroApp: vi.fn(),
 	checkShareResourcePassword: vi.fn(),
 	getShareResource: vi.fn(),
-	getShareResourceFiles: vi.fn(),
+	loadShareFilesV2: vi.fn(),
 	getTemporaryDownloadUrl: vi.fn(),
 	historyReplace: vi.fn(),
 	openOrganizationSwitch: vi.fn(),
@@ -94,10 +94,13 @@ vi.mock("@/apis", () => ({
 		resolvePublishedMicroApp: mocks.resolvePublishedMicroApp,
 		checkShareResourcePassword: mocks.checkShareResourcePassword,
 		getShareResource: mocks.getShareResource,
-		getShareResourceFiles: mocks.getShareResourceFiles,
 		getMicroAppRuntimeProject: vi.fn().mockResolvedValue({ exists: false }),
 		ensureMicroAppRuntimeProject: vi.fn(),
 	},
+}))
+
+vi.mock("@/pages/share/services/shareFilesLoader", () => ({
+	loadShareFilesV2: mocks.loadShareFilesV2,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -356,7 +359,7 @@ export function resetMicroAppSharePageMocks() {
 			project_name: "Demo App",
 		},
 	})
-	mocks.getShareResourceFiles.mockResolvedValue({
+	mocks.loadShareFilesV2.mockResolvedValue({
 		tree: [
 			{
 				file_id: "app-json-1",
