@@ -39,10 +39,10 @@ const NAME_LABEL_CONFIG = {
 	/** 让 size label 在边界附近保持稳定，避免缩放时反复切换可见性 */
 	SIZE_LABEL_PRIORITY_EPSILON: 2,
 	/** 状态标签与主名称分开显示，保留可辨识的间隙 */
-	SUFFIX_GAP: 4,
-	STATUS_FONT_SIZE: 10,
+	SUFFIX_GAP: 6,
+	STATUS_FONT_RATIO: 5 / 6,
 	STATUS_PADDING_X: 4,
-	STATUS_PADDING_Y: 1,
+	STATUS_PADDING_Y: 2,
 	/** 省略后仍保留的最小文本宽度，避免标签节点宽度为 0 */
 	MIN_TEXT_WIDTH: 1,
 } as const
@@ -454,7 +454,7 @@ export class NameLabelManager extends BaseLabelManager {
 				suffixNode = new Konva.Text({
 					name: NAME_LABEL_SUFFIX_NAME,
 					text: suffixText,
-					fontSize: NAME_LABEL_CONFIG.STATUS_FONT_SIZE,
+					fontSize: textNode.fontSize() * NAME_LABEL_CONFIG.STATUS_FONT_RATIO,
 					fontFamily: this.labelConfig.fontFamily,
 					fill: this.labelConfig.textColor,
 					wrap: "none",
@@ -464,8 +464,7 @@ export class NameLabelManager extends BaseLabelManager {
 				labelGroup.add(
 					new Konva.Rect({
 						name: "name-label-status-background",
-						fill: "rgba(115, 115, 115, 0.12)",
-						cornerRadius: 3,
+						cornerRadius: 7,
 						listening: false,
 					}),
 				)
@@ -473,6 +472,21 @@ export class NameLabelManager extends BaseLabelManager {
 				changed = true
 			} else if (suffixNode.text() !== suffixText) {
 				suffixNode.text(suffixText)
+				changed = true
+			}
+
+			// 进行中的任务使用画布蓝色；终态保留中性色，避免继续传达正在处理。
+			const statusColor = content.suffix?.inProgress ? "#3B82F6" : this.labelConfig.textColor
+			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
+			const backgroundColor = content.suffix?.inProgress
+				? "rgba(59, 130, 246, 0.08)"
+				: "rgba(115, 115, 115, 0.08)"
+			if (background?.fill() !== backgroundColor) {
+				background?.fill(backgroundColor)
+				changed = true
+			}
+			if (suffixNode.fill() !== statusColor) {
+				suffixNode.fill(statusColor)
 				changed = true
 			}
 
@@ -626,7 +640,6 @@ export class NameLabelManager extends BaseLabelManager {
 		)
 		const iconY = iconCanFit ? Math.max(0, (labelHeight - state.iconHeight) / 2) : 0
 		const textY = Math.max(0, (labelHeight - textNode.height()) / 2)
-		const suffixY = state.suffixText ? Math.max(0, (labelHeight - state.suffixHeight) / 2) : 0
 		if (iconNode) {
 			// The label group already starts at the element's left edge. Keep the
 			// icon slot at x=0 and preserve the resolver's natural drawing geometry.
@@ -648,12 +661,16 @@ export class NameLabelManager extends BaseLabelManager {
 			changed = true
 		}
 		if (suffixNode) {
-			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
+			// 胶囊整体与标题居中，内部文字独立居中；字号较小也不会沿标题底部排列。
+			const suffixY = (labelHeight - state.suffixHeight) / 2
 			const suffixTextX = suffixOffsetX + NAME_LABEL_CONFIG.STATUS_PADDING_X
 			const suffixTextY = suffixY + NAME_LABEL_CONFIG.STATUS_PADDING_Y
+			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
 			if (
 				suffixNode.x() !== suffixTextX ||
 				suffixNode.y() !== suffixTextY ||
+				background?.x() !== suffixOffsetX ||
+				background?.y() !== suffixY ||
 				background?.width() !== state.suffixNaturalTextWidth ||
 				background?.height() !== state.suffixHeight
 			) {

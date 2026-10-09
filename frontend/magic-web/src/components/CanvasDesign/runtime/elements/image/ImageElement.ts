@@ -2119,18 +2119,18 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	public override getNameLabelContent(): NameLabelContent {
 		const baseName = this.data.name || this.getRenderName()
 		const displayState = this.getDisplayState()
-		const withStatus = (text: string): NameLabelContent => ({
+		const withStatus = (text: string, inProgress = false): NameLabelContent => ({
 			primaryText: baseName,
-			suffix: { text },
+			suffix: { text, inProgress },
 		})
 
 		switch (displayState.status) {
 			case "timed-out":
 				return withStatus(this.getText("image.status.timedOut", "超时"))
 			case "generating":
-				return withStatus(this.getGeneratingNameSuffix(displayState))
+				return withStatus(this.getGeneratingNameSuffix(displayState), true)
 			case "uploading":
-				return withStatus(this.getText("image.status.uploading", "上传中"))
+				return withStatus(this.getText("image.status.uploading", "上传中"), true)
 			case "failed":
 				return displayState.failureSource === "resource"
 					? { primaryText: baseName }

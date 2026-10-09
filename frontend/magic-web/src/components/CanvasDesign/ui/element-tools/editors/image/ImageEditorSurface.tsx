@@ -79,7 +79,6 @@ import type {
 } from "../../../../public/magic-types"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import type { Canvas } from "../../../../runtime/core/Canvas"
-import { ImageElement as ImageElementInstance } from "../../../../runtime/elements/image/ImageElement"
 import {
 	areCanvasResourceReferencesSame,
 	getCanvasResourceAvailability,
@@ -158,10 +157,6 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		isMediaResourcePreviewOpen = false,
 	} = props
 	const { canvas } = useCanvas()
-	const imageInstance = canvas?.elementManager.getElementInstance(imageElement.id)
-	const isGenerating =
-		imageInstance instanceof ImageElementInstance &&
-		imageInstance.getDisplayState().status === "generating"
 	const { methods } = useMagic()
 	const { setEditingElementId } = useCanvasModeUI()
 
@@ -765,21 +760,6 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					onChange={handlers.handleFileChange}
 				/>
 				<div ref={setSourceListContainer} className={styles.sourceListMount} />
-				{readOnly ? (
-					<div className={styles.readOnlyHeader}>
-						<div className={styles.readOnlyStatus}>
-							{isGenerating ? (
-								<LoaderCircle size={14} className="animate-spin" />
-							) : null}
-							<span>
-								{isGenerating
-									? t("image.status.generating", "生成中")
-									: t("imageEditor.readOnly", "只读")}
-							</span>
-						</div>
-						<span>{t("imageEditor.readOnlyHint", "可查看和复制提示词及参考图片")}</span>
-					</div>
-				) : null}
 				{!readOnly && linkedEditorInputs?.textConnections.length ? (
 					<div className={styles.linkedInputs}>
 						<LinkedEditorInputsBar
