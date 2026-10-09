@@ -15,4 +15,8 @@ return [
         'default' => 'zh-CN',
         'supported' => ['zh-CN', 'en-US'],
     ],
+    // Event consumption lease and recovery are notification-domain settings;
+    // async-event retry settings remain owned by async-event.
+    'processing_lease_seconds' => 300,
+    'recovery_batch_size' => 100,
 ];

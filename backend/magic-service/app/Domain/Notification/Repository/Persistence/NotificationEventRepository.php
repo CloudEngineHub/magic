@@ -103,7 +103,10 @@ final class NotificationEventRepository implements NotificationEventRepositoryIn
             ->where('processing_token', $processingToken)
             ->update([
                 'status' => NotificationEventStatus::SUCCEEDED->value,
-                'notification_count' => $notificationCount,
+                // A replay can legitimately create zero new rows because the
+                // notification source key is already present. Keep the event
+                // statistic stable instead of replacing the original count.
+                'notification_count' => Db::raw("GREATEST(notification_count, {$notificationCount})"),
                 'processing_token' => null,
                 'locked_until' => null,
                 'last_finished_at' => $finishedAt,
@@ -203,7 +206,7 @@ final class NotificationEventRepository implements NotificationEventRepositoryIn
         return [
             'id' => $entity->getId(),
             'event_id' => $entity->getEventId(),
-            'event_type' => $entity->getEventType()?->value,
+            'event_type' => $entity->getEventType(),
             'organization_code' => $entity->getOrganizationCode(),
             'source_domain' => $entity->getSourceDomain(),
             'source_type' => $entity->getSourceType(),
