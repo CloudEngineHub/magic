@@ -162,6 +162,7 @@ function FileContentRender(props: any) {
 		fileId: data?.file_id,
 		fileName: data?.file_name || data?.display_filename || data?.filename,
 		editingPresenceEnabled,
+		silentClose: type === DetailType.Design,
 	})
 
 	// Use hook to manage save handler registration and wrapped checkBeforeClose

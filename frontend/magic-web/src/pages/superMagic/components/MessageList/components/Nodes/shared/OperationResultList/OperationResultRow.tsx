@@ -21,12 +21,14 @@ import type {
 	OperationResultTarget,
 	OperationResultSummary,
 } from "@/pages/superMagic/components/Detail/types"
+import { GenerationProgress } from "@/pages/superMagic/components/MessageList/components/shared/ToolGenerationProgress"
 
 interface OperationResultRowProps {
 	item: OperationResultItem
 	stage?: OperationResultSummary["stage"]
 	loading: boolean
 	unavailable?: string
+	progressAnchorKey: string
 	onLocate: (target: OperationResultTarget, showDetails?: boolean) => void
 }
 
@@ -35,10 +37,12 @@ export default function OperationResultRow({
 	stage,
 	loading,
 	unavailable,
+	progressAnchorKey,
 	onLocate,
 }: OperationResultRowProps) {
 	const { t } = useTranslation("super")
-	const pending = loading && item.status === "success" && !unavailable
+	const pending =
+		loading && item.status === "success" && item.is_processing !== false && !unavailable
 	const ResultIcon =
 		unavailable || item.status === "skipped"
 			? CircleAlert
@@ -58,6 +62,7 @@ export default function OperationResultRow({
 				? `${web.origin}${web.pathname}`
 				: item.label
 	const changes = item.status === "success" ? item.changes : undefined
+	const showProgress = pending && Boolean(item.expected_finished_at)
 	const message =
 		unavailable ||
 		(pending
@@ -159,7 +164,7 @@ export default function OperationResultRow({
 						) : (
 							<div className="min-w-0 max-w-full shrink">{name}</div>
 						)}
-						{!changes && !web && message && (
+						{!changes && !web && message && !showProgress && (
 							<span className="min-w-0 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
 								{message}
 							</span>
@@ -190,6 +195,26 @@ export default function OperationResultRow({
 							)}
 						</div>
 					)}
+					{showProgress && (
+						<p className="m-0 mt-0.5 text-xs leading-5 text-muted-foreground">
+							<GenerationProgress
+								anchorKey={progressAnchorKey}
+								active
+								startedAt={item.started_at}
+								expectedFinishedAt={item.expected_finished_at}
+							/>
+						</p>
+					)}
+					{/* 终态挂载一次用于清理虚拟列表重挂载时保存的本地进度锚点。 */}
+					{!showProgress && item.expected_finished_at && (
+						<GenerationProgress
+							anchorKey={progressAnchorKey}
+							active={false}
+							startedAt={item.started_at}
+							expectedFinishedAt={item.expected_finished_at}
+						/>
+					)}
+					{showProgress && <span className="sr-only">{message}</span>}
 					{item.description && (
 						<p className="m-0 mt-0.5 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
 							{item.description}

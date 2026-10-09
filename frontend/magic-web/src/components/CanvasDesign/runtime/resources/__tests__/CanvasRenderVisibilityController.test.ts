@@ -173,6 +173,107 @@ describe("CanvasRenderVisibilityController", () => {
 		expect(controller.getCulledCount()).toBe(0)
 	})
 
+	it("diffs the admitted render workset without enumerating all elements during motion", () => {
+		const { controller, nodes } = createController("hidden")
+		const activeNode = createFakeNode()
+		const enteringNode = createFakeNode()
+		const farNode = createFakeNode()
+		nodes.set("active", activeNode)
+		nodes.set("entering", enteringNode)
+		nodes.set("far", farNode)
+		const allElementIds = new Set(["active", "entering", "far"])
+		const allElementIdsIterator = vi.spyOn(allElementIds, Symbol.iterator)
+
+		controller.sync({
+			activeElementIds: ["active"],
+			allElementIds,
+			allowCullFar: true,
+			mode: "bootstrap",
+			topologyRevision: 1,
+		})
+		allElementIdsIterator.mockClear()
+
+		controller.sync({
+			activeElementIds: ["entering"],
+			allElementIds,
+			allowCullFar: false,
+			mode: "incremental",
+			topologyRevision: 1,
+		})
+
+		expect(allElementIdsIterator).not.toHaveBeenCalled()
+		expect(activeNode.visible()).toBe(true)
+		expect(enteringNode.visible()).toBe(true)
+		expect(farNode.visible()).toBe(false)
+
+		controller.sync({
+			activeElementIds: ["entering"],
+			allElementIds,
+			allowCullFar: true,
+			mode: "incremental",
+			topologyRevision: 1,
+		})
+
+		expect(activeNode.visible()).toBe(false)
+		expect(enteringNode.visible()).toBe(true)
+		expect(farNode.visible()).toBe(false)
+	})
+
+	it("does not restore unchanged active nodes on an incremental sync", () => {
+		const { controller, nodes } = createController("hidden")
+		const node = createFakeNode()
+		nodes.set("image-1", node)
+
+		controller.sync({
+			activeElementIds: ["image-1"],
+			allElementIds: ["image-1"],
+			allowCullFar: true,
+			mode: "bootstrap",
+			topologyRevision: 1,
+		})
+		const visibleCallCount = node.visible.mock.calls.length
+		const listeningCallCount = node.listening.mock.calls.length
+
+		controller.sync({
+			activeElementIds: ["image-1"],
+			allElementIds: [],
+			allowCullFar: false,
+			mode: "incremental",
+			topologyRevision: 1,
+		})
+
+		expect(node.visible.mock.calls).toHaveLength(visibleCallCount)
+		expect(node.listening.mock.calls).toHaveLength(listeningCallCount)
+	})
+
+	it("cleans stale cull state during a topology reconcile", () => {
+		const { controller, nodes } = createController("hidden")
+		const activeNode = createFakeNode()
+		const removedNode = createFakeNode()
+		nodes.set("active", activeNode)
+		nodes.set("removed", removedNode)
+
+		controller.sync({
+			activeElementIds: ["active"],
+			allElementIds: ["active", "removed"],
+			allowCullFar: true,
+			mode: "bootstrap",
+			topologyRevision: 1,
+		})
+		expect(controller.getCulledCount()).toBe(1)
+
+		nodes.delete("removed")
+		controller.sync({
+			activeElementIds: ["active"],
+			allElementIds: ["active"],
+			allowCullFar: true,
+			mode: "bootstrap",
+			topologyRevision: 2,
+		})
+
+		expect(controller.getCulledCount()).toBe(0)
+	})
+
 	it("detaches and reattaches far nodes when using the detached strategy", () => {
 		const { controller, nodes } = createController("detached")
 		const node = createFakeNode()

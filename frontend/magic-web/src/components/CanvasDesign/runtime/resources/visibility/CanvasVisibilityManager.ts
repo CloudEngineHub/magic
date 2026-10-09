@@ -151,6 +151,7 @@ const CONTENT_LAYER_HIT_GRAPH_RESTORE_DELAY_MS = 160
 const VIEWPORT_IDLE_MEDIA_DELAY_MS = 160
 const VIEWPORT_IDLE_MEDIA_REFRESH_REASON = "viewport:idle-media"
 const IMAGE_LOW_FALLBACK_REFRESH_REASON = "image:low-fallback"
+const FAR_VISIBILITY_DRAIN_REFRESH_REASON = "visibility:far-drain"
 // Current default: Konva-only far culling. Far elements stop participating in drawing / hit
 // testing after the 3s drain, while image resources stay cached for fast return.
 const FAR_KONVA_RENDER_VISIBILITY_STRATEGY: CanvasRenderVisibilityStrategy = "hidden"
@@ -180,9 +181,9 @@ interface ContainerRootCache {
 }
 
 interface ViewportElementQueryResult {
-	rootElementIds: Set<string>
-	renderActiveRootIds: Set<string>
-	activeViewportScaleLayoutElementIds: Set<string>
+	renderElementIds: string[]
+	renderActiveElementIds: Set<string>
+	viewportScaleLayoutElementIds: Set<string>
 	visibleConsumerIds: Set<string>
 	nearConsumerIds: Set<string>
 	visibleImageIds: Set<string>
@@ -191,6 +192,45 @@ interface ViewportElementQueryResult {
 	nearVideoIds: Set<string>
 	visibleAudioIds: Set<string>
 	nearAudioIds: Set<string>
+}
+
+type ViewportMediaVisibilityState = "visible" | "near"
+
+interface CachedViewportMediaCandidate<TCandidate extends LoadCandidateBase> {
+	visibilityState: ViewportMediaVisibilityState
+	candidate: TCandidate | null
+}
+
+interface ViewportMediaCandidateLists {
+	visibleCandidates: ImageLoadCandidate[]
+	lowDetailVisibleCandidates: ImageLoadCandidate[]
+	nearCandidates: ImageLoadCandidate[]
+	visibleVideoCandidates: VideoLoadCandidate[]
+	lowDetailVisibleVideoCandidates: VideoLoadCandidate[]
+	nearVideoCandidates: VideoLoadCandidate[]
+	visibleAudioCandidates: AudioLoadCandidate[]
+	nearAudioCandidates: AudioLoadCandidate[]
+}
+
+interface CachedViewportMediaCandidates extends ViewportMediaCandidateLists {
+	geometryRevision: number
+	scaleBand: number
+	baselineViewportScale: number
+	viewportScale: number
+	viewportCenter: { x: number; y: number }
+	imagePresentationPhase: ImagePresentationPhase
+	imageCandidatesByElementId: ReadonlyMap<
+		string,
+		CachedViewportMediaCandidate<ImageLoadCandidate>
+	>
+	videoCandidatesByElementId: ReadonlyMap<
+		string,
+		CachedViewportMediaCandidate<VideoLoadCandidate>
+	>
+	audioCandidatesByElementId: ReadonlyMap<
+		string,
+		CachedViewportMediaCandidate<AudioLoadCandidate>
+	>
 }
 
 function now(): number {
@@ -288,8 +328,40 @@ function removeCandidatesByIds<T extends LoadCandidateBase>(
 	}
 }
 
+function hasSameCandidateMembership<TCandidate extends LoadCandidateBase>(
+	candidatesByElementId: ReadonlyMap<string, CachedViewportMediaCandidate<TCandidate>>,
+	visibleElementIds: ReadonlySet<string>,
+	nearElementIds: ReadonlySet<string>,
+): boolean {
+	let expectedCandidateCount = visibleElementIds.size
+	nearElementIds.forEach((elementId) => {
+		if (!visibleElementIds.has(elementId)) expectedCandidateCount += 1
+	})
+	if (candidatesByElementId.size !== expectedCandidateCount) return false
+	for (const elementId of visibleElementIds) {
+		if (candidatesByElementId.get(elementId)?.visibilityState !== "visible") return false
+	}
+	for (const elementId of nearElementIds) {
+		if (visibleElementIds.has(elementId)) continue
+		if (candidatesByElementId.get(elementId)?.visibilityState !== "near") return false
+	}
+	return true
+}
+
+function rescaleCandidate<TCandidate extends LoadCandidateBase>(
+	candidate: TCandidate,
+	scaleRatio: number,
+): TCandidate {
+	if (scaleRatio === 1) return candidate
+	candidate.screenArea *= scaleRatio * scaleRatio
+	candidate.screenLongEdge *= scaleRatio
+	return candidate
+}
+
 function getBackgroundImageLoadRequestBudget(reason: string): number | null {
-	return reason === "visibility:drain" || reason === "visibility:variant-switch-cooldown"
+	return reason === "visibility:drain" ||
+		reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON ||
+		reason === "visibility:variant-switch-cooldown"
 		? BACKGROUND_IMAGE_LOAD_REQUESTS_PER_REFRESH
 		: null
 }
@@ -372,9 +444,12 @@ export class CanvasVisibilityManager {
 	private scheduledRequiresFullRefresh = false
 	private scheduledReason = "unknown"
 	private lastQueryCoverRect: Rect | null = null
+	private lastQueryLayoutRect: Rect | null = null
 	private lastScaleBand: number | null = null
 	private lastQueryViewportScale: number | null = null
 	private lastQueryGeometryRevision: number | null = null
+	/** Direct media candidates can be reused during motion while spatial membership is stable. */
+	private viewportMediaCandidateCache: CachedViewportMediaCandidates | null = null
 	private containerRootCache: ContainerRootCache | null = null
 	private destroyed = false
 	private lastViewportMovementAt = now()
@@ -453,11 +528,13 @@ export class CanvasVisibilityManager {
 
 	private readonly handleElementChange = (): void => {
 		this.invalidateContainerRootCache()
+		this.invalidateViewportMediaCandidateCache()
 		this.scheduleRefresh("element:change", true)
 	}
 
 	private readonly handleDocumentLoaded = (): void => {
 		this.invalidateContainerRootCache()
+		this.invalidateViewportMediaCandidateCache()
 		this.initialVisibleCriticalUntil = now() + INITIAL_VISIBLE_CRITICAL_WINDOW_MS
 		this.scheduleRefresh("document:loaded", true)
 	}
@@ -482,6 +559,7 @@ export class CanvasVisibilityManager {
 			if (element.type === ElementTypeEnum.Video) this.updateVideoElement(elementId, path)
 			if (element.type === ElementTypeEnum.Audio) this.updateAudioElement(elementId, path)
 		}
+		this.invalidateViewportMediaCandidateCache()
 		this.scheduleRefresh("content:previewChanged", true)
 	}
 
@@ -517,20 +595,25 @@ export class CanvasVisibilityManager {
 	private readonly handleImageResourceLoaded = (event: {
 		data: { path: string; resource: { variant: ImageResourceVariant } }
 	}): void => {
+		let fallbackPathChanged = false
 		if (event.data.resource.variant === "low") {
 			this.lowFallbackPreviewPathByElementId.forEach((path, elementId) => {
 				if (this.isSameResourcePath(path, event.data.path)) {
 					this.lowFallbackPreviewPathByElementId.delete(elementId)
+					fallbackPathChanged = true
 				}
 			})
 		}
+		if (fallbackPathChanged) this.invalidateViewportMediaCandidateCache()
 	}
 
 	private readonly handleVideoResourceLoadFailed = (event: { data: { path: string } }): void => {
+		let affected = false
 		this.registeredVideos.forEach((registered, elementId) => {
 			if (!this.isSameResourcePath(registered.path, event.data.path)) return
-			this.lastRequestedVideoLoadState.delete(elementId)
+			affected = this.lastRequestedVideoLoadState.delete(elementId) || affected
 		})
+		if (affected) this.invalidateViewportMediaCandidateCache()
 	}
 
 	private readonly handleVideoPosterWillRelease = (event: { data: { path?: string } }): void => {
@@ -546,6 +629,7 @@ export class CanvasVisibilityManager {
 		// a visible video can keep its old "poster requested" state and never ask for
 		// a replacement after its Canvas source has been released.
 		if (affected && !this.destroyed) {
+			this.invalidateViewportMediaCandidateCache()
 			this.scheduleRefresh("video:poster-released", true)
 		}
 	}
@@ -554,10 +638,12 @@ export class CanvasVisibilityManager {
 		data: { path: string; reason?: ResourceLoadFailureReason }
 	}): void => {
 		if (event.data.reason === "not-found") return
+		let affected = false
 		this.registeredAudios.forEach((registered, elementId) => {
 			if (!this.isSameResourcePath(registered.path, event.data.path)) return
-			this.lastRequestedAudioLoadState.delete(elementId)
+			affected = this.lastRequestedAudioLoadState.delete(elementId) || affected
 		})
+		if (affected) this.invalidateViewportMediaCandidateCache()
 	}
 
 	private readonly handleImageResourceLoadFailed = (event: {
@@ -616,7 +702,10 @@ export class CanvasVisibilityManager {
 			fallbackTargetChanged = true
 		})
 		if (fallbackTargetChanged && this.imagePresentationPhase === "idle") {
+			this.invalidateViewportMediaCandidateCache()
 			this.scheduleRefresh(IMAGE_LOW_FALLBACK_REFRESH_REASON, true)
+		} else if (fallbackTargetChanged) {
+			this.invalidateViewportMediaCandidateCache()
 		}
 	}
 
@@ -663,6 +752,7 @@ export class CanvasVisibilityManager {
 			return
 		}
 		this.registeredImages.set(elementId, { elementId, path })
+		this.invalidateViewportMediaCandidateCache()
 		if (current) {
 			this.cancelViewportResourceSignalIfUnused(
 				"image",
@@ -683,6 +773,7 @@ export class CanvasVisibilityManager {
 		const registered = this.registeredImages.get(elementId)
 		if (!registered) return
 		this.registeredImages.delete(elementId)
+		this.invalidateViewportMediaCandidateCache()
 		this.cancelViewportResourceSignalIfUnused(
 			"image",
 			registered.path,
@@ -717,6 +808,7 @@ export class CanvasVisibilityManager {
 			return
 		}
 		this.registeredVideos.set(elementId, { elementId, path })
+		this.invalidateViewportMediaCandidateCache()
 		if (current) {
 			this.cancelViewportResourceSignalIfUnused(
 				"video",
@@ -734,6 +826,7 @@ export class CanvasVisibilityManager {
 		const registered = this.registeredVideos.get(elementId)
 		if (!registered) return
 		this.registeredVideos.delete(elementId)
+		this.invalidateViewportMediaCandidateCache()
 		this.cancelViewportResourceSignalIfUnused(
 			"video",
 			registered.path,
@@ -765,6 +858,7 @@ export class CanvasVisibilityManager {
 			return
 		}
 		this.registeredAudios.set(elementId, { elementId, path })
+		this.invalidateViewportMediaCandidateCache()
 		if (current) {
 			// 等价资源引用也可能从相对路径切换成项目绝对路径。必须更新保存的引用并
 			// 释放旧会话，否则后续刷新会继续使用旧 path 和已完成的请求去重状态。
@@ -785,6 +879,7 @@ export class CanvasVisibilityManager {
 		const registered = this.registeredAudios.get(elementId)
 		if (!registered) return
 		this.registeredAudios.delete(elementId)
+		this.invalidateViewportMediaCandidateCache()
 		this.cancelViewportResourceSignalIfUnused(
 			"audio",
 			registered.path,
@@ -825,7 +920,10 @@ export class CanvasVisibilityManager {
 		})
 
 		if (matched && options?.scheduleRefresh !== false) {
+			this.invalidateViewportMediaCandidateCache()
 			this.scheduleRefresh(`audio:load-request-invalidated:${reason}`, true)
+		} else if (matched) {
+			this.invalidateViewportMediaCandidateCache()
 		}
 	}
 
@@ -961,7 +1059,10 @@ export class CanvasVisibilityManager {
 		})
 
 		if (matched && options?.scheduleRefresh !== false) {
+			this.invalidateViewportMediaCandidateCache()
 			this.scheduleRefresh(`image:load-request-invalidated:${reason}`, true)
+		} else if (matched) {
+			this.invalidateViewportMediaCandidateCache()
 		}
 	}
 
@@ -1029,6 +1130,7 @@ export class CanvasVisibilityManager {
 
 			this.clearViewportResourceLoadRequestStates(affectedResourceKeys)
 			if (affectedResourceKeys.size > 0) {
+				this.invalidateViewportMediaCandidateCache()
 				this.scheduleRefresh("resource-reference-resolver-changed", true)
 			}
 			return
@@ -1046,6 +1148,7 @@ export class CanvasVisibilityManager {
 		this.lastRequestedAudioLoadState.clear()
 		this.lowFallbackPreviewPathByElementId.clear()
 		this.imageRetentionHints.clear()
+		this.invalidateViewportMediaCandidateCache()
 		this.scheduleRefresh("resource-reference-resolver-changed", true)
 	}
 
@@ -1095,6 +1198,7 @@ export class CanvasVisibilityManager {
 		this.lastRequestedAudioLoadState.clear()
 		this.lastContainerDisplayVariant.clear()
 		this.imageRetentionHints.clear()
+		this.invalidateViewportMediaCandidateCache()
 		const controllers = this.getViewportResourceAbortControllers()
 		controllers.forEach((controller) => controller.abort())
 		controllers.clear()
@@ -1268,7 +1372,7 @@ export class CanvasVisibilityManager {
 
 	private scheduleRefresh(reason: string, requiresFullRefresh: boolean): void {
 		if (this.destroyed) return
-		if (reason === "visibility:drain") {
+		if (reason === "visibility:drain" || reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON) {
 			this.statsSnapshot.drainRunCount += 1
 		}
 		if (requiresFullRefresh || !this.scheduledRequiresFullRefresh) {
@@ -1306,6 +1410,9 @@ export class CanvasVisibilityManager {
 	private markViewportMoving(currentTime = now()): void {
 		this.imagePresentationPhase = "moving"
 		this.lastViewportMovementAt = currentTime
+		// A far-drain timer belongs to the previous settled viewport. Cancel it immediately so a
+		// delayed callback cannot enqueue a full-document visibility refresh during active motion.
+		this.cancelFarVisibilityDrain()
 		if (this.viewportIdleMediaTimerId !== null) {
 			clearTimeout(this.viewportIdleMediaTimerId)
 		}
@@ -1314,6 +1421,12 @@ export class CanvasVisibilityManager {
 			if (this.destroyed) return
 			this.markViewportIdle()
 		}, VIEWPORT_IDLE_MEDIA_DELAY_MS)
+	}
+
+	private cancelFarVisibilityDrain(): void {
+		if (this.farVisibilityDrainTimerId === null) return
+		clearTimeout(this.farVisibilityDrainTimerId)
+		this.farVisibilityDrainTimerId = null
 	}
 
 	private markViewportIdle(): void {
@@ -1370,9 +1483,15 @@ export class CanvasVisibilityManager {
 		if (!this.canvas.geometryCacheManager.containsRect(this.lastQueryCoverRect, viewportRect)) {
 			return false
 		}
-		// The cover rect is also the render-active and viewport-layout window from the last full
-		// query. A viewport contained by it cannot expose a culled root or a previously inactive
-		// layout element on screen; crossing the boundary forces a full query before either is used.
+		if (
+			!this.lastQueryLayoutRect ||
+			!this.canvas.geometryCacheManager.containsRect(this.lastQueryLayoutRect, viewportRect)
+		) {
+			return false
+		}
+		// Reuse the previous classifications only while the viewport remains inside both windows.
+		// Crossing the narrower layout window refreshes eligibility before an inactive element can
+		// become visible, while the near window preserves the existing resource/culling contract.
 		if (!this.lastQueryViewportScale || this.lastQueryViewportScale <= 0) return false
 
 		const scaleRatio = viewportScale / this.lastQueryViewportScale
@@ -1380,6 +1499,307 @@ export class CanvasVisibilityManager {
 			scaleRatio >= 1 / VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO &&
 			scaleRatio <= VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO
 		)
+	}
+
+	private getCompatibleViewportMediaCandidates(options: {
+		geometryRevision: number
+		scaleBand: number
+		viewportScale: number
+	}): CachedViewportMediaCandidates | null {
+		const cached = this.viewportMediaCandidateCache
+		if (!cached) return null
+		if (
+			cached.geometryRevision !== options.geometryRevision ||
+			cached.scaleBand !== options.scaleBand ||
+			cached.imagePresentationPhase !== this.imagePresentationPhase
+		) {
+			return null
+		}
+
+		const scaleRatio = options.viewportScale / cached.baselineViewportScale
+		if (
+			!Number.isFinite(scaleRatio) ||
+			scaleRatio < 1 / VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO ||
+			scaleRatio > VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO
+		) {
+			return null
+		}
+
+		return cached
+	}
+
+	private hasSameViewportMediaMembership(
+		cached: CachedViewportMediaCandidates,
+		options: {
+			visibleImageIds: ReadonlySet<string>
+			nearImageIds: ReadonlySet<string>
+			visibleVideoIds: ReadonlySet<string>
+			nearVideoIds: ReadonlySet<string>
+			visibleAudioIds: ReadonlySet<string>
+			nearAudioIds: ReadonlySet<string>
+		},
+	): boolean {
+		return (
+			hasSameCandidateMembership(
+				cached.imageCandidatesByElementId,
+				options.visibleImageIds,
+				options.nearImageIds,
+			) &&
+			hasSameCandidateMembership(
+				cached.videoCandidatesByElementId,
+				options.visibleVideoIds,
+				options.nearVideoIds,
+			) &&
+			hasSameCandidateMembership(
+				cached.audioCandidatesByElementId,
+				options.visibleAudioIds,
+				options.nearAudioIds,
+			)
+		)
+	}
+
+	private updateViewportMediaCandidateEntries<TCandidate extends LoadCandidateBase>(options: {
+		cachedCandidatesByElementId?: ReadonlyMap<string, CachedViewportMediaCandidate<TCandidate>>
+		visibleElementIds: ReadonlySet<string>
+		nearElementIds: ReadonlySet<string>
+		scaleRatio: number
+		viewportCenter: { x: number; y: number }
+		getElementBounds?: (elementId: string) => Rect | null
+		createCandidate: (
+			elementId: string,
+			visibilityState: ViewportMediaVisibilityState,
+		) => TCandidate | null
+	}): Map<string, CachedViewportMediaCandidate<TCandidate>> {
+		const nextCandidatesByElementId = new Map<
+			string,
+			CachedViewportMediaCandidate<TCandidate>
+		>()
+		const appendCandidates = (
+			elementIds: ReadonlySet<string>,
+			visibilityState: ViewportMediaVisibilityState,
+		): void => {
+			elementIds.forEach((elementId) => {
+				// Visible wins if a defensive caller ever supplies overlapping spatial sets.
+				if (visibilityState === "near" && options.visibleElementIds.has(elementId)) return
+				const cachedCandidate = options.cachedCandidatesByElementId?.get(elementId)
+				let candidate: TCandidate | null
+				if (cachedCandidate?.visibilityState === visibilityState) {
+					candidate = cachedCandidate.candidate
+					if (candidate) {
+						const bounds = options.getElementBounds?.(elementId)
+						if (bounds) {
+							candidate.distanceToViewportCenter = getDistance(
+								getRectCenter(bounds),
+								options.viewportCenter,
+							)
+						}
+						rescaleCandidate(candidate, options.scaleRatio)
+					}
+				} else {
+					candidate = options.createCandidate(elementId, visibilityState)
+				}
+				nextCandidatesByElementId.set(elementId, { candidate, visibilityState })
+			})
+		}
+
+		appendCandidates(options.visibleElementIds, "visible")
+		appendCandidates(options.nearElementIds, "near")
+		return nextCandidatesByElementId
+	}
+
+	private classifyViewportMediaCandidates(options: {
+		imageCandidatesByElementId: ReadonlyMap<
+			string,
+			CachedViewportMediaCandidate<ImageLoadCandidate>
+		>
+		videoCandidatesByElementId: ReadonlyMap<
+			string,
+			CachedViewportMediaCandidate<VideoLoadCandidate>
+		>
+		audioCandidatesByElementId: ReadonlyMap<
+			string,
+			CachedViewportMediaCandidate<AudioLoadCandidate>
+		>
+	}): ViewportMediaCandidateLists {
+		const visibleCandidates: ImageLoadCandidate[] = []
+		const lowDetailVisibleCandidates: ImageLoadCandidate[] = []
+		const nearCandidates: ImageLoadCandidate[] = []
+		const visibleVideoCandidates: VideoLoadCandidate[] = []
+		const lowDetailVisibleVideoCandidates: VideoLoadCandidate[] = []
+		const nearVideoCandidates: VideoLoadCandidate[] = []
+		const visibleAudioCandidates: AudioLoadCandidate[] = []
+		const nearAudioCandidates: AudioLoadCandidate[] = []
+
+		options.imageCandidatesByElementId.forEach(({ candidate, visibilityState }) => {
+			if (!candidate) return
+			if (visibilityState === "visible") {
+				if (candidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
+					visibleCandidates.push(candidate)
+				} else {
+					lowDetailVisibleCandidates.push(candidate)
+				}
+			} else if (candidate.screenLongEdge >= MIN_NEAR_SCREEN_LONG_EDGE_FOR_LOAD) {
+				nearCandidates.push(candidate)
+			}
+		})
+
+		options.videoCandidatesByElementId.forEach(({ candidate, visibilityState }) => {
+			if (!candidate) return
+			if (visibilityState === "visible") {
+				if (candidate.screenLongEdge >= MIN_VISIBLE_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD) {
+					visibleVideoCandidates.push(candidate)
+				} else {
+					lowDetailVisibleVideoCandidates.push(candidate)
+				}
+			} else if (candidate.screenLongEdge >= MIN_NEAR_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD) {
+				nearVideoCandidates.push(candidate)
+			}
+		})
+
+		options.audioCandidatesByElementId.forEach(({ candidate, visibilityState }) => {
+			if (!candidate) return
+			if (
+				visibilityState === "visible" &&
+				candidate.screenLongEdge >= MIN_VISIBLE_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD
+			) {
+				visibleAudioCandidates.push(candidate)
+			} else if (
+				visibilityState === "near" &&
+				candidate.screenLongEdge >= MIN_NEAR_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD
+			) {
+				nearAudioCandidates.push(candidate)
+			}
+		})
+
+		return {
+			visibleCandidates,
+			lowDetailVisibleCandidates,
+			nearCandidates,
+			visibleVideoCandidates,
+			lowDetailVisibleVideoCandidates,
+			nearVideoCandidates,
+			visibleAudioCandidates,
+			nearAudioCandidates,
+		}
+	}
+
+	private createViewportMediaCandidateCache(options: {
+		compatibleCache: CachedViewportMediaCandidates | null
+		geometryRevision: number
+		scaleBand: number
+		viewportScale: number
+		viewportCenter: { x: number; y: number }
+		viewportRect: Rect
+		promoteInitialVisibleLoads: boolean
+		visibleImageIds: ReadonlySet<string>
+		nearImageIds: ReadonlySet<string>
+		visibleVideoIds: ReadonlySet<string>
+		nearVideoIds: ReadonlySet<string>
+		visibleAudioIds: ReadonlySet<string>
+		nearAudioIds: ReadonlySet<string>
+	}): CachedViewportMediaCandidates {
+		const { compatibleCache } = options
+		const sameMembership = compatibleCache
+			? this.hasSameViewportMediaMembership(compatibleCache, options)
+			: false
+		if (
+			compatibleCache &&
+			compatibleCache.viewportScale === options.viewportScale &&
+			compatibleCache.viewportCenter.x === options.viewportCenter.x &&
+			compatibleCache.viewportCenter.y === options.viewportCenter.y &&
+			sameMembership
+		) {
+			return compatibleCache
+		}
+
+		const scaleRatio = compatibleCache
+			? options.viewportScale / compatibleCache.viewportScale
+			: 1
+		// Geometry revision and phase compatibility guarantee that unchanged entries can retain their
+		// expensive bounds, clipping, and resource decisions. Only membership/state deltas are rebuilt.
+		const imageCandidatesByElementId = this.updateViewportMediaCandidateEntries({
+			cachedCandidatesByElementId: compatibleCache?.imageCandidatesByElementId,
+			visibleElementIds: options.visibleImageIds,
+			nearElementIds: options.nearImageIds,
+			scaleRatio,
+			viewportCenter: options.viewportCenter,
+			getElementBounds: (elementId) =>
+				this.canvas.geometryCacheManager.getElementBounds(elementId),
+			createCandidate: (elementId, visibilityState) => {
+				const candidate = this.createCandidate(
+					elementId,
+					visibilityState,
+					options.viewportScale,
+					options.viewportCenter,
+					visibilityState === "visible" && options.promoteInitialVisibleLoads
+						? "critical"
+						: undefined,
+					options.viewportRect,
+					true,
+				)
+				return candidate ? this.resolveImageCandidateForPresentationPhase(candidate) : null
+			},
+		})
+		const videoCandidatesByElementId = this.updateViewportMediaCandidateEntries({
+			cachedCandidatesByElementId: compatibleCache?.videoCandidatesByElementId,
+			visibleElementIds: options.visibleVideoIds,
+			nearElementIds: options.nearVideoIds,
+			scaleRatio,
+			viewportCenter: options.viewportCenter,
+			getElementBounds: (elementId) =>
+				this.canvas.geometryCacheManager.getElementBounds(elementId),
+			createCandidate: (elementId, visibilityState) =>
+				this.createVideoCandidate(
+					elementId,
+					visibilityState,
+					options.viewportScale,
+					options.viewportCenter,
+					visibilityState === "visible" ? "poster" : "url",
+					true,
+				),
+		})
+		const audioCandidatesByElementId = this.updateViewportMediaCandidateEntries({
+			cachedCandidatesByElementId: compatibleCache?.audioCandidatesByElementId,
+			visibleElementIds: options.visibleAudioIds,
+			nearElementIds: options.nearAudioIds,
+			scaleRatio,
+			viewportCenter: options.viewportCenter,
+			getElementBounds: (elementId) =>
+				this.canvas.geometryCacheManager.getElementBounds(elementId),
+			createCandidate: (elementId, visibilityState) =>
+				this.createAudioCandidate(
+					elementId,
+					visibilityState,
+					options.viewportScale,
+					options.viewportCenter,
+					visibilityState === "visible" ? "preload" : "url",
+					true,
+				),
+		})
+		const candidateLists = this.classifyViewportMediaCandidates({
+			imageCandidatesByElementId,
+			videoCandidatesByElementId,
+			audioCandidatesByElementId,
+		})
+
+		const cache: CachedViewportMediaCandidates = {
+			geometryRevision: options.geometryRevision,
+			scaleBand: options.scaleBand,
+			baselineViewportScale: compatibleCache?.baselineViewportScale ?? options.viewportScale,
+			viewportScale: options.viewportScale,
+			viewportCenter: options.viewportCenter,
+			imagePresentationPhase: this.imagePresentationPhase,
+			imageCandidatesByElementId,
+			videoCandidatesByElementId,
+			audioCandidatesByElementId,
+			...candidateLists,
+		}
+		this.viewportMediaCandidateCache = cache
+		return cache
+	}
+
+	private invalidateViewportMediaCandidateCache(): void {
+		this.viewportMediaCandidateCache = null
 	}
 
 	private invalidateContainerRootCache(): void {
@@ -1465,16 +1885,20 @@ export class CanvasVisibilityManager {
 
 	private queryViewportElementIds(
 		viewportSnapshot: CanvasViewportSpatialSnapshot,
-		includeRenderRoots: boolean,
+		includeRenderVisibility: boolean,
+		includeAllRenderElements = false,
 	): ViewportElementQueryResult {
-		const rootElementIds = new Set<string>()
-		if (includeRenderRoots) {
-			this.canvas.elementManager.getAllElements().forEach((element) => {
-				rootElementIds.add(element.id)
-			})
-		}
-		const renderActiveRootIds = new Set<string>()
-		const activeViewportScaleLayoutElementIds = new Set<string>()
+		const renderElementIds = includeAllRenderElements
+			? this.canvas.elementManager.getAllElementIds()
+			: []
+		const interactionElementIds = this.getInteractionElementIds()
+		const viewportScaleLayoutElementIds = this.getViewportScaleLayoutElementIds(
+			viewportSnapshot,
+			interactionElementIds,
+		)
+		const renderActiveElementIds = includeRenderVisibility
+			? this.getRenderActiveElementIds(viewportSnapshot, interactionElementIds)
+			: new Set<string>()
 		const visibleConsumerIds = new Set<string>()
 		const nearConsumerIds = new Set<string>()
 		const visibleImageIds = new Set<string>()
@@ -1485,20 +1909,12 @@ export class CanvasVisibilityManager {
 		const nearAudioIds = new Set<string>()
 
 		viewportSnapshot.visibleElementIds.forEach((elementId) => {
-			if (rootElementIds.has(elementId)) renderActiveRootIds.add(elementId)
-			if (this.canvas.runtimeScheduler.hasViewportScaleLayoutElement(elementId)) {
-				activeViewportScaleLayoutElementIds.add(elementId)
-			}
 			if (this.consumerVisibilityListeners.has(elementId)) visibleConsumerIds.add(elementId)
 			if (this.registeredImages.has(elementId)) visibleImageIds.add(elementId)
 			if (this.registeredVideos.has(elementId)) visibleVideoIds.add(elementId)
 			if (this.registeredAudios.has(elementId)) visibleAudioIds.add(elementId)
 		})
 		viewportSnapshot.nearElementIds.forEach((elementId) => {
-			if (rootElementIds.has(elementId)) renderActiveRootIds.add(elementId)
-			if (this.canvas.runtimeScheduler.hasViewportScaleLayoutElement(elementId)) {
-				activeViewportScaleLayoutElementIds.add(elementId)
-			}
 			if (this.consumerVisibilityListeners.has(elementId)) {
 				nearConsumerIds.add(elementId)
 			}
@@ -1514,9 +1930,9 @@ export class CanvasVisibilityManager {
 		})
 
 		return {
-			rootElementIds,
-			renderActiveRootIds,
-			activeViewportScaleLayoutElementIds,
+			renderElementIds,
+			renderActiveElementIds,
+			viewportScaleLayoutElementIds,
 			visibleConsumerIds,
 			nearConsumerIds,
 			visibleImageIds,
@@ -1525,6 +1941,97 @@ export class CanvasVisibilityManager {
 			nearVideoIds,
 			visibleAudioIds,
 			nearAudioIds,
+		}
+	}
+
+	private getViewportScaleLayoutElementIds(
+		viewportSnapshot: CanvasViewportSpatialSnapshot,
+		interactionElementIds: ReadonlySet<string> = this.getInteractionElementIds(),
+	): Set<string> {
+		// Scale callbacks change an element's screen-space controls/content. They are registered on
+		// that owning element, so the visible set plus active interactions is enough; the wider layout
+		// window remains reserved for keeping the render tree mounted.
+		return new Set<string>([...viewportSnapshot.visibleElementIds, ...interactionElementIds])
+	}
+
+	private getInteractionElementIds(): Set<string> {
+		const interactionElementIds = new Set<string>()
+		this.canvas.selectionManager?.getSelectedIds?.().forEach((elementId) => {
+			interactionElementIds.add(elementId)
+		})
+		const activeInteractionElementIds = [
+			this.canvas.hoverManager?.getHoveredElementId?.(),
+			this.canvas.cropManager?.getCroppingElementId?.(),
+			this.canvas.extendManager?.getExtendingElementId?.(),
+			this.canvas.eraserManager?.getErasingElementId?.(),
+			this.canvas.textEditingManager?.getEditingElementId?.(),
+			this.canvas.elementRenameManager?.getRenamingElementId?.(),
+		]
+		activeInteractionElementIds.forEach((elementId) => {
+			if (elementId) interactionElementIds.add(elementId)
+		})
+		return interactionElementIds
+	}
+
+	private getRenderActiveElementIds(
+		viewportSnapshot: CanvasViewportSpatialSnapshot,
+		interactionElementIds: ReadonlySet<string> = this.getInteractionElementIds(),
+	): Set<string> {
+		// Near is a resource warm-up window and must not expand the Konva scene. The narrower
+		// layout window is sufficient to keep upcoming content mounted while avoiding draw work
+		// for media that is only being prefetched.
+		const activeElementIds = new Set<string>([
+			...viewportSnapshot.visibleElementIds,
+			...viewportSnapshot.layoutElementIds,
+		])
+
+		// Selection and edit sessions can intentionally keep an element active outside the current
+		// viewport. Their parent chain must stay admitted as well, otherwise hiding a nested child
+		// would break its transformer, crop, extend, eraser, or text-editing surface.
+		interactionElementIds.forEach((elementId) => {
+			activeElementIds.add(elementId)
+		})
+
+		// CanvasDocumentIndex already owns the parent map. Track expanded IDs only for this closure so
+		// shared ancestors are resolved once and malformed cyclic data cannot loop indefinitely.
+		const expandedElementIds = new Set<string>()
+		for (const elementId of activeElementIds) {
+			let currentId: string | undefined = elementId
+			while (currentId && !expandedElementIds.has(currentId)) {
+				expandedElementIds.add(currentId)
+				const parentId = this.canvas.elementManager.findParentIdForElement(currentId)
+				if (!parentId) break
+				activeElementIds.add(parentId)
+				currentId = parentId
+			}
+		}
+
+		return activeElementIds
+	}
+
+	private getRenderVisibilitySyncPlan(
+		farDrainReady: boolean,
+		topologyRevision: number,
+	): {
+		shouldSync: boolean
+		fullReconcile: boolean
+		allowCullFar: boolean
+	} {
+		if (!this.renderVisibilityController) {
+			return { shouldSync: false, fullReconcile: false, allowCullFar: false }
+		}
+		const hasBootstrapped = this.renderVisibilityController.hasBootstrappedRenderWorkset()
+		const topologyChanged =
+			hasBootstrapped &&
+			this.renderVisibilityController.getLastTopologyRevision() !== topologyRevision
+		const bootstrap = !hasBootstrapped && farDrainReady
+
+		return {
+			shouldSync: hasBootstrapped || bootstrap || topologyChanged,
+			fullReconcile: bootstrap || topologyChanged,
+			// A topology change after bootstrap must hide a newly added far node immediately. Normal
+			// motion still waits for the existing delayed drain before removing admitted nodes.
+			allowCullFar: farDrainReady || topologyChanged,
 		}
 	}
 
@@ -1539,6 +2046,24 @@ export class CanvasVisibilityManager {
 		) {
 			return
 		}
+		const startedAt = now()
+		if (
+			reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON &&
+			startedAt - this.lastViewportMovementAt < FAR_VISIBILITY_DRAIN_GRACE_MS
+		) {
+			// A far-drain callback may already be queued when a new pan/zoom event arrives. Defer it
+			// until the new viewport has actually been idle for the full grace period.
+			this.scheduleFarVisibilityDrain()
+			return
+		}
+		const farDrainReady =
+			(reason === "visibility:drain" || reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON) &&
+			startedAt - this.lastViewportMovementAt >= FAR_VISIBILITY_DRAIN_GRACE_MS
+		const topologyRevision = this.canvas.elementManager?.getDocumentTopologyRevision?.() ?? 0
+		const renderVisibilitySyncPlan = this.getRenderVisibilitySyncPlan(
+			farDrainReady,
+			topologyRevision,
+		)
 
 		const currentViewportRect = getViewportCanvasRect(this.canvas)
 		const currentViewportScale = this.canvas.stage.scaleX() || 1
@@ -1547,36 +2072,41 @@ export class CanvasVisibilityManager {
 		if (
 			this.shouldReuseCoveredViewportState({
 				reason,
-				requiresFullRefresh,
+				requiresFullRefresh: requiresFullRefresh || renderVisibilitySyncPlan.fullReconcile,
 				viewportRect: currentViewportRect,
 				viewportScale: currentViewportScale,
 				scaleBand: currentScaleBand,
 				geometryRevision: currentGeometryRevision,
 			})
 		) {
+			// A Canvas without registered scale layouts has no eligibility set to refresh. Keep those
+			// covered media-only frames out of the coordinator snapshot path; when scale layouts exist,
+			// reclassify the cached coverage because exact visible membership can change inside the layout
+			// window even though the spatial coverage itself remains valid.
+			if (this.canvas.runtimeScheduler.getViewportScaleLayoutElementCount() > 0) {
+				const viewportSnapshot = this.canvas.viewportQueryCoordinator.getSnapshot()
+				this.canvas.runtimeScheduler.replaceViewportScaleLayoutEligibility(
+					this.getViewportScaleLayoutElementIds(viewportSnapshot),
+				)
+			}
 			this.scheduleFarVisibilityDrain()
 			this.statsSnapshot.skippedViewportQueryCount += 1
 			return
 		}
 
-		const startedAt = now()
 		const viewportSnapshot = this.canvas.viewportQueryCoordinator.getSnapshot()
 		const { viewportRect, viewportScale } = viewportSnapshot
 		const scaleBand = getScaleBand(viewportScale)
-		const farDrainReady =
-			reason === "visibility:drain" &&
-			startedAt - this.lastViewportMovementAt >= FAR_VISIBILITY_DRAIN_GRACE_MS
-		const needsRenderVisibilitySync =
-			farDrainReady || this.renderVisibilityController.getCulledCount() > 0
 
 		this.lastQueryCoverRect = viewportSnapshot.nearRect
+		this.lastQueryLayoutRect = viewportSnapshot.layoutRect
 		this.lastScaleBand = scaleBand
 		this.lastQueryViewportScale = viewportScale
 		this.lastQueryGeometryRevision = viewportSnapshot.geometryRevision
 		const {
-			rootElementIds,
-			renderActiveRootIds,
-			activeViewportScaleLayoutElementIds,
+			renderElementIds,
+			renderActiveElementIds,
+			viewportScaleLayoutElementIds,
 			visibleConsumerIds,
 			nearConsumerIds,
 			visibleImageIds: visibleIds,
@@ -1585,57 +2115,57 @@ export class CanvasVisibilityManager {
 			nearVideoIds,
 			visibleAudioIds,
 			nearAudioIds,
-		} = this.queryViewportElementIds(viewportSnapshot, needsRenderVisibilitySync)
-		this.canvas.runtimeScheduler.replaceActiveViewportScaleLayoutElementIds(
-			activeViewportScaleLayoutElementIds,
+		} = this.queryViewportElementIds(
+			viewportSnapshot,
+			renderVisibilitySyncPlan.shouldSync,
+			renderVisibilitySyncPlan.fullReconcile,
+		)
+		this.canvas.runtimeScheduler.replaceViewportScaleLayoutEligibility(
+			viewportScaleLayoutElementIds,
 		)
 		this.applyConsumerVisibilityStates(visibleConsumerIds, nearConsumerIds)
 
 		const viewportCenter = getRectCenter(viewportRect)
 		const promoteInitialVisibleLoads = this.shouldPromoteInitialVisibleLoads(reason)
-		const visibleCandidates: ImageLoadCandidate[] = []
-		const lowDetailVisibleCandidates: ImageLoadCandidate[] = []
-		const nearCandidates: ImageLoadCandidate[] = []
-		const visibleVideoCandidates: VideoLoadCandidate[] = []
-		const lowDetailVisibleVideoCandidates: VideoLoadCandidate[] = []
-		const nearVideoCandidates: VideoLoadCandidate[] = []
-		const visibleAudioCandidates: AudioLoadCandidate[] = []
-		const nearAudioCandidates: AudioLoadCandidate[] = []
+		const canReuseMediaCache =
+			isViewportMovementReason(reason) ||
+			reason === "visibility:drain" ||
+			reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON
+		const compatibleMediaCandidates = canReuseMediaCache
+			? this.getCompatibleViewportMediaCandidates({
+					geometryRevision: viewportSnapshot.geometryRevision,
+					scaleBand,
+					viewportScale,
+				})
+			: null
+		const directMediaCandidates = this.createViewportMediaCandidateCache({
+			compatibleCache: compatibleMediaCandidates,
+			geometryRevision: viewportSnapshot.geometryRevision,
+			scaleBand,
+			viewportScale,
+			viewportCenter,
+			viewportRect,
+			promoteInitialVisibleLoads,
+			visibleImageIds: visibleIds,
+			nearImageIds: nearIds,
+			visibleVideoIds,
+			nearVideoIds,
+			visibleAudioIds,
+			nearAudioIds,
+		})
+		// Container promotion removes direct candidates from these working arrays. Keep the cache's
+		// direct lists untouched so the next motion refresh can incrementally reuse them.
+		const visibleCandidates = directMediaCandidates.visibleCandidates.slice()
+		const lowDetailVisibleCandidates = directMediaCandidates.lowDetailVisibleCandidates.slice()
+		const nearCandidates = directMediaCandidates.nearCandidates.slice()
+		const visibleVideoCandidates = directMediaCandidates.visibleVideoCandidates.slice()
+		const lowDetailVisibleVideoCandidates =
+			directMediaCandidates.lowDetailVisibleVideoCandidates.slice()
+		const nearVideoCandidates = directMediaCandidates.nearVideoCandidates.slice()
+		const visibleAudioCandidates = directMediaCandidates.visibleAudioCandidates.slice()
+		const nearAudioCandidates = directMediaCandidates.nearAudioCandidates.slice()
 		const frameAdjustedVideoIds = new Set<string>()
 		const frameAdjustedAudioIds = new Set<string>()
-
-		visibleIds.forEach((elementId) => {
-			const candidate = this.createCandidate(
-				elementId,
-				"visible",
-				viewportScale,
-				viewportCenter,
-				promoteInitialVisibleLoads ? "critical" : undefined,
-				viewportRect,
-			)
-			if (!candidate) return
-			const displayCandidate = this.resolveImageCandidateForPresentationPhase(candidate)
-			if (displayCandidate.screenLongEdge >= MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD) {
-				visibleCandidates.push(displayCandidate)
-			} else {
-				lowDetailVisibleCandidates.push(displayCandidate)
-			}
-		})
-
-		nearIds.forEach((elementId) => {
-			const candidate = this.createCandidate(
-				elementId,
-				"near",
-				viewportScale,
-				viewportCenter,
-				undefined,
-				viewportRect,
-			)
-			if (!candidate) return
-			if (candidate.screenLongEdge >= MIN_NEAR_SCREEN_LONG_EDGE_FOR_LOAD) {
-				nearCandidates.push(candidate)
-			}
-		})
 
 		if (this.shouldScanVisibleContainerMedia(reason)) {
 			const visibleContainerMediaCandidates = this.collectVisibleContainerMediaCandidates({
@@ -1660,6 +2190,9 @@ export class CanvasVisibilityManager {
 				visibleContainerMediaCandidates.videoCandidates.forEach((candidate) =>
 					frameAdjustedVideoIds.add(candidate.elementId),
 				)
+				removeCandidatesByIds(visibleVideoCandidates, frameAdjustedVideoIds)
+				removeCandidatesByIds(lowDetailVisibleVideoCandidates, frameAdjustedVideoIds)
+				removeCandidatesByIds(nearVideoCandidates, frameAdjustedVideoIds)
 				visibleVideoCandidates.push(...visibleContainerMediaCandidates.videoCandidates)
 			}
 			if (visibleContainerMediaCandidates.audioCandidates.length > 0) {
@@ -1670,6 +2203,8 @@ export class CanvasVisibilityManager {
 					visibleAudioIds.add(elementId)
 					nearAudioIds.delete(elementId)
 				})
+				removeCandidatesByIds(visibleAudioCandidates, frameAdjustedAudioIds)
+				removeCandidatesByIds(nearAudioCandidates, frameAdjustedAudioIds)
 				visibleAudioCandidates.push(...visibleContainerMediaCandidates.audioCandidates)
 			}
 		}
@@ -1680,67 +2215,6 @@ export class CanvasVisibilityManager {
 				: [...visibleCandidates, ...lowDetailVisibleCandidates, ...nearCandidates]
 		this.replaceImagePresentationTargets(presentationCandidates)
 		this.updateImageRetentionHints(presentationCandidates, startedAt)
-
-		visibleVideoIds.forEach((elementId) => {
-			if (frameAdjustedVideoIds.has(elementId)) return
-			const candidate = this.createVideoCandidate(
-				elementId,
-				"visible",
-				viewportScale,
-				viewportCenter,
-				"poster",
-			)
-			if (!candidate) return
-			if (candidate.screenLongEdge >= MIN_VISIBLE_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD) {
-				visibleVideoCandidates.push(candidate)
-			} else {
-				lowDetailVisibleVideoCandidates.push(candidate)
-			}
-		})
-		nearVideoIds.forEach((elementId) => {
-			if (frameAdjustedVideoIds.has(elementId)) return
-			const candidate = this.createVideoCandidate(
-				elementId,
-				"near",
-				viewportScale,
-				viewportCenter,
-				"url",
-			)
-			if (!candidate) return
-			if (candidate.screenLongEdge >= MIN_NEAR_VIDEO_SCREEN_LONG_EDGE_FOR_LOAD) {
-				nearVideoCandidates.push(candidate)
-			}
-		})
-
-		visibleAudioIds.forEach((elementId) => {
-			if (frameAdjustedAudioIds.has(elementId)) return
-			const candidate = this.createAudioCandidate(
-				elementId,
-				"visible",
-				viewportScale,
-				viewportCenter,
-				"preload",
-			)
-			if (!candidate) return
-			if (candidate.screenLongEdge >= MIN_VISIBLE_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD) {
-				visibleAudioCandidates.push(candidate)
-			}
-		})
-
-		nearAudioIds.forEach((elementId) => {
-			if (frameAdjustedAudioIds.has(elementId)) return
-			const candidate = this.createAudioCandidate(
-				elementId,
-				"near",
-				viewportScale,
-				viewportCenter,
-				"url",
-			)
-			if (!candidate) return
-			if (candidate.screenLongEdge >= MIN_NEAR_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD) {
-				nearAudioCandidates.push(candidate)
-			}
-		})
 		const pendingVisibleCandidates = visibleCandidates.filter((candidate) =>
 			this.shouldRequestImageCandidate(candidate, { reason }),
 		)
@@ -1835,11 +2309,13 @@ export class CanvasVisibilityManager {
 		if (isViewportMovementReason(reason)) {
 			this.scheduleFarVisibilityDrain()
 		}
-		if (needsRenderVisibilitySync) {
+		if (renderVisibilitySyncPlan.shouldSync) {
 			this.renderVisibilityController.sync({
-				activeElementIds: renderActiveRootIds,
-				allElementIds: rootElementIds,
-				allowCullFar: farDrainReady,
+				activeElementIds: renderActiveElementIds,
+				allElementIds: renderElementIds,
+				allowCullFar: renderVisibilitySyncPlan.allowCullFar,
+				mode: renderVisibilitySyncPlan.fullReconcile ? "bootstrap" : "incremental",
+				topologyRevision,
 			})
 		}
 		const farCount = this.replaceMediaVisibilityStates(
@@ -1871,7 +2347,6 @@ export class CanvasVisibilityManager {
 			mediaType: "image" | "video" | "audio",
 		) => {
 			elementIds.forEach((elementId) => {
-				if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return
 				const resource = registered.get(elementId)
 				if (!resource) return
 				activeViewportResourceKeys.add(
@@ -2208,12 +2683,12 @@ export class CanvasVisibilityManager {
 
 	private scheduleFarVisibilityDrain(): void {
 		if (this.destroyed) return
-		if (this.farVisibilityDrainTimerId !== null) {
-			clearTimeout(this.farVisibilityDrainTimerId)
-		}
+		this.cancelFarVisibilityDrain()
+		const movementAtSchedule = this.lastViewportMovementAt
 		this.farVisibilityDrainTimerId = setTimeout(() => {
 			this.farVisibilityDrainTimerId = null
-			this.scheduleRefresh("visibility:drain", true)
+			if (this.destroyed || movementAtSchedule !== this.lastViewportMovementAt) return
+			this.scheduleRefresh(FAR_VISIBILITY_DRAIN_REFRESH_REASON, true)
 		}, FAR_VISIBILITY_DRAIN_GRACE_MS)
 	}
 
@@ -2258,7 +2733,8 @@ export class CanvasVisibilityManager {
 			reason === "audio:register" ||
 			reason === "viewport:pan" ||
 			reason === "viewport:scale" ||
-			reason === "visibility:drain"
+			reason === "visibility:drain" ||
+			reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON
 		)
 	}
 
@@ -2269,7 +2745,8 @@ export class CanvasVisibilityManager {
 			reason === "audio:register" ||
 			reason === "viewport:pan" ||
 			reason === "viewport:scale" ||
-			reason === "visibility:drain"
+			reason === "visibility:drain" ||
+			reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON
 		)
 	}
 
@@ -2280,10 +2757,18 @@ export class CanvasVisibilityManager {
 		viewportCenter: { x: number; y: number },
 		priorityOverride?: ImageResourceLoadPriority,
 		viewportRect?: Rect,
+		dataTreeVisibilityConfirmed = false,
 	): ImageLoadCandidate | null {
 		const registered = this.registeredImages.get(elementId)
 		if (!registered) return null
-		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return null
+		// Visible/near IDs from the shared viewport snapshot have already passed the data-tree
+		// visibility filter. Keep the fallback check for any future callers that do not provide that
+		// snapshot guarantee.
+		if (
+			!dataTreeVisibilityConfirmed &&
+			!this.canvas.elementManager.isElementVisibleInDataTree(elementId)
+		)
+			return null
 
 		const bounds = this.canvas.geometryCacheManager.getElementBounds(elementId)
 		if (!bounds) return null
@@ -2400,6 +2885,7 @@ export class CanvasVisibilityManager {
 				clipBounds: Rect
 				frameDisplayVariant?: MediaDisplayResourceVariant
 			},
+			parentDataTreeVisible: boolean,
 		): void => {
 			if (
 				imageCandidates.length + videoCandidates.length + audioCandidates.length >=
@@ -2407,7 +2893,10 @@ export class CanvasVisibilityManager {
 			) {
 				return
 			}
-			if (!this.canvas.elementManager.isElementVisibleInDataTree(element.id)) {
+			// The root container check below already validates its complete ancestor chain. For
+			// descendants, only the node's own flag can change the inherited result; walking the
+			// same parent chain for every media child turns nested-frame traversal into quadratic work.
+			if (!parentDataTreeVisible || element.visible === false) {
 				return
 			}
 
@@ -2583,13 +3072,17 @@ export class CanvasVisibilityManager {
 				const scaleX = parentTransform.scaleX * (element.scaleX ?? 1)
 				const scaleY = parentTransform.scaleY * (element.scaleY ?? 1)
 				element.children.forEach((child) =>
-					visit(child, {
-						bounds: elementBounds,
-						scaleX,
-						scaleY,
-						clipBounds,
-						frameDisplayVariant,
-					}),
+					visit(
+						child,
+						{
+							bounds: elementBounds,
+							scaleX,
+							scaleY,
+							clipBounds,
+							frameDisplayVariant,
+						},
+						true,
+					),
 				)
 			}
 		}
@@ -2597,6 +3090,9 @@ export class CanvasVisibilityManager {
 		visibleContainerIds.forEach((containerId) => {
 			const container = this.canvas.elementManager.getElementData(containerId)
 			if (!container || !hasChildren(container)) {
+				return
+			}
+			if (!this.canvas.elementManager.isElementVisibleInDataTree(container.id)) {
 				return
 			}
 			const containerBounds = this.canvas.geometryCacheManager.getElementBounds(containerId)
@@ -2619,13 +3115,17 @@ export class CanvasVisibilityManager {
 					})
 				: undefined
 			container.children.forEach((child) =>
-				visit(child, {
-					bounds: containerBounds,
-					scaleX,
-					scaleY,
-					clipBounds,
-					frameDisplayVariant,
-				}),
+				visit(
+					child,
+					{
+						bounds: containerBounds,
+						scaleX,
+						scaleY,
+						clipBounds,
+						frameDisplayVariant,
+					},
+					true,
+				),
 			)
 		})
 
@@ -2682,10 +3182,15 @@ export class CanvasVisibilityManager {
 		viewportScale: number,
 		viewportCenter: { x: number; y: number },
 		tier: VideoLoadTier,
+		dataTreeVisibilityConfirmed = false,
 	): VideoLoadCandidate | null {
 		const registered = this.registeredVideos.get(elementId)
 		if (!registered) return null
-		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return null
+		if (
+			!dataTreeVisibilityConfirmed &&
+			!this.canvas.elementManager.isElementVisibleInDataTree(elementId)
+		)
+			return null
 
 		const bounds = this.canvas.geometryCacheManager.getElementBounds(elementId)
 		if (!bounds) return null
@@ -2714,10 +3219,15 @@ export class CanvasVisibilityManager {
 		viewportScale: number,
 		viewportCenter: { x: number; y: number },
 		tier: AudioLoadTier,
+		dataTreeVisibilityConfirmed = false,
 	): AudioLoadCandidate | null {
 		const registered = this.registeredAudios.get(elementId)
 		if (!registered) return null
-		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return null
+		if (
+			!dataTreeVisibilityConfirmed &&
+			!this.canvas.elementManager.isElementVisibleInDataTree(elementId)
+		)
+			return null
 
 		const bounds = this.canvas.geometryCacheManager.getElementBounds(elementId)
 		if (!bounds) return null

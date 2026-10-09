@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import {
 	DesignRemoteListener,
-	designDataHasPendingMediaWithoutGenerationRequest,
+	designDataHasPendingMediaWithoutGenerationDetails,
 	type DesignRemoteListenerOptions,
 } from "../DesignRemoteListener"
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
@@ -107,7 +107,7 @@ describe("DesignRemoteListener file-change freshness", () => {
 			},
 		}
 
-		expect(designDataHasPendingMediaWithoutGenerationRequest(data)).toBe(true)
+		expect(designDataHasPendingMediaWithoutGenerationDetails(data)).toBe(true)
 
 		const image = (
 			data.canvas?.elements?.[0] as unknown as {
@@ -122,7 +122,13 @@ describe("DesignRemoteListener file-change freshness", () => {
 		)
 		if (!imageContent) throw new Error("Expected image content")
 		imageContent.generateImageRequest = { prompt: "A product photo" }
-		expect(designDataHasPendingMediaWithoutGenerationRequest(data)).toBe(false)
+		expect(designDataHasPendingMediaWithoutGenerationDetails(data)).toBe(true)
+
+		imageContent.generateImageRequest.start_time = "2026-10-07T15:31:00.000+08:00"
+		expect(designDataHasPendingMediaWithoutGenerationDetails(data)).toBe(true)
+
+		imageContent.generateImageRequest.expected_finished_at = "2026-10-07T15:32:10.000+08:00"
+		expect(designDataHasPendingMediaWithoutGenerationDetails(data)).toBe(false)
 	})
 
 	it("uses file version when updated_at looks stale", async () => {

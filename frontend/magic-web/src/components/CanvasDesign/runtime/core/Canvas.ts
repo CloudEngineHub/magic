@@ -228,7 +228,7 @@ export class Canvas {
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
 	public videoCompositionManager: VideoCompositionManager
-	/** 当前图片和视频标签是否常驻显示。 */
+	/** 当前图片和视频标签是否常驻显示；默认按 hover/选中状态显示。 */
 	private mediaLabelsAlwaysVisible = false
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
@@ -554,6 +554,7 @@ export class Canvas {
 		// 初始化名称标签管理器（使用共享的 Overlay Layer）
 		this.nameLabelManager = new NameLabelManager({
 			canvas: this,
+			iconResolver: options.nameLabelIconResolver,
 		})
 
 		this.elementRenameManager = new ElementRenameManager({

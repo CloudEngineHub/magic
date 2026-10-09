@@ -3,6 +3,8 @@ import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import type { CanvasDesignStorageData } from "../../../public/magic-types"
 
+// Media labels remain an explicit opt-in because mounting one overlay node per media element
+// makes pan/zoom cost proportional to the visible media count.
 const DEFAULT_MEDIA_LABELS_ALWAYS_VISIBLE = false
 
 function readCachedMediaLabelsAlwaysVisible(

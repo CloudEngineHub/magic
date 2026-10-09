@@ -51,6 +51,7 @@ class DisplayType(str, Enum):
     DESIGN = 'design'
     ASK_USER = "ask_user"  # ask_user 问答结果展示
     PLAN = "plan"  # 开发计划确认展示
+    GENERATION_PROGRESS = "generation_progress"  # 生成进度：只带预期完成时间，百分比由前端换算
     OPERATION_RESULT_LIST = "operation_result_list"  # 简短操作结果，在消息卡片内展开
     FILE_DOWNLOAD = "file_download"
 
@@ -433,6 +434,9 @@ class OperationResultItem(BaseModel):
     description: str = ""
     target: OperationResultTarget | OperationResultFileTarget | OperationResultUrlTarget | None = None
     changes: OperationResultChanges | None = None
+    started_at: str | None = None
+    expected_finished_at: str | None = None
+    is_processing: bool | None = None
 
 
 class OperationResultListContent(OperationResultSummary):

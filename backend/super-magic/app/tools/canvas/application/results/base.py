@@ -42,6 +42,8 @@ class GeneratedResultItem(Protocol):
     error: str | None
     persistence_warning: str | None
     persistence_error: str | None
+    started_at: str | None
+    expected_finished_at: str | None
 
 
 TResultItem = TypeVar("TResultItem", bound=CanvasResultItem)

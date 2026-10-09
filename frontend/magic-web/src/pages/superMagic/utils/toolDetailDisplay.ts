@@ -76,6 +76,8 @@ export function getOperationResultListData(
 		),
 		items: items.map((item) => ({
 			...item,
+			started_at: item.started_at ?? undefined,
+			expected_finished_at: item.expected_finished_at ?? undefined,
 			target: isCanvasElementTarget(item.target)
 				? {
 						...item.target,
@@ -202,7 +204,10 @@ function isOperationResultItem(
 					item.changes.modified_lines ?? 0,
 				].every(
 					(value) => typeof value === "number" && Number.isInteger(value) && value >= 0,
-				)))
+				))) &&
+		(item.started_at == null || typeof item.started_at === "string") &&
+		(item.expected_finished_at == null || typeof item.expected_finished_at === "string") &&
+		(item.is_processing == null || typeof item.is_processing === "boolean")
 	)
 }
 

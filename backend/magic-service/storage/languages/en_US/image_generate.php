@@ -18,6 +18,7 @@ return [
     'prompt_check_failed' => 'Prompt validation failed',
     'polling_failed' => 'Failed to poll task result',
     'task_timeout' => 'Task execution timed out',
+    'task_failed_retry' => 'Image generation failed, please try again later',
     'invalid_request_type' => 'Invalid request type',
     'missing_job_id' => 'Missing task ID',
     'task_failed' => 'Task execution failed',

@@ -11,6 +11,7 @@ import dataclasses
 import json
 import os
 import random
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, List, Optional
@@ -18,10 +19,13 @@ from typing import Any, ClassVar, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.event import EventPairType, get_correlation_manager
+from agentlang.event.data import PendingToolCallEventData
 from agentlang.event.event import EventType
 from agentlang.logger import get_logger
 from agentlang.path_manager import PathManager
 from agentlang.tools.tool_result import ToolResult
+from app.core.context.agent_context import AgentContext
 from app.core.entity.attachment import AttachmentStorageType
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.core.entity.tool.tool_result_types import ImageToolResult
@@ -51,7 +55,8 @@ from app.tools.media_generator import (
     ImageGeneratorDispatcher,
     get_image_generator,
 )
-from app.tools.media_generator.base import ImageGenerationProviderError
+from app.tools.media_generator.base import ImageGenerationProviderError, ImageTaskCreatedCallback
+from app.tools.snippet_timeout_registry import SdkSnippetTimeoutRegistry
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import (
     async_copy2,
@@ -63,6 +68,8 @@ from app.utils.async_file_utils import (
 )
 
 logger = get_logger(__name__)
+
+SdkSnippetTimeoutRegistry.register("generate_images", min_timeout=600)
 
 
 @dataclass
@@ -282,9 +289,20 @@ Image generation, editing, retries, and additional candidates may consume points
         params: GenerateImagesParams,
         *,
         model_id: Optional[str] = None,
+        on_task_created: Optional[ImageTaskCreatedCallback] = None,
+        report_progress: bool = True,
     ) -> ImageToolResult:
-        """供其他工具内部调用，并允许使用已验证的图片模型覆盖值。"""
-        return await self._execute_with_model(tool_context, params, model_id=model_id)
+        """供其他工具内部调用，并允许使用已验证的图片模型覆盖值。
+
+        `on_task_created` 由画布链路传入，用来把任务时间写进元素元数据。
+        """
+        return await self._execute_with_model(
+            tool_context,
+            params,
+            model_id=model_id,
+            on_task_created=on_task_created,
+            report_progress=report_progress,
+        )
 
     async def execute(
         self, tool_context: ToolContext, params: GenerateImagesParams
@@ -298,6 +316,8 @@ Image generation, editing, retries, and additional candidates may consume points
         params: GenerateImagesParams,
         *,
         model_id: Optional[str] = None,
+        on_task_created: Optional[ImageTaskCreatedCallback] = None,
+        report_progress: bool = True,
     ) -> ImageToolResult:
         """使用显式模型或当前用户图片模型执行批量生成。"""
         try:
@@ -307,13 +327,33 @@ Image generation, editing, retries, and additional candidates may consume points
             workspace_root = Path(str(self.base_dir))
             await self._normalize_tasks(params.tasks, workspace_root, tool_context)
 
+            # 整批任务共用一张工具卡，进度事件只需要下发一次；画布元素则每个任务各写各的。
+            generation_progress_dispatched = False
+
+            async def _handle_task_created(
+                task_id: str,
+                expected_finished_at: Optional[str],
+                started_at: Optional[str],
+            ) -> None:
+                nonlocal generation_progress_dispatched
+                if on_task_created is not None:
+                    await on_task_created(task_id, expected_finished_at, started_at)
+                if not report_progress or generation_progress_dispatched or expected_finished_at is None:
+                    return
+                generation_progress_dispatched = True
+                await self._dispatch_generation_progress(
+                    tool_context, params, task_id, expected_finished_at, started_at
+                )
+
             async def _run_with_delay(
                 idx: int, gen_task: ImageGenerationTask
             ) -> ImageTaskResult:
                 # 错开并发请求，首个 task 不延迟
                 if idx > 0:
                     await asyncio.sleep(min(idx * 0.1 + random.uniform(0, 1.0), 3.0))
-                return await self._generate_single(gen_task, model, image_dispatcher, tool_context)
+                return await self._generate_single(
+                    gen_task, model, image_dispatcher, tool_context, _handle_task_created
+                )
 
             task_results: List[ImageTaskResult] = list(
                 await asyncio.gather(*[_run_with_delay(i, t) for i, t in enumerate(params.tasks)])
@@ -439,6 +479,7 @@ Image generation, editing, retries, and additional candidates may consume points
         model: str,
         dispatcher: ImageGeneratorDispatcher,
         tool_context: ToolContext,
+        on_task_created: Optional[ImageTaskCreatedCallback] = None,
     ) -> ImageTaskResult:
         """生成单张图片，失败自动重试一次，返回结构化结果。"""
         output_path = task.output_path.strip()
@@ -471,7 +512,9 @@ Image generation, editing, retries, and additional candidates may consume points
                     model=model,
                     reference_image_urls=reference_urls,
                 )
-                response = await dispatcher.generate(HANDLER_MAGIC_SERVICE, request)
+                response = await dispatcher.generate(
+                    HANDLER_MAGIC_SERVICE, request, on_task_created
+                )
 
                 best = await response._pick_best_image()
                 saved_path = await self._save_from_image(
@@ -521,6 +564,74 @@ Image generation, editing, retries, and additional candidates may consume points
             reference_images=task.reference_images,
             error="未知错误",
         )
+
+    async def _dispatch_generation_progress(
+        self,
+        tool_context: ToolContext,
+        params: GenerateImagesParams,
+        task_id: str,
+        expected_finished_at: str,
+        started_at: Optional[str],
+    ) -> None:
+        """补发生成时间，供工具卡与 Canvas 使用同一进度口径。"""
+        try:
+            agent_context = tool_context.get_extension_typed("agent_context", AgentContext)
+            if agent_context is None:
+                return
+
+            # 委托调用时沿用外层工具的名称与文案，确保进度更新原工具卡。
+            tool_name = tool_context.tool_name or "generate_images"
+            tool_instance = self
+            friendly_arguments = dict(tool_context.arguments or {})
+            if tool_name != "generate_images":
+                try:
+                    from app.tools.core.tool_factory import tool_factory
+
+                    tool_instance = tool_factory.get_tool_instance(tool_name)
+                except Exception:
+                    tool_name = "generate_images"
+                    friendly_arguments = {}
+            if not friendly_arguments:
+                friendly_arguments = {"tasks": [task.model_dump() for task in params.tasks]}
+
+            scope_id = getattr(agent_context, "context_id", None)
+            correlation_id = get_correlation_manager().get_active_correlation_id(
+                EventPairType.TOOL_CALL, scope_id
+            ) or tool_context.tool_call_id or str(uuid.uuid4())
+
+            friendly = await tool_instance.get_before_tool_call_friendly_action_and_remark(
+                tool_name,
+                tool_context,
+                friendly_arguments,
+            )
+
+            event_data = PendingToolCallEventData(
+                tool_context=tool_context,
+                tool_name=tool_name,
+                arguments={
+                    "name": tool_name,
+                    "correlation_id": correlation_id,
+                    "action": friendly.get("action", ""),
+                    "detail": {
+                        "type": DisplayType.GENERATION_PROGRESS.value,
+                        "data": {
+                            "media_type": "image",
+                            "task_id": task_id,
+                            "started_at": started_at,
+                            "expected_finished_at": expected_finished_at,
+                            "message": friendly.get("remark", ""),
+                        },
+                    },
+                    "status": "processing",
+                },
+                tool_instance=tool_instance,
+                correlation_id=correlation_id,
+            )
+            agent_context.update_activity_time()
+            await agent_context.dispatch_event(EventType.PENDING_TOOL_CALL, event_data)
+        except Exception as e:
+            # 进度下发失败不能影响出图结果。
+            logger.warning(f"下发图片生成进度失败: {e}")
 
     async def _save_from_image(
         self,

@@ -253,6 +253,11 @@ function OperationResultList({
 										item={item}
 										stage={data?.stage}
 										loading={loading}
+										progressAnchorKey={`${toolData.id || "operation-result"}:${
+											item.target?.type === "canvas_element"
+												? `${item.target.element_id}:${item.target.content_id ?? ""}`
+												: index
+										}`}
 										unavailable={resultUnavailable ? unavailable : undefined}
 										onLocate={(target, showDetails) => {
 											// 普通图片沿用项目文件预览，画布元素保留原定位与生成详情流程。
