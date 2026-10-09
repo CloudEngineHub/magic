@@ -144,6 +144,7 @@ import {
 	areMediaEditSnapshotsEqual,
 	type MediaEditIntent,
 } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
+import { runSeedanceImageCompliancePreflight } from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -546,6 +547,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			mergedReferenceAssetInfos,
 		],
 	)
+	const buildRequestParamsWithLinkedInputsRef = useLatest(buildRequestParamsWithLinkedInputs)
 	const hasNonStandardInputMode = config.availableInputModes.some((mode) => mode !== "standard")
 	const isEstimateInputModeSettled =
 		config.availableInputModes.includes(config.selectedInputMode) &&
@@ -1384,6 +1386,27 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			clipboardSessionIdRef.current = getClipboardSessionId()
 			setIsSending(true)
 			try {
+				const requestImageInputSnapshot = JSON.stringify({
+					frames: requestParams.inputs?.frames ?? [],
+					reference_images: requestParams.inputs?.reference_images ?? [],
+				})
+				const compliancePreflight = await runSeedanceImageCompliancePreflight({
+					canvas,
+					sourceVideoElementId: videoElement.id,
+					request: requestParams,
+					modelName: config.selectedModelOption?.model.model_name,
+					isRequestStillCurrent: () => {
+						const latestRequest = buildRequestParamsWithLinkedInputsRef.current()
+						return (
+							JSON.stringify({
+								frames: latestRequest.inputs?.frames ?? [],
+								reference_images: latestRequest.inputs?.reference_images ?? [],
+							}) === requestImageInputSnapshot
+						)
+					},
+				})
+				if (!compliancePreflight.proceed) return
+
 				handlers.cancelPendingDraftPersistence()
 				if (submitTarget === "current-content") captureSessionDraft()
 				const submitted =
@@ -1422,8 +1445,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			config.ratioOption,
 			config.selectedModelId,
 			captureSessionDraft,
+			buildRequestParamsWithLinkedInputsRef,
 			getClipboardSessionId,
 			handlers,
+			config.selectedModelOption,
 			onGenerateSubmitSucceeded,
 			sessionKey,
 			sessionStore,

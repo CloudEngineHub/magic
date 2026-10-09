@@ -247,4 +247,41 @@ describe("CanvasAssetComplianceTaskManager", () => {
 			failedReason: null,
 		})
 	})
+
+	it("deduplicates concurrent existing-asset compliance starts", async () => {
+		let resolveStart!: (value: { assetId: string; mediaType: "image"; fileUrl: null }) => void
+		const startExistingAssetCompliance = vi.fn(
+			() =>
+				new Promise<{
+					assetId: string
+					mediaType: "image"
+					fileUrl: null
+				}>((resolve) => {
+					resolveStart = resolve
+				}),
+		)
+		const { taskManager } = createTaskManager()
+
+		const first = taskManager.startLibraryAssetCompliance({
+			assetId: "asset-concurrent",
+			fileKey: "private/concurrent.png",
+			startExistingAssetCompliance,
+		})
+		const second = taskManager.startLibraryAssetCompliance({
+			assetId: "asset-concurrent",
+			fileKey: "private/concurrent.png",
+			startExistingAssetCompliance,
+		})
+
+		expect(startExistingAssetCompliance).toHaveBeenCalledTimes(1)
+		resolveStart({
+			assetId: "response-id-must-not-be-used",
+			mediaType: "image",
+			fileUrl: null,
+		})
+		await expect(Promise.all([first, second])).resolves.toEqual([
+			"asset-concurrent",
+			"asset-concurrent",
+		])
+	})
 })

@@ -25,6 +25,7 @@ import { isEditorInteractiveKeyboardTarget } from "../../../editors/keyboard"
 import { resolveVideoReferenceVideoModel } from "./model-config/video-editor-config.model"
 import type { VideoEditSessionSnapshot } from "./video-editor-config.types"
 import { buildMediaEditSourceFingerprint } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
+import { runSeedanceImageCompliancePreflight } from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
 import { useElementToolCommand } from "../../model/useElementToolCommand"
 import type { GenerationToolCommandRequest } from "../../../../runtime/element-tools"
 
@@ -206,14 +207,26 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 				if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
 				setIsGeneratingAgain(true)
 				try {
+					const requestWithId = {
+						...generateVideoRequest,
+						video_id: generateUUID(),
+					}
+					const modelName = videoModelList.find(
+						(model) => model.model_id === requestWithId.model_id,
+					)?.model_name
+					const compliancePreflight = await runSeedanceImageCompliancePreflight({
+						canvas,
+						sourceVideoElementId: videoElement.id,
+						request: requestWithId,
+						modelName,
+					})
+					if (!compliancePreflight.proceed) return
+
 					const elementInstance = canvas.elementManager.getElementInstance(
 						videoElement.id,
 					)
 					if (!(elementInstance instanceof VideoElementClass)) return
-					const submitted = await elementInstance.submitContentGeneration({
-						...generateVideoRequest,
-						video_id: generateUUID(),
-					})
+					const submitted = await elementInstance.submitContentGeneration(requestWithId)
 					if (submitted) sessionStore?.clearContent(videoElement.id, sessionContentId)
 				} finally {
 					setIsGeneratingAgain(false)
@@ -231,6 +244,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		savedGenerateVideoRequest,
 		sessionContentId,
 		sessionStore,
+		videoModelList,
 		videoElement,
 	])
 

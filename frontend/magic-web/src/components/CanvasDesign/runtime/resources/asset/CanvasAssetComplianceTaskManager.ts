@@ -65,6 +65,12 @@ export interface StartLibraryAssetComplianceParams {
  */
 export class CanvasAssetComplianceTaskManager {
 	private readonly activeLibraryWatchIds = new Set<string>()
+	/**
+	 * Existing-asset compliance is a mutation.  Keep one in-flight mutation per
+	 * source asset so automatic video preflight and a manual menu action cannot
+	 * create duplicate checks for the same asset.
+	 */
+	private readonly activeLibraryStartPromises = new Map<string, Promise<string | null>>()
 
 	constructor(private readonly host: CanvasAssetComplianceTaskHost) {}
 
@@ -142,15 +148,34 @@ export class CanvasAssetComplianceTaskManager {
 		const sourceAssetId = params.assetId.trim()
 		if (!sourceAssetId) return null
 
-		await params.startExistingAssetCompliance({
-			assetId: sourceAssetId,
-			fileKey: params.fileKey?.trim() || undefined,
-			name: params.name?.trim() || undefined,
-		})
-		// Existing-asset compliance must never turn a response ID into a new
-		// frontend asset. The source asset remains the authoritative polling key.
-		this.watchLibraryComplianceChecks([sourceAssetId], onSettled)
-		return sourceAssetId
+		const activeStart = this.activeLibraryStartPromises.get(sourceAssetId)
+		if (activeStart) {
+			const result = await activeStart
+			// The first caller owns the mutation, while later callers may still need
+			// their own listener attached to the already shared polling entry.
+			if (result && onSettled) this.watchLibraryComplianceChecks([sourceAssetId], onSettled)
+			return result
+		}
+
+		const startPromise = (async () => {
+			await params.startExistingAssetCompliance({
+				assetId: sourceAssetId,
+				fileKey: params.fileKey?.trim() || undefined,
+				name: params.name?.trim() || undefined,
+			})
+			// Existing-asset compliance must never turn a response ID into a new
+			// frontend asset. The source asset remains the authoritative polling key.
+			this.watchLibraryComplianceChecks([sourceAssetId], onSettled)
+			return sourceAssetId
+		})()
+		this.activeLibraryStartPromises.set(sourceAssetId, startPromise)
+		try {
+			return await startPromise
+		} finally {
+			if (this.activeLibraryStartPromises.get(sourceAssetId) === startPromise) {
+				this.activeLibraryStartPromises.delete(sourceAssetId)
+			}
+		}
 	}
 
 	public resumeDocumentCompliancePolling(): void {

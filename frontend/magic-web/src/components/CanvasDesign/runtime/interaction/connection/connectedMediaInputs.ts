@@ -8,6 +8,7 @@ import {
 	type AudioElementContent,
 	type CropConfig,
 	ElementTypeEnum,
+	type ImageElement,
 	type ImageElementContent,
 	type LayerElement,
 	type VideoElementContent,
@@ -28,6 +29,8 @@ export interface ConnectedMediaCandidate {
 	/** Stable candidate identity; direct candidates use the persisted edge ID. */
 	connectionId: string
 	sourceElementId: string
+	/** Source snapshot; needed when a Frame/Group descendant is not registered as a top-level element. */
+	element?: LayerElement
 	kind: LinkedMediaKind
 	path?: string
 	fileName?: string
@@ -40,9 +43,7 @@ export interface ConnectedMediaCandidate {
 }
 
 export interface ConnectedMediaResolverOptions {
-	resolveImageContent?: (
-		element: Extract<LayerElement, { type: ElementTypeEnum.Image }>,
-	) => ImageElementContent | undefined
+	resolveImageContent?: (element: ImageElement) => ImageElementContent | undefined
 }
 
 function getFileName(path: string): string {
@@ -51,11 +52,12 @@ function getFileName(path: string): string {
 
 function createCandidate(
 	source: ConnectedInputSourceElement,
-	media: Omit<ConnectedMediaCandidate, "connectionId" | "sourceElementId">,
+	media: Omit<ConnectedMediaCandidate, "connectionId" | "sourceElementId" | "element">,
 ): ConnectedMediaCandidate {
 	return {
 		connectionId: source.connectionId,
 		sourceElementId: source.sourceElementId,
+		element: source.element,
 		rootConnectionId: source.rootConnectionId,
 		rootSourceElementId: source.rootSourceElementId,
 		origin: source.origin,
