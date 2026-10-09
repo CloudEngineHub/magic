@@ -228,6 +228,8 @@ export class Canvas {
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
 	public videoCompositionManager: VideoCompositionManager
+	/** 当前图片和视频标签是否常驻显示。 */
+	private mediaLabelsAlwaysVisible = false
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
@@ -1670,6 +1672,23 @@ export class Canvas {
 			if (affectedElementIds && !affectedElementIds.has(elementId)) return
 			this.elementManager.getElementInstance(elementId)?.onResourceReferenceResolverChanged()
 		})
+	}
+
+	/**
+	 * 统一切换图片和视频的标题、分辨率标签显示模式，确保两个标签管理器保持一致。
+	 */
+	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean): void {
+		if (this.mediaLabelsAlwaysVisible === alwaysVisible) return
+		this.mediaLabelsAlwaysVisible = alwaysVisible
+		// 两种标签会互相通知；先统一模式，关闭时不再按另一管理器的旧常驻状态布局。
+		this.nameLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible, false)
+		this.sizeLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible, false)
+		this.nameLabelManager.syncMediaLabelsVisibility()
+		this.sizeLabelManager.syncMediaLabelsVisibility()
+	}
+
+	public isMediaLabelsAlwaysVisible(): boolean {
+		return this.mediaLabelsAlwaysVisible
 	}
 
 	/**

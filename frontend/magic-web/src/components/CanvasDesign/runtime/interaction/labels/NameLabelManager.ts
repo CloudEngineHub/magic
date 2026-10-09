@@ -21,6 +21,10 @@ const NAME_LABEL_CONFIG = {
 	OFFSET_LEFT: 0,
 	/** 透明命中区相对文字的内边距，避免短名称难以点中 */
 	HIT_PADDING: 2,
+	/** 名称与右侧尺寸标签之间的最小间距（标签局部坐标） */
+	LABEL_GAP: 4,
+	/** 省略后仍保留的最小文本宽度，避免标签节点宽度为 0 */
+	MIN_TEXT_WIDTH: 8,
 } as const
 
 /**
@@ -28,7 +32,7 @@ const NAME_LABEL_CONFIG = {
  * 职责：
  * 1. 在独立的 Layer 上渲染所有元素的名称标签
  * 2. 监听元素变化，同步更新名称标签
- * 3. 管理名称标签的可见性（Frame/Audio 一直显示，Image 只在 hover 时显示）
+ * 3. 管理名称标签的可见性（媒体标签默认常驻，可通过画布设置切回 hover/选中显示）
  * 4. 处理名称标签的位置和缩放
  * 5. 选择工具下命中名称：hover 手势、单击选中、双击重命名（不从名称拖动元素）
  */
@@ -37,6 +41,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private interactionUnsubscribers: Array<() => void> = []
 	private pointerHoverElementId: string | null = null
 	private domLabelElementId: string | null = null
+	private naturalTextWidths = new WeakMap<Konva.Text, { key: string; width: number }>()
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -89,8 +94,9 @@ export class NameLabelManager extends BaseLabelManager {
 			!this.canvas.elementRenameManager.canRename(elementId)
 		)
 			return null
-		const layout = this.getRenameInputLayout(elementId)
+		const layout = this.getDisplayLabelLayout(elementId)
 		if (!layout || !this.labelMap.get(elementId)?.visible()) return null
+		if (!this.getMediaRowLayout(elementId)?.showOperation) return null
 		const bounds = this.canvas.elementManager.getElementInstance(elementId)?.getBoundingRect()
 		if (!bounds || layout.width + 24 > bounds.width * this.canvas.stage.scaleX()) return null
 		return { x: layout.x + layout.width, y: layout.y + layout.height - 24 }
@@ -106,7 +112,7 @@ export class NameLabelManager extends BaseLabelManager {
 			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
 		)
 			return null
-		const layout = this.getRenameInputLayout(elementId)
+		const layout = this.getDisplayLabelLayout(elementId)
 		return layout && this.labelMap.get(elementId)?.visible() ? layout : null
 	}
 
@@ -122,6 +128,23 @@ export class NameLabelManager extends BaseLabelManager {
 			reason: "dom-name-label",
 			priority: "input",
 		})
+	}
+
+	/** 浏览文字使用最终屏幕比例；编辑入口继续通过 getRenameInputLayout 读取全文。 */
+	public getDisplayLabelLayout(
+		elementId: string,
+	): ReturnType<NameLabelManager["getRenameInputLayout"]> {
+		const layout = this.getRenameInputLayout(elementId)
+		const group = this.labelMap.get(elementId)
+		const textNode = group?.findOne<Konva.Text>("Text")
+		if (!layout || !group?.visible() || !textNode) return null
+		const screenRatio = group.scaleX() * this.canvas.stage.scaleX()
+		return {
+			...layout,
+			width: textNode.width() * screenRatio,
+			height: textNode.height() * screenRatio,
+			fontSize: textNode.fontSize() * screenRatio,
+		}
 	}
 
 	public setRenamingElementId(elementId: string | null): void {
@@ -164,7 +187,11 @@ export class NameLabelManager extends BaseLabelManager {
 		return {
 			x: labelGroup.x() * scale + stagePosition.x,
 			y: labelGroup.y() * scale + stagePosition.y,
-			width: Math.ceil(textNode.width()),
+			width: Math.ceil(
+				this.canvas.elementManager.getElementData(elementId)?.type === ElementTypeEnum.Image
+					? textNode.width()
+					: this.getNaturalTextWidth(textNode),
+			),
 			height: Math.ceil(textNode.height()),
 			text: textNode.text(),
 			fontSize: this.labelConfig.fontSize,
@@ -179,6 +206,17 @@ export class NameLabelManager extends BaseLabelManager {
 	protected getLabelText(elementId: string): string {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		return element?.getNameLabelText() || ""
+	}
+
+	protected override getLabelGap(): number {
+		return NAME_LABEL_CONFIG.LABEL_GAP
+	}
+
+	protected override getLabelOperationScreenWidth(elementId: string): number {
+		return this.canvas.elementManager.getElementData(elementId)?.type ===
+			ElementTypeEnum.Image && this.canvas.elementRenameManager.canRename(elementId)
+			? 24
+			: 0
 	}
 
 	protected override createLabel(elementId: string): Konva.Group {
@@ -214,6 +252,85 @@ export class NameLabelManager extends BaseLabelManager {
 			this.syncHitRect(labelGroup)
 		}
 		return changed
+	}
+
+	/**
+	 * 名称与尺寸共用一行时，优先保留右侧完整尺寸信息。
+	 * 名称只收窄渲染宽度并启用省略号，文本本身不改写，重命名仍能读取完整名称。
+	 */
+	protected override updateLabelLayout(
+		elementId: string,
+		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
+		labelGroup: Konva.Group,
+		boundingRect: { x: number; y: number; width: number; height: number },
+		inverseScale: number,
+	): boolean {
+		void boundingRect.x
+		void boundingRect.y
+		void boundingRect.height
+		if (this.renamingElementId === elementId) return false
+
+		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		if (!textNode) return false
+
+		const safeInverseScale = Math.max(inverseScale, Number.EPSILON)
+		const mediaLayout = this.getMediaRowLayout(elementId)
+		// 媒体使用整行的标题优先预算；下方原有尺寸预留规则只用于其它元素。
+		const otherLabelSizes = this.getOtherLabelSizes(elementId)
+		const reservedWidth = otherLabelSizes.reduce(
+			(maxWidth, size) => Math.max(maxWidth, size.width),
+			0,
+		)
+		// 图片名称为 24px 铅笔命中区预留空间。尺寸文本能放下时也预留其真实宽度，
+		// 长标题只在标签中省略，编辑面板仍读取完整元素名，不把铅笔压到尺寸标注上。
+		const buttonWidth =
+			element?.getData().type === ElementTypeEnum.Image &&
+			this.canvas.permissionManager.canRename(element.getData())
+				? 24
+				: 0
+		const availableTextWidth = Math.max(
+			NAME_LABEL_CONFIG.MIN_TEXT_WIDTH,
+			boundingRect.width / safeInverseScale -
+				reservedWidth -
+				NAME_LABEL_CONFIG.LABEL_GAP -
+				buttonWidth,
+		)
+		const naturalTextWidth = this.getNaturalTextWidth(textNode)
+		const targetTextWidth = mediaLayout
+			? Math.max(Number.EPSILON, mediaLayout.nameWidth)
+			: Math.min(naturalTextWidth, availableTextWidth)
+
+		textNode.wrap("none")
+		textNode.ellipsis(true)
+		if (textNode.width() === targetTextWidth) return false
+		textNode.width(targetTextWidth)
+		this.syncHitRect(labelGroup)
+		return true
+	}
+
+	/** 完整文本宽度独立于省略布局；仅文本或字体变化时重新测量，缩放可以恢复全文。 */
+	private getNaturalTextWidth(textNode: Konva.Text): number {
+		const key = JSON.stringify([
+			textNode.text(),
+			textNode.fontFamily(),
+			textNode.fontSize(),
+			textNode.fontStyle(),
+			textNode.fontVariant(),
+			textNode.letterSpacing(),
+		])
+		const cached = this.naturalTextWidths.get(textNode)
+		if (cached?.key === key) return cached.width
+		const width = Math.max(
+			...textNode
+				.text()
+				.split("\n")
+				.map(
+					(line) =>
+						textNode.measureSize(line).width + line.length * textNode.letterSpacing(),
+				),
+		)
+		this.naturalTextWidths.set(textNode, { key, width })
+		return width
 	}
 
 	protected override shouldRetainHiddenLabel(elementId: string): boolean {
@@ -268,6 +385,14 @@ export class NameLabelManager extends BaseLabelManager {
 		labelGroup: Konva.Group,
 		baseVisibility: boolean,
 	): boolean | null {
+		const elementType = element?.getData().type
+		if (
+			this.isMediaLabelsAlwaysVisible() &&
+			(elementType === ElementTypeEnum.Image || elementType === ElementTypeEnum.Video)
+		) {
+			return null
+		}
+
 		if (
 			this.renamingElementId === elementId &&
 			element?.getData().type !== ElementTypeEnum.Image
@@ -278,34 +403,6 @@ export class NameLabelManager extends BaseLabelManager {
 		// 如果基础可见性为 false，不需要检查自定义逻辑
 		if (!baseVisibility) {
 			return null
-		}
-
-		// 图片名称为 24px 铅笔命中区预留空间。尺寸文本能放下时也预留其真实宽度，
-		// 长标题只在标签中省略，编辑面板仍读取完整元素名，不把铅笔压到尺寸标注上。
-		if (element?.getData().type === ElementTypeEnum.Image) {
-			const textNode = labelGroup.findOne("Text") as Konva.Text | null
-			const bounds = element.getBoundingRect()
-			if (textNode && bounds) {
-				const screenWidth = bounds.width * this.canvas.stage.scaleX()
-				const buttonWidth = this.canvas.permissionManager.canRename(element.getData())
-					? 24
-					: 0
-				const sizeWidth = textNode.measureSize(element.getSizeLabelText()).width
-				const available = screenWidth - buttonWidth
-				const withSize = available - sizeWidth - 8
-				textNode.wrap("none")
-				textNode.ellipsis(true)
-				textNode.width(
-					Math.max(
-						1,
-						Math.min(
-							textNode.measureSize(textNode.text()).width,
-							withSize >= 32 ? withSize : available,
-						),
-					),
-				)
-				this.syncHitRect(labelGroup)
-			}
 		}
 
 		// 检查 name label 是否超出元素宽度

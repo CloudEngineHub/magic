@@ -860,8 +860,10 @@
 		"webSearch": "Web Search"
 	},
 	"zoom": {
+		"alwaysShowMediaLabels": "Always show media title and resolution",
 		"fitToScreen": "Fit to Screen",
 		"minimap": "Minimap",
+		"settings": "Canvas settings",
 		"zoomIn": "Zoom In",
 		"zoomOut": "Zoom Out",
 		"zoomTo": "Zoom to {{percent}}%"

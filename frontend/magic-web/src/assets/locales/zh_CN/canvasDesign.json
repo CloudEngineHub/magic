@@ -861,8 +861,10 @@
 		"webSearch": "网络搜索"
 	},
 	"zoom": {
+		"alwaysShowMediaLabels": "常驻显示媒体标题和分辨率",
 		"fitToScreen": "适配屏幕",
 		"minimap": "小地图",
+		"settings": "画布设置",
 		"zoomIn": "放大",
 		"zoomOut": "缩小",
 		"zoomTo": "缩放至{{percent}}%"
