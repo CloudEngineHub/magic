@@ -183,7 +183,6 @@ abstract class AbstractGoogleGeminiClient implements GoogleGeminiInterface
                 $this->logger->error('Google Gemini API provider error', [
                     'status_code' => $statusCode,
                     'error' => $errorMessage,
-                    'url' => $url,
                 ]);
                 // Keep the provider message as the previous exception. The model layer converts
                 // the visible error to the generic image-generation failure message.
