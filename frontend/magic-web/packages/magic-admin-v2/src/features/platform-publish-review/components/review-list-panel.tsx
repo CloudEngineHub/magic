@@ -116,7 +116,7 @@ export function ReviewListPanel<TData>({
 		<div className="space-y-4">
 			<div className="flex min-w-0 flex-wrap items-end gap-2">
 				<FilterControlField
-					className="min-w-0 flex-1 md:w-[340px] md:flex-none xl:w-[420px]"
+					className="hidden"
 					label={t("publishReview.filter.searchCondition")}
 				>
 					<FieldSearchControl
@@ -135,7 +135,7 @@ export function ReviewListPanel<TData>({
 						value={filterDraft.search_field}
 					/>
 				</FilterControlField>
-				<div className="hidden items-end gap-2 md:flex">
+				<div className="hidden">
 					<ReviewStatusSelect
 						className="w-fit"
 						label={t("publishReview.filter.reviewStatus")}
@@ -158,14 +158,29 @@ export function ReviewListPanel<TData>({
 				</div>
 				<Button
 					aria-label={t("publishReview.filter.title")}
-					className="h-9 w-9 px-0 md:w-auto md:px-3"
+					className="h-9 w-9 px-0 md:hidden"
 					onClick={() => handleFilterSheetOpenChange(true)}
 					type="button"
 					variant="outline"
 				>
 					<Filter className="size-4" aria-hidden="true" />
-					<span className="hidden md:inline">{t("publishReview.filter.title")}</span>
 				</Button>
+			</div>
+			<div className="hidden grid-cols-1 items-end gap-3 md:grid sm:grid-cols-2 xl:grid-cols-4">
+				<AdvancedFilterControls
+					filterDraft={filterDraft}
+					kind={kind}
+					onDraftChange={onDraftChange}
+					variant={variant}
+				/>
+				<div className="flex justify-end sm:col-start-2 xl:col-start-4">
+					<Button
+						variant="outline"
+						onClick={() => onDraftChange(createDefaultFilterDraft(kind, variant))}
+					>
+						{t("publishReview.action.reset")}
+					</Button>
+				</div>
 			</div>
 
 			<FilterSheet
@@ -174,7 +189,7 @@ export function ReviewListPanel<TData>({
 				onOpenChange={handleFilterSheetOpenChange}
 				onReset={resetAdvancedFilters}
 				open={isFilterSheetOpen}
-				presentation="responsive"
+				presentation="mobile-only"
 				resetLabel={t("publishReview.action.reset")}
 				title={t("publishReview.filter.title")}
 				description={t("publishReview.filter.description")}

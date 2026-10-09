@@ -108,7 +108,7 @@ export function MarketFilters({
 		<>
 			<div className="flex min-w-0 flex-wrap items-end gap-2">
 				<FilterControlField
-					className="min-w-0 flex-1 md:w-[340px] md:flex-none xl:w-[420px]"
+					className="hidden"
 					label={t("officialMarketplace.filter.searchCondition")}
 				>
 					<FieldSearchControl
@@ -131,14 +131,14 @@ export function MarketFilters({
 					/>
 				</FilterControlField>
 
-				<div className="hidden items-end md:flex">
+				<div className="hidden">
 					<MarketFilterSelects
 						filterDraft={filterDraft}
 						onDraftChange={onDraftChange}
 						visibleFields={["publish_status"]}
 					/>
 				</div>
-				<div className="hidden items-end md:flex">
+				<div className="hidden">
 					<MarketFilterSelects
 						filterDraft={filterDraft}
 						onDraftChange={onDraftChange}
@@ -146,7 +146,7 @@ export function MarketFilters({
 					/>
 				</div>
 
-				<div className="shrink-0">
+				<div className="shrink-0 md:hidden">
 					<Button
 						aria-label={t("officialMarketplace.filter.title")}
 						className="h-9 w-9 px-0 md:w-auto md:px-3"
@@ -165,6 +165,26 @@ export function MarketFilters({
 					<div className="shrink-0 md:ml-auto">{toolbarActions}</div>
 				) : null}
 			</div>
+			<div className="hidden grid-cols-1 items-end gap-3 md:grid sm:grid-cols-2 xl:grid-cols-4">
+				<MarketAdvancedFilterControls
+					categoryOptions={categoryOptions}
+					categoryOptionsLoading={categoryOptionsLoading}
+					codeLabel={codeLabel}
+					codePlaceholder={codePlaceholder}
+					filterDraft={filterDraft}
+					onDraftChange={onDraftChange}
+					showCategoryFilter={showCategoryFilter}
+					showPackageName={showPackageName}
+				/>
+				<div className="flex justify-end sm:col-start-2 xl:col-start-4">
+					<Button
+						variant="outline"
+						onClick={() => onDraftChange(createDefaultFilterDraft())}
+					>
+						{t("officialMarketplace.action.reset")}
+					</Button>
+				</div>
+			</div>
 
 			<FilterSheet
 				applyLabel={t("officialMarketplace.filter.apply")}
@@ -173,7 +193,7 @@ export function MarketFilters({
 				onOpenChange={handleFilterSheetOpenChange}
 				onReset={resetAdvancedFilters}
 				open={isFilterSheetOpen}
-				presentation="responsive"
+				presentation="mobile-only"
 				resetLabel={t("officialMarketplace.action.reset")}
 				title={t("officialMarketplace.filter.title")}
 				description={t("officialMarketplace.filter.description")}
@@ -330,7 +350,7 @@ function MarketAdvancedFilterControls({
 							time_range: timeRange,
 						}))
 					}
-					presentation="inline"
+					presentation="popover"
 					value={filterDraft.time_range}
 				/>
 			</FilterControlField>

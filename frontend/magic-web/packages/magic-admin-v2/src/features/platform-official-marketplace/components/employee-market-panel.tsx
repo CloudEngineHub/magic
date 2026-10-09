@@ -67,7 +67,7 @@ export function EmployeeMarketPanel({
 	const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
 	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } =
 		useListQueryParams({
-			debounceFields: ["search_value"],
+			debounceFields: ["code", "name_i18n", "organization_code", "package_name"],
 			initialDraft: createDefaultFilterDraft,
 			toParams: toAgentMarketParams,
 		})

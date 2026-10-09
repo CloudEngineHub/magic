@@ -522,46 +522,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 					</h3>
 				</div>
 				<div className="mb-3 md:mb-0 md:border-b md:p-4">
-					<div className="flex min-w-0 items-end gap-2 md:hidden">
-						<FilterControlField
-							className="min-w-0 flex-1"
-							label={t("slidesTemplate.tagName")}
-						>
-							<FilterSearchInput
-								clearLabel={t("common.clear")}
-								onValueChange={(value) => {
-									setDebouncedField("keyword", value)
-									setSelectedTagId(null)
-								}}
-								placeholder={t("slidesTemplate.tagName")}
-								value={filters.keyword}
-							/>
-						</FilterControlField>
-						<FilterControlField
-							className="w-[104px] shrink-0"
-							label={t("slidesTemplate.status")}
-						>
-							<Select
-								value={filters.status}
-								onValueChange={(status) => {
-									setFilterDraft((state) => ({ ...state, status }))
-									setSelectedTagId(null)
-								}}
-							>
-								<SelectTrigger className="w-full">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value={emptyStatus}>
-										{t("slidesTemplate.all")}
-									</SelectItem>
-									<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-									<SelectItem value="0">
-										{t("slidesTemplate.disabled")}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</FilterControlField>
+					<div className="flex justify-end md:hidden">
 						<Button
 							aria-label={t("slidesTemplate.filterTitle")}
 							className={cn(

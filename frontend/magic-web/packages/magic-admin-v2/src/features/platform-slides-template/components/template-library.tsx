@@ -438,7 +438,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 
 		return (
 			<div className="space-y-4">
-				<div className="flex min-w-0 flex-wrap items-end gap-2">
+				<div className="flex min-w-0 flex-wrap items-end justify-end gap-2 md:hidden">
 					<FilterControlField
 						className="min-w-0 flex-1 md:w-[340px] md:flex-none xl:w-[420px]"
 						label={t("slidesTemplate.keyword")}
@@ -471,14 +471,102 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 					</FilterControlField>
 					<Button
 						aria-label={t("slidesTemplate.filterTitle")}
-						className="h-9 w-9 px-0 md:w-auto md:px-3"
+						className="h-9 w-9 px-0"
 						onClick={() => handleFilterSheetOpenChange(true)}
 						type="button"
 						variant="outline"
 					>
 						<Filter className="size-4" aria-hidden="true" />
-						<span className="hidden md:inline">{t("slidesTemplate.filterTitle")}</span>
 					</Button>
+				</div>
+				<div className="hidden grid-cols-1 items-end gap-3 md:grid sm:grid-cols-2 xl:grid-cols-4">
+					<FilterControlField label={t("slidesTemplate.keyword")}>
+						<FilterSearchInput
+							clearLabel={t("common.clear")}
+							onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
+							placeholder={t("slidesTemplate.keyword")}
+							value={filters.keyword}
+						/>
+					</FilterControlField>
+					<FilterControlField label={t("slidesTemplate.templateCode")}>
+						<FilterSearchInput
+							clearLabel={t("common.clear")}
+							onValueChange={(code) => setDebouncedField("code", code)}
+							placeholder={t("slidesTemplate.templateCode")}
+							value={filters.code}
+						/>
+					</FilterControlField>
+					<FilterControlField label={t("slidesTemplate.category")}>
+						<SearchableCategorySelect
+							ariaLabel={t("slidesTemplate.category")}
+							emptyLabel={t("slidesTemplate.all")}
+							isLoading={categories.isLoading}
+							onChange={(category) =>
+								setFilterDraft((value) => ({ ...value, category }))
+							}
+							onOpenChange={(open) => open && setCategoryOptionsOpen(true)}
+							options={categories.data?.list ?? []}
+							value={filters.category}
+						/>
+					</FilterControlField>
+					<FilterControlField label={t("slidesTemplate.tagsFilter")}>
+						<SearchableTagSelect
+							ariaLabel={t("slidesTemplate.tagsFilter")}
+							contentClassName="w-[min(360px,calc(100vw-3rem))]"
+							emptyLabel={t("slidesTemplate.allTags")}
+							isLoading={tags.isLoading}
+							maxVisibleTags={2}
+							onChange={(tagCodes) =>
+								setFilterDraft((value) => ({ ...value, tagCodes }))
+							}
+							onOpenChange={(open) => open && setTagOptionsOpen(true)}
+							options={tagOptions}
+							value={filters.tagCodes}
+						/>
+					</FilterControlField>
+					<FilterControlField label={t("slidesTemplate.tagMatch")}>
+						<Select
+							value={filters.tagMatch}
+							onValueChange={(tagMatch: "any" | "all") =>
+								setFilterDraft((value) => ({ ...value, tagMatch }))
+							}
+						>
+							<SelectTrigger className="w-full">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="any">{t("slidesTemplate.any")}</SelectItem>
+								<SelectItem value="all">{t("slidesTemplate.all")}</SelectItem>
+							</SelectContent>
+						</Select>
+					</FilterControlField>
+					<FilterControlField label={t("slidesTemplate.status")}>
+						<Select
+							value={filters.status}
+							onValueChange={(status) =>
+								setFilterDraft((value) => ({ ...value, status }))
+							}
+						>
+							<SelectTrigger className="w-full">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value={emptyStatus}>
+									{t("slidesTemplate.all")}
+								</SelectItem>
+								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
+								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
+							</SelectContent>
+						</Select>
+					</FilterControlField>
+					<div className="flex justify-end sm:col-start-2 xl:col-start-4">
+						<Button
+							variant="outline"
+							onClick={() => setFilterDraft(createDefaultTemplateLibraryDraft())}
+						>
+							{t("slidesTemplate.reset")}
+						</Button>
+					</div>
 				</div>
 				<FilterSheet
 					applyLabel={t("slidesTemplate.applyFilters")}
@@ -487,7 +575,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 					onOpenChange={handleFilterSheetOpenChange}
 					onReset={resetAdvancedFilters}
 					open={isFilterSheetOpen}
-					presentation="responsive"
+					presentation="mobile-only"
 					resetLabel={t("slidesTemplate.reset")}
 					title={t("slidesTemplate.filterTitle")}
 				>

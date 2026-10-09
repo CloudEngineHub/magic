@@ -84,17 +84,25 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 				toCategoryListParams(draft, page, pageSize),
 			[pageSize],
 		)
-		const { filterDraft: filters, page, params, setDebouncedField, setFilterDraft, setPage } =
-			useListQueryParams({
-				debounceFields: ["keyword", "code"],
-				extraResetKey: pageSize,
-				initialDraft: createDefaultCategoryFilterDraft,
-				toParams,
-			})
+		const {
+			filterDraft: filters,
+			page,
+			params,
+			setDebouncedField,
+			setFilterDraft,
+			setPage,
+		} = useListQueryParams({
+			debounceFields: ["keyword", "code"],
+			extraResetKey: pageSize,
+			initialDraft: createDefaultCategoryFilterDraft,
+			toParams,
+		})
 		const [dialogOpen, setDialogOpen] = useState(false)
 		const [editing, setEditing] = useState<SlidesTemplateCategory | null>(null)
 		const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-		const [advancedFilterDraft, setAdvancedFilterDraft] = useState(createDefaultCategoryFilterDraft)
+		const [advancedFilterDraft, setAdvancedFilterDraft] = useState(
+			createDefaultCategoryFilterDraft,
+		)
 		const query = useSlidesTemplateCategoriesQuery(params)
 		const mutations = useSlidesTemplateCategoryMutations()
 		const { pendingIds: statusPendingIds, run: runStatusPending } = useRowPendingIds()
@@ -255,18 +263,7 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 
 		return (
 			<div className="space-y-4">
-				<div className="flex min-w-0 items-end gap-2 md:hidden">
-					<FilterControlField
-						className="min-w-0 flex-1"
-						label={t("slidesTemplate.keyword")}
-					>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(value) => setDebouncedField("keyword", value)}
-							placeholder={t("slidesTemplate.keyword")}
-							value={filters.keyword}
-						/>
-					</FilterControlField>
+				<div className="flex justify-end md:hidden">
 					<Button
 						aria-label={t("slidesTemplate.filterTitle")}
 						onClick={() => handleFilterSheetOpenChange(true)}
