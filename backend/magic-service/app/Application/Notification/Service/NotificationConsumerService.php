@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Application\Notification\Service;
 
 use App\Application\Notification\Contract\EventEnvelope;
+use App\Application\Notification\Strategy\NotificationCatalogStrategyInterface;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Domain\Notification\Constant\NotificationActionStatus;
 use App\Domain\Notification\Constant\NotificationCategory;
@@ -21,7 +22,8 @@ use App\Domain\Notification\Entity\ValueObject\NotificationDataIsolation;
 use App\Domain\Notification\Repository\Facade\NotificationEventRepositoryInterface;
 use App\Domain\Notification\Repository\Facade\NotificationRepositoryInterface;
 use App\Domain\Notification\Repository\Facade\NotificationTemplateRepositoryInterface;
-use App\Application\Notification\Strategy\NotificationCatalogStrategyInterface;
+use App\ErrorCode\EventErrorCode;
+use App\ErrorCode\NotificationErrorCode;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
@@ -88,13 +90,18 @@ final readonly class NotificationConsumerService
             unset($notificationCount);
         } catch (Throwable $throwable) {
             $retryable = ! $throwable instanceof InvalidArgumentException
-                && (int) $throwable->getCode() !== 35010
+                && (int) $throwable->getCode() !== NotificationErrorCode::TEMPLATE_NOT_FOUND->value
                 && $event->getAttempts() < self::MAX_ATTEMPTS;
             $this->events->markFailed(
                 $eventId,
                 $token,
-                (string) ($throwable->getCode() ?: 'NOTIFICATION_CONSUME_ERROR'),
-                $throwable->getMessage(),
+                NotificationErrorFormatter::code(
+                    $throwable,
+                    $throwable instanceof InvalidArgumentException
+                        ? EventErrorCode::EVENT_CONSUMER_VALIDATION_FAILED->value
+                        : EventErrorCode::EVENT_CONSUMER_EXECUTION_FAILED->value
+                ),
+                NotificationErrorFormatter::message($throwable),
                 $retryable,
                 $retryable ? date('Y-m-d H:i:s', time() + self::RETRY_DELAY_SECONDS) : null,
                 date('Y-m-d H:i:s'),
@@ -105,7 +112,14 @@ final readonly class NotificationConsumerService
                 'organization_code' => $event->getOrganizationCode(),
                 'attempt' => $event->getAttempts(),
                 'processing_token' => $token,
-                'error_code' => (string) ($throwable->getCode() ?: 'NOTIFICATION_CONSUME_ERROR'),
+                'error_code' => NotificationErrorFormatter::code(
+                    $throwable,
+                    $throwable instanceof InvalidArgumentException
+                        ? EventErrorCode::EVENT_CONSUMER_VALIDATION_FAILED->value
+                        : EventErrorCode::EVENT_CONSUMER_EXECUTION_FAILED->value
+                ),
+                'error' => $throwable->getMessage(),
+                'trace' => $throwable->getTraceAsString(),
                 'retryable' => $retryable,
             ]);
             throw $throwable;
@@ -121,7 +135,7 @@ final readonly class NotificationConsumerService
     {
         $eventType = $envelope->eventType;
         if ($this->isWithdrawal($eventType)) {
-            return $this->withdraw($event);
+            return $this->withdraw($event, $eventType);
         }
 
         // The source type is the stable fallback for permission-change events;
@@ -131,11 +145,11 @@ final readonly class NotificationConsumerService
             array_merge(['resource_type' => $envelope->source->type], $envelope->payload)
         );
         if ($messageType === null) {
-            throw new RuntimeException('Event does not generate a message', 35010);
+            throw new RuntimeException('Event does not generate a message', NotificationErrorCode::TEMPLATE_NOT_FOUND->value);
         }
         $template = $this->templates->findLatestActive($messageType, 'zh-CN');
         if ($template === null) {
-            throw new RuntimeException("Notification template not found: {$messageType}", 35010);
+            throw new RuntimeException("Notification template not found: {$messageType}", NotificationErrorCode::TEMPLATE_NOT_FOUND->value);
         }
         $englishTemplate = $this->templates->findByTypeVersionLocale(
             $messageType,
@@ -143,14 +157,22 @@ final readonly class NotificationConsumerService
             'en-US'
         );
         if ($englishTemplate === null || $englishTemplate->getStatus() !== NotificationTemplateStatus::ACTIVE) {
-            throw new RuntimeException("Notification template pair not found: {$messageType}:{$template->getVersion()}", 35010);
+            throw new RuntimeException("Notification template pair not found: {$messageType}:{$template->getVersion()}", NotificationErrorCode::TEMPLATE_NOT_FOUND->value);
         }
 
+        if ($eventType === NotificationEventType::INVITATION_PERMISSION_CHANGED->value) {
+            $this->withdrawAllVersions($event, $envelope);
+        }
+
+        $category = $this->category($messageType);
+        $actionStatus = $category === NotificationCategory::AUTHORIZATION
+            ? NotificationActionStatus::PENDING
+            : NotificationActionStatus::NONE;
         $created = 0;
         foreach ($envelope->recipients as $recipient) {
             $notification = new NotificationEntity();
             $notification->setRecipientUserId($recipient->userId);
-            $notification->setCategory(NotificationCategory::SYSTEM);
+            $notification->setCategory($category);
             $notification->setType($messageType);
             $notification->setTemplateVersion($template->getVersion());
             $notification->setPayload(array_merge($envelope->payload, $recipient->payload));
@@ -160,26 +182,71 @@ final readonly class NotificationConsumerService
             $notification->setSourceId($envelope->source->id);
             $notification->setSourceVersion($envelope->source->version);
             $notification->setMessageStatus(NotificationMessageStatus::ACTIVE);
-            $notification->setActionStatus(NotificationActionStatus::NONE);
-            $isNew = $this->notifications->findBySourceEventKey(
+            $notification->setActionStatus($actionStatus);
+            $existingNotification = $this->notifications->findBySourceEventKey(
                 NotificationDataIsolation::create($envelope->organizationCode, $recipient->userId),
                 $recipient->sourceEventKey,
                 $recipient->userId
-            ) === null;
-            $this->notifications->create(
+            );
+            $persistedNotification = $this->notifications->create(
                 NotificationDataIsolation::create($envelope->organizationCode, $recipient->userId),
                 $notification
             );
-            if ($isNew) {
+            if ($existingNotification === null && $persistedNotification->getId() === $notification->getId()) {
                 ++$created;
             }
         }
         return $created;
     }
 
-    private function withdraw(NotificationEventEntity $event): int
+    private function withdraw(NotificationEventEntity $event, string $eventType): int
     {
+        $isInvitation = $eventType === NotificationEventType::INVITATION_WITHDRAWN->value;
+        $isVersioned = $isInvitation && $event->getSourceVersion() !== null;
         $isolation = NotificationDataIsolation::create($event->getOrganizationCode());
+        if ($isInvitation) {
+            $payload = $event->getEventPayload();
+            $recipients = (array) ($payload['recipients'] ?? []);
+            if ($recipients !== []) {
+                $withdrawn = 0;
+                foreach ($recipients as $recipient) {
+                    $userId = trim((string) ($recipient['user_id'] ?? ''));
+                    if ($userId === '') {
+                        continue;
+                    }
+                    if ($event->getSourceVersion() !== null) {
+                        $withdrawn += $this->notifications->withdrawBySourceIdentity(
+                            $isolation,
+                            $event->getSourceDomain(),
+                            $event->getSourceType(),
+                            $event->getSourceId(),
+                            $event->getSourceVersion(),
+                            date('Y-m-d H:i:s')
+                        );
+                    } else {
+                        $withdrawn += $this->notifications->withdrawAllBySourceIdentityAndRecipient(
+                            $isolation,
+                            $event->getSourceDomain(),
+                            $event->getSourceType(),
+                            $event->getSourceId(),
+                            $userId,
+                            date('Y-m-d H:i:s')
+                        );
+                    }
+                }
+                return $withdrawn;
+            }
+        }
+        if ($isVersioned) {
+            return $this->notifications->withdrawBySourceIdentity(
+                $isolation,
+                $event->getSourceDomain(),
+                $event->getSourceType(),
+                $event->getSourceId(),
+                $event->getSourceVersion(),
+                date('Y-m-d H:i:s')
+            );
+        }
         return $this->notifications->withdrawAllBySourceIdentity(
             $isolation,
             $event->getSourceDomain(),
@@ -189,11 +256,36 @@ final readonly class NotificationConsumerService
         );
     }
 
+    private function withdrawAllVersions(NotificationEventEntity $event, EventEnvelope $envelope): void
+    {
+        $isolation = NotificationDataIsolation::create($envelope->organizationCode);
+        foreach ($envelope->recipients as $recipient) {
+            $this->notifications->withdrawAllBySourceIdentityAndRecipient(
+                $isolation,
+                $envelope->source->domain,
+                $envelope->source->type,
+                $envelope->source->id,
+                $recipient->userId,
+                date('Y-m-d H:i:s')
+            );
+        }
+    }
+
     private function isWithdrawal(string $eventType): bool
     {
         return in_array($eventType, [
             NotificationEventType::PROJECT_WITHDRAWN->value,
             NotificationEventType::FILE_WITHDRAWN->value,
+            NotificationEventType::INVITATION_WITHDRAWN->value,
         ], true);
+    }
+
+    private function category(string $type): NotificationCategory
+    {
+        return in_array($type, [
+            'project_invitation',
+            'agent_invitation',
+            'skill_invitation',
+        ], true) ? NotificationCategory::AUTHORIZATION : NotificationCategory::SYSTEM;
     }
 }

@@ -16,18 +16,27 @@ use App\Domain\Notification\Constant\NotificationEventStatus;
 use App\Domain\Notification\Constant\NotificationEventType;
 use App\Domain\Notification\Entity\NotificationEventEntity;
 use App\Domain\Notification\Repository\Facade\NotificationEventRepositoryInterface;
+use App\ErrorCode\EventErrorCode;
+use App\ErrorCode\NotificationErrorCode;
+use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 final readonly class NotificationEventAppService implements NotificationEventPublisherInterface
 {
+    private LoggerInterface $logger;
+
     public function __construct(
         private NotificationEventEnvelopeValidator $validator,
         private NotificationEventRepositoryInterface $events,
         private EventDispatcherInterface $dispatcher,
+        LoggerFactory $loggerFactory,
     ) {
+        $this->logger = $loggerFactory->get(self::class);
     }
 
-    /** @return array{event_id:string,status:string,accepted:bool,duplicate:bool} */
+    /** @return array{event_id:string,status:string,accepted:bool,duplicate:bool,queued:bool,code:?int} */
     public function publish(EventEnvelope|array $envelope): array
     {
         $data = $this->validator->validate($envelope);
@@ -54,8 +63,27 @@ final readonly class NotificationEventAppService implements NotificationEventPub
 
         // A duplicate pending event can be a prior publish whose async dispatch failed.
         // Re-publishing the lightweight trigger is safe because the consumer uses a CAS lease.
+        $queued = true;
+        $code = null;
         if ($existing->getStatus() === NotificationEventStatus::PENDING) {
-            $this->dispatcher->dispatch(new NotificationEventConsumeRequested($eventId));
+            try {
+                $this->dispatcher->dispatch(new NotificationEventConsumeRequested($eventId));
+            } catch (Throwable $throwable) {
+                $queued = false;
+                $code = NotificationErrorCode::EVENT_DISPATCH_FAILED->value;
+                $this->events->markDispatchFailed(
+                    $eventId,
+                    NotificationErrorFormatter::code($throwable, EventErrorCode::EVENT_DELIVERY_FAILED->value),
+                    NotificationErrorFormatter::message($throwable),
+                    date('Y-m-d H:i:s'),
+                );
+                $this->logger->error('Notification event dispatch failed', [
+                    'event_id' => $eventId,
+                    'error_code' => NotificationErrorFormatter::code($throwable, EventErrorCode::EVENT_DELIVERY_FAILED->value),
+                    'error' => $throwable->getMessage(),
+                    'trace' => $throwable->getTraceAsString(),
+                ]);
+            }
         }
 
         return [
@@ -63,6 +91,8 @@ final readonly class NotificationEventAppService implements NotificationEventPub
             'status' => $existing->getStatus()->value,
             'accepted' => true,
             'duplicate' => $duplicate,
+            'queued' => $queued,
+            'code' => $code,
         ];
     }
 }

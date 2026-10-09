@@ -49,6 +49,26 @@ final class NotificationEventRepository implements NotificationEventRepositoryIn
         return $row === null ? null : NotificationEventEntity::fromArray((array) $row);
     }
 
+    public function markDispatchFailed(
+        string $eventId,
+        string $errorCode,
+        string $errorMessage,
+        string $failedAt
+    ): bool {
+        return Db::table('magic_notification_events')
+            ->where('event_id', $eventId)
+            ->where('status', NotificationEventStatus::PENDING->value)
+            ->update([
+                // The event was accepted, but no Consumer lease was acquired.
+                // Keep attempts untouched and let recovery dispatch the same event again.
+                'status' => NotificationEventStatus::PENDING->value,
+                'next_retry_at' => null,
+                'last_error_code' => $this->normalizeErrorCode($errorCode),
+                'last_error_message' => $this->truncateErrorMessage($errorMessage),
+                'updated_at' => $failedAt,
+            ]) > 0;
+    }
+
     public function claimPending(
         string $eventId,
         string $processingToken,
@@ -130,8 +150,8 @@ final class NotificationEventRepository implements NotificationEventRepositoryIn
             ->update([
                 'status' => $retryable ? NotificationEventStatus::PENDING->value : NotificationEventStatus::FAILED->value,
                 'next_retry_at' => $retryable ? $nextRetryAt : null,
-                'last_error_code' => $errorCode,
-                'last_error_message' => $errorMessage,
+                'last_error_code' => $this->normalizeErrorCode($errorCode),
+                'last_error_message' => $this->truncateErrorMessage($errorMessage),
                 'processing_token' => null,
                 'locked_until' => null,
                 'last_finished_at' => $finishedAt,
@@ -234,6 +254,18 @@ final class NotificationEventRepository implements NotificationEventRepositoryIn
     }
 
     private function now(): string { return date('Y-m-d H:i:s'); }
+
+    private function truncateErrorMessage(string $message): string
+    {
+        $message = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $message) ?? '';
+        $message = preg_replace('/\s+/u', ' ', trim($message)) ?? '';
+        return mb_substr($message, 0, 500);
+    }
+
+    private function normalizeErrorCode(string $errorCode): string
+    {
+        return preg_match('/^\d+$/', $errorCode) === 1 ? $errorCode : '0';
+    }
 
     private function isDuplicateKey(Throwable $throwable): bool
     {

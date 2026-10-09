@@ -17,6 +17,14 @@ interface NotificationEventRepositoryInterface
 
     public function findByEventId(string $eventId): ?NotificationEventEntity;
 
+    /** Record a dispatch failure without changing the pending event attempt count. */
+    public function markDispatchFailed(
+        string $eventId,
+        string $errorCode,
+        string $errorMessage,
+        string $failedAt
+    ): bool;
+
     public function claimPending(
         string $eventId,
         string $processingToken,
