@@ -33,7 +33,10 @@ function DownloadProgressToast({
 	const normalizedProgress = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0
 
 	return (
-		<div ref={anchorRef} className="pointer-events-none w-[min(360px,calc(100vw-24px))]">
+		<div
+			ref={anchorRef}
+			className="pointer-events-none w-max min-w-[min(360px,calc(100vw-24px))] max-w-[min(440px,calc(100vw-24px))]"
+		>
 			<DraggableCore
 				nodeRef={nodeRef}
 				cancel="button, a, input, textarea, select, [role='button']"
@@ -51,7 +54,7 @@ function DownloadProgressToast({
 					onPointerDown={(event) => event.stopPropagation()}
 				>
 					<div className="flex items-center gap-2.5">
-						<div className="flex min-w-0 max-w-[45%] shrink items-center gap-2.5">
+						<div className="flex min-w-0 shrink items-center gap-2.5">
 							<span className="shrink-0 text-primary">
 								<ProgressIndicator
 									value={normalizedProgress}
@@ -60,19 +63,20 @@ function DownloadProgressToast({
 								/>
 							</span>
 							<SmartTooltip
+								maxLines={0}
 								disabled={dragging}
 								placement="bottom"
 								className={cn(
-									"download-progress-label min-w-0 text-[13px] leading-5",
+									"download-progress-label min-w-0 text-[13px] leading-5 md:overflow-hidden md:text-ellipsis",
 									description && "font-medium",
 								)}
 							>
 								{resolvedText}
 							</SmartTooltip>
 						</div>
-						{/* 主状态、进度和操作放在同一行；长文案省略后可悬停阅读，取消始终可见。 */}
+						{/* 桌面长文案先扩宽再省略；手机保留完整换行文案，缩短进度条为取消操作留空间。 */}
 						<div
-							className="h-1 min-w-6 flex-1 overflow-hidden rounded-full bg-primary/10"
+							className="h-1 w-20 min-w-20 shrink-0 grow overflow-hidden rounded-full bg-primary/10 max-md:w-6 max-md:min-w-6"
 							aria-hidden
 						>
 							<div
