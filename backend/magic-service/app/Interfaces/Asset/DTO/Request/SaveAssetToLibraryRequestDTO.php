@@ -38,6 +38,15 @@ class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
         return strtoupper((string) ($this->visibility['visibility_type'] ?? 'PERSONAL'));
     }
 
+    /** @return array{user_ids: array<string>, department_ids: array<string>} */
+    public function getVisibilityConfig(): array
+    {
+        return [
+            'user_ids' => array_values(array_map('strval', (array) ($this->visibility['user_ids'] ?? []))),
+            'department_ids' => array_values(array_map('strval', (array) ($this->visibility['department_ids'] ?? []))),
+        ];
+    }
+
     public function setVisibility(mixed $value): void
     {
         $this->visibility = (array) ($value ?? []);

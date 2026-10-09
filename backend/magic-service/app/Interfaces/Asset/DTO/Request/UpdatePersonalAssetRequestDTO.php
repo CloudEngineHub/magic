@@ -16,7 +16,7 @@ class UpdatePersonalAssetRequestDTO extends AbstractRequestDTO
 
     public ?string $description = null;
 
-    /** @var null|array{user_ids?: array<string>, department_ids?: array<string>} */
+    /** @var null|array{visibility_type?: string, user_ids?: array<string>, department_ids?: array<string>} */
     public ?array $visibility = null;
 
     /** @var null|array<int, int|string> */
@@ -32,10 +32,24 @@ class UpdatePersonalAssetRequestDTO extends AbstractRequestDTO
         return $this->description;
     }
 
-    /** @return null|array{user_ids?: array<string>, department_ids?: array<string>} */
+    /** @return null|array{visibility_type?: string, user_ids?: array<string>, department_ids?: array<string>} */
     public function getVisibility(): ?array
     {
         return $this->visibility;
+    }
+
+    public function getVisibilityType(): string
+    {
+        return strtoupper((string) ($this->visibility['visibility_type'] ?? 'PERSONAL'));
+    }
+
+    /** @return array{user_ids: array<string>, department_ids: array<string>} */
+    public function getVisibilityConfig(): array
+    {
+        return [
+            'user_ids' => array_values(array_map('strval', (array) ($this->visibility['user_ids'] ?? []))),
+            'department_ids' => array_values(array_map('strval', (array) ($this->visibility['department_ids'] ?? []))),
+        ];
     }
 
     /** @return null|array<int, int|string> */

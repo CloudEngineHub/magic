@@ -130,6 +130,7 @@ class AssetAppService extends AbstractAssetAppService
         $contentHash = $this->materializeProjectFileIfNeeded($dataIsolation, $requestDTO);
         $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
         $asset->setVisibilityType($requestDTO->getVisibilityType());
+        $asset->setVisibility($requestDTO->getVisibilityConfig());
         if ($contentHash !== null) {
             $asset->setContentHash($contentHash);
         }
@@ -266,7 +267,8 @@ class AssetAppService extends AbstractAssetAppService
             }
             if ($requestDTO->getVisibility() !== null) {
                 $visibility = $requestDTO->getVisibility();
-                $asset->setVisibilityType(strtoupper((string) ($visibility['visibility_type'] ?? 'PERSONAL')));
+                $asset->setVisibilityType($requestDTO->getVisibilityType());
+                $asset->setVisibility($requestDTO->getVisibilityConfig());
             }
             $updated = $this->assetDomainService->update($dataIsolation, $asset);
             if ($updated === null) {

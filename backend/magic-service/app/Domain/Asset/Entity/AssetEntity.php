@@ -55,6 +55,9 @@ class AssetEntity extends AbstractEntity
 
     protected AssetVisibilityType $visibilityType = AssetVisibilityType::PERSONAL;
 
+    /** 可见范围配置：用户和部门授权主体。 */
+    protected ?array $visibility = null;
+
     protected ?array $metadata = null;
 
     protected ?string $createdAt = null;
@@ -288,6 +291,16 @@ class AssetEntity extends AbstractEntity
         $this->visibilityType = $value instanceof AssetVisibilityType ? $value : AssetVisibilityType::from($value);
     }
 
+    public function getVisibility(): ?array
+    {
+        return $this->visibility;
+    }
+
+    public function setVisibility(?array $value): void
+    {
+        $this->visibility = $value;
+    }
+
     public function getMetadata(): ?array
     {
         return $this->metadata;
@@ -332,6 +345,7 @@ class AssetEntity extends AbstractEntity
             'content_hash' => $this->contentHash,
             'status' => $this->status->value,
             'visibility_type' => $this->visibilityType->value,
+            'visibility' => $this->visibility,
             'metadata' => $this->metadata,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
