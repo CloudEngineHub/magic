@@ -78,6 +78,24 @@ vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
 }))
 
+/**
+ * The new-user guide's entry, as this block sees it. Held in a flag rather than stubbed per test
+ * because the block reads it inside the click, and because "the guide is due" is the only thing
+ * about it the block knows.
+ */
+const guideState = vi.hoisted(() => ({ deliverableRunDue: false }))
+
+vi.mock("@/pages/superMagic/components/LazyGuideTour/GuideTourManager", async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import("@/pages/superMagic/components/LazyGuideTour/GuideTourManager")
+		>()
+	return {
+		...actual,
+		startHomeOnboardingDeliverableRunIfDue: () => guideState.deliverableRunDue,
+	}
+})
+
 describe("MessageAttachment", () => {
 	beforeEach(() => {
 		getTemporaryDownloadUrlMock.mockReset()
@@ -88,6 +106,7 @@ describe("MessageAttachment", () => {
 		warningMock.mockReset()
 		openMessageFileMock.mockReset()
 		useIsMobileMock.mockReturnValue(false)
+		guideState.deliverableRunDue = false
 		projectFilesStoreMock.workspaceFilesList = []
 		projectFilesStoreMock.workspaceFileTree = []
 		supportsStaticDependenciesMock.mockReturnValue(false)
@@ -327,5 +346,45 @@ describe("MessageAttachment", () => {
 			)
 		})
 		expect(warningMock).toHaveBeenCalledWith("share.documentDependenciesAnalysisFailed")
+	})
+
+	/**
+	 * The one click a new account's guide is allowed to take: the first attachment such an account
+	 * ever opens. The guide explains what these files are, so the file stays shut while it is on
+	 * screen and the user opens it by clicking again — the path every other test in this file
+	 * covers, since the guide is not due in them.
+	 */
+	it("spends the first click on the guide, opens nothing, and marks the block it frames", () => {
+		guideState.deliverableRunDue = true
+		const onFileClick = vi.fn()
+		const onSelectDetail = vi.fn()
+		const file = {
+			file_id: "file-1",
+			file_extension: "md",
+			file_name: "report.md",
+			filename: "report.md",
+			contentLength: 0,
+			url: "",
+		}
+
+		render(
+			<Attachment
+				attachments={[file]}
+				onSelectDetail={onSelectDetail}
+				onFileClick={onFileClick}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("handle-open-file"))
+
+		// Nothing is opened by any of the three routes a click could take.
+		expect(onFileClick).not.toHaveBeenCalled()
+		expect(onSelectDetail).not.toHaveBeenCalled()
+		expect(openMessageFileMock).not.toHaveBeenCalled()
+		// The guide's first step has nothing else to point at: this mark is the only record of which
+		// of the page's blocks the click belonged to.
+		expect(
+			document.querySelector('[data-guide-anchor="deliverable-attachment"]'),
+		).not.toBeNull()
 	})
 })

@@ -231,13 +231,18 @@ describe("home onboarding: the two steps a delivered file is framed by", () => {
 		markers.splice(0).forEach((marker) => marker.remove())
 	})
 
-	/** Both anchors are on the page: the block that was opened, and the row the project keeps. */
+	/**
+	 * Both anchors are on the page: the block that was opened, and the project files area that
+	 * block's file is filed under. Nothing here marks the file's own row in that area — the file is
+	 * opened by the click *after* the tour's first step, so on the way through there usually is no
+	 * such row, and the second step is not supposed to need one.
+	 */
 	async function startDeliverableRun() {
 		vi.resetModules()
 		const onboarding = await import("../GuideTourManager")
 		const tour = await import("../HomeOnboardingTour")
 		publishAnchor(onboarding.HomeOnboardingAnchor.DeliverableAttachment)
-		publishAnchor(onboarding.HomeOnboardingAnchor.DeliverableProjectFile)
+		publishAnchor(onboarding.HomeOnboardingAnchor.ProjectSider)
 		onboarding.startHomeOnboardingDeliverableRun()
 		render(<tour.default page="home" userMagicId={MAGIC_ID} />)
 		return { onboarding, tour }
@@ -359,15 +364,19 @@ describe("home onboarding: the two steps a delivered file is framed by", () => {
 		expect(onboarding.getHomeOnboardingStatus(MAGIC_ID, "first-ai-work")).toBe("pending")
 	})
 
-	it("closes rather than fails when the project files row is not on the page", async () => {
+	it("ends, recording nothing against a task, when the project files area itself is not there", async () => {
 		vi.resetModules()
 		const onboarding = await import("../GuideTourManager")
 		const tour = await import("../HomeOnboardingTour")
 
 		/*
-		 * Only the block that was opened is marked. The panel the second step points at is the user's
-		 * own — collapsed, on another tab, or showing a row that is not the open file — so that step
-		 * may be stepped over instead of ending the run.
+		 * Only the block that was opened is marked. The files area is a region the project page
+		 * always renders, so a page without it is a page the tour cannot be shown on rather than a
+		 * step to walk past — and the run ends instead of waiting for something that is not coming.
+		 *
+		 * It is the second step, though, so the run has already been read by the time it ends: what
+		 * this case is really about is that ending it costs nothing. This tour belongs to no task,
+		 * so leaving it early must not record an abort against the task whose result was clicked.
 		 */
 		publishAnchor(onboarding.HomeOnboardingAnchor.DeliverableAttachment)
 		onboarding.startHomeOnboardingDeliverableRun()
@@ -379,18 +388,13 @@ describe("home onboarding: the two steps a delivered file is framed by", () => {
 			fireEvent.click(primaryAction())
 		})
 
-		// Nothing to frame, so the step is held only for its grace period and then walked past.
+		// Nothing to frame, so the step is held only for its grace period and then the run ends.
 		await act(async () => {
 			vi.advanceTimersByTime(3000)
 		})
 
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
 		expect(onboarding.getHomeOnboardingFlow()).toBeNull()
-		/*
-		 * Stepping over the last step closes the run rather than aborting it: the panel being closed
-		 * is not a failed tour. It also records nothing against a task, which is the part that would
-		 * be wrong here — no task was ever this run's to report on.
-		 */
 		expect(onboarding.getHomeOnboardingStatus(MAGIC_ID, "first-ai-work")).toBe("pending")
 		expect(completeOnboardingTask).not.toHaveBeenCalled()
 	})

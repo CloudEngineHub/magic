@@ -195,6 +195,19 @@
 			},
 			"title": "Choose a featured example"
 		},
+		"firstWork": {
+			"actions": {
+				"later": "Not now, I'll look around",
+				"start": "Start a new task"
+			},
+			"card": {
+				"description": "You can start a new task, or pick up more from the task entries.",
+				"title": "First AI work completed"
+			},
+			"close": "Close",
+			"points": "+{{points}} points",
+			"title": "Congratulations on your first AI work"
+		},
 		"microApp": {
 			"actions": {
 				"finish": "Finish the tour and claim 50 points"

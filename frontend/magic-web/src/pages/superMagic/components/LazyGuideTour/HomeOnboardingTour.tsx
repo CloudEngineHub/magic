@@ -192,8 +192,15 @@ interface GuidedFlowStep {
 	placement: Placement
 	/**
 	 * Whether the step may be walked past when its anchor is not on the page — see
-	 * `OnboardingStep.optional`. A flow's steps are the ones that need it most, because what they
-	 * frame is often the user's own screen rather than a control the tour can count on.
+	 * `OnboardingStep.optional`.
+	 *
+	 * No step of a flow sets it today, and that is deliberate rather than an oversight. A flow walks
+	 * the page the run is already on, and its steps frame regions that page always renders; the one
+	 * exception used to be the delivered file's second step, which framed the row the file was filed
+	 * under — a row published only while that file is the open one. It framed the project files area
+	 * instead (see `deliverableSteps`), which turned a step that was usually skipped into one that
+	 * always has something to point at. The field stays because the question it answers is a real
+	 * one for a flow too; it simply has no caller yet.
 	 */
 	optional?: boolean
 }
@@ -267,7 +274,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		() => [
 			{
 				flow: "project-file",
-				anchor: "project-sider",
+				anchor: HomeOnboardingAnchor.ProjectSider,
 				analyticsStepIndex: 4,
 				title: t("homeOnboarding.project.file.title"),
 				text: t("homeOnboarding.project.file.description"),
@@ -313,12 +320,15 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 * benefits card never offers it and no task is finished by it: what it marks is the moment the
 	 * user first sees what a task produced, which is a moment rather than a task.
 	 *
-	 * Both steps frame something the click brought about. The first is the attachment block that was
-	 * clicked, which is why the entry marks that block as the anchor before opening the tour. The
-	 * second is the same file's row in the project files panel, which is the one part of the tour
-	 * that can be legitimately missing: the row is only marked while that file is the open one, and
-	 * the panel only shows it while it is on its file tab and expanded. So that step may be stepped
-	 * over — a user who left their panel closed loses a sentence, not the tour.
+	 * The first step frames the attachment block that was clicked, and that click is the whole of
+	 * what the tour stands on: the entry marks the block as the anchor, and the file itself is left
+	 * shut — the user is being told what a task's results are before one of them takes the screen,
+	 * and opens it by clicking again afterwards. The second step says where that result was filed
+	 * and frames the project files area itself, which the page always carries: the file's own row
+	 * would have been the more precise target, but the file is now opened on the click *after* this
+	 * one, so that row is usually not there on the way through — and a step that is only sometimes
+	 * frameable is a step whose sentence gets dropped. Pointing at the region instead costs the
+	 * precision and keeps the sentence, which is what makes both steps of this run dependable.
 	 */
 	const deliverableSteps = useMemo<GuidedFlowStep[]>(
 		() => [
@@ -332,12 +342,11 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			},
 			{
 				flow: "project-result",
-				anchor: HomeOnboardingAnchor.DeliverableProjectFile,
+				anchor: HomeOnboardingAnchor.ProjectSider,
 				analyticsStepIndex: 10,
 				title: t("homeOnboarding.deliverable.saved.title"),
 				text: t("homeOnboarding.deliverable.saved.description"),
 				placement: "right",
-				optional: true,
 			},
 		],
 		[t],
@@ -919,12 +928,11 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	/**
 	 * Whether the highlighted step may be stepped over.
 	 *
-	 * A task's own steps say so one by one. A flow's steps do too, and the ones that carry it are
-	 * the entries the user's own screen can legitimately not have: the create-skill entry, which
-	 * needs a permission, and the project files row a delivered file is filed under, which exists
-	 * only while that file is the open one and the panel is showing its files at all. Every other
-	 * step of a flow walks the user through something that really happens and has an anchor to
-	 * match, and a missing one there is a failed run, not a step to walk past.
+	 * A task's own steps say so one by one, and the ones that carry it are the entries the user's
+	 * own screen can legitimately not have: the create-skill entry, which an account without the
+	 * permission never renders, and the AI-PPT card steps, which need the account's library to hold
+	 * a featured template. No step of a flow says so any more — see `GuidedFlowStep.optional` for
+	 * why the one that used to has been given an anchor that is always there instead.
 	 */
 	const stepOptional = flow
 		? activeProjectStep?.optional === true
@@ -1072,9 +1080,9 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 
 	/**
 	 * Walking past an optional step whose anchor is not on the page — the create-skill entry, which
-	 * an account without the permission never renders, or the project files row a delivered file is
-	 * filed under, which is only there while that file is the open one. The run carries on to the
-	 * next step, and stepping over the last one closes the run exactly as confirming it would have.
+	 * an account without the permission never renders, or an AI-PPT card step whose library holds
+	 * no featured template. The run carries on to the next step, and stepping over the last one
+	 * closes the run exactly as confirming it would have.
 	 *
 	 * A run in a guided flow walks that flow's steps by position, so the two cases share nothing
 	 * but the entry: the position and the list both belong to the flow rather than to a task.

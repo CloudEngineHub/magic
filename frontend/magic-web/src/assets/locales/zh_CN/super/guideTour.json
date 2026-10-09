@@ -195,6 +195,19 @@
 			},
 			"title": "选择一个精选案例"
 		},
+		"firstWork": {
+			"actions": {
+				"later": "稍后再说，我自己看看",
+				"start": "开始新任务"
+			},
+			"card": {
+				"description": "可以继续开展新任务，也可以从任务入口继续体验。",
+				"title": "完成第一次AI工作"
+			},
+			"close": "关闭",
+			"points": "+{{points}} 积分",
+			"title": "恭喜你，完成第一次 AI 工作"
+		},
 		"microApp": {
 			"actions": {
 				"finish": "完成导览，领取 50 积分"

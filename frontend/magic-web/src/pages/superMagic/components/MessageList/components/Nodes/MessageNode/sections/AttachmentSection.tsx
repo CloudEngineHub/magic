@@ -138,10 +138,20 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 	if (attachments.length === 0) return null
 
 	/**
-	 * Opening one of these files — and, when the guide is due, opening the tour that frames what was
-	 * opened. The two go together because the tour is about the file the user just asked to see:
-	 * `startHomeOnboardingDeliverableRunIfDue` answers whether it was opened, and only then does
-	 * this block become what the first step points at.
+	 * Opening one of these files — unless this is the first of them a new account has ever asked
+	 * for, in which case the guide takes the click and nothing is opened.
+	 *
+	 * The guide is about these files rather than about the one that was clicked: it says what a
+	 * task's results are and where they are kept, and both of its sentences are about the block the
+	 * user is looking at. Opening the file underneath would put that explanation on a screen the
+	 * user has not been introduced to yet, and the frame the first step draws around the block would
+	 * be over a panel that has just been replaced by the file's contents. So the click buys the
+	 * guide alone; the next one — what the guide's own words invite — opens the file, and every
+	 * click after that behaves as it always did.
+	 *
+	 * The block is still marked as the guide's anchor, and marked before the early return: the mark
+	 * is what the first step points at, and it is the only thing that can tell the guide which of
+	 * the page's attachment blocks was clicked. See `startHomeOnboardingDeliverableRunIfDue`.
 	 */
 	const openAttachment = (
 		attachment: FilePathAttachment & { presentation: FilePresentation },
@@ -151,6 +161,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 				"data-guide-anchor",
 				HomeOnboardingAnchor.DeliverableAttachment,
 			)
+			return
 		}
 		openFileByPath(attachment)
 	}

@@ -23,6 +23,13 @@ import { useCanHostHomeOnboarding } from "./onboardingAvailability"
 import { useHomeOnboardingPreludeHeld } from "./onboardingPrelude"
 
 const HomeOnboardingTour = lazy(() => import("./HomeOnboardingTour"))
+/**
+ * The congratulations are a chunk of their own for the reason the tour is: they reach the workspace
+ * services, and this wrapper is mounted by every page — including the pages of the benefits card,
+ * which imports the barrel above for the manager's helpers and must not inherit a dialog's worth of
+ * dependencies for them. They are fetched on the one page that can show them, and nowhere else.
+ */
+const HomeOnboardingFirstWorkCongrats = lazy(() => import("./HomeOnboardingFirstWorkCongrats"))
 
 interface GuideTourWrapperProps {
 	/**
@@ -153,17 +160,44 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 	 * claims — nothing in this component is for a mobile client, whatever got it mounted.
 	 */
 	if (!userInfo?.magic_id || isMobile) return null
-	if (!entryForThisPage && !automaticRun && !activeFlow) return null
+
+	const tourRequested = entryForThisPage || automaticRun || activeFlow
+	/*
+	 * The project detail page, which is the only page this dialog belongs to: it is the page a topic
+	 * runs on, and the one whose route carries both ids. The same pair is what the dialog itself
+	 * reads before it subscribes, so the two cannot disagree about which page this is.
+	 */
+	const onProjectPage = Boolean(projectId && topicId)
 
 	return (
-		<Suspense fallback={null}>
+		<>
 			{/*
-			 * `key` forces a fresh tour on every replay request. A finished tour stays mounted while
-			 * rendering null, so reusing the instance would keep its internal `dismissed` state and
-			 * the replay would never become visible again.
+			 * The congratulations a first finished task earns are *not* a run: nothing asks for them
+			 * and no step walks them, so they are mounted beside the tour rather than through it. The
+			 * account they belong to, and whether this client has the feature at all, are the two
+			 * things this gate has already worked out, which is why they are rendered from here
+			 * rather than from a mount point of their own.
 			 */}
-			<HomeOnboardingTour key={requestVersion} page={page} userMagicId={userInfo?.magic_id} />
-		</Suspense>
+			{onProjectPage ? (
+				<Suspense fallback={null}>
+					<HomeOnboardingFirstWorkCongrats userMagicId={userInfo.magic_id} />
+				</Suspense>
+			) : null}
+			{tourRequested ? (
+				<Suspense fallback={null}>
+					{/*
+					 * `key` forces a fresh tour on every replay request. A finished tour stays mounted
+					 * while rendering null, so reusing the instance would keep its internal
+					 * `dismissed` state and the replay would never become visible again.
+					 */}
+					<HomeOnboardingTour
+						key={requestVersion}
+						page={page}
+						userMagicId={userInfo.magic_id}
+					/>
+				</Suspense>
+			) : null}
+		</>
 	)
 }
 

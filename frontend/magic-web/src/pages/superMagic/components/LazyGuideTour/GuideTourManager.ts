@@ -111,13 +111,23 @@ export const HomeOnboardingAnchor = {
 	 * account still being a new one, not a row being unfinished. See `startHomeOnboardingDeliverableRunIfDue`.
 	 *
 	 * `DeliverableAttachment` is the attachment block of the message that delivered the file — the
-	 * one that was clicked, because it is the click that opens the tour. `DeliverableProjectFile`
-	 * is that same file's row in the project files panel, where the second step sends the user: the
-	 * row carries it only while it is the open file, so the panel's own state decides whether there
-	 * is anything to point at.
+	 * one that was clicked, because it is the click that opens the tour. The second step is not
+	 * named here at all: it points at the project files area, which is where the result was filed —
+	 * see `ProjectSider`.
 	 */
 	DeliverableAttachment: "deliverable-attachment",
-	DeliverableProjectFile: "deliverable-project-file",
+	/**
+	 * The project files area of the project page: the sidebar that holds the files tab and the tree
+	 * under it. Two steps point at it — the in-project tour's first ("项目文件，一目了然") and the
+	 * second of the tour a delivered file opens, which says where the result was filed.
+	 *
+	 * It is the region rather than anything inside it because the region is the one thing the page
+	 * always has: a file's own row is published only while that file is the open one, and an entry
+	 * behind a tab is only reachable once the user is on that tab. The page renders this sidebar
+	 * whatever the account's state, which is what makes a step pointing at it a step that always
+	 * has something to frame.
+	 */
+	ProjectSider: "project-sider",
 } as const
 
 export const HOME_ONBOARDING_REQUEST_EVENT = "magic-home-onboarding-request"
@@ -639,6 +649,46 @@ export function spendHomeOnboardingDeliverableIntro(userMagicId?: string) {
 	}
 }
 
+/**
+ * Where an account's copy of the one-shot "first AI work is done" flag lives.
+ *
+ * The congratulation is offered the first time a topic finishes while the account is on the project
+ * page, and — like the delivered-file tour beside it — it is offered **once per account per
+ * browser**, which comes from the two halves of the key. The account is in it because the
+ * congratulations belong to whoever earned them; storage rather than the runtime state beside it,
+ * because "the first time" is a moment in a window rather than a property of the account, and the
+ * same account finishing its next task on another machine is having that moment for the first time
+ * there too.
+ *
+ * Being per browser is also why this is not the backend's task list: the list says whether the
+ * account still counts as new, which is the *other* half of the trigger's precondition, and it is
+ * asked separately in `hasHomeOnboardingTasks`.
+ */
+const FIRST_WORK_CONGRATS_SPENT_STORAGE_PREFIX = "magiHomeOnboardingFirstWorkCongratsSpent:"
+
+const getFirstWorkCongratsSpentStorageKey = (userMagicId?: string) =>
+	`${FIRST_WORK_CONGRATS_SPENT_STORAGE_PREFIX}${getUserKey(userMagicId)}`
+
+/** Whether this browser has already congratulated this account on its first AI work. */
+export function isHomeOnboardingFirstWorkCongratsSpent(userMagicId?: string) {
+	try {
+		return window.localStorage.getItem(getFirstWorkCongratsSpentStorageKey(userMagicId)) === "1"
+	} catch {
+		// Storage can refuse to be read at all — Safari in private mode does. Nothing is remembered
+		// then, so the congratulation falls back to being offered once per load.
+		return false
+	}
+}
+
+/** The congratulation is behind us: shown — and closed, either way it can be left. */
+export function spendHomeOnboardingFirstWorkCongrats(userMagicId?: string) {
+	try {
+		window.localStorage.setItem(getFirstWorkCongratsSpentStorageKey(userMagicId), "1")
+	} catch {
+		// An unwritable store cannot remember the answer; the congratulation comes back next load.
+	}
+}
+
 export function getHomeOnboardingStatus(
 	userMagicId: string | undefined,
 	task: HomeOnboardingTaskId,
@@ -702,7 +752,7 @@ export const startHomeOnboarding = (
 
 /**
  * Opening the tour that frames a delivered file: the two steps of the `project-result` flow — the
- * attachment block that was just opened, and the copy of the file in the project files panel.
+ * attachment block that was just opened, and the project files area the file was filed into.
  *
  * A run of its own rather than a task's flow. Nothing named it, so the tour enters it as the
  * automatic run's task — `first-ai-work` — which is also the one whose page carries these anchors:

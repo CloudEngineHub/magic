@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from "react"
 import { SmoothTabs } from "@/components/shadcn-ui/smooth-tabs"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 import { ProjectSiderProps } from "./types"
 import { cn } from "@/utils/cn"
 
@@ -52,6 +53,13 @@ export default memo(function ProjectSider(props: ProjectSiderProps) {
 			<div
 				className={cn("relative flex flex-none flex-col border-border", className)}
 				style={width ? { width } : undefined}
+				/*
+				 * The new-user guide points at this panel, so the anchor is published on either
+				 * shape this component can take. Without it a sidebar that happens to have a single
+				 * tab would be a page with no project files area as far as the guide can tell — see
+				 * `HomeOnboardingAnchor.ProjectSider`.
+				 */
+				data-guide-anchor={HomeOnboardingAnchor.ProjectSider}
 			>
 				{visibleItems[0].content}
 			</div>
@@ -62,7 +70,7 @@ export default memo(function ProjectSider(props: ProjectSiderProps) {
 		<div
 			className={cn("relative flex flex-none flex-col border-border", className)}
 			style={width ? { width } : undefined}
-			data-guide-anchor="project-sider"
+			data-guide-anchor={HomeOnboardingAnchor.ProjectSider}
 		>
 			<div className="flex h-full flex-col gap-1">
 				{/* Header - 横向 Tabs */}
