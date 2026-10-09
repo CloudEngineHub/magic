@@ -370,6 +370,7 @@
 	},
 	"menu": {
 		"addFrame": "添加画框",
+		"addNode": "添加节点",
 		"addToCurrentConversation": "添加至当前对话",
 		"addToNewConversation": "添加至新话题",
 		"batchDownload": "批量下载",
@@ -377,6 +378,7 @@
 		"copyLoadingDescription": "正在准备媒体文件，请稍候...",
 		"copyPng": "复制为 PNG",
 		"copySuccess": "复制成功",
+		"createAudioGenerator": "音频生成",
 		"createImageGenerator": "图片生成",
 		"createText": "文本",
 		"createVideoGenerator": "视频生成",
@@ -400,11 +402,13 @@
 		"moveUp": "上移一层",
 		"paste": "粘贴",
 		"pasteUseShortcutHint": "系统文件请使用 Ctrl/Cmd+V 粘贴",
+		"redo": "重做",
 		"removeFrame": "取消画框",
 		"rename": "重命名",
 		"restoreDraft": "取消废稿标记",
 		"restoreDraftDescription": "恢复正常显示",
 		"show": "显示",
+		"undo": "撤销",
 		"unlock": "解锁"
 	},
 	"messageHistory": {

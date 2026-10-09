@@ -40,6 +40,7 @@ import {
 } from "../../runtime/shared/ids"
 import { AUDIO_CONFIG } from "../../runtime/elements/audio/AudioElement.config"
 import { resolveNearestFreeMediaPlacement } from "../../runtime/shared/placement/placementEngine"
+import { useToolCreationDrag } from "./useToolCreationDrag"
 
 /**
  * 将 BaseTool 转换为 ToolType
@@ -76,6 +77,8 @@ export default function Tools() {
 	const imageUploadInputRef = useRef<HTMLInputElement>(null)
 	const videoUploadInputRef = useRef<HTMLInputElement>(null)
 	const audioUploadInputRef = useRef<HTMLInputElement>(null)
+	const uploadPositionRef = useRef<{ x: number; y: number } | null>(null)
+	const { onPointerDown, dragPreview } = useToolCreationDrag()
 
 	// 监听 Canvas 的工具状态变化
 	useCanvasEvent("tool:change", ({ data }) => {
@@ -133,6 +136,9 @@ export default function Tools() {
 
 	const handleUploadFiles = useCallback(
 		async (files: File[], type: "image" | "video" | "audio") => {
+			// 文件选择完成后保留菜单发起时的落点，后续菜单关闭不影响上传。
+			const requestedPosition = uploadPositionRef.current
+			uploadPositionRef.current = null
 			if (!canvas || !canvas.permissionManager.can("document.write") || files.length === 0)
 				return
 
@@ -145,7 +151,8 @@ export default function Tools() {
 			})
 			if (validFiles.length === 0) return
 
-			const anchorPosition = await getUploadAnchorPosition(validFiles[0])
+			const anchorPosition =
+				requestedPosition ?? (await getUploadAnchorPosition(validFiles[0]))
 			if (!anchorPosition) return
 
 			await canvas.clipboardManager.pasteMultipleCanvasFiles(validFiles, anchorPosition)
@@ -181,7 +188,7 @@ export default function Tools() {
 	)
 
 	const openLocalUploadPicker = useCallback(
-		(type: "image" | "video" | "audio") => {
+		(type: "image" | "video" | "audio", position?: { x: number; y: number }) => {
 			if (!canvas || !canvas.permissionManager.can("document.write")) return
 
 			const input =
@@ -192,10 +199,19 @@ export default function Tools() {
 						: audioUploadInputRef.current
 			if (!input) return
 
+			uploadPositionRef.current = position ?? null
 			input.value = ""
 			input.click()
 		},
 		[canvas],
+	)
+
+	useCanvasEvent(
+		"ui:upload:request",
+		({ data }) => {
+			openLocalUploadPicker(data.mediaType, data.position)
+		},
+		[openLocalUploadPicker],
 	)
 
 	const tools: Array<ToolOptionItem | typeof Divider> = [
@@ -356,6 +372,9 @@ export default function Tools() {
 							<IconButton
 								className={styles.toolItem}
 								selected={item.value === activeTool}
+								onPointerDown={(event) =>
+									onPointerDown(event, item.value, item.label)
+								}
 								onClick={() => {
 									if (item.value) setActiveTool(item.value)
 								}}
@@ -392,6 +411,7 @@ export default function Tools() {
 					<PluginTool />
 				</>
 			)}
+			{dragPreview}
 		</div>
 	)
 }

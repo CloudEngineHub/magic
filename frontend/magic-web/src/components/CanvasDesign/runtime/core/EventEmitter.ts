@@ -322,6 +322,11 @@ export interface CanvasEventMap {
 		current: CanvasDeviceInfo
 	}
 	"canvas:contextmenu": { x: number; y: number; canvasX: number; canvasY: number } // 画布空白区域右键菜单事件
+	// 菜单只请求打开已有文件选择器；工具栏持有上传流程与创建位置快照。
+	"ui:upload:request": {
+		mediaType: "image" | "video" | "audio"
+		position: { x: number; y: number }
+	}
 	"document:loaded": void // 文档加载完成事件
 	"document:restored": void // 文档恢复事件（撤销/恢复时触发，用于更新 UI 状态）
 
