@@ -12,9 +12,11 @@ from app.infrastructure.sdk.magic_service.api.project_api import ProjectApi
 from app.infrastructure.sdk.magic_service.api.workspace_api import WorkspaceApi
 from app.infrastructure.sdk.magic_service.kernel.magic_service_parameter import MagicServiceAuthConfig
 from app.tools.super_magic.context import ProductContextError, current_product_context
+from app.tools.super_magic.display import ProductTool, success
 from app.tools.super_magic.files import _batch_present, _batch_result
 from app.tools.super_magic.message_formatter import format_topic_messages
-from app.tools.super_magic.models import resource_id
+from app.tools.super_magic.models import FILE, PROJECT, projected, resource_id
+from app.tools.super_magic.projects import ListTopics, ListTopicsParams
 from app.tools.super_magic.tasks import _submit
 
 
@@ -115,6 +117,86 @@ async def test_project_list_filters_by_workspace(monkeypatch, auth, scope, metho
     assert captured["options"][parameter_key]["workspace_id"] == "987654321012345678"
 
 
+@pytest.mark.asyncio
+async def test_owned_projects_forward_sort_without_changing_participated_order(monkeypatch, auth):
+    captured = []
+
+    async def request(self, parameter, method, path):
+        captured.append((method, path, parameter.to_options(method)))
+        return {"list": []}
+
+    monkeypatch.setattr(ProjectApi, "request_by_parameter_async", request)
+    api = object.__new__(ProjectApi)
+    await api.list_async(auth, scope="owned", order_by="updated_at", sort="asc")
+    await api.list_async(auth, scope="participated")
+    assert captured[0][2]["params"]["order_by"] == "updated_at"
+    assert captured[0][2]["params"]["sort"] == "asc"
+    assert "order_by" not in captured[1][2]["json"]
+    assert "sort" not in captured[1][2]["json"]
+
+
+@pytest.mark.asyncio
+async def test_topic_name_search_uses_existing_sidebar_route(monkeypatch, auth):
+    captured = {}
+
+    async def request(self, parameter, method, path):
+        captured.update(method=method, path=path, options=parameter.to_options(method))
+        return {"list": [], "total": 0}
+
+    monkeypatch.setattr(ProjectApi, "request_by_parameter_async", request)
+    await object.__new__(ProjectApi).search_topics_async(auth, "123", keyword="pricing", page=2, page_size=25)
+    assert captured["method"] == "GET"
+    assert captured["path"] == "/api/v1/super-agent/projects/123/sidebar-topics"
+    assert captured["options"]["params"] == {"q": "pricing", "page": 2, "page_size": 25}
+
+
+@pytest.mark.asyncio
+async def test_list_topics_switches_only_when_search_or_recent_order_is_requested(monkeypatch):
+    calls = []
+
+    async def list_topics(_auth, _project_id, **kwargs):
+        calls.append(("ordinary", kwargs))
+        return {"list": [], "total": 0}
+
+    async def search_topics(_auth, _project_id, **kwargs):
+        calls.append(("sidebar", kwargs))
+        return {"list": [], "total": 999}
+
+    ctx = SimpleNamespace(auth=object(), sdk=SimpleNamespace(project=SimpleNamespace(
+        list_topics_async=list_topics, search_topics_async=search_topics,
+    )))
+
+    async def run_product(self, _tool_context, action, operation, **kwargs):
+        return success(action, await operation(ctx))
+
+    monkeypatch.setattr(ProductTool, "run_product", run_product)
+    tool = ListTopics()
+    ordinary = await tool.execute(None, ListTopicsParams(project_id="123"))
+    recent = await tool.execute(None, ListTopicsParams(project_id="123", order_by="updated_at", keyword="pricing"))
+    assert calls[0][0] == "ordinary"
+    assert calls[1] == ("sidebar", {"keyword": "pricing", "page": 1, "page_size": 20})
+    assert ordinary.data["has_more"] is False
+    assert recent.data["coverage_limit"] == 999
+    assert "more may exist" in recent.content
+
+
+def test_discovery_keeps_times_and_file_path_without_internal_fields():
+    project = projected({"id": 123, "project_name": "Pricing", "last_active_at": "2026-10-08 09:30:00", "workspace_name": "Research", "work_dir": "/private/work", "user_id": "secret"}, PROJECT)
+    file = projected({"id": 456, "file_name": "plan.pdf", "relative_file_path": "notes/plan.pdf", "file_key": "secret"}, FILE)
+    assert project["last_active_at"] == "2026-10-08 09:30:00"
+    assert file["relative_file_path"] == "notes/plan.pdf"
+    assert "work_dir" not in project and "user_id" not in project and "file_key" not in file
+    content = success("Project search", {"items": [project], "page": 1, "total": 1, "has_more": False}).content
+    assert "last active: 2026-10-08 09:30:00 UTC+08:00" in content
+    assert "workspace: Research" in content
+    assert "secret" not in content
+
+
+def test_capped_topic_search_does_not_claim_complete_coverage():
+    content = success("Topic search", {"items": [], "page": 50, "total": 999, "has_more": False, "coverage_limit": 999}).content
+    assert "more may exist" in content
+
+
 def test_message_cursor_survives_filtered_page():
     raw = {
         "list": [{"id": 123, "role": "assistant", "content_type": "reasoning", "content": "private"}],
@@ -211,3 +293,21 @@ async def test_custom_agent_mode_is_preserved(auth):
     receipt = await _submit(ctx, "10", "20", "Continue")
     assert receipt["task_id"] == "123"
     assert sent[0]["agent_mode"] == "SMA-987"
+
+
+@pytest.mark.asyncio
+async def test_forced_submission_requests_interruption_and_keeps_task_id(auth):
+    sent = []
+
+    async def get_topic(_auth, topic_id):
+        return {"project_id": "10", "topic_mode": "general"}
+
+    async def create_task(_auth, body):
+        sent.append(body)
+        return {"task_id": "123"}
+
+    ctx = SimpleNamespace(auth=auth, sdk=SimpleNamespace(topic=SimpleNamespace(get_async=get_topic), task=SimpleNamespace(create_async=create_task)))
+    receipt = await _submit(ctx, "10", "20", "Start now", force_interrupt=True)
+    assert sent[0]["force_interrupt"] is True
+    assert receipt["task_id"] == "123"
+    assert receipt["force_interrupt"] is True

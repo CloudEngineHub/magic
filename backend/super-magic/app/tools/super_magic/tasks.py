@@ -16,6 +16,7 @@ class StartTopicTaskParams(ProductParams):
     project_id: str = Field(..., description="Target project's exact ID.")
     topic_id: str = Field(..., description="Target topic's exact ID.")
     content: str = Field(..., min_length=1, max_length=32000, description="Plain-text instruction for the target topic.")
+    force_interrupt: bool = Field(False, description="If true, suspend the target topic's active task and start this task immediately. If false, an active topic queues the message instead.")
 
 
 def _mode(topic: dict) -> str:
@@ -30,7 +31,7 @@ def _mode(topic: dict) -> str:
     return topic_mode
 
 
-async def _submit(ctx, project_id: str, topic_id: str, content: str) -> dict:
+async def _submit(ctx, project_id: str, topic_id: str, content: str, force_interrupt: bool = False) -> dict:
     topic = await ctx.sdk.topic.get_async(ctx.auth, topic_id)
     if str(topic.get("project_id")) != project_id:
         raise ValueError("The target topic does not belong to the given project")
@@ -39,12 +40,12 @@ async def _submit(ctx, project_id: str, topic_id: str, content: str) -> dict:
         "topic_id": topic_id,
         "content": content,
         "agent_mode": _mode(topic),
-        "force_interrupt": False,
+        "force_interrupt": force_interrupt,
     })
     task_id = raw.get("task_id")
     queue_id = raw.get("queue_id")
     if task_id:
-        return {"kind": "task", "topic_id": topic_id, "task_id": str(task_id), "status": "accepted"}
+        return {"kind": "task", "topic_id": topic_id, "task_id": str(task_id), "status": "accepted", "force_interrupt": force_interrupt}
     if queue_id:
         return {"kind": "queue", "topic_id": topic_id, "queue_id": str(queue_id), "status": "queued"}
     raise ValueError("The service returned neither a task ID nor a queue ID")
@@ -53,12 +54,13 @@ async def _submit(ctx, project_id: str, topic_id: str, content: str) -> dict:
 def _receipt(data: dict) -> ToolResult:
     if data["kind"] == "queue":
         return ToolResult(content=f"Message queued in topic {data['topic_id']} (queue_id: {data['queue_id']}). Delivery is not task completion.", data=data)
-    return ToolResult(content=f"Task accepted in topic {data['topic_id']} (task_id: {data['task_id']}). Check its status before reporting completion.", data=data)
+    interruption = " Interruption of any active task was requested." if data.get("force_interrupt") else ""
+    return ToolResult(content=f"Task accepted in topic {data['topic_id']} (task_id: {data['task_id']}).{interruption} Check its status before reporting completion.", data=data)
 
 
 @tool(name="start_topic_task", code_mode_only=True)
 class StartTopicTask(ProductTool[StartTopicTaskParams]):
-    """Start a non-interrupting task in a target topic using that topic's Agent mode."""
+    """Start a task in a target topic using its Agent mode and the requested interruption behavior."""
     name = "start_topic_task"
 
     async def execute(self, tool_context: ToolContext, params: StartTopicTaskParams) -> ToolResult:
@@ -66,7 +68,7 @@ class StartTopicTask(ProductTool[StartTopicTaskParams]):
         topic_id = resource_id(params.topic_id, "topic_id")
         return await self.run_product(
             tool_context, "Task submission",
-            lambda ctx: _submit(ctx, project_id, topic_id, params.content),
+            lambda ctx: _submit(ctx, project_id, topic_id, params.content, params.force_interrupt),
             write=True, format_result=_receipt,
         )
 

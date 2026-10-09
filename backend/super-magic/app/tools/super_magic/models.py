@@ -37,9 +37,9 @@ def projected(value: Any, fields: tuple[str, ...]) -> dict[str, Any]:
 
 
 WORKSPACE = ("id", "name", "workspace_type", "is_archived", "is_pinned", "project_count", "updated_at")
-PROJECT = ("id", "project_name", "project_description", "workspace_id", "user_role", "is_pinned", "created_at", "updated_at")
+PROJECT = ("id", "project_name", "project_description", "workspace_id", "workspace_name", "topic_count", "user_role", "is_pinned", "created_at", "updated_at", "last_active_at")
 TOPIC = ("id", "topic_name", "project_id", "workspace_id", "topic_mode", "agent_code", "task_status", "updated_at")
-FILE = ("id", "file_id", "file_name", "name", "project_id", "parent_id", "is_directory", "file_type", "file_size", "created_at", "updated_at")
+FILE = ("id", "file_id", "file_name", "name", "project_id", "parent_id", "relative_file_path", "is_directory", "file_type", "file_size", "created_at", "updated_at")
 
 
 def projected_page(raw: Any, fields: tuple[str, ...]) -> dict[str, Any]:

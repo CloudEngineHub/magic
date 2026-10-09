@@ -6,7 +6,9 @@ import asyncio
 import html
 import re
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from typing import Any, TypeVar
+from zoneinfo import ZoneInfo
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
@@ -49,6 +51,12 @@ def _state(data: dict[str, Any]) -> str:
 
 def _time(value: object) -> str:
     try:
+        # Magic Service serializes database times without an offset in its
+        # Asia/Shanghai process timezone. Numeric timestamps remain UTC instants.
+        if isinstance(value, str) and "-" in value:
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                return format_tool_time(parsed.replace(tzinfo=ZoneInfo("Asia/Shanghai")), "Asia/Shanghai")
         return format_tool_time(value)
     except (ValueError, OverflowError, OSError):
         return "-"
@@ -56,8 +64,8 @@ def _time(value: object) -> str:
 
 def _resource_lines(data: dict[str, Any]) -> list[str]:
     lines = []
-    for key in ("name", "project_name", "topic_name", "file_name", "project_description", "relative_file_path",
-                "project_count", "file_size", "version", "count", "current", "total"):
+    for key in ("name", "project_name", "topic_name", "file_name", "project_description", "workspace_name",
+                "relative_file_path", "project_count", "topic_count", "file_size", "version", "count", "current", "total"):
         if data.get(key) is not None:
             value = _visible_text(data[key]).replace("\n", " ")
             if value:
@@ -68,7 +76,7 @@ def _resource_lines(data: dict[str, Any]) -> list[str]:
     for key in ("archived", "is_archived", "is_directory"):
         if isinstance(data.get(key), (bool, int)):
             lines.append(f"- {_label(f'field.{key}')}: {_label('yes' if data[key] else 'no')}")
-    for key in ("created_at", "updated_at", "expires_at"):
+    for key in ("created_at", "updated_at", "last_active_at", "expires_at"):
         if data.get(key) is not None:
             lines.append(f"- {_label(f'field.{key}')}: {_time(data[key])}")
     return lines
@@ -164,11 +172,25 @@ def success(action: str, data: dict[str, Any]) -> ToolResult:
         if more is not None:
             suffix += " More records are available." if more else " No further records are reported."
         lines = [f"{action}: {len(items)} item(s).{suffix}"]
+        if data.get("total") is not None:
+            lines[0] += f" Reported total: {data['total']}."
+        if data.get("coverage_limit"):
+            lines[0] += f" The service caps this search at {data['coverage_limit']} records; more may exist."
         for item in items:
             name = next((item[key] for key in ("name", "project_name", "topic_name", "file_name") if item.get(key)), "Unnamed")
             identifier = item.get("id", item.get("file_id", item.get("queue_id", "unknown")))
             state_text = f", status: {item['status']}" if item.get("status") is not None else ""
-            lines.append(f"- {name} (id: {identifier}{state_text})")
+            details = [f"id: {identifier}{state_text}"]
+            if item.get("workspace_name"):
+                details.append(f"workspace: {item['workspace_name']}")
+            if item.get("relative_file_path"):
+                details.append(f"project file path: {item['relative_file_path']}")
+            for key, label in (("last_active_at", "last active"), ("updated_at", "updated"), ("created_at", "created")):
+                if item.get(key):
+                    timestamp = _time(item[key])
+                    if timestamp != "-":
+                        details.append(f"{label}: {timestamp}")
+            lines.append(f"- {name} ({'; '.join(details)})")
         return ToolResult(content="\n".join(lines), data=data)
     name = next((data[key] for key in ("name", "project_name", "topic_name", "file_name") if data.get(key)), None)
     identifier = data.get("id", data.get("project_id", data.get("topic_id")))

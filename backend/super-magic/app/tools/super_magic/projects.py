@@ -20,6 +20,8 @@ class ListProjectsParams(ProductParams):
     workspace_id: str | None = Field(None, description="Exact workspace ID. Limit results to projects in this workspace.")
     page: int = Field(1, ge=1, description="Page number.")
     page_size: int = Field(20, ge=1, le=100, description="Projects per page.")
+    order_by: Literal["id", "created_at", "updated_at"] = Field("created_at", description="Owned projects only: order by ID, creation time, or project update time. Participated projects use last_active_at descending.")
+    sort: Literal["asc", "desc"] = Field("desc", description="Owned projects only: ascending or descending order.")
 
 
 @tool(name="list_projects", code_mode_only=True)
@@ -28,10 +30,16 @@ class ListProjects(ProductTool[ListProjectsParams]):
     name = "list_projects"
 
     async def execute(self, tool_context: ToolContext, params: ListProjectsParams) -> ToolResult:
+        if params.scope == "participated" and (params.order_by != "created_at" or params.sort != "desc"):
+            return ToolResult.error("Participated projects use last_active_at descending; order_by and sort apply only to owned projects.")
         workspace_id = resource_id(params.workspace_id, "workspace_id") if params.workspace_id is not None else None
         async def operation(ctx):
-            raw = await ctx.sdk.project.list_async(ctx.auth, keyword=params.keyword, scope=params.scope, workspace_id=workspace_id, page=params.page, page_size=params.page_size)
-            return projected_page(raw, PROJECT)
+            raw = await ctx.sdk.project.list_async(ctx.auth, keyword=params.keyword, scope=params.scope, workspace_id=workspace_id, page=params.page, page_size=params.page_size, order_by=params.order_by, sort=params.sort)
+            result = projected_page(raw, PROJECT)
+            result.update(page=params.page, page_size=params.page_size)
+            if isinstance(result.get("total"), int):
+                result["has_more"] = params.page * params.page_size < result["total"]
+            return result
         return await self.run_product(tool_context, "Project search", operation)
 
 
@@ -52,6 +60,8 @@ class GetProject(ProductTool[GetProjectParams]):
 
 
 class ListTopicsParams(GetProjectParams):
+    keyword: str = Field("", max_length=255, description="Optional topic name filter within this project.")
+    order_by: Literal["created_at", "updated_at"] = Field("created_at", description="Default creation order, or recently updated topics. Name search uses recently updated order.")
     page: int = Field(1, ge=1, description="Page number.")
     page_size: int = Field(20, ge=1, le=100, description="Topics per page.")
 
@@ -64,8 +74,18 @@ class ListTopics(ProductTool[ListTopicsParams]):
     async def execute(self, tool_context: ToolContext, params: ListTopicsParams) -> ToolResult:
         project_id = resource_id(params.project_id, "project_id")
         async def operation(ctx):
-            raw = await ctx.sdk.project.list_topics_async(ctx.auth, project_id, page=params.page, page_size=params.page_size)
-            return projected_page(raw, TOPIC)
+            searching = bool(params.keyword) or params.order_by == "updated_at"
+            if searching:
+                raw = await ctx.sdk.project.search_topics_async(ctx.auth, project_id, keyword=params.keyword, page=params.page, page_size=params.page_size)
+            else:
+                raw = await ctx.sdk.project.list_topics_async(ctx.auth, project_id, page=params.page, page_size=params.page_size)
+            result = projected_page(raw, TOPIC)
+            result.update(page=params.page, page_size=params.page_size)
+            if isinstance(result.get("total"), int):
+                result["has_more"] = params.page * params.page_size < result["total"]
+                if searching and result["total"] >= 999:
+                    result["coverage_limit"] = 999
+            return result
         return await self.run_product(tool_context, "Topic search", operation)
 
 

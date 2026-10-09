@@ -1,5 +1,7 @@
 # Read topic messages
 
+`read_topic_messages` reads a topic owned by the current user, including a topic outside the current project. The current backend returns an empty message page for a non-owner; project collaboration alone does not establish permission to read that person's private topic history. Treat an unexpected empty page as uncertain access or content, not proof that the topic has never had messages.
+
 ```python
 from sdk.tool import tool
 

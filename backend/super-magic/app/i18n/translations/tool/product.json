@@ -131,6 +131,10 @@
         "zh_CN": "项目说明",
         "en_US": "Project description"
     },
+    "field.workspace_name": {
+        "zh_CN": "所属工作区",
+        "en_US": "Workspace"
+    },
     "field.relative_file_path": {
         "zh_CN": "文件位置",
         "en_US": "File location"
@@ -138,6 +142,10 @@
     "field.project_count": {
         "zh_CN": "项目数量",
         "en_US": "Project count"
+    },
+    "field.topic_count": {
+        "zh_CN": "话题数量",
+        "en_US": "Topic count"
     },
     "field.file_size": {
         "zh_CN": "文件大小（字节）",
@@ -182,6 +190,10 @@
     "field.updated_at": {
         "zh_CN": "更新时间",
         "en_US": "Updated"
+    },
+    "field.last_active_at": {
+        "zh_CN": "最近活跃时间",
+        "en_US": "Last active"
     },
     "field.expires_at": {
         "zh_CN": "可用截止时间",

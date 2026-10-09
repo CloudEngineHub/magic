@@ -28,7 +28,7 @@ async def test_product_skill_and_references_load():
     skill_dir = AGENTS / "skills" / "super-magic"
     skill = await SkillLoader().load_from_file(skill_dir / "SKILL.md")
     assert skill.name == "super-magic"
-    assert "read_topic_messages" in skill.content
+    assert "references/messages.md" in skill.content
     assert all((skill_dir / "references" / f"{name}.md").is_file() for name in (
-        "workspaces", "projects", "topics", "messages", "files", "tasks",
+        "workspaces", "projects", "topics", "messages", "files", "tasks", "data-schema",
     ))
