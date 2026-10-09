@@ -53,7 +53,9 @@ export function requiresNativeLoadWait(html: string): boolean {
 		/<(?:canvas|video|audio|iframe|object|embed)\b/i.test(html) ||
 		/<(?:svg:)?(?:image|use)\b[^>]*(?:\bhref|\bxlink:href)\s*=/i.test(html) ||
 		/\bon[a-z][\w:-]*\s*=/i.test(html) ||
-		/\bdata-render-ready\s*=|@(?:font-face|import)\b|\burl\s*\(/i.test(html)
+		/\bdata-(?:render-ready|magic-export-ready)\s*=|@(?:font-face|import)\b|\burl\s*\(/i.test(
+			html,
+		)
 	)
 }
 
@@ -147,6 +149,12 @@ function decodeInlineScriptEntities(rawHtml: string): string {
 const EXPORT_PATCHES = `<script>
 (function(){
 var O=window.IntersectionObserver;
+var root=document.documentElement;
+if(root) root.setAttribute("data-magic-export-mode","pptx");
+window.__MAGIC_EXPORT_MODE__="pptx";
+document.addEventListener("DOMContentLoaded",function(){
+window.dispatchEvent(new Event("magic:export-start"));
+},{once:true});
 window.IntersectionObserver=function(cb,opts){
 this._cb=cb;this._els=[];
 };

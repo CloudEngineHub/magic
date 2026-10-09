@@ -5,6 +5,10 @@ import {
 	normalizeSandboxHtml,
 	requiresNativeLoadWait,
 } from "../src/sandbox/htmlRenderSandbox.helpers"
+import {
+	detectRenderReadinessCapabilities,
+	waitForPageRenderReadiness,
+} from "../src/sandbox/render-readiness"
 
 describe("export animation normalization", () => {
 	it("freezes animations at their final frame instead of leaving opacity at the initial value", () => {
@@ -12,11 +16,57 @@ describe("export animation normalization", () => {
 			"<html><head></head><body><div class='a'>visible</div></body></html>",
 		)
 
+		expect(normalized).toContain('setAttribute("data-magic-export-mode","pptx")')
+		expect(normalized).toContain('magic:export-start')
 		expect(normalized).not.toContain("animation:none")
 		expect(normalized).toContain("animation-play-state:paused!important")
 		expect(normalized).toContain("animation-delay:-999999s!important")
 		expect(normalized).toContain("animation-iteration-count:1!important")
 		expect(normalized).toContain("animation-fill-mode:both!important")
+	})
+})
+
+describe("page export readiness protocol", () => {
+	it("detects the explicit export-ready marker and setter", () => {
+		expect(
+			detectRenderReadinessCapabilities(`
+				<html data-magic-export-ready="pending">
+					<script>
+						document.documentElement.dataset.magicExportReady = "true"
+					</script>
+				</html>
+			`),
+		).toEqual({
+			echartsSourceHint: false,
+			expectsExplicitRenderReady: true,
+		})
+	})
+
+	it("waits for the page-owned export-ready marker", async () => {
+		document.documentElement.setAttribute("data-magic-export-ready", "pending")
+		const originalRequestAnimationFrame = window.requestAnimationFrame
+		window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+			callback(0)
+			return 0
+		}) as typeof window.requestAnimationFrame
+
+		try {
+			const readiness = waitForPageRenderReadiness({
+				iframeWindow: window,
+				iframeDocument: document,
+				echartsSourceHint: false,
+				expectsExplicitRenderReady: true,
+				explicitReadyTimeoutMs: 100,
+			})
+			window.setTimeout(() => {
+				document.documentElement.setAttribute("data-magic-export-ready", "true")
+			}, 0)
+
+			expect(await readiness).toEqual({ handledCanvas: false })
+		} finally {
+			document.documentElement.removeAttribute("data-magic-export-ready")
+			window.requestAnimationFrame = originalRequestAnimationFrame
+		}
 	})
 })
 
