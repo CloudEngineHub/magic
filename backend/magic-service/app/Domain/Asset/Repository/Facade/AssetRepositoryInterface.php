@@ -48,9 +48,6 @@ interface AssetRepositoryInterface
     /** @return array<string> */
     public function findOwnerUidsByIds(AssetDataIsolation $dataIsolation, array $assetIds): array;
 
-    /** @return array<string> */
-    public function findIdsByOwnerUid(AssetDataIsolation $dataIsolation, string $ownerUid): array;
-
     public function batchUpdateOwner(AssetDataIsolation $dataIsolation, array $assetIds, string $ownerUid): int;
 
     /**

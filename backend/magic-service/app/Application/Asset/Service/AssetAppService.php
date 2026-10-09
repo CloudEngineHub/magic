@@ -573,12 +573,6 @@ class AssetAppService extends AbstractAssetAppService
         $query->setScope($scope);
         $sharedAssetIds = $scope->includesSharedAssets() ? $this->sharedAssetIds($dataIsolation) : [];
         $query->setSharedAssetIds($sharedAssetIds);
-        if ($scope === AssetScope::ALL) {
-            $query->setAccessibleAssetIds(array_merge(
-                $sharedAssetIds,
-                $this->assetDomainService->findIdsByOwnerUid($dataIsolation, $dataIsolation->getCurrentUserId()),
-            ));
-        }
         $query->setAssetKind($requestDTO->getAssetKind());
         $query->setParentId($requestDTO->getParentId());
         $query->setAssetBusinessType($requestDTO->getAssetBusinessType());

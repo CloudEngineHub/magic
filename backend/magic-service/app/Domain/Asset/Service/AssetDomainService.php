@@ -157,12 +157,6 @@ class AssetDomainService
     }
 
     /** @return array<string> */
-    public function findIdsByOwnerUid(AssetDataIsolation $dataIsolation, string $ownerUid): array
-    {
-        return $this->assets->findIdsByOwnerUid($dataIsolation, $ownerUid);
-    }
-
-    /** @return array<string> */
     public function findOwnerUidsByIds(AssetDataIsolation $dataIsolation, array $assetIds): array
     {
         return $this->assets->findOwnerUidsByIds($dataIsolation, $assetIds);

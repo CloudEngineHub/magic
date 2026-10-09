@@ -50,8 +50,6 @@ class AssetQuery
      */
     private array $sharedAssetIds = [];
 
-    /** @var array<string> */
-    private array $accessibleAssetIds = [];
 
     public function getKeyword(): ?string
     {
@@ -182,15 +180,4 @@ class AssetQuery
         $this->sharedAssetIds = array_values($sharedAssetIds);
     }
 
-    /** @return array<string> */
-    public function getAccessibleAssetIds(): array
-    {
-        return $this->accessibleAssetIds;
-    }
-
-    /** @param array<string> $accessibleAssetIds */
-    public function setAccessibleAssetIds(array $accessibleAssetIds): void
-    {
-        $this->accessibleAssetIds = array_values(array_unique(array_map('strval', $accessibleAssetIds)));
-    }
 }

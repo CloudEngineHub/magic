@@ -171,16 +171,6 @@ class AssetRepository implements AssetRepositoryInterface
             ->all();
     }
 
-    public function findIdsByOwnerUid(AssetDataIsolation $dataIsolation, string $ownerUid): array
-    {
-        return $this->assetModel::query()
-            ->whereIn('organization_code', $dataIsolation->getOrganizationCodes())
-            ->where('owner_uid', $ownerUid)
-            ->pluck('id')
-            ->map(static fn ($id): string => (string) $id)
-            ->all();
-    }
-
     public function batchUpdateOwner(AssetDataIsolation $dataIsolation, array $assetIds, string $ownerUid): int
     {
         if ($assetIds === []) {
@@ -272,7 +262,7 @@ class AssetRepository implements AssetRepositoryInterface
     /**
      * 按查询范围过滤：
      * - 个人：当前归属人是自己；
-     * - 团队分享：别人通过可见范围授权给我/我部门的（本人创建的在「个人」里，不重复出现）；
+     * - 团队分享：当前归属人自己的团队素材，或通过可见范围授权给我/我部门的素材；
      * - 公开：官方资产（user_id 为空）；
      * - 全部：个人与团队分享的并集（官方公开仍走 PUBLIC 入口，不混进「全部」）。
      *
@@ -295,13 +285,21 @@ class AssetRepository implements AssetRepositoryInterface
                     ->where('visibility_type', AssetVisibilityType::PERSONAL->value);
                 return;
             case AssetScope::TEAM:
-                // 归属人如果把素材授权给部门/其他用户，也应在“团队可见”中看到；
-                // 仅本人可见的素材不会进入 sharedAssetIds。
-                $builder->whereIn('id', $sharedAssetIds)
+                $builder->where(static function (Builder $scope) use ($currentUserId, $sharedAssetIds): void {
+                    $scope->where('owner_uid', $currentUserId);
+                    if ($sharedAssetIds !== []) {
+                        $scope->orWhereIn('id', $sharedAssetIds);
+                    }
+                })
                     ->where('visibility_type', AssetVisibilityType::TEAM->value);
                 return;
             case AssetScope::ALL:
-                $builder->whereIn('id', $query->getAccessibleAssetIds())
+                $builder->where(static function (Builder $scope) use ($currentUserId, $sharedAssetIds): void {
+                    $scope->where('owner_uid', $currentUserId);
+                    if ($sharedAssetIds !== []) {
+                        $scope->orWhereIn('id', $sharedAssetIds);
+                    }
+                })
                     ->whereIn('visibility_type', [
                         AssetVisibilityType::PERSONAL->value,
                         AssetVisibilityType::TEAM->value,
