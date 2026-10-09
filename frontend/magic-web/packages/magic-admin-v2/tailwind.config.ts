@@ -3,7 +3,12 @@ import animate from "tailwindcss-animate";
 
 const config: Config = {
   darkMode: ["class"],
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{ts,tsx}",
+    // Dialogs and filter panels reuse the host ScrollArea in standalone builds.
+    "../../src/components/shadcn-ui/scroll-area.tsx",
+  ],
   theme: {
     container: {
       center: true,
