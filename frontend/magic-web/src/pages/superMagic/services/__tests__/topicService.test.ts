@@ -785,13 +785,18 @@ describe("TopicService scene topic-created analytics", () => {
 			total: 1,
 		})
 
-		await topicService.createTopic({ projectId: "project-1", topicName: "New" })
+		await topicService.createTopic({
+			projectId: "project-1",
+			topicName: "New",
+			workspaceId: "workspace-1",
+			mode: TopicMode.General,
+		})
 
 		expect(trackMock).toHaveBeenCalledTimes(1)
 		expect(trackMock).toHaveBeenCalledWith("topic_create_attempted", {
 			projectId: "project-1",
-			workspaceId: undefined,
-			mode: undefined,
+			workspaceId: "workspace-1",
+			mode: TopicMode.General,
 		})
 	})
 

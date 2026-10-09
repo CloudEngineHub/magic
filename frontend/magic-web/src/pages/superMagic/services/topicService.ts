@@ -29,8 +29,11 @@ export interface UpdateTopicStatusParams {
 export interface CreateTopicParams {
 	projectId: string
 	topicName: string
+	/** Parent project context is known before the topic request and is required by analytics. */
+	workspaceId?: string | null
+	mode?: Topic["topic_mode"] | null
 	/** Topic whose frontend employee selection should be inherited after creation */
-	sourceTopic?: Pick<Topic, "project_id" | "topic_mode" | "agent_code"> | null
+	sourceTopic?: Pick<Topic, "project_id" | "workspace_id" | "topic_mode" | "agent_code"> | null
 }
 
 export interface MarkTopicReadProgressParams {
@@ -247,13 +250,15 @@ class TopicService {
 	async createTopic({
 		projectId,
 		topicName,
+		workspaceId,
+		mode,
 		sourceTopic,
 	}: CreateTopicParams): Promise<Topic | null> {
 		try {
 			analyticsService.report("topic_create_attempted", {
 				projectId,
-				workspaceId: sourceTopic?.workspace_id,
-				mode: sourceTopic?.topic_mode,
+				workspaceId: workspaceId ?? sourceTopic?.workspace_id,
+				mode: mode ?? sourceTopic?.topic_mode,
 			})
 			const newTopic = await SuperMagicApi.createTopic({
 				topic_name: topicName,

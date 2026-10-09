@@ -442,6 +442,8 @@ async function createTopicForContext({
 		return new TopicService({ store: localTopicStore }).createTopic({
 			projectId: selectedProject.id,
 			topicName: "",
+			workspaceId: selectedProject.workspace_id,
+			mode: selectedProject.project_mode,
 		})
 	}
 
