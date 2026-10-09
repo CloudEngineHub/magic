@@ -16,7 +16,7 @@ class UpdatePersonalAssetRequestDTO extends AbstractRequestDTO
 
     public ?string $description = null;
 
-    /** @var null|array{visibility_type?: string, user_ids?: array<string>, department_ids?: array<string>} */
+    /** @var null|array{user_ids?: array<string>, department_ids?: array<string>} */
     public ?array $visibility = null;
 
     /** @var null|array<int, int|string> */
@@ -32,7 +32,7 @@ class UpdatePersonalAssetRequestDTO extends AbstractRequestDTO
         return $this->description;
     }
 
-    /** @return null|array{visibility_type?: string, user_ids?: array<string>, department_ids?: array<string>} */
+    /** @return null|array{user_ids?: array<string>, department_ids?: array<string>} */
     public function getVisibility(): ?array
     {
         return $this->visibility;
@@ -40,7 +40,12 @@ class UpdatePersonalAssetRequestDTO extends AbstractRequestDTO
 
     public function getVisibilityType(): string
     {
-        return strtoupper((string) ($this->visibility['visibility_type'] ?? 'PERSONAL'));
+        return $this->hasVisibilityPrincipals() ? 'TEAM' : 'PERSONAL';
+    }
+
+    private function hasVisibilityPrincipals(): bool
+    {
+        return ($this->visibility['user_ids'] ?? []) !== [] || ($this->visibility['department_ids'] ?? []) !== [];
     }
 
     /** @return array{user_ids: array<string>, department_ids: array<string>} */
@@ -91,7 +96,6 @@ class UpdatePersonalAssetRequestDTO extends AbstractRequestDTO
             'visibility' => 'nullable|array',
             'visibility.user_ids' => 'nullable|array',
             'visibility.department_ids' => 'nullable|array',
-            'visibility.visibility_type' => 'nullable|in:PERSONAL,TEAM',
             'tag_ids' => 'nullable|array',
             'tags' => 'nullable|array',
         ];
