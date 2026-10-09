@@ -106,7 +106,9 @@ describe("home onboarding: the screen a run claims", () => {
 		})
 
 		expect(analyticsReport).toHaveBeenCalledTimes(1)
-		expect(analyticsReport).toHaveBeenCalledWith("onboarding_guide_popup_exposure")
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_guide_popup_exposure", {
+			participantType: undefined,
+		})
 	})
 
 	afterEach(() => {

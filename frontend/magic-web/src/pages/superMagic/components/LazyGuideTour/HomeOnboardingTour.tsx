@@ -25,6 +25,7 @@ import {
 	getHomeOnboardingEntryTask,
 	getHomeOnboardingFlow,
 	getHomeOnboardingPreparedStepIndex,
+	getHomeOnboardingRewardList,
 	getHomeOnboardingStepIndex,
 	homeOnboardingClaimFailureKey,
 	HOME_ONBOARDING_STEP_READY_EVENT,
@@ -380,6 +381,8 @@ interface HomeOnboardingTourProps {
 function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnboardingTourProps) {
 	const { t } = useTranslation("super/guideTour")
 	const navigate = useNavigate()
+	// The task-list response owns this classification; analytics only forwards that snapshot.
+	const participantType = getHomeOnboardingRewardList(userMagicId).participantType
 	// The MagiClaw task names the product, and its name is environment- and language-dependent.
 	const clawBrandValues = getClawBrandTranslationValues()
 	const homeSteps: OnboardingStep[] = [
@@ -1288,7 +1291,10 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 * entry.
 	 */
 	const startFirstAiWork = useCallback(() => {
-		analyticsService.report("onboarding_guide_popup_click", { action: "start_experience" })
+		analyticsService.report("onboarding_guide_popup_click", {
+			action: "start_experience",
+			participantType,
+		})
 		beginHomeOnboardingAnalyticsRun("first-ai-work", false)
 		// The dialog has been on screen, so the introduction is already spent; taking it up is what
 		// this button does, not what ends it.
@@ -1301,7 +1307,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		setHomeOnboardingFlow("featured-case")
 		setFlow("featured-case")
 		setStarted(true)
-	}, [])
+	}, [participantType])
 
 	const selectFeaturedCase = useCallback(
 		(caseId: number, prompt: string) => {
@@ -1569,7 +1575,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		if (!showingIntro && (!run || run.task !== entry.task)) return
 		if (showingIntro) {
 			if (consumeHomeOnboardingSurfaceExposure("welcome"))
-				analyticsService.report("onboarding_guide_popup_exposure")
+				analyticsService.report("onboarding_guide_popup_exposure", { participantType })
 			return
 		}
 		if (
@@ -1584,7 +1590,14 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			stepIndex: analyticsStepIndex,
 			isReplay: run.isReplay,
 		})
-	}, [runActive, showingIntro, exposureNodeVisible, entry.task, analyticsStepIndex])
+	}, [
+		runActive,
+		showingIntro,
+		exposureNodeVisible,
+		entry.task,
+		analyticsStepIndex,
+		participantType,
+	])
 
 	/**
 	 * Telling the benefits entry card that a run is up, and telling it again when the screen is
@@ -1637,6 +1650,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 						onClick={() => {
 							analyticsService.report("onboarding_guide_popup_click", {
 								action: "close",
+								participantType,
 							})
 							abort()
 						}}
@@ -1684,6 +1698,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 							onClick={() => {
 								analyticsService.report("onboarding_guide_popup_click", {
 									action: "skip_explore",
+									participantType,
 								})
 								abort()
 							}}

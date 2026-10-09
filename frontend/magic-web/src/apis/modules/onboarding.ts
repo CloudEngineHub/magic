@@ -30,6 +30,9 @@ export type OnboardingTaskStatusCode = "PENDING" | "COMPLETED" | "EXPIRED"
 /** Where the reward for a completed task stands. Only meaningful once `status` is `COMPLETED`. */
 export type OnboardingRewardStatus = "PENDING" | "GRANTED" | "FAILED"
 
+/** Audience segment assigned by the onboarding backend for operational analysis. */
+export type OnboardingParticipantType = "new_register" | "registered_unused"
+
 export interface OnboardingTask {
 	/** Backend task code. The mapping onto this client's guided flows lives beside the guide engine. */
 	code: string
@@ -46,6 +49,8 @@ export interface OnboardingTask {
 }
 
 export interface OnboardingTaskListData {
+	/** Backend-owned audience classification; the client forwards it without re-deriving it. */
+	participant_type: OnboardingParticipantType
 	/**
 	 * Display order, decided by backend configuration. A user whose progress predates a task keeps
 	 * the shorter list, so this is authoritative for both order and count.

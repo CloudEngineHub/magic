@@ -12,6 +12,7 @@ import {
 	readOnboardingErrorCode,
 	readOnboardingErrorMessage,
 } from "@/apis/modules/onboarding-codes"
+import type { OnboardingParticipantType } from "@/apis/modules/onboarding"
 import {
 	HOME_ONBOARDING_TASK_CODE,
 	toHomeOnboardingReward,
@@ -863,6 +864,8 @@ export type HomeOnboardingRewardListStatus = "idle" | "loading" | "ready" | "uns
 export interface HomeOnboardingRewardList {
 	status: HomeOnboardingRewardListStatus
 	rewards: HomeOnboardingReward[]
+	/** Supplied with the task list and reused by guide analytics; never inferred on the client. */
+	participantType?: OnboardingParticipantType
 }
 
 /** Stable identity while nothing has been fetched, so a render never sees a brand-new object. */
@@ -985,8 +988,13 @@ export function refreshHomeOnboardingRewardList(userMagicId?: string): Promise<v
 }
 
 async function loadHomeOnboardingRewardList(userMagicId: string, key: string) {
-	const known = rewardListByUser.get(key)?.rewards ?? []
-	writeHomeOnboardingRewardList(key, { status: "loading", rewards: known })
+	const knownList = rewardListByUser.get(key)
+	const known = knownList?.rewards ?? []
+	writeHomeOnboardingRewardList(key, {
+		status: "loading",
+		rewards: known,
+		participantType: knownList?.participantType,
+	})
 
 	try {
 		const { getOnboardingTasks } = await import("@/apis/modules/onboarding")
@@ -1003,7 +1011,11 @@ async function loadHomeOnboardingRewardList(userMagicId: string, key: string) {
 				onboardingStatusByUser.set(getStatusKey(userMagicId, reward.taskId), "completed")
 			}
 		}
-		writeHomeOnboardingRewardList(key, { status: "ready", rewards })
+		writeHomeOnboardingRewardList(key, {
+			status: "ready",
+			rewards,
+			participantType: data.participant_type,
+		})
 	} catch (error) {
 		const code = readOnboardingErrorCode(error)
 		if (isOnboardingUnsupportedCode(code)) {
@@ -1012,7 +1024,11 @@ async function loadHomeOnboardingRewardList(userMagicId: string, key: string) {
 		}
 		// Keep whatever rows were already on screen and let the next mount try again. Nothing is
 		// marked done here: an unanswered list must not turn into a fabricated progress.
-		writeHomeOnboardingRewardList(key, { status: "failed", rewards: known })
+		writeHomeOnboardingRewardList(key, {
+			status: "failed",
+			rewards: known,
+			participantType: knownList?.participantType,
+		})
 	} finally {
 		rewardListRequests.delete(key)
 	}
@@ -1033,6 +1049,7 @@ function applyHomeOnboardingReward(
 
 	const grantedAt = new Date().toISOString()
 	writeHomeOnboardingRewardList(key, {
+		...list,
 		status: "ready",
 		rewards: list.rewards.map((reward) =>
 			reward.taskId === task

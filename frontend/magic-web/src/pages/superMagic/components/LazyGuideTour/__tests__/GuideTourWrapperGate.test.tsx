@@ -297,7 +297,10 @@ describe("the wrapper's gate on the automatic run", () => {
 
 	it("still opens on a list that leaves both home tasks unfinished", async () => {
 		const { onboarding } = await mountWrapper(() => {
-			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "PENDING")] })
+			getOnboardingTasks.mockResolvedValue({
+				participant_type: "new_register",
+				tasks: [task("first_ai_work", "PENDING")],
+			})
 		})
 
 		// The other half of the rule: the gate is about the deployment's answer, not about whether
@@ -305,6 +308,9 @@ describe("the wrapper's gate on the automatic run", () => {
 		// has it coming.
 		expect(await screen.findByRole("dialog", { name: INTRO }, { timeout: 15000 })).toBeTruthy()
 		expect(onboarding.getHomeOnboardingRewardList(MAGIC_ID).status).toBe("ready")
+		expect(onboarding.getHomeOnboardingRewardList(MAGIC_ID).participantType).toBe(
+			"new_register",
+		)
 	})
 
 	it("stays off on a list that reports the home tasks as already done", async () => {
