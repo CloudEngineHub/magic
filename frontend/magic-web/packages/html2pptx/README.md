@@ -115,7 +115,7 @@ valid snapshot):
 ```html
 <html data-magic-export-ready="pending">
   <script>
-    document.addEventListener("magic:export-start", async () => {
+    window.addEventListener("magic:export-start", async () => {
       document.documentElement.classList.add("pptx-export-mode")
       await renderChartsAndImages()
       document.documentElement.dataset.magicExportReady = "true"

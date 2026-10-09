@@ -152,9 +152,6 @@ var O=window.IntersectionObserver;
 var root=document.documentElement;
 if(root) root.setAttribute("data-magic-export-mode","pptx");
 window.__MAGIC_EXPORT_MODE__="pptx";
-document.addEventListener("DOMContentLoaded",function(){
-window.dispatchEvent(new Event("magic:export-start"));
-},{once:true});
 window.IntersectionObserver=function(cb,opts){
 this._cb=cb;this._els=[];
 };
@@ -170,6 +167,7 @@ rootBounds:null,time:performance.now()}],self);
 };
 window.IntersectionObserver.prototype.unobserve=function(){};
 window.IntersectionObserver.prototype.disconnect=function(){};
+setTimeout(function(){window.dispatchEvent(new Event("magic:export-start"));},0);
 })();
 <\/script>
 <style>*,*::before,*::after{
