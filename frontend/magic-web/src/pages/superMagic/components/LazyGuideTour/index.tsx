@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react"
 import { useParams } from "react-router"
-import { useUserInfo } from "@/models/user/hooks"
+import { useOrganization, useUserInfo } from "@/models/user/hooks"
 import { WorkspacePage } from "@/pages/superMagic/layouts/MainLayout/types"
 import {
 	canOpenAutomaticHomeOnboarding,
@@ -15,6 +15,7 @@ import {
 	isHomeOnboardingTaskOnPage,
 	isHomeOnboardingTaskPending,
 	setHomeOnboardingUserMagicId,
+	setHomeOnboardingAnalyticsScope,
 	type HomeOnboardingRewardListStatus,
 	type HomeOnboardingTaskPage,
 } from "./GuideTourManager"
@@ -183,12 +184,21 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
  */
 export default function GuideTourWrapper({ isMobile, page }: GuideTourWrapperProps) {
 	const canHostFeature = useCanHostHomeOnboarding()
+	const { userInfo } = useUserInfo()
+	const { organizationCode } = useOrganization()
+
+	// Synchronize before passive exposure effects, including switches to an ineligible organization.
+	// Route unmounts keep the scope so a multi-page tour retains its run and exposure records.
+	useLayoutEffect(() => {
+		setHomeOnboardingAnalyticsScope(userInfo?.magic_id, organizationCode)
+	}, [userInfo?.magic_id, organizationCode])
 
 	if (isMobile || !canHostFeature) return null
 
 	return <GuideTourGate isMobile={isMobile} page={page} />
 }
 export {
+	consumeHomeOnboardingSurfaceExposure,
 	HOME_ONBOARDING_RUN_EVENT,
 	HOME_ONBOARDING_STATE_EVENT,
 	canManuallyCompleteHomeOnboardingTask,

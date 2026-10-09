@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { CSSProperties } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { LucideIcon } from "lucide-react"
@@ -27,6 +27,8 @@ import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
 import { useUserInfo } from "@/models/user/hooks"
+import { analyticsService } from "@/services/analytics"
+import { useElementVisibility } from "@/pages/superMagic/hooks/useElementVisibility"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import {
@@ -40,6 +42,7 @@ import {
 	HOME_ONBOARDING_STATE_EVENT,
 	isHomeOnboardingRunActive,
 	isReplayableHomeOnboardingTask,
+	consumeHomeOnboardingSurfaceExposure,
 	startHomeOnboarding,
 	type HomeOnboardingReward,
 	type HomeOnboardingTaskId,
@@ -66,6 +69,8 @@ export const NEW_USER_BENEFITS_ASSET_DIR = "src/pages/superMagic/components/NewU
  * header that names it.
  */
 const COMPLETION_BONUS = 50
+const ONBOARDING_EXPOSURE_RATIO = 0.01
+const ONBOARDING_EXPOSURE_THRESHOLDS = [0, ONBOARDING_EXPOSURE_RATIO]
 
 /**
  * Where the folded state is remembered. Folding the card is not a per-visit toggle but a standing
@@ -270,6 +275,10 @@ function NewUserBenefitsCard() {
 	const { userInfo } = useUserInfo()
 	const navigate = useNavigate()
 	const [open, setOpen] = useState(false)
+	const cardContainerRef = useRef<HTMLDivElement>(null)
+	const [dialogNode, setDialogNode] = useState<HTMLDivElement | null>(null)
+	const dialogExposed = useRef(false)
+
 	/**
 	 * The backend's answer for this account. Read through the manager, which owns the cache, and
 	 * re-read off every state change: a claim, a refresh or the first load all announce themselves
@@ -371,7 +380,7 @@ function NewUserBenefitsCard() {
 	 * not interactive.
 	 */
 	const openTask = useCallback(
-		(task: HomeOnboardingTaskId) => {
+		(task: HomeOnboardingTaskId, isReplay: boolean) => {
 			setOpen(false)
 			// A task belongs to the page that carries its anchors. This card sits on the home page,
 			// so a task whose steps live on a route of its own has to be navigated to — the entry is
@@ -386,7 +395,7 @@ function NewUserBenefitsCard() {
 			else if (page === "recordings") navigate({ name: RouteName.AudioRecordings })
 			// The account is named so the entry can spend this account's introduction: from the
 			// moment a task is opened from the card, the dialog is behind it for good.
-			startHomeOnboarding(task, userInfo?.magic_id)
+			startHomeOnboarding(task, userInfo?.magic_id, isReplay)
 		},
 		[navigate, userInfo?.magic_id],
 	)
@@ -530,7 +539,14 @@ function NewUserBenefitsCard() {
 
 		const onAction =
 			action === "start" || action === "replay"
-				? () => openTask(taskId)
+				? () => {
+						analyticsService.report("onboarding_task_click", {
+							taskId,
+							action: action === "replay" ? "review" : "start",
+							isRecommended: presentation.recommended === true,
+						})
+						openTask(taskId, action === "replay")
+					}
 				: action === "retry"
 					? () => void claimReward(taskId)
 					: undefined
@@ -561,8 +577,6 @@ function NewUserBenefitsCard() {
 	 * does not offer the feature (`9300`/`9301`) or a failed fetch there is nothing to show at all.
 	 * Waiting costs a beat; guessing costs a wrong number in front of the user.
 	 */
-	if (rows.length === 0) return null
-
 	const totalTasks = rows.length
 	const completedTasks = rows.filter((row) => row.completed)
 	const remainingTasks = rows.filter((row) => !row.completed)
@@ -594,6 +608,45 @@ function NewUserBenefitsCard() {
 	 * dot goes with it rather than staying on a finished card.
 	 */
 	const hasUnfinishedTasks = remainingCount > 0
+	const recommendedTaskId = rows.find((row) => row.recommended)?.taskId
+	const cardVisible = useElementVisibility(cardContainerRef, {
+		enabled: Boolean(rows.length) && !open && !runActive,
+		minimumIntersectionRatio: ONBOARDING_EXPOSURE_RATIO,
+		requireDocumentVisible: true,
+		threshold: ONBOARDING_EXPOSURE_THRESHOLDS,
+	})
+	const dialogVisible = useElementVisibility(dialogNode, {
+		enabled: open && Boolean(rows.length),
+		minimumIntersectionRatio: ONBOARDING_EXPOSURE_RATIO,
+		requireDocumentVisible: true,
+		threshold: ONBOARDING_EXPOSURE_THRESHOLDS,
+	})
+
+	useEffect(() => {
+		if (!cardVisible || !consumeHomeOnboardingSurfaceExposure("floating_card")) return
+		analyticsService.report("onboarding_floating_card_exposure", {
+			completedCount,
+			totalTasks,
+			collapsed,
+			hasRedDot: hasUnfinishedTasks && !collapsed,
+		})
+	}, [cardVisible, completedCount, totalTasks, collapsed, hasUnfinishedTasks])
+
+	useEffect(() => {
+		if (!open) {
+			dialogExposed.current = false
+			return
+		}
+		if (!dialogVisible || dialogExposed.current) return
+		dialogExposed.current = true
+		analyticsService.report("onboarding_task_center_exposure", {
+			completedCount,
+			totalTasks,
+			recommendedTaskId,
+		})
+	}, [open, dialogVisible, completedCount, totalTasks, recommendedTaskId])
+
+	if (rows.length === 0) return null
 	/**
 	 * Whether the account has finished every tour this deployment offered it, which is a state of
 	 * its own rather than "the best progress there is".
@@ -623,6 +676,12 @@ function NewUserBenefitsCard() {
 	 * to explain it, which is why the two directions are not the same code.
 	 */
 	const foldCard = () => {
+		analyticsService.report("onboarding_floating_card_click", {
+			action: "collapse",
+			completedCount,
+			totalTasks,
+			hasRedDot: hasUnfinishedTasks && !collapsed,
+		})
 		if (prefersReducedMotion()) {
 			setCollapsed(true)
 			return
@@ -643,6 +702,12 @@ function NewUserBenefitsCard() {
 	 */
 	const handleCardClick = () => {
 		if (foldingOut) return
+		analyticsService.report("onboarding_floating_card_click", {
+			action: collapsed ? "expand" : "enter_task_center",
+			completedCount,
+			totalTasks,
+			hasRedDot: hasUnfinishedTasks && !collapsed,
+		})
 		if (collapsed) unfoldCard()
 		else setOpen(true)
 	}
@@ -686,6 +751,7 @@ function NewUserBenefitsCard() {
 			 * card that comes back from the dead would replay the wrong half of that pair.
 			 */}
 			<div
+				ref={cardContainerRef}
 				className={cn(
 					"absolute right-4 top-20 z-30 hidden hover:-translate-y-0.5",
 					/*
@@ -998,6 +1064,7 @@ function NewUserBenefitsCard() {
 
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogContent
+					ref={setDialogNode}
 					/*
 					 * 800px now, after 920 then 860: at 920 the dialog all but filled the viewport it
 					 * was reviewed in and the rows read as loose, because the flexible middle column

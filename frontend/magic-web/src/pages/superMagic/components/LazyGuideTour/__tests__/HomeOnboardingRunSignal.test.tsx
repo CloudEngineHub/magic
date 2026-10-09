@@ -16,6 +16,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
  */
 const { translate } = vi.hoisted(() => ({ translate: (key: string) => key }))
 
+const { analyticsReport } = vi.hoisted(() => ({ analyticsReport: vi.fn() }))
+vi.mock("@/services/analytics", () => ({
+	analyticsService: { report: analyticsReport },
+}))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		i18n: { language: "en_US" },
@@ -56,6 +61,7 @@ async function loadTour() {
 describe("home onboarding: the screen a run claims", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+		analyticsReport.mockClear()
 		/*
 		 * The introduction is the one piece of state that outlives a page load, so it is storage
 		 * rather than module memory — and jsdom keeps storage for the whole file. Clearing it is
@@ -64,8 +70,48 @@ describe("home onboarding: the screen a run claims", () => {
 		window.localStorage.clear()
 	})
 
+	it("reports the introduction only after its dialog is visibly rendered", async () => {
+		const { tour } = await loadTour()
+		let callback: IntersectionObserverCallback | undefined
+		let target: Element | undefined
+		vi.stubGlobal(
+			"IntersectionObserver",
+			vi.fn((nextCallback: IntersectionObserverCallback) => {
+				callback = nextCallback
+				return {
+					disconnect: vi.fn(),
+					observe: vi.fn((nextTarget: Element) => {
+						target = nextTarget
+					}),
+				}
+			}),
+		)
+
+		render(<tour.default page="home" userMagicId={MAGIC_ID} />)
+		await act(async () => vi.advanceTimersByTime(32))
+		expect(analyticsReport).not.toHaveBeenCalled()
+		if (!callback || !target) throw new Error("Expected the welcome dialog to be observed")
+		const observedTarget = target
+		act(() => {
+			callback?.(
+				[
+					{
+						intersectionRatio: 1,
+						isIntersecting: true,
+						target: observedTarget,
+					} as IntersectionObserverEntry,
+				],
+				{} as IntersectionObserver,
+			)
+		})
+
+		expect(analyticsReport).toHaveBeenCalledTimes(1)
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_guide_popup_exposure")
+	})
+
 	afterEach(() => {
 		vi.useRealTimers()
+		vi.unstubAllGlobals()
 	})
 
 	it("claims the screen for the introduction dialog and gives it back when declined", async () => {

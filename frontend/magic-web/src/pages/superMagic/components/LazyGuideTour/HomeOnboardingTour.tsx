@@ -7,6 +7,8 @@ import { IconArrowRight, IconArrowUp } from "@tabler/icons-react"
 import { cn } from "@/utils/cn"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import magicToast from "@/components/base/MagicToaster/utils"
+import { analyticsService } from "@/services/analytics"
+import { useElementVisibility } from "@/pages/superMagic/hooks/useElementVisibility"
 import { sidebarStore } from "@/stores/layout"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { RouteName } from "@/routes/constants"
@@ -15,6 +17,11 @@ import {
 	canManuallyCompleteHomeOnboardingTask,
 	claimHomeOnboardingReward,
 	clearHomeOnboardingEntryTask,
+	beginHomeOnboardingAnalyticsRun,
+	consumeHomeOnboardingStepExposure,
+	consumeHomeOnboardingSurfaceExposure,
+	endHomeOnboardingAnalyticsRun,
+	getHomeOnboardingAnalyticsRun,
 	getHomeOnboardingEntryTask,
 	getHomeOnboardingFlow,
 	getHomeOnboardingPreparedStepIndex,
@@ -59,6 +66,8 @@ const ONBOARDING_PAGE_ROUTE_NAME: Partial<Record<HomeOnboardingTaskPage, string>
  * of the very control it points at.
  */
 const CARD_HEIGHT_FALLBACK = 240
+const ONBOARDING_EXPOSURE_RATIO = 0.01
+const ONBOARDING_EXPOSURE_THRESHOLDS = [0, ONBOARDING_EXPOSURE_RATIO]
 
 /**
  * How much of the card has to stay on screen when it is pushed against a window edge to keep clear
@@ -127,6 +136,8 @@ const ANCHOR_APPEAR_TIMEOUT_MS = 2000
  * and the run's last step closes with the label its own state calls for.
  */
 interface OnboardingStep {
+	/** Stable task-wide number; reordering or skipping cards must not change their identity. */
+	analyticsStepIndex: number
 	anchor: string
 	placement: Placement
 	title: string
@@ -167,6 +178,8 @@ interface OnboardingStep {
  * the flow each one carries has to be written out on every step rather than named once.
  */
 interface GuidedFlowStep {
+	/** Uses task-wide numbering, independent of this flow's position. */
+	analyticsStepIndex: number
 	flow: HomeOnboardingFlow
 	anchor: string
 	title: string
@@ -196,24 +209,28 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.WorkspaceSidebar,
 			placement: "right" as Placement,
+			analyticsStepIndex: 1,
 			title: t("homeOnboarding.steps.sidebar.title"),
 			text: t("homeOnboarding.steps.sidebar.description"),
 		},
 		{
 			anchor: HomeOnboardingAnchor.WorkspaceList,
 			placement: "right" as Placement,
+			analyticsStepIndex: 2,
 			title: t("homeOnboarding.steps.workspace.title"),
 			text: t("homeOnboarding.steps.workspace.description"),
 		},
 		{
 			anchor: HomeOnboardingAnchor.RoleSwitcher,
 			placement: "top" as Placement,
+			analyticsStepIndex: 3,
 			title: t("homeOnboarding.steps.experts.title"),
 			text: t("homeOnboarding.steps.experts.description"),
 		},
 		{
 			anchor: HomeOnboardingAnchor.MessageComposer,
 			placement: "top" as Placement,
+			analyticsStepIndex: 4,
 			title: t("homeOnboarding.steps.composer.title"),
 			text: t("homeOnboarding.steps.composer.description"),
 		},
@@ -246,6 +263,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			{
 				flow: "project-file",
 				anchor: "project-sider",
+				analyticsStepIndex: 4,
 				title: t("homeOnboarding.project.file.title"),
 				text: t("homeOnboarding.project.file.description"),
 				placement: "right",
@@ -253,6 +271,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			{
 				flow: "project-orientation",
 				anchor: "message-header-topic-group",
+				analyticsStepIndex: 5,
 				title: t("homeOnboarding.project.topic.title"),
 				text: t("homeOnboarding.project.topic.description"),
 				placement: "left",
@@ -260,6 +279,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			{
 				flow: "project-orientation",
 				anchor: "message-list-container",
+				analyticsStepIndex: 6,
 				title: t("homeOnboarding.project.result.title"),
 				text: t("homeOnboarding.project.result.description"),
 				placement: "left",
@@ -267,6 +287,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			{
 				flow: "project-orientation",
 				anchor: "message-editor-container",
+				analyticsStepIndex: 7,
 				title: t("homeOnboarding.project.composer.title"),
 				text: t("homeOnboarding.project.composer.description"),
 				placement: "top",
@@ -274,6 +295,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			{
 				flow: "project-orientation",
 				anchor: "message-editor-at-button",
+				analyticsStepIndex: 8,
 				title: t("homeOnboarding.project.at.title"),
 				text: t("homeOnboarding.project.at.description"),
 				placement: "left",
@@ -298,6 +320,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			{
 				flow: "project-result",
 				anchor: HomeOnboardingAnchor.DeliverableAttachment,
+				analyticsStepIndex: 9,
 				title: t("homeOnboarding.deliverable.attachment.title"),
 				text: t("homeOnboarding.deliverable.attachment.description"),
 				placement: "top",
@@ -305,6 +328,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			{
 				flow: "project-result",
 				anchor: HomeOnboardingAnchor.DeliverableProjectFile,
+				analyticsStepIndex: 10,
 				title: t("homeOnboarding.deliverable.saved.title"),
 				text: t("homeOnboarding.deliverable.saved.description"),
 				placement: "right",
@@ -322,18 +346,21 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.MagiClawHero,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 1,
 			title: t("homeOnboarding.claw.steps.hero.title", clawBrandValues),
 			text: t("homeOnboarding.claw.steps.hero.description", clawBrandValues),
 		},
 		{
 			anchor: HomeOnboardingAnchor.MagiClawCreatedSection,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 2,
 			title: t("homeOnboarding.claw.steps.create.title", clawBrandValues),
 			text: t("homeOnboarding.claw.steps.create.description", clawBrandValues),
 		},
 		{
 			anchor: HomeOnboardingAnchor.MagiClawFeatures,
 			placement: "top" as Placement,
+			analyticsStepIndex: 3,
 			title: t("homeOnboarding.claw.steps.features.title", clawBrandValues),
 			text: t("homeOnboarding.claw.steps.features.description", clawBrandValues),
 		},
@@ -352,6 +379,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.CrewMarketSearch,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 1,
 			title: t("homeOnboarding.employee.steps.search.title"),
 			text: t("homeOnboarding.employee.steps.search.description"),
 			action: t("homeOnboarding.employee.steps.search.action"),
@@ -359,6 +387,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.CrewMarketCategories,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 2,
 			title: t("homeOnboarding.employee.steps.category.title"),
 			text: t("homeOnboarding.employee.steps.category.description"),
 			action: t("homeOnboarding.employee.steps.category.action"),
@@ -366,6 +395,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.CrewMarketCardDetails,
 			placement: "right" as Placement,
+			analyticsStepIndex: 3,
 			title: t("homeOnboarding.employee.steps.details.title"),
 			text: t("homeOnboarding.employee.steps.details.description"),
 			action: t("homeOnboarding.employee.steps.details.action"),
@@ -373,6 +403,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.CrewMarketCardHire,
 			placement: "right" as Placement,
+			analyticsStepIndex: 4,
 			title: t("homeOnboarding.employee.steps.hire.title"),
 			text: t("homeOnboarding.employee.steps.hire.description"),
 			action: t("homeOnboarding.employee.steps.hire.action"),
@@ -382,6 +413,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			// of one of its own: claiming the reward on a first pass, reviewing it on a re-watch.
 			anchor: HomeOnboardingAnchor.CrewMarketCardDetails,
 			placement: "left" as Placement,
+			analyticsStepIndex: 5,
 			title: t("homeOnboarding.employee.steps.chat.title"),
 			text: t("homeOnboarding.employee.steps.chat.description"),
 		},
@@ -398,6 +430,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			anchor: HomeOnboardingAnchor.SkillMarketSearch,
 			page: "skill-market",
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 1,
 			title: t("homeOnboarding.skill.steps.search.title"),
 			text: t("homeOnboarding.skill.steps.search.description"),
 		},
@@ -405,6 +438,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			anchor: HomeOnboardingAnchor.SkillMarketCard,
 			page: "skill-market",
 			placement: "right" as Placement,
+			analyticsStepIndex: 2,
 			title: t("homeOnboarding.skill.steps.card.title"),
 			text: t("homeOnboarding.skill.steps.card.description"),
 		},
@@ -416,6 +450,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			anchor: HomeOnboardingAnchor.SkillMarketCardAdd,
 			page: "skill-market",
 			placement: "top" as Placement,
+			analyticsStepIndex: 3,
 			title: t("homeOnboarding.skill.steps.add.title"),
 			text: t("homeOnboarding.skill.steps.add.description"),
 		},
@@ -423,6 +458,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			anchor: HomeOnboardingAnchor.SkillMarketMySkills,
 			page: "skill-market",
 			placement: "left" as Placement,
+			analyticsStepIndex: 4,
 			title: t("homeOnboarding.skill.steps.mySkills.title"),
 			text: t("homeOnboarding.skill.steps.mySkills.description"),
 		},
@@ -431,6 +467,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			anchor: HomeOnboardingAnchor.MySkillsCreatedTab,
 			page: "my-skills",
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 5,
 			title: t("homeOnboarding.skill.steps.created.title"),
 			text: t("homeOnboarding.skill.steps.created.description"),
 		},
@@ -438,6 +475,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			anchor: HomeOnboardingAnchor.MySkillsLibraryTab,
 			page: "my-skills",
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 6,
 			title: t("homeOnboarding.skill.steps.library.title"),
 			text: t("homeOnboarding.skill.steps.library.description"),
 		},
@@ -451,6 +489,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			anchor: HomeOnboardingAnchor.SkillMarketCreate,
 			page: "skill-market",
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 7,
 			title: t("homeOnboarding.skill.steps.create.title"),
 			text: t("homeOnboarding.skill.steps.create.description"),
 			optional: true,
@@ -471,12 +510,14 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.MessageEditorContent,
 			placement: "left" as Placement,
+			analyticsStepIndex: 1,
 			title: t("homeOnboarding.microApp.steps.prompt.title"),
 			text: t("homeOnboarding.microApp.steps.prompt.description"),
 		},
 		{
 			anchor: HomeOnboardingAnchor.MessageEditorToolbar,
 			placement: "left" as Placement,
+			analyticsStepIndex: 2,
 			title: t("homeOnboarding.microApp.steps.tools.title"),
 			text: t("homeOnboarding.microApp.steps.tools.description"),
 		},
@@ -492,6 +533,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			 */
 			anchor: HomeOnboardingAnchor.MicroAppsLibrary,
 			placement: "top" as Placement,
+			analyticsStepIndex: 3,
 			title: t("homeOnboarding.microApp.steps.manage.title"),
 			text: t("homeOnboarding.microApp.steps.manage.description"),
 		},
@@ -524,6 +566,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.SlidesTemplateFeaturedCard,
 			placement: "left" as Placement,
+			analyticsStepIndex: 1,
 			title: t("homeOnboarding.aiPpt.steps.featured.title"),
 			text: t("homeOnboarding.aiPpt.steps.featured.description"),
 			optional: true,
@@ -532,6 +575,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.SlidesTemplatesToolbar,
 			placement: "top" as Placement,
+			analyticsStepIndex: 2,
 			title: t("homeOnboarding.aiPpt.steps.search.title"),
 			text: t("homeOnboarding.aiPpt.steps.search.description"),
 			action: t("homeOnboarding.aiPpt.steps.search.action"),
@@ -539,6 +583,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.SlidesTemplateFeaturedCard,
 			placement: "right" as Placement,
+			analyticsStepIndex: 3,
 			title: t("homeOnboarding.aiPpt.steps.pick.title"),
 			text: t("homeOnboarding.aiPpt.steps.pick.description"),
 			action: t("homeOnboarding.aiPpt.steps.pick.action"),
@@ -552,6 +597,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			 */
 			anchor: HomeOnboardingAnchor.SlidesTemplatesPrompt,
 			placement: "top" as Placement,
+			analyticsStepIndex: 4,
 			title: t("homeOnboarding.aiPpt.steps.prompt.title"),
 			text: t("homeOnboarding.aiPpt.steps.prompt.description"),
 			awaitsPage: true,
@@ -576,6 +622,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.AudioRecordingsStart,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 1,
 			title: t("homeOnboarding.audioRecording.steps.start.title"),
 			text: t("homeOnboarding.audioRecording.steps.start.description"),
 			action: t("homeOnboarding.audioRecording.steps.start.action"),
@@ -583,6 +630,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.AudioRecordingsImport,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 2,
 			title: t("homeOnboarding.audioRecording.steps.import.title"),
 			text: t("homeOnboarding.audioRecording.steps.import.description"),
 			action: t("homeOnboarding.audioRecording.steps.import.action"),
@@ -590,6 +638,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.AudioRecordingStatusBar,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 3,
 			title: t("homeOnboarding.audioRecording.steps.status.title"),
 			text: t("homeOnboarding.audioRecording.steps.status.description"),
 			action: t("homeOnboarding.audioRecording.steps.status.action"),
@@ -597,6 +646,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.AudioRecordingLiveTranscript,
 			placement: "right" as Placement,
+			analyticsStepIndex: 4,
 			title: t("homeOnboarding.audioRecording.steps.transcript.title"),
 			text: t("homeOnboarding.audioRecording.steps.transcript.description"),
 			action: t("homeOnboarding.audioRecording.steps.transcript.action"),
@@ -604,6 +654,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.AudioRecordingFinishSheet,
 			placement: "top" as Placement,
+			analyticsStepIndex: 5,
 			title: t("homeOnboarding.audioRecording.steps.finish.title"),
 			text: t("homeOnboarding.audioRecording.steps.finish.description"),
 			action: t("homeOnboarding.audioRecording.steps.finish.action"),
@@ -611,6 +662,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		{
 			anchor: HomeOnboardingAnchor.AudioRecordingHeaderActions,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 6,
 			title: t("homeOnboarding.audioRecording.steps.export.title"),
 			text: t("homeOnboarding.audioRecording.steps.export.description"),
 			action: t("homeOnboarding.audioRecording.steps.export.action"),
@@ -620,6 +672,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			// of one of its own: claiming the reward on a first pass, reviewing it on a re-watch.
 			anchor: HomeOnboardingAnchor.AudioRecordingHeaderActions,
 			placement: "bottom" as Placement,
+			analyticsStepIndex: 7,
 			title: t("homeOnboarding.audioRecording.steps.share.title"),
 			text: t("homeOnboarding.audioRecording.steps.share.description"),
 		},
@@ -667,6 +720,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			!storedFlow &&
 			!isHomeOnboardingIntroSpent(userMagicId) &&
 			!isHomeOnboardingCompleted(userMagicId, "first-ai-work")
+		const analyticsRun = getHomeOnboardingAnalyticsRun()
 		return {
 			/** A benefits-card entry is a run of its own, never the automatic one. */
 			requested: Boolean(requestedTask),
@@ -674,8 +728,10 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			// A re-watch stops at the end of its own steps and does not pay the reward twice. Only
 			// the tours a finished task can re-open are ever one.
 			isReplay:
-				isReplayableHomeOnboardingTask(task) &&
-				isHomeOnboardingCompleted(userMagicId, task),
+				analyticsRun?.task === task
+					? analyticsRun.isReplay
+					: isReplayableHomeOnboardingTask(task) &&
+						isHomeOnboardingCompleted(userMagicId, task),
 			startsWithIntro,
 			flow: storedFlow ?? (requestedTask === "first-ai-work" ? "featured-case" : null),
 		}
@@ -778,6 +834,37 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 */
 	const [cardHeight, setCardHeight] = useState(CARD_HEIGHT_FALLBACK)
 	const cardRef = useRef<HTMLElement | null>(null)
+	const [exposureNode, setExposureNode] = useState<HTMLElement | null>(null)
+	const setStepCardRef = useCallback((node: HTMLElement | null) => {
+		cardRef.current = node
+		setExposureNode(node)
+	}, [])
+	const reportStepClick = useCallback(
+		(
+			stepNumber: number | undefined,
+			action:
+				| "next"
+				| "prev"
+				| "exit"
+				| "complete"
+				| "select_case"
+				| "send"
+				| "confirm"
+				| "dismiss",
+			caseId?: string,
+		) => {
+			const run = getHomeOnboardingAnalyticsRun()
+			if (!run || run.task !== entry.task || stepNumber === undefined) return
+			analyticsService.report("onboarding_guide_step_click", {
+				taskId: run.task,
+				stepIndex: stepNumber,
+				isReplay: run.isReplay,
+				action,
+				caseId,
+			})
+		},
+		[entry.task],
+	)
 
 	/**
 	 * Reading the card's height back before the frame is painted — a layout effect keeps this ahead
@@ -911,6 +998,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 */
 	const exitTour = useCallback(
 		(outcome: "completed" | "aborted") => {
+			endHomeOnboardingAnalyticsRun()
 			// Nothing to record about the introduction here: it was spent when its dialog was put on
 			// screen, and a run ending cannot un-spend it — every task is entered from the benefits
 			// card from that point on, whichever way this run goes.
@@ -1015,6 +1103,8 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 * entry.
 	 */
 	const startFirstAiWork = useCallback(() => {
+		analyticsService.report("onboarding_guide_popup_click", { action: "start_experience" })
+		beginHomeOnboardingAnalyticsRun("first-ai-work", false)
 		// The dialog has been on screen, so the introduction is already spent; taking it up is what
 		// this button does, not what ends it.
 		// The picker starts from an empty composer, so the prompt of the chosen case is the only
@@ -1028,11 +1118,15 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		setStarted(true)
 	}, [])
 
-	const selectFeaturedCase = useCallback((prompt: string) => {
-		pubsub.publish(PubSubEvents.Set_Input_Message, prompt)
-		setHomeOnboardingFlow("prompt-ready")
-		setFlow("prompt-ready")
-	}, [])
+	const selectFeaturedCase = useCallback(
+		(caseId: number, prompt: string) => {
+			reportStepClick(1, "select_case", String(caseId))
+			pubsub.publish(PubSubEvents.Set_Input_Message, prompt)
+			setHomeOnboardingFlow("prompt-ready")
+			setFlow("prompt-ready")
+		},
+		[reportStepClick],
+	)
 
 	useLayoutEffect(() => {
 		if (flow !== "prompt-ready" && flow !== "task-processing") return
@@ -1062,13 +1156,14 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		const handleSendClick = (event: MouseEvent) => {
 			const target = event.target as HTMLElement | null
 			if (!target?.closest('[data-guide-anchor="message-editor-send-button"]')) return
+			reportStepClick(2, "send")
 			setFlow("task-processing")
 			setProjectEntered(false)
 			setHomeOnboardingFlow("task-processing")
 		}
 		document.addEventListener("click", handleSendClick, true)
 		return () => document.removeEventListener("click", handleSendClick, true)
-	}, [flow])
+	}, [flow, reportStepClick])
 
 	useEffect(() => {
 		/**
@@ -1254,6 +1349,48 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 * shown, no more and no less.
 	 */
 	const showingIntro = runActive && entry.startsWithIntro && !started && !flow
+	// Special flows keep their existing 1/2/3 contract. Configured cards carry their own number,
+	// shared by exposure and generic clicks, so array position never determines event identity.
+	const analyticsStepIndex =
+		flow === "featured-case"
+			? 1
+			: flow === "prompt-ready"
+				? 2
+				: flow === "task-processing"
+					? 3
+					: flow
+						? activeProjectStep?.analyticsStepIndex
+						: primarySteps[stepIndex]?.analyticsStepIndex
+	const exposureNodeVisible = useElementVisibility(exposureNode, {
+		enabled: runActive,
+		minimumIntersectionRatio: ONBOARDING_EXPOSURE_RATIO,
+		requireDocumentVisible: true,
+		threshold: ONBOARDING_EXPOSURE_THRESHOLDS,
+	})
+
+	useEffect(() => {
+		if (!runActive || !exposureNodeVisible) return
+		const run = getHomeOnboardingAnalyticsRun()
+		// The welcome dialog is not a task step and precedes creation of its run.
+		if (!showingIntro && (!run || run.task !== entry.task)) return
+		if (showingIntro) {
+			if (consumeHomeOnboardingSurfaceExposure("welcome"))
+				analyticsService.report("onboarding_guide_popup_exposure")
+			return
+		}
+		if (
+			!run ||
+			analyticsStepIndex === undefined ||
+			getHomeOnboardingAnalyticsRun()?.id !== run.id
+		)
+			return
+		if (!consumeHomeOnboardingStepExposure(run.id, String(analyticsStepIndex))) return
+		analyticsService.report("onboarding_guide_step_exposure", {
+			taskId: run.task,
+			stepIndex: analyticsStepIndex,
+			isReplay: run.isReplay,
+		})
+	}, [runActive, showingIntro, exposureNodeVisible, entry.task, analyticsStepIndex])
 
 	/**
 	 * Telling the benefits entry card that a run is up, and telling it again when the screen is
@@ -1296,11 +1433,19 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				aria-label={t("homeOnboarding.welcome.title")}
 			>
 				<div className="absolute inset-0 bg-[rgba(52,52,52,0.62)]" />
-				<section className="fixed left-1/2 top-1/2 max-h-[calc(100vh-34px)] w-[min(540px,calc(100vw-40px))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-[14px] border border-border bg-background px-8 pb-[26px] pt-[30px] text-left shadow-[0_1px_2px_rgba(0,0,0,0.08),0_16px_42px_rgba(0,0,0,0.14)] max-[760px]:w-[calc(100vw-24px)] max-[760px]:px-5 max-[760px]:pb-5 max-[760px]:pt-6">
+				<section
+					ref={setExposureNode}
+					className="fixed left-1/2 top-1/2 max-h-[calc(100vh-34px)] w-[min(540px,calc(100vw-40px))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-[14px] border border-border bg-background px-8 pb-[26px] pt-[30px] text-left shadow-[0_1px_2px_rgba(0,0,0,0.08),0_16px_42px_rgba(0,0,0,0.14)] max-[760px]:w-[calc(100vw-24px)] max-[760px]:px-5 max-[760px]:pb-5 max-[760px]:pt-6"
+				>
 					<button
 						className="absolute right-3 top-3 inline-flex size-11 items-center justify-center rounded-[10px] text-muted-foreground hover:border hover:border-border hover:bg-muted hover:text-foreground"
 						type="button"
-						onClick={abort}
+						onClick={() => {
+							analyticsService.report("onboarding_guide_popup_click", {
+								action: "close",
+							})
+							abort()
+						}}
 						aria-label={t("homeOnboarding.welcome.close")}
 					>
 						<X className="size-7" strokeWidth={1.8} />
@@ -1342,7 +1487,12 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 						<button
 							className="min-h-11 self-center px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
 							type="button"
-							onClick={abort}
+							onClick={() => {
+								analyticsService.report("onboarding_guide_popup_click", {
+									action: "skip_explore",
+								})
+								abort()
+							}}
 						>
 							{t("homeOnboarding.welcome.skip")}
 						</button>
@@ -1367,7 +1517,10 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		return createPortal(
 			<div className="fixed inset-0 z-[1200] text-foreground" role="dialog" aria-modal="true">
 				<div className="absolute inset-0 bg-[rgba(52,52,52,0.62)]" />
-				<section className="fixed left-1/2 top-1/2 w-[min(440px,calc(100vw-40px))] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-border bg-background px-5 pb-5 pt-6 shadow-2xl">
+				<section
+					ref={setExposureNode}
+					className="fixed left-1/2 top-1/2 w-[min(440px,calc(100vw-40px))] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-border bg-background px-5 pb-5 pt-6 shadow-2xl"
+				>
 					<h2 className="text-xl font-bold">{t("homeOnboarding.processing.title")}</h2>
 					<p className="mt-3 max-w-[380px] text-sm leading-6 text-muted-foreground">
 						{t("homeOnboarding.processing.description")}
@@ -1375,7 +1528,10 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 					<div className="mt-5 flex items-center justify-end gap-5 border-t border-border pt-4">
 						<button
 							type="button"
-							onClick={abort}
+							onClick={() => {
+								reportStepClick(3, "dismiss")
+								abort()
+							}}
 							className="text-xs font-medium text-muted-foreground hover:text-foreground"
 						>
 							{t("homeOnboarding.processing.skip")}
@@ -1383,6 +1539,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 						<button
 							type="button"
 							onClick={() => {
+								reportStepClick(3, "confirm")
 								setProjectStepIndex(0)
 								setFlow(guidedProjectSteps[0].flow)
 								setHomeOnboardingFlow(guidedProjectSteps[0].flow)
@@ -1440,6 +1597,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 					}}
 				/>
 				<section
+					ref={setExposureNode}
 					className="fixed z-[1202] rounded-[18px] border border-border bg-background px-7 pb-7 pt-8 shadow-2xl"
 					style={{ left, top, width: cardWidth }}
 				>
@@ -1458,7 +1616,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 							<button
 								key={item.id}
 								type="button"
-								onClick={() => selectFeaturedCase(item.prompt)}
+								onClick={() => selectFeaturedCase(item.id, item.prompt)}
 								className="flex h-32 flex-col justify-end rounded-xl border border-border px-5 py-4 text-left text-base font-semibold hover:border-foreground hover:bg-muted"
 							>
 								<span className="mb-auto text-2xl font-bold text-muted-foreground/40">
@@ -1470,7 +1628,14 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 					</div>
 					<div className="mt-6 flex items-center justify-between border-t border-border pt-5 text-xs text-muted-foreground">
 						<span>{t("homeOnboarding.featured.footer")}</span>
-						<button type="button" onClick={abort} className="hover:text-foreground">
+						<button
+							type="button"
+							onClick={() => {
+								reportStepClick(1, "exit")
+								abort()
+							}}
+							className="hover:text-foreground"
+						>
 							{t("homeOnboarding.actions.skip")}
 						</button>
 					</div>
@@ -1483,6 +1648,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const step: OnboardingStep =
 		flow === "prompt-ready"
 			? {
+					analyticsStepIndex: 2,
 					anchor: "message-editor-send-button",
 					placement: "top" as Placement,
 					title: "featured.send.title",
@@ -1490,6 +1656,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				}
 			: flow && activeProjectStep
 				? {
+						analyticsStepIndex: activeProjectStep.analyticsStepIndex,
 						anchor: activeProjectStep.anchor,
 						placement: activeProjectStep.placement,
 						title: activeProjectStep.title,
@@ -1744,7 +1911,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				 * swallows pointer/focus events and makes the prefilled prompt look read-only.
 				 */}
 				<section
-					ref={cardRef}
+					ref={setStepCardRef}
 					className={cn(
 						"pointer-events-auto fixed z-[1202] w-[min(390px,calc(100vw-32px))] rounded-[14px] border border-border bg-background px-5 pb-4 pt-5 shadow-[0_18px_48px_rgba(17,24,39,0.24)]",
 						placement === "top" &&
@@ -1813,7 +1980,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				}}
 			/>
 			<section
-				ref={cardRef}
+				ref={setStepCardRef}
 				className={cn(
 					"fixed z-[1202] w-[min(400px,calc(100vw-32px))] rounded-[14px] border border-border bg-background px-5 pb-[17px] pt-[19px] shadow-[0_18px_48px_rgba(17,24,39,0.24)] duration-200 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none max-[760px]:bottom-4 max-[760px]:left-1/2 max-[760px]:top-auto max-[760px]:-translate-x-1/2",
 					placement === "right" &&
@@ -1900,6 +2067,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 								className="min-h-[42px] whitespace-nowrap rounded-[10px] px-4 text-[13px] text-muted-foreground hover:bg-muted"
 								type="button"
 								onClick={() => {
+									reportStepClick(analyticsStepIndex, "prev")
 									if (isProjectGuide) goToProjectStep(projectStepIndex - 1)
 									else goToStep(stepIndex - 1)
 								}}
@@ -1910,7 +2078,10 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 						<button
 							className="min-h-[42px] whitespace-nowrap rounded-[10px] px-4 text-[13px] text-muted-foreground hover:bg-muted"
 							type="button"
-							onClick={abort}
+							onClick={() => {
+								reportStepClick(analyticsStepIndex, "exit")
+								abort()
+							}}
 						>
 							{t("homeOnboarding.actions.skip")}
 						</button>
@@ -1919,6 +2090,15 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 						className="ml-auto inline-flex min-h-[42px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-foreground bg-foreground px-4 text-[13px] text-background hover:opacity-90"
 						type="button"
 						onClick={() => {
+							// Only the PRD's final guide cards carry `complete`; the AI-work
+							// orientation ends at 8 and its deliverable cards are 9/10 later.
+							reportStepClick(
+								analyticsStepIndex,
+								(entry.task === "workbench" && analyticsStepIndex === 4) ||
+									(entry.task === "first-ai-work" && analyticsStepIndex === 10)
+									? "complete"
+									: "next",
+							)
 							if (!flow && stepIndex === primarySteps.length - 1) {
 								// Every task ends with its own steps: a run never hands over to
 								// another task, which is only opened by the introduction dialog or

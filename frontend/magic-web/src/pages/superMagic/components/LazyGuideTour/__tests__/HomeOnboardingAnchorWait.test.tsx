@@ -17,6 +17,8 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("@/routes/hooks/useNavigate", () => ({ default: () => vi.fn() }))
 
+vi.mock("@/services/analytics", () => ({ analyticsService: { report: vi.fn() } }))
+
 vi.mock("@/stores/layout", () => ({
 	sidebarStore: { collapsed: false, setCollapsed: vi.fn() },
 }))

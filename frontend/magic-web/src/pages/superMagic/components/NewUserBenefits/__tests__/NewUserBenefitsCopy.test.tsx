@@ -3,7 +3,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ComponentType } from "react"
 
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Boxes } from "lucide-react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -16,7 +16,10 @@ import { BASE_MARKET_MENU_ITEMS } from "@/layouts/BaseLayout/components/MagicSid
  * The verdict is handed over directly rather than through the barrel the component imports: only a
  * tour ever writes it, so the barrel has no reason to pass the writer on to the product.
  */
-import { setHomeOnboardingRunActive } from "../../LazyGuideTour/GuideTourManager"
+import {
+	setHomeOnboardingAnalyticsScope,
+	setHomeOnboardingRunActive,
+} from "../../LazyGuideTour/GuideTourManager"
 import {
 	holdHomeOnboardingPrelude,
 	releaseHomeOnboardingPrelude,
@@ -27,6 +30,11 @@ import {
 	type HomeOnboardingTaskId,
 } from "../../LazyGuideTour"
 import NewUserBenefits, { ENTRY_FOLD_OUT_MS } from "../index"
+
+const { analyticsReport } = vi.hoisted(() => ({ analyticsReport: vi.fn() }))
+vi.mock("@/services/analytics", () => ({
+	analyticsService: { report: analyticsReport },
+}))
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -198,6 +206,7 @@ const MAX_POINTS = 500
 const COLLAPSED_KEY = "magiFeatureEntryCollapsed"
 
 beforeEach(() => {
+	analyticsReport.mockClear()
 	calls.length = 0
 	toasts.length = 0
 	paidRows.clear()
@@ -645,6 +654,84 @@ describe("NewUserBenefits row icons", () => {
 })
 
 describe("NewUserBenefits entry card", () => {
+	it("reports only actually visible card and dialog content", async () => {
+		setHomeOnboardingAnalyticsScope("other-user", "other-org")
+		// Isolated card tests seed the scope normally owned by GuideTourWrapper.
+		setHomeOnboardingAnalyticsScope("magic-benefits-copy")
+		const observations: Array<{
+			callback: IntersectionObserverCallback
+			target: Element | null
+		}> = []
+		vi.stubGlobal(
+			"IntersectionObserver",
+			vi.fn((callback: IntersectionObserverCallback) => {
+				const observation = { callback, target: null as Element | null }
+				observations.push(observation)
+				return {
+					disconnect: vi.fn(),
+					observe: vi.fn((target: Element) => {
+						observation.target = target
+					}),
+				}
+			}),
+		)
+		const exposeLatest = () => {
+			const observation = observations.at(-1)
+			if (!observation?.target) throw new Error("Expected an observed onboarding surface")
+			observation.callback(
+				[
+					{
+						intersectionRatio: 1,
+						isIntersecting: true,
+						target: observation.target,
+					} as IntersectionObserverEntry,
+				],
+				{} as IntersectionObserver,
+			)
+		}
+		try {
+			render(<NewUserBenefits />)
+			await waitFor(() => expect(observations.length).toBeGreaterThan(0))
+			act(exposeLatest)
+			await waitFor(() =>
+				expect(analyticsReport).toHaveBeenCalledWith("onboarding_floating_card_exposure", {
+					completedCount: 0,
+					totalTasks: 8,
+					collapsed: false,
+					hasRedDot: true,
+				}),
+			)
+			fireEvent.click(screen.getByLabelText("newUserBenefits.entry.ariaLabel"))
+			await waitFor(() => expect(observations.length).toBeGreaterThan(1))
+			act(exposeLatest)
+			await waitFor(() =>
+				expect(analyticsReport).toHaveBeenCalledWith("onboarding_task_center_exposure", {
+					completedCount: 0,
+					totalTasks: 8,
+					recommendedTaskId: "first-ai-work",
+				}),
+			)
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
+	it("reports the card entrance and the clicked recommended task from rendered rows", () => {
+		openDialog()
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_floating_card_click", {
+			action: "enter_task_center",
+			completedCount: 0,
+			totalTasks: 8,
+			hasRedDot: true,
+		})
+		fireEvent.click(rowAction("firstAiWork"))
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_task_click", {
+			taskId: "first-ai-work",
+			action: "start",
+			isRecommended: true,
+		})
+	})
+
 	it("sells the whole pot until the first task is finished", () => {
 		render(<NewUserBenefits />)
 

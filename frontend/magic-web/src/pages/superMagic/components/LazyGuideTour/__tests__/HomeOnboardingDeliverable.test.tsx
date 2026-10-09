@@ -15,6 +15,11 @@ const { translate } = vi.hoisted(() => ({
 		values === undefined ? key : `${key}:${JSON.stringify(values)}`,
 }))
 
+const { analyticsReport } = vi.hoisted(() => ({ analyticsReport: vi.fn() }))
+vi.mock("@/services/analytics", () => ({
+	analyticsService: { report: analyticsReport },
+}))
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		i18n: { language: "en_US" },
@@ -218,6 +223,7 @@ describe("home onboarding: the two steps a delivered file is framed by", () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		window.localStorage.clear()
+		analyticsReport.mockClear()
 	})
 
 	afterEach(() => {
@@ -237,6 +243,68 @@ describe("home onboarding: the two steps a delivered file is framed by", () => {
 		return { onboarding, tour }
 	}
 
+	it("exposes each actually rendered result card once per run", async () => {
+		const observations: Array<{
+			callback: IntersectionObserverCallback
+			target: Element | null
+		}> = []
+		vi.stubGlobal(
+			"IntersectionObserver",
+			vi.fn((callback: IntersectionObserverCallback) => {
+				const observation = { callback, target: null as Element | null }
+				observations.push(observation)
+				return {
+					disconnect: vi.fn(),
+					observe: vi.fn((target: Element) => {
+						observation.target = target
+					}),
+				}
+			}),
+		)
+		const exposeLatest = () => {
+			const observation = observations.at(-1)
+			if (!observation?.target) throw new Error("Expected an observed onboarding step card")
+			observation.callback(
+				[
+					{
+						intersectionRatio: 1,
+						isIntersecting: true,
+						target: observation.target,
+					} as IntersectionObserverEntry,
+				],
+				{} as IntersectionObserver,
+			)
+		}
+		try {
+			await startDeliverableRun()
+			await act(async () => vi.advanceTimersByTime(32))
+			act(exposeLatest)
+			expect(analyticsReport).toHaveBeenCalledWith("onboarding_guide_step_exposure", {
+				taskId: "first-ai-work",
+				stepIndex: 9,
+				isReplay: false,
+			})
+			await act(async () => fireEvent.click(primaryAction()))
+			await act(async () => vi.advanceTimersByTime(32))
+			act(exposeLatest)
+			expect(analyticsReport).toHaveBeenCalledWith("onboarding_guide_step_exposure", {
+				taskId: "first-ai-work",
+				stepIndex: 10,
+				isReplay: false,
+			})
+			fireEvent.click(screen.getByText(PREVIOUS))
+			await act(async () => vi.advanceTimersByTime(32))
+			act(exposeLatest)
+			const step9Exposures = analyticsReport.mock.calls.filter(
+				([event, payload]) =>
+					event === "onboarding_guide_step_exposure" && payload.stepIndex === 9,
+			)
+			expect(step9Exposures).toHaveLength(1)
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
 	it("frames the file that was opened, then the copy the project keeps, over two numbered steps", async () => {
 		const { onboarding } = await startDeliverableRun()
 
@@ -255,6 +323,13 @@ describe("home onboarding: the two steps a delivered file is framed by", () => {
 		await act(async () => {
 			fireEvent.click(primaryAction())
 		})
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_guide_step_click", {
+			taskId: "first-ai-work",
+			stepIndex: 9,
+			isReplay: false,
+			action: "next",
+			caseId: undefined,
+		})
 
 		/*
 		 * Then where the project files it. It is the last step, so it closes the run — and the label
@@ -269,6 +344,13 @@ describe("home onboarding: the two steps a delivered file is framed by", () => {
 
 		await act(async () => {
 			fireEvent.click(primaryAction())
+		})
+		expect(analyticsReport).toHaveBeenCalledWith("onboarding_guide_step_click", {
+			taskId: "first-ai-work",
+			stepIndex: 10,
+			isReplay: false,
+			action: "complete",
+			caseId: undefined,
 		})
 
 		// The run is over, and — unlike a task's flow — it reported nothing on the way out.

@@ -44,6 +44,35 @@ beforeEach(() => {
 	window.localStorage.clear()
 })
 
+describe("onboarding analytics run", () => {
+	it("freezes replay and deduplicates steps across remounts", async () => {
+		const manager = await loadOnboarding()
+		manager.setHomeOnboardingAnalyticsScope(MAGIC_ID, "org-1")
+		manager.startHomeOnboarding(WORKBENCH, MAGIC_ID, true)
+		const run = manager.getHomeOnboardingAnalyticsRun()
+		const runId = run?.id ?? -1
+		expect(run?.isReplay).toBe(true)
+		expect(manager.consumeHomeOnboardingStepExposure(runId, "1")).toBe(true)
+		expect(manager.consumeHomeOnboardingStepExposure(runId, "1")).toBe(false)
+		manager.markHomeOnboardingAborted(MAGIC_ID, WORKBENCH)
+		expect(manager.getHomeOnboardingAnalyticsRun()?.isReplay).toBe(true)
+		manager.startHomeOnboarding(WORKBENCH, MAGIC_ID, false)
+		expect(manager.consumeHomeOnboardingStepExposure(runId, "2")).toBe(false)
+		expect(manager.getHomeOnboardingAnalyticsRun()?.isReplay).toBe(false)
+	})
+
+	it("isolates a previous account and organization's exposure records", async () => {
+		const manager = await loadOnboarding()
+		manager.setHomeOnboardingAnalyticsScope(MAGIC_ID, "org-1")
+		expect(manager.consumeHomeOnboardingSurfaceExposure("floating_card")).toBe(true)
+		expect(manager.consumeHomeOnboardingSurfaceExposure("floating_card")).toBe(false)
+		manager.startHomeOnboarding(FIRST_AI_WORK, MAGIC_ID)
+		manager.setHomeOnboardingAnalyticsScope(MAGIC_ID, "org-2")
+		expect(manager.getHomeOnboardingAnalyticsRun()).toBeNull()
+		expect(manager.consumeHomeOnboardingSurfaceExposure("floating_card")).toBe(true)
+	})
+})
+
 describe("home onboarding status", () => {
 	it("starts every task unfinished on every page load", async () => {
 		const firstLoad = await loadOnboarding()

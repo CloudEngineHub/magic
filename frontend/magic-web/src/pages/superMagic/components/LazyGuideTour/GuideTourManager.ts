@@ -357,6 +357,59 @@ let onboardingEntryTask: HomeOnboardingTaskId | null = null
  * tour, which announces its own state on the way in.
  */
 let onboardingRunActive = false
+
+/** Analytics follows a run across route remounts; completion status must not change replay mid-run. */
+interface OnboardingAnalyticsRun {
+	id: number
+	task: HomeOnboardingTaskId
+	isReplay: boolean
+	exposedSteps: Set<string>
+}
+let analyticsScope = ""
+let analyticsRunId = 0
+let analyticsRun: OnboardingAnalyticsRun | null = null
+let floatingCardExposed = false
+let welcomeExposed = false
+
+export function setHomeOnboardingAnalyticsScope(userMagicId?: string, organizationCode?: string) {
+	const scope = `${userMagicId ?? ""}:${organizationCode ?? ""}`
+	if (scope === analyticsScope) return
+	analyticsScope = scope
+	analyticsRun = null
+	floatingCardExposed = false
+	welcomeExposed = false
+}
+
+export function beginHomeOnboardingAnalyticsRun(task: HomeOnboardingTaskId, isReplay: boolean) {
+	analyticsRun = { id: ++analyticsRunId, task, isReplay, exposedSteps: new Set() }
+	return analyticsRun.id
+}
+
+export function getHomeOnboardingAnalyticsRun() {
+	return analyticsRun
+}
+
+export function endHomeOnboardingAnalyticsRun() {
+	analyticsRun = null
+}
+
+export function consumeHomeOnboardingStepExposure(runId: number, stepId: string) {
+	if (!analyticsRun || analyticsRun.id !== runId || analyticsRun.exposedSteps.has(stepId))
+		return false
+	analyticsRun.exposedSteps.add(stepId)
+	return true
+}
+
+export function consumeHomeOnboardingSurfaceExposure(surface: "floating_card" | "welcome") {
+	if (surface === "floating_card") {
+		if (floatingCardExposed) return false
+		floatingCardExposed = true
+		return true
+	}
+	if (welcomeExposed) return false
+	welcomeExposed = true
+	return true
+}
 /**
  * The account the guide belongs to, as the surface that hosts it sees it.
  *
@@ -629,7 +682,9 @@ function setHomeOnboardingStatus(
 export const startHomeOnboarding = (
 	task: HomeOnboardingTaskId = "workbench",
 	userMagicId?: string,
+	isReplay = false,
 ) => {
+	beginHomeOnboardingAnalyticsRun(task, isReplay)
 	onboardingEntryTask = task
 	// A card entry opens its own task on its own first step, so the introduction is behind us by
 	// definition — a later mount must not fall back to its dialog.
@@ -659,6 +714,7 @@ export const startHomeOnboarding = (
  * refuses to paint, and a stored flow is exactly what "somebody asked" looks like from outside.
  */
 export function startHomeOnboardingDeliverableRun() {
+	beginHomeOnboardingAnalyticsRun("first-ai-work", false)
 	setHomeOnboardingFlow("project-result")
 	// The home shell is none of this tour's business: its anchors are the project page's own.
 	setHomeOnboardingSidebarTopMode(false)

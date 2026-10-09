@@ -42,7 +42,11 @@ const { translate, MAGIC_ID, deployment, organization } = vi.hoisted(() => ({
 	MAGIC_ID: "magic-guide-gate",
 	/** The deployment and the organization the wrapper under test is looking at. */
 	deployment: { privateDeployment: false },
-	organization: { organizationListReady: true, isPersonalOrganization: true },
+	organization: {
+		organizationListReady: true,
+		isPersonalOrganization: true,
+		organizationCode: "org-1",
+	},
 }))
 
 vi.mock("react-i18next", () => ({
@@ -87,6 +91,9 @@ const { getOnboardingTasks, completeOnboardingTask } = vi.hoisted(() => ({
 vi.mock("@/apis/modules/onboarding", () => ({ getOnboardingTasks, completeOnboardingTask }))
 
 vi.mock("@/routes/hooks/useNavigate", () => ({ default: () => vi.fn() }))
+
+// The wrapper spec owns the onboarding gate only; reporting is covered by the event specs.
+vi.mock("@/services/analytics", () => ({ analyticsService: { report: vi.fn() } }))
 
 vi.mock("@/stores/layout", () => ({
 	sidebarStore: { collapsed: false, setCollapsed: vi.fn() },
@@ -159,6 +166,7 @@ beforeEach(() => {
 	deployment.privateDeployment = false
 	organization.organizationListReady = true
 	organization.isPersonalOrganization = true
+	organization.organizationCode = "org-1"
 
 	getOnboardingTasks.mockReset()
 	completeOnboardingTask.mockReset()
@@ -242,6 +250,29 @@ describe("whether the feature is mounted at all", () => {
 		})
 
 		expect(await screen.findByRole("dialog", { name: INTRO }, { timeout: 15000 })).toBeTruthy()
+	})
+})
+
+describe("the wrapper owns the analytics scope", () => {
+	it("keeps the run and exposure records across route remounts, then clears them on organization change", async () => {
+		const { onboarding, wrapper, unmount } = await mountWrapper(() => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [] })
+		})
+		const runId = onboarding.beginHomeOnboardingAnalyticsRun("manage-skill", true)
+		expect(onboarding.consumeHomeOnboardingStepExposure(runId, "4")).toBe(true)
+		expect(onboarding.consumeHomeOnboardingSurfaceExposure("floating_card")).toBe(true)
+		unmount()
+		const nextPage = render(<wrapper.default isMobile={false} page="my-skills" />)
+		expect(onboarding.getHomeOnboardingAnalyticsRun()?.id).toBe(runId)
+		expect(onboarding.consumeHomeOnboardingStepExposure(runId, "4")).toBe(false)
+		expect(onboarding.consumeHomeOnboardingSurfaceExposure("floating_card")).toBe(false)
+
+		organization.organizationCode = "org-2"
+		organization.isPersonalOrganization = false
+		nextPage.rerender(<wrapper.default isMobile={false} page="my-skills" />)
+		expect(onboarding.getHomeOnboardingAnalyticsRun()).toBeNull()
+		expect(onboarding.consumeHomeOnboardingStepExposure(runId, "5")).toBe(false)
+		expect(onboarding.consumeHomeOnboardingSurfaceExposure("floating_card")).toBe(true)
 	})
 })
 
