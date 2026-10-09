@@ -2,13 +2,7 @@ import { useEffect, useState } from "react"
 import type { RefObject } from "react"
 import { useMemoizedFn } from "ahooks"
 import { bindTouchPinch, type PinchPhase, type PinchPoint } from "../utils/touch-pinch"
-
-export interface PinchAnchor {
-	contentX: number
-	contentY: number
-	clientX: number
-	clientY: number
-}
+import { createPinchZoomController, type PinchAnchor } from "../utils/pinch-zoom-controller"
 
 interface TouchPinchZoomConfig {
 	containerRef: RefObject<HTMLDivElement>
@@ -16,6 +10,7 @@ interface TouchPinchZoomConfig {
 	enabled: boolean
 	iframeReady: boolean
 	scale: number
+	onPinchActiveChange?: (active: boolean) => void
 	onScaleChange: (scale: number, anchor: PinchAnchor) => void
 }
 
@@ -23,74 +18,30 @@ export function useTouchPinchZoom(config: TouchPinchZoomConfig): boolean {
 	const [isPinching, setIsPinching] = useState(false)
 	const getScale = useMemoizedFn(() => config.scale)
 	const changeScale = useMemoizedFn(config.onScaleChange)
+	const setActive = useMemoizedFn((active: boolean) => {
+		config.onPinchActiveChange?.(active)
+		setIsPinching(active)
+	})
 	const { containerRef, iframeRef, enabled, iframeReady } = config
 
 	useEffect(() => {
 		const container = containerRef.current
 		const iframe = iframeRef.current
 		if (!container || !iframe) return
-		let session: {
-			source: "host" | "iframe"
-			ids: number[]
-			distance: number
-			scale: number
-			anchor: PinchAnchor
-		} | null = null
+		const controller = createPinchZoomController({
+			iframe,
+			getScale,
+			onScaleChange: changeScale,
+			onActiveChange: setActive,
+		})
 		const handleGesture = (
 			source: "host" | "iframe",
 			phase: PinchPhase,
 			points: PinchPoint[],
 		) => {
-			if (phase === "end") {
-				if (session?.source === source) {
-					session = null
-					setIsPinching(false)
-				}
-				return
-			}
-			if (!enabled || points.length !== 2) return
-			const rect = iframe.getBoundingClientRect()
-			// Iframe touch coordinates are unscaled CSS pixels. Read actual geometry on every
-			// event so a pending React render cannot feed the previous zoom back into the gesture.
-			const physicalPoints =
-				source === "host"
-					? points
-					: points.map((point) => ({
-							...point,
-							x: rect.left + point.x * (rect.width / iframe.clientWidth),
-							y: rect.top + point.y * (rect.height / iframe.clientHeight),
-						}))
-			const [a, b] = physicalPoints
-			const distance = Math.hypot(a.x - b.x, a.y - b.y)
-			if (!Number.isFinite(distance) || distance <= 0) return
-			const clientX = (a.x + b.x) / 2
-			const clientY = (a.y + b.y) / 2
-			if (phase === "start") {
-				setIsPinching(true)
-				const scale = getScale()
-				session = {
-					source,
-					ids: points.map((point) => point.id),
-					distance,
-					scale,
-					anchor: {
-						contentX: (clientX - rect.left) / scale,
-						contentY: (clientY - rect.top) / scale,
-						clientX,
-						clientY,
-					},
-				}
-			} else if (
-				session?.source === source &&
-				points.every((point) => session?.ids.includes(point.id))
-			) {
-				changeScale((session.scale * distance) / session.distance, {
-					...session.anchor,
-					clientX,
-					clientY,
-				})
-			}
+			if (enabled) controller.handleGesture(source, phase, points)
 		}
+
 		let origin: string | undefined
 		try {
 			if (iframe.src) {
@@ -120,7 +71,7 @@ export function useTouchPinchZoom(config: TouchPinchZoomConfig): boolean {
 			}
 			if (event.data?.type !== "magic-preview-pinch") return
 			const { phase, points } = event.data
-			if (phase === "end") {
+			if (phase === "end" || phase === "cancel") {
 				handleGesture("iframe", phase, [])
 				return
 			}
@@ -133,7 +84,9 @@ export function useTouchPinchZoom(config: TouchPinchZoomConfig): boolean {
 						point &&
 						Number.isFinite(point.id) &&
 						Number.isFinite(point.x) &&
-						Number.isFinite(point.y),
+						Number.isFinite(point.y) &&
+						((point.screenX === undefined && point.screenY === undefined) ||
+							(Number.isFinite(point.screenX) && Number.isFinite(point.screenY))),
 				)
 			)
 				return
@@ -162,9 +115,8 @@ export function useTouchPinchZoom(config: TouchPinchZoomConfig): boolean {
 			sendState(false)
 			unbind?.()
 			unbindIframe?.()
-			session = null
-			setIsPinching(false)
+			controller.destroy()
 		}
-	}, [containerRef, iframeRef, enabled, iframeReady, getScale, changeScale])
+	}, [containerRef, iframeRef, enabled, iframeReady, getScale, changeScale, setActive])
 	return enabled && isPinching
 }

@@ -1,15 +1,15 @@
 import { act, renderHook } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useTouchPinchZoom } from "../useTouchPinchZoom"
 import { usePPTSwipeNavigation } from "@/pages/superMagic/components/Detail/components/PPTRender/hooks/usePPTSwipeNavigation"
 import type { PinchPoint } from "../../utils/touch-pinch"
 
-function touch(target: EventTarget, type: string, distance: number, count = 2) {
+function touch(target: EventTarget, type: string, distance: number, count = 2, center = 400) {
 	const event = new Event(type, { cancelable: true })
 	Object.defineProperty(event, "touches", {
 		value: Array.from({ length: count }, (_, id) => ({
 			identifier: id,
-			clientX: 400 + (id - 0.5) * distance,
+			clientX: center + (id - 0.5) * distance,
 			clientY: 300,
 		})),
 	})
@@ -55,7 +55,16 @@ function setup() {
 	}
 }
 
+beforeEach(() => {
+	vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+		callback(0)
+		return 0
+	})
+	vi.stubGlobal("cancelAnimationFrame", vi.fn())
+})
+
 afterEach(() => {
+	vi.unstubAllGlobals()
 	vi.restoreAllMocks()
 	document.body.innerHTML = ""
 })
@@ -223,4 +232,118 @@ describe("useTouchPinchZoom", () => {
 			expect(onSwipe).toHaveBeenCalledWith("next")
 		},
 	)
+	it("does not amplify a delayed iframe move when the fingers stay at the same screen positions", () => {
+		const { iframe, config, onScaleChange, setVisualScale } = setup()
+		iframe.src = "https://sandbox.example.test/slide"
+		const frame = iframe.contentWindow
+		if (!frame) throw new Error("Missing frame")
+		vi.spyOn(frame, "postMessage").mockImplementation(() => undefined)
+		const hook = renderHook((props) => useTouchPinchZoom(props), { initialProps: config })
+		const message = (phase: string, distance: number) => {
+			const points = [0, 1].map((id) => ({
+				id,
+				x: 400 + (id - 0.5) * distance,
+				y: 300,
+				screenX: 220 + (id - 0.5) * distance * 0.5,
+				screenY: 190,
+			}))
+			act(() =>
+				window.dispatchEvent(
+					new MessageEvent("message", {
+						source: frame,
+						origin: "https://sandbox.example.test",
+						data: { type: "magic-preview-pinch", phase, points },
+					}),
+				),
+			)
+		}
+		message("start", 200)
+		message("move", 320)
+		expect(onScaleChange.mock.lastCall?.[0]).toBeCloseTo(0.8)
+		setVisualScale(0.8)
+		hook.rerender({ ...config, scale: 0.8 })
+		// A queued move retains old iframe CSS coordinates, but the physical fingers did not move.
+		message("move", 320)
+		expect(onScaleChange.mock.lastCall?.[0]).toBeCloseTo(0.8)
+	})
+
+	it("ignores finger jitter instead of repainting on every tiny movement", () => {
+		const { container, config, onScaleChange } = setup()
+		renderHook(() => useTouchPinchZoom(config))
+		touch(container, "touchstart", 100)
+		for (let i = 0; i < 30; i += 1) touch(container, "touchmove", 100 + (i % 2 ? 1 : -1))
+		expect(onScaleChange).not.toHaveBeenCalled()
+	})
+
+	it("coalesces rapid samples into one update per frame and keeps only the latest sample", () => {
+		const { container, config, onScaleChange } = setup()
+		const frames: FrameRequestCallback[] = []
+		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+			frames.push(callback)
+			return frames.length
+		})
+		renderHook(() => useTouchPinchZoom(config))
+		touch(container, "touchstart", 100)
+		for (const distance of [120, 130, 150, 160]) touch(container, "touchmove", distance)
+		expect(onScaleChange).not.toHaveBeenCalled()
+		expect(frames).toHaveLength(1)
+		act(() => frames.shift()?.(16))
+		expect(onScaleChange).toHaveBeenCalledTimes(1)
+		expect(onScaleChange.mock.lastCall?.[0]).toBeCloseTo(0.8)
+	})
+
+	it("discards queued movement on cancellation or disable, but retains the last valid move on release", () => {
+		const { container, config, onScaleChange } = setup()
+		const frames: FrameRequestCallback[] = []
+		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+			frames.push(callback)
+			return frames.length
+		})
+		const hook = renderHook((props) => useTouchPinchZoom(props), { initialProps: config })
+		touch(container, "touchstart", 100)
+		touch(container, "touchmove", 160)
+		touch(container, "touchcancel", 0, 0)
+		act(() => frames.shift()?.(16))
+		expect(onScaleChange).not.toHaveBeenCalled()
+		touch(container, "touchstart", 100)
+		touch(container, "touchmove", 160)
+		hook.rerender({ ...config, enabled: false })
+		act(() => frames.shift()?.(32))
+		expect(onScaleChange).not.toHaveBeenCalled()
+		hook.rerender(config)
+		touch(container, "touchstart", 100)
+		touch(container, "touchmove", 160)
+		touch(container, "touchend", 0, 0)
+		expect(onScaleChange.mock.lastCall?.[0]).toBeCloseTo(0.8)
+		act(() => frames.shift()?.(48))
+		expect(onScaleChange).toHaveBeenCalledTimes(1)
+	})
+	it("cannot apply an old cancelled frame to a new gesture", () => {
+		const { container, config, onScaleChange } = setup()
+		const frames: FrameRequestCallback[] = []
+		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+			frames.push(callback)
+			return frames.length
+		})
+		renderHook(() => useTouchPinchZoom(config))
+		touch(container, "touchstart", 100)
+		touch(container, "touchmove", 160)
+		touch(container, "touchcancel", 0, 0)
+		touch(container, "touchstart", 100)
+		touch(container, "touchmove", 120)
+		act(() => frames.shift()?.(16))
+		expect(onScaleChange).not.toHaveBeenCalled()
+		act(() => frames.shift()?.(32))
+		expect(onScaleChange).toHaveBeenCalledTimes(1)
+		expect(onScaleChange.mock.lastCall?.[0]).toBeCloseTo(0.6)
+	})
+	it("keeps scale noise out of intentional two-finger panning", () => {
+		const { container, config, onScaleChange } = setup()
+		renderHook(() => useTouchPinchZoom(config))
+		touch(container, "touchstart", 100)
+		touch(container, "touchmove", 101, 2, 410)
+		touch(container, "touchmove", 99, 2, 420)
+		expect(onScaleChange.mock.calls.map(([scale]) => scale)).toEqual([0.5, 0.5])
+		expect(onScaleChange.mock.lastCall?.[1].clientX).toBe(420)
+	})
 })

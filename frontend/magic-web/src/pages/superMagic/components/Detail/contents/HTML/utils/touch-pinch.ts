@@ -2,9 +2,12 @@ export interface PinchPoint {
 	id: number
 	x: number
 	y: number
+	/** Screen coordinates remain stable while an iframe is transformed. */
+	screenX?: number
+	screenY?: number
 }
 
-export type PinchPhase = "start" | "move" | "end"
+export type PinchPhase = "start" | "move" | "end" | "cancel"
 
 /** Only own two-finger gestures; ordinary scrolling and swipe listeners still receive events. */
 export function bindTouchPinch(
@@ -13,25 +16,29 @@ export function bindTouchPinch(
 ): () => void {
 	let activeIds: number[] | null = null
 	let blocked = false
-	const end = () => {
-		if (activeIds) onGesture("end", [])
+	const end = (phase: "end" | "cancel" = "end") => {
+		if (activeIds) onGesture(phase, [])
 		activeIds = null
 	}
 	const handleTouch = (event: Event) => {
 		const touchEvent = event as TouchEvent
 		if (event.type === "touchcancel") {
-			end()
+			end("cancel")
 			blocked = touchEvent.touches.length > 0
 			return
 		}
-		const points = Array.from(touchEvent.touches, (touch) => ({
-			id: touch.identifier,
-			x: touch.clientX,
-			y: touch.clientY,
-		}))
+		const points = Array.from(touchEvent.touches, (touch): PinchPoint => {
+			const point: PinchPoint = { id: touch.identifier, x: touch.clientX, y: touch.clientY }
+			if (Number.isFinite(touch.screenX) && Number.isFinite(touch.screenY)) {
+				point.screenX = touch.screenX
+				point.screenY = touch.screenY
+			}
+			return point
+		})
+
 		if (points.length !== 2) {
 			if (activeIds || points.length > 2) blocked = true
-			end()
+			end(points.length > 2 ? "cancel" : "end")
 			if (points.length === 0) blocked = false
 			return
 		}
@@ -42,7 +49,7 @@ export function bindTouchPinch(
 		} else if (activeIds && points.every((point) => activeIds?.includes(point.id))) {
 			if (event.type === "touchmove") onGesture("move", points)
 		} else {
-			end()
+			end("cancel")
 			blocked = true
 			return
 		}
@@ -54,6 +61,6 @@ export function bindTouchPinch(
 	)
 	return () => {
 		events.forEach((name) => target.removeEventListener(name, handleTouch, true))
-		end()
+		end("cancel")
 	}
 }

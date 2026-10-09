@@ -100,4 +100,38 @@ describe("compiled touch pinch installer", () => {
 		expect(touch("touchstart").defaultPrevented).toBe(false)
 		expect(parent.postMessage).not.toHaveBeenCalled()
 	})
+	it("reports transform-independent screen coordinates from the compiled bridge", () => {
+		const { parent, sandbox, execute, state, touch } = setup()
+		execute()
+		state(true)
+		// The native Touch shape includes screen pixels even though iframe CSS pixels differ.
+		const event = new Event("touchstart", { cancelable: true })
+		const documentTarget = new EventTarget()
+		const targetScript = createIframeRuntimeScript("touch-pinch", { parentOrigin: origin })
+		new Function("window", "document", targetScript)(sandbox, documentTarget)
+		state(true)
+		Object.defineProperty(event, "touches", {
+			value: [0, 1].map((id) => ({
+				identifier: id,
+				clientX: id * 200,
+				clientY: 100,
+				screenX: 250 + id * 100,
+				screenY: 300,
+			})),
+		})
+		documentTarget.dispatchEvent(event)
+		expect(parent.postMessage).toHaveBeenLastCalledWith(
+			{
+				type: "magic-preview-pinch",
+				phase: "start",
+				points: [
+					{ id: 0, x: 0, y: 100, screenX: 250, screenY: 300 },
+					{ id: 1, x: 200, y: 100, screenX: 350, screenY: 300 },
+				],
+			},
+			origin,
+		)
+		sandbox.__MAGIC_PREVIEW_PINCH_CLEANUP__?.()
+		expect(touch("touchmove").defaultPrevented).toBe(false)
+	})
 })

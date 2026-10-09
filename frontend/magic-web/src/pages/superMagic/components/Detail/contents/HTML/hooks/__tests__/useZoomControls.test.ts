@@ -232,4 +232,59 @@ describe("useZoomControls", () => {
 		expect(result.current.scaleRatio).toBe(0.5)
 		expect(container.scrollTo).not.toHaveBeenCalled()
 	})
+	it("lets touch own zoom before its first frame and prevents wheel/legacy deltas from stacking", async () => {
+		const container = document.createElement("div")
+		Object.defineProperties(container, {
+			offsetWidth: { value: 960 },
+			offsetHeight: { value: 800 },
+			clientWidth: { value: 960 },
+			clientHeight: { value: 800 },
+		})
+		container.scrollTo = vi.fn()
+		const iframe = document.createElement("iframe")
+		document.body.appendChild(iframe)
+		const containerRef = { current: container },
+			iframeRef = { current: iframe }
+		const { result } = renderHook(() =>
+			useZoomControls({
+				containerRef,
+				iframeRef,
+				isPptRender: true,
+				iframeLoaded: true,
+				contentInjected: true,
+				scaleContentDimensions: { width: 1920, height: 1080 },
+			}),
+		)
+		await waitFor(() => expect(result.current.scaleRatio).toBe(0.5))
+		const frames: FrameRequestCallback[] = []
+		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+			frames.push(callback)
+			return frames.length
+		})
+		const pinch = (type: string, distance: number) => {
+			const event = new Event(type, { cancelable: true })
+			Object.defineProperty(event, "touches", {
+				value: [0, 1].map((id) => ({
+					identifier: id,
+					clientX: 400 + (id - 0.5) * distance,
+					clientY: 300,
+				})),
+			})
+			act(() => container.dispatchEvent(event))
+		}
+		pinch("touchstart", 100)
+		const wheel = new WheelEvent("wheel", { ctrlKey: true, deltaY: -100, cancelable: true })
+		act(() => {
+			iframe.contentWindow?.dispatchEvent(wheel)
+			result.current.handleScaleChange(1)
+		})
+		expect(result.current.scaleRatio).toBe(0.5)
+		expect(wheel.defaultPrevented).toBe(true)
+		pinch("touchmove", 160)
+		act(() => frames.shift()?.(16))
+		expect(result.current.scaleRatio).toBeCloseTo(0.8)
+		// The scroll origin is corrected in layout, without two extra queued RAF callbacks.
+		expect(container.scrollTo).toHaveBeenCalledTimes(1)
+		expect(frames).toHaveLength(0)
+	})
 })
