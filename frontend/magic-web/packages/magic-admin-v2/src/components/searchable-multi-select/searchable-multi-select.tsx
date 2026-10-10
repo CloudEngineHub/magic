@@ -26,6 +26,15 @@ export type SearchableMultiSelectProps = {
 	ariaLabel: string
 	/** 触发器容器的自定义样式。 */
 	className?: string
+	/** Stable selectors for the trigger, menu, options, and states. */
+	triggerTestId?: string
+	contentTestId?: string
+	searchInputTestId?: string
+	searchClearButtonTestId?: string
+	optionTestId?: string
+	loadingTestId?: string
+	emptyTestId?: string
+	clearButtonTestId?: string
 	/** 清空搜索和移除选项操作使用的文案。 */
 	clearLabel: string
 	/** 下拉内容容器的自定义样式。 */
@@ -61,6 +70,14 @@ export type SearchableMultiSelectProps = {
 export function SearchableMultiSelect({
 	ariaLabel,
 	className,
+	clearButtonTestId,
+	contentTestId,
+	loadingTestId,
+	emptyTestId,
+	optionTestId,
+	searchClearButtonTestId,
+	searchInputTestId,
+	triggerTestId,
 	clearLabel,
 	contentClassName,
 	disabled = false,
@@ -156,6 +173,7 @@ export function SearchableMultiSelect({
 			<PopoverTrigger
 				aria-haspopup="listbox"
 				aria-label={ariaLabel}
+				data-testid={triggerTestId}
 				aria-busy={isLoading || undefined}
 				className={cn(
 					"flex min-h-9 w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-md border border-input bg-background px-2.5 py-1.5 text-left text-sm shadow-sm outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring",
@@ -221,6 +239,7 @@ export function SearchableMultiSelect({
 			</PopoverTrigger>
 			<PopoverContent
 				align="start"
+				data-testid={contentTestId}
 				className={cn(
 					"z-[100] max-w-[calc(100vw-1.5rem)] overflow-hidden p-0",
 					!matchTriggerWidth && "w-[min(360px,calc(100vw-1.5rem))]",
@@ -232,7 +251,9 @@ export function SearchableMultiSelect({
 					<FilterSearchInput
 						autoFocus
 						clearLabel={clearLabel}
+						clearButtonTestId={searchClearButtonTestId}
 						disabled={disabled}
+						inputTestId={searchInputTestId}
 						onValueChange={setKeyword}
 						placeholder={searchPlaceholder}
 						value={keyword}
@@ -245,7 +266,10 @@ export function SearchableMultiSelect({
 					role="listbox"
 				>
 					{isLoading && options.length === 0 ? (
-						<div className="flex min-h-24 items-center justify-center text-muted-foreground">
+						<div
+							className="flex min-h-24 items-center justify-center text-muted-foreground"
+							data-testid={loadingTestId}
+						>
 							<Loader2 aria-hidden="true" className="size-4 animate-spin" />
 						</div>
 					) : filteredOptions.length > 0 ? (
@@ -256,6 +280,7 @@ export function SearchableMultiSelect({
 							return (
 								<button
 									aria-selected={selected}
+											data-testid={optionTestId}
 									className={cn(
 										"flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50",
 										selected && "bg-accent/70",
@@ -297,7 +322,10 @@ export function SearchableMultiSelect({
 							)
 						})
 					) : (
-						<div className="flex min-h-24 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+						<div
+							className="flex min-h-24 items-center justify-center px-4 text-center text-sm text-muted-foreground"
+							data-testid={emptyTestId}
+						>
 							{noMatchingLabel}
 						</div>
 					)}
@@ -308,6 +336,7 @@ export function SearchableMultiSelect({
 					</span>
 					<Button
 						className="shrink-0"
+						data-testid={clearButtonTestId}
 						disabled={disabled || value.length === 0}
 						onClick={() => onChange([])}
 						size="sm"

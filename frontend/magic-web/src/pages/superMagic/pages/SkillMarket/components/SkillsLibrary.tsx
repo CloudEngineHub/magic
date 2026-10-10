@@ -174,7 +174,6 @@ function SkillsLibrary({
 	})
 	const selectedSkillId = selectedSkill?.id
 	const selectedSkillStatus = selectedSkill?.status
-	const selectedSkillNeedUpgrade = selectedSkill?.needUpgrade ?? false
 	const isSelectedSkillAdding = selectedSkillId
 		? skillsStore.isAddingSkill(selectedSkillId)
 		: false
@@ -185,34 +184,21 @@ function SkillsLibrary({
 						label: isSelectedSkillAdding
 							? t("skillsLibrary.adding")
 							: selectedSkillStatus === "added"
-								? selectedSkillNeedUpgrade
-									? t("skillsLibrary.upgrade")
-									: t("skillsLibrary.added")
+								? t("skillsLibrary.added")
 								: t("skillsLibrary.addToMySkills"),
 						onClick: async () => {
 							if (selectedSkillStatus === "added") {
-								if (selectedSkillNeedUpgrade)
-									await skillsStore.upgradeSkill(selectedSkillId)
 								return
 							}
 
 							await skillsStore.addSkill(selectedSkillId)
 						},
 						onError: () => toast.error(t("skillsLibrary.actionFailed")),
-						disabled:
-							isSelectedSkillAdding ||
-							(selectedSkillStatus === "added" && !selectedSkillNeedUpgrade),
+						disabled: isSelectedSkillAdding || selectedSkillStatus === "added",
 						testId: "skill-detail-dialog-primary-action",
 					}
 				: undefined,
-		[
-			isSelectedSkillAdding,
-			selectedSkillId,
-			selectedSkillNeedUpgrade,
-			selectedSkillStatus,
-			skillsStore,
-			t,
-		],
+		[isSelectedSkillAdding, selectedSkillId, selectedSkillStatus, skillsStore, t],
 	)
 
 	return (

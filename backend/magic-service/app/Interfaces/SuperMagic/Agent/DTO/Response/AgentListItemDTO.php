@@ -20,11 +20,11 @@ class AgentListItemDTO extends AbstractDTO
 
     private ?string $projectId;
 
-    private string $name;
+    private array $nameI18n;
 
-    private string $role;
+    private ?array $roleI18n;
 
-    private string $description;
+    private ?array $descriptionI18n;
 
     /**
      * Agent图标对象，包含 type 和 value.
@@ -36,7 +36,7 @@ class AgentListItemDTO extends AbstractDTO
     /**
      * Playbook 列表（feature）.
      *
-     * @var array<int, array{name: string, icon: null|string, theme_color: null|string}>
+     * @var array<int, array{name_i18n: array, icon: null|string, theme_color: null|string}>
      */
     private array $playbooks;
 
@@ -83,9 +83,9 @@ class AgentListItemDTO extends AbstractDTO
         int $id,
         string $code,
         ?string $projectId,
-        string $name,
-        string $role,
-        string $description,
+        array $nameI18n,
+        ?array $roleI18n,
+        ?array $descriptionI18n,
         ?array $icon,
         int $iconType,
         array $playbooks,
@@ -111,9 +111,9 @@ class AgentListItemDTO extends AbstractDTO
         $this->id = $id;
         $this->code = $code;
         $this->projectId = $projectId;
-        $this->name = $name;
-        $this->role = $role;
-        $this->description = $description;
+        $this->nameI18n = $nameI18n;
+        $this->roleI18n = $roleI18n;
+        $this->descriptionI18n = $descriptionI18n;
         $this->icon = $icon;
         $this->iconType = $iconType;
         $this->playbooks = $playbooks;
@@ -146,9 +146,9 @@ class AgentListItemDTO extends AbstractDTO
             'id' => (string) $this->id,
             'code' => $this->code,
             'project_id' => $this->projectId,
-            'name' => $this->name,
-            'role' => $this->role,
-            'description' => $this->description,
+            'name_i18n' => $this->nameI18n,
+            'role_i18n' => $this->roleI18n,
+            'description_i18n' => $this->descriptionI18n,
             'icon' => $this->icon,
             'icon_type' => $this->iconType,
             'playbooks' => $this->playbooks,

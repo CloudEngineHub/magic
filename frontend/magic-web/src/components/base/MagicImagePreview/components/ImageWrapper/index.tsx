@@ -6,6 +6,7 @@ import { isString } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { Skeleton, Tooltip } from "antd"
 import MessageFilePreviewService from "@/services/chat/message/MessageImagePreview"
+import ChatFileService, { type FileCacheData } from "@/services/chat/file/ChatFileService"
 import MessageFilePreviewStore from "@/stores/chatNew/messagePreview/ImagePreviewStore"
 import useChatFileUrls from "@/hooks/chat/useChatFileUrls"
 import conversationStore from "@/stores/chatNew/conversation"
@@ -80,6 +81,7 @@ const ImageWrapper = observer((props: ImageWrapperProps) => {
 	const isLongImage = useImageSize(fileInfo?.url)
 
 	const [error, { setTrue, setFalse }] = useBoolean(false)
+	const refreshAttemptRef = useRef(false)
 	const { currentConversation: conversation } = conversationStore
 
 	const { data: urls, isLoading } = useChatFileUrls(
@@ -145,6 +147,9 @@ const ImageWrapper = observer((props: ImageWrapperProps) => {
 		urls,
 		useHDImage,
 	])
+	useEffect(() => {
+		refreshAttemptRef.current = false
+	}, [fileId, messageId])
 
 	// useUpdateEffect(() => {
 	// 	const { previewInfo, open } = MessageFilePreviewStore
@@ -159,8 +164,27 @@ const ImageWrapper = observer((props: ImageWrapperProps) => {
 		setFalse()
 	})
 
-	const onError = useMemoizedFn((e) => {
+	const onError = useMemoizedFn(async (e) => {
 		onErrorInProps?.(e)
+		if (fileId && messageId && !refreshAttemptRef.current) {
+			refreshAttemptRef.current = true
+			let refreshed: Record<string, FileCacheData>
+			try {
+				refreshed = await ChatFileService.fetchFileUrl(
+					[{ file_id: fileId, message_id: messageId }],
+					{ forceRefresh: true },
+				)
+			} catch {
+				setTrue()
+				return
+			}
+			const resource = refreshed[fileId]
+			if (resource?.url) {
+				setFileInfo((current) => (current ? { ...current, url: resource.url } : current))
+				setFalse()
+				return
+			}
+		}
 		setTrue()
 	})
 

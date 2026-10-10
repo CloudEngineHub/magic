@@ -32,7 +32,7 @@ Other document types should usually be read or exported through semantic convers
 3. If the file is large, sample a few representative units before choosing a full reading strategy.
 4. Plan the next read from the sample result and the user's goal.
 5. After inspection and sampling, use the returned `strategy_context` and the user's goal to choose an asset strategy.
-6. If the user did not specify an asset preference and the recommendation materially changes the output, call `ask_user` once before extraction. Put the recommended strategy first and use it as the timeout default.
+6. If the user did not specify an asset preference and the recommendation materially changes the output, call `ask_user` once before extraction. Put the recommended strategy first and omit `timeout`; the user may need time to decide. Use `timeout=60` only when the choice is simple, has a safe default, and does not materially affect the result.
 7. Extract or understand only the selected ranges into reusable Markdown artifacts.
 8. Read `document.reading_state.json` between large-document steps to avoid rereading the same content.
 9. For summaries, summarize smaller chunks first, then combine them into section-level and document-level summaries.

@@ -96,7 +96,8 @@ export interface SlidesTemplateLocaleItem {
 	value: string
 }
 
-export type SlidesTemplateResponseText = string | SlidesTemplateItem["label"] | SlidesTemplateLocaleItem[]
+export type SlidesTemplateResponseText =
+	string | SlidesTemplateItem["label"] | SlidesTemplateLocaleItem[]
 
 export interface SlidesTemplateRawListResponse {
 	page: number

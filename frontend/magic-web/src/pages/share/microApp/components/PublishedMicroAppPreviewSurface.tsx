@@ -1,3 +1,5 @@
+import MicroAppPreviewTabs from "@/pages/superMagic/pages/MicroAppPage/components/MicroAppPreviewTabs"
+import MicroAppPreviewPages from "@/pages/superMagic/pages/MicroAppPage/components/MicroAppPreviewPages"
 import { useMemo } from "react"
 import { FileCode2, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -17,6 +19,11 @@ const NOOP_LEAVE = () => undefined
 export interface PublishedMicroAppPreviewSurfaceProps {
 	preview: UsePublishedMicroAppPreviewReturn
 	onLeave?: () => void
+	/**
+	 * 错误态（无权限、分享失效等）下「返回」按钮的落点。
+	 * 不传则不渲染按钮——应用内的微应用预览标签页正是如此，它有自己的外层导航。
+	 */
+	onErrorBack?: () => void
 	testIdPrefix: "micro-app-tab" | "micro-app-share"
 	rootTestId?: string
 	onHtmlPermissionManagerChange?: (manager: { open: () => void } | null) => void
@@ -48,6 +55,7 @@ function PublishedMicroAppPreviewEmpty({ testId }: { testId: string }) {
 function PublishedMicroAppPreviewSurface({
 	preview,
 	onLeave,
+	onErrorBack,
 	testIdPrefix,
 	rootTestId,
 	onHtmlPermissionManagerChange,
@@ -72,11 +80,10 @@ function PublishedMicroAppPreviewSurface({
 		handleVerifySuccess,
 		getShareData,
 		setError,
-		reload,
 		installFlow,
 		previewMode,
 		setPreviewMode,
-		handleOpenFileTab,
+		browser,
 		attachmentsTree,
 		attachmentList,
 		shareMeta,
@@ -141,7 +148,7 @@ function PublishedMicroAppPreviewSurface({
 				{error && !loading ? (
 					<ErrorDisplay
 						errorMessage={t("microAppShare.errorTitle")}
-						onRetry={reload}
+						onBack={onErrorBack}
 						isFileShare
 						illustration={
 							<MicroAppPermissionIllustration
@@ -187,29 +194,40 @@ function PublishedMicroAppPreviewSurface({
 										/>
 									</header>
 								) : null}
+								{browser.previewTabs.length > 1 && (
+									<div className="flex shrink-0 border-b border-border bg-muted/10">
+										<MicroAppPreviewTabs {...browser} />
+									</div>
+								)}
 								<div className="min-h-0 flex-1 overflow-hidden">
-									<HtmlPreviewContent
-										key={previewFile.file_id || previewFile.relative_file_path}
-										data={buildPreviewFile(previewFile)}
-										attachments={attachmentsTree}
-										attachmentList={attachmentList}
-										allowEdit={false}
-										showFileHeader={false}
-										showFooter={false}
-										viewMode={previewMode}
-										onViewModeChange={setPreviewMode}
-										activeFileId={previewFile.file_id}
-										projectId={shareMeta.projectId}
-										microAppId={appId}
-										microAppName={displayAppName}
-										virtualStorageMarkerId={defaultEntryFile?.file_id}
-										openFileTab={handleOpenFileTab}
-										onHtmlPermissionManagerChange={
-											onHtmlPermissionManagerChange
-										}
-										isSharePreview
-										className="h-full"
-									/>
+									<MicroAppPreviewPages browser={browser}>
+										{({ tab, active, onOpenFile }) => (
+											<HtmlPreviewContent
+												key={`${tab.id}:${tab.revision}`}
+												data={buildPreviewFile(tab.file)}
+												attachments={attachmentsTree}
+												attachmentList={attachmentList}
+												allowEdit={false}
+												showFileHeader={false}
+												showFooter={false}
+												viewMode={previewMode}
+												onViewModeChange={setPreviewMode}
+												activeFileId={tab.file.file_id}
+												projectId={shareMeta.projectId}
+												microAppId={appId}
+												microAppName={displayAppName}
+												virtualStorageMarkerId={defaultEntryFile?.file_id}
+												openFileTab={onOpenFile}
+												onHtmlPermissionManagerChange={
+													active
+														? onHtmlPermissionManagerChange
+														: undefined
+												}
+												isSharePreview
+												className="h-full"
+											/>
+										)}
+									</MicroAppPreviewPages>
 								</div>
 							</div>
 						</PublishedMicroAppConversationProvider>

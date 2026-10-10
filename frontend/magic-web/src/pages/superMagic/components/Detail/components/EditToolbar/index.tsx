@@ -1,3 +1,4 @@
+import { filterPptSlidePaths } from "@/pages/superMagic/utils/pptHiddenSlides"
 import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -55,12 +56,14 @@ import {
 	formatPptxStreamingProgress,
 	openPptxDestination,
 	PptxExportUnavailableError,
-	supportsPptxFileStreaming,
+	supportsPptxExport,
 	startPptxStreamingExportFromFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 import type { BeforeAction } from "../../utils/actionGuard"
 
 export interface EditToolbarProps {
+	/** Controlled by the preview host when fullscreen is managed outside this toolbar. */
+	isFullscreen?: boolean
 	/** 将更多菜单挂载到当前预览容器，以支持全屏。 */
 	getPopupContainer?: () => HTMLElement | null
 	/** Only the active cached preview should expose fixed test ids. */
@@ -158,6 +161,7 @@ export interface EditToolbarProps {
 }
 
 function EditToolbar({
+	isFullscreen: controlledFullscreen,
 	testIdsEnabled = true,
 	interactionDisabled = false,
 	showAIOptimization = false,
@@ -204,7 +208,8 @@ function EditToolbar({
 }: EditToolbarProps) {
 	const { t } = useTranslation("super")
 	const { emitFullscreenToggle } = usePPTEventBus()
-	const [isFullscreen, setIsFullscreen] = useState(false)
+	const [localFullscreen, setIsFullscreen] = useState(false)
+	const isFullscreen = controlledFullscreen ?? localFullscreen
 	const isFullscreenMode = useFullscreenMode()
 	const [isEditableExporting, setIsEditableExporting] = useState(false)
 
@@ -233,7 +238,7 @@ function EditToolbar({
 		t,
 	})
 
-	function exportPdfByPaths(input: { slidePaths?: string[] }) {
+	function exportPdfByPaths(input: { slidePaths?: string[]; includeHiddenSlides?: boolean }) {
 		if (!pptStore) {
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
 			return
@@ -249,9 +254,14 @@ function EditToolbar({
 		const defaultName =
 			storeConfig?.displayConfig?.name || storeConfig?.mainFileName || "slides"
 
-		const targetSlides = slidePaths?.length
-			? pptStore.slides.filter((slide) => slidePaths.includes(slide.path))
-			: pptStore.slides
+		const exportPaths = new Set(
+			filterPptSlidePaths(
+				slidePaths ?? pptStore.slides.map((slide) => slide.path),
+				storeConfig?.displayConfig?.hidden_slides,
+				input.includeHiddenSlides,
+			),
+		)
+		const targetSlides = pptStore.slides.filter((slide) => exportPaths.has(slide.path))
 
 		if (!targetSlides.length) {
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
@@ -334,7 +344,11 @@ function EditToolbar({
 			})
 	}
 
-	function exportImageByPaths(input: { slidePaths?: string[]; imageFormat: "png" | "jpeg" }) {
+	function exportImageByPaths(input: {
+		slidePaths?: string[]
+		imageFormat: "png" | "jpeg"
+		includeHiddenSlides?: boolean
+	}) {
 		if (!pptStore) {
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
 			return
@@ -345,9 +359,14 @@ function EditToolbar({
 		const defaultName =
 			storeConfig?.displayConfig?.name || storeConfig?.mainFileName || "slides"
 
-		const targetSlides = slidePaths?.length
-			? pptStore.slides.filter((slide) => slidePaths.includes(slide.path))
-			: pptStore.slides
+		const exportPaths = new Set(
+			filterPptSlidePaths(
+				slidePaths ?? pptStore.slides.map((slide) => slide.path),
+				storeConfig?.displayConfig?.hidden_slides,
+				input.includeHiddenSlides,
+			),
+		)
+		const targetSlides = pptStore.slides.filter((slide) => exportPaths.has(slide.path))
 
 		if (!targetSlides.length) {
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
@@ -431,7 +450,10 @@ function EditToolbar({
 			})
 	}
 
-	async function exportEditablePptByPaths(input: { slidePaths?: string[] }) {
+	async function exportEditablePptByPaths(input: {
+		slidePaths?: string[]
+		includeHiddenSlides?: boolean
+	}) {
 		if (!pptStore) {
 			magicToast.error(t("topicFiles.contextMenu.fileExport.exportFailed"))
 			return
@@ -442,10 +464,14 @@ function EditToolbar({
 		const defaultName =
 			storeConfig?.displayConfig?.name || storeConfig?.mainFileName || "slides"
 
-		const selectedPathSet = slidePaths?.length ? new Set(slidePaths) : null
-		const selectedSlides = pptStore.slides.filter(
-			(slide) => !selectedPathSet || selectedPathSet.has(slide.path),
+		const selectedPathSet = new Set(
+			filterPptSlidePaths(
+				slidePaths ?? pptStore.slides.map((slide) => slide.path),
+				storeConfig?.displayConfig?.hidden_slides,
+				input.includeHiddenSlides,
+			),
 		)
+		const selectedSlides = pptStore.slides.filter((slide) => selectedPathSet.has(slide.path))
 		const firstSlide = selectedSlides[0]
 		const pageCount = selectedSlides.length
 
@@ -523,11 +549,22 @@ function EditToolbar({
 				(signal) =>
 					iteratePreparedHtmlPages({
 						pages: (async function* iterateSelectedSlides() {
-							for (const slide of selectedSlides) {
+							for (const [index, slide] of selectedSlides.entries()) {
 								if (signal.aborted) return
 								const content = await ensureSlideContent(slide)
 								if (signal.aborted) return
-								yield content
+								const fileId =
+									pptStore.getFileIdByPath(slide.path) ||
+									pptStore.tryExtractAndMapFileId(slide.path)
+								yield {
+									index,
+									html: content,
+									key: slide.path,
+									pageName:
+										slide.path.split("/").pop() || slide.title || slide.path,
+									pagePath: slide.path,
+									pageFileId: fileId,
+								}
 							}
 						})(),
 						signal,
@@ -540,7 +577,10 @@ function EditToolbar({
 					config: createPptxSlideConfig(
 						resolvePptScaleContentDimensions(firstPage.html, firstSlide.rawContent),
 					),
-					skipFailedPages: false,
+					// A malformed page script (for example, ECharts targeting a missing container)
+					// is reported through onExportIssue but must not prevent the remaining slides
+					// from being written to the selected PPTX destination.
+					skipFailedPages: true,
 					fontResolver: pptFontResolver,
 					logger: pptxExternalLogger,
 					logLevel: "warn",
@@ -778,6 +818,7 @@ function EditToolbar({
 					{showFileEditButtons && (
 						<FileEditButtons
 							testIdPrefix={testIdsEnabled ? "ppt-edit-toolbar" : undefined}
+							fileId={fileId}
 							interactionDisabled={interactionDisabled}
 							isEditMode={isEditMode}
 							isSaving={isSaving}
@@ -823,7 +864,8 @@ function EditToolbar({
 							onClick={() => {
 								void runGuardedAction(beforeAction, () => {
 									emitFullscreenToggle()
-									setIsFullscreen(!isFullscreen)
+									if (controlledFullscreen === undefined)
+										setIsFullscreen(!isFullscreen)
 								})
 							}}
 							title={
@@ -859,10 +901,13 @@ function EditToolbar({
 						<ExportDropdown
 							showText={shouldShowButtonText}
 							isExporting={isExporting || isEditableExporting}
-							supportPptx={supportsPptxFileStreaming()}
+							supportPptx={supportsPptxExport()}
 							beforeAction={beforeAction}
 							supportSpecificPages={!!pptStore}
 							slides={pptStore?.slides}
+							hiddenSlides={
+								pptStore?.getConfigForExport()?.displayConfig?.hidden_slides
+							}
 							onExportPptx={() => {
 								if (pptStore) exportEditablePptByPaths({})
 								else void exportPptx([mainFileId || ""])
@@ -870,21 +915,26 @@ function EditToolbar({
 							onExportSpecificPages={(
 								filePaths: string[],
 								format: "source" | "pdf" | "pptx" | "image_png" | "image_jpeg",
+								includeHiddenSlides?: boolean,
 							) => {
 								if (!filePaths.length) return
 
 								// PDF 和 PPTX 使用纯前端多页导出（直接拿 slide content）
 								if (format === "pdf") {
-									exportPdfByPaths({ slidePaths: filePaths })
+									exportPdfByPaths({ slidePaths: filePaths, includeHiddenSlides })
 									return
 								}
 								if (format === "pptx") {
-									exportEditablePptByPaths({ slidePaths: filePaths })
+									exportEditablePptByPaths({
+										slidePaths: filePaths,
+										includeHiddenSlides,
+									})
 									return
 								}
 								if (format === "image_png" || format === "image_jpeg") {
 									exportImageByPaths({
 										slidePaths: filePaths,
+										includeHiddenSlides,
 										imageFormat: format === "image_png" ? "png" : "jpeg",
 									})
 									return

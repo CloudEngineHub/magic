@@ -20,10 +20,16 @@ SUCCESS_STATUSES = frozenset(
         "already_replaced",
         "estimated",
         "not_billable",
+        "changed",
+        "unchanged",
+        "unframed",
+        "prepared",
+        "shared_file_kept",
+        "file_deleted",
     }
 )
 PROCESSING_STATUSES = frozenset({"pending", "processing", "queued", "running"})
-PARTIAL_STATUSES = frozenset({"partial"})
+PARTIAL_STATUSES = frozenset({"partial", "file_renamed"})
 FAILED_STATUSES = frozenset(
     {
         "failed",
@@ -32,6 +38,10 @@ FAILED_STATUSES = frozenset(
         "not_applicable",
         "not_applied",
         "unavailable",
+        "retained",
+        "canvas_write_failed",
+        "deletion_unconfirmed",
+        "rename_unconfirmed",
     }
 )
 

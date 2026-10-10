@@ -9,7 +9,7 @@ import { isSupportedLanguage, languageOptions } from "@magic-admin-v2/i18n/resou
 import { useI18n } from "@magic-admin-v2/i18n/use-i18n"
 import { useTranslation } from "react-i18next"
 
-export function LanguageSwitcher() {
+export function LanguageSwitcher({ optionTestId, testId }: { optionTestId?: string; testId?: string }) {
 	const { t } = useTranslation()
 	const { canChangeLanguage, isChangingLanguage, language, setLanguage } = useI18n()
 	const options = languageOptions.map((option) => ({
@@ -19,9 +19,10 @@ export function LanguageSwitcher() {
 
 	return (
 		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
+			<DropdownMenuTrigger asChild data-testid="language-switcher-language-trigger">
 				<button
 					aria-label={t("language.toggle")}
+					data-testid={testId}
 					className="inline-flex h-9 w-9 items-center justify-center gap-2 rounded-md border border-input bg-card px-0 text-sm font-medium shadow-sm transition-colors hover:bg-accent data-[state=open]:bg-accent sm:w-auto sm:px-3"
 					disabled={!canChangeLanguage || isChangingLanguage}
 					type="button"
@@ -35,9 +36,10 @@ export function LanguageSwitcher() {
 					</span>
 				</button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-40">
+			<DropdownMenuContent align="end" className="w-40" data-testid="language-switcher-action-button">
 				{options.map((option) => (
 					<DropdownMenuItem
+						data-testid={optionTestId}
 						key={option.value}
 						onSelect={() => {
 							if (isSupportedLanguage(option.value)) {

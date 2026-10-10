@@ -64,7 +64,11 @@ import { exportPPTXStreaming } from "@magic/html2pptx"
 ```
 
 Version 2 removes the buffered `exportPPTX` and `generatePPTX` APIs. All exports must provide a
-caller-owned destination and use `exportPPTXStreaming`; there is no Blob or in-memory fallback.
+caller-owned destination and use `exportPPTXStreaming`. The package never chooses a Blob output
+destination by itself. A browser host that intentionally owns a buffered-download sink
+may mark that sink with `replayPolicy: "buffered"`; the export still runs through the Packaging
+Worker and may use an in-memory replay store when OPFS is unavailable. File-stream sinks remain
+OPFS-backed and are never silently converted to an unbounded memory export.
 
 The package must be built before a workspace consumer resolves its `dist` exports. Commercial
 applications may compose their own integration around these public exports, but no commercial
@@ -99,6 +103,31 @@ const handle = exportPPTXStreaming(pages, {
 })
 await handle.promise
 ```
+
+### Page-owned export readiness
+
+Pages that need to stop application-owned animations or finish asynchronous rendering can opt in
+to the export handshake. The sandbox sets `data-magic-export-mode="pptx"` on the document root and
+dispatches `magic:export-start` after DOM parsing. The page should switch to its deterministic
+static state, then set `data-magic-export-ready="true"` (or `"error"` when it cannot produce a
+valid snapshot):
+
+```html
+<html data-magic-export-ready="pending">
+  <script>
+    window.addEventListener("magic:export-start", async () => {
+      document.documentElement.classList.add("pptx-export-mode")
+      await renderChartsAndImages()
+      document.documentElement.dataset.magicExportReady = "true"
+    })
+  </script>
+</html>
+```
+
+The exporter waits for this marker only when the page declares the protocol, so existing pages keep
+their current behavior. The legacy `data-render-ready` marker remains supported. 页面可以通过
+`data-magic-export-mode="pptx"` 判断当前处于导出模式，在完成动画、图表和资源初始化后设置
+`data-magic-export-ready="true"`；旧的 `data-render-ready` 写法继续兼容。
 
 The CJS build test covers this explicit override path. The browser smoke benchmark also accepts
 `--target dist` to verify the generated ESM asset path after a package build.

@@ -73,6 +73,7 @@ import { canUseDesignPlugins } from "./utils/pluginAccess"
 import { userStore } from "@/models/user"
 import { getHydratedElementDetailsProvenance } from "./utils/elementDetailsIo"
 import { useCanvasSelectionMentionPublisher } from "./hooks/useCanvasSelectionMentionPublisher"
+import { useTerminateGeneratingImages } from "./hooks/useTerminateGeneratingImages"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
 
@@ -281,6 +282,7 @@ interface DesignViewerProps {
 	isTabActive?: boolean
 	isFullscreen?: boolean
 	onFullscreen?: () => void
+	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
 	data?: {
 		project_path?: string
 		elements?: LayerElement[]
@@ -302,6 +304,7 @@ function DesignViewer(props: DesignViewerProps) {
 		isTabActive,
 		isFullscreen,
 		onFullscreen,
+		onRegisterSaveHandler,
 	} = props
 	// Prefer the topic project, then standalone preview, then the selected project.
 	const projectId = selectedTopic?.project_id || projectIdProp || selectedProject?.id
@@ -487,6 +490,8 @@ function DesignViewer(props: DesignViewerProps) {
 		updateDesignData,
 		updateDesignDataAndScheduleSave,
 		persistLocalDraft,
+		persistLocalDraftAndWait,
+		hasUnsavedChanges,
 		magicProjectJsFileId,
 		isInitialLoading,
 		pendingDesignUpgrade,
@@ -515,9 +520,11 @@ function DesignViewer(props: DesignViewerProps) {
 		resolveBlockingConflictWithRemote,
 		resolveBlockingConflictWithLocal,
 		resolveEditedElementConflictsWithLocal,
+		manualSave,
 	} = designProjectManager
 
 	const { isProcessingRevoke, revokeType } = designProjectManager
+
 	const latestDesignDataRef = useRef(designData)
 	const isInitialLoadingRef = useRef(isInitialLoading)
 	const [isVersionActionLoading, setIsVersionActionLoading] = useState(false)
@@ -725,6 +732,7 @@ function DesignViewer(props: DesignViewerProps) {
 		getFallbackDocument: getLatestCanvasDocument,
 		resolveFileBySrc: resolveCanvasResourceFile,
 	})
+	useTerminateGeneratingImages(canvasDesignRef)
 
 	const videoPointsEstimateCacheScope = useMemo(
 		() =>
@@ -805,7 +813,7 @@ function DesignViewer(props: DesignViewerProps) {
 	})
 
 	// 使用 hook 获取 methods 方法集合
-	const methods = useDesignMethods({
+	const baseMethods = useDesignMethods({
 		getContentViewElement,
 		projectId,
 		designProjectId,
@@ -823,7 +831,8 @@ function DesignViewer(props: DesignViewerProps) {
 
 	// 注入 Manager 依赖（getCanvasElements、methods、pubsub 等）
 	useEffect(() => {
-		markerManager.updateDependencies({
+		if (!designProjectId) return undefined
+		return markerManager.registerDependencies(designProjectId, {
 			getCanvasElements: (id) =>
 				id === designProjectId ? { elements: designData.canvas?.elements } : null,
 			getElementImageInfo: (elementId: string) => {
@@ -832,9 +841,9 @@ function DesignViewer(props: DesignViewerProps) {
 					canvasDesignRef.current?.getElementImageInfo(elementId) ?? Promise.resolve(null)
 				)
 			},
-			getFileInfo: methods.getFileInfo,
-			uploadPrivateFiles: methods.uploadPrivateFiles,
-			identifyImageMark: methods.identifyImageMark,
+			getFileInfo: baseMethods.getFileInfo,
+			uploadPrivateFiles: baseMethods.uploadPrivateFiles,
+			identifyImageMark: baseMethods.identifyImageMark,
 			publishToMessageEditor: (event, payload) => pubsub.publish(event, payload),
 			projectId,
 			topicId: selectedTopic?.id,
@@ -845,9 +854,9 @@ function DesignViewer(props: DesignViewerProps) {
 		markerManager,
 		designProjectId,
 		designData.canvas?.elements,
-		methods.getFileInfo,
-		methods.uploadPrivateFiles,
-		methods.identifyImageMark,
+		baseMethods.getFileInfo,
+		baseMethods.uploadPrivateFiles,
+		baseMethods.identifyImageMark,
 		projectId,
 		selectedTopic?.id,
 	])
@@ -856,7 +865,7 @@ function DesignViewer(props: DesignViewerProps) {
 	const { handleMarkerCreated, handleMarkerDeleted, handleMarkerUpdated, handleMarkerRestored } =
 		useDesignMarker({
 			canvas: designData.canvas,
-			methods,
+			methods: baseMethods,
 			projectId,
 			designProjectId,
 			markerManager,
@@ -980,13 +989,13 @@ function DesignViewer(props: DesignViewerProps) {
 	)
 
 	const persistCurrentCanvasDraftImmediately = useCallback(
-		(reason: DesignDraftReason = "pagehide") => {
+		async (reason: DesignDraftReason = "pagehide") => {
 			if (
 				fileVersion !== undefined ||
 				isVersionActionLoading ||
 				isInitialLoadingRef.current
 			) {
-				return
+				return null
 			}
 			const currentCanvasData = canvasDesignRef.current?.exportCurrentDocument?.()
 			const latestCanvasData = latestDesignDataRef.current.canvas
@@ -995,25 +1004,43 @@ function DesignViewer(props: DesignViewerProps) {
 			// Canvas 在初始化/恢复期间可能暂时导出空文档。此时保留最近一次可信数据，
 			// 避免 pagehide 把远端非空画布覆盖成本地空草稿。
 			if (currentCanvasData && (currentElementCount > 0 || latestElementCount === 0)) {
-				persistCanvasDataLocally(currentCanvasData, {
+				const nextDesignData: DesignData = {
+					...latestDesignDataRef.current,
+					canvas: currentCanvasData,
+				}
+				latestDesignDataRef.current = nextDesignData
+				updateDesignData(() => nextDesignData)
+				const writeResult = await persistLocalDraftAndWait(nextDesignData, {
 					immediate: true,
 					reason,
 				})
-				return
+				return { designData: nextDesignData, durable: writeResult?.durable ?? false }
 			}
-			persistLocalDraft(latestDesignDataRef.current, {
+			const nextDesignData = latestDesignDataRef.current
+			const writeResult = await persistLocalDraftAndWait(nextDesignData, {
 				immediate: true,
 				reason,
 			})
+			return { designData: nextDesignData, durable: writeResult?.durable ?? false }
 		},
-		[fileVersion, isVersionActionLoading, persistCanvasDataLocally, persistLocalDraft],
+		[fileVersion, isVersionActionLoading, persistLocalDraftAndWait, updateDesignData],
 	)
 
 	const persistCurrentCanvasDraftImmediatelyRef = useRef(persistCurrentCanvasDraftImmediately)
+	const manualSaveRef = useRef(manualSave)
+	const hasUnsavedChangesRef = useRef(hasUnsavedChanges)
 
 	useEffect(() => {
 		persistCurrentCanvasDraftImmediatelyRef.current = persistCurrentCanvasDraftImmediately
 	}, [persistCurrentCanvasDraftImmediately])
+
+	useEffect(() => {
+		manualSaveRef.current = manualSave
+	}, [manualSave])
+
+	useEffect(() => {
+		hasUnsavedChangesRef.current = hasUnsavedChanges
+	}, [hasUnsavedChanges])
 
 	// 重新初始化页面（用于刷新按钮）
 	const handleReinitialize = useCallback(async () => {
@@ -1093,18 +1120,19 @@ function DesignViewer(props: DesignViewerProps) {
 		handleVersionRollback: handleVersionRollbackWithLoading,
 	})
 
-	const { handleCanvasDesignDataChange: syncCanvasImageFileRename } =
-		useCanvasImageFileRenameSync({
-			canvasDesignRef,
-			currentCanvasData: designData.canvas,
-			flatAttachments,
-			attachmentsReady,
-			attachmentIndex,
-			designProjectBasePath,
-			projectId,
-			persistCanvasData,
-			updateAttachments,
-		})
+	const imageRename = useCanvasImageFileRenameSync({
+		canvasDesignRef,
+		currentCanvasData: designData.canvas,
+		flatAttachments,
+		attachmentsReady,
+		attachmentIndex,
+		designProjectBasePath,
+		projectId,
+		persistCanvasData,
+		updateAttachments,
+	})
+
+	const methods = useMemo(() => ({ ...baseMethods, imageRename }), [baseMethods, imageRename])
 
 	// 处理画布数据变化（用户编辑，触发自动保存）
 	const handleCanvasDesignDataChange = useCallback(
@@ -1131,19 +1159,17 @@ function DesignViewer(props: DesignViewerProps) {
 				...latestDesignDataRef.current,
 				canvas: canvasData,
 			})
-			syncCanvasImageFileRename(canvasData, meta)
 		},
 		[
 			isOffline,
 			persistCanvasData,
 			persistCanvasDataLocally,
 			resolveEditedElementConflictsWithLocal,
-			syncCanvasImageFileRename,
 		],
 	)
 
 	const handleCanvasDesignDataPatchChange = useCallback(
-		(patch: CanvasDesignDataPatch, meta?: CanvasDesignDataChangeMeta) => {
+		(patch: CanvasDesignDataPatch) => {
 			mentionPanelStore.invalidateActiveCanvasElementsCache()
 			if (isApplyingRemoteCanvasUpdateRef.current) {
 				return
@@ -1156,16 +1182,12 @@ function DesignViewer(props: DesignViewerProps) {
 
 			const nextCanvasData = persistCanvasDataPatch(patch)
 			resolveEditedElementConflictsFromPatch(patch, nextCanvasData)
-			if (nextCanvasData) {
-				syncCanvasImageFileRename(nextCanvasData, meta)
-			}
 		},
 		[
 			isOffline,
 			persistCanvasDataPatch,
 			persistCanvasPatchLocally,
 			resolveEditedElementConflictsFromPatch,
-			syncCanvasImageFileRename,
 		],
 	)
 
@@ -1470,6 +1492,40 @@ function DesignViewer(props: DesignViewerProps) {
 		!!conflictState && !hasUnresolvedElementConflicts && !hasUnresolvedConnectionConflicts
 	const shouldShowCanvasConflictNotice = shouldBlockCanvasForConflict && !!conflictNoticeText
 	const canvasAccessMode: CanvasAccessMode = accessMode
+
+	useEffect(() => {
+		if (!onRegisterSaveHandler) return
+		if (canvasAccessMode !== "edit" || isInitialLoading) {
+			onRegisterSaveHandler(null)
+			return
+		}
+
+		const saveCanvasBeforeClose = async () => {
+			// Export the runtime document again because the last Canvas interaction may not
+			// have reached the host change callback before the user closes the tab.
+			const prepared = await persistCurrentCanvasDraftImmediatelyRef.current("manual-refresh")
+			if (!prepared) return
+
+			const saveInBackground = () =>
+				manualSaveRef.current(prepared.designData).catch(() => undefined)
+			if (!hasUnsavedChangesRef.current(prepared.designData)) return
+
+			// The local draft is the close-time recovery boundary. Once it is durable, the remote
+			// save may continue after the Canvas component unmounts without delaying the tab close.
+			if (prepared.durable) {
+				saveInBackground()
+				return
+			}
+
+			// If every local fallback failed, retain the old blocking behavior for this rare case;
+			// otherwise a page close could leave the user without either recovery or remote data.
+			await manualSaveRef.current(prepared.designData)
+		}
+
+		onRegisterSaveHandler(saveCanvasBeforeClose)
+		return () => onRegisterSaveHandler(null)
+	}, [canvasAccessMode, isInitialLoading, onRegisterSaveHandler])
+
 	const canvasCapabilities = useMemo<Partial<Record<CanvasCapability, boolean>>>(() => {
 		const runtimeWriteBlocked =
 			isUpgradeBlockingCanvas || isBlockingDesignLoadIssue || shouldBlockCanvasForConflict

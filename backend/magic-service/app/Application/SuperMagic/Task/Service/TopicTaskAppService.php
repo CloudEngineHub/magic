@@ -45,6 +45,7 @@ use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Constant\AgentConstant;
 use App\Domain\SuperMagic\Task\Constant\AgentEventEnum;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Event\RunTaskAfterEvent;
 use App\Domain\SuperMagic\Task\Event\RunTaskBeforeEvent;
@@ -61,6 +62,9 @@ use App\ErrorCode\SuperAgentErrorCode;
 use App\ErrorCode\SuperMagicErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallRecoveryException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\Utils\TaskStatusValidator;
 use App\Infrastructure\SuperMagic\Utils\TaskTerminationUtil;
@@ -244,6 +248,20 @@ class TopicTaskAppService extends AbstractAppService
 
             $status = $messageDTO->getPayload()->getStatus();
             $taskStatus = TaskStatus::tryFrom($status) ?? TaskStatus::ERROR;
+
+            // 先落库等待状态，再保存和发布提问消息。这样定时检查或容器回收看到的
+            // 都是 WAITING_FOR_USER，不会在提问卡已经出现后把任务误判成 RUNNING。
+            if ($this->isWaitingForUserMessage($messageDTO)
+                && $taskEntity->getStatus() !== TaskStatus::WAITING_FOR_USER
+            ) {
+                $this->updateTaskStatus(
+                    dataIsolation: $dataIsolation,
+                    task: $taskEntity,
+                    status: TaskStatus::WAITING_FOR_USER,
+                );
+                $taskEntity->setStatus(TaskStatus::WAITING_FOR_USER);
+            }
+
             $usage = [];
             if ($taskStatus->isFinal()) {
                 // Calculate usage information when task is finished
@@ -376,7 +394,36 @@ class TopicTaskAppService extends AbstractAppService
                 $task->getSandboxId(),
                 $errMsg
             );
-            $this->topicDomainService->updateTopicStatusAndSandboxId($task->getTopicId(), $task->getId(), $status, $task->getSandboxId());
+            // 任务行里的 sandbox_id 是【建任务那一刻】抄下的话题绑定快照；任务
+            // 结束时，下面会把它写回话题。任务的"结束"由终态消息何时到达决定，
+            // 与沙箱生死完全解耦——任务可能比沙箱活得久（长时间挂起、终态消息
+            // 靠补偿补投），期间话题可能已被换绑多次：
+            //
+            //   时间   话题指针 topics.sandbox_id           pod 状态
+            //   ----   -----------------------------       ------------------
+            //   t0     W0  (建任务, 抄下快照 W0)          W0*
+            //   t1     W1  (预热池 mount 换绑)            W0x W1*
+            //   t2     W2  (又一次换绑)                   W0x W1* W2*
+            //   t3     W0  (任务结束, 无条件写回快照)     W0x W1* W2*
+            //              ^^ 回滚! 指针指向早已销毁的沙箱
+            //   t4     W3  (下个请求探测 W0 失败,再绑)    W0x W1* W2* W3*
+            //
+            //   t3 的回滚 + t4 的"自愈"，让 W1、W2 相继脱离指针视野——每绕开
+            //   一个活 pod 就泄漏一个（*=活, x=死），同 topic-id 的重复沙箱
+            //   就这样跨天滚雪球。因此仅当话题绑定仍是本任务快照指向的沙箱时
+            //   才写回，否则只更新任务状态，不碰 sandbox_id。
+            $currentTopic = $this->topicDomainService->getTopicById($task->getTopicId());
+            if ($currentTopic !== null && $currentTopic->getSandboxId() === $task->getSandboxId()) {
+                $this->topicDomainService->updateTopicStatusAndSandboxId($task->getTopicId(), $task->getId(), $status, $task->getSandboxId());
+            } else {
+                $this->logger->info('Skip writing back stale task sandbox_id to topic', [
+                    'task_id' => $taskId,
+                    'topic_id' => $task->getTopicId(),
+                    'task_sandbox_id' => $task->getSandboxId(),
+                    'topic_sandbox_id' => $currentTopic?->getSandboxId() ?? '',
+                ]);
+                $this->topicDomainService->updateTopicStatus($task->getTopicId(), $task->getId(), $status);
+            }
 
             $this->projectDomainService->updateProjectStatus($task->getProjectId(), $task->getTopicId(), $status);
             // Log success
@@ -423,27 +470,226 @@ class TopicTaskAppService extends AbstractAppService
             throw new RuntimeException('Task not found: ' . $taskId);
         }
 
-        // 透传给沙盒（沙盒取消定时器 → 加工答复 → 注入历史 → 推送 AFTER_TOOL_CALL → 重启 Agent）
-        $this->agentDomainService->sendUserToolCallFeedback(
-            $dataIsolation,
-            $task->getSandboxId(),
-            $name,
-            $toolCallId,
-            $detail
-        );
+        $detailTaskId = is_string($detail['task_id'] ?? null) ? trim($detail['task_id']) : '';
+        if ($detailTaskId !== '' && $detailTaskId !== $taskId) {
+            $this->logger->warning('HandleUserToolCallReplyStaleTask', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'stale_task_ignored',
+            ]);
+            return;
+        }
 
-        // 更新任务状态为运行中
-        $this->updateTaskStatus(
+        $organizationCode = $dataIsolation->getCurrentOrganizationCode() ?: $topicEntity->getUserOrganizationCode();
+        $lockKey = sprintf('user_tool_call_reply:%s:%s:%s', $organizationCode, $chatTopicId, $toolCallId);
+        $lockOwner = IdGenerator::getUniqueId32();
+        $lockAcquired = $this->locker->mutexLock($lockKey, $lockOwner, 86400);
+        if (! $lockAcquired) {
+            $this->logger->info('HandleUserToolCallReplyAlreadyProcessed', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'already_processed',
+            ]);
+            return;
+        }
+
+        $forwardedToSandbox = false;
+        try {
+            // 先投递到当前绑定的执行环境。
+            $this->agentDomainService->sendUserToolCallFeedback(
+                $dataIsolation,
+                $task->getSandboxId(),
+                $name,
+                $toolCallId,
+                $detail
+            );
+            $forwardedToSandbox = true;
+
+            // 更新任务状态为运行中
+            $this->updateTaskStatus(
+                dataIsolation: $dataIsolation,
+                task: $task,
+                status: TaskStatus::RUNNING,
+            );
+
+            $this->logger->info('HandleUserToolCallReplyCompleted', [
+                'topic_id' => $chatTopicId,
+                'task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'name' => $name,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'forwarded',
+            ]);
+        } catch (UserToolCallNotFoundException $e) {
+            // 沙盒已经消费或超时：保留幂等占位，后续旧回执不能再次触达沙盒。
+            $this->logger->warning('HandleUserToolCallReplyExpired', [
+                'topic_id' => $chatTopicId,
+                'current_task_id' => $taskId,
+                'detail_task_id' => $detailTaskId,
+                'tool_call_id' => $toolCallId,
+                'idempotency_result' => 'expired',
+            ]);
+            throw $e;
+        } catch (SandboxOperationException $e) {
+            if ($task->getStatus() !== TaskStatus::WAITING_FOR_USER) {
+                $this->locker->release($lockKey, $lockOwner);
+                throw new UserToolCallNotFoundException(
+                    'The user tool call is no longer waiting for an answer.'
+                );
+            }
+
+            if (! $this->shouldRecoverTaskSandbox($task, $e)) {
+                $this->locker->release($lockKey, $lockOwner);
+                throw $e;
+            }
+
+            try {
+                // 原执行环境退出后，恢复原任务的 Agent 上下文，再用同一个 tool_call_id
+                // 投递同一份回答。不能调用会新建任务的通用启动入口，否则会改变话题当前任务。
+                $recoveredSandboxId = $this->recoverTaskSandbox(
+                    dataIsolation: $dataIsolation,
+                    topicEntity: $topicEntity,
+                    task: $task,
+                );
+                $this->agentDomainService->sendUserToolCallFeedback(
+                    $dataIsolation,
+                    $recoveredSandboxId,
+                    $name,
+                    $toolCallId,
+                    $detail
+                );
+                $forwardedToSandbox = true;
+
+                $this->updateTaskStatus(
+                    dataIsolation: $dataIsolation,
+                    task: $task,
+                    status: TaskStatus::RUNNING,
+                );
+
+                $this->logger->info('HandleUserToolCallReplyRecoveredAndForwarded', [
+                    'topic_id' => $chatTopicId,
+                    'task_id' => $taskId,
+                    'tool_call_id' => $toolCallId,
+                    'sandbox_id' => $recoveredSandboxId,
+                    'idempotency_result' => 'recovered_and_forwarded',
+                ]);
+            } catch (UserToolCallNotFoundException $recoveredNotFound) {
+                // 第一次请求可能已经被旧执行环境接收，只是响应未返回；重投得到 4100
+                // 时按已处理收口，避免用户看到技术错误。
+                throw $recoveredNotFound;
+            } catch (Throwable $recoveryError) {
+                $this->logger->error('HandleUserToolCallReplyRecoveryFailed', [
+                    'topic_id' => $chatTopicId,
+                    'task_id' => $taskId,
+                    'tool_call_id' => $toolCallId,
+                    'initial_error' => $e->getMessage(),
+                    'recovery_error' => $recoveryError->getMessage(),
+                ]);
+                $this->locker->release($lockKey, $lockOwner);
+                throw new UserToolCallRecoveryException(
+                    'Failed to continue the submitted answer after recovering the execution environment.',
+                    $recoveryError
+                );
+            }
+        } catch (Throwable $e) {
+            // 仅释放真正的传输/沙盒故障，允许用户在网络恢复后有意重试。
+            if (! $forwardedToSandbox) {
+                $this->locker->release($lockKey, $lockOwner);
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * 恢复当前等待任务绑定的执行环境，不创建新的任务记录。
+     */
+    private function recoverTaskSandbox(
+        DataIsolation $dataIsolation,
+        TopicEntity $topicEntity,
+        TaskEntity $task,
+    ): string {
+        $projectEntity = $this->projectDomainService->getProjectNotUserId($topicEntity->getProjectId());
+        if ($projectEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND);
+        }
+
+        $agentContext = $this->agentDomainService->buildInitAgentContext(
             dataIsolation: $dataIsolation,
-            task: $task,
-            status: TaskStatus::RUNNING,
+            projectEntity: $projectEntity,
+            topicEntity: $topicEntity,
+            taskEntity: $task,
+            // 传入当前绑定的 sandbox_id，由 Domain 负责判断旧环境是否还能复用；
+            // 不传 topic_id，避免跳过预热池的正常路径。
+            sandboxId: (string) $topicEntity->getSandboxId(),
+            skipInitMessage: true,
         );
 
-        $this->logger->info('HandleUserToolCallReplyCompleted', [
-            'task_id' => $taskId,
-            'name' => $name,
-            'tool_call_id' => $toolCallId,
-        ]);
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
+            dataIsolation: $dataIsolation,
+            agentContext: $agentContext,
+            rootFileIds: new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory(
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode()
+                ),
+                (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+                    $projectEntity->getId(),
+                    $topicEntity->getId(),
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $projectEntity->getUserOrganizationCode()
+                )
+            )
+        );
+
+        $this->topicDomainService->updateTopicSandboxId($dataIsolation, $topicEntity->getId(), $sandboxId);
+        $this->taskDomainService->updateTaskSandboxId($dataIsolation, $task->getId(), $sandboxId);
+        $task->setSandboxId($sandboxId);
+
+        return $sandboxId;
+    }
+
+    /**
+     * 只有旧执行环境已经退出或找不到时，才允许自动恢复。
+     */
+    private function shouldRecoverTaskSandbox(TaskEntity $task, SandboxOperationException $initialError): bool
+    {
+        $sandboxId = trim($task->getSandboxId());
+        if ($sandboxId === '') {
+            return true;
+        }
+
+        try {
+            $status = $this->agentDomainService->getSandboxStatus($sandboxId)->getStatus();
+            $recoverable = in_array($status, [
+                SandboxStatus::EXITED,
+                SandboxStatus::NOT_FOUND,
+                SandboxStatus::UNKNOWN,
+            ], true);
+
+            $this->logger->info('CheckUserToolCallRecoverySandboxStatus', [
+                'task_id' => $task->getId(),
+                'sandbox_id' => $sandboxId,
+                'sandbox_status' => $status,
+                'recoverable' => $recoverable,
+                'initial_error' => $initialError->getMessage(),
+            ]);
+
+            return $recoverable;
+        } catch (Throwable $statusError) {
+            $this->logger->warning('Failed to check sandbox status before user tool call recovery', [
+                'task_id' => $task->getId(),
+                'sandbox_id' => $sandboxId,
+                'initial_error' => $initialError->getMessage(),
+                'status_error' => $statusError->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     public function handleUserToolCallCancelled(
@@ -810,11 +1056,56 @@ class TopicTaskAppService extends AbstractAppService
         // Check task permission (validates ownership)
         $taskEntity = $this->checkTaskPermission($dataIsolation, $taskId);
 
-        return [
+        $result = [
             'id' => (string) $taskEntity->getId(),
             'task_status' => $taskEntity->getTaskStatus(),
             'err_msg' => $taskEntity->getErrMsg(),
             'updated_at' => $taskEntity->getUpdatedAt(),
+        ];
+
+        if ($taskEntity->getTaskStatus() === TaskStatus::FINISHED->value) {
+            $result['result'] = $this->buildTaskResult(
+                (int) $taskEntity->getTopicId(),
+                (int) $taskEntity->getId(),
+            );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Build the compact result returned by the task status polling API.
+     * The first message for each event is used when duplicate records exist.
+     *
+     * @return array{content: string, attachments: array}
+     */
+    private function buildTaskResult(int $topicId, int $taskId): array
+    {
+        $messages = $this->taskMessageDomainService->findCompletedResultMessages($topicId, $taskId);
+        $content = '';
+        $attachments = [];
+        $contentMessageFound = false;
+        $attachmentsMessageFound = false;
+
+        foreach ($messages as $message) {
+            if ($message->getEvent() === 'after_agent_reply' && ! $contentMessageFound) {
+                $contentMessageFound = true;
+                $rawContent = $message->getRawContent();
+                if ($rawContent !== '' && json_validate($rawContent)) {
+                    $decoded = json_decode($rawContent, true);
+                    $content = (string) ($decoded['super_magic_message']['content'] ?? '');
+                }
+            }
+
+            if ($message->getEvent() === 'after_main_agent_run' && ! $attachmentsMessageFound) {
+                $attachmentsMessageFound = true;
+                $attachments = $message->getAttachments() ?? [];
+            }
+        }
+
+        return [
+            'content' => $content,
+            'attachments' => $attachments,
         ];
     }
 
@@ -887,6 +1178,21 @@ class TopicTaskAppService extends AbstractAppService
         }
 
         return null;
+    }
+
+    private function isWaitingForUserMessage(TopicTaskMessageDTO $messageDTO): bool
+    {
+        $payload = $messageDTO->getPayload();
+        if ($payload->getType() === MessageType::ToolCall->value) {
+            $tool = $payload->getTool();
+            return is_array($tool)
+                && in_array($tool['name'] ?? '', ['ask_user', 'plan'], true)
+                && $payload->getEvent() === AgentEventEnum::BEFORE_TOOL_CALL->value;
+        }
+
+        return $payload->getType() === MessageType::SuperMagicMessage->value
+            && $payload->getEvent() === AgentEventEnum::AFTER_MAIN_AGENT_RUN->value
+            && $payload->getStatus() === TaskStatus::WAITING_FOR_USER->value;
     }
 
     /**

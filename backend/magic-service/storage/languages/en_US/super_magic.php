@@ -152,6 +152,7 @@ return [
             'extract_failed' => 'Failed to extract the archive. Please verify the file and try again',
         ],
         'publish' => [
+            'skills_sync_failed' => 'Publish failed: failed to sync skill references (:reason). Check the skills bound to this agent and try again.',
             'identity_md_not_found' => 'Publish failed: the required file :path was not found under the project root. Please add it and try again.',
         ],
         'export_failed' => 'Agent export failed. Please try again later',
@@ -162,6 +163,9 @@ return [
         'sandbox_init_failed' => 'Runtime environment error. Please try again later.',
         'chat_task_start_failed' => 'Failed to start the task. Please try again later.',
         'question_expired' => 'This question has expired or already been handled, so your answer was not delivered. You can continue the conversation by sending a new message.',
+        'question_recovery_failed' => 'We cannot continue processing right now. Please try again later. Your answer has been kept.',
+        'project_file_count_exceeded' => 'The project space needs some file cleanup before this task can continue. Remove files you no longer need and try again.',
+        'user_space_file_count_exceeded' => 'Your personal file space needs some cleanup before this task can continue. Remove files you no longer need and try again.',
     ],
     'magic_claw' => [
         'create_system_error' => 'A system error occurred. Please try again later.',

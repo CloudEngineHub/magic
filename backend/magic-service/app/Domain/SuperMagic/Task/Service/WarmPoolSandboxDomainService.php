@@ -346,7 +346,11 @@ class WarmPoolSandboxDomainService
             return null;
         }
 
-        $sandboxImages = $mountResult->getSandboxImages();
+        $sandboxImages = [
+            'agent_image' => $latestImage,
+            'agfs_image' => $latestAgfsImage,
+        ];
+
         $this->logger->info('[WarmPoolSandbox] Mount succeeded, fast path completed', [
             'sandbox_id' => $sandboxId,
         ]);

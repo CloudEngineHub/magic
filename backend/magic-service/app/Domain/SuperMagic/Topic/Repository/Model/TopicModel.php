@@ -41,6 +41,7 @@ class TopicModel extends AbstractModel
         'chat_conversation_id',
         'sandbox_id',
         'sandbox_config',
+        // Deprecated legacy column; use sandbox_images for new data.
         'agent_image',
         'sandbox_images',
         'current_task_id',

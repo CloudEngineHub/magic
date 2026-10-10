@@ -2,6 +2,7 @@ const assert = require("node:assert/strict")
 const test = require("node:test")
 const {
 	getHtmlSandboxAllowedOrigins,
+	isHtmlSandboxRuntimeRequest,
 	setHtmlSandboxRuntimeCorsHeaders,
 } = require("../utils/htmlSandboxRuntimeCors.cjs")
 
@@ -80,4 +81,34 @@ test("removes a wildcard header for origins outside the allowlist", () => {
 
 	assert.equal(response.getHeader("Access-Control-Allow-Origin"), undefined)
 	assert.equal(response.getHeader("Vary"), "Origin")
+})
+
+test("runtime CORS rejects missing, null, unconfigured and lookalike origins", () => {
+	for (const requestOrigin of [undefined, "null", "https://husky.example.com.attacker.test"]) {
+		const response = createHeaderRecorder({
+			"Access-Control-Allow-Origin": "*",
+			Vary: "Origin",
+		})
+		setHtmlSandboxRuntimeCorsHeaders(response, requestOrigin, ["https://husky.example.com"])
+		assert.equal(response.getHeader("Access-Control-Allow-Origin"), undefined)
+		assert.equal(response.getHeader("Vary"), "Origin")
+	}
+	const response = createHeaderRecorder()
+	setHtmlSandboxRuntimeCorsHeaders(response, "https://husky.example.com", [])
+	assert.equal(response.getHeader("Access-Control-Allow-Origin"), undefined)
+})
+
+test("runtime CORS does not enable credentialed requests", () => {
+	const response = createHeaderRecorder()
+	setHtmlSandboxRuntimeCorsHeaders(response, "https://husky.example.com", [
+		"https://husky.example.com",
+	])
+	assert.equal(response.getHeader("Access-Control-Allow-Credentials"), undefined)
+})
+
+test("runtime CORS policy is scoped to the runtime asset, never API or config routes", () => {
+	assert.equal(isHtmlSandboxRuntimeRequest("/husky-runtime.js"), true)
+	for (const path of ["/api/v1/user", "/config.js", "/other.js", "/husky-runtime.js/extra"]) {
+		assert.equal(isHtmlSandboxRuntimeRequest(path), false)
+	}
 })

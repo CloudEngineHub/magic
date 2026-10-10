@@ -8,10 +8,16 @@ declare(strict_types=1);
 namespace App\Domain\SuperMagic\File\Repository\Model;
 
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Infrastructure\Core\AbstractModel;
+use Hyperf\Database\Model\Builder;
 use Hyperf\Database\Model\SoftDeletes;
 
+/**
+ * @method static Builder projectSpace()
+ * @method static Builder visibleProjectFiles()
+ */
 class TaskFileModel extends AbstractModel
 {
     use SoftDeletes;
@@ -89,6 +95,25 @@ class TaskFileModel extends AbstractModel
         'source' => TaskFileSource::class, // 自动将数据库中的int转换为TaskFileSource枚举
         'storage_type' => StorageType::class, // 自动将数据库中的string转换为StorageType枚举
     ];
+
+    /**
+     * 项目空间包含隐藏文件和目录，供完整空间统计复用。
+     * 权限、项目范围和删除状态由调用方决定，不影响 topic／user 的内部查询。
+     */
+    public function scopeProjectSpace(Builder $query): Builder
+    {
+        return $query->where($this->qualifyColumn('space_type'), FileSpaceType::PROJECT->value)
+            ->where($this->qualifyColumn('storage_type'), StorageType::WORKSPACE->value);
+    }
+
+    /**
+     * 普通项目文件展示排除内部隐藏文件；此条件不代替用户权限检查。
+     * 回收站须显式 withTrashed()，普通列表保留默认软删除过滤。
+     */
+    public function scopeVisibleProjectFiles(Builder $query): Builder
+    {
+        return $this->scopeProjectSpace($query)->where($this->qualifyColumn('is_hidden'), false);
+    }
 
     public function getDates(): array
     {

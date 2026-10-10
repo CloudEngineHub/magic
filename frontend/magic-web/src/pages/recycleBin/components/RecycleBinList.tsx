@@ -1,6 +1,6 @@
 import type { UIEvent } from "react"
 import type { TFunction } from "i18next"
-import { CheckLine, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react"
+import { CheckLine, Eye, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
@@ -21,6 +21,7 @@ import {
 } from "./recycle-bin-domain"
 
 export interface RecycleBinListProps {
+	onPreview?: (item: RecycleBinItem) => void
 	project?: RecycleBinFileListOptions
 	items: RecycleBinItem[]
 	selectedIds: string[]
@@ -141,7 +142,18 @@ export function RecycleBinList(props: RecycleBinListProps) {
 									{getCategoryLabel(item.category, t, item.fileKind)}
 								</Badge>
 								<div className="truncate text-sm font-medium leading-normal text-foreground">
-									{getDisplayTitle(item, t)}
+									{props.onPreview &&
+									item.category === "files" &&
+									item.fileKind !== "folder" ? (
+										<button
+											type="button"
+											onClick={() => props.onPreview?.(item)}
+										>
+											{getDisplayTitle(item, t)}
+										</button>
+									) : (
+										getDisplayTitle(item, t)
+									)}
 								</div>
 							</div>
 
@@ -175,6 +187,14 @@ export function RecycleBinList(props: RecycleBinListProps) {
 								</div>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
+								{props.onPreview &&
+									item.category === "files" &&
+									item.fileKind !== "folder" && (
+										<DropdownMenuItem onSelect={() => props.onPreview?.(item)}>
+											<Eye size={16} />
+											{t("recycleBin.preview.open")}
+										</DropdownMenuItem>
+									)}
 								<DropdownMenuItem
 									variant="default"
 									onSelect={() => onOpenRestore({ kind: "item", item })}

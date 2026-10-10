@@ -4,6 +4,8 @@ import { superMagicStore } from "@/pages/superMagic/stores"
 import { useCallback, useMemo } from "react"
 import { observer } from "mobx-react-lite"
 import { useToolTooltip } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/hooks/useToolTooltip"
+import ToolGenerationProgress from "@/pages/superMagic/components/MessageList/components/shared/ToolGenerationProgress"
+import ToolWaitCountdown from "@/pages/superMagic/components/MessageList/components/shared/ToolWaitCountdown"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { ToolIconBadge } from "@/pages/superMagic/components/MessageList/components/shared/ToolIconConfig"
@@ -26,7 +28,10 @@ interface ToolDataLike {
 	action?: string | ReactNode
 	remark?: string
 	status?: string
+	/** 工具调用的原始 arguments 字符串；等待工具的 sleep 时长要从这里读。 */
+	rawArguments?: string
 	detail?: {
+		type?: string
 		data?: Record<string, unknown>
 	}
 	interactionTarget?: ToolCardInteractionTarget
@@ -34,6 +39,8 @@ interface ToolDataLike {
 }
 
 interface DefaultToolProps {
+	suffix?: ReactNode
+	cardClassName?: string
 	node?: NodeProps["node"]
 	toolData?: ToolDataLike
 	loading?: boolean
@@ -49,8 +56,7 @@ function DefaultTool(props: DefaultToolProps) {
 	const filesStore = useMessageListProjectFilesStore()
 	const { onMouseEnter, onMouseLeave, loading, classNames, onClick } = props
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| { tool?: ToolDataLike }
-		| undefined
+		{ tool?: ToolDataLike } | undefined
 	const tool = props.toolData || node?.tool
 	const interactionTarget =
 		props.toolData?.interactionTarget ?? getToolCardInteractionTarget(tool?.name, tool?.detail)
@@ -70,8 +76,9 @@ function DefaultTool(props: DefaultToolProps) {
 			if (!hasInteraction) return
 			const detail = { ...tool?.detail, id: tool?.id }
 			selectToolDetail({ detail, onSelectDetail: props?.onSelectDetail })
-			if (interactionTargetType === "design") {
+			if (interactionTargetType === "canvas") {
 				const { designProjectId, elements } = getToolDesignProjectInfo(tool, filesStore)
+				if (!designProjectId) return
 				pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
 					isFromPlaybackToolNode: true,
 					canvasDesignId: designProjectId,
@@ -127,11 +134,13 @@ function DefaultTool(props: DefaultToolProps) {
 				className={cn(
 					"inline-flex h-fit w-fit max-w-full items-center overflow-hidden rounded-md border border-border bg-white pl-1.5 shadow-sm dark:bg-card",
 					!loading && "gap-1.5",
+					props.cardClassName,
 				)}
 			>
 				<div
 					className={cn(
 						"inline-flex h-7 w-fit items-center gap-1.5 overflow-hidden py-1.5 pr-1.5",
+						props.suffix !== undefined && "min-w-0 flex-1",
 						hasInteraction && "cursor-pointer",
 					)}
 					onClick={hasInteraction ? onClick : undefined}
@@ -143,6 +152,11 @@ function DefaultTool(props: DefaultToolProps) {
 							{tool?.action}
 						</span>
 					)}
+					<ToolGenerationProgress
+						toolCallId={tool?.id}
+						status={tool?.status}
+						detail={tool?.detail}
+					/>
 					{tool?.remark && (
 						<span
 							{...tooltipProps}
@@ -162,9 +176,16 @@ function DefaultTool(props: DefaultToolProps) {
 						</div>
 					</div>
 				) : (
-					renderSuffixIcon
+					(props.suffix ?? renderSuffixIcon)
 				)}
 			</div>
+			<ToolWaitCountdown
+				toolCallId={tool?.id}
+				toolName={tool?.name}
+				status={tool?.status}
+				rawArguments={tool?.rawArguments}
+				detail={tool?.detail}
+			/>
 			{renderTooltip()}
 		</div>
 	)

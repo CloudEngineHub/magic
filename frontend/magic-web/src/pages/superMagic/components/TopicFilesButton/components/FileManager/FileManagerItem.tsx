@@ -8,7 +8,7 @@ import {
 	type KeyboardEvent,
 	type MouseEvent,
 	type ReactNode,
-	type RefObject,
+	type MutableRefObject,
 } from "react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
@@ -17,6 +17,7 @@ import SmartTooltip from "@/components/other/SmartTooltip"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { MoreHorizontal, ChevronRight, Loader2, RotateCw } from "lucide-react"
+import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { Button } from "@/components/shadcn-ui/button"
 import type { InputRef } from "antd"
 import type { TopicFilesMenuItem } from "../../utils/menu-items"
@@ -42,7 +43,8 @@ interface Props {
 	selected: boolean
 	focused: boolean
 	cut?: boolean
-	menuItems: TopicFilesMenuItem[]
+	menuItems?: TopicFilesMenuItem[]
+	onCheck?: () => void
 	tag?: ReactNode
 	onSelect: (event: MouseEvent<HTMLElement>) => void
 	onOpen: () => void
@@ -64,6 +66,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 	focused,
 	cut,
 	menuItems,
+	onCheck,
 	tag,
 	onSelect,
 	onOpen,
@@ -73,7 +76,202 @@ export const FileManagerItem = memo(function FileManagerItem({
 	const grid = view === "grid"
 	const { item, name, isDirectory } = presentation
 	const fileTag = tag ?? <ProjectFileTag item={item} presentation={presentation} />
-	return (
+	const rowElement = (
+		<div
+			id={id}
+			role="option"
+			aria-selected={selected}
+			aria-label={name}
+			draggable={!onCheck && !rename}
+			data-manager-item={item.file_id}
+			data-manager-target={isDirectory ? item.file_id : undefined}
+			onClick={(event) => {
+				if (event.target instanceof Node && event.currentTarget.contains(event.target))
+					onSelect(event)
+			}}
+			onDoubleClick={(event) => {
+				if (event.target instanceof Node && event.currentTarget.contains(event.target))
+					onOpen()
+			}}
+			style={!grid ? { gridTemplateColumns: "var(--manager-columns)" } : undefined}
+			className={cn(
+				"group relative h-full w-full min-w-0 cursor-pointer select-none rounded-md text-xs outline-none transition-colors duration-150 motion-reduce:transition-none",
+				grid ? "flex flex-col items-center gap-1 px-1 py-2" : "grid items-center px-3",
+				!grid &&
+					(selected
+						? onCheck
+							? "bg-primary/5"
+							: "bg-blue-500 text-white"
+						: striped
+							? "bg-muted/35 hover:bg-muted/60"
+							: "hover:bg-muted/40"),
+				!grid && focused && !selected && "bg-muted/60",
+				cut && "opacity-45",
+				"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
+			)}
+		>
+			<div
+				className={cn(
+					"flex min-w-0",
+					grid ? "w-full flex-col items-center gap-1.5" : "items-center gap-1.5 px-2",
+				)}
+				style={!grid ? { paddingLeft: (row?.level ?? 0) * 16 } : undefined}
+			>
+				{!grid && (
+					<button
+						tabIndex={-1}
+						className={cn(
+							"flex size-4 shrink-0 cursor-pointer items-center justify-center rounded disabled:cursor-not-allowed",
+							!row?.expandable && "invisible",
+						)}
+						disabled={!row?.expandable || item.directoryLoadState === "loading"}
+						aria-expanded={row?.expanded}
+						aria-label={t(
+							item.directoryLoadState === "error"
+								? "userSpace.retry"
+								: row?.expanded
+									? "fileTree.collapseAll"
+									: "fileTree.expandAll",
+						)}
+						onDoubleClick={(event) => event.stopPropagation()}
+						onClick={(event) => {
+							event.stopPropagation()
+							onToggleFolder(event.altKey)
+						}}
+					>
+						{item.directoryLoadState === "loading" ? (
+							<Loader2 size={12} className="animate-spin" />
+						) : item.directoryLoadState === "error" ? (
+							<RotateCw size={12} />
+						) : (
+							<ChevronRight
+								size={12}
+								className={cn(
+									"transition-transform duration-150 motion-reduce:transition-none",
+									row?.expanded && "rotate-90",
+								)}
+							/>
+						)}
+					</button>
+				)}
+				{onCheck && (
+					<Checkbox
+						checked={selected}
+						onCheckedChange={onCheck}
+						aria-label={t("fileManager.checkItem", { name })}
+						className="size-4 shrink-0"
+						onClick={(event) => event.stopPropagation()}
+						onDoubleClick={(event) => event.stopPropagation()}
+						onPointerDown={(event) => event.stopPropagation()}
+					/>
+				)}
+				<span
+					className={cn(
+						"pointer-events-none flex shrink-0 items-center justify-center rounded-md",
+						grid && "h-16 w-[72px] rounded-[9px] group-hover:bg-muted/60",
+						grid && selected && !onCheck && "bg-muted/80",
+						grid && focused && "bg-muted/80",
+					)}
+				>
+					<FileResourceIcon
+						presentation={presentation}
+						size={grid ? 44 : 16}
+						className={
+							grid && !isDirectory
+								? "drop-shadow-[0_1px_2px_rgba(0,0,0,0.18)]"
+								: undefined
+						}
+					/>
+				</span>
+				{rename ? (
+					<FileManagerNameInput
+						rename={rename}
+						grid={grid}
+						isDirectory={isDirectory}
+						getPopupContainer={getPopupContainer}
+					/>
+				) : (
+					<SmartTooltip
+						fileName
+						elementType="span"
+						placement="bottom"
+						sideOffset={4}
+						maxLines={grid ? 2 : 1}
+						getPopupContainer={getPopupContainer}
+						className={cn(
+							"min-w-0 max-w-full",
+							grid
+								? "line-clamp-2 rounded-[5px] px-1 py-px text-center text-[13px] font-medium leading-[17px] tracking-normal [overflow-wrap:anywhere]"
+								: "truncate text-xs leading-4",
+							grid &&
+								selected &&
+								!onCheck &&
+								"bg-blue-600 text-white dark:bg-blue-500",
+							focused && !selected && "underline underline-offset-4",
+						)}
+					>
+						{name}
+					</SmartTooltip>
+				)}
+				{!grid && <span className="ml-auto shrink-0">{fileTag}</span>}
+			</div>
+			{grid
+				? fileTag && (
+						<span className="flex max-w-full justify-center text-muted-foreground">
+							{fileTag}
+						</span>
+					)
+				: columns
+						.filter((column) => column !== "name")
+						.map((column) => {
+							const value = getColumnText(presentation, column)
+							return (
+								<MagicTooltip
+									key={column}
+									title={value}
+									getPopupContainer={getPopupContainer}
+								>
+									<span
+										className={cn(
+											"truncate px-2 text-[11px]",
+											column === "size" && "text-right tabular-nums",
+											selected && !onCheck
+												? "text-white/85"
+												: "text-muted-foreground",
+										)}
+									>
+										{value}
+									</span>
+								</MagicTooltip>
+							)
+						})}
+
+			{!onCheck && showActions && (
+				<MagicDropdown
+					overlayClassName="[&_[role=menuitem]]:cursor-pointer [&_[data-disabled]]:cursor-not-allowed"
+					trigger={["click"]}
+					menu={{ items: menuItems }}
+					getPopupContainer={() => getPopupContainer() ?? document.body}
+				>
+					<Button
+						size="icon"
+						variant="ghost"
+						className="absolute right-1 top-1 size-6 cursor-pointer"
+						aria-label={t("userSpace.actions", { name })}
+						onClick={(event) => {
+							event.stopPropagation()
+							if (!selected) onSelect(event)
+						}}
+					>
+						<MoreHorizontal size={16} />
+					</Button>
+				</MagicDropdown>
+			)}
+		</div>
+	)
+	return onCheck ? (
+		rowElement
+	) : (
 		<MagicDropdown
 			overlayClassName="[&_[role=menuitem]]:cursor-pointer [&_[data-disabled]]:cursor-not-allowed"
 			trigger={["contextMenu"]}
@@ -81,181 +279,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 			menu={{ items: menuItems }}
 			getPopupContainer={() => getPopupContainer() ?? document.body}
 		>
-			<div
-				id={id}
-				role="option"
-				aria-selected={selected}
-				aria-label={name}
-				draggable={!rename}
-				data-manager-item={item.file_id}
-				data-manager-target={isDirectory ? item.file_id : undefined}
-				onClick={(event) => {
-					if (event.target instanceof Node && event.currentTarget.contains(event.target))
-						onSelect(event)
-				}}
-				onDoubleClick={(event) => {
-					if (event.target instanceof Node && event.currentTarget.contains(event.target))
-						onOpen()
-				}}
-				style={!grid ? { gridTemplateColumns: "var(--manager-columns)" } : undefined}
-				className={cn(
-					"group relative h-full w-full min-w-0 cursor-pointer select-none rounded-md text-xs outline-none transition-colors duration-150 motion-reduce:transition-none",
-					grid ? "flex flex-col items-center gap-1 px-1 py-2" : "grid items-center px-3",
-					!grid &&
-						(selected
-							? "bg-blue-500 text-white"
-							: striped
-								? "bg-muted/35 hover:bg-muted/60"
-								: "hover:bg-muted/40"),
-					!grid && focused && !selected && "bg-muted/60",
-					cut && "opacity-45",
-					"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
-				)}
-			>
-				<div
-					className={cn(
-						"flex min-w-0",
-						grid ? "w-full flex-col items-center gap-1.5" : "items-center gap-1.5 px-2",
-					)}
-					style={!grid ? { paddingLeft: (row?.level ?? 0) * 16 } : undefined}
-				>
-					{!grid && (
-						<button
-							tabIndex={-1}
-							className={cn(
-								"flex size-4 shrink-0 cursor-pointer items-center justify-center rounded disabled:cursor-not-allowed",
-								!row?.expandable && "invisible",
-							)}
-							disabled={!row?.expandable || item.directoryLoadState === "loading"}
-							aria-expanded={row?.expanded}
-							aria-label={t(
-								item.directoryLoadState === "error"
-									? "userSpace.retry"
-									: row?.expanded
-										? "fileTree.collapseAll"
-										: "fileTree.expandAll",
-							)}
-							onDoubleClick={(event) => event.stopPropagation()}
-							onClick={(event) => {
-								event.stopPropagation()
-								onToggleFolder(event.altKey)
-							}}
-						>
-							{item.directoryLoadState === "loading" ? (
-								<Loader2 size={12} className="animate-spin" />
-							) : item.directoryLoadState === "error" ? (
-								<RotateCw size={12} />
-							) : (
-								<ChevronRight
-									size={12}
-									className={cn(
-										"transition-transform duration-150 motion-reduce:transition-none",
-										row?.expanded && "rotate-90",
-									)}
-								/>
-							)}
-						</button>
-					)}
-					<span
-						className={cn(
-							"pointer-events-none flex shrink-0 items-center justify-center rounded-md",
-							grid && "h-16 w-[72px] rounded-[9px] group-hover:bg-muted/60",
-							grid && selected && "bg-muted/80",
-							grid && focused && "bg-muted/80",
-						)}
-					>
-						<FileResourceIcon
-							presentation={presentation}
-							size={grid ? 44 : 16}
-							className={
-								grid && !isDirectory
-									? "drop-shadow-[0_1px_2px_rgba(0,0,0,0.18)]"
-									: undefined
-							}
-						/>
-					</span>
-					{rename ? (
-						<FileManagerNameInput
-							rename={rename}
-							grid={grid}
-							isDirectory={isDirectory}
-							getPopupContainer={getPopupContainer}
-						/>
-					) : (
-						<SmartTooltip
-							fileName
-							elementType="span"
-							placement="bottom"
-							sideOffset={4}
-							maxLines={grid ? 2 : 1}
-							getPopupContainer={getPopupContainer}
-							className={cn(
-								"min-w-0 max-w-full",
-								grid
-									? "line-clamp-2 rounded-[5px] px-1 py-px text-center text-[13px] font-medium leading-[17px] tracking-normal [overflow-wrap:anywhere]"
-									: "truncate text-xs leading-4",
-								grid && selected && "bg-blue-600 text-white dark:bg-blue-500",
-								focused && !selected && "underline underline-offset-4",
-							)}
-						>
-							{name}
-						</SmartTooltip>
-					)}
-					{!grid && <span className="ml-auto shrink-0">{fileTag}</span>}
-				</div>
-				{grid
-					? fileTag && (
-							<span className="flex max-w-full justify-center text-muted-foreground">
-								{fileTag}
-							</span>
-						)
-					: columns
-							.filter((column) => column !== "name")
-							.map((column) => {
-								const value = getColumnText(presentation, column)
-								return (
-									<MagicTooltip
-										key={column}
-										title={value}
-										getPopupContainer={getPopupContainer}
-									>
-										<span
-											className={cn(
-												"truncate px-2 text-[11px]",
-												column === "size" && "text-right tabular-nums",
-												selected
-													? "text-white/85"
-													: "text-muted-foreground",
-											)}
-										>
-											{value}
-										</span>
-									</MagicTooltip>
-								)
-							})}
-
-				{showActions && (
-					<MagicDropdown
-						overlayClassName="[&_[role=menuitem]]:cursor-pointer [&_[data-disabled]]:cursor-not-allowed"
-						trigger={["click"]}
-						menu={{ items: menuItems }}
-						getPopupContainer={() => getPopupContainer() ?? document.body}
-					>
-						<Button
-							size="icon"
-							variant="ghost"
-							className="absolute right-1 top-1 size-6 cursor-pointer"
-							aria-label={t("userSpace.actions", { name })}
-							onClick={(event) => {
-								event.stopPropagation()
-								if (!selected) onSelect(event)
-							}}
-						>
-							<MoreHorizontal size={16} />
-						</Button>
-					</MagicDropdown>
-				)}
-			</div>
+			{rowElement}
 		</MagicDropdown>
 	)
 })
@@ -289,7 +313,7 @@ const pendingRenameCancelTimers = new WeakMap<object, number>()
 
 /** Expose a textarea as the InputRef useRename already knows how to focus and select. */
 function bindRenameTextArea(
-	renameInputRef: RefObject<InputRef | null>,
+	renameInputRef: MutableRefObject<InputRef | null>,
 	node: HTMLTextAreaElement | null,
 ) {
 	if (!node) {

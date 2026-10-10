@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { lazy, Suspense } from "react"
 import { Loader2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
@@ -114,4 +115,12 @@ function CrewConversationPage() {
 	)
 }
 
-export default observer(CrewConversationPage)
+const ObservedPage = observer(CrewConversationPage)
+
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<ObservedPage />
+		</FileAccessProvider>
+	)
+}

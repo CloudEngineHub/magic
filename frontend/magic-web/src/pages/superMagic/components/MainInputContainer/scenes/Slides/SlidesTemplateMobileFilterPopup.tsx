@@ -63,6 +63,7 @@ function SlidesTemplateMobileFilterPopup({
 				icon: <X />,
 				ariaLabel: closeLabel,
 				onClick: handleClose,
+				testId: "slides-template-mobile-filter-close",
 			}}
 			headerTrailingAction={headerTrailingAction}
 			className={cn("max-h-[85dvh] rounded-t-[14px] border-0 bg-muted p-0", className)}

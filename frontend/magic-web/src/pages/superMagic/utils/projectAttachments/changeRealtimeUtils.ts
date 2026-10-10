@@ -12,6 +12,7 @@ import { withAttachmentsRefreshWaitersResolved } from "../../services/attachment
 import { projectAttachmentsChangeLog } from "./changeLogReporter"
 import { parseProjectAttachmentsChangeEvent } from "./changeEventParser"
 import { getAttachmentName, normalizeAttachmentId, normalizeAttachmentItem } from "./treeUtils"
+import { getSharedMediaResourceScope } from "../../services/sharedMediaResourceScope"
 
 export { getProjectAttachmentsChangeDedupeKey } from "./changeEventParser"
 
@@ -123,7 +124,9 @@ export function resolveProjectAttachmentsChangeEvent(params: {
 }
 
 export function loadProjectAttachmentsSingleflight(projectId: string) {
-	const existing = fallbackRefreshByProject.get(projectId)
+	// 同项目只合并同一账户／组织的读取，不能复用切换身份前仍在途的请求。
+	const requestKey = `${getSharedMediaResourceScope()}\0${projectId}`
+	const existing = fallbackRefreshByProject.get(requestKey)
 	if (existing) return existing
 
 	// Unsafe reducer states such as missing parents fall back to full refresh.
@@ -137,10 +140,10 @@ export function loadProjectAttachmentsSingleflight(projectId: string) {
 			list: res.list || [],
 		})),
 	).finally(() => {
-		fallbackRefreshByProject.delete(projectId)
+		fallbackRefreshByProject.delete(requestKey)
 	})
 
-	fallbackRefreshByProject.set(projectId, request)
+	fallbackRefreshByProject.set(requestKey, request)
 	return request
 }
 

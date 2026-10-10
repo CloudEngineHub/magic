@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import (
+    DisplayType,
+    OperationResultItem,
+    OperationResultListContent,
+    ToolDetail,
+)
 from app.i18n import I18nManager
 from app.tools.canvas.presentation import (
     CanvasGenerationFeedback,
@@ -64,6 +73,101 @@ def test_generation_feedback_separates_image_statuses() -> None:
         assert CanvasGenerationFeedback.remark(summary) == "已生成 1 个图片；1 个图片生成中；1 个图片生成失败"
     finally:
         I18nManager.reset_language()
+
+
+def test_generation_detail_keeps_each_items_timing() -> None:
+    """逐项结果必须携带自己的起止时间，供刷新后的行内百分比恢复。"""
+    arguments = _arguments(
+        ("image-1", "generated", "image"),
+        ("image-2", "generated", "image"),
+    )
+    result = ToolResult(
+        content="mock",
+        data={
+            "items": [
+                {
+                    "item_ref": "image-1",
+                    "status": "processing",
+                    "element_id": "element-1",
+                    "started_at": "2026-10-05T10:00:00+08:00",
+                    "expected_finished_at": "2026-10-05T10:00:45+08:00",
+                },
+                {
+                    "item_ref": "image-2",
+                    "status": "completed",
+                    "element_id": "element-2",
+                    "started_at": "2026-10-05T10:00:01+08:00",
+                    "expected_finished_at": "2026-10-05T10:01:11+08:00",
+                },
+            ],
+        },
+    )
+
+    detail = CanvasGenerationFeedback.operation_result_detail(result, arguments)
+
+    assert detail is not None
+    assert detail.data.items[0].started_at == "2026-10-05T10:00:00+08:00"
+    assert detail.data.items[0].expected_finished_at == "2026-10-05T10:00:45+08:00"
+    assert detail.data.items[1].started_at == "2026-10-05T10:00:01+08:00"
+    assert detail.data.items[1].expected_finished_at == "2026-10-05T10:01:11+08:00"
+    assert detail.data.items[0].is_processing is True
+    assert detail.data.items[1].is_processing is False
+
+
+@pytest.mark.asyncio
+async def test_pending_detail_omits_unavailable_item_timing() -> None:
+    """并发建单期间尚未返回的时间不能以 null 破坏整张逐项卡。"""
+    agent_context = SimpleNamespace(
+        context_id="context-1",
+        update_activity_time=Mock(),
+        dispatch_event=AsyncMock(),
+    )
+    tool_context = ToolContext(arguments={})
+    tool_context.tool_call_id = "tool-1"
+    tool_context.register_extension("agent_context", agent_context)
+    tool = SimpleNamespace(
+        name="generate_canvas_images",
+        get_before_tool_call_friendly_action_and_remark=AsyncMock(
+            return_value={"action": "Generating", "remark": "Two images"}
+        ),
+    )
+    detail = ToolDetail(
+        type=DisplayType.OPERATION_RESULT_LIST,
+        data=OperationResultListContent(
+            items=[
+                OperationResultItem(
+                    label="Ready",
+                    kind="text",
+                    status="success",
+                    message="Generating",
+                    started_at="2026-10-07T17:14:00+08:00",
+                    expected_finished_at="2026-10-07T17:14:45+08:00",
+                    is_processing=True,
+                ),
+                OperationResultItem(
+                    label="Waiting",
+                    kind="text",
+                    status="success",
+                    message="Generating",
+                    is_processing=True,
+                ),
+            ]
+        ),
+    )
+
+    with patch(
+        "app.tools.canvas.presentation.generation_feedback.get_correlation_manager"
+    ) as get_manager:
+        get_manager.return_value.get_active_correlation_id.return_value = "correlation-1"
+        await CanvasGenerationFeedback.report_pending_detail(
+            tool, tool_context, tool_context.arguments, detail
+        )
+
+    event_data = agent_context.dispatch_event.await_args.args[1]
+    items = event_data.arguments["detail"]["data"]["items"]
+    assert items[0]["started_at"] == "2026-10-07T17:14:00+08:00"
+    assert "started_at" not in items[1]
+    assert "expected_finished_at" not in items[1]
 
 
 def test_generation_feedback_ignores_imported_media() -> None:
@@ -224,7 +328,7 @@ async def test_generation_tool_feedback_uses_specific_media_wording(tool_class: 
     finally:
         I18nManager.reset_language()
 
-    assert before["action"] == "正在生成图片"
-    assert before["remark"] == "准备生成 2 个图片"
-    assert after["action"] == "生成图片"
-    assert after["remark"] == "已生成 2 个图片"
+    assert before["action"] == "正在画布中生成图像"
+    assert before["remark"] == "image-1、image-2"
+    assert after["action"] == "在画布中生成图像"
+    assert after["remark"] == "image-1已生成；image-2已生成"

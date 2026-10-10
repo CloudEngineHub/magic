@@ -14,10 +14,15 @@ const editorSource = readFileSync(
   "src/features/platform-model-list/utils/model-editor.ts",
   "utf8",
 );
+const providerBindingSource = readFileSync(
+  "src/features/platform-model-list/components/provider-binding-card.tsx",
+  "utf8",
+);
 
 describe("platform model embedding runtime configuration", () => {
   it("matches the legacy Embedding field visibility", () => {
-    assert.deepEqual(getCommonRuntimeFieldVisibility(providerModelType.embedding), {
+    assert.deepEqual(getCommonRuntimeFieldVisibility(providerModelType.embedding, true), {
+      chatApi: false,
       capabilities: false,
       maxOutputTokens: true,
       maxTokens: false,
@@ -27,7 +32,8 @@ describe("platform model embedding runtime configuration", () => {
   });
 
   it("keeps the normal LLM runtime fields unchanged", () => {
-    assert.deepEqual(getCommonRuntimeFieldVisibility(providerModelType.largeLanguageModel), {
+    assert.deepEqual(getCommonRuntimeFieldVisibility(providerModelType.largeLanguageModel, true), {
+      chatApi: true,
       capabilities: true,
       maxOutputTokens: true,
       maxTokens: true,
@@ -38,7 +44,8 @@ describe("platform model embedding runtime configuration", () => {
 
   it("does not expose shared runtime fields for image or video models", () => {
     [providerModelType.textToImage, providerModelType.textToVideo].forEach((modelType) => {
-      assert.deepEqual(getCommonRuntimeFieldVisibility(modelType), {
+      assert.deepEqual(getCommonRuntimeFieldVisibility(modelType, true), {
+        chatApi: false,
         capabilities: false,
         maxOutputTokens: false,
         maxTokens: false,
@@ -48,13 +55,33 @@ describe("platform model embedding runtime configuration", () => {
     });
   });
 
+  it("only exposes official runtime options to the official organization", () => {
+    assert.deepEqual(getCommonRuntimeFieldVisibility(providerModelType.largeLanguageModel, false), {
+      chatApi: true,
+      capabilities: false,
+      maxOutputTokens: false,
+      maxTokens: true,
+      temperature: false,
+      vectorSize: false,
+    });
+    assert.deepEqual(getCommonRuntimeFieldVisibility(providerModelType.embedding, false), {
+      chatApi: false,
+      capabilities: false,
+      maxOutputTokens: false,
+      maxTokens: false,
+      temperature: false,
+      vectorSize: true,
+    });
+  });
+
   it("drives editor rendering and error focus from model_type instead of category", () => {
     assert.equal(editorSource.includes("modelType={modelType}"), true);
     assert.equal(
-      editorSource.includes("getCommonRuntimeFieldVisibility(modelType)"),
+      editorSource.includes("getCommonRuntimeFieldVisibility(modelType, isOfficialOrganization)"),
       true,
     );
     assert.equal(editorSource.includes("isEmbeddingModelType(modelType)"), true);
+    assert.equal(editorSource.includes('name="chat_api"'), true);
     assert.equal(editorSource.includes("hasCommonRuntimeFields(modelType)"), true);
     assert.equal(
       editorSource.includes(
@@ -62,6 +89,23 @@ describe("platform model embedding runtime configuration", () => {
       ),
       false,
     );
+  });
+
+  it("exposes extra headers and bodies for LLM and Embedding model types", () => {
+    assert.equal(
+      providerBindingSource.includes(
+        "category === providerModelCategory.llm || isEmbeddingModelType(modelType)",
+      ),
+      true,
+    );
+    assert.equal(providerBindingSource.includes("supportsExtraRequest && !isOfficialSynced"), true);
+    assert.equal(
+      editorSource.includes(
+        "values.category === providerModelCategory.llm || isEmbeddingModelType(values.model_type)",
+      ),
+      true,
+    );
+    assert.equal(editorSource.includes("supportsExtraRequest && (binding.extra_header.trim()"), true);
   });
 
   it("keeps the backend Embedding category persisted as LLM", () => {

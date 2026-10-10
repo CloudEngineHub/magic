@@ -13,6 +13,7 @@ from agentlang.logger import get_logger
 from app.service.memory.policies.memory_file_budget import get_memory_md_budget
 from app.service.memory.policies.memory_scope import MemoryScopeKind, resolve_memory_scopes
 from app.service.memory.policies.memory_skill_policy import is_auto_memory_enabled, is_memory_skill_available
+from app.service.channel_context_service import ChannelContextService
 from agentlang.tools.tool_result import ToolResult
 from app.tools.read_file import ReadFile, ReadFileParams
 from app.utils.async_file_utils import (
@@ -45,6 +46,7 @@ class AutoReadRuleId(StrEnum):
     GLOBAL_MEMORY = "global_memory"
     PROJECT_MEMORY = "project_memory"
     CLAW_MEMORY = "claw_memory"
+    CHANNEL_SKILL = "channel_skill"
 
 
 class AutoReadPathKind(StrEnum):
@@ -55,6 +57,7 @@ class AutoReadPathKind(StrEnum):
     GLOBAL_MEMORY = "global_memory"
     PROJECT_MEMORY = "project_memory"
     CLAW_MEMORY = "claw_memory"
+    CHANNEL_SKILL_FILES = "channel_skill_files"
 
 
 @dataclass(frozen=True)
@@ -110,6 +113,12 @@ AUTO_READ_FILE_RULES: tuple[AutoReadFileRule, ...] = (
         path_kind=AutoReadPathKind.NESTED_AGENTS,
         priority=50,
     ),
+    AutoReadFileRule(
+        rule_id=AutoReadRuleId.CHANNEL_SKILL,
+        load_policy=AutoReadLoadPolicy.ALWAYS,
+        path_kind=AutoReadPathKind.CHANNEL_SKILL_FILES,
+        priority=60,
+    ),
 )
 
 
@@ -139,8 +148,10 @@ class AutoReadFileService:
         workspace_entries: list["WorkspaceEntry"] | None = None,
     ) -> None:
         """使用现有工作区快照追加规则索引，并通过 ReadFile 交付自动文件。"""
+        if not chat_history._is_tool_call_sequence_complete():
+            return
         try:
-            candidates = await cls._resolve_candidates(agent_context, workspace_entries)
+            candidates = await cls._resolve_candidates(agent_context, workspace_entries, chat_history)
             await cls._append_instruction_index(chat_history, candidates)
             await cls._append_always_read_files(agent_context, chat_history, candidates)
         except Exception as error:
@@ -151,6 +162,7 @@ class AutoReadFileService:
         cls,
         agent_context: "AgentContext",
         workspace_entries: list["WorkspaceEntry"] | None,
+        chat_history: ChatHistory | None = None,
     ) -> tuple[AutoReadFileCandidate, ...]:
         candidates: list[AutoReadFileCandidate] = []
         for rule in AUTO_READ_FILE_RULES:
@@ -162,6 +174,18 @@ class AutoReadFileService:
                     f"rule_id={rule.rule_id.value} path_kind={rule.path_kind.value} error={error}",
                     exc_info=True,
                 )
+                if chat_history is not None:
+                    notice = (
+                        f"AutoRead could not resolve '{rule.rule_id.value}' ({type(error).__name__}). "
+                        "Its required knowledge has not been loaded. Continue the task, but do not assume "
+                        "this rule's files were read; use the available skill or file-reading tools when needed."
+                    )
+                    source = f"{_AUTO_READ_SOURCE_PREFIX}notice:{hashlib.sha256(notice.encode('utf-8')).hexdigest()[:20]}"
+                    if not cls._has_source(chat_history, source):
+                        await chat_history.append_user_message(
+                            f"<system_injected_context>\n{notice}\n</system_injected_context>",
+                            show_in_ui=False, source=source,
+                        )
 
         deduplicated: dict[str, AutoReadFileCandidate] = {}
         for candidate in sorted(
@@ -194,6 +218,15 @@ class AutoReadFileService:
             return []
 
         workspace_dir = Path(agent_context.get_workspace_dir()).absolute()
+
+        if rule.path_kind == AutoReadPathKind.CHANNEL_SKILL_FILES:
+            candidates: list[AutoReadFileCandidate] = []
+            for file_path in await ChannelContextService.resolve_auto_read_files(agent_context):
+                candidates.extend(await cls._single_candidate(
+                    rule, file_path, display_path=str(file_path), scope="active-im-channels",
+                    require_exists=False,
+                ))
+            return candidates
 
         if rule.path_kind == AutoReadPathKind.WORKSPACE_ROOT_AGENTS:
             return await cls._single_candidate(
@@ -239,8 +272,9 @@ class AutoReadFileService:
         *,
         display_path: str,
         scope: str,
+        require_exists: bool = True,
     ) -> list[AutoReadFileCandidate]:
-        if not await cls._is_safe_regular_file(file_path):
+        if require_exists and not await cls._is_safe_regular_file(file_path):
             return []
         return [
             AutoReadFileCandidate(
@@ -359,9 +393,7 @@ class AutoReadFileService:
             if candidate.load_policy != AutoReadLoadPolicy.ALWAYS:
                 continue
             source = cls._build_file_source(candidate.absolute_path)
-            delivered = cls._has_source(chat_history, source)
-            tracked = await agent_context.horizon.is_file_tracked(candidate.absolute_path)
-            if delivered and tracked:
+            if await agent_context.horizon.has_complete_file_read(candidate.absolute_path):
                 continue
 
             max_tokens = None
@@ -382,26 +414,38 @@ class AutoReadFileService:
                     limit=-1,
                 ),
                 max_tokens=max_tokens,
+                allow_fuzzy_match=False,
+                record_read=False,
             )
             if not result.ok:
                 logger.warning(
                     "自动读取文件失败: "
                     f"rule_id={candidate.rule_id.value} path={candidate.display_path} content={result.content}"
                 )
+
+            info = result.extra_info or {}
+            truncated = bool(info.get("was_truncated"))
+            source_content = info.get("source_content")
+            complete = result.ok and not truncated and isinstance(source_content, str)
+            # 同一失败或截断前缀不反复塞入上下文；这不是完整阅读凭据，不阻止后续全文。
+            result_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:20]
+            delivery_source = f"{source}:{result_hash}"
+            if not complete and cls._has_source(chat_history, delivery_source):
                 continue
+            state = "current" if complete else "incomplete"
 
             content = "\n".join(
                 (
                     "<system_injected_context>",
                     (
-                        f'<auto_read_file state="current" rule_id="{candidate.rule_id.value}" '
+                        f'<auto_read_file state="{state}" rule_id="{candidate.rule_id.value}" '
                         f'path="{html.escape(candidate.display_path, quote=True)}" '
                         f'scope="{html.escape(candidate.scope, quote=True)}">'
                     ),
                     (
-                        "The runtime called read_file for this file. Treat the result as content already read in "
-                        "the current context. The shared file-loading mechanism does not change the file's "
-                        "ownership or authority."
+                        "The runtime called read_file for this file. Use the delivered content and respect any "
+                        "failure or truncation notice; an incomplete result is not a full read. "
+                        "The shared file-loading mechanism does not change the file's ownership or authority."
                     ),
                     "<read_file_result>",
                     html.escape(result.content, quote=False),
@@ -410,7 +454,12 @@ class AutoReadFileService:
                     "</system_injected_context>",
                 )
             )
-            await chat_history.append_user_message(content, show_in_ui=False, source=source)
+            await chat_history.append_user_message(content, show_in_ui=False, source=delivery_source)
+            await read_file.record_read_result(
+                tool_context,
+                ReadFileParams(file_path=str(candidate.absolute_path), offset=0, limit=-1),
+                result,
+            )
 
     @staticmethod
     async def read_changed_file(file_path: str, max_tokens: int) -> ToolResult:

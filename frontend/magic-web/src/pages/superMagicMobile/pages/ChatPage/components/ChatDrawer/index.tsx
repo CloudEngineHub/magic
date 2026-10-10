@@ -526,12 +526,14 @@ function ChatDrawer({
 					icon: <X />,
 					ariaLabel: t("common.cancel"),
 					onClick: () => setProjectDeleteModalVisible(false),
+					testId: "chat-drawer-project-delete-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
 					ariaLabel: t("common.confirm"),
 					onClick: handleDeleteProjectConfirm,
 					tone: "destructive",
+					testId: "chat-drawer-project-delete-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-0"
 			>

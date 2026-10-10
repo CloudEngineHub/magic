@@ -31,6 +31,7 @@ from app.service.channel_context_service import ChannelContextService
 from app.core.client_context import ClientContextService
 from app.service.image_model_sizes_service import ImageModelSizesService
 from app.service.video_model_config_service import VideoModelConfigService
+from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
 from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
@@ -568,7 +569,6 @@ class AgentService(Base):
 
         # 追加渠道专属上下文片段（如微信消息携带的媒体文件路径），不支持的渠道返回空串不影响
         query = ChannelContextService.append_channel_context(query, chat_client_message)
-        await ChannelContextService.suggest_channel_skills(chat_client_message, agent_context)
 
         # 原生视觉消费 mention 模块提取出的工作区或挂载目录图片路径。
         image_refs = await self._mention_builder.extract_image_refs(mentions, agent_context)
@@ -601,12 +601,31 @@ class AgentService(Base):
         """
         await CliStatusFactory.wait_initial(agent_context)
 
+        run_succeeded = False
         try:
             request = AgentRunRequest(query=query, image_refs=image_refs)
             await agent.run_main_agent(request)
+            run_succeeded = agent.is_agent_finished()
         finally:
-            # 持久化聊天记录·
-            await FileStorageListenerService._archive_and_upload_project(agent_context)
+            try:
+                await sandbox_restart_coordinator.prepare_pending_restart(
+                    agent_context=agent_context,
+                    run_succeeded=run_succeeded,
+                )
+                # 持久化聊天记录·
+                await FileStorageListenerService._archive_and_upload_project(agent_context)
+            except asyncio.CancelledError:
+                await sandbox_restart_coordinator.cancel_pending_restart(agent_context.context_id)
+                raise
+            except Exception as exc:
+                if not sandbox_restart_coordinator.has_pending_restart(agent_context.context_id):
+                    raise
+                # 重启用于恢复异常环境；归档失败保留日志，不把它变成重启门槛。
+                logger.warning("Agent run finalization failed: %s", exc, exc_info=True)
+            await sandbox_restart_coordinator.dispatch_pending_restart(
+                agent_context=agent_context,
+                run_succeeded=run_succeeded,
+            )
 
     def create_agent_context(
         self,

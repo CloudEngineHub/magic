@@ -98,7 +98,7 @@ export function ReviewActionDialogs<TRecord extends ReviewRecordBase>({
 					if (!open) onClose()
 				}}
 				onConfirm={handleApprove}
-			>
+			 contentTestId="platform-publish-review-confirm-dialog-content" cancelButtonTestId="platform-publish-review-confirm-dialog-cancel-button" confirmButtonTestId="platform-publish-review-confirm-dialog-confirm-button">
 				{variant === "platform" ? (
 					<FilterControlField label={t("publishReview.field.publisherType")}>
 						<Select
@@ -108,14 +108,14 @@ export function ReviewActionDialogs<TRecord extends ReviewRecordBase>({
 								setPublisherType(value as PublishReviewPublisherType)
 							}
 						>
-							<SelectTrigger>
+							<SelectTrigger data-testid="platform-publish-review-select-trigger">
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="USER">
+							<SelectContent data-testid="platform-publish-review-select-content">
+								<SelectItem value="USER" data-testid="platform-publish-review-option">
 									{t("publishReview.publisherType.user")}
 								</SelectItem>
-								<SelectItem value="OFFICIAL">
+								<SelectItem value="OFFICIAL" data-testid="platform-publish-review-option">
 									{t("publishReview.publisherType.official")}
 								</SelectItem>
 							</SelectContent>
@@ -135,7 +135,7 @@ export function ReviewActionDialogs<TRecord extends ReviewRecordBase>({
 					if (!open) onClose()
 				}}
 				onConfirm={handleReject}
-			>
+			 contentTestId="platform-publish-review-secondary-confirm-dialog-content" cancelButtonTestId="platform-publish-review-secondary-confirm-dialog-cancel-button" confirmButtonTestId="platform-publish-review-secondary-confirm-dialog-confirm-button">
 				{variant === "internal" ? (
 					<FilterControlField label={t("publishReview.field.reviewRemark")}>
 						<Textarea
@@ -144,7 +144,7 @@ export function ReviewActionDialogs<TRecord extends ReviewRecordBase>({
 							onChange={(event) => setReviewRemark(event.target.value)}
 							placeholder={t("publishReview.placeholder.reviewRemark")}
 							value={reviewRemark}
-						/>
+						 data-testid="platform-publish-review-textarea-input"/>
 					</FilterControlField>
 				) : null}
 			</ConfirmDialog>

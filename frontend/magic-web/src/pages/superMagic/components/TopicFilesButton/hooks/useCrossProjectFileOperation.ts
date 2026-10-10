@@ -24,7 +24,10 @@ import {
 	resolveSingleDocumentStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
 import { useCanvasFileOperationGuard } from "./useCanvasFileOperationGuard"
-import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+import {
+	resolveCanvasOperationConfirmTitleKey,
+	type CanvasProjectPathRepairResult,
+} from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 import type { FileScope } from "@/apis/modules/fileScope"
 import type { ConfirmFileOperation, FileOperationPreparation } from "./types"
 import { buildAttachmentIndex } from "../utils/attachmentIndex"
@@ -291,7 +294,12 @@ export function useCrossProjectFileOperation(options: UseCrossProjectFileOperati
 						})
 					: ""
 				const modal = MagicModal.confirm({
-					title: t("topicFiles.canvasOperationRisk.title"),
+					title: t(
+						resolveCanvasOperationConfirmTitleKey({
+							requiresCanvasRisk: canvasRisk.shouldWarn,
+							hasPathRepairFailures: repairFailures.length > 0,
+						}),
+					),
 					content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 					icon: createElement(IconAlertTriangleFilled, {
 						size: 20,

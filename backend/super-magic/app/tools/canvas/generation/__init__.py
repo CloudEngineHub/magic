@@ -12,7 +12,7 @@ from app.tools.canvas.generation.capability.generation_capability_registry impor
 from app.tools.canvas.generation.contracts.generation_capability import GenerationCapability
 from app.tools.canvas.generation.contracts.generation_query_request import GenerationQueryRequest
 from app.tools.canvas.generation.contracts.generation_query_result import GenerationQueryResult
-from app.tools.canvas.generation.contracts.generation_request import GenerationRequest
+from app.tools.canvas.generation.contracts.generation_request import GenerationRequest, TaskCreatedCallback
 from app.tools.canvas.generation.contracts.generation_submission import GenerationSubmission
 from app.tools.canvas.generation.contracts.generation_task import GenerationTask
 from app.tools.canvas.generation.contracts.project_identity import ProjectIdentity
@@ -57,5 +57,6 @@ __all__ = [
     "build_video_filename",
     "sanitize_video_filename",
     "SynchronousGenerationStrategy",
+    "TaskCreatedCallback",
     "default_generation_capabilities",
 ]

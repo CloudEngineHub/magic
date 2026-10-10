@@ -10,6 +10,7 @@ import { shadow } from "@/utils/shadow"
 import { useMemoizedFn } from "ahooks"
 import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import CommonFooter from "../../components/CommonFooter"
+import { TextSaveStatus } from "../../components/TextSaveStatus"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import Deleted from "../../components/Deleted"
 import useSaveHandlerRegistration from "../../hooks/useSaveHandlerRegistration"
@@ -85,9 +86,13 @@ export default function CodeViewer(props: any) {
 		fetchFileVersions,
 		isNewestVersion,
 		isDeleted,
+		loadError: fileLoadError,
+		refreshFile,
 		loading: fileLoading,
 	} = useFileData({
-		enabled: !textFileSession,
+		enabled: true,
+		loadContent: !textFileSession,
+		isTabActive,
 		file_id,
 		updatedAt,
 		isEditing: isEditMode,
@@ -97,7 +102,10 @@ export default function CodeViewer(props: any) {
 	})
 
 	const [localContent, setContent] = useState<string>("")
-	const content = textFileSession?.content ?? localContent
+	const content =
+		fileVersion !== undefined
+			? (fileData ?? textFileSession?.content ?? "")
+			: (textFileSession?.content ?? localContent)
 	const loading = textFileSession?.loading ?? fileLoading
 	const [localDraft, setLocalDraft] = useState<string>("")
 	const editingCodeContent = textFileSession?.draft ?? localDraft
@@ -127,11 +135,15 @@ export default function CodeViewer(props: any) {
 		if (editingCodeContent && editingCodeContent !== content) {
 			// 保存代码编辑内容，使用 shadow 函数加密
 			const enable_shadow = true
+			// Feedback is the top-right save chip, so skip the centered toast.
 			await saveEditContent?.(
 				shadow(editingCodeContent),
 				file_id,
 				enable_shadow,
 				fetchFileVersions,
+				undefined,
+				false,
+				{ silent: true },
 			)
 			// 更新 content 状态
 			setContent(editingCodeContent)
@@ -388,13 +400,22 @@ export default function CodeViewer(props: any) {
 			tabIndex={-1}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{textFileSession?.loadError ? (
+			<TextSaveStatus fileId={file_id} textFileSession={textFileSession} />
+			{textFileSession?.loadError || fileLoadError ? (
 				<DetailEmpty
 					title={t("common.fileNotFoundOrLoadFailed")}
-					onRetry={textFileSession.refresh}
+					onRetry={textFileSession?.refresh ?? refreshFile}
 				/>
 			) : textFileSession && loading ? (
-				<MagicSpin spinning />
+				<Flex
+					flex={1}
+					align="center"
+					justify="center"
+					className="min-h-0 bg-background"
+					data-testid="text-file-session-loading"
+				>
+					<MagicSpin spinning />
+				</Flex>
 			) : isPureShareCodePreview ? (
 				loading ? (
 					<Flex

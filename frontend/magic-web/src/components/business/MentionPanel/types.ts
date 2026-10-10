@@ -111,6 +111,8 @@ export interface ProjectMentionData {
 }
 
 export interface ProjectFileMentionData {
+	/** 原附件来源用于沿用 AI 图片下载策略，不从名称或 URL 猜测。 */
+	source?: import("@/pages/superMagic/components/TopicFilesButton/hooks/types").AttachmentSource
 	file_id: string
 	file_name: string
 	file_path: string

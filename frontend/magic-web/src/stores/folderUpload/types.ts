@@ -1,6 +1,14 @@
 import { UploadSource } from "@/pages/superMagic/components/MessageEditor/hooks/useFileUpload"
 import type { FileScope } from "@/apis/modules/fileScope"
 
+/** 完成后仅保留真实保存目标；不保留原始文件、签名 URL 或整批结果。 */
+export interface UploadedTaskTarget {
+	fileId: string
+	fileName: string
+	relativePath: string
+	isDirectory: boolean
+}
+
 export interface FolderUploadFile {
 	file: File
 	relativePath: string
@@ -55,13 +63,7 @@ export interface FolderUploadState {
 	progress: number
 
 	currentPhase:
-		| "preparing"
-		| "creating_folders"
-		| "uploading"
-		| "saving"
-		| "paused"
-		| "completed"
-		| "error"
+		"preparing" | "creating_folders" | "uploading" | "saving" | "paused" | "completed" | "error"
 
 	// Folder directory creation progress.
 	directoryTotal?: number
@@ -132,6 +134,8 @@ export interface FolderUploadTask {
 	displayName: string
 	displayFileExtension?: string
 	isSingleFileUploadTask: boolean
+	uploadedTarget?: UploadedTaskTarget
+	uploadIdentityKey?: string
 
 	// 任务状态
 	state: FolderUploadState

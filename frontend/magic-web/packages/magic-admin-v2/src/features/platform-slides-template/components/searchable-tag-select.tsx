@@ -21,6 +21,14 @@ type SearchableTagSelectProps = {
   onOpenChange?: (open: boolean) => void;
   options: SlidesTemplateTag[];
   value: string[];
+  triggerTestId?: string;
+  contentTestId?: string;
+  searchInputTestId?: string;
+  searchClearButtonTestId?: string;
+  optionTestId?: string;
+  loadingTestId?: string;
+  emptyTestId?: string;
+  clearButtonTestId?: string;
 };
 
 export function SearchableTagSelect({
@@ -34,6 +42,14 @@ export function SearchableTagSelect({
   onOpenChange,
   options,
   value,
+  triggerTestId,
+  contentTestId,
+  searchInputTestId,
+  searchClearButtonTestId,
+  optionTestId,
+  loadingTestId,
+  emptyTestId,
+  clearButtonTestId,
 }: SearchableTagSelectProps) {
   const { t } = useTranslation();
   const selectOptions = useMemo<SearchableMultiSelectOption[]>(
@@ -71,6 +87,14 @@ export function SearchableTagSelect({
         t("slidesTemplate.form.selectedTagCount", { count })
       }
       value={value}
+      triggerTestId={triggerTestId}
+      contentTestId={contentTestId}
+      searchInputTestId={searchInputTestId}
+      searchClearButtonTestId={searchClearButtonTestId}
+      optionTestId={optionTestId}
+      loadingTestId={loadingTestId}
+      emptyTestId={emptyTestId}
+      clearButtonTestId={clearButtonTestId}
     />
   );
 }

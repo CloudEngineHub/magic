@@ -62,6 +62,8 @@ class MagicClawAssembler
             'topic_id' => (string) ($topicId ?? ''),
             'status' => $status,
             'need_upgrade' => $needUpgrade,
+            'created_at' => $entity->getCreatedAt(),
+            'updated_at' => $entity->getUpdatedAt(),
         ];
     }
 }

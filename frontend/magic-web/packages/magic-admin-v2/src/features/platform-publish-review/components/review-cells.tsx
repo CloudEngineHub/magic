@@ -88,7 +88,7 @@ export function PublishTargetCell({
 
 	return (
 		<Popover>
-			<PopoverTrigger className="flex min-w-0 max-w-full items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
+			<PopoverTrigger data-testid="platform-publish-review-detail-trigger" className="flex min-w-0 max-w-full items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
 				<div className="min-w-0">
 					<div className="flex items-center gap-1.5">
 						<Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
@@ -115,7 +115,7 @@ export function PublishTargetCell({
 					</div>
 				</div>
 			</PopoverTrigger>
-			<PopoverContent align="start" className="w-[min(360px,calc(100vw-2rem))] p-0">
+			<PopoverContent align="start" className="w-[min(360px,calc(100vw-2rem))] p-0" data-testid="platform-publish-review-filter-content">
 				<div className="border-b px-3 py-2.5">
 					<div className="text-sm font-medium text-foreground">
 						{t("publishReview.target.detailTitle")}

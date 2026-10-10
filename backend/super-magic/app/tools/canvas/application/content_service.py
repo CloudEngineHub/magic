@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 
 from agentlang.context.tool_context import ToolContext
 from app.tools.canvas.application.canvas_id import new_canvas_id
@@ -47,6 +47,8 @@ class ContentService:
         project_path: str,
         items: Sequence[AddContentCommand],
         tool_context: ToolContext | None = None,
+        *,
+        on_placeholders_created: Callable[[AddContentsResult], Awaitable[None]] | None = None,
     ) -> AddContentsResult:
         """向已有 Element 追加 Content 版本。"""
         generated: list[GenerationSubmissionCommand] = []
@@ -129,7 +131,16 @@ class ContentService:
             )
         except CanvasDomainError as error:
             raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
-        return await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
+        # 追加版本与新增元素共用同一时机：先保存占位 Content，再发送可定位进度。
+        if generated and on_placeholders_created is not None:
+            await on_placeholders_created(result)
+        return await self.generation_submission_service.submit_generated(
+            project_path,
+            result,
+            generated,
+            tool_context,
+            on_progress_updated=on_placeholders_created,
+        )
 
     async def select_main(self, project_path: str, items: Sequence[SelectMainContentCommand]) -> SelectMainContentsResult:
         """选择用户明确指定的 main Content，并同步 active Content 指针。"""

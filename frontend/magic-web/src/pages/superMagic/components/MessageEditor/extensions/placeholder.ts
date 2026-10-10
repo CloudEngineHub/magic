@@ -212,7 +212,8 @@ export const Placeholder = Extension.create<
 
 						doc.descendants((node, pos) => {
 							const hasAnchor = anchor >= pos && anchor <= pos + node.nodeSize
-							const isEmpty = !node.isLeaf && isNodeEmpty(node)
+							// 空段落可以显示输入提示；空卡片等结构容器不能承载提示，否则会与自身界面重叠。
+							const isEmpty = node.isTextblock && isNodeEmpty(node)
 
 							if (
 								(hasAnchor || !this.options.showOnlyCurrent) &&

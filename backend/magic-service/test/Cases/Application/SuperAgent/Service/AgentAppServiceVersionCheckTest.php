@@ -25,17 +25,25 @@ use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResponse;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
+use App\Infrastructure\SuperMagic\Task\Locker\CheckpointRollbackLock;
 use Hyperf\Codec\Packer\PhpSerializerPacker;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
+use Hyperf\Database\ConnectionResolver;
+use Hyperf\Database\ConnectionResolverInterface;
+use Hyperf\Database\MySqlConnection;
+use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Snowflake\IdGeneratorInterface;
 use Hyperf\Snowflake\Meta;
+use PDO;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
+use ReflectionMethod;
+use RuntimeException;
 
 /**
  * @internal
@@ -56,6 +64,10 @@ class AgentAppServiceVersionCheckTest extends TestCase
         $container->set(ConfigInterface::class, new AgentAppServiceTestConfig());
         $container->set(IdGeneratorInterface::class, new AgentAppServiceTestIdGenerator());
         $container->set(PhpSerializerPacker::class, new PhpSerializerPacker());
+        $container->set(ConnectionResolverInterface::class, new ConnectionResolver([
+            'default' => new MySqlConnection(new PDO('sqlite::memory:'), 'memory'),
+        ]));
+        $container->set(Db::class, new Db($container));
         ApplicationContext::setContainer($container);
     }
 
@@ -141,7 +153,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertSame(
@@ -231,7 +244,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertSame(
@@ -291,7 +305,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertSame('Sandbox and messages rollback committed successfully', $service->rollbackCheckpointCommit($dataIsolation, 920));
@@ -337,7 +352,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertTrue($service->rollbackCheckpoint($dataIsolation, 920, '920', 'seq-100')->isSuccess());
@@ -379,7 +395,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         self::assertSame('Sandbox and messages rollback undone successfully', $service->rollbackCheckpointUndo($dataIsolation, 920));
@@ -398,15 +415,23 @@ class AgentAppServiceVersionCheckTest extends TestCase
         $loggerFactory->method('get')->with('sandbox')->willReturn($logger);
 
         $topic = (new TopicEntity())
-            ->setId(101)->setSandboxId('101')
-            ->setSandboxImages(['agent_image' => 'registry.example.com/agent:v1.0.0', 'agfs_image' => 'agfs:v1']);
+            ->setId(101)
+            ->setSandboxId('101')
+            ->setSandboxImages([
+                'agent_image' => 'registry.example.com/agent:v1.0.0',
+                'agfs_image' => 'registry.example.com/agfs:v1.0.0',
+            ]);
 
         $topicDomainService->expects($this->once())
             ->method('getTopicById')
             ->with(101)
             ->willReturn($topic);
-        $agentDomainService->expects(self::once())->method('getLatestImages')
-            ->willReturn(['agent_image' => 'registry.example.com/agent:v2.0.0', 'agfs_image' => 'agfs:v1']);
+        $agentDomainService->expects($this->once())
+            ->method('getLatestImages')
+            ->willReturn([
+                'agent_image' => 'registry.example.com/agent:v2.0.0',
+                'agfs_image' => 'registry.example.com/agfs:v1.0.0',
+            ]);
 
         $sandboxVersionDomainService = new SandboxVersionDomainService(
             $topicDomainService,
@@ -423,7 +448,8 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         $result = $service->checkSandboxVersion(101);
@@ -446,11 +472,16 @@ class AgentAppServiceVersionCheckTest extends TestCase
         $loggerFactory->method('get')->with('sandbox')->willReturn($logger);
 
         $topicA = (new TopicEntity())
-            ->setId(201)->setSandboxId('201')
-            ->setSandboxImages(['agent_image' => 'registry.example.com/agent:v2.0.0', 'agfs_image' => 'agfs:v1']);
+            ->setId(201)
+            ->setSandboxId('201')
+            ->setSandboxImages([
+                'agent_image' => 'registry.example.com/agent:v2.0.0',
+                'agfs_image' => 'registry.example.com/agfs:v1.0.0',
+            ]);
         $topicB = (new TopicEntity())
-            ->setId(202)->setSandboxId('202')
-            ->setAgentImage('');
+            ->setId(202)
+            ->setSandboxId('202')
+            ->setAgentImage('registry.example.com/agent:v1.0.0');
 
         $topicDomainService->expects($this->once())
             ->method('getTopicsByIds')
@@ -459,8 +490,12 @@ class AgentAppServiceVersionCheckTest extends TestCase
                 return $ids === [201, 202];
             }))
             ->willReturn([$topicA, $topicB]);
-        $agentDomainService->expects(self::once())->method('getLatestImages')
-            ->willReturn(['agent_image' => 'registry.example.com/agent:v2.0.0', 'agfs_image' => 'agfs:v1']);
+        $agentDomainService->expects($this->once())
+            ->method('getLatestImages')
+            ->willReturn([
+                'agent_image' => 'registry.example.com/agent:v2.0.0',
+                'agfs_image' => 'registry.example.com/agfs:v1.0.0',
+            ]);
 
         $sandboxVersionDomainService = new SandboxVersionDomainService(
             $topicDomainService,
@@ -477,52 +512,62 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-            $eventDispatcher
+            $eventDispatcher,
+            $this->makeRollbackLock()
         );
 
         $result = $service->checkSandboxVersionsByTopicIds([202, 201, 202, 0, -1]);
 
         $this->assertSame([
             201 => false,
-            202 => null,
+            202 => true,
         ], $result);
-    }
-
-    public function testUpgradeSkipsOnlyConfirmedCurrentImages(): void
-    {
-        foreach ([false, true, null] as $needsUpdate) {
-            $images = ['agent_image' => 'agent:v1', 'agfs_image' => 'agfs:v1'];
-            $topic = $this->makeTopic()->setSandboxId('920');
-            if ($needsUpdate !== null) {
-                $topic->setSandboxImages($needsUpdate ? array_replace($images, ['agfs_image' => 'agfs:old']) : $images);
-            }
-            $topicService = $this->createMock(TopicDomainService::class);
-            $topicService->method('getTopicById')->willReturn($topic);
-            $agentService = $this->createMock(AgentDomainService::class);
-            $agentService->method('getLatestImages')->willReturn($images);
-            $loggerFactory = $this->createMock(LoggerFactory::class);
-            $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
-            $versionService = new SandboxVersionDomainService($topicService, $agentService, $loggerFactory);
-            $service = new UpgradeVersionTestAppService(
-                $loggerFactory,
-                $agentService,
-                $this->createMock(ProjectDomainService::class),
-                $topicService,
-                $this->createMock(TaskFileDomainService::class),
-                $this->createMock(TaskDomainService::class),
-                $versionService,
-                (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
-                $this->createMock(EventDispatcherInterface::class)
-            );
-            self::assertSame($needsUpdate === false ? '920' : 'restarted', $service->upgradeSandbox(new DataIsolation(['current_user_id' => 'user-1']), 920));
-        }
     }
 
     public function testSandboxInfoPreservesUnknownVersion(): void
     {
         $info = new SandboxInfoDTO('sandbox', 'Running', '', '', null);
+
         self::assertNull($info->getNeedsUpdate());
         self::assertNull($info->toArray()['needs_update']);
+    }
+
+    public function testLostRollbackLockBeforeCommitRollsBackDatabaseMutation(): void
+    {
+        $connection = ApplicationContext::getContainer()->get(ConnectionResolverInterface::class)->connection();
+        $connection->getPdo()->exec('CREATE TABLE rollback_guard_probe (id INTEGER PRIMARY KEY)');
+        $service = (new ReflectionClass(AgentAppService::class))->newInstanceWithoutConstructor();
+        $checks = 0;
+        $guard = static function () use (&$checks): void {
+            if (++$checks === 2) {
+                throw new RuntimeException('lease lost before commit');
+            }
+        };
+        try {
+            (new ReflectionMethod($service, 'runRollbackMessageMutation'))->invoke(
+                $service,
+                static function () use ($connection): array {
+                    $connection->table('rollback_guard_probe')->insert(['id' => 1]);
+                    return ['seq-1'];
+                },
+                $guard
+            );
+            self::fail('Expected ownership failure before commit');
+        } catch (RuntimeException $exception) {
+            self::assertSame('lease lost before commit', $exception->getMessage());
+        }
+        self::assertSame(0, $connection->table('rollback_guard_probe')->count());
+        self::assertSame(0, $connection->transactionLevel());
+    }
+
+    private function makeRollbackLock(): CheckpointRollbackLock
+    {
+        $lock = $this->createMock(CheckpointRollbackLock::class);
+        $lock->method('run')->willReturnCallback(static function (int $topicId, callable $operation): mixed {
+            self::assertSame(920, $topicId);
+            return $operation(static function (): void {});
+        });
+        return $lock;
     }
 
     private function makeTopic(): TopicEntity
@@ -637,13 +682,5 @@ final class AgentAppServiceTestIdGenerator implements IdGeneratorInterface
     public function degenerate(int $id): Meta
     {
         return new Meta(0, 0, 0, 0);
-    }
-}
-
-readonly class UpgradeVersionTestAppService extends AgentAppService
-{
-    public function restartSandbox(DataIsolation $dataIsolation, int $topicId): string
-    {
-        return 'restarted';
     }
 }

@@ -17,6 +17,8 @@ import type {
 } from "./packaging/streaming-types"
 
 export interface StreamingStagingStore {
+	/** Optional implementation marker used for OPFS-specific descriptor handling. */
+	readonly stagingKind?: "opfs" | "memory" | "custom"
 	createSession(sessionId: string, options?: StreamingStagingOperationOptions): Promise<void>
 	stage(
 		source: MediaSourceDescriptor,

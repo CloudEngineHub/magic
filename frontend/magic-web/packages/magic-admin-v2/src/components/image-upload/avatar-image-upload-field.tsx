@@ -66,6 +66,9 @@ export type AvatarImageUploadFieldProps = {
 	uploadLabel?: ReactNode
 	/** 当前已上传图片地址；上传中的本地预览会暂时覆盖该值。 */
 	value: string
+	uploadButtonTestId?: string
+	clearButtonTestId?: string
+	inputTestId?: string
 }
 
 export function AvatarImageUploadField({
@@ -97,6 +100,9 @@ export function AvatarImageUploadField({
 	showPreviewWhenEmpty = true,
 	uploadLabel,
 	value,
+	uploadButtonTestId,
+	clearButtonTestId,
+	inputTestId,
 }: AvatarImageUploadFieldProps) {
 	const { t } = useTranslation()
 	const upload = usePublicImageUpload({
@@ -118,6 +124,7 @@ export function AvatarImageUploadField({
 	const actions = (
 		<div className={cn("flex flex-wrap items-center gap-2", actionsClassName)}>
 			<Button
+				data-testid={uploadButtonTestId}
 				className={layout === "conditional" && !hasPreview ? "w-fit" : undefined}
 				disabled={disabled || upload.isUploading}
 				onClick={upload.openFilePicker}
@@ -136,6 +143,7 @@ export function AvatarImageUploadField({
 			</Button>
 			{clearable && value ? (
 				<Button
+					data-testid={clearButtonTestId}
 					disabled={disabled || upload.isUploading}
 					onClick={onClear}
 					size={buttonSize}
@@ -162,6 +170,7 @@ export function AvatarImageUploadField({
 	const fileInput = (
 		<input
 			id={id}
+			data-testid={inputTestId}
 			ref={upload.inputRef}
 			accept={accept}
 			className="hidden"

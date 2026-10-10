@@ -1,5 +1,13 @@
 import { LoaderCircle } from "lucide-react"
-import { useCallback, type CSSProperties, type ReactElement, type ReactNode } from "react"
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type CSSProperties,
+	type ReactElement,
+	type ReactNode,
+} from "react"
 import { MediaPreviewThumbnail } from "./MediaPreview"
 import { MediaPreviewTooltip } from "./MediaPreviewTooltip"
 import type { MediaPreviewSource } from "./types"
@@ -55,9 +63,50 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 		thumbnailClassName = "size-4 shrink-0 rounded object-cover",
 		thumbnailStyle,
 	} = props
+	// 行内图框由预览组件负责，不能被宿主 Markdown 的 height:auto 改成原图比例。
+	const resolvedThumbnailStyle = { width: 16, height: 16, ...thumbnailStyle }
+
+	const [previewOpen, setPreviewOpen] = useState(false)
+	const retries = useRef({ thumbnail: false, preview: false })
+	const resourceKey = source?.resourceKey
+	useEffect(() => {
+		retries.current = { thumbnail: false, preview: false }
+		setPreviewOpen(false)
+	}, [resourceKey])
+	const refreshSource = source?.refreshSource
+	const recover = useCallback(
+		(rendition: "thumbnail" | "preview") => {
+			if (!enabled || disabled || !refreshSource || retries.current[rendition]) return
+			retries.current[rendition] = true
+			return refreshSource(rendition)
+		},
+		[enabled, disabled, refreshSource],
+	)
+	const refreshAt = source?.refreshAt
+	const hasError = source?.hasError
+	useEffect(() => {
+		if (
+			!(open ?? previewOpen) ||
+			!enabled ||
+			disabled ||
+			hasError ||
+			!refreshAt ||
+			!refreshSource
+		)
+			return
+		// 只给打开的预览续期；隐藏引用没有计时器，也不会持续刷新签名地址。
+		const timer = setTimeout(
+			() => {
+				void refreshSource("preview")
+			},
+			Math.max(0, refreshAt - Date.now()),
+		)
+		return () => clearTimeout(timer)
+	}, [open, previewOpen, enabled, disabled, hasError, refreshAt, refreshSource])
 
 	const loadPreview = useCallback(
 		(nextOpen: boolean) => {
+			setPreviewOpen(nextOpen)
 			if (nextOpen) void source?.loadPreview?.()
 			onOpenChange?.(nextOpen)
 		},
@@ -68,6 +117,7 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 	const thumbnailFallback = source?.isLoading ? (
 		<span
 			className={`${thumbnailClassName} inline-flex items-center justify-center`}
+			style={resolvedThumbnailStyle}
 			aria-label="Loading"
 		>
 			<LoaderCircle className="size-full animate-spin text-muted-foreground" aria-hidden />
@@ -85,7 +135,8 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 					alt={fileName}
 					fallback={thumbnailFallback}
 					className={thumbnailClassName}
-					style={thumbnailStyle}
+					style={resolvedThumbnailStyle}
+					onError={() => recover("thumbnail")}
 				/>
 			))
 		: fallback
@@ -105,7 +156,10 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 
 	return (
 		<MediaPreviewTooltip
+			key={resourceKey}
 			mediaType={source.mediaType}
+			resourceKey={source.resourceKey}
+			imageActions={source.imageActions}
 			fileName={fileName}
 			previewUrl={source.previewUrl}
 			posterUrl={source.posterUrl}
@@ -125,6 +179,7 @@ export function MediaPreviewTrigger(props: MediaPreviewTriggerProps) {
 			container={container}
 			open={open}
 			onOpenChange={loadPreview}
+			onMediaError={() => recover("preview")}
 		>
 			{trigger}
 		</MediaPreviewTooltip>

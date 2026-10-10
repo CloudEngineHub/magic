@@ -1,4 +1,5 @@
 import defaultToolIcon from "@/pages/superMagic/assets/tool_icon/default.svg"
+import { getToolIconConfig, toolIconMap } from "../../shared/ToolIconConfig/config"
 
 const iconModules = import.meta.glob<string>("/src/pages/superMagic/assets/tool_icon/*.svg", {
 	import: "default",
@@ -22,6 +23,7 @@ const iconNameMap: Record<string, string> = {
 	image_search: "bing_search",
 	use_browser_click: "click",
 	file_search: "file_search",
+	find_file_range: "file_search",
 	use_browser: "read_more_as_markdown",
 	read_webpages_as_markdown: "read_more_as_markdown",
 	use_browser_goto: "goto",
@@ -30,6 +32,7 @@ const iconNameMap: Record<string, string> = {
 	replace_in_file: "replace_in_file",
 	edit_file: "replace_in_file",
 	edit_file_range: "replace_in_file",
+	// Keep the icon mapping for historical messages; the tool is no longer registered or callable.
 	multi_edit_file_range: "replace_in_file",
 	multi_edit_file: "replace_in_file",
 	delete_file: "delete_file",
@@ -109,9 +112,14 @@ const iconNameMap: Record<string, string> = {
 /**
  * 支持的工具图标
  */
-export const supportedToolIcons: string[] = Object.keys(iconNameMap)
+export const supportedToolIcons: string[] = [
+	...new Set([...Object.keys(iconNameMap), ...Object.keys(toolIconMap)]),
+]
 
 export function loadToolIcon(toolName?: string): Promise<string> {
+	const assetUrl = getToolIconConfig(toolName).assetUrl
+	if (assetUrl) return Promise.resolve(assetUrl)
+
 	const iconName = iconNameMap[toolName ?? ""] ?? "default"
 	const iconPath = `/src/pages/superMagic/assets/tool_icon/${iconName}.svg`
 	const loader = iconModules[iconPath]

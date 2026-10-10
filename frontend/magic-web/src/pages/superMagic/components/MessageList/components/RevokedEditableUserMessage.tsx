@@ -18,11 +18,7 @@ import { isAllowedMention as defaultIsAllowedMention } from "@/pages/superMagic/
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
-import {
-	projectStore,
-	topicStore,
-	workspaceStore,
-} from "@/pages/superMagic/stores/core"
+import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import { UserMessageCollapsibleRichText } from "@/pages/superMagic/components/MessageList/components/UserMessageCollapsibleRichText"
 import MentionList from "@/pages/superMagic/components/MessageEditor/components/MentionList"

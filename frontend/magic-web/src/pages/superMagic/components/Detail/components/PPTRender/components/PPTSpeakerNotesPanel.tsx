@@ -1,171 +1,73 @@
+import { observer } from "mobx-react-lite"
+import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
+import { AArrowDown, AArrowUp } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Loader2, NotebookPen } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/utils/cn"
-import { shadow } from "@/utils/shadow"
-import { extractSlideNotes, upsertSlideNotes } from "../utils/slideNotes"
 import { useSpeakerNotesResize } from "../hooks/useSpeakerNotesResize"
-import PPTNotesMarkdown from "./PPTNotesMarkdown"
-import PPTNotesActions, { type PPTNotesAction } from "./PPTNotesActions"
+import { useNotesOverviewScroll } from "../hooks/useNotesOverviewScroll"
+import SpeakerNotesEditor, { type SaveState } from "./SpeakerNotesEditor"
+import PPTNotesSlideLoading from "./PPTNotesSlideLoading"
+import PPTNotesSettingsDialog from "./PPTNotesSettingsDialog"
+import type { PPTSpeakerNotesPanelProps } from "./pptNotesTypes"
 
-interface PPTSpeakerNotesPanelProps {
-	visible?: boolean
-	slideIndex: number
-	rawContent: string
-	fileId: string
-	getLatestRawContent?: (fileId: string) => string
-	allowEdit: boolean
-	saveEditContent?: (
-		content: any,
-		fileId?: string,
-		enable_shadow?: boolean,
-		fetchFileVersions?: (fileId: string) => void,
-		isPPTEditMode?: boolean,
-	) => Promise<boolean | void>
-	onSaved: (content: string, fileId: string) => Promise<void>
-	onGenerate?: (action: PPTNotesAction) => void
-}
-
-type SaveState = "idle" | "saving" | "saved" | "error"
-const MAX_NOTE_SAVE_REBASES = 3
-
-/**
- * Notes deliberately own their edit state instead of reusing PPT HTML edit mode.
- * This lets a user prepare speaker notes while the slide remains a normal preview.
- */
-export default function PPTSpeakerNotesPanel(props: PPTSpeakerNotesPanelProps) {
-	const drafts = useRef(new Map<string, string>())
-	const resize = useSpeakerNotesResize()
-	const slideKey = props.fileId || String(props.slideIndex)
-	// Isolate edit/save state by slide, retaining only unsaved text when switching pages.
-	return (
-		<SpeakerNotesEditor
-			key={slideKey}
-			{...props}
-			resize={resize}
-			initialDraft={drafts.current.get(slideKey)}
-			onDraftChange={(draft) => drafts.current.set(slideKey, draft)}
-			onDraftSaved={(draft) => {
-				if (drafts.current.get(slideKey) === draft) drafts.current.delete(slideKey)
-			}}
-		/>
-	)
-}
-
-function SpeakerNotesEditor({
-	visible = true,
-	slideIndex,
-	rawContent,
-	fileId,
-	getLatestRawContent,
-	allowEdit,
-	saveEditContent,
-	onSaved,
-	onGenerate,
-	initialDraft,
-	onDraftChange,
-	onDraftSaved,
-	resize: { panelRef, height, overlay, inFlowHeight, resizeHandleProps },
-}: PPTSpeakerNotesPanelProps & {
-	initialDraft?: string
-	onDraftChange: (draft: string) => void
-	onDraftSaved: (draft: string) => void
-	resize: ReturnType<typeof useSpeakerNotesResize>
-}) {
+/** One keyed editor per file keeps drafts and pending saves intact across both views. */
+const PPTSpeakerNotesPanel = observer(function PPTSpeakerNotesPanel(
+	props: PPTSpeakerNotesPanelProps,
+) {
 	const { t } = useTranslation("super")
-	const savingRef = useRef(false)
-	const activeRef = useRef(true)
-	const lastSyncedRawContentRef = useRef(rawContent)
-	const [notes, setNotes] = useState(() => extractSlideNotes(rawContent))
-	const [draft, setDraft] = useState(initialDraft ?? notes)
-	const [isEditing, setIsEditing] = useState(initialDraft !== undefined && initialDraft !== notes)
-	const [saveState, setSaveState] = useState<SaveState>("idle")
-	const dirty = draft !== notes
-
-	useEffect(() => {
-		activeRef.current = true
-		return () => {
-			activeRef.current = false
-		}
-	}, [])
-
-	useEffect(() => {
-		if (isEditing && dirty) return
-		const nextNotes = extractSlideNotes(rawContent)
-		// The parent may update the slide content asynchronously after save. Do not
-		// let the still-stale prop overwrite the locally saved notes in that window.
-		if (rawContent === lastSyncedRawContentRef.current && nextNotes !== notes) return
-		lastSyncedRawContentRef.current = rawContent
-		setNotes(nextNotes)
-		setDraft(nextNotes)
-		setSaveState("idle")
-	}, [dirty, isEditing, notes, rawContent])
-
-	const saveNotes = async () => {
-		if (!dirty) {
-			setIsEditing(false)
-			return true
-		}
-		if (!allowEdit || !saveEditContent || !fileId) return false
-		if (savingRef.current) return false
-
-		savingRef.current = true
-		setSaveState("saving")
-		try {
-			let latestRawContent = getLatestRawContent?.(fileId) || rawContent
-			let nextContent = upsertSlideNotes(latestRawContent, draft)
-			for (let attempt = 0; attempt <= MAX_NOTE_SAVE_REBASES; attempt += 1) {
-				const result = await saveEditContent(
-					shadow(nextContent),
-					fileId,
-					true,
-					undefined,
-					true,
-				)
-				// Navigation invalidates this editor, including retries against the latest HTML.
-				if (!activeRef.current) return false
-				if (result === false) throw new Error("Failed to save speaker notes")
-
-				const currentRawContent = getLatestRawContent?.(fileId) || latestRawContent
-				if (currentRawContent === latestRawContent || currentRawContent === nextContent)
-					break
-				if (attempt === MAX_NOTE_SAVE_REBASES) {
-					throw new Error("Slide changed repeatedly while saving speaker notes")
-				}
-				latestRawContent = currentRawContent
-				nextContent = upsertSlideNotes(latestRawContent, draft)
-			}
-
-			await onSaved(nextContent, fileId)
-			if (!activeRef.current) return false
-			onDraftSaved(draft)
-			setNotes(draft)
-			setIsEditing(false)
-			setSaveState("saved")
-			return true
-		} catch (error) {
-			console.error("Failed to save speaker notes:", error)
-			if (activeRef.current) setSaveState("error")
-			return false
-		} finally {
-			savingRef.current = false
-		}
+	const drafts = useRef(new Map<string, string>())
+	const [overviewSelected, setShowAll] = useState(false)
+	const isPresenter = props.layout === "presenter"
+	const { fontSize: notesFontSize, setFontSize } = pptNotesPreferenceStore
+	const showAll = overviewSelected && !isPresenter
+	const [openedAll, setOpenedAll] = useState(false)
+	const { panelRef, height, overlay, inFlowHeight, resizeHandleProps } = useSpeakerNotesResize()
+	const visible = props.visible !== false
+	const slideKey = props.fileId || String(props.slideIndex)
+	const currentSlide = props.slides?.find((slide) => slide.slideIndex === props.slideIndex) ?? {
+		key: slideKey,
+		fileId: props.fileId,
+		slideIndex: props.slideIndex,
+		rawContent: props.rawContent,
 	}
-
-	const statusLabel =
-		saveState === "saving"
-			? t("ppt.speakerNotes.saving")
-			: saveState === "saved"
-				? t("ppt.speakerNotes.saved")
-				: saveState === "error"
-					? t("ppt.speakerNotes.saveFailed")
-					: null
+	const { viewportRef, currentNoteRef } = useNotesOverviewScroll(
+		showAll && visible,
+		currentSlide.key,
+		currentSlide.slideIndex,
+	)
+	// Once opened, retain editors while hidden: changing views must not discard failed saves.
+	const slides = openedAll && props.slides ? props.slides : [currentSlide]
+	const isOverlay = overlay && !isPresenter
+	const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({})
+	// Only aggregate files still in this deck; a removed page cannot leave a stale status.
+	const states = (props.slides ?? [currentSlide]).map((slide) => saveStates[slide.key])
+	const hasDrafts = (props.slides ?? [currentSlide]).some((slide) =>
+		drafts.current.has(slide.key),
+	)
+	const status = states.includes("saving")
+		? "saving"
+		: states.includes("error")
+			? "error"
+			: states.includes("unsaved") || hasDrafts
+				? "unsaved"
+				: states.includes("saved")
+					? "saved"
+					: "idle"
+	const { onPendingChangesChange } = props
+	// Single-page mode unmounts the old editor, but its draft remains in this panel's cache.
+	// Keep it protected even after that editor's transient save status is removed.
+	const pendingChanges =
+		hasDrafts || status === "saving" || status === "error" || status === "unsaved"
+	useEffect(() => {
+		onPendingChangesChange?.(pendingChanges)
+	}, [pendingChanges, onPendingChangesChange])
 
 	return (
 		<>
-			{/* Keep the slide canvas size stable once notes overlay it. */}
-			{visible && overlay ? (
+			{visible && isOverlay ? (
 				<div
 					aria-hidden
 					data-testid="ppt-speaker-notes-spacer"
@@ -176,90 +78,147 @@ function SpeakerNotesEditor({
 			<section
 				ref={panelRef}
 				data-testid="ppt-speaker-notes-panel"
-				data-overlay={overlay ? "true" : undefined}
+				data-layout={props.layout ?? "default"}
+				data-overlay={isOverlay ? "true" : undefined}
 				hidden={!visible}
-				style={{ height }}
-				// Keep the editor mounted while collapsed so unsaved or failed drafts survive.
+				style={isPresenter ? undefined : { height }}
 				className={cn(
 					"min-h-0 flex-col overflow-hidden border-t border-border/60 bg-background",
-					overlay
-						? // Cover the slide without hiding the presentation loading overlay.
-							"absolute inset-x-0 bottom-0 z-[5] shadow-[0_-8px_32px_oklch(0_0_0/0.12)]"
+					// The overview uses the existing stage as its boundary, including embedded previews.
+					isOverlay
+						? "absolute inset-x-0 bottom-0 z-[5] shadow-[0_-8px_32px_oklch(0_0_0/0.12)]"
 						: "shrink-0",
+					isPresenter && "col-start-2 row-start-2 h-full min-w-0 rounded-xl border",
 					visible ? "flex" : "hidden",
 				)}
 			>
-				<button
-					type="button"
-					aria-label={t("ppt.speakerNotes.resize")}
-					className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-					{...resizeHandleProps}
-				>
-					<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
-				</button>
-				<div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2">
-					<div className="flex min-w-0 items-center gap-2">
-						<NotebookPen className="size-4 shrink-0 text-muted-foreground" />
-						<h2 className="truncate text-xs font-normal text-muted-foreground">
-							{t("ppt.speakerNotes.pageTitle", { page: slideIndex + 1 })}
-						</h2>
-						{statusLabel && (
-							<span
-								role="status"
-								className={cn(
-									"text-xs",
-									saveState === "error"
-										? "text-destructive"
-										: "text-muted-foreground",
-								)}
-							>
-								{statusLabel}
-							</span>
-						)}
-					</div>
-					<div className="flex flex-wrap items-center gap-1">
-						{onGenerate && (
-							<PPTNotesActions
-								hasNotes={Boolean(draft.trim())}
-								disabled={saveState === "saving" || !allowEdit}
-								onAction={async (action) => {
-									if (dirty && !(await saveNotes())) return
-									// A save can finish after navigation; never apply its action to the new page.
-									if (!activeRef.current) return
-									onGenerate(action)
-								}}
-							/>
-						)}
-						{allowEdit && dirty && (
+				{/* Both views share the saved panel height and the same resize controls. */}
+				{!isPresenter && (
+					<button
+						type="button"
+						aria-label={t("ppt.speakerNotes.resize")}
+						className="group flex h-2 w-full shrink-0 cursor-ns-resize touch-none items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+						{...resizeHandleProps}
+					>
+						<span className="h-0.5 w-7 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50" />
+					</button>
+				)}
+				<div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-3 py-1">
+					{!isPresenter && props.slides && props.slides.length > 1 && (
+						<>
 							<Button
-								type="button"
-								variant="outline"
+								variant={showAll ? "ghost" : "secondary"}
 								size="sm"
-								disabled={saveState === "saving"}
-								onClick={() => void saveNotes()}
 								className="h-7 px-2 text-xs"
+								aria-pressed={!showAll}
+								onClick={() => setShowAll(false)}
 							>
-								{saveState === "saving" && (
-									<Loader2 className="mr-1.5 size-3.5 animate-spin" />
-								)}
-								{t("ppt.speakerNotes.save")}
+								{t("ppt.speakerNotes.currentPage")}
 							</Button>
+							<Button
+								variant={showAll ? "secondary" : "ghost"}
+								size="sm"
+								className="h-7 px-2 text-xs"
+								aria-pressed={showAll}
+								onClick={() => {
+									setOpenedAll(true)
+									setShowAll(true)
+								}}
+							>
+								{t("ppt.speakerNotes.allPages", { count: props.slides.length })}
+							</Button>
+						</>
+					)}
+					<div className="ml-auto flex shrink-0 items-center gap-1">
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7"
+							aria-label={t("ppt.speakerNotes.decreaseFontSize")}
+							disabled={notesFontSize <= 11}
+							onClick={() => setFontSize(Math.max(11, notesFontSize - 2))}
+						>
+							<AArrowDown size={16} />
+						</Button>
+						<span
+							className="min-w-6 text-center text-xs tabular-nums"
+							aria-label={t("ppt.speakerNotes.fontSize")}
+						>
+							{notesFontSize}
+						</span>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7"
+							aria-label={t("ppt.speakerNotes.increaseFontSize")}
+							disabled={notesFontSize >= 31}
+							onClick={() => setFontSize(Math.min(31, notesFontSize + 2))}
+						>
+							<AArrowUp size={16} />
+						</Button>
+						{props.allowEdit && props.onGenerate && (
+							<PPTNotesSettingsDialog hintEnabled={visible} />
 						)}
 					</div>
 				</div>
-
-				<PPTNotesMarkdown
-					value={isEditing ? draft : notes}
-					readOnly={saveState === "saving" || !allowEdit}
-					onChange={(value) => {
-						setIsEditing(true)
-						setDraft(value)
-						onDraftChange(value)
-						setSaveState("idle")
-					}}
-					onSave={() => void saveNotes()}
-				/>
+				<ScrollArea
+					viewportRef={viewportRef}
+					className="min-h-0 flex-1"
+					// Let notes determine their content height; this viewport owns scrolling in every view.
+					viewportClassName="overscroll-contain"
+				>
+					{slides.map((slide) => (
+						<div
+							key={slide.key}
+							ref={slide.key === currentSlide.key ? currentNoteRef : undefined}
+							hidden={!showAll && slide.key !== currentSlide.key}
+							className={cn(showAll && "border-b border-border/60 last:border-b-0")}
+						>
+							{slide.rawContent === undefined ? (
+								<PPTNotesSlideLoading
+									slide={slide}
+									isCurrentPage={slide.key === currentSlide.key}
+									onLoad={props.onLoadSlide}
+									enabled={showAll && visible}
+								/>
+							) : (
+								<SpeakerNotesEditor
+									{...props}
+									overview={showAll}
+									fontSize={notesFontSize}
+									visible={visible && (showAll || slide.key === currentSlide.key)}
+									isCurrentPage={slide.key === currentSlide.key}
+									onSaveStateChange={(state) =>
+										setSaveStates((previous) => {
+											if (previous[slide.key] === state) return previous
+											const next = { ...previous }
+											if (state === undefined) delete next[slide.key]
+											else next[slide.key] = state
+											return next
+										})
+									}
+									slideIndex={slide.slideIndex}
+									fileId={slide.fileId}
+									rawContent={slide.rawContent}
+									allowEdit={props.allowEdit && Boolean(slide.fileId)}
+									onGenerate={props.allowEdit ? props.onGenerate : undefined}
+									initialDraft={drafts.current.get(slide.key)}
+									onDraftChange={(draft) => {
+										if (draft === undefined) drafts.current.delete(slide.key)
+										else drafts.current.set(slide.key, draft)
+									}}
+									onDraftSaved={(draft) => {
+										if (drafts.current.get(slide.key) === draft)
+											drafts.current.delete(slide.key)
+									}}
+								/>
+							)}
+						</div>
+					))}
+				</ScrollArea>
 			</section>
 		</>
 	)
-}
+})
+
+export default PPTSpeakerNotesPanel

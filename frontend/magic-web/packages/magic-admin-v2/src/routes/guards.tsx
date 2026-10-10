@@ -11,7 +11,7 @@ type RouteGuardProps = PropsWithChildren<{
 
 export function RouteGuard({ children, fallback, validate }: RouteGuardProps) {
   const runtime = useRuntime();
-  const loadingFallback = fallback ?? <ListPageSkeleton />;
+  const loadingFallback = fallback ?? <ListPageSkeleton testId="route-list-loading" />;
 
   if (runtime.auth.status === "loading" || runtime.authorizationLoading) {
     return loadingFallback;

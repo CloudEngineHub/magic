@@ -22,7 +22,7 @@ function RecentProjectItem(props: ComponentProps<typeof ProjectItem<ProjectListI
 				{...props}
 				titleLayout="recent"
 				locationName={locationName}
-				sortType={SortType.MY_LAST_ACTIVE_TIME}
+				sortType={props.sortType ?? SortType.MY_LAST_ACTIVE_TIME}
 				relativeActiveTime
 				onRenameProject={actions.handleRenameProject}
 				onPinProject={actions.handlePinProject}

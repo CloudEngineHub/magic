@@ -6,6 +6,7 @@ import { EditorStore } from "../EditorStore"
 import { DraftStore } from "../DraftStore"
 import { FileUploadStore } from "../FileUploadStore"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
+import type { UploadTokenService } from "../../services/UploadTokenService"
 
 /**
  * MessageEditorStore - Root store for MessageEditor
@@ -45,6 +46,7 @@ export class MessageEditorStore {
 		)
 		this.fileUploadStore = new FileUploadStore({
 			projectFilesStore: options.projectFilesStore,
+			uploadTokenService: options.uploadTokenService,
 		})
 		this.topicModelStore = options.topicModelStore ?? createSuperMagicTopicModelStore()
 		// Note: config parameter will be added in Phase 2 for fileUploadStore
@@ -125,6 +127,7 @@ interface SetValueOptions {
 }
 
 interface MessageEditorStoreOptions {
+	uploadTokenService?: UploadTokenService
 	mentionPanelStore?: DataService
 	projectFilesStore?: ProjectFilesStore
 	topicModelStore?: ReturnType<typeof createSuperMagicTopicModelStore>

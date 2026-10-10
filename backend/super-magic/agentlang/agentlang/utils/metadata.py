@@ -374,6 +374,17 @@ class MetadataUtil:
         return None
 
     @classmethod
+    def log_authorization_header_diagnostics(cls, headers: Dict[str, Any], source: str) -> None:
+        """只记录来源和长度，不记录凭据内容、前缀或指纹，也不修改请求头。"""
+        lengths = {}
+        for name in ("Magic-Authorization", "User-Authorization"):
+            key = cls._find_header_key(headers, name)
+            value = headers.get(key) if key else None
+            lengths[name] = len(value) if isinstance(value, str) else 0
+        logger.info(f"Authorization headers source={source} magic_length={lengths['Magic-Authorization']} "
+                    f"user_length={lengths['User-Authorization']}")
+
+    @classmethod
     def add_magic_and_user_authorization_headers(
         cls,
         headers: Dict[str, Any],
@@ -416,6 +427,7 @@ class MetadataUtil:
         user_header_key = cls._find_header_key(headers, "User-Authorization")
         user_header_value = headers.get(user_header_key) if user_header_key else None
         if user_header_value:
+            cls.log_authorization_header_diagnostics(headers, "existing_headers")
             return
 
         user_auth = cls.get_user_authorization()
@@ -425,3 +437,4 @@ class MetadataUtil:
         if user_header_key and user_header_key != "User-Authorization":
             headers.pop(user_header_key, None)
         headers["User-Authorization"] = user_auth
+        cls.log_authorization_header_diagnostics(headers, "init_client_metadata")

@@ -15,12 +15,32 @@ export type PlatformInfoFooter = {
   filing: PlatformInfoFooterFiling;
 };
 
+/** 组织水印中可展示的用户信息字段。 */
+export type PlatformWatermarkField =
+  | "real_name"
+  | "employee_no"
+  | "visit_time"
+  | "department"
+  | "phone"
+  | "email";
+
+/** 组织水印的深浅档位，与后端 `watermark.depth` 的取值保持一致。 */
+export type PlatformWatermarkDepth = "light" | "standard" | "strong";
+
+/** 组织水印配置；后端只返回 enabled、fields、depth 三个字段。 */
+export type PlatformInfoWatermark = {
+  enabled: boolean;
+  fields: PlatformWatermarkField[];
+  depth: PlatformWatermarkDepth;
+};
+
 export type PlatformInfoDetails = {
   logo: PlatformLocalizedText;
   favicon: string | null;
   minimal_logo: string | null;
   default_language: PlatformLocale | string;
   footer?: PlatformInfoFooter;
+  watermark?: PlatformInfoWatermark;
   name_i18n: PlatformLocalizedText;
   title_i18n: PlatformLocalizedText;
   keywords_i18n: PlatformLocalizedText;
@@ -40,6 +60,7 @@ export type PlatformInfoFormState = {
     copyright_i18n: Record<PlatformLocale, string>;
     filing: PlatformInfoFooterFiling;
   };
+  watermark: PlatformInfoWatermark;
   name_i18n: Record<PlatformLocale, string>;
   title_i18n: Record<PlatformLocale, string>;
   keywords_i18n: Record<PlatformLocale, string>;
@@ -56,6 +77,7 @@ export type UpdatePlatformInfoParams = {
   favicon_url: string;
   default_language: PlatformLocale;
   footer: PlatformInfoFormState["footer"];
+  watermark: PlatformInfoWatermark;
   name_i18n: Record<PlatformLocale, string>;
   title_i18n: Record<PlatformLocale, string>;
   keywords_i18n: Record<PlatformLocale, string>;

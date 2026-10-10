@@ -11,6 +11,7 @@ import { useMarkdownSelection } from "./hooks/useMarkdownSelection"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import CommonHeaderV2 from "../../components/CommonHeaderV2"
+import { TextSaveStatus } from "../../components/TextSaveStatus"
 import { cn } from "@/utils/cn"
 import { useFileData } from "@/pages/superMagic/hooks/useFileData"
 import { useMemoizedFn } from "ahooks"
@@ -87,6 +88,7 @@ interface TextEditorProps {
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
 		shouldExitEditMode?: boolean,
+		options?: { silent?: boolean; awaitPersist?: boolean },
 	) => Promise<void>
 	onRegisterSaveHandler?: (handler: (() => Promise<void>) | null) => void
 	viewMode?: "code" | "desktop" | "phone"
@@ -220,8 +222,12 @@ export default memo(function TextEditor(props: TextEditorProps) {
 		fetchFileVersions,
 		isNewestVersion,
 		isDeleted,
+		loadError: fileLoadError,
+		refreshFile,
 	} = useFileData({
-		enabled: !textFileSession,
+		enabled: true,
+		loadContent: !textFileSession,
+		isTabActive,
 		file_id: displayData?.file_id || "",
 		updatedAt,
 		isEditing: isEditMode,
@@ -252,7 +258,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 
 	// 计算当前的内容源 - savedContent 优先于 fileData 和 displayData?.content
 	const currentContent =
-		textFileSession?.content ?? (savedContent || displayData?.content || fileData || "")
+		fileVersion !== undefined
+			? (fileData ?? textFileSession?.content ?? "")
+			: (textFileSession?.content ?? (savedContent || displayData?.content || fileData || ""))
 	const isLargeMarkdown = useMemo(() => isLargeMarkdownContent(currentContent), [currentContent])
 	const wasEditingLargeMarkdownRef = useRef(false)
 
@@ -328,9 +336,9 @@ export default memo(function TextEditor(props: TextEditorProps) {
 	const data = useMemo(() => {
 		return {
 			...displayData,
-			content: displayData?.content || fileData,
+			content: currentContent,
 		}
-	}, [displayData, fileData])
+	}, [displayData, currentContent])
 
 	const [sourceSnapshot, setSourceSnapshot] = useState<MarkdownSourceSnapshot | null>(null)
 	const processedContent = sourceSnapshot?.content ?? ""
@@ -565,7 +573,16 @@ export default memo(function TextEditor(props: TextEditorProps) {
 			}
 			// 调用保存方法
 			if (saveEditContent) {
-				await saveEditContent(editContent, displayData?.file_id, false, fetchFileVersions)
+				// Feedback is the top-right save chip, so skip the centered toast.
+				await saveEditContent(
+					editContent,
+					displayData?.file_id,
+					false,
+					fetchFileVersions,
+					undefined,
+					false,
+					{ silent: true },
+				)
 				// 保存成功后更新原始内容
 				setOriginalContent(editContent)
 				setSavedContent(editContent)
@@ -604,6 +621,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 					fetchFileVersions,
 					undefined,
 					true,
+					{ silent: true },
 				)
 				// 保存成功后更新原始内容
 				setOriginalContent(editContent)
@@ -988,16 +1006,17 @@ export default memo(function TextEditor(props: TextEditorProps) {
 						extraMoreMenuItems={aiEditMenuItems}
 					/>
 				)}
+				<TextSaveStatus fileId={displayData?.file_id} textFileSession={textFileSession} />
 				{devicePreviewEnabled && (
 					<DevicePreviewToolbar
 						{...devicePreview}
 						active={isTabActive && !loading && !isDeleted}
 					/>
 				)}
-				{textFileSession?.loadError ? (
+				{textFileSession?.loadError || fileLoadError ? (
 					<DetailEmpty
 						title={t("common.fileNotFoundOrLoadFailed")}
-						onRetry={textFileSession.refresh}
+						onRetry={textFileSession?.refresh ?? refreshFile}
 					/>
 				) : loading ? (
 					documentFlowFullscreen ? (
@@ -1043,6 +1062,7 @@ export default memo(function TextEditor(props: TextEditorProps) {
 								)}
 							>
 								<EditorBody
+									allowDownload={allowDownload}
 									selectionRootRef={markdownSelection.selectionRootRef}
 									enableSourceLocation={
 										!!allowEdit &&

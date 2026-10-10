@@ -60,7 +60,7 @@ export function ConnectivityTestResult({
 						onClick={() => setShowDetails((value) => !value)}
 						type="button"
 						variant="link"
-					>
+					 data-testid="platform-system-capabilities-view-button">
 						{showDetails ? labels.hideDetails : labels.viewDetails}
 						{showDetails ? (
 							<ChevronUp className="size-3.5" aria-hidden="true" />

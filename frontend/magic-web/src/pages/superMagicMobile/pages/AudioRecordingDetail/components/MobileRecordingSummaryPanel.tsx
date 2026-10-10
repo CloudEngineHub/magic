@@ -2,6 +2,7 @@ import {
 	useEffect,
 	useMemo,
 	useState,
+	Suspense,
 	type CSSProperties,
 	type ReactNode,
 	type RefObject,
@@ -12,8 +13,9 @@ import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade
 import { cn } from "@/utils/cn"
 import MagicMarkmap from "@/components/base/MagicMarkmap"
 import IsolatedHTMLRenderer from "@/pages/superMagic/components/Detail/contents/HTML/IsolatedHTMLRenderer"
-import { processHtmlContent } from "@/pages/superMagic/components/Detail/contents/HTML/htmlProcessor"
 import { RecordingTokenText } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingTokenText"
+import { useRecordingMetricsHtml } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingMetricsHtml"
+import MagicSpin from "@/components/base/MagicSpin"
 import type { RecordingDetailFileRef, RecordingTopicSection } from "../types"
 import { parseTopicsMarkdown } from "../utils/topics-parser"
 import { formatRecordingTime } from "../utils/time"
@@ -266,44 +268,49 @@ function MetricsHtmlContent({
 	content: string
 	attachmentList: AttachmentItem[]
 }) {
-	const [processedContent, setProcessedContent] = useState(content)
-	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
-
-	useEffect(() => {
-		let cancelled = false
-
-		void processHtmlContent({
+	const { t } = useTranslation("audioRecordings")
+	const { processedContent, filePathMapping, isLoading, handleRenderReady } =
+		useRecordingMetricsHtml({
 			content,
-			attachments: attachmentList,
 			attachmentList,
 			fileId: file.file.file_id,
 			fileName: file.fileName,
-		}).then((result) => {
-			if (cancelled) return
-			setProcessedContent(result.processedContent)
-			setFilePathMapping(result.filePathMapping)
 		})
-
-		return () => {
-			cancelled = true
-		}
-	}, [attachmentList, content, file.file.file_id, file.fileName])
 
 	return (
 		<div
-			className="flex min-h-0 flex-1 flex-col"
+			className="relative flex min-h-0 flex-1 flex-col"
+			aria-busy={isLoading}
 			data-testid="mobile-recording-metrics-container"
 		>
-			<IsolatedHTMLRenderer
-				content={processedContent}
-				fileId={file.file.file_id}
-				filePathMapping={filePathMapping}
-				attachmentList={attachmentList}
-				relative_file_path={file.file.relative_file_path}
-				openNewTab={() => undefined}
-				className="flex min-h-[520px] flex-1 overflow-hidden rounded-2xl bg-card"
-				iframeClassName="h-full min-h-[520px] bg-white"
-			/>
+			{/* Keep IsolatedHTMLRenderer inside a local Suspense so a suspend cannot
+			    bubble to the route LoadingFallback and blank the host page. */}
+			{processedContent ? (
+				<Suspense fallback={null}>
+					<IsolatedHTMLRenderer
+						content={processedContent}
+						fileId={file.file.file_id}
+						filePathMapping={filePathMapping}
+						attachmentList={attachmentList}
+						relative_file_path={file.file.relative_file_path}
+						openNewTab={() => undefined}
+						className="flex min-h-[520px] flex-1 overflow-hidden rounded-2xl bg-card"
+						iframeClassName="h-full min-h-[520px] bg-white"
+						onRenderReady={handleRenderReady}
+					/>
+				</Suspense>
+			) : null}
+			{isLoading ? (
+				<div
+					className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-card/80"
+					data-testid="mobile-recording-metrics-loading"
+					role="status"
+					aria-live="polite"
+				>
+					{/* Metrics HTML is already inside the detail page; use the generic loading copy. */}
+					<MagicSpin spinning tip={t("loading")} />
+				</div>
+			) : null}
 		</div>
 	)
 }
@@ -449,21 +456,33 @@ function TopicsContent({
 		<div className="flex flex-col gap-4" data-testid="mobile-recording-topics-content">
 			<div className="-mx-4 overflow-x-auto px-4">
 				<div className="flex w-max gap-2">
-					{topics.map((topic) => (
-						<button
-							key={topic.id}
-							type="button"
-							className={cn(
-								"h-8 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
-								topic.id === activeTopic.id
-									? "border-foreground bg-foreground text-background"
-									: "border-border bg-card/70 text-muted-foreground",
-							)}
-							onClick={() => setActiveTopicId(topic.id)}
-						>
-							{topic.name}
-						</button>
-					))}
+					{topics.map((topic) => {
+						const isActive = topic.id === activeTopic.id
+						return (
+							<button
+								key={topic.id}
+								type="button"
+								className={cn(
+									"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-4 text-[14px] font-medium leading-none transition-colors",
+									isActive
+										? "border-foreground bg-foreground text-background"
+										: "border-border bg-card/70 text-muted-foreground",
+								)}
+								onClick={() => setActiveTopicId(topic.id)}
+							>
+								{/* Chapter color dot reuses the per-topic color so tabs stay visually distinct, matching the legacy HTML tab dots. */}
+								<span
+									aria-hidden
+									className={cn(
+										"size-2 shrink-0 rounded-full ring-1 ring-inset ring-black/15 dark:ring-white/25",
+										isActive && "ring-white/40 dark:ring-black/30",
+									)}
+									style={{ backgroundColor: topic.color }}
+								/>
+								{topic.name}
+							</button>
+						)
+					})}
 				</div>
 			</div>
 

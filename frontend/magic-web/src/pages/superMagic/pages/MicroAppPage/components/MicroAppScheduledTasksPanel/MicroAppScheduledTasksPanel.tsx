@@ -18,6 +18,10 @@ import MagicIcon from "@/components/base/MagicIcon"
 import { ScheduledTask } from "@/types/scheduledTask"
 import { useScheduleTaskWithModal } from "@/components/business/AccountSetting/pages/ScheduledTasks/hooks/useScheduleTask"
 import useSuperMagicDropdown from "@/pages/superMagic/components/SuperMagicDropdown/useSuperMagicDropdown"
+import {
+	PROJECT_PANEL_HEADER_CLASSNAME,
+	PROJECT_PANEL_TITLE_CLASSNAME,
+} from "@/pages/superMagic/components/ProjectSider/panelChrome"
 
 import MicroAppScheduledTaskItem from "./MicroAppScheduledTaskItem"
 import { useMicroAppScheduledTasksModifyModal } from "./useMicroAppScheduledTasksModifyModal"
@@ -189,11 +193,16 @@ export default function MicroAppScheduledTasksPanel({
 			<header
 				className={
 					compact
-						? "flex shrink-0 justify-end border-b border-border p-3"
+						? PROJECT_PANEL_HEADER_CLASSNAME
 						: "flex h-[72px] shrink-0 items-center justify-between border-b border-border px-8"
 				}
+				data-slot={compact ? "project-panel-header" : undefined}
 			>
-				{!compact && (
+				{compact ? (
+					<h2 className={PROJECT_PANEL_TITLE_CLASSNAME} data-slot="project-panel-title">
+						{t("scheduleTask.title")}
+					</h2>
+				) : (
 					<div className="flex min-w-0 flex-col gap-1">
 						<h2 className="truncate text-lg font-semibold leading-6 text-foreground">
 							{t("scheduleTask.title")}
@@ -204,13 +213,15 @@ export default function MicroAppScheduledTasksPanel({
 					</div>
 				)}
 				<Button
-					size="sm"
+					size={compact ? "icon-sm" : "sm"}
+					variant={compact ? "ghost" : "default"}
 					onClick={handleCreateTask}
-					className="shadow-sm"
+					className={compact ? undefined : "shadow-sm"}
 					disabled={!contextReady}
+					aria-label={t("scheduleTask.createScheduleTask")}
 				>
 					<IconPlus size={16} stroke={2} />
-					{t("scheduleTask.createScheduleTask")}
+					{compact ? null : t("scheduleTask.createScheduleTask")}
 				</Button>
 			</header>
 
@@ -221,7 +232,7 @@ export default function MicroAppScheduledTasksPanel({
 					"data-testid": "micro-app-scheduled-tasks-list",
 				}}
 				className="min-h-0 flex-1"
-				viewportClassName={compact ? "p-3" : "px-8 py-6"}
+				viewportClassName={compact ? "px-2 pb-2" : "px-8 py-6"}
 			>
 				<div className="flex min-h-full flex-col items-center gap-4">
 					{!contextReady || (loading && !tasks.length) ? (

@@ -21,7 +21,15 @@ export type ShareFileAccess = {
 	resourceId?: string
 }
 
-export type FileAccessContext = SessionFileAccess | ShareFileAccess
+export type RecycleBinFileAccess = {
+	kind: "recycle-bin"
+	recycleBinId: string
+	fileId: string
+	identityKey: string
+	projectId?: string
+}
+
+export type FileAccessContext = SessionFileAccess | ShareFileAccess | RecycleBinFileAccess
 
 export function createSessionFileAccess(
 	params: {
@@ -72,7 +80,7 @@ export function getAccessProjectId(access?: FileAccessContext | null, fallback =
 
 export function getAccessTopicId(access?: FileAccessContext | null, fallback = ""): string {
 	if (access?.kind === "share") return access.topicId ?? ""
-	return access?.topicId || fallback
+	return access?.kind === "recycle-bin" ? "" : access?.topicId || fallback
 }
 
 export function resolveAttachmentProjectId(
@@ -99,6 +107,8 @@ export function resolveTemporaryTokenFromAccess(
  */
 export function getFileAccessIdentityKey(access?: FileAccessContext | null): string {
 	if (!access) return "none"
+	if (access.kind === "recycle-bin")
+		return `recycle-bin:${access.identityKey}:${access.recycleBinId}:${access.fileId}`
 	if (access.kind === "share") {
 		return [
 			"share",
@@ -117,6 +127,8 @@ export function getFileAccessIdentityKey(access?: FileAccessContext | null): str
  */
 export function getFileAccessContentKey(access?: FileAccessContext | null): string {
 	if (!access) return "none"
+	if (access.kind === "recycle-bin")
+		return `recycle-bin:${access.identityKey}:${access.recycleBinId}:${access.fileId}`
 	if (access.kind === "share") {
 		return ["share", access.projectId, access.topicId ?? "", access.resourceId ?? ""].join(":")
 	}

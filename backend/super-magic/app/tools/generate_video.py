@@ -248,6 +248,8 @@ class GenerateVideo(AbstractFileTool[GenerateVideoParams], WorkspaceTool[Generat
 -->
 **When to call**: Use only for regular video generation in general mode.
 
+Video generation and revisions may consume points or money. After a successful video, let the user review it; do not regenerate or revise it because of your own aesthetic judgment. Follow the core user-confirmation rule for any additional video call.
+
 **Key rules**
 - Unless explicitly specified, omit model_id, input_mode, task, size, resolution, fps, seed, and watermark; let the tool choose for the current model
 - Usually omit output_path and use the default videos directory

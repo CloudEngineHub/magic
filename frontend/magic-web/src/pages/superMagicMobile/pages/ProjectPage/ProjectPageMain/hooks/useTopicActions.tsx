@@ -32,6 +32,7 @@ import { applySuperMobileDetailExitNavigation } from "@/pages/superMagicMobile/u
 import { shouldExitTopicDetailAfterDelete } from "@/pages/superMagicMobile/utils/resolveSuperMobileBackFallback"
 
 interface UseTopicListActionsOptions {
+	enableSimpleMode?: boolean
 	/** Topic sub-page uses back+fallback; project topics tab keeps in-page topic switching. */
 	topicActionContext?: "default" | "topic-detail"
 }
@@ -42,6 +43,7 @@ interface UseTopicListActionsOptions {
  */
 export function useTopicListActions({
 	topicActionContext = "default",
+	enableSimpleMode = false,
 }: UseTopicListActionsOptions = {}) {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
@@ -294,6 +296,7 @@ export function useTopicListActions({
 	const topicActionComponents = (
 		<>
 			<ConversationActionsPopup
+				enableSimpleMode={enableSimpleMode}
 				visible={actionsPopupVisible}
 				title={topicActionPopupTitle}
 				subtitle={currentActionItem?.project?.project_name}
@@ -363,12 +366,14 @@ export function useTopicListActions({
 					icon: <X />,
 					ariaLabel: t("common.cancel"),
 					onClick: () => setDeleteModalVisible(false),
+					testId: "topic-delete-popup-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
 					ariaLabel: t("common.confirm"),
 					onClick: handleDeleteConfirm,
 					tone: "destructive",
+					testId: "topic-delete-popup-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-0"
 				zIndex={1021}

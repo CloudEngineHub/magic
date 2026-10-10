@@ -1,3 +1,8 @@
+import {
+	restoreWechatChatContent,
+	serializeWechatChatContent,
+} from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/transform"
+import { WECHAT_CHAT_HISTORY } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/types"
 import { encodeSelectionText } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/serialization"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import {
@@ -396,6 +401,14 @@ export function getClipboardPlainText(
 			return String(props?.value || props?.defaultValue || props?.placeholder || "")
 		}
 
+		if (node.type === WECHAT_CHAT_HISTORY) {
+			return (
+				serializeWechatChatContent({ type: "doc", content: [node] })
+					.content?.map((child) => serialize(child, inSelection))
+					.join("") ?? ""
+			)
+		}
+
 		if (node.type === INSPECTOR_DETAIL_TYPE) {
 			return (
 				serializeInspectorContent({ type: "doc", content: [node] })
@@ -410,7 +423,10 @@ export function getClipboardPlainText(
 		return node.type === "paragraph" ? `${childText}\n` : childText
 	}
 
-	return serialize(transformInspectorContent(content)).replace(/\n$/, "")
+	return serialize(restoreWechatChatContent(transformInspectorContent(content))).replace(
+		/\n$/,
+		"",
+	)
 }
 
 export function getClipboardHtml(

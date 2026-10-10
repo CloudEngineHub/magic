@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { IconFolder, IconGitFork, IconMaximize } from "@tabler/icons-react"
 import { useMemoizedFn, useDebounceEffect, useDeepCompareEffect, useUpdateEffect } from "ahooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -49,6 +50,7 @@ import { getAppEntryFile } from "@/pages/superMagic/components/MessageList/compo
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import SuperMagicService from "@/pages/superMagic/services"
 import { resolveMobileAudioShareCreatedByBadgeBottom } from "./utils/audio-share-topbar-offset"
+import { resolveShareErrorBackNavigation } from "./utils/share-error-back"
 import usePureShareDocumentFlow from "./hooks/usePureShareDocumentFlow"
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
@@ -423,8 +425,12 @@ function Share() {
 
 	// Sync loading and error from active hook
 	useEffect(() => {
+		// New resource shares render the page shell independently of attachment tree assembly.
+		// Their hook loading state covers cursor pagination and local tree processing, so syncing it
+		// here would keep the whole share page behind the global loading mask.
+		if (!routeInfo.isLegacy) return
 		setLoading(activeDataHook.loading)
-	}, [activeDataHook.loading])
+	}, [activeDataHook.loading, routeInfo.isLegacy])
 
 	useEffect(() => {
 		if (activeDataHook.error) {
@@ -681,7 +687,9 @@ function Share() {
 			return
 		}
 
-		window.location.href = window.location.origin
+		// 已登录但没有查看权限：直接回到当前端的首页（桌面 /super、移动 /mobile-home），
+		// 不再跳到站点根路由再重定向一次，也避免整页刷新。
+		navigate(resolveShareErrorBackNavigation(isMobile))
 	})
 
 	const handleWorkspaceButtonClick = useMemoizedFn(async () => {
@@ -1126,4 +1134,10 @@ function Share() {
 	)
 }
 
-export default Share
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<Share />
+		</FileAccessProvider>
+	)
+}

@@ -16,13 +16,11 @@ import { resolveStreamingMediaPolicyMode } from "../api/strategy"
 import type { StreamingExportTaskInput } from "../index"
 import type { PPTNode } from "../ir/node"
 import { serializePptNodes, type SerializablePPTNode } from "../ir/serialize"
-import {
-	withMediaSourceKey,
-	type MediaSourceDescriptor,
-} from "../media/source-descriptor"
+import { withMediaSourceKey, type MediaSourceDescriptor } from "../media/source-descriptor"
 import { detectFontsFromNodes } from "../font/detectFontsFromNodes"
 import {
 	createStreamingPresentationPackager,
+	createInMemoryStreamingStagingStore,
 	type StreamingPresentationPackager,
 	type StreamingPresentationPlan,
 	type StreamingWorkerDestination,
@@ -67,11 +65,129 @@ interface StreamingPptxWithStaging {
 	createOpfsStagingStore?: (options?: { sessionId?: string }) => StreamingStagingStore
 }
 
+interface CreatedStagingStore {
+	store: StreamingStagingStore
+	usesDefaultOpfs: boolean
+	allowsOpfsDescriptors: boolean
+}
+
+type StagedPageMetadata = Pick<StreamingHtmlPage, "key" | "pageName" | "pagePath" | "pageFileId">
+
 interface ExportDiagnosticState {
 	phase: ExportFailurePhase
 	pageIndex?: number
 	pageCount?: number
 	bytesWritten?: number
+}
+
+/**
+ * A page failure must not be confused with a packaging failure.  Rendering,
+ * page scripts and media preparation can be represented by a placeholder
+ * slide and reported to the host.  Worker, sink and finalization failures
+ * invalidate the output stream and must still abort the export.
+ */
+function isRecoverablePageError(error: unknown): boolean {
+	if (error instanceof DOMException && error.name === "AbortError") return false
+	if (
+		error &&
+		typeof error === "object" &&
+		"name" in error &&
+		(error as { name?: unknown }).name === "AbortError"
+	)
+		return false
+
+	// Fidelity failures are still page-local when they are raised while preparing the current
+	// page. With skipFailedPages enabled, preserve the rest of the deck by replacing that page
+	// with a diagnostic placeholder and forwarding the original issue to the host/AI repair flow.
+	// Destination, Worker, ZIP, and finalization failures are not raised through this helper and
+	// therefore remain terminal for the whole export.
+	if (isExportFidelityError(error)) return true
+	if (!isPptxExportError(error)) return true
+
+	const diagnostic = error.diagnostic
+	if (isExportFidelityError(error.sourceError)) return true
+	if (
+		[
+			"worker-failed",
+			"sink-write-failed",
+			"finalize-failed",
+			"cleanup-failed",
+			"cancelled",
+		].includes(diagnostic.code)
+	)
+		return false
+
+	// Image preflight/transform errors are page-local when they carry an asset
+	// identity. A preflight rejection without one may be a global capability
+	// failure and should remain fatal.
+	if (diagnostic.phase === "preflight") {
+		return Boolean(diagnostic.details && "assetKey" in diagnostic.details)
+	}
+
+	return (
+		[
+			"prepare-page",
+			"render-page",
+			"stage-media",
+			"media-fetch",
+			"transform-media",
+			"media-fetch-failed",
+			"media-transform-failed",
+			"prepare-page-failed",
+			"render-page-failed",
+		].includes(diagnostic.phase) ||
+		[
+			"prepare-page-failed",
+			"render-page-failed",
+			"media-fetch-failed",
+			"media-transform-failed",
+		].includes(diagnostic.code)
+	)
+}
+
+/** Create a valid slide when the source HTML cannot be rendered. */
+function createFailedPagePlaceholder(
+	config: SlideConfig,
+	page: Pick<StreamingHtmlPage, "index" | "pageName" | "pagePath">,
+	error: unknown,
+): SerializablePPTNode[] {
+	const pageLabel = page.pageName || page.pagePath || `Page ${page.index + 1}`
+	const message = error instanceof Error ? error.message : String(error ?? "Unknown error")
+	const safeMessage = message.length > 360 ? `${message.slice(0, 357)}...` : message
+	return [
+		{
+			type: "shape",
+			x: 0,
+			y: 0,
+			w: config.slideWidth,
+			h: config.slideHeight,
+			zOrder: 0,
+			shapeType: "rect",
+			fill: { type: "solid", color: "FFF7ED" },
+			line: null,
+			shadow: null,
+		},
+		{
+			type: "text",
+			x: 0.6,
+			y: 0.7,
+			w: Math.max(config.slideWidth - 1.2, 1),
+			h: Math.max(config.slideHeight - 1.4, 1),
+			zOrder: 1,
+			text: `PPTX export issue\n${pageLabel}\n\n${safeMessage}`,
+			fontSize: 18,
+			fontFace: "Arial",
+			fontWeight: 400,
+			color: "9A3412",
+			bold: false,
+			italic: false,
+			underline: false,
+			align: "left",
+			valign: "top",
+			wrap: true,
+			margin: [0, 0, 0, 0],
+		},
+	]
 }
 
 /** Default Phase 4 HTML -> IR -> Packaging Worker streaming runner. */
@@ -85,6 +201,8 @@ export async function runStreamingExport(input: StreamingExportTaskInput): Promi
 	const mediaPolicyMode = resolveStreamingMediaPolicyMode(input.mediaPolicy, {
 		requiresReplay,
 	})
+	const canUseInMemoryStaging =
+		isSinkProxyDestination(input.destination) && input.stagingPolicy?.mode !== "opfs"
 	const requiresStaging =
 		requiresReplay || mediaPolicyMode === "rolling-stage" || mediaPolicyMode === "full-stage"
 	const diagnostic: ExportDiagnosticState = {
@@ -99,7 +217,7 @@ export async function runStreamingExport(input: StreamingExportTaskInput): Promi
 		fileName: input.fileName,
 		pageCount: input.pageCount,
 		mediaPolicyMode,
-		zipMode: "zip64",
+		zipMode: "classic",
 	}
 	try {
 		const preflight = preflightPptxExport({
@@ -112,6 +230,7 @@ export async function runStreamingExport(input: StreamingExportTaskInput): Promi
 			stagingPolicy: input.stagingPolicy,
 			hasInjectedPackager: Boolean(input.pipeline?.createStreamingPresentationPackager),
 			hasInjectedStagingStore: Boolean(input.pipeline?.createStreamingStagingStore),
+			hasInMemoryStagingStore: canUseInMemoryStaging,
 		})
 		errorContext = {
 			...errorContext,
@@ -221,6 +340,10 @@ async function runDirectStreamingExport(
 	let successCount = 0
 	let outputSlideCount = 0
 	let currentPageIndex: number | undefined
+	let currentPageKey: string | undefined
+	let currentPageName: string | undefined
+	let currentPagePath: string | undefined
+	let currentPageFileId: string | undefined
 
 	try {
 		packager = createPackagerOrThrow(createPackager, {
@@ -232,25 +355,41 @@ async function runDirectStreamingExport(
 			signal: input.signal,
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
-			onResourceError: (error) => reportExportResourceError(input, error),
+			onResourceError: (error) =>
+				reportExportResourceError(input, error, currentPageIndex, {
+					pageKey: currentPageKey,
+					pageName: currentPageName,
+					pagePath: currentPagePath,
+					pageFileId: currentPageFileId,
+				}),
 			// Packaging errors arrive after the Worker commit, so retain only the
 			// primitive page index needed to label that diagnostic.
 			onExportIssue: (issue) =>
 				input.onExportIssue?.({
 					...issue,
 					pageIndex: issue.pageIndex ?? currentPageIndex,
+					pageKey: issue.pageKey ?? currentPageKey,
+					pageName: issue.pageName ?? currentPageName,
+					pagePath: issue.pagePath ?? currentPagePath,
+					pageFileId: issue.pageFileId ?? currentPageFileId,
 				}),
 		})
 		await packager.ready
 		for await (const page of input.pages) {
 			throwIfAborted(input.signal)
+			currentPageIndex = page.index
+			currentPageKey = page.key
+			currentPageName = page.pageName
+			currentPagePath = page.pagePath
+			currentPageFileId = page.pageFileId
 			input.onProgress?.({
 				phase: "prepare-page",
 				pageIndex: page.index,
 				pageCount: input.pageCount,
 			})
+			let packagingStarted = false
 			try {
-				const result = await prepareStreamingPage(input, page.html, page.index)
+				const result = await prepareStreamingPage(input, page)
 				const nodes = serializePptNodes(result.pptNodes)
 				await normalizeNodeMediaSources(nodes)
 				await applyImagePreflight(nodes, input)
@@ -263,6 +402,7 @@ async function runDirectStreamingExport(
 				for (let pageOffset = 0; pageOffset < outputPages.length; pageOffset += 1) {
 					currentPageIndex = page.index
 					const outputNodes = outputPages[pageOffset]
+					packagingStarted = true
 					await packager.commitSlide({
 						nodes: outputNodes,
 						background: result.bodyBackground,
@@ -279,17 +419,24 @@ async function runDirectStreamingExport(
 				successCount += 1
 			} catch (error) {
 				if (input.signal.aborted) throw createAbortError()
-				if (
-					isPptxExportError(error) ||
-					isExportFidelityError(error) ||
-					!input.skipFailedPages
-				)
+				if (packagingStarted || !input.skipFailedPages || !isRecoverablePageError(error))
 					throw error
-				reportPageExportError(input, page.index, error)
+				reportPageExportError(input, page, error)
+				await packager.commitSlide({
+					nodes: createFailedPagePlaceholder(input.config, page, error),
+					background: null,
+					options: { slideKey: createSlideKey(page.key, page.index, 0) },
+				})
+				outputSlideCount += 1
 			}
 		}
 
-		if (successCount === 0) throw new Error("[exportPPTXStreaming] All pages failed")
+		// A page placeholder is a valid output slide. Only a destination/packaging
+		// failure can reach this point now; page rendering failures are reported
+		// through onExportIssue and do not reject the export.
+		if (successCount === 0 && outputSlideCount === 0) {
+			throw new Error("[exportPPTXStreaming] No pages were produced")
+		}
 		input.onProgress?.({ phase: "finalize", pageCount: outputSlideCount })
 		const summary = await packager.finalize()
 		return {
@@ -320,32 +467,77 @@ async function runStagedStreamingExport(
 	const usedFonts = new Map<string, Set<string>>()
 	const stagedKeys: string[] = []
 	const stagedMedia = new Map<string, MediaSourceDescriptor>()
-	const usesDefaultOpfsStore = !input.pipeline?.createStreamingStagingStore
+	let usesDefaultOpfsStore = !input.pipeline?.createStreamingStagingStore
+	let allowsOpfsDescriptors = usesDefaultOpfsStore
+	const canUseInMemoryStaging =
+		isSinkProxyDestination(input.destination) && input.stagingPolicy?.mode !== "opfs"
 	let measuredMaxWidth = input.config.htmlWidth
 	let successfulSourcePages = 0
 	let exportSucceeded = false
 	let packager: StreamingPresentationPackager | undefined
 	let currentPageIndex: number | undefined
+	let currentPageKey: string | undefined
+	let currentPageName: string | undefined
+	let currentPagePath: string | undefined
+	let currentPageFileId: string | undefined
+	const stagedPageMetadata = new Map<number, StagedPageMetadata>()
 
 	try {
-		const activeStore = await runStagingOperation(input.signal, () =>
-			createStagingStore(input, sessionId),
+		const createdStore = await runStagingOperation(input.signal, () =>
+			createStagingStore(input, sessionId, canUseInMemoryStaging),
 		)
+		let activeStore = createdStore.store
+		usesDefaultOpfsStore = createdStore.usesDefaultOpfs
+		allowsOpfsDescriptors = createdStore.allowsOpfsDescriptors
 		store = activeStore
-		await runStagingOperation(
-			input.signal,
-			() => activeStore.createSession(sessionId, { signal: input.signal }),
-			usesDefaultOpfsStore ? { operation: "createSession", classifyAll: true } : undefined,
-		)
+		try {
+			await runStagingOperation(
+				input.signal,
+				() => activeStore.createSession(sessionId, { signal: input.signal }),
+				usesDefaultOpfsStore
+					? { operation: "createSession", classifyAll: true }
+					: undefined,
+			)
+		} catch (error) {
+			if (
+				!usesDefaultOpfsStore ||
+				!canUseInMemoryStaging ||
+				!isSafeInMemoryFallbackError(error)
+			) {
+				throw error
+			}
+			// A browser may expose navigator.storage.getDirectory but reject the
+			// actual access (private mode, embedded WebView, or a denied origin).
+			// Switch only the replay boundary to memory; packaging still uses the
+			// same Worker and destination.
+			// A rejected OPFS lookup may have created part of the session directory.
+			// Cleanup is intentionally silent here because failure is the expected
+			// capability signal that triggers the memory fallback.
+			await cleanupStagingSession(activeStore, sessionId)
+			activeStore = createInMemoryStreamingStagingStore()
+			store = activeStore
+			usesDefaultOpfsStore = false
+			allowsOpfsDescriptors = false
+			await runStagingOperation(input.signal, () =>
+				activeStore.createSession(sessionId, { signal: input.signal }),
+			)
+		}
 		for await (const page of input.pages) {
 			throwIfAborted(input.signal)
+			currentPageIndex = page.index
+			currentPageKey = page.key
+			currentPageName = page.pageName
+			currentPagePath = page.pagePath
+			currentPageFileId = page.pageFileId
 			input.onProgress?.({
 				phase: "prepare-page",
 				pageIndex: page.index,
 				pageCount: input.pageCount,
 			})
+			const pageStageStart = stagedKeys.length
+			let stagingWriteInFlight = false
 			try {
-				const result = await prepareStreamingPage(input, page.html, page.index)
+				const result = await prepareStreamingPage(input, page)
 				if (input.autoSize && result.totalWidth > MAX_PPT_PAGE_PX) {
 					throw new ExportFidelityError(
 						`[exportPPTXStreaming] Page ${page.index + 1} width ${result.totalWidth}px exceeds PowerPoint's ${MAX_PPT_PAGE_PX}px limit.`,
@@ -376,11 +568,19 @@ async function runStagedStreamingExport(
 						input.signal,
 						stagedMedia,
 						input.mediaPolicy?.mode,
+						allowsOpfsDescriptors,
 						usesDefaultOpfsStore ? "stage" : undefined,
 					)
 					mergeUsedFonts(usedFonts, detectFontsFromNodes([outputNodes]))
 					const key = createSlideKey(page.key, page.index, pageOffset)
 					const stageIndex = stagedKeys.length + 1
+					stagedPageMetadata.set(stageIndex, {
+						key: page.key,
+						pageName: page.pageName,
+						pagePath: page.pagePath,
+						pageFileId: page.pageFileId,
+					})
+					stagingWriteInFlight = true
 					await runStagingOperation(
 						input.signal,
 						() =>
@@ -395,6 +595,7 @@ async function runStagedStreamingExport(
 							),
 						usesDefaultOpfsStore ? { operation: "putSlideIr" } : undefined,
 					)
+					stagingWriteInFlight = false
 					outputNodes.length = 0
 					stagedKeys.push(key)
 				}
@@ -406,18 +607,46 @@ async function runStagedStreamingExport(
 				})
 			} catch (error) {
 				if (input.signal.aborted) throw createAbortError()
-				if (
-					isPptxExportError(error) ||
-					isExportFidelityError(error) ||
-					!input.skipFailedPages
-				)
+				if (stagingWriteInFlight || !input.skipFailedPages || !isRecoverablePageError(error))
 					throw error
-				reportPageExportError(input, page.index, error)
+				await discardStagedPageRecords(
+					activeStore,
+					stagedKeys,
+					stagedPageMetadata,
+					pageStageStart,
+					input.signal,
+					usesDefaultOpfsStore,
+				)
+				reportPageExportError(input, page, error)
+				const placeholderIndex = stagedKeys.length + 1
+				const placeholderKey = createSlideKey(page.key, page.index, 0)
+				stagedPageMetadata.set(placeholderIndex, {
+					key: page.key,
+					pageName: page.pageName,
+					pagePath: page.pagePath,
+					pageFileId: page.pageFileId,
+				})
+				await runStagingOperation(
+					input.signal,
+					() =>
+						activeStore.putSlideIr(
+							placeholderIndex,
+							{
+								key: placeholderKey,
+								nodes: createFailedPagePlaceholder(input.config, page, error),
+								background: null,
+							} satisfies StagedSlideRecord,
+							{ signal: input.signal },
+						),
+					usesDefaultOpfsStore ? { operation: "putSlideIr" } : undefined,
+				)
+				stagedKeys.push(placeholderKey)
+				successfulSourcePages += 1
 			}
 		}
 
 		if (successfulSourcePages === 0 || stagedKeys.length === 0) {
-			throw new Error("[exportPPTXStreaming] All pages failed")
+			throw new Error("[exportPPTXStreaming] No pages were produced")
 		}
 		const finalConfig = input.autoSize
 			? buildFinalAutoSizeConfig(input.config, measuredMaxWidth)
@@ -434,11 +663,21 @@ async function runStagedStreamingExport(
 			signal: input.signal,
 			workerUrl: input.workerUrl,
 			onProgress: input.onProgress,
-			onResourceError: (error) => reportExportResourceError(input, error),
+			onResourceError: (error) =>
+				reportExportResourceError(input, error, currentPageIndex, {
+					pageKey: currentPageKey,
+					pageName: currentPageName,
+					pagePath: currentPagePath,
+					pageFileId: currentPageFileId,
+				}),
 			onExportIssue: (issue) =>
 				input.onExportIssue?.({
 					...issue,
 					pageIndex: issue.pageIndex ?? currentPageIndex,
+					pageKey: issue.pageKey ?? currentPageKey,
+					pageName: issue.pageName ?? currentPageName,
+					pagePath: issue.pagePath ?? currentPagePath,
+					pageFileId: issue.pageFileId ?? currentPageFileId,
 				}),
 		})
 		await packager.ready
@@ -446,6 +685,11 @@ async function runStagedStreamingExport(
 		for (let index = 1; index <= stagedKeys.length; index += 1) {
 			throwIfAborted(input.signal)
 			currentPageIndex = index - 1
+			const pageMetadata = stagedPageMetadata.get(index)
+			currentPageKey = pageMetadata?.key
+			currentPageName = pageMetadata?.pageName
+			currentPagePath = pageMetadata?.pagePath
+			currentPageFileId = pageMetadata?.pageFileId
 			const record = await runStagingOperation(
 				input.signal,
 				() => activeStore.getSlideIr<StagedSlideRecord>(index, { signal: input.signal }),
@@ -495,10 +739,39 @@ async function runStagedStreamingExport(
 	}
 }
 
+/**
+ * Remove SlideIR records already staged for the current page before replacing that page with a
+ * diagnostic placeholder. Staged records are appended in order, so only the tail can belong to
+ * the page currently being prepared.
+ */
+async function discardStagedPageRecords(
+	store: StreamingStagingStore,
+	stagedKeys: string[],
+	stagedPageMetadata: Map<number, StagedPageMetadata>,
+	pageStageStart: number,
+	signal: AbortSignal,
+	usesDefaultOpfsStore: boolean,
+): Promise<void> {
+	const deleteSlideIr = store.deleteSlideIr
+	while (stagedKeys.length > pageStageStart) {
+		const index = stagedKeys.length
+		if (deleteSlideIr) {
+			await runStagingOperation(
+				signal,
+				() => deleteSlideIr.call(store, index, { signal }),
+				usesDefaultOpfsStore ? { operation: "deleteSlideIr" } : undefined,
+			)
+		}
+		stagedPageMetadata.delete(index)
+		stagedKeys.pop()
+	}
+}
+
 function reportExportResourceError(
 	input: StreamingExportTaskInput,
 	error: ResourceLoadError,
 	pageIndex?: number,
+	pageIdentity?: Pick<ExportIssue, "pageKey" | "pageName" | "pagePath" | "pageFileId">,
 ): void {
 	try {
 		input.onResourceError?.(error)
@@ -508,6 +781,7 @@ function reportExportResourceError(
 	try {
 		input.onExportIssue?.({
 			pageIndex,
+			...pageIdentity,
 			code: "resource-error",
 			message: error.message || `${error.kind} ${error.reason}`,
 			severity: "warning",
@@ -526,30 +800,52 @@ function reportExportResourceError(
 /** Report a recoverable page failure before the page is skipped. */
 function reportPageExportError(
 	input: StreamingExportTaskInput,
-	pageIndex: number,
+	page: StreamingHtmlPage,
 	error: unknown,
 ): void {
+	const diagnostic = isPptxExportError(error) ? error.diagnostic : undefined
+	const sourceError = isExportFidelityError(error) ? error.sourceError : undefined
+	const message = error instanceof Error ? error.message : String(error)
 	try {
 		input.onExportIssue?.({
-			pageIndex,
+			pageIndex: page.index,
+			pageKey: page.key,
+			pageName: page.pageName,
+			pagePath: page.pagePath,
+			pageFileId: page.pageFileId,
 			code: "render-error",
-			message: error instanceof Error ? error.message : String(error),
+			message,
 			severity: "error",
-			details: { phase: "render-page", recoverable: true },
+			details: {
+				phase: diagnostic?.phase ?? "render-page",
+				recoverable: true,
+				errorName: error instanceof Error ? error.name : typeof error,
+				...(diagnostic?.code ? { failureCode: diagnostic.code } : {}),
+				...(diagnostic?.details ? { diagnostic: diagnostic.details } : {}),
+				...(error instanceof Error && error.stack
+					? { stack: error.stack.slice(0, 4000) }
+					: sourceError instanceof Error && sourceError.stack
+						? { stack: sourceError.stack.slice(0, 4000) }
+						: {}),
+			},
 		})
 	} catch {
 		// Diagnostics must never turn a recoverable page failure into an export failure.
 	}
 }
 
-async function prepareStreamingPage(input: StreamingExportTaskInput, html: string, pageIndex?: number) {
+async function prepareStreamingPage(input: StreamingExportTaskInput, page: StreamingHtmlPage) {
 	const activePrepare = input.pipeline?.prepareSlideNodes ?? prepareSlideNodes
 	return activePrepare({
 		config: input.config,
-		html,
+		html: page.html,
 		sandbox: input.sandbox,
 		signal: input.signal,
-		pageIndex,
+		pageIndex: page.index,
+		pageKey: page.key,
+		pageName: page.pageName,
+		pagePath: page.pagePath,
+		pageFileId: page.pageFileId,
 		onResourceError: input.onResourceError,
 		textMergeMode: DEFAULT_TEXT_MERGE_MODE,
 		onExportIssue: input.onExportIssue,
@@ -733,7 +1029,8 @@ async function normalizeNodeMediaSources(nodes: SerializablePPTNode[]): Promise<
 			continue
 		}
 		if (node.type !== "media" || node.mediaType === "online") continue
-		if (!node.source) throw new TypeError(`${node.mediaType} node must provide a source descriptor`)
+		if (!node.source)
+			throw new TypeError(`${node.mediaType} node must provide a source descriptor`)
 		node.source = withMediaSourceKey(node.source, node.assetKey)
 		if (node.coverSource)
 			node.coverSource = withMediaSourceKey(node.coverSource, node.coverAssetKey)
@@ -746,6 +1043,7 @@ async function stageNodeMediaSources(
 	signal: AbortSignal,
 	stagedMedia: Map<string, MediaSourceDescriptor>,
 	mediaMode: MediaPolicy["mode"],
+	allowsOpfsDescriptors: boolean,
 	opfsOperation?: string,
 ): Promise<void> {
 	for (const node of nodes) {
@@ -756,6 +1054,7 @@ async function stageNodeMediaSources(
 				signal,
 				stagedMedia,
 				mediaMode,
+				allowsOpfsDescriptors,
 				opfsOperation,
 			)
 		}
@@ -767,6 +1066,7 @@ async function stageNodeMediaSources(
 					signal,
 					stagedMedia,
 					mediaMode,
+					allowsOpfsDescriptors,
 					opfsOperation,
 				)
 			}
@@ -777,6 +1077,7 @@ async function stageNodeMediaSources(
 					signal,
 					stagedMedia,
 					mediaMode,
+					allowsOpfsDescriptors,
 					opfsOperation,
 				)
 			}
@@ -790,11 +1091,18 @@ async function stageDescriptor(
 	signal: AbortSignal,
 	stagedMedia: Map<string, MediaSourceDescriptor>,
 	mediaMode: MediaPolicy["mode"],
+	allowsOpfsDescriptors: boolean,
 	opfsOperation?: string,
 ): Promise<MediaSourceDescriptor> {
 	const existing = stagedMedia.get(source.key)
 	if (existing) return existing
 	if (source.kind === "opfs") {
+		if (!allowsOpfsDescriptors) {
+			throw createOpfsUnavailableError(
+				new Error(`In-memory staging cannot read OPFS media source "${source.key}"`),
+				{ reason: "runtime-operation-rejected", operation: "stage" },
+			)
+		}
 		stagedMedia.set(source.key, source)
 		return source
 	}
@@ -852,17 +1160,27 @@ function isLikelyOpfsUnavailableError(error: unknown): boolean {
 		error && typeof error === "object" && "name" in error
 			? String((error as { name?: unknown }).name ?? "")
 			: ""
-	if (
-		["NotSupportedError", "SecurityError", "InvalidStateError", "QuotaExceededError"].includes(
-			name,
-		)
-	) {
+	if (["NotSupportedError", "SecurityError", "InvalidStateError"].includes(name)) {
 		return true
 	}
 	const message = error instanceof Error ? error.message : String(error ?? "")
 	return /origin private file system|\bopfs\b|storage\.getDirectory|createWritable|opfs.*(?:unavailable|not writable|permission|quota)/i.test(
 		message,
 	)
+}
+
+/** Do not turn a quota exhaustion into an unbounded heap allocation. */
+function isSafeInMemoryFallbackError(error: unknown): boolean {
+	const sourceError = isPptxExportError(error) ? error.sourceError : error
+	const name =
+		sourceError && typeof sourceError === "object" && "name" in sourceError
+			? String((sourceError as { name?: unknown }).name ?? "")
+			: ""
+	if (name === "QuotaExceededError") return false
+	const message = sourceError instanceof Error ? sourceError.message : String(sourceError ?? "")
+	if (/quota|storage\s+(?:full|limit)|disk\s+full/i.test(message)) return false
+	if (isPptxExportError(error)) return isLikelyOpfsUnavailableError(sourceError)
+	return isLikelyOpfsUnavailableError(error)
 }
 
 const STAGING_CLEANUP_ATTEMPTS = 2
@@ -920,23 +1238,69 @@ function shouldStageMediaSource(
 async function createStagingStore(
 	input: StreamingExportTaskInput,
 	sessionId: string,
-): Promise<StreamingStagingStore> {
+	canUseInMemoryStaging: boolean,
+): Promise<CreatedStagingStore> {
 	if (input.pipeline?.createStreamingStagingStore) {
-		return input.pipeline.createStreamingStagingStore({ config: input.config, sessionId })
+		const store = await input.pipeline.createStreamingStagingStore({
+			config: input.config,
+			sessionId,
+		})
+		return {
+			store,
+			usesDefaultOpfs: false,
+			allowsOpfsDescriptors: store.stagingKind !== "memory",
+		}
+	}
+	if (canUseInMemoryStaging && !hasOpfsCapability()) {
+		return {
+			store: createInMemoryStreamingStagingStore(),
+			usesDefaultOpfs: false,
+			allowsOpfsDescriptors: false,
+		}
 	}
 	const presentation = createPresentation(input.config) as unknown as StreamingPptxWithStaging
 	if (typeof presentation.createOpfsStagingStore !== "function") {
+		if (canUseInMemoryStaging) {
+			return {
+				store: createInMemoryStreamingStagingStore(),
+				usesDefaultOpfs: false,
+				allowsOpfsDescriptors: false,
+			}
+		}
 		throw createOpfsUnavailableError(
 			new Error("PptxGenJS v5 createOpfsStagingStore() is unavailable"),
 			{ reason: "runtime-hook-missing" },
 		)
 	}
 	try {
-		return await presentation.createOpfsStagingStore({ sessionId })
+		return {
+			store: await presentation.createOpfsStagingStore({ sessionId }),
+			usesDefaultOpfs: true,
+			allowsOpfsDescriptors: true,
+		}
 	} catch (error) {
+		if (canUseInMemoryStaging && isSafeInMemoryFallbackError(error)) {
+			return {
+				store: createInMemoryStreamingStagingStore(),
+				usesDefaultOpfs: false,
+				allowsOpfsDescriptors: false,
+			}
+		}
 		throw createOpfsUnavailableError(error, {
 			reason: "runtime-operation-rejected",
 		})
+	}
+}
+
+function hasOpfsCapability(): boolean {
+	try {
+		const storage = typeof navigator === "undefined" ? undefined : navigator.storage
+		return (
+			typeof (storage as (StorageManager & { getDirectory?: unknown }) | undefined)
+				?.getDirectory === "function"
+		)
+	} catch {
+		return false
 	}
 }
 
@@ -992,7 +1356,8 @@ function createCapacityOnlyPlan(pageCount?: number): StreamingPresentationPlan {
 	return {
 		// The direct path starts packaging before pages and media are observed. An
 		// empty map here means "not scanned yet", rather than "this export has no
-		// media", so capacity telemetry must remain conservative.
+		// media". Unknown media stays on classic ZIP for PowerPoint compatibility;
+		// the PptxGenJS writer aborts before a real ZIP32 overflow.
 		capacityPlan: createCapacityPlan(pageCount ?? 0, new Map(), { mediaScanComplete: false }),
 	}
 }
@@ -1026,23 +1391,49 @@ function createCapacityPlan(
 		}
 	}
 	const estimatedEntryCount = BigInt(Math.max(24, slideCount * 6 + media.size + 24))
+	// Browser HTML exports commonly discover media lengths only while the
+	// Packaging Worker opens each resource. Selecting ZIP64 merely because a
+	// length is unknown makes otherwise small presentations unreadable by some
+	// PowerPoint versions. Opt unknown sources into classic ZIP; PptxGenJS still
+	// enforces the ZIP32 byte/entry limits and aborts before emitting overflow.
+	const unknownLengthSourceMayReachZip32Limit = false
+	const maxEntryBytesMayReachZip32Limit =
+		(maxKnownEntryBytes !== undefined && maxKnownEntryBytes >= ZIP32_SIZE_SENTINEL)
+	const archiveBytesMayReachZip32Limit = knownInputBytes >= ZIP32_SIZE_SENTINEL
+	const entryCountMayReachZip32Limit = estimatedEntryCount >= ZIP32_ENTRY_COUNT_SENTINEL
 	return {
 		confidence: hasUnknownLengthSource ? "streaming-unknown" : "upper-bound",
-		zipMode: "zip64",
+		zipMode:
+			maxEntryBytesMayReachZip32Limit ||
+			archiveBytesMayReachZip32Limit ||
+			entryCountMayReachZip32Limit
+				? "zip64"
+				: "classic",
 		hasUnknownLengthSource,
-		maxEntryBytesMayReachZip32Limit:
-			hasUnknownLengthSource ||
-			(maxKnownEntryBytes !== undefined && maxKnownEntryBytes >= ZIP32_SIZE_SENTINEL),
+		unknownLengthSourceMayReachZip32Limit,
+		maxEntryBytesMayReachZip32Limit,
 		// Unknown lengths are represented by hasUnknownLengthSource. Keep this
 		// field tied to the known aggregate/explicit archive estimate so the
 		// snapshot matches PptxGenJS's CapacityPlan contract.
-		archiveBytesMayReachZip32Limit:
-			knownInputBytes >= ZIP32_SIZE_SENTINEL,
-		entryCountMayReachZip32Limit: estimatedEntryCount >= ZIP32_ENTRY_COUNT_SENTINEL,
+		archiveBytesMayReachZip32Limit,
+		entryCountMayReachZip32Limit,
 		knownInputBytes,
 		maxKnownEntryBytes,
 		estimatedEntryCount,
 	}
+}
+
+/**
+ * Sink-proxy destinations are the browser-owned buffered/download route. A
+ * raw WritableStream remains a true file-stream target and must still require
+ * OPFS for replay instead of silently growing the heap.
+ */
+function isSinkProxyDestination(destination?: PptxDestination): boolean {
+	if (!destination || typeof destination !== "object") return false
+	if ("kind" in destination && (destination as { kind?: unknown }).kind === "sink-proxy") {
+		return (destination as { replayPolicy?: string }).replayPolicy === "buffered"
+	}
+	return false
 }
 
 function normalizeWorkerDestination(destination: PptxDestination): StreamingWorkerDestination {

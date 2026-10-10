@@ -35,7 +35,6 @@ import { resolveDetailSummaryVisualState } from "@/pages/superMagic/pages/AudioR
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
 import type { MobileRecordingSourceTab, MobileRecordingTopTab } from "./types"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
-import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
 import { useMobileRecordingDetailData } from "./hooks/useMobileRecordingDetailData"
 import { MobileRecordingAudioPlayer } from "./components/MobileRecordingAudioPlayer"
@@ -105,11 +104,6 @@ export default function MobileAudioRecordingDetailPage() {
 		initialTitle: locationState?.projectName,
 	})
 	const player = useMobileRecordingAudioPlayer(audioUrl)
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const [playerScrollSignal, setPlayerScrollSignal] = useState(0)
 	const [detailItem, setDetailItem] = useState<AudioProjectListItem | null>(null)
 	const [titleOverride, setTitleOverride] = useState("")
@@ -1070,7 +1064,7 @@ export default function MobileAudioRecordingDetailPage() {
 				<MobileRecordingAudioPlayer
 					audioRef={player.audioRef}
 					audioUrl={audioUrl}
-					currentSec={playerCurrentSec}
+					currentSec={player.currentTime}
 					duration={player.duration}
 					playing={player.playing}
 					expanded={playerExpanded}
@@ -1132,6 +1126,7 @@ export default function MobileAudioRecordingDetailPage() {
 						setTopicRenameOpen(false)
 						setTopicActionItem(null)
 					},
+					testId: "mobile-recording-topic-rename-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
@@ -1139,6 +1134,7 @@ export default function MobileAudioRecordingDetailPage() {
 					onClick: () => void submitRecordingTopicRename(),
 					disabled: !topicRenameValue.trim(),
 					tone: "primary",
+					testId: "mobile-recording-topic-rename-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-4"
 			>
@@ -1166,12 +1162,14 @@ export default function MobileAudioRecordingDetailPage() {
 						setTopicDeleteOpen(false)
 						setTopicActionItem(null)
 					},
+					testId: "mobile-recording-topic-delete-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
 					ariaLabel: t("super:common.confirm"),
 					onClick: () => void confirmRecordingTopicDelete(),
 					tone: "destructive",
+					testId: "mobile-recording-topic-delete-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-6"
 			>

@@ -66,7 +66,7 @@ export function TemplateEditorPreview({
 						onClick={() => onPreviewIndexChange((index) => index - 1)}
 						size="sm"
 						variant="outline"
-					>
+					 data-testid="platform-slides-template-edit-button">
 						<ChevronLeft className="mr-1 size-4" />
 						{t("slidesTemplate.form.previous")}
 					</Button>
@@ -75,7 +75,7 @@ export function TemplateEditorPreview({
 						onClick={() => onPreviewIndexChange((index) => index + 1)}
 						size="sm"
 						variant="outline"
-					>
+					 data-testid="platform-slides-template-edit-button">
 						{t("slidesTemplate.form.next")}
 						<ChevronRight className="ml-1 size-4" />
 					</Button>

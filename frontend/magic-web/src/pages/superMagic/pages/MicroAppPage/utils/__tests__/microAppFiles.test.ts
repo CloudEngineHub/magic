@@ -3,6 +3,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import {
 	collectHtmlFiles,
 	collectRootHtmlFiles,
+	getMicroAppPreviewPath,
 	isSamePreviewEntryFile,
 	resolveDefaultHtmlEntry,
 	resolveSelectedHtmlEntry,
@@ -85,6 +86,13 @@ describe("microAppFiles", () => {
 		).toBe("first")
 	})
 
+	it("collects nested children without duplicating flat entries and resolves a nested homepage", () => {
+		const nested = file({ file_id: "nested", relative_file_path: "pages/index.html" })
+		const items = [file({ file_id: "folder", type: "directory", children: [nested] }), nested]
+		expect(collectHtmlFiles(items)).toEqual([nested])
+		expect(resolveSelectedHtmlEntry({ items, selectedFileId: "nested" })).toBe(nested)
+	})
+
 	it("keeps a valid selected entry", () => {
 		const selected = resolveSelectedHtmlEntry({
 			selectedFileId: "second",
@@ -138,5 +146,24 @@ describe("microAppFiles", () => {
 				file({ file_id: "entry", updated_at: "2026-08-03T05:31:00Z" }),
 			),
 		).toBe(false)
+	})
+
+	it("returns full normalized paths for navigation bar preview path", () => {
+		expect(getMicroAppPreviewPath(null)).toBe("/")
+		expect(
+			getMicroAppPreviewPath(
+				file({ file_name: "index.html", relative_file_path: "index.html" }),
+			),
+		).toBe("/index.html")
+		expect(
+			getMicroAppPreviewPath(
+				file({ file_name: "index.htm", relative_file_path: "index.htm" }),
+			),
+		).toBe("/index.htm")
+		expect(
+			getMicroAppPreviewPath(
+				file({ file_name: "admin.html", relative_file_path: "pages/admin.html" }),
+			),
+		).toBe("/pages/admin.html")
 	})
 })

@@ -211,6 +211,8 @@ export default function ConnectorLibraryMobile({ scrollViewportRef }: ConnectorL
 				<SkillMarketTabs
 					value={SKILL_MARKET_TAB_VALUES.connectors}
 					onValueChange={(value) => {
+						if (value === SKILL_MARKET_TAB_VALUES.crew)
+							navigate({ name: RouteName.CrewMarketCrew })
 						if (value === SKILL_MARKET_TAB_VALUES.skills)
 							navigate({ name: RouteName.CrewMarketSkills })
 					}}

@@ -108,7 +108,7 @@ export function AgentMarketCategoryFormDialog({
 			}}
 			open={open}
 		>
-			<DialogContent className="sm:max-w-xl">
+			<DialogContent className="sm:max-w-xl" data-testid="platform-official-marketplace-dialog-content" closeButtonTestId="agent-market-category-form-dialog-close-button">
 				<DialogHeader>
 					<DialogTitle>
 						{editing
@@ -132,7 +132,7 @@ export function AgentMarketCategoryFormDialog({
 							id="market-category-name-zh"
 							maxLength={agentMarketCategoryNameMaxLength}
 							{...form.register("nameZh")}
-						/>
+						 data-testid="platform-official-marketplace-market-category-name-zh-input"/>
 						<FieldError message={form.formState.errors.nameZh?.message} />
 					</DialogFormField>
 
@@ -146,7 +146,7 @@ export function AgentMarketCategoryFormDialog({
 							id="market-category-name-en"
 							maxLength={agentMarketCategoryNameMaxLength}
 							{...form.register("nameEn")}
-						/>
+						 data-testid="platform-official-marketplace-market-category-name-en-input"/>
 						<FieldError message={form.formState.errors.nameEn?.message} />
 					</DialogFormField>
 
@@ -162,7 +162,7 @@ export function AgentMarketCategoryFormDialog({
 								setValueAs: (value) => (value === "" ? 0 : Number(value)),
 							})}
 							type="number"
-						/>
+						 data-testid="platform-official-marketplace-market-category-sort-order-input"/>
 						<FieldError message={form.formState.errors.sortOrder?.message} />
 					</DialogFormField>
 
@@ -180,7 +180,7 @@ export function AgentMarketCategoryFormDialog({
 									disabled={isPending}
 									id="market-category-visible"
 									onCheckedChange={field.onChange}
-								/>
+								 data-testid="platform-official-marketplace-market-category-visible-switch"/>
 							)}
 						/>
 					</DialogFormField>
@@ -191,10 +191,10 @@ export function AgentMarketCategoryFormDialog({
 							onClick={() => onOpenChange(false)}
 							type="button"
 							variant="outline"
-						>
+						 data-testid="platform-official-marketplace-cancel-button">
 							{t("common.cancel")}
 						</Button>
-						<Button disabled={isPending} type="submit">
+						<Button disabled={isPending} type="submit" data-testid="platform-official-marketplace-save-button">
 							{isPending ? (
 								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
 							) : null}

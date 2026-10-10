@@ -80,13 +80,13 @@ export function ProviderConfigFields({
                 onValueChange={field.onChange}
               >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="platform-provider-list-select-trigger">
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>
-                <SelectContent>
-                  <SelectItem value={providerAuthType.apiKey}>Google AI Studio</SelectItem>
-                  <SelectItem value={providerAuthType.serviceAccount}>
+                <SelectContent data-testid="platform-provider-list-select-content">
+                  <SelectItem value={providerAuthType.apiKey} data-testid="platform-provider-list-option">Google AI Studio</SelectItem>
+                  <SelectItem value={providerAuthType.serviceAccount} data-testid="platform-provider-list-option">
                     Google Cloud Vertex AI
                   </SelectItem>
                 </SelectContent>
@@ -128,7 +128,7 @@ export function ProviderConfigFields({
                       onChange={field.onChange}
                       placeholder={fieldConfig.placeholder}
                       value={typeof field.value === "string" ? field.value : ""}
-                    />
+                    data-testid="platform-provider-list-textarea-input" />
                   ) : (
                     <Input
                       disabled={disabled}
@@ -136,7 +136,7 @@ export function ProviderConfigFields({
                       placeholder={fieldConfig.placeholder}
                       type={fieldConfig.inputType === "password" ? "password" : fieldConfig.inputType}
                       value={typeof field.value === "string" ? field.value : ""}
-                    />
+                    data-testid="platform-provider-list-input" />
                   )}
                 </FormControl>
                 {fieldConfig.description ? (
@@ -184,7 +184,7 @@ function GoogleServiceAccountJsonImport({
           {t("providerList.fieldDesc.googleServiceAccountJson")}
         </div>
       </div>
-      <input
+      <input data-testid="platform-provider-config-input"
         accept=".json,application/json"
         className="sr-only"
         disabled={disabled}
@@ -197,7 +197,7 @@ function GoogleServiceAccountJsonImport({
         onClick={() => inputRef.current?.click()}
         type="button"
         variant="outline"
-      >
+       data-testid="platform-provider-list-upload-button">
         <Upload className="size-4" aria-hidden="true" />
         {t("providerList.action.importJson")}
       </Button>

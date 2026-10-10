@@ -11,12 +11,14 @@ use App\Interfaces\SuperMagic\Agent\Facade\OpenApi\OpenSuperMagicAgentApi;
 use App\Interfaces\SuperMagic\Agent\Facade\Sandbox\SkillSandboxApi;
 use App\Interfaces\SuperMagic\Agent\Facade\Sandbox\SuperMagicAgentSandboxApi;
 use App\Interfaces\SuperMagic\Common\Share\Facade\ShareApi;
+use App\Interfaces\SuperMagic\Design\Facade\Sandbox\HtmlDesignStyleSandboxApi;
 use App\Interfaces\SuperMagic\File\Facade\InternalApi\FileApi;
 use App\Interfaces\SuperMagic\File\Facade\OpenApi\OpenFileApi;
 use App\Interfaces\SuperMagic\Message\Facade\OpenApi\OpenMessageScheduleApi;
 use App\Interfaces\SuperMagic\Project\Facade\OpenApi\OpenMicroAppApi;
 use App\Interfaces\SuperMagic\Project\Facade\OpenApi\OpenProjectApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\AiAbilityApi;
+use App\Interfaces\SuperMagic\Task\Facade\InternalApi\FollowUpSuggestionApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\SandboxApi as InternalSandboxApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\TaskApi as InternalTaskApi;
 use App\Interfaces\SuperMagic\Task\Facade\OpenApi\OAuth2CallbackRelayApi;
@@ -57,6 +59,7 @@ Router::addGroup(
         Router::put('/upgrade', [InternalSandboxApi::class, 'upgradeSandbox']);
         // 检查沙箱镜像版本（当前版本 vs 最新版本）
         Router::get('/version-check', [InternalSandboxApi::class, 'checkSandboxVersion']);
+        Router::post('/follow-up-suggestions', [FollowUpSuggestionApi::class, 'report']);
 
         // 文件管理相关
         Router::addGroup('/file', static function () {
@@ -151,6 +154,11 @@ Router::addGroup(
         Router::addGroup('/skill-market', static function () {
             // 获取市场技能库列表
             Router::post('/queries', [SkillSandboxApi::class, 'queriesMarket']);
+        });
+
+        // HTML 设计风格源文，供 super-magic 内部 Skill 调用
+        Router::addGroup('/html-design-styles', static function () {
+            Router::get('/{styleCode}/source', [HtmlDesignStyleSandboxApi::class, 'getSource']);
         });
     },
     ['middleware' => [SandboxUserAuthMiddleware::class]]

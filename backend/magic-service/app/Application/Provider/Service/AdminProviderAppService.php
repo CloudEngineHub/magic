@@ -32,7 +32,9 @@ use App\Domain\Provider\Entity\ValueObject\Category;
 use App\Domain\Provider\Entity\ValueObject\ModelType;
 use App\Domain\Provider\Entity\ValueObject\NaturalLanguageProcessing;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\Provider\Entity\ValueObject\ProviderConfigSearchField;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\Provider\Entity\ValueObject\ProviderVirtualIdentity;
 use App\Domain\Provider\Entity\ValueObject\Query\ProviderModelQuery;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Event\ProviderConfigCreatedEvent;
@@ -48,6 +50,7 @@ use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
 use App\Infrastructure\Util\FuzzMatchUtil;
 use App\Interfaces\Agent\Assembler\FileAssembler;
@@ -101,6 +104,39 @@ readonly class AdminProviderAppService
         $this->processProviderAndModelsIcons($providerModels);
 
         return $providerModels;
+    }
+
+    /**
+     * 按指定字段搜索服务商配置。
+     *
+     * @return array{total: int, list: array<int, array<string, mixed>>}
+     */
+    public function searchProviderConfigs(
+        MagicUserAuthorization $authorization,
+        Page $page,
+        ProviderConfigSearchField $searchField,
+        string $keyword
+    ): array {
+        $dataIsolation = ProviderDataIsolation::create(
+            $authorization->getOrganizationCode(),
+            $authorization->getId(),
+        );
+
+        if (ProviderVirtualIdentity::matchesPlatformOfficialSearch($searchField, $keyword)) {
+            return [
+                'total' => 1,
+                'list' => $page->getPage() === 1
+                    ? [ProviderVirtualIdentity::platformOfficialSelectorItem()]
+                    : [],
+            ];
+        }
+
+        return $this->providerConfigDomainService->searchProviderConfigs(
+            $dataIsolation,
+            $page,
+            $searchField,
+            $keyword
+        );
     }
 
     /**

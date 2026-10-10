@@ -20,6 +20,9 @@ export interface SuperMagicFocusCanvasElementPayload {
 	selectElement?: string[] | boolean
 	animated?: boolean
 	padding?: PaddingInsetConfig
+	/** 用户明确点击生成详情时才打开记录；普通聚焦保持原行为。 */
+	showGenerationDetails?: boolean
+	contentId?: string
 }
 
 /**

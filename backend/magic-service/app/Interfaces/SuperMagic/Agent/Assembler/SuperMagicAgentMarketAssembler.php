@@ -125,7 +125,7 @@ class SuperMagicAgentMarketAssembler
         $features = [];
         foreach ($playbooks as $playbook) {
             $features[] = [
-                'name' => $playbook->getI18nName(CoContext::getLanguage()),
+                'name_i18n' => $playbook->getNameI18n() ?? [],
                 'icon' => $playbook->getIcon(),
                 'theme_color' => $playbook->getThemeColor(),
             ];
@@ -135,7 +135,6 @@ class SuperMagicAgentMarketAssembler
         $allowDelete = $isAdded && $userAgent?->getSourceType()->isMarket() === true;
 
         $latestVersionCode = isset($latestVersionsMap[$agentCode]) ? $latestVersionsMap[$agentCode]->getVersion() : null;
-        $latestVersion = $latestVersionsMap[$agentCode] ?? null;
         $publisher = self::buildPublisher(
             $agentMarket->getPublisherType(),
             $publisherUserMap[$agentMarket->getPublisherId()] ?? null
@@ -151,20 +150,9 @@ class SuperMagicAgentMarketAssembler
             id: $agentMarket->getId() ?? 0,
             agentCode: $agentCode,
             userCode: $userAgent?->getAgentCode(),
-            name: self::resolveLocalizedText(
-                $agentMarket->getNameI18n(),
-                $latestVersion?->getI18nName(CoContext::getLanguage()) ?? '',
-                CoContext::getLanguage()
-            ),
-            role: self::resolveLocalizedRole(
-                $agentMarket->getRoleI18n() ?? $latestVersion?->getRoleI18n(),
-                CoContext::getLanguage()
-            ),
-            description: self::resolveLocalizedText(
-                $agentMarket->getDescriptionI18n(),
-                $latestVersion?->getI18nDescription(CoContext::getLanguage()) ?? '',
-                CoContext::getLanguage()
-            ),
+            nameI18n: $agentMarket->getNameI18n() ?? [],
+            roleI18n: $agentMarket->getRoleI18n(),
+            descriptionI18n: $agentMarket->getDescriptionI18n(),
             icon: $agentMarket->getIcon(),
             iconType: $agentMarket->getIconType()->value,
             playbooks: $features,
@@ -238,11 +226,6 @@ class SuperMagicAgentMarketAssembler
         }
 
         return [];
-    }
-
-    private static function resolveLocalizedRole(?array $i18n, string $language): string
-    {
-        return implode(', ', self::resolveLocalizedList($i18n, $language));
     }
 
     /**

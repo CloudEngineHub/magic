@@ -28,7 +28,11 @@ import { useTopicDetailPanelController } from "@/pages/superMagic/pages/TopicPag
 import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
-import { isTopicWaitingForUser, TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	isTopicTaskRunning,
+	isTopicWaitingForUser,
+	TaskStatus,
+} from "@/pages/superMagic/pages/Workspace/types"
 import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/useTopicModel"
 import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
 import { userStore } from "@/models/user"
@@ -140,8 +144,9 @@ const ClawMobileConversationPanel = observer(
 					}
 				},
 			})
+			const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 			const canInterruptTask =
-				showLoading || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
+				isTaskRunning || selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 
 			const {
 				handlePullMoreMessage,
@@ -155,7 +160,7 @@ const ClawMobileConversationPanel = observer(
 				projectId: selectedProject?.id,
 				topicId: selectedTopic?.id,
 				agentCode: clawCode,
-				isTaskRunning: showLoading,
+				isTaskRunning,
 				isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 				isEmptyStatus: false,
 				isShowLoadingInit: isMessagesInitialLoading,
@@ -444,7 +449,7 @@ const ClawMobileConversationPanel = observer(
 						<ClawMobileInputContainer
 							editorContext={editorContext}
 							editorNodes={mobileEditorNodes}
-							isTaskRunning={showLoading}
+							isTaskRunning={canInterruptTask}
 							onNewChat={handleClawNewChatSlash}
 							onOpenFilesDrawer={onOpenFilesDrawer}
 							onOpenSkillsDrawer={onOpenSkillsDrawer}

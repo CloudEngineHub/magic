@@ -18,6 +18,12 @@ function isValidCropConfig(value: unknown): boolean {
 	return ["width", "height", "x", "y"].every((field) => isFiniteNumber(value[field]))
 }
 
+function isValidGenerationTiming(value: unknown): boolean {
+	if (!isObject(value)) return false
+	if (!isFiniteNumber(value.startedAt) || !isOptionalString(value.imageId)) return false
+	return value.source === "submitted" || value.source === "server" || value.source === "observed"
+}
+
 function isValidContentContainer(element: Record<string, unknown>): boolean {
 	if (!Array.isArray(element.contents)) return false
 	const contentIds = new Set<string>()
@@ -140,9 +146,15 @@ function isValidElementContent(content: Record<string, unknown>, type: string): 
 	const allowedFields = new Set(["contentId", ...getElementContentFields(type)])
 	if (!hasOnlyAllowedFields(content, allowedFields)) return false
 	if (!isOptionalString(content.src)) return false
+	if (content.discarded !== undefined && typeof content.discarded !== "boolean") return false
 	if (!isOptionalString(content.status)) return false
 	if (!isOptionalString(content.errorMessage)) return false
 	if (content.crop !== undefined && !isValidCropConfig(content.crop)) return false
+	if (
+		content.generationTiming !== undefined &&
+		!isValidGenerationTiming(content.generationTiming)
+	)
+		return false
 
 	switch (type) {
 		case ElementTypeEnum.Text:

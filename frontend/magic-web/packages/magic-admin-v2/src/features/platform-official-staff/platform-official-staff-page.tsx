@@ -1,5 +1,5 @@
 import { Bot, Filter, Plus, RefreshCw } from "lucide-react"
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ConfirmDialog } from "@magic-admin-v2/components/confirm-dialog"
@@ -10,6 +10,7 @@ import { ListPageSkeleton } from "@magic-admin-v2/components/list-page-skeleton"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import {
 	Select,
 	SelectContent,
@@ -51,20 +52,6 @@ import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 import { useRights } from "@magic-admin-v2/hooks/use-rights"
 import { cn } from "@magic-admin-v2/utils/cn"
-
-function OfficialStaffShell({ actions, children }: { actions?: ReactNode; children: ReactNode }) {
-	const { t } = useTranslation()
-
-	return (
-		<ListShell
-			actions={actions}
-			description={t("nav.desc.officialStaff")}
-			title={t("nav.item.officialStaff")}
-		>
-			{children}
-		</ListShell>
-	)
-}
 
 function toOfficialStaffListParams(
 	draft: FilterDraft,
@@ -205,23 +192,26 @@ export default function PlatformOfficialStaffPage() {
 
 	return (
 		<>
-			<OfficialStaffShell
+			<ListShell
+				testId="official-staff-page"
 				actions={
 					<>
-						<Button onClick={handleRefresh} variant="outline">
+						<PageHeaderActionButton onClick={handleRefresh} variant="outline" data-testid="platform-official-staff-refresh-button">
 							<RefreshCw
 								className={cn("size-4", listQuery.isFetching && "animate-spin")}
 							/>
 							{t("common.refresh")}
-						</Button>
+						</PageHeaderActionButton>
 						{hasEditRight ? (
-							<Button onClick={() => setStaffDialog({ open: true, staff: null })}>
+							<PageHeaderActionButton onClick={() => setStaffDialog({ open: true, staff: null })} data-testid="platform-official-staff-create-button">
 								<Plus className="size-4" />
 								{t("officialStaff.action.addStaff")}
-							</Button>
+							</PageHeaderActionButton>
 						) : null}
 					</>
 				}
+				description={t("nav.desc.officialStaff")}
+				title={t("nav.item.officialStaff")}
 			>
 				<div className="space-y-6">
 					<DefaultSettingsCard
@@ -245,28 +235,30 @@ export default function PlatformOfficialStaffPage() {
 					/>
 
 					<div className="space-y-4">
-						<div className="flex min-w-0 items-end gap-2 md:hidden">
+						<div className="sticky top-0 z-40 -mx-4 flex min-w-0 items-end gap-2 bg-background px-4 py-2 md:hidden lg:-mx-6 lg:px-6">
 							<FilterControlField
 								className="min-w-0 flex-1"
 								label={t("officialStaff.filter.keyword")}
 							>
 								<FilterSearchInput
 									clearLabel={t("common.clear")}
-									onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
+									clearButtonTestId="platform-official-staff-mobile-clear-button"
+									onValueChange={(keyword) =>
+			setDebouncedField("keyword", keyword)}
 									placeholder={t("officialStaff.placeholder.keyword")}
 									value={filterDraft.keyword}
-								/>
+								 inputTestId="platform-official-staff-mobile-search-input"/>
 							</FilterControlField>
 							<Button
 								aria-label={t("officialStaff.filter.title")}
 								onClick={() => handleMobileFilterOpenChange(true)}
 								size="icon"
 								variant="outline"
-							>
+							 data-testid="platform-official-staff-filter-button">
 								<Filter className="size-4" aria-hidden="true" />
 							</Button>
 						</div>
-						<div className="hidden min-w-0 flex-col gap-2 md:flex md:flex-row md:items-end">
+						<div className="sticky top-0 z-40 -mx-4 hidden min-w-0 flex-col gap-2 bg-background px-4 py-2 md:flex md:flex-row md:items-end lg:-mx-6 lg:px-6">
 							<FilterControlField
 								className="w-fit"
 								label={t("officialStaff.filter.status")}
@@ -282,15 +274,15 @@ export default function PlatformOfficialStaffPage() {
 									open={openFloatingId === "staff-status-filter"}
 									value={filterDraft.status}
 								>
-									<SelectTrigger className="w-fit max-w-full">
+									<SelectTrigger className="w-fit max-w-full" data-testid="platform-official-staff-select-trigger">
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={selectAllValue}>
+									<SelectContent data-testid="platform-official-staff-select-content">
+										<SelectItem value={selectAllValue} data-testid="platform-official-staff-option">
 											{t("officialStaff.filter.allStatuses")}
 										</SelectItem>
-										<SelectItem value="1">{t("common.enabled")}</SelectItem>
-										<SelectItem value="0">{t("common.disabled")}</SelectItem>
+										<SelectItem value="1" data-testid="platform-official-staff-option">{t("common.enabled")}</SelectItem>
+										<SelectItem value="0" data-testid="platform-official-staff-option">{t("common.disabled")}</SelectItem>
 									</SelectContent>
 								</Select>
 							</FilterControlField>
@@ -300,10 +292,12 @@ export default function PlatformOfficialStaffPage() {
 							>
 								<FilterSearchInput
 									clearLabel={t("common.clear")}
-									onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
+									clearButtonTestId="platform-official-staff-secondary-clear-button"
+									onValueChange={(keyword) =>
+			setDebouncedField("keyword", keyword)}
 									placeholder={t("officialStaff.placeholder.keyword")}
 									value={filterDraft.keyword}
-								/>
+								 inputTestId="platform-official-staff-secondary-search-input"/>
 							</FilterControlField>
 							<FilterControlField
 								className="min-w-0 flex-1 md:flex-none md:w-[340px] xl:w-[420px]"
@@ -316,10 +310,11 @@ export default function PlatformOfficialStaffPage() {
 									}
 									placeholder={t("officialStaff.placeholder.identifier")}
 									value={filterDraft.identifier}
-								/>
+								 inputTestId="platform-official-staff-tertiary-search-input" clearButtonTestId="platform-official-staff-tertiary-search-clear-button"/>
 							</FilterControlField>
 						</div>
-						<FilterSheet
+						<FilterSheet contentTestId="platform-official-staff-filter-sheet" bodyTestId="platform-official-staff-filter-body" resetButtonTestId="platform-official-staff-reset-button" applyButtonTestId="platform-official-staff-apply-button"
+							closeButtonTestId="platform-official-staff-filter-close-button"
 							applyLabel={t("officialStaff.action.applyFilters")}
 							description={t("officialStaff.filter.description")}
 							onApply={applyMobileFilters}
@@ -338,7 +333,7 @@ export default function PlatformOfficialStaffPage() {
 									}
 									placeholder={t("officialStaff.placeholder.keyword")}
 									value={mobileFilterDraft.keyword}
-								/>
+								 inputTestId="platform-official-staff-mobile-search-input" clearButtonTestId="platform-official-staff-mobile-search-clear-button"/>
 							</FilterControlField>
 							<FilterControlField
 								className="w-full"
@@ -350,15 +345,15 @@ export default function PlatformOfficialStaffPage() {
 									}
 									value={mobileFilterDraft.status}
 								>
-									<SelectTrigger className="w-full">
+									<SelectTrigger className="w-full" data-testid="platform-official-staff-select-trigger">
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={selectAllValue}>
+									<SelectContent data-testid="platform-official-staff-select-content">
+										<SelectItem value={selectAllValue} data-testid="platform-official-staff-option">
 											{t("officialStaff.filter.allStatuses")}
 										</SelectItem>
-										<SelectItem value="1">{t("common.enabled")}</SelectItem>
-										<SelectItem value="0">{t("common.disabled")}</SelectItem>
+										<SelectItem value="1" data-testid="platform-official-staff-option">{t("common.enabled")}</SelectItem>
+										<SelectItem value="0" data-testid="platform-official-staff-option">{t("common.disabled")}</SelectItem>
 									</SelectContent>
 								</Select>
 							</FilterControlField>
@@ -376,12 +371,12 @@ export default function PlatformOfficialStaffPage() {
 									}
 									placeholder={t("officialStaff.placeholder.identifier")}
 									value={mobileFilterDraft.identifier}
-								/>
+								 inputTestId="platform-official-staff-mobile-search-input" clearButtonTestId="platform-official-staff-mobile-search-clear-button"/>
 							</FilterControlField>
 						</FilterSheet>
 
 						{listQuery.isLoading ? (
-							<ListPageSkeleton rows={6} />
+							<ListPageSkeleton rows={6} testId="platform-official-staff-loading" />
 						) : listQuery.isError ? (
 							<div className="rounded-lg border border-border/50 p-4">
 								<EmptyState
@@ -391,7 +386,7 @@ export default function PlatformOfficialStaffPage() {
 									)}
 									icon={Bot}
 									title={t("officialStaff.error.loadTitle")}
-								/>
+					 testId="platform-official-staff-error"/>
 							</div>
 						) : regularItems.length === 0 ? (
 							<div className="rounded-lg border border-dashed bg-muted/20 p-4">
@@ -399,7 +394,7 @@ export default function PlatformOfficialStaffPage() {
 									description={t("officialStaff.empty.description")}
 									icon={Bot}
 									title={t("officialStaff.empty.title")}
-								/>
+								 testId="platform-official-staff-empty"/>
 							</div>
 						) : (
 							<div className="space-y-3">
@@ -417,8 +412,6 @@ export default function PlatformOfficialStaffPage() {
 												setOpenFloatingId(null)
 												setStaffDialog({ open: true, staff })
 											}}
-											onFloatingOpenChange={setOpenFloatingId}
-											openFloatingId={openFloatingId}
 											onStatusChange={(staff, status) => {
 												if (hasEditRight) setStatusDialog({ staff, status })
 											}}
@@ -426,6 +419,12 @@ export default function PlatformOfficialStaffPage() {
 									))}
 								</div>
 								<ListPagination
+									previousButtonTestId="official-staff-previous-button"
+									nextButtonTestId="official-staff-next-button"
+									pageSizeTriggerTestId="official-staff-page-size-trigger"
+									pageSizeOptionTestId="official-staff-page-size-option"
+									jumpInputTestId="official-staff-jump-input"
+				testId="official-staff-pagination"
 									showQuickJumper
 									className="px-1"
 									loading={listQuery.isFetching}
@@ -439,7 +438,7 @@ export default function PlatformOfficialStaffPage() {
 						)}
 					</div>
 				</div>
-			</OfficialStaffShell>
+			</ListShell>
 
 			{hasEditRight ? (
 				<OfficialStaffFormDialog
@@ -474,7 +473,7 @@ export default function PlatformOfficialStaffPage() {
 				confirmLabel={t("officialStaff.action.confirm")}
 				confirmDisabled={!hasEditRight}
 				isPending={statusMutation.isPending}
-			/>
+			 contentTestId="platform-official-staff-confirm-dialog-content" cancelButtonTestId="platform-official-staff-confirm-dialog-cancel-button" confirmButtonTestId="platform-official-staff-confirm-dialog-confirm-button"/>
 		</>
 	)
 }

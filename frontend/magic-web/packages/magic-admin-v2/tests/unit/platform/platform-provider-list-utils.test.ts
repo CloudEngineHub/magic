@@ -39,7 +39,7 @@ describe("platform provider list utils", () => {
     assert.deepEqual(createDefaultProviderFilterDraft(), {
       alias: "",
       name: "",
-      provider_code: "",
+      provider_id: "",
       provider_type: providerSelectAllValue,
       search_field: "name",
       status: providerSelectAllValue,
@@ -68,7 +68,7 @@ describe("platform provider list utils", () => {
     );
   });
 
-  it("searches name, alias, and provider code independently and case-insensitively", () => {
+  it("searches name, alias, and provider IDs independently and case-insensitively", () => {
     const items = [
       createProvider("openai", {
         name: "OpenAI",
@@ -97,9 +97,18 @@ describe("platform provider list utils", () => {
     assert.deepEqual(
       filterProviders(items, {
         ...baseFilter,
-        provider_code: "open_ai",
+        provider_id: "template-openai",
       }).map((item) => item.id),
       ["openai"],
+    );
+    assert.deepEqual(
+      filterProviders([
+        { ...items[0], id: "config-openai", service_provider_id: "template-other" },
+      ], {
+        ...baseFilter,
+        provider_id: "CONFIG-OPENAI",
+      }).map((item) => item.id),
+      ["config-openai"],
     );
   });
 
@@ -120,6 +129,7 @@ describe("platform provider list utils", () => {
     assert.deepEqual(
       filterProviders(items, {
         name: "match",
+        provider_id: "",
         provider_type: String(providerType.custom),
         status: String(providerStatus.enabled),
       }).map((item) => item.id),

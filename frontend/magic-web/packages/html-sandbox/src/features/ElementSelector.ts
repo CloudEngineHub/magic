@@ -136,6 +136,7 @@ interface ElementInfo {
 	inlineStyles?: Record<string, string>
 	attributes?: {
 		href?: string
+		dataMagicHref?: string
 		target?: string
 		rel?: string
 		download?: string
@@ -422,11 +423,10 @@ export class ElementSelector {
 	}
 
 	private getCommonAttributes(element: HTMLElement): ElementInfo["attributes"] {
-		if (element.tagName.toLowerCase() !== "a") return undefined
-
 		const read = (name: string) => element.getAttribute(name) || undefined
 		return {
 			href: read("href"),
+			dataMagicHref: read("data-magic-href"),
 			target: read("target"),
 			rel: read("rel"),
 			download: read("download"),
@@ -767,11 +767,7 @@ export class ElementSelector {
 			rect: { top: number; left: number; width: number; height: number }
 		}> = []
 		let current = element.parentElement
-		while (
-			current &&
-			!this.isDocumentRoot(current) &&
-			ancestors.length < 8
-		) {
+		while (current && !this.isDocumentRoot(current) && ancestors.length < 8) {
 			if (!isInjectedElement(current)) {
 				const { rect } = this.getElementRectWithRotation(current)
 				const textContent = getEditableTextContent(current).trim()

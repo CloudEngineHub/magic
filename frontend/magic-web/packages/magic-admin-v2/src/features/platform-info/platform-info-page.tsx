@@ -1,6 +1,7 @@
 import {
 	AlertCircle,
 	Bot,
+	Droplets,
 	Edit3,
 	FileText,
 	Info,
@@ -23,7 +24,7 @@ import {
 	type SectionNavigationItem,
 } from "@magic-admin-v2/components/section-navigation"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { Skeleton } from "@magic-admin-v2/components/ui/skeleton"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import {
@@ -75,6 +76,11 @@ const platformInfoSections = [
 		id: "footer",
 		titleKey: platformInfoSectionTitleKeys.footer,
 		icon: FileText,
+	},
+	{
+		id: "watermark",
+		titleKey: platformInfoSectionTitleKeys.watermark,
+		icon: Droplets,
 	},
 ] satisfies Array<SectionNavigationItem<PlatformInfoSectionId>>
 
@@ -160,19 +166,24 @@ export default function PlatformInfoPage() {
 		return (
 			<ListShell
 				actions={
-					<Button onClick={() => platformInfoQuery.refetch()} variant="outline">
+					<PageHeaderActionButton
+						data-testid="platform-info-refresh-button"
+						onClick={() => platformInfoQuery.refetch()}
+						variant="outline"
+					>
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
-					</Button>
+					</PageHeaderActionButton>
 				}
 				description={t("nav.desc.platformInfo")}
+				testId="platform-info-page"
 				title={t("nav.item.platformInfo")}
 			>
 				<EmptyState
 					icon={AlertCircle}
+					testId="platform-info-error"
 					title={t("platformInfo.error.loadTitle")}
-					description={queryError.message}
-				/>
+					description={queryError.message}/>
 			</ListShell>
 		)
 	}
@@ -186,15 +197,17 @@ export default function PlatformInfoPage() {
 			actions={
 				isEditing ? (
 					<>
-						<Button
+						<PageHeaderActionButton
+							data-testid="platform-info-cancel-button"
 							disabled={updateMutation.isPending}
 							onClick={cancelEditing}
 							variant="outline"
 						>
 							<X className="size-4" aria-hidden="true" />
 							{t("common.cancel")}
-						</Button>
-						<Button
+						</PageHeaderActionButton>
+						<PageHeaderActionButton
+							data-testid="platform-info-save-button"
 							disabled={
 								updateMutation.isPending ||
 								isImageUploading ||
@@ -204,11 +217,12 @@ export default function PlatformInfoPage() {
 						>
 							<Save className="size-4" aria-hidden="true" />
 							{updateMutation.isPending ? t("common.saving") : t("common.save")}
-						</Button>
+						</PageHeaderActionButton>
 					</>
 				) : (
 					<>
-						<Button
+						<PageHeaderActionButton
+							data-testid="platform-info-refresh-button"
 							disabled={platformInfoQuery.isFetching}
 							onClick={() => platformInfoQuery.refetch()}
 							variant="outline"
@@ -221,18 +235,22 @@ export default function PlatformInfoPage() {
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
-						</Button>
+						</PageHeaderActionButton>
 						{hasEditRight ? (
-							<Button onClick={startEditing}>
+							<PageHeaderActionButton
+								data-testid="platform-info-edit-button"
+								onClick={startEditing}
+							>
 								<Edit3 className="size-4" aria-hidden="true" />
 								{t("common.edit")}
-							</Button>
+							</PageHeaderActionButton>
 						) : null}
 					</>
 				)
 			}
 			contentClassName="space-y-4"
 			description={t("nav.desc.platformInfo")}
+			testId="platform-info-page"
 			title={t("nav.item.platformInfo")}
 			titleAddon={
 				isEditing ? (
@@ -244,6 +262,7 @@ export default function PlatformInfoPage() {
 				<SectionNavigation
 					mode="select"
 					sections={platformInfoSections}
+					testIdPrefix="platform-info-sections"
 					value={activeSection}
 					onValueChange={setActiveSection}
 				/>
@@ -252,6 +271,7 @@ export default function PlatformInfoPage() {
 				<SectionNavigation
 					mode="tabs"
 					sections={platformInfoSections}
+					testIdPrefix="platform-info-sections"
 					value={activeSection}
 					onValueChange={setActiveSection}
 				/>
@@ -261,11 +281,15 @@ export default function PlatformInfoPage() {
 					<SectionNavigation
 						mode="nav"
 						sections={platformInfoSections}
+						testIdPrefix="platform-info-sections"
 						value={activeSection}
 						onValueChange={setActiveSection}
 					/>
 				</aside>
-				<div className="min-w-0 flex-1">
+				<div
+					className="min-w-0 flex-1"
+					data-testid={isEditing ? "platform-info-form" : "platform-info-preview"}
+				>
 					{isEditing ? (
 						<PlatformInfoForm
 							activeSection={activeSection}
@@ -296,20 +320,21 @@ function PlatformInfoSkeleton({ hasEditRight }: { hasEditRight: boolean }) {
 		<ListShell
 			actions={
 				<>
-					<Button disabled variant="outline">
+					<PageHeaderActionButton data-testid="platform-info-refresh-button" disabled variant="outline">
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
-					</Button>
+					</PageHeaderActionButton>
 					{hasEditRight ? (
-						<Button disabled>
+						<PageHeaderActionButton data-testid="platform-info-edit-button" disabled>
 							<Edit3 className="size-4" aria-hidden="true" />
 							{t("common.edit")}
-						</Button>
+						</PageHeaderActionButton>
 					) : null}
 				</>
 			}
 			contentClassName="space-y-4"
 			description={t("nav.desc.platformInfo")}
+			testId="platform-info-page"
 			title={t("nav.item.platformInfo")}
 		>
 			<div className="md:hidden">
@@ -318,7 +343,7 @@ function PlatformInfoSkeleton({ hasEditRight }: { hasEditRight: boolean }) {
 			<div className="hidden md:block lg:hidden">
 				<SectionNavigationSkeleton mode="tabs" sections={platformInfoSections} />
 			</div>
-			<div className="flex min-h-0 gap-12">
+			<div className="flex min-h-0 gap-12" data-testid="platform-info-loading">
 				<aside className="hidden shrink-0 lg:block lg:w-52">
 					<SectionNavigationSkeleton mode="nav" sections={platformInfoSections} />
 				</aside>

@@ -5,7 +5,11 @@ interface UserSpaceIconProps extends SVGProps<SVGSVGElement> {
 }
 
 /** 云朵内的用户标识用于区分个人空间与项目文件。 */
-export default function UserSpaceIcon({ size = 16, ...props }: UserSpaceIconProps) {
+export default function UserSpaceIcon({
+	size = 16,
+	strokeWidth = 1.5,
+	...props
+}: UserSpaceIconProps) {
 	return (
 		<svg
 			width={size}
@@ -13,7 +17,7 @@ export default function UserSpaceIcon({ size = 16, ...props }: UserSpaceIconProp
 			viewBox="0 0 24 24"
 			fill="none"
 			stroke="currentColor"
-			strokeWidth={2}
+			strokeWidth={strokeWidth}
 			strokeLinecap="round"
 			strokeLinejoin="round"
 			aria-hidden="true"

@@ -12,8 +12,17 @@ class PersonalPreferences(BaseModel):
         default=True,
         description="是否启用通用长期记忆自动功能",
     )
+    show_follow_up_suggestions: bool = Field(
+        default=True,
+        description="是否在主任务中触发追加问题生成",
+    )
 
     @validator("long_term_memory_enabled", pre=True, always=True)
     def validate_long_term_memory_enabled(cls, value: Any) -> bool:
         """缺失或非法值按开启处理，兼容旧消息和脏数据。"""
+        return value if isinstance(value, bool) else True
+
+    @validator("show_follow_up_suggestions", pre=True, always=True)
+    def validate_show_follow_up_suggestions(cls, value: Any) -> bool:
+        """缺失或非法值按开启处理；明确的 false 必须保留。"""
         return value if isinstance(value, bool) else True

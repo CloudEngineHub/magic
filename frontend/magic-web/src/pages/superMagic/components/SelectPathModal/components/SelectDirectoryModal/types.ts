@@ -22,7 +22,7 @@ export interface MobileCrossProjectConfig {
 	workspaces?: Array<Pick<Workspace, "id" | "name" | "project_count" | "workspace_type">>
 	includeSpecialWorkspaces?: boolean
 	allowWorkspaceSubmit?: boolean
-	selectionMode?: "destination" | "mention"
+	selectionMode?: "destination" | "mention" | "import"
 	excludeProjectIds?: string[]
 }
 

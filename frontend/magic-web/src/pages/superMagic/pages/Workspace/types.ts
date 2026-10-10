@@ -166,7 +166,7 @@ export interface Workspace {
 	cooperate_project_count?: number
 	project_count: number
 	status?: "waiting" | "running" | "finished" | "error" // 其实没有这个字段，但是为了兼容旧数据，所以加了这个字段
-	workspace_type: "chat" | "default"
+	workspace_type: "chat" | "default" | "micro-app"
 }
 
 // 话题
@@ -200,6 +200,11 @@ export interface Topic {
 /** Whether a topic is paused while the agent waits for a user response. */
 export function isTopicWaitingForUser(topic?: Pick<Topic, "task_status"> | null): boolean {
 	return topic?.task_status === TaskStatus.WAITING_FOR_USER
+}
+
+/** Topic 状态仍为 running 时，即使消息流 loading 短暂归零，也不能把新消息直接发给当前任务。 */
+export function isTopicTaskRunning(topic?: Pick<Topic, "task_status" | "status"> | null): boolean {
+	return (topic?.task_status || topic?.status) === TaskStatus.RUNNING
 }
 
 // 消息相关类型
@@ -306,6 +311,8 @@ export interface ProjectListItem {
 	tag: "collaboration" | "" // 用于标识是否是协作项目
 	is_pinned?: boolean // 协作项目才有
 	last_active_at?: string // 协作项目才有
+	claw_code?: string
+	micro_app_id?: string
 	user_role?: CollaboratorPermission
 	is_bind_workspace?: boolean // 协作项目才有
 	bind_workspace_id?: string // 协作项目才有

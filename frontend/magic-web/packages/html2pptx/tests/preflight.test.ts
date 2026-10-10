@@ -5,6 +5,7 @@ import type { PptxDestination } from "../src/api/options"
 function createSinkProxyDestination(): PptxDestination {
 	return {
 		kind: "sink-proxy",
+		replayPolicy: "buffered",
 		sink: {
 			write: vi.fn(),
 			close: vi.fn(),
@@ -130,6 +131,38 @@ describe("preflightPptxExport", () => {
 		)
 	})
 
+	it("allows a buffered sink to use the in-memory replay fallback", () => {
+		vi.stubGlobal("navigator", {})
+
+		const result = preflightPptxExport({
+			destination: createSinkProxyDestination(),
+			requiresOpfs: true,
+			hasInjectedPackager: true,
+			hasInMemoryStagingStore: true,
+		})
+
+		expect(result.accepted).toBe(true)
+		expect(result.requiresOpfs).toBe(true)
+		expect(result.errors).toEqual([])
+	})
+
+	it("keeps an explicitly file-stream sink on the OPFS requirement", () => {
+		vi.stubGlobal("navigator", {})
+
+		const result = preflightPptxExport({
+			destination: {
+				kind: "sink-proxy",
+				replayPolicy: "opfs-required",
+				sink: { write: vi.fn(), close: vi.fn(), abort: vi.fn() },
+			},
+			requiresOpfs: true,
+			hasInjectedPackager: true,
+		})
+
+		expect(result.accepted).toBe(false)
+		expect(result.errors.map((issue) => issue.code)).toContain("opfs-unavailable")
+	})
+
 	it("classifies storage access failures as unavailable OPFS", () => {
 		vi.stubGlobal("navigator", {
 			get storage(): never {
@@ -154,14 +187,14 @@ describe("preflightPptxExport", () => {
 		)
 	})
 
-	it("allows an unknown cumulative size and selects ZIP64 conservatively", () => {
+	it("keeps an unknown cumulative size in classic ZIP for PowerPoint compatibility", () => {
 		const result = preflightPptxExport({
 			destination: createSinkProxyDestination(),
 			hasInjectedPackager: true,
 		})
 
 		expect(result.accepted).toBe(true)
-		expect(result.zipMode).toBe("zip64")
+		expect(result.zipMode).toBe("classic")
 		expect(result.capacityConfidence).toBe("streaming-unknown")
 		expect(result.estimatedOutputBytes).toBeUndefined()
 		expect(result.warnings.map((issue) => issue.code)).toContain("unknown-output-size")

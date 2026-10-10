@@ -24,13 +24,16 @@ import {
 	GLOBAL_SYSTEM_PROMPT_MAX_LENGTH,
 	getContentLocaleCompletion,
 	localeLabels,
+	platformInfoSectionDescriptionKeys,
 	platformInfoSectionTitleKeys,
 	platformLocales,
 	sharedImageFields,
+	showsPlatformInfoContentLocale,
 	type PlatformInfoSectionId,
 } from "@magic-admin-v2/features/platform-info/utils"
 import { PlatformInfoContentLanguageBar, PlatformInfoContentSection } from "./platform-info-shared"
 import { PlatformInfoFieldControl } from "./platform-info-fields"
+import { PlatformInfoWatermarkForm } from "./platform-info-watermark"
 
 type PlatformInfoFormController = UseFormReturn<PlatformInfoFormState>
 
@@ -53,18 +56,12 @@ export function PlatformInfoForm({
 	const contentCompletion = getContentLocaleCompletion(value)
 	const errors = form.formState.errors
 	const setValue = form.setValue
-	const showContentLocale = activeSection !== "basic" && activeSection !== "globalSystemPrompt"
+	const showContentLocale = showsPlatformInfoContentLocale(activeSection)
 
 	return (
 		<PlatformInfoContentSection
 			title={t(platformInfoSectionTitleKeys[activeSection])}
-			description={
-				activeSection === "globalSystemPrompt"
-					? t("platformInfo.sectionDesc.globalSystemPrompt")
-					: showContentLocale
-						? t("platformInfo.contentLanguage.description")
-						: t("nav.desc.platformInfo")
-			}
+			description={t(platformInfoSectionDescriptionKeys[activeSection])}
 		>
 			<Form {...form}>
 				<form className="space-y-8 pb-4" onSubmit={(event) => event.preventDefault()}>
@@ -130,12 +127,12 @@ export function PlatformInfoForm({
 												)
 											}
 										>
-											<SelectTrigger className="w-full">
+											<SelectTrigger className="w-full" data-testid="platform-info-select-trigger">
 												<SelectValue />
 											</SelectTrigger>
-											<SelectContent>
+											<SelectContent data-testid="platform-info-select-content">
 												{platformLocales.map((locale) => (
-													<SelectItem key={locale} value={locale}>
+													<SelectItem key={locale} value={locale} data-testid="platform-info-option">
 														{localeLabels[locale]}
 													</SelectItem>
 												))}
@@ -160,7 +157,7 @@ export function PlatformInfoForm({
 														formSetValueOptions,
 													)
 												}
-											/>
+											 data-testid="platform-info-input"/>
 										</PlatformInfoFieldControl>,
 										t("platformInfo.fieldDesc.platformNameZh"),
 									],
@@ -181,7 +178,7 @@ export function PlatformInfoForm({
 														formSetValueOptions,
 													)
 												}
-											/>
+											 data-testid="platform-info-input"/>
 										</PlatformInfoFieldControl>,
 										t("platformInfo.fieldDesc.platformNameEn"),
 									],
@@ -205,7 +202,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									/>,
+									 data-testid="platform-info-textarea-input"/>,
 									t("platformInfo.fieldDesc.seoTitle"),
 								],
 								[
@@ -220,7 +217,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									/>,
+									 data-testid="platform-info-textarea-input"/>,
 									t("platformInfo.fieldDesc.seoKeywords"),
 								],
 								[
@@ -235,7 +232,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									/>,
+									 data-testid="platform-info-textarea-input"/>,
 									t("platformInfo.fieldDesc.seoDescription"),
 								],
 							]}
@@ -264,7 +261,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										/>
+										 data-testid="platform-info-input"/>
 									</PlatformInfoFieldControl>,
 									t("platformInfo.fieldDesc.agentRoleName"),
 								],
@@ -288,7 +285,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										/>
+										 data-testid="platform-info-textarea-input"/>
 									</PlatformInfoFieldControl>,
 									t("platformInfo.fieldDesc.agentRoleDescription"),
 								],
@@ -311,7 +308,7 @@ export function PlatformInfoForm({
 											formSetValueOptions,
 										)
 									}
-								/>
+								 data-testid="platform-info-textarea-input"/>
 								<div className="flex justify-end text-xs text-muted-foreground">
 									{t("platformInfo.characterCount", {
 										count: value.global_system_prompt.length,
@@ -337,7 +334,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									/>,
+									 data-testid="platform-info-textarea-input"/>,
 									t("platformInfo.fieldDesc.copyright"),
 								],
 								[
@@ -352,7 +349,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										/>
+										 data-testid="platform-info-switch"/>
 										<span className="text-sm text-muted-foreground">
 											{value.footer.filing.enabled
 												? t("common.enabled")
@@ -380,7 +377,7 @@ export function PlatformInfoForm({
 																formSetValueOptions,
 															)
 														}
-													/>
+													 data-testid="platform-info-input"/>
 												</PlatformInfoFieldControl>,
 												t("platformInfo.fieldDesc.filingNumber"),
 											],
@@ -401,13 +398,23 @@ export function PlatformInfoForm({
 																formSetValueOptions,
 															)
 														}
-													/>
+													 data-testid="platform-info-input"/>
 												</PlatformInfoFieldControl>,
 												t("platformInfo.fieldDesc.filingLink"),
 											],
 										] as Array<[string, ReactNode, string?]>)
 									: []),
 							]}
+						/>
+					) : null}
+
+					{activeSection === "watermark" ? (
+						<PlatformInfoWatermarkForm
+							error={errors.watermark?.fields?.message}
+							value={value.watermark}
+							onChange={(nextValue) =>
+								setValue("watermark", nextValue, formSetValueOptions)
+							}
 						/>
 					) : null}
 				</form>

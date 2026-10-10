@@ -12,10 +12,10 @@ import json
 import os
 import re
 import shutil
+from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any, Callable, Dict, Optional, Union
 
 import aiofiles
@@ -688,7 +688,7 @@ async def async_write_text_with_retry(
     content_validator: Optional[Callable[[str], bool]] = None,
 ) -> None:
     """
-    写入文本文件并验证写入结果，适用于存在同步延迟的存储后端（如 TOS）。
+    写入文本文件并验证写入结果，适用于存在同步延迟的网络存储。
 
     写入完成后进入轮询验证循环：依次检查文件存在、大小非零、内容非空，
     若提供了 content_validator 则额外执行自定义校验。任一检查失败时重试；
@@ -709,13 +709,16 @@ async def async_write_text_with_retry(
     for attempt in range(max_retries):
         await asyncio.sleep(retry_delay)
 
-        if not await async_exists(path_obj):
+        try:
+            # MagicFS 的路径 stat 可能短暂保留覆盖前的大小；新句柄的 fstat
+            # 能观察到已写入的文件，避免把成功覆盖误判为空文件。
+            file_stat = await async_fresh_stat(path_obj)
+        except FileNotFoundError:
             if attempt < max_retries - 1:
                 logger.warning(f"File does not exist after write, retrying... (attempt {attempt + 1}/{max_retries}): {path_obj}")
                 continue
             raise IOError(f"File does not exist after write: {path_obj}")
 
-        file_stat = await async_stat(path_obj)
         if file_stat.st_size == 0:
             if attempt < max_retries - 1:
                 logger.warning(f"File is empty after write, retrying... (attempt {attempt + 1}/{max_retries}): {path_obj}")
@@ -739,68 +742,6 @@ async def async_write_text_with_retry(
         return
 
     raise IOError(f"File write verification failed after {max_retries} retries: {path_obj}")
-
-
-async def async_write_text_with_retry(
-    file_path: Union[str, Path],
-    content: str,
-    encoding: str = 'utf-8',
-    max_retries: int = 5,
-    retry_delay: float = 0.2,
-    content_validator: Optional[Callable[[str], bool]] = None,
-) -> None:
-    """
-    写入文本文件并轮询验证写入结果，适用于 TOS 等存在同步延迟的存储层。
-
-    Args:
-        file_path: 文件路径
-        content: 文本内容
-        encoding: 编码格式，默认 utf-8
-        max_retries: 验证最大重试次数，默认 5
-        retry_delay: 每次重试前等待秒数，默认 0.2
-        content_validator: 可选的内容校验函数，接收已写入内容字符串，返回 True 表示合法；
-                           不传则只校验文件存在且内容非空
-
-    Raises:
-        IOError: 超出重试次数后文件仍不存在、为空或未通过自定义校验
-        PermissionError: 权限不足
-    """
-    path_obj = Path(file_path)
-    await async_write_text(path_obj, content, encoding=encoding)
-
-    for attempt in range(max_retries):
-        await asyncio.sleep(retry_delay)
-
-        if not await async_exists(path_obj):
-            if attempt < max_retries - 1:
-                logger.warning(f"File does not exist after write, retrying... (attempt {attempt + 1}/{max_retries}): {path_obj}")
-                continue
-            raise IOError(f"File does not exist after write: {path_obj}")
-
-        file_stat = await async_stat(path_obj)
-        if file_stat.st_size == 0:
-            if attempt < max_retries - 1:
-                logger.warning(f"File is empty after write, retrying... (attempt {attempt + 1}/{max_retries}): {path_obj}")
-                continue
-            raise IOError(f"File is empty after write: {path_obj}")
-
-        written_content = await async_read_text(path_obj, encoding=encoding)
-        if not written_content or not written_content.strip():
-            if attempt < max_retries - 1:
-                logger.warning(f"File content is empty after write, retrying... (attempt {attempt + 1}/{max_retries}): {path_obj}")
-                continue
-            raise IOError(f"File content is empty after write: {path_obj}")
-
-        if content_validator is not None and not content_validator(written_content):
-            if attempt < max_retries - 1:
-                logger.warning(f"File content failed validation, retrying... (attempt {attempt + 1}/{max_retries}): {path_obj}")
-                continue
-            raise IOError(f"File content failed validation after write: {path_obj}")
-
-        logger.info(f"Verified file write success: {path_obj} (size: {file_stat.st_size} bytes, attempt: {attempt + 1})")
-        return
-
-    raise IOError(f"Failed to verify file write after {max_retries} retries: {path_obj}")
 
 
 async def async_write_bytes(
@@ -974,8 +915,8 @@ async def async_fresh_stat(file_path: str | Path) -> os.stat_result:
     """
     打开文件取 fstat，避免仅使用网络挂载的路径元数据缓存。
 
-    记忆测量用句柄观察文件身份与大小；这不是替换所有 stat 的通用入口。
-    Horizon 的高频变化探测仍沿用既有 mtime 和网络延迟容差，避免增加每轮打开文件的成本。
+    只用于写后验证等必须观察当前内容的场景；常规高频探测仍使用
+    async_stat，避免为每次检查额外打开文件。
     """
     async with aiofiles.open(file_path, "rb") as stream:
         return await asyncio.to_thread(os.fstat, stream.fileno())
@@ -1458,6 +1399,33 @@ async def set_content_version_to_xattr(filepath: Union[str, Path], version: str)
         version: version string to write (e.g. "3")
     """
     await asyncio.to_thread(_write_magicfs_content_version, str(filepath), version)
+
+
+def _list_xattr_names(filepath: str) -> list[str]:
+    """Synchronous xattr name listing, intended to run in a thread pool."""
+    try:
+        return os.listxattr(filepath)  # type: ignore[attr-defined]
+    except (OSError, AttributeError):
+        return []
+
+
+async def async_list_xattr_names(filepath: Union[str, Path]) -> list[str]:
+    """
+    List extended attribute names of a path (e.g. ["user.magicfs.file_id", ...]).
+
+    Runs in a thread pool via ``asyncio.to_thread`` because AGFS plugins are
+    FUSE-based and xattr calls involve user-space IPC.
+
+    Only available on Linux; returns an empty list on other platforms, when the
+    path does not exist, or when the filesystem does not support xattrs.
+
+    Args:
+        filepath: path to the file or directory
+
+    Returns:
+        list[str]: attribute names, possibly empty
+    """
+    return await asyncio.to_thread(_list_xattr_names, str(filepath))
 
 
 async def async_iterdir(path: Union[str, Path]) -> list[Path]:

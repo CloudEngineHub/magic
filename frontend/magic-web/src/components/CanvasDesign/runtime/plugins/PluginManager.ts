@@ -23,6 +23,7 @@ export class PluginManager {
 	private listeners = new Set<() => void>()
 	private activePluginName: string | null = null
 	private sessionId = 0
+	private destroyed = false
 	private snapshot: CanvasPluginManagerSnapshot = {
 		plugins: [],
 		activePlugin: null,
@@ -30,11 +31,13 @@ export class PluginManager {
 	}
 
 	public register(plugin: CanvasDesignPlugin): void {
+		if (this.destroyed) return
 		this.plugins.set(plugin.name, plugin)
 		this.rebuildSnapshot()
 	}
 
 	public registerMany(plugins: CanvasDesignPlugin[]): void {
+		if (this.destroyed) return
 		plugins.forEach((plugin) => {
 			this.plugins.set(plugin.name, plugin)
 		})
@@ -89,6 +92,7 @@ export class PluginManager {
 	public async loadUserPluginsFromCanvasResources(
 		options: LoadUserPluginsOptions,
 	): Promise<void> {
+		if (this.destroyed) return
 		const { rootPath, directories, getFileInfo, resolveResourceReference } = options
 		if (!rootPath) return
 		if (!directories?.length) return
@@ -112,6 +116,7 @@ export class PluginManager {
 					}),
 				),
 			)
+			if (this.destroyed) return
 			this.registerMany(userPlugins)
 		} catch (error) {
 			console.warn(
@@ -122,6 +127,8 @@ export class PluginManager {
 	}
 
 	public destroy(): void {
+		if (this.destroyed) return
+		this.destroyed = true
 		this.plugins.clear()
 		this.listeners.clear()
 		this.activePluginName = null

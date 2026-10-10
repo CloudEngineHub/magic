@@ -69,6 +69,7 @@ export class TransformManager {
 
 	// 记录是否正在拖拽
 	private isDragging: boolean = false
+	private isFinishingDrag = false
 
 	// 记录 transform 开始时的初始宽高比（用于 Shift 或 Command 键锁定）
 	private initialAspectRatio: number | null = null
@@ -330,12 +331,23 @@ export class TransformManager {
 	}
 
 	public cancelActiveTransformDrag(): void {
-		if (this.multiSelectionProxy?.isDragging()) {
-			this.multiSelectionProxy.stopDrag()
+		const transformer = this.transformer
+		const proxy = this.multiSelectionProxy
+		// 单选拖动由实际元素发起；只停止控制器会让元素继续拖动或漏掉结束通知。
+		const nodes = Array.from(this.transformingElementIds)
+			.map((id) => this.canvas.elementManager.getElementInstance(id)?.getNode())
+			.filter((node): node is Konva.Node => Boolean(node))
+		for (const node of nodes) {
+			if (node.isDragging()) node.stopDrag()
 		}
-		if (this.transformer?.isDragging()) {
-			this.transformer.stopDrag()
+		if (proxy?.isDragging()) {
+			proxy.stopDrag()
 		}
+		if (transformer?.isDragging()) {
+			transformer.stopDrag()
+		}
+		// 控制器已销毁或 dragend 因权限变化被中断时，仍通过原结束入口释放状态。
+		if (this.isDragging) this.handleTransformerDragend()
 		this.clearTransformInteractionIntent()
 	}
 
@@ -751,21 +763,33 @@ export class TransformManager {
 	 * Transformer dragend 事件处理：拖动 Transformer 移动选区结束时触发
 	 */
 	private handleTransformerDragend(): void {
-		if (!this.canvas.permissionManager.can("document.write")) return
-
+		if (!this.isDragging || this.isFinishingDrag) return
+		this.isFinishingDrag = true
+		const elementIds = Array.from(this.transformingElementIds)
+		const canWrite =
+			this.canvas.permissionManager.can("document.write") && elementIds.length > 0
 		const historyManager = this.canvas.historyManager
-		historyManager?.disable()
+		let synchronized = false
+		if (canWrite) historyManager?.disable()
 
 		try {
-			const elementIds = Array.from(this.transformingElementIds)
-
-			if (this.isUsingSelectionProxy()) {
-				this.syncSelectionProxyToElements({ isRealtime: false, isScaling: false })
-				this.syncSelectionProxyFromElements(elementIds)
-			} else {
-				this.syncTransformerNodesToElements({ isRealtime: false, isScaling: false })
+			if (canWrite) {
+				if (this.isUsingSelectionProxy()) {
+					this.syncSelectionProxyToElements({ isRealtime: false, isScaling: false })
+					this.syncSelectionProxyFromElements(elementIds)
+				} else {
+					this.syncTransformerNodesToElements({ isRealtime: false, isScaling: false })
+				}
+				synchronized = true
 			}
-
+		} finally {
+			// 正常释放、控制器销毁、权限丢失或同步失败，都必须先结束运行态再通知 UI。
+			// 否则结束订阅中更新的选中状态会再次被当作「仍在拖动」而无限延期。
+			this.isDragging = false
+			this.isFinishingDrag = false
+			this.isProxyInteractionActive = false
+			this.initialAspectRatio = null
+			this.clearTransformSessionState()
 			this.canvas.eventEmitter.emit({
 				type: "elements:transform:dragend",
 				data: { elementIds },
@@ -778,20 +802,17 @@ export class TransformManager {
 				})
 			})
 
-			if (historyManager) {
-				historyManager.enable()
+			historyManager?.enable()
+			if (synchronized && historyManager) {
 				historyManager.recordHistoryImmediate()
 			}
 
-			this.canvas.eventEmitter.emit({
-				type: "element:change",
-				data: elementIds.length > 0 ? { elementIds, phase: "commit" } : undefined,
-			})
-
-			this.isDragging = false
-			this.isProxyInteractionActive = false
-			this.initialAspectRatio = null
-			this.clearTransformSessionState()
+			if (synchronized) {
+				this.canvas.eventEmitter.emit({
+					type: "element:change",
+					data: { elementIds, phase: "commit" },
+				})
+			}
 
 			if (this.transformer && !this.transformer.visible()) {
 				this.transformer.show()
@@ -799,8 +820,6 @@ export class TransformManager {
 				this.requestControlsDraw("transformer-show-on-drag-end")
 			}
 			this.schedulePendingTransformerUpdate()
-		} finally {
-			this.canvas.historyManager?.enable()
 		}
 	}
 
@@ -1175,6 +1194,8 @@ export class TransformManager {
 	 * 隐藏 Transformer
 	 */
 	public hideTransformer(): void {
+		// 移除结束监听之前完成活动拖动，否则控制器消失而 isDragging 永远不会复位。
+		if (this.isDragging) this.cancelActiveTransformDrag()
 		this.cancelPendingTransformerUpdate()
 		this.pendingTransformerElementIds = null
 

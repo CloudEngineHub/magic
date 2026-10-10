@@ -142,7 +142,7 @@ export function ProviderAddDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl" data-testid="platform-provider-list-dialog-content" closeButtonTestId="provider-add-dialog-close-button">
         <DialogHeader className="shrink-0 px-6 pb-4 pt-6">
           <DialogTitle>{t("providerList.action.add")}</DialogTitle>
           <DialogDescription>{t("providerList.dialog.addDescription")}</DialogDescription>
@@ -176,16 +176,16 @@ export function ProviderAddDialog({
                         onValueChange={handleTemplateChange}
                       >
                         <FormControl>
-                          <SelectTrigger className="h-auto min-h-9 w-full py-1.5">
+                          <SelectTrigger className="h-auto min-h-9 w-full py-1.5" data-testid="platform-provider-list-select-trigger">
                             <ProviderTemplateSelectValue
                               placeholder={t("providerList.placeholder.template")}
                               template={selectedTemplate}
                             />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent data-testid="platform-provider-list-select-content">
                           {templates.map((template) => (
-                            <SelectItem key={template.id} value={template.id}>
+                            <SelectItem key={template.id} value={template.id} data-testid="platform-provider-list-option">
                               <ProviderTemplateOptionContent provider={template} />
                             </SelectItem>
                           ))}
@@ -213,10 +213,10 @@ export function ProviderAddDialog({
                   onClick={() => onOpenChange(false)}
                   type="button"
                   variant="outline"
-                >
+                 data-testid="platform-provider-list-cancel-button">
                   {t("common.cancel")}
                 </Button>
-                <Button disabled={submitting} type="submit">
+                <Button disabled={submitting} type="submit" data-testid="platform-provider-list-save-button">
                   {submitting ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   ) : (

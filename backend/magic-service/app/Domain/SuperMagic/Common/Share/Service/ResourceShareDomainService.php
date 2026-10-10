@@ -313,6 +313,14 @@ class ResourceShareDomainService
         return ['total' => $result['total'], 'list' => $filteredList];
     }
 
+    public function assertShareOwnership(ResourceShareEntity $shareEntity, string $userId, string $organizationCode): void
+    {
+        if ($shareEntity->getCreatedUid() !== $userId
+            || $shareEntity->getOrganizationCode() !== $organizationCode) {
+            ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.no_permission_to_share', [$shareEntity->getResourceId()]);
+        }
+    }
+
     /**
      * 保存分享（创建或更新）.
      *
@@ -340,6 +348,10 @@ class ResourceShareDomainService
         // 1. 查找是否已存在分享（通过 resource_id 查询，不校验 resource_type）
         // 这样可以避免类型转换(13↔12)时查询失败
         $shareEntity = $this->getShareByResourceIdWithTrashed($resourceId);
+        if ($shareEntity) {
+            // Direct domain callers must not overwrite or restore another owner's share.
+            $this->assertShareOwnership($shareEntity, $userId, $organizationCode);
+        }
 
         // 2. 如果不存在，创建新的分享实体
         if (! $shareEntity) {
@@ -720,8 +732,8 @@ class ResourceShareDomainService
     public function deleteAllSharesByResource(string $resourceId, int $resourceType): bool
     {
         try {
-            // 这里可以扩展为批量删除，目前先用单个删除
-            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType);
+            // 已取消的分享已完成清理，不能再次删除并将其误判为失败。
+            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType, false);
             if (! $shareEntity) {
                 return true;
             }

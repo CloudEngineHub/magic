@@ -4,6 +4,7 @@ import type { DirectoryMentionData, ProjectFileMentionData } from "../types"
 import { getFolderMentionData } from "./directoryMention"
 
 type ProjectReferenceFileLike = {
+	source?: import("@/pages/superMagic/components/TopicFilesButton/hooks/types").AttachmentSource
 	file_id?: string | number
 	project_id?: string
 	file_name?: string | number
@@ -398,6 +399,7 @@ export function createProjectFileMentionData(
 		file_id: String(fileId),
 		file_name: fileName,
 		file_path: normalizeProjectReferencePath(filePath),
+		...(file.source !== undefined ? { source: file.source } : {}),
 		relative_file_path: normalizeProjectReferencePath(filePath),
 		is_hidden: file.is_hidden,
 		file_extension: file.file_extension || "",

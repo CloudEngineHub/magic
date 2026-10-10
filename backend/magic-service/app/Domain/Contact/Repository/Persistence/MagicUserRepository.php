@@ -15,6 +15,7 @@ use App\Domain\Contact\Entity\ValueObject\AccountStatus;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Entity\ValueObject\UserIdType;
 use App\Domain\Contact\Entity\ValueObject\UserOption;
+use App\Domain\Contact\Entity\ValueObject\UserSearchField;
 use App\Domain\Contact\Entity\ValueObject\UserStatus;
 use App\Domain\Contact\Entity\ValueObject\UserType;
 use App\Domain\Contact\Factory\ContactUserFactory;
@@ -541,6 +542,61 @@ readonly class MagicUserRepository implements MagicUserRepositoryInterface
         ])->orderBy('u.id', 'desc')
             ->forPage($page->getPage(), $page->getPageNum());
 
+        $rows = Db::select($listQuery->toSql(), $listQuery->getBindings());
+        $list = [];
+        foreach ($rows as $row) {
+            $list[] = (array) $row;
+        }
+
+        return [
+            'total' => $total,
+            'list' => $list,
+        ];
+    }
+
+    /**
+     * 按指定字段搜索用户及其组织信息。
+     *
+     * @param null|string $organizationCodeFilter 组织编码过滤条件；null 表示不限制组织
+     * @return array{total: int, list: array<int, array<string, mixed>>}
+     */
+    public function searchUsers(
+        Page $page,
+        UserSearchField $searchField,
+        string $keyword,
+        ?string $organizationCodeFilter = null
+    ): array {
+        $query = Db::table('magic_contact_users as u')
+            ->join('magic_contact_accounts as a', 'a.magic_id', '=', 'u.magic_id')
+            ->leftJoin('magic_organizations as o', 'o.magic_organization_code', '=', 'u.organization_code')
+            ->whereNull('u.deleted_at')
+            ->whereNull('a.deleted_at')
+            ->whereNull('o.deleted_at');
+
+        match ($searchField) {
+            UserSearchField::UserId => $query->where('u.user_id', $keyword),
+            UserSearchField::Phone => $query->where('a.phone', $keyword),
+            UserSearchField::UserName => $query->where(static function ($builder) use ($keyword) {
+                $builder->where('u.nickname', 'like', '%' . $keyword . '%')
+                    ->orWhere('a.real_name', 'like', '%' . $keyword . '%');
+            }),
+        };
+
+        if ($organizationCodeFilter !== null) {
+            $query->where('u.organization_code', $organizationCodeFilter);
+        }
+
+        $total = (clone $query)->count();
+        $listQuery = (clone $query)
+            ->select([
+                'u.user_id',
+                Db::raw("CASE WHEN a.real_name IS NOT NULL AND a.real_name <> '' THEN a.real_name ELSE u.nickname END AS user_name"),
+                'a.phone',
+                'u.organization_code',
+                'o.name as organization_name',
+            ])
+            ->orderBy('u.id', 'desc')
+            ->forPage($page->getPage(), $page->getPageNum());
         $rows = Db::select($listQuery->toSql(), $listQuery->getBindings());
         $list = [];
         foreach ($rows as $row) {

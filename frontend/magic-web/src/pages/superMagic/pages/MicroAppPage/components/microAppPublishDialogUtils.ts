@@ -33,16 +33,28 @@ export function normalizeMicroAppPublishShareType(
 		: shareType
 }
 
+/**
+ * Share type used when nothing has been published yet. Team sharing is unavailable to a personal
+ * organization and to a free-plan organization alike, so both fall back to public access.
+ *
+ * This only decides the *initial* value: an already published micro app keeps its own share type
+ * (see `createFormStateFromPublishedItem`) so loading the dialog never rewrites a live share.
+ */
+export function resolveDefaultMicroAppPublishShareType(
+	isPersonalOrganization = false,
+	isFreePlan = false,
+): MicroAppPublishShareType {
+	return isPersonalOrganization || isFreePlan ? ShareType.Public : ShareType.Organization
+}
+
 export function createDefaultMicroAppPublishFormState(
 	appName = "",
 	isPersonalOrganization = false,
+	isFreePlan = false,
 ): MicroAppPublishFormState {
 	return {
 		appName,
-		shareType: normalizeMicroAppPublishShareType(
-			ShareType.Organization,
-			isPersonalOrganization,
-		),
+		shareType: resolveDefaultMicroAppPublishShareType(isPersonalOrganization, isFreePlan),
 		shareRange: "all",
 		targets: [],
 		password: generateSharePassword(),
@@ -118,11 +130,13 @@ export function createFormStateFromPublishedItem(
 	item: PublishedMicroAppProjectItem | null,
 	appName?: string,
 	isPersonalOrganization = false,
+	isFreePlan = false,
 ): MicroAppPublishFormState {
 	return {
 		appName: item?.app_name || appName || "",
 		shareType: normalizeMicroAppPublishShareType(
-			item?.share_type || ShareType.Organization,
+			item?.share_type ||
+				resolveDefaultMicroAppPublishShareType(isPersonalOrganization, isFreePlan),
 			isPersonalOrganization,
 		),
 		shareRange: item?.share_range || "all",

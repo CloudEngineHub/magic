@@ -78,6 +78,15 @@ class ImageGenerationPayloadSanitizerTest extends TestCase
             {
                 $this->saved = $entity;
             }
+
+            public function markTimedOutBatch(
+                string $createdBefore,
+                string $errorCode,
+                string $errorMessage,
+                int $limit
+            ): int {
+                return 0;
+            }
         };
         $service = new ImageGenerationTaskDomainService($repository, new ImageGenerationPayloadSanitizer());
         $task = new ImageGenerationTaskEntity(

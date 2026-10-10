@@ -45,12 +45,19 @@ vi.mock("../../utils/canvasProjectOperationRisk", () => ({
 
 vi.mock(
 	"@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair",
-	() => ({
-		planCanvasProjectsBeforeFileOperation: vi.fn(),
-		commitCanvasProjectPathRepair: vi.fn(),
-		syncCanvasProjectNameAfterFileOperation: vi.fn(),
-		formatCanvasPathRepairFailures: vi.fn(() => "repair failed"),
-	}),
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair")
+			>()
+		return {
+			...actual,
+			planCanvasProjectsBeforeFileOperation: vi.fn(),
+			commitCanvasProjectPathRepair: vi.fn(),
+			syncCanvasProjectNameAfterFileOperation: vi.fn(),
+			formatCanvasPathRepairFailures: vi.fn(() => "repair failed"),
+		}
+	},
 )
 
 const imagesDir: AttachmentItem = {

@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
 	writeText: vi.fn(),
 	successToast: vi.fn(),
 	errorToast: vi.fn(),
+	ensureFileSavesSynced: vi.fn(),
 	functionPermissions: {} as Record<string, boolean>,
+	isMobile: false,
 }))
 
 vi.hoisted(() => {
@@ -109,7 +111,7 @@ vi.mock("ahooks", () => ({
 }))
 
 vi.mock("@/hooks/useIsMobile", () => ({
-	useIsMobile: () => false,
+	useIsMobile: () => mocks.isMobile,
 }))
 
 vi.mock("@/models/user", () => ({
@@ -240,9 +242,14 @@ vi.mock("../../utils/generateShareMessageText", () => ({
 	generateShareMessageText: () => "share-message",
 }))
 
+vi.mock("@/pages/superMagic/components/Detail/services/fileSaveQueue", () => ({
+	ensureFileSavesSynced: mocks.ensureFileSavesSynced,
+}))
+
 describe("FileShareModal", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		mocks.isMobile = false
 		mocks.functionPermissions = {
 			"project.share_password": true,
 			"project.share_public": true,
@@ -251,6 +258,7 @@ describe("FileShareModal", () => {
 		mocks.getSnowflakeIds.mockResolvedValue({ ids: ["share-1"] })
 		mocks.createOrUpdateShareResource.mockResolvedValue({ file_ids: [] })
 		mocks.batchGetFileDetails.mockResolvedValue({ files: [] })
+		mocks.ensureFileSavesSynced.mockResolvedValue(true)
 	})
 
 	it("创建录音文件分享时会补齐必需文件 ids", async () => {
@@ -574,6 +582,41 @@ describe("FileShareModal", () => {
 		)
 
 		expect(await screen.findByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		expect(screen.getByTestId("save-share")).toBeDisabled()
+
+		// 全部分享方式被管控后，只有「分享方式」与提示保留，其它内容不再渲染。
+		expect(screen.getByTestId("share-type-field")).toBeInTheDocument()
+		expect(screen.queryByTestId("file-share-file-list-section")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-name-field")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-advanced-settings")).not.toBeInTheDocument()
+	})
+
+	it("移动端管理员未开放任何分享方式时只保留分享方式与提示", () => {
+		mocks.isMobile = true
+		mocks.functionPermissions = {
+			"project.share_password": false,
+			"project.share_public": false,
+			"project.share_team": false,
+		}
+
+		render(
+			<FileShareModal
+				types={[ShareType.PasswordProtected, ShareType.Public, ShareType.Organization]}
+				shareMode={ShareMode.Project}
+				projectId="project-1"
+				projectName="Demo Project"
+				attachments={[]}
+			/>,
+		)
+
+		expect(screen.getByTestId("file-share-modal-mobile")).toBeInTheDocument()
+		expect(screen.getByText("share.noAvailableShareMethods")).toBeInTheDocument()
+		expect(screen.getByTestId("share-type-field")).toBeInTheDocument()
+		expect(screen.queryByTestId("file-share-selection-card")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-name-field")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-expiry-field")).not.toBeInTheDocument()
+		expect(screen.queryByTestId("share-advanced-settings")).not.toBeInTheDocument()
 		expect(screen.getByTestId("save-share")).toBeDisabled()
 	})
 })

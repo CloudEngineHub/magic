@@ -53,18 +53,18 @@ export function CapabilityModelSelect({
 			<SelectTrigger
 				className="h-12 w-full items-center py-2 [&>span]:min-w-0 [&>span]:line-clamp-none"
 				id={id}
-			>
+			 data-testid="platform-system-capabilities-select-trigger">
 				<SelectValue placeholder={t("systemCapabilities.placeholder.aiModel")} />
 			</SelectTrigger>
-			<SelectContent className="max-w-[min(520px,calc(100vw-2rem))]">
+			<SelectContent className="max-w-[min(520px,calc(100vw-2rem))]" data-testid="platform-system-capabilities-select-content">
 				{loading ? (
-					<SelectItem disabled value="__loading">
+					<SelectItem disabled value="__loading" data-testid="platform-system-capabilities-option">
 						{t("systemCapabilities.model.loading")}
 					</SelectItem>
 				) : (
 					<>
 						{value && !selectedModel ? (
-							<SelectItem textValue={value} value={value}>
+							<SelectItem textValue={value} value={value} data-testid="platform-system-capabilities-option">
 								{value}
 							</SelectItem>
 						) : null}
@@ -74,12 +74,12 @@ export function CapabilityModelSelect({
 									key={model.id}
 									textValue={model.name || model.model_id}
 									value={model.model_id}
-								>
+								 data-testid="platform-system-capabilities-option">
 									<ModelOption model={model} />
 								</SelectItem>
 							))
 						) : (
-							<SelectItem disabled value="__empty">
+							<SelectItem disabled value="__empty" data-testid="platform-system-capabilities-option">
 								{t("systemCapabilities.model.noResults")}
 							</SelectItem>
 						)}

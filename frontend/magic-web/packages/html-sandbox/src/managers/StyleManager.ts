@@ -59,10 +59,7 @@ type ContainerWithCanvasData = {
 }
 
 type SpecialElementData =
-	| CanvasElementData
-	| VideoElementData
-	| AudioElementData
-	| ContainerWithCanvasData
+	CanvasElementData | VideoElementData | AudioElementData | ContainerWithCanvasData
 
 function splitPriority(value: string): { value: string; priority: "important" | "" } {
 	const match = value.match(/^(.*?)(?:\s*!important\s*)$/i)
@@ -89,6 +86,7 @@ function setInlineStyle(element: HTMLElement, property: string, rawValue: string
 
 const COMMON_ATTRIBUTE_NAMES: Record<string, string> = {
 	href: "href",
+	dataMagicHref: "data-magic-href",
 	target: "target",
 	rel: "rel",
 	download: "download",
@@ -99,7 +97,7 @@ const COMMON_ATTRIBUTE_NAMES: Record<string, string> = {
 function setCommonAttribute(element: HTMLElement, name: string, value: string | null): void {
 	const attributeName = COMMON_ATTRIBUTE_NAMES[name]
 	if (!attributeName) return
-	if (name === "href") value = normalizeSafeHref(value)
+	if (name === "href" || name === "dataMagicHref") value = normalizeSafeHref(value)
 	if (value === null || value.trim() === "") {
 		element.removeAttribute(attributeName)
 		return
@@ -111,7 +109,7 @@ function readCommonAttributes(element: HTMLElement): Record<string, string | nul
 	return Object.fromEntries(
 		Object.entries(COMMON_ATTRIBUTE_NAMES).map(([key, attributeName]) => {
 			const value = element.getAttribute(attributeName)
-			if (key !== "href" || value === null) return [key, value]
+			if ((key !== "href" && key !== "dataMagicHref") || value === null) return [key, value]
 			try {
 				return [key, normalizeSafeHref(value)]
 			} catch {
@@ -920,7 +918,9 @@ export class StyleManager {
 		const normalizedAttributes = Object.fromEntries(
 			Object.entries(attributes).map(([name, value]) => [
 				name,
-				name === "href" ? normalizeSafeHref(value) : value?.trim() || null,
+				name === "href" || name === "dataMagicHref"
+					? normalizeSafeHref(value)
+					: value?.trim() || null,
 			]),
 		) as Record<string, string | null>
 
@@ -1960,8 +1960,7 @@ export class StyleManager {
 				// every cloned ID remains unique in the document.
 				const clonedElement = element.cloneNode(true) as HTMLElement
 				const duplicatedIdMappings = (command.payload as any).duplicatedIdMappings as
-					| DuplicatedIdMapping[]
-					| undefined
+					DuplicatedIdMapping[] | undefined
 				const appliedIdMappings = assignUniqueIdsToClone(
 					clonedElement,
 					duplicatedIdMappings,

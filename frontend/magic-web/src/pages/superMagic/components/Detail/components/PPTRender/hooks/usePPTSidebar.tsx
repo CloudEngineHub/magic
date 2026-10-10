@@ -25,6 +25,7 @@ import projectFilesStore from "@/stores/projectFiles"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 import type { PPTSlideStructureAdapter } from "../types"
+import { reconcilePPTTransitions } from "../utils/pptTransitions"
 
 interface UsePPTSidebarOptions {
 	slides: SlideItem[]
@@ -791,7 +792,7 @@ export function usePPTSidebar({
 
 	// Handle rename slide with optimistic update
 	const handleRenameSlide = useMemoizedFn(async (index: number, newFileName: string) => {
-		if (!allowEdit) return
+		if (!allowEdit) return false
 
 		// Capture slide info at the start based on index
 		const slideToRename = store.slides[index]
@@ -799,14 +800,14 @@ export function usePPTSidebar({
 
 		if (!oldPath) {
 			magicToast.error(t("fileViewer.renameSlideFailed"))
-			return
+			return false
 		}
 
 		// Get file ID
 		const fileId = store.getFileIdByPath(oldPath)
 		if (!fileId) {
 			magicToast.error(t("fileViewer.renameSlideFailed"))
-			return
+			return false
 		}
 
 		// Calculate new path (optimistic)
@@ -868,7 +869,7 @@ export function usePPTSidebar({
 					projectId,
 					reason: "ppt-template-rename-slide",
 				})
-				return
+				return true
 			}
 
 			// Background API calls (renameSlide API will update magic.project.js)
@@ -916,10 +917,29 @@ export function usePPTSidebar({
 				}
 			}
 
+			// The manifest rename is confirmed now. Update its path-owned metadata immediately;
+			// waiting for attachment refresh would temporarily play the renamed page's default.
+			const displayConfig = store.getConfigForExport().displayConfig
+			if (displayConfig?.transitions !== undefined) {
+				await store.updateConfig({
+					displayConfig: {
+						...displayConfig,
+						slides: store.slidePaths,
+						transitions: reconcilePPTTransitions(
+							displayConfig.transitions,
+							store.slidePaths,
+							{
+								renamePath: { from: oldPath, to: result.newFilePath },
+							},
+						),
+					},
+				})
+			}
 			requestProjectAttachmentsFullRefresh({
 				projectId,
 				reason: "ppt-rename-slide",
 			})
+			return true
 		} catch (error) {
 			console.error("Failed to rename slide:", error)
 
@@ -940,6 +960,7 @@ export function usePPTSidebar({
 			}
 
 			magicToast.error(t("fileViewer.renameSlideFailed"))
+			return false
 		}
 	})
 

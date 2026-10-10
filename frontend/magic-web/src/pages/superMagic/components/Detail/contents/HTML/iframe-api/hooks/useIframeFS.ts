@@ -27,6 +27,8 @@ export interface UseIframeFSOptions {
 	iframeRef: React.RefObject<HTMLIFrameElement>
 	/** 回发 iframe 的严格目标源。 */
 	targetOrigin: string
+	/** Recreate document-owned watches/streams when the iframe Window changes. */
+	runtimeRevision?: string | number
 	/** HTML 入口文件的 workspace 相对路径 */
 	entryPath: string
 	/** workspace 文件列表（attachmentList 扁平化后） */
@@ -86,6 +88,7 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 	const {
 		iframeRef,
 		targetOrigin,
+		runtimeRevision = 0,
 		entryPath,
 		fileList,
 		appConfig,
@@ -108,16 +111,15 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 	// 调用方可能在渲染时创建新的保存函数；稳定代理避免重建 Service 丢失 watch 注册，同时调用最新实现。
 	const stableSaveContentFn = useMemoizedFn(saveContentFn)
 
-	// postToIframe 是稳定引用，内部每次通过 ref 取最新的 iframe window
-	const postToIframe = useMemoizedFn((message: object) => {
-		iframeRef.current?.contentWindow?.postMessage(message, targetOrigin)
-	})
-
 	// 重建 service：entryPath / appConfig 变化时
 	useDeepCompareEffect(() => {
 		serviceRef.current?.destroy()
+		const target = iframeRef.current?.contentWindow
+		let active = true
 		serviceRef.current = new IframeFSService({
-			postToIframe,
+			postToIframe: (message) => {
+				if (active) target?.postMessage(message, targetOrigin)
+			},
 			entryPath,
 			fileList,
 			appConfig,
@@ -137,10 +139,13 @@ export function useIframeFS(options: UseIframeFSOptions): UseIframeFSReturn {
 		})
 
 		return () => {
+			active = false
 			serviceRef.current?.destroy()
 			serviceRef.current = null
 		}
 	}, [
+		runtimeRevision,
+		targetOrigin,
 		entryPath,
 		appConfig,
 		projectId,

@@ -29,6 +29,7 @@ const { mockUpdateStyle, mockSelectedElement, mockStylePanelStore } = vi.hoisted
 			textSelection: null,
 			getSelectedSelectors: () => ["h1.title"],
 			setPreviewRect: vi.fn(),
+			rememberMoreStylesTab: vi.fn(),
 		},
 	}
 })
@@ -97,6 +98,19 @@ vi.mock("../controls", async () => {
 })
 
 describe("ContextStyleToolbar text format buttons", () => {
+	it("opens the selected element's navigation settings from the toolbar", () => {
+		const onRevealMoreStyles = vi.fn()
+		render(
+			<ContextStyleToolbar
+				editorRef={{ current: null }}
+				onRevealMoreStyles={onRevealMoreStyles}
+			/>,
+		)
+		fireEvent.click(screen.getByRole("button", { name: "stylePanel.clickLink" }))
+		expect(mockStylePanelStore.rememberMoreStylesTab).toHaveBeenCalledWith("h1.title", "link")
+		expect(onRevealMoreStyles).toHaveBeenCalledOnce()
+	})
+
 	beforeEach(() => {
 		mockUpdateStyle.mockReset()
 		mockSelectedElement.current.computedStyles = {

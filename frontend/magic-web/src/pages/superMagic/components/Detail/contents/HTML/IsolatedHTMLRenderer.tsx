@@ -54,6 +54,7 @@ import type {
 	ImageUploadResultPayload,
 } from "./iframe-bridge/types/messages"
 import { useHTMLEditorV2 } from "./hooks/useHTMLEditorV2"
+import { preserveSlideNotesFromSource } from "../../components/PPTRender/utils/slideNotes"
 import { useImageDrop } from "./hooks/useImageDrop"
 import { SelectionOverlay } from "./components/SelectionOverlay"
 import { DropOverlay } from "./components/DropOverlay"
@@ -67,6 +68,7 @@ import { shouldCollapseStylesOnBlur } from "./components/EditorSidebar/sidebarSe
 import { MoreStylesPanel } from "./components/StylePanel/MoreStylesPanel"
 import type { DevConsoleLayout } from "./components/DevConsole/types"
 import { useDevConsole } from "./hooks/useDevConsole"
+import { usePreviewDocumentRevision } from "./hooks/usePreviewDocumentRevision"
 import { platformKey } from "@/utils/storage"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
 import { useCurrentHtmlFileInfo } from "./hooks/useCurrentHtmlFileInfo"
@@ -119,6 +121,8 @@ export interface IsolatedHTMLRendererRef {
 	/** Close the element context panel without leaving HTML edit mode. */
 	closeElementContextPanel?: () => boolean
 	resetContent: () => void
+	/** Recreate the iframe document so page scripts and animations run from the start. */
+	restartDocument?: () => void
 	updateContent: (
 		newContent: string,
 		options?: {
@@ -174,6 +178,7 @@ import {
 	HtmlNavigationRuntimeService,
 	type HtmlNavigationRuntimeRequest,
 } from "./utils/html-navigation-runtime"
+import { useIframeI18n } from "./iframe-api/hooks/useIframeI18n"
 import { useIframeFS } from "./iframe-api/hooks/useIframeFS"
 import { useIframeLLM } from "./iframe-api/hooks/useIframeLLM"
 import { useIframeDatabase } from "./iframe-api/hooks/useIframeDatabase"
@@ -199,7 +204,11 @@ import { env } from "@/utils/env"
 import { userStore } from "@/models/user"
 import { ContactApi } from "@/apis"
 import MagicModal from "@/components/base/MagicModal"
-import type { HtmlNavigationRequest } from "./utils/html-navigation"
+import {
+	getHtmlNavigationIntent,
+	type HtmlNavigationIntent,
+	type HtmlNavigationRequest,
+} from "./utils/html-navigation"
 import type { HtmlPermissionScope } from "./iframe-api/types"
 import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 
@@ -214,6 +223,8 @@ interface IsolatedHTMLRendererProps {
 	sandboxType?: "iframe" | "shadow-dom"
 	className?: string
 	isPptRender?: boolean
+	/** A visible PPT transition layer must paint without resuming its media yet. */
+	isPlaybackPaused?: boolean
 	isFullscreen?: boolean
 	/** Expands a pure-share iframe into the page instead of a viewport-scrolling shell. */
 	documentFlowFullscreen?: boolean
@@ -237,7 +248,12 @@ interface IsolatedHTMLRendererProps {
 	filePathMapping: Map<string, string>
 	/** 当前 HTML 所在目录，用于相对资源解析、上传默认目录等历史逻辑。 */
 	htmlRelativeFolderPath?: string
-	openNewTab: (fileId: string, path: string, autoEdit?: boolean) => void
+	openNewTab: (
+		fileId: string,
+		path: string,
+		autoEdit?: boolean,
+		intent?: HtmlNavigationIntent,
+	) => void
 	/** origin 项目 ID：文件/库所在项目。host 来自 HostConversationProvider。 */
 	projectId?: string
 	/** 发布微应用身份，由宿主注入，用于自动添加可信 @micro_app mention。 */
@@ -451,6 +467,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			sandboxType = "iframe",
 			className,
 			isPptRender,
+			isPlaybackPaused = false,
 			isFullscreen,
 			documentFlowFullscreen = false,
 			documentFlowContentHeight = 0,
@@ -574,10 +591,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		useEffect(() => {
 			syncDeviceScrollbars()
 		}, [devicePreviewEnabled, supportsDevicePreview, sandboxType, syncDeviceScrollbars])
-		const inspectorCapturePrewarmRef = useRef<(() => void) | null>(null)
-		const registerInspectorCapturePrewarm = useCallback((prewarm: (() => void) | null) => {
-			inspectorCapturePrewarmRef.current = prewarm
-		}, [])
+		const inspectorCapturePrewarmRef = useRef<(() => Promise<boolean>) | null>(null)
+		const registerInspectorCapturePrewarm = useCallback(
+			(prewarm: (() => Promise<boolean>) | null) => {
+				inspectorCapturePrewarmRef.current = prewarm
+			},
+			[],
+		)
 		// Keep the editor bridge ref above callbacks and effects that reference it.
 		// Declaring it later would put those dependency arrays in the temporal dead zone.
 		const editorRef = useRef<HTMLEditorV2Ref>(null)
@@ -611,14 +631,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			() => getHtmlNavigationKey(htmlNavigation),
 			[htmlNavigation],
 		)
-		useEffect(() => {
-			const iframe = iframeRef.current
-			if (!iframe) return
-			// Legacy fullscreen attributes for old WebKit/Firefox engines.
-			iframe.setAttribute("allowfullscreen", "true")
-			iframe.setAttribute("webkitallowfullscreen", "true")
-			iframe.setAttribute("mozallowfullscreen", "true")
-		}, [])
 
 		const [iframeLoaded, setIframeLoaded] = useState(false)
 		const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -633,6 +645,25 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			setStylesExpanded(true)
 		}, [])
 		const [contentInjected, setContentInjected] = useState(false) // 标记内容是否已注入到 iframe
+		const { revision: previewDocumentRevision, restart: restartPreviewDocument } =
+			usePreviewDocumentRevision(content, isEditMode)
+		const iframeRuntimeKey = `${fileId || "html"}:${sandboxType}:${htmlSandboxShellUrl}:${htmlNavigationKey}:${previewDocumentRevision}`
+		const [loadedDocumentRevision, setLoadedDocumentRevision] = useState(iframeRuntimeKey)
+		// Reset readiness in the same render as the new iframe key; no effect may
+		// inject into a newly created Window using the preceding shell's readiness.
+		if (loadedDocumentRevision !== iframeRuntimeKey) {
+			setLoadedDocumentRevision(iframeRuntimeKey)
+			setIframeLoaded(false)
+			setContentInjected(false)
+		}
+		useEffect(() => {
+			const iframe = iframeRef.current
+			if (!iframe) return
+			// Legacy fullscreen attributes for old WebKit/Firefox engines.
+			iframe.setAttribute("allowfullscreen", "true")
+			iframe.setAttribute("webkitallowfullscreen", "true")
+			iframe.setAttribute("mozallowfullscreen", "true")
+		}, [iframeRuntimeKey])
 		const [processedSourceCode, setProcessedSourceCode] = useState<string | undefined>(
 			undefined,
 		) // 预处理后的 HTML 源码（供 DevConsole Sources 面板展示）
@@ -640,7 +671,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			useState<VirtualStorageRuntimeContext | null>(null)
 		const hasRenderedOnceRef = useRef(false) // 跟踪 iframe 是否至少已渲染一次
 		const hasNotifiedRenderReadyRef = useRef(false)
-		const hasIframeI18nSubscriberRef = useRef(false)
 		const renderLifecycleRef = useRef(createIframeRenderLifecycleState())
 		// Fallback timer: unblocks scaling when sandbox never sends contentMetrics
 		const contentMetricsFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -852,7 +882,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				clearTimeout(contentMetricsFallbackTimerRef.current)
 				contentMetricsFallbackTimerRef.current = null
 			}
-		}, [clearRenderLifecycleTimeout, content, startRenderLifecycleSession])
+		}, [clearRenderLifecycleTimeout, content, iframeRuntimeKey, startRenderLifecycleSession])
 
 		const notifyRenderReady = useMemoizedFn(() => {
 			if (hasNotifiedRenderReadyRef.current) return
@@ -881,9 +911,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			setDomTreeRevision((current) => current + 1)
 		})
 
+		const prepareVisualSaveContent = useMemoizedFn((nextContent: string) => {
+			// Notes can be saved while this iframe retains a body draft. Keep the latest
+			// host metadata without rewriting the document or resetting that draft.
+			const contentWithNotes =
+				isPptRender && typeof rawSourceCode === "string"
+					? preserveSlideNotesFromSource(nextContent, rawSourceCode)
+					: nextContent
+			return preserveOriginalTrailingNewline(contentWithNotes, rawSourceCode)
+		})
+
 		// V2 编辑机制相关
-		// Preserve the API source's EOF newline for both current and legacy visual save paths.
-		const saveEditContentWithOriginalTrailingNewline = useMemoizedFn(
+		// The legacy iframe save message also needs the host's current metadata.
+		const savePreparedEditContent = useMemoizedFn(
 			async (
 				nextContent: string,
 				nextFileId?: string,
@@ -893,7 +933,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			) => {
 				if (!saveEditContent) return
 				return saveEditContent(
-					preserveOriginalTrailingNewline(nextContent, rawSourceCode),
+					prepareVisualSaveContent(nextContent),
 					nextFileId,
 					enableShadow,
 					fetchFileVersions,
@@ -909,7 +949,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			contentInjected,
 			targetOrigin: iframeTargetOrigin,
 			scaleRatio: effectiveScaleRatio,
-			saveEditContent: saveEditContentWithOriginalTrailingNewline,
+			saveEditContent,
+			prepareSaveContent: prepareVisualSaveContent,
 			fileId,
 			filePathMapping,
 			editorRef,
@@ -1205,6 +1246,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				}
 
 				return {
+					file_id: saveRes.file_id,
+					relative_file_path: saveRes.relative_file_path,
 					uploadedRelativeFilePath: saveRes.relative_file_path,
 					storedRelativeFilePath: toStoredRelativePath(saveRes.relative_file_path),
 				}
@@ -1276,6 +1319,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const { handleFSMessage } = useIframeFS({
 			iframeRef,
+			runtimeRevision: iframeRuntimeKey,
 			targetOrigin: iframeTargetOrigin,
 			entryPath: htmlEntryFilePath,
 			fileList: flatFileList,
@@ -1356,6 +1400,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const { handleLLMMessage } = useIframeLLM({
 			iframeRef,
+			runtimeRevision: iframeRuntimeKey,
 			targetOrigin: iframeTargetOrigin,
 			baseUrl: (env("MAGIC_SERVICE_BASE_URL") as string) || "",
 			getAuthorization: () => userStore.user.authorization?.trim() || "",
@@ -1468,7 +1513,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			} catch (error) {
 				console.error("初始化iframe内容时出错:", error)
 			}
-		}, [htmlNavigationKey, htmlSandboxShellUrl, navigationRuntimeService])
+		}, [htmlNavigationKey, htmlSandboxShellUrl, navigationRuntimeService, iframeRuntimeKey])
 
 		const getMarkerId = useMemoizedFn(() => {
 			if (!attachmentList || !fileId) return fileId
@@ -1516,6 +1561,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			getStorageMarkerId,
 			runtimeProjectId,
 			virtualStorageMarkerId,
+			iframeRuntimeKey,
 		])
 
 		useEffect(() => {
@@ -1533,32 +1579,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			return () => {
 				virtualStorageRegistry.unregister(registeredContext)
 			}
-		}, [iframeLoaded, iframeTargetOrigin, virtualStorageContext])
+		}, [iframeLoaded, iframeTargetOrigin, virtualStorageContext, iframeRuntimeKey])
 
 		const reloadIframeContent = () => {
 			resetInspectorSelection()
 			pubsub.publish(PubSubEvents.Super_Magic_Detail_Refresh)
 		}
 
-		const notifyIframeI18nLang = useMemoizedFn(
-			(source: "subscribe_ack" | "language_changed", requestId?: string) => {
-				const currentLang = i18n.resolvedLanguage || i18n.language || "zh-CN"
-				if (!iframeRef.current?.contentWindow) return
-
-				iframeRef.current.contentWindow.postMessage(
-					{
-						type: "MAGIC_I18N_LANG_SUBSCRIBE",
-						requestId,
-						success: true,
-						results: {
-							lang: currentLang,
-							source,
-						},
-					},
-					iframeTargetOrigin,
-				)
-			},
-		)
+		const notifyIframeI18nLang = useIframeI18n({
+			iframeRef,
+			targetOrigin: iframeTargetOrigin,
+			i18n,
+			enabled: sandboxType === "iframe",
+		})
 
 		const handleIframeElementLoad = useMemoizedFn(() => {
 			reportRenderLifecycleStage("shell_loaded")
@@ -1572,7 +1605,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 
 		const refreshIframeContent = useMemoizedFn((options?: { force?: boolean }) => {
 			if (!virtualStorageContext) return
-			hasIframeI18nSubscriberRef.current = false
 			// 解码HTML实体
 			let decodedContent = decodeHTMLEntities(content)
 
@@ -1605,12 +1637,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				reportContentMetrics: documentFlowFullscreen,
 				contentMetricsTargetOrigin,
 				disableParentClickBridge: disableIframeDocumentClickBridge,
+				enableTouchPinchZoom: isPptRender,
 				enableInlineInspectorFallback,
 				postMessageTargetStrategy,
 				virtualStorage: virtualStorageContext,
 				locationSearch: htmlNavigation?.search || "",
 				locationAnchor: htmlNavigation?.hash || "",
 				navigationRequestId,
+				navigationBasePath: htmlEntryFilePath,
 			})
 			const request = {
 				requestId: navigationRequestId,
@@ -1687,6 +1721,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				closeElementContextPanel,
 				requestInspectorExit,
 				consumeInspectorEscape,
+				restartDocument: restartPreviewDocument,
 				resetContent: () => {
 					// Clear edit history
 					if (editorRef.current) {
@@ -1694,9 +1729,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							console.error("清除编辑历史失败:", error)
 						})
 					}
-					// Refresh iframe content to original state, even when the source content
-					// itself has not changed. The editor may have changed the live iframe DOM.
-					refreshIframeContent({ force: true })
+					// Explicit reset discards the current document, including script state.
+					restartPreviewDocument()
 				},
 				updateContent: async (
 					newContent: string,
@@ -1705,7 +1739,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						restoreSelectionMode?: boolean
 					},
 				) => {
-					hasIframeI18nSubscriberRef.current = false
 					// Save current edit mode state before updating content
 					const wasInEditMode = isEditMode
 					// 默认恢复；仅显式传 false 时不恢复
@@ -1744,12 +1777,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						reportContentMetrics: documentFlowFullscreen,
 						contentMetricsTargetOrigin,
 						disableParentClickBridge: disableIframeDocumentClickBridge,
+						enableTouchPinchZoom: isPptRender,
 						enableInlineInspectorFallback,
 						postMessageTargetStrategy,
 						virtualStorage: virtualStorageContext,
 						locationSearch: htmlNavigation?.search || "",
 						locationAnchor: htmlNavigation?.hash || "",
 						navigationRequestId,
+						navigationBasePath: htmlEntryFilePath,
 					})
 					const request = {
 						requestId: navigationRequestId,
@@ -1804,11 +1839,20 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					resetInspectorSelection()
 				},
 				startInspectorAppend: () => {
-					inspectorCapturePrewarmRef.current?.()
-					startInAppendMode()
+					void (async () => {
+						const prepare = inspectorCapturePrewarmRef.current
+						const ready = prepare ? await prepare() : true
+						if (!ready) return
+						startInAppendMode()
+					})()
 				},
 				startInspectorQuickSelect: () => {
-					startInQuickSelectionMode()
+					void (async () => {
+						const prepare = inspectorCapturePrewarmRef.current
+						const ready = prepare ? await prepare() : true
+						if (!ready) return
+						startInQuickSelectionMode()
+					})()
 				},
 			}),
 			[
@@ -1827,9 +1871,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				injectMediaScript,
 				isEditMode,
 				isMediaScenario,
+				isPptRender,
 				htmlNavigation?.hash,
 				htmlNavigation?.search,
 				refreshIframeContent,
+				restartPreviewDocument,
+				htmlEntryFilePath,
 				editorRef,
 				handleFetchIntercepted,
 				navigationRuntimeService,
@@ -2064,6 +2111,33 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				return
 			}
 
+			// 回收站 HTML 只展示保留内容，不授予嵌入页面操作宿主项目或会话的能力。
+			if (
+				fileAccess?.kind === "recycle-bin" &&
+				([
+					"MAGIC_FS_",
+					"MAGIC_DB_",
+					"MAGIC_LLM_",
+					"MAGIC_CREATE_TOPIC_",
+					"MAGIC_SEND_MESSAGE_",
+					"MAGIC_UPLOAD_FILES_",
+					"MAGIC_ADD_FILES_TO_MESSAGE_",
+					"MAGIC_DOWNLOAD_FILES_",
+				].some((prefix) => messageType.startsWith(prefix)) ||
+					messageType === "MAGIC_SET_INPUT_MESSAGE")
+			) {
+				if (messageType.endsWith("_REQUEST"))
+					iframeRef.current?.contentWindow?.postMessage(
+						{
+							type: messageType.replace(/_REQUEST$/, "_RESPONSE"),
+							requestId: event.data.requestId,
+							success: false,
+							error: "Recycle bin content is read-only",
+						},
+						iframeTargetOrigin,
+					)
+				return
+			}
 			const requestBoundMessageTypes = [
 				"contentLoaded",
 				"domReady",
@@ -2270,7 +2344,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						return
 					}
 					try {
-						openNewTab(fileId || "", href, autoEdit)
+						openNewTab(
+							fileId || "",
+							href,
+							autoEdit,
+							getHtmlNavigationIntent(event.data),
+						)
 					} catch (error) {
 						logger.error({
 							eventKey: "process_iframe_failed",
@@ -2333,7 +2412,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					console.log("收到旧版保存消息 (V1)", event.data)
 					if (saveEditContent && typeof saveEditContent === "function") {
 						const newContent = filterInjectedTags(event.data.content, filePathMapping)
-						saveEditContentWithOriginalTrailingNewline(newContent, String(fileId))
+						savePreparedEditContent(newContent, String(fileId))
 					}
 				} else if (event.data && event.data.type === MEDIA_MESSAGE_TYPES.SPEAKER_EDITED) {
 					// 处理媒体说话人编辑事件
@@ -2372,8 +2451,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					// 处理 window.Magic.user.getInfo() 请求
 					await handleUserInfoMessage(event.data.type, event.data)
 				} else if (event.data && event.data.type === "MAGIC_RELOAD_REQUEST") {
-					// 处理 window.Magic.reload() 请求
-					reloadIframeContent()
+					// Reload only the requesting document, even when its source is unchanged.
+					// Reuse the fresh-Window lifecycle instead of refreshing unrelated file tabs.
+					resetInspectorSelection()
+					restartPreviewDocument()
 				} else if (event.data && event.data.type === "MAGIC_SET_INPUT_MESSAGE") {
 					// 处理 window.Magic.setInputMessage() 请求
 					const message = event.data.message
@@ -2392,7 +2473,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				} else if (event.data && event.data.type === "MAGIC_I18N_LANG_SUBSCRIBE") {
 					// 处理 window.Magic.i18n.subscribe() 请求
 					const payload = event.data as MagicI18nLangSubscribeRequest
-					hasIframeI18nSubscriberRef.current = true
 					notifyIframeI18nLang("subscribe_ack", payload.requestId)
 				}
 
@@ -2489,25 +2569,18 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			iframeRef.current.contentWindow.postMessage(
 				{
 					type: "setAnimationState",
-					paused: !isVisible,
+					paused: !isVisible || isPlaybackPaused,
 				},
 				iframeTargetOrigin,
 			)
-		}, [contentInjected, iframeTargetOrigin, isPptRender, isVisible, sandboxType])
-
-		useEffect(() => {
-			if (sandboxType !== "iframe") return
-
-			const handleLanguageChanged = () => {
-				if (!hasIframeI18nSubscriberRef.current) return
-				notifyIframeI18nLang("language_changed")
-			}
-
-			i18n.on("languageChanged", handleLanguageChanged)
-			return () => {
-				i18n.off("languageChanged", handleLanguageChanged)
-			}
-		}, [i18n, notifyIframeI18nLang, sandboxType])
+		}, [
+			contentInjected,
+			iframeTargetOrigin,
+			isPptRender,
+			isVisible,
+			isPlaybackPaused,
+			sandboxType,
+		])
 
 		useLayoutEffect(() => {
 			window.addEventListener("message", handleMessage, true)
@@ -2526,15 +2599,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				// 使用新的编辑机制 V2 保存
 				try {
 					const saveResult = await editorRef.current.save()
-					// Keep the returned baseline identical to the content sent through the save callback.
-					const savedCleanContent = preserveOriginalTrailingNewline(
-						saveResult.cleanContent,
-						rawSourceCode,
-					)
 					console.log("[IsolatedHTMLRenderer] 保存结果:", {
 						success: saveResult.success,
 						fileId: saveResult.fileId,
-						contentLength: savedCleanContent.length,
+						contentLength: saveResult.cleanContent.length,
 					})
 
 					if (!saveResult.success) {
@@ -2542,10 +2610,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					}
 
 					// Return the exact saved content so conflict detection uses the correct baseline.
-					return {
-						...saveResult,
-						cleanContent: savedCleanContent,
-					}
+					return saveResult
 				} catch (error) {
 					console.error("保存内容时出错:", error)
 					throw error
@@ -2708,7 +2773,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 														 * HTML 文档仍然读取到之前的 query。
 														 */}
 														<iframe
-															key={`${htmlSandboxShellUrl}:${htmlNavigationKey}`}
+															key={iframeRuntimeKey}
 															ref={iframeRef}
 															className={cn(
 																styles.iframe,

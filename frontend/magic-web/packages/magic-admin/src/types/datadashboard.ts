@@ -12,14 +12,7 @@ export namespace DataDashboard {
 	export type FileSourceType = "user_created" | "ai_created"
 	/** 文件产出分析文件类别 */
 	export type FileCategory =
-		| "doc"
-		| "spreadsheet"
-		| "image"
-		| "video"
-		| "ppt"
-		| "html"
-		| "md"
-		| "other"
+		"doc" | "spreadsheet" | "image" | "video" | "ppt" | "html" | "md" | "other"
 	/** 文件产出分析明细 Tabs */
 	export type FileTabType = "file_user" | "file_department" | "file_agent"
 	/** 文件产出分析 Summary 查询参数 */
@@ -572,11 +565,7 @@ export namespace DataDashboard {
 
 	/** 数据看板导出任务状态 */
 	export type DashboardExportStatus =
-		| "pending"
-		| "processing"
-		| "completed"
-		| "failed"
-		| "expired"
+		"pending" | "processing" | "completed" | "failed" | "expired"
 
 	/** 数据看板导出请求；不携带分页和表格排序参数 */
 	export interface DashboardExportRequest extends BaseQuery {

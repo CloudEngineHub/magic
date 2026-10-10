@@ -17,6 +17,7 @@ vi.mock("@/lib/jszip", () => ({ loadJSZip: mocks.loadJSZip }))
 vi.mock("@/utils/htmlExportPrepare", () => ({ prepareHtmlPagesForExport: vi.fn() }))
 vi.mock("@/pages/superMagic/services/pptService", () => ({
 	prepareExportSlides: vi.fn(),
+	resolvePptExportSlides: vi.fn(async (input) => ({ ...input, configResolved: true })),
 	prepareSingleSlideExport: vi.fn(),
 	iterateSingleExportSlide: mocks.iterateSingleExportSlide,
 	iterateExportSlides: mocks.iterateExportSlides,
@@ -38,6 +39,7 @@ vi.mock("@/pages/superMagic/services/pptxStreamingExport", () => ({
 	iteratePreparedPptxPages: (pages: AsyncIterable<unknown>) => pages,
 	openPptxDestination: mocks.openPptxDestination,
 	startPptxStreamingExportFromFactory: mocks.startFromFactory,
+	supportsPptxExport: mocks.supportsFileStreaming,
 	supportsPptxFileStreaming: mocks.supportsFileStreaming,
 }))
 vi.mock("@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions", () => ({

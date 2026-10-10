@@ -10,6 +10,7 @@ export interface DialogFormFieldProps {
 	fieldId?: string
 	label: ReactNode
 	required?: boolean
+	descriptionButtonTestId?: string
 }
 
 /** 弹窗表单统一的字段标题、必填标记和说明布局。 */
@@ -21,6 +22,7 @@ export function DialogFormField({
 	fieldId,
 	label,
 	required = false,
+	descriptionButtonTestId,
 }: DialogFormFieldProps) {
 	return (
 		<div className={cn("grid gap-2", className)} data-form-field={fieldId}>
@@ -41,7 +43,7 @@ export function DialogFormField({
 					</span>
 				)}
 				{description && descriptionMode === "tooltip" ? (
-					<FieldDescriptionTooltip description={description} />
+					<FieldDescriptionTooltip description={description} testId={descriptionButtonTestId} />
 				) : null}
 			</div>
 			{children}
@@ -52,11 +54,12 @@ export function DialogFormField({
 	)
 }
 
-function FieldDescriptionTooltip({ description }: { description: string }) {
+function FieldDescriptionTooltip({ description, testId }: { description: string; testId?: string }) {
 	return (
 		<span className="group relative inline-flex">
 			<button
 				aria-label={description}
+				data-testid={testId}
 				className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 				onMouseDown={(event) => event.preventDefault()}
 				tabIndex={-1}

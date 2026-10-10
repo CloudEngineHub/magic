@@ -47,6 +47,34 @@ describe("resolveImageDisplayState", () => {
 		).toMatchObject({ status: "uploading", surface: "placeholder" })
 	})
 
+	it("keeps explicit termination ahead of active generation state", () => {
+		expect(
+			resolve(
+				{
+					status: "terminated",
+					generateImageRequest: { image_id: "terminated-task" },
+				},
+				{ hasActiveGeneration: true, hasActiveGenerationTask: true },
+			),
+		).toMatchObject({ status: "terminated", surface: "error", failureSource: "generation" })
+	})
+
+	it("shows an overdue pending generation as timed out", () => {
+		expect(
+			resolve(
+				{
+					status: GenerationStatus.Processing,
+					generateImageRequest: { image_id: "overdue-task" },
+				},
+				{
+					hasActiveGeneration: true,
+					hasActiveGenerationTask: true,
+					generationTiming: { imageId: "overdue-task", startedAt: 1 },
+				},
+			),
+		).toMatchObject({ status: "timed-out", surface: "error", failureSource: "generation" })
+	})
+
 	it("preserves a loaded source while exposing its generating status", () => {
 		expect(
 			resolve(

@@ -1,3 +1,5 @@
+import type { SaveConfirmationStage } from "./contents/HTML/hooks/useSaveConfirmation"
+
 /** 已验证完整内容的只读供数入口，不承担草稿或保存职责。 */
 export interface TextReadOnlyPreview {
 	content: string
@@ -7,6 +9,7 @@ export interface TextReadOnlyPreview {
 /** 详情类型 */
 export enum DetailType {
 	Terminal = "terminal",
+	ScriptExecution = "script_execution",
 	Browser = "browser",
 	Search = "search",
 	KnowledgeSearch = "knowledge_search",
@@ -30,6 +33,50 @@ export enum DetailType {
 	SelfMedia = "self-media",
 	AICard = "ai-card",
 	SlidesTemplate = "slides-template",
+	Subagents = "subagents",
+	OperationResultList = "operation_result_list",
+	FileDownload = "file_download",
+}
+
+/** 等待子智能体卡片里的一行，字段与后端 SubagentItemContent 一一对应 */
+export interface DetailSubagentItem {
+	agent_id: string
+	label: string
+	/** pending / running / done / error / interrupted / not_found / ambiguous */
+	status: string
+	elapsed_seconds?: number
+	last_activity?: string
+	result?: string
+	error?: string
+}
+
+/** 等待子智能体卡片，字段与后端 SubagentsContent 一一对应 */
+export interface DetailSubagentsData {
+	/** 已结束个数占比，0-100；不是工作量进度 */
+	progress: number
+	/** 只等一个时没有中间进度，显示转圈而不是 0% */
+	indeterminate: boolean
+	message: string
+	total_agents: number
+	finished_agents: number
+	elapsed_seconds: number
+	phase: "waiting" | "settled"
+	agents: DetailSubagentItem[]
+}
+
+export interface FileDownloadItem {
+	file_id: string
+	relative_file_path: string
+	file_name: string
+	file_size: number
+}
+
+export interface FileDownloadData {
+	title: string
+	archive_name: string
+	project_id: string
+	total_bytes: number
+	items: FileDownloadItem[]
 }
 
 /** Self-media platform values supported by the dispatcher */
@@ -70,7 +117,9 @@ export interface DetailSelfMediaData {
 
 /** 详情 */
 export interface DetailData {
+	[DetailType.FileDownload]: FileDownloadData
 	[DetailType.Terminal]: DetailTerminalData
+	[DetailType.ScriptExecution]: DetailScriptExecutionData
 	[DetailType.Browser]: DetailBrowserData
 	[DetailType.Search]: DetailSearchData
 	[DetailType.KnowledgeSearch]: any
@@ -82,7 +131,70 @@ export interface DetailData {
 	[DetailType.PowerPoint]: DetailUniverData
 	[DetailType.SlidesTemplate]: DetailHTMLData
 	[DetailType.FileTree]: DetailFileTreeData
+	[DetailType.OperationResultList]: DetailOperationResultListData
 }
+
+export interface OperationResultCanvasTarget {
+	type: "canvas_element"
+	project_path: string
+	element_id: string
+	content_id?: string
+	content_type?: "image" | "video" | "audio"
+}
+
+export interface OperationResultFileTarget {
+	type: "file"
+	relative_file_path: string
+}
+
+export interface OperationResultUrlTarget {
+	type: "url"
+	url: string
+}
+
+export type OperationResultTarget =
+	OperationResultCanvasTarget | OperationResultFileTarget | OperationResultUrlTarget
+
+/** 操作结果显示对象名称与执行状态，可选提供稳定的导航目标。 */
+export interface OperationResultItem {
+	label: string
+	kind: "file" | "directory" | "text"
+	status: "success" | "error" | "skipped"
+	message: string
+	description?: string
+	target?: OperationResultTarget
+	changes?: { added_lines: number; deleted_lines: number; modified_lines?: number }
+	started_at?: string
+	expected_finished_at?: string
+	is_processing?: boolean | null
+}
+
+export interface OperationResultSummary {
+	stage?: "read" | "edit" | "find" | "download" | "analyze" | "load"
+	total_count?: number
+	success_count?: number
+	failed_count?: number
+	skipped_count?: number
+	omitted_count?: number
+}
+
+export interface DetailOperationResultListItemsData extends OperationResultSummary {
+	items: OperationResultItem[]
+}
+
+/** 正文与文件化引用保持顶层结构，卡片只提供原有 Markdown 详情入口。 */
+export interface DetailOperationResultListReportData extends DetailOperationResultListItemsData {
+	file_name: string
+	content: string
+	file_id?: string
+	storage_type?: string
+	file_extension?: string
+	target_file_path?: string
+	report_type?: DetailType
+}
+
+export type DetailOperationResultListData =
+	DetailOperationResultListItemsData | DetailOperationResultListReportData
 
 /** 终端 Terminal */
 export interface TerminalToolInfo {
@@ -100,6 +212,16 @@ export interface DetailTerminalData {
 	output: string
 	code: string
 	exit_code: number
+}
+
+/** Python 脚本执行详情。代码、标准输出和标准错误保持独立，避免前端重新猜测文本来源。 */
+export interface DetailScriptExecutionData {
+	code: string
+	args?: string | null
+	stdout: string
+	stderr: string
+	exit_code: number
+	success: boolean
 }
 
 /** 浏览器 Browser */
@@ -218,6 +340,8 @@ export interface TextFileSession {
 	loading: boolean
 	loadError: boolean
 	saving: boolean
+	/** Drives the top-right save chip; omitted sessions never show save feedback. */
+	saveStage?: SaveConfirmationStage
 	setDraft: (content: string) => void
 	refresh: () => Promise<void>
 	save: () => Promise<void>

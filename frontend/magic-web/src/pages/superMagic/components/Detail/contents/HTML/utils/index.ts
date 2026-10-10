@@ -2,6 +2,8 @@ import { env } from "@/utils/env"
 import { normalizeConflictingBackgroundDeclarations } from "./background-style"
 import { restoreHtmlLocationHref } from "./location-href-restore"
 import valueParser from "postcss-value-parser"
+import { isRootHtmlXhtmlNamespace, serializeHtmlDocument } from "./serializeHtmlDocument"
+export { isRootHtmlXhtmlNamespace, removeRootHtmlXhtmlNamespace } from "./serializeHtmlDocument"
 // import { getEditingScript } from "./editing-script"
 
 interface ShouldPromptForServerUpdateOptions {
@@ -227,7 +229,7 @@ interface ResourceFileTypeInfo {
 	relative_file_path?: string
 }
 
-function getResourceContentType(file: ResourceFileTypeInfo, fallbackPath: string): string {
+export function getResourceContentType(file: ResourceFileTypeInfo, fallbackPath: string): string {
 	return getContentTypeFromExtension(
 		file.file_extension || file.file_name || file.relative_file_path || fallbackPath,
 	)
@@ -874,51 +876,13 @@ export function rewriteHtmlCdnWithHost(content: string, cdnHost: string): Docume
 export const handleHtCdnUrl = (content: string) =>
 	rewriteHtmlCdnWithHost(content, env("MAGIC_CDNHOST") || "")
 
-function restoreSerializedEntitiesForCdnRewrite(html: string): string {
-	const ENTITY_PATTERN = /&(?:[a-z0-9]+|#\d+|#x[0-9a-f]+);/gi
-	const el = document.createElement("div")
-	return html.replace(ENTITY_PATTERN, (entity) => {
-		el.innerHTML = entity
-		return el.textContent ?? entity
-	})
-}
-
-/**
- * Removes only the XHTML namespace copied onto the root html element.
- * Namespaces inside SVG foreignObject content are valid markup and must remain intact.
- */
-export function isRootHtmlXhtmlNamespace(attr: Attr): boolean {
-	return attr.name === "xmlns" && attr.value === "http://www.w3.org/1999/xhtml"
-}
-
-/**
- * Cleans XMLSerializer's XHTML namespace side effect from the root html tag only.
- */
-export function removeRootHtmlXhtmlNamespace(html: string): string {
-	if (!html || typeof html !== "string") return html
-
-	return html.replace(/<html\b([^>]*)>/i, (match, attrs = "") => {
-		const cleanedAttrs = attrs.replace(
-			/\s+xmlns=(["'])http:\/\/www\.w3\.org\/1999\/xhtml\1/i,
-			"",
-		)
-		return `<html${cleanedAttrs}>`
-	})
-}
-
-function serializeCdnRewrittenDocument(doc: Document): string {
-	return removeRootHtmlXhtmlNamespace(
-		restoreSerializedEntitiesForCdnRewrite(new XMLSerializer().serializeToString(doc)),
-	)
-}
-
 const REWRITE_HTML_WITH_MAGIC_CDN_CACHE_MAX = 64
 const rewriteHtmlWithMagicCdnCache = new Map<string, string>()
 
 /**
  * 仅对 HTML 做麦吉 CDN 外链替换（handleHtCdnUrl：script / link 等），
  * 不处理附件、相对路径。用于消息列表 HTML 预览等无附件场景。
- * 序列化方式与 htmlProcessor 内 serializeDocToHtml 一致。
+ * 与 htmlProcessor 共用 HTML 序列化，保留文本／属性实体及 script/style 原始内容。
  * 对相同输入字符串做有界缓存，避免在电脑/移动端预览间切换时重复执行 handleHtCdnUrl。
  */
 export function rewriteHtmlWithMagicCdn(html: string): string {
@@ -929,7 +893,7 @@ export function rewriteHtmlWithMagicCdn(html: string): string {
 
 	try {
 		const htmlDoc = handleHtCdnUrl(html)
-		const result = serializeCdnRewrittenDocument(htmlDoc)
+		const result = serializeHtmlDocument(htmlDoc)
 		rewriteHtmlWithMagicCdnCache.set(html, result)
 		if (rewriteHtmlWithMagicCdnCache.size > REWRITE_HTML_WITH_MAGIC_CDN_CACHE_MAX) {
 			const oldestKey = rewriteHtmlWithMagicCdnCache.keys().next().value

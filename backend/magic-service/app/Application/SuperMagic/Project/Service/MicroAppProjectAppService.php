@@ -291,21 +291,23 @@ class MicroAppProjectAppService extends AbstractAppService
     /** Query the current user's runtime project without creating it. */
     public function getRuntimeProject(RequestContext $requestContext, int $appId): array
     {
+        $authorization = $requestContext->getUserAuthorization();
         $this->assertRuntimeProjectAccess($requestContext, $appId);
         $project = $this->projectAppService->findSpecialProject(
             $requestContext,
             self::RUNTIME_PROJECT_KEY_PREFIX . $appId,
         );
 
-		return [
+        return [
             'exists' => $project !== null,
-            'project' => $project === null ? null : $this->responseFormatter->formatProject($project),
+            'project' => $project === null ? null : $this->formatRuntimeProject($project, $authorization),
         ];
     }
 
     /** Create or get the current user's runtime project. */
     public function ensureRuntimeProject(RequestContext $requestContext, int $appId): array
     {
+        $authorization = $requestContext->getUserAuthorization();
         $this->assertRuntimeProjectAccess($requestContext, $appId);
         $result = $this->projectAppService->ensureMicroAppRuntimeProject(
             $requestContext,
@@ -313,8 +315,14 @@ class MicroAppProjectAppService extends AbstractAppService
         );
         $project = $this->projectRepository->findById((int) ($result['project']['id'] ?? 0));
 
+        $formattedProject = $project === null
+            ? $result['project']
+            : $this->formatRuntimeProject($project, $authorization);
+        // Keep the role field present even if persistence returns no entity after creation.
+        $formattedProject['user_role'] ??= null;
+
         return [
-            'project' => $project === null ? $result['project'] : $this->responseFormatter->formatProject($project),
+            'project' => $formattedProject,
             'is_existing' => (bool) $result['is_existing'],
         ];
     }
@@ -509,6 +517,19 @@ class MicroAppProjectAppService extends AbstractAppService
         $this->microAppVisitRepository->recordVisit($record->getId(), $authorization->getId(), $authorization->getOrganizationCode());
 
         return ['recorded' => true];
+    }
+
+    /**
+     * Runtime projects are user-owned special projects, but the role remains
+     * part of the response so every client can fail closed before rendering
+     * file write actions.
+     */
+    private function formatRuntimeProject(ProjectEntity $project, MagicUserAuthorization $authorization): array
+    {
+        $formatted = $this->responseFormatter->formatProject($project);
+        $formatted['user_role'] = $this->resolveUserRole($project, $authorization);
+
+        return $formatted;
     }
 
     /**
@@ -864,13 +885,9 @@ class MicroAppProjectAppService extends AbstractAppService
         }
 
         $file = $this->taskFileRepository->getFilesByIds([(int) $fileId], $projectId)[0] ?? null;
-        $root = $this->taskFileRepository->findRootDirectoryByProjectId($projectId);
-        $rootId = $root?->getFileId();
-        $isRootChild = $file?->getParentId() === null || $file?->getParentId() === $rootId;
         if ($file === null
             || $file->getProjectId() !== $projectId
             || $file->getDeletedAt() !== null
-            || ! $isRootChild
             || $file->getIsHidden()
             || $file->getIsDirectory()
             || ! in_array(strtolower($file->getFileExtension()), ['html', 'htm'], true)) {

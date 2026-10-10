@@ -3,6 +3,8 @@ import { useFileTagVisibility } from "../hooks/useFileTagVisibility"
 import { getFilePresentationIndex } from "../utils/file-presentation"
 import type { FileHelpContext } from "../utils/magic-system-folder"
 import { ProjectFileTag } from "./TopicFileTag"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
+import { filterFileAccessMenuItems } from "../utils/file-access-menu"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import MagicPullToRefresh from "@/components/base-mobile/MagicPullToRefresh"
 import { ScrollEdgeFadeContainer } from "@/components/base-mobile/ScrollEdgeFade"
@@ -252,6 +254,7 @@ function MobileProjectDetailFilesView({
 	onBatchMove,
 	onBatchDelete,
 }: MobileProjectDetailFilesViewProps) {
+	const { permissions: access } = useFileAccess()
 	const { t } = useTranslation("super")
 	const skillFiles = useMemo(() => getFilePresentationIndex(attachments).skills, [attachments])
 	const isChatSheetVariant = mobileViewVariant === "chat-sheet"
@@ -402,6 +405,8 @@ function MobileProjectDetailFilesView({
 			setPathStackKeys((prev) => [...prev, getAttachmentKey(item)])
 			return
 		}
+
+		if (!access.view || !access.preview) return
 
 		const fileItem = toFileItem(item)
 		const contentTypeConfig = detectContentTypeRender(fileItem)
@@ -610,7 +615,7 @@ function MobileProjectDetailFilesView({
 
 	const batchZipMenuItems = useMemo<MobileDownloadMenuItem[]>(
 		() =>
-			allowDownload && onBatchZipDownload
+			allowDownload && access.download && onBatchZipDownload
 				? [
 						{
 							key: "batchZip",
@@ -619,18 +624,23 @@ function MobileProjectDetailFilesView({
 						},
 					]
 				: [],
-		[allowDownload, onBatchZipDownload, t],
+		[allowDownload, access.download, onBatchZipDownload, t],
 	)
 
 	const singleDownloadMenuItems = useMemo(() => {
 		if (!singleDownloadTarget || !getSingleFileDownloadMenuItems) return []
-		return getSingleFileDownloadMenuItems(singleDownloadTarget)
-	}, [getSingleFileDownloadMenuItems, singleDownloadTarget])
+		return allowDownload
+			? filterFileAccessMenuItems(
+					getSingleFileDownloadMenuItems(singleDownloadTarget),
+					access,
+				)
+			: []
+	}, [getSingleFileDownloadMenuItems, singleDownloadTarget, access, allowDownload])
 
 	/** Open per-file export sheet (used when exactly one item is selected in the bottom bar). */
 	const openSingleFileDownloadSheet = (item: AttachmentItem) => {
 		if (!allowDownload || !getSingleFileDownloadMenuItems) return
-		const menuItems = getSingleFileDownloadMenuItems(item)
+		const menuItems = filterFileAccessMenuItems(getSingleFileDownloadMenuItems(item), access)
 		if (menuItems.length === 0) return
 		// Start modal chunk load as soon as user opens the sheet (mobile equivalent of desktop hover).
 		if (menuItemsIncludeNoWaterMarkDownload(menuItems)) preloadWaterMarkFreeModal?.()
@@ -647,7 +657,7 @@ function MobileProjectDetailFilesView({
 			return
 		}
 
-		if (!onBatchZipDownload) return
+		if (!access.download || !onBatchZipDownload) return
 		setBatchDownloadSheetOpen(true)
 	}
 
@@ -655,10 +665,13 @@ function MobileProjectDetailFilesView({
 		if (!allowDownload || selectedItems.length === 0) return false
 		if (selectedItems.length === 1) {
 			if (!getSingleFileDownloadMenuItems) return false
-			return getSingleFileDownloadMenuItems(selectedItems[0]).length > 0
+			return (
+				filterFileAccessMenuItems(getSingleFileDownloadMenuItems(selectedItems[0]), access)
+					.length > 0
+			)
 		}
-		return Boolean(onBatchZipDownload)
-	}, [allowDownload, getSingleFileDownloadMenuItems, onBatchZipDownload, selectedItems])
+		return access.download && Boolean(onBatchZipDownload)
+	}, [allowDownload, getSingleFileDownloadMenuItems, onBatchZipDownload, selectedItems, access])
 
 	/**
 	 * 确认创建时直接复用既有父层回调，只替换展示层，不引入新的业务保存入口。
@@ -803,7 +816,9 @@ function MobileProjectDetailFilesView({
 					<button
 						type="button"
 						className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70"
-						onClick={() => onFileOpen?.(item)}
+						onClick={() => {
+							if (access.view && access.preview) onFileOpen?.(item)
+						}}
 						data-file-name-container
 						data-testid="mobile-file-button"
 					>
@@ -998,7 +1013,7 @@ function MobileProjectDetailFilesView({
 							isPartiallySelected={isPartiallySelected}
 							onToggleAll={handleToggleAll}
 							onDownload={canSelectionDownload ? handleSelectionDownload : undefined}
-							onShare={() => onBatchShare?.(selectedIds)}
+							onShare={access.share ? () => onBatchShare?.(selectedIds) : undefined}
 							onCopy={() => onBatchCopy?.(selectedIds)}
 							onMove={() => onBatchMove?.(selectedIds)}
 							onDelete={() => onBatchDelete?.(selectedIds)}

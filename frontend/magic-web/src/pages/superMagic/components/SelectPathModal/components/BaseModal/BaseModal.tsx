@@ -32,6 +32,8 @@ export interface BaseModalProps {
 	}
 	onClose?: () => void
 	width?: number
+	height?: number | string
+	maxHeight?: number | string
 	className?: string
 	/** 点击遮罩是否关闭，默认 false */
 	maskClosable?: boolean
@@ -49,6 +51,8 @@ function BaseModal({
 	footer,
 	onClose,
 	width = 720,
+	height = 500,
+	maxHeight,
 	className,
 	maskClosable = false,
 	customPopupProps,
@@ -148,6 +152,8 @@ function BaseModal({
 				style={{
 					width: width,
 					minWidth: 720,
+					height,
+					maxHeight,
 				}}
 				showCloseButton
 				data-testid={testId}

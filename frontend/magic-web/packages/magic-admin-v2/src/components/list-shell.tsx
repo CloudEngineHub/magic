@@ -12,6 +12,7 @@ export function ListShell({
 	description,
 	headerContent,
 	headerClassName,
+	testId,
 	showSeparator = true,
 	title,
 	titleAddon,
@@ -24,12 +25,16 @@ export function ListShell({
 	description?: string
 	headerContent?: ReactNode
 	headerClassName?: string
+	testId?: string
 	showSeparator?: boolean
 	title: string
 	titleAddon?: ReactNode
 }) {
 	return (
-		<div className={cn("-m-4 flex h-[calc(100svh-4rem)] min-h-0 flex-col", className)}>
+		<div
+			className={cn("-m-4 flex h-[calc(100svh-4rem)] min-h-0 flex-col", className)}
+			data-testid={testId}
+		>
 			<div className={cn("shrink-0 px-4 pt-6 lg:px-6", headerClassName)}>
 				{headerContent ? <div className="mb-3">{headerContent}</div> : null}
 				<PageHeader

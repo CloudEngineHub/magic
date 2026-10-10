@@ -42,7 +42,7 @@ export function ProviderConfigField({
 									placeholder={description}
 									rows={4}
 									value={String(formField.value ?? "")}
-								/>
+								 data-testid="platform-system-capabilities-textarea-input"/>
 							) : (
 								<Input
 									disabled={disabled}
@@ -52,7 +52,7 @@ export function ProviderConfigField({
 									placeholder={description}
 									type={field.type === "password" ? "password" : "text"}
 									value={String(formField.value ?? "")}
-								/>
+								 data-testid="platform-system-capabilities-input"/>
 							)}
 						</FormControl>
 						<FormMessage />

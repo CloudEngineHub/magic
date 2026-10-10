@@ -11,6 +11,7 @@ import type {
 } from "../../public/magic-types"
 import type { TFunction } from "../../public/i18n-types"
 import type { CanvasAccessMode, CanvasCapability } from "../../public/props"
+import type { NameLabelIconResolver } from "../interaction/labels/nameLabelTypes"
 
 /** 裁剪矩形配置 */
 export interface CropConfig {
@@ -83,6 +84,8 @@ export interface CanvasConfig {
 	}
 	/** Plugin configuration injected by the host application. */
 	plugins?: CanvasDesignPluginModuleConfig
+	/** 可选的名称标签图标 resolver；不传时名称标签保持纯文本。 */
+	nameLabelIconResolver?: NameLabelIconResolver
 	/** 获取设备形态、布局和输入能力，如果未提供则使用默认检测 */
 	getDevice?: () => CanvasDeviceInfo
 	/** 翻译函数 */
@@ -147,9 +150,7 @@ export type ElementType = (typeof ElementTypeEnum)[keyof typeof ElementTypeEnum]
 
 /** 可直接替换资源的画布媒体元素类型。 */
 export type MediaElementType =
-	| typeof ElementTypeEnum.Image
-	| typeof ElementTypeEnum.Video
-	| typeof ElementTypeEnum.Audio
+	typeof ElementTypeEnum.Image | typeof ElementTypeEnum.Video | typeof ElementTypeEnum.Audio
 
 /** 边框位置类型 */
 export type StrokePosition = "inside" | "center" | "outside"
@@ -340,6 +341,14 @@ export interface TextElement extends ContentElementProps<TextElementContent> {
 
 /** 图片节点中可独立切换的内容 */
 export interface ImageElementContent extends ElementContentBase {
+	/** 人工废稿标记，仅属于此版本，不改变生成状态或主版本。 */
+	discarded?: boolean
+	/** 只用于等待超时展示，不改变后端生成状态；任务更换时独立计时。 */
+	generationTiming?: {
+		startedAt: number
+		imageId?: string
+		source: "submitted" | "server" | "observed"
+	}
 	/** 大模型对当前图片 Content 的理解结果；重字段由 sidecar 拆分保存。 */
 	visualUnderstanding?: unknown
 	/** 图片源(用来换取 ossSrc 的临时 path) */

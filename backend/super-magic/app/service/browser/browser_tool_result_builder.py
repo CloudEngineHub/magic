@@ -422,6 +422,28 @@ class BrowserToolResultBuilder:
             extra_info=screenshot_result.extra_info,
         )
 
+    @classmethod
+    def native_visual(
+        cls,
+        page: BrowserPage,
+        result: ScreenshotResult,
+        artifact: BrowserScreenshotArtifact,
+        query: str,
+    ) -> ToolResult:
+        screenshot_result = cls.screenshot(page, result, artifact)
+        return ToolResult(
+            content=(
+                "Browser screenshot attached as native visual input. "
+                "The next model request will answer the visual query."
+            ),
+            data={
+                **screenshot_result.data,
+                "native_visual": True,
+                "query": query,
+            },
+            extra_info=screenshot_result.extra_info,
+        )
+
     @staticmethod
     def visual_match(
         visual_result: ToolResult,

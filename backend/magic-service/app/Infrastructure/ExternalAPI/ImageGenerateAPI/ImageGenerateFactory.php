@@ -226,6 +226,10 @@ class ImageGenerateFactory
             $request->setReferenceImages($referenceImages);
         }
 
+        if (! empty($data['extra']) && is_array($data['extra'])) {
+            $request->setExtra($data['extra']);
+        }
+
         return $request;
     }
 

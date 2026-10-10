@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import bashlex
+from bashlex.ast import node as BashNode
 from loguru import logger
 
 
@@ -35,21 +36,7 @@ def extract_read_file_path(command: str, work_dir: Path) -> Path | None:
         return None
     if len(nodes) != 1 or nodes[0].kind != "command":
         return None
-    words: list[str] = []
-    source = command.strip()
-    for part in nodes[0].parts:
-        if part.kind != "word" or part.parts:
-            return None
-        raw_word = source[part.pos[0]:part.pos[1]]
-        if not _is_literal_shell_word(raw_word):
-            return None
-        # bashlex 的引号移除不覆盖全部转义细节；解析不一致时不猜测文件名。
-        try:
-            if shlex.split(raw_word) != [part.word]:
-                return None
-        except ValueError:
-            return None
-        words.append(part.word)
+    words = _literal_command_words(nodes[0], command.strip())
     if not words:
         return None
     binary = Path(words[0])
@@ -72,6 +59,63 @@ def extract_read_file_path(command: str, work_dir: Path) -> Path | None:
     path = Path(file_name)
     # 保留 .. 与符号链接的实际解析语义；此处只拼接，不执行文件 I/O。
     return path if path.is_absolute() else work_dir / path
+
+
+def extract_literal_and_commands(command: str) -> list[SubCommand] | None:
+    """仅提取单条字面命令或 && 链，供成功后的文件事件确认使用。
+
+    调用方还需排除 exit、cd 等改变控制流或工作目录的命令，再以整链返回 0
+    确认执行完成；||、管道、分组和动态展开不能按这个条件判断。
+    这里不使用 dispatcher 的展平和 split 降级。
+    """
+    source = command.strip()
+    try:
+        roots = bashlex.parse(source)
+        if len(roots) != 1:
+            return None
+        root = roots[0]
+        if root.kind == "command":
+            nodes = [root]
+        elif root.kind == "list":
+            parts = root.parts
+            if len(parts) % 2 != 1 or any(
+                part.kind != "operator" or part.op != "&&" for part in parts[1::2]
+            ):
+                return None
+            nodes = parts[::2]
+        else:
+            return None
+        commands: list[SubCommand] = []
+        for node in nodes:
+            if node.kind != "command":
+                return None
+            words = _literal_command_words(node, source)
+            if not words:
+                return None
+            commands.append(SubCommand(words[0], source[node.pos[0]:node.pos[1]], tuple(words[1:])))
+        return commands
+    except Exception:
+        # bashlex 的不支持语法也可能抛 NotImplementedError；只放弃事件识别。
+        return None
+
+
+def _literal_command_words(node: BashNode, source: str) -> list[str] | None:
+    """复用读取观察的字面参数规则，不执行替换或通配符展开。"""
+    words: list[str] = []
+    for part in node.parts:
+        if part.kind != "word" or part.parts:
+            return None
+        raw_word = source[part.pos[0]:part.pos[1]]
+        if not _is_literal_shell_word(raw_word):
+            return None
+        # bashlex 的引号移除不覆盖全部转义细节；解析不一致时不猜测文件名。
+        try:
+            if shlex.split(raw_word) != [part.word]:
+                return None
+        except ValueError:
+            return None
+        words.append(part.word)
+    return words
 
 
 def _is_literal_shell_word(source: str) -> bool:

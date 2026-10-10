@@ -182,7 +182,7 @@ const CHAT_MESSAGE_SKELETONS = [
 	{ alignment: "start", bubbleWidth: "w-[82%]", lines: ["w-full", "w-[68%]"] },
 ] as const
 
-/** Skeleton placeholder aligned with the collapsed RecordingDetailAudioBar layout. */
+/** Skeleton placeholder aligned with the PC collapsed RecordingDetailAudioBar transport row. */
 function RecordingDetailPlayerSkeleton() {
 	return (
 		<div
@@ -201,6 +201,10 @@ function RecordingDetailPlayerSkeleton() {
 						/>
 					))}
 				</div>
+				{/* Rate label plus two skip buttons sit between waveform and expand on the PC collapsed bar. */}
+				<Skeleton className="h-4 w-8 shrink-0 rounded-sm" />
+				<Skeleton className="size-7 shrink-0 rounded-full" />
+				<Skeleton className="size-7 shrink-0 rounded-full" />
 				<Skeleton className="size-7 shrink-0 rounded-full" />
 			</div>
 		</div>

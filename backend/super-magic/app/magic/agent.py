@@ -1,4 +1,5 @@
 from app.i18n import i18n
+from app.utils.context_usage import ContextUsageEstimator, ToolSchemaEstimate
 import asyncio
 import ctypes
 import gc
@@ -25,15 +26,18 @@ from app.core.horizon.models import HorizonInjectionPoint
 from app.service.user_context_service import UserContextService
 from agentlang.chat_history import AssistantMessage, CompactionConfig, SystemMessage, ToolCall
 from agentlang.chat_history.chat_history import ChatHistory
-from agentlang.chat_history.chat_history_models import UserMessage
+from agentlang.chat_history.chat_history_models import UserMessage, ToolMessage, ContextSource
 from agentlang.context.tool_context import ToolContext
 from agentlang.event.data import (
+    AfterAgentLoopEventData,
     AfterAgentReplyEventData,
     AfterLlmRequestSucceededEventData,
     AfterMainAgentRunEventData,
+    AgentLoopOutcome,
     BeforeLlmRetryEventData,
     BeforeMainAgentRunEventData,
     ErrorEventData,
+    resolve_completed_loop_outcome,
 )
 from agentlang.event.event import EventType
 from agentlang.config.config import config
@@ -82,17 +86,25 @@ from app.core.entity.final_task_state import (
     build_final_task_state,
 )
 from app.core.entity.message.server_message import TaskStatus
+from app.core.entity.todo import TodoItem, TodoStatus
 
 # 多语言支持
 from app.magic.user_command_handler import Commands
 from app.path_manager import PathManager
 from app.service.auto_read_file_service import AutoReadFileService
 from app.service.agent_event.native_visual_disable_listener_service import NativeVisualDisableListenerService
+from app.service.browser.browser_screenshot_artifact import BrowserScreenshotArtifactStore
 from app.service.native_visual_message_builder import NativeVisualMessageBuilder
 from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import AppToolValidator
 from app.tools.core.tool_factory import tool_factory
+from app.tools.subagent_session_manager import SubagentRunRef, subagent_session_manager
+from app.utils.file_utils import (
+    WorkspaceSnapshot,
+    calculate_file_hash,
+    get_fresh_file_stat,
+)
 from app.infrastructure.changefeed.change_ledger_client import (
     ChangeLedgerClient,
     ChangeLedgerUnavailable,
@@ -103,9 +115,9 @@ from app.infrastructure.changefeed.workspace_path_changes import (
     map_ledger_changes_to_workspace_paths,
 )
 from app.utils.agfs_mount_path import get_agfs_fuse_mount_root
-from app.utils.file_utils import WorkspaceSnapshot
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
+from app.core.skill_utils.prompt import PreloadedSkillFile
 from app.core.skill_utils.runtime_policy import resolve_runtime_skills
 from app.service.memory.policies.memory_skill_policy import is_auto_memory_enabled, is_memory_skill_available
 from app.service.memory.policies.memory_scope import MemoryScopeKind, build_memory_runtime_context, resolve_memory_scopes
@@ -267,10 +279,15 @@ class AgentLoopState:
     last_llm_message: Optional[ChatCompletionMessage] = None
     should_continue: bool = True
     output_recovery_count: int = 0
+    # Todo 与子 Agent 共用本次运行的提醒次数；工具调用、重试和压缩都不重置。
+    completion_reminder_count: int = 0
     # reactive compact：context_window_exceeded 时自动压缩一次后重试
     reactive_compact_attempted: bool = False
     # LLM 两阶梯重试状态
     retry_state: LLMRetryState = field(default_factory=LLMRetryState)
+    # 当前 run 内的循环序号和正常有效轮数，只用于轮次事件
+    loop_index: int = 0
+    effective_loop_count: int = 0
 
 
 @dataclass
@@ -331,6 +348,8 @@ class ToolExecutionResult:
     inject_horizon_after_tools: bool = True
     # 检测到某个工具因超长参数导致校验失败（参数有效但缺字段，通常是模型输出过长导致）
     has_long_args_failure: bool = False
+    # 本轮执行了历史压缩，不计入正常有效轮
+    has_compact_history: bool = False
 
 
 @dataclass
@@ -408,6 +427,7 @@ class Agent(BaseAgent):
 
     def __init__(self, agent_name: str, agent_context: AgentContext = None, agent_id: str = None):
         self.agent_name = agent_name
+        self._context_usage_estimator = ContextUsageEstimator()
         self._closed = False
         self._context_registered = False
         self._active_run_task: asyncio.Task[object] | None = None
@@ -434,7 +454,8 @@ class Agent(BaseAgent):
         # 设置Agent上下文
         self.agent_context = self._setup_agent_context(agent_context)
         self._message_renderer = LLMMessageRenderer(
-            workspace_dir=self.agent_context.get_workspace_dir()
+            workspace_dir=self.agent_context.get_workspace_dir(),
+            browser_artifact_store=BrowserScreenshotArtifactStore(self.agent_context),
         )
         self._native_visual_message_builder = NativeVisualMessageBuilder(
             self.agent_context.get_workspace_dir()
@@ -506,6 +527,8 @@ class Agent(BaseAgent):
             self.agent_context.chat_history_dir,
             self.agent_context.get_event_dispatcher(),  # 传递事件分发器
         )
+        # 轮次监听器从上下文读取当前历史，避免再查全局消息。
+        self.agent_context.chat_history = self.chat_history
 
         # Token usage 文件必须跟随当前 Agent 的聊天历史目录，不能复用全局 mutable prefix。
         token_usage_report_manager = TokenUsageReport.for_session(
@@ -565,6 +588,7 @@ class Agent(BaseAgent):
         if self._closed:
             return
         self._closed = True
+        self._context_usage_estimator.clear()
         self._bg_compact_state.reset()
 
         if self._context_registered:
@@ -580,6 +604,9 @@ class Agent(BaseAgent):
 
     def _claim_run(self) -> asyncio.Task[object]:
         """登记当前 run 的 Task 身份，阻止同一 Agent 被并发执行。"""
+        from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
+
+        sandbox_restart_coordinator.ensure_accepting_runs()
         current_task = asyncio.current_task()
         if current_task is None:
             raise RuntimeError("Agent.run() must execute inside an asyncio Task")
@@ -589,6 +616,7 @@ class Agent(BaseAgent):
             raise RuntimeError(f"Agent {self.agent_name} is already running")
 
         self._active_run_task = current_task
+        self.agent_context.horizon.begin_im_progress()
         return current_task
 
     def _set_run_terminal_state(
@@ -605,6 +633,7 @@ class Agent(BaseAgent):
         if self._active_run_task is not run_task:
             return
         self._active_run_task = None
+        self.agent_context.horizon.end_im_progress()
 
     def dispose(self) -> None:
         """兼容性别名，语义等同于 close()。"""
@@ -661,7 +690,7 @@ class Agent(BaseAgent):
         self.loaded_skills = skill_result.loaded_names
         self.agent_context.set_loaded_skills(skill_result.loaded_names)
         self.agent_context.set_excluded_skills(list(dict.fromkeys([*skills_config.excluded_skills, *skill_result.disabled_names])))
-        self._preloaded_skill_files: tuple[Path, ...] = skill_result.preloaded_files
+        self._preloaded_file_contents: tuple[PreloadedSkillFile, ...] = skill_result.preloaded_file_contents
         if skills_prompt_content:
             logger.info(f"为 agent {self.agent_name} 生成了 skills prompt，包含 {len(skill_result.loaded_names)} 个 skills")
         else:
@@ -692,6 +721,10 @@ class Agent(BaseAgent):
 
         # 准备静态变量并应用到 system_prompt
         static_vars = self._prepare_prompt_static_variables()
+        self._context_usage_estimator.set_skill_blocks((
+            self._agent_loader.set_variables(skills_prompt_content, static_vars) if skills_prompt_content else "",
+            skill_result.preloaded_content,
+        ))
         self.system_prompt = self._agent_loader.set_variables(self.system_prompt, static_vars)
 
         # Skill 是文件原文，须避开模板处理，保留注释及其中的模板示例。
@@ -817,6 +850,15 @@ class Agent(BaseAgent):
             "slide_template_html": slide_template_html,
             "managed_agent_code": managed_agent_code,
         }
+
+        # 提示词语法没有条件分支，按当前运行环境选择 sandbox / local 之一的说明，
+        # 用同一套变量预先渲染成正文；static_context 用 @variable 引用它，变量值不会被二次解析。
+        runtime_environment = PathManager.get_runtime_environment()
+        variables["runtime_environment"] = runtime_environment.value
+        variables["runtime_environment_prompt"] = self._agent_loader.set_variables(
+            f'{{{{ @include(path="./prompts/runtime_environment/{runtime_environment.value}.prompt") }}}}',
+            variables,
+        ).strip()
 
         return variables
 
@@ -1317,17 +1359,6 @@ class Agent(BaseAgent):
             if not self.chat_history.messages:
                 logger.info("聊天记录为空，添加主 System Prompt")
                 await self.chat_history.append_system_message(self.system_prompt)
-
-                if self.agent_context.get_subagent_depth() > 0:
-                    parent_agent_name = self.agent_context.get_subagent_parent_agent_name() or "the parent agent"
-                    subagent_context_message = (
-                        "Sub-agent execution context:\n"
-                        f"- You are running as a sub-agent invoked by {parent_agent_name}.\n"
-                        "- The next visible user message is the delegated task from the parent agent, not a direct end-user chat.\n"
-                        "- Focus on completing the delegated task for the parent agent.\n"
-                        "- When you finish, include the paths of key deliverable files (if any) in your final reply — only files the user would care about, not temporary or intermediate ones."
-                    )
-                    await self.chat_history.append_user_message(subagent_context_message, show_in_ui=False)
             else:
                 # 聊天记录存在时，更新第一条 system message 为最新的 system_prompt
                 # 因为代码会更新，聊天记录不会更新，需要在 agent 每次运行时更新最新的 system prompt
@@ -1437,6 +1468,9 @@ class Agent(BaseAgent):
         loop_state = AgentLoopState()
 
         while loop_state.should_continue:
+            loop_state.loop_index += 1
+            round_outcome = AgentLoopOutcome.ERROR
+            round_restored = False
             # 更新活动时间，用于活动追踪
             self.agent_context.update_activity_time()
 
@@ -1471,6 +1505,7 @@ class Agent(BaseAgent):
                         break
 
                     loop_state.last_llm_message = restored_context.llm_response  # 也更新last_llm_message
+                    round_restored = True
 
                     # 创建LLM上下文用于后续处理
                     llm_context = LLMResponseContext(
@@ -1534,6 +1569,7 @@ class Agent(BaseAgent):
                             "The output may be incomplete. Any tool calls in that response were not executed.",
                             source="max_output_tokens_recovery",
                         )
+                        round_outcome = AgentLoopOutcome.MAINTENANCE
                         continue
 
                     # 预处理工具参数：修复畸形 JSON、检测截断
@@ -1564,6 +1600,7 @@ class Agent(BaseAgent):
                                 "No tool calls from that response were executed.",
                                 source="tool_args_truncation_recovery",
                             )
+                            round_outcome = AgentLoopOutcome.MAINTENANCE
                             continue
                         for candidate in preprocess_result.json_repair_candidates:
                             validation = await tool_argument_json_repair_validation_service.validate(
@@ -1621,9 +1658,13 @@ class Agent(BaseAgent):
                         await self._handle_no_tool_calls(llm_context, loop_state)
                         if not loop_state.should_continue:
                             # todo都完成了，退出循环
+                            round_outcome = AgentLoopOutcome.NORMAL
+                            # 没有追加提醒，按模型本次结束意图退出，不代表所有事项都已完成。
                             break
                         else:
                             # 还有未完成的todo，继续循环让大模型继续处理
+                            round_outcome = AgentLoopOutcome.NORMAL
+                            # 提醒已进入上下文，继续调用模型，由模型处理未完成事项。
                             continue
 
                     # Reset no_tool_call_count when tools are called successfully
@@ -1675,11 +1716,17 @@ class Agent(BaseAgent):
                         source="tool_args_truncation_recovery",
                     )
 
+                round_outcome = resolve_completed_loop_outcome(
+                    restored=round_restored,
+                    waiting_for_user=self.agent_state == AgentState.WAITING_FOR_USER,
+                    maintenance=tool_result.has_long_args_failure or tool_result.has_compact_history,
+                )
                 if tool_result.should_exit:
                     loop_state.final_response = tool_result.final_response
                     break
 
             except Exception as e:
+                round_outcome = AgentLoopOutcome.ERROR
                 # 处理非 LLM 异常（工具执行失败等）
                 exception_result = await self._handle_agent_loop_exception(
                     e,
@@ -1689,9 +1736,31 @@ class Agent(BaseAgent):
                     loop_state.final_response = exception_result.final_response
                 if not exception_result.should_continue:
                     break
+            finally:
+                await self._emit_after_agent_loop(loop_state, round_outcome)
 
         # 完成循环后的清理工作
         return await self._finalize_agent_loop(loop_state)
+
+    async def _emit_after_agent_loop(self, loop_state: AgentLoopState, outcome: AgentLoopOutcome) -> None:
+        """发出本轮结束事件。取消时不投递，避免拖延退出；投递失败不回到主循环重试。"""
+        if isinstance(sys.exc_info()[1], asyncio.CancelledError):
+            return
+        if outcome == AgentLoopOutcome.NORMAL:
+            loop_state.effective_loop_count += 1
+        try:
+            await self.agent_context.dispatch_event(
+                EventType.AFTER_AGENT_LOOP,
+                AfterAgentLoopEventData(
+                    agent_context=self.agent_context,
+                    agent_name=self.agent_name,
+                    loop_index=loop_state.loop_index,
+                    effective_loop_count=loop_state.effective_loop_count,
+                    outcome=outcome,
+                ),
+            )
+        except Exception as error:
+            logger.warning(f"派发循环结束事件失败: {error.__class__.__name__}")
 
     async def _check_and_restore_session(self) -> SessionRestoreContext:
         """
@@ -1980,6 +2049,7 @@ class Agent(BaseAgent):
             bool: True if compaction was triggered, False otherwise
         """
         if not self.compaction_config.enable_compaction:
+            self.agent_context.set_compaction_threshold_tokens(0)
             return False
 
         token_count = await self.chat_history.tokens_count()
@@ -2015,6 +2085,8 @@ class Agent(BaseAgent):
             threshold_matched_rule = None
             threshold_used_default = False
 
+        # 展示自动整理的硬阈值；后台提前准备仍沿用原逻辑，不另算前端比例。
+        self.agent_context.set_compaction_threshold_tokens(compaction_threshold_tokens)
         early_threshold = self.compaction_config.early_compact_threshold
         message_threshold = self.compaction_config.max_conversation_rounds
         background_failed_this_snapshot = False
@@ -3002,6 +3074,17 @@ Since your subsequent output will be merged with pre-interruption content and di
         threshold_model_id = self._require_current_text_model_id()
         await self._try_compact_chat_history(threshold_model_id=threshold_model_id)
 
+        # 压缩会清空文件跟踪；preload 仍在 system prompt，沿原登记和通知入口恢复。
+        await self._ensure_preloaded_files_tracked()
+        # 先处理已读文件的变化，再决定 AutoRead；完整 diff 已交付时无需重复全文。
+        if self.chat_history._is_tool_call_sequence_complete():
+            preload_context = await self._build_horizon_context_update_safely(
+                injection_point=HorizonInjectionPoint.BEFORE_LLM_PRELOADED_SKILLS,
+                log_context="AutoRead 前刷新文件版本",
+            )
+            if preload_context:
+                await self.chat_history.append_user_message(preload_context, show_in_ui=False, source="horizon")
+
         # 自动规则文件统一在真实模型调用前发现和读取；压缩或 /new 后会根据当前 ChatHistory 自动重建交付状态。
         await AutoReadFileService.prepare_before_llm(
             self.agent_context,
@@ -3013,19 +3096,13 @@ Since your subsequent output will be merged with pre-interruption content and di
             ),
         )
 
-        # 压缩会清空文件跟踪；preload 仍在 system prompt，沿原登记和通知入口恢复。
-        if await self._ensure_preloaded_files_tracked() and self.chat_history._is_tool_call_sequence_complete():
-            preload_context = await self._build_horizon_context_update_safely(
-                injection_point=HorizonInjectionPoint.BEFORE_LLM_PRELOADED_SKILLS,
-                log_context="preload 恢复后注入",
-            )
-            if preload_context:
-                await self.chat_history.append_user_message(preload_context, show_in_ui=False, source="horizon")
-
         # 压缩可能切换到专属模型，调用前重新解析一次当前文本模型。
         text_model_state = self._resolve_current_text_model()
 
-        # 应用层基于聊天消息元组快照渲染多模态消息，再交由 agentlang 修复通用消息序列。
+        # 历史加当前合计超过上限时，先关掉历史原生视觉消息，再基于快照渲染请求。
+        await self.chat_history.disable_historical_native_visual_if_over_limit(
+            self._message_renderer.max_history_image_refs,
+        )
         message_snapshot = self.chat_history.get_message_snapshot()
         render_result = await self._message_renderer.render_messages_with_horizon_hint(
             message_snapshot,
@@ -3237,11 +3314,22 @@ Since your subsequent output will be merged with pre-interruption content and di
         """仅为缺失的 preload 路径登记文件，不覆盖已有记录或维护另一套恢复状态。"""
         registered = False
         horizon = self.agent_context.horizon
-        for file_path in self._preloaded_skill_files:
+        for preloaded_file in self._preloaded_file_contents:
+            file_path = preloaded_file.path
             try:
                 if await horizon.is_file_tracked(file_path):
                     continue
-                await horizon.record_file_observation(file_path, tool_name="skill_preload")
+                stat = await get_fresh_file_stat(file_path)
+                await horizon.record_file_read(
+                    path=file_path,
+                    file_hash=await calculate_file_hash(file_path),
+                    mtime_ms=stat.mtime * 1000,
+                    size=stat.size,
+                    truncated=False,
+                    tool_name="skill_preload",
+                    ranges=[(0, -1)],
+                    source_content=preloaded_file.source_content,
+                )
                 registered = await horizon.is_file_tracked(file_path) or registered
             except Exception as error:
                 logger.warning(f"[AgentHorizon] preload 文件登记失败 {file_path}: {error}")
@@ -3324,37 +3412,92 @@ Since your subsequent output will be merged with pre-interruption content and di
             except Exception as e:
                 logger.warning(f"合成 error tool_result 失败: tool={tool_name}, error={e}")
 
+    _MAX_COMPLETION_REMINDERS = 2
+
     async def _handle_no_tool_calls(self, llm_context: LLMResponseContext, loop_state: AgentLoopState) -> None:
+        """结束前提供有限提醒，不代替模型等待、停止子 Agent 或更新 Todo。
+
+        例：第一次只提醒 Todo，第二次同时提醒 Todo 和子 Agent，共用两次机会。
+        模型再次选择结束时不再提醒；次数用完也不终止它主动继续调用工具的工作。
         """
-        处理LLM响应中没有工具调用的情况
+        loop_state.should_continue = False
+        if loop_state.completion_reminder_count >= self._MAX_COMPLETION_REMINDERS:
+            return
 
-        逻辑流程:
-        1. 检查是否存在未完成的todo任务
-        2. 如果有未完成任务，通知大模型继续处理
-        3. 如果todo都完成了，直接退出循环
+        incomplete_todos = await self._check_incomplete_todos()
+        running_subagents: list[SubagentRunRef] = []
+        try:
+            running_subagents = await subagent_session_manager.list_running_child_runs(
+                self.agent_context.context_id,
+            )
+        except Exception as error:
+            logger.warning(f"读取运行中子 Agent 失败: {error}")
 
-        Args:
-            llm_context: LLM响应上下文
-            loop_state: 循环状态，会被直接修改
-        """
-        # 检查是否存在未完成的todo任务
-        has_incomplete_todos, todo_message = await self._check_incomplete_todos()
+        if not incomplete_todos and not running_subagents:
+            return
 
-        if has_incomplete_todos:
-            # 有未完成的任务，将提示消息添加到聊天历史
-            logger.info("检测到未完成的todo任务，提示大模型继续完成任务")
-            await self.chat_history.append_user_message(todo_message, show_in_ui=False)
+        reminder = self._build_completion_reminder(incomplete_todos, running_subagents)
+        # 先占用机会，写入失败不无限重试；次数和容忍结束的边界不发送给模型。
+        loop_state.completion_reminder_count += 1
+        try:
             # 本轮没有工具结果，不会经过通常的注入点；继续推理前仍需要最新目录。
             ctx_update = await self._build_horizon_context_update_safely(
                 injection_point=HorizonInjectionPoint.BEFORE_CONTINUATION_LLM, log_context="继续未完成任务",
             )
             if ctx_update:
                 await self.chat_history.append_user_message(ctx_update, show_in_ui=False, source="horizon")
+            # 直接写入当前上下文，不放入可能因预算超限而延期消费的 Horizon 通知队列。
+            await self.chat_history.append_user_message(
+                reminder, show_in_ui=False, source="completion_reminder",
+            )
             loop_state.should_continue = True
-        else:
-            # All tasks completed, exit the loop directly
-            logger.info("所有任务已完成，退出 agent 循环")
-            loop_state.should_continue = False
+            logger.info(
+                f"已追加结束提醒 #{loop_state.completion_reminder_count}/{self._MAX_COMPLETION_REMINDERS}，"
+                f"未完成 Todo={len(incomplete_todos)}，运行中子 Agent={len(running_subagents)}"
+            )
+        except Exception as error:
+            logger.warning(f"结束提醒写入失败，沿用正常结束流程: {error}")
+
+    @staticmethod
+    def _build_completion_reminder(
+        incomplete_todos: list[TodoItem],
+        running_subagents: list[SubagentRunRef],
+    ) -> str:
+        """按实际存在的事项生成提醒；运行上限不是模型可选择的工作方式。"""
+        lines = [
+            "Runtime reminder, not a new user instruction.",
+            "There is unfinished work to resolve before completing this task.",
+        ]
+        if running_subagents:
+            lines.extend(["", "Sub-agents still running:"])
+            lines.extend(f"- {ref.agent_name} / {ref.agent_id}" for ref in running_subagents)
+            lines.extend([
+                "",
+                "Before finishing, wait for the running sub-agents to complete and collect their results.",
+                "Call wait_for_subagents with these exact final session IDs:",
+                json.dumps([ref.agent_id for ref in running_subagents], ensure_ascii=False),
+                "A timeout or progress message does not mean the sub-agent has completed. "
+                "Keep waiting and process the final results before completing this task.",
+                "If a delegated task is no longer needed, explicitly stop that sub-agent "
+                "instead of leaving it running.",
+            ])
+        if incomplete_todos:
+            lines.extend(["", "Todo items still incomplete:"])
+            lines.extend(
+                f"- [{todo.status.value}] {todo.id}: {todo.content}"
+                for todo in incomplete_todos
+            )
+            lines.extend([
+                "",
+                "Resolve the incomplete Todo items. Use todo_update to mark an item completed "
+                "only when its work is done, or cancelled only when it is no longer needed.",
+            ])
+        content = html.escape("\n".join(lines), quote=False)
+        return (
+            '<system_injected_context>\n<notifications>\n'
+            f'<notification source="completion_reminder">\n{content}\n</notification>\n'
+            '</notifications>\n</system_injected_context>'
+        )
 
     async def _execute_and_process_tool_calls(self, llm_context: LLMResponseContext) -> ToolExecutionResult:
         """
@@ -3393,6 +3536,10 @@ Since your subsequent output will be merged with pre-interruption content and di
             final_response=final_response,
             inject_horizon_after_tools=inject_horizon_after_tools,
             has_long_args_failure=has_long_args_failure,
+            has_compact_history=any(
+                result is not None and result.system == "COMPACT_HISTORY"
+                for result in tool_call_results
+            ),
         )
 
     # 工具参数长度阈值：超过此值的失败工具调用被视为"超长参数导致的校验失败"
@@ -3467,6 +3614,11 @@ Since your subsequent output will be merged with pre-interruption content and di
                     tool_call_id=result.tool_call_id,
                     system=result.system,
                     duration_ms=tool_duration_ms,
+                    context_source=(
+                        ContextSource.SKILLS if result.name == "read_skills"
+                        else ContextSource.MCP if bool(result.name and result.name.startswith("mcp_"))
+                        else ContextSource.from_value(result.extra_info.get("context_source"))
+                    ),
                 )
 
                 # 检查其他特殊工具调用
@@ -3517,57 +3669,19 @@ Since your subsequent output will be merged with pre-interruption content and di
 
         return should_exit, final_response, inject_horizon_after_tools
 
-    async def _check_incomplete_todos(self) -> tuple[bool, Optional[str]]:
-        """
-        检查是否存在未完成的任务
-
-        Returns:
-            tuple[bool, Optional[str]]: (是否有未完成任务, 提示消息)
-        """
+    async def _check_incomplete_todos(self) -> list[TodoItem]:
+        """读取未完成 Todo；保留原有读取失败不阻止结束的行为。"""
         try:
             # 加载待办任务列表
             todos = await TodoService.load_todos()
-
-            # 如果没有任务,直接返回
-            if not todos:
-                logger.debug("没有找到任何待办任务")
-                return False, None
-
             # 过滤出未完成的任务(状态为pending或in_progress)
-            incomplete_todos = [
+            return [
                 todo for todo in todos
-                if todo.status in ["pending", "in_progress"]
+                if todo.status in (TodoStatus.PENDING, TodoStatus.IN_PROGRESS)
             ]
-
-            # 如果没有未完成任务,返回False
-            if not incomplete_todos:
-                logger.info("所有任务都已完成")
-                return False, None
-
-            # 构造提示消息
-            logger.info(f"发现 {len(incomplete_todos)} 个未完成的任务")
-
-            formatted_todos = TodoService.format_todos_simple(incomplete_todos)
-
-            # 构造详细的提示消息
-            message_lines = [
-                "我发现有任务处于未完成的状态，以下是所有任务的列表",
-                "",
-                formatted_todos,
-                "",
-                "你需要自行确认(不需要问我)这些任务是否已经完成了，如果已经完成了，请使用 todo_update 工具将其标记为 completed；如果不需要完成，请使用 todo_update 工具将其标记为 cancelled。",
-                "",
-                "如果存在没有完成的任务，请立马开始处理它们"
-            ]
-
-            prompt_message = "\n".join(message_lines)
-
-            return True, prompt_message
-
         except Exception as e:
             logger.error(f"检查未完成任务时发生错误: {e}", exc_info=True)
-            # 出错时返回False,不阻止任务完成
-            return False, None
+            return []
 
     async def _execute_history_compact(self, result: CompactResult) -> None:
         """
@@ -3683,6 +3797,7 @@ Since your subsequent output will be merged with pre-interruption content and di
 
             await self._rehydrate_media_models_after_context_reset()
 
+            self._context_usage_estimator.clear()
             logger.info("Chat history reset for new session via /new")
 
         except Exception as e:
@@ -4005,6 +4120,17 @@ Since your subsequent output will be merged with pre-interruption content and di
             return False
         return tool_instance.is_visible_in_context(self.agent_context)
 
+    @staticmethod
+    def _validate_llm_response(response: ChatCompletion) -> None:
+        """错误 envelope 不包含 choices，先保留上游错误语义，再读取消息。"""
+        extra = response.model_extra or {}
+        code = extra.get("code")
+        if code is not None and code != 1000:
+            message = extra.get("message") or "Model service returned an error"
+            raise RuntimeError(f"Model request failed: code={code}, message={message}")
+        if not response.choices or response.choices[0].message is None:
+            raise RuntimeError("Model service returned no response choices/message.")
+
     async def _call_llm(
         self,
         messages: List[Dict[str, Any]],
@@ -4086,6 +4212,31 @@ Since your subsequent output will be merged with pre-interruption content and di
         if non_stream_timeout is not None:
             processor_config.non_stream_timeout_seconds = non_stream_timeout
 
+        if self.agent_context.is_main_agent and self.agent_context.get_message_version() == "v2":
+            sources: dict[str, ContextSource | None] = {}
+            for message in self.chat_history.messages:
+                if isinstance(message, AssistantMessage):
+                    for call in message.tool_calls or []:
+                        if call.function is None:
+                            continue
+                        name = call.function.name
+                        sources[call.id] = (
+                            ContextSource.SKILLS if name == "read_skills"
+                            else ContextSource.MCP if name.startswith("mcp_")
+                            else ContextSource.MIXED if name == "run_sdk_snippet"
+                            else None
+                        )
+                elif isinstance(message, ToolMessage) and message.context_source is not None:
+                    sources[message.tool_call_id] = message.context_source
+            schema_estimates: dict[int, ToolSchemaEstimate] = {}
+            for tool_param in tools_list:
+                estimate = tool_factory.get_context_usage_schema_estimate(tool_param["function"]["name"])
+                if estimate is not None:
+                    schema_estimates[id(estimate.schema)] = estimate
+            processor_config.context_usage_estimator = lambda request: self._context_usage_estimator.estimate(
+                request, sources, schema_estimates,
+            )
+
         processor_config.model_id = text_model_state.model_id
         processor_config.model_name = text_model_state.model_name
 
@@ -4103,13 +4254,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         except ResourceLimitExceededException:
             raise
 
-        # 检查 model_extra 中的响应状态码
-        if hasattr(llm_response, 'model_extra') and llm_response.model_extra:
-            code = llm_response.model_extra.get('code')
-            if code is not None and code != 1000:
-                message = llm_response.model_extra.get('message', '')
-                logger.error(f"LLM响应异常状态: code={code}, message={message}")
-
+        self._validate_llm_response(llm_response)
         llm_response_message = llm_response.choices[0].message
         request_time = time.time() - start_time
         # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ 调用 LLM 结束 ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ #

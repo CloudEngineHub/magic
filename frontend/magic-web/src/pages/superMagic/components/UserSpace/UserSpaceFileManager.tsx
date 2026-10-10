@@ -12,9 +12,13 @@ import type { AttachmentItem } from "../TopicFilesButton/hooks/types"
 import UserSpaceFilesView from "./UserSpaceFilesView"
 import UserSpaceMemoryManager from "./UserSpaceMemoryManager"
 
+import type { FileManagerProps } from "../TopicFilesButton/components/FileManager/types"
+
 export default function UserSpaceFileManager({
 	context,
 	onFileClick,
+	onPreviewFile,
+	onPreviewRemoved,
 	projectId,
 	projectName,
 	topicId,
@@ -22,6 +26,8 @@ export default function UserSpaceFileManager({
 	initialState,
 	onStateChange,
 }: {
+	onPreviewFile?: FileManagerProps["onPreviewFile"]
+	onPreviewRemoved?: FileManagerProps["onPreviewRemoved"]
 	context: Extract<FileManagerContext, { spaceType: "user" }>
 	onFileClick: (file: AttachmentItem) => void
 	projectId?: string
@@ -103,6 +109,8 @@ export default function UserSpaceFileManager({
 				/>
 			) : (
 				<UserSpaceFilesView
+					onPreviewFile={onPreviewFile}
+					onPreviewRemoved={onPreviewRemoved}
 					initialState={saved.current.filesLocation}
 					onStateChange={(filesLocation, options) =>
 						updateState({ filesLocation }, options)
