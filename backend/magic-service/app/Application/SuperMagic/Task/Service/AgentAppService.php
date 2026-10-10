@@ -30,6 +30,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\Respons
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -256,6 +257,19 @@ readonly class AgentAppService
     public function getBatchSandboxStatus(array $sandboxIds): BatchStatusResult
     {
         return $this->agentDomainService->getBatchSandboxStatus($sandboxIds);
+    }
+
+    /**
+     * 列出沙箱网关里真实存在的沙箱（可按状态过滤）。
+     *
+     * 运维脚本（如 magic-claw:restart-sandbox-all）用这个接口拿“正在运行”的沙箱集合，
+     * 而不是从业务表反推，避免把已经退出、或从未创建过沙箱的记录重新拉起。
+     *
+     * @param string[] $statuses 只返回这些状态（如 ['Running']）；空数组表示不过滤
+     */
+    public function listSandboxes(array $statuses = []): SandboxListResult
+    {
+        return $this->agentDomainService->listSandboxes($statuses);
     }
 
     /**

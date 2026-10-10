@@ -56,6 +56,12 @@
       -->
       <file>test/Cases/Application/SuperMagic/File/Service/MagicFSChangePublisherTest.php</file>
       <file>test/Cases/Application/SuperMagic/File/Service/MagicFSFileAppServiceChangeFeedBatchTest.php</file>
+      <!--
+        Magic Claw 沙箱重启命令与网关清单解析：同样按文件精确登记（原因见上）。
+      -->
+      <file>test/Cases/Application/SuperMagic/Agent/Command/RestartAllMagicClawSandboxCommandTest.php</file>
+      <file>test/Cases/Infrastructure/SuperMagic/ExternalAPI/SandboxOS/SandboxListGatewayTest.php</file>
+      <file>test/Cases/Infrastructure/SuperMagic/ExternalAPI/SandboxOS/Gateway/Result/SandboxListResultTest.php</file>
     </testsuite>
   </testsuites>
 

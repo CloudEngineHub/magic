@@ -115,6 +115,17 @@ readonly class MagicClawDomainService
         return $this->magicClawRepository->getByProjectId($projectId);
     }
 
+    /**
+     * Get claws indexed by their bound project ID.
+     *
+     * @param int[] $projectIds
+     * @return array<int, MagicClawEntity> projectId => claw
+     */
+    public function getByProjectIds(array $projectIds): array
+    {
+        return $this->magicClawRepository->getByProjectIds($projectIds);
+    }
+
     private function getByCodeOrFail(string $code, string $userId, string $organizationCode): MagicClawEntity
     {
         $entity = $this->magicClawRepository->findByCode($code, $userId, $organizationCode);

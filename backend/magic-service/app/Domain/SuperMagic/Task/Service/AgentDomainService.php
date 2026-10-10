@@ -63,6 +63,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\Respons
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
@@ -597,6 +598,40 @@ class AgentDomainService
             'requested_count' => count($sandboxIds),
             'returned_count' => $result->getTotalCount(),
             'running_count' => $result->getRunningCount(),
+        ]);
+
+        return $result;
+    }
+
+    /**
+     * 列出网关里真实存在的沙箱（可按状态过滤）。
+     *
+     * 与 getBatchSandboxStatus 不同：这里不依赖业务表里的 sandbox_id，直接以网关
+     * 的 pod 清单为准，供运维脚本判断“当前哪些沙箱真的在跑”。
+     *
+     * @param string[] $statuses 只返回这些状态（如 ['Running']）；空数组表示不过滤
+     */
+    public function listSandboxes(array $statuses = []): SandboxListResult
+    {
+        $this->logger->info('[Sandbox][Domain] Listing sandboxes from gateway', [
+            'statuses' => $statuses,
+        ]);
+
+        $result = $this->gateway->listSandboxes($statuses);
+
+        if (! $result->isSuccess()) {
+            $this->logger->error('[Sandbox][Domain] Failed to list sandboxes', [
+                'statuses' => $statuses,
+                'error' => $result->getMessage(),
+                'code' => $result->getCode(),
+            ]);
+            throw new SandboxOperationException('List sandboxes', $result->getMessage(), $result->getCode());
+        }
+
+        $this->logger->info('[Sandbox][Domain] Sandbox list retrieved', [
+            'statuses' => $statuses,
+            'total' => $result->getTotal(),
+            'status_counts' => $result->getStatusCounts(),
         ]);
 
         return $result;

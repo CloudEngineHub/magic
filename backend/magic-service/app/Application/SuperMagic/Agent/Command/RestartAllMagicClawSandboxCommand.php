@@ -11,24 +11,36 @@ use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
-use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
 use Hyperf\Logger\LoggerFactory;
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Throwable;
 
+/**
+ * 重启“正在运行”的 Magic Claw 沙箱。
+ *
+ * 运行集合以沙箱网关返回的 pod 清单为准（GET /api/v1/sandboxes），不再从 magic_super_magic_claw
+ * 表反推：已经退出、或从未创建过沙箱的龙虾不会被重新拉起。
+ */
 #[Command]
 class RestartAllMagicClawSandboxCommand extends HyperfCommand
 {
-    protected ?string $name = 'magic-claw:restart-sandbox-all';
+    /**
+     * --status 的特殊取值：不向网关传状态过滤，清单包含所有状态的沙箱（旧行为）。
+     */
+    private const STATUS_FILTER_ANY = 'any';
 
     private LoggerInterface $logger;
 
     public function __construct(
         private readonly MagicClawDomainService $magicClawDomainService,
-        private readonly ProjectDomainService $projectDomainService,
+        private readonly TopicDomainService $topicDomainService,
         private readonly AgentAppService $agentAppService,
         LoggerFactory $loggerFactory,
     ) {
@@ -39,209 +51,357 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
     public function configure(): void
     {
         parent::configure();
-        $this->setDescription('Restart sandboxes for all valid Magic Claws');
+        $this->setDescription('Restart sandboxes of running Magic Claws (gateway sandbox list, default status Running)');
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'List targets without restarting sandboxes');
         $this->addOption('code', null, InputOption::VALUE_OPTIONAL, 'Restart only the Magic Claw with this code');
-        $this->addOption('page-size', null, InputOption::VALUE_OPTIONAL, 'Page size for scanning Magic Claws', 100);
-        $this->addOption('limit', null, InputOption::VALUE_OPTIONAL, 'Maximum records to scan, 0 means unlimited', 0);
+        $this->addOption(
+            'status',
+            null,
+            InputOption::VALUE_OPTIONAL,
+            'Comma separated sandbox statuses to list from the gateway, or "any" to disable the status filter',
+            SandboxStatus::RUNNING
+        );
+        $this->addOption('limit', null, InputOption::VALUE_OPTIONAL, 'Maximum sandboxes to restart, 0 means unlimited', 0);
         $this->addOption('sleep-ms', null, InputOption::VALUE_OPTIONAL, 'Sleep milliseconds after each restart', 0);
     }
 
-    public function handle(): void
+    public function handle(): int
     {
         $dryRun = (bool) $this->input->getOption('dry-run');
-        $pageSize = max(1, (int) $this->input->getOption('page-size'));
         $limit = max(0, (int) $this->input->getOption('limit'));
         $sleepMs = max(0, (int) $this->input->getOption('sleep-ms'));
         $code = trim((string) $this->input->getOption('code'));
 
+        try {
+            $statusFilter = $this->parseStatusFilter((string) $this->input->getOption('status'));
+        } catch (InvalidArgumentException $e) {
+            $this->error($e->getMessage());
+            return self::FAILURE;
+        }
+
+        $this->info('Listing sandboxes from the sandbox gateway...');
+        $this->line(sprintf(
+            'Options: dry_run=%s, code=%s, status=%s, limit=%d, sleep_ms=%d',
+            $dryRun ? 'true' : 'false',
+            $code === '' ? 'all' : $code,
+            $statusFilter === [] ? self::STATUS_FILTER_ANY : implode(',', $statusFilter),
+            $limit,
+            $sleepMs
+        ));
+
+        try {
+            $sandboxList = $this->agentAppService->listSandboxes($statusFilter);
+        } catch (Throwable $e) {
+            $this->error('Failed to list sandboxes from the sandbox gateway: ' . $e->getMessage());
+            $this->logger->error('Failed to list sandboxes from the sandbox gateway', [
+                'status_filter' => $statusFilter,
+                'exception' => get_class($e),
+                'error' => $e->getMessage(),
+            ]);
+            return self::FAILURE;
+        }
+
+        $sandboxes = $sandboxList->getSandboxes();
+        $statusCounts = $sandboxList->getStatusCounts();
+
         $stats = [
-            'scanned' => 0,
-            'eligible' => 0,
+            'listed' => count($sandboxes),
+            'matched' => 0,
             'restarted' => 0,
             'skipped' => 0,
             'failed' => 0,
         ];
 
-        $this->info('Scanning Magic Claws for sandbox restart...');
-        $this->line(sprintf(
-            'Options: dry_run=%s, code=%s, page_size=%d, limit=%d, sleep_ms=%d',
-            $dryRun ? 'true' : 'false',
-            $code === '' ? 'all' : $code,
-            $pageSize,
-            $limit,
-            $sleepMs
-        ));
+        // 沙箱 → 话题 → 龙虾：网关只认识 pod，归属关系仍然要回业务表确认。
+        $topicBySandboxId = $this->resolveTopicsBySandboxId($sandboxes);
+        $clawByProjectId = $this->resolveClawsByProjectId($topicBySandboxId);
 
-        $page = 1;
-        while (true) {
-            $result = $this->magicClawDomainService->getAllValidList($page, $pageSize);
-            /** @var MagicClawEntity[] $claws */
-            $claws = $result['list'];
-            if (empty($claws)) {
+        $handledTopicIds = [];
+        foreach ($sandboxes as $sandbox) {
+            $sandboxId = (string) $sandbox['sandbox_id'];
+            $status = (string) $sandbox['status'];
+
+            $topic = $topicBySandboxId[$sandboxId] ?? null;
+            if ($topic === null) {
+                $this->skip($stats, $sandboxId, $status, 'no topic matches this sandbox');
+                continue;
+            }
+
+            $topicId = $topic->getId();
+            $claw = $clawByProjectId[$topic->getProjectId()] ?? null;
+            if ($claw === null) {
+                $this->skip($stats, $sandboxId, $status, 'project is not a Magic Claw');
+                continue;
+            }
+
+            // --code 是精确过滤，其它龙虾静默跳过（与旧行为一致，不计入统计）。
+            if ($code !== '' && $claw->getCode() !== $code) {
+                continue;
+            }
+
+            if (isset($handledTopicIds[$topicId])) {
+                $this->skip($stats, $sandboxId, $status, sprintf('topic %d already handled by another sandbox', $topicId));
+                continue;
+            }
+
+            if ($limit > 0 && $stats['matched'] >= $limit) {
                 break;
             }
 
-            $topicIdMap = $this->resolveTopicIdMap($claws);
+            ++$stats['matched'];
+            $handledTopicIds[$topicId] = true;
+            $this->line(sprintf(
+                '[TARGET] code=%s, sandbox_id=%s, status=%s, topic_id=%d, project_id=%d',
+                $claw->getCode(),
+                $sandboxId,
+                $status,
+                $topicId,
+                $topic->getProjectId()
+            ));
 
-            foreach ($claws as $claw) {
-                if ($code !== '' && $claw->getCode() !== $code) {
-                    continue;
+            if ($dryRun) {
+                continue;
+            }
+
+            try {
+                $restartedSandboxId = $this->restartSandbox($topic);
+                ++$stats['restarted'];
+                $this->info(sprintf('[OK] code=%s, sandbox_id=%s', $claw->getCode(), $restartedSandboxId));
+                $this->logger->info('Magic Claw sandbox restarted', [
+                    'code' => $claw->getCode(),
+                    'user_id' => $topic->getUserId(),
+                    'organization_code' => $topic->getUserOrganizationCode(),
+                    'project_id' => $topic->getProjectId(),
+                    'topic_id' => $topicId,
+                    'previous_sandbox_id' => $sandboxId,
+                    'previous_status' => $status,
+                    'sandbox_id' => $restartedSandboxId,
+                ]);
+
+                if ($sleepMs > 0) {
+                    usleep($sleepMs * 1000);
                 }
-
-                if ($limit > 0 && $stats['scanned'] >= $limit) {
-                    $this->printSummary($stats);
-                    return;
-                }
-
-                ++$stats['scanned'];
-
-                $projectId = $claw->getProjectId();
-                if ($projectId === null) {
-                    $this->skip($stats, $claw, 'project_id is empty');
-                    continue;
-                }
-
-                if (! array_key_exists($projectId, $topicIdMap)) {
-                    $this->skip($stats, $claw, 'project not found or deleted');
-                    continue;
-                }
-
-                $topicId = $topicIdMap[$projectId];
-                if ($topicId === null) {
-                    $this->skip($stats, $claw, 'current_topic_id is empty');
-                    continue;
-                }
-
-                ++$stats['eligible'];
-                $this->line(sprintf(
-                    '[TARGET] code=%s, user_id=%s, organization_code=%s, project_id=%d, topic_id=%d',
+            } catch (Throwable $e) {
+                ++$stats['failed'];
+                $this->error(sprintf(
+                    '[FAIL] code=%s, sandbox_id=%s, topic_id=%d, error=%s',
                     $claw->getCode(),
-                    $claw->getUserId(),
-                    $claw->getOrganizationCode(),
-                    $projectId,
-                    $topicId
+                    $sandboxId,
+                    $topicId,
+                    $e->getMessage()
                 ));
-
-                if ($dryRun) {
-                    if ($code !== '') {
-                        $this->printSummary($stats);
-                        return;
-                    }
-                    continue;
-                }
-
-                try {
-                    $sandboxId = $this->agentAppService->restartSandbox(
-                        $this->createDataIsolation($claw),
-                        $topicId
-                    );
-                    ++$stats['restarted'];
-                    $this->info(sprintf('[OK] code=%s, sandbox_id=%s', $claw->getCode(), $sandboxId));
-                    $this->logger->info('Magic Claw sandbox restarted', [
-                        'code' => $claw->getCode(),
-                        'user_id' => $claw->getUserId(),
-                        'organization_code' => $claw->getOrganizationCode(),
-                        'project_id' => $projectId,
-                        'topic_id' => $topicId,
-                        'sandbox_id' => $sandboxId,
-                    ]);
-
-                    if ($sleepMs > 0) {
-                        usleep($sleepMs * 1000);
-                    }
-                } catch (Throwable $e) {
-                    ++$stats['failed'];
-                    $this->error(sprintf(
-                        '[FAIL] code=%s, project_id=%d, topic_id=%d, error=%s',
-                        $claw->getCode(),
-                        $projectId,
-                        $topicId,
-                        $e->getMessage()
-                    ));
-                    $this->logger->error('Failed to restart Magic Claw sandbox', [
-                        'code' => $claw->getCode(),
-                        'user_id' => $claw->getUserId(),
-                        'organization_code' => $claw->getOrganizationCode(),
-                        'project_id' => $projectId,
-                        'topic_id' => $topicId,
-                        'exception' => get_class($e),
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-
-                if ($code !== '') {
-                    $this->printSummary($stats);
-                    return;
-                }
+                $this->logger->error('Failed to restart Magic Claw sandbox', [
+                    'code' => $claw->getCode(),
+                    'user_id' => $topic->getUserId(),
+                    'organization_code' => $topic->getUserOrganizationCode(),
+                    'project_id' => $topic->getProjectId(),
+                    'topic_id' => $topicId,
+                    'sandbox_id' => $sandboxId,
+                    'exception' => get_class($e),
+                    'error' => $e->getMessage(),
+                ]);
             }
-
-            if ($stats['scanned'] >= (int) $result['total']) {
-                break;
-            }
-            ++$page;
         }
 
-        if ($code !== '' && $stats['scanned'] === 0) {
-            $this->line(sprintf('[NOT_FOUND] Magic Claw code not found: %s', $code));
+        if ($code !== '' && $stats['matched'] === 0) {
+            $this->line(sprintf(
+                '[NOT_FOUND] No running Magic Claw sandbox for code: %s (status=%s)',
+                $code,
+                $statusFilter === [] ? self::STATUS_FILTER_ANY : implode(',', $statusFilter)
+            ));
         }
 
-        $this->printSummary($stats);
+        $this->printSummary($stats, $statusCounts, $statusFilter);
+        return self::SUCCESS;
     }
 
     /**
-     * @param MagicClawEntity[] $claws
-     * @return array<int, null|int>
+     * 重启沙箱：以话题归属者身份发起，restartSandbox 会校验话题归属，用话题 owner 才能通过。
      */
-    private function resolveTopicIdMap(array $claws): array
+    protected function restartSandbox(TopicEntity $topic): string
     {
-        $projectIds = array_values(array_unique(array_filter(
-            array_map(static fn (MagicClawEntity $claw): ?int => $claw->getProjectId(), $claws)
-        )));
+        return $this->agentAppService->restartSandbox($this->createDataIsolation($topic), $topic->getId());
+    }
 
-        if (empty($projectIds)) {
+    /**
+     * 把网关返回的沙箱映射回话题。
+     *
+     * 首选 pod 上的 topic-id 标签（PHP 冷启动与温池挂载都会打）；标签缺失时退化为
+     * “沙箱 ID 即话题 ID”的历史约定，并要求话题记录的 sandbox_id 与之吻合，避免温池
+     * 生成的雪花 ID 撞上真实话题 ID 时误伤别的话题。
+     *
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}> $sandboxes
+     * @return array<string, TopicEntity> sandboxId => topic
+     */
+    private function resolveTopicsBySandboxId(array $sandboxes): array
+    {
+        $candidateTopicIds = [];
+        foreach ($sandboxes as $sandbox) {
+            $topicId = $this->resolveCandidateTopicId($sandbox);
+            if ($topicId !== null) {
+                $candidateTopicIds[$topicId] = $topicId;
+            }
+        }
+
+        if ($candidateTopicIds === []) {
             return [];
         }
 
-        return $this->projectDomainService->getTopicIdMapByProjectIds($projectIds);
+        $topicById = [];
+        foreach ($this->topicDomainService->getTopicsByIds(array_values($candidateTopicIds)) as $topic) {
+            $topicById[$topic->getId()] = $topic;
+        }
+
+        $result = [];
+        foreach ($sandboxes as $sandbox) {
+            $sandboxId = (string) $sandbox['sandbox_id'];
+            $topicId = $this->resolveCandidateTopicId($sandbox);
+            $topic = $topicId === null ? null : ($topicById[$topicId] ?? null);
+            if ($topic === null) {
+                continue;
+            }
+
+            // 走沙箱 ID 兜底时，必须确认话题自己记的就是这个沙箱。
+            $labelTopicId = (int) ($sandbox['topic_id'] ?? 0);
+            $persistedSandboxId = $topic->getSandboxId();
+            if ($labelTopicId <= 0 && $persistedSandboxId !== '' && $persistedSandboxId !== $sandboxId) {
+                continue;
+            }
+
+            $result[$sandboxId] = $topic;
+        }
+
+        return $result;
     }
 
-    private function createDataIsolation(MagicClawEntity $claw): DataIsolation
+    /**
+     * @param array{sandbox_id: string, topic_id: string} $sandbox
+     */
+    private function resolveCandidateTopicId(array $sandbox): ?int
     {
-        $dataIsolation = DataIsolation::create($claw->getOrganizationCode(), $claw->getUserId());
-        $dataIsolation->setThirdPartyOrganizationCode($claw->getOrganizationCode());
+        $labelTopicId = (int) ($sandbox['topic_id'] ?? 0);
+        if ($labelTopicId > 0) {
+            return $labelTopicId;
+        }
+
+        $sandboxId = (string) ($sandbox['sandbox_id'] ?? '');
+        $sandboxIdInt = (int) $sandboxId;
+        if ($sandboxIdInt > 0 && (string) $sandboxIdInt === $sandboxId) {
+            return $sandboxIdInt;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, TopicEntity> $topicBySandboxId
+     * @return array<int, MagicClawEntity> projectId => claw
+     */
+    private function resolveClawsByProjectId(array $topicBySandboxId): array
+    {
+        $projectIds = [];
+        foreach ($topicBySandboxId as $topic) {
+            $projectId = $topic->getProjectId();
+            if ($projectId > 0) {
+                $projectIds[$projectId] = $projectId;
+            }
+        }
+
+        if ($projectIds === []) {
+            return [];
+        }
+
+        return $this->magicClawDomainService->getByProjectIds(array_values($projectIds));
+    }
+
+    /**
+     * 解析 --status：空值或 any 表示不过滤（返回空数组）。
+     *
+     * @return string[] 规范化后的状态列表
+     * @throws InvalidArgumentException 出现未知状态时抛出
+     */
+    private function parseStatusFilter(string $option): array
+    {
+        $option = trim($option);
+        if ($option === '' || strcasecmp($option, self::STATUS_FILTER_ANY) === 0) {
+            return [];
+        }
+
+        $allowed = [];
+        foreach (SandboxStatus::getAllStatuses() as $status) {
+            $allowed[strtolower($status)] = $status;
+        }
+
+        $filter = [];
+        foreach (explode(',', $option) as $status) {
+            $status = trim($status);
+            if ($status === '') {
+                continue;
+            }
+
+            $canonical = $allowed[strtolower($status)] ?? null;
+            if ($canonical === null) {
+                throw new InvalidArgumentException(sprintf(
+                    'Invalid --status value "%s", allowed: %s, or "any" to disable the filter',
+                    $status,
+                    implode(', ', SandboxStatus::getAllStatuses())
+                ));
+            }
+            $filter[$canonical] = $canonical;
+        }
+
+        return array_values($filter);
+    }
+
+    private function createDataIsolation(TopicEntity $topic): DataIsolation
+    {
+        $dataIsolation = DataIsolation::create($topic->getUserOrganizationCode(), $topic->getUserId());
+        $dataIsolation->setThirdPartyOrganizationCode($topic->getUserOrganizationCode());
         return $dataIsolation;
     }
 
     /**
-     * @param array{scanned: int, eligible: int, restarted: int, skipped: int, failed: int} $stats
+     * @param array{listed: int, matched: int, restarted: int, skipped: int, failed: int} $stats
      */
-    private function skip(array &$stats, MagicClawEntity $claw, string $reason): void
+    private function skip(array &$stats, string $sandboxId, string $status, string $reason): void
     {
         ++$stats['skipped'];
         $this->line(sprintf(
-            '[SKIP] code=%s, user_id=%s, organization_code=%s, project_id=%s, reason=%s',
-            $claw->getCode(),
-            $claw->getUserId(),
-            $claw->getOrganizationCode(),
-            $claw->getProjectId() === null ? 'null' : (string) $claw->getProjectId(),
+            '[SKIP] sandbox_id=%s, status=%s, reason=%s',
+            $sandboxId,
+            $status === '' ? 'unknown' : $status,
             $reason
         ));
     }
 
     /**
-     * @param array{scanned: int, eligible: int, restarted: int, skipped: int, failed: int} $stats
+     * @param array{listed: int, matched: int, restarted: int, skipped: int, failed: int} $stats
+     * @param array<string, int> $statusCounts
+     * @param string[] $statusFilter
      */
-    private function printSummary(array $stats): void
+    private function printSummary(array $stats, array $statusCounts = [], array $statusFilter = []): void
     {
         $this->line('');
         $this->info('Magic Claw sandbox restart summary:');
-        $this->line('  scanned: ' . $stats['scanned']);
-        $this->line('  eligible: ' . $stats['eligible']);
+        $this->line('  status_filter: ' . ($statusFilter === [] ? self::STATUS_FILTER_ANY . ' (disabled)' : implode(',', $statusFilter)));
+        $this->line('  listed: ' . $stats['listed']);
+        $this->line('  matched: ' . $stats['matched']);
         $this->line('  restarted: ' . $stats['restarted']);
         $this->line('  skipped: ' . $stats['skipped']);
         $this->line('  failed: ' . $stats['failed']);
 
-        $this->logger->info('Magic Claw sandbox restart command finished', $stats);
+        if ($statusCounts !== []) {
+            arsort($statusCounts);
+            $parts = [];
+            foreach ($statusCounts as $status => $count) {
+                $parts[] = $status . '=' . $count;
+            }
+            $this->line('  sandbox_statuses: ' . implode(', ', $parts));
+        }
+
+        $this->logger->info('Magic Claw sandbox restart command finished', $stats + [
+            'status_filter' => $statusFilter === [] ? self::STATUS_FILTER_ANY : $statusFilter,
+            'status_counts' => $statusCounts,
+        ]);
     }
 }

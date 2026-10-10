@@ -128,6 +128,32 @@ class MagicClawRepository extends SuperMagicAbstractRepository implements MagicC
         return $model ? $this->modelToEntity($model) : null;
     }
 
+    public function getByProjectIds(array $projectIds): array
+    {
+        $projectIds = array_values(array_unique(array_filter(
+            array_map('intval', $projectIds),
+            static fn (int $projectId): bool => $projectId > 0
+        )));
+        if (empty($projectIds)) {
+            return [];
+        }
+
+        $models = $this->magicClawModel::query()
+            ->whereIn('project_id', $projectIds)
+            ->get();
+
+        $claws = [];
+        foreach ($models as $model) {
+            $entity = $this->modelToEntity($model);
+            $projectId = $entity->getProjectId();
+            if ($projectId !== null) {
+                $claws[$projectId] = $entity;
+            }
+        }
+
+        return $claws;
+    }
+
     private function modelToEntity(MagicClawModel $model): MagicClawEntity
     {
         $entity = new MagicClawEntity();
