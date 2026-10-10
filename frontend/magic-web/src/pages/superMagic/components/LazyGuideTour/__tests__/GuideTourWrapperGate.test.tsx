@@ -443,6 +443,48 @@ describe("the wrapper's gate on the dialogs that come first", () => {
 	})
 })
 
+describe("the offer of the introduction, once it has been taken up", () => {
+	/**
+	 * The gate above is answered by reading the stores, and the page they belong to goes on moving
+	 * after the dialog is up: the organization settles, the sidebar answers, the layout the wrapper
+	 * hangs off re-renders for reasons of its own. None of that is a new answer to "may this page
+	 * offer the run" — and taking the run back down is not a small mistake, because the run spends
+	 * the one-shot flag the moment the dialog is on screen. A dialog unmounted here is gone for good:
+	 * the flag that was just written is the same one that keeps a later mount from offering it.
+	 */
+	it("keeps the dialog up while the page around it re-renders", async () => {
+		const { wrapper, rerender } = await mountWrapper(() => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "PENDING")] })
+		})
+
+		await screen.findByRole("dialog", { name: INTRO }, { timeout: 15000 })
+
+		await act(async () => {
+			rerender(<wrapper.default isMobile={false} />)
+		})
+
+		expect(screen.queryByRole("dialog", { name: INTRO })).not.toBeNull()
+	})
+
+	it("is not taken down by a dialog that arrives after it", async () => {
+		/*
+		 * The daily-reward claim takes the screen for the length of its request, and it can begin at
+		 * any time — the account's organization lands late, or the check comes round on its timer.
+		 * Arriving behind an introduction that is already up, it is the same kind of late answer as a
+		 * re-render: the run has been offered, and nothing that happens afterwards can un-offer it.
+		 */
+		const { prelude } = await mountWrapper(() => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "PENDING")] })
+		})
+
+		await screen.findByRole("dialog", { name: INTRO }, { timeout: 15000 })
+
+		act(() => prelude.holdHomeOnboardingPrelude("daily-reward-claim"))
+
+		expect(screen.queryByRole("dialog", { name: INTRO })).not.toBeNull()
+	})
+})
+
 describe("the wrapper's offer of the introduction", () => {
 	/**
 	 * A page load is a fresh module graph over storage that is *not* cleared, which is exactly what

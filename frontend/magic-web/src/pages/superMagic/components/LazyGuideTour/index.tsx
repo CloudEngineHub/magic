@@ -154,6 +154,30 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 		isHomeOnboardingTaskPending(userInfo?.magic_id, "first-ai-work") &&
 		checkIfHomeOnboardingNeeded(userInfo?.magic_id, isHome, isMobile)
 
+	/**
+	 * The offer stands once it has been made.
+	 *
+	 * Every answer above is a reason to *wait* — the list is still on its way, a dialog ahead of this
+	 * one is on screen, the account's status has not settled — and waiting is not the same thing as
+	 * taking the offer back. Two of them change *because* the run has started, which is what makes
+	 * the distinction carry weight rather than being a nicety:
+	 *
+	 * - the introduction flag is spent by the run itself, the moment the dialog is on screen;
+	 * - a daily-reward claim takes the screen for the length of its request, and it can begin at any
+	 *   time — the account's organization arrives late, or the check comes round on its timer.
+	 *
+	 * Read again on the next render — and there is always a next render: the organization store
+	 * settles, the sidebar answers, the layout this wrapper hangs off re-renders for reasons of its
+	 * own — either of them would unmount exactly what just satisfied it. The dialog would then close
+	 * a frame after opening, and it could not be brought back: the flag written by showing it is the
+	 * same flag that keeps a later mount from offering it at all, so the account would be left having
+	 * seen a dialog for no time and having lost it for good.
+	 */
+	const [automaticRunOffered, setAutomaticRunOffered] = useState(false)
+	useEffect(() => {
+		if (automaticRun) setAutomaticRunOffered(true)
+	}, [automaticRun])
+
 	/*
 	 * The second line behind the wrapper's own mobile answer. That gate is what keeps a phone from
 	 * asking at all; this one is about rendering, and it is kept because the two are different
@@ -161,7 +185,11 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 	 */
 	if (!userInfo?.magic_id || isMobile) return null
 
-	const tourRequested = entryForThisPage || automaticRun || activeFlow
+	/*
+	 * The run stays mounted on the strength of the offer having been made, not on the strength of it
+	 * still being available: see `automaticRunOffered`.
+	 */
+	const tourRequested = entryForThisPage || automaticRun || automaticRunOffered || activeFlow
 	/*
 	 * The project detail page, which is the only page this dialog belongs to: it is the page a topic
 	 * runs on, and the one whose route carries both ids. The same pair is what the dialog itself
