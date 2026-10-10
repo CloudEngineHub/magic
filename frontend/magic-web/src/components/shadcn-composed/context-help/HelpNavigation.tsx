@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/shadcn-ui/tooltip"
+import SmartTooltip from "@/components/other/SmartTooltip"
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -50,7 +50,11 @@ export function HelpNavigation({
 			?.querySelector<HTMLElement>('[aria-current="page"]')
 			?.scrollIntoView({ block: "nearest" })
 	}, [activeId, expanded])
-	function renderItem(item: HelpNavigationItem, depth: number): ReactNode {
+	function renderItem(
+		item: HelpNavigationItem,
+		depth: number,
+		reserveToggle: boolean,
+	): ReactNode {
 		const hasChildren = Boolean(item.children?.length)
 		const open = expanded.has(item.id)
 		const active = item.articleId === activeId
@@ -64,7 +68,7 @@ export function HelpNavigation({
 				<div
 					style={{ paddingInlineStart: `calc(var(--help-nav-indent) * ${depth})` }}
 					className={cn(
-						"flex items-center rounded-md pr-1",
+						"flex items-center rounded-md pr-1 hover:bg-accent hover:text-accent-foreground",
 						active && "bg-accent text-accent-foreground",
 					)}
 				>
@@ -74,7 +78,7 @@ export function HelpNavigation({
 								variant="ghost"
 								size="icon"
 								aria-label={`${open ? t("contextHelp.collapse") : t("contextHelp.expand")} · ${item.label}`}
-								className="h-8 w-5 shrink-0 [@media(pointer:coarse)]:h-11"
+								className="h-8 w-5 shrink-0 hover:bg-transparent [@media(pointer:coarse)]:h-11"
 							>
 								{open ? (
 									<ChevronDown size={14} aria-hidden />
@@ -83,42 +87,44 @@ export function HelpNavigation({
 								)}
 							</Button>
 						</CollapsibleTrigger>
-					) : (
+					) : reserveToggle ? (
 						<span className="w-5 shrink-0" />
-					)}
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								variant="ghost"
-								aria-current={active ? "page" : undefined}
-								onClick={() =>
-									item.articleId
-										? onSelect(item.articleId)
-										: onExpandedChange(item.id, !open)
-								}
-								className={cn(
-									"h-auto min-h-9 min-w-0 flex-1 justify-start gap-2 whitespace-nowrap px-1 py-2 text-left text-xs font-normal leading-5 [@media(pointer:coarse)]:min-h-11",
-									active &&
-										"font-medium hover:bg-accent hover:text-accent-foreground",
-								)}
-							>
-								<span className="inline-flex shrink-0" aria-hidden>
-									{item.icon}
-								</span>
-								<span className="min-w-0 truncate">{item.label}</span>
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent
-							side="right"
-							className="max-w-[min(480px,calc(100vw-2rem))] break-all font-mono"
+					) : null}
+					<SmartTooltip
+						elementType="span"
+						className="min-w-0 flex-1 overflow-visible"
+						content={item.path ?? item.label}
+						forceShowTooltip={Boolean(item.path)}
+						trigger={["hover", "focus"]}
+						placement="right"
+						tooltipContentClassName={cn(
+							"max-w-[min(480px,calc(100vw-2rem))] break-words",
+							item.path && "font-mono",
+						)}
+					>
+						<Button
+							variant="ghost"
+							aria-current={active ? "page" : undefined}
+							onClick={() =>
+								item.articleId
+									? onSelect(item.articleId)
+									: onExpandedChange(item.id, !open)
+							}
+							className={cn(
+								"h-auto min-h-9 w-full min-w-0 justify-start gap-2 whitespace-nowrap px-1 py-2 text-left text-[13px] font-normal leading-5 hover:bg-transparent [@media(pointer:coarse)]:min-h-11",
+								active && "font-medium",
+							)}
 						>
-							{item.path ?? item.label}
-						</TooltipContent>
-					</Tooltip>
+							<span className="inline-flex shrink-0" aria-hidden>
+								{item.icon}
+							</span>
+							<span className="min-w-0 truncate">{item.label}</span>
+						</Button>
+					</SmartTooltip>
 				</div>
 				{hasChildren && (
 					<CollapsibleContent>
-						{item.children?.map((child) => renderItem(child, depth + 1))}
+						{item.children?.map((child) => renderItem(child, depth + 1, reserveToggle))}
 					</CollapsibleContent>
 				)}
 			</Collapsible>
@@ -126,6 +132,8 @@ export function HelpNavigation({
 	}
 	function renderGroup(group: HelpNavigationGroup): ReactNode {
 		const open = expanded.has(group.id)
+		// 分组内有子目录才保留折叠列；后代沿用该列，每级缩进仍递增，保证父子图标对齐。
+		const reserveToggle = group.items.some((item) => Boolean(item.children?.length))
 		return (
 			<Collapsible
 				key={group.id}
@@ -135,7 +143,7 @@ export function HelpNavigation({
 				<CollapsibleTrigger asChild>
 					<Button
 						variant="ghost"
-						className="h-auto min-h-9 w-full justify-start gap-1 whitespace-normal px-0 text-left text-xs font-medium [@media(pointer:coarse)]:min-h-11"
+						className="h-auto min-h-9 w-full justify-start gap-1 whitespace-normal px-0 text-left text-sm font-semibold [@media(pointer:coarse)]:min-h-11"
 					>
 						<span className="flex w-5 shrink-0 items-center justify-center">
 							{open ? (
@@ -148,7 +156,7 @@ export function HelpNavigation({
 					</Button>
 				</CollapsibleTrigger>
 				<CollapsibleContent className="mb-3 space-y-1">
-					{group.items.map((item) => renderItem(item, 1))}
+					{group.items.map((item) => renderItem(item, 1, reserveToggle))}
 				</CollapsibleContent>
 			</Collapsible>
 		)

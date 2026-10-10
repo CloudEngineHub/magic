@@ -43,6 +43,7 @@ export interface HelpDialogProps extends HelpDialogContentProps {
 }
 
 export interface ContextHelpProps {
+	/** 标题按当前学习场景提供；默认使用通用帮助标题，文件用途只是其中一种内容。 */
 	header?: HelpDialogProps["header"]
 	help: HelpDefinition
 	mode: "preview" | "dialog"

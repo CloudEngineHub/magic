@@ -39,6 +39,8 @@ interface ScriptExecutionProps {
 	className?: string
 	/** 初始代码区占比（百分比）；0 先展示结果，后续尺寸由用户操作决定。 */
 	initialCodePanelSize?: number
+	/** 嵌入 Helper 的教学示例可关闭入口，避免在教程内重复打开同一教程。 */
+	showOutputHelp?: boolean
 }
 
 export default memo(function ScriptExecution({
@@ -53,6 +55,7 @@ export default memo(function ScriptExecution({
 	allowEdit,
 	className,
 	initialCodePanelSize = 35,
+	showOutputHelp = true,
 }: ScriptExecutionProps) {
 	const { styles, cx } = useStyles()
 	const { appearance } = useThemeMode()
@@ -271,7 +274,12 @@ export default memo(function ScriptExecution({
 							className={styles.section}
 							aria-label={t("scriptExecution.output")}
 						>
-							<ScriptOutput key={recordKey} data={data} recordKey={recordKey} />
+							<ScriptOutput
+								key={recordKey}
+								data={data}
+								recordKey={recordKey}
+								showHelp={showOutputHelp}
+							/>
 						</section>
 					</ResizablePanel>
 				</ResizablePanelGroup>

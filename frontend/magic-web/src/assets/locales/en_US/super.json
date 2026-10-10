@@ -6237,6 +6237,638 @@
 		"copyCode": "Copy code",
 		"expandCode": "Show code",
 		"hasOutput": "Has output",
+		"help": {
+			"articles": {
+				"case": {
+					"detail": {
+						"intro": [
+							"Apply the preceding concepts to a business decision. AI has combined three department sheets into sales.xlsx. This step calculates a total and saves monthly_sales.xlsx. The example covers this step, not the full merge."
+						],
+						"overview": {
+							"detailsTitle": "Read more: example scope and business purpose",
+							"facts": [],
+							"lead": "Further reading: a summary file has been generated and will be used for customer sales rankings. Switch between three records to see how technical results affect business decisions."
+						},
+						"sections": [
+							{
+								"paragraphs": [
+									"Rows without customer names affect a departmental total differently from a customer ranking. Execution status describes program completion; the intended use determines what still needs checking.",
+									"The three situations below show a warning, no printed text, and a read failure. Inspect code and both channels, choose a conclusion, then read its reasoning and a useful follow-up request."
+								],
+								"title": "The same result can matter differently for different uses"
+							}
+						]
+					},
+					"title": "8. Further reading: a sales report"
+				},
+				"code": {
+					"detail": {
+						"intro": [
+							"First identify the inputs, processing, and destination of results. Then compare those actions with your requirements. You can learn common syntax gradually without first mastering the entire language."
+						],
+						"overview": {
+							"detailsTitle": "Read more: conditions, loops, indentation, and business rules",
+							"facts": [
+								{
+									"text": "print creates a text record. Saving a file requires a write operation.",
+									"title": "Printing ≠ saving a file"
+								},
+								{
+									"text": "Finishing the code does not prove it used the right file, column, or business rule.",
+									"title": "Check even after a normal return"
+								}
+							],
+							"lead": "Identify the input, processing steps, and result, then check them against your request. These three lines introduce variables, functions, and printing."
+						},
+						"sections": [
+							{
+								"paragraphs": [
+									"Quoted content is usually text, such as a file name, column name, or message. Read operations select inputs; calculations, filters, and conversions process them; saving, returning, or printing sends results somewhere.",
+									"print(...) commonly writes text; it does not automatically create a spreadsheet. read_excel(...) and to_excel(...) commonly read and save spreadsheets through a package."
+								],
+								"title": "Find inputs, processing, and results"
+							},
+							{
+								"paragraphs": [
+									"A variable names data in a program. items = [10, 20, 30] stores three numbers under the name items; = means assignment here. Later instructions can use that name.",
+									"A function is an operation you can call. sum(items) adds the numbers; parentheses call the function, and items is a parameter telling it what to process. The result can be stored under another name, total."
+								],
+								"title": "Recognize variables, functions, and parameters"
+							},
+							{
+								"code": "for value in [10, 20, 30]:\n    print(value)\nprint(\"Done\")",
+								"paragraphs": [
+									"if selects actions when a condition holds; for commonly repeats actions for each item; import introduces a package. Python uses indentation to define which statements belong to a condition or loop.",
+									"Only the indented print below repeats for each number. The final statement is outside the loop and runs once. Follow these structures to understand longer scripts."
+								],
+								"title": "Conditions, loops, and indentation matter"
+							},
+							{
+								"paragraphs": [
+									"A normally completed program may still use the wrong file or column, or omit a filter. Your business knowledge remains necessary. Ask AI to explain inputs, steps, and outputs in plain language and compare record counts or totals."
+								],
+								"title": "Compare business requirements with written rules"
+							}
+						]
+					},
+					"title": "3. How to read a script"
+				},
+				"errors": {
+					"detail": {
+						"intro": [
+							"A failed execution encountered a problem that prevented it from continuing: a missing file, invalid format, misspelled name, or unavailable dependency, for example. This is feedback for AI to investigate; it does not by itself mean the whole task failed."
+						],
+						"overview": {
+							"detailsTitle": "Read more: Traceback, another attempt, and completed actions",
+							"facts": [
+								{
+									"text": "While AI investigates or revises, watch the next record. Step in when information is needed or attempts make no progress.",
+									"title": "Watch what happens next"
+								},
+								{
+									"text": "Failure does not undo previous writes. Another execution must consider repeated work and overwriting.",
+									"title": "Earlier changes may remain"
+								}
+							],
+							"lead": "This execution stopped, and its error is returned to AI. AI can investigate and revise the script for another attempt. One failed card does not establish that the whole task has failed."
+						},
+						"sections": [
+							{
+								"paragraphs": [
+									"The tool returns error information to AI. AI can inspect inputs and the environment, revise the script, or use another approach. When a card shows failure, first check whether AI is still working and what later attempts produce.",
+									"Each card keeps that execution’s record; a later success does not rewrite an earlier failure. Assess the task using later valid results, artifacts, and AI’s final explanation. Automatic retries cannot resolve every problem."
+								],
+								"title": "What does AI do next?"
+							},
+							{
+								"paragraphs": [
+									"Python errors often start with Traceback, which records the calls leading to the problem. The last line commonly gives the error type and reason; file names and line numbers locate the relevant code. Start with the cause, then find your script.",
+									"In the example below, NameError means a name was used without being defined. The script defines total but writes totla on line 3. It stops while printing; AI can correct the spelling and execute again."
+								],
+								"title": "How do you read an error?"
+							},
+							{
+								"paragraphs": [
+									"Unhandled exceptions stop the script, but earlier file writes may already have occurred. Before retrying, AI needs to consider repeated processing or overwriting artifacts. You can state which original data should be preserved.",
+									"If AI is investigating and revising, continue observing. If it requests information, permission, or a business decision, or repeatedly makes no progress, your involvement is needed. The next chapter explains these cases."
+								],
+								"title": "Earlier actions may already have happened"
+							}
+						]
+					},
+					"title": "5. Failure and AI retries"
+				},
+				"execution": {
+					"detail": {
+						"intro": [
+							"An execution has three stages: prepare the code, run the instructions, and return the results to AI. They distinguish AI reasoning, program execution, and reading an execution record."
+						],
+						"overview": {
+							"detailsTitle": "Read more: execution order, runtime, and the whole task",
+							"facts": [
+								{
+									"text": "A task may include several executions. Earlier cards retain their original results.",
+									"title": "One card, one execution"
+								},
+								{
+									"text": "Text appears in the output tabs. Generated files are checked in project files.",
+									"title": "Text and files"
+								}
+							],
+							"lead": "AI sends code to an execution tool, which starts Python in the runtime. The result returns to AI so it can decide what to do next."
+						},
+						"sections": [
+							{
+								"paragraphs": [
+									"Execution takes place in the platform’s environment. A tool starts Python, passes in the code, and collects text and completion status. The browser detail panel displays the record.",
+									"The script may read workspace files, use installed packages, and save new files. Text appears in the output tabs; generated files are separate artifacts to inspect in Project files."
+								],
+								"title": "Displaying code does not execute it"
+							},
+							{
+								"paragraphs": [
+									"Ordinary statements generally run from top to bottom. Conditions select actions, loops repeat them, and functions group actions for reuse.",
+									"An unhandled error stops the execution before later instructions. Earlier operations may already have taken effect; failure does not mean nothing happened."
+								],
+								"title": "Instructions follow the program’s structure"
+							},
+							{
+								"paragraphs": [
+									"AI may run one script to inspect inputs, another to process them, and another to verify results. Each has its own record. A card describes one execution.",
+									"Results return to AI’s context so it can continue, revise the code, or request information. AI can adapt to errors, but success still depends on the inputs, environment, and approach."
+								],
+								"title": "One execution within a larger task"
+							}
+						]
+					},
+					"title": "2. How a script executes"
+				},
+				"intervention": {
+					"detail": {
+						"intro": [
+							"AI can handle many execution details, but it does not know business facts you have not supplied and cannot make every authorization or decision for you. Your involvement supplies evidence, makes decisions, or stops an unsuitable action."
+						],
+						"overview": {
+							"detailsTitle": "Read more: information, evidence, and stopping work",
+							"facts": [],
+							"lead": "You provide business decisions and missing information; AI handles further technical work. Whether to step in depends on what it currently needs."
+						},
+						"sections": [
+							{
+								"paragraphs": [
+									"Checks of paths or files, changes of approach, and new execution cards indicate continued work. One error can be part of that process. Read later attempts and the final explanation instead of requesting a restart after every failed card."
+								],
+								"title": "Wait while AI is investigating and revising"
+							},
+							{
+								"paragraphs": [
+									"Missing files, wrong attachments, or incomplete information require correct inputs from you. Account sign-in or an explicit authorization may require your action or decision.",
+									"Specify duplicate rules, accounting definitions, refund handling, and authoritative data sources. Ask AI to list uncertainties and confirm them before processing."
+								],
+								"title": "Supply missing information, permission, or business rules"
+							},
+							{
+								"paragraphs": [
+									"If AI has stopped with an incomplete task, ask it to continue and identify the missing result. If the same problem recurs, request the checks already made, evidence, and the next action rather than an unchanged retry.",
+									"Name the file, failed step, key message, and intended outcome. For example: identify the file being read, explain why its format cannot be recognized, and choose a fix based on the checks."
+								],
+								"title": "Ask for evidence when work stops or repeats without progress"
+							},
+							{
+								"paragraphs": [
+									"If AI is using the wrong input, misunderstood the task, or is about to overwrite or delete something you want to preserve, stop the current processing in the conversation input area and provide a correction.",
+									"Stopping does not necessarily undo completed file operations. Before continuing, ask which actions already occurred and which artifacts remain."
+								],
+								"title": "Stop promptly if the direction is wrong"
+							}
+						]
+					},
+					"title": "6. When should you intervene?"
+				},
+				"python": {
+					"detail": {
+						"intro": [
+							"Python is a programming language for describing calculations, file operations, and data processing as instructions a computer can execute. Its syntax specifies how a program handles its input and produces results.",
+							"A script is a program written to perform an operation. It can be saved in a .py file or executed as a temporary code snippet. Here, AI writes Python for your request and uses a tool to run it."
+						],
+						"overview": {
+							"detailsTitle": "Read more: packages, read-only cards, and execution records",
+							"facts": [
+								{
+									"text": "Python defines the syntax; a script specifies the work for this execution.",
+									"title": "Language and script"
+								},
+								{
+									"text": "AI writes and revises instructions. Python processes data as instructed.",
+									"title": "AI and execution"
+								}
+							],
+							"lead": "Python is a programming language. A script is a set of instructions written in that language; AI can use it to read files, calculate, or organize data."
+						},
+						"sections": [
+							{
+								"paragraphs": [
+									"Python is the language; the script contains specific instructions; AI understands the request and writes or changes those instructions. The Python interpreter in the execution environment actually executes them.",
+									"AI may decide which data to calculate, while Python follows the written read, calculate, and save instructions. The code and execution records let you inspect the inputs and actions."
+								],
+								"title": "What do Python, a script, and AI each do?"
+							},
+							{
+								"paragraphs": [
+									"Computers handle repeated, explicitly defined operations well, such as processing many rows, converting formats, or organizing files. A script records repeatable steps that can be checked.",
+									"Python can also use existing packages for drawing charts or reading documents. A package is a collection of capabilities written by others; importing it makes those capabilities available to the script."
+								],
+								"title": "Why does AI use scripts?"
+							},
+							{
+								"paragraphs": [
+									"The code area shows the script for this execution. Standard output and Standard error show text emitted by the program. The return status and exit code describe how this execution ended.",
+									"The code is read-only. Reading, copying, searching, or switching tabs does not execute it. Ask AI in the conversation when you need a change or another execution."
+								],
+								"title": "What does this detail card contain?"
+							}
+						]
+					},
+					"title": "1. Python and scripts"
+				},
+				"reading": {
+					"detail": {
+						"intro": [
+							"Search, word wrap, end navigation, and height adjustment help with long output. They change how you read; they do not change the script or data or execute it again."
+						],
+						"overview": {
+							"detailsTitle": "Read more: search scope, wrapping, and reading space",
+							"facts": [
+								{
+									"text": "Select standard error to search diagnostics. A missing match may mean the script never printed that information.",
+									"title": "Search the selected channel"
+								},
+								{
+									"text": "If a record says content was omitted or truncated, investigate further. The visible window is not all the data.",
+									"title": "Check completeness"
+								}
+							],
+							"lead": "These tools change how you read the output. They do not change data or execute the script again. Try them in the output panel below."
+						},
+						"sections": [
+							{
+								"paragraphs": [
+									"Search output displays match counts. The up/down arrows move between matches. Search applies to the selected channel; switch to Standard error to find diagnostics."
+								],
+								"title": "Search and switch channels"
+							},
+							{
+								"paragraphs": [
+									"Jump to end shows the final records. Word wrap fits long text within the available width without adding line breaks to the original output.",
+									"Only part of a long record fits on screen. Not finding a business item does not prove it is absent from the data; it may never have been printed. Explicit omission or truncation notices define completeness."
+								],
+								"title": "Jump to end and word wrap"
+							},
+							{
+								"paragraphs": [
+									"Expand or collapse code using the top control. Drag the divider or use keyboard arrows to adjust proportions. Expand code to inspect processing steps and give results more room for long records."
+								],
+								"title": "Allocate space between code and results"
+							}
+						]
+					},
+					"title": "7. Use the output reading controls"
+				},
+				"streams": {
+					"detail": {
+						"intro": [
+							"Programs have two default text output channels: standard output (stdout) and standard error (stderr). They carry two types of information from one execution. Switching tabs does not execute a different script."
+						],
+						"overview": {
+							"detailsTitle": "Read more: channel conventions, empty output, and exit codes",
+							"facts": [
+								{
+									"text": "Gray: no text. Neither color reports task success or failure.",
+									"title": "Blue: text is available"
+								},
+								{
+									"text": "0 usually means a normal exit; other codes usually indicate an abnormal exit.",
+									"title": "Exit code: how it ended"
+								}
+							],
+							"lead": "Programs have two text output channels. Standard output usually contains results; standard error usually contains warnings and diagnostics. A channel name does not tell you whether execution succeeded."
+						},
+						"sections": [
+							{
+								"paragraphs": [
+									"This usually carries results, progress, or statistics. Python print(...) writes here by default. The messages depend on what the script prints.",
+									"An execution can calculate or save without printing anything. To verify a generated file, inspect the save operation and actual artifact."
+								],
+								"title": "Standard output: ordinary program messages"
+							},
+							{
+								"paragraphs": [
+									"This usually carries warnings, diagnostics, and unhandled exceptions. Its name describes a channel convention; text there does not necessarily mean failure. Packages may also report warnings or progress there.",
+									"A program may finish normally while warning that optional information is missing. Read the message and the top return status together."
+								],
+								"title": "Standard error: a diagnostic channel"
+							},
+							{
+								"paragraphs": [
+									"Has output and No output only indicate whether that channel has text. Blue means text is available; grey means it is empty. The top return status and exit code describe how execution ended.",
+									"A normal return usually corresponds to exit code 0; other codes typically indicate abnormal completion. Normal execution still requires checking business correctness. The channels are collected separately, so their tab positions do not establish message timing."
+								],
+								"title": "What do badges, colors, and status mean?"
+							}
+						]
+					},
+					"title": "4. Standard output and Standard error"
+				}
+			},
+			"catalogHint": "Start with the foundations, then interpret execution results. Business cases are in Further reading.",
+			"description": "Understand execution, read code and output, and know when to intervene.",
+			"groups": {
+				"foundations": "Foundations",
+				"further": "Further reading",
+				"results": "Reading and interpretation"
+			},
+			"label": "Learn about script execution and output",
+			"lesson": {
+				"answerCorrect": "The conclusion follows from the evidence",
+				"answerTryAgain": "This conclusion needs more evidence",
+				"chooseAnswer": "Choose your conclusion",
+				"chooseCase": "Choose a situation",
+				"codeResult": "After this line",
+				"codeScope": "Select a line to see what changes when it runs.",
+				"codeSteps": [
+					{
+						"concept": "A variable names data. = assigns the right-hand value to the name on the left. [...] is an ordered list.",
+						"label": "Input",
+						"meaning": "Name this data items so later instructions can retrieve it.",
+						"result": "items → [10, 20, 30]"
+					},
+					{
+						"concept": "sum is a function (an operation you can call). items is its argument: the data to process.",
+						"label": "Process",
+						"meaning": "sum(items) adds these numbers and assigns 60 to total.",
+						"result": "total → 60"
+					},
+					{
+						"concept": "Quotes contain text. f and {total} insert the variable value into it. Printing does not save a spreadsheet.",
+						"label": "Output",
+						"meaning": "print writes a text record, shown in standard output below.",
+						"result": "Standard output → Total: 60"
+					}
+				],
+				"codeWalkthrough": "Three lines: input → process → output",
+				"demoCaption": "Interactive example: switch channels and search. The content is illustrative; no script is executed.",
+				"execution": {
+					"hint": "Select a stage to follow the code and feedback.",
+					"note": "This diagram shows one execution. AI can call tools several times in a task, leaving a separate record each time.",
+					"steps": [
+						{
+							"example": "items = [10, 20, 30]\ntotal = sum(items)\nprint(total)",
+							"explanation": "AI chooses inputs and a method. The execution tool receives the code. Seeing code on the page does not mean your browser is running it.",
+							"summary": "AI → execution tool",
+							"title": "1. Prepare code"
+						},
+						{
+							"example": "Input [10, 20, 30] → sum 60 → print 60",
+							"explanation": "Python names the data, adds the numbers, and prints the result. Conditions and loops can change which steps run and how often.",
+							"summary": "Tool → Python",
+							"title": "2. Run instructions"
+						},
+						{
+							"example": "Standard output: 60\nStandard error: no output\nNormal return · exit code 0",
+							"explanation": "The tool collects text and the exit status and returns them to AI. AI can check results, continue, or revise the code for another execution.",
+							"summary": "Execution result → AI",
+							"title": "3. Return feedback"
+						}
+					],
+					"title": "One execution, three stages"
+				},
+				"intervention": {
+					"cases": [
+						{
+							"action": "Watch the subsequent results",
+							"reason": "A failed attempt may be one step in the work. Check new records and final artifacts before deciding whether the task is complete.",
+							"request": "",
+							"signal": "Checks, revisions, or new execution records appear",
+							"title": "AI is still investigating"
+						},
+						{
+							"action": "Provide what AI cannot decide for you",
+							"reason": "Supply the right file, needed permission, or business rule, such as whether missing records should be retained or excluded.",
+							"request": "Keep records without customer names and list them separately. Do not produce customer rankings yet.",
+							"signal": "A file, permission, or business rule is missing",
+							"title": "Information or rules needed"
+						},
+						{
+							"action": "Ask what has actually been established",
+							"reason": "Connect the failed step, actual input, and key error before deciding how to continue.",
+							"request": "First explain which file you read, what checks established, and what you will change in the next attempt.",
+							"signal": "The same issue recurs without new evidence",
+							"title": "Repeated attempts, no progress"
+						},
+						{
+							"action": "Stop and check existing results",
+							"reason": "Stopping prevents further work but does not undo previous writes. Check what has already changed before continuing.",
+							"request": "Stop first. Explain which files you have read or changed, and preserve current results for my review.",
+							"signal": "Wrong data is used or an unsuitable action is next",
+							"title": "Wrong direction or operation"
+						}
+					],
+					"hint": "Select a situation to see how to respond.",
+					"title": "What you see, what to do next"
+				},
+				"noOutput": "No output",
+				"practiceCases": {
+					"empty": {
+						"answers": [
+							{
+								"correct": false,
+								"explanation": "This example reads, calculates, and saves without print. No text does not mean no execution. Expand the code to find the save action, then check Project files.",
+								"label": "No text means the step did not execute"
+							},
+							{
+								"correct": true,
+								"explanation": "A normal return and empty output can coexist. This script saves without printing. Find the current artifact and inspect its contents before concluding the business task is complete.",
+								"label": "No; check the actual file and its contents first"
+							},
+							{
+								"correct": false,
+								"explanation": "Return status does not verify department coverage. Input data may be missing a sheet even when execution ends normally. Compare the file with the requirements.",
+								"label": "A normal return proves every department is included"
+							}
+						],
+						"label": "Case 2: No text",
+						"question": "Both channels are empty and execution returned normally. Does that prove no file was generated?",
+						"request": "This execution printed nothing. Locate the monthly_sales.xlsx generated by this run, verify department row counts, month, and totals, and identify all input files."
+					},
+					"error": {
+						"answers": [
+							{
+								"correct": false,
+								"explanation": "The message does not establish the underlying cause. Check the read path, size, and actual format before deleting or overwriting usable data.",
+								"label": "Delete the source sheet and generate a new one"
+							},
+							{
+								"correct": true,
+								"explanation": "The failure occurred while reading, and the final message points to an unexpected format. Confirm the selected file and its contents to distinguish an empty file, wrong format, wrong path, or corruption.",
+								"label": "Inspect the path, size, and actual format of sales.xlsx"
+							},
+							{
+								"correct": false,
+								"explanation": "If the input and path do not change, the same read is likely to fail again. Give AI the file, failed action, and key error, and ask for evidence first.",
+								"label": "Repeat the same attempt without investigating"
+							}
+						],
+						"label": "Case 3: Read failure",
+						"question": "The execution failed with File is not a zip file. What should you ask AI to do next?",
+						"request": "Reading sales.xlsx returned an error ending in File is not a zip file. Check its path, size, and actual format. Explain what was read, preserve the source, and propose a fix based on evidence."
+					},
+					"warning": {
+						"answers": [
+							{
+								"correct": false,
+								"explanation": "Normal completion only describes execution. Twelve rows have no customer name. They are included in the total, but a customer ranking may be incomplete until their assignment is resolved.",
+								"label": "It returned normally, so use the ranking directly"
+							},
+							{
+								"correct": true,
+								"explanation": "The warning matters to a customer ranking. Inspect those rows and amounts, decide how to assign or group them, and then reconcile the ranking and total.",
+								"label": "Check how the 12 unnamed-customer rows are handled"
+							},
+							{
+								"correct": false,
+								"explanation": "Standard output records a saved file, and execution returned normally. This channel carries a warning here. Whether the file meets the ranking requirement still needs checking.",
+								"label": "Standard error has text, so no file was saved"
+							}
+						],
+						"label": "Case 1: A warning",
+						"question": "The report is for a customer sales ranking. What should you do about the warning?",
+						"request": "This report is for customer sales ranking. List the 12 rows with missing names and their amounts. Explain how they enter the total, and do not treat the ranking as final until their assignment is confirmed."
+					}
+				},
+				"reading": {
+					"instruction": "Search for 128, clear the search, then jump to the end to find the completion record for 240 items.",
+					"tools": [
+						{
+							"text": "Find a keyword and move through its matches.",
+							"title": "Search and up/down arrows"
+						},
+						{
+							"text": "Fit long lines to the window without changing the text.",
+							"title": "Word wrap"
+						},
+						{
+							"text": "Go straight to the latest or last record.",
+							"title": "Jump to end"
+						},
+						{
+							"text": "Expand the code and drag the divider to change the panel proportions.",
+							"title": "Adjust reading space"
+						}
+					]
+				},
+				"requestTitle": "A useful request to AI",
+				"retry": {
+					"change": "total is the variable holding the sum from line 2. Correcting the name lets print(total) read that value.",
+					"hint": "Select a stage to compare the error, revision, and next execution.",
+					"location": {
+						"text": "example.py, line 3: print(totla) on the third line corresponds to this error.",
+						"title": "File and line: the location"
+					},
+					"note": "This example corrects a spelling mistake. File, permission, or business-rule issues may require your input; AI cannot always resolve them alone.",
+					"reason": {
+						"text": "NameError: name 'totla' is not defined means the name totla was never defined.",
+						"title": "Last line: the cause"
+					},
+					"steps": [
+						{
+							"description": "The script defines total but prints totla. Python cannot find that name and stops at line 3.",
+							"title": "1. Misspelled name"
+						},
+						{
+							"description": "The error points to an undefined name. In this example, AI can correct it to the total already defined earlier.",
+							"title": "2. Revise the script"
+						},
+						{
+							"description": "The revised execution returns normally with 60 in standard output. The first failed record still remains.",
+							"title": "3. Execute again"
+						}
+					],
+					"title": "From an error to a next step"
+				},
+				"roles": {
+					"hint": "Select a role to see its responsibility.",
+					"note": "Python is the language; the Python interpreter is the program that executes it.",
+					"steps": [
+						{
+							"example": "Request: add 10, 20, and 30, then show the total.",
+							"explanation": "AI converts your request into code and can revise that code using execution feedback.",
+							"summary": "Understands, writes, and revises",
+							"title": "AI"
+						},
+						{
+							"example": "items = [10, 20, 30]\ntotal = sum(items)\nprint(total)",
+							"explanation": "These three lines form a script. They specify the numbers to process and how to output the result.",
+							"summary": "Specifies input, work, and output",
+							"title": "Python script"
+						},
+						{
+							"example": "Standard output\n60",
+							"explanation": "The interpreter is a program in the runtime. It recognizes Python syntax and carries out the instructions. This script outputs 60.",
+							"summary": "Reads and executes the code",
+							"title": "Python interpreter"
+						}
+					],
+					"title": "Who does what?"
+				},
+				"sample": {
+					"amountColumn": "Sales amount",
+					"basicOutput": "Total: 60",
+					"basicTemplate": "Total: {total}",
+					"customerColumn": "Customer name",
+					"record": "Processing item {{index}}",
+					"recordTemplate": "Processing item {index}",
+					"recordsComplete": "Processing completed: 240 items",
+					"rows": "Rows read: 240",
+					"rowsTemplate": "Rows read: {len(table)}",
+					"saved": "Report saved: monthly_sales.xlsx",
+					"simpleOutput": "Processing completed",
+					"simpleWarning": "Warning: optional descriptive information was not supplied.",
+					"total": "Sales total: 480000",
+					"totalTemplate": "Sales total: {total}",
+					"warning": "Warning: 12 rows have no customer name; these rows were kept.",
+					"warningTemplate": "Warning: {missing} rows have no customer name; these rows were kept."
+				},
+				"streams": {
+					"cases": [
+						{
+							"explanation": "Check the header: normal return. Select standard error: this is a notice that did not stop execution.",
+							"label": "Normal return + notice"
+						},
+						{
+							"explanation": "Standard output contains the total; standard error has no text. These are two channels from the same execution.",
+							"label": "Normal return + result only"
+						},
+						{
+							"explanation": "The header reports an abnormal return. Standard error identifies a misspelled name. Status and content together explain why this execution stopped.",
+							"label": "Abnormal return + error"
+						}
+					],
+					"channels": [
+						{
+							"description": "Ordinary information and results written by the program.",
+							"title": "Standard output · stdout"
+						},
+						{
+							"description": "A channel commonly used for warnings, diagnostics, and exceptions.",
+							"title": "Standard error · stderr"
+						}
+					],
+					"hint": "Switch the output tabs below. “Has output” means text is available, not success or failure."
+				}
+			},
+			"summary": "Learn what Python and scripts are, how execution works, how to read both output channels, and how AI handles failures.",
+			"title": "Understanding script execution"
+		},
 		"noCodeToCopy": "No code to copy",
 		"noExecutionOutput": "This execution produced no output",
 		"noOutput": "No output",

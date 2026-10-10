@@ -5,15 +5,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn-ui
 import { cn } from "@/utils/cn"
 import type { DetailScriptExecutionData } from "../../types"
 import { TerminalOutput } from "../Terminal/components/TerminalOutput"
+import ScriptOutputHelp from "./ScriptOutputHelp"
 
 type OutputStream = "stdout" | "stderr"
 
 interface ScriptOutputProps {
 	data: DetailScriptExecutionData
 	recordKey: string
+	showHelp?: boolean
 }
 
-export default function ScriptOutput({ data, recordKey }: ScriptOutputProps) {
+export default function ScriptOutput({ data, recordKey, showHelp = true }: ScriptOutputProps) {
 	const { t } = useTranslation("super")
 	// 初次打开优先显示失败原因或唯一非空输出；后续数据更新不抢走用户选择。
 	const [stream, setStream] = useState<OutputStream>(() =>
@@ -66,6 +68,7 @@ export default function ScriptOutput({ data, recordKey }: ScriptOutputProps) {
 							</TabsTrigger>
 						))}
 					</TabsList>
+					{showHelp && <ScriptOutputHelp />}
 				</div>
 			</div>
 			{streams.map(({ key, content }) => (
