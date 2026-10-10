@@ -21,6 +21,7 @@ import { findElement } from "../utils/ElementSelector"
 import { camelToKebab } from "../utils/css"
 import { normalizeSafeHref } from "../utils/safeUrl"
 import { getEditableTextContent, setElementTextContent } from "../utils/textContent"
+import { markSourceNode } from "../utils/sourceNodes"
 import {
 	assignEditorNodeIds,
 	assignUniqueIdsToClone,
@@ -1134,6 +1135,7 @@ export class StyleManager {
 			} else {
 				parent.appendChild(clonedElement)
 			}
+			markSourceNode(clonedElement)
 
 			EditorLogger.info("[StyleManager] Element duplicated and inserted")
 
@@ -1677,6 +1679,7 @@ export class StyleManager {
 						parent.appendChild(restoredElement)
 						EditorLogger.info("[StyleManager] Element restored at end (fallback)")
 					}
+					markSourceNode(restoredElement)
 
 					// Restore special element state (Canvas, Video, etc.)
 					if (specialElementData) {
@@ -1803,6 +1806,7 @@ export class StyleManager {
 					const previousHTML = previousState.innerHTML
 
 					element.innerHTML = previousHTML
+					markSourceNode(element)
 
 					// Try to restore text selection after innerHTML restoration
 					if (this.textStyleManager) {
@@ -1835,6 +1839,7 @@ export class StyleManager {
 				command.commandType !== "APPLY_TEXT_STYLE"
 			) {
 				element.innerHTML = (command.previousState as any).innerHTML
+				markSourceNode(element)
 				return
 			}
 
@@ -1982,6 +1987,7 @@ export class StyleManager {
 				} else {
 					parent.appendChild(clonedElement)
 				}
+				markSourceNode(clonedElement)
 
 				// Restore special element state
 				if (specialElementData) {
@@ -2092,6 +2098,7 @@ export class StyleManager {
 					// Case 2: innerHTML restoration (creating new span)
 					else if (payload.innerHTML !== undefined) {
 						element.innerHTML = payload.innerHTML
+						markSourceNode(element)
 
 						// Try to restore text selection after innerHTML restoration
 						if (this.textStyleManager) {

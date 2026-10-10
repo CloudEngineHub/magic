@@ -1,5 +1,5 @@
 import { getElementSelector, isInjectedElement } from "../utils/dom"
-import { isSourceNode } from "../utils/sourceNodes"
+import { isSourceNode, markSourceNode, SOURCE_NODE_ATTRIBUTE } from "../utils/sourceNodes"
 import { EditorLogger } from "../utils/EditorLogger"
 
 export const EDITOR_NODE_ID_ATTRIBUTE = "data-magic-editor-node-id"
@@ -354,6 +354,9 @@ export function insertAtElementIndex(
 	child: HTMLElement,
 	index?: number,
 ): number {
+	// Parsed editor content has no marker; moving an existing source node must retain
+	// unmarked runtime descendants instead of promoting them to saved content.
+	if (!child.hasAttribute(SOURCE_NODE_ATTRIBUTE)) markSourceNode(child)
 	const children = Array.from(parent.children)
 	const targetIndex = Math.max(0, Math.min(index ?? children.length, children.length))
 	const reference = children[targetIndex]

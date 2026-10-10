@@ -8,6 +8,14 @@ export function markSourceNodes(doc: Document): void {
 	})
 }
 
+/** Mark a subtree created by an editor command as persistable source content. */
+export function markSourceNode(element: Element): void {
+	element.setAttribute(SOURCE_NODE_ATTRIBUTE, "")
+	element.querySelectorAll("*").forEach((child) => {
+		child.setAttribute(SOURCE_NODE_ATTRIBUTE, "")
+	})
+}
+
 export function removeRuntimeNodes(doc: Document): void {
 	if (!doc.documentElement.hasAttribute(SOURCE_NODE_ATTRIBUTE)) return
 	// Never serialize DOM created by scripts: rerunning those scripts would create it again.

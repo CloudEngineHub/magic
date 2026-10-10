@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from "vitest"
 import { ContentCleaner } from "../ContentCleaner"
+import { markSourceNode } from "../sourceNodes"
 
 describe("ContentCleaner", () => {
 	describe("cleanDocument", () => {
@@ -14,6 +15,26 @@ describe("ContentCleaner", () => {
 			expect(cleaned).toContain("<p>Fixed</p>")
 			expect(cleaned).not.toContain("Dynamic")
 			expect(cleaned).not.toContain("data-magic-source-node")
+		})
+
+		it("preserves editor-inserted nodes that were marked as source content", () => {
+			const parser = new DOMParser()
+			const doc = parser.parseFromString(
+				"<html><body><section><p>Fixed</p></section></body></html>",
+				"text/html",
+			)
+			doc.documentElement.setAttribute("data-magic-source-node", "")
+			doc.body.setAttribute("data-magic-source-node", "")
+			doc.querySelector("section")?.setAttribute("data-magic-source-node", "")
+
+			const inserted = doc.createElement("img")
+			inserted.src = "./images/inserted.png"
+			doc.querySelector("section")?.appendChild(inserted)
+			markSourceNode(inserted)
+
+			const cleaned = ContentCleaner.cleanDocument(doc.documentElement.outerHTML)
+
+			expect(cleaned).toContain("images/inserted.png")
 		})
 		it("should remove injected script elements", () => {
 			const html = `

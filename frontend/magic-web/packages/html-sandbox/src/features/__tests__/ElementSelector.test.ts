@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { ElementSelector } from "../ElementSelector"
 import { EditorBridge } from "../../core/EditorBridge"
-import { markSourceNodes } from "../../utils/sourceNodes"
+import { markSourceNode, markSourceNodes } from "../../utils/sourceNodes"
 
 describe("ElementSelector", () => {
 	let selector: ElementSelector
@@ -89,6 +89,23 @@ describe("ElementSelector", () => {
 			dynamic.click()
 			expect(sendEventSpy).toHaveBeenCalledWith("DYNAMIC_ELEMENT_CLICKED", {})
 			expect(selector.getSelectedCount()).toBe(0)
+		})
+
+		it("allows editor-inserted nodes after they receive source provenance", () => {
+			container.innerHTML = "<section id='fixed'>Fixed</section>"
+			markSourceNodes(document)
+			const inserted = document.createElement("p")
+			inserted.textContent = "Inserted"
+			container.appendChild(inserted)
+			markSourceNode(inserted)
+
+			selector.selectElement(inserted)
+
+			expect(selector.getSelectedCount()).toBe(1)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({ tagName: "p" }),
+			)
 		})
 
 		it("should select valid element", () => {
