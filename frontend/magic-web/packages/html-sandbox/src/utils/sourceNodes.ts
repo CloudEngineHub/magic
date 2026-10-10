@@ -8,11 +8,16 @@ export function markSourceNodes(doc: Document): void {
 	})
 }
 
-/** Mark a subtree created by an editor command as persistable source content. */
+/** Mark one editor-owned node without changing the provenance of its descendants. */
 export function markSourceNode(element: Element): void {
 	element.setAttribute(SOURCE_NODE_ATTRIBUTE, "")
+}
+
+/** Mark a newly created editor-owned subtree as persistable source content. */
+export function markSourceSubtree(element: Element): void {
+	markSourceNode(element)
 	element.querySelectorAll("*").forEach((child) => {
-		child.setAttribute(SOURCE_NODE_ATTRIBUTE, "")
+		markSourceNode(child)
 	})
 }
 
