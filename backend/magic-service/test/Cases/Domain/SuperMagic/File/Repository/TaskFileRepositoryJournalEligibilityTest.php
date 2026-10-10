@@ -18,6 +18,7 @@ use Hyperf\DbConnection\Db;
 use HyperfTest\Stub\Domain\SuperMagic\File\ArrayRowConnectionStub;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
+use ReflectionClass;
 
 /**
  * durable journal 准入判定（shouldJournalFileTree）的回归测试。
@@ -46,8 +47,6 @@ use Psr\Container\ContainerInterface;
  */
 class TaskFileRepositoryJournalEligibilityTest extends TestCase
 {
-    private const HEADS_TABLE = 'magic_fs_file_tree_heads';
-
     private const CHANGES_TABLE = 'magic_super_agent_task_file_tree_changes';
 
     private const FILES_TABLE = 'magic_super_agent_task_files';
@@ -77,7 +76,7 @@ class TaskFileRepositoryJournalEligibilityTest extends TestCase
 
     protected function tearDown(): void
     {
-        (new \ReflectionClass(ApplicationContext::class))->getProperty('container')->setValue(null, $this->previousContainer);
+        (new ReflectionClass(ApplicationContext::class))->getProperty('container')->setValue(null, $this->previousContainer);
         if ($this->previousModelResolver === null) {
             Register::unsetConnectionResolver();
         } else {
@@ -116,7 +115,7 @@ class TaskFileRepositoryJournalEligibilityTest extends TestCase
      */
     public function testProjectFileRowWithSessionTopicIsJournaled(): void
     {
-        $connection = $this->journalReadyConnection();
+        $connection = $this->journalReadyConnection(967076817104486401);
 
         $this->repository()->insert(
             self::projectRow(['file_name' => '星辰.txt', 'is_directory' => 0, 'parent_id' => 967076817104486401])
@@ -240,12 +239,15 @@ class TaskFileRepositoryJournalEligibilityTest extends TestCase
 
     /**
      * 事故现场可用的 journal 状态：项目根的 head 早已存在（子节点不能自建 head），
-     * 父链解析由递归 CTE 给出项目根。
+     * The parent chain is read node by node, then verified before journaling.
      */
-    private function journalReadyConnection(): ArrayRowConnectionStub
+    private function journalReadyConnection(int $parentId = self::PARENT_DIR_ID): ArrayRowConnectionStub
     {
+        $parentRow = ['file_id' => (string) $parentId, 'parent_id' => (string) self::PROJECT_ROOT_ID, 'is_directory' => 1];
         $connection = (new ArrayRowConnectionStub())->queueSelectRows(
-            [self::projectRootRow()],                       // resolveFileTreeRootId：父链递归 CTE
+            [$parentRow],
+            [self::projectRootRow()],
+            [self::projectRootRow(), $parentRow],
             [self::headRow(self::PROJECT_ROOT_ID, 256740)]  // appendFileTreeChanges：锁定 head
         );
         $this->useArrayRowConnection($connection);
@@ -281,7 +283,7 @@ class TaskFileRepositoryJournalEligibilityTest extends TestCase
     }
 
     /**
-     * 父链 CTE 的返回行：根目录的 parent_id 为空，`resolveParentChainRootId` 取它作根。
+     * A physical root row with a null parent, returned by point reads and verification.
      *
      * @return array<string, mixed>
      */
@@ -319,12 +321,12 @@ class TaskFileRepositoryJournalEligibilityTest extends TestCase
     }
 
     /**
-     * @return bool 是否执行过父链递归 CTE（即是否尝试过解析文件树根）
+     * @return bool whether a parent-chain point read or verification was executed
      */
     private function resolvedAnyRoot(ArrayRowConnectionStub $connection): bool
     {
         foreach ($connection->executedStatements() as [$query]) {
-            if (stripos($query, 'WITH RECURSIVE') !== false) {
+            if (str_starts_with($query, 'SELECT file_id, parent_id, is_directory FROM ' . self::FILES_TABLE . ' WHERE file_id ')) {
                 return true;
             }
         }

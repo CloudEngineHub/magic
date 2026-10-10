@@ -1086,6 +1086,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     ->get()
                     ->keyBy('file_id');
                 $pending = [];
+                $parentRootIds = [];
                 foreach ($beforeModels as $beforeModel) {
                     $afterModel = $afterModels->get($beforeModel->file_id);
                     $this->recordFileTreeMutation(
@@ -1094,7 +1095,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                         'update',
                         null,
                         null,
-                        $pending
+                        $pending,
+                        parentRootIds: $parentRootIds
                     );
                 }
                 $this->appendFileTreeChanges($pending);
@@ -1218,6 +1220,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 ->get()
                 ->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($changedIds as $fileId) {
                 $beforeModel = $beforeModels->get($fileId);
                 $afterModel = $afterModels->get($fileId);
@@ -1230,7 +1233,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     null,
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -1274,6 +1278,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             }
             $afterModels = $this->model::query()->whereIn('file_id', $ids)->get()->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $afterModel = $afterModels->get($beforeModel->file_id);
                 $this->recordFileTreeMutation(
@@ -1282,7 +1287,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     null,
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -1319,10 +1325,11 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 ->where('project_id', $projectId)
                 ->get();
             $beforeRoots = [];
+            $beforeParentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $before = new TaskFileEntity($beforeModel->toArray());
                 if ($this->shouldJournalFileTree($before) && $before->getDeletedAt() === null) {
-                    $beforeRoots[(int) $beforeModel->file_id] = $this->resolveFileTreeRootId($before);
+                    $beforeRoots[(int) $beforeModel->file_id] = $this->resolveFileTreeRootId($before, $beforeParentRootIds);
                 }
             }
             $result = $this->model::query()
@@ -1510,8 +1517,9 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $ids = array_column($insertData, 'file_id');
             $models = $this->model::query()->whereIn('file_id', $ids)->get();
             $pending = [];
+            $parentRootIds = [];
             foreach ($models as $model) {
-                $this->recordFileTreeMutation(null, new TaskFileEntity($model->toArray()), 'create', null, null, $pending);
+                $this->recordFileTreeMutation(null, new TaskFileEntity($model->toArray()), 'create', null, null, $pending, parentRootIds: $parentRootIds);
             }
             $this->appendFileTreeChanges($pending);
         });
@@ -1539,8 +1547,9 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     'updated_at' => date('Y-m-d H:i:s'),
                 ]);
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $model) {
-                $this->recordFileTreeMutation(new TaskFileEntity($model->toArray()), null, 'delete', null, null, $pending);
+                $this->recordFileTreeMutation(new TaskFileEntity($model->toArray()), null, 'delete', null, null, $pending, parentRootIds: $parentRootIds);
             }
             $this->appendFileTreeChanges($pending);
         });
@@ -1571,6 +1580,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 ->get()
                 ->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $afterModel = $afterModels->get($beforeModel->file_id);
                 $this->recordFileTreeMutation(
@@ -1579,7 +1589,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     null,
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -1774,6 +1785,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $affected = Db::update($sql, $bindings);
             $afterModels = $this->model::query()->whereIn('file_id', $fileIds)->get()->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $afterModel = $afterModels->get($beforeModel->file_id);
                 $this->recordFileTreeMutation(
@@ -1782,7 +1794,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     null,
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -1811,10 +1824,11 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             }
             $beforeModels = $beforeQuery->get();
             $beforeRoots = [];
+            $beforeParentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $before = new TaskFileEntity($beforeModel->toArray());
                 if ($this->shouldJournalFileTree($before) && $before->getDeletedAt() === null) {
-                    $beforeRoots[(int) $beforeModel->file_id] = $this->resolveFileTreeRootId($before);
+                    $beforeRoots[(int) $beforeModel->file_id] = $this->resolveFileTreeRootId($before, $beforeParentRootIds);
                 }
             }
 
@@ -1856,10 +1870,11 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         Db::transaction(function () use ($fileKeys): void {
             $beforeModels = $this->model::withTrashed()->whereIn('file_key', $fileKeys)->get();
             $beforeRoots = [];
+            $beforeParentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $before = new TaskFileEntity($beforeModel->toArray());
                 if ($this->shouldJournalFileTree($before) && $before->getDeletedAt() === null) {
-                    $beforeRoots[(int) $beforeModel->file_id] = $this->resolveFileTreeRootId($before);
+                    $beforeRoots[(int) $beforeModel->file_id] = $this->resolveFileTreeRootId($before, $beforeParentRootIds);
                 }
             }
             $this->model::query()->whereIn('file_key', $fileKeys)->forceDelete();
@@ -2026,6 +2041,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             }
             $afterModels = $this->model::query()->whereIn('file_id', $fileIds)->get()->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $afterModel = $afterModels->get($beforeModel->file_id);
                 $this->recordFileTreeMutation(
@@ -2034,7 +2050,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     null,
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -2076,6 +2093,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             }
             $afterModels = $this->model::query()->whereIn('file_id', $fileIds)->get()->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $afterModel = $afterModels->get($beforeModel->file_id);
                 $this->recordFileTreeMutation(
@@ -2084,7 +2102,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     null,
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -2415,6 +2434,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             }
             $afterModels = $this->model::query()->whereIn('file_id', $fileIds)->get()->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $afterModel = $afterModels->get($beforeModel->file_id);
                 $this->recordFileTreeMutation(
@@ -2423,7 +2443,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     'move',
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -2787,6 +2808,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $ids = $beforeModels->pluck('file_id')->all();
             $afterModels = $this->model::query()->whereIn('file_id', $ids)->get()->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $afterModel = $afterModels->get($beforeModel->file_id);
                 $this->recordFileTreeMutation(
@@ -2795,7 +2817,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     null,
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -2958,6 +2981,7 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                 ]);
             $afterModels = $this->model::query()->whereIn('file_id', $ids)->get()->keyBy('file_id');
             $pending = [];
+            $parentRootIds = [];
             foreach ($beforeModels as $beforeModel) {
                 $afterModel = $afterModels->get($beforeModel->file_id);
                 $this->recordFileTreeMutation(
@@ -2966,7 +2990,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
                     null,
                     null,
                     null,
-                    $pending
+                    $pending,
+                    parentRootIds: $parentRootIds
                 );
             }
             $this->appendFileTreeChanges($pending);
@@ -3032,8 +3057,9 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             $ids = array_column($insertData, 'file_id');
             $models = $this->model::query()->whereIn('file_id', $ids)->get();
             $pending = [];
+            $parentRootIds = [];
             foreach ($models as $model) {
-                $this->recordFileTreeMutation(null, new TaskFileEntity($model->toArray()), 'create', null, null, $pending);
+                $this->recordFileTreeMutation(null, new TaskFileEntity($model->toArray()), 'create', null, null, $pending, parentRootIds: $parentRootIds);
             }
             $this->appendFileTreeChanges($pending);
         });
@@ -3043,14 +3069,21 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * Resolve a file's current file-tree root by following parent_id links.
      * This is intentionally an ancestor-only query: moving a directory never
      * requires touching or scanning its descendants.
+     *
+     * @param null|array<int, int> $parentRootIds roots resolved within one unchanged parent-chain phase
      */
-    private function resolveFileTreeRootId(TaskFileEntity $file): int
+    private function resolveFileTreeRootId(TaskFileEntity $file, ?array &$parentRootIds = null): int
     {
         if (! $this->shouldJournalFileTree($file)) {
             throw new RuntimeException(sprintf(
                 'File %d does not belong to a journaled file tree',
                 $file->getFileId()
             ));
+        }
+
+        $parentId = $file->getParentId();
+        if ($parentRootIds !== null && $parentId !== null && $parentId > 0) {
+            return $parentRootIds[$parentId] ??= $this->resolveRootIdFromParentChain($file);
         }
 
         return $this->resolveRootIdFromParentChain($file);
@@ -3080,56 +3113,101 @@ class TaskFileRepository implements TaskFileRepositoryInterface
     }
 
     /**
-     * Resolve a root from an existing parent row using one recursive CTE.
+     * Resolve a root without recursive CTE materialization. Multi-row walks
+     * are verified in one read view before accepting either a root or an error.
      * Deleted ancestors are included because delete/restore mutations must
      * retain the root that was valid at the time of the mutation.
      */
     private function resolveParentChainRootId(int $parentId): int
     {
-        $rows = Db::select(
-            sprintf(
-                'WITH RECURSIVE file_tree_ancestors AS ('
-                . ' SELECT file_id, parent_id, is_directory, space_type, project_id, topic_id, user_id, organization_code, 0 AS depth'
-                . ' FROM magic_super_agent_task_files WHERE file_id = ?'
-                . ' UNION ALL'
-                . ' SELECT parent.file_id, parent.parent_id, parent.is_directory, parent.space_type, parent.project_id, parent.topic_id, parent.user_id, parent.organization_code, ancestors.depth + 1'
-                . ' FROM magic_super_agent_task_files parent'
-                . ' INNER JOIN file_tree_ancestors ancestors ON parent.file_id = ancestors.parent_id'
-                . ' WHERE ancestors.depth < %d'
-                . ') SELECT file_id, parent_id, is_directory, space_type, project_id, topic_id, user_id, organization_code, depth'
-                . ' FROM file_tree_ancestors ORDER BY depth DESC',
-                self::MAX_FILE_TREE_DEPTH
-            ),
-            [$parentId]
-        );
+        $currentId = $parentId;
+        $observedRows = [];
+        $root = null;
 
-        if ($rows === []) {
+        // Depth zero is the supplied parent. The observed map detects cycles.
+        for ($depth = 0; $depth <= self::MAX_FILE_TREE_DEPTH; ++$depth) {
+            if (array_key_exists($currentId, $observedRows)) {
+                break;
+            }
+
+            $rows = Db::select(
+                'SELECT file_id, parent_id, is_directory FROM magic_super_agent_task_files WHERE file_id = ?',
+                [$currentId]
+            );
+            if ($rows === []) {
+                if ($depth === 0) {
+                    throw new RuntimeException(sprintf(
+                        'Parent file %d does not exist while resolving its file-tree root',
+                        $parentId
+                    ));
+                }
+                // Missing intermediate nodes must also be verified.
+                $observedRows[$currentId] = null;
+                break;
+            }
+
+            $row = $this->normalizeFileTreeParentRow((array) $rows[0]);
+            $observedRows[$currentId] = $row;
+            if ($row['parent_id'] === null || $row['parent_id'] === 0) {
+                $root = $row;
+                break;
+            }
+            $currentId = $row['parent_id'];
+        }
+
+        // A single point read is coherent; longer paths need one read view.
+        if (count($observedRows) > 1 && ! $this->fileTreeParentRowsMatch($observedRows)) {
+            throw new RuntimeException(sprintf('File-tree parent chain for %d changed while resolving its root', $parentId));
+        }
+        if ($root === null) {
             throw new RuntimeException(sprintf(
-                'Parent file %d does not exist while resolving its file-tree root',
-                $parentId
+                'File-tree parent chain for %d is cyclic or exceeds depth %d',
+                $parentId,
+                self::MAX_FILE_TREE_DEPTH
             ));
         }
-
-        foreach ($rows as $row) {
-            $row = (array) $row;
-            $ancestorParentId = $row['parent_id'] ?? null;
-            if ($ancestorParentId !== null && (int) $ancestorParentId !== 0) {
-                continue;
-            }
-            if (! (bool) ($row['is_directory'] ?? false)) {
-                throw new RuntimeException(sprintf(
-                    'File-tree root %d is not a directory',
-                    (int) $row['file_id']
-                ));
-            }
-            return (int) $row['file_id'];
+        if (! $root['is_directory']) {
+            throw new RuntimeException(sprintf('File-tree root %d is not a directory', $root['file_id']));
         }
+        return $root['file_id'];
+    }
 
-        throw new RuntimeException(sprintf(
-            'File-tree parent chain for %d is cyclic or exceeds depth %d',
-            $parentId,
-            self::MAX_FILE_TREE_DEPTH
-        ));
+    /**
+     * @param array<int, null|array{file_id:int,parent_id:?int,is_directory:bool}> $observedRows
+     */
+    private function fileTreeParentRowsMatch(array $observedRows): bool
+    {
+        $fileIds = array_keys($observedRows);
+        $rows = Db::select(
+            'SELECT file_id, parent_id, is_directory FROM magic_super_agent_task_files WHERE file_id IN ('
+            . implode(', ', array_fill(0, count($fileIds), '?')) . ')',
+            $fileIds
+        );
+        $currentRows = [];
+        foreach ($rows as $row) {
+            $row = $this->normalizeFileTreeParentRow((array) $row);
+            $currentRows[$row['file_id']] = $row;
+        }
+        foreach ($observedRows as $fileId => $observedRow) {
+            if (($currentRows[$fileId] ?? null) !== $observedRow) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array{file_id:int,parent_id:?int,is_directory:bool}
+     */
+    private function normalizeFileTreeParentRow(array $row): array
+    {
+        $parentId = $row['parent_id'] ?? null;
+        return [
+            'file_id' => (int) $row['file_id'],
+            'parent_id' => $parentId === null ? null : (int) $parentId,
+            'is_directory' => (bool) ($row['is_directory'] ?? false),
+        ];
     }
 
     private function isFileTreeRoot(TaskFileEntity $file): bool
@@ -3261,6 +3339,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
      * precise event. Moving across logical roots is represented as
      * delete+create because a root-local cursor cannot cross that boundary
      * safely.
+     *
+     * @param null|array<int, int> $parentRootIds operation-local roots; discard after changing parent links
      */
     private function recordFileTreeMutation(
         ?TaskFileEntity $before,
@@ -3270,7 +3350,8 @@ class TaskFileRepository implements TaskFileRepositoryInterface
         ?string $oldName = null,
         ?array &$pending = null,
         ?int $beforeRootFileId = null,
-        ?int $afterRootFileId = null
+        ?int $afterRootFileId = null,
+        ?array &$parentRootIds = null
     ): void {
         if ($before !== null && ! $this->shouldJournalFileTree($before)) {
             $before = null;
@@ -3292,8 +3373,12 @@ class TaskFileRepository implements TaskFileRepositoryInterface
             return;
         }
 
-        $beforeRootFileId ??= $before === null ? null : $this->resolveFileTreeRootId($before);
-        $afterRootFileId ??= $after === null ? null : $this->resolveFileTreeRootId($after);
+        // Reuse queries within this stable read phase, including before/after
+        // images with the same parent. Never seed this map from a before-root
+        // override: it may have been captured before an ancestor was moved.
+        $parentRootIds ??= [];
+        $beforeRootFileId ??= $before === null ? null : $this->resolveFileTreeRootId($before, $parentRootIds);
+        $afterRootFileId ??= $after === null ? null : $this->resolveFileTreeRootId($after, $parentRootIds);
 
         if ($beforeActive && $afterActive && $before !== null && $after !== null
             && $this->isFileTreeRoot($before)
