@@ -6,14 +6,13 @@ import { useTranslation } from "react-i18next"
 import type { ApiError } from "@magic-admin-v2/api/types"
 import { createSharedMarketColumns } from "@magic-admin-v2/features/platform-official-marketplace/components/market-columns"
 import { MarketListPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/market-list-panel"
-import { SearchableMultiSelect } from "@magic-admin-v2/components/searchable-multi-select"
+import { MarketCategorySelectCell } from "@magic-admin-v2/features/platform-official-marketplace/components/market-category-select-cell"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import { SkillMarketCategoryManagerDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/skill-market-category-manager-dialog"
 import { OfficialSkillImportDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/official-skill-import-dialog"
 import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 import {
 	DescriptionCell,
-	MarketCategoryBadges,
 	MarketNameCell,
 	OrganizationCell,
 	TableText,
@@ -97,32 +96,14 @@ export function SkillMarketPanel({
 		)
 		return Array.from(optionMap.values())
 	}, [categoryQuery.data?.list, items, language])
-	const [categoryDrafts, setCategoryDrafts] = useState<Record<string, string[]>>({})
-	const [openCategoryId, setOpenCategoryId] = useState<string | null>(null)
 	const [categorySavingIds, setCategorySavingIds] = useState<Set<string>>(new Set())
 	const updateCategoryMutation = useUpdateSkillMarketCategoryRelationMutation()
-
-	const updateCategoryDraft = useCallback((recordId: string, categoryIds: string[]) => {
-		setCategoryDrafts((previous) => ({
-			...previous,
-			[recordId]: normalizeCategoryIds(categoryIds),
-		}))
-	}, [])
 
 	const saveCategories = useCallback(
 		async (record: SkillMarketItem, nextCategoryIds: string[]) => {
 			if (!canEdit) return
 			const categoryIds = normalizeCategoryIds(nextCategoryIds)
-			if (areSameCategoryIds(getSkillMarketCategoryIds(record), categoryIds)) {
-				setCategoryDrafts((previous) => {
-					if (!(record.id in previous)) return previous
-
-					const next = { ...previous }
-					delete next[record.id]
-					return next
-				})
-				return
-			}
+			if (areSameCategoryIds(getSkillMarketCategoryIds(record), categoryIds)) return
 
 			setCategorySavingIds((previous) => new Set(previous).add(record.id))
 			try {
@@ -134,11 +115,6 @@ export function SkillMarketPanel({
 						t("officialMarketplace.error.updateFailed"),
 				)
 			} finally {
-				setCategoryDrafts((previous) => {
-					const next = { ...previous }
-					delete next[record.id]
-					return next
-				})
 				setCategorySavingIds((previous) => {
 					const next = new Set(previous)
 					next.delete(record.id)
@@ -203,49 +179,29 @@ export function SkillMarketPanel({
 				header: t("officialMarketplace.column.category"),
 				cell: ({ row }) => {
 					const record = row.original
-					const categoryIds =
-						categoryDrafts[record.id] ?? getSkillMarketCategoryIds(record)
 					const saving = categorySavingIds.has(record.id)
-					if (!categoryOptions.length && !categoryQuery.isLoading) {
-						return (
-							<MarketCategoryBadges
-								labels={getSkillMarketCategoryLabels(
-									record,
-									categoryOptions,
-									language,
-								)}
-							/>
-						)
-					}
-					return (
-						<SearchableMultiSelect
-							ariaLabel={t("officialMarketplace.column.category")}
-							className="w-[220px]"
-							clearLabel={t("officialMarketplace.filter.clearCategories")}
-							disabled={!canEdit || saving || categoryQuery.isLoading}
-							emptyLabel={t("officialMarketplace.filter.uncategorized")}
-							isLoading={saving || categoryQuery.isLoading}
-							maxVisibleItems={1}
-							noMatchingLabel={t("officialMarketplace.filter.noMatchingCategories")}
-							open={openCategoryId === record.id}
-							onChange={(value) => updateCategoryDraft(record.id, value)}
-							onOpenChange={(open) => {
-								if (open) {
-									setOpenCategoryId(record.id)
-									return
-								}
 
-								setOpenCategoryId((previous) =>
-									previous === record.id ? null : previous,
-								)
-								void saveCategories(record, categoryIds)
-							}}
-							options={categoryOptions}
+					return (
+						<MarketCategorySelectCell
+							ariaLabel={t("officialMarketplace.column.category")}
+							canEdit={canEdit}
+							categoryIds={getSkillMarketCategoryIds(record)}
+							categoryLabels={getSkillMarketCategoryLabels(
+								record,
+								categoryOptions,
+								language,
+							)}
+							categoryOptions={categoryOptions}
+							clearLabel={t("officialMarketplace.filter.clearCategories")}
+							emptyLabel={t("officialMarketplace.filter.uncategorized")}
+							isLoading={categoryQuery.isLoading}
+							isSaving={saving}
+							noMatchingLabel={t("officialMarketplace.filter.noMatchingCategories")}
+							onSave={(nextCategoryIds) => saveCategories(record, nextCategoryIds)}
 							searchPlaceholder={t("officialMarketplace.filter.searchCategories")}
 							selectedCountLabel={(count) =>
 								t("officialMarketplace.filter.selectedCategoryCount", { count })
 							}
-							value={categoryIds}
 						/>
 					)
 				},
@@ -254,14 +210,11 @@ export function SkillMarketPanel({
 		],
 		[
 			canEdit,
-			categoryDrafts,
 			categoryOptions,
 			categoryQuery.isLoading,
 			categorySavingIds,
 			language,
-			openCategoryId,
 			saveCategories,
-			updateCategoryDraft,
 			t,
 			tableState,
 		],

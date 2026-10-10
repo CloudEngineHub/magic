@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { SearchableMultiSelect } from "@magic-admin-v2/components/searchable-multi-select"
+import { MarketCategorySelectCell } from "@magic-admin-v2/features/platform-official-marketplace/components/market-category-select-cell"
 import {
 	Sheet,
 	SheetContent,
@@ -30,6 +31,34 @@ function ControlledSearchableMultiSelect() {
 			selectedCountLabel={(count) => `已选 ${count} 个分类`}
 			value={value}
 		/>
+	)
+}
+
+function MarketCategoryCell() {
+	const [savedValue, setSavedValue] = useState<string[]>([])
+
+	return (
+		<>
+			<MarketCategorySelectCell
+				ariaLabel="选择市场分类"
+				canEdit
+				categoryIds={[]}
+				categoryLabels={[]}
+				categoryOptions={[
+					{ label: "研发", value: "engineering" },
+					{ label: "设计", value: "design" },
+				]}
+				clearLabel="清空分类"
+				emptyLabel="未分类"
+				isLoading={false}
+				isSaving={false}
+				noMatchingLabel="没有匹配分类"
+				onSave={setSavedValue}
+				searchPlaceholder="搜索分类"
+				selectedCountLabel={(count) => `已选 ${count} 个分类`}
+			/>
+			<span data-testid="saved-category-value">{savedValue.join(",")}</span>
+		</>
 	)
 }
 
@@ -75,6 +104,20 @@ describe("SearchableMultiSelect in Sheet", () => {
 		const listbox = screen.getByRole("listbox")
 		expect(within(listbox).getByText("报销审批")).toBeInTheDocument()
 		expect(within(listbox).queryByText("差旅审批")).not.toBeInTheDocument()
+	})
+
+	it("keeps category drafts local until the popover loses focus", () => {
+		render(<MarketCategoryCell />)
+
+		fireEvent.click(screen.getByRole("button", { name: "选择市场分类" }))
+		fireEvent.click(screen.getByRole("option", { name: "研发" }))
+
+		expect(screen.getByRole("listbox")).toBeInTheDocument()
+		expect(screen.getByTestId("saved-category-value")).toHaveTextContent("")
+
+		fireEvent.pointerDown(document.body)
+		expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
+		expect(screen.getByTestId("saved-category-value")).toHaveTextContent("engineering")
 	})
 
 	it("keeps a controlled popover open while selections rerender", () => {

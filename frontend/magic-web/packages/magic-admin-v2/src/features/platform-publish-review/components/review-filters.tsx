@@ -186,6 +186,7 @@ export function ReviewStatusSelect({
 	const statuses =
 		variant === "internal"
 			? [
+					publishReviewStatus.pending,
 					publishReviewStatus.underReview,
 					publishReviewStatus.approved,
 					publishReviewStatus.rejected,
@@ -231,7 +232,11 @@ export function PublishStatusSelect({
 	const { t } = useTranslation()
 	const statuses =
 		variant === "internal"
-			? [publishReviewPublishStatus.unpublished, publishReviewPublishStatus.published]
+			? [
+					publishReviewPublishStatus.unpublished,
+					publishReviewPublishStatus.publishing,
+					publishReviewPublishStatus.published,
+				]
 			: Object.values(publishReviewPublishStatus)
 
 	return (
