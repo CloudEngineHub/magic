@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use HyperfDatabaseMigrationsMigration;
-use HyperfDatabaseSchemaBlueprint;
-use HyperfDatabaseSchemaSchema;
+use Hyperf\Database\Migrations\Migration;
+use Hyperf\Database\Schema\Blueprint;
+use Hyperf\Database\Schema\Schema;
 
 return new class extends Migration {
     public function up(): void
