@@ -7,6 +7,14 @@ import { ContentCleaner } from "../ContentCleaner"
 
 describe("ContentCleaner", () => {
 	describe("cleanDocument", () => {
+		it("removes runtime-created children before saving authored HTML", () => {
+			const html =
+				'<html data-magic-source-node=""><body data-magic-source-node=""><section data-magic-source-node=""><p data-magic-source-node="">Fixed</p><p>Dynamic</p></section></body></html>'
+			const cleaned = ContentCleaner.cleanDocument(html)
+			expect(cleaned).toContain("<p>Fixed</p>")
+			expect(cleaned).not.toContain("Dynamic")
+			expect(cleaned).not.toContain("data-magic-source-node")
+		})
 		it("should remove injected script elements", () => {
 			const html = `
 				<!DOCTYPE html>

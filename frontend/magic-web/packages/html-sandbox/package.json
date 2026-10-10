@@ -46,6 +46,10 @@
 			"types": "./src/utils/textContent.ts",
 			"import": "./dist/utils/textContent.js"
 		},
+		"./utils/sourceNodes": {
+			"types": "./src/utils/sourceNodes.ts",
+			"import": "./dist/utils/sourceNodes.js"
+		},
 		"./utils/inspectableTextContent": {
 			"types": "./src/utils/inspectableTextContent.ts",
 			"import": "./dist/utils/inspectableTextContent.js"

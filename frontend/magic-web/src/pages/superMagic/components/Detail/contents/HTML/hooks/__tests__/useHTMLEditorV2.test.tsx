@@ -6,6 +6,12 @@ import { EditorMessageType } from "../../iframe-bridge/types/messages"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import { useHTMLEditorV2 } from "../useHTMLEditorV2"
 
+const toastInfo = vi.hoisted(() => vi.fn())
+
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: { info: toastInfo },
+}))
+
 const bridgeState = vi.hoisted(() => ({
 	instances: [] as Array<{
 		request: ReturnType<typeof vi.fn>
@@ -118,9 +124,17 @@ function TestHarness({
 
 describe("useHTMLEditorV2 edit lifecycle", () => {
 	beforeEach(() => {
+		toastInfo.mockClear()
 		bridgeState.instances.length = 0
 		bridgeState.requests.length = 0
 		bridgeState.activationMessages.length = 0
+	})
+
+	it("explains why a JavaScript-created element cannot be edited", async () => {
+		render(<TestHarness isEditMode />)
+		await waitFor(() => expect(bridgeState.instances).toHaveLength(1))
+		act(() => bridgeState.instances[0].emit(EditorMessageType.DYNAMIC_ELEMENT_CLICKED))
+		expect(toastInfo).toHaveBeenCalledOnce()
 	})
 
 	it("uses metadata updated during GET_CONTENT and returns the exact submitted snapshot", async () => {
