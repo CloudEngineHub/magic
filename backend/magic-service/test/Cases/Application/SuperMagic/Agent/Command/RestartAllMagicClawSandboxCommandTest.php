@@ -23,6 +23,7 @@ use Psr\Log\LoggerInterface;
 use ReflectionProperty;
 use RuntimeException;
 use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Tester\CommandTester;
 
 /**
@@ -79,6 +80,26 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         self::assertSame(0, $tester->execute(['--limit' => 1]));
 
         self::assertSame([102], $this->spy->restartTopicIds);
+        self::assertStringContainsString('Targets: 1 of 2 eligible Magic Claw sandbox(es) to restart, oldest first (limited)', $tester->getDisplay());
+    }
+
+    public function testSkipDetailsArePrintedOnlyInVerboseMode(): void
+    {
+        $sandboxes = [
+            $this->sandbox('warm-101', 'Running', topicId: 101),
+            $this->sandbox('warm-900', 'Running', topicId: ''),
+        ];
+        $topics = [101 => $this->topic(101, 11, 'warm-101')];
+        $claws = [11 => $this->claw('claw-1', 11)];
+
+        $quiet = $this->tester(sandboxes: $sandboxes, topics: $topics, claws: $claws);
+        self::assertSame(0, $quiet->execute([]));
+        self::assertStringContainsString('Skipped: no topic matches this sandbox=1', $quiet->getDisplay());
+        self::assertStringNotContainsString('[SKIP]', $quiet->getDisplay(), '默认不逐条打印 SKIP，避免淹没进度');
+
+        $verbose = $this->tester(sandboxes: $sandboxes, topics: $topics, claws: $claws);
+        self::assertSame(0, $verbose->execute([], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE]));
+        self::assertStringContainsString('[SKIP] sandbox_id=warm-900, status=Running, reason=no topic matches this sandbox', $verbose->getDisplay());
     }
 
     public function testSandboxesWithoutCreatedAtKeepGatewayOrder(): void
@@ -125,7 +146,9 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         self::assertSame(0, $tester->execute([]));
 
         $display = $tester->getDisplay();
-        self::assertStringContainsString('[TARGET] code=claw-1, sandbox_id=warm-101, status=Running', $display);
+        self::assertStringContainsString('[1/1] restarting code=claw-1, sandbox_id=warm-101, status=Running', $display);
+        self::assertStringContainsString('[1/1] [OK] code=claw-1, new_sandbox_id=sandbox-new', $display);
+        self::assertStringContainsString('Targets: 1 Magic Claw sandbox(es) to restart, oldest first', $display);
         self::assertStringContainsString('project is not a Magic Claw', $display);
         self::assertSame([101], $this->spy->restartTopicIds, '只允许重启属于 Magic Claw 的沙箱');
         self::assertStringContainsString('listed: 2', $display);
@@ -212,7 +235,32 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         self::assertSame(0, $tester->execute(['--code' => 'claw-2']));
 
         self::assertSame([102], $this->spy->restartTopicIds);
-        self::assertStringContainsString('[TARGET] code=claw-2', $tester->getDisplay());
+        self::assertStringContainsString('[1/1] restarting code=claw-2', $tester->getDisplay());
+    }
+
+    public function testProgressLineIsPrintedForLongRuns(): void
+    {
+        $sandboxes = [];
+        $topics = [];
+        $claws = [];
+        for ($i = 1; $i <= 12; ++$i) {
+            $topicId = 100 + $i;
+            $projectId = 10 + $i;
+            $sandboxes[] = $this->sandbox('warm-' . $topicId, 'Running', topicId: $topicId, createdAt: sprintf('2026-09-%02dT00:00:00Z', $i));
+            $topics[$topicId] = $this->topic($topicId, $projectId, 'warm-' . $topicId);
+            $claws[$projectId] = $this->claw('claw-' . $i, $projectId);
+        }
+
+        $tester = $this->tester(sandboxes: $sandboxes, topics: $topics, claws: $claws);
+
+        self::assertSame(0, $tester->execute([]));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('Targets: 12 Magic Claw sandbox(es) to restart, oldest first', $display);
+        self::assertStringContainsString('[12/12] [OK] code=claw-12', $display);
+        // 每 PROGRESS_EVERY(10) 个目标至少一行进度，带已完成数和 ETA。
+        self::assertMatchesRegularExpression('/progress: 10\/12 done \(restarted=10, failed=0\), elapsed .+, eta ~.+/', $display);
+        self::assertSame(range(101, 112), $this->spy->restartTopicIds, '按沙箱运行时长升序执行');
     }
 
     public function testCodeOptionReportsWhenNoRunningSandboxMatches(): void
