@@ -4,7 +4,6 @@
 工具特定逻辑（结果格式化、超时默认值等）通过 pending.result_builder 注入，无需在此注册 per-tool handler。
 """
 
-import asyncio
 import traceback
 from typing import Any, Dict
 
@@ -70,6 +69,12 @@ async def dispatch(payload: UserToolCallPayload) -> BaseResponse:
 
     try:
         service = UserToolCallService.get_instance()
+        if payload.name == "ask_user" and service.idle_exit_requested:
+            # 不能消费即将退出的环境中的问题，也不能把它误报成已结束。
+            return create_error_response(
+                "执行环境正在恢复，请稍后重试。",
+                code=ErrorCode.USER_TOOL_CALL_ENVIRONMENT_CLOSING,
+            )
         pending = await service.pop_pending_or_restore_from_latest_history(
             tool_name=payload.name,
             tool_call_id=tool_call_id,
@@ -81,17 +86,7 @@ async def dispatch(payload: UserToolCallPayload) -> BaseResponse:
             )
             return create_error_response("这个问题已经结束，无法再提交。", code=ErrorCode.USER_TOOL_CALL_NOT_FOUND)
 
-        pending.cancel_timeout()
-
-        asyncio.create_task(
-            service.resume_after_user_tool_call(
-                pending=pending,
-                response_status=response_status,
-                answer=answer,
-                remark=remark,
-            ),
-            name=f"user_tool_call_resume_{tool_call_id}",
-        )
+        service.schedule_resume(pending, response_status, answer, remark)
         return create_success_response("已收到你的回答，正在继续处理。")
     except Exception as e:
         logger.error(f"user_tool_call dispatch [{payload.name}] 异常: {e}")

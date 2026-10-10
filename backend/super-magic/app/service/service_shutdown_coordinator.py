@@ -282,8 +282,10 @@ class ServiceShutdownCoordinator:
 
     async def _interrupt_runs(self) -> None:
         contexts = AgentContextRegistry.get_instance().list_contexts()
+        request = self.request
+        reason = "idle_timeout" if request is not None and request.trigger == ShutdownTrigger.IDLE_TIMEOUT else "service_shutdown"
         results = await asyncio.gather(
-            *(context.stop_run(reason="service_shutdown") for context in contexts),
+            *(context.stop_run(reason=reason) for context in contexts),
             return_exceptions=True,
         )
         for result in results:

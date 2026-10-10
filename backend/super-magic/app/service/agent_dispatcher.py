@@ -48,7 +48,6 @@ from app.service.memory.runtime.events.memory_event_listener import MemoryListen
 from app.infrastructure.observability import install_tool_monitoring_listener
 from app.service.mcp_service import MCPService
 from app.path_manager import PathManager
-from app.service.agent_event.user_tool_call_listener_service import UserToolCallListenerService
 from app.service.agent_event.channel_startup_listener_service import ChannelStartupListenerService
 from app.core.entity.message.client_message import InitClientMessage, ChatClientMessage, AgentMode
 from app.service.cli_manager import CliManagerService
@@ -175,7 +174,6 @@ class AgentDispatcher(Base):
         MemoryListenerService.register_standard_listeners(self.agent_context)
         ResourceCleanupListenerService.register_standard_listeners(self.agent_context)
         ChannelStartupListenerService.register_standard_listeners(self.agent_context)
-        UserToolCallListenerService.register_standard_listeners(self.agent_context)
         ThirdPartyMessageListenerService.register_standard_listeners(self.agent_context)
         FollowUpSuggestionListener.register_standard_listeners(self.agent_context)
 
