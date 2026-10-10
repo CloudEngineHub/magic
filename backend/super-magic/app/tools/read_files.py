@@ -697,7 +697,8 @@ Strongly recommended to use this tool for batch reading multiple reference files
             read_range = item.get("read_range")
             message = ""
             if not item.get("is_success"):
-                message = i18n.translate("read_file.failed", category="tool.messages")
+                # 例：文件不存在时，列表与详情都显示同一多语言原因，不透传原始异常。
+                message = self._get_failure_reason_label(item.get("error_type"))
             elif read_range:
                 message = i18n.translate(
                     "read_file.line_range", category="tool.messages",
