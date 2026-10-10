@@ -69,6 +69,13 @@ export type DataTableProps<TData, TValue> = {
 	columns: Array<ColumnDef<TData, TValue>>
 	/** 表格容器的自定义样式。 */
 	containerClassName?: string
+	/** Stable selectors for table containers and repeated rows. */
+	containerTestId?: string
+	loadingTestId?: string
+	rowTestId?: string
+	mobileDetailContentTestId?: string
+	mobileDetailButtonTestId?: string
+	mobileDetailCloseButtonTestId?: string
 	/** 当前表格行数据。 */
 	data: TData[]
 	/** 没有数据且非加载状态时展示的内容。 */
@@ -102,16 +109,22 @@ export type DataTableProps<TData, TValue> = {
 export function DataTable<TData, TValue>({
 	columns,
 	containerClassName,
+	containerTestId,
 	data,
 	emptyState,
 	getRowId,
 	isLoading,
+	loadingTestId,
 	manualSorting,
 	minWidth = 960,
+	mobileDetailContentTestId,
+	mobileDetailButtonTestId,
+	mobileDetailCloseButtonTestId,
 	onColumnVisibilityChange,
 	onSortingChange,
 	columnVisibility,
 	sorting,
+	rowTestId,
 	selectedRowId,
 	stickyHeader = true,
 	stickyLeftColumnId,
@@ -159,12 +172,21 @@ export function DataTable<TData, TValue>({
 
 	if (isMobile) {
 		if (isLoading) {
-			return <MobileCardListSkeleton className={containerClassName} />
+			return (
+				<MobileCardListSkeleton
+					className={containerClassName}
+					testId={loadingTestId ?? containerTestId}
+				/>
+			)
 		}
 
 		if (table.getRowModel().rows.length === 0) {
 			return (
-				<div className={containerClassName} data-slot="data-table-mobile-empty">
+				<div
+					className={containerClassName}
+					data-slot="data-table-mobile-empty"
+					data-testid={containerTestId}
+				>
 					{emptyState}
 				</div>
 			)
@@ -175,13 +197,16 @@ export function DataTable<TData, TValue>({
 				<div
 					className={cn(mobileCardTokens.list, "bg-transparent", containerClassName)}
 					data-slot="data-table-mobile-list"
+					data-testid={containerTestId}
 				>
 					{table.getRowModel().rows.map((row) => (
 						<MobileDataCard
 							columnLabels={mobileColumnLabels}
 							key={row.id}
+							mobileDetailButtonTestId={mobileDetailButtonTestId}
 							onViewDetails={() => setMobileDetailRow(row)}
 							row={row}
+							rowTestId={rowTestId}
 							stickyRightColumnId={stickyRightColumnId}
 							viewDetailsLabel={t("common.viewDetails")}
 						/>
@@ -190,6 +215,8 @@ export function DataTable<TData, TValue>({
 
 				<MobileDataDetailSheet
 					columnLabels={mobileColumnLabels}
+					contentTestId={mobileDetailContentTestId}
+					closeButtonTestId={mobileDetailCloseButtonTestId}
 					onOpenChange={(open) => {
 						if (!open) setMobileDetailRow(null)
 					}}
@@ -264,6 +291,7 @@ export function DataTable<TData, TValue>({
 		<DataTableFrame
 			containerClassName={containerClassName}
 			header={renderHeader()}
+			containerTestId={containerTestId}
 			minWidth={minWidth}
 			sizingHeader={stickyHeader ? renderHeader(true) : null}
 			stickyHeader={stickyHeader}
@@ -306,6 +334,9 @@ export function DataTable<TData, TValue>({
 										selected ? "bg-primary/5 hover:bg-primary/10" : undefined
 									}
 									data-state={selected ? "selected" : undefined}
+									data-testid={
+										rowTestId ? rowTestId.replace("{id}", row.id) : undefined
+									}
 									key={row.id}
 									role={stickyHeader ? "row" : undefined}
 								>
@@ -339,14 +370,18 @@ export function DataTable<TData, TValue>({
 
 function MobileDataCard<TData>({
 	columnLabels,
+	mobileDetailButtonTestId,
 	onViewDetails,
 	row,
+	rowTestId,
 	stickyRightColumnId,
 	viewDetailsLabel,
 }: {
 	columnLabels: Map<string, ReactNode>
+	mobileDetailButtonTestId?: string
 	onViewDetails: () => void
 	row: Row<TData>
+	rowTestId?: string
 	stickyRightColumnId?: string
 	viewDetailsLabel: string
 }) {
@@ -364,7 +399,10 @@ function MobileDataCard<TData>({
 	const summaryCells = dataCells.slice(1, 5)
 
 	return (
-		<article className={mobileCardTokens.card}>
+		<article
+			className={mobileCardTokens.card}
+			data-testid={rowTestId ? rowTestId.replace("{id}", row.id) : undefined}
+		>
 			<div className={mobileCardTokens.header}>
 				{selectionCells.length > 0 ? (
 					<div className="flex shrink-0 items-center gap-2 pt-0.5">
@@ -425,6 +463,7 @@ function MobileDataCard<TData>({
 				<div className={mobileCardTokens.actions}>
 					<Button
 						className={mobileCardTokens.actionButton}
+						data-testid={mobileDetailButtonTestId}
 						onClick={onViewDetails}
 						type="button"
 						variant="ghost"
@@ -440,6 +479,8 @@ function MobileDataCard<TData>({
 
 function MobileDataDetailSheet<TData>({
 	columnLabels,
+	contentTestId,
+	closeButtonTestId,
 	onOpenChange,
 	open,
 	row,
@@ -447,6 +488,8 @@ function MobileDataDetailSheet<TData>({
 	title,
 }: {
 	columnLabels: Map<string, ReactNode>
+	contentTestId?: string
+	closeButtonTestId?: string
 	onOpenChange: (open: boolean) => void
 	open: boolean
 	row: Row<TData> | null
@@ -465,6 +508,8 @@ function MobileDataDetailSheet<TData>({
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent
 				className="max-h-[calc(100svh-0.5rem)] gap-0 rounded-t-xl p-0"
+				data-testid={contentTestId}
+				closeButtonTestId={closeButtonTestId}
 				side="bottom"
 			>
 				<SheetHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left">
@@ -490,11 +535,12 @@ function MobileDataDetailSheet<TData>({
 	)
 }
 
-function MobileCardListSkeleton({ className }: { className?: string }) {
+function MobileCardListSkeleton({ className, testId }: { className?: string; testId?: string }) {
 	return (
 		<div
 			className={cn(mobileCardTokens.list, "bg-transparent", className)}
 			data-slot="data-table-mobile-list"
+			data-testid={testId}
 		>
 			{Array.from({ length: 4 }, (_, index) => (
 				<div className={mobileCardTokens.card} key={index}>

@@ -79,7 +79,7 @@ export function ModelConfigSection({
 									placeholder={t("systemCapabilities.placeholder.prompt")}
 									rows={4}
 									value={field.value ?? ""}
-								/>
+								 data-testid="platform-system-capabilities-capability-prompt-input"/>
 							</DialogFormField>
 							<FormMessage />
 						</FormItem>

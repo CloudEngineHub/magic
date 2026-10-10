@@ -82,7 +82,7 @@ export function TemplateEditorForm({
 									<RequiredMark />
 								</FormLabel>
 								<FormControl>
-									<Input maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name} {...field} />
+									<Input maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name} {...field} data-testid="platform-slides-template-input" />
 								</FormControl>
 								<FormMessage className="text-xs" />
 							</FormItem>
@@ -98,7 +98,7 @@ export function TemplateEditorForm({
 									<RequiredMark />
 								</FormLabel>
 								<FormControl>
-									<Input maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name} {...field} />
+									<Input maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name} {...field} data-testid="platform-slides-template-input" />
 								</FormControl>
 								<FormMessage className="text-xs" />
 							</FormItem>
@@ -118,7 +118,7 @@ export function TemplateEditorForm({
 										maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.description}
 										rows={3}
 										{...field}
-									/>
+									 data-testid="platform-slides-template-textarea-input"/>
 								</FormControl>
 								<FormMessage className="text-xs" />
 							</FormItem>
@@ -138,7 +138,7 @@ export function TemplateEditorForm({
 										maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.description}
 										rows={3}
 										{...field}
-									/>
+									 data-testid="platform-slides-template-textarea-input"/>
 								</FormControl>
 								<FormMessage className="text-xs" />
 							</FormItem>
@@ -153,6 +153,14 @@ export function TemplateEditorForm({
 							<FormItem>
 								<FormLabel>{t("slidesTemplate.form.category")}</FormLabel>
 								<SearchableCategorySelect
+									clearButtonTestId="platform-slides-template-editor-category-clear-button"
+									clearSearchButtonTestId="platform-slides-template-editor-category-search-clear-button"
+									contentTestId="platform-slides-template-editor-category-content"
+									emptyTestId="platform-slides-template-editor-category-empty"
+									inputTestId="platform-slides-template-editor-category-search-input"
+									loadingTestId="platform-slides-template-editor-category-loading"
+									optionTestId="platform-slides-template-editor-category-option"
+									triggerTestId="platform-slides-template-editor-category-trigger"
 									isLoading={categoriesLoading}
 									onChange={field.onChange}
 									options={selectableCategories}
@@ -193,7 +201,7 @@ export function TemplateEditorForm({
 												),
 											)
 										}
-									/>
+									 data-testid="platform-slides-template-switch"/>
 								</div>
 								<FormItem>
 									<FormLabel>{t("slidesTemplate.form.tags")}</FormLabel>
@@ -202,7 +210,7 @@ export function TemplateEditorForm({
 										onChange={field.onChange}
 										options={selectableTags}
 										value={field.value}
-									/>
+									 triggerTestId="platform-slides-template-tag-select-trigger" contentTestId="platform-slides-template-tag-select-content" searchInputTestId="platform-slides-template-tag-select-search-input" searchClearButtonTestId="platform-slides-template-tag-select-search-clear-button" optionTestId="platform-slides-template-tag-select-option" loadingTestId="platform-slides-template-tag-select-loading" emptyTestId="platform-slides-template-tag-select-empty" clearButtonTestId="platform-slides-template-tag-select-clear-button"/>
 									<FormMessage className="text-xs" />
 								</FormItem>
 							</div>
@@ -298,7 +306,7 @@ export function TemplateEditorForm({
 									maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.previewUrl}
 									placeholder="https://"
 									{...field}
-								/>
+								 data-testid="platform-slides-template-input"/>
 							</FormControl>
 							<FormMessage className="text-xs" />
 						</FormItem>
@@ -318,7 +326,7 @@ export function TemplateEditorForm({
 									<RequiredMark />
 								</FormLabel>
 								<FormControl>
-									<Input readOnly {...field} />
+									<Input readOnly {...field} data-testid="platform-slides-template-input" />
 								</FormControl>
 								<FormMessage className="text-xs" />
 							</FormItem>
@@ -351,7 +359,7 @@ export function TemplateEditorForm({
 						<FormItem className="flex items-center justify-between rounded-lg border p-4">
 							<FormLabel>{t("slidesTemplate.form.status")}</FormLabel>
 							<FormControl>
-								<Switch checked={field.value} onCheckedChange={field.onChange} />
+								<Switch checked={field.value} onCheckedChange={field.onChange} data-testid="platform-slides-template-switch" />
 							</FormControl>
 						</FormItem>
 					)}
@@ -413,6 +421,6 @@ const SortInput = forwardRef<HTMLInputElement, SortInputProps>(function SortInpu
 			ref={ref}
 			type="number"
 			value={draft}
-		/>
+		 data-testid="platform-slides-template-input"/>
 	)
 })

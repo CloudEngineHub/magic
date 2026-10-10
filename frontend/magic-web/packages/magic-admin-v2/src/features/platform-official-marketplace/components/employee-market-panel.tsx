@@ -181,6 +181,7 @@ export function EmployeeMarketPanel({
 								<MarketCategorySelectCell
 									ariaLabel={t("officialMarketplace.column.category")}
 									canEdit={canEdit}
+									disabled={!canEdit || saving}
 									categoryIds={getAgentMarketCategoryIds(record)}
 									categoryLabels={getAgentMarketCategoryLabels(
 										record,
@@ -195,7 +196,9 @@ export function EmployeeMarketPanel({
 									noMatchingLabel={t(
 										"officialMarketplace.filter.noMatchingCategories",
 									)}
-									onSave={(nextCategoryIds) => saveCategories(record, nextCategoryIds)}
+									onSave={(nextCategoryIds) =>
+										saveCategories(record, nextCategoryIds)
+									}
 									searchPlaceholder={t(
 										"officialMarketplace.filter.searchCategories",
 									)}

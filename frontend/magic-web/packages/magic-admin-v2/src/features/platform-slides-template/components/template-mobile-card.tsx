@@ -113,12 +113,18 @@ export function TemplateMobileCard({
 							disabled={!canEdit}
 							loading={statusPending}
 							onCheckedChange={onStatusChange}
+							data-testid="platform-slides-template-switch"
 						/>
 					</div>
-					<div className="flex min-w-0 ">
-						<Button onClick={onPreview} size="sm" variant="ghost">
+					<div className="flex min-w-0 gap-2">
+						<Button
+							onClick={onPreview}
+							size="icon-sm"
+							className="md:w-auto md:gap-1.5 md:px-2.5"
+							variant="outline"
+							data-testid="platform-slides-template-delete-button"
+						>
 							<Eye className="mr-1 size-4" />
-							<span className="hidden md:inline">{t("slidesTemplate.preview")}</span>
 						</Button>
 						<Button
 							aria-label={t("slidesTemplate.aria.editTemplate", {
@@ -126,11 +132,12 @@ export function TemplateMobileCard({
 							})}
 							disabled={!canEdit || system}
 							onClick={onEdit}
-							size="sm"
-							variant="ghost"
+							size="icon-sm"
+							className="md:w-auto md:gap-1.5 md:px-2.5"
+							variant="outline"
+							data-testid="platform-slides-template-delete-button"
 						>
 							<Pencil className="mr-1 size-4" />
-							<span className="hidden md:inline">{t("common.edit")}</span>
 						</Button>
 						<Button
 							aria-label={t("slidesTemplate.aria.deleteTemplate", {
@@ -138,8 +145,10 @@ export function TemplateMobileCard({
 							})}
 							disabled={!canEdit || system}
 							onClick={onDelete}
-							size="sm"
-							variant="ghost"
+							size="icon-sm"
+							className="md:w-auto md:gap-1.5 md:px-2.5"
+							variant="outline"
+							data-testid="platform-slides-template-delete-button"
 						>
 							<Trash2 className="size-4 text-destructive" />
 						</Button>

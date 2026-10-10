@@ -116,6 +116,7 @@
 	"fieldDesc.placeholder": "用于设置输入框中的 Placeholder，内容支持换行。",
 	"fieldDesc.sort": "数值越大，优先级越高。",
 	"filter.allStatuses": "全部状态",
+	"filter.description": "按状态、员工名称和员工标识进一步筛选员工列表。",
 	"filter.identifier": "员工标识",
 	"filter.keyword": "员工名称",
 	"filter.status": "状态",

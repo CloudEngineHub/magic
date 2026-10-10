@@ -49,7 +49,7 @@ export function ProviderAliasLanguageFields({
         </span>
         <TabsList className="h-11 shrink-0">
           {([Language.ZhCN, Language.EnUS] as const).map((locale) => (
-            <TabsTrigger className="h-11 gap-2" key={locale} value={locale}>
+            <TabsTrigger className="h-11 gap-2" key={locale} value={locale} data-testid="platform-provider-list-tab-trigger">
               <span>{locale === Language.ZhCN ? t("language.zhCN") : t("language.enUS")}</span>
               <Badge className="h-5 px-1.5 text-[11px] leading-none shadow-none" variant="secondary">
                 {completion[locale]
@@ -72,7 +72,7 @@ export function ProviderAliasLanguageFields({
                   disabled={disabled}
                   placeholder={t("providerList.placeholder.alias")}
                   {...field}
-                />
+                data-testid="platform-provider-list-input" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -91,7 +91,7 @@ export function ProviderAliasLanguageFields({
                   disabled={disabled}
                   placeholder={t("providerList.placeholder.aliasEn")}
                   {...field}
-                />
+                data-testid="platform-provider-list-input" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -119,7 +119,7 @@ export function ProviderFooterStatusSwitch({
         <FormItem className="flex min-h-9 items-center gap-3">
           <FormLabel className="m-0 text-sm">{t("providerList.field.status")}</FormLabel>
           <FormControl>
-            <Switch disabled={disabled} checked={field.value} onCheckedChange={field.onChange} />
+            <Switch disabled={disabled} checked={field.value} onCheckedChange={field.onChange} data-testid="platform-provider-list-switch" />
           </FormControl>
         </FormItem>
       )}
@@ -157,7 +157,7 @@ export function ProviderSortField({
               step={1}
               type="number"
               value={field.value}
-            />
+            data-testid="platform-provider-list-input" />
           </FormControl>
           <FormDescription>{t("providerList.fieldDesc.sort")}</FormDescription>
           <FormMessage />

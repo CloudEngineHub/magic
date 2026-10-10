@@ -13,8 +13,7 @@ import {
 } from "@magic-admin-v2/features/platform-publish-review/types"
 
 export type ReviewDraftUpdater =
-	| PublishReviewFilterDraft
-	| ((previous: PublishReviewFilterDraft) => PublishReviewFilterDraft)
+	PublishReviewFilterDraft | ((previous: PublishReviewFilterDraft) => PublishReviewFilterDraft)
 
 export function createDefaultFilterDraft(
 	kind: PublishReviewKind,
@@ -155,9 +154,9 @@ export function getSearchFieldOptions(
 	kind: PublishReviewKind,
 	t: ReturnType<typeof import("react-i18next").useTranslation>["t"],
 	variant: PublishReviewVariant,
-) {
+): Array<{ value: PublishReviewSearchField; label: string }> {
 	if (kind === "employee") {
-		const options = [
+		const options: Array<{ value: PublishReviewSearchField; label: string }> = [
 			{ value: "name_i18n", label: t("publishReview.filter.employeeName") },
 			{ value: "version", label: t("publishReview.filter.version") },
 		]

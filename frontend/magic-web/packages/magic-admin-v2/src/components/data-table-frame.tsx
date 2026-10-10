@@ -6,6 +6,7 @@ import { cn } from "@magic-admin-v2/utils/cn"
 export function DataTableFrame({
 	children,
 	containerClassName,
+	containerTestId,
 	header,
 	minWidth,
 	sizingHeader,
@@ -14,6 +15,7 @@ export function DataTableFrame({
 }: {
 	children: ReactNode
 	containerClassName?: string
+	containerTestId?: string
 	header: ReactNode
 	minWidth: number
 	sizingHeader: ReactNode
@@ -82,6 +84,7 @@ export function DataTableFrame({
 				containerClassName,
 			)}
 			data-slot="data-table-desktop"
+			data-testid={containerTestId}
 			role={stickyHeader ? "table" : undefined}
 		>
 			{stickyHeader ? (

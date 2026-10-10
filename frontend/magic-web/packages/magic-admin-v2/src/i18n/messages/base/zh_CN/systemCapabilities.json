@@ -1,7 +1,6 @@
 {
 	"action.config": "能力配置",
 	"action.more": "更多操作",
-	"action.reset": "重置",
 	"action.testConnection": "测试连通性",
 	"column.actions": "操作",
 	"column.capability": "能力",
@@ -46,10 +45,8 @@
 	"fieldDesc.sk": "请输入 SK。",
 	"fieldDesc.status": "关闭后该系统能力将不再对用户可用。",
 	"filter.allStatuses": "全部状态",
-	"filter.apply": "应用搜索",
 	"filter.keyword": "搜索条件",
 	"filter.status": "状态",
-	"filter.title": "搜索条件",
 	"list.count": "当前显示 {{count}} 项能力。",
 	"message.updateSuccess": "系统能力已更新。",
 	"model.loading": "正在加载模型...",

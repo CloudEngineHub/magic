@@ -1,7 +1,6 @@
 {
 	"action.config": "Configure capability",
 	"action.more": "More actions",
-	"action.reset": "Reset",
 	"action.testConnection": "Test connection",
 	"column.actions": "Actions",
 	"column.capability": "Capability",
@@ -46,10 +45,8 @@
 	"fieldDesc.sk": "Enter the SK.",
 	"fieldDesc.status": "When disabled, this system capability is unavailable to users.",
 	"filter.allStatuses": "All statuses",
-	"filter.apply": "Apply",
 	"filter.keyword": "Search condition",
 	"filter.status": "Status",
-	"filter.title": "Search conditions",
 	"list.count": "Showing {{count}} capabilities.",
 	"message.updateSuccess": "System capability updated.",
 	"model.loading": "Loading models...",

@@ -1,4 +1,4 @@
-import { Pencil, Tags, Trash2 } from "lucide-react"
+import { MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -6,13 +6,17 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
+import { ListFilterPanel } from "@magic-admin-v2/components/list-filter-panel"
 import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
-import {
-	ListFilterPanel,
-	type ListFilterPanelFieldsProps,
-} from "@magic-admin-v2/components/list-filter-panel"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { Button } from "@magic-admin-v2/components/ui/button"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@magic-admin-v2/components/ui/dropdown-menu"
 import { Input } from "@magic-admin-v2/components/ui/input"
 import {
 	Select,
@@ -67,47 +71,6 @@ function toCategoryListParams(
 	}
 }
 
-/** Name, code and status are independent fields; every control fills its grid cell. */
-function CategoryFilterFields({
-	onChange,
-	value,
-}: ListFilterPanelFieldsProps<CategoryFilterDraft>) {
-	const { t } = useTranslation()
-
-	return (
-		<>
-			<FilterControlField label={t("slidesTemplate.keyword")}>
-				<FilterSearchInput
-					clearLabel={t("common.clear")}
-					onValueChange={(keyword) => onChange({ keyword })}
-					placeholder={t("slidesTemplate.keyword")}
-					value={value.keyword}
-				/>
-			</FilterControlField>
-			<FilterControlField label={t("slidesTemplate.categoryCode")}>
-				<FilterSearchInput
-					clearLabel={t("common.clear")}
-					onValueChange={(code) => onChange({ code })}
-					placeholder={t("slidesTemplate.categoryCode")}
-					value={value.code}
-				/>
-			</FilterControlField>
-			<FilterControlField label={t("slidesTemplate.status")}>
-				<Select value={value.status} onValueChange={(status) => onChange({ status })}>
-					<SelectTrigger aria-label={t("slidesTemplate.status")} className="w-full">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={emptyStatus}>{t("slidesTemplate.all")}</SelectItem>
-						<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-						<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
-					</SelectContent>
-				</Select>
-			</FilterControlField>
-		</>
-	)
-}
-
 type CategoryManagerProps = {
 	canEdit: boolean
 	onDelete: (record: SlidesTemplateCategory) => void
@@ -132,6 +95,7 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 			filterDraft: filters,
 			page,
 			params,
+			setDebouncedField,
 			setFilterDraft,
 			setPage,
 		} = useListQueryParams({
@@ -189,6 +153,7 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 									)
 								}
 							}}
+							data-testid="platform-slides-template-switch"
 						/>
 					),
 				},
@@ -222,6 +187,7 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 								if (event.key === "Enter") event.currentTarget.blur()
 							}}
 							type="number"
+							data-testid="platform-slides-template-input"
 						/>
 					),
 				},
@@ -238,33 +204,46 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 					id: "actions",
 					header: t("slidesTemplate.actions"),
 					enableSorting: false,
+					meta: {
+						fitContent: true,
+					},
 					cell: ({ row }) => (
-						<div className="flex gap-1">
-							<Button
-								aria-label={t("slidesTemplate.aria.editCategory", {
-									name: resolveSlidesTemplateCategoryName(row.original),
-								})}
-								disabled={!canEdit}
-								onClick={() => {
-									setEditing(row.original)
-									setDialogOpen(true)
-								}}
-								size="sm"
-								variant="ghost"
-							>
-								<Pencil className="size-4" />
-							</Button>
-							<Button
-								aria-label={t("slidesTemplate.aria.deleteCategory", {
-									name: resolveSlidesTemplateCategoryName(row.original),
-								})}
-								disabled={!canEdit}
-								onClick={() => onDelete(row.original)}
-								size="sm"
-								variant="ghost"
-							>
-								<Trash2 className="size-4 text-destructive" />
-							</Button>
+						<div className="flex justify-end">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										aria-label={t("slidesTemplate.actions")}
+										size="icon"
+										variant="ghost"
+										data-testid="platform-slides-template-category-menu-trigger"
+									>
+										<MoreHorizontal className="size-4" aria-hidden="true" />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									<DropdownMenuItem
+										disabled={!canEdit}
+										onSelect={() => {
+											setEditing(row.original)
+											setDialogOpen(true)
+										}}
+										data-testid="platform-slides-template-category-edit-item"
+									>
+										<Pencil className="mr-2 size-4" />
+										{t("common.edit")}
+									</DropdownMenuItem>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem
+										className="text-destructive focus:text-destructive"
+										disabled={!canEdit}
+										onSelect={() => onDelete(row.original)}
+										data-testid="platform-slides-template-category-delete-item"
+									>
+										<Trash2 className="mr-2 size-4" />
+										{t("common.delete")}
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
 						</div>
 					),
 				},
@@ -292,26 +271,94 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 				<ListFilterPanel
 					applyLabel={t("slidesTemplate.applyFilters")}
 					createDefaultValue={createDefaultCategoryFilterDraft}
-					onChange={(patch) => setFilterDraft((previous) => ({ ...previous, ...patch }))}
+					onApply={(draft) => setFilterDraft(draft)}
+					onChange={(patch) => {
+						if (patch.keyword !== undefined) setDebouncedField("keyword", patch.keyword)
+						if (patch.code !== undefined) setDebouncedField("code", patch.code)
+						if (patch.status !== undefined)
+							setFilterDraft((previous) => ({ ...previous, status: patch.status! }))
+					}}
 					onReset={reset}
-					renderFields={(props) => <CategoryFilterFields {...props} />}
+					renderFields={({ layout, onChange, value }) => (
+						<>
+							<FilterControlField label={t("slidesTemplate.keyword")}>
+								<FilterSearchInput
+									clearLabel={t("common.clear")}
+									onValueChange={(keyword) =>
+										layout === "grid"
+											? setDebouncedField("keyword", keyword)
+											: onChange({ keyword })
+									}
+									placeholder={t("slidesTemplate.keyword")}
+									value={value.keyword}
+								/>
+							</FilterControlField>
+							<FilterControlField label={t("slidesTemplate.categoryCode")}>
+								<FilterSearchInput
+									clearLabel={t("common.clear")}
+									onValueChange={(code) =>
+										layout === "grid"
+											? setDebouncedField("code", code)
+											: onChange({ code })
+									}
+									placeholder={t("slidesTemplate.categoryCode")}
+									value={value.code}
+								/>
+							</FilterControlField>
+							<FilterControlField label={t("slidesTemplate.status")}>
+								<Select
+									value={value.status}
+									onValueChange={(status) => onChange({ status })}
+								>
+									<SelectTrigger className="w-full">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value={emptyStatus}>
+											{t("slidesTemplate.all")}
+										</SelectItem>
+										<SelectItem value="1">
+											{t("slidesTemplate.enabled")}
+										</SelectItem>
+										<SelectItem value="0">
+											{t("slidesTemplate.disabled")}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							</FilterControlField>
+						</>
+					)}
 					resetLabel={t("slidesTemplate.reset")}
 					title={t("slidesTemplate.filterTitle")}
 					value={filters}
 				/>
+
 				<div>
 					<DataTable
 						columns={columns}
 						data={query.data?.list ?? []}
 						emptyState={
-							<EmptyState icon={Tags} title={t("slidesTemplate.emptyCategories")} />
+							<EmptyState
+								icon={Tags}
+								title={t("slidesTemplate.emptyCategories")}
+								testId="platform-slides-template-empty"
+							/>
 						}
 						getRowId={(row) => row.id}
 						isLoading={query.isLoading}
 						minWidth={900}
 						stickyRightColumnId="actions"
+						containerTestId="platform-slides-template-list"
+						loadingTestId="platform-slides-template-loading"
+						rowTestId="platform-slides-template-row"
 					/>
 					<ListPagination
+						previousButtonTestId="slides-template-category-previous-button"
+						nextButtonTestId="slides-template-category-next-button"
+						pageSizeTriggerTestId="slides-template-category-page-size-trigger"
+						pageSizeOptionTestId="slides-template-category-page-size-option"
+						jumpInputTestId="slides-template-category-jump-input"
+						testId="slides-template-category-pagination"
 						showQuickJumper
 						loading={query.isFetching}
 						onPageChange={setPage}

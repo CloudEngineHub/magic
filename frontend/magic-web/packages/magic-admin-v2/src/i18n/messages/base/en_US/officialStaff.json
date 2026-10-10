@@ -116,6 +116,7 @@
 	"fieldDesc.placeholder": "Sets the input placeholder. Line breaks are supported.",
 	"fieldDesc.sort": "Higher values have higher priority.",
 	"filter.allStatuses": "All statuses",
+	"filter.description": "Filter the staff list further by status, staff name, and staff identifier.",
 	"filter.identifier": "Staff identifier",
 	"filter.keyword": "Staff name",
 	"filter.status": "Status",

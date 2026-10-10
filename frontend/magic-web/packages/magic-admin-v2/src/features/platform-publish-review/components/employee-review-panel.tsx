@@ -62,11 +62,12 @@ export function EmployeeReviewPanel({
 		page,
 		pageSize,
 		params,
+		setDebouncedField,
 		setFilterDraft,
 		setPage,
 		setPageSize,
 	} = useListQueryParams({
-		debounceFields: ["name_i18n", "organization_code", "version"],
+		debounceFields: ["search_value"],
 		initialDraft: () => createDefaultFilterDraft("employee", variant),
 		toParams: toAgentReviewParams,
 	})
@@ -179,6 +180,7 @@ export function EmployeeReviewPanel({
 				onDraftChange={setFilterDraft}
 				onPageChange={setPage}
 				onPageSizeChange={setPageSize}
+				onSearchValueChange={(value) => setDebouncedField("search_value", value)}
 				page={page}
 				pageSize={pageSize}
 				queryError={query.error as ApiError | null}

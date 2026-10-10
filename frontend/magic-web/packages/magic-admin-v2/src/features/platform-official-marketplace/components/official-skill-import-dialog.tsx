@@ -278,7 +278,7 @@ export function OfficialSkillImportDialog({
   return (
     <>
       <Dialog onOpenChange={(nextOpen) => !nextOpen && !submitting && onCancel()} open={open}>
-        <DialogContent className="flex max-h-[calc(100vh-2rem)] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]">
+        <DialogContent className="flex max-h-[calc(100vh-2rem)] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]" data-testid="platform-official-marketplace-dialog-content" closeButtonTestId="official-skill-import-dialog-close-button">
           <DialogHeader className="border-b px-5 py-4 pr-12">
             <DialogTitle>{t("officialMarketplace.skillImport.title")}</DialogTitle>
             <DialogDescription>{t("officialMarketplace.skillImport.description")}</DialogDescription>
@@ -301,7 +301,7 @@ export function OfficialSkillImportDialog({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <input
+                  <input data-testid="platform-marketplace-skill-name-input"
                     accept={archiveAccept}
                     className="hidden"
                     onChange={(event) => {
@@ -311,7 +311,7 @@ export function OfficialSkillImportDialog({
                     ref={fileInputRef}
                     type="file"
                   />
-                  <input
+                  <input data-testid="platform-marketplace-skill-slug-input"
                     className="hidden"
                     onChange={(event) => {
                       void handleFolderChange(event.target.files);
@@ -321,11 +321,11 @@ export function OfficialSkillImportDialog({
                     type="file"
                     {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
                   />
-                  <Button disabled={processing || submitting} onClick={() => fileInputRef.current?.click()} type="button">
+                  <Button disabled={processing || submitting} onClick={() => fileInputRef.current?.click()} type="button" data-testid="platform-official-marketplace-save-button">
                     {processing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Upload className="size-4" aria-hidden="true" />}
                     {t("officialMarketplace.skillImport.upload.chooseFile")}
                   </Button>
-                  <Button disabled={processing || submitting} onClick={() => folderInputRef.current?.click()} type="button" variant="outline">
+                  <Button disabled={processing || submitting} onClick={() => folderInputRef.current?.click()} type="button" variant="outline" data-testid="platform-official-marketplace-save-button">
                     <FolderOpen className="size-4" aria-hidden="true" />
                     {t("officialMarketplace.skillImport.upload.chooseFolder")}
                   </Button>
@@ -347,7 +347,7 @@ export function OfficialSkillImportDialog({
                       aria-invalid={Boolean(formState.errors.nameZh)}
                       id="official-skill-name-zh"
                       {...register("nameZh")}
-                    />
+                    data-testid="platform-official-marketplace-official-skill-name-zh-input" />
                     <FieldError message={formState.errors.nameZh?.message} />
                   </DialogFormField>
                   <DialogFormField fieldId="official-skill-name-en" label={t("officialMarketplace.skillImport.field.nameEn")} required>
@@ -355,7 +355,7 @@ export function OfficialSkillImportDialog({
                       aria-invalid={Boolean(formState.errors.nameEn)}
                       id="official-skill-name-en"
                       {...register("nameEn")}
-                    />
+                    data-testid="platform-official-marketplace-official-skill-name-en-input" />
                     <FieldError message={formState.errors.nameEn?.message} />
                   </DialogFormField>
                 </div>
@@ -365,7 +365,7 @@ export function OfficialSkillImportDialog({
                       aria-invalid={Boolean(formState.errors.descriptionZh)}
                       id="official-skill-description-zh"
                       {...register("descriptionZh")}
-                    />
+                    data-testid="platform-official-marketplace-official-skill-description-zh-input" />
                     <FieldError message={formState.errors.descriptionZh?.message} />
                   </DialogFormField>
                   <DialogFormField fieldId="official-skill-description-en" label={t("officialMarketplace.skillImport.field.descriptionEn")} required>
@@ -373,7 +373,7 @@ export function OfficialSkillImportDialog({
                       aria-invalid={Boolean(formState.errors.descriptionEn)}
                       id="official-skill-description-en"
                       {...register("descriptionEn")}
-                    />
+                    data-testid="platform-official-marketplace-official-skill-description-en-input" />
                     <FieldError message={formState.errors.descriptionEn?.message} />
                   </DialogFormField>
                 </div>
@@ -383,10 +383,10 @@ export function OfficialSkillImportDialog({
                       aria-invalid={Boolean(formState.errors.version)}
                       id="official-skill-version"
                       {...register("version")}
-                    />
+                    data-testid="platform-official-marketplace-official-skill-version-input" />
                     <FieldError message={formState.errors.version?.message} />
                   </DialogFormField>
-                  <DialogFormField label={t("officialMarketplace.skillImport.field.category")}>
+                  <DialogFormField fieldId="official-skill-category" label={t("officialMarketplace.skillImport.field.category")}>
                     <Controller
                       control={control}
                       name="categoryIds"
@@ -402,19 +402,21 @@ export function OfficialSkillImportDialog({
                           onChange={field.onChange}
                           options={categoryOptions}
                           searchPlaceholder={t("officialMarketplace.filter.searchCategories")}
-                          selectedCountLabel={(count) => t("officialMarketplace.filter.selectedCategoryCount", { count })}
+                          clearButtonTestId="platform-official-marketplace-dialog-select-clear-button"
+                          selectedCountLabel={(count) =>
+			t("officialMarketplace.filter.selectedCategoryCount", { count })}
                           value={field.value}
-                        />
+                         triggerTestId="platform-official-marketplace-multi-select-trigger" contentTestId="platform-official-marketplace-multi-select-content" searchInputTestId="platform-official-marketplace-multi-select-search-input" searchClearButtonTestId="platform-official-marketplace-multi-select-search-clear-button" optionTestId="platform-official-marketplace-multi-select-option" loadingTestId="platform-official-marketplace-multi-select-loading" emptyTestId="platform-official-marketplace-multi-select-empty"/>
                       )}
                     />
                   </DialogFormField>
                 </div>
-                <DialogFormField label={t("officialMarketplace.skillImport.field.logo")}>
+                <DialogFormField fieldId="official-skill-logo" label={t("officialMarketplace.skillImport.field.logo")}>
                   <div className="flex items-center gap-3">
                     <div className="flex size-16 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
                       {formValues.logoPreview ? <img alt="" className="size-full object-cover" src={formValues.logoPreview} /> : <Upload className="size-5 text-muted-foreground" aria-hidden="true" />}
                     </div>
-                    <input
+                    <input data-testid="platform-marketplace-skill-description-input"
                       accept="image/*"
                       className="hidden"
                       onChange={(event) => {
@@ -424,7 +426,7 @@ export function OfficialSkillImportDialog({
                       id="official-skill-logo"
                       type="file"
                     />
-                    <Button disabled={logoUploading || submitting} onClick={() => document.getElementById("official-skill-logo")?.click()} type="button" variant="outline">
+                    <Button disabled={logoUploading || submitting} onClick={() => document.getElementById("official-skill-logo")?.click()} type="button" variant="outline" data-testid="platform-official-marketplace-save-button">
                       {logoUploading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Upload className="size-4" aria-hidden="true" />}
                       {t("officialMarketplace.skillImport.field.uploadLogo")}
                     </Button>
@@ -435,7 +437,7 @@ export function OfficialSkillImportDialog({
                     <Controller
                       control={control}
                       name="featured"
-                      render={({ field }) => <Switch checked={field.value} disabled={submitting} onCheckedChange={field.onChange} />}
+                      render={({ field }) => <Switch checked={field.value} disabled={submitting} onCheckedChange={field.onChange} data-testid="platform-official-marketplace-switch" />}
                     />
                     {t("officialMarketplace.skillImport.field.featured")}
                   </label>
@@ -443,7 +445,7 @@ export function OfficialSkillImportDialog({
                     <Controller
                       control={control}
                       name="hidden"
-                      render={({ field }) => <Switch checked={field.value} disabled={submitting} onCheckedChange={field.onChange} />}
+                      render={({ field }) => <Switch checked={field.value} disabled={submitting} onCheckedChange={field.onChange} data-testid="platform-official-marketplace-switch" />}
                     />
                     {t("officialMarketplace.skillImport.field.hidden")}
                   </label>
@@ -456,15 +458,15 @@ export function OfficialSkillImportDialog({
                       {...register("sortOrder", {
                         setValueAs: (value) => (value === "" ? 0 : Number(value)),
                       })}
-                    />
+                    data-testid="platform-official-marketplace-input" />
                   </label>
                 </div>
               </div>
             ) : null}
             </div>
             <DialogFooter className="border-t px-5 py-4">
-              <Button disabled={submitting} onClick={onCancel} type="button" variant="outline">{t("officialMarketplace.skillImport.cancel")}</Button>
-              <Button disabled={!parsed || processing || submitting || logoUploading} type="submit">
+              <Button disabled={submitting} onClick={onCancel} type="button" variant="outline" data-testid="platform-official-marketplace-cancel-button">{t("officialMarketplace.skillImport.cancel")}</Button>
+              <Button disabled={!parsed || processing || submitting || logoUploading} type="submit" data-testid="platform-official-marketplace-save-button">
                 {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
                 {t("officialMarketplace.skillImport.confirm")}
               </Button>
@@ -474,17 +476,17 @@ export function OfficialSkillImportDialog({
       </Dialog>
 
       <Dialog onOpenChange={setDuplicateConfirmOpen} open={duplicateConfirmOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" data-testid="platform-official-marketplace-dialog-content" closeButtonTestId="official-skill-import-dialog-close-button">
           <DialogHeader>
             <DialogTitle>{t("officialMarketplace.skillImport.duplicateTitle")}</DialogTitle>
             <DialogDescription>{t("officialMarketplace.skillImport.duplicateDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={clearSelectedFile} type="button" variant="outline">{t("officialMarketplace.skillImport.duplicateCancel")}</Button>
+            <Button onClick={clearSelectedFile} type="button" variant="outline" data-testid="platform-official-marketplace-cancel-button">{t("officialMarketplace.skillImport.duplicateCancel")}</Button>
             <Button
               onClick={() => void handleSubmit((values) => submitImport(values, true))()}
               type="button"
-            >
+             data-testid="platform-official-marketplace-save-button">
               {t("officialMarketplace.skillImport.duplicateContinue")}
             </Button>
           </DialogFooter>

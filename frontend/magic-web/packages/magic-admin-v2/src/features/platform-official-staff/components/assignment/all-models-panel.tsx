@@ -91,7 +91,7 @@ export function AllModelsPanel({
         onValueChange={setKeyword}
         placeholder={t("officialStaff.placeholder.modelSearch")}
         value={keyword}
-      />
+       inputTestId="platform-official-staff-search-input" clearButtonTestId="platform-official-staff-search-clear-button"/>
       <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border">
         {visibleModels.length === 0 ? (
           <div className="flex h-full min-h-40 items-center justify-center p-4 text-sm text-muted-foreground">
@@ -161,7 +161,7 @@ export function AvailableModelRow({
       ref={setNodeRef}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <button
+        <button data-testid="platform-official-staff-model-action-button"
           aria-label={t("officialStaff.aria.dragModel")}
           className="flex size-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabled}
@@ -182,18 +182,18 @@ export function AvailableModelRow({
         </div>
       </div>
       <DropdownMenu onOpenChange={onMenuOpenChange} open={openMenuId === menuId}>
-        <DropdownMenuTrigger asChild>
-          <Button aria-label={t("officialStaff.action.addModel")} className="size-7" disabled={disabled} size="icon" variant="outline">
+        <DropdownMenuTrigger asChild data-testid="platform-official-staff-menu-trigger">
+          <Button aria-label={t("officialStaff.action.addModel")} className="size-7" disabled={disabled} size="icon" variant="outline" data-testid="platform-official-staff-create-button">
             <Plus className="size-3.5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="max-h-80 w-56 overflow-y-auto">
+        <DropdownMenuContent align="end" className="max-h-80 w-56 overflow-y-auto" data-testid="platform-official-staff-action-button">
           <DropdownMenuItem
             onSelect={() => {
               onMenuOpenChange(false);
               onCreateGroupForModel(model);
             }}
-          >
+           data-testid="platform-official-staff-menu-item">
             <Plus className="mr-2 size-4" />
             {t("officialStaff.action.createGroup")}
           </DropdownMenuItem>
@@ -205,7 +205,7 @@ export function AvailableModelRow({
                   onMenuOpenChange(false);
                   onAddModel(model, targetGroup);
                 }}
-              >
+               data-testid="platform-official-staff-menu-item">
                 <List className="mr-2 size-4" />
                 <span className="truncate">{targetGroup.label}</span>
               </DropdownMenuItem>
@@ -218,7 +218,7 @@ export function AvailableModelRow({
                         onMenuOpenChange(false);
                         onAddModel(model, target);
                       }}
-                    >
+                     data-testid="platform-official-staff-menu-item">
                       <SquareEqual className="mr-2 size-4" />
                       <span className="truncate">{target.label}</span>
                     </DropdownMenuItem>

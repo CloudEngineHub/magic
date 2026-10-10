@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { SearchableMultiSelect } from "@magic-admin-v2/components/searchable-multi-select"
 import type { SearchableMultiSelectOption } from "@magic-admin-v2/components/searchable-multi-select"
-import {
-	MarketCategoryBadges,
-} from "@magic-admin-v2/features/platform-official-marketplace/components/market-table-cells"
+import { MarketCategoryBadges } from "@magic-admin-v2/features/platform-official-marketplace/components/market-table-cells"
 import {
 	areSameCategoryIds,
 	normalizeCategoryIds,
@@ -19,6 +17,7 @@ type MarketCategorySelectCellProps = {
 	emptyLabel: string
 	isLoading: boolean
 	isSaving: boolean
+	disabled?: boolean
 	noMatchingLabel: string
 	onSave: (categoryIds: string[]) => void | Promise<void>
 	searchPlaceholder: string
@@ -36,13 +35,16 @@ export function MarketCategorySelectCell({
 	emptyLabel,
 	isLoading,
 	isSaving,
+	disabled,
 	noMatchingLabel,
 	onSave,
 	searchPlaceholder,
 	selectedCountLabel,
 }: MarketCategorySelectCellProps) {
 	const [open, setOpen] = useState(false)
-	const [draftCategoryIds, setDraftCategoryIds] = useState(() => normalizeCategoryIds(categoryIds))
+	const [draftCategoryIds, setDraftCategoryIds] = useState(() =>
+		normalizeCategoryIds(categoryIds),
+	)
 	const draftCategoryIdsRef = useRef(draftCategoryIds)
 
 	useEffect(() => {
@@ -83,7 +85,7 @@ export function MarketCategorySelectCell({
 			ariaLabel={ariaLabel}
 			className="w-[220px]"
 			clearLabel={clearLabel}
-			disabled={!canEdit || isSaving || isLoading}
+			disabled={disabled ?? (!canEdit || isSaving || isLoading)}
 			emptyLabel={emptyLabel}
 			isLoading={isSaving || isLoading}
 			maxVisibleItems={1}

@@ -57,6 +57,11 @@ export type FilterSheetProps = {
 	applyLoading?: boolean
 	/** Optional class names for page-specific body overflow requirements. */
 	bodyClassName?: string
+	contentTestId?: string
+	bodyTestId?: string
+	resetButtonTestId?: string
+	applyButtonTestId?: string
+	closeButtonTestId?: string
 }
 
 function useMediaQuery(query: string) {
@@ -84,6 +89,11 @@ export function FilterSheet({
 	applyLabel,
 	applyLoading = false,
 	bodyClassName,
+	contentTestId,
+	bodyTestId,
+	resetButtonTestId,
+	applyButtonTestId,
+	closeButtonTestId,
 	children,
 	description,
 	onApply,
@@ -110,6 +120,8 @@ export function FilterSheet({
 							? "max-h-[85vh] rounded-t-xl"
 							: "w-full sm:max-w-md",
 					)}
+					data-testid={contentTestId}
+					closeButtonTestId={closeButtonTestId}
 					side={side}
 				>
 					<SheetHeader className="shrink-0 border-b px-4 py-4 text-left">
@@ -121,6 +133,7 @@ export function FilterSheet({
 							"min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4",
 							bodyClassName,
 						)}
+						data-testid={bodyTestId}
 					>
 						{children}
 					</div>
@@ -132,10 +145,16 @@ export function FilterSheet({
 								: "pb-4",
 						)}
 					>
-						<Button onClick={onReset} type="button" variant="outline">
+						<Button
+							data-testid={resetButtonTestId}
+							onClick={onReset}
+							type="button"
+							variant="outline"
+						>
 							{resetLabel}
 						</Button>
 						<Button
+							data-testid={applyButtonTestId}
 							disabled={applyDisabled || applyLoading}
 							onClick={onApply}
 							type="button"

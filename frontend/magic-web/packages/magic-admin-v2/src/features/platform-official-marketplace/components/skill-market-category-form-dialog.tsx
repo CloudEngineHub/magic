@@ -104,7 +104,7 @@ export function SkillMarketCategoryFormDialog({
 
 	return (
 		<Dialog onOpenChange={(nextOpen) => !isPending && onOpenChange(nextOpen)} open={open}>
-			<DialogContent className="sm:max-w-xl">
+			<DialogContent className="sm:max-w-xl" data-testid="platform-official-marketplace-dialog-content" closeButtonTestId="skill-market-category-form-dialog-close-button">
 				<DialogHeader>
 					<DialogTitle>
 						{editing
@@ -128,7 +128,7 @@ export function SkillMarketCategoryFormDialog({
 							id="skill-market-category-name-zh"
 							maxLength={skillMarketCategoryNameMaxLength}
 							{...form.register("nameZh")}
-						/>
+						 data-testid="platform-official-marketplace-skill-market-category-name-zh-input"/>
 						<FieldError message={form.formState.errors.nameZh?.message} />
 					</DialogFormField>
 
@@ -142,7 +142,7 @@ export function SkillMarketCategoryFormDialog({
 							id="skill-market-category-name-en"
 							maxLength={skillMarketCategoryNameMaxLength}
 							{...form.register("nameEn")}
-						/>
+						 data-testid="platform-official-marketplace-skill-market-category-name-en-input"/>
 						<FieldError message={form.formState.errors.nameEn?.message} />
 					</DialogFormField>
 
@@ -158,7 +158,7 @@ export function SkillMarketCategoryFormDialog({
 								setValueAs: (value) => (value === "" ? 0 : Number(value)),
 							})}
 							type="number"
-						/>
+						 data-testid="platform-official-marketplace-skill-market-category-sort-order-input"/>
 						<FieldError message={form.formState.errors.sortOrder?.message} />
 					</DialogFormField>
 
@@ -176,7 +176,7 @@ export function SkillMarketCategoryFormDialog({
 									disabled={isPending}
 									id="skill-market-category-visible"
 									onCheckedChange={field.onChange}
-								/>
+								 data-testid="platform-official-marketplace-skill-market-category-visible-switch"/>
 							)}
 						/>
 					</DialogFormField>
@@ -187,10 +187,10 @@ export function SkillMarketCategoryFormDialog({
 							onClick={() => onOpenChange(false)}
 							type="button"
 							variant="outline"
-						>
+						 data-testid="platform-official-marketplace-cancel-button">
 							{t("common.cancel")}
 						</Button>
-						<Button disabled={isPending} type="submit">
+						<Button disabled={isPending} type="submit" data-testid="platform-official-marketplace-save-button">
 							{isPending ? (
 								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
 							) : null}

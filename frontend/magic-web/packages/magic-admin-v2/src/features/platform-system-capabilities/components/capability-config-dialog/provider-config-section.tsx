@@ -96,7 +96,7 @@ export function ProviderConfigSection({
 											<SelectTrigger
 												className="w-full"
 												id="capability-provider-select"
-											>
+											 data-testid="platform-system-capabilities-capability-provider-select-trigger">
 												<SelectValue
 													placeholder={t(
 														"systemCapabilities.placeholder.provider",
@@ -104,13 +104,13 @@ export function ProviderConfigSection({
 												/>
 											</SelectTrigger>
 										</FormControl>
-										<SelectContent>
+										<SelectContent data-testid="platform-system-capabilities-capability-provider-select-content">
 											{providerList.map((provider) => (
 												<SelectItem
 													key={provider.provider}
 													textValue={getProviderLabel(provider)}
 													value={provider.provider}
-												>
+												 data-testid="platform-system-capabilities-option">
 													{getProviderLabel(provider)}
 												</SelectItem>
 											))}
@@ -152,7 +152,7 @@ export function ProviderConfigSection({
 							onClick={onTestConnection}
 							type="button"
 							variant="outline"
-						>
+						 data-testid="platform-system-capabilities-edit-button">
 							{testPending ? (
 								<Loader2 className="size-4 animate-spin" aria-hidden="true" />
 							) : (

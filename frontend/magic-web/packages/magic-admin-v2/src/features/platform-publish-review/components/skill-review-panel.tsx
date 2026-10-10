@@ -60,11 +60,12 @@ export function SkillReviewPanel({
 		page,
 		pageSize,
 		params,
+		setDebouncedField,
 		setFilterDraft,
 		setPage,
 		setPageSize,
 	} = useListQueryParams({
-		debounceFields: ["package_name", "skill_name", "version"],
+		debounceFields: ["search_value"],
 		initialDraft: () => createDefaultFilterDraft("skill", variant),
 		toParams: toSkillReviewParams,
 	})
@@ -161,6 +162,7 @@ export function SkillReviewPanel({
 				onDraftChange={setFilterDraft}
 				onPageChange={setPage}
 				onPageSizeChange={setPageSize}
+				onSearchValueChange={(value) => setDebouncedField("search_value", value)}
 				page={page}
 				pageSize={pageSize}
 				queryError={query.error as ApiError | null}

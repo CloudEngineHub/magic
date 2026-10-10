@@ -13,7 +13,15 @@ import { createNavigation, getNavigationMatch } from "@magic-admin-v2/routes/men
 import { useRuntime } from "@magic-admin-v2/runtime/context";
 import { useTranslation } from "react-i18next";
 
-export function AppBreadcrumbs() {
+export type AppBreadcrumbsProps = {
+  fallbackLinkTestId?: string
+  sectionLinkTestId?: string
+}
+
+export function AppBreadcrumbs({
+  fallbackLinkTestId,
+  sectionLinkTestId,
+}: AppBreadcrumbsProps) {
   const location = useLocation();
   const { t } = useTranslation();
   const routes = useRouteConfig();
@@ -27,7 +35,7 @@ export function AppBreadcrumbs() {
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link to="/overview">{t("nav.item.overview")}</Link>
+              <Link data-testid={fallbackLinkTestId} to="/overview">{t("nav.item.overview")}</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
@@ -44,7 +52,7 @@ export function AppBreadcrumbs() {
       <BreadcrumbList>
         <BreadcrumbItem>
           <BreadcrumbLink asChild>
-            <Link to={match.section.href}>{t(match.section.titleKey)}</Link>
+            <Link data-testid={sectionLinkTestId} to={match.section.href}>{t(match.section.titleKey)}</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbSeparator />

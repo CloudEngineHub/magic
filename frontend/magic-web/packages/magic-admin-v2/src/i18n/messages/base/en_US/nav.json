@@ -19,7 +19,7 @@
 	"group.agentManagement": "Agent Management",
 	"group.basicSettings": "Basic Settings",
 	"group.modelManagement": "Model Management",
-	"group.operationsSettings": "Operations & Maintenance Settings",
+	"group.operationsSettings": "Operations Settings",
 	"group.packageManagement": "Plan Management",
 	"group.publishAndReview": "Publishing & Review",
 	"item.aiWatermark": "AI Watermark",

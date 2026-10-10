@@ -1,4 +1,5 @@
 {
+	"action.copy": "Copy",
 	"all": "All",
 	"back": "Back",
 	"backToOverview": "Back to Overview",
@@ -16,6 +17,8 @@
 	"editing": "Editing",
 	"emptyValue": "-",
 	"enabled": "Enabled",
+	"message.copyFailed": "Copy failed. Please try again.",
+	"message.copySuccess": "Copied to clipboard.",
 	"modulePending": "Module pending",
 	"next": "Next",
 	"paginationJumpToPageLabel": "Jump to page",
