@@ -1817,7 +1817,9 @@ export const getFullContent = (
 	return doctypeString + doc.documentElement.outerHTML
 }
 
-const ESCAPED_HTML_DOCUMENT_PATTERN = /(?:&lt;|&#60;|&#x3c;)\s*(?:!doctype|html|head|body)\b/i
+// A nested escaped document (for example, inside a textarea) must not cause the
+// entire page to be decoded, which would also rewrite JavaScript string literals.
+const ESCAPED_HTML_DOCUMENT_PATTERN = /^(?:&lt;|&#60;|&#x3c;)\s*(?:!doctype|html|head|body)\b/i
 
 function shouldDecodeEscapedHtmlDocument(html: string): boolean {
 	const trimmedHtml = html.trim()

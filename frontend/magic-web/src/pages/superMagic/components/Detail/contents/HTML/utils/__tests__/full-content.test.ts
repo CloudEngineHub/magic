@@ -18,6 +18,27 @@ vi.mock("@/models/config", () => ({
 	},
 }))
 
+describe("decodeHTMLEntities", () => {
+	it("does not decode an HTML document because a textarea contains escaped HTML", async () => {
+		const { decodeHTMLEntities } = await import("../full-content")
+		const script = `function escapeHtml(value) {
+			return String(value).replace(/'/g, () => '&#39;');
+		}`
+		const html = `<!DOCTYPE html><html><head><script>${script}</script></head><body>
+			<textarea>&lt;!DOCTYPE html&gt;\n&lt;html&gt;&lt;body&gt;Scene&lt;/body&gt;&lt;/html&gt;</textarea>
+		</body></html>`
+
+		expect(decodeHTMLEntities(html)).toBe(html)
+	})
+
+	it("still decodes a document whose first token is escaped HTML", async () => {
+		const { decodeHTMLEntities } = await import("../full-content")
+		expect(decodeHTMLEntities("&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;/html&gt;")).toBe(
+			"<!DOCTYPE html><html></html>",
+		)
+	})
+})
+
 describe("getFullContent", () => {
 	it("installs PPT touch zoom only when requested through compiled runtime preparation", async () => {
 		const { getFullContent } = await import("../full-content")
