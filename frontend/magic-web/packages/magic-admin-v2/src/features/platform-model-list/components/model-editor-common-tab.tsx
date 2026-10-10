@@ -161,12 +161,12 @@ export function ModelEditorCommonTab({
 							data-model-editor-field="category"
 							disabled={disabled || selectableCategories.length <= 1}
 							id="category"
-						>
+						 data-testid="platform-model-list-category-trigger">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent data-testid="platform-model-list-category-content">
 							{selectableCategories.map((value) => (
-								<SelectItem key={value} value={value}>
+								<SelectItem key={value} value={value} data-testid="platform-model-list-option">
 									{getCategoryLabel(value, t)}
 								</SelectItem>
 							))}
@@ -195,12 +195,12 @@ export function ModelEditorCommonTab({
 							data-model-editor-field="model_type"
 							disabled={disabled}
 							id="model_type"
-						>
+						 data-testid="platform-model-list-model-type-trigger">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent data-testid="platform-model-list-model-type-content">
 							{modelTypeOptions.map((option) => (
-								<SelectItem key={option.value} value={String(option.value)}>
+								<SelectItem key={option.value} value={String(option.value)} data-testid="platform-model-list-option">
 									{option.label}
 								</SelectItem>
 							))}

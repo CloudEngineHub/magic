@@ -213,6 +213,7 @@
 	"filter.allModelTypes": "全部模型类型",
 	"filter.allStatuses": "全部状态",
 	"filter.categories": "模型分类",
+	"filter.description": "按模型分类、类型和状态筛选列表。",
 	"filter.modelTypes": "模型类型",
 	"filter.search": "搜索",
 	"filter.statuses": "模型状态",

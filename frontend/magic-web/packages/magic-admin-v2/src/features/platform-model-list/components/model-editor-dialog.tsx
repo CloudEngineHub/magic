@@ -175,26 +175,19 @@ export function ModelEditorDialog({
   const recordIdsKey = recordIds.join(",");
   const isSaving = saveMutation.isPending || deleteBindingsMutation.isPending;
   const isOperationRunning = progress?.phase === "running";
-  const officialSyncedRecords = useMemo(() => {
-    if (!isOfficialOrganization || !isEditorReady) {
-      return {} as Record<string, ProviderModelRecord>;
-    }
-
-    const officialProviderIds = new Set(
-      (providerQuery.data ?? [])
-        .filter((provider) => provider.provider_type === providerType.official)
-        .map((provider) => provider.id),
-    );
-    return Object.fromEntries(
-      Object.entries(loadedRecordsRef.current).filter(([, record]) =>
-        officialProviderIds.has(record.service_provider_config_id),
-      ),
-    );
-  }, [isEditorReady, isOfficialOrganization, providerQuery.data]);
-  const officialSyncedRecordIds = useMemo(
-    () => new Set(Object.keys(officialSyncedRecords)),
-    [officialSyncedRecords],
-  );
+  // Keep the large record map out of form state. isEditorReady and failed-load updates
+  // re-render after the ref is written, so this derivation sees the loaded records.
+  const officialSyncedRecords =
+    isOfficialOrganization && isEditorReady
+      ? Object.fromEntries(
+          Object.entries(loadedRecordsRef.current).filter(([, record]) =>
+            (providerQuery.data ?? [])
+              .filter((provider) => provider.provider_type === providerType.official)
+              .some((provider) => provider.id === record.service_provider_config_id),
+          ),
+        )
+      : ({} as Record<string, ProviderModelRecord>);
+  const officialSyncedRecordIds = new Set(Object.keys(officialSyncedRecords));
   const hasOfficialSyncedBinding = officialSyncedRecordIds.size > 0;
 
   const modelTypeOptions = useMemo(() => getModelTypeOptions(category, t), [category, t]);
@@ -255,17 +248,26 @@ export function ModelEditorDialog({
       return;
     }
 
-    setProgress({ completed: 0, failed: 0, kind: "load", phase: "running", total: ids.length });
+    // Loading one provider is fast enough to keep inside the editor; only show the
+    // progress modal when editing a model with multiple provider configurations.
+    const shouldShowLoadProgress = allRecordIds.length >= 2;
+    if (shouldShowLoadProgress) {
+      setProgress({ completed: 0, failed: 0, kind: "load", phase: "running", total: ids.length });
+    } else {
+      setProgress(null);
+    }
     const result = await loadDetails({
       recordIds: ids,
       onProgress: (nextProgress) => {
-        setProgress((previous) => ({
-          completed: nextProgress.completed,
-          failed: (previous?.kind === "load" ? previous.failed : 0) + (nextProgress.status === "failed" ? 1 : 0),
-          kind: "load",
-          phase: "running",
-          total: nextProgress.total,
-        }));
+        if (shouldShowLoadProgress) {
+          setProgress((previous) => ({
+            completed: nextProgress.completed,
+            failed: (previous?.kind === "load" ? previous.failed : 0) + (nextProgress.status === "failed" ? 1 : 0),
+            kind: "load",
+            phase: "running",
+            total: nextProgress.total,
+          }));
+        }
       },
     });
 
@@ -275,13 +277,17 @@ export function ModelEditorDialog({
     setFailedLoadRecordIds(result.failedRecordIds);
 
     if (result.failedRecordIds.length) {
-      setProgress({
-        completed: ids.length,
-        failed: result.failedRecordIds.length,
-        kind: "load",
-        phase: "finished",
-        total: ids.length,
-      });
+      if (shouldShowLoadProgress) {
+        setProgress({
+          completed: ids.length,
+          failed: result.failedRecordIds.length,
+          kind: "load",
+          phase: "finished",
+          total: ids.length,
+        });
+      } else {
+        setProgress(null);
+      }
       return;
     }
 
@@ -730,9 +736,10 @@ export function ModelEditorDialog({
       }}
     >
       <DialogContent
+      closeButtonTestId="model-editor-dialog-close-button"
         className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
         showCloseButton={!progress}
-      >
+       data-testid="platform-model-list-dialog-content">
         <DialogHeader className="shrink-0 border-b px-6 pb-4 pt-6">
           <DialogTitle>{t(isEditMode ? "modelList.editor.editTitle" : "modelList.editor.title")}</DialogTitle>
           <DialogDescription>{t(isEditMode ? "modelList.editor.editDescription" : "modelList.editor.description")}</DialogDescription>
@@ -814,7 +821,7 @@ export function ModelEditorDialog({
           <DialogFooter className="shrink-0 gap-2 border-t px-6 py-4 sm:justify-between">
             <div>
               {canRetrySave ? (
-                <Button disabled={isSaving} onClick={retryFailed} type="button" variant="outline">
+                <Button disabled={isSaving} onClick={retryFailed} type="button" variant="outline" data-testid="platform-model-list-edit-button">
                   {isSaving ? <Loader2 className="size-4 animate-spin" /> : <AlertCircle className="size-4" />}
                   {t("modelList.editor.action.retryFailed", {
                     count: failedInputs.length,
@@ -823,10 +830,10 @@ export function ModelEditorDialog({
               ) : null}
             </div>
             <div className="flex gap-2">
-              <Button disabled={isSaving} onClick={() => onOpenChange(false)} type="button" variant="outline">
+              <Button disabled={isSaving} onClick={() => onOpenChange(false)} type="button" variant="outline" data-testid="platform-model-list-cancel-button">
                 {t("common.cancel")}
               </Button>
-              <Button disabled={isSaving || isIconUploading} type="submit">
+              <Button disabled={isSaving || isIconUploading} type="submit" data-testid="platform-model-list-save-button">
                 {isSaving ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
                 {isSaving ? t("common.saving") : t(isEditMode ? "modelList.editor.action.update" : "modelList.editor.action.create")}
               </Button>
@@ -870,8 +877,11 @@ export function ModelEditorDialog({
             }
           }}
           confirmLabel={t("common.confirm")}
-        />
+         contentTestId="platform-model-list-confirm-dialog-content" cancelButtonTestId="platform-model-list-confirm-dialog-cancel-button" confirmButtonTestId="platform-model-list-confirm-dialog-confirm-button"/>
 		<DeleteConfirmDialog
+			contentTestId="model-editor-delete-dialog-content"
+			cancelButtonTestId="model-editor-delete-cancel-button"
+			confirmButtonTestId="model-editor-delete-confirm-button"
 			open={pendingRemoveProviderIndex !== null}
 			title={t("modelList.editor.removeProviderTitle")}
 			description={t("modelList.editor.removeProviderDescription")}
@@ -908,7 +918,7 @@ function EditorTab({
     <TabsTrigger
       className="mb-0 h-10 shrink-0 justify-start gap-2 rounded-md border-0 px-3 data-[state=active]:bg-muted data-[state=active]:shadow-sm sm:w-full"
       value={value}
-    >
+     data-testid="platform-model-list-tab-trigger">
       {icon}
       {label}
     </TabsTrigger>

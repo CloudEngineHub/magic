@@ -59,7 +59,7 @@ export function ModelEditorProvidersTab({
           onClick={onAdd}
           type="button"
           variant="outline"
-        >
+         data-testid="platform-model-list-delete-button">
           <Plus className="size-4" aria-hidden="true" />
           {t("modelList.editor.action.addProvider")}
         </Button>

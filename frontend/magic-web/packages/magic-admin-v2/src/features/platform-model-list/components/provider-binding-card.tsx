@@ -191,7 +191,7 @@ export function ProviderBindingCard({
 										data-model-editor-field={fieldName(
 											"service_provider_config_id",
 										)}
-									>
+									 data-testid="platform-model-list-select-trigger">
 										<SelectValue
 											placeholder={t("modelList.editor.placeholder.provider")}
 										>
@@ -201,13 +201,13 @@ export function ProviderBindingCard({
 											/>
 										</SelectValue>
 									</SelectTrigger>
-									<SelectContent className="min-w-72">
+									<SelectContent className="min-w-72" data-testid="platform-model-list-select-content">
 										{(providerQuery.data ?? []).map((provider) => (
 											<SelectItem
 												key={provider.id}
 												textValue={getProviderOptionLabel(provider)}
 												value={provider.id}
-											>
+											 data-testid="platform-model-list-option">
 												<ProviderOption provider={provider} />
 											</SelectItem>
 										))}
@@ -265,7 +265,7 @@ export function ProviderBindingCard({
 										checked={field.value}
 										disabled={fieldDisabled}
 										onCheckedChange={field.onChange}
-									/>
+									 data-testid="platform-model-list-switch"/>
 								</>
 							)}
 						/>
@@ -276,7 +276,7 @@ export function ProviderBindingCard({
 							size="icon"
 							type="button"
 							variant="ghost"
-						>
+						 data-testid="platform-model-list-delete-button">
 							<Trash2 className="size-4" aria-hidden="true" />
 						</Button>
 						<Button
@@ -289,7 +289,7 @@ export function ProviderBindingCard({
 							size="icon"
 							type="button"
 							variant="ghost"
-						>
+						 data-testid="platform-model-list-edit-button">
 							<ChevronDown
 								className={cn(
 									"size-4 transition-transform",
@@ -344,7 +344,7 @@ export function ProviderBindingCard({
 												"modelList.editor.placeholder.modelVersion",
 											)}
 											value={field.value}
-										/>
+										 data-testid="platform-model-list-input"/>
 									)}
 								/>
 								<FieldError
@@ -407,7 +407,7 @@ export function ProviderBindingCard({
 												)}
 												rows={3}
 												value={field.value}
-											/>
+											 data-testid="platform-model-list-textarea-input"/>
 										)}
 									/>
 								</DialogFormField>
@@ -430,7 +430,7 @@ export function ProviderBindingCard({
 												)}
 												rows={3}
 												value={field.value}
-											/>
+											 data-testid="platform-model-list-textarea-input"/>
 										)}
 									/>
 								</DialogFormField>
@@ -581,7 +581,7 @@ function BindingNumberField({
 						step={step}
 						type="number"
 						value={field.value}
-					/>
+					 data-testid="platform-model-list-input"/>
 				)}
 			/>
 			<FieldError className="text-sm" message={error} />

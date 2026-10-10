@@ -100,14 +100,14 @@ export function ModelEditorRuntimeFields({
 									onValueChange={field.onChange}
 									value={field.value}
 								>
-									<SelectTrigger className="w-full" id="chat-api">
+									<SelectTrigger className="w-full" id="chat-api" data-testid="platform-model-list-chat-api-trigger">
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="chat_completions">
+									<SelectContent data-testid="platform-model-list-chat-api-content">
+										<SelectItem value="chat_completions" data-testid="platform-model-list-option">
 											{t("modelList.editor.chatApi.chatCompletions")}
 										</SelectItem>
-										<SelectItem value="responses">
+										<SelectItem value="responses" data-testid="platform-model-list-option">
 											{t("modelList.editor.chatApi.responses")}
 										</SelectItem>
 									</SelectContent>
@@ -133,14 +133,14 @@ export function ModelEditorRuntimeFields({
 										onValueChange={field.onChange}
 										value={field.value}
 									>
-										<SelectTrigger className="w-full" id="temperature-mode">
+										<SelectTrigger className="w-full" id="temperature-mode" data-testid="platform-model-list-temperature-mode-trigger">
 											<SelectValue />
 										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="recommended">
+										<SelectContent data-testid="platform-model-list-temperature-mode-content">
+											<SelectItem value="recommended" data-testid="platform-model-list-option">
 												{t("modelList.editor.temperature.recommended")}
 											</SelectItem>
-											<SelectItem value="fixed">
+											<SelectItem value="fixed" data-testid="platform-model-list-option">
 												{t("modelList.editor.temperature.fixed")}
 											</SelectItem>
 										</SelectContent>
@@ -234,7 +234,7 @@ function NumberField({
 						step={step}
 						type="number"
 						value={field.value}
-					/>
+					 data-testid="platform-model-list-input"/>
 				)}
 			/>
 			<FieldError className="text-sm" message={error} />
@@ -269,7 +269,7 @@ function ToggleField({
 						checked={field.value}
 						disabled={disabled}
 						onCheckedChange={field.onChange}
-					/>
+					 data-testid="platform-model-list-switch"/>
 				)}
 			/>
 		</div>
