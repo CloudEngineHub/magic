@@ -163,6 +163,68 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         self::assertSame([101], $this->spy->restartTopicIds);
     }
 
+    public function testConcurrencyRestartsTargetsInParallel(): void
+    {
+        $sandboxes = [];
+        $topics = [];
+        $claws = [];
+        for ($i = 1; $i <= 3; ++$i) {
+            $topicId = 100 + $i;
+            $projectId = 10 + $i;
+            $sandboxes[] = $this->sandbox('warm-' . $topicId, 'Running', topicId: $topicId, createdAt: sprintf('2026-09-0%dT00:00:00Z', $i));
+            $topics[$topicId] = $this->topic($topicId, $projectId, 'warm-' . $topicId);
+            $claws[$projectId] = $this->claw('claw-' . $i, $projectId);
+        }
+
+        $tester = $this->tester(sandboxes: $sandboxes, topics: $topics, claws: $claws);
+        self::assertSame(0, $tester->execute(['--concurrency' => '4']));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('concurrency=3', $display, '并发度收敛到目标数');
+        self::assertStringNotContainsString('running sequentially', $display);
+        $restarted = $this->spy->restartTopicIds;
+        sort($restarted);
+        self::assertSame([101, 102, 103], $restarted, '每个目标都要被处理');
+        self::assertGreaterThanOrEqual(2, $this->spy->maxInFlight, '并发模式下应当有多个目标同时在重启');
+        self::assertStringContainsString('restarted: 3', $display);
+    }
+
+    public function testConcurrencyFallsBackToSequentialWithoutCoroutineRuntime(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101, createdAt: '2026-09-01T00:00:00Z'),
+                $this->sandbox('warm-102', 'Running', topicId: 102, createdAt: '2026-09-02T00:00:00Z'),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 102 => $this->topic(102, 12, 'warm-102')],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12)],
+            coroutineRuntimeAvailable: false,
+        );
+
+        self::assertSame(0, $tester->execute(['--concurrency' => '8']));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('coroutine runtime unavailable, running sequentially', $display);
+        self::assertSame([101, 102], $this->spy->restartTopicIds, '没有协程时必须老实串行，顺序仍是最老的先');
+        self::assertSame(1, $this->spy->maxInFlight, '串行模式下不应出现重叠');
+    }
+
+    public function testConcurrencyIsClampedToAtLeastOne(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'Running', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute(['--concurrency' => '0']));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('concurrency=1', $display);
+        self::assertStringNotContainsString('running sequentially', $display);
+        self::assertSame([101], $this->spy->restartTopicIds);
+    }
+
     public function testCommandKeepsItsRegisteredName(): void
     {
         $command = $this->command(sandboxes: [], topics: [], claws: []);
@@ -430,8 +492,9 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         array $claws,
         bool $restartFails = false,
         bool $deleteFails = false,
+        bool $coroutineRuntimeAvailable = true,
     ): CommandTester {
-        return new CommandTester($this->command($sandboxes, $topics, $claws, $restartFails, $deleteFails));
+        return new CommandTester($this->command($sandboxes, $topics, $claws, $restartFails, $deleteFails, $coroutineRuntimeAvailable));
     }
 
     /**
@@ -445,6 +508,7 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         array $claws,
         bool $restartFails = false,
         bool $deleteFails = false,
+        bool $coroutineRuntimeAvailable = true,
     ): TestableRestartAllMagicClawSandboxCommand {
         $topicDomainService = $this->createMock(TopicDomainService::class);
         $topicDomainService->method('getTopicsByIds')->willReturn(array_values($topics));
@@ -459,6 +523,7 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
             $loggerFactory,
             $this->spy,
             $restartFails,
+            $coroutineRuntimeAvailable,
         );
         // 测试进程没有 Swoole，命令默认会切到协程里执行；这里关掉协程，只验证命令逻辑。
         (new ReflectionProperty(HyperfCommand::class, 'coroutine'))->setValue($command, false);
@@ -477,6 +542,11 @@ final class RestartCommandSpy
 
     /** @var string[] 重启前被删掉的 sandbox ID */
     public array $deletedSandboxIds = [];
+
+    /** 同时处于"重启中"的最大目标数，用来证明并发真的生效 */
+    public int $inFlight = 0;
+
+    public int $maxInFlight = 0;
 }
 
 /**
@@ -491,13 +561,24 @@ class TestableRestartAllMagicClawSandboxCommand extends RestartAllMagicClawSandb
         LoggerFactory $loggerFactory,
         private readonly RestartCommandSpy $spy,
         private readonly bool $restartFails = false,
+        private readonly bool $coroutineRuntimeAvailable = true,
     ) {
         parent::__construct($magicClawDomainService, $topicDomainService, $agentAppService, $loggerFactory);
+    }
+
+    protected function canRunInParallel(): bool
+    {
+        return $this->coroutineRuntimeAvailable;
     }
 
     protected function restartSandbox(TopicEntity $topic): string
     {
         $this->spy->restartTopicIds[] = $topic->getId();
+        ++$this->spy->inFlight;
+        $this->spy->maxInFlight = max($this->spy->maxInFlight, $this->spy->inFlight);
+        // 模拟真实耗时：串行时并发度只能是 1，并发时应当重叠。
+        usleep(50000);
+        --$this->spy->inFlight;
 
         if ($this->restartFails) {
             throw new RuntimeException('sandbox gateway exploded');

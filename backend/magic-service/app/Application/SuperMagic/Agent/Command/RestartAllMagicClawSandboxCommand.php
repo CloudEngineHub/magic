@@ -16,6 +16,8 @@ use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
+use Hyperf\Coroutine\Coroutine;
+use Hyperf\Coroutine\Parallel;
 use Hyperf\Logger\LoggerFactory;
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
@@ -55,6 +57,26 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
      */
     private float $lastProgressAt = 0.0;
 
+    /**
+     * 已处理完的目标数（成功或失败都算），并发模式下由各协程共同累加。
+     */
+    private int $completedTargets = 0;
+
+    /**
+     * 已删除的旧沙箱数。
+     */
+    private int $deletedSandboxes = 0;
+
+    /**
+     * 已重建成功的沙箱数。
+     */
+    private int $restartedSandboxes = 0;
+
+    /**
+     * 重建失败的沙箱数。
+     */
+    private int $failedSandboxes = 0;
+
     public function __construct(
         private readonly MagicClawDomainService $magicClawDomainService,
         private readonly TopicDomainService $topicDomainService,
@@ -79,12 +101,20 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
             SandboxStatus::RUNNING
         );
         $this->addOption('limit', null, InputOption::VALUE_OPTIONAL, 'Maximum sandboxes to restart, 0 means unlimited', 0);
+        $this->addOption(
+            'concurrency',
+            null,
+            InputOption::VALUE_OPTIONAL,
+            'How many Magic Claws to restart in parallel (1 = sequential; each claw still waits for its own sandbox to be ready)',
+            1
+        );
     }
 
     public function handle(): int
     {
         $dryRun = (bool) $this->input->getOption('dry-run');
         $limit = max(0, (int) $this->input->getOption('limit'));
+        $concurrency = max(1, (int) $this->input->getOption('concurrency'));
         $code = trim((string) $this->input->getOption('code'));
 
         try {
@@ -96,11 +126,12 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
 
         $this->info('Listing sandboxes from the sandbox gateway...');
         $this->line(sprintf(
-            'Options: dry_run=%s, code=%s, status=%s, limit=%d',
+            'Options: dry_run=%s, code=%s, status=%s, limit=%d, concurrency=%d',
             $dryRun ? 'true' : 'false',
             $code === '' ? 'all' : $code,
             $statusFilter === [] ? self::STATUS_FILTER_ANY : implode(',', $statusFilter),
-            $limit
+            $limit,
+            $concurrency
         ));
         $startedAt = microtime(true);
 
@@ -202,115 +233,52 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
         }
 
         $total = count($targets);
-        $this->line(sprintf('Restarting %d sandbox(es), oldest first...', $total));
+        $effectiveConcurrency = min($concurrency, $total);
+        // 协程运行时才谈得上并发；没有协程（本地/单测）就老实串行，避免静默假并发。
+        $runInParallel = $effectiveConcurrency > 1 && $this->canRunInParallel();
+        $this->line(sprintf(
+            'Restarting %d sandbox(es), oldest first, concurrency=%d%s...',
+            $total,
+            $effectiveConcurrency,
+            $effectiveConcurrency > 1 && ! $runInParallel ? ' (coroutine runtime unavailable, running sequentially)' : ''
+        ));
+
         $this->lastProgressAt = 0.0;
+        $this->completedTargets = 0;
+        $this->deletedSandboxes = 0;
+        $this->restartedSandboxes = 0;
+        $this->failedSandboxes = 0;
         $progressStartedAt = microtime(true);
 
-        foreach ($targets as $index => $target) {
-            $ordinal = $index + 1;
-            $claw = $target['claw'];
-            $topic = $target['topic'];
-            /** @var array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $staleSandboxes */
-            $staleSandboxes = $target['sandboxes'];
-            $sandboxIds = array_column($staleSandboxes, 'sandbox_id');
-            $oldestSandbox = $staleSandboxes[0];
-
-            $this->line(sprintf(
-                '[%d/%d] restarting code=%s, topic_id=%d, running_sandbox(es)=%d (%s)',
-                $ordinal,
-                $total,
-                $claw->getCode(),
-                $topic->getId(),
-                count($sandboxIds),
-                implode(', ', array_map(
-                    static fn (array $sandbox): string => sprintf('%s@%s', $sandbox['sandbox_id'], $sandbox['created_at'] === '' ? 'unknown' : $sandbox['created_at']),
-                    $staleSandboxes
-                ))
-            ));
-
-            $attemptStartedAt = microtime(true);
-            try {
-                // 关键：删“清单里看到的”全部 pod，而不是话题表里记的那一个。
-                // 表里的 sandbox_id 与实际 pod 漂移过时（线上出现过同一龙虾两个 pod），
-                // 只删表里那个会把真正在跑的 pod 留成孤儿。
-                foreach ($sandboxIds as $sandboxIdToDelete) {
-                    try {
-                        $this->agentAppService->stopSandbox((string) $sandboxIdToDelete);
-                        ++$stats['deleted'];
-                        $this->line(sprintf('  [DELETE] code=%s, sandbox_id=%s', $claw->getCode(), $sandboxIdToDelete));
-                        $this->logger->info('Stale Magic Claw sandbox deleted before restart', [
-                            'code' => $claw->getCode(),
-                            'topic_id' => $topic->getId(),
-                            'sandbox_id' => $sandboxIdToDelete,
-                        ]);
-                    } catch (Throwable $deleteError) {
-                        // 删不掉不能阻断重建，但必须显式报出来，否则又会留下重复 pod。
-                        $this->error(sprintf(
-                            '  [DELETE_FAIL] code=%s, sandbox_id=%s, error=%s',
-                            $claw->getCode(),
-                            $sandboxIdToDelete,
-                            $deleteError->getMessage()
-                        ));
-                        $this->logger->error('Failed to delete stale Magic Claw sandbox before restart', [
-                            'code' => $claw->getCode(),
-                            'topic_id' => $topic->getId(),
-                            'sandbox_id' => $sandboxIdToDelete,
-                            'exception' => get_class($deleteError),
-                            'error' => $deleteError->getMessage(),
-                        ]);
-                    }
-                }
-
-                $restartedSandboxId = $this->restartSandbox($topic);
-                $duration = microtime(true) - $attemptStartedAt;
-                ++$stats['restarted'];
-                $this->info(sprintf(
-                    '[%d/%d] [OK] code=%s, new_sandbox_id=%s, took %s',
-                    $ordinal,
-                    $total,
-                    $claw->getCode(),
-                    $restartedSandboxId,
-                    self::formatDuration($duration)
-                ));
-                $this->logger->info('Magic Claw sandbox restarted', [
-                    'code' => $claw->getCode(),
-                    'user_id' => $topic->getUserId(),
-                    'organization_code' => $topic->getUserOrganizationCode(),
-                    'project_id' => $topic->getProjectId(),
-                    'topic_id' => $topic->getId(),
-                    'previous_sandbox_ids' => $sandboxIds,
-                    'previous_sandbox_created_at' => $oldestSandbox['created_at'],
-                    'sandbox_id' => $restartedSandboxId,
-                    'duration_seconds' => round($duration, 3),
-                ]);
-            } catch (Throwable $e) {
-                ++$stats['failed'];
-                $this->error(sprintf(
-                    '[%d/%d] [FAIL] code=%s, topic_id=%d, sandbox_ids=%s, error=%s',
-                    $ordinal,
-                    $total,
-                    $claw->getCode(),
-                    $topic->getId(),
-                    implode(',', $sandboxIds),
-                    $e->getMessage()
-                ));
-                $this->logger->error('Failed to restart Magic Claw sandbox', [
-                    'code' => $claw->getCode(),
-                    'user_id' => $topic->getUserId(),
-                    'organization_code' => $topic->getUserOrganizationCode(),
-                    'project_id' => $topic->getProjectId(),
-                    'topic_id' => $topic->getId(),
-                    'sandbox_ids' => $sandboxIds,
-                    'exception' => get_class($e),
-                    'error' => $e->getMessage(),
-                ]);
+        if ($runInParallel) {
+            $parallel = new Parallel($effectiveConcurrency);
+            foreach ($targets as $index => $target) {
+                $parallel->add(
+                    fn (): null => $this->restartTarget($index + 1, $total, $target, $progressStartedAt),
+                    $index
+                );
             }
-
-            $this->printProgress($stats, $ordinal, $total, $progressStartedAt);
+            $parallel->wait(false);
+        } else {
+            foreach ($targets as $index => $target) {
+                $this->restartTarget($index + 1, $total, $target, $progressStartedAt);
+            }
         }
+
+        $stats['deleted'] = $this->deletedSandboxes;
+        $stats['restarted'] = $this->restartedSandboxes;
+        $stats['failed'] = $this->failedSandboxes;
 
         $this->printSummary($stats, $statusCounts, $statusFilter, microtime(true) - $startedAt);
         return self::SUCCESS;
+    }
+
+    /**
+     * 当前进程是否具备协程运行时（没有就只能串行，避免"假并发"）。
+     */
+    protected function canRunInParallel(): bool
+    {
+        return Coroutine::inCoroutine();
     }
 
     /**
@@ -319,6 +287,117 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
     protected function restartSandbox(TopicEntity $topic): string
     {
         return $this->agentAppService->restartSandbox($this->createDataIsolation($topic), $topic->getId());
+    }
+
+    /**
+     * 处理一个目标：删掉清单里该话题名下所有在跑的 pod，再重建一个。
+     *
+     * 并发模式下这个方法会在各自协程里跑；所有输出都用 [序号/总数] 前缀，便于在交错日志里对上号。
+     *
+     * @param array{claw: MagicClawEntity, topic: TopicEntity, sandboxes: array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}>} $target
+     */
+    private function restartTarget(int $ordinal, int $total, array $target, float $progressStartedAt): void
+    {
+        $claw = $target['claw'];
+        $topic = $target['topic'];
+        /** @var array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $staleSandboxes */
+        $staleSandboxes = $target['sandboxes'];
+        $sandboxIds = array_column($staleSandboxes, 'sandbox_id');
+        $oldestSandbox = $staleSandboxes[0];
+
+        $this->line(sprintf(
+            '[%d/%d] restarting code=%s, topic_id=%d, running_sandbox(es)=%d (%s)',
+            $ordinal,
+            $total,
+            $claw->getCode(),
+            $topic->getId(),
+            count($sandboxIds),
+            implode(', ', array_map(
+                static fn (array $sandbox): string => sprintf('%s@%s', $sandbox['sandbox_id'], $sandbox['created_at'] === '' ? 'unknown' : $sandbox['created_at']),
+                $staleSandboxes
+            ))
+        ));
+
+        $attemptStartedAt = microtime(true);
+        try {
+            // 关键：删“清单里看到的”全部 pod，而不是话题表里记的那一个。
+            // 表里的 sandbox_id 与实际 pod 漂移过时（线上出现过同一龙虾两个 pod），
+            // 只删表里那个会把真正在跑的 pod 留成孤儿。
+            foreach ($sandboxIds as $sandboxIdToDelete) {
+                try {
+                    $this->agentAppService->stopSandbox((string) $sandboxIdToDelete);
+                    ++$this->deletedSandboxes;
+                    $this->line(sprintf('  [DELETE] code=%s, sandbox_id=%s', $claw->getCode(), $sandboxIdToDelete));
+                    $this->logger->info('Stale Magic Claw sandbox deleted before restart', [
+                        'code' => $claw->getCode(),
+                        'topic_id' => $topic->getId(),
+                        'sandbox_id' => $sandboxIdToDelete,
+                    ]);
+                } catch (Throwable $deleteError) {
+                    // 删不掉不能阻断重建，但必须显式报出来，否则又会留下重复 pod。
+                    $this->error(sprintf(
+                        '  [DELETE_FAIL] code=%s, sandbox_id=%s, error=%s',
+                        $claw->getCode(),
+                        $sandboxIdToDelete,
+                        $deleteError->getMessage()
+                    ));
+                    $this->logger->error('Failed to delete stale Magic Claw sandbox before restart', [
+                        'code' => $claw->getCode(),
+                        'topic_id' => $topic->getId(),
+                        'sandbox_id' => $sandboxIdToDelete,
+                        'exception' => get_class($deleteError),
+                        'error' => $deleteError->getMessage(),
+                    ]);
+                }
+            }
+
+            $restartedSandboxId = $this->restartSandbox($topic);
+            $duration = microtime(true) - $attemptStartedAt;
+            ++$this->restartedSandboxes;
+            $this->info(sprintf(
+                '[%d/%d] [OK] code=%s, new_sandbox_id=%s, took %s',
+                $ordinal,
+                $total,
+                $claw->getCode(),
+                $restartedSandboxId,
+                self::formatDuration($duration)
+            ));
+            $this->logger->info('Magic Claw sandbox restarted', [
+                'code' => $claw->getCode(),
+                'user_id' => $topic->getUserId(),
+                'organization_code' => $topic->getUserOrganizationCode(),
+                'project_id' => $topic->getProjectId(),
+                'topic_id' => $topic->getId(),
+                'previous_sandbox_ids' => $sandboxIds,
+                'previous_sandbox_created_at' => $oldestSandbox['created_at'],
+                'sandbox_id' => $restartedSandboxId,
+                'duration_seconds' => round($duration, 3),
+            ]);
+        } catch (Throwable $e) {
+            ++$this->failedSandboxes;
+            $this->error(sprintf(
+                '[%d/%d] [FAIL] code=%s, topic_id=%d, sandbox_ids=%s, error=%s',
+                $ordinal,
+                $total,
+                $claw->getCode(),
+                $topic->getId(),
+                implode(',', $sandboxIds),
+                $e->getMessage()
+            ));
+            $this->logger->error('Failed to restart Magic Claw sandbox', [
+                'code' => $claw->getCode(),
+                'user_id' => $topic->getUserId(),
+                'organization_code' => $topic->getUserOrganizationCode(),
+                'project_id' => $topic->getProjectId(),
+                'topic_id' => $topic->getId(),
+                'sandbox_ids' => $sandboxIds,
+                'exception' => get_class($e),
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        ++$this->completedTargets;
+        $this->printProgress($total, $progressStartedAt);
     }
 
     /**
@@ -414,35 +493,33 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
     }
 
     /**
-     * 长任务的心跳：每 PROGRESS_EVERY 个目标，或距上次打印超过 PROGRESS_INTERVAL_SECONDS 就打一行，
-     * 带已完成数、耗时和 ETA，方便判断还要等多久。
-     *
-     * @param array{listed: int, matched: int, duplicates: int, deleted: int, restarted: int, skipped: int, failed: int} $stats
+     * 长任务心跳：每完成 PROGRESS_EVERY 个目标，或距上次打印超过 PROGRESS_INTERVAL_SECONDS 就打一行，
+     * 带已完成数、耗时和 ETA。并发模式下按“已完成数”计数，不再看处理顺序。
      */
-    private function printProgress(array &$stats, int $ordinal, int $total, float $startedAt): void
+    private function printProgress(int $total, float $startedAt): void
     {
-        if ($ordinal >= $total) {
+        $done = $this->completedTargets;
+        if ($done >= $total) {
             return;
         }
 
         $elapsed = microtime(true) - $startedAt;
-        if ($ordinal % self::PROGRESS_EVERY !== 0 && $elapsed - $this->lastProgressAt < self::PROGRESS_INTERVAL_SECONDS) {
+        if ($done % self::PROGRESS_EVERY !== 0 && $elapsed - $this->lastProgressAt < self::PROGRESS_INTERVAL_SECONDS) {
             return;
         }
         $this->lastProgressAt = $elapsed;
 
-        $done = $stats['restarted'] + $stats['failed'];
-        $remaining = $total - $ordinal;
-        $eta = $done > 0 ? $elapsed / $done * $remaining : 0.0;
+        $remaining = $total - $done;
+        $averageSeconds = $done > 0 ? $elapsed / $done : 0.0;
 
         $this->line(sprintf(
             '  progress: %d/%d done (restarted=%d, failed=%d), elapsed %s, eta ~%s',
-            $ordinal,
+            $done,
             $total,
-            $stats['restarted'],
-            $stats['failed'],
+            $this->restartedSandboxes,
+            $this->failedSandboxes,
             self::formatDuration($elapsed),
-            self::formatDuration($eta)
+            self::formatDuration($averageSeconds * $remaining)
         ));
     }
 
