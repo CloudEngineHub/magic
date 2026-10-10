@@ -16,7 +16,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\Respons
 class SandboxListResult extends GatewayResult
 {
     /**
-     * @var array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}>
+     * @var array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}>
      */
     private array $sandboxes = [];
 
@@ -48,6 +48,8 @@ class SandboxListResult extends GatewayResult
                 'topic_id' => (string) ($sandbox['topic_id'] ?? ''),
                 'warm_pool' => (bool) ($sandbox['warm_pool'] ?? false),
                 'bound' => (bool) ($sandbox['bound'] ?? false),
+                // pod 创建时间（RFC3339 UTC）：老网关不返回该字段时为空串，调用方按“未知”处理。
+                'created_at' => (string) ($sandbox['created_at'] ?? ''),
             ];
         }
 
@@ -57,7 +59,7 @@ class SandboxListResult extends GatewayResult
     /**
      * 获取沙箱列表.
      *
-     * @return array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}>
+     * @return array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}>
      */
     public function getSandboxes(): array
     {

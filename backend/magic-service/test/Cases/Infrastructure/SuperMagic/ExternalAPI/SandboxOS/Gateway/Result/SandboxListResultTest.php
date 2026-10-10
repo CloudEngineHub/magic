@@ -33,6 +33,7 @@ class SandboxListResultTest extends TestCase
                         'topic_id' => '101',
                         'warm_pool' => true,
                         'bound' => true,
+                        'created_at' => '2026-09-01T08:30:00Z',
                     ],
                     [
                         'sandbox_id' => '102',
@@ -52,6 +53,7 @@ class SandboxListResultTest extends TestCase
                 'topic_id' => '101',
                 'warm_pool' => true,
                 'bound' => true,
+                'created_at' => '2026-09-01T08:30:00Z',
             ],
             [
                 'sandbox_id' => '102',
@@ -60,6 +62,7 @@ class SandboxListResultTest extends TestCase
                 'topic_id' => '',
                 'warm_pool' => false,
                 'bound' => false,
+                'created_at' => '',
             ],
         ], $result->getSandboxes());
         self::assertSame(['Running' => 1, 'NotFound' => 1], $result->getStatusCounts());

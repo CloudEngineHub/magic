@@ -42,6 +42,63 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         $this->spy = new RestartCommandSpy();
     }
 
+    public function testOldestSandboxIsRestartedFirst(): void
+    {
+        // 网关按 sandbox_id 返回（warm-101 在前），但跑得最久的是 warm-102，必须先重启它。
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101, createdAt: '2026-10-10T12:00:00Z'),
+                $this->sandbox('warm-102', 'Running', topicId: 102, createdAt: '2026-09-01T08:30:00Z'),
+                $this->sandbox('warm-103', 'Running', topicId: 103, createdAt: '2026-10-01T08:30:00Z'),
+            ],
+            topics: [
+                101 => $this->topic(101, 11, 'warm-101'),
+                102 => $this->topic(102, 12, 'warm-102'),
+                103 => $this->topic(103, 13, 'warm-103'),
+            ],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12), 13 => $this->claw('claw-3', 13)],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        self::assertSame([102, 103, 101], $this->spy->restartTopicIds, '跑得最久的沙箱必须先重启');
+        self::assertStringContainsString('created_at=2026-09-01T08:30:00Z', $tester->getDisplay());
+    }
+
+    public function testLimitTakesTheOldestSandboxesFirst(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101, createdAt: '2026-10-10T12:00:00Z'),
+                $this->sandbox('warm-102', 'Running', topicId: 102, createdAt: '2026-09-01T08:30:00Z'),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 102 => $this->topic(102, 12, 'warm-102')],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12)],
+        );
+
+        self::assertSame(0, $tester->execute(['--limit' => 1]));
+
+        self::assertSame([102], $this->spy->restartTopicIds);
+    }
+
+    public function testSandboxesWithoutCreatedAtKeepGatewayOrder(): void
+    {
+        // 老网关不返回 created_at：退化为网关顺序（sandbox_id 升序），不能当成 1970 抢跑。
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101),
+                $this->sandbox('warm-102', 'Running', topicId: 102),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 102 => $this->topic(102, 12, 'warm-102')],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12)],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        self::assertSame([101, 102], $this->spy->restartTopicIds);
+        self::assertStringContainsString('created_at=unknown', $tester->getDisplay());
+    }
+
     public function testCommandKeepsItsRegisteredName(): void
     {
         $command = $this->command(sandboxes: [], topics: [], claws: []);
@@ -253,9 +310,9 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
     }
 
     /**
-     * @return array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}
+     * @return array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}
      */
-    private function sandbox(string $sandboxId, string $status, int|string $topicId): array
+    private function sandbox(string $sandboxId, string $status, int|string $topicId, string $createdAt = ''): array
     {
         return [
             'sandbox_id' => $sandboxId,
@@ -264,11 +321,12 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
             'topic_id' => (string) $topicId,
             'warm_pool' => false,
             'bound' => true,
+            'created_at' => $createdAt,
         ];
     }
 
     /**
-     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}> $sandboxes
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
      * @param array<int, TopicEntity> $topics
      * @param array<int, MagicClawEntity> $claws
      */
@@ -282,7 +340,7 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
     }
 
     /**
-     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}> $sandboxes
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
      * @param array<int, TopicEntity> $topics
      * @param array<int, MagicClawEntity> $claws
      */
@@ -368,7 +426,7 @@ readonly class RestartCommandClawDomainService extends MagicClawDomainService
 readonly class RestartCommandAgentAppService extends AgentAppService
 {
     /**
-     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}> $sandboxes
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
      */
     public function __construct(
         private RestartCommandSpy $spy,

@@ -103,7 +103,8 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
             return self::FAILURE;
         }
 
-        $sandboxes = $sandboxList->getSandboxes();
+        // 网关按 sandbox_id 返回，这里改成“跑得最久的沙箱先重启”，让 --limit 变成有意义的灰度放量。
+        $sandboxes = $this->sortBySandboxAge($sandboxList->getSandboxes());
         $statusCounts = $sandboxList->getStatusCounts();
 
         $stats = [
@@ -152,11 +153,13 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
 
             ++$stats['matched'];
             $handledTopicIds[$topicId] = true;
+            $createdAt = (string) $sandbox['created_at'];
             $this->line(sprintf(
-                '[TARGET] code=%s, sandbox_id=%s, status=%s, topic_id=%d, project_id=%d',
+                '[TARGET] code=%s, sandbox_id=%s, status=%s, created_at=%s, topic_id=%d, project_id=%d',
                 $claw->getCode(),
                 $sandboxId,
                 $status,
+                $createdAt === '' ? 'unknown' : $createdAt,
                 $topicId,
                 $topic->getProjectId()
             ));
@@ -177,6 +180,7 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
                     'topic_id' => $topicId,
                     'previous_sandbox_id' => $sandboxId,
                     'previous_status' => $status,
+                    'previous_sandbox_created_at' => $createdAt,
                     'sandbox_id' => $restartedSandboxId,
                 ]);
 
@@ -226,13 +230,45 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
     }
 
     /**
+     * 按 pod 创建时间升序排列：跑得最久的沙箱先重启，重启后会拿到新沙箱（新时间），
+     * 因此配 --limit 反复执行天然是“老的先、重启过的排到后面”。
+     *
+     * created_at 缺失（老网关不返回该字段）时视为未知并排到最后；PHP 8 的排序是稳定的，
+     * 所以全部未知时会保持网关给的 sandbox_id 升序。
+     *
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
+     * @return array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}>
+     */
+    private function sortBySandboxAge(array $sandboxes): array
+    {
+        usort($sandboxes, static function (array $left, array $right): int {
+            return self::sandboxCreatedAtTimestamp($left['created_at']) <=> self::sandboxCreatedAtTimestamp($right['created_at']);
+        });
+
+        return $sandboxes;
+    }
+
+    /**
+     * 未知时间统一放到最后，避免“缺字段”被当成 1970 年从而抢占最先重启的位置。
+     */
+    private static function sandboxCreatedAtTimestamp(string $createdAt): int
+    {
+        if ($createdAt === '') {
+            return PHP_INT_MAX;
+        }
+
+        $timestamp = strtotime($createdAt);
+        return $timestamp === false ? PHP_INT_MAX : $timestamp;
+    }
+
+    /**
      * 把网关返回的沙箱映射回话题。
      *
      * 首选 pod 上的 topic-id 标签（PHP 冷启动与温池挂载都会打）；标签缺失时退化为
      * “沙箱 ID 即话题 ID”的历史约定，并要求话题记录的 sandbox_id 与之吻合，避免温池
      * 生成的雪花 ID 撞上真实话题 ID 时误伤别的话题。
      *
-     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}> $sandboxes
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
      * @return array<string, TopicEntity> sandboxId => topic
      */
     private function resolveTopicsBySandboxId(array $sandboxes): array

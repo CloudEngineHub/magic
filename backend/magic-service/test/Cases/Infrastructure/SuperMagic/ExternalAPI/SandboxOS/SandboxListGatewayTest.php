@@ -28,7 +28,7 @@ class SandboxListGatewayTest extends TestCase
         $history = [];
         $handler = HandlerStack::create(new MockHandler([
             new Response(200, [], '{"code":1000,"message":"ok","data":{"total":2,"sandboxes":['
-                . '{"sandbox_id":"warm-1","status":"Running","project_id":"11","topic_id":"101","warm_pool":true,"bound":true},'
+                . '{"sandbox_id":"warm-1","status":"Running","project_id":"11","topic_id":"101","warm_pool":true,"bound":true,"created_at":"2026-09-01T08:30:00Z"},'
                 . '{"sandbox_id":"warm-2","status":"NotReady"}]}}'),
         ]));
         $handler->push(Middleware::history($history));
@@ -43,6 +43,8 @@ class SandboxListGatewayTest extends TestCase
         self::assertTrue($result->isSuccess());
         self::assertSame(2, $result->getTotal());
         self::assertSame('warm-1', $result->getSandboxes()[0]['sandbox_id']);
+        self::assertSame('2026-09-01T08:30:00Z', $result->getSandboxes()[0]['created_at']);
+        self::assertSame('', $result->getSandboxes()[1]['created_at']);
         self::assertSame(['Running' => 1, 'NotReady' => 1], $result->getStatusCounts());
         self::assertSame('GET', $history[0]['request']->getMethod());
         self::assertSame('/api/v1/sandboxes', $history[0]['request']->getUri()->getPath());
