@@ -160,12 +160,18 @@ export default function ChatBlock({ node, deleteNode, editor, getPos }: ReactNod
 				</div>
 			)}
 			{/* 收起时仅隐藏来源段落，末尾原生 super-placeholder 仍能编辑；不另存处理要求。 */}
+			{/* 仅在聊天卡片内将行内输入改为独立输入区；展开时与原文留出间距，收起时保持紧凑。 */}
+			{/* 处理要求已独占一块，末尾编辑器辅助换行不再显示；仅改变布局，保留辅助 DOM 和文档结构。 */}
 			<NodeViewContent
 				className={cn(
 					"px-4 pb-3 pt-2 [&_p]:m-0 [&_p]:min-h-6",
+					"[&_[data-wechat-instruction='true']>.ProseMirror-separator]:!hidden [&_[data-wechat-instruction='true']>.ProseMirror-trailingBreak]:hidden [&_[data-wechat-instruction='true']>.node-super-placeholder]:block",
 					!expanded &&
 						"[&>div>p:last-child]:mt-2 [&>div>p:last-child]:border-t [&>div>p:last-child]:border-border [&>div>p:last-child]:pt-3 [&_p:not([data-wechat-instruction='true']):not(:has([data-type='super-placeholder']))]:hidden",
-					"[&_.super-placeholder]:!block [&_.super-placeholder]:!min-h-9 [&_.super-placeholder]:!w-full [&_.super-placeholder]:!rounded-lg [&_.super-placeholder]:!border [&_.super-placeholder]:!border-border [&_.super-placeholder]:!bg-muted/30 [&_.super-placeholder]:!p-2 [&_.super-placeholder]:!text-sm [&_[data-type='super-placeholder']]:!m-0 [&_[data-type='super-placeholder']]:!block",
+					"[&_.super-placeholder]:!m-0 [&_.super-placeholder]:!block [&_.super-placeholder]:!w-full [&_.super-placeholder]:!rounded-lg [&_.super-placeholder]:!border [&_.super-placeholder]:!border-border [&_.super-placeholder]:!bg-muted/30 [&_.super-placeholder]:!text-sm [&_[data-type='super-placeholder']]:!m-0 [&_[data-type='super-placeholder']]:!block",
+					expanded
+						? "[&_.super-placeholder]:!h-auto [&_.super-placeholder]:!min-h-24 [&_.super-placeholder]:!p-3 [&_[data-wechat-instruction='true']]:!mt-4"
+						: "[&_.super-placeholder]:!min-h-9 [&_.super-placeholder]:!p-2",
 				)}
 			/>
 		</NodeViewWrapper>
