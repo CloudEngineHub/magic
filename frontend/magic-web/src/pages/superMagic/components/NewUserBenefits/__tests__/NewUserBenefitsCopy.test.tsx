@@ -135,59 +135,75 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
  * The code → flow mapping is deliberately *not* restated here: it is read off the module under
  * test, so a row the card cannot place would fail these tests the same way it would fail the app.
  */
-const { TASK_ROWS, listState, unpaidRows, paidRows, claimReward, buildRewardList } = vi.hoisted(
-	() => {
-		/** `code` and `points`, exactly as the contract's appendix tabulates them. */
-		const TASK_ROWS: Array<{ code: string; points: number }> = [
-			{ code: "first_ai_work", points: 100 },
-			{ code: "super_magic_intro", points: 50 },
-			{ code: "ai_ppt", points: 50 },
-			{ code: "ai_recording", points: 50 },
-			{ code: "digital_employee", points: 50 },
-			{ code: "skill_management", points: 50 },
-			{ code: "micro_app", points: 50 },
-			{ code: "magiclaw", points: 50 },
-		]
-		/** What the account has done, by code: done-but-unpaid and done-and-paid. */
-		const unpaidRows = new Set<string>()
-		const paidRows = new Set<string>()
-		const claimReward = vi.fn()
-		/**
-		 * The three answers a deployment can give that are not a full list: no feature, nothing to
-		 * show yet, and a task this build has no row for.
-		 */
-		const listState = { empty: false, extraCode: null as string | null }
+const {
+	TASK_ROWS,
+	listState,
+	unpaidRows,
+	paidRows,
+	claimReward,
+	refreshRewardList,
+	buildRewardList,
+} = vi.hoisted(() => {
+	/** `code` and `points`, exactly as the contract's appendix tabulates them. */
+	const TASK_ROWS: Array<{ code: string; points: number }> = [
+		{ code: "first_ai_work", points: 100 },
+		{ code: "super_magic_intro", points: 50 },
+		{ code: "ai_ppt", points: 50 },
+		{ code: "ai_recording", points: 50 },
+		{ code: "digital_employee", points: 50 },
+		{ code: "skill_management", points: 50 },
+		{ code: "micro_app", points: 50 },
+		{ code: "magiclaw", points: 50 },
+	]
+	/** What the account has done, by code: done-but-unpaid and done-and-paid. */
+	const unpaidRows = new Set<string>()
+	const paidRows = new Set<string>()
+	const claimReward = vi.fn()
+	/** The ask the card makes when its task centre is opened — see the case below. */
+	const refreshRewardList = vi.fn()
+	/**
+	 * The three answers a deployment can give that are not a full list: no feature, nothing to
+	 * show yet, and a task this build has no row for.
+	 */
+	const listState = { empty: false, extraCode: null as string | null }
 
-		return { TASK_ROWS, listState, unpaidRows, paidRows, claimReward, buildRewardList }
+	return {
+		TASK_ROWS,
+		listState,
+		unpaidRows,
+		paidRows,
+		claimReward,
+		refreshRewardList,
+		buildRewardList,
+	}
 
-		function buildRewardList(
-			toTaskId: (code: string) => HomeOnboardingTaskId | null,
-		): HomeOnboardingRewardList {
-			if (listState.empty) return { status: "ready", rewards: [] }
+	function buildRewardList(
+		toTaskId: (code: string) => HomeOnboardingTaskId | null,
+	): HomeOnboardingRewardList {
+		if (listState.empty) return { status: "ready", rewards: [] }
 
-			const rows = listState.extraCode
-				? [...TASK_ROWS, { code: listState.extraCode, points: 50 }]
-				: TASK_ROWS
+		const rows = listState.extraCode
+			? [...TASK_ROWS, { code: listState.extraCode, points: 50 }]
+			: TASK_ROWS
 
-			const rewards: HomeOnboardingReward[] = rows.map(({ code, points }) => {
-				const done = paidRows.has(code) || unpaidRows.has(code)
-				return {
-					taskId: toTaskId(code),
-					code,
-					points,
-					validityDays: 7,
-					status: done ? "COMPLETED" : "PENDING",
-					rewardStatus: paidRows.has(code) ? "GRANTED" : "PENDING",
-					completedAt: null,
-					rewardGrantedAt: null,
-					expiresAt: "2026-10-06T09:12:33+00:00",
-				}
-			})
+		const rewards: HomeOnboardingReward[] = rows.map(({ code, points }) => {
+			const done = paidRows.has(code) || unpaidRows.has(code)
+			return {
+				taskId: toTaskId(code),
+				code,
+				points,
+				validityDays: 7,
+				status: done ? "COMPLETED" : "PENDING",
+				rewardStatus: paidRows.has(code) ? "GRANTED" : "PENDING",
+				completedAt: null,
+				rewardGrantedAt: null,
+				expiresAt: "2026-10-06T09:12:33+00:00",
+			}
+		})
 
-			return { status: "ready", rewards }
-		}
-	},
-)
+		return { status: "ready", rewards }
+	}
+})
 
 vi.mock("../../LazyGuideTour", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../LazyGuideTour")>()
@@ -196,6 +212,12 @@ vi.mock("../../LazyGuideTour", async (importOriginal) => {
 		// The card reads the list through the manager, which owns the cache; here it is a fixture.
 		getHomeOnboardingRewardList: () => buildRewardList(actual.getHomeOnboardingTaskIdByCode),
 		ensureHomeOnboardingRewardList: () => Promise.resolve(),
+		/*
+		 * Recorded rather than stubbed away: the ask the card makes when its task centre is opened
+		 * is one of the behaviours this file pins — see "the task centre asks again". It stands in
+		 * for the round trip, so the case can assert the ask without a network behind it.
+		 */
+		refreshHomeOnboardingRewardList: refreshRewardList,
 		claimHomeOnboardingReward: claimReward,
 	}
 })
@@ -216,6 +238,7 @@ beforeEach(() => {
 	listState.extraCode = null
 	claimReward.mockReset()
 	claimReward.mockResolvedValue({ ok: true, points: 50 })
+	refreshRewardList.mockReset()
 	// The card reads its folded state on mount, and jsdom keeps storage for the whole file — so a
 	// test that folds the card would otherwise decide the state every later test starts in.
 	window.localStorage.clear()
@@ -556,6 +579,44 @@ describe("NewUserBenefits rows come from the backend", () => {
 
 		expect(rowTitles()).toEqual(ROW_ORDER)
 		expect(screen.queryByText(/brand_new_task/)).toBeNull()
+	})
+})
+
+/**
+ * The card asks the backend for the account's progress every time its task centre is opened, rather
+ * than showing whatever the page's first answer left behind.
+ *
+ * The manager deliberately never re-fetches a settled list (`ensureHomeOnboardingRewardList` returns
+ * early on one), and that rule is exactly why this matters: a task finished after that answer landed
+ * — the first AI work is the one that always is, because the backend completes that row on its own
+ * while the user is still on the project page — would read as pending for the rest of the visit, in
+ * the one place the user goes to check it.
+ */
+describe("NewUserBenefits task centre asks again", () => {
+	it("asks for the latest progress when it is opened, and not while it is closed", () => {
+		render(<NewUserBenefits />)
+
+		// On the page but unopened: the mount's own ask is `ensureHomeOnboardingRewardList`, which
+		// is a no-op once the list has settled, and nothing has been re-asked for on the card's
+		// behalf yet.
+		expect(refreshRewardList).not.toHaveBeenCalled()
+
+		fireEvent.click(screen.getByLabelText("newUserBenefits.entry.ariaLabel"))
+
+		expect(refreshRewardList).toHaveBeenCalledTimes(1)
+		expect(refreshRewardList).toHaveBeenCalledWith("magic-benefits-copy")
+	})
+
+	it("asks again on the next opening rather than reusing the first answer", () => {
+		openDialog()
+		expect(refreshRewardList).toHaveBeenCalledTimes(1)
+
+		// Closed and opened again: what is on screen is as old as the last opening, so the second
+		// one adds its own ask instead of inheriting the first.
+		fireEvent.click(screen.getByLabelText("newUserBenefits.dialog.close"))
+		fireEvent.click(screen.getByLabelText("newUserBenefits.entry.ariaLabel"))
+
+		expect(refreshRewardList).toHaveBeenCalledTimes(2)
 	})
 })
 

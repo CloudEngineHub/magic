@@ -884,6 +884,53 @@ describe("the two exits", () => {
 })
 
 /**
+ * The account's progress is asked for again as the dialog is acted on, on top of the ask that
+ * brought the dialog up.
+ *
+ * The dialog's own ask happens at the instant the work is *reported* finished, and the row this
+ * congratulation is about is the one task the backend completes by itself rather than on request —
+ * so its verdict can still be settling at that moment. A list that came back with the row still
+ * pending would then be the last word for the rest of the visit: a settled list is never asked for
+ * again on its own (`ensureHomeOnboardingRewardList` returns early), and the task centre behind
+ * this dialog is where the user goes to look at it. Each of the three exits therefore asks once
+ * more, so what they land on cannot be the answer from before the task was finished.
+ *
+ * Counted off the network call rather than off the manager: `getOnboardingTasks` is the real
+ * module's only way out, and a spy there is what makes "asked again" mean the ask actually went
+ * out. The extra round trip is the whole of the change, so one call per exit is the assertion.
+ */
+describe("the progress it asks for again", () => {
+	it("asks once more from the primary action", async () => {
+		await mountWithConversationEndingAt("finished")
+
+		// Everything the dialog needed is in place, and the row is on screen — the ask this counts
+		// from is the one the opening already made.
+		const askedOnOpening = getOnboardingTasks.mock.calls.length
+		expect(askedOnOpening).toBeGreaterThan(0)
+
+		await act(async () => {
+			fireEvent.click(screen.getByText(START))
+		})
+
+		expect(getOnboardingTasks.mock.calls.length).toBe(askedOnOpening + 1)
+	})
+
+	it("asks once more from the quiet exit, which is where the card is waiting", async () => {
+		await mountWithConversationEndingAt("finished")
+
+		const askedOnOpening = getOnboardingTasks.mock.calls.length
+
+		await act(async () => {
+			fireEvent.click(screen.getByText(LATER))
+		})
+
+		// "稍后再说" closes the dialog and leaves the user where they were — looking at the task
+		// centre's own row for this task. It is the exit that most needs the fresh answer.
+		expect(getOnboardingTasks.mock.calls.length).toBe(askedOnOpening + 1)
+	})
+})
+
+/**
  * A namespace is a file, and the wrong one is silent rather than empty: `t` hands back the key it
  * was given, so the dialog draws `homeOnboarding.firstWork.title` and nothing anywhere complains.
  * The namespace is therefore taken from the dialog itself and then used to open the file, so the two

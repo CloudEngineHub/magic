@@ -43,6 +43,7 @@ import {
 	isReplayableHomeOnboardingTask,
 	subscribeHomeOnboardingRun,
 	consumeHomeOnboardingSurfaceExposure,
+	refreshHomeOnboardingRewardList,
 	startHomeOnboarding,
 	type HomeOnboardingReward,
 	type HomeOnboardingTaskId,
@@ -361,6 +362,36 @@ function NewUserBenefitsCard() {
 		window.addEventListener(HOME_ONBOARDING_STATE_EVENT, syncStatus)
 		return () => window.removeEventListener(HOME_ONBOARDING_STATE_EVENT, syncStatus)
 	}, [userInfo?.magic_id])
+
+	/**
+	 * The task centre asks for the account's progress again every time it is opened.
+	 *
+	 * The cache below is deliberately never re-fetched once the backend has answered
+	 * (`ensureHomeOnboardingRewardList` returns early on a settled list), which is right for the
+	 * card's own reasons — a finished tour cannot become unfinished — but it also makes the list as
+	 * old as the page. A task finished after that answer landed (the first AI work is the one that
+	 * always is: the backend completes it by itself while the user is still on the project page)
+	 * would then read as pending for the whole visit, and the dialog is exactly where the user looks
+	 * to see it. Opening the dialog is the one moment the answer has to be current, so the ask is
+	 * repeated here rather than trusted to a mount that happened long ago.
+	 */
+	useEffect(() => {
+		if (!open) return
+		void refreshHomeOnboardingRewardList(userInfo?.magic_id)
+	}, [open, userInfo?.magic_id])
+
+	/**
+	 * A run takes the screen and gives it back on its own schedule, so the card follows it instead of
+	 * working it out from anything it knows. It has nothing to work it out from: every task leads to
+	 * the same thing from the card's side, and the run that opens the introduction dialog is not one
+	 * the card ever asked for.
+	 */
+	useEffect(() => {
+		const syncRun = () => setRunActive(isHomeOnboardingRunActive())
+		syncRun()
+		window.addEventListener(HOME_ONBOARDING_RUN_EVENT, syncRun)
+		return () => window.removeEventListener(HOME_ONBOARDING_RUN_EVENT, syncRun)
+	}, [])
 
 	/**
 	 * Opens a task's guided flow — both the "开始体验" of an unfinished task and the "回看" of a

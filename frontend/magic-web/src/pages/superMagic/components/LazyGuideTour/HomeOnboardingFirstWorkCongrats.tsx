@@ -360,8 +360,25 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 
 	if (!shown) return null
 
+	/**
+	 * Asking the backend for the account's progress once more, as the dialog is acted on.
+	 *
+	 * The list is already asked for when these congratulations open, but that ask happens at the
+	 * instant the work is *reported* finished — the backend is still settling its own verdict at
+	 * that moment, and this one task it completes by itself rather than on request. A list that
+	 * came back with the row still pending would then be the last word for the rest of the visit,
+	 * because a settled list is never asked for again on its own (`ensureHomeOnboardingRewardList`).
+	 * Acting on the dialog is the other end of the same moment: whatever the user does next, the
+	 * first AI work is behind them, and the task centre they land on has to say so. Both exits ask,
+	 * including the quiet one — the dialog is spent either way, and the card behind it is not.
+	 */
+	const askForFreshProgress = () => {
+		void refreshHomeOnboardingRewardList(userMagicId)
+	}
+
 	const close = (action: "later" | "close") => {
 		analyticsService.report("onboarding_reward_popup_click", { action })
+		askForFreshProgress()
 		setShown(false)
 	}
 
@@ -416,6 +433,7 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 							analyticsService.report("onboarding_reward_popup_click", {
 								action: "start_new_task",
 							})
+							askForFreshProgress()
 							setShown(false)
 							navigateToSuperHome()
 						}}
