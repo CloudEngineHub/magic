@@ -99,7 +99,9 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 	const hasWebSearch = selectedWebSearch !== undefined
 	// draft 是服务端按模型能力声明的生成开关，不能用模型 ID 做前端推断。
 	const draftConfig = selectedModelOption?.model.video_generation_config?.generation?.draft
-	const hasDraft = draftConfig !== undefined && selectedDraft !== undefined
+	// 样片协议固定使用 480p；其他分辨率下不展示该开关，避免用户误以为可提交样片。
+	const hasDraft =
+		draftConfig !== undefined && selectedDraft !== undefined && selectedResolution === "480p"
 
 	const fallbackTriggerLabel = t("videoEditor.generationSettings", "生成设置")
 	const draftLabel = draftConfig?.name || t("videoEditor.draft", "样片模式")

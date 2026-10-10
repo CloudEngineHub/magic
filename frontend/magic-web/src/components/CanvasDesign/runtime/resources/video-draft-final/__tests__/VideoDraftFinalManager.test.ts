@@ -3,7 +3,11 @@ import type { Canvas } from "../../../core/Canvas"
 import { EventEmitter } from "../../../core/EventEmitter"
 import { ElementTypeEnum, type LayerElement, type VideoElement } from "../../../document/types"
 import { VideoElement as VideoElementClass } from "../../../elements/video/VideoElement"
-import { GenerationStatus, type GenerateVideoRequest } from "../../../../public/magic-types"
+import {
+	GenerationStatus,
+	type GenerateVideoRequest,
+	type VideoModelItem,
+} from "../../../../public/magic-types"
 import { VideoDraftFinalManager } from "../VideoDraftFinalManager"
 import { buildVideoDraftFinalRequest } from "../videoDraftFinalRequest"
 
@@ -65,7 +69,7 @@ function createExistingFinal(source: VideoElement, id = "final"): VideoElement {
 	} as VideoElement
 }
 
-function createCanvas(initialElements: LayerElement[]) {
+function createCanvas(initialElements: LayerElement[], videoModelList: VideoModelItem[] = []) {
 	const eventEmitter = new EventEmitter()
 	const elements = new Map(initialElements.map((element) => [element.id, element]))
 	const temporaryIds = new Set<string>()
@@ -92,7 +96,13 @@ function createCanvas(initialElements: LayerElement[]) {
 	const canvas = {
 		eventEmitter,
 		t: (_key: string, fallback: string) => fallback,
-		magicConfigManager: { config: { methods: {} } },
+		magicConfigManager: {
+			config: {
+				methods: videoModelList.length
+					? { getVideoModelList: vi.fn(async () => videoModelList) }
+					: {},
+			},
+		},
 		elementManager: {
 			getElementData: vi.fn((id: string) => elements.get(id)),
 			getElementInstance: vi.fn((id: string) =>
@@ -146,7 +156,28 @@ describe("VideoDraftFinalManager", () => {
 
 	it("creates a temporary result and promotes the element and connection together", async () => {
 		const source = createDraftVideo()
-		const { canvas, elements, temporaryIds, connections } = createCanvas([source])
+		source.name = "AAA"
+		const { canvas, elements, temporaryIds, connections } = createCanvas(
+			[source],
+			[
+				{
+					model_id: "seedance-model",
+					video_generation_config: {
+						generation: {
+							sizes: [
+								{
+									label: "16:9",
+									value: "1920x1080",
+									width: 1920,
+									height: 1080,
+									resolution: "1080p",
+								},
+							],
+						},
+					},
+				} as VideoModelItem,
+			],
+		)
 		const manager = new VideoDraftFinalManager({ canvas })
 		const request = createFinalRequest(source, "final-task")
 
@@ -162,6 +193,7 @@ describe("VideoDraftFinalManager", () => {
 		const resultId = processing.resultElementId
 		if (!resultId) throw new Error("expected a temporary final result")
 		const result = elements.get(resultId) as VideoElement
+		expect(result).toMatchObject({ name: "AAA(1080p)", width: 1920, height: 1080 })
 		result.contents[0] = {
 			...result.contents[0],
 			src: "./videos/final.mp4",

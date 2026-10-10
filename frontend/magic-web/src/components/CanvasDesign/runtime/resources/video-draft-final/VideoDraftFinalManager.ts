@@ -1,5 +1,9 @@
 import { toast } from "sonner"
-import { GenerationStatus, type GenerateVideoRequest } from "../../../public/magic-types"
+import {
+	GenerationStatus,
+	type GenerateVideoRequest,
+	type VideoModelItem,
+} from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
 import { getContentState, updateContent } from "../../document/elementContent"
 import {
@@ -17,7 +21,12 @@ import {
 import { resolveConnectedPlacement } from "../../shared/placement/placementEngine"
 import { getCanvasResourceReferenceIdentity } from "../../shared/path/canvasResourcePath"
 import { resolveGenerationErrorMessage } from "../polling/generationPollingUtils"
-import { isDraftVideoContent, isVideoDraftFinalRequestForSource } from "./videoDraftFinalRequest"
+import {
+	isDraftVideoContent,
+	isVideoDraftFinalRequestForSource,
+	VIDEO_DRAFT_FINAL_RESOLUTION,
+	resolveVideoDraftFinalElementSize,
+} from "./videoDraftFinalRequest"
 
 export type VideoDraftFinalStatus = "idle" | "processing" | "completed" | "error" | "cancelled"
 
@@ -160,8 +169,23 @@ export class VideoDraftFinalManager {
 		if (!identity) return false
 
 		const resultElementId = generateElementId()
+		const resultSize = await this.resolveResultSize(sourceContent, sourceElement)
+		const currentSourceElement = this.canvas.elementManager.getElementData(sourceElement.id)
+		const currentSourceContent = this.getSourceContent(
+			sourceElement.id,
+			sourceContent.contentId,
+		)
+		if (
+			this.destroyed ||
+			!currentSourceElement ||
+			currentSourceElement.type !== ElementTypeEnum.Video ||
+			!currentSourceContent ||
+			this.getSourceIdentity(currentSourceContent) !== identity
+		) {
+			return false
+		}
 		try {
-			if (!this.createPlaceholder(sourceElement, resultElementId)) {
+			if (!this.createPlaceholder(currentSourceElement, resultElementId, resultSize)) {
 				return this.fail(
 					key,
 					this.translate("videoEditor.generateFinalFailed", "正片生成失败，请重试"),
@@ -304,9 +328,43 @@ export class VideoDraftFinalManager {
 		return uriIdentity ? `uri:${uriIdentity}` : ""
 	}
 
-	private createPlaceholder(source: VideoElementData, resultElementId: string): boolean {
-		const width = Math.max(1, source.width ?? 640)
-		const height = Math.max(1, source.height ?? 360)
+	private async resolveResultSize(
+		content: VideoElementContent,
+		source: VideoElementData,
+	): Promise<{
+		width: number
+		height: number
+	}> {
+		const getVideoModelList = this.canvas.magicConfigManager.config?.methods?.getVideoModelList
+		let model: VideoModelItem | undefined
+		if (getVideoModelList) {
+			try {
+				const models = await getVideoModelList()
+				model = models.find(
+					(candidate) => candidate.model_id === content.generateVideoRequest?.model_id,
+				)
+			} catch {
+				// Older hosts may not expose model metadata; the ratio-based fallback below keeps the node usable.
+			}
+		}
+		const configuredSize = resolveVideoDraftFinalElementSize(model, content)
+		if (configuredSize) return configuredSize
+
+		const sourceWidth = source.width ?? 16
+		const sourceHeight = source.height ?? 9
+		const sourceAspectRatio = sourceWidth / Math.max(1, sourceHeight)
+		return sourceAspectRatio >= 1
+			? { width: 1920, height: Math.max(1, Math.round(1920 / sourceAspectRatio)) }
+			: { width: Math.max(1, Math.round(1920 * sourceAspectRatio)), height: 1920 }
+	}
+
+	private createPlaceholder(
+		source: VideoElementData,
+		resultElementId: string,
+		resultSize: { width: number; height: number },
+	): boolean {
+		const width = Math.max(1, resultSize.width)
+		const height = Math.max(1, resultSize.height)
 		const originRect = this.canvas.geometryCacheManager.getElementBounds(source.id) ?? {
 			x: source.x ?? 0,
 			y: source.y ?? 0,
@@ -342,7 +400,10 @@ export class VideoDraftFinalManager {
 			this.canvas.elementManager.getNextZIndexInLevel(),
 		)
 		if (result.type !== ElementTypeEnum.Video) return false
-		result.name = this.translate("video.finalResultName", "正片视频")
+		const sourceName = source.name?.trim()
+		result.name = sourceName
+			? `${sourceName}(${VIDEO_DRAFT_FINAL_RESOLUTION})`
+			: `${this.translate("video.finalResultName", "正片视频")}(${VIDEO_DRAFT_FINAL_RESOLUTION})`
 		result.contents = [
 			{
 				contentId:

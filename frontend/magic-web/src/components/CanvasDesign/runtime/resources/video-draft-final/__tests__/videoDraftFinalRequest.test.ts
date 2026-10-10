@@ -5,6 +5,7 @@ import {
 	buildVideoDraftFinalRequest,
 	isDraftVideoContent,
 	isVideoDraftFinalRequestForSource,
+	resolveVideoDraftFinalElementSize,
 	supportsVideoDraftFinal,
 } from "../videoDraftFinalRequest"
 
@@ -139,5 +140,32 @@ describe("videoDraftFinalRequest", () => {
 				}),
 			),
 		).toBe(true)
+	})
+
+	it("resolves the final element size from the 1080p model size for the draft ratio", () => {
+		const model = createDraftCapableModel()
+		const generation = model.video_generation_config?.generation
+		if (!generation) throw new Error("expected video generation config")
+		generation.sizes = [
+			{
+				label: "16:9",
+				value: "1920x1080",
+				width: 1920,
+				height: 1080,
+				resolution: "1080p",
+			},
+			{
+				label: "9:16",
+				value: "1080x1920",
+				width: 1080,
+				height: 1920,
+				resolution: "1080p",
+			},
+		]
+
+		expect(resolveVideoDraftFinalElementSize(model, createDraftContent())).toEqual({
+			width: 1920,
+			height: 1080,
+		})
 	})
 })
