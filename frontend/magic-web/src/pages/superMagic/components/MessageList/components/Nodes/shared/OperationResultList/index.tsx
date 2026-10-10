@@ -1,14 +1,6 @@
 import { useId, type MouseEventHandler, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
-import {
-	ChevronRight,
-	CircleAlert,
-	CircleCheck,
-	CircleX,
-	Info,
-	Loader2,
-	MonitorPlay,
-} from "lucide-react"
+import { ChevronRight, CircleAlert, CircleCheck, CircleX, Loader2, MonitorPlay } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -124,17 +116,17 @@ function OperationResultList({
 					: skippedCount === total
 						? t("operationResultList.skipped")
 						: rangeSummary || stageLabels[stage]
+	const neutralStatus =
+		isRangeTool && !loading && (resultUnavailable || !items || failedCount > 0)
 	const StatusIcon = loading
 		? Loader2
-		: isRangeTool && (resultUnavailable || !items || failedCount > 0)
-			? Info
-			: resultUnavailable || !items
-				? CircleAlert
-				: failedCount
-					? successCount
-						? CircleAlert
-						: CircleX
-					: CircleCheck
+		: resultUnavailable || !items
+			? CircleAlert
+			: failedCount
+				? successCount
+					? CircleAlert
+					: CircleX
+				: CircleCheck
 	const canToggle = !web || Boolean(items && items.length > 3)
 	const displayed = web ? items?.slice(0, open ? 8 : 3) : open ? items : undefined
 	const openReport = () => {
@@ -184,28 +176,27 @@ function OperationResultList({
 			<span
 				className={cn(
 					"inline-flex h-4 items-center gap-0.5 text-xs leading-4 text-muted-foreground",
-					!rangeSummary && "ml-1",
+					// 细线区分文件与状态；需要重新定位时直接显示原因，减少提示图标的视觉干扰。
+					isRangeTool ? "ml-1.5 border-l border-border pl-2" : "ml-1",
 					// 范围错误说明比计数长；窄屏允许截断，完整原因在展开行和详情中保留。
 					rangeSummary && failedCount > 0 ? "min-w-0 shrink" : "shrink-0",
 				)}
 				aria-live="polite"
 			>
-				<StatusIcon
-					size={13}
-					strokeWidth={1.5}
-					aria-hidden
-					className={cn(
-						"shrink-0",
-						loading && "animate-spin",
-						!loading &&
-							!resultUnavailable &&
-							(failedCount
-								? isRangeTool
-									? "text-muted-foreground"
-									: "text-destructive"
-								: "text-success"),
-					)}
-				/>
+				{!neutralStatus && (
+					<StatusIcon
+						size={13}
+						strokeWidth={1.5}
+						aria-hidden
+						className={cn(
+							"shrink-0",
+							loading && "animate-spin",
+							!loading &&
+								!resultUnavailable &&
+								(failedCount ? "text-destructive" : "text-success"),
+						)}
+					/>
+				)}
 				{rangeSummary ? <span className="truncate">{status}</span> : status}
 			</span>
 			{canToggle && (

@@ -45,17 +45,16 @@ export default function OperationResultRow({
 	const { t } = useTranslation("super")
 	const pending =
 		loading && item.status === "success" && item.is_processing !== false && !unavailable
+	const neutralStatus =
+		errorTone === "neutral" &&
+		Boolean(unavailable || item.status === "error" || item.status === "skipped")
 	const ResultIcon =
 		unavailable || item.status === "skipped"
-			? errorTone === "neutral"
-				? Info
-				: CircleAlert
+			? CircleAlert
 			: pending
 				? Loader2
 				: item.status === "error"
-					? errorTone === "neutral"
-						? Info
-						: CircleX
+					? CircleX
 					: CircleCheck
 	const target = item.target
 	const web = target?.type === "url" ? new URL(target.url) : undefined
@@ -116,25 +115,27 @@ export default function OperationResultRow({
 	return (
 		<li className="min-w-0 px-2 py-2 text-xs">
 			<div className="flex min-w-0 items-start gap-2">
-				{(pending || unavailable || item.status !== "success" || stage === "analyze") && (
-					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
-						<ResultIcon
-							size={13}
-							strokeWidth={1.5}
-							aria-hidden
-							className={cn(
-								pending && "animate-spin",
-								!pending && !unavailable && item.status === "success"
-									? "text-success"
-									: item.status === "error"
-										? errorTone === "neutral"
-											? "text-muted-foreground"
-											: "text-destructive"
-										: "text-muted-foreground",
-							)}
-						/>
-					</span>
-				)}
+				{!neutralStatus &&
+					(pending ||
+						unavailable ||
+						item.status !== "success" ||
+						stage === "analyze") && (
+						<span className="flex h-5 w-4 shrink-0 items-center justify-center">
+							<ResultIcon
+								size={13}
+								strokeWidth={1.5}
+								aria-hidden
+								className={cn(
+									pending && "animate-spin",
+									!pending && !unavailable && item.status === "success"
+										? "text-success"
+										: item.status === "error"
+											? "text-destructive"
+											: "text-muted-foreground",
+								)}
+							/>
+						</span>
+					)}
 				{item.kind !== "text" || web ? (
 					<span className="flex h-5 w-4 shrink-0 items-center justify-center">
 						{web ? (
