@@ -81,10 +81,11 @@ const TabItem = memo<TabItemProps>(
 		const displayConfig = (
 			tab?.fileData as { display_config?: Record<string, unknown> } | undefined
 		)?.display_config
-		const isDeleted = tab.isDeleted
 		const isLoading = tab.isLoading
-		// 回收站仅给名称加删除线；不使用 isDeleted 的红色锁标记和内容不可用状态。
 		const isRecycleBin = Boolean(tab.fileData.recycleBin)
+		// 回收站与普通已删除标签共用外观，但回收站仍能只读预览。
+		// 此条件只控制标签展示，不能写回会触发内容不可用页面的 tab.isDeleted。
+		const showDeletedStatus = Boolean(tab.isDeleted || isRecycleBin)
 
 		// 当右键菜单显示且是当前 tab 时，隐藏 Tooltip
 		const tooltipOpen = useMemo(() => {
@@ -227,9 +228,7 @@ const TabItem = memo<TabItemProps>(
 						<span
 							className={cn(
 								"max-w-[160px] truncate font-sans text-xs font-normal leading-4 text-foreground",
-								isDeleted && !isRecycleBin && "text-destructive line-through",
-								isRecycleBin &&
-									"line-through decoration-muted-foreground/60 decoration-1 dark:decoration-foreground/80 dark:decoration-[1.5px]",
+								showDeletedStatus && "text-destructive line-through",
 								isLoading && "text-muted-foreground",
 							)}
 							aria-label={
@@ -245,12 +244,12 @@ const TabItem = memo<TabItemProps>(
 					<span
 						className={cn(
 							"max-w-[140px] truncate font-sans text-xs font-light leading-4 text-muted-foreground",
-							(!relativePath || isDeleted) && "hidden",
+							(!relativePath || showDeletedStatus) && "hidden",
 						)}
 					>
 						{relativePath}
 					</span>
-					{isDeleted && !isRecycleBin && (
+					{showDeletedStatus && (
 						<span className="flex items-center gap-1 font-sans text-xs font-normal leading-4 text-destructive">
 							{t("fileViewer.tabs.deleted")}
 							<MagicIcon component={IconLock} size={14} color="currentColor" />
