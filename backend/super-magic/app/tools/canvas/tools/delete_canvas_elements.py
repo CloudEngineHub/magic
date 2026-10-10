@@ -18,7 +18,7 @@ from app.tools.core import BaseToolParams, tool
 # 完整说明：agents/skills/canvas-manager/references/element-management.md。
 @tool(name="delete_canvas_elements", code_mode_only=True)
 class DeleteCanvasElements(CanvasManagementTool):
-    """Remove Canvas targets after a scope-bound human confirmation."""
+    """Prepare or remove exact Canvas targets and their selected versions."""
 
     name = "delete_canvas_elements"
 
@@ -28,8 +28,6 @@ class DeleteCanvasElements(CanvasManagementTool):
         targets: list[DeleteCanvasTarget] = Field(min_length=1)
         mode: Literal["remove", "remove_with_files"] = "remove"
         stage: Literal["prepare", "execute"] = "prepare"
-        prepared_tool_call_id: str | None = None
-        confirmation_tool_call_id: str | None = None
 
     params_class = Params
 
@@ -40,10 +38,10 @@ class DeleteCanvasElements(CanvasManagementTool):
                 params.targets,
                 params.mode,
                 params.stage,
-                params.prepared_tool_call_id,
-                params.confirmation_tool_call_id,
             )
             lines = [f"Canvas deletion stage: {result['stage']}; mode={params.mode}."]
+            if result["stage"] == "prepared":
+                lines.append(f"Affected connections: {', '.join(result['connection_ids']) or 'none'}.")
             for item in result["items"]:
                 lines.append(
                     f"- element_id={item['element_id']} | name={item['name']} | scope={item['scope']} | affected_elements={', '.join(item['descendant_ids'])} | affected_contents={', '.join(item['content_ids'])} | status={item.get('status', 'prepared')}"
@@ -58,9 +56,9 @@ class DeleteCanvasElements(CanvasManagementTool):
                 )
                 if file.get("error"):
                     lines.append(str(file["error"]))
-            if result.get("prepared_tool_call_id"):
+            if result["stage"] == "prepared":
                 lines.append(
-                    f"prepared_tool_call_id={result['prepared_tool_call_id']}. Call ask_user directly with this binding, then execute with the resulting confirmation_tool_call_id."
+                    "No changes were made. Ask the user to confirm this exact scope with ordinary ask_user questions XML; execute only after explicit agreement."
                 )
             lines.append(
                 "Removing a generating placeholder does not cancel provider generation or refund charges. Restoring a recycled file does not restore Canvas Elements or connections."

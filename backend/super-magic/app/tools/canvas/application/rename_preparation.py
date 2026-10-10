@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import mimetypes
 from pathlib import Path
 
 from app.tools.canvas.application.commands.rename_commands import BatchNaming, RenameElement, VersionFileName
-from app.tools.canvas.application.operation_confirmation import CanvasOperationPreparation
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.services.spatial_geometry import CanvasSpatialGeometry
 from app.tools.canvas.domain.types import JsonObject
@@ -23,7 +20,7 @@ class RenamePreparation:
 
     async def prepare(
         self, project_path: str, items: list[RenameElement], gateway: WorkspaceFileManagement
-    ) -> CanvasOperationPreparation:
+    ) -> JsonObject:
         project = await self.repository.read(project_path)
         geometry = CanvasSpatialGeometry(project.canvas)
         if project.canvas.opaque_elements or any(e.opaque_children for e in project.canvas.iter_elements()):
@@ -32,20 +29,8 @@ class RenamePreparation:
             )
         files: dict[str, JsonObject] = {}
         skipped: list[JsonObject] = []
-        selection: list[JsonObject] = []
         for item in items:
             element = geometry.assert_mutable(item.element_id)
-            selection.append(
-                {
-                    "element_id": item.element_id,
-                    "single_version": len(element.contents) == 1,
-                    "name": element.properties.name if item.canvas_title is not None else None,
-                    "content_ids": [c.content_id for c in element.contents]
-                    if item.all_versions_base_name
-                    else [file.content_id for file in item.files],
-                    "requested": item.model_dump(),
-                }
-            )
             if element.element_type != "image" and (item.files or item.all_versions_base_name):
                 raise CanvasDomainError("IMAGE_REQUIRED", "File rename currently supports image Elements only.")
             versions = list(item.files)
@@ -123,30 +108,7 @@ class RenamePreparation:
                 item.element_id for item in items if len(geometry.require(item.element_id).contents) == 1
             ],
         }
-        # 位置变化不使确认过期；标题、版本、文件身份和引用变化会影响实际删除／改名范围。
-        references: list[JsonObject] = []
-        source_paths = {str(file["path"]) for file in files.values()}
-        for element in project.canvas.iter_elements():
-            for content in element.contents:
-                path = content.fields.asset_path
-                if not path or "://" in path or path.startswith("data:"):
-                    continue
-                try:
-                    reference = gateway.paths.to_workspace_reference_path(project_path, path)
-                except ValueError:
-                    continue
-                if str(gateway.workspace / reference) in source_paths:
-                    references.append(
-                        {"element_id": element.element_id, "content_id": content.content_id, "asset_path": path}
-                    )
-        snapshot = {
-            "selection": selection,
-            "files": payload["files"],
-            "references": references,
-        }
-        return CanvasOperationPreparation(
-            payload, hashlib.sha256(json.dumps(snapshot, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-        )
+        return payload
 
     async def batch_items(
         self, project_path: str, items: list[RenameElement], naming: BatchNaming

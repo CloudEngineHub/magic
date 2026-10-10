@@ -27,15 +27,15 @@ print(result.content)
 - `remove`: remove the Element and its descendants/connections, retaining actual files. For an existing multi-version image, `scope=current` and the exact active `content_id` remove only that version; `scope=all` removes the whole Element.
 - `remove_with_files`: supported only for actual image Elements and completed Workspace image files in this project. The existing Workspace deletion tool and mounted filesystem handle product recycle-bin semantics. This is not permanent deletion or clearing a recycle bin.
 - A multi-version target requires explicit `scope=current|all`; current-version deletion requires its exact active Content ID. Do not default to all. Single-version Elements require no extra version choice.
-- Current-version deletion retains a file still used by another Content. All-version file deletion is rejected if unselected Contents still use the file. The prepared question explains retained shared files; do not delete the reference owners implicitly.
+- Current-version deletion retains a file still used by another Content. All-version file deletion is rejected if unselected Contents still use the file. The prepared list identifies retained shared files; do not delete the reference owners implicitly.
 - A Frame's ordinary removal recursively affects its children; preparation lists every descendant and affected connection. Selecting both a parent and its descendant is normalized. Locked ancestors/descendants are not automatically unlocked.
 - A generating placeholder can be removed with `mode=remove`. It has no completed file to delete. Removal does not cancel provider generation or refund fees; late results must not recreate the removed target.
 
 ### Required human confirmation
 
-1. Call `stage=prepare` with the exact targets and mode. Read the returned scope, actual files, shared-file policy and `prepared_tool_call_id`.
-2. Call `ask_user` directly outside Code mode with only `prepared_tool_call_id`. The runtime supplies the exact prepared question; do not author a different impact list. Wait for the human.
-3. On explicit confirmation, call `stage=execute` with the same target list/mode, prepared ID and the actual `ask_user` call ID in `confirmation_tool_call_id`.
+1. Call `stage=prepare` with the exact targets and mode. Read the returned versions, descendants, connections, actual files and shared-file policy. Preparation makes no changes.
+2. Call the main Agent's direct `ask_user` outside Code mode with ordinary `questions` XML describing that exact impact list. For example, `<question type="confirm">Remove these two selected images from the Canvas? Their actual files will remain.</question>`. Include file deletion and retained shared files when relevant. Omit timeout and wait for the user's answer.
+3. Judge the answer and call `stage=execute` with the same target list/mode only after explicit agreement. Rejection, skipping, timeout or an unclear answer means do not execute.
 
 ```python
 from sdk.tool import tool
@@ -46,6 +46,6 @@ result = tool.call("delete_canvas_elements", {
 print(result.content)
 ```
 
-The runtime rejects missing, declined, skipped, timed-out, stale or reused confirmations. Moving an Element alone does not change the confirmed deletion scope; changes to files, versions, descendants or references require preparing and confirming again. Non-interactive channels and subagents cannot bypass the gate.
+The Agent is responsible for obtaining and interpreting confirmation; the tools do not validate AskUser records. If the user changes the scope, query and prepare it again before asking. Execution re-reads current targets and checks versions, descendants, references, locks, file identity and permission. Do not silently expand the agreed scope or bypass a failed check.
 
 Read actual per-item outcomes. Only confirmed successful file deletions permit removal of their Canvas targets. Failures retain the corresponding targets. If a file was deleted but Canvas writing failed, report the partial result and re-query before repairing Canvas state; do not repeat deletion of a recreated same-name file. Recycled file recovery does not restore Canvas Elements, positions or connections automatically. The tools use existing persistence; they do not promise an atomic transaction with files or conflict-free simultaneous browser edits.

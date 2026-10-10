@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict
 
 from agentlang.context.tool_context import ToolContext
-from app.i18n import i18n
-from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation, CanvasOperationPreparation
+from app.core.context.agent_context import AgentContext
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
 from app.tools.canvas.domain.services.spatial_geometry import CanvasSpatialGeometry
@@ -33,7 +30,6 @@ class DeleteCanvasTarget(BaseModel):
 class DeleteElementsService:
     def __init__(self, repository: CanvasRepositoryInterface, context: ToolContext):
         self.repository, self.context = repository, context
-        self.confirmation = CanvasOperationConfirmation.from_tool(context)
 
     async def run(
         self,
@@ -41,51 +37,19 @@ class DeleteElementsService:
         targets: list[DeleteCanvasTarget],
         mode: str,
         stage: str,
-        prepared_id: str | None,
-        confirmation_id: str | None,
     ) -> JsonObject:
-        gateway = WorkspaceFileManagement(self.repository.workspace, project_path, self.confirmation.agent_context)
-        prepared = await self._prepare(project_path, targets, mode, gateway)
-        payload, fingerprint = prepared.payload, prepared.fingerprint
+        agent = self.context.get_extension_typed("agent_context", AgentContext)
+        if agent is None:
+            raise CanvasDomainError("AGENT_CONTEXT_REQUIRED", "Canvas deletion requires the current Agent context.")
+        gateway = WorkspaceFileManagement(self.repository.workspace, project_path, agent)
+        payload = await self._prepare(project_path, targets, mode, gateway)
         if stage == "prepare":
-            description = "\n".join(
-                i18n.translate(
-                    "canvas.confirmation_element",
-                    category="tool.messages",
-                    name=child["name"] or child["element_id"],
-                    versions=sum(content["contentId"] in item["content_ids"] for content in child["contents"]),
-                )
-                for item in payload["items"]
-                for child in item["snapshot"]
-            )
-            file_list = "\n".join(
-                Path(file["path"]).relative_to(gateway.project_root).as_posix()
-                + (
-                    " (" + i18n.translate("canvas.shared_file_kept", category="tool.messages") + ")"
-                    if file["shared"]
-                    else ""
-                )
-                for file in payload["files"]
-            )
-            question = i18n.translate(
-                "canvas.delete_confirmation_files" if mode == "remove_with_files" else "canvas.delete_confirmation",
-                category="tool.messages",
-                count=sum(len(item["descendant_ids"]) for item in payload["items"]),
-                elements=description,
-                files=file_list,
-                connections=len(payload["connection_ids"]),
-            )
-            record = await self.confirmation.prepare(
-                self.context.tool_call_id, "delete", payload, fingerprint, question
-            )
             return {
                 **payload,
                 "items": [{**item, "status": "prepared"} for item in payload["items"]],
                 "stage": "prepared",
-                "prepared_tool_call_id": record.prepared_tool_call_id,
             }
         await gateway.check_canvas_write_access()
-        record = await self.confirmation.consume(prepared_id or "", confirmation_id or "", "delete", fingerprint)
         file_outcomes: dict[str, JsonObject] = {}
         for file in payload["files"]:
             if file["shared"]:
@@ -95,7 +59,7 @@ class DeleteElementsService:
             identity = WorkspaceFileInfo.model_validate(file["identity"])
             try:
                 if await gateway.info(identity.id) != identity or await get_file_id_from_xattr(path) != identity.id:
-                    raise CanvasDomainError("FILE_IDENTITY_CHANGED", "The file changed after confirmation.")
+                    raise CanvasDomainError("FILE_IDENTITY_CHANGED", "The file changed during execution.")
                 deletion = await gateway.wait(
                     DeleteFiles(base_dir=self.repository.workspace).execute(
                         self.context, DeleteFilesParams(file_paths=[str(path)])
@@ -110,8 +74,6 @@ class DeleteElementsService:
                     "error": str(error),
                     "error_code": error.code if isinstance(error, CanvasDomainError) else "INTERNAL_ERROR",
                 }
-            record.payload["file_outcomes"] = list(file_outcomes.values())
-            await self.confirmation.save(record)
         outcomes: list[JsonObject] = []
         for item in payload["items"]:
             removable = [
@@ -152,11 +114,7 @@ class DeleteElementsService:
                         "error_code": error.code if isinstance(error, CanvasDomainError) else "INTERNAL_ERROR",
                     }
                 )
-            record.payload["outcomes"] = outcomes
-            await self.confirmation.save(record)
         complete = all(item["status"] == "removed" and item["metadata_cleanup_complete"] for item in outcomes)
-        if complete:
-            await self.confirmation.discard(record)
         return {
             "project_path": project_path,
             "stage": "executed",
@@ -167,7 +125,7 @@ class DeleteElementsService:
 
     async def _prepare(
         self, project_path: str, targets: list[DeleteCanvasTarget], mode: str, gateway: WorkspaceFileManagement
-    ) -> CanvasOperationPreparation:
+    ) -> JsonObject:
         if not targets or len({target.element_id for target in targets}) != len(targets):
             raise CanvasDomainError("INVALID_SELECTION", "Select distinct exact Element IDs.")
         project = await self.repository.read(project_path)
@@ -310,13 +268,7 @@ class DeleteElementsService:
             "files": list(files.values()),
             "connection_ids": connections,
         }
-        affected_paths = {str(file["path"]) for file in files.values()}
-        snapshot = {
-            **payload,
-            "references": {path: pairs for path, pairs in references.items() if path in affected_paths},
-        }
-        fingerprint = hashlib.sha256(json.dumps(snapshot, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-        return CanvasOperationPreparation(payload, fingerprint)
+        return payload
 
     async def _remove(self, project_path: str, item: JsonObject, content_ids: list[str]) -> bool:
         removed_elements: list[str] = []
@@ -332,7 +284,7 @@ class DeleteElementsService:
                 geometry.assert_mutable(child.element_id)
                 if child.opaque_children:
                     raise CanvasDomainError(
-                        "CONFIRMATION_STALE",
+                        "CANVAS_TARGET_CHANGED",
                         "The target now contains undecoded children; prepare its current scope again.",
                     )
             current = [
@@ -347,7 +299,7 @@ class DeleteElementsService:
             ]
             if current != item["snapshot"]:
                 raise CanvasDomainError(
-                    "CONFIRMATION_STALE",
+                    "CANVAS_TARGET_CHANGED",
                     "The target or its descendants changed during execution; Canvas removal was not performed.",
                 )
             remaining = [content for content in element.contents if content.content_id not in content_ids]
@@ -392,7 +344,7 @@ class DeleteElementsService:
                 ]
                 if project.canvas.opaque_connections or not set(current_connections).issubset(item["connection_ids"]):
                     raise CanvasDomainError(
-                        "CONFIRMATION_STALE",
+                        "CANVAS_TARGET_CHANGED",
                         "The target's connections changed during execution; Canvas removal was not performed.",
                     )
                 project.canvas.remove_element(element_id)
