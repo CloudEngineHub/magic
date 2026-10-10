@@ -22,15 +22,17 @@ export function ModelEditorRuntimeFields({
 	control,
 	disabled,
 	errors,
+	isOfficialOrganization,
 	modelType,
 }: {
 	control: Control<ModelEditorValues>
 	disabled: boolean
 	errors: FieldErrors<ModelEditorValues>
+	isOfficialOrganization: boolean
 	modelType: ProviderModelType
 }) {
 	const { t } = useTranslation()
-	const visibility = getCommonRuntimeFieldVisibility(modelType)
+	const visibility = getCommonRuntimeFieldVisibility(modelType, isOfficialOrganization)
 
 	return (
 		<div className="grid gap-5">
@@ -66,7 +68,6 @@ export function ModelEditorRuntimeFields({
 						description={t("modelList.editor.fieldDesc.maxTokens")}
 						error={getErrorMessage(errors.max_tokens?.message)}
 						label={t("modelList.editor.field.maxTokens")}
-						required
 						name="max_tokens"
 						placeholder={t("modelList.editor.placeholder.maxTokens")}
 					/>
@@ -78,9 +79,42 @@ export function ModelEditorRuntimeFields({
 						description={t("modelList.editor.fieldDesc.maxOutputTokens")}
 						error={getErrorMessage(errors.max_output_tokens?.message)}
 						label={t("modelList.editor.field.maxOutputTokens")}
+						required
 						name="max_output_tokens"
 						placeholder={t("modelList.editor.placeholder.maxOutputTokens")}
 					/>
+				) : null}
+				{visibility.chatApi ? (
+					<DialogFormField
+						description={t("modelList.editor.fieldDesc.chatApi")}
+						descriptionMode="text"
+						fieldId="chat-api"
+						label={t("modelList.editor.field.chatApi")}
+					>
+						<Controller
+							control={control}
+							name="chat_api"
+							render={({ field }) => (
+								<Select
+									disabled={disabled}
+									onValueChange={field.onChange}
+									value={field.value}
+								>
+									<SelectTrigger className="w-full" id="chat-api">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="chat_completions">
+											{t("modelList.editor.chatApi.chatCompletions")}
+										</SelectItem>
+										<SelectItem value="responses">
+											{t("modelList.editor.chatApi.responses")}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							)}
+						/>
+					</DialogFormField>
 				) : null}
 				{visibility.temperature ? (
 					<>
@@ -120,6 +154,7 @@ export function ModelEditorRuntimeFields({
 							description={t("modelList.editor.fieldDesc.temperature")}
 							error={getErrorMessage(errors.temperature?.message)}
 							label={t("modelList.editor.field.temperature")}
+							required
 							name="temperature"
 							placeholder={t("modelList.editor.placeholder.temperature")}
 							step="0.1"

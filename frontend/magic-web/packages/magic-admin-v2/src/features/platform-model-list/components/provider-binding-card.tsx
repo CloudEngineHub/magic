@@ -55,11 +55,13 @@ import {
 	defaultProviderIcon,
 	getProviderLogoSrc,
 } from "@magic-admin-v2/features/platform-provider-list/utils/provider-icons"
+import { isEmbeddingModelType } from "@magic-admin-v2/features/platform-model-list/utils/model-runtime-config"
 import { cn } from "@magic-admin-v2/utils/cn"
 
 export function ProviderBindingCard({
 	canRemove,
 	category,
+	officialSyncedRecordIds,
 	control,
 	disabled,
 	error,
@@ -72,6 +74,7 @@ export function ProviderBindingCard({
 }: {
 	canRemove: boolean
 	category: ProviderModelCategory
+	officialSyncedRecordIds: ReadonlySet<string>
 	control: Control<ModelEditorValues>
 	disabled: boolean
 	error: ProviderBindingErrors | undefined
@@ -91,12 +94,17 @@ export function ProviderBindingCard({
 	const fieldName = <T extends keyof ProviderBindingValues>(name: T) =>
 		`providers.${index}.${name}` as const
 	const providerId = useWatch({ control, name: fieldName("service_provider_config_id") })
+	const recordId = useWatch({ control, name: fieldName("record_id") })
 	const modelVersion = useWatch({ control, name: fieldName("model_version") })
 	const selectedProvider = (providerQuery.data ?? []).find(
 		(provider) => provider.id === providerId,
 	)
+	const isOfficialSynced = Boolean(recordId && officialSyncedRecordIds.has(recordId))
 	const canTestConnectivity =
-		selectedProvider && selectedProvider.provider_type !== providerType.official
+		selectedProvider && selectedProvider.provider_type !== providerType.official && !isOfficialSynced
+	const fieldDisabled = disabled || isOfficialSynced
+	const supportsExtraRequest =
+		category === providerModelCategory.llm || isEmbeddingModelType(modelType)
 	const [expanded, setExpanded] = useState(false)
 	const [optionalOpen, setOptionalOpen] = useState(false)
 	const [pricingOpen, setPricingOpen] = useState(false)
@@ -137,7 +145,7 @@ export function ProviderBindingCard({
 						render={({ field }) => {
 							return (
 								<Select
-									disabled={disabled || providerQuery.isLoading}
+									disabled={fieldDisabled || providerQuery.isLoading}
 									onValueChange={(value) => {
 										field.onChange(value)
 										const nextProvider = providerQuery.data?.find(
@@ -226,7 +234,7 @@ export function ProviderBindingCard({
 						<ModelConnectivityTest
 							className="flex-nowrap gap-1.5"
 							compact
-							disabled={disabled || !modelVersion.trim()}
+							disabled={fieldDisabled || !modelVersion.trim()}
 							key={`${providerId}:${modelVersion}:${category}:${modelType}`}
 							request={{
 								kind: "config",
@@ -255,7 +263,7 @@ export function ProviderBindingCard({
 									</span>
 									<Switch
 										checked={field.value}
-										disabled={disabled}
+										disabled={fieldDisabled}
 										onCheckedChange={field.onChange}
 									/>
 								</>
@@ -263,7 +271,7 @@ export function ProviderBindingCard({
 						/>
 						<Button
 							aria-label={t("modelList.editor.action.removeProvider")}
-							disabled={!canRemove || disabled}
+							disabled={!canRemove || fieldDisabled}
 							onClick={onRemove}
 							size="icon"
 							type="button"
@@ -329,7 +337,7 @@ export function ProviderBindingCard({
 									name={fieldName("model_version")}
 									render={({ field }) => (
 										<Input
-											disabled={disabled}
+											disabled={fieldDisabled}
 											id={fieldName("model_version")}
 											onChange={field.onChange}
 											placeholder={t(
@@ -378,6 +386,8 @@ export function ProviderBindingCard({
 										placeholder={t("modelList.editor.placeholder.loadWeight")}
 									/>
 								) : null}
+								{supportsExtraRequest && !isOfficialSynced ? (
+									<>
 								<DialogFormField
 									description={t("modelList.editor.fieldDesc.extraHeader")}
 									descriptionMode="text"
@@ -424,10 +434,12 @@ export function ProviderBindingCard({
 										)}
 									/>
 								</DialogFormField>
+									</>
+								) : null}
 							</div>
 						</details>
 
-						{dataSource.endpoints.modelPricingTemplates ? (
+						{dataSource.endpoints.modelPricingTemplates && !isOfficialSynced ? (
 							<details
 								className="group rounded-md border"
 								data-model-editor-field={

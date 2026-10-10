@@ -23,6 +23,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { ConfirmDialog } from "@magic-admin-v2/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog";
 import { Button } from "@magic-admin-v2/components/ui/button";
 import {
@@ -67,13 +68,15 @@ import { useProviderModelDataSource } from "@magic-admin-v2/features/platform-mo
 import {
   createBindingValues,
   createEditorValues,
+  createImportedEditorValues,
   createEmptyValues,
   getModelTypeOptions,
   getProviderCategory,
+  getUnpairedLanguageChanges,
   toSaveInputs,
 } from "@magic-admin-v2/features/platform-model-list/utils/model-editor";
 import {
-  modelEditorSchema,
+  createModelEditorSchema,
   type ModelEditorValues,
   type ProviderBindingErrors,
 } from "@magic-admin-v2/features/platform-model-list/utils/model-editor-schema";
@@ -87,12 +90,13 @@ import {
   resolveCanonicalBillingTiers,
   validatePricingEntries,
 } from "@magic-admin-v2/features/platform-model-list/utils/pricing";
+import { providerType } from "@magic-admin-v2/features/platform-provider-list/types";
 import { useProviderListQuery } from "@magic-admin-v2/features/platform-provider-list/queries";
 import {
   Language,
   type Language as LanguageCode,
 } from "@magic-admin-v2/i18n/resources";
-import { useApis } from "@magic-admin-v2/runtime/context";
+import { useApis, useRuntime } from "@magic-admin-v2/runtime/context";
 
 export function ModelEditorDialog({
   allowedCategories,
@@ -111,7 +115,9 @@ export function ModelEditorDialog({
 }) {
   const { t } = useTranslation();
   const dataSource = useProviderModelDataSource();
+  const { access } = useRuntime();
   const { platformModel } = useApis();
+  const isOfficialOrganization = access?.isOfficialOrganization === true;
   const selectableCategories = useMemo(
     () => Array.from(new Set(allowedCategories.map(getProviderCategory))),
     [allowedCategories],
@@ -128,7 +134,7 @@ export function ModelEditorDialog({
       ?? providerModelType.largeLanguageModel;
   const form = useForm<ModelEditorValues>({
     defaultValues: createEmptyValues(),
-    resolver: zodResolver(modelEditorSchema),
+    resolver: zodResolver(createModelEditorSchema(isOfficialOrganization)),
   });
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -154,7 +160,11 @@ export function ModelEditorDialog({
   const [failedLoadRecordIds, setFailedLoadRecordIds] = useState<string[]>([]);
   const [isEditorReady, setIsEditorReady] = useState(false);
   const [isIconUploading, setIsIconUploading] = useState(false);
+  const [languageSyncWarningOpen, setLanguageSyncWarningOpen] = useState(false);
+  const [languageSyncWarnings, setLanguageSyncWarnings] = useState<{ name: boolean; description: boolean } | null>(null);
+  const [pendingLanguageSyncValues, setPendingLanguageSyncValues] = useState<ModelEditorValues | null>(null);
   const loadedRecordsRef = useRef<Record<string, ProviderModelRecord>>({});
+  const initialLanguageValuesRef = useRef<Pick<ModelEditorValues, "name" | "name_en" | "description" | "description_en"> | null>(null);
   const loadSessionRef = useRef("");
   const focusRequestIdRef = useRef(0);
   const isEditMode = Boolean(model);
@@ -165,6 +175,27 @@ export function ModelEditorDialog({
   const recordIdsKey = recordIds.join(",");
   const isSaving = saveMutation.isPending || deleteBindingsMutation.isPending;
   const isOperationRunning = progress?.phase === "running";
+  const officialSyncedRecords = useMemo(() => {
+    if (!isOfficialOrganization || !isEditorReady) {
+      return {} as Record<string, ProviderModelRecord>;
+    }
+
+    const officialProviderIds = new Set(
+      (providerQuery.data ?? [])
+        .filter((provider) => provider.provider_type === providerType.official)
+        .map((provider) => provider.id),
+    );
+    return Object.fromEntries(
+      Object.entries(loadedRecordsRef.current).filter(([, record]) =>
+        officialProviderIds.has(record.service_provider_config_id),
+      ),
+    );
+  }, [isEditorReady, isOfficialOrganization, providerQuery.data]);
+  const officialSyncedRecordIds = useMemo(
+    () => new Set(Object.keys(officialSyncedRecords)),
+    [officialSyncedRecords],
+  );
+  const hasOfficialSyncedBinding = officialSyncedRecordIds.size > 0;
 
   const modelTypeOptions = useMemo(() => getModelTypeOptions(category, t), [category, t]);
   const failedInputs = useMemo(
@@ -189,6 +220,10 @@ export function ModelEditorDialog({
       setFailedLoadRecordIds([]);
       setIsEditorReady(false);
       setIsIconUploading(false);
+      setLanguageSyncWarningOpen(false);
+      setLanguageSyncWarnings(null);
+      setPendingLanguageSyncValues(null);
+      initialLanguageValuesRef.current = null;
       loadedRecordsRef.current = {};
       loadSessionRef.current = "";
     }
@@ -207,6 +242,9 @@ export function ModelEditorDialog({
     setRemovedRecordIds([]);
     setPendingRemoveProviderIndex(null);
     setFailedLoadRecordIds([]);
+    setLanguageSyncWarningOpen(false);
+    setPendingLanguageSyncValues(null);
+    initialLanguageValuesRef.current = null;
     setIsEditorReady(true);
     loadedRecordsRef.current = {};
   }, [form, isEditMode, open, resolvedInitialCategory, resolvedInitialModelType]);
@@ -250,7 +288,9 @@ export function ModelEditorDialog({
     const records = allRecordIds
       .map((id) => loadedRecordsRef.current[id])
       .filter((record): record is ProviderModelRecord => Boolean(record));
-    form.reset(createEditorValues(records));
+    const editorValues = createEditorValues(records);
+    form.reset(editorValues);
+    initialLanguageValuesRef.current = editorValues;
     setSaveResults({});
     setActiveTab("common");
     setContentLocale(Language.ZhCN);
@@ -364,7 +404,9 @@ export function ModelEditorDialog({
 
   async function resolvePricingTiersForSave(values: ModelEditorValues) {
     const legacyBindings = values.providers.filter((binding) =>
-      !binding.billing_tiers.length && hasLegacyPricing(binding.legacy_pricing),
+      !officialSyncedRecordIds.has(binding.record_id ?? "")
+      && !binding.billing_tiers.length
+      && hasLegacyPricing(binding.legacy_pricing),
     );
     if (!legacyBindings.length) {
       return {} as Record<string, ProviderModelBillingTier[] | null>;
@@ -435,13 +477,24 @@ export function ModelEditorDialog({
     return Object.fromEntries(converted) as Record<string, ProviderModelBillingTier[] | null>;
   }
 
-  async function submit(values: ModelEditorValues) {
-    if (isIconUploading) return;
+  function handleApplyImportedConfig(record: ProviderModelRecord) {
+    const importedValues = createImportedEditorValues(record);
+    form.reset(importedValues);
+    setActiveTab("common");
+    setContentLocale(Language.ZhCN);
+    setSaveResults({});
+    setRemovedRecordIds([]);
+    initialLanguageValuesRef.current = null;
+    setLanguageSyncWarnings(null);
+  }
 
+  async function submitValues(values: ModelEditorValues) {
     const invalidPricing = values.providers
       .map((binding, index) => ({
         index,
-        validation: validatePricingEntries(binding.pricing_template, binding.pricing_entries),
+        validation: officialSyncedRecordIds.has(binding.record_id ?? "")
+          ? undefined
+          : validatePricingEntries(binding.pricing_template, binding.pricing_entries),
       }))
       .find((item) => Boolean(item.validation));
     if (invalidPricing?.validation) {
@@ -467,11 +520,29 @@ export function ModelEditorDialog({
       await save(toSaveInputs(
         values,
         dataSource.supportsLoadBalancing ?? true,
+        isOfficialOrganization,
         canonicalPricingTiers,
+        officialSyncedRecords,
       ));
     } catch {
       toast.error(t("modelList.editor.pricingTemplateLoadFailed"));
     }
+  }
+
+  async function submit(values: ModelEditorValues) {
+    if (isIconUploading) return;
+
+    if (isEditMode && initialLanguageValuesRef.current) {
+      const warnings = getUnpairedLanguageChanges(initialLanguageValuesRef.current, values);
+      if (warnings.name || warnings.description) {
+        setPendingLanguageSyncValues(values);
+        setLanguageSyncWarnings(warnings);
+        setLanguageSyncWarningOpen(true);
+        return;
+      }
+    }
+
+    await submitValues(values);
   }
 
   function requestEditorFocus(target: Omit<ModelEditorFocusRequest, "id">) {
@@ -687,13 +758,19 @@ export function ModelEditorDialog({
                 <ModelEditorCommonTab
                   category={category}
                   contentLocale={contentLocale}
-                  disabled={isSaving}
+                  disabled={isSaving || hasOfficialSyncedBinding}
                   form={form}
                   modelType={modelType}
                   modelTypeOptions={modelTypeOptions}
+                  onApplyImportedConfig={handleApplyImportedConfig}
                   onCategoryChange={handleCategoryChange}
                   onIconUploadingChange={setIsIconUploading}
                   onLocaleChange={setContentLocale}
+                  showImportConfig={
+                    isOfficialOrganization &&
+                    !isEditMode &&
+                    Boolean(dataSource.endpoints.modelImportList)
+                  }
                   selectableCategories={selectableCategories}
                 />
               </TabsContent>
@@ -703,8 +780,9 @@ export function ModelEditorDialog({
                   {category === providerModelCategory.llm || category === providerModelCategory.embedding ? (
                     <ModelEditorRuntimeFields
                       control={form.control}
-                      disabled={isSaving}
+                      disabled={isSaving || hasOfficialSyncedBinding}
                       errors={form.formState.errors}
+                      isOfficialOrganization={isOfficialOrganization}
                       modelType={modelType}
                     />
                   ) : (
@@ -719,10 +797,12 @@ export function ModelEditorDialog({
                 <ModelEditorProvidersTab
                   category={category}
                   disabled={isSaving}
+                  hasOfficialSyncedBinding={hasOfficialSyncedBinding}
                   fields={fields}
                   focusRequest={focusRequest}
                   form={form}
                   modelType={modelType}
+                  officialSyncedRecordIds={officialSyncedRecordIds}
                   onAdd={() => append(createBindingValues())}
                   onRemove={setPendingRemoveProviderIndex}
                   saveResults={saveResults}
@@ -756,6 +836,41 @@ export function ModelEditorDialog({
         ) : (
           <div className="min-h-80 flex-1" />
         )}
+        <ConfirmDialog
+          open={languageSyncWarningOpen}
+          title={t("modelList.editor.languageSync.title")}
+          description={
+            languageSyncWarnings ? (
+              <div className="space-y-1">
+                {languageSyncWarnings.name ? (
+                  <div>{t("modelList.editor.languageSync.name")}</div>
+                ) : null}
+                {languageSyncWarnings.description ? (
+                  <div>{t("modelList.editor.languageSync.description")}</div>
+                ) : null}
+              </div>
+            ) : (
+              t("modelList.editor.languageSync.name")
+            )
+          }
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              setLanguageSyncWarningOpen(false);
+              setLanguageSyncWarnings(null);
+              setPendingLanguageSyncValues(null);
+            }
+          }}
+          onConfirm={async () => {
+            const values = pendingLanguageSyncValues;
+            setLanguageSyncWarningOpen(false);
+            setLanguageSyncWarnings(null);
+            setPendingLanguageSyncValues(null);
+            if (values) {
+              await submitValues(values);
+            }
+          }}
+          confirmLabel={t("common.confirm")}
+        />
 		<DeleteConfirmDialog
 			open={pendingRemoveProviderIndex !== null}
 			title={t("modelList.editor.removeProviderTitle")}
