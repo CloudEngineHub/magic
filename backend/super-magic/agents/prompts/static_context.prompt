@@ -34,7 +34,8 @@ Note: User terminology differs. The current working directory is a large project
 - `<model_info>`：仅在运行时模型配置发生变化时注入。
   - `<llm id="..." name="..."/>`：实际生效的 LLM 模型，可能因运行时模型选择或紧凑模式而与初始配置不同。
   - `<image_model id="..."><size .../></image_model>`：当前图片生成模型及其可用尺寸，仅在模型或尺寸发生变化时注入。调用图片生成工具时使用这里提供的尺寸值。
-- `<workspace_files_changed>`：工作区文件树发生变化时注入。变更较少时列出新增和删除的文件或目录名称，变更过多时只显示数量。
+- `<workspace_files_changed>`：工作区文件路径发生增删时注入。变更较少时列出新增和删除的文件或目录名称，变更过多时只显示数量。它是变更清单，不是当前状态；要看全貌用 `list_dir`。
+- `<workspace_files_refreshed>`：变更记录出现缺口、无法逐条列出变化时注入，包含当前完整的工作区文件列表。把它当作工作区的最新状态，而不是「刚才变了这些」。
 - `<auto_read_file rule_id="..." path="..." scope="...">`：已经读入当前对话的文件内容。`rule_id` 只说明文件角色，不改变文件的所有权和权威级别。
 - `<available_project_instructions>`：已发现但尚未读取正文的嵌套 `AGENTS.md` 索引。确定目标路径后，先按 `order` 从浅到深读取所有适用规则，再详细读取、修改文件或执行会影响该路径的命令。
 - `<user_preferred_language_changed>`：用户偏好语言发生变化时注入，包含新的语言值。
@@ -62,7 +63,8 @@ Sub-elements:
 - `<model_info>`: emitted only when runtime model configuration changes.
   - `<llm id="..." name="..."/>`: the LLM model that is actually in effect (may differ from initial config due to runtime model selection or compact mode).
   - `<image_model id="..."><size .../></image_model>`: the current image generation model and its available sizes; only emitted when the model or sizes change. Use these size values when calling image generation tools.
-- `<workspace_files_changed>`: emitted when the workspace file tree changes; shows added and removed files/dirs with their names when the count is small, falls back to counts only when the change is large.
+- `<workspace_files_changed>`: emitted when workspace file paths are added or removed; shows the added and removed files/dirs by name when the count is small, and falls back to counts only when the change is large. It is a change list, not the current state; use `list_dir` when you need the full picture.
+- `<workspace_files_refreshed>`: emitted when the change log had a gap and individual changes cannot be listed. It contains the current complete workspace file listing. Treat it as the workspace state as of now, not as a list of what just changed.
 - `<auto_read_file rule_id="..." path="..." scope="...">`: file content that is already available in this conversation. `rule_id` describes the file's role; it does not change ownership or authority.
 - `<available_project_instructions>`: an index of nested `AGENTS.md` files whose contents have not been read. After identifying a target path, read every applicable entry from shallowest to deepest by `order` before detailed reads, modifications, or commands that affect that path.
 - `<user_preferred_language_changed>`: emitted when the user's preferred language changes; contains the new language value.

@@ -19,6 +19,15 @@ interface TaskFileRepositoryInterface
     public function getById(int $id): ?TaskFileEntity;
 
     /**
+     * Load a MagicFS node with its effective file-tree context.
+     *
+     * Descendant rows may retain historical project/user fields after their
+     * directory is moved to another root.  The parent chain, not those
+     * denormalized fields, is the authoritative tree boundary.
+     */
+    public function getFileTreeFileById(int $id): ?TaskFileEntity;
+
+    /**
      * 根据项目ID获取项目目录。
      */
     public function getDirectoryByIdAndProject(int $parentId, int $projectId): ?TaskFileEntity;
@@ -94,7 +103,45 @@ interface TaskFileRepositoryInterface
      */
     public function getByProjectParentAndName(int $projectId, ?int $parentId, string $fileName, bool $withTrash = false): ?TaskFileEntity;
 
-    public function getBySpaceParentAndName(string $spaceType, int $projectId, ?int $parentId, string $fileName, string $userId, string $organizationCode, bool $withTrash = false): ?TaskFileEntity;
+    public function getBySpaceParentAndName(
+        string $spaceType,
+        int $projectId,
+        ?int $parentId,
+        string $fileName,
+        string $userId,
+        string $organizationCode,
+        bool $withTrash = false,
+        ?int $topicId = null
+    ): ?TaskFileEntity;
+
+    /**
+     * Find a direct child by parent/name for MagicFS.
+     *
+     * Parent identity is authoritative; descendants may retain historical
+     * project fields after a cross-root move.  The optional trash flag is used
+     * by checkpoint restore/reuse semantics.
+     */
+    public function getFileTreeChildByParentAndName(
+        int $parentId,
+        string $fileName,
+        bool $withTrash = false,
+        ?TaskFileEntity $parentContext = null
+    ): ?TaskFileEntity;
+
+    /**
+     * Find a direct child in a user-owned file tree.
+     *
+     * User-space identity is scoped by user, organization and space type;
+     * project_id=0 is only a storage value and must not be used as a lookup
+     * boundary on the large task-files table.
+     */
+    public function getUserFileTreeChildByParentAndName(
+        int $parentId,
+        string $fileName,
+        string $userId,
+        string $organizationCode,
+        bool $withTrash = false
+    ): ?TaskFileEntity;
 
     /**
      * 根据项目、父目录和文件名批量查询直接子节点。
@@ -175,7 +222,32 @@ interface TaskFileRepositoryInterface
         ?int $afterFileId,
         int $limit,
         array $fileTypes = [],
+        string $fileName = '',
+        ?string $spaceType = null,
+        ?int $topicId = null,
+        ?string $userId = null,
+        ?string $organizationCode = null,
         bool $excludeHidden = false
+    ): array;
+
+    /**
+     * Cursor pagination for a MagicFS directory.
+     *
+     * The authenticated parent is the tree boundary, so this query must use
+     * parent_id as its ownership predicate and must not filter descendants by
+     * their historical project_id after a cross-root move.
+     *
+     * @param string[] $fileTypes optional file_type filter for non-directory files
+     * @return array<int, array<string, mixed>> raw rows from PDO
+     */
+    public function getFileTreeChildrenByParentCursor(
+        int $parentId,
+        string $storageType,
+        ?int $afterSort,
+        ?int $afterFileId,
+        int $limit,
+        array $fileTypes = [],
+        string $fileName = ''
     ): array;
 
     /**
@@ -223,7 +295,37 @@ interface TaskFileRepositoryInterface
     /**
      * 更新文件.
      */
-    public function updateById(TaskFileEntity $entity): TaskFileEntity;
+    public function updateById(
+        TaskFileEntity $entity,
+        ?string $journalOperation = null,
+        bool $emitJournal = true
+    ): TaskFileEntity;
+
+    /**
+     * Initialize one durable change-feed head for every active file-tree root.
+     * The operation is bounded and idempotent so it can be safely resumed.
+     *
+     * @return array{discovered_file_trees:int, initialized_file_trees:int}
+     */
+    public function initializeFileTreeHeads(int $batchSize = 1000): array;
+
+    /**
+     * Backfill metadata_version in bounded transactions while publishing the
+     * same precise file-tree update events as an online mutation.
+     *
+     * This is intentionally a repository operation rather than a command
+     * writing the task-file table directly: the file row, root head and
+     * journal snapshot must commit together.
+     */
+    public function backfillMagicFSMetadataVersions(int $batchSize = 1000): int;
+
+    /**
+     * Apply heterogeneous maintenance updates to active task-file rows in one
+     * bounded transaction and append one precise event per changed row.
+     *
+     * @param array<int, array{file_id:int,file_key?:string,parent_id?:null|int,updated_at?:string}> $updates
+     */
+    public function applyMagicFSBackfillUpdates(array $updates): int;
 
     /**
      * Delete file by ID.
@@ -434,6 +536,69 @@ interface TaskFileRepositoryInterface
     public function countAttachmentsByProjectIdV2(int $projectId): int;
 
     /**
+     * Append one durable root-local change and return its monotonic cursor.
+     * The caller should invoke this in the same database transaction as the
+     * file mutation.
+     */
+    public function appendFileTreeChange(
+        TaskFileEntity $file,
+        string $operation,
+        ?int $oldParentId = null,
+        ?string $oldName = null,
+        ?int $rootFileId = null
+    ): int;
+
+    /**
+     * Publish a precise before/after mutation after any related version-chain
+     * updates have completed. This is used by atomic MagicFS operations that
+     * need their journal snapshot to contain the final metadata revision.
+     */
+    public function appendFileTreeMutation(
+        ?TaskFileEntity $before,
+        ?TaskFileEntity $after,
+        ?string $operation = null
+    ): void;
+
+    /**
+     * Read changes after a root_file_id-local cursor. A limit of zero is a cheap head
+     * query and returns no rows.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getFileTreeChanges(TaskFileEntity $rootFile, int $sinceRevision, int $limit): array;
+
+    /** Return the current durable revision for a file tree. */
+    public function getFileTreeRevision(TaskFileEntity $rootFile): int;
+
+    /**
+     * Read a bounded root feed together with cursor state. Revisions are
+     * allocated independently for each root_file_id; callers must never
+     * compare cursors from different roots.
+     *
+     * @return array{
+     *     rows: array<int, array<string, mixed>>,
+     *     head: int,
+     *     oldest: int,
+     *     cursor_expired: bool
+     * }
+     */
+    public function getFileTreeChangeFeed(TaskFileEntity $rootFile, int $sinceRevision, int $limit): array;
+
+    /**
+     * Retain only the newest N revisions per root_file_id and advance
+     * oldest_revision atomically. Clients whose cursor falls before that
+     * boundary receive cursor_expired and re-list visited directories on
+     * demand; no complete-tree rebuild is allowed as a recovery path.
+     *
+     * @return array{file_trees:int, deleted_rows:int, expired_file_trees:int}
+     */
+    public function compactFileTreeChangeJournal(
+        int $keepRevisions = 100000,
+        int $batchSize = 1000,
+        bool $dryRun = false
+    ): array;
+
+    /**
      * Batch count files by project IDs.
      *
      * @param array $projectIds Project ID array
@@ -516,7 +681,7 @@ interface TaskFileRepositoryInterface
      *
      * @param int $fileId 文件ID
      */
-    public function restoreFile(int $fileId): void;
+    public function restoreFile(int $fileId, bool $emitJournal = true): void;
 
     /**
      * 递归获取文件及其所有父级文件.
@@ -553,21 +718,18 @@ interface TaskFileRepositoryInterface
     public function getVersionsByIds(array $fileIds): array;
 
     /**
-     * 递增指定文件的元数据版本号（原子操作）.
-     * 用于 MagicFS，在文件重命名、移动、权限修改等元数据操作时调用.
+     * Advance the metadata version of the given nodes.
      *
-     * @param int $fileId 文件ID
-     * @return int 更新后的元数据版本号
-     */
-    public function incrementMetadataVersionById(int $fileId): int;
-
-    /**
-     * 批量递增多个文件的元数据版本号（原子操作）.
-     * 用于优化版本链更新性能，一次 SQL 操作更新多个文件.
+     * Cache invalidation only: a version is a cache key, and moving it is not a
+     * change event. Journal rows are appended by the mutation that changed the
+     * node (insert / update / delete / move / restore), never by a bump, so a
+     * reader's window stays one row per changed node instead of one row per
+     * ancestor per change. See the implementation for the full rationale.
      *
-     * @param array $fileIds 文件ID数组
+     * @param array<null|int|string> $fileIds
+     * @return int rows whose version actually advanced
      */
-    public function incrementMetadataVersionByIds(array $fileIds): void;
+    public function bumpMetadataVersions(array $fileIds): int;
 
     /**
      * 批量获取文件元数据版本号.
@@ -665,7 +827,7 @@ interface TaskFileRepositoryInterface
      * @param bool $isHidden New hidden status
      * @return int Number of affected rows
      */
-    public function batchUpdateIsHidden(array $fileIds, bool $isHidden): int;
+    public function batchUpdateIsHidden(array $fileIds, bool $isHidden, ?string $updatedAt = null): int;
 
     /**
      * Get existing file names under a parent directory, filtered by provided names.

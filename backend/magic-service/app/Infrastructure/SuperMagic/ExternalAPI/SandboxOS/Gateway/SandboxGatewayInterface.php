@@ -10,6 +10,7 @@ namespace App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 
 /**
@@ -58,6 +59,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxSt
  *   - deleteSandbox            — k8s delete pod
  *   - getSandboxStatus         — k8s pod status
  *   - getBatchSandboxStatus    — k8s batch status
+ *   - listSandboxes            — k8s pod list (运维脚本查“正在运行”的沙箱)
  *   - getLatestAgentImage      — global image version
  *   - getLatestAgfsImage       — global image version
  *   - getLatestImages          — global image version (combined)
@@ -102,6 +104,16 @@ interface SandboxGatewayInterface
      * 纯 gateway 控制面调用（k8s 批量状态），无需 user 身份。
      */
     public function getBatchSandboxStatus(array $sandboxIds): BatchStatusResult;
+
+    /**
+     * List sandbox pods in the gateway namespace, optionally filtered by status.
+     *
+     * 纯 gateway 控制面调用（k8s pod 列表），无需 user 身份。运维脚本据此拿到
+     * “当前真正在运行”的沙箱集合，避免从业务表反推、把已退出的沙箱重新拉起。
+     *
+     * @param string[] $statuses 只返回这些状态（如 ['Running']）；空数组表示不过滤
+     */
+    public function listSandboxes(array $statuses = []): SandboxListResult;
 
     /**
      * Proxy request to sandbox.

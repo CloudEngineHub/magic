@@ -27,6 +27,18 @@ class TaskFileModel extends AbstractModel
     protected string $primaryKey = 'file_id';
 
     /**
+     * file_id 由调用方按雪花 ID 显式赋值，不依赖数据库自增，必须保持 false。
+     *
+     * Eloquent 默认按自增模型插入：插入成功后会把 PDO::lastInsertId() 写回主键属性
+     * （Hyperf\Database\Model\Model::insertAndSetId）。而本表的 INSERT 一定显式带 file_id，
+     * MySQL 不会为该语句生成自增值，lastInsertId() 返回的是这条连接上「最近一次自增插入」
+     * 的残留值（可能来自其它任何表）。一旦回写，内存里的 file_id 就与真正入库的值不一致，
+     * MagicFS 创建接口会把该残留值当 file.id 返回给挂载端，之后按 file_id 的查询一律查不到
+     * （51300 文件不存在），挂载端改这个新节点就失败。
+     */
+    public bool $incrementing = false;
+
+    /**
      * 可填充字段列表.
      */
     protected array $fillable = [

@@ -46,6 +46,22 @@
     </testsuite>
     <testsuite name="超级麦吉文件测试">
       <directory suffix="Test.php">test/Cases/Domain/SuperMagic</directory>
+      <directory suffix="Test.php">test/Cases/Interfaces/SuperMagic/File</directory>
+      <!--
+        test/Cases/Application/SuperMagic 不在任何 testsuite 里（历史遗留：该目录下
+        既有的 MagicFSFileAppServicePublishedAccessTest 同样从未被执行过）。把整个目录
+        收进这个 suite 会顺带改变一批与本改动无关的测试的执行状态，那是另一个决定；
+        所以这里按文件精确登记新增的变更投递单测，让它们真的跑起来，同时把结构性缺口
+        留在明面上。
+      -->
+      <file>test/Cases/Application/SuperMagic/File/Service/MagicFSChangePublisherTest.php</file>
+      <file>test/Cases/Application/SuperMagic/File/Service/MagicFSFileAppServiceChangeFeedBatchTest.php</file>
+      <!--
+        Magic Claw 沙箱重启命令与网关清单解析：同样按文件精确登记（原因见上）。
+      -->
+      <file>test/Cases/Application/SuperMagic/Agent/Command/RestartAllMagicClawSandboxCommandTest.php</file>
+      <file>test/Cases/Infrastructure/SuperMagic/ExternalAPI/SandboxOS/SandboxListGatewayTest.php</file>
+      <file>test/Cases/Infrastructure/SuperMagic/ExternalAPI/SandboxOS/Gateway/Result/SandboxListResultTest.php</file>
     </testsuite>
   </testsuites>
 

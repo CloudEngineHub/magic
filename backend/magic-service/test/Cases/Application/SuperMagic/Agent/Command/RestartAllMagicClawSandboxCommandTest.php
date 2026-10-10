@@ -1,0 +1,639 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace HyperfTest\Cases\Application\SuperMagic\Agent\Command;
+
+use App\Application\SuperMagic\Agent\Command\RestartAllMagicClawSandboxCommand;
+use App\Application\SuperMagic\Task\Service\AgentAppService;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
+use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
+use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
+use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
+use Hyperf\Command\Command as HyperfCommand;
+use Hyperf\Logger\LoggerFactory;
+use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
+use ReflectionProperty;
+use RuntimeException;
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Tester\CommandTester;
+
+/**
+ * 重启目标来自沙箱网关的 pod 清单，而不是 magic_super_magic_claw 表。
+ *
+ * 这里用假的网关清单把边界钉住：非龙虾项目的沙箱、对不上话题的沙箱都不允许重启。
+ *
+ * @internal
+ */
+class RestartAllMagicClawSandboxCommandTest extends TestCase
+{
+    private RestartCommandSpy $spy;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->spy = new RestartCommandSpy();
+    }
+
+    public function testOldestSandboxIsRestartedFirst(): void
+    {
+        // 网关按 sandbox_id 返回（warm-101 在前），但跑得最久的是 warm-102，必须先重启它。
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101, createdAt: '2026-10-10T12:00:00Z'),
+                $this->sandbox('warm-102', 'Running', topicId: 102, createdAt: '2026-09-01T08:30:00Z'),
+                $this->sandbox('warm-103', 'Running', topicId: 103, createdAt: '2026-10-01T08:30:00Z'),
+            ],
+            topics: [
+                101 => $this->topic(101, 11, 'warm-101'),
+                102 => $this->topic(102, 12, 'warm-102'),
+                103 => $this->topic(103, 13, 'warm-103'),
+            ],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12), 13 => $this->claw('claw-3', 13)],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        self::assertSame([102, 103, 101], $this->spy->restartTopicIds, '跑得最久的沙箱必须先重启');
+        self::assertStringContainsString('warm-102@2026-09-01T08:30:00Z', $tester->getDisplay());
+    }
+
+    public function testLimitTakesTheOldestSandboxesFirst(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101, createdAt: '2026-10-10T12:00:00Z'),
+                $this->sandbox('warm-102', 'Running', topicId: 102, createdAt: '2026-09-01T08:30:00Z'),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 102 => $this->topic(102, 12, 'warm-102')],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12)],
+        );
+
+        self::assertSame(0, $tester->execute(['--limit' => 1]));
+
+        self::assertSame([102], $this->spy->restartTopicIds);
+        self::assertStringContainsString('Targets: 1 of 2 eligible Magic Claw sandbox(es) to restart, oldest first (limited)', $tester->getDisplay());
+    }
+
+    public function testSkipDetailsArePrintedOnlyInVerboseMode(): void
+    {
+        $sandboxes = [
+            $this->sandbox('warm-101', 'Running', topicId: 101),
+            $this->sandbox('warm-900', 'Running', topicId: ''),
+        ];
+        $topics = [101 => $this->topic(101, 11, 'warm-101')];
+        $claws = [11 => $this->claw('claw-1', 11)];
+
+        $quiet = $this->tester(sandboxes: $sandboxes, topics: $topics, claws: $claws);
+        self::assertSame(0, $quiet->execute([]));
+        self::assertStringContainsString('Skipped: no topic matches this sandbox=1', $quiet->getDisplay());
+        self::assertStringNotContainsString('[SKIP]', $quiet->getDisplay(), '默认不逐条打印 SKIP，避免淹没进度');
+
+        $verbose = $this->tester(sandboxes: $sandboxes, topics: $topics, claws: $claws);
+        self::assertSame(0, $verbose->execute([], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE]));
+        self::assertStringContainsString('[SKIP] sandbox_id=warm-900, status=Running, reason=no topic matches this sandbox', $verbose->getDisplay());
+    }
+
+    public function testSandboxesWithoutCreatedAtKeepGatewayOrder(): void
+    {
+        // 老网关不返回 created_at：退化为网关顺序（sandbox_id 升序），不能当成 1970 抢跑。
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101),
+                $this->sandbox('warm-102', 'Running', topicId: 102),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 102 => $this->topic(102, 12, 'warm-102')],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12)],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        self::assertSame([101, 102], $this->spy->restartTopicIds);
+        self::assertStringContainsString('warm-101@unknown', $tester->getDisplay());
+    }
+
+    public function testDuplicateSandboxesOfOneTopicAreAllDeleted(): void
+    {
+        // 现网症状：话题表里的 sandbox_id 与实际 pod 漂移，同一话题下并存 72 天的老 pod 和刚建的新 pod。
+        // 重启必须把清单里看到的两个都删掉，只留最后重建的那一个。
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('941300468243693569', 'Running', topicId: 101, createdAt: '2026-07-30T03:52:00Z'),
+                $this->sandbox('9675582091886593', 'Running', topicId: 101, createdAt: '2026-10-10T14:30:00Z'),
+            ],
+            topics: [101 => $this->topic(101, 11, '9675582091886593')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('[DUPLICATE] code=claw-1, topic_id=101 有 2 个在跑的沙箱', $display);
+        self::assertStringContainsString('941300468243693569@2026-07-30T03:52:00Z', $display);
+        self::assertSame(['941300468243693569', '9675582091886593'], $this->spy->deletedSandboxIds, '老 pod 和新 pod 都要删掉');
+        self::assertSame([101], $this->spy->restartTopicIds, '同一个话题只重建一次');
+        self::assertStringContainsString('duplicates: 1', $display);
+        self::assertStringContainsString('deleted: 2', $display);
+    }
+
+    public function testDeleteFailureIsReportedButRestartStillProceeds(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'Running', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+            deleteFails: true,
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('[DELETE_FAIL] code=claw-1, sandbox_id=warm-101', $display);
+        self::assertStringContainsString('[1/1] [OK] code=claw-1', $display, '删不掉也要继续重建，但必须显式报出来');
+        self::assertSame([], $this->spy->deletedSandboxIds);
+        self::assertSame([101], $this->spy->restartTopicIds);
+    }
+
+    public function testConcurrencyRestartsTargetsInParallel(): void
+    {
+        $sandboxes = [];
+        $topics = [];
+        $claws = [];
+        for ($i = 1; $i <= 3; ++$i) {
+            $topicId = 100 + $i;
+            $projectId = 10 + $i;
+            $sandboxes[] = $this->sandbox('warm-' . $topicId, 'Running', topicId: $topicId, createdAt: sprintf('2026-09-0%dT00:00:00Z', $i));
+            $topics[$topicId] = $this->topic($topicId, $projectId, 'warm-' . $topicId);
+            $claws[$projectId] = $this->claw('claw-' . $i, $projectId);
+        }
+
+        $tester = $this->tester(sandboxes: $sandboxes, topics: $topics, claws: $claws);
+        self::assertSame(0, $tester->execute(['--concurrency' => '4']));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('concurrency=3', $display, '并发度收敛到目标数');
+        self::assertStringNotContainsString('running sequentially', $display);
+        $restarted = $this->spy->restartTopicIds;
+        sort($restarted);
+        self::assertSame([101, 102, 103], $restarted, '每个目标都要被处理');
+        self::assertGreaterThanOrEqual(2, $this->spy->maxInFlight, '并发模式下应当有多个目标同时在重启');
+        self::assertStringContainsString('restarted: 3', $display);
+    }
+
+    public function testConcurrencyFallsBackToSequentialWithoutCoroutineRuntime(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101, createdAt: '2026-09-01T00:00:00Z'),
+                $this->sandbox('warm-102', 'Running', topicId: 102, createdAt: '2026-09-02T00:00:00Z'),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 102 => $this->topic(102, 12, 'warm-102')],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12)],
+            coroutineRuntimeAvailable: false,
+        );
+
+        self::assertSame(0, $tester->execute(['--concurrency' => '8']));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('coroutine runtime unavailable, running sequentially', $display);
+        self::assertSame([101, 102], $this->spy->restartTopicIds, '没有协程时必须老实串行，顺序仍是最老的先');
+        self::assertSame(1, $this->spy->maxInFlight, '串行模式下不应出现重叠');
+    }
+
+    public function testConcurrencyIsClampedToAtLeastOne(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'Running', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute(['--concurrency' => '0']));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('concurrency=1', $display);
+        self::assertStringNotContainsString('running sequentially', $display);
+        self::assertSame([101], $this->spy->restartTopicIds);
+    }
+
+    public function testCommandKeepsItsRegisteredName(): void
+    {
+        $command = $this->command(sandboxes: [], topics: [], claws: []);
+
+        self::assertSame('magic-claw:restart-sandbox-all', $command->getName());
+
+        // bin/hyperf.php 启动时会把命令 add() 进 Symfony Application，名字为空会直接 fatal。
+        $application = new Application();
+        $application->add($command);
+        self::assertTrue($application->has('magic-claw:restart-sandbox-all'));
+    }
+
+    public function testRestartsRunningSandboxOfMagicClawOnly(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101),
+                $this->sandbox('warm-201', 'Running', topicId: 201),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 201 => $this->topic(201, 21, 'warm-201')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('[1/1] restarting code=claw-1, topic_id=101, running_sandbox(es)=1 (warm-101@unknown)', $display);
+        self::assertStringContainsString('  [DELETE] code=claw-1, sandbox_id=warm-101', $display);
+        self::assertStringContainsString('[1/1] [OK] code=claw-1, new_sandbox_id=sandbox-new', $display);
+        self::assertStringContainsString('Targets: 1 Magic Claw sandbox(es) to restart, oldest first', $display);
+        self::assertStringContainsString('project is not a Magic Claw', $display);
+        self::assertSame([101], $this->spy->restartTopicIds, '只允许重启属于 Magic Claw 的沙箱');
+        self::assertSame(['warm-101'], $this->spy->deletedSandboxIds, '删除的是清单里看到的 pod，而不是话题表里的 id');
+        self::assertStringContainsString('deleted: 1', $display);
+        self::assertStringContainsString('listed: 2', $display);
+        self::assertStringContainsString('restarted: 1', $display);
+        self::assertStringContainsString('skipped: 1', $display);
+    }
+
+    public function testStatusFilterIsForwardedToTheGateway(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'NotReady', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute(['--status' => 'running,notready']));
+
+        self::assertSame(['Running', 'NotReady'], $this->spy->listedStatuses);
+        self::assertSame([101], $this->spy->restartTopicIds);
+    }
+
+    public function testAnyStatusAsksTheGatewayWithoutFilter(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('101', 'NotFound', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, '101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute(['--status' => 'any']));
+
+        self::assertSame([], $this->spy->listedStatuses);
+        self::assertSame([101], $this->spy->restartTopicIds);
+        self::assertStringContainsString('status_filter: any (disabled)', $tester->getDisplay());
+    }
+
+    public function testSandboxWithoutMatchingTopicIsSkipped(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-999', 'Running', topicId: 999)],
+            topics: [],
+            claws: [],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        self::assertSame([], $this->spy->restartTopicIds);
+        self::assertStringContainsString('no topic matches this sandbox', $tester->getDisplay());
+    }
+
+    public function testLegacySandboxIdFallbackRequiresTopicSandboxIdToMatch(): void
+    {
+        // 没有 topic-id 标签时用数字沙箱 ID 兜底；话题记录的 sandbox_id 不吻合就必须跳过，
+        // 否则温池雪花 ID 可能撞上真实话题 ID。
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('102', 'Running', topicId: ''),
+                $this->sandbox('103', 'Running', topicId: ''),
+            ],
+            topics: [
+                102 => $this->topic(102, 12, '102'),
+                103 => $this->topic(103, 13, 'warm-303'),
+            ],
+            claws: [12 => $this->claw('claw-legacy', 12), 13 => $this->claw('claw-mismatch', 13)],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        self::assertSame([102], $this->spy->restartTopicIds);
+        self::assertStringContainsString('no topic matches this sandbox', $tester->getDisplay());
+    }
+
+    public function testCodeOptionTargetsSingleClaw(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101),
+                $this->sandbox('warm-102', 'Running', topicId: 102),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 102 => $this->topic(102, 12, 'warm-102')],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12)],
+        );
+
+        self::assertSame(0, $tester->execute(['--code' => 'claw-2']));
+
+        self::assertSame([102], $this->spy->restartTopicIds);
+        self::assertStringContainsString('[1/1] restarting code=claw-2', $tester->getDisplay());
+    }
+
+    public function testProgressLineIsPrintedForLongRuns(): void
+    {
+        $sandboxes = [];
+        $topics = [];
+        $claws = [];
+        for ($i = 1; $i <= 12; ++$i) {
+            $topicId = 100 + $i;
+            $projectId = 10 + $i;
+            $sandboxes[] = $this->sandbox('warm-' . $topicId, 'Running', topicId: $topicId, createdAt: sprintf('2026-09-%02dT00:00:00Z', $i));
+            $topics[$topicId] = $this->topic($topicId, $projectId, 'warm-' . $topicId);
+            $claws[$projectId] = $this->claw('claw-' . $i, $projectId);
+        }
+
+        $tester = $this->tester(sandboxes: $sandboxes, topics: $topics, claws: $claws);
+
+        self::assertSame(0, $tester->execute([]));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('Targets: 12 Magic Claw sandbox(es) to restart, oldest first', $display);
+        self::assertStringContainsString('[12/12] [OK] code=claw-12', $display);
+        // 每 PROGRESS_EVERY(10) 个目标至少一行进度，带已完成数和 ETA。
+        self::assertMatchesRegularExpression('/progress: 10\/12 done \(restarted=10, failed=0\), elapsed .+, eta ~.+/', $display);
+        self::assertSame(range(101, 112), $this->spy->restartTopicIds, '按沙箱运行时长升序执行');
+    }
+
+    public function testCodeOptionReportsWhenNoRunningSandboxMatches(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'Running', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute(['--code' => 'claw-other']));
+
+        self::assertSame([], $this->spy->restartTopicIds);
+        self::assertStringContainsString('[NOT_FOUND] No running Magic Claw sandbox for code: claw-other', $tester->getDisplay());
+    }
+
+    public function testDryRunListsTargetsWithoutRestarting(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'Running', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute(['--dry-run' => true]));
+
+        self::assertSame([], $this->spy->restartTopicIds);
+        self::assertStringContainsString('matched: 1', $tester->getDisplay());
+    }
+
+    public function testLimitCapsRestarts(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('warm-101', 'Running', topicId: 101),
+                $this->sandbox('warm-102', 'Running', topicId: 102),
+            ],
+            topics: [101 => $this->topic(101, 11, 'warm-101'), 102 => $this->topic(102, 12, 'warm-102')],
+            claws: [11 => $this->claw('claw-1', 11), 12 => $this->claw('claw-2', 12)],
+        );
+
+        self::assertSame(0, $tester->execute(['--limit' => 1]));
+
+        self::assertSame([101], $this->spy->restartTopicIds);
+    }
+
+    public function testRestartFailureIsCounted(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'Running', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+            restartFails: true,
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('[FAIL]', $display);
+        self::assertStringContainsString('failed: 1', $display);
+    }
+
+    public function testInvalidStatusOptionFailsBeforeListing(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'Running', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(1, $tester->execute(['--status' => 'Bogus']));
+
+        self::assertStringContainsString('Invalid --status value "Bogus"', $tester->getDisplay());
+        self::assertSame(null, $this->spy->listedStatuses, '参数非法时不应该请求网关');
+    }
+
+    private function claw(string $code, int $projectId): MagicClawEntity
+    {
+        $claw = new MagicClawEntity();
+        $claw->setCode($code);
+        $claw->setOrganizationCode('org-1');
+        $claw->setUserId('user-1');
+        $claw->setProjectId($projectId);
+        return $claw;
+    }
+
+    private function topic(int $topicId, int $projectId, string $sandboxId): TopicEntity
+    {
+        return (new TopicEntity())
+            ->setId($topicId)
+            ->setProjectId($projectId)
+            ->setSandboxId($sandboxId)
+            ->setUserId('user-1')
+            ->setUserOrganizationCode('org-1');
+    }
+
+    /**
+     * @return array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}
+     */
+    private function sandbox(string $sandboxId, string $status, int|string $topicId, string $createdAt = ''): array
+    {
+        return [
+            'sandbox_id' => $sandboxId,
+            'status' => $status,
+            'project_id' => '',
+            'topic_id' => (string) $topicId,
+            'warm_pool' => false,
+            'bound' => true,
+            'created_at' => $createdAt,
+        ];
+    }
+
+    /**
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
+     * @param array<int, TopicEntity> $topics
+     * @param array<int, MagicClawEntity> $claws
+     */
+    private function tester(
+        array $sandboxes,
+        array $topics,
+        array $claws,
+        bool $restartFails = false,
+        bool $deleteFails = false,
+        bool $coroutineRuntimeAvailable = true,
+    ): CommandTester {
+        return new CommandTester($this->command($sandboxes, $topics, $claws, $restartFails, $deleteFails, $coroutineRuntimeAvailable));
+    }
+
+    /**
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
+     * @param array<int, TopicEntity> $topics
+     * @param array<int, MagicClawEntity> $claws
+     */
+    private function command(
+        array $sandboxes,
+        array $topics,
+        array $claws,
+        bool $restartFails = false,
+        bool $deleteFails = false,
+        bool $coroutineRuntimeAvailable = true,
+    ): TestableRestartAllMagicClawSandboxCommand {
+        $topicDomainService = $this->createMock(TopicDomainService::class);
+        $topicDomainService->method('getTopicsByIds')->willReturn(array_values($topics));
+
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->method('get')->willReturn($this->createMock(LoggerInterface::class));
+
+        $command = new TestableRestartAllMagicClawSandboxCommand(
+            new RestartCommandClawDomainService($claws),
+            $topicDomainService,
+            new RestartCommandAgentAppService($this->spy, $sandboxes, $deleteFails),
+            $loggerFactory,
+            $this->spy,
+            $restartFails,
+            $coroutineRuntimeAvailable,
+        );
+        // 测试进程没有 Swoole，命令默认会切到协程里执行；这里关掉协程，只验证命令逻辑。
+        (new ReflectionProperty(HyperfCommand::class, 'coroutine'))->setValue($command, false);
+
+        return $command;
+    }
+}
+
+final class RestartCommandSpy
+{
+    /** @var null|string[] 传给网关的状态过滤，null 表示没有请求网关 */
+    public ?array $listedStatuses = null;
+
+    /** @var int[] 被真正重启的 topic ID */
+    public array $restartTopicIds = [];
+
+    /** @var string[] 重启前被删掉的 sandbox ID */
+    public array $deletedSandboxIds = [];
+
+    /** 同时处于"重启中"的最大目标数，用来证明并发真的生效 */
+    public int $inFlight = 0;
+
+    public int $maxInFlight = 0;
+}
+
+/**
+ * 命令内的 DataIsolation::create() 依赖 DI 容器，这里替换掉重启这一步，保证单测不依赖容器。
+ */
+class TestableRestartAllMagicClawSandboxCommand extends RestartAllMagicClawSandboxCommand
+{
+    public function __construct(
+        MagicClawDomainService $magicClawDomainService,
+        TopicDomainService $topicDomainService,
+        AgentAppService $agentAppService,
+        LoggerFactory $loggerFactory,
+        private readonly RestartCommandSpy $spy,
+        private readonly bool $restartFails = false,
+        private readonly bool $coroutineRuntimeAvailable = true,
+    ) {
+        parent::__construct($magicClawDomainService, $topicDomainService, $agentAppService, $loggerFactory);
+    }
+
+    protected function canRunInParallel(): bool
+    {
+        return $this->coroutineRuntimeAvailable;
+    }
+
+    protected function restartSandbox(TopicEntity $topic): string
+    {
+        $this->spy->restartTopicIds[] = $topic->getId();
+        ++$this->spy->inFlight;
+        $this->spy->maxInFlight = max($this->spy->maxInFlight, $this->spy->inFlight);
+        // 模拟真实耗时：串行时并发度只能是 1，并发时应当重叠。
+        usleep(50000);
+        --$this->spy->inFlight;
+
+        if ($this->restartFails) {
+            throw new RuntimeException('sandbox gateway exploded');
+        }
+
+        return 'sandbox-new';
+    }
+}
+
+readonly class RestartCommandClawDomainService extends MagicClawDomainService
+{
+    /**
+     * @param array<int, MagicClawEntity> $clawsByProjectId
+     */
+    public function __construct(private array $clawsByProjectId)
+    {
+    }
+
+    public function getByProjectIds(array $projectIds): array
+    {
+        return array_intersect_key($this->clawsByProjectId, array_flip($projectIds));
+    }
+}
+
+readonly class RestartCommandAgentAppService extends AgentAppService
+{
+    /**
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
+     */
+    public function __construct(
+        private RestartCommandSpy $spy,
+        private array $sandboxes,
+        private bool $deleteFails = false,
+    ) {
+    }
+
+    public function stopSandbox(string $sandboxId): GatewayResult
+    {
+        if ($this->deleteFails) {
+            throw new RuntimeException('gateway refused to delete ' . $sandboxId);
+        }
+
+        $this->spy->deletedSandboxIds[] = $sandboxId;
+
+        return GatewayResult::success();
+    }
+
+    public function listSandboxes(array $statuses = []): SandboxListResult
+    {
+        $this->spy->listedStatuses = $statuses;
+
+        return SandboxListResult::fromApiResponse([
+            'code' => ResponseCode::SUCCESS,
+            'message' => 'ok',
+            'data' => ['total' => count($this->sandboxes), 'sandboxes' => $this->sandboxes],
+        ]);
+    }
+}

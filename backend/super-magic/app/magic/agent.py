@@ -64,10 +64,9 @@ from app.core.agent_definition_normalizer import normalize_agent_definition
 from app.core.context.agent_context import AgentContext
 from app.core.horizon.memory_directory import scan_memory_directory
 from app.core.horizon.models import MemoryDirectorySnapshot
-from app.core.horizon.workspace_tree_display import (
-    WORKSPACE_FILES_DISPLAY_MAX_CHARS,
-    WORKSPACE_TREE_SCAN_DEPTH,
-    build_workspace_tree_display_text,
+from app.core.horizon.workspace_entry_index import (
+    BaselineMaintenance,
+    WorkspaceEntryIndex,
 )
 from app.magic.background_compact import (
     BackgroundCompactState,
@@ -100,14 +99,22 @@ from app.service.todo_service import TodoService
 from app.tools.core import AutoMount
 from app.tools.core.app_tool_validator import AppToolValidator
 from app.tools.core.tool_factory import tool_factory
-from app.tools.list_dir import ListDir
 from app.tools.subagent_session_manager import SubagentRunRef, subagent_session_manager
 from app.utils.file_utils import (
     WorkspaceSnapshot,
-    extract_workspace_entries,
     calculate_file_hash,
     get_fresh_file_stat,
 )
+from app.infrastructure.changefeed.change_ledger_client import (
+    ChangeLedgerClient,
+    ChangeLedgerUnavailable,
+    LedgerPage,
+)
+from app.infrastructure.changefeed.workspace_path_changes import (
+    WorkspaceChangeSet,
+    map_ledger_changes_to_workspace_paths,
+)
+from app.utils.agfs_mount_path import get_agfs_fuse_mount_root
 from agentlang.environment import Environment
 from app.core.skill_manager import generate_skills_prompt
 from app.core.skill_utils.prompt import PreloadedSkillFile
@@ -126,8 +133,129 @@ from app.service.native_visual_overflow_hint_builder import (
 logger = get_logger(__name__)
 
 
-# Agent Loop Context Objects for clean parameter passing and state management
-@dataclass
+class _WorkspaceChangeSkip(str, Enum):
+    """这一轮账本为什么没能提供变更清单。每一种处置不同，日志里必须分开。"""
+
+    PRIMING = "priming"          # 第一次读取：只对齐起点，历史不属于"刚发生的变化"
+    EXPIRED = "expired"          # 窗口挤掉了游标，这段时间的变更读不到了
+    REGRESSION = "regression"    # revision 回退：agfs 重启过或文件树被重置
+    UNRESOLVED = "unresolved"    # 有变更说不出是哪个路径，条目集合必然缺项
+    NO_FEED = "no_feed"          # 账本在，但这个挂载没在听（版本同步被关掉了）
+    UNAVAILABLE = "unavailable"  # 账本读不到：没配、没起来、或者令牌过期
+
+
+# 账本自报缺口的那几种跳过：变更清单已经不可信，模型的工作区认知要整份重新对齐。
+_WORKSPACE_GAP_SKIPS = frozenset(
+    {
+        _WorkspaceChangeSkip.EXPIRED,
+        _WorkspaceChangeSkip.REGRESSION,
+        _WorkspaceChangeSkip.UNRESOLVED,
+    }
+)
+
+
+@dataclass(frozen=True)
+class _WorkspaceChangeDelivery:
+    """一次账本读取的结论：游标推进到哪、报出哪些变化、条目集合靠什么维护。"""
+
+    cursor: int
+    changes: WorkspaceChangeSet
+    maintenance: BaselineMaintenance
+    skipped: Optional[_WorkspaceChangeSkip] = None
+
+    @property
+    def is_gap(self) -> bool:
+        """账本是否自报缺口。缺口意味着模型的工作区认知需要整份重新对齐。"""
+        return self.skipped in _WORKSPACE_GAP_SKIPS
+
+
+def _unmaintained_delivery(cursor: int, skip: _WorkspaceChangeSkip) -> _WorkspaceChangeDelivery:
+    """账本不参与时的投递计划。
+
+    游标原地不动是刻意的：账本恢复后要从同一个位置接着读，跳过一段就等于把那段时间
+    里的远端变更永久丢掉。集合改由重新观测保持新鲜——那是**目录索引**的新鲜度，不是
+    变更的兜底来源，两者对模型的含义完全不同。
+    """
+    return _WorkspaceChangeDelivery(
+        cursor=cursor,
+        changes=WorkspaceChangeSet(),
+        maintenance=BaselineMaintenance.OBSERVATION,
+        skipped=skip,
+    )
+
+
+def _plan_workspace_change_delivery(
+    page: LedgerPage,
+    cursor: int,
+    *,
+    primed: bool,
+) -> _WorkspaceChangeDelivery:
+    """决定一次账本读取该怎么处理：游标推进到哪、报什么、集合靠什么维护。
+
+    纯函数——取数和上报留给调用方——因为这里几个判断都不需要网络或运行时就能测，
+    而它们一旦错了，模型会拿到一个可以被证伪的工作区事实：
+
+    1. **首次读取只对齐起点。** 账本里可能存着这个沙箱更早的历史（会话恢复、Claw 长
+       生命周期、agent 进程重启）。把这些历史当成"刚发生的变化"报出去，模型会把一条
+       早已过期、文件甚至已被重建的 `delete` 读成"这个文件刚被删了"。起点之前的状态
+       由 `<workspace_files>` 全量注入负责，账本只负责之后发生的增量。
+    2. **没在听就不算数。** `feed_attached=false` 的挂载照样有账本、照样回 200、
+       revision 永远是 0，和"什么都没变"长得一模一样。这种部署下变更清单是空的，
+       但集合仍要有人维护，所以退回重新观测。
+    3. **连续性判断。** 窗口挤掉了游标、或者 revision 回退，都说明这段时间的变更读不到
+       了：此时既不能报变更，也不能相信现有的集合，只能重新观测一次。
+    4. **缺口判断。** 有变更解析不出路径时，条目集合必然缺项；已经解析出来的那部分
+       仍然是事实，照常上报，同时把集合标记为需要重新观测。
+    5. **路径换算。** 见 `map_ledger_changes_to_workspace_paths` 的规则表。
+
+    例：首次读取 revision=900 → 对齐到 900、不报、此后由事件负责；
+        cursor=900、page.revision=937 → 报出该页变化、游标推进到 937；
+        cursor=900、page.revision=40 → 回落到 40、改为重新观测。
+    """
+    if not primed:
+        return _WorkspaceChangeDelivery(
+            cursor=page.revision,
+            changes=WorkspaceChangeSet(),
+            maintenance=BaselineMaintenance.EVENTS,
+            skipped=_WorkspaceChangeSkip.PRIMING,
+        )
+    if page.cursor_expired:
+        return _WorkspaceChangeDelivery(
+            cursor=page.revision,
+            changes=WorkspaceChangeSet(),
+            maintenance=BaselineMaintenance.STALE,
+            skipped=_WorkspaceChangeSkip.EXPIRED,
+        )
+    if page.revision < cursor:
+        return _WorkspaceChangeDelivery(
+            cursor=page.revision,
+            changes=WorkspaceChangeSet(),
+            maintenance=BaselineMaintenance.STALE,
+            skipped=_WorkspaceChangeSkip.REGRESSION,
+        )
+    if not page.feed_attached:
+        return _WorkspaceChangeDelivery(
+            cursor=page.revision,
+            changes=WorkspaceChangeSet(),
+            maintenance=BaselineMaintenance.OBSERVATION,
+            skipped=_WorkspaceChangeSkip.NO_FEED,
+        )
+
+    changes = map_ledger_changes_to_workspace_paths(page.changes)
+    if changes.unresolved:
+        return _WorkspaceChangeDelivery(
+            cursor=page.revision,
+            changes=changes,
+            maintenance=BaselineMaintenance.STALE,
+            skipped=_WorkspaceChangeSkip.UNRESOLVED,
+        )
+    return _WorkspaceChangeDelivery(
+        cursor=page.revision,
+        changes=changes,
+        maintenance=BaselineMaintenance.EVENTS,
+    )
+
+
 class LLMRetryState:
     """LLM 两阶梯重试状态"""
     # 当前是否已降级到非流式模式（第一阶梯失败后置 True，后续调用不再尝试流式）
@@ -304,7 +432,19 @@ class Agent(BaseAgent):
         self._context_registered = False
         self._active_run_task: asyncio.Task[object] | None = None
         self._tool_preflight_failures: Dict[str, str] = {}
+        # 最近一次观测到的工作区快照。条目集合本身由索引持有（见 _workspace_entry_index），
+        # 这里保留一份是为了让同一轮里的其它使用方（如嵌套规则文件的发现）拿到同一份事实，
+        # 而不是各自再问一次。
         self._workspace_snapshot: WorkspaceSnapshot | None = None
+        self._workspace_entry_index_instance: WorkspaceEntryIndex | None = None
+
+        # 工作区变更账本：游标属于本进程（只有我们知道模型的视图从哪一刻开始），
+        # 客户端懒建，`_change_ledger_disabled` 表示这个部署根本没开这个能力。
+        self._change_ledger_client: ChangeLedgerClient | None = None
+        self._change_ledger_cursor: int = 0
+        self._change_ledger_disabled: bool = False
+        # 首次读取只对齐起点：账本里的历史不属于"刚发生的变化"，见投递计划的说明。
+        self._change_ledger_primed: bool = False
         # 当前最近一次真实 LLM 请求是否包含原生图片输入。
         self._last_llm_request_contains_native_images = False
         # 同一轮只注入一次相同的原生视觉 Horizon 状态，避免工具循环重复提示。
@@ -702,7 +842,7 @@ class Agent(BaseAgent):
             "workspace_skills_dir": str(get_workspace_skills_dir().relative_to(PathManager.get_workspace_dir())),
             "project_root": str(PathManager.get_project_root()),
             "memory_root": str(PathManager.get_memory_root_dir()),
-            "agfs_fuse_mount_path": str(PathManager.get_agfs_fuse_mount_path()),
+            "agfs_fuse_mount_path": str(get_agfs_fuse_mount_root()),
             "cwd": self.agent_context._workspace_dir,
             "python_version": sys.version,
             "nodejs_version": subprocess.check_output(["node", "--version"]).decode("utf-8").strip(),
@@ -722,24 +862,17 @@ class Agent(BaseAgent):
 
         return variables
 
-    async def _get_workspace_snapshot(self) -> WorkspaceSnapshot:
-        """扫描工作区文件树并生成快照。"""
-        logger.info("扫描工作区文件树")
-        list_dir_tool = ListDir()
-        content = await list_dir_tool.get_file_tree_async(
-            relative_workspace_path=".",
-            level=WORKSPACE_TREE_SCAN_DEPTH,
-            filter_binary=False,
-        )
-        entries = extract_workspace_entries(content.tree)
-        display = build_workspace_tree_display_text(
-            entries,
-            max_chars=WORKSPACE_FILES_DISPLAY_MAX_CHARS,
-            scan_depth=WORKSPACE_TREE_SCAN_DEPTH,
-        )
-        snapshot = WorkspaceSnapshot(display=display, entries=entries)
-        self._workspace_snapshot = snapshot
-        return snapshot
+    def _workspace_entry_index(self) -> WorkspaceEntryIndex:
+        """惰性创建条目集合。
+
+        工作区根在会话内固定，所以可以按 Agent 实例缓存；惰性创建是为了让不碰工作区的
+        路径（例如只跑一个纯文本任务）完全不付这份开销。
+        """
+        if self._workspace_entry_index_instance is None:
+            self._workspace_entry_index_instance = WorkspaceEntryIndex(
+                Path(self.agent_context._workspace_dir)
+            )
+        return self._workspace_entry_index_instance
 
     async def _get_memory_directory_snapshot(self) -> MemoryDirectorySnapshot | None:
         """
@@ -765,13 +898,104 @@ class Agent(BaseAgent):
         例：第一轮工具创建了文件，第二轮即使没有新用户消息，也应能看到它。
         Workspace 与项目记忆各自扫描，在同一个上下文准备时机交给 Horizon 比较变化。
         不把目录发现误作全文读取，模型仍按当前任务判断是否打开新笔记。
+
+        顺序是刻意的：**先问账本这一轮谁在维护条目集合，再按那个状态刷新**。反过来的话，
+        事件模式下会先付一次不必要的遍历。
         """
         horizon = self.agent_context.horizon
+
+        delivery = await self._poll_workspace_changes()
         try:
-            await horizon.set_workspace_snapshot(await self._get_workspace_snapshot())
+            snapshot = await self._workspace_entry_index().observe(
+                maintenance=delivery.maintenance, events=delivery.changes
+            )
+            await horizon.set_workspace_snapshot(snapshot)
+            self._workspace_snapshot = snapshot
         except Exception as error:
+            # 刷新失败不阻止另一目录更新，也不阻止已经拿到的事件交付：事件是已经发生
+            # 的事实，不该因为一次遍历失败而一起丢掉。
             logger.warning(f"刷新工作区文件树失败: {error}")
+        if not delivery.changes.empty:
+            horizon.add_workspace_changes(delivery.changes)
+        if delivery.is_gap:
+            # 账本自己说这段时间的变更读不到了：逐条列举无从谈起，只能把当前这份
+            # 观测整份交给模型。此时集合刚被重新观测过，所以列表是新的。
+            horizon.request_workspace_files_refresh()
+
         await horizon.set_memory_directory_snapshot(await self._get_memory_directory_snapshot())
+
+    async def _poll_workspace_changes(self) -> _WorkspaceChangeDelivery:
+        """读一次变更账本，得出游标推进到哪、报出哪些变化、条目集合靠什么维护。
+
+        这条链路存在的理由：目录遍历是有预算的，而"有预算的观测"证明不了删除——大
+        项目上它要么什么都不说，要么说错。账本里的变更不依赖观测完整性：一条
+        create/delete 本身就是结论，而且它覆盖不是本沙箱写的东西（浏览器上传、
+        别的会话改动）。
+
+        它**不产生 magic-service 请求**：账本的权威数据是 agfs-server 用一条进程级订阅
+        拉进沙箱的，这里只是把它读出来。
+
+        读不到时返回"集合改由重新观测维护"——它不会把"读不到"当成"没有变化"（那种
+        错误完全无声），也不会拿目录遍历当变更来源（那会给出一个可以被证伪的清单）。
+        """
+        if self._change_ledger_disabled:
+            return _unmaintained_delivery(
+                self._change_ledger_cursor, _WorkspaceChangeSkip.UNAVAILABLE
+            )
+        if self._change_ledger_client is None:
+            self._change_ledger_client = ChangeLedgerClient()
+
+        try:
+            page = await self._change_ledger_client.fetch(self._change_ledger_cursor)
+        except ChangeLedgerUnavailable as error:
+            if error.permanent and not self._change_ledger_disabled:
+                # 这个部署没给挂载配账本，重试一辈子也不会有结果；记一次就停。
+                logger.warning(
+                    f"工作区变更账本不可用，本会话不再尝试（变更通知将缺席）: {error}"
+                )
+                self._change_ledger_disabled = True
+            else:
+                logger.debug(f"读取工作区变更账本失败（下一轮重试）: {error}")
+            return _unmaintained_delivery(
+                self._change_ledger_cursor, _WorkspaceChangeSkip.UNAVAILABLE
+            )
+        except Exception as error:
+            logger.warning(f"读取工作区变更账本时发生未预期错误（下一轮重试）: {error}")
+            return _unmaintained_delivery(
+                self._change_ledger_cursor, _WorkspaceChangeSkip.UNAVAILABLE
+            )
+
+        plan = _plan_workspace_change_delivery(
+            page, self._change_ledger_cursor, primed=self._change_ledger_primed
+        )
+        self._change_ledger_cursor = plan.cursor
+        self._change_ledger_primed = True
+        self._log_workspace_change_delivery(plan)
+        return plan
+
+    @staticmethod
+    def _log_workspace_change_delivery(plan: _WorkspaceChangeDelivery) -> None:
+        """把投递结论写进日志。
+
+        `priming` 是正常冷启动，用 info；其余跳过都是"账本这一轮没给出清单"，用
+        warning——它们出现得频繁就说明变更链路在退化，而这个退化除了这里没有别的地方
+        会表现出来（模型那边只会安静地收不到通知）。
+        """
+        if plan.skipped is _WorkspaceChangeSkip.PRIMING:
+            logger.info(f"[ChangeLedger] 对齐工作区变更起点: revision={plan.cursor}")
+        elif plan.skipped is not None:
+            logger.warning(
+                f"[ChangeLedger] 账本本轮未提供变更清单（{plan.skipped.value}），"
+                f"条目集合改用重新观测维护: revision={plan.cursor}"
+            )
+
+        changes = plan.changes
+        if changes.empty and not changes.unresolved:
+            return
+        logger.info(
+            f"[ChangeLedger] 工作区变化: +{len(changes.added)} -{len(changes.removed)} "
+            f"unresolved={changes.unresolved} revision={plan.cursor}"
+        )
 
     async def async_complete_dynamic_init(self) -> None:
         """初始化用户语言与 Claw 读取状态，目录在每轮上下文准备时统一刷新。

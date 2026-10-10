@@ -76,8 +76,8 @@ class PathManager(BasePathManager):
 
     持久化边界：
     - `.chat_history/` 是运行期聊天历史持久状态；沙箱内它是指向 localfs
-      空间挂载的 symlink（/mnt/agfs/localfs/chat_history，gateway 在 bind
-      时创建），每次保存由 checkpoint hook 增量记账进 checkpoint；本地开
+      空间挂载的 symlink（<AGFS FUSE 挂载根>/localfs/chat_history，gateway
+      在 bind 时创建），每次保存由 checkpoint hook 增量记账进 checkpoint；本地开
       发环境（无 agfs 挂载）它是普通本地目录，只是没有帧记账。
     - `.topic/chat_history/` 是启动恢复源；恢复到配置的 `.chat_history/` 后再运行。
       活动会话不放在 `.topic/`，避免频繁读写话题网络卷；需要持久保留的内容

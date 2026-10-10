@@ -28,11 +28,11 @@ class CrossProjectMentionPathTranslatorTest extends TestCase
                 ],
             ],
             1001,
-            '/mnt/agfs/magicfs/referenced-projects',
+            '/mnt/agfs-vol/agfs/magicfs/referenced-projects',
         );
 
         self::assertSame(
-            '/mnt/agfs/magicfs/referenced-projects/4001',
+            '/mnt/agfs-vol/agfs/magicfs/referenced-projects/4001',
             $result[0]['project_path'],
         );
     }
@@ -42,7 +42,7 @@ class CrossProjectMentionPathTranslatorTest extends TestCase
         $translator = new CrossProjectMentionPathTranslator();
         $mention = ['type' => 'micro_app', 'app_id' => '3001'];
 
-        $result = $translator->translate([$mention], 1001, '/mnt/agfs/magicfs/referenced-projects');
+        $result = $translator->translate([$mention], 1001, '/mnt/agfs-vol/agfs/magicfs/referenced-projects');
 
         self::assertArrayNotHasKey('project_path', $result[0]);
     }
@@ -59,11 +59,11 @@ class CrossProjectMentionPathTranslatorTest extends TestCase
                 ],
             ],
             1001,
-            '/mnt/agfs/magicfs/referenced-projects',
+            '/mnt/agfs-vol/agfs/magicfs/referenced-projects',
         );
 
         self::assertSame(
-            '/mnt/agfs/magicfs/referenced-projects/4002',
+            '/mnt/agfs-vol/agfs/magicfs/referenced-projects/4002',
             $result[0]['project_path'],
         );
     }
@@ -81,7 +81,7 @@ class CrossProjectMentionPathTranslatorTest extends TestCase
                 ],
             ],
             1001,
-            '/mnt/agfs/magicfs/referenced-projects',
+            '/mnt/agfs-vol/agfs/magicfs/referenced-projects',
         );
 
         self::assertArrayNotHasKey('project_path', $result[0]);

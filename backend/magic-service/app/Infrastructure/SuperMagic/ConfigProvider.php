@@ -16,6 +16,7 @@ use App\Application\SuperMagic\Common\Share\Adapter\TopicShareableResource;
 use App\Application\SuperMagic\Common\Share\Factory\ShareableResourceFactory;
 use App\Application\SuperMagic\Common\Share\Service\ResourceShareAppService;
 use App\Application\SuperMagic\File\Service\FileProcessAppService;
+use App\Application\SuperMagic\File\Service\MagicFSChangePublisher;
 use App\Application\SuperMagic\Message\Service\HandleAgentMessageAppService;
 use App\Application\SuperMagic\Message\Service\MessageQueueAppService;
 use App\Application\SuperMagic\Message\Service\MessageScheduleAppService;
@@ -48,6 +49,7 @@ use App\Domain\SuperMagic\Common\Share\Repository\Persistence\ResourceShareCopyL
 use App\Domain\SuperMagic\Common\Share\Repository\Persistence\ResourceShareRepository;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareAccessLogDomainService;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareCopyLogDomainService;
+use App\Domain\SuperMagic\File\Contract\FileTreeChangePublisherInterface;
 use App\Domain\SuperMagic\File\Repository\Facade\AudioMarkerRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Facade\AudioProjectRepositoryInterface;
 use App\Domain\SuperMagic\File\Repository\Facade\BatchDownloadPackRepositoryInterface;
@@ -140,6 +142,8 @@ class ConfigProvider
                 UserAiWatermarkPolicyInterface::class => DefaultUserAiWatermarkPolicy::class,
                 // 添加接口到实现类的映射
                 TaskFileRepositoryInterface::class => TaskFileRepository::class,
+                // magicfs change feed：journal 追加点只依赖 domain 端口，推送实现放在 application 层
+                FileTreeChangePublisherInterface::class => MagicFSChangePublisher::class,
                 TaskFileCleanupRecordRepositoryInterface::class => TaskFileCleanupRecordRepository::class,
                 TaskFileVersionRepositoryInterface::class => TaskFileVersionRepository::class,
                 TopicRepositoryInterface::class => TopicRepository::class,

@@ -21,8 +21,8 @@ Python 写（创建时一次、之后只读），后者只由 agfs 侧 hook 写�
 - project / topic：magicfs 插件（元数据服务 + S3）。
 - chat_history：localfs 插件（agfs-server 容器本地盘，无元数据/S3）。
   运行期聊天历史 `.chat_history/` 即该空间的挂载（symlink 指向
-  /mnt/agfs/localfs/chat_history），每次保存由 hook 以 per-file 帧增量
-  记账，Python 不做整目录快照。
+  <AGFS FUSE 挂载根>/localfs/chat_history），每次保存由 hook 以 per-file
+  帧增量记账，Python 不做整目录快照。
 
 历史遗留：升级前旧 checkpoint 的远端归档中可能仍存在
 initial/latest_chat_history_snapshots 整目录快照目录；读侧已删除，

@@ -14,6 +14,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\Respons
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -460,6 +461,109 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
                 'error' => $e->getMessage(),
             ]);
             return BatchStatusResult::fromApiResponse([
+                'code' => 2000,
+                'message' => 'HTTP request failed after retries: ' . $e->getMessage(),
+                'data' => [],
+            ]);
+        }
+    }
+
+    /**
+     * 列出网关命名空间下的沙箱，可按状态过滤.
+     */
+    public function listSandboxes(array $statuses = []): SandboxListResult
+    {
+        $statuses = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $status): string => is_string($status) ? trim($status) : '', $statuses),
+            static fn (string $status): bool => $status !== ''
+        )));
+
+        // 本地调试模式没有真实网关，返回空清单，避免脚本在本地误判“有沙箱在跑”。
+        if (! $this->isEnabledSandbox()) {
+            $this->logger->info('[Sandbox][Gateway] Local debugging mode: returning empty sandbox list', [
+                'statuses' => $statuses,
+            ]);
+
+            return SandboxListResult::fromApiResponse([
+                'code' => ResponseCode::SUCCESS,
+                'message' => 'Success (local debugging mode)',
+                'data' => ['total' => 0, 'sandboxes' => []],
+            ]);
+        }
+
+        $this->logger->debug('[Sandbox][Gateway] Listing sandboxes', [
+            'statuses' => $statuses,
+            'max_retries' => 3,
+        ]);
+
+        try {
+            return retry(3, function () use ($statuses) {
+                try {
+                    $requestOptions = [
+                        'headers' => $this->getBaseHeaders(),
+                        'timeout' => 300,
+                    ];
+                    if ($statuses !== []) {
+                        $requestOptions['query'] = ['status' => implode(',', $statuses)];
+                    }
+
+                    $response = $this->getClient()->get($this->buildApiPath('api/v1/sandboxes'), $requestOptions);
+
+                    $body = $response->getBody()->getContents();
+                    $responseData = Json::decode($body);
+
+                    if (empty($responseData)) {
+                        throw new RuntimeException('Sandbox list response is empty');
+                    }
+
+                    $result = SandboxListResult::fromApiResponse($responseData);
+
+                    $this->logger->debug('[Sandbox][Gateway] Sandbox list retrieved', [
+                        'requested_statuses' => $statuses,
+                        'returned_count' => $result->getTotal(),
+                        'success' => $result->isSuccess(),
+                    ]);
+
+                    return $result;
+                } catch (GuzzleException $e) {
+                    $isRetryableError = $this->isRetryableError($e);
+
+                    $this->logger->error('[Sandbox][Gateway] HTTP error when listing sandboxes', [
+                        'statuses' => $statuses,
+                        'error' => $e->getMessage(),
+                        'code' => $e->getCode(),
+                        'is_retryable' => $isRetryableError,
+                    ]);
+
+                    // Only retry for retryable errors
+                    if (! $isRetryableError) {
+                        return SandboxListResult::fromApiResponse([
+                            'code' => 2000,
+                            'message' => 'HTTP request failed: ' . $e->getMessage(),
+                            'data' => [],
+                        ]);
+                    }
+
+                    // Re-throw for retry mechanism to handle
+                    throw $e;
+                } catch (Exception $e) {
+                    $this->logger->error('[Sandbox][Gateway] Unexpected error when listing sandboxes', [
+                        'statuses' => $statuses,
+                        'error' => $e->getMessage(),
+                    ]);
+                    return SandboxListResult::fromApiResponse([
+                        'code' => 2000,
+                        'message' => 'Unexpected error: ' . $e->getMessage(),
+                        'data' => [],
+                    ]);
+                }
+            }, 1000); // Start with 1-second delay
+        } catch (Throwable $e) {
+            $this->logger->error('[Sandbox][Gateway] All retry attempts failed for listing sandboxes', [
+                'statuses' => $statuses,
+                'error' => $e->getMessage(),
+            ]);
+            return SandboxListResult::fromApiResponse([
                 'code' => 2000,
                 'message' => 'HTTP request failed after retries: ' . $e->getMessage(),
                 'data' => [],

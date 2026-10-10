@@ -455,7 +455,7 @@ async def test_select_source_assets_fills_missing_reuse_filename(tmp_path):
 @pytest.mark.asyncio
 async def test_select_source_assets_remark_shows_template_name_not_path():
     select_tool = SelectSlideTemplateSourceAssets(base_dir="/tmp")
-    arguments = {"template_dir": "/mnt/agfs/magicfs/project/SLIDE-奥运体育赛事"}
+    arguments = {"template_dir": "/mnt/agfs-vol/agfs/magicfs/project/SLIDE-奥运体育赛事"}
     before = await select_tool.get_before_tool_call_friendly_action_and_remark(
         select_tool.name,
         ToolContext(tool_name=select_tool.name, arguments=arguments),
@@ -466,7 +466,7 @@ async def test_select_source_assets_remark_shows_template_name_not_path():
         ToolContext(tool_name=select_tool.name, arguments=arguments),
         ToolResult(
             content="ok",
-            data={"template_directory": "/mnt/agfs/magicfs/project/SLIDE-奥运体育赛事"},
+            data={"template_directory": "/mnt/agfs-vol/agfs/magicfs/project/SLIDE-奥运体育赛事"},
         ),
         0.1,
         arguments,
