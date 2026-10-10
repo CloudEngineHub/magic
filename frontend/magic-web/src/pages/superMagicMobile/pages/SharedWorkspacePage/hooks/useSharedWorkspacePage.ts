@@ -20,6 +20,7 @@ import type {
 	SharedWorkspaceTabState,
 } from "../types"
 import {
+	appendSharedWorkspacePage,
 	createInitialTabStateMap,
 	resolveSharedWorkspaceHasMore,
 } from "./shared-workspace-tab-state"
@@ -304,16 +305,13 @@ export function useSharedWorkspacePage(): UseSharedWorkspacePageReturn {
 
 			if (requestSeq !== requestSeqByTabRef.current[targetTab]) return
 
-			patchTabState(targetTab, (current) => ({
-				...current,
-				projects: [
-					...current.projects,
-					...(response.list as unknown as SharedWorkspaceProject[]),
-				],
-				total: response.total ?? current.total,
-				currentPage: nextPage,
-				isLoadingMore: false,
-			}))
+			patchTabState(targetTab, (current) =>
+				appendSharedWorkspacePage(
+					current,
+					response.list as unknown as SharedWorkspaceProject[],
+					response.total ?? current.total,
+				),
+			)
 		} catch (error) {
 			if (requestSeq !== requestSeqByTabRef.current[targetTab]) return
 
