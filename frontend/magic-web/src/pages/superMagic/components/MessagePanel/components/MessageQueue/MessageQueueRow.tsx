@@ -63,6 +63,9 @@ export default function MessageQueueRow({
 	// 保证 AI 选取元素、文件提及这些需要节点视图的内容不会退化成原始标记。
 	const previewText = useMemo(() => normalizeQueuePreviewText(message.content), [message.content])
 	const previewLabel = previewText || t("messageQueue.mobile.emptyContent")
+	// 消息列表更新时父组件会重新渲染；缓存裁剪后的对象，避免 RichText 因引用变化销毁并重建
+	// ProseMirror 视图，导致队列预览在无关消息更新期间短暂切换。
+	const trimmedContent = useMemo(() => trimQueueContent(message.content), [message.content])
 	const actions: QueueAction[] = [
 		{
 			label: t("messageQueue.edit"),
@@ -176,7 +179,7 @@ export default function MessageQueueRow({
 				{mobile && !previewText ? (
 					<p className="truncate">{previewLabel}</p>
 				) : (
-					<CollapsibleText content={trimQueueContent(message.content)} maxLines={1} />
+					<CollapsibleText content={trimmedContent} maxLines={1} />
 				)}
 			</div>
 			<div className="flex shrink-0 items-center gap-1">

@@ -11,6 +11,8 @@ import {
 } from "../../../../runtime/shared/path/canvasResourcePath"
 
 interface UseReferenceImagesStateOptions {
+	/** 只读查看已提交参数时，仅更新当前面板，不回写元素的参考图列表。 */
+	readOnlyPaths?: readonly string[]
 	/** Canvas 实例，用于请求 Resource */
 	canvas: Canvas | null
 	/** ImageElement ID，用于同步 Element 存储 */
@@ -76,7 +78,7 @@ function isSameReferenceInfos(
  * 4. → matchableItems (派生，供 TipTap 渲染)
  */
 export function useReferenceImagesState(options: UseReferenceImagesStateOptions) {
-	const { canvas, imageElementId, maxReferenceFiles } = options
+	const { canvas, imageElementId, maxReferenceFiles, readOnlyPaths } = options
 	const resolveResourceReference =
 		canvas?.magicConfigManager.config?.methods?.resolveResourceReference
 	const getResourceIdentity = useCallback(
@@ -155,16 +157,20 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 		if (!canvas) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElementId)
-		if (
-			!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)
-		) {
+		if (!(
+			elementInstance instanceof ImageElementClass ||
+			elementInstance instanceof VideoElementClass
+		)) {
 			return
 		}
 
-		const infos = elementInstance.getReferenceImageInfos() as ReferenceResourceFileInfo[]
+		const infos: ReferenceResourceFileInfo[] = readOnlyPaths
+			? readOnlyPaths.map((path) => ({
+					path,
+					src: path,
+					fileName: getCanvasResourceFileName(path) || path,
+				}))
+			: (elementInstance.getReferenceImageInfos() as ReferenceResourceFileInfo[])
 		const paths = infos.map((info) => info.path)
 
 		// 标记正在同步，避免触发 useEffect 回写到 Element
@@ -190,7 +196,7 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 				isSyncingFromElementRef.current = false
 			})
 		})
-	}, [canvas, getResourceIdentity, imageElementId, syncResourceInfos])
+	}, [canvas, getResourceIdentity, imageElementId, syncResourceInfos, readOnlyPaths])
 
 	// 初始化：从 Element 同步
 	useEffect(() => {
@@ -199,17 +205,16 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 
 	// 当 referenceFilePaths 变化时，同步到 Element 并更新 Resource 信息
 	useEffect(() => {
+		if (readOnlyPaths !== undefined) return
 		// 如果正在从 Element 同步，跳过（避免循环）
 		if (isSyncingFromElementRef.current) return
 		if (!canvas) return
 
 		const elementInstance = canvas.elementManager.getElementInstance(imageElementId)
-		if (
-			!(
-				elementInstance instanceof ImageElementClass ||
-				elementInstance instanceof VideoElementClass
-			)
-		) {
+		if (!(
+			elementInstance instanceof ImageElementClass ||
+			elementInstance instanceof VideoElementClass
+		)) {
 			return
 		}
 
@@ -265,7 +270,14 @@ export function useReferenceImagesState(options: UseReferenceImagesStateOptions)
 
 		// 4. 同步 Resource 信息
 		syncResourceInfos(reorderedInfos)
-	}, [canvas, getResourceIdentity, imageElementId, referenceFilePaths, syncResourceInfos])
+	}, [
+		canvas,
+		getResourceIdentity,
+		imageElementId,
+		referenceFilePaths,
+		syncResourceInfos,
+		readOnlyPaths,
+	])
 
 	// 添加参考文件
 	const addReferenceFile = useCallback(

@@ -224,10 +224,19 @@ class ReferencedProjectMountServiceTest extends TestCase
     public function testLockContentionBlocksPreparationWithoutReleasingAnotherOwnersLock(): void
     {
         $this->locker->expects(self::once())->method('mutexLock')->willReturn(false);
+        $this->locker->expects(self::once())->method('spinLock')
+            ->with('referenced-projects:sandbox-1', self::isType('string'), 3600, 1)->willReturn(false);
         $this->locker->expects(self::never())->method('release');
         $this->agent->expects(self::never())->method('getWorkspaceStatus');
-        $this->expectExceptionMessage('already in progress');
-        $this->runBlocked();
+        $this->gateway->expects(self::never())->method('listReferencedProjects');
+        $checks = 0;
+        $this->service->prepareAndSend(
+            $this->identity,
+            'sandbox-1',
+            [],
+            static function () use (&$checks): bool { return ++$checks >= 2; },
+            static function (): void { self::fail('Cancelled task cannot send'); }
+        );
     }
 
     public function testPublishedMentionUsesPublicationGuardAndKeepsLockUntilSendReturns(): void

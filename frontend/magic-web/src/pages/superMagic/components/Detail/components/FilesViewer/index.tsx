@@ -760,6 +760,10 @@ const FilesViewer = memo(
 									loading: isAwaitingProjectAttachments,
 									attachmentLoadState: props.attachmentLoadState,
 									onFileClick: openFileTab,
+									onPreviewFile: (file, activate) =>
+										openFileTab(file, false, activate),
+									onPreviewRemoved: (ids) =>
+										ids.forEach((id) => closeFileTab(`recycle-bin:${id}`)),
 								}}
 								key={tab.id}
 								tab={tab as any}

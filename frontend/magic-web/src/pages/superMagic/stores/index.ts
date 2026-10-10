@@ -1,3 +1,4 @@
+import { mergeDownloadProgress } from "./download-progress"
 import { makeAutoObservable, observable, runInAction, toJS } from "mobx"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { unionBy, get, set, merge, isEqual } from "lodash-es"
@@ -20,6 +21,8 @@ import {
 	getRawMessageNode,
 	transformRawMessage,
 	sortMessages,
+	positionAnchoredMessages,
+	reconcileMessageDisplayAnchors,
 	addOneToBigNumberString,
 	isToolCallsEqual,
 	isToolCallArgumentsComplete,
@@ -267,6 +270,8 @@ interface TopicSyncContext {
 	correlationIds: Set<string>
 	authoritativeCorrelationIds: Set<string>
 	didApplyAuthoritativeSnapshot: boolean
+	/** 本次响应实际覆盖的旧流；tail 只覆盖公共锚点之后，不能当作完整话题。 */
+	coveredStreamIds: Set<string>
 }
 
 interface SharedReplayState {
@@ -515,7 +520,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				persistenceQueues: false,
 				streamRenderStarted: false,
 				streamCorrelationIds: false,
-				streamRecoveryStates: false,
+				streamRecoveryStates: observable.shallow,
 				topicMessageIndexes: false,
 				messageRevisions: observable.shallow,
 				topicMessageMembershipRevisions: observable.shallow,
@@ -640,8 +645,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * Stream rendering deliberately does not use this path for every frame.
 	 */
 	private setTopicMessages(topicId: string, messages: MessageItem[]) {
-		this.messages.set(topicId, messages)
-		this.rebuildTopicMessageIndex(topicId, messages)
+		// Final、HTTP 和断线补齐共用此入口，避免旧流式位置在正式顺序补齐后继续生效。
+		const reconciledMessages = reconcileMessageDisplayAnchors(messages)
+		this.messages.set(topicId, reconciledMessages)
+		this.rebuildTopicMessageIndex(topicId, reconciledMessages)
 		this.topicMessageMembershipRevisions.set(
 			topicId,
 			(this.topicMessageMembershipRevisions.get(topicId) || 0) + 1,
@@ -1220,8 +1227,41 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	/** Coordinator 发请求前的二次校验，避免 UI 门控或迟到 IM 已解决时仍打 HTTP。 */
 	resolveStreamRecoveryRequest(payload: StreamRecoveryRequestPayload) {
 		this.wakeDormantToolRecoveries(payload.topicId, payload.reason)
-		if (payload.reason !== "tool_response") return payload
-		return this.getToolResponseRecoveryRequest(payload.topicId)
+		if (payload.reason === "tool_response")
+			return this.getToolResponseRecoveryRequest(payload.topicId)
+		const messages = this.messages.get(payload.topicId) || []
+		const index = this.getTopicMessageIndex(payload.topicId)
+		let anchor: MessageItem | undefined
+		messages.forEach((message) => {
+			if (!message.is_stream_placeholder || !message.display_after_message_id) return
+			const position =
+				index.bySuperMessageId.get(message.display_after_message_id) ??
+				index.byAppMessageId.get(message.display_after_message_id)
+			const candidate = position === undefined ? undefined : messages[position]
+			if (
+				!candidate ||
+				candidate.is_stream_placeholder ||
+				this.collaborators.getMessageOptimisticStatus(
+					payload.topicId,
+					candidate.app_message_id,
+				)
+			)
+				return
+			if (!anchor || compareMessageSeqId(candidate.seq_id, anchor.seq_id) < 0)
+				anchor = candidate
+		})
+		if (!anchor) return payload
+		// 已有请求要求更早位置时保留它；否则扩大到最早旧卡，避免只拉取最新一页。
+		const requestedIndex = payload.anchorAppMessageId
+			? index.byAppMessageId.get(payload.anchorAppMessageId)
+			: undefined
+		const requested = requestedIndex === undefined ? undefined : messages[requestedIndex]
+		if (
+			payload.anchorAppMessageId &&
+			(!requested || compareMessageSeqId(requested.seq_id, anchor.seq_id) <= 0)
+		)
+			return payload
+		return { ...payload, anchorAppMessageId: anchor.app_message_id, anchorSeqId: anchor.seq_id }
 	}
 
 	private wakeDormantToolRecoveries(
@@ -1282,20 +1322,22 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 */
 	private isGenerationProgressToolResponse(messageNode?: RawSuperMagicMessageNode) {
 		const detail = messageNode?.tool?.detail
-		const data =
-			detail && typeof detail === "object" && !Array.isArray(detail) ? detail.data : undefined
-		return Boolean(
-			detail &&
-			typeof detail === "object" &&
-			!Array.isArray(detail) &&
-			detail.type === "generation_progress" &&
-			data &&
-			typeof data === "object" &&
-			!Array.isArray(data) &&
-			typeof data.task_id === "string" &&
-			data.task_id.length > 0 &&
-			typeof data.expected_finished_at === "string" &&
-			data.expected_finished_at.length > 0,
+		if (
+			!detail ||
+			typeof detail !== "object" ||
+			Array.isArray(detail) ||
+			detail.type !== "generation_progress"
+		)
+			return false
+
+		const data = detail.data
+		if (!data || typeof data !== "object" || Array.isArray(data)) return false
+		const progressData = data as Record<string, unknown>
+		return (
+			typeof progressData.task_id === "string" &&
+			progressData.task_id.length > 0 &&
+			typeof progressData.expected_finished_at === "string" &&
+			progressData.expected_finished_at.length > 0
 		)
 	}
 
@@ -1711,6 +1753,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			type: String(message.type || ""),
 			imStatus,
 			superStatus,
+			event: message.event || undefined,
+			toolCallId:
+				typeof messageNode?.tool_call_id === "string"
+					? messageNode.tool_call_id
+					: undefined,
 			status: imStatus,
 			sendTime: Number(message.send_time || 0),
 		}
@@ -1775,6 +1822,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		message: MessageItem,
 		messageNode?: RawSuperMagicMessageNode,
 	) {
+		if (message.is_stream_placeholder) return
 		const messageRef = this.toEventMessageRef(message, messageNode)
 		const messageKey = this.getEventEntityKey("message", topicId, messageRef.logicalMessageId)
 		this.eventTransitions.seedMessage(
@@ -2410,6 +2458,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private getTrackedTopicCorrelationIds(topicId: string, syncContext?: TopicSyncContext) {
 		return new Set([
 			...(syncContext?.correlationIds || []),
+			...(this.messages.get(topicId) || [])
+				.filter((message) => message.is_stream_placeholder)
+				.map((message) => this.getMessageSuperMessageId(message)),
 			...this.getTopicMetadata(topicId).content.keys(),
 			...this.getTopicRecoveryCorrelationIds(topicId),
 			...this.getTopicBufferedAssistantCorrelationIds(topicId),
@@ -2555,6 +2606,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		)
 		if (state.failureEmitted) return
 		state.failureEmitted = true
+		// 失败状态只更新当前卡的渲染订阅，保留 StreamState 以接受后续有效 chunk。
+		this.streamRecoveryStates.set(this.getStreamRecoveryKey(topicId, streamIdentity), {
+			...state,
+		})
 		this.emitStreamRecoveryFailed({
 			topicId,
 			correlationId: this.getStreamCorrelationId(topicId, streamIdentity),
@@ -3023,6 +3078,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			correlationIds: trackedCorrelationIds,
 			authoritativeCorrelationIds: new Set(),
 			didApplyAuthoritativeSnapshot: false,
+			coveredStreamIds: new Set(),
 		})
 		releasedTopics.forEach((correlationIds, releasedTopicId) => {
 			if (releasedTopicId !== topicId) {
@@ -3223,7 +3279,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		return (this.messages.get(topicId) || []).reduce((latestSeqId, message) => {
 			// Active stream cards use a locally derived seq only to participate in the current
 			// list projection. They are not durable watermarks and must not advance HTTP/WS sync.
-			if (this.isActiveStreamPlaceholder(topicId, message)) return latestSeqId
+			if (message.is_stream_placeholder) return latestSeqId
 			const currentSeqId = String(message.seq_id || "")
 			if (!currentSeqId) return latestSeqId
 			if (!latestSeqId || compareMessageSeqId(currentSeqId, latestSeqId) > 0) {
@@ -3233,14 +3289,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}, "")
 	}
 
-	private isActiveStreamPlaceholder(topicId: string, message: MessageItem): boolean {
-		if (message.role !== "assistant") return false
-		const superMessageId = this.getMessageSuperMessageId(message)
-		return Boolean(
-			superMessageId &&
-			message.app_message_id === superMessageId &&
-			this.getTopicMetadata(topicId).content.has(superMessageId),
+	private getDisplayAnchor(messages: MessageItem[]): string | undefined {
+		const visibleMessages = positionAnchoredMessages(
+			messages.filter(
+				(message) =>
+					!message.is_stream_placeholder &&
+					(message.imStatus ?? message.status) !== "revoked" &&
+					message.event !== "before_llm_request",
+			),
 		)
+		const predecessor = visibleMessages[visibleMessages.length - 1]
+		return predecessor ? this.getMessageSuperMessageId(predecessor) : undefined
 	}
 
 	/**
@@ -3249,13 +3308,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	 * seq; Final revision arbitration continues to ignore this projection-only local value.
 	 */
 	private reanchorActiveStreamPlaceholders(
-		topicId: string,
 		messages: MessageItem[],
 		snapshotLatestSeqId: string,
+		previousMessages: MessageItem[],
 	): MessageItem[] {
 		let latestDurableSeqId = snapshotLatestSeqId
 		messages.forEach((message) => {
-			if (this.isActiveStreamPlaceholder(topicId, message)) return
+			if (message.is_stream_placeholder) return
 			const seqId = String(message.seq_id || "")
 			if (
 				seqId &&
@@ -3265,15 +3324,46 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			}
 		})
 		if (!latestDurableSeqId) return messages
+		const previousPlaceholderIds = new Set(
+			previousMessages
+				.filter(
+					(message) => message.is_stream_placeholder && !message.display_after_message_id,
+				)
+				.map((message) => this.getMessageSuperMessageId(message)),
+		)
+		const unanchoredStreamIds = new Set(
+			messages
+				.filter(
+					(message) =>
+						!message.display_after_message_id &&
+						(message.is_stream_placeholder ||
+							previousPlaceholderIds.has(this.getMessageSuperMessageId(message))),
+				)
+				.map((message) => this.getMessageSuperMessageId(message)),
+		)
+		if (unanchoredStreamIds.size === 0) return messages
+		// HTTP 接管可能先于初始基线；首次定位排除这些卡自身，避免产生自引用。
+		const displayAnchor = this.getDisplayAnchor(
+			sortMessages(
+				messages.filter(
+					(message) => !unanchoredStreamIds.has(this.getMessageSuperMessageId(message)),
+				),
+			),
+		)
+		if (!displayAnchor) return messages
 
 		let nextProjectionSeqId = latestDurableSeqId
 		let didChange = false
 		const nextMessages = messages.map((message) => {
-			if (!this.isActiveStreamPlaceholder(topicId, message)) return message
-			nextProjectionSeqId = addOneToBigNumberString(nextProjectionSeqId)
-			if (message.seq_id === nextProjectionSeqId) return message
+			if (!unanchoredStreamIds.has(this.getMessageSuperMessageId(message))) return message
+			if (message.is_stream_placeholder)
+				nextProjectionSeqId = addOneToBigNumberString(nextProjectionSeqId)
 			didChange = true
-			return { ...message, seq_id: nextProjectionSeqId }
+			return {
+				...message,
+				seq_id: message.is_stream_placeholder ? nextProjectionSeqId : message.seq_id,
+				display_after_message_id: displayAnchor,
+			}
 		})
 		return didChange ? nextMessages : messages
 	}
@@ -3290,6 +3380,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				(Boolean(superMessageId) &&
 					this.getMessageSuperMessageId(message) === superMessageId)
 			if (!matchesIdentity) return latest
+			if (latest && !latest.is_stream_placeholder && message.is_stream_placeholder)
+				return latest
+			if (latest?.is_stream_placeholder && !message.is_stream_placeholder) return message
 			if (!latest || compareMessageSeqId(message.seq_id, latest.seq_id) > 0) return message
 			return latest
 		}, undefined)
@@ -3338,7 +3431,11 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				return
 			}
 			const current = deduped[existingIndex]
-			if (compareMessageSeqId(incoming.seq_id, current.seq_id) >= 0) {
+			if (
+				(current.is_stream_placeholder && !incoming.is_stream_placeholder) ||
+				(current.is_stream_placeholder === incoming.is_stream_placeholder &&
+					compareMessageSeqId(incoming.seq_id, current.seq_id) >= 0)
+			) {
 				deduped[existingIndex] = this.mergeAuthoritativeMessageCard(current, incoming)
 			}
 		})
@@ -3351,6 +3448,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		allowImStatusRestore = false,
 	) {
 		const normalizedIncoming = this.normalizeMessageStatuses(incoming, incoming.debug)
+		normalizedIncoming.display_after_message_id =
+			current.display_after_message_id ?? incoming.display_after_message_id
 		const currentImStatus = String(current.imStatus ?? current.status ?? "")
 		const incomingImStatus = normalizedIncoming.imStatus
 		const sameImMessage =
@@ -3468,23 +3567,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			existingCorrelationId,
 			incomingCorrelationId,
 			resolution: "preserve-existing-correlation-canonical",
-		})
-	}
-
-	private removeTopicMessageNodesOutsideSnapshot(
-		_topicId: string,
-		previousMessages: MessageItem[],
-		nextMessages: MessageItem[],
-	) {
-		const retainedSuperMessageIds = new Set(
-			nextMessages.map((message) => this.getMessageSuperMessageId(message)).filter(Boolean),
-		)
-
-		previousMessages.forEach((message) => {
-			const superMessageId = this.getMessageSuperMessageId(message)
-			if (!superMessageId || retainedSuperMessageIds.has(superMessageId)) return
-			this.messageMap.delete(superMessageId)
-			this.topicMessageNodes.get(_topicId)?.delete(superMessageId)
 		})
 	}
 
@@ -3716,17 +3798,17 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		if (!syncContext.didApplyAuthoritativeSnapshot) return
 		const discardedStreamIdentities = new Set(
 			Array.from(syncContext.correlationIds).filter(
-				(streamIdentity) => !syncContext.authoritativeCorrelationIds.has(streamIdentity),
+				(streamIdentity) =>
+					syncContext.coveredStreamIds.has(streamIdentity) &&
+					!syncContext.authoritativeCorrelationIds.has(streamIdentity) &&
+					!(this.messages.get(topicId) || []).some(
+						(message) =>
+							this.getMessageSuperMessageId(message) === streamIdentity &&
+							!message.is_stream_placeholder,
+					),
 			),
 		)
 		if (discardedStreamIdentities.size === 0) return
-
-		const topicMeta = this.getTopicMetadata(topicId)
-		if (topicMeta.timer) {
-			clearTimeout(topicMeta.timer)
-			topicMeta.timer = null
-			topicMeta.activeRenderSuperMessageId = null
-		}
 
 		const previousMessages = this.messages.get(topicId) || []
 		const retainedMessages = previousMessages.filter(
@@ -3737,56 +3819,18 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					discardedStreamIdentities.has(this.getMessageSuperMessageId(message))
 				),
 		)
-		this.removeTopicMessageNodesOutsideSnapshot(topicId, previousMessages, retainedMessages)
+		const preservedStreams = new Set(
+			Array.from(this.getTopicMetadata(topicId).content.keys()).filter(
+				(identity) => !discardedStreamIdentities.has(identity),
+			),
+		)
+		this.removeTopicStateOutsideSnapshot(
+			topicId,
+			previousMessages,
+			retainedMessages,
+			preservedStreams,
+		)
 		this.setTopicMessages(topicId, retainedMessages)
-
-		const buffer = this.getTopicBuffer(topicId)
-		buffer.messages = buffer.messages.filter((envelope) => {
-			const imMessage = envelope?.seq?.message
-			const rawNode = getRawMessageNode(imMessage)
-			const superMessageId = this.normalizeAssistantSuperMessageId(
-				rawNode,
-				String(imMessage?.app_message_id || ""),
-			)
-			if (!discardedStreamIdentities.has(superMessageId)) return true
-
-			this.messageMap.delete(superMessageId)
-			this.topicMessageNodes.get(topicId)?.delete(superMessageId)
-			return false
-		})
-		buffer.isProcessing = false
-
-		const discardedCorrelationIds = new Map<string, string>()
-		discardedStreamIdentities.forEach((streamIdentity) => {
-			const correlationId = this.getStreamCorrelationId(topicId, streamIdentity)
-			discardedCorrelationIds.set(streamIdentity, correlationId)
-			this.messageMap.delete(streamIdentity)
-			this.topicMessageNodes.get(topicId)?.delete(streamIdentity)
-			topicMeta.content.delete(streamIdentity)
-			topicMeta.streamSnapshots.delete(streamIdentity)
-			topicMeta.finalizedCorrelationIds.add(streamIdentity)
-			this.clearStreamRecoveryState(topicId, streamIdentity)
-			this.clearStreamChunkLedger(topicId, streamIdentity)
-			this.clearStreamCorrelationId(topicId, streamIdentity)
-			this.setStreamTransportBarrier(topicId, streamIdentity, {
-				correlationId,
-				chunkIndex: 0,
-			})
-		})
-
-		topicMeta.isStream = topicMeta.content.size > 0
-		topicMeta.isStreamLoading = topicMeta.content.size > 0
-		this.topicMeta.set(topicId, topicMeta)
-		discardedStreamIdentities.forEach((streamIdentity) => {
-			this.publishStreamEnded(
-				topicId,
-				streamIdentity,
-				"recovery_replaced",
-				{ awaitingCanonicalMessage: false },
-				"recovery",
-				discardedCorrelationIds.get(streamIdentity) || streamIdentity,
-			)
-		})
 	}
 
 	private applyHttpMessageStatusesInAction(
@@ -3822,10 +3866,6 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			let existingIndex = nextMessages.findIndex(
 				(message) => message.app_message_id === appMessageId,
 			)
-			const streamKey =
-				rawNode?.role === "assistant" && superMessageId
-					? this.getEventEntityKey("stream", topicId, superMessageId)
-					: ""
 			const superMessageIndex =
 				existingIndex < 0 && rawNode?.role === "assistant" && superMessageId
 					? nextMessages.findIndex(
@@ -3834,12 +3874,10 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 								this.getMessageSuperMessageId(message) === superMessageId,
 						)
 					: -1
+			const placeholderIndex = existingIndex >= 0 ? existingIndex : superMessageIndex
 			const isActiveStreamPlaceholder =
-				existingIndex < 0 &&
-				superMessageIndex >= 0 &&
-				Boolean(streamKey) &&
-				this.eventTransitions.isStreamActive(streamKey)
-			if (isActiveStreamPlaceholder) existingIndex = superMessageIndex
+				placeholderIndex >= 0 && nextMessages[placeholderIndex].is_stream_placeholder
+			if (isActiveStreamPlaceholder) existingIndex = placeholderIndex
 			if (existingIndex < 0) return
 
 			const currentMessage = nextMessages[existingIndex]
@@ -3893,7 +3931,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					rawNode.correlation_id || currentMessage.correlation_id || "",
 				)
 				const currentNode = this.getAssistantMessageNode(topicId, superMessageId)
-				const wasStreamActive = this.eventTransitions.isStreamActive(streamKey)
+				const wasStreamActive = this.eventTransitions.isStreamActive(
+					this.getEventEntityKey("stream", topicId, superMessageId),
+				)
 				const didSettleCurrentStream = this.reconcileServerAssistantSnapshot(
 					topicId,
 					appMessageId,
@@ -4087,7 +4127,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				? syncContext
 				: undefined
 		const authoritativeSyncContext =
-			mode === "replace" &&
+			(mode === "replace" || (mode === "replace_tail" && tailAnchorIndex >= 0)) &&
 			currentSyncContext &&
 			(syncGeneration === undefined || syncGeneration === currentSyncContext.generation)
 				? currentSyncContext
@@ -4102,12 +4142,28 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				? "merge"
 				: mode
 		const appliedMode =
-			requestedMode === "replace" && syncGeneration !== undefined && !authoritativeSyncContext
+			requestedMode !== "merge" && syncGeneration !== undefined && !authoritativeSyncContext
 				? "merge"
 				: requestedMode
-		if (authoritativeSyncContext) {
+		if (authoritativeSyncContext && appliedMode !== "merge") {
 			authoritativeSyncContext.authoritativeCorrelationIds.clear()
 			authoritativeSyncContext.didApplyAuthoritativeSnapshot = true
+			authoritativeSyncContext.coveredStreamIds.clear()
+			const index = this.getTopicMessageIndex(topicId)
+			authoritativeSyncContext.correlationIds.forEach((identity) => {
+				const cardIndex = index.bySuperMessageId.get(identity)
+				const card = cardIndex === undefined ? undefined : previousMessages[cardIndex]
+				const anchorIndex = card?.display_after_message_id
+					? (index.bySuperMessageId.get(card.display_after_message_id) ??
+						index.byAppMessageId.get(card.display_after_message_id))
+					: undefined
+				if (
+					appliedMode === "replace" ||
+					(anchorIndex !== undefined && anchorIndex >= tailAnchorIndex)
+				) {
+					authoritativeSyncContext.coveredStreamIds.add(identity)
+				}
+			})
 		}
 		const incomingAppMessageIds: string[] = []
 		const bufferedMessageIds = new Set(
@@ -4161,6 +4217,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				)
 				if (rawNode?.role === "assistant" && superMessageId) {
 					incomingMessage.super_message_id = superMessageId
+					const previousIndex =
+						this.getTopicMessageIndex(topicId).bySuperMessageId.get(superMessageId)
+					incomingMessage.display_after_message_id =
+						previousIndex === undefined
+							? undefined
+							: previousMessages[previousIndex]?.display_after_message_id
 					rawNode.super_message_id = superMessageId
 					this.setStreamCorrelationId(topicId, superMessageId, correlationId)
 				}
@@ -4422,7 +4484,8 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					const isStreamingMessage = Boolean(
 						message.role === "assistant" &&
 						messageSuperMessageId &&
-						syncTopicMeta.content.has(messageSuperMessageId),
+						(message.is_stream_placeholder ||
+							syncTopicMeta.content.has(messageSuperMessageId)),
 					)
 					const precedingUserMessage = isStreamingMessage
 						? previousMessages
@@ -4440,11 +4503,13 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					)
 					const isStreamingOverlay = Boolean(
 						isStreamingMessage &&
-						(explicitlyPreservedStreamIds === undefined ||
+						(message.is_stream_placeholder ||
+							explicitlyPreservedStreamIds === undefined ||
 							explicitlyPreservedStreamIds.has(messageSuperMessageId) ||
 							hasRetainedTurnUser),
 					)
 					const isNewerPersistentMessage = Boolean(
+						!message.is_stream_placeholder &&
 						snapshotLatestSeqId &&
 						message.seq_id &&
 						compareMessageSeqId(message.seq_id, snapshotLatestSeqId) > 0,
@@ -4462,9 +4527,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			const dedupedServerMessages = this.dedupeAuthoritativeMessages(authoritativeMessages)
 			const mergedServerMessages = sortMessages(
 				this.reanchorActiveStreamPlaceholders(
-					topicId,
 					dedupedServerMessages,
 					snapshotLatestSeqId,
+					previousMessages,
 				),
 			)
 			// Server history enters the in-memory list first, then local failed messages are restored by send-time anchors before a single UI update.
@@ -5758,15 +5823,55 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		appMessageId?: string,
 	): AssistantRenderPhase | StreamState["stage"] | undefined {
 		const finalRenderState = this.getFinalRenderState(topicId, superMessageId)
-		if (finalRenderState) return this.getFinalRenderPhase(finalRenderState)
-
+		const finalPhase = finalRenderState ? this.getFinalRenderPhase(finalRenderState) : undefined
+		if (finalPhase) return finalPhase
+		const node = this.getAssistantMessageNode(topicId, superMessageId)
+		const streamEndReason = this.eventTransitions.getLastStreamEndReason(
+			this.getEventEntityKey("stream", topicId, superMessageId),
+		)
 		const identities = [superMessageId, correlationId, appMessageId].filter(
 			(identity): identity is string => Boolean(identity),
 		)
+		let activeStage: StreamState["stage"] | undefined
+		let recoveryFailed = false
 		for (const identity of identities) {
-			const streamState = this.getStreamState(topicId, identity)
-			if (streamState) return streamState.stage
+			recoveryFailed ||= this.getStreamRecoveryState(topicId, identity)?.status === "failed"
+			activeStage ??= this.getStreamState(topicId, identity)?.stage
 		}
+		// 正文/工具阶段证明这段思考已结束，不代表工具或整轮任务已完成。
+		// 保留正在展示的阶段，避免旧恢复失败覆盖正文/工具的打字机动画。
+		if (activeStage && activeStage !== "reasoning_content") return activeStage
+		const visibleNode = this.getRenderedMessageNode(superMessageId, topicId)
+		const hasVisibleOutput =
+			visibleNode?.role === "assistant" &&
+			((typeof visibleNode.content === "string" && visibleNode.content.trim().length > 0) ||
+				(Array.isArray(visibleNode.tool_calls) &&
+					visibleNode.tool_calls.some(
+						(toolCall: ToolCall) => toolCall.id && toolCall.function?.name,
+					)))
+		if (hasVisibleOutput) return "done"
+		if (
+			(!this.getCanonicalFinalBarrier(topicId, superMessageId) &&
+				streamEndReason === "suspended") ||
+			node?.status === "suspended" ||
+			node?.status === "error"
+		)
+			return "interrupted"
+		// finish_reason 已结束当前输出；等待正式 Final 不应让思考标题退回未知。
+		if (
+			!activeStage &&
+			(this.getCanonicalFinalBarrier(topicId, superMessageId) ||
+				streamEndReason === "finish_reason" ||
+				streamEndReason === "authoritative_final")
+		)
+			return "done"
+		if (recoveryFailed) return "idle"
+		if (activeStage) return activeStage
+		const index = this.getTopicMessageIndex(topicId).bySuperMessageId.get(superMessageId)
+		if (index !== undefined && this.messages.get(topicId)?.[index]?.is_stream_placeholder)
+			return "idle"
+		if (!this.getCanonicalFinalBarrier(topicId, superMessageId) && node?.status === "running")
+			return "idle"
 		return undefined
 	}
 
@@ -5927,6 +6032,12 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					} as MessageItem)
 				: undefined
 		if (canonicalMessage) {
+			canonicalMessage.is_stream_placeholder = false
+			canonicalMessage.display_after_message_id =
+				cardIndex >= 0
+					? messages[cardIndex].display_after_message_id
+					: finalMessage?.display_after_message_id
+			if (normalizedSeqId) canonicalMessage.seq_id = normalizedSeqId
 			const nextMessages = messages.slice()
 			if (cardIndex >= 0) nextMessages[cardIndex] = canonicalMessage
 			else nextMessages.push(canonicalMessage)
@@ -6228,8 +6339,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			? this.getStreamCorrelationId(topicId, ownerIdentity)
 			: ""
 		const isOrphanFinishTask = !ownerIdentity && this.isOwnerlessFinishTaskResponse(messageNode)
-		if (!isOrphanFinishTask && !ownerIdentity && !isGenerationProgress)
-			return { kind: "missing_owner" }
+		if (!isOrphanFinishTask && !ownerIdentity) return { kind: "missing_owner" }
 		if (
 			!isOrphanFinishTask &&
 			!isGenerationProgress &&
@@ -6298,6 +6408,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 
 		if (!current) {
+			incoming.downloadProgress = mergeDownloadProgress(undefined, incoming)
 			toolResponseMap.set(toolId, incoming)
 			if (normalizedSeqId) seqMap.set(toolId, normalizedSeqId)
 			this.toolResponseMap.set(topicId, toolResponseMap)
@@ -6393,6 +6504,14 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 			if (preserveRealPayload && key !== "status" && current?.[key] !== undefined) return
 			merged[key] = value
 		})
+
+		merged.downloadProgress = mergeDownloadProgress(current, incoming)
+		if (
+			current?.name === "download_from_urls" &&
+			this.isStrongToolResponseStatus(currentStatus) &&
+			!this.isStrongToolResponseStatus(incomingStatus)
+		)
+			merged.detail = current.detail
 
 		if (!currentStatus || incomingStatus === undefined) {
 			if (currentStatus && incomingStatus === undefined) merged.status = currentStatus
@@ -6656,11 +6775,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				Boolean(superMessageId) && this.getMessageSuperMessageId(item) === superMessageId
 			if (!matchesAppMessageId && !matchesSuperMessageId) return
 			// 流式占位卡的 seq 是本地推导值，不代表已接受的 Final revision。
-			if (
-				item.app_message_id === superMessageId &&
-				this.getMessageSuperMessageId(item) === superMessageId
-			)
-				return
+			if (item.is_stream_placeholder) return
 			consider(item.seq_id)
 		})
 
@@ -7076,6 +7191,7 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 	private mergeFinalCardMetadata(existingCard: MessageItem, finalCard: MessageItem) {
 		// 卡片属于传入的 topicId；Final 可能携带另一个内层 Agent topic，不能改写路由归属。
 		const patchableKeys: Array<string> = [
+			"is_stream_placeholder",
 			"app_message_id",
 			"super_message_id",
 			"correlation_id",
@@ -7371,7 +7487,9 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 				super_message_id: superMessageId,
 				app_message_id: superMessageId,
 				seq_id: seqId,
-			}) as any
+				debug: cache,
+			})
+			card.display_after_message_id = this.getDisplayAnchor(messages)
 			card.task_id = streamState.task_id
 			card.content = cache.content
 			card.reasoning_content = cache.reasoning_content
@@ -7384,6 +7502,15 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 					this.getMessageSuperMessageId(message) !== superMessageId,
 			)
 			this.setTopicMessages(topicId, sortMessages([...nextMessages, card]))
+			// 新卡首次可见时确认旧临时卡；沿用协调器，不给每个 chunk 添加请求。
+			const previousPlaceholder = messages.find((message) => message.is_stream_placeholder)
+			if (previousPlaceholder)
+				this.emitStreamRecoveryRequested({
+					topicId,
+					correlationId: previousPlaceholder.correlation_id,
+				})
+			// 协调器可能同步进入 HTTP 恢复；本次渲染交给同步完成后的原恢复入口。
+			if (this.getTopicMetadata(topicId).syncState === "syncing") return
 		}
 
 		if (topicMeta.renderPolicy === "instant") {
@@ -8655,17 +8782,27 @@ export class SuperMagicStore implements SuperMagicStoreCallbackRegistrar {
 		}
 	}
 
-	private getDefaultMessage(node: Record<string, string>) {
-		const role = node.role || "assistant"
+	private getDefaultMessage(
+		node: Pick<
+			MessageItem,
+			| "topic_id"
+			| "correlation_id"
+			| "super_message_id"
+			| "app_message_id"
+			| "seq_id"
+			| "debug"
+		>,
+	): MessageItem {
 		return {
 			type: "super_magic_message",
+			is_stream_placeholder: true,
 			unread_count: 0,
 			sender_id: "sender_id",
 			send_time: dayjs().unix(),
 			status: "unread",
 			imStatus: "unread",
-			superStatus: role === "user" ? undefined : "running",
-			event: null,
+			superStatus: "running",
+			event: "",
 			parent_correlation_id: "",
 			role: "assistant",
 			refer_message_id: "",

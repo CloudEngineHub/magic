@@ -20,10 +20,13 @@ import { useTranslation } from "react-i18next"
 import rehypeRaw from "rehype-raw"
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
+import { remarkSpacedFileLinks } from "@/pages/superMagic/utils/remarkSpacedFileLinks"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { useTheme } from "@/models/config/hooks"
 import { cn } from "@/utils/cn"
 import { parseAnchorLink, scrollToAnchor, slugify } from "@/utils/slug"
+import { MarkdownFileLink } from "../MarkdownFileLink"
+import { copyMarkdownFileLinks } from "../markdown-file-link-clipboard"
 import {
 	getVirtualMarkdownChunkContent,
 	splitMarkdownIntoVirtualChunks,
@@ -285,7 +288,7 @@ const MarkdownChunk = memo(function MarkdownChunk({
 	const components = useMemo<Components>(
 		() => ({
 			a: ({ href = "", ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
-				<a
+				<MarkdownFileLink
 					{...props}
 					href={href}
 					onClick={(event) => {
@@ -294,8 +297,8 @@ const MarkdownChunk = memo(function MarkdownChunk({
 							return
 						}
 						if (!onLinkClick) return
-						event.preventDefault()
-						onLinkClick(event.nativeEvent, href, event.currentTarget)
+						if (onLinkClick(event.nativeEvent, href, event.currentTarget) === true)
+							event.preventDefault()
 					}}
 				/>
 			),
@@ -322,7 +325,7 @@ const MarkdownChunk = memo(function MarkdownChunk({
 	return (
 		<div data-markdown-chunk-id={chunk.id}>
 			<ReactMarkdown
-				remarkPlugins={[remarkGfm]}
+				remarkPlugins={[remarkGfm, remarkSpacedFileLinks]}
 				rehypePlugins={[
 					rehypeRaw,
 					[rehypeSanitize, markdownSanitizeSchema],
@@ -795,6 +798,7 @@ export default function LargeMarkdownPreview({
 				className,
 			)}
 			data-testid="large-markdown-preview"
+			onCopy={copyMarkdownFileLinks}
 		>
 			<LargeMarkdownSearchToolbar
 				visible={searchEnabled && searchVisible}

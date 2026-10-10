@@ -39,6 +39,7 @@ type Row =
 export function RecycleBinFileList({
 	selectedIds,
 	onToggleItem,
+	onPreview,
 	onOpenRestore,
 	onOpenDelete,
 	project,
@@ -224,6 +225,7 @@ export function RecycleBinFileList({
 													onRestore={onOpenRestore}
 													onDelete={onOpenDelete}
 													onDetail={setDetail}
+													onPreview={onPreview}
 												/>
 											))}
 										</div>

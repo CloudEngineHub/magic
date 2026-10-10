@@ -5,6 +5,7 @@ type ListPageSkeletonProps = {
   minWidth?: number;
   columns?: number;
   rows?: number;
+  testId?: string;
   /**
    * @deprecated 搜索/筛选区不再使用骨架屏，保留此参数仅兼容旧调用。
    */
@@ -15,11 +16,12 @@ export function ListPageSkeleton({
   minWidth = 1140,
   columns = 8,
   rows = 6,
+  testId,
 }: ListPageSkeletonProps) {
   const gridTemplateColumns = createGridTemplateColumns(columns);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid={testId}>
       <div className="overflow-hidden rounded-lg border border-border/50 bg-card">
         <div style={{ minWidth }}>
           <div className="grid border-b" style={{ gridTemplateColumns }}>

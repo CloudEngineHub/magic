@@ -130,7 +130,7 @@ Bind reference assets in the prompt by array order:
 - `reference_video_paths[0]` → `[video1]`, `reference_video_paths[1]` → `[video2]`
 - `reference_audio_paths[0]` → `[audio1]`, `reference_audio_paths[1]` → `[audio2]`
 
-Place each token next to the subject, action, or source media it controls. Do not put file paths in the prompt.
+Place each token next to the subject, action, or source media it controls, and say what that reference governs and how strictly, e.g. "the presenter from [image1], face and outfit exactly as in [image1]". Do not put file paths in the prompt.
 
 Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit. For prompt-only generation, omit reference arrays. For image, video, or audio references, populate the corresponding arrays and bind every reference in the prompt.
 
@@ -164,15 +164,15 @@ If the current `<media_model_info>` does not declare a mode, do not use it. A re
 - Infer established facts and reasonable defaults before asking questions, but ask about every unresolved choice that materially changes the result. Resolve no more than one to three related decisions in one confirmation round.
 - Present a complete direction, storyboard, first-frame prompt collection, or other long-form material as readable Markdown in the assistant message. Then use `ask_user` with one concise question that does not repeat the displayed content.
 - Treat direction approval, storyboard approval, first-frame prompt approval, initialization or first-frame candidate approval, the first trial video, edit configuration, and final composition as hard gates when they apply.
-- A revision request is not approval. Keep the current candidate unconfirmed, append a new candidate to the same logical Element, and ask for confirmation again after the result returns.
+- A revision request is not approval. Keep the current candidate unconfirmed and ask again after the revised result returns. Image revisions default to independent Elements; use the same-Element candidate workflow for videos or explicitly requested image versions.
 - After resuming from a pause or interruption, query the relevant Elements before continuing.
 
 ## Content versioning and retries
 
-Use the current Canvas Content lifecycle rather than creating replacement Elements. Follow the retry, waiting, and version rules in SKILL.md.
+Follow the retry, waiting, and version rules in SKILL.md. Image revisions default to independent Elements; existing video version workflows remain unchanged.
 
 - New logical result: omit `element_id` and `content_id` in `add_canvas_elements`.
-- New candidate for an existing result: pass the existing `element_id` and omit `content_id`; use `add_canvas_contents` when appending to an existing writable Element.
+- New candidate for an existing video, or explicitly requested image versions: pass the existing `element_id` and omit `content_id`; use `add_canvas_contents` when appending to that Element.
 - Exact retry: use `retry_canvas_content_generation` with the exact `element_id`, `content_id`, and original `item_ref` returned by the latest result or query. Never add `-retry`, `-new`, or a counter to `item_ref`.
 - A failed final composition is an in-place retry of the existing final Video Element and Content. Reuse their exact IDs; do not call `add_canvas_elements` to create a duplicate final-video Element.
 - Never identify an existing result by name alone. Preserve every returned Element ID, Content ID, task ID, video ID, status, and media path.
@@ -182,6 +182,7 @@ Use the current Canvas Content lifecycle rather than creating replacement Elemen
 - Treat all submitted compatible assets as required source material by default. Use every relevant path in the appropriate reference array and map every materially contributing Canvas Element separately to direct Connections.
 - Exclude an asset only when the user explicitly asks to ignore it or the current generation tool cannot accept its media type. If relevance is unclear, ask before omitting it.
 - Before each generation call, verify that every used asset appears in the correct reference array, that direct Connections contain only the intended upstream Element IDs, and that any requested or storyboarded audio is still present in the prompt with `content.audioPolicy="generate"` on the direct video request.
+- The generation model sees each reference directly; the prompt carries its role, not its appearance. Restating a referenced subject's look in your own words (skin, facial hair, glasses, clothing details) adds your misreadings as instructions the model also follows, and the result drifts from the reference. Name a detail only when the user stressed it, it is the thing changing, it is small and easily lost (a logo, label text), or you must pick one of several subjects, and point to it in the reference instead of re-describing it. With a first frame, the frame already fixes subject and scene; describe motion, camera, and what happens next.
 - Reference media may contain watermarks, captions, interface marks, compression artifacts, unwanted backgrounds, or accidental crops. Preserve intended subject information but explicitly exclude those defects from generated prompts unless the user requests them.
 - Use only model IDs, `input_mode`, task values, aspect ratios, resolutions, durations, FPS values, and other generation fields declared by the current `<media_model_info>`.
 
@@ -232,7 +233,7 @@ Locate the video specified by the user and create a silent copy in a system temp
 
 ### 2. Understand the assets
 
-Use `visual_understanding` to identify subjects, products, scenes, text, style, distinguishing details, defects, and factual constraints. Separate direct observations from uncertain inferences.
+Look at each asset to identify subjects, products, scenes, text, style, distinguishing details, defects, and factual constraints; call `visual_understanding` only for assets not already visible in your context. Separate direct observations from uncertain inferences. These observations drive planning, reference roles, and defect exclusion; they are not prompt text (see Asset and prompt fidelity).
 Imported assets are original reference material only. They do not count as initialization visual anchors, storyboard first frames, or confirmed main Content unless a newly generated anchor has been created and confirmed through the stage below.
 Treat uncertain brand marks, product categories, and feature claims as inferences rather than facts. If a requested selling point is not supported by the submitted assets, identify the gap and ask the user to confirm it before putting the claim into a generation prompt.
 
@@ -251,7 +252,7 @@ Canvas node arrangement and final video aspect ratio are separate decisions. Do 
 
 Map every submitted source medium to its Canvas Element. Pass every media path as generation evidence and every owning Element as a direct upstream source — do not rely on prompt text alone to represent an imported subject.
 
-Confirm each generated anchor before depending on it downstream; its first Content is automatically main, so no main-selection call is needed. If the user requests a change, append a candidate to the same Element, confirm again, and only then select that appended candidate as main.
+Confirm each generated anchor before depending on it downstream; its first Content is automatically main, so no main-selection call is needed. If the user requests a change, create an independent Image Element by default, confirm it, and use its exact ID/path as the revised anchor. Append inside the original Element only when the user explicitly requests image versions; that later candidate requires confirmation before selecting main.
 
 The confirmation sequence is mandatory: generate the initialization candidate, wait for completion, query its Element, show or summarize the candidate, call `ask_user`, and wait. A successful tool result or visual inspection is not user approval.
 
@@ -297,7 +298,7 @@ Do not generate a first frame immediately after saving. First display the openin
 
 After the opening frame returns, wait for its task if needed, query the exact Element, show or summarize the candidate, call `ask_user`, and wait for explicit approval. Only after the opening frame is confirmed may you draft and confirm the remaining prompts. Every first-frame request must pass all confirmed initialization assets in `reference_images` (and the corresponding project paths when required by the provider), not just the asset most relevant to that shot. Generate one independent image task per shot, verify every requested shot succeeded, preserve successful frames, and retry only missing or rejected shots.
 
-Use one generated `image` Element per shot. The storyboard Element is the direct upstream source of each first-frame Element; reference paths are generation inputs. A first-frame revision appends a new Content to the same first-frame Element and does not create a duplicate logical Element:
+Use one generated `image` Element per shot. The storyboard Element is the direct upstream source of each first-frame Element; reference paths are generation inputs. A first-frame revision defaults to a new independent Image Element; update only the affected shot's confirmed frame binding. Append Content to the old Element only for an explicit same-Element version request:
 
 ```python
 result = tool.call("add_canvas_elements", {
@@ -312,7 +313,7 @@ result = tool.call("add_canvas_elements", {
             "source": "generated",
             "content_type": "image",
             "name": "Opening shot first frame",
-            "prompt": "The confirmed opening shot composition, subject identity, scene, camera framing, lighting, and artifact exclusions.",
+            "prompt": "The product from Image 1 exactly as shown, placed in the location from Image 2, in the style of Image 3; then the confirmed opening composition, camera framing, lighting, and artifact exclusions.",
             "reference_images": ["./images/product-anchor.webp", "./images/scene-anchor.webp", "./images/style-anchor.webp"],
             "size": "1080x1920",
         },
@@ -413,7 +414,7 @@ Use the current Canvas tools below; do not call the removed video-production too
 | Read the current project index | `query_canvas_overview` |
 | Read exact Content, status, paths, and Connections | `query_canvas_element_details` |
 | Create or update a storyboard | `add_canvas_elements` / `add_canvas_contents` with `storyboard` Content |
-| Generate an initialization image or first frame | `add_canvas_elements` / `add_canvas_contents` with generated `image` Content |
+| Generate an initialization image or first frame | `add_canvas_elements` with generated `image` Content; `add_canvas_contents` only for explicitly requested versions |
 | Generate a direct video or shot video | `add_canvas_elements` / `add_canvas_contents` with generated `video` Content |
 | Wait for image or video generation | `wait_canvas_generation` |
 | Retry one failed Content | `retry_canvas_content_generation` |
@@ -472,7 +473,7 @@ Use `dependency_flow` for professional production relations. Basic Canvas image 
 - When a shot video changes, keep its Element ID, append a candidate Content, confirm, and select main before composing again.
 - When changing shot count or order, update the storyboard first, preserve unaffected outputs, rebuild the ordered sequence, confirm the edit, and compose again.
 - When adding, replacing, or removing BGM, import or reuse the Audio Element, update `audio_sequence`, confirm the edit, and compose again.
-- A new direction appends a candidate with `add_canvas_contents`; it does not create a duplicate logical Element.
+- A new video direction appends a candidate with `add_canvas_contents`; image revisions remain independent by default.
 - If the media is correct but a Canvas relation is wrong, repair only the relation with `manage_canvas_connections`: query the exact current Connection IDs first, provide the complete intended endpoints, and do not regenerate media. Remove or replace relations only with explicit user intent.
 
 ## Provider-managed assets

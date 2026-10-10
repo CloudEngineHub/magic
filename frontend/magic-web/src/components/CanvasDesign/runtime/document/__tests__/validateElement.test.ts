@@ -117,6 +117,27 @@ describe("isValidElementData", () => {
 		).toBe(false)
 	})
 
+	it("validates image generation timing", () => {
+		expect(
+			isValidElementData(
+				contentElement(ElementTypeEnum.Image, {
+					generationTiming: {
+						startedAt: 1_791_446_326_882,
+						imageId: "task-1",
+						source: "submitted",
+					},
+				}),
+			),
+		).toBe(true)
+		expect(
+			isValidElementData(
+				contentElement(ElementTypeEnum.Image, {
+					generationTiming: { startedAt: "invalid", source: "submitted" },
+				}),
+			),
+		).toBe(false)
+	})
+
 	it("validates storyboard shots without redundant output or duration fields", () => {
 		const content = {
 			generationConfig: { model_id: "gpt-image-2", size: "1080x1920" },

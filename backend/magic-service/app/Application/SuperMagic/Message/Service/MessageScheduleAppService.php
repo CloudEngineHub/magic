@@ -1037,10 +1037,22 @@ class MessageScheduleAppService extends AbstractAppService
         if (! empty($topicId)) {
             return $this->topicDomainService->getTopicById($topicId);
         }
+        // Summarize before acquiring the shared conversation row locks.
+        // Defer a summary failure until after IM initialization to preserve the
+        // existing outer transaction's handled-failure commit behavior.
+        $topicName = '';
+        $summaryException = null;
+        try {
+            $topicName = $this->getSummarizeMessageText($dataIsolation, $messageType, $messageContent);
+        } catch (Throwable $exception) {
+            $summaryException = $exception;
+        }
+
         // 1. Initialize chat conversation and topic
         [$chatConversationId, $chatConversationTopicId] = $this->chatAppService->initMagicChatConversation($dataIsolation);
-
-        $topicName = $this->getSummarizeMessageText($dataIsolation, $messageType, $messageContent);
+        if ($summaryException !== null) {
+            throw $summaryException;
+        }
         // Append timestamp in ymdHi format
         $topicName = $topicName . ' ' . date('ymdHi');
 

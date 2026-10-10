@@ -19,6 +19,8 @@ import type { ModelEditorFocusRequest } from "@magic-admin-v2/features/platform-
 export function ModelEditorProvidersTab({
   category,
   disabled,
+  hasOfficialSyncedBinding,
+  officialSyncedRecordIds,
   fields,
   focusRequest,
   form,
@@ -29,6 +31,8 @@ export function ModelEditorProvidersTab({
 }: {
   category: ProviderModelCategory;
   disabled: boolean;
+  hasOfficialSyncedBinding: boolean;
+  officialSyncedRecordIds: ReadonlySet<string>;
   fields: Array<FieldArrayWithId<ModelEditorValues, "providers", "id">>;
   focusRequest: ModelEditorFocusRequest | null;
   form: UseFormReturn<ModelEditorValues>;
@@ -51,11 +55,11 @@ export function ModelEditorProvidersTab({
           </p>
         </div>
         <Button
-          disabled={disabled}
+          disabled={disabled || hasOfficialSyncedBinding}
           onClick={onAdd}
           type="button"
           variant="outline"
-        >
+         data-testid="platform-model-list-delete-button">
           <Plus className="size-4" aria-hidden="true" />
           {t("modelList.editor.action.addProvider")}
         </Button>
@@ -74,6 +78,7 @@ export function ModelEditorProvidersTab({
             category={category}
             control={form.control}
             disabled={disabled}
+            officialSyncedRecordIds={officialSyncedRecordIds}
             error={form.formState.errors.providers?.[index] as ProviderBindingErrors | undefined}
             form={form}
             focusRequest={focusRequest}

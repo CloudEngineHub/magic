@@ -17,6 +17,7 @@ import {
 } from "@tabler/icons-react"
 import { Crosshair } from "lucide-react"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { ensureFileSavesSynced } from "../../../services/fileSaveQueue"
 
 interface AIEditItem {
 	key: string
@@ -46,6 +47,7 @@ export function useAIEdit(options: UseAIEditOptions = {}) {
 	const insertContentToChat = useCallback(
 		async (content: JSONContent[], extraData?: { hasInput?: boolean }) => {
 			if (!currentFile) return
+			if (currentFile.file_id && !(await ensureFileSavesSynced([currentFile.file_id]))) return
 			const topicId = topicStore.selectedTopic?.id
 			const identity = getFileReferenceIdentityKey()
 			const isUserFile =

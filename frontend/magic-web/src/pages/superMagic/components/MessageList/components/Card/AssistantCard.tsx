@@ -14,6 +14,7 @@ import { Ellipsis } from "lucide-react"
 import { MagicDropdown, MagicTooltip } from "@/components/base"
 import { logger as Logger } from "@/infrastructure/logger"
 import { StatusBadge } from "./components/StatusBadge"
+import { FileSpaceLimitCard, getFileSpaceLimitData } from "./components/FileSpaceLimitCard"
 import { useGlobalSuggestion } from "@/components/settings/FollowUpSuggestionItems/hooks"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
@@ -34,6 +35,7 @@ const logger = Logger.createLogger("AssistantCard")
 
 export function withAssistantCard<
 	T extends {
+		contentMode?: "full" | "answer" | "process"
 		node: any
 		selectedTopic: Topic | null
 		classNames?: {
@@ -51,6 +53,7 @@ export function withAssistantCard<
 			allowConversationCopy,
 			onTopicSwitch,
 			showTaskCompletedBadge = true,
+			onOpenProjectFiles,
 		} = useMessageListContext()
 		const { followUpSuggestions, keepUsedFollowUpSuggestions, setFollowUpSuggestions } =
 			useGlobalSuggestion()
@@ -241,6 +244,13 @@ export function withAssistantCard<
 		})
 
 		const isRevokedMessage = node?.status === MessageStatus.REVOKED
+		const fileSpaceLimitData = useMemo(
+			() =>
+				getFileSpaceLimitData(messageNode?.data) ??
+				getFileSpaceLimitData(messageNode?.extra?.file_space_limit) ??
+				getFileSpaceLimitData(messageNode?.error?.data),
+			[messageNode],
+		)
 
 		const isLastMessage = checkIsLastMessage?.(
 			node?.app_message_id || messageNode?.message_id || "",
@@ -248,11 +258,18 @@ export function withAssistantCard<
 
 		const baseShowSuggestCondition = useMemo(
 			() =>
+				props.contentMode !== "process" &&
 				!isShareRoute &&
 				!isMagicShareRoute &&
 				messageNode?.status === "finished" &&
 				!isRevokedMessage,
-			[isRevokedMessage, messageNode?.status, isShareRoute, isMagicShareRoute],
+			[
+				isRevokedMessage,
+				messageNode?.status,
+				isShareRoute,
+				isMagicShareRoute,
+				props.contentMode,
+			],
 		)
 
 		const showSuggestList = useMemo(
@@ -273,18 +290,27 @@ export function withAssistantCard<
 			[baseShowSuggestCondition, followUpSuggestions, isLastMessage],
 		)
 
+		// contents 不新增布局盒；有附件时沿用列表留白，无附件时给完成提示增加间距。
 		return (
-			<>
-				<WrapperComponent {...props} />
+			<div className="contents [&:not(:has(.message-attachments))>[data-slot=message-status][data-status=finished]]:pt-2">
+				{!fileSpaceLimitData && <WrapperComponent {...props} />}
 
-				{statusList.has(messageNode?.status) && (
+				{props.contentMode !== "process" && statusList.has(messageNode?.status) && (
 					<>
+						{fileSpaceLimitData && (
+							<FileSpaceLimitCard
+								data={fileSpaceLimitData}
+								onOpenProjectFiles={onOpenProjectFiles}
+							/>
+						)}
 						{messageNode?.role === "tool" && messageNode?.content && (
 							<div className="mb-2 text-muted-foreground">{messageNode?.content}</div>
 						)}
 						<div
-							className="ml-[var(--message-status-offset,0px)] w-fit"
+							className={`${fileSpaceLimitData ? "mt-3" : ""} ml-[var(--message-status-offset,0px)] w-fit`}
 							data-testid="message-list-status-badge"
+							data-slot="message-status"
+							data-status={messageNode?.status}
 						>
 							<StatusBadge status={messageNode?.status} />
 						</div>
@@ -354,7 +380,7 @@ export function withAssistantCard<
 						</button>
 					</div>
 				)}
-			</>
+			</div>
 		)
 	})
 

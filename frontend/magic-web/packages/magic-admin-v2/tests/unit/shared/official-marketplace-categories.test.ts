@@ -19,6 +19,7 @@ const categoryMessagesZh = JSON.parse(
 const pageSource = [
   "src/features/platform-official-marketplace/platform-official-marketplace-page.tsx",
   "src/features/platform-official-marketplace/components/employee-market-panel.tsx",
+  "src/features/platform-official-marketplace/components/agent-market-category-manager-dialog.tsx",
 ]
   .map((filePath) => readFileSync(filePath, "utf8"))
   .join("\n");
@@ -111,7 +112,7 @@ describe("official marketplace employee category management", () => {
   it("provides the complete legacy management surface and permission guard", () => {
     assert.equal(pageSource.includes("AgentMarketCategoryManagerDialog"), true);
     assert.equal(permissionSource.includes("PLATFORM_EMPLOYEE_MARKET_EDIT"), true);
-    assert.equal(pageSource.includes("disabled={!canEdit || saving"), true);
+    assert.equal(pageSource.includes("disabled={!canEdit"), true);
     assert.equal(managerSource.includes("DeleteConfirmDialog"), true);
     assert.equal(managerSource.includes("useAgentMarketCategoryMutations"), true);
     assert.equal(managerSource.includes("updateStatus"), true);

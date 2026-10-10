@@ -26,6 +26,8 @@ class CanvasOverviewElementResult:
     child_count: int
     incoming_element_ids: tuple[str, ...]
     outgoing_element_ids: tuple[str, ...]
+    asset_path: str | None = None
+    file_name: str | None = None
 
     def to_dict(self) -> JsonObject:
         """转换为模型友好的概览对象。"""
@@ -46,6 +48,8 @@ class CanvasOverviewElementResult:
             "child_count": self.child_count,
             "incoming": list(self.incoming_element_ids),
             "outgoing": list(self.outgoing_element_ids),
+            "asset_path": self.asset_path,
+            "file_name": self.file_name,
         }
 
 

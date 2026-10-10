@@ -1,7 +1,9 @@
 import asyncio
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from pydantic import Field
 
@@ -9,8 +11,16 @@ from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.ai_abilities import get_visual_understanding_model_id
-from app.core.entity.attachment import AttachmentStorageType
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import (
+    DisplayType,
+    FileContent,
+    OperationResultFileTarget,
+    OperationResultItem,
+    OperationResultListContent,
+    OperationResultListReportContent,
+    OperationResultTargetType,
+    ToolDetail,
+)
 from app.i18n import i18n
 from app.path_manager import PathManager
 from app.service.native_visual_message_builder import NativeVisualMessageBuilder
@@ -129,8 +139,8 @@ def _classify_image_processing_error(error: str | None) -> str:
 class VisualUnderstandingParams(BaseToolParams):
     images: List[str] = Field(
         ...,
-        description="""<!--zh: 图片来源列表，可以是图片URL或本地文件路径，支持多图片输入-->
-Image source list, can be image URLs or local file paths, supports multiple image input"""
+        description="""<!--zh: 图片来源列表，可以是图片URL或本地文件路径，支持多图片输入；活跃 Browser 页面不要先截图再传入此工具-->
+Image source list, which can contain image URLs or local file paths and supports multiple images. For an active Browser tab, use browser_visual_query instead of taking a screenshot and passing it here."""
     )
     query: str = Field(
         ...,
@@ -146,6 +156,8 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
     视觉专家无法得知你所知晓的上下文，因此需要提供必要且充足的背景与需求信息。
     对于简单问题，视觉专家可给出答案，不仅限于分析和解释图片本身。
 
+    图片已经在对话中直接呈现给你时（例如用户在消息里发送的图片），直接查看即可，不要再调用本工具；本工具用于查看你当前看不到的图片，例如只给出文件路径或链接的图片。同一批图片不要重复调用。
+
     最佳实践：
     1、分析需求明确时，为视觉专家提供完整的逐字引用的分析需求
     2、简单问题可直接要求视觉专家给出答案（如：与上下文无关的、无需太多背景信息的问题）
@@ -158,6 +170,7 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
     要求：
     - 输入图片路径或URL链接，支持同时输入多张图片
     - 提供对图片内容的具体问题或要求描述
+    - 活跃 Browser 页面需要视觉判断时使用 browser_visual_query；不要先调用 browser_screenshot 再把截图交给本工具
     调用示例：
     ```
     # 网址输入
@@ -178,6 +191,8 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
     Visual understanding tool: Call AI vision expert to view, read, analyze or interpret image content.
     Vision expert cannot know the context you know, so provide necessary and sufficient background and requirement information.
     For simple questions, vision expert can provide answers, not limited to analyzing and interpreting images themselves.
+
+    If an image is already shown to you in the conversation (for example, one the user sent in a message), look at it directly instead of calling this tool. Use this tool for images you cannot currently see, such as those given only as a file path or URL. Do not call it again for the same images.
 
     Best practices:
     1. When analysis requirements are clear, provide vision expert with complete verbatim quoted analysis requirements
@@ -464,21 +479,23 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
         try:
             image_count = result.extra_info.get("image_count", 0) if result.extra_info else 0
 
-            if result.extra_info and result.extra_info.get("native_visual") and image_count == 1:
-                image_path = Path(result.extra_info["images"][0])
+            if result.ok and result.extra_info and result.extra_info.get("native_visual"):
+                images: list[str] = result.extra_info["images"]
+                names = Counter(Path(image).name for image in images)
                 workspace_dir = PathManager.get_workspace_dir().resolve()
-                try:
-                    relative_path = image_path.resolve().relative_to(workspace_dir).as_posix()
-                except ValueError:
-                    return None
+                # 原生工具完成的是图片输入准备；分析结论由后续 Agent 回复承接。
+                # 单图、多图共用结果列表，项目外图片保留状态，但不提供错误的文件入口。
+                items = [self._build_image_result_item(
+                    source=image,
+                    name=Path(image).name,
+                    success=True,
+                    message=i18n.translate("visual_understanding.image_loaded", category="tool.messages"),
+                    duplicate_name=names[Path(image).name] > 1,
+                    workspace_dir=workspace_dir,
+                ) for image in images]
                 return ToolDetail(
-                    type=DisplayType.IMAGE,
-                    data=FileContent(
-                        file_name=image_path.name,
-                        content="",
-                        relative_file_path=relative_path,
-                        storage_type=AttachmentStorageType.WORKSPACE,
-                    ),
+                    type=DisplayType.OPERATION_RESULT_LIST,
+                    data=OperationResultListContent(items=items, stage="load"),
                 )
 
             title = i18n.translate("visual_understanding.title", category="tool.messages")
@@ -487,6 +504,33 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
                 title = i18n.translate("visual_understanding.single", category="tool.messages", image_name=image_source_name)
             elif image_count > 1:
                 title = i18n.translate("visual_understanding.multiple", category="tool.messages", count=image_count)
+
+            if result.ok and result.extra_info and "batch_results" in result.extra_info:
+                batch_results: BatchImageProcessingResults = result.extra_info["batch_results"]
+                names = Counter(self._get_image_result_name(image.source) for image in batch_results.results)
+                workspace_dir = PathManager.get_workspace_dir().resolve()
+                # 例：4 张输入中 1 张预处理失败，报告只分析其余 3 张，清单仍保留失败项。
+                # 导航使用输入原图，不能指向 finally 会清理的临时复制文件。
+                items = [self._build_image_result_item(
+                    source=image.source,
+                    name=self._get_image_result_name(image.source),
+                    success=image.success,
+                    message=i18n.translate(
+                        "visual_understanding.image_analyzed" if image.success else "visual_understanding.image_not_analyzed",
+                        category="tool.messages",
+                    ),
+                    duplicate_name=names[self._get_image_result_name(image.source)] > 1,
+                    workspace_dir=workspace_dir,
+                ) for image in batch_results.results]
+                return ToolDetail(
+                    type=DisplayType.OPERATION_RESULT_LIST,
+                    data=OperationResultListReportContent(
+                        items=items,
+                        stage="analyze",
+                        file_name=i18n.translate("visual_understanding.result_file", category="tool.messages"),
+                        content=f"## {title}\n\n{result.content}",
+                    ),
+                )
 
             # 返回Markdown格式的视觉理解内容
             return ToolDetail(
@@ -500,8 +544,55 @@ class VisualUnderstanding(WorkspaceTool[VisualUnderstandingParams]):
             logger.error(f"生成工具详情失败: {e!s}")
             return None
 
+    def _get_image_result_name(self, source: str) -> str:
+        """卡片只显示文件名，不能透传沙盒路径、签名 URL 或内联图片数据。"""
+        if source.startswith("data:"):
+            return i18n.translate("visual_understanding.external_image", category="tool.messages")
+        if re.match(r"^https?://", source, re.IGNORECASE):
+            return Path(urlsplit(source).path).name or i18n.translate(
+                "visual_understanding.external_image", category="tool.messages"
+            )
+        return Path(source).name
+
+    def _build_image_result_item(
+        self,
+        source: str,
+        name: str,
+        success: bool,
+        message: str,
+        duplicate_name: bool,
+        workspace_dir: Path,
+    ) -> OperationResultItem:
+        """原生与非原生共用原图入口，URL／项目外图片仅显示安全名称和状态。"""
+        target: OperationResultFileTarget | None = None
+        description = i18n.translate("visual_understanding.preview_unavailable", category="tool.messages")
+        if not source.startswith("data:") and not re.match(r"^https?://", source, re.IGNORECASE):
+            try:
+                relative_path = Path(source).resolve().relative_to(workspace_dir).as_posix()
+                target = OperationResultFileTarget(
+                    type=OperationResultTargetType.FILE,
+                    relative_file_path=relative_path,
+                )
+                description = relative_path if duplicate_name else ""
+            except ValueError:
+                pass
+        return OperationResultItem(
+            label=name,
+            kind="file",
+            status="success" if success else "error",
+            message=message,
+            description=description,
+            target=target,
+        )
+
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:
         """获取备注内容"""
+        if result.ok and result.extra_info and result.extra_info.get("native_visual"):
+            return i18n.translate(
+                "visual_understanding.images_loaded",
+                category="tool.messages",
+                count=result.extra_info["image_count"],
+            )
         if not arguments or "images" not in arguments:
             return i18n.translate("visual_understanding_webpage.success", category="tool.messages")
 

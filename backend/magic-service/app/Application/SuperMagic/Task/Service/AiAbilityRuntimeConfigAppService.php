@@ -30,6 +30,7 @@ readonly class AiAbilityRuntimeConfigAppService
         AiAbilityCode::SmartFilename->value => 'smart_filename',
         AiAbilityCode::Compact->value => 'compact',
         AiAbilityCode::AnalysisAudio->value => 'analysis_audio',
+        AiAbilityCode::FollowUpQuestions->value => 'follow_up_questions',
     ];
 
     /**

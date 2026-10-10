@@ -21,13 +21,15 @@ interface ImageItemProps {
 
 function ImageItem({ image, onClick }: ImageItemProps) {
 	const { styles } = useStyles()
-	const { ref, url, loading } = useLazyImage(image.file_id)
+	const { ref, url, loading, refresh } = useLazyImage(image.file_id)
 
 	return (
 		<div ref={ref} className={styles.imageItem} onClick={onClick}>
 			<div className={styles.imageWrapper}>
 				{loading && <Spin />}
-				{!loading && url && <img src={url} alt={image.file_name} />}
+				{!loading && url && (
+					<img src={url} alt={image.file_name} onError={() => void refresh()} />
+				)}
 				{!loading && !url && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="" />}
 			</div>
 			<div className={styles.imageName} title={image.file_name}>

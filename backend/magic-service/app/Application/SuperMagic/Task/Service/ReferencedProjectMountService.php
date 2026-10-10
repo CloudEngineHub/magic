@@ -22,6 +22,12 @@ use Throwable;
  */
 class ReferencedProjectMountService
 {
+    private const PREPARATION_TIMEOUT_SECONDS = 3000;
+
+    private const LOCK_EXPIRE_SECONDS = 3600;
+
+    private const LOCK_WAIT_SLICE_SECONDS = 1;
+
     public function __construct(
         private readonly SandboxGatewayInterface $gateway,
         private readonly ReferencedProjectCollaborationAccess $collaborationAccess,
@@ -47,11 +53,10 @@ class ReferencedProjectMountService
     ): void {
         $lockName = 'referenced-projects:' . $sandboxId;
         $owner = bin2hex(random_bytes(16));
-        // Reserve time beyond the preparation deadline for bounded gateway calls/cleanup.
-        if (! $this->locker->mutexLock($lockName, $owner, 3600)) {
-            throw new RuntimeException('Sandbox reference preparation is already in progress');
+        if (! $this->acquirePreparationLock($lockName, $owner, $isTerminated)) {
+            return;
         }
-        $deadline = hrtime(true) + 3000 * 1_000_000_000;
+        $deadline = hrtime(true) + self::PREPARATION_TIMEOUT_SECONDS * 1_000_000_000;
         $checkDeadline = static function () use ($deadline): void {
             if (hrtime(true) >= $deadline) {
                 throw new RuntimeException('Sandbox reference preparation timed out');
@@ -137,6 +142,30 @@ class ReferencedProjectMountService
             $send();
         } finally {
             $this->locker->release($lockName, $owner);
+        }
+    }
+
+    /** @param callable(): bool $isTerminated */
+    private function acquirePreparationLock(string $lockName, string $owner, callable $isTerminated): bool
+    {
+        // Reserve time beyond the preparation deadline for bounded gateway calls/cleanup.
+        if ($this->locker->mutexLock($lockName, $owner, self::LOCK_EXPIRE_SECONDS)) {
+            return true;
+        }
+
+        // 启动时插入的消息等待前一次准备和发送；分段等待让终止可被检测。
+        // 等待独立计时，取得锁后仍保留完整的准备预算。
+        $deadline = hrtime(true) + self::PREPARATION_TIMEOUT_SECONDS * 1_000_000_000;
+        while (true) {
+            if ($this->terminated($isTerminated)) {
+                return false;
+            }
+            if (hrtime(true) >= $deadline) {
+                throw new RuntimeException('Sandbox reference preparation lock wait timed out');
+            }
+            if ($this->locker->spinLock($lockName, $owner, self::LOCK_EXPIRE_SECONDS, self::LOCK_WAIT_SLICE_SECONDS)) {
+                return true;
+            }
         }
     }
 

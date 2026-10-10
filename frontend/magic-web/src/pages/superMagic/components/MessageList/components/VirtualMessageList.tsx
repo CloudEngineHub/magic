@@ -55,6 +55,7 @@ function hasTerminalToolStatus(node: Record<string, unknown> | undefined) {
 
 export interface VirtualMessageListProps {
 	topicId?: string
+	processProjectionKey?: string
 	items: Array<VirtualMessageItem>
 	/** Bottom content is the last virtual row so its height is measured by the same virtualizer. */
 	footer?: ReactNode
@@ -123,6 +124,17 @@ const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 	topicId?: string
 	renderNode: VirtualMessageListProps["renderNode"]
 }) {
+	if (item.kind === "process-toggle") {
+		// 过程入口也属于 AI 消息时间线，复用正文行样式，让头像下方的虚线连续穿过入口。
+		return (
+			<div
+				data-message-id={item.key}
+				className={cn("relative w-full", ASSISTANT_MESSAGE_ROW_CLASS)}
+			>
+				{renderNode({ item })}
+			</div>
+		)
+	}
 	// The revision read is the row's only Store subscription. Updating another message
 	// must not force this visible row to rebuild its Markdown/tool subtree.
 	const superMessageId = item.node?.super_message_id || ""
@@ -174,6 +186,7 @@ const VirtualMessageRenderRow = observer(function VirtualMessageRenderRow({
 })
 
 function getResetKey(item: VirtualMessageItem) {
+	if (item.kind === "process-toggle") return String(item.expanded)
 	return typeof item.node?.content === "string"
 		? item.node.content
 		: typeof item.node?.status === "string"
@@ -210,7 +223,9 @@ function VirtualMessageContent({
 			resetKey={getResetKey(item)}
 			fallbackWrapper={wrapMessageRow}
 		>
-			<MessageViewStateScopeProvider messageKey={item.key}>
+			<MessageViewStateScopeProvider
+				messageKey={item.kind === "message" ? item.viewStateKey || item.key : item.key}
+			>
 				<VirtualMessageRenderRow topicId={topicId} item={item} renderNode={renderNode} />
 			</MessageViewStateScopeProvider>
 		</MessageRenderErrorBoundary>
@@ -358,6 +373,7 @@ function VirtualMessageRow({
 const EMPTY_USER_INDICES: Array<number> = []
 
 function VirtualMessageListInner({
+	processProjectionKey = "",
 	topicId,
 	items,
 	footer = null,
@@ -383,6 +399,7 @@ function VirtualMessageListInner({
 	const previousItemsRef = useRef<Array<Pick<VirtualMessageItem, "key">>>([])
 	const processedSequenceRef = useRef("")
 	const shiftRef = useRef(false)
+	const previousProcessProjectionRef = useRef(processProjectionKey)
 	const stickyTopValueRef = useRef<number | null>(null)
 	const stickySyncFrameRef = useRef<number | null>(null)
 	const stickySyncPendingRef = useRef(false)
@@ -445,7 +462,10 @@ function VirtualMessageListInner({
 		// virtua reads `shift` in the same render that observes the new item count, so this must
 		// be render-phase bookkeeping — an effect would allow one paint at the old coordinate.
 		// `shift` is only safe for pure prepends; a mid-list change would misplace rows instead.
-		shiftRef.current = getPrependedVirtualItemCount(previousItemsRef.current, items) > 0
+		shiftRef.current =
+			previousProcessProjectionRef.current === processProjectionKey &&
+			getPrependedVirtualItemCount(previousItemsRef.current, items) > 0
+		previousProcessProjectionRef.current = processProjectionKey
 		previousItemsRef.current = items
 		processedSequenceRef.current = sequenceSignature
 	}

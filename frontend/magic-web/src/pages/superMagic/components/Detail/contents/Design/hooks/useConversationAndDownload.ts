@@ -1,3 +1,7 @@
+import {
+	packAndDownloadFileEntries,
+	type PackDownloadFileEntry,
+} from "@/pages/superMagic/services/fileBundleDownload"
 import { useCallback } from "react"
 import {
 	ElementTypeEnum,
@@ -13,12 +17,7 @@ import {
 	type ProjectListItem,
 } from "@/pages/superMagic/pages/Workspace/types"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
-import {
-	packAndDownloadFileEntries,
-	convertFileItemToAttachmentItem,
-	getDesignDirectoryInfo,
-	type PackDownloadFileEntry,
-} from "../utils/utils"
+import { convertFileItemToAttachmentItem, getDesignDirectoryInfo } from "../utils/utils"
 import { resolveDesignCanvasResourceFileItem } from "../utils/designResourceReferenceResolver"
 import { useTranslation } from "react-i18next"
 import { addFileToCurrentChat, addMultipleFilesToNewChat } from "@/pages/superMagic/utils/topics"

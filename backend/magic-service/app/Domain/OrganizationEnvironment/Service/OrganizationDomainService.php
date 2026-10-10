@@ -10,6 +10,7 @@ namespace App\Domain\OrganizationEnvironment\Service;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\OrganizationEnvironment\Entity\OrganizationEntity;
+use App\Domain\OrganizationEnvironment\Entity\ValueObject\OrganizationSearchField;
 use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationRepositoryInterface;
 use App\Domain\Permission\Service\OrganizationAdminDomainService;
 use App\ErrorCode\PermissionErrorCode;
@@ -143,6 +144,21 @@ readonly class OrganizationDomainService
     public function queries(Page $page, ?array $filters = null): array
     {
         return $this->organizationRepository->queries($page, $filters);
+    }
+
+    /**
+     * 按指定字段搜索组织。
+     *
+     * @param null|string $organizationCodeFilter 组织编码过滤条件；null 表示不限制组织
+     * @return array{total: int, list: OrganizationEntity[]}
+     */
+    public function searchOrganizations(
+        Page $page,
+        OrganizationSearchField $searchField,
+        string $keyword,
+        ?string $organizationCodeFilter = null
+    ): array {
+        return $this->organizationRepository->searchOrganizations($page, $searchField, $keyword, $organizationCodeFilter);
     }
 
     /**

@@ -10,6 +10,7 @@ namespace HyperfTest\Cases\Application\Audit\ModelCall\Event\Subscribe;
 use App\Application\Audit\ModelCall\Event\Subscribe\ModelAuditReadyBridgeSubscriber;
 use App\Application\ModelGateway\Service\LLMAppService;
 use App\Domain\Audit\ModelCall\Entity\AuditLogEntity;
+use App\Domain\Audit\ModelCall\Repository\Facade\AuditHourlyRecordRepositoryInterface;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditLogRepositoryInterface;
 use App\Domain\Audit\ModelCall\Service\ModelCallAuditDomainService;
 use App\Domain\ModelGateway\Entity\Dto\TextGenerateImageDTO;
@@ -30,7 +31,7 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
     {
         $repository = new RecordingAuditLogRepository();
         $subscriber = new ModelAuditReadyBridgeSubscriber(
-            new ModelCallAuditDomainService($repository),
+            new ModelCallAuditDomainService($repository, $this->createStub(AuditHourlyRecordRepositoryInterface::class)),
             (new ReflectionClass(ProviderModelDomainService::class))->newInstanceWithoutConstructor(),
             new NullLogger(),
         );
@@ -118,7 +119,7 @@ class ModelAuditReadyBridgeSubscriberTest extends TestCase
     {
         $repository = new RecordingAuditLogRepository();
         $subscriber = new ModelAuditReadyBridgeSubscriber(
-            new ModelCallAuditDomainService($repository),
+            new ModelCallAuditDomainService($repository, $this->createStub(AuditHourlyRecordRepositoryInterface::class)),
             (new ReflectionClass(ProviderModelDomainService::class))->newInstanceWithoutConstructor(),
             new NullLogger(),
         );

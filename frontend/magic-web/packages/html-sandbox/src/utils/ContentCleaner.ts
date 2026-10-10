@@ -71,28 +71,29 @@ export class ContentCleaner {
 	}
 
 	private static cleanUnsafeHrefAttributes(doc: Document): void {
-		doc.querySelectorAll<HTMLAnchorElement>("a[href], area[href]").forEach((element) => {
-			const href = element.getAttribute("href")
-			if (href === null) return
-			try {
-				const normalizedHref = normalizeSafeHref(href)
-				if (normalizedHref === null) {
-					element.removeAttribute("href")
-				} else {
-					element.setAttribute("href", normalizedHref)
+		doc.querySelectorAll<HTMLElement>("a[href], area[href], [data-magic-href]").forEach(
+			(element) => {
+				for (const attribute of ["href", "data-magic-href"]) {
+					const href = element.getAttribute(attribute)
+					if (href === null) continue
+					try {
+						const normalizedHref = normalizeSafeHref(href)
+						if (normalizedHref === null) element.removeAttribute(attribute)
+						else element.setAttribute(attribute, normalizedHref)
+					} catch {
+						element.removeAttribute(attribute)
+					}
 				}
-			} catch {
-				element.removeAttribute("href")
-			}
 
-			if (element.getAttribute("target") !== "_blank") return
-			const relTokens = new Set(
-				(element.getAttribute("rel") ?? "").split(/\s+/).filter(Boolean),
-			)
-			relTokens.add("noopener")
-			relTokens.add("noreferrer")
-			element.setAttribute("rel", Array.from(relTokens).join(" "))
-		})
+				if (element.getAttribute("target") !== "_blank") return
+				const relTokens = new Set(
+					(element.getAttribute("rel") ?? "").split(/\s+/).filter(Boolean),
+				)
+				relTokens.add("noopener")
+				relTokens.add("noreferrer")
+				element.setAttribute("rel", Array.from(relTokens).join(" "))
+			},
+		)
 	}
 
 	/**

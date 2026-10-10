@@ -152,7 +152,7 @@ export function DynamicModelEditDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden sm:max-w-lg">
+			<DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden sm:max-w-lg" data-testid="platform-official-staff-dialog-content" closeButtonTestId="assignment-dialogs-close-button">
 				<DialogHeader className="shrink-0">
 					<DialogTitle>{t("officialStaff.dialog.editDynamicModelTitle")}</DialogTitle>
 					<DialogDescription>
@@ -176,7 +176,7 @@ export function DynamicModelEditDialog({
 							</span>
 							<TabsList className="h-11 shrink-0">
 								{([Language.ZhCN, Language.EnUS] as const).map((locale) => (
-									<TabsTrigger className="h-11 gap-2" key={locale} value={locale}>
+									<TabsTrigger className="h-11 gap-2" key={locale} value={locale} data-testid="platform-official-staff-tab-trigger">
 										<span>
 											{locale === Language.ZhCN
 												? t("language.zhCN")
@@ -208,7 +208,7 @@ export function DynamicModelEditDialog({
 									aria-invalid={Boolean(form.formState.errors.nameZh)}
 									id="official-staff-model-name-zh"
 									{...form.register("nameZh")}
-								/>
+								 data-testid="platform-official-staff-official-staff-model-name-zh-input"/>
 								<FieldError message={form.formState.errors.nameZh?.message} />
 							</DialogFormField>
 							<DialogFormField
@@ -219,7 +219,7 @@ export function DynamicModelEditDialog({
 									id="official-staff-model-description-zh"
 									rows={4}
 									{...form.register("descriptionZh")}
-								/>
+								 data-testid="platform-official-staff-official-staff-model-description-zh-input"/>
 							</DialogFormField>
 							<DialogFormField
 								description={t("officialStaff.fieldDesc.modelIdentifier")}
@@ -235,7 +235,7 @@ export function DynamicModelEditDialog({
 									}
 									placeholder={t("officialStaff.placeholder.modelIdentifier")}
 									value={modelId}
-								/>
+								 data-testid="platform-official-staff-official-staff-model-identifier-zh-input"/>
 							</DialogFormField>
 						</TabsContent>
 						<TabsContent
@@ -252,7 +252,7 @@ export function DynamicModelEditDialog({
 									aria-invalid={Boolean(form.formState.errors.nameEn)}
 									id="official-staff-model-name-en"
 									{...form.register("nameEn")}
-								/>
+								 data-testid="platform-official-staff-official-staff-model-name-en-input"/>
 								<FieldError message={form.formState.errors.nameEn?.message} />
 							</DialogFormField>
 							<DialogFormField
@@ -263,7 +263,7 @@ export function DynamicModelEditDialog({
 									id="official-staff-model-description-en"
 									rows={4}
 									{...form.register("descriptionEn")}
-								/>
+								 data-testid="platform-official-staff-official-staff-model-description-en-input"/>
 							</DialogFormField>
 							<DialogFormField
 								description={t("officialStaff.fieldDesc.modelIdentifier")}
@@ -279,7 +279,7 @@ export function DynamicModelEditDialog({
 									}
 									placeholder={t("officialStaff.placeholder.modelIdentifier")}
 									value={modelId}
-								/>
+								 data-testid="platform-official-staff-official-staff-model-identifier-en-input"/>
 							</DialogFormField>
 						</TabsContent>
 					</Tabs>
@@ -298,10 +298,10 @@ export function DynamicModelEditDialog({
 					</DialogFormField>
 				</div>
 				<DialogFooter className="shrink-0">
-					<Button onClick={() => onOpenChange(false)} variant="outline">
+					<Button onClick={() => onOpenChange(false)} variant="outline" data-testid="platform-official-staff-cancel-button">
 						{t("common.cancel")}
 					</Button>
-					<Button disabled={!canEdit || isIconUploading} type="submit">
+					<Button disabled={!canEdit || isIconUploading} type="submit" data-testid="platform-official-staff-save-button">
 						<Save className="size-4" />
 						{t("common.save")}
 					</Button>
@@ -354,7 +354,7 @@ export function SubModelRow({
 		>
 			<div className="flex min-w-0 items-center gap-2">
 				{editable && !deleted ? (
-					<button
+					<button data-testid="platform-official-staff-assignment-action-button"
 						aria-label={t("officialStaff.aria.dragSubModel")}
 						className="flex size-4 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing"
 						type="button"
@@ -383,7 +383,7 @@ export function SubModelRow({
 					onClick={() => onDelete(subModel.id)}
 					size="icon"
 					variant="ghost"
-				>
+				 data-testid="platform-official-staff-delete-button">
 					<Trash2 className="size-3.5" />
 				</Button>
 			) : null}
@@ -508,7 +508,7 @@ export function GroupFormDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden sm:max-w-xl">
+			<DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden sm:max-w-xl" data-testid="platform-official-staff-dialog-content" closeButtonTestId="assignment-dialogs-close-button">
 				<DialogHeader className="shrink-0">
 					<DialogTitle>
 						{targetGroup
@@ -535,7 +535,7 @@ export function GroupFormDialog({
 								disabled={!canEdit}
 								id="official-staff-group-name-zh"
 								{...form.register("nameZh")}
-							/>
+							 data-testid="platform-official-staff-official-staff-group-name-zh-input"/>
 							<FieldError message={form.formState.errors.nameZh?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -548,7 +548,7 @@ export function GroupFormDialog({
 								disabled={!canEdit}
 								id="official-staff-group-name-en"
 								{...form.register("nameEn")}
-							/>
+							 data-testid="platform-official-staff-official-staff-group-name-en-input"/>
 							<FieldError message={form.formState.errors.nameEn?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -566,13 +566,13 @@ export function GroupFormDialog({
 						</DialogFormField>
 					</div>
 					<DialogFooter className="shrink-0">
-						<Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+						<Button onClick={() => onOpenChange(false)} type="button" variant="outline" data-testid="platform-official-staff-cancel-button">
 							{t("common.cancel")}
 						</Button>
 						<Button
 							disabled={!canEdit || isIconUploading || saveGroupMutation.isPending}
 							type="submit"
-						>
+						 data-testid="platform-official-staff-save-button">
 							{saveGroupMutation.isPending ? (
 								<Loader2 className="size-4 animate-spin" />
 							) : (

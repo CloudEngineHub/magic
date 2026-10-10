@@ -16,6 +16,18 @@ export const MY_CLAW_WORKSPACE_ID = "my-claw"
 export const MY_SKILLS_WORKSPACE_ID = "my-skills"
 export const MY_AGENTS_WORKSPACE_ID = "my-agents"
 export const MICRO_APPS_WORKSPACE_ID = "micro-apps"
+export const MY_MICRO_APPS_WORKSPACE_ID = "my-micro-apps"
+
+export const MY_MICRO_APPS_WORKSPACE_DATA = (t: TFunction): Workspace => ({
+	id: MY_MICRO_APPS_WORKSPACE_ID,
+	name: t("selectPathModal.myMicroApps", { ns: "super" }),
+	workspace_status: WorkspaceStatus.WAITING,
+	is_archived: 0,
+	current_topic_id: "",
+	current_project_id: null,
+	project_count: 0,
+	workspace_type: "micro-app",
+})
 
 export const SHARE_WORKSPACE_DATA = (t: TFunction): Workspace => {
 	return {
@@ -77,7 +89,7 @@ export const MICRO_APPS_WORKSPACE_DATA = (t: TFunction): Workspace => ({
 	current_topic_id: "",
 	current_project_id: "",
 	project_count: 0,
-	workspace_type: "default",
+	workspace_type: "micro-app",
 })
 
 export const MY_AUDIO_RECORDINGS_WORKSPACE_DATA = (t: TFunction): Workspace => {

@@ -455,6 +455,11 @@ export abstract class BaseLabelManager {
 
 	/** Recomputes one label after a sibling manager changes its available width. */
 	public refreshLabelLayout(elementId: string, skipBatchDraw = false): boolean {
+		if (
+			!this.labelMap.has(elementId) &&
+			this.canvas.nameLabelManager?.isDOMLabelInteracting(elementId)
+		)
+			return this.createOrUpdateLabel(elementId, { skipBatchDraw })
 		return this.updateLabelPosition(elementId, skipBatchDraw)
 	}
 
@@ -575,9 +580,14 @@ export abstract class BaseLabelManager {
 	 * 更新图片和视频标签的显示模式，并立即同步现有及当前视口内的标签。
 	 * 常驻模式需要把媒体加入候选索引，否则缩小时标签尚未创建就无法显示。
 	 */
-	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean): void {
+	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean, syncLabels = true): void {
 		if (this.mediaLabelsAlwaysVisible === alwaysVisible) return
 		this.mediaLabelsAlwaysVisible = alwaysVisible
+		if (syncLabels) this.syncMediaLabelsVisibility()
+	}
+
+	/** Canvas 先统一标题与分辨率的模式，再沿用现有同步和清理流程。 */
+	public syncMediaLabelsVisibility(): void {
 		this.visibleLabelQueryCache = null
 		this.syncVisibleLabels("media-label-visibility")
 	}
@@ -939,6 +949,18 @@ export abstract class BaseLabelManager {
 			return false
 		}
 
+		// 关闭常驻后先移除非交互标签，避免移除前仍为整批媒体度量文本、布局和计算遮挡。
+		// 悬浮、选中与重命名标签继续由原有保留规则处理。
+		if (
+			!this.shouldRetainLabel(
+				elementId,
+				element,
+				this.calculateBaseVisibility(elementId, element),
+			)
+		) {
+			return this.updateLabelVisibility(elementId, skipBatchDraw)
+		}
+
 		// 更新标签内容；名称标签会复用事件阶段缓存，避免 transform/viewport 热路径
 		// 重复解析生成状态和测量自然宽度。
 		let layoutChanged = this.updateLabelContent(elementId, labelGroup)
@@ -1063,6 +1085,10 @@ export abstract class BaseLabelManager {
 			return null
 		}
 
+		// 标签位于独立 Overlay Layer，必须同时遵守元素自身和祖先的隐藏状态。
+		if (this.canvas.elementManager.isElementVisibleInDataTree?.(elementId) === false)
+			return false
+
 		// 检查是否在裁剪状态下，如果是裁剪的元素，强制显示标签
 		const croppingElementId = this.canvas.cropManager.getCroppingElementId()
 		if (croppingElementId === elementId) {
@@ -1090,7 +1116,10 @@ export abstract class BaseLabelManager {
 		if (this.visibilityConfig.hoverOrSelectTypes.has(elementType)) {
 			const isSelected = this.canvas.selectionManager.isSelected(elementId)
 			const hoveredId = this.canvas.hoverManager.getHoveredElementId()
-			const isHovered = hoveredId === elementId
+			// 指针进入 DOM 标题后会离开 Konva；仍按同一媒体行的悬浮处理，避免闪隐。
+			const isHovered =
+				hoveredId === elementId ||
+				this.canvas.nameLabelManager?.isDOMLabelInteracting(elementId) === true
 
 			// 如果有元素正在裁剪，且当前元素不是正在裁剪的元素，则hover时不显示标签
 			if (croppingElementId && croppingElementId !== elementId && isHovered && !isSelected) {
@@ -1292,8 +1321,17 @@ export abstract class BaseLabelManager {
 
 			const labelGroup = manager.labelMap.get(elementId)
 			if (labelGroup && labelGroup.visible()) {
-				const labelBounds = manager.getLabelBounds(labelGroup)
-				if (labelBounds) bounds.push(labelBounds)
+				const textNode = labelGroup.findOne("Text") as Konva.Text
+				if (textNode) {
+					const scaleX = labelGroup.scaleX()
+					const scaleY = labelGroup.scaleY()
+					bounds.push({
+						x: labelGroup.x(),
+						y: labelGroup.y(),
+						width: textNode.width() * scaleX,
+						height: textNode.height() * scaleY,
+					})
+				}
 			}
 		}
 

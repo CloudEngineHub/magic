@@ -114,6 +114,7 @@ export function PlatformAppMenuTable({
 						<Switch
 							aria-label={`${getMenuName(item, language)} ${t("appMenu.column.status")}`}
 							checked={item.status === appMenuStatus.enabled}
+							data-testid="app-menu-status-switch"
 							disabled={!hasEditRight || isStatusPending}
 							loading={isStatusPending}
 							onCheckedChange={(checked) => onStatusChange(item, checked)}
@@ -133,13 +134,22 @@ export function PlatformAppMenuTable({
 					return (
 						<div className="flex justify-end">
 							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<Button aria-label={t("appMenu.action.more")} size="icon" variant="ghost">
+								<DropdownMenuTrigger asChild data-testid="platform-app-menu-menu-trigger">
+									<Button
+										aria-label={t("appMenu.action.more")}
+										data-testid="app-menu-more-button"
+										size="icon"
+										variant="ghost"
+									>
 										<MoreHorizontal className="size-4" aria-hidden="true" />
 									</Button>
 								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end">
-									<DropdownMenuItem disabled={!hasEditRight} onSelect={() => onEdit(item)}>
+								<DropdownMenuContent align="end" data-testid="app-menu-actions-menu">
+									<DropdownMenuItem
+										data-testid="app-menu-edit-item"
+										disabled={!hasEditRight}
+										onSelect={() => onEdit(item)}
+									>
 										<Edit3 className="mr-2 size-4" aria-hidden="true" />
 										{t("common.edit")}
 									</DropdownMenuItem>
@@ -148,6 +158,7 @@ export function PlatformAppMenuTable({
 											<DropdownMenuSeparator />
 											<DropdownMenuItem
 												className="text-destructive focus:text-destructive"
+												data-testid="app-menu-delete-item"
 												disabled={!hasEditRight}
 												onSelect={() => hasEditRight && onDelete(item)}
 											>
@@ -180,8 +191,8 @@ export function PlatformAppMenuTable({
 				<EmptyState
 					description={error.message}
 					icon={AlertCircle}
-					title={t("appMenu.error.loadTitle")}
-				/>
+					testId="app-menu-error"
+					title={t("appMenu.error.loadTitle")}/>
 			</div>
 		)
 	}
@@ -189,20 +200,22 @@ export function PlatformAppMenuTable({
 	return (
 		<DataTable
 				columns={columns}
+			containerTestId="app-menu-table"
 				data={items}
 				emptyState={
 					<div className="p-4">
 						<EmptyState
 							description={t("appMenu.empty.description")}
 							icon={MenuSquare}
-							title={t("appMenu.empty.title")}
-						/>
+						testId="app-menu-empty"
+							title={t("appMenu.empty.title")}/>
 					</div>
 				}
 				getRowId={(item) => item.id}
 				isLoading={isLoading}
+			loadingTestId="app-menu-loading"
 				minWidth={1140}
-				stickyRightColumnId="actions"
-			/>
+			rowTestId="app-menu-row"
+				stickyRightColumnId="actions"/>
 	)
 }

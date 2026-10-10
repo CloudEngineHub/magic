@@ -23,11 +23,17 @@ vi.mock("../../../../app/providers/CanvasUIProvider", () => ({
 		extendingElementId: null,
 		erasingElementId: null,
 	}),
+	useCanvasPanelUI: () => ({
+		messageHistoryElementId: null,
+	}),
 }))
 
 vi.mock("../../../../app/providers/CanvasProvider", () => ({
 	useCanvas: () => ({
 		canvas: {
+			permissionManager: {
+				can: vi.fn(() => true),
+			},
 			elementManager: {
 				isTemporary: vi.fn(() => false),
 				getElementInstance: vi.fn(() => undefined),

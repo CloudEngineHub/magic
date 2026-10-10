@@ -4,6 +4,12 @@ import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesB
 import type { ReactNode, MouseEvent } from "react"
 import { Loader2 } from "lucide-react"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
+import { MediaPreviewTrigger } from "@/components/base/MediaPreview"
+import { useTranslation } from "react-i18next"
+import {
+	useFileMediaSource,
+	type FileMediaMetadata,
+} from "@/pages/superMagic/services/useFileMediaSource"
 
 export interface FileReferenceProps {
 	presentation?: FilePresentation
@@ -15,6 +21,7 @@ export interface FileReferenceProps {
 	loading?: boolean
 	isDirectory?: boolean
 	mentionAttrs?: TiptapMentionAttributes
+	mediaFile?: FileMediaMetadata | null
 	onClick?: (event: MouseEvent<HTMLSpanElement>) => void
 }
 
@@ -34,10 +41,28 @@ export function FileReference({
 	loading = false,
 	isDirectory = false,
 	mentionAttrs,
+	mediaFile,
 	onClick,
 }: FileReferenceProps) {
 	const canDrag = !disabled && Boolean(mentionAttrs)
-	return (
+	const { t } = useTranslation("super")
+	const source = useFileMediaSource(mediaFile, { enabled: !disabled && !loading && !isDirectory })
+	const icon = loading ? (
+		<Loader2 size={16} className="shrink-0 animate-spin" />
+	) : (
+		<FileResourceIcon
+			presentation={
+				presentation ??
+				resolveFilePresentation({
+					file_extension: fileType,
+					is_directory: isDirectory,
+				})
+			}
+			size={16}
+			className="shrink-0"
+		/>
+	)
+	const renderReference = (thumbnail: ReactNode) => (
 		<span
 			data-testid="markdown-file-reference"
 			data-file-reference={href}
@@ -48,32 +73,41 @@ export function FileReference({
 			aria-disabled={disabled || undefined}
 			aria-busy={loading || undefined}
 			// Use the filename's baseline for surrounding text; the icon must not supply the flex baseline.
+			// 媒体名称略小于正文，外间距分开连续引用；最大宽度扣除外间距，避免窄列溢出。
 			className={[
-				"inline-flex max-w-full items-baseline gap-1 overflow-hidden rounded bg-[#f0f6ff] px-0.5 align-baseline text-xs font-normal text-[#315cec]",
+				"inline-flex items-baseline gap-1 overflow-hidden align-baseline",
+				source
+					? "m-0.5 max-w-[calc(100%-0.25rem)] rounded bg-[#f0f6ff] px-1 text-[#315cec] leading-[1.4] [font-size:0.93em] [font-weight:inherit]"
+					: "max-w-full rounded bg-[#f0f6ff] px-0.5 text-xs font-normal text-[#315cec]",
 				disabled
 					? "cursor-default opacity-60"
 					: onClick
-						? "cursor-pointer hover:bg-[#e0ecff]"
+						? source
+							? "cursor-pointer hover:bg-[#e0ecff]"
+							: "cursor-pointer hover:bg-[#e0ecff]"
 						: "",
 			].join(" ")}
-			title={title}
+			title={source ? undefined : title}
 			onClick={disabled ? undefined : onClick}
+			role={onClick ? "button" : undefined}
+			tabIndex={!disabled && onClick ? 0 : undefined}
+			onKeyDown={(event) => {
+				if (!disabled && onClick && (event.key === "Enter" || event.key === " ")) {
+					event.preventDefault()
+					event.currentTarget.click()
+				}
+			}}
 		>
-			{loading ? (
-				<Loader2 size={16} className="mt-[-0.2em] shrink-0 animate-spin self-center" />
-			) : (
-				<FileResourceIcon
-					presentation={
-						presentation ??
-						resolveFilePresentation({
-							file_extension: fileType,
-							is_directory: isDirectory,
-						})
-					}
-					size={16}
-					className="mt-[-0.2em] shrink-0 self-center"
-				/>
-			)}
+			<span
+				className={
+					source
+						? "inline-flex size-4 shrink-0 items-center self-center"
+						: "mt-[-0.2em] shrink-0 self-center"
+				}
+				aria-hidden
+			>
+				{thumbnail}
+			</span>
 			<span
 				data-file-reference-label
 				className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
@@ -81,5 +115,23 @@ export function FileReference({
 				{label}
 			</span>
 		</span>
+	)
+	return (
+		<MediaPreviewTrigger
+			fileName={mediaFile?.fileName || title || href || ""}
+			source={source}
+			fallback={icon}
+			renderTrigger={renderReference}
+			enableTouchTrigger={false}
+			labels={{
+				errorMessage: t("common.fileNotFoundOrLoadFailed"),
+				audioLabels: {
+					play: t("filePreview.play"),
+					pause: t("filePreview.pause"),
+					loading: t("common.loading"),
+					progress: t("filePreview.progress"),
+				},
+			}}
+		/>
 	)
 }

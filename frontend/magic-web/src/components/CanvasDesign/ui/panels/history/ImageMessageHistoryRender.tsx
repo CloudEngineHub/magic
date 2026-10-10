@@ -6,7 +6,7 @@ import {
 import styles from "./index.module.css"
 import IconButton from "../../primitives/custom/IconButton/index"
 import { CircleCheck, CircleX, Copy, ImagePlus, Loader2, X } from "lucide-react"
-import { useMemo, useCallback } from "react"
+import { useMemo, useCallback, useState } from "react"
 import { toast } from "sonner"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useCanvasPanelUI, useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
@@ -27,11 +27,12 @@ import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/refer
 import { copyHistoryPromptToClipboard } from "./historyPromptClipboard"
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
-import { useGenerationRuntime } from "../../../app/hooks/canvas"
+import { useGenerationRuntime, useCanvasEvent } from "../../../app/hooks/canvas"
 import {
 	getActiveImageContent,
 	getImageContentById,
 } from "../../../runtime/document/elementContent"
+import { isImageGenerationTimedOut } from "../../../runtime/elements/image/imageGenerationTiming"
 import { normalizeImageSizeValue } from "../../element-tools/editors/image/image-editor-config.utils"
 import { cn } from "@/utils/cn"
 
@@ -49,6 +50,14 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(imageElement.id, contentId)
+	const [, refreshDisplayState] = useState(0)
+	useCanvasEvent(
+		"element:image:displayStateChanged",
+		({ data }) => {
+			if (data.elementId === imageElement.id) refreshDisplayState((revision) => revision + 1)
+		},
+		[imageElement.id],
+	)
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
 	// 卡片指定版本时直接读取它；不存在时显示缺失，不回退到用户当前看的另一版。
 	const imageContent = contentId
@@ -75,6 +84,19 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 		return canvas.elementManager.getElementInstance(imageElement.id) as
 			ImageElementClass | undefined
 	}, [canvas, imageElement.id])
+	const timing =
+		(imageContent ? elementInstance?.getGenerationTiming(imageContent.contentId) : undefined) ??
+		imageContent?.generationTiming
+	const timedOut = Boolean(imageContent && isImageGenerationTimedOut(imageContent, timing))
+	const generationStatus = timedOut
+		? t("image.timedOut", "生成已超时")
+		: generationRuntime
+			? t("image.generating", "正在生成中...")
+			: imageContent?.status === "failed"
+				? t("messageHistory.generationFailed", "生成失败")
+				: imageContent?.src || imageContent?.status === "completed"
+					? t("messageHistory.generationCompleted", "生成完成")
+					: t("image.generating", "正在生成中...")
 
 	// 获取尺寸
 	const sizes = useMemo(() => {
@@ -234,6 +256,22 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 			</div>
 			<div className={styles.divider}></div>
 			<div className={styles.body}>
+				{!missingContent && (
+					<div className={styles.item}>
+						<div className={styles.itemTitle}>
+							{t("messageHistory.generationStatus", "生成状态")}
+						</div>
+						<div className={styles.itemContent}>{generationStatus}</div>
+						{timing?.source === "observed" ? (
+							<div className={styles.itemContent}>
+								{t(
+									"messageHistory.generationTimeObserved",
+									"缺少原始开始时间，等待时长从首次查看起计算。",
+								)}
+							</div>
+						) : null}
+					</div>
+				)}
 				{missingContent || !request ? (
 					<div className={styles.itemContent} role="status">
 						{missingContent

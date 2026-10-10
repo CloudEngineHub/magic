@@ -101,15 +101,16 @@ export function preflightPptxExport(options: PreflightOptions = {}): ExportPrefl
 		warnings.push({
 			code: "unknown-output-size",
 			message:
-				"The final archive size is unknown until media sources are read; ZIP64 is selected conservatively.",
+				"The final archive size is unknown until media sources are read; classic ZIP is selected for broad PowerPoint compatibility and the writer will stop before a ZIP32 overflow.",
 			severity: "warning",
 		})
 	}
+	const zipMode = estimatedZipEntries >= ZIP32_ENTRY_COUNT_SENTINEL ? "zip64" : "classic"
 
 	return {
 		accepted: errors.length === 0,
 		outputPolicy,
-		zipMode: "zip64",
+		zipMode,
 		capacityConfidence: "streaming-unknown",
 		pageCount: pageCount ?? 0,
 		knownMinimumOutputBytes,
@@ -122,6 +123,8 @@ export function preflightPptxExport(options: PreflightOptions = {}): ExportPrefl
 		errors,
 	}
 }
+
+const ZIP32_ENTRY_COUNT_SENTINEL = BigInt("65535")
 
 function normalizeOutputPolicy(
 	policy: LargeExportOutputPolicy | undefined,

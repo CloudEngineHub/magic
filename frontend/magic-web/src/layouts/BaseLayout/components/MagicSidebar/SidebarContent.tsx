@@ -49,14 +49,11 @@ function SidebarContent({ collapsed, onBusyChange, onSelect }: SidebarContentPro
 		RouteName.MicroAppsList,
 		RouteName.MicroApp,
 	].some((routeName) => routesPathMatch(routeName, location.pathname))
-	// Keep the task entry selected throughout the task workspace while excluding chat routes.
+	// The "new task" entry only represents the task home / workspace views. Project and topic
+	// detail pages (/super/:projectId[/:topicId]) belong to an existing project, so they must not
+	// keep this entry selected; chat routes are likewise excluded.
 	const isNewTaskActive =
-		[
-			RouteName.Super,
-			RouteName.SuperWorkspaceState,
-			RouteName.SuperWorkspaceProjectState,
-			RouteName.SuperWorkspaceProjectTopicState,
-		].includes(currentRouteName as RouteName) &&
+		[RouteName.Super, RouteName.SuperWorkspaceState].includes(currentRouteName as RouteName) &&
 		!isSidebarMarketRouteActive &&
 		!isMicroAppRouteActive
 	useEffect(() => {

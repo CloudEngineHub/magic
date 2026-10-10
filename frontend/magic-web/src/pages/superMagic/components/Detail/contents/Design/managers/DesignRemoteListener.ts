@@ -33,6 +33,8 @@ import { SuperMagicApi } from "@/apis"
 import { loadDesignDataToRuntime } from "../utils/designDataLoader"
 import type { LoadDesignDataToRuntimeResult } from "../utils/designDataLoader"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
+import type { SuperMagicProjectAttachmentsReconciledPayload } from "@/pages/superMagic/events/files"
+import { getSharedMediaResourceScope } from "@/pages/superMagic/services/sharedMediaResourceScope"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
 	// "create_canvas_element",
@@ -233,6 +235,9 @@ export class DesignRemoteListener {
 	private localSaveUpdatedAtMs: number | null = null
 	private projectKey: string
 	private latestRemoteApplyToken = 0
+	private pendingReconciliation: SuperMagicProjectAttachmentsReconciledPayload | null = null
+	private lastReconciledSnapshot:
+		SuperMagicProjectAttachmentsReconciledPayload["snapshot"] | null = null
 
 	constructor(options: DesignRemoteListenerOptions) {
 		this.options = options
@@ -254,6 +259,8 @@ export class DesignRemoteListener {
 		this.options = { ...this.options, ...options }
 		this.projectKey = this.getProjectKey(this.options)
 		if (prevProjectKey !== this.projectKey) {
+			this.pendingReconciliation = null
+			this.lastReconciledSnapshot = null
 			this.latestRemoteApplyToken += 1
 			this.fileId = null
 			this.hasPendingFileChangeDuringSave = false
@@ -269,17 +276,28 @@ export class DesignRemoteListener {
 			this.unsubscribeRemoteUpdateEvents(prevMode)
 			this.subscribeRemoteUpdateEvents()
 		}
+		this.flushPendingReconciliation()
 	}
 
 	mount(): void {
 		this.isMounted = true
 		this.initializeMagicProjectJsUpdatedAtFromOptions()
 		this.subscribeRemoteUpdateEvents()
+		pubsub.subscribe(
+			PubSubEvents.Super_Magic_Project_Attachments_Reconciled,
+			this.handleProjectAttachmentsReconciled,
+		)
 	}
 
 	unmount(): void {
 		this.isMounted = false
 		this.unsubscribeRemoteUpdateEvents()
+		pubsub.unsubscribe(
+			PubSubEvents.Super_Magic_Project_Attachments_Reconciled,
+			this.handleProjectAttachmentsReconciled,
+		)
+		this.pendingReconciliation = null
+		this.lastReconciledSnapshot = null
 		if (this.debounceTimer) {
 			clearTimeout(this.debounceTimer)
 			this.debounceTimer = null
@@ -346,7 +364,61 @@ export class DesignRemoteListener {
 	}
 
 	private getProjectKey(options: DesignRemoteListenerOptions): string {
-		return `${options.projectId ?? ""}:${options.designProjectId ?? ""}`
+		return `${options.projectId ?? ""}:${options.designProjectId ?? ""}:${options.fileApi?.identityKey ?? ""}`
+	}
+
+	private readonly handleProjectAttachmentsReconciled = (
+		payload: SuperMagicProjectAttachmentsReconciledPayload,
+	): void => {
+		if (
+			!this.isMounted ||
+			this.getAccessMode() === "share" ||
+			payload.projectId !== this.options.projectId ||
+			payload.accessScope !== getSharedMediaResourceScope() ||
+			payload.snapshot === this.lastReconciledSnapshot
+		)
+			return
+
+		this.pendingReconciliation = payload
+		this.flushPendingReconciliation()
+	}
+
+	private flushPendingReconciliation(): void {
+		const pending = this.pendingReconciliation
+		if (!this.isMounted || !pending || !this.options.getMagicProjectJsFileId()) return
+		if (pending.accessScope !== getSharedMediaResourceScope()) {
+			this.pendingReconciliation = null
+			return
+		}
+
+		// MobX 提交后 React 才把附件传进管理器。按真实列表引用等待，不能猜渲染延迟。
+		const list = this.options.flatAttachments
+		const hasCurrentAttachments = list
+			? list === pending.snapshot.list || list === pending.store.workspaceFilesList
+			: this.options.attachments === pending.snapshot.tree ||
+				this.options.attachments === pending.store.workspaceFileTree
+		if (!hasCurrentAttachments) return
+
+		this.pendingReconciliation = null
+		this.lastReconciledSnapshot = pending.snapshot
+		if (this.deferRemoteRefreshDuringSave()) return
+		const projectKey = this.projectKey
+		const applyToken = this.latestRemoteApplyToken
+		void this.options
+			.checkRemoteUpdate()
+			.then(({ hasUpdate, isCheckReliable, currentVersion }) => {
+				if (
+					!this.isMounted ||
+					projectKey !== this.projectKey ||
+					applyToken !== this.latestRemoteApplyToken ||
+					pending.accessScope !== getSharedMediaResourceScope()
+				)
+					return
+				if (!hasUpdate && isCheckReliable) return
+				// 保存延期、历史版本和本地草稿仍交给原远端更新流程处理。
+				this.debouncedLoadAndApply(undefined, currentVersion)
+			})
+			.catch(() => undefined)
 	}
 
 	private subscribeRemoteUpdateEvents(): void {

@@ -24,15 +24,18 @@ export default function MicroAppCardCover({
 	id,
 	coverUrl,
 	compact = false,
+	variant = "cover",
 }: {
 	id: string
 	coverUrl?: string
 	compact?: boolean
+	variant?: "cover" | "icon"
 }) {
 	const [failedUrl, setFailedUrl] = useState<string>()
 	const hasCover = Boolean(coverUrl && failedUrl !== coverUrl)
 	const themeIndex = resolveThemeIndex(id)
 	const Icon = icons[themeIndex]
+	const icon = variant === "icon"
 
 	return (
 		<div
@@ -41,7 +44,11 @@ export default function MicroAppCardCover({
 			className={cn(
 				"relative isolate shrink-0 overflow-hidden bg-[color-mix(in_srgb,currentColor_13%,rgb(var(--card-rgb)))]",
 				themes[themeIndex],
-				compact ? "h-14 w-[76px] rounded-xl" : "h-[76px] w-full rounded-xl",
+				icon
+					? "size-8 rounded-lg"
+					: compact
+						? "h-14 w-[76px] rounded-xl"
+						: "h-[76px] w-full rounded-xl",
 			)}
 		>
 			{hasCover ? (
@@ -61,7 +68,7 @@ export default function MicroAppCardCover({
 						className="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-[radial-gradient(currentColor_0.6px,transparent_0.6px)] opacity-[0.08] transition-opacity duration-300 [background-size:8px_8px] [mask-image:linear-gradient(to_left,black,transparent)] group-hover:opacity-[0.14] motion-reduce:transition-none"
 					/>
 					{/* Small thumbnails keep a single focal point; decoration only fits wide covers. */}
-					{!compact ? (
+					{!compact && !icon ? (
 						<div
 							aria-hidden
 							data-cover-decoration
@@ -71,14 +78,14 @@ export default function MicroAppCardCover({
 					<div
 						className={cn(
 							"absolute top-1/2 -translate-y-1/2",
-							compact ? "left-1/2 -translate-x-1/2" : "left-6",
+							compact || icon ? "left-1/2 -translate-x-1/2" : "left-6",
 						)}
 					>
 						<div
 							data-cover-icon
 							className={cn(
 								"relative flex items-center justify-center rounded-full bg-card transition-transform duration-300 ease-out group-hover:-translate-y-0.5 group-hover:rotate-[-4deg] motion-reduce:transform-none motion-reduce:transition-none",
-								compact ? "size-8" : "size-10",
+								icon ? "size-6" : compact ? "size-8" : "size-10",
 							)}
 						>
 							<Icon className="size-4" strokeWidth={1.5} />

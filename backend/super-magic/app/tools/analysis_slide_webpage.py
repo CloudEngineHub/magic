@@ -37,27 +37,24 @@ DEFAULT_MAX_TOKENS = 8000
 class AnalysisSlideWebpageParams(BaseToolParams):
     target: str = Field(
         ...,
-        description="""<!--zh: 网页目标，可以是本地HTML文件路径（相对于工作目录）或远程URL地址-->
-Webpage target, can be local HTML file path (relative to working directory) or remote URL address"""
+        description="Workspace-relative HTML path or remote webpage URL."
     )
     max_width: int = Field(
         ...,
-        description="""<!--zh: 画布最大宽度，用于检测元素是否超出边界-->
-Canvas max width, used to detect if elements exceed boundaries"""
+        description="Positive canvas and browser viewport width in pixels."
     )
     max_height: int = Field(
         ...,
-        description="""<!--zh: 画布最大高度，用于检测元素是否超出边界-->
-Canvas max height, used to detect if elements exceed boundaries"""
+        description="Positive canvas and browser viewport height in pixels."
     )
     top_elements_offset: int = Field(
         default=0,
-        description="获取'主要布局元素'列表时的起始偏移量（0-based），用于分页。",
+        description="Zero-based offset into the main-layout-element list.",
         ge=0
     )
     top_elements_limit: int = Field(
         default=10,
-        description="获取'主要布局元素'列表时一次返回的最大数量（范围 5-20），用于分页。",
+        description="Main-layout-element page size, from 5 to 20.",
         ge=5,
         le=20
     )
@@ -79,53 +76,11 @@ Canvas max height, used to detect if elements exceed boundaries"""
         return v
 
 
-@tool()
+# 使用说明：agents/skills/slide-template-maker/SKILL.md
+# 参数与结果契约：agents/skills/slide-template-maker/references/webpage-layout-analysis.md
+@tool(code_mode_only=True)
 class AnalysisSlideWebpage(WorkspaceTool[AnalysisSlideWebpageParams]):
-    """<!--zh
-    幻灯片网页分析工具
-
-    加载网页（本地HTML或URL），注入脚本分析DOM，提供页面布局、内容及问题的结构化报告。
-    主要用于分析类似幻灯片的网页。
-
-    使用示例:
-    ```json
-    {
-        "tool_name": "analysis_slide_webpage",
-        "arguments": {
-            "target": "slide.html",
-            "max_width": 1920,
-            "max_height": 1080,
-            "top_elements_offset": 0,
-            "top_elements_limit": 10
-    -->
-    Slide webpage analysis tool
-
-    Load webpage (local HTML or URL), inject script to analyze DOM, provide structured report of page layout, content, and issues.
-    Mainly used to analyze slide-like webpages.
-
-    Usage example:
-    ```json
-    {
-        "tool_name": "analysis_slide_webpage",
-        "arguments": {
-            "target": "slide.html",
-            "max_width": 1920,
-            "max_height": 1080,
-            "top_elements_offset": 0,
-            "top_elements_limit": 10
-        }
-    }
-    ```
-
-    检测的主要问题类型:
-    - CANVAS_OVERFLOW: 超出画布。
-    - PARENT_OVERFLOW: 超出父容器。
-    - CLIPPED: 内容被父容器裁切。
-    - HAS_HORIZONTAL_SCROLLBAR / HAS_VERTICAL_SCROLLBAR: 出现滚动条。
-    - IMG_FAILED: 图片加载失败。
-    - ASPECT_RATIO_DISTORTED: 图片宽高比失真。
-    - IMAGE_CONTENT_SIGNIFICANTLY_CUT_OFF: 图片被父容器严重裁切。
-    """
+    """Analyze a local HTML file or URL for layout issues and repair suggestions."""
 
     def __init__(self, **data):
         super().__init__(**data)

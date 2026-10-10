@@ -1,3 +1,4 @@
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import type { FileSidebarControl } from "../../../components/Detail/components/FilesViewer/types"
 import { lazy, memo, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
@@ -278,6 +279,9 @@ function TopicMessagePanel({
 			onTopicSwitch: setSelectedTopic,
 			onRetryOptimisticMessage: handleRetryOptimisticMessage,
 			projectFilesStore: scopedProjectFilesStore,
+			onOpenProjectFiles: fileSidebarControl?.isCollapsed
+				? fileSidebarControl.onToggle
+				: undefined,
 			renderAssistantAvatar: topicModeConfig?.mode
 				? ({ className } = {}) => (
 						<ModeAvatar
@@ -294,6 +298,7 @@ function TopicMessagePanel({
 		setSelectedTopic,
 		handleRetryOptimisticMessage,
 		scopedProjectFilesStore,
+		fileSidebarControl,
 	])
 
 	const currentTopicId = selectedTopic?.chat_topic_id
@@ -329,6 +334,7 @@ function TopicMessagePanel({
 	const messageListNode = (
 		<MessageListProvider value={value}>
 			<MessageList
+				enableSimpleMode={!isChatDetail && !isReadOnlyProject(selectedProject?.user_role)}
 				className="[--message-list-surface:rgb(var(--sidebar-rgb))]"
 				classNames={{ content: "pl-2 pt-[10px]" }}
 				data={messagesWithOptimisticMeta as SuperMagicMessageItem[]}
@@ -414,6 +420,7 @@ function TopicMessagePanel({
 			)}
 		>
 			<MessageHeader
+				enableSimpleMode={!isChatDetail && !isReadOnlyProject(selectedProject?.user_role)}
 				historyTriggerRef={historyTriggerRef}
 				fileSidebarControl={fileSidebarControl}
 				alignWithContent={

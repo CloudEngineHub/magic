@@ -38,7 +38,11 @@ import {
 	validateFile,
 } from "../../shared/ids"
 import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
-import { filterRedundantElements, getCanvasCenter } from "../../shared/placement/elementUtils"
+import {
+	filterRedundantElements,
+	getCanvasCenter,
+	getResolvedMediaPlacementConfig,
+} from "../../shared/placement/elementUtils"
 import { resolveGridPlacements } from "../../shared/placement/placementEngine"
 import {
 	buildAssetResourcePath,
@@ -154,6 +158,7 @@ function isCanvasContainerElement(element: LayerElement): element is CanvasConta
  */
 export class ClipboardManager {
 	private canvas: Canvas
+	private duplicating = false
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -1389,6 +1394,83 @@ export class ClipboardManager {
 		} catch (error) {
 			// 复制失败，静默处理
 			throw new Error(error instanceof Error ? error.message : "复制失败")
+		}
+	}
+
+	public canDuplicate(elementIds = this.canvas.selectionManager.getSelectedIds()): boolean {
+		if (this.duplicating || !this.canvas.permissionManager.can("document.write")) return false
+		if (!this.canvas.permissionManager.can("sideEffect.copy") || elementIds.length === 0)
+			return false
+		const elements = elementIds.map((id) => this.canvas.elementManager.getElementData(id))
+		if (elements.some((element) => !element)) return false
+		return Array.from(this.getClipboardElementIds(elements as LayerElement[])).every(
+			(id) =>
+				!this.canvas.elementManager.isTemporary(id) &&
+				!this.canvas.mediaReplaceController.isReplacing(id),
+		)
+	}
+
+	/**
+	 * 例：复制图片后修改参考图，原图仍保留。只创建新元素，不改系统剪贴板或发起生成。
+	 * 复用粘贴的 Content 身份重建、任务身份清理、容器连线和一次撤销机制。
+	 */
+	public async duplicate(
+		elementIds = this.canvas.selectionManager.getSelectedIds(),
+	): Promise<void> {
+		if (!this.canDuplicate(elementIds)) return
+		this.duplicating = true
+		try {
+			const selectedIds = filterRedundantElements(elementIds, this.canvas.elementManager)
+			const elements = selectedIds.flatMap((id) => {
+				const element = this.canvas.elementManager.getElementData(id)
+				const node = this.canvas.elementManager.getElementInstance(id)?.getNode()
+				if (!element || !node) return []
+				// 子元素单独复制到根层时，保留它在画布中的位置与父级缩放。
+				const transform = this.canvas.contentLayer
+					.getAbsoluteTransform()
+					.copy()
+					.invert()
+					.multiply(node.getAbsoluteTransform())
+					.decompose()
+				const projected = this.projectElementTreeForContentView(element)
+				return [
+					this.sanitizeElementTreeForClipboard({
+						...projected,
+						x: transform.x,
+						y: transform.y,
+						scaleX: transform.scaleX,
+						scaleY: transform.scaleY,
+					}),
+				]
+			})
+			const nodes = selectedIds.flatMap((id) => {
+				const node = this.canvas.elementManager.getElementInstance(id)?.getNode()
+				return node ? [node] : []
+			})
+			const bounds = calculateNodesRect(nodes, this.canvas.stage, this.canvas.elementManager)
+			if (elements.length === 0 || !bounds) return
+			// 反向使用粘贴的同一中心算法，只平移选区宽度和既有间距，避免缩放或容器影响落位。
+			const centerOffset =
+				elements.length === 1
+					? this.getElementCenterOffset(elements[0], { x: 0, y: 0 })
+					: this.getElementsCenterOffset(elements, { x: 0, y: 0 })
+			const position = {
+				x:
+					-centerOffset.offsetX +
+					bounds.width +
+					getResolvedMediaPlacementConfig(this.canvas).spacing,
+				y: -centerOffset.offsetY,
+			}
+			await this.pasteCanvasElementsFromRichClipboard(
+				elements,
+				[],
+				[],
+				this.getClipboardConnections(elements),
+				this.canvas.id,
+				position,
+			)
+		} finally {
+			this.duplicating = false
 		}
 	}
 

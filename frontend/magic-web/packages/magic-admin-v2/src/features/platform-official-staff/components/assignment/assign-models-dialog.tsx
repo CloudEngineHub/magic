@@ -178,7 +178,7 @@ export function AssignModelsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(860px,calc(100vh-48px))] overflow-hidden sm:max-w-5xl">
+      <DialogContent className="max-h-[min(860px,calc(100vh-48px))] overflow-hidden sm:max-w-5xl" data-testid="platform-official-staff-dialog-content" closeButtonTestId="assign-models-dialog-close-button">
         <DialogHeader>
           <DialogTitle>
             {isDefaultConfig
@@ -215,9 +215,9 @@ export function AssignModelsDialog({
                 value={category}
               >
                 <TabsList>
-                  <TabsTrigger value={staffModelCategory.text}>{t("officialStaff.category.text")}</TabsTrigger>
-                  <TabsTrigger value={staffModelCategory.image}>{t("officialStaff.category.image")}</TabsTrigger>
-                  <TabsTrigger value={staffModelCategory.video}>{t("officialStaff.category.video")}</TabsTrigger>
+                  <TabsTrigger value={staffModelCategory.text} data-testid="platform-official-staff-tab-trigger">{t("officialStaff.category.text")}</TabsTrigger>
+                  <TabsTrigger value={staffModelCategory.image} data-testid="platform-official-staff-tab-trigger">{t("officialStaff.category.image")}</TabsTrigger>
+                  <TabsTrigger value={staffModelCategory.video} data-testid="platform-official-staff-tab-trigger">{t("officialStaff.category.video")}</TabsTrigger>
                 </TabsList>
               </Tabs>
               <div className="grid min-h-0 flex-1 gap-4 overflow-hidden md:grid-cols-[minmax(260px,0.42fr)_minmax(0,1fr)]">
@@ -248,14 +248,14 @@ export function AssignModelsDialog({
                           open={openFloatingId === "assign-distribution"}
                           value={String(detail.mode.distribution_type)}
                         >
-                          <SelectTrigger className="w-fit min-w-36 max-w-full">
+                          <SelectTrigger className="w-fit min-w-36 max-w-full" data-testid="platform-official-staff-select-trigger">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={String(staffDistributionType.independent)}>
+                          <SelectContent data-testid="platform-official-staff-select-content">
+                            <SelectItem value={String(staffDistributionType.independent)} data-testid="platform-official-staff-option">
                               {t("officialStaff.assign.customConfig")}
                             </SelectItem>
-                            <SelectItem value={String(staffDistributionType.follow)}>
+                            <SelectItem value={String(staffDistributionType.follow)} data-testid="platform-official-staff-option">
                               {t("officialStaff.assign.followOther")}
                             </SelectItem>
                           </SelectContent>
@@ -281,14 +281,14 @@ export function AssignModelsDialog({
                         open={openFloatingId === "assign-follow-staff"}
                         value={detail.mode.follow_mode_id || ""}
                       >
-                        <SelectTrigger className="w-fit min-w-40 max-w-full">
+                        <SelectTrigger className="w-fit min-w-40 max-w-full" data-testid="platform-official-staff-select-trigger">
                           <SelectValue placeholder={t("officialStaff.placeholder.selectStaff")} />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent data-testid="platform-official-staff-select-content">
                           {modeOptions
                             .filter((item) => item.id !== staff?.id)
                             .map((item) => (
-                              <SelectItem key={item.id} value={item.id}>
+                              <SelectItem key={item.id} value={item.id} data-testid="platform-official-staff-option">
                                 {getI18nText(item.name_i18n, language)}
                               </SelectItem>
                             ))}
@@ -300,13 +300,13 @@ export function AssignModelsDialog({
                           <Button
                             onClick={() => setConfirmAction({ kind: "reset" })}
                             variant="outline"
-                          >
+                           data-testid="platform-official-staff-confirm-button">
                             <RotateCcw className="size-4" />
                             {t("officialStaff.action.resetDefault")}
                           </Button>
                         ) : null}
                         {editable ? (
-                          <Button onClick={() => setGroupDialog({ group: null, open: true })}>
+                          <Button onClick={() => setGroupDialog({ group: null, open: true })} data-testid="platform-official-staff-create-button">
                             <Plus className="size-4" />
                             {t("officialStaff.action.createGroup")}
                           </Button>
@@ -323,7 +323,7 @@ export function AssignModelsDialog({
                         description={t("officialStaff.assign.emptyDescription")}
                         icon={Boxes}
                         title={t("officialStaff.assign.emptyTitle")}
-                      />
+                      testId="platform-official-staff-empty" />
                     ) : (
                       <SortableContext
                         items={detail.groups.map((entry) => entry.group.id)}
@@ -365,10 +365,10 @@ export function AssignModelsDialog({
           </DndContext>
         )}
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
+          <Button onClick={() => onOpenChange(false)} type="button" variant="outline" data-testid="platform-official-staff-cancel-button">
             {t("common.cancel")}
           </Button>
-          <Button disabled={!canEdit || !detail || saveConfigPending} onClick={handleSave}>
+          <Button disabled={!canEdit || !detail || saveConfigPending} onClick={handleSave} data-testid="platform-official-staff-save-button">
             {saveConfigPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             {t("common.save")}
           </Button>
@@ -390,6 +390,9 @@ export function AssignModelsDialog({
               targetGroup={groupDialog.group}
             />
             <DeleteConfirmDialog
+			contentTestId="platform-official-staff-model-delete-dialog-content"
+			cancelButtonTestId="platform-official-staff-model-delete-cancel-button"
+			confirmButtonTestId="platform-official-staff-model-delete-confirm-button"
               confirmDisabled={!canEdit}
               confirmIcon={
                 confirmAction?.kind === "reset" ? (
@@ -423,7 +426,10 @@ export function AssignModelsDialog({
 
 function AssignDialogSkeleton() {
   return (
-    <div className="grid min-h-0 gap-4 py-2 md:grid-cols-[minmax(260px,0.42fr)_minmax(0,1fr)]">
+    <div
+      className="grid min-h-0 gap-4 py-2 md:grid-cols-[minmax(260px,0.42fr)_minmax(0,1fr)]"
+      data-testid="platform-official-staff-assignment-loading"
+    >
       <div className="flex min-h-[420px] min-w-0 flex-col gap-3 overflow-hidden rounded-lg border bg-card p-4">
         <div className="shrink-0 space-y-2">
           <Skeleton className="h-4 w-24" />

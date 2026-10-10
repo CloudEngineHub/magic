@@ -328,7 +328,7 @@ async def test_generation_tool_feedback_uses_specific_media_wording(tool_class: 
     finally:
         I18nManager.reset_language()
 
-    assert before["action"] == "正在生成图片"
-    assert before["remark"] == "准备生成 2 个图片"
-    assert after["action"] == "生成图片"
-    assert after["remark"] == "已生成 2 个图片"
+    assert before["action"] == "正在画布中生成图像"
+    assert before["remark"] == "image-1、image-2"
+    assert after["action"] == "在画布中生成图像"
+    assert after["remark"] == "image-1已生成；image-2已生成"

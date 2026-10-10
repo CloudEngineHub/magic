@@ -58,6 +58,8 @@ export type RelativeTimeTabProps = {
 	supportedUnits: readonly RelativeUnit[]
 	/** 当前面板对外的时间范围值，用于判断按月选中状态。 */
 	timeRangeValue: TimeRangeValue | null | undefined
+	/** 是否显示按整点对齐开关；小时精度下范围始终按小时边界处理，无需额外切换。 */
+	showAlignToUnit: boolean
 	/** 切换是否按单位起点对齐。 */
 	onAlignToUnitChange: (value: boolean) => void
 	/** 提交当前自定义相对范围。 */
@@ -72,6 +74,7 @@ export type RelativeTimeTabProps = {
 	onMonthApply: (monthKey: string) => void
 	/** 提交指定的快捷或标准预设。 */
 	onPresetApply: (presetKey: TimePresetKey) => void
+	testIdPrefix?: string
 }
 
 export function RelativeTimeTab({
@@ -89,6 +92,7 @@ export function RelativeTimeTab({
 	standardPresetOptions,
 	supportedUnits,
 	timeRangeValue,
+	showAlignToUnit,
 	onAlignToUnitChange,
 	onCustomRelativeApply,
 	onCustomUnitChange,
@@ -96,7 +100,9 @@ export function RelativeTimeTab({
 	onCustomValueChange,
 	onMonthApply,
 	onPresetApply,
+	testIdPrefix,
 }: RelativeTimeTabProps) {
+	const testId = (suffix: string) => (testIdPrefix ? `${testIdPrefix}-${suffix}` : undefined)
 	const { t } = useTranslation()
 
 	return (
@@ -115,12 +121,16 @@ export function RelativeTimeTab({
 						{currentRangeText}
 					</div>
 				</div>
-				{!isRelativeDayOnly ? (
+				{!isRelativeDayOnly && showAlignToUnit ? (
 					<div className="flex shrink-0 items-center gap-2">
 						<span className="text-xs font-medium text-muted-foreground">
 							{t("timeFilter.alignToUnit")}
 						</span>
-						<Switch checked={alignToUnit} onCheckedChange={onAlignToUnitChange} />
+						<Switch
+							data-testid={testId("align-switch")}
+							checked={alignToUnit}
+							onCheckedChange={onAlignToUnitChange}
+						/>
 					</div>
 				) : null}
 			</div>
@@ -136,11 +146,12 @@ export function RelativeTimeTab({
 								isInline && "space-y-2",
 								!isInline &&
 									!isRelativeDayOnly &&
+									showAlignToUnit &&
 									"grid gap-2 sm:grid-cols-[56px_1fr] sm:items-start",
 							)}
 							key={group.key}
 						>
-							{!isRelativeDayOnly ? (
+							{!isRelativeDayOnly && showAlignToUnit ? (
 								<div
 									className={cn(
 										"text-sm font-medium text-muted-foreground",
@@ -166,6 +177,7 @@ export function RelativeTimeTab({
 										}
 										key={option.key}
 										onClick={() => onPresetApply(option.key)}
+										testId={testId("quick-preset-option")}
 									>
 										{getPresetLabel(option.labelKey, t)}
 									</TimeOptionButton>
@@ -222,6 +234,7 @@ export function RelativeTimeTab({
 							}
 							key={monthKey}
 							onClick={() => onMonthApply(monthKey)}
+							testId={testId("month-option")}
 						>
 							{formatMonthLabel(monthKey, t)}
 						</TimeOptionButton>
@@ -245,6 +258,7 @@ export function RelativeTimeTab({
 						</span>
 						<Input
 							className="h-8 w-20"
+							data-testid={testId("custom-value-input")}
 							min={1}
 							onChange={(event) =>
 								onCustomValueChange(Math.max(1, Number(event.target.value) || 1))
@@ -256,6 +270,7 @@ export function RelativeTimeTab({
 							<button
 								aria-expanded={customUnitMenuOpen}
 								aria-haspopup="listbox"
+								data-testid={testId("custom-unit-trigger")}
 								className="flex h-8 w-28 max-w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-sm shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 								onClick={() => onCustomUnitMenuOpenChange(!customUnitMenuOpen)}
 								type="button"
@@ -277,6 +292,7 @@ export function RelativeTimeTab({
 									{supportedUnits.map((unit) => (
 										<button
 											aria-selected={customUnit === unit}
+											data-testid={testId("custom-unit-option")}
 											className={cn(
 												"flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
 												customUnit === unit &&
@@ -300,7 +316,12 @@ export function RelativeTimeTab({
 							) : null}
 						</div>
 					</div>
-					<Button className="w-fit" onClick={onCustomRelativeApply} size="sm">
+					<Button
+						className="w-fit"
+						data-testid={testId("custom-apply-button")}
+						onClick={onCustomRelativeApply}
+						size="sm"
+					>
 						{t("timeFilter.confirm")}
 					</Button>
 				</div>

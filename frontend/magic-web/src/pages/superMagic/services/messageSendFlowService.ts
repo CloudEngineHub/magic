@@ -1,5 +1,6 @@
 import { isObject, merge } from "lodash-es"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import { serializeWechatChatContent } from "../components/MessageEditor/extensions/wechat-chat-history/transform"
 import { ChatApi, SuperMagicApi } from "@/apis"
 import { EventType } from "@/types/chat"
 import {
@@ -206,7 +207,9 @@ class MessageSendService {
 		let resolvedJson: JSONContent | undefined
 		if (isObject(jsonContent)) {
 			// Preserve structured mention nodes in the rich-text payload so refreshes can restore them.
-			resolvedJson = normalizeTextMentionLabelsForBackend(jsonContent)
+			resolvedJson = normalizeTextMentionLabelsForBackend(
+				serializeWechatChatContent(jsonContent),
+			)
 		} else if (trimmedText) {
 			resolvedJson = buildPlainTextJSONContent(trimmedText)
 		} else {

@@ -101,6 +101,7 @@ import {
 } from "../../../editors/message/reference-assets/promptPlaceholderTokenConfig"
 
 interface ImageEditorSurfaceProps {
+	readOnly?: boolean
 	imageElement: ImageElement
 	config: ImageEditorConfig
 	editorRef: MutableRefObject<MessageEditorRef | null>
@@ -136,6 +137,7 @@ export function hasDeletedReference(
 export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const {
 		imageElement,
+		readOnly = false,
 		config,
 		editorRef,
 		shouldShow,
@@ -242,6 +244,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		handleMentionChange: handleAssociationMentionChange,
 		handleLinkedMediaSelectionChange,
 	} = useLinkedMediaAssociationController({
+		readOnly,
 		targetElementId: imageElement.id,
 		targetKind: "image",
 		mediaPolicy: linkedMediaPolicy,
@@ -482,6 +485,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handlePaste = useCallback(
 		(event: ClipboardEvent<HTMLDivElement>) => {
+			if (readOnly) {
+				event.preventDefault()
+				event.stopPropagation()
+				return
+			}
 			const nativeEvent = event.nativeEvent
 			const files = CanvasDesignClipboard.readEventFilesSnapshot(nativeEvent)
 			const nativeFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(nativeEvent)
@@ -641,11 +649,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			config.mentionBindings,
 			config.referenceFileInfos,
 			resolveResourceReference,
+			readOnly,
 		],
 	)
 
 	const { overlayState, dragEvents } = useReferenceResourceDrop({
-		isEnabled: isDropEnabled,
+		isEnabled: isDropEnabled && !readOnly,
 		checkProjectFiles: canAcceptProjectFiles,
 		checkLocalFiles: canAcceptLocalFiles,
 		getProjectHoverState: getHoverDropState,
@@ -656,13 +665,14 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleMentionChange = useCallback(
 		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
+			if (readOnly) return
 			const currentMentionBindings = editorRef.current?.getMentionBindings()
 			if (currentMentionBindings) handlers.updateMentionBindings(currentMentionBindings)
 			if (handleAssociationMentionChange(paths, currentPrompt, context)) {
 				syncMentionPaths(paths, currentPrompt, context)
 			}
 		},
-		[editorRef, handleAssociationMentionChange, handlers, syncMentionPaths],
+		[editorRef, handleAssociationMentionChange, handlers, syncMentionPaths, readOnly],
 	)
 
 	const handleReferenceFileRemoveFromPopover = useCallback(
@@ -678,7 +688,9 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		[config.referenceFileInfos, editorRef, handlers, prompt, resolveResourceReference],
 	)
 
-	const handleSend = useCallback(() => onSend(linkedEditorInputs), [linkedEditorInputs, onSend])
+	const handleSend = useCallback(() => {
+		if (!readOnly) return onSend(linkedEditorInputs)
+	}, [linkedEditorInputs, onSend, readOnly])
 
 	const buildPromptOptimizationRequest = useCallback(() => {
 		const currentPrompt = prompt.trim()
@@ -739,6 +751,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				dragEvents={dragEvents}
 			>
 				<input
+					disabled={readOnly}
 					ref={fileInputRef}
 					type="file"
 					accept={fileInputAccept}
@@ -747,7 +760,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					onChange={handlers.handleFileChange}
 				/>
 				<div ref={setSourceListContainer} className={styles.sourceListMount} />
-				{linkedEditorInputs?.textConnections.length ? (
+				{!readOnly && linkedEditorInputs?.textConnections.length ? (
 					<div className={styles.linkedInputs}>
 						<LinkedEditorInputsBar
 							textConnections={linkedEditorInputs.textConnections}
@@ -759,51 +772,70 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						/>
 					</div>
 				) : null}
-				<MessageEditor
-					ref={editorRef}
-					autoFocus={autoFocus}
-					autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
-					fullWidth
-					selectionPersistenceKey={selectionPersistenceKey}
-					placeholder={placeholder}
-					value={prompt}
-					onChange={handlers.setPrompt}
-					onEnter={handleSend}
-					onScrollbarChange={setHasScrollbar}
-					matchableItems={matchableItems}
-					mentionBindings={config.mentionBindings}
-					mentionDataService={mentionDataService}
-					mentionExtension={mentionExtension}
-					mentionItemsReady={Boolean(config.hasRestoredRef.current)}
-					onMentionChange={handleMentionChange}
-					onMentionItemHoverChange={setHoveredMentionPath}
-					mentionEnabled={mentionEnabled}
-					enrichClipboardMentionAttrs={enrichClipboardMentionAttrs}
-					onPasteCapture={handlePaste}
-				/>
+				<div hidden={readOnly && !config.hasGenerationRequest}>
+					<MessageEditor
+						readOnly={readOnly}
+						ref={editorRef}
+						autoFocus={autoFocus}
+						autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
+						fullWidth
+						selectionPersistenceKey={selectionPersistenceKey}
+						placeholder={placeholder}
+						value={prompt}
+						onChange={handlers.setPrompt}
+						onEnter={handleSend}
+						onScrollbarChange={setHasScrollbar}
+						matchableItems={matchableItems}
+						mentionBindings={config.mentionBindings}
+						mentionDataService={mentionDataService}
+						mentionExtension={mentionExtension}
+						mentionItemsReady={Boolean(config.hasRestoredRef.current)}
+						onMentionChange={handleMentionChange}
+						onMentionItemHoverChange={setHoveredMentionPath}
+						mentionEnabled={mentionEnabled}
+						enrichClipboardMentionAttrs={enrichClipboardMentionAttrs}
+						onPasteCapture={handlePaste}
+					/>
+				</div>
+				{readOnly && !config.hasGenerationRequest ? (
+					<div className={styles.readOnlyWaiting}>
+						{t(
+							"imageEditor.parametersPending",
+							"生成参数尚未同步，收到后将在这里显示。",
+						)}
+					</div>
+				) : null}
 				<ImageEditorControls
+					readOnly={readOnly}
 					config={config}
 					hoveredMentionPath={hoveredMentionPath}
 					onSelectSource={handleSelectSource}
 					onProjectSelect={handleProjectSelect}
 					onReferenceFileRemove={handleReferenceFileRemoveFromPopover}
-					linkedMediaItems={linkedEditorInputs?.mediaItems}
-					onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
-					renderPromptOptimizationButton={() => (
-						<PromptOptimizationButton
-							buildRequest={buildPromptOptimizationRequest}
-							referencePrompt={`${linkedEditorInputs.textPrompt}\n${prompt}\n${effectiveCurrentReferenceFiles.join("\n")}`}
-							placeholderPaths={promptOptimizationPlaceholderPaths}
-							onApply={handlers.setPrompt}
-							onPreviewMediaResource={onPreviewMediaResource}
-							isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
-						/>
-					)}
+					linkedMediaItems={readOnly ? undefined : linkedEditorInputs?.mediaItems}
+					onLinkedMediaSelectionChange={
+						readOnly ? undefined : handleLinkedMediaSelectionChange
+					}
+					renderPromptOptimizationButton={
+						readOnly
+							? undefined
+							: () => (
+									<PromptOptimizationButton
+										buildRequest={buildPromptOptimizationRequest}
+										referencePrompt={`${linkedEditorInputs.textPrompt}\n${prompt}\n${effectiveCurrentReferenceFiles.join("\n")}`}
+										placeholderPaths={promptOptimizationPlaceholderPaths}
+										onApply={handlers.setPrompt}
+										onPreviewMediaResource={onPreviewMediaResource}
+										isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+									/>
+								)
+					}
 					renderSendButton={() => (
 						<Button
 							className={styles.sendButton}
 							onClick={handleSend}
 							disabled={
+								readOnly ||
 								isSending ||
 								!canSendPrompt ||
 								!config.selectedModelId ||
@@ -819,7 +851,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						</Button>
 					)}
 					renderRestoreDefaultConfigButton={
-						showRestoreDefaultConfig && onRestoreDefaultConfig
+						!readOnly && showRestoreDefaultConfig && onRestoreDefaultConfig
 							? () => (
 									<Button
 										variant="ghost"

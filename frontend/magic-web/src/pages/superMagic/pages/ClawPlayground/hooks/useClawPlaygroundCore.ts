@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useDeepCompareEffect, useDebounceFn, useMemoizedFn } from "ahooks"
 import { useParams } from "react-router"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
@@ -7,7 +7,7 @@ import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPo
 import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/useRefreshTopicDetailOnTaskComplete"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import { loadProjectAttachments } from "@/pages/superMagic/services"
+import SuperMagicService, { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
 	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
@@ -24,6 +24,7 @@ import { useClawPlaygroundInitErrorRedirect } from "./useClawPlaygroundInitError
 export function useClawPlaygroundCore() {
 	const { code } = useParams<{ code?: string }>()
 	const store = useClawPlaygroundStore()
+	const visitScope = useRef({})
 
 	useClawPlaygroundInitErrorRedirect(store)
 
@@ -42,6 +43,15 @@ export function useClawPlaygroundCore() {
 		if (!code) return
 		void store.init(code)
 	}, [code, store])
+
+	useEffect(() => {
+		if (!selectedProject || store.loading || store.error || store.currentClawCode !== code)
+			return
+		SuperMagicService.project.recordProjectVisit(
+			{ ...selectedProject, claw_code: code },
+			visitScope.current,
+		)
+	}, [code, selectedProject, store, store.loading, store.error, store.currentClawCode])
 
 	// -- debounced attachment fetcher --
 	const updateAttachments = useDebounceFn(

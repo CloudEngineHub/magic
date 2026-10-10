@@ -43,6 +43,8 @@ const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 	[ElementTypeEnum.Frame]: [],
 	[ElementTypeEnum.Group]: [],
 	[ElementTypeEnum.Image]: [
+		"discarded",
+		"generationTiming",
 		"visualUnderstanding",
 		"src",
 		"assetId",

@@ -40,6 +40,11 @@ export interface MediaLabelLayoutOptions {
 /** 缩略图至少容纳四个字高时维持标准字号；再缩小就让文字一起缩小。 */
 const THUMBNAIL_FONT_HEIGHTS = 4
 
+// 屏幕字号在原标签 12px 与界面正文 14px 之间变化；图片继续放大时不再放大文字。
+// 小图仍使用原字号和极小缩略图约束，普通图片约占 24 个字高时进入舒适字号。
+const MAX_SCREEN_FONT_SIZE = 14
+const IMAGE_FONT_HEIGHTS = 24
+
 interface CachedLayout {
 	key: string
 	layout: MediaLabelLayout
@@ -132,6 +137,11 @@ export function getMediaLabelLayout(
 	const nameLeadingHeight = Math.max(0, options.nameLeadingHeight ?? 0)
 	const rowHeight =
 		Math.max(options.name.height, options.size.height, nameLeadingHeight) + options.offsetTop
+	const maxScreenRatio = Math.max(1, MAX_SCREEN_FONT_SIZE / options.fontSize)
+	const desiredScreenRatio = Math.min(
+		maxScreenRatio,
+		Math.max(1, (bounds.height * scale) / (options.fontSize * IMAGE_FONT_HEIGHTS)),
+	)
 	const operationExtraHeight =
 		Math.max(
 			0,
@@ -178,7 +188,9 @@ export function getMediaLabelLayout(
 	if (cachedSpatial?.key === spatialKey) {
 		candidateIds = cachedSpatial.candidateIds
 	} else {
-		const queryHeight = (rowHeight + operationExtraHeight) / getScaleBandLowerBound(scaleBand)
+		const queryHeight =
+			((rowHeight + operationExtraHeight) * maxScreenRatio) /
+			getScaleBandLowerBound(scaleBand)
 		candidateIds = canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			{
 				x: bounds.x,
@@ -191,7 +203,7 @@ export function getMediaLabelLayout(
 		cache.spatialCandidates.set(element, { key: spatialKey, candidateIds })
 	}
 
-	let availableHeight = (rowHeight + operationExtraHeight) / scale
+	let availableHeight = ((rowHeight + operationExtraHeight) * desiredScreenRatio) / scale
 	for (const candidateId of candidateIds) {
 		if (candidateId === elementId) continue
 		const candidate = canvas.elementManager.getElementInstance(candidateId)
@@ -220,7 +232,7 @@ export function getMediaLabelLayout(
 	const screenRatio = Math.max(
 		0,
 		Math.min(
-			1,
+			desiredScreenRatio,
 			(bounds.height * scale) / (options.fontSize * THUMBNAIL_FONT_HEIGHTS),
 			(availableHeight * scale) / rowHeight,
 		),
@@ -241,14 +253,15 @@ export function getMediaLabelLayout(
 	// 操作区保持可点击尺寸；连一个字都留不下时不强塞按钮，优先显示标题。
 	const showOperation =
 		options.operationScreenWidth > 0 &&
-		screenRatio === 1 &&
-		availableHeight * scale >= rowHeight + operationExtraHeight &&
+		screenRatio >= 1 &&
+		availableHeight * scale >= (rowHeight + operationExtraHeight) * screenRatio &&
 		screenWidth >=
-			options.operationScreenWidth + (options.fontSize + nameLeadingWidth) * screenRatio
-	const operationWidth = showOperation ? options.operationScreenWidth : 0
+			(options.operationScreenWidth + options.fontSize + nameLeadingWidth) * screenRatio
+	const operationWidth = showOperation ? options.operationScreenWidth * screenRatio : 0
 	const localWidth = Math.max(0, (screenWidth - operationWidth) / screenRatio)
 	const gap = options.name.width > 0 && options.size.width > 0 ? options.gap : 0
-	const minimumTextWidth = 1
+	const minimumTextWidth =
+		options.name.width > 0 ? Math.min(options.name.width, options.fontSize) : 1
 	// The size label is all-or-nothing and lower priority than the complete name (including its
 	// mandatory status suffix). The optional leading icon may still yield independently.
 	const showSize =

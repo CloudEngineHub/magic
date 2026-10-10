@@ -13,6 +13,7 @@ import {
 import type { ReferenceResourceMetadataCandidate } from "../message/reference-assets/referenceResourceDescriptor"
 
 interface UseLinkedMediaAssociationControllerOptions {
+	readOnly?: boolean
 	targetElementId: string
 	targetKind: LinkedEditorTargetKind
 	mediaPolicy?: LinkedEditorMediaPolicy
@@ -33,6 +34,7 @@ export function useLinkedMediaAssociationController(
 ) {
 	const { canvas } = useCanvas()
 	const {
+		readOnly = false,
 		targetElementId,
 		targetKind,
 		mediaPolicy,
@@ -130,7 +132,7 @@ export function useLinkedMediaAssociationController(
 	const applyingSeedIdRef = useRef<string | null>(null)
 
 	useEffect(() => {
-		if (!canvas || applyingSeedIdRef.current) return
+		if (readOnly || !canvas || applyingSeedIdRef.current) return
 		const seed = canvas.connectionAssociationSeedManager?.peek(targetElementId)
 		if (!seed) return
 		if (mentionReadyTargetElementId !== targetElementId) return
@@ -182,6 +184,7 @@ export function useLinkedMediaAssociationController(
 		resolveResourceReference,
 		targetElementId,
 		targetKind,
+		readOnly,
 	])
 
 	return {

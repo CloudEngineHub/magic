@@ -734,6 +734,18 @@ class FileStorageListenerService:
         return ConstructedFileKey(file_key=s3_key, file_id=file_id)
 
     @staticmethod
+    async def create_workspace_attachment(filepath: str) -> Attachment:
+        """投递前取得真实文件身份；无 MagicFS key 时拒绝产生不可下载的镜像。"""
+        constructed = await FileStorageListenerService._construct_file_key(filepath)
+        if constructed is None:
+            raise ValueError("The file has no MagicFS storage identity; wait for file synchronization.")
+        stat = await async_stat(filepath)
+        return FileStorageListenerService._build_attachment(
+            filepath, constructed.file_key, constructed.file_id, AttachmentTag.FINAL,
+            file_size=stat.st_size,
+        )
+
+    @staticmethod
     def _create_attachment_from_uploaded_file(
         filepath: str,
         file_key: str,
@@ -978,6 +990,7 @@ class FileStorageListenerService:
         file_id: Optional[str],
         file_tag: AttachmentTag,
         source: int = 3,
+        file_size: Optional[int] = None,
     ) -> Attachment:
         """
         构造 Attachment 对象的公共实现，供事件路径与 checkpoint 路径共用。
@@ -993,7 +1006,8 @@ class FileStorageListenerService:
             Attachment: 构造好的附件对象
         """
         file_path_obj = Path(filepath)
-        file_size = os.path.getsize(filepath)
+        if file_size is None:
+            file_size = os.path.getsize(filepath)
         file_ext = file_path_obj.suffix.lstrip('.')
         file_name = file_path_obj.name
 

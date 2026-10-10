@@ -95,7 +95,7 @@ export function ModelIdentifierPicker({
   return (
     <>
       <Popover onOpenChange={setOpen} open={open}>
-        <PopoverTrigger
+        <PopoverTrigger data-testid="platform-model-identifier-trigger"
           aria-label={t("modelList.editor.field.modelId")}
           className={cn(
             "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 py-2 text-left text-sm shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
@@ -108,7 +108,7 @@ export function ModelIdentifierPicker({
           <span className="truncate">{value || t("modelList.editor.placeholder.modelId")}</span>
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </PopoverTrigger>
-        <PopoverContent align="start" className="z-[100] w-[min(480px,calc(100vw-3rem))] p-0">
+        <PopoverContent align="start" className="z-[100] w-[min(480px,calc(100vw-3rem))] p-0" data-testid="platform-model-list-filter-content">
           <div className="border-b p-3">
             <FilterSearchInput
               autoFocus
@@ -116,7 +116,7 @@ export function ModelIdentifierPicker({
               onValueChange={setKeyword}
               placeholder={t("modelList.editor.placeholder.searchModelId")}
               value={keyword}
-            />
+             inputTestId="platform-model-list-search-input" clearButtonTestId="platform-model-list-search-clear-button"/>
           </div>
           <div className="max-h-56 overflow-y-auto p-1.5">
             {originalModelIdsQuery.isLoading ? (
@@ -131,7 +131,7 @@ export function ModelIdentifierPicker({
 
                 return (
                   <div className="flex items-center gap-1 rounded-sm hover:bg-accent" key={item.id}>
-                    <button
+                    <button data-testid="platform-model-identifier-option"
                       className="flex min-w-0 flex-1 items-center justify-between gap-3 px-2.5 py-2 text-left text-sm"
                       onClick={() => {
                         onChange(item.model_id);
@@ -158,7 +158,7 @@ export function ModelIdentifierPicker({
                         size="icon"
                         type="button"
                         variant="ghost"
-                      >
+                       data-testid="platform-model-list-delete-button">
                         {isDeleting ? (
                           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                         ) : (
@@ -186,7 +186,7 @@ export function ModelIdentifierPicker({
                 size="sm"
                 type="button"
                 variant="ghost"
-              >
+               data-testid="platform-model-list-confirm-button">
                 {createModelIdMutation.isPending ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 ) : (
@@ -200,6 +200,9 @@ export function ModelIdentifierPicker({
       </Popover>
 
       <DeleteConfirmDialog
+			contentTestId="model-identifier-delete-dialog-content"
+			cancelButtonTestId="model-identifier-delete-cancel-button"
+			confirmButtonTestId="model-identifier-delete-confirm-button"
         open={Boolean(deleteTarget)}
         title={t("modelList.editor.modelIdDeleteTitle")}
         description={t("modelList.editor.modelIdDeleteDescription", {

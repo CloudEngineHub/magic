@@ -17,6 +17,8 @@ class ImageContentFields(GeneratedMediaContentFields):
     generate_image_request: JsonObject | None = None
     image_generation_task_meta: JsonObject | None = None
     crop: JsonObject | None = None
+    # 人工不采用与生成完成是两件事；不改变主版本和下游引用。
+    discarded: bool = False
 
     @property
     def generated_request_field(self) -> str:
@@ -38,5 +40,6 @@ class ImageContentFields(GeneratedMediaContentFields):
             self.generated_request_field: deepcopy(self.generate_image_request),
             "imageGenerationTaskMeta": deepcopy(self.image_generation_task_meta),
             "crop": deepcopy(self.crop),
+            "discarded": True if self.discarded else None,
         }
         return {key: value for key, value in values.items() if value is not None}

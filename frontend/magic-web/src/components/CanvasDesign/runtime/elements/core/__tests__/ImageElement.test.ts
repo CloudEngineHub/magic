@@ -41,6 +41,13 @@ function createDeferredValue<T>() {
 	return { promise, resolve, reject }
 }
 
+/** Object.create-based unit fixtures bypass ImageElement's constructor, so provide its timing reader. */
+function attachGenerationTimingStub(element: ImageElement): void {
+	Object.assign(element, {
+		pollingManager: { getGenerationTiming: () => undefined },
+	})
+}
+
 function contentImage(
 	contents: ImageElementContent[],
 	activeContentId = contents[0]?.contentId ?? null,
@@ -371,6 +378,7 @@ describe("ImageElement mounted image node sync", () => {
 			renderImage: ReturnType<typeof vi.fn>
 			renderLoadingPlaceholder: ReturnType<typeof vi.fn>
 		}
+		attachGenerationTimingStub(element)
 		element.data = {
 			id: "image-1",
 			type: ElementTypeEnum.Image,
@@ -407,6 +415,7 @@ describe("ImageElement mounted image node sync", () => {
 			isGenerating: boolean
 			isErrorState: boolean
 		}
+		attachGenerationTimingStub(element)
 		element.data = {
 			id: "pasted-image",
 			name: "Pasted image",
@@ -450,6 +459,7 @@ describe("ImageElement mounted image node sync", () => {
 			isGenerating: boolean
 			isErrorState: boolean
 		}
+		attachGenerationTimingStub(element)
 		element.data = {
 			id: "agent-image",
 			name: "Agent image",
@@ -596,6 +606,7 @@ describe("ImageElement mounted image node sync", () => {
 			getActiveImageGenerationTaskMeta: () => undefined
 			renderError: ReturnType<typeof vi.fn>
 		}
+		attachGenerationTimingStub(element)
 		element.data = {
 			id: "failed-image",
 			type: ElementTypeEnum.Image,

@@ -11,6 +11,12 @@ import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import { HoverManager } from "../../interaction/hover/HoverManager"
 import { normalizeSize } from "../../shared/normalize/normalizeUtils"
 
+/** 名称与运行状态分别布局；展示状态不进入元素名称或文件名。 */
+export interface NameLabelContent {
+	primaryText: string
+	suffix?: { text: string; inProgress?: boolean }
+}
+
 /**
  * 变换上下文
  */
@@ -23,18 +29,6 @@ export interface TransformContext {
 	shouldKeepRatio: boolean
 	/** 初始宽高比（用于锁定比例；多选时传入当前元素自己的初始比例） */
 	initialAspectRatio?: number
-}
-
-/**
- * Runtime-only name label content. Keeping the suffix separate prevents a
- * state marker from being truncated together with the user-visible name while
- * leaving the persisted element data unchanged.
- */
-export interface NameLabelContent {
-	primaryText: string
-	suffix?: {
-		text: string
-	}
 }
 
 export type ElementTransformAnchor =

@@ -90,7 +90,11 @@ export function PlatformAppMenuFormDialog({
 
 	return (
 		<Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-			<DialogContent className="max-h-[calc(100vh-2rem)] overflow-visible sm:max-w-2xl">
+			<DialogContent
+				className="max-h-[calc(100vh-2rem)] overflow-visible sm:max-w-2xl"
+				data-testid="platform-app-menu-dialog-content"
+				closeButtonTestId="platform-app-menu-form-dialog-close-button"
+			>
 				<DialogHeader>
 					<DialogTitle>
 						{formItem || fallbackItem
@@ -122,6 +126,7 @@ export function PlatformAppMenuFormDialog({
 									id="platform-app-menu-name-zh"
 									placeholder={t("appMenu.placeholder.nameZh")}
 									{...form.register("name_i18n.zh_CN")}
+									data-testid="platform-app-menu-platform-app-menu-name-zh-input"
 								/>
 								<FieldError
 									message={form.formState.errors.name_i18n?.zh_CN?.message}
@@ -138,6 +143,7 @@ export function PlatformAppMenuFormDialog({
 									id="platform-app-menu-name-en"
 									placeholder={t("appMenu.placeholder.nameEn")}
 									{...form.register("name_i18n.en_US")}
+									data-testid="platform-app-menu-platform-app-menu-name-en-input"
 								/>
 								<FieldError
 									message={form.formState.errors.name_i18n?.en_US?.message}
@@ -156,6 +162,7 @@ export function PlatformAppMenuFormDialog({
 								id="platform-app-menu-path"
 								placeholder={t("appMenu.placeholder.path")}
 								{...form.register("path")}
+								data-testid="platform-app-menu-platform-app-menu-path-input"
 							/>
 							<FieldError message={form.formState.errors.path?.message} />
 						</DialogFormField>
@@ -196,6 +203,7 @@ export function PlatformAppMenuFormDialog({
 									placeholder={t("appMenu.placeholder.sortOrder")}
 									type="number"
 									{...form.register("sort_order", { valueAsNumber: true })}
+									data-testid="platform-app-menu-platform-app-menu-sort-order-input"
 								/>
 								<FieldError message={form.formState.errors.sort_order?.message} />
 							</DialogFormField>
@@ -316,6 +324,7 @@ export function PlatformAppMenuFormDialog({
 											disabled={isSaving}
 											id="platform-app-menu-status"
 											onCheckedChange={field.onChange}
+											data-testid="platform-app-menu-platform-app-menu-status-switch"
 										/>
 									)}
 								/>
@@ -333,12 +342,14 @@ export function PlatformAppMenuFormDialog({
 								onClick={onClose}
 								type="button"
 								variant="outline"
+								data-testid="platform-app-menu-cancel-button"
 							>
 								{t("common.cancel")}
 							</Button>
 							<Button
 								disabled={isSaving || isDetailLoading || isImageUploading}
 								type="submit"
+								data-testid="platform-app-menu-save-button"
 							>
 								{isSaving ? (
 									<Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -402,7 +413,7 @@ function createAppMenuSchema(t: (key: string) => string) {
 
 function AppMenuFormSkeleton() {
 	return (
-		<div className="space-y-5">
+		<div className="space-y-5" data-testid="platform-app-menu-loading">
 			{Array.from({ length: 3 }, (_, section) => (
 				<section className="space-y-3" key={section}>
 					<Skeleton className="h-4 w-24" />

@@ -342,6 +342,14 @@ export interface TextElement extends ContentElementProps<TextElementContent> {
 
 /** 图片节点中可独立切换的内容 */
 export interface ImageElementContent extends ElementContentBase {
+	/** 人工废稿标记，仅属于此版本，不改变生成状态或主版本。 */
+	discarded?: boolean
+	/** 只用于等待超时展示，不改变后端生成状态；任务更换时独立计时。 */
+	generationTiming?: {
+		startedAt: number
+		imageId?: string
+		source: "submitted" | "server" | "observed"
+	}
 	/** 大模型对当前图片 Content 的理解结果；重字段由 sidecar 拆分保存。 */
 	visualUnderstanding?: unknown
 	/** 图片源(用来换取 ossSrc 的临时 path) */

@@ -2,6 +2,7 @@ import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesBu
 import { getFileDisplayPath } from "@/pages/superMagic/utils/markdownFileReference"
 import { memo, useMemo } from "react"
 import { Tooltip } from "antd"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { IconX, IconLock } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -82,6 +83,8 @@ const TabItem = memo<TabItemProps>(
 		)?.display_config
 		const isDeleted = tab.isDeleted
 		const isLoading = tab.isLoading
+		// 回收站仅给名称加删除线；不使用 isDeleted 的红色锁标记和内容不可用状态。
+		const isRecycleBin = Boolean(tab.fileData.recycleBin)
 
 		// 当右键菜单显示且是当前 tab 时，隐藏 Tooltip
 		const tooltipOpen = useMemo(() => {
@@ -168,7 +171,8 @@ const TabItem = memo<TabItemProps>(
 			if (!isPlayback && onDragStart) {
 				onDragStart(e, tab)
 				if (e.defaultPrevented) return
-				if (tab.type !== "file_manager") handleTabDragStartMessageEditor(e, tab)
+				if (tab.type !== "file_manager" && !tab.fileData.recycleBin)
+					handleTabDragStartMessageEditor(e, tab)
 			}
 		}
 
@@ -181,7 +185,7 @@ const TabItem = memo<TabItemProps>(
 
 		return (
 			<Tooltip
-				title={getFileTooltip(tab, t("fileViewer.unknownFile"))}
+				title={isRecycleBin ? undefined : getFileTooltip(tab, t("fileViewer.unknownFile"))}
 				placement="bottom"
 				mouseEnterDelay={0.5}
 				open={tooltipOpen}
@@ -211,15 +215,32 @@ const TabItem = memo<TabItemProps>(
 						size={16}
 						className="size-4 shrink-0 rounded-[2px] object-cover"
 					/>
-					<span
-						className={cn(
-							"max-w-[160px] truncate font-sans text-xs font-normal leading-4 text-foreground",
-							isDeleted && "text-destructive line-through",
-							isLoading && "text-muted-foreground",
-						)}
+					<MagicTooltip
+						title={
+							isRecycleBin
+								? `${getDisplayFileName(tab)} · ${t("recycleBin.preview.readonly")}`
+								: undefined
+						}
+						placement="bottom"
+						disabled={tooltipOpen === false}
 					>
-						{getDisplayFileName(tab)}
-					</span>
+						<span
+							className={cn(
+								"max-w-[160px] truncate font-sans text-xs font-normal leading-4 text-foreground",
+								isDeleted && !isRecycleBin && "text-destructive line-through",
+								isRecycleBin &&
+									"line-through decoration-muted-foreground/60 decoration-1 dark:decoration-foreground/80 dark:decoration-[1.5px]",
+								isLoading && "text-muted-foreground",
+							)}
+							aria-label={
+								isRecycleBin
+									? `${getDisplayFileName(tab)} · ${t("recycleBin.preview.readonly")}`
+									: undefined
+							}
+						>
+							{getDisplayFileName(tab)}
+						</span>
+					</MagicTooltip>
 					{isLoading && <MagicLoadingIcon size={12} />}
 					<span
 						className={cn(
@@ -229,7 +250,7 @@ const TabItem = memo<TabItemProps>(
 					>
 						{relativePath}
 					</span>
-					{isDeleted && (
+					{isDeleted && !isRecycleBin && (
 						<span className="flex items-center gap-1 font-sans text-xs font-normal leading-4 text-destructive">
 							{t("fileViewer.tabs.deleted")}
 							<MagicIcon component={IconLock} size={14} color="currentColor" />

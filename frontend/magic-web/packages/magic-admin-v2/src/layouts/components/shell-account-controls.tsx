@@ -62,7 +62,7 @@ export function ShellAccountControls() {
 	}
 
 	return (
-		<div className="flex items-center gap-2">
+		<div className="flex items-center gap-2" data-testid="shell-account-controls">
 			{account ? (
 				<>
 					<AccountMenu
@@ -117,10 +117,11 @@ function AccountMenu({
 
 	return (
 		<DropdownMenu modal={false}>
-			<DropdownMenuTrigger asChild>
+			<DropdownMenuTrigger asChild data-testid="admin-layout-switch-trigger">
 				<button
 					aria-label={t("userContext.switchOrganization")}
 					className="flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-card px-0 text-sm font-medium shadow-sm transition-colors hover:bg-accent data-[state=open]:bg-accent sm:w-auto sm:max-w-[260px] sm:px-3"
+					data-testid="shell-account-switcher-trigger"
 					type="button"
 				>
 					<OrganizationLogo logo={currentOrganization.logo} />
@@ -136,6 +137,7 @@ function AccountMenu({
 			<DropdownMenuContent
 				align="end"
 				className="max-h-[min(80vh,560px)] w-[320px] overflow-y-auto rounded-lg"
+				data-testid="shell-account-switcher-content"
 				forceMount
 			>
 				{currentAccount ? (
@@ -182,7 +184,10 @@ function AccountMenu({
 				{onAddAccount ? (
 					<>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem onSelect={() => void onAddAccount()}>
+						<DropdownMenuItem
+							data-testid="shell-account-add-account-item"
+							onSelect={() => void onAddAccount()}
+						>
 							<Plus className="mr-2 size-4" />
 							{t("userContext.addAccount")}
 						</DropdownMenuItem>
@@ -236,6 +241,7 @@ function OrganizationMenuItem({
 	return (
 		<DropdownMenuItem
 			className="gap-2 px-2 py-1.5"
+			data-testid="shell-account-organization-item"
 			disabled={switching}
 			onSelect={() => {
 				if (!current) onSwitch(account.accountId, item.organizationCode)
@@ -272,7 +278,7 @@ function OtherAccountMenu({
 	const platformName = account.platformName || t("userContext.saasPlatform")
 	return (
 		<DropdownMenuSub>
-			<DropdownMenuSubTrigger className="gap-2">
+			<DropdownMenuSubTrigger className="gap-2" data-testid="shell-account-other-account-trigger">
 				<UserAvatarRender
 					className="size-6 text-[10px]"
 					name={account.name}
@@ -283,7 +289,10 @@ function OtherAccountMenu({
 					{platformName}
 				</span>
 			</DropdownMenuSubTrigger>
-			<DropdownMenuSubContent className="max-h-[min(70vh,420px)] w-[280px] overflow-y-auto">
+			<DropdownMenuSubContent
+				className="max-h-[min(70vh,420px)] w-[280px] overflow-y-auto"
+				data-testid="shell-account-other-account-content"
+			>
 				<div className="pr-1">
 					{account.organizations.map((item) => (
 						<OrganizationMenuItem
@@ -303,6 +312,7 @@ function OtherAccountMenu({
 						<DropdownMenuSeparator />
 						<DropdownMenuItem
 							className="text-destructive"
+							data-testid="shell-account-logout-item"
 							onSelect={() => void onLogout(account.accountId)}
 						>
 							<LogOut className="mr-2 size-4" />
@@ -332,10 +342,11 @@ function OrganizationSwitcher({
 
 	return (
 		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
+			<DropdownMenuTrigger asChild data-testid="admin-layout-shell-account-logout-trigger">
 				<button
 					aria-label={t("userContext.switchOrganization")}
 					className="flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-card px-0 text-sm font-medium shadow-sm transition-colors hover:bg-accent data-[state=open]:bg-accent disabled:pointer-events-none disabled:opacity-60 sm:w-auto sm:max-w-[260px] sm:px-3"
+					data-testid="shell-organization-switcher-trigger"
 					disabled={disabled || switchingOrganizationCode !== null}
 					type="button"
 				>
@@ -352,6 +363,7 @@ function OrganizationSwitcher({
 			<DropdownMenuContent
 				align="end"
 				className="max-h-80 w-[260px] overflow-y-auto rounded-lg"
+				data-testid="shell-organization-switcher-content"
 			>
 				<DropdownMenuLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
 					{t("userContext.switchOrganization")}
@@ -360,6 +372,7 @@ function OrganizationSwitcher({
 				{organizations.map((organization) => (
 					<DropdownMenuItem
 						className="gap-2 px-2 py-1.5"
+						data-testid="shell-organization-item"
 						key={organization.organizationCode}
 						onSelect={() => onValueChange(organization.organizationCode)}
 					>
@@ -411,10 +424,11 @@ function UserAvatarMenu({
 
 	return (
 		<DropdownMenu modal={false}>
-			<DropdownMenuTrigger asChild>
+			<DropdownMenuTrigger asChild data-testid="admin-layout-filter-trigger">
 				<Button
 					aria-label={t("userContext.userMenu")}
 					className="relative h-8 w-8 rounded-full"
+					data-testid="shell-user-menu-trigger"
 					variant="ghost"
 				>
 					<UserAvatarRender
@@ -424,7 +438,12 @@ function UserAvatarMenu({
 					/>
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent className="w-56" align="end" forceMount>
+			<DropdownMenuContent
+				align="end"
+				className="w-56"
+				data-testid="shell-user-menu-content"
+				forceMount
+			>
 				<DropdownMenuLabel className="font-normal">
 					<div className="flex flex-col space-y-1">
 						<p className="text-sm leading-none font-medium">{displayName}</p>

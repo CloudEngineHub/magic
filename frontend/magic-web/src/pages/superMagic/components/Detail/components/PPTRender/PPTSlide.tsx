@@ -7,11 +7,15 @@ import {
 	useRef,
 	type CSSProperties,
 } from "react"
+import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { FileX, Loader2 } from "lucide-react"
 import IsolatedHTMLRenderer, {
 	type IsolatedHTMLRendererRef,
 } from "../../contents/HTML/IsolatedHTMLRenderer"
+import { HtmlPreviewFreshness } from "../../contents/HTML/components/HtmlPreviewFreshness"
+import { useSaveConfirmation } from "../../contents/HTML/hooks/useSaveConfirmation"
+import { usePreviewFrameSwap } from "../../contents/HTML/hooks/usePreviewFrameSwap"
 import EditToolbar, {
 	type EditToolbarProps,
 } from "@/pages/superMagic/components/Detail/components/EditToolbar"
@@ -41,12 +45,16 @@ import { processHtmlContent, type ProcessHtmlContentInput } from "../../contents
 import { HTML_PREVIEW_IMAGE_PROCESS } from "../../contents/HTML/previewImageProcess"
 import { resolvePptScaleContentDimensions } from "../../contents/HTML/utils/slide-dimensions"
 import { usePPTVersionManager } from "./hooks/usePPTVersionManager"
+import { flushFileSaves } from "../../services/fileSaveQueue"
 import { cn } from "@/utils/cn"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
 import { stripSlideNotes } from "./utils/slideNotes"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { injectPPTSwipeBridge } from "./utils/pptSwipeBridge"
+import { injectPPTAnimationHoldBridge } from "./utils/pptAnimationHold"
+import { canReplaySlideInPlace } from "./utils/slideReplayPolicy"
+import { usePPTSlideReplay } from "./hooks/usePPTSlideReplay"
 import { usePPTSwipeNavigation, type PPTSwipeDirection } from "./hooks/usePPTSwipeNavigation"
 
 export interface PPTSlideToolbarModel {
@@ -61,6 +69,9 @@ interface PPTSlideProps {
 	isActive: boolean
 	/** The slide currently painted in the main canvas. May differ from isActive while preparing. */
 	isPresented?: boolean
+	/** Both real iframe layers are visible during a transition, but neither accepts input. */
+	transitionRole?: "incoming" | "outgoing"
+	onTransitionLayerChange?: (key: string, element: HTMLDivElement | null) => void
 	/** Hide presented-slide chrome when the file tab is cached. */
 	isTabActive?: boolean
 	content: string
@@ -75,6 +86,8 @@ interface PPTSlideProps {
 		enable_shadow?: boolean,
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
+		shouldExitEditMode?: boolean,
+		options?: { silent?: boolean },
 	) => Promise<boolean | void>
 	fileId: string
 	projectId?: string
@@ -141,13 +154,15 @@ const PPTSlide = observer(function PPTSlide({
 	index,
 	isActive,
 	isPresented,
+	transitionRole,
+	onTransitionLayerChange,
 	isTabActive,
 	content,
 	rawContent,
 	renderRevision,
 	isFullscreen,
 	isPlaybackMode,
-	saveEditContent,
+	saveEditContent: saveEditContentWithToast,
 	fileId,
 	projectId,
 	filePathMapping,
@@ -187,13 +202,35 @@ const PPTSlide = observer(function PPTSlide({
 	const isMobile = useIsMobile()
 	const fileTabActive = isTabActive !== false
 	const effectiveIsPresented = (isPresented ?? isActive) && fileTabActive
-	const isInteractive = effectiveIsPresented && isActive
+	const isTransitionVisible = Boolean(transitionRole) && fileTabActive
+	const isVisible = effectiveIsPresented || isTransitionVisible
+	const isInteractive = effectiveIsPresented && isActive && !transitionRole
 
 	// 内部管理编辑模式
 	const { isEditMode, setIsEditMode } = useEditMode({ fileId })
 	const [showSaveDialog, setShowSaveDialog] = useState(false)
 	const [pendingDeactivate, setPendingDeactivate] = useState(false)
 	const [isSaving, setIsSaving] = useState(false)
+	// Match the HTML preview notice: mute the global toast and show save status here.
+	const saveEditContent = useMemoizedFn(
+		(
+			content: any,
+			nextFileId?: string,
+			enableShadow?: boolean,
+			fetchFileVersions?: (fileId: string) => void,
+			isPPTEditMode?: boolean,
+		) =>
+			saveEditContentWithToast?.(
+				content,
+				nextFileId,
+				enableShadow,
+				fetchFileVersions,
+				isPPTEditMode,
+				false,
+				{ silent: true },
+			),
+	)
+	const saveStage = useSaveConfirmation(fileId, !isSaving)
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isAppendPicking, setIsAppendPicking] = useState(false)
 	const [isQuickSelecting, setIsQuickSelecting] = useState(false)
@@ -216,6 +253,8 @@ const PPTSlide = observer(function PPTSlide({
 		content: string
 		usesIframe: boolean
 	} | null>(null)
+	// Renderer key that has already painted once. Later in-place updates stay silent.
+	const paintedRendererKeyRef = useRef<string | null>(null)
 	const iframeElement = rendererRef.current?.getIframeElement() ?? null
 	usePPTSwipeNavigation({
 		containerRef: slideWrapperRef,
@@ -238,6 +277,26 @@ const PPTSlide = observer(function PPTSlide({
 	} = usePPTVersionManager({
 		fileId: fileId || "",
 	})
+	const notesVersionSourceRef = useRef({ fileId, rawContent })
+	useEffect(() => {
+		const previous = notesVersionSourceRef.current
+		notesVersionSourceRef.current = { fileId, rawContent }
+		if (
+			previous.fileId !== fileId ||
+			previous.rawContent === rawContent ||
+			stripSlideNotes(previous.rawContent) !== stripSlideNotes(rawContent)
+		)
+			return
+		// Notes change the local source without refreshing the iframe. Wait for the
+		// shared optimistic save queue before asking the server for the new history.
+		let cancelled = false
+		void flushFileSaves([fileId]).then((saved) => {
+			if (saved && !cancelled) void fetchFileVersions(fileId, true)
+		})
+		return () => {
+			cancelled = true
+		}
+	}, [fileId, rawContent, fetchFileVersions])
 
 	const [displayContent, setDisplayContent] = useState<{
 		content: string
@@ -250,13 +309,11 @@ const PPTSlide = observer(function PPTSlide({
 	})
 	// Keep runtime gesture code out of raw source and saved slide content.
 	const hasSwipeNavigation = Boolean(onSwipe)
-	const swipeEnabledContent = useMemo(
-		() =>
-			hasSwipeNavigation
-				? injectPPTSwipeBridge(displayContent.content, window.location.origin)
-				: displayContent.content,
-		[displayContent.content, hasSwipeNavigation],
-	)
+	const previewRuntimeContent = useMemo(() => {
+		const origin = window.location.origin
+		const content = injectPPTAnimationHoldBridge(displayContent.content, origin)
+		return hasSwipeNavigation ? injectPPTSwipeBridge(content, origin) : content
+	}, [displayContent.content, hasSwipeNavigation])
 
 	const isDisplayContentCurrent =
 		fileVersion === undefined
@@ -271,6 +328,47 @@ const PPTSlide = observer(function PPTSlide({
 		() => resolvePptScaleContentDimensions(displayContent.content, displayContent.rawContent),
 		[displayContent.content, displayContent.rawContent],
 	)
+	// Latest-version refreshes keep the previous render on screen until the new HTML is
+	// processed, like the HTML preview. Version switches still show the blocking spinner.
+	const isDisplayContentStale =
+		!isDisplayContentCurrent &&
+		fileVersion === undefined &&
+		displayContent.sourceVersion === undefined &&
+		Boolean(displayContent.content.trim())
+	const canRenderDisplayContent = isDisplayContentCurrent || isDisplayContentStale
+	// Stable across content updates so the iframe is updated in place, not remounted.
+	const rendererKey = `${fileId ?? "slide"}:${displayContent.sourceVersion ?? "latest"}`
+	// Hold the edit-time preview through save-and-exit until reprocessed HTML
+	// arrives in the same render (effects would freeze the swap with no live frame).
+	const [editPreviewHoldContent, setEditPreviewHoldContent] = useState<string | null>(null)
+	const expectContentSyncAfterExitRef = useRef(false)
+	if (isEditMode) {
+		if (editPreviewHoldContent !== previewRuntimeContent) {
+			setEditPreviewHoldContent(previewRuntimeContent)
+		}
+	} else if (editPreviewHoldContent !== null) {
+		if (previewRuntimeContent !== editPreviewHoldContent) {
+			expectContentSyncAfterExitRef.current = false
+			setEditPreviewHoldContent(null)
+		} else if (!expectContentSyncAfterExitRef.current) {
+			// Cancel/exit without a pending content sync: do not freeze forever.
+			setEditPreviewHoldContent(null)
+		}
+	}
+	const releaseEditPreviewHold = useCallback(() => {
+		expectContentSyncAfterExitRef.current = false
+		setEditPreviewHoldContent(null)
+	}, [])
+	const holdsEditPreview = Boolean(isEditMode || editPreviewHoldContent !== null)
+	const isIframeMounted =
+		loadingState === "loaded" &&
+		Boolean(content?.trim()) &&
+		canRenderDisplayContent &&
+		viewMode !== "code"
+
+	useEffect(() => {
+		if (!isIframeMounted) paintedRendererKeyRef.current = null
+	}, [isIframeMounted])
 
 	// 历史版本对比弹窗状态
 	const [showHistoryCompareDialog, setShowHistoryCompareDialog] = useState(false)
@@ -399,15 +497,57 @@ const PPTSlide = observer(function PPTSlide({
 		return !isMobile && !isFullscreen && !isPlaybackMode
 	}, [isMobile, isFullscreen, isPlaybackMode])
 
+	const presentedReadyRef = useRef<boolean | null>(null)
+	const reportSlideRenderReady = useMemoizedFn((ready: boolean) => {
+		if (ready) {
+			presentedVisualRef.current = {
+				revision: renderRevision,
+				content: displayContent.content,
+				usesIframe: isIframeMounted,
+			}
+		}
+		if (presentedReadyRef.current === ready) return
+		presentedReadyRef.current = ready
+		setIsSlideRenderReady(ready)
+		onRenderReadyChange?.(ready)
+	})
+	// Inspect only the authored source, once per content change; injected host scripts do not
+	// turn a declarative slide into a custom application that needs document reconstruction.
+	const canReplayInPlace = useMemo(
+		() => canReplaySlideInPlace(displayContent.rawContent || content),
+		[displayContent.rawContent, content],
+	)
+	const {
+		isPreparingReplay,
+		isReplayPendingRef,
+		onRenderReady: onReplayRenderReady,
+	} = usePPTSlideReplay({
+		content: displayContent.content,
+		documentKey: rendererKey,
+		canReplayInPlace,
+		isActive,
+		isPresented: effectiveIsPresented,
+		isEditing: Boolean(isEditMode),
+		isCodeView: viewMode === "code",
+		iframeMounted: isIframeMounted,
+		ready: isSlideRenderReady,
+		getIframe: () => rendererRef.current?.getIframeElement() ?? null,
+		restartDocument: () => rendererRef.current?.restartDocument?.(),
+		onReadyChange: reportSlideRenderReady,
+	})
+
+	// Paint transition layers and the replay preparation frame without dropping the saved preview.
+	const isRendering = isVisible || (isPreparingReplay && fileTabActive)
 	const slideWrapperClassNames = "absolute inset-0 flex h-full w-full flex-col"
 	// Keep every resident slide at the same dimensions while only the presented one is interactive.
 	const slideWrapperStyle: CSSProperties = {
-		visibility: effectiveIsPresented ? "visible" : "hidden",
+		visibility: isRendering ? "visible" : "hidden",
 		pointerEvents: isInteractive ? "auto" : "none",
-		zIndex: effectiveIsPresented ? 1 : 0,
+		// Incoming must cover outgoing independently of their stable DOM/cache order.
+		zIndex: transitionRole === "incoming" ? 2 : isVisible ? 1 : 0,
 	}
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		const wrapper = slideWrapperRef.current as (HTMLDivElement & { inert?: boolean }) | null
 		if (!wrapper) return
 
@@ -422,26 +562,57 @@ const PPTSlide = observer(function PPTSlide({
 		setTriggerSaveRef(() => triggerSave)
 	}, [])
 
-	const presentedReadyRef = useRef<boolean | null>(null)
-	const reportSlideRenderReady = useMemoizedFn((ready: boolean) => {
-		if (ready) {
-			presentedVisualRef.current = {
-				revision: renderRevision,
-				content: displayContent.content,
-				usesIframe: viewMode !== "code",
-			}
-		}
-		if (presentedReadyRef.current === ready) return
-		presentedReadyRef.current = ready
-		setIsSlideRenderReady(ready)
-		onRenderReadyChange?.(ready)
+	const rendererStaticProps = {
+		// Metadata saves must reach the save boundary immediately, even while the
+		// processed preview is retained. Historical previews keep their own source.
+		rawSourceCode: fileVersion === undefined ? rawContent : displayContent.rawContent,
+		sandboxType: "iframe" as const,
+		isPptRender: true as const,
+		scaleContentDimensions,
+		isFullscreen,
+		isEditMode,
+		isVisible: isRendering,
+		isPlaybackPaused: Boolean(transitionRole) || isPreparingReplay,
+		isTabActive: isInteractive,
+		isSaving,
+		saveEditContent,
+		fileId,
+		filePathMapping,
+		openNewTab,
+		htmlRelativeFolderPath,
+		projectId,
+		selectedProject,
+		attachmentList,
+		setSlideContents: updateSlideContents,
+		slideIndex: index,
+		isPlaybackMode,
+		className: cn(
+			"h-full",
+			!isFullscreen && !isPlaybackMode && "!bg-[#eeeeee] dark:!bg-[#2b2b2b]",
+		),
+		autoFitVerticalPadding: isFullscreen ? 0 : 64,
+		manualScale,
+		onManualScaleChange: isEditMode ? undefined : onManualScaleChange,
+		onScaleRatioChange: effectiveIsPresented ? onScaleRatioChange : undefined,
+	}
+	const previewFrameSwap = usePreviewFrameSwap({
+		token: rendererKey,
+		content: previewRuntimeContent,
+		isEditing: Boolean(isEditMode),
+		contentIsEditVariant: holdsEditPreview,
+		props: rendererStaticProps,
+	})
+
+	const reacknowledgeRenderReady = useMemoizedFn(() => {
+		onRenderReadyChange?.(true)
 	})
 
 	const handleSlideRenderReady = useMemoizedFn(() => {
 		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) {
 			return
 		}
-		reportSlideRenderReady(true)
+		paintedRendererKeyRef.current = rendererKey
+		onReplayRenderReady()
 	})
 
 	useEffect(() => {
@@ -456,18 +627,25 @@ const PPTSlide = observer(function PPTSlide({
 			return
 		}
 
-		// Keep iframe ready when visual identity is unchanged.
+		// Keep iframe ready when the rendered HTML is unchanged, even if the store revision moved.
 		// Code view unmounts the iframe, so it is a new present.
 		const presentedVisual = presentedVisualRef.current
 		const isUnchangedPresentedVisual =
+			!isReplayPendingRef.current &&
 			Boolean(presentedVisual) &&
-			presentedVisual?.revision === renderRevision &&
 			presentedVisual?.content === displayContent.content &&
-			presentedVisual?.usesIframe === (viewMode !== "code") &&
+			presentedVisual?.usesIframe === isIframeMounted &&
 			loadingState === "loaded" &&
 			isDisplayContentCurrent
 
-		if (isUnchangedPresentedVisual) return
+		if (isUnchangedPresentedVisual) {
+			const wasReported = presentedReadyRef.current === true
+			const isRevisionChanged = presentedVisual?.revision !== renderRevision
+			reportSlideRenderReady(true)
+			// The owner tracks readiness per revision, so a new revision needs a fresh ack.
+			if (wasReported && isRevisionChanged) reacknowledgeRenderReady()
+			return
+		}
 		reportSlideRenderReady(false)
 		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) return
 
@@ -475,6 +653,7 @@ const PPTSlide = observer(function PPTSlide({
 		// This only releases the local spinner for the initially presented page. It must not tell the
 		// double buffer that a hidden target is safe to swap before a real renderComplete signal.
 		const fallbackTimer = window.setTimeout(() => {
+			paintedRendererKeyRef.current = rendererKey
 			setIsSlideRenderReady(true)
 		}, 4000)
 
@@ -486,9 +665,13 @@ const PPTSlide = observer(function PPTSlide({
 		displayContent.content,
 		fileVersion,
 		isDisplayContentCurrent,
+		isIframeMounted,
+		isReplayPendingRef,
 		loadingState,
 		rawContent,
 		renderRevision,
+		rendererKey,
+		reacknowledgeRenderReady,
 		reportSlideRenderReady,
 		viewMode,
 	])
@@ -615,7 +798,7 @@ const PPTSlide = observer(function PPTSlide({
 		}
 	})
 
-	const executeSaveContent = useMemoizedFn(async () => {
+	const executeSaveContent = useMemoizedFn(async (): Promise<SaveResult | false> => {
 		if (viewMode === "code") {
 			const saveResult = await saveEditContent?.(
 				shadow(editingCodeContent),
@@ -627,23 +810,19 @@ const PPTSlide = observer(function PPTSlide({
 			// Render returns false when the persistence request fails. Do not mark the
 			// slide as saved or leave edit/fullscreen state in that case.
 			if (saveResult === false) return false
-			await onManualSave?.(
-				{
-					success: true,
-					cleanContent: editingCodeContent,
-					rawContent: content,
-					fileId,
-				},
-				index,
-			)
-			return true
+			return {
+				success: true,
+				cleanContent: editingCodeContent,
+				rawContent: content,
+				fileId,
+			}
 		}
 
 		if (!triggerSaveRef) return false
 
 		const saveResult = await triggerSaveRef()
-		await onManualSave?.(saveResult, index)
-		return saveResult?.success !== false
+		if (saveResult?.success === false) return false
+		return saveResult ?? false
 	})
 
 	const finishSave = useMemoizedFn((options: PerformSaveOptions = {}) => {
@@ -672,10 +851,25 @@ const PPTSlide = observer(function PPTSlide({
 	const performSave = useMemoizedFn(async (options: PerformSaveOptions = {}) => {
 		setIsSaving(true)
 		try {
-			const didSave = await executeSaveContent()
-			if (!didSave) return false
+			const saveResult = await executeSaveContent()
+			if (!saveResult) return false
 
-			finishSave(options)
+			// Flush exit before store sync: leaveEdit used to await presence API
+			// first, so content remounted while isEditMode was still true and
+			// orphaned ENTER_EDIT_MODE requests (selection fails intermittently).
+			if (options.shouldExitEditMode) {
+				expectContentSyncAfterExitRef.current = true
+				flushSync(() => {
+					finishSave(options)
+				})
+			} else {
+				finishSave(options)
+			}
+			const syncing = onManualSave?.(saveResult, index)
+			if (options.shouldExitEditMode) {
+				// Identical preview HTML never triggers the content-change release.
+				void Promise.resolve(syncing).finally(releaseEditPreviewHold)
+			}
 			return true
 		} catch (err) {
 			console.error("保存失败", err)
@@ -927,6 +1121,10 @@ const PPTSlide = observer(function PPTSlide({
 		},
 	)
 	const resolvedToolbarOwnerKey = toolbarOwnerKey || `${fileId || "missing-file"}:${index}`
+	useLayoutEffect(() => {
+		onTransitionLayerChange?.(resolvedToolbarOwnerKey, slideWrapperRef.current)
+		return () => onTransitionLayerChange?.(resolvedToolbarOwnerKey, null)
+	}, [onTransitionLayerChange, resolvedToolbarOwnerKey])
 	const toolbarModel = useMemo<PPTSlideToolbarModel | null>(() => {
 		if (!showEditToolbar) return null
 
@@ -942,7 +1140,7 @@ const PPTSlide = observer(function PPTSlide({
 					rendererRef.current?.requestInspectorExit?.() ?? Promise.resolve(true),
 				showFileEdit: allowEdit && !fileVersion,
 				isEditMode,
-				isSaving,
+				isSaving: false,
 				attachmentList,
 				fileId,
 				mainFileId,
@@ -1099,7 +1297,7 @@ const PPTSlide = observer(function PPTSlide({
 			)
 		}
 
-		if (!isDisplayContentCurrent) {
+		if (!canRenderDisplayContent) {
 			return (
 				<div
 					data-testid="ppt-slide-content-updating"
@@ -1127,49 +1325,55 @@ const PPTSlide = observer(function PPTSlide({
 				data-testid="ppt-slide-render-content"
 				className={cn("relative min-h-0 w-full", isFullscreen ? "h-full" : "flex-1")}
 			>
-				<IsolatedHTMLRenderer
-					key={`${renderRevision || `${fileId}:${content.length}`}:${displayContent.sourceVersion ?? "latest"}`}
-					ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
-					content={swipeEnabledContent}
-					rawSourceCode={displayContent.rawContent}
-					sandboxType="iframe"
-					isPptRender
-					scaleContentDimensions={scaleContentDimensions}
-					isFullscreen={isFullscreen}
-					isEditMode={isEditMode}
-					isVisible={effectiveIsPresented}
-					isTabActive={isInteractive}
-					isSaving={isSaving}
-					saveEditContent={saveEditContent}
-					fileId={fileId}
-					onSaveReady={handleSaveReady}
-					filePathMapping={filePathMapping}
-					openNewTab={openNewTab}
-					htmlRelativeFolderPath={htmlRelativeFolderPath}
-					projectId={projectId}
-					selectedProject={selectedProject}
-					attachmentList={attachmentList}
-					setSlideContents={updateSlideContents}
-					slideIndex={index}
-					isPlaybackMode={isPlaybackMode}
-					className={cn(
-						"h-full",
-						// Preserve the backdrop owned by fullscreen and presenter layouts.
-						!isFullscreen && !isPlaybackMode && "!bg-[#eeeeee] dark:!bg-[#2b2b2b]",
-					)}
-					autoFitVerticalPadding={isFullscreen ? 0 : 64}
-					manualScale={manualScale}
-					onManualScaleChange={isEditMode ? undefined : onManualScaleChange}
-					onScaleRatioChange={effectiveIsPresented ? onScaleRatioChange : undefined}
-					onRenderReady={handleSlideRenderReady}
-					onAppendPickingChange={setIsAppendPicking}
-					onQuickSelectionChange={setIsQuickSelecting}
-				/>
-				{!isSlideRenderReady && (
-					<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">
-						<MagicSpin spinning />
+				{previewFrameSwap.frames.map((frame) => (
+					<div
+						key={`${rendererKey}-${frame.id}`}
+						className={
+							frame.isVisible
+								? "contents"
+								: "pointer-events-none invisible absolute inset-0"
+						}
+					>
+						{frame.isLive ? (
+							<IsolatedHTMLRenderer
+								{...rendererStaticProps}
+								ref={rendererRef as React.RefObject<IsolatedHTMLRendererRef>}
+								content={frame.content}
+								onSaveReady={handleSaveReady}
+								onRenderReady={() => {
+									handleSlideRenderReady()
+									previewFrameSwap.markReady(frame.id)
+								}}
+								onAppendPickingChange={setIsAppendPicking}
+								onQuickSelectionChange={setIsQuickSelecting}
+							/>
+						) : (
+							frame.frozenProps && (
+								<IsolatedHTMLRenderer
+									{...frame.frozenProps}
+									// A saved frame can outlive its captured props while the deck starts a transition.
+									isPlaybackPaused={Boolean(transitionRole) || isPreparingReplay}
+									content={frame.content}
+								/>
+							)
+						)}
 					</div>
-				)}
+				))}
+				<HtmlPreviewFreshness
+					key={fileId}
+					phase="idle"
+					hasRendered
+					saveStage={saveStage}
+					previewStatusEnabled={false}
+					onRetry={() => undefined}
+				/>
+				{!isSlideRenderReady &&
+					!previewFrameSwap.holdsPreviousFrame &&
+					paintedRendererKeyRef.current !== rendererKey && (
+						<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">
+							<MagicSpin spinning />
+						</div>
+					)}
 			</div>
 		)
 	}
@@ -1181,7 +1385,7 @@ const PPTSlide = observer(function PPTSlide({
 				data-testid={fileId ? `ppt-slide-item-${fileId}` : "ppt-slide-item"}
 				className={slideWrapperClassNames}
 				style={slideWrapperStyle}
-				aria-hidden={!effectiveIsPresented}
+				aria-hidden={!isInteractive}
 				data-interactive={String(isInteractive)}
 			>
 				{!onToolbarModelChange && toolbarModel && (

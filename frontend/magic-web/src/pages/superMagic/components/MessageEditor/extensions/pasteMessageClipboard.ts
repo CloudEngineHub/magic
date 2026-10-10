@@ -1,3 +1,4 @@
+import { restoreWechatChatContent } from "./wechat-chat-history/transform"
 import type { Editor, JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { DOMParser as ProseMirrorDOMParser } from "prosemirror-model"
 import magicToast from "@/components/base/MagicToaster/utils"
@@ -380,7 +381,9 @@ function pasteFromMagicMetadata(
 				options.getCurrentProjectId?.(),
 			)
 			const converted = replaceWorkspaceLinksInRichText(content, attachments)
-			const editorContent = transformInspectorContent(converted.content)
+			const editorContent = restoreWechatChatContent(
+				transformInspectorContent(converted.content),
+			)
 			return (
 				runActiveEditor(
 					editor,

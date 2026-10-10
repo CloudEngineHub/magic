@@ -119,7 +119,7 @@ export function useListQueryParams<TDraft, TParams extends { page: number }>({
 		[resetKey],
 	)
 	const setPageSize = useCallback((nextPageSize: number) => {
-		setPagination((current) => ({ page: 1, pageSize: nextPageSize, resetKey }))
+		setPagination({ page: 1, pageSize: nextPageSize, resetKey })
 	}, [resetKey])
 
 	return {

@@ -16,15 +16,21 @@ export function hasCommonRuntimeFields(modelType: ProviderModelType) {
   return modelType === providerModelType.largeLanguageModel || isEmbeddingModelType(modelType);
 }
 
-export function getCommonRuntimeFieldVisibility(modelType: ProviderModelType) {
+export function getCommonRuntimeFieldVisibility(
+  modelType: ProviderModelType,
+  isOfficialOrganization: boolean,
+) {
   const isEmbedding = isEmbeddingModelType(modelType);
   const hasRuntimeFields = hasCommonRuntimeFields(modelType);
+  const canConfigureOfficialRuntime = hasRuntimeFields && isOfficialOrganization;
+  const isLargeLanguageModel = modelType === providerModelType.largeLanguageModel;
 
   return {
-    capabilities: hasRuntimeFields && !isEmbedding,
-    maxOutputTokens: hasRuntimeFields,
+    chatApi: isLargeLanguageModel,
+    capabilities: canConfigureOfficialRuntime && !isEmbedding,
+    maxOutputTokens: canConfigureOfficialRuntime,
     maxTokens: hasRuntimeFields && !isEmbedding,
-    temperature: hasRuntimeFields,
+    temperature: canConfigureOfficialRuntime,
     vectorSize: hasRuntimeFields && isEmbedding,
   };
 }

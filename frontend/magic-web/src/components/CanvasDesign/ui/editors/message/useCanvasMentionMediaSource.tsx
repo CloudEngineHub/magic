@@ -12,6 +12,7 @@ import { getMediaResourcePathKind } from "../../../runtime/resources/media-commo
 import { useReferenceAudioSrc } from "../../previews/reference-media/useReferenceAudioSrc"
 import { useReferenceVideoPoster } from "../../previews/reference-media/useReferenceVideoPoster"
 import type { CanvasAssetMediaType } from "../../../public/magic-types"
+import { useCanvasImagePreviewActions } from "../../previews/reference-media/useCanvasImagePreviewActions"
 
 interface CanvasPosterProps {
 	poster: HTMLCanvasElement
@@ -68,6 +69,10 @@ export function useCanvasMentionMediaSource(
 	const mediaKind = getMediaKind(path, fileName, fileExtension, mediaType)
 	const resourcePath = path || ""
 	const resourceEnabled = enabled && Boolean(canvas)
+	const imageActions = useCanvasImagePreviewActions(
+		resourceEnabled && mediaKind === "image" ? path : undefined,
+		fileName,
+	)
 	const image = useReferenceImageUrls(resourcePath, {
 		enabled: resourceEnabled && mediaKind === "image",
 	})
@@ -173,6 +178,7 @@ export function useCanvasMentionMediaSource(
 		if (mediaKind === "image") {
 			return {
 				mediaType: "image",
+				imageActions,
 				thumbnailUrl: image.lowUrl,
 				previewUrl: image.fullUrl,
 				isLoading:
@@ -236,5 +242,15 @@ export function useCanvasMentionMediaSource(
 		}
 
 		return null
-	}, [audio, fileName, image, mediaKind, path, registryResource.snapshot, resourceEnabled, video])
+	}, [
+		audio,
+		fileName,
+		image,
+		mediaKind,
+		path,
+		registryResource.snapshot,
+		resourceEnabled,
+		video,
+		imageActions,
+	])
 }

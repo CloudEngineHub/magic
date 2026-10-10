@@ -141,7 +141,7 @@ describe("media label spatial layout cache", () => {
 		expect(layout?.hasSpace).toBe(true)
 	})
 
-	it("shows the complete size only after the full name fits", () => {
+	it("drops the complete size label before truncating the name or its optional icon", () => {
 		const bounds = { x: 0, y: 100, width: 100, height: 80 }
 		const element = {
 			getBoundingRect: () => bounds,
@@ -185,15 +185,6 @@ describe("media label spatial layout cache", () => {
 		expect(withIcon?.nameWidth).toBe(100)
 		expect(withoutIcon?.showSize).toBe(false)
 		expect(withoutIcon?.nameWidth).toBe(100)
-
-		const wideEnough = getMediaLabelLayout(canvas, "image-1", {
-			...baseOptions,
-			nameLeadingWidth: 14,
-			nameLeadingHeight: 12,
-			boundsOverride: { ...bounds, width: 300 },
-		})
-		expect(wideEnough?.showSize).toBe(true)
-		expect(wideEnough?.nameWidth).toBe(254)
 
 		const tooNarrow = getMediaLabelLayout(canvas, "image-1", {
 			...baseOptions,

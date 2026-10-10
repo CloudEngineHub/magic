@@ -22,11 +22,13 @@ import type { PPTDeckTools } from "../hooks/usePPTDeckTools"
 import { cn } from "@/utils/cn"
 
 export default function PPTDeckToolbar({
+	onOpenTransitions,
 	tools,
 	allowEdit,
 	slideCount,
 	isMobile,
 }: {
+	onOpenTransitions?: () => void
 	tools: PPTDeckTools
 	allowEdit: boolean
 	slideCount: number
@@ -95,6 +97,11 @@ export default function PPTDeckToolbar({
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end">
+							{onOpenTransitions && (
+								<DropdownMenuItem onSelect={onOpenTransitions}>
+									{t("ppt.transitions.title")}
+								</DropdownMenuItem>
+							)}
 							<DropdownMenuItem onSelect={() => void tools.duplicate()}>
 								{t("ppt.batch.copy")}
 							</DropdownMenuItem>

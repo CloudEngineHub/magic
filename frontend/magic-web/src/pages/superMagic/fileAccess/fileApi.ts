@@ -33,13 +33,44 @@ export function createFileApi(access?: FileAccessContext | null): FileApi {
 	return {
 		identityKey,
 		getTemporaryDownloadUrl: (params) =>
-			getTemporaryDownloadUrl({ ...params, access: params.access ?? boundAccess }),
+			getTemporaryDownloadUrl({
+				...params,
+				access:
+					boundAccess?.kind === "recycle-bin"
+						? boundAccess
+						: (params.access ?? boundAccess),
+			}),
 		getFileContentById: (fileId, options) =>
-			getFileContentById(fileId, { ...options, access: options?.access ?? boundAccess }),
+			getFileContentById(fileId, {
+				...options,
+				access:
+					boundAccess?.kind === "recycle-bin"
+						? boundAccess
+						: (options?.access ?? boundAccess),
+			}),
 		getFileContentsByIds: (fileIds, options) =>
-			getFileContentsByIds(fileIds, { ...options, access: options?.access ?? boundAccess }),
+			getFileContentsByIds(fileIds, {
+				...options,
+				access:
+					boundAccess?.kind === "recycle-bin"
+						? boundAccess
+						: (options?.access ?? boundAccess),
+			}),
 		requestSharedMediaUrls: (fileIds, options) => {
-			const requestAccess = options?.access ?? boundAccess
+			const requestAccess =
+				boundAccess?.kind === "recycle-bin" ? boundAccess : (options?.access ?? boundAccess)
+			if (requestAccess?.kind === "recycle-bin") {
+				if (options?.fileVersions)
+					return Promise.reject(
+						new Error("Recycle bin preview does not allow file versions"),
+					)
+				return getTemporaryDownloadUrl({
+					file_ids: fileIds,
+					download_mode: options?.downloadMode,
+					is_download: options?.isDownload,
+					access: requestAccess,
+				})
+			}
 			return requestSharedMediaUrls(fileIds, {
 				...options,
 				identityKey: options?.identityKey ?? getFileAccessIdentityKey(requestAccess),

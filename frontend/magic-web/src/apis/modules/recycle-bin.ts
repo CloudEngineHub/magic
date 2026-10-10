@@ -138,7 +138,29 @@ export namespace RecycleBin {
 	}
 }
 
+export interface RecycleBinFilePreview {
+	recycle_bin_id: string
+	file_id: string
+	file_name: string
+	file_extension: string
+	file_size: number
+	is_directory: false
+	space_type: "user" | "project"
+	project_id: string
+	relative_file_path: string
+	updated_at: string
+	url: string
+	expires_at: string
+}
+
 export const generateRecycleBinApi = (fetch: ServiceHttpClient) => ({
+	previewFile(id: string, projectId?: string, signal?: AbortSignal) {
+		return fetch.get<RecycleBinFilePreview>(`/api/v1/recycle-bin/${id}/preview`, {
+			params: projectId ? { project_id: projectId } : undefined,
+			signal,
+			enableErrorMessagePrompt: false,
+		})
+	},
 	getProjectRecycleBinList(params: RecycleBin.ProjectListParams, signal?: AbortSignal) {
 		return fetch.get<RecycleBin.ProjectListResult>("/api/v1/recycle-bin/list", {
 			params: { ...params },

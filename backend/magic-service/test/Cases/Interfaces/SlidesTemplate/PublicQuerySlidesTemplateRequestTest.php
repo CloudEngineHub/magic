@@ -85,6 +85,12 @@ final class PublicQuerySlidesTemplateRequestTest extends TestCase
         self::assertNull($request->getKeyword());
         self::assertSame('any', $request->getTagMatch());
         self::assertSame([], $request->getTagCodes());
+        self::assertSame('', $request->getToken());
+    }
+
+    public function testTokenIsTrimmed(): void
+    {
+        self::assertSame('share-token', $this->request(['token' => ' share-token '])->getToken());
     }
 
     public function testWhitespaceKeywordAndCodeValuesBecomeNull(): void

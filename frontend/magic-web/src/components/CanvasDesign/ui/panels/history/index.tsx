@@ -60,6 +60,7 @@ export default function MessageHistory() {
 		if (!messageHistoryElementId || !element) return null
 		if (element.id !== messageHistoryElementId) return null
 
+		// 生成占位图可能尚未收到请求详情，仍允许打开记录查看状态及缺失说明。
 		if (element.type === ElementTypeEnum.Image) {
 			return (
 				<ImageMessageHistoryRender

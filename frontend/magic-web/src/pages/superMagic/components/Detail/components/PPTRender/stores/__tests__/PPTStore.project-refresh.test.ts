@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PPT_FILE_UPDATE_DEBOUNCE_MS, PPTStore } from "../PPTStore"
+import { SlideScreenshotService } from "../../services/SlideScreenshotService"
 
 const mockState = vi.hoisted(() => ({
 	downloadFileContent: vi.fn(),
@@ -80,6 +81,9 @@ describe("PPTStore original project refresh", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.spyOn(SlideScreenshotService.prototype, "generateScreenshot").mockResolvedValue(
+			"blob:regenerated",
+		)
 		mockState.processHtmlContent.mockImplementation(async ({ content }) => ({
 			processedContent: content,
 		}))
@@ -139,7 +143,14 @@ describe("PPTStore original project refresh", () => {
 		store.dispose()
 	})
 
-	it("reloads the active slide and clears its thumbnail when that HTML file changes", async () => {
+	it("reloads the active slide and refreshes its thumbnail in place when that HTML file changes", async () => {
+		const generateScreenshot = vi
+			.spyOn(
+				(store as unknown as { screenshotService: SlideScreenshotService })
+					.screenshotService,
+				"generateScreenshot",
+			)
+			.mockResolvedValue("blob:regenerated")
 		await store.updateConfig({
 			attachmentList: createProjectAttachments({
 				page2: {},
@@ -153,7 +164,8 @@ describe("PPTStore original project refresh", () => {
 			expect.anything(),
 		)
 		expect(store.slides[0]?.content).toContain("cover-file")
-		expect(store.slides[0]?.thumbnailUrl).toBeUndefined()
+		expect(generateScreenshot.mock.calls[0]?.[1]).toContain("cover-file")
+		expect(store.slides[0]?.thumbnailUrl).toBe("blob:regenerated")
 	})
 
 	it("keeps the current HTML visible while a slide file is refreshing", async () => {
@@ -201,6 +213,13 @@ describe("PPTStore original project refresh", () => {
 	it("loads a visible idle slide after its HTML file settles", async () => {
 		store.updateVisibleSlidePreviews([0, 1])
 		mockState.downloadFileContent.mockClear()
+		const generateScreenshot = vi
+			.spyOn(
+				(store as unknown as { screenshotService: SlideScreenshotService })
+					.screenshotService,
+				"generateScreenshot",
+			)
+			.mockResolvedValue("blob:regenerated")
 
 		await store.updateConfig({
 			attachmentList: createProjectAttachments({
@@ -210,7 +229,9 @@ describe("PPTStore original project refresh", () => {
 		})
 
 		await vi.waitFor(() => expect(store.slides[1]?.content).toContain("page-2-file"))
-		expect(store.slides[1]?.thumbnailUrl).toBeUndefined()
+		await vi.waitFor(() => expect(generateScreenshot).toHaveBeenCalled())
+		expect(generateScreenshot.mock.calls[0]?.[1]).toContain("page-2-file")
+		expect(store.slides[1]?.thumbnailUrl).toBe("blob:regenerated")
 	})
 
 	it("waits for slide writes to settle before reloading project HTML", async () => {
@@ -244,6 +265,10 @@ describe("PPTStore original project refresh", () => {
 			true,
 		)
 
+		vi.spyOn(
+			(store as unknown as { screenshotService: SlideScreenshotService }).screenshotService,
+			"generateScreenshot",
+		).mockResolvedValue("blob:regenerated")
 		vi.useFakeTimers()
 		try {
 			const firstUpdate = store.updateConfig({

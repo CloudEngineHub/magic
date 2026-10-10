@@ -1,4 +1,4 @@
-import { memo, useEffect, useCallback, useState, type MouseEvent } from "react"
+import { memo, useEffect, useCallback, useRef, type MouseEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { FilePenLine, Save, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
@@ -9,8 +9,11 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { runGuardedAction } from "../../utils/actionGuard"
 import type { BeforeAction } from "../../utils/actionGuard"
 import { cn } from "@/utils/cn"
+import { FileSaveSyncBadge } from "../FileSaveSyncBadge"
 
 interface FileEditButtonsProps {
+	/** Unique file id used for the unsynced save badge. */
+	fileId?: string
 	/** Stable test id scope for the edit actions rendered by this component. */
 	testIdPrefix?: string
 	/** 是否禁用当前工具栏交互（例如 PPT 冷切页等待目标页 ready 时） */
@@ -39,6 +42,7 @@ interface FileEditButtonsProps {
 
 function FileEditButtons({
 	testIdPrefix,
+	fileId,
 	interactionDisabled = false,
 	isEditMode = false,
 	isSaving = false,
@@ -52,30 +56,35 @@ function FileEditButtons({
 	getPopupContainer,
 }: FileEditButtonsProps) {
 	const { t } = useTranslation("super")
-	const [isSavingLocal, setIsSavingLocal] = useState(false)
+	// Prevent double-submit without freezing the toolbar on "保存中…".
+	// Save progress is shown by the preview corner chip / sync badge instead.
+	const saveInFlightRef = useRef(false)
 	const isMac =
 		typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent)
 	const isMobile = useIsMobile()
 
-	const handleSave = useCallback(async () => {
-		if (interactionDisabled || isSaving || isSavingLocal || !onSave) return
-		setIsSavingLocal(true)
-		try {
-			await onSave()
-		} finally {
-			setIsSavingLocal(false)
-		}
-	}, [interactionDisabled, onSave, isSaving, isSavingLocal])
+	const runGuardedSave = useCallback(
+		async (action?: () => void | Promise<void>) => {
+			if (interactionDisabled || isSaving || saveInFlightRef.current || !action) return
+			saveInFlightRef.current = true
+			try {
+				await action()
+			} catch (error) {
+				console.error(error)
+			} finally {
+				saveInFlightRef.current = false
+			}
+		},
+		[interactionDisabled, isSaving],
+	)
 
-	const handleSaveAndExit = useCallback(async () => {
-		if (interactionDisabled || isSaving || isSavingLocal || !onSaveAndExit) return
-		setIsSavingLocal(true)
-		try {
-			await onSaveAndExit()
-		} finally {
-			setIsSavingLocal(false)
-		}
-	}, [interactionDisabled, onSaveAndExit, isSaving, isSavingLocal])
+	const handleSave = useCallback(() => {
+		void runGuardedSave(onSave)
+	}, [onSave, runGuardedSave])
+
+	const handleSaveAndExit = useCallback(() => {
+		void runGuardedSave(onSaveAndExit)
+	}, [onSaveAndExit, runGuardedSave])
 
 	const handleCancel = useCallback(
 		(event?: MouseEvent<HTMLButtonElement>) => {
@@ -110,9 +119,9 @@ function FileEditButtons({
 			if (isCmdOrCtrl && e.key === "s") {
 				e.preventDefault()
 				if (e.shiftKey) {
-					void handleSaveAndExit()
+					handleSaveAndExit()
 				} else {
-					void handleSave()
+					handleSave()
 				}
 			}
 		}
@@ -123,7 +132,8 @@ function FileEditButtons({
 		}
 	}, [interactionDisabled, isEditMode, handleSave, handleSaveAndExit, handleCancel, isMac])
 
-	const showSaving = isSaving || isSavingLocal
+	// Only the parent-driven flag may paint "保存中…"; local work must not freeze the chrome.
+	const showSaving = isSaving
 	const resolvedEditLabel = editLabel ?? t("fileViewer.edit")
 	const outlineButtonClassName = getOutlineActionButtonClassName(showButtonText)
 	const primaryButtonClassName = getPrimaryActionButtonClassName(showButtonText)
@@ -154,6 +164,7 @@ function FileEditButtons({
 				</ConditionalTooltip>
 			) : (
 				<>
+					<FileSaveSyncBadge fileId={fileId} />
 					<ConditionalTooltip
 						showText={showButtonText}
 						title={showSaving ? t("fileViewer.saving") : t("fileViewer.save")}

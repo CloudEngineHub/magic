@@ -46,7 +46,10 @@ const NAME_LABEL_CONFIG = {
 	SIZE_LABEL_PRIORITY_EPSILON: 2,
 	/** 状态后缀紧跟主名称，保持与原有拼接文案一致 */
 	SUFFIX_GAP: 0,
-	/** 至少保留一个局部像素，避免 Konva 将宽度 0 视为自动宽度 */
+	STATUS_FONT_RATIO: 5 / 6,
+	STATUS_PADDING_X: 4,
+	STATUS_PADDING_Y: 2,
+	/** 省略后仍保留的最小文本宽度，避免标签节点宽度为 0 */
 	MIN_TEXT_WIDTH: 1,
 } as const
 
@@ -81,8 +84,11 @@ export interface NameLabelScreenLayout {
 }
 
 export interface ImageNameLabelLayout extends NameLabelScreenLayout {
+	rowWidth: number
 	canRename: boolean
 	showRenameButton: boolean
+	renameButtonGap: number
+	hitPadding: number
 }
 
 /**
@@ -102,6 +108,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private readonly iconResolver?: NameLabelIconResolver
 	private readonly labelLayoutStates = new WeakMap<Konva.Group, NameLabelLayoutState>()
 	private domLabelElementId: string | null = null
+	private renameButtonElementId: string | null = null
 
 	constructor(options: { canvas: Canvas; iconResolver?: NameLabelIconResolver }) {
 		const { canvas } = options
@@ -152,7 +159,10 @@ export class NameLabelManager extends BaseLabelManager {
 		// motion so callers that request the button on demand retain the previous lazy-create behavior.
 		const layout = this.getImageNameLabelLayout(elementId)
 		if (!layout?.showRenameButton) return null
-		return { x: layout.x + layout.width, y: layout.y + layout.height - 24 }
+		return {
+			x: layout.x + layout.width + layout.renameButtonGap,
+			y: layout.y,
+		}
 	}
 
 	/** 只把当前可交互图片的名称交给 DOM；布局和其它元素标签仍由原管理器维护。 */
@@ -178,10 +188,41 @@ export class NameLabelManager extends BaseLabelManager {
 			return null
 		const layout = this.readDisplayLabelLayout(elementId)
 		if (!layout) return null
+		const viewportScale = this.canvas.stage.scaleX()
+		const labelSize = this.getLabelSize(labelGroup)
+		const labelScreenRight =
+			labelGroup.x() * viewportScale +
+			this.canvas.stage.position().x +
+			(labelSize?.width ?? 0) * labelGroup.scaleX() * viewportScale
 		return {
 			...layout,
+			rowWidth: Math.max(layout.width, labelScreenRight - layout.x),
 			canRename: state.canRename,
 			showRenameButton: state.canRename && state.showOperation,
+			renameButtonGap:
+				Math.max(0, labelScreenRight - layout.x - layout.width) +
+				(state.showOperation
+					? NAME_LABEL_CONFIG.ICON_GAP * labelGroup.scaleX() * viewportScale
+					: 0),
+			hitPadding: NAME_LABEL_CONFIG.HIT_PADDING * labelGroup.scaleX() * viewportScale,
+		}
+	}
+
+	/** DOM 标题悬浮或键盘聚焦期间，名称与分辨率沿用同一个交互目标。 */
+	public isDOMLabelInteracting(elementId: string): boolean {
+		return this.domLabelElementId === elementId && this.renameButtonElementId === elementId
+	}
+
+	/** 只有标题悬浮或键盘聚焦才占用铅笔宽度；图片选中本身不挤压标题。 */
+	public setRenameButtonElementId(elementId: string | null): void {
+		if (this.renameButtonElementId === elementId) return
+		const previous = this.renameButtonElementId
+		this.renameButtonElementId = elementId
+		for (const id of [previous, elementId]) {
+			if (!id) continue
+			// 名称与尺寸共用操作区预算；释放按钮空间后，两者必须一起恢复布局。
+			this.refreshLabelLayout(id)
+			this.canvas.sizeLabelManager.refreshLabelLayout(id)
 		}
 	}
 
@@ -190,8 +231,18 @@ export class NameLabelManager extends BaseLabelManager {
 		const previous = this.domLabelElementId
 		this.domLabelElementId = elementId
 		// DOM 文字支持原生选中复制，只隐藏同一标签的 Konva 文字，避免双份文字重叠。
-		if (previous) this.labelMap.get(previous)?.findOne<Konva.Text>("Text")?.opacity(1)
-		if (elementId) this.labelMap.get(elementId)?.findOne<Konva.Text>("Text")?.opacity(0)
+		// 文字和命中一起交接，避免 DOM 文字光标与下方透明区域的手形光标竞争。
+		if (previous) {
+			const group = this.labelMap.get(previous)
+			this.getTextNode(group)?.opacity(1)
+			group?.findOne<Konva.Rect>(`.${NAME_LABEL_HIT_NAME}`)?.listening(true)
+		}
+		if (elementId) {
+			const group = this.labelMap.get(elementId)
+			this.getTextNode(group)?.opacity(0)
+			group?.findOne<Konva.Rect>(`.${NAME_LABEL_HIT_NAME}`)?.listening(false)
+			if (this.pointerHoverElementId === elementId) this.clearPointerHover()
+		}
 		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
 			source: "NameLabelManager",
 			reason: "dom-name-label",
@@ -208,7 +259,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private readDisplayLabelLayout(elementId: string): NameLabelScreenLayout | null {
 		const layout = this.readRenameInputLayout(elementId)
 		const group = this.labelMap.get(elementId)
-		const textNode = group?.findOne<Konva.Text>("Text")
+		const textNode = group ? this.getTextNode(group) : null
 		if (!layout || !group?.visible() || !textNode) return null
 		const screenRatio = group.scaleX() * this.canvas.stage.scaleX()
 		return {
@@ -360,7 +411,7 @@ export class NameLabelManager extends BaseLabelManager {
 		const hitRect = new Konva.Rect({
 			name: NAME_LABEL_HIT_NAME,
 			fill: "rgba(0, 0, 0, 0.001)",
-			listening: true,
+			listening: this.domLabelElementId !== elementId,
 		})
 		labelGroup.add(hitRect)
 		labelGroup.add(textNode)
@@ -412,27 +463,53 @@ export class NameLabelManager extends BaseLabelManager {
 				suffixNode = new Konva.Text({
 					name: NAME_LABEL_SUFFIX_NAME,
 					text: suffixText,
-					fontSize: this.labelConfig.fontSize,
+					fontSize: textNode.fontSize() * NAME_LABEL_CONFIG.STATUS_FONT_RATIO,
 					fontFamily: this.labelConfig.fontFamily,
 					fill: this.labelConfig.textColor,
 					wrap: "none",
 					listening: false,
 				})
 				labelGroup.add(suffixNode)
+				labelGroup.add(
+					new Konva.Rect({
+						name: "name-label-status-background",
+						cornerRadius: 7,
+						listening: false,
+					}),
+				)
+				suffixNode.moveToTop()
 				changed = true
 			} else if (suffixNode.text() !== suffixText) {
 				suffixNode.text(suffixText)
 				changed = true
 			}
 
+			// 进行中的任务使用画布蓝色；终态保留中性色，避免继续传达正在处理。
+			const statusColor = content.suffix?.inProgress ? "#3B82F6" : this.labelConfig.textColor
+			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
+			const backgroundColor = content.suffix?.inProgress
+				? "rgba(59, 130, 246, 0.08)"
+				: "rgba(115, 115, 115, 0.08)"
+			if (background?.fill() !== backgroundColor) {
+				background?.fill(backgroundColor)
+				changed = true
+			}
+			if (suffixNode.fill() !== statusColor) {
+				suffixNode.fill(statusColor)
+				changed = true
+			}
+
 			if (state.suffixText !== suffixText || changed) {
-				state.suffixNaturalTextWidth = this.measureNaturalTextWidth(suffixNode)
-				state.suffixHeight = suffixNode.height()
+				state.suffixNaturalTextWidth =
+					this.measureNaturalTextWidth(suffixNode) +
+					NAME_LABEL_CONFIG.STATUS_PADDING_X * 2
+				state.suffixHeight = suffixNode.height() + NAME_LABEL_CONFIG.STATUS_PADDING_Y * 2
 				changed = true
 			}
 		} else {
 			if (suffixNode) {
 				suffixNode.destroy()
+				labelGroup.findOne(".name-label-status-background")?.destroy()
 				changed = true
 			}
 			if (state.suffixText || state.suffixNaturalTextWidth || state.suffixHeight) {
@@ -521,10 +598,13 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 		const hasIcon = state.iconKey !== null
 		const fullIconWidth = hasIcon ? state.iconWidth + state.iconGap : 0
+		const minimumVisibleTextWidth =
+			naturalTextWidth > 0
+				? Math.min(naturalTextWidth, NAME_LABEL_CONFIG.FONT_SIZE)
+				: NAME_LABEL_CONFIG.MIN_TEXT_WIDTH
 		const iconCanFit =
 			hasIcon &&
-			availableLabelWidth - fullIconWidth - suffixReservation >=
-				NAME_LABEL_CONFIG.MIN_TEXT_WIDTH
+			availableLabelWidth - fullIconWidth - suffixReservation >= minimumVisibleTextWidth
 		const textOffsetX = iconCanFit ? fullIconWidth : 0
 		const availableTextWidth = Math.max(
 			0,
@@ -569,7 +649,6 @@ export class NameLabelManager extends BaseLabelManager {
 		)
 		const iconY = iconCanFit ? Math.max(0, (labelHeight - state.iconHeight) / 2) : 0
 		const textY = Math.max(0, (labelHeight - textNode.height()) / 2)
-		const suffixY = state.suffixText ? Math.max(0, (labelHeight - state.suffixHeight) / 2) : 0
 		if (iconNode) {
 			// The label group already starts at the element's left edge. Keep the
 			// icon slot at x=0 and preserve the resolver's natural drawing geometry.
@@ -591,8 +670,26 @@ export class NameLabelManager extends BaseLabelManager {
 			changed = true
 		}
 		if (suffixNode) {
-			if (suffixNode.x() !== suffixOffsetX || suffixNode.y() !== suffixY) {
-				suffixNode.position({ x: suffixOffsetX, y: suffixY })
+			// 胶囊整体与标题居中，内部文字独立居中；字号较小也不会沿标题底部排列。
+			const suffixY = (labelHeight - state.suffixHeight) / 2
+			const suffixTextX = suffixOffsetX
+			const suffixTextY = suffixY + NAME_LABEL_CONFIG.STATUS_PADDING_Y
+			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
+			if (
+				suffixNode.x() !== suffixTextX ||
+				suffixNode.y() !== suffixTextY ||
+				background?.x() !== suffixOffsetX ||
+				background?.y() !== suffixY ||
+				background?.width() !== state.suffixNaturalTextWidth ||
+				background?.height() !== state.suffixHeight
+			) {
+				suffixNode.position({ x: suffixTextX, y: suffixTextY })
+				background?.setAttrs({
+					x: suffixOffsetX - NAME_LABEL_CONFIG.STATUS_PADDING_X,
+					y: suffixY,
+					width: state.suffixNaturalTextWidth,
+					height: state.suffixHeight,
+				})
 				changed = true
 			}
 			if (suffixNode.visible() !== Boolean(state.suffixText)) {
@@ -606,7 +703,6 @@ export class NameLabelManager extends BaseLabelManager {
 				false
 			changed = sizeVisibilityChanged || changed
 		}
-
 		if (changed) this.syncHitRect(labelGroup)
 		return changed
 	}
@@ -880,7 +976,12 @@ export class NameLabelManager extends BaseLabelManager {
 			}
 		}
 
-		if (requiresDraw) this.requestOverlayDraw("name-label-icons")
+		if (requiresDraw)
+			this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
+				source: "NameLabelManager",
+				reason: "name-label-icons",
+				priority: "input",
+			})
 	}
 
 	public override refreshAfterLocaleChange(): void {
@@ -898,6 +999,7 @@ export class NameLabelManager extends BaseLabelManager {
 		this.clearPointerHover()
 		this.iconHoverElementId = null
 		this.domLabelElementId = null
+		this.renameButtonElementId = null
 		for (const unsubscribe of this.interactionUnsubscribers) {
 			unsubscribe()
 		}
@@ -1087,7 +1189,10 @@ export class NameLabelManager extends BaseLabelManager {
 			stopPointerEvent(e)
 			this.selectElementFromLabel(elementId)
 		})
-		labelGroup.on("mouseup", stopPointerEvent)
+		labelGroup.on("mouseup", (event) => {
+			// 只截断 Konva 冒泡；原生 mouseup 必须到达 window，Konva 才能派发 dragend。
+			event.cancelBubble = true
+		})
 		labelGroup.on("click tap", (e) => {
 			stopPointerEvent(e)
 		})
@@ -1124,19 +1229,19 @@ export class NameLabelManager extends BaseLabelManager {
 		})
 	}
 
-	private selectElementFromLabel(elementId: string): void {
+	public selectElementFromLabel(elementId: string, autoFocus = true): void {
 		const elementData = this.canvas.elementManager.getElementData(elementId)
 		if (!this.canvas.permissionManager.canSelect(elementData)) {
 			return
 		}
 		if (this.canvas.selectionManager.isSelected(elementId)) {
 			if (this.canvas.selectionManager.getSelectionCount() > 1) {
-				this.canvas.selectionManager.replaceSelection([elementId])
+				this.canvas.selectionManager.replaceSelection([elementId], autoFocus)
 			}
 			return
 		}
 		this.canvas.connectionManager?.deselectConnection()
-		this.canvas.selectionManager.replaceSelection([elementId])
+		this.canvas.selectionManager.replaceSelection([elementId], autoFocus)
 	}
 
 	private clearPointerHover(): void {

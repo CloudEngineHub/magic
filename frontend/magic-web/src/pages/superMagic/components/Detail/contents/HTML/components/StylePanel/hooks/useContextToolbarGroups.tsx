@@ -1,4 +1,9 @@
 import { useMemo, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
+import { Link2 } from "lucide-react"
+import MagicTooltip from "@/components/base/MagicTooltip"
+import { Button } from "@/components/shadcn-ui/button"
+import { STYLE_PANEL_STYLES } from "../styles"
 import type { HTMLEditorV2Ref } from "../../../iframe-bridge/types/props"
 import type { ElementCapabilities } from "../capabilities"
 import type { ContextToolbarItemMotion, SelectedElementInfo } from "../types"
@@ -50,6 +55,7 @@ export interface UseContextToolbarGroupsParams {
 	handleStyleChange: (property: string, value: string) => Promise<void>
 	showBackgroundImageAction: boolean
 	contextMorePopover: ReactNode
+	onRevealLinkSettings?: () => void
 	renderContextToolbarItem: ContextToolbarItemMotion
 }
 
@@ -79,8 +85,10 @@ export function useContextToolbarGroups({
 	handleStyleChange,
 	showBackgroundImageAction,
 	contextMorePopover,
+	onRevealLinkSettings,
 	renderContextToolbarItem,
 }: UseContextToolbarGroupsParams): ContextToolGroup<{ node: ReactNode }>[] {
+	const { t } = useTranslation("super")
 	return useMemo<ContextToolGroup<{ node: ReactNode }>[]>(() => {
 		const list: ContextToolGroup<{ node: ReactNode }>[] = []
 
@@ -95,6 +103,28 @@ export function useContextToolbarGroups({
 						disabled={disabled}
 						itemMotion={renderContextToolbarItem}
 					/>
+				),
+			},
+		})
+
+		list.push({
+			id: "link",
+			estimatedWidth: 28,
+			data: {
+				node: renderContextToolbarItem(
+					<MagicTooltip title={t("stylePanel.clickLink")}>
+						<Button
+							variant="ghost"
+							size="icon"
+							className={STYLE_PANEL_STYLES.iconButton}
+							disabled={isDisabled || !selectedElement || !onRevealLinkSettings}
+							aria-label={t("stylePanel.clickLink")}
+							onClick={onRevealLinkSettings}
+						>
+							<Link2 className="h-4 w-4" />
+						</Button>
+					</MagicTooltip>,
+					"link",
 				),
 			},
 		})
@@ -281,6 +311,8 @@ export function useContextToolbarGroups({
 		capabilities.showFontSizeAdjuster,
 		capabilities.showTypography,
 		contextMorePopover,
+		onRevealLinkSettings,
+		t,
 		currentColor,
 		disabled,
 		editorRef,

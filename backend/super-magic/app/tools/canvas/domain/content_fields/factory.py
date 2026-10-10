@@ -41,6 +41,7 @@ class ContentFieldsFactory:
                 generate_image_request=cls._optional_object(data, request_field or ""),
                 image_generation_task_meta=cls._optional_object(data, "imageGenerationTaskMeta"),
                 crop=cls._optional_object(data, "crop"),
+                discarded=cls._boolean(data, "discarded"),
             )
         if element_type == "video":
             request_field = generation_request_field("video")
@@ -109,6 +110,14 @@ class ContentFieldsFactory:
     def empty(element_type: str) -> CanvasContentFields:
         """为新增 Element 创建对应类型的空 Fields。"""
         return ContentFieldsFactory.from_protocol(element_type, {})
+
+    @staticmethod
+    def _boolean(data: dict[str, JsonValue], key: str) -> bool:
+        """读取缺省为 false 的布尔字段，避免字符串被当成真值。"""
+        value = data.get(key, False)
+        if not isinstance(value, bool):
+            raise CanvasProtocolError("INVALID_CONTENT", f"{key} must be a boolean.")
+        return value
 
     @staticmethod
     def _optional_string(data: dict[str, JsonValue], key: str) -> str | None:

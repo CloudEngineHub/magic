@@ -32,6 +32,15 @@
 	align-items: center;
 }
 
+.readOnlyWaiting {
+	padding: var(--spacing-3, 12px);
+	color: var(--base-muted-foreground, #737373);
+	font-size: var(--text-sm-font-size, 14px);
+	line-height: 1.5;
+	background: var(--base-muted, #f5f5f5);
+	border-radius: var(--border-radius-rounded-md, 8px);
+}
+
 .restoreDefaultButton {
 	display: inline-flex;
 	align-items: center;

@@ -10,26 +10,42 @@ import { cn } from "@magic-admin-v2/utils/cn"
 type SearchableCategorySelectProps = {
 	ariaLabel?: string
 	className?: string
+	clearButtonTestId?: string
+	contentTestId?: string
 	emptyLabel?: string
+	emptyTestId?: string
 	isLoading?: boolean
+	loadingTestId?: string
 	noMatchingLabel?: string
+	optionTestId?: string
 	onChange: (value: string) => void
 	onOpenChange?: (open: boolean) => void
 	options: SlidesTemplateCategory[]
 	searchPlaceholder?: string
+	triggerTestId?: string
+	inputTestId?: string
+	clearSearchButtonTestId?: string
 	value: string
 }
 
 export function SearchableCategorySelect({
 	ariaLabel,
 	className,
+	clearButtonTestId,
+	contentTestId,
 	emptyLabel,
+	emptyTestId,
 	isLoading = false,
+	loadingTestId,
 	noMatchingLabel,
+	optionTestId,
 	onChange,
 	onOpenChange,
 	options,
 	searchPlaceholder,
+	triggerTestId,
+	inputTestId,
+	clearSearchButtonTestId,
 	value,
 }: SearchableCategorySelectProps) {
 	const { t } = useTranslation()
@@ -57,7 +73,7 @@ export function SearchableCategorySelect({
 	return (
 		<div className={cn("relative", className)}>
 			<Popover onOpenChange={handleOpenChange} open={open}>
-				<PopoverTrigger
+				<PopoverTrigger data-testid={triggerTestId ?? "platform-slides-template-category-trigger"}
 					aria-haspopup="listbox"
 					aria-label={ariaLabel ?? t("slidesTemplate.form.category")}
 					className={cn(
@@ -78,7 +94,7 @@ export function SearchableCategorySelect({
 				<PopoverContent
 					align="start"
 					className="z-[100] w-[min(420px,calc(100vw-3rem))] overflow-hidden p-0"
-				>
+				 data-testid={contentTestId ?? "platform-slides-template-filter-content"}>
 					<div className="border-b p-3">
 						<FilterSearchInput
 							autoFocus
@@ -88,19 +104,19 @@ export function SearchableCategorySelect({
 								searchPlaceholder ?? t("slidesTemplate.form.searchCategories")
 							}
 							value={keyword}
-						/>
+						 inputTestId={inputTestId ?? "platform-slides-template-search-input"} clearButtonTestId={clearSearchButtonTestId ?? "platform-slides-template-search-clear-button"}/>
 					</div>
 					<div
 						className="max-h-64 overflow-y-auto overscroll-contain p-1.5"
 						role="listbox"
 					>
 						{isLoading && options.length === 0 ? (
-							<div className="flex h-20 items-center justify-center text-muted-foreground">
+							<div className="flex h-20 items-center justify-center text-muted-foreground" data-testid={loadingTestId}>
 								<Loader2 aria-hidden="true" className="size-4 animate-spin" />
 							</div>
 						) : filteredOptions.length > 0 ? (
 							filteredOptions.map((category) => (
-								<button
+								<button data-testid={optionTestId ?? "platform-slides-template-category-option"}
 									aria-selected={category.code === value}
 									className={cn(
 										"flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent",
@@ -128,7 +144,7 @@ export function SearchableCategorySelect({
 								</button>
 							))
 						) : (
-							<div className="flex h-20 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+							<div className="flex h-20 items-center justify-center px-4 text-center text-sm text-muted-foreground" data-testid={emptyTestId}>
 								{noMatchingLabel ?? t("slidesTemplate.form.noMatchingCategories")}
 							</div>
 						)}
@@ -136,7 +152,7 @@ export function SearchableCategorySelect({
 				</PopoverContent>
 			</Popover>
 			{value ? (
-				<button
+				<button data-testid={clearButtonTestId ?? "platform-slides-template-category-clear-button"}
 					aria-label={t("common.clear")}
 					className="absolute right-8 top-1/2 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					onClick={(event) => {

@@ -26,6 +26,12 @@ final class PersonalPreferencesKeys
     public const LONG_TERM_MEMORY_ENABLED = 'long_term_memory_enabled';
 
     /**
+     * CHAT metadata 中的追问开关字段名。
+     * 值来自用户资料，不写入 magic_user_settings，因此不能加入 defaultValues()。
+     */
+    public const SHOW_FOLLOW_UP_SUGGESTIONS = 'show_follow_up_suggestions';
+
+    /**
      * PersonalPreferences value 的默认值（扩展新字段时在此补充）.
      *
      * @return array<string, mixed>

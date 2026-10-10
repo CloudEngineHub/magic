@@ -17,22 +17,37 @@ class ShadowCode
 
     public static function shadow(string $input): string
     {
-        for ($i = 0; $i < strlen($input); ++$i) {
-            $input[$i] = chr(self::shuffleMap[ord($input[$i])]);
-        }
-        return self::PREFIX . $input;
+        // strtr 是 C 实现，比逐字节 PHP 循环快得多（大载荷时避免长时间阻塞协程）
+        return self::PREFIX . strtr($input, self::getTable(self::shuffleMap));
     }
 
     public static function unShadow(string $input): string
     {
-        if (str_starts_with($input, self::PREFIX)) {
-            $input = substr($input, strlen(self::PREFIX));
-        } else {
+        if (! str_starts_with($input, self::PREFIX)) {
             return $input;
         }
-        for ($i = 0; $i < strlen($input); ++$i) {
-            $input[$i] = chr(self::unShuffleMap[ord($input[$i])]);
+        return strtr(substr($input, strlen(self::PREFIX)), self::getTable(self::unShuffleMap));
+    }
+
+    /**
+     * 把 256 项映射表转成 strtr 需要的 [from => to] 数组，只构造一次.
+     *
+     * @param array<int, int> $map
+     * @return array<string, string>
+     */
+    private static function getTable(array $map): array
+    {
+        static $tables = [];
+        $key = $map === self::shuffleMap ? 'shuffle' : 'unShuffle';
+        if (! isset($tables[$key])) {
+            $table = [];
+            foreach ($map as $from => $to) {
+                if ($from !== $to) {
+                    $table[chr($from)] = chr($to);
+                }
+            }
+            $tables[$key] = $table;
         }
-        return $input;
+        return $tables[$key];
     }
 }

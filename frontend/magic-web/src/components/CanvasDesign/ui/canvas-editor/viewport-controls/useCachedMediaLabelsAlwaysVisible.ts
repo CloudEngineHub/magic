@@ -12,7 +12,8 @@ function readCachedMediaLabelsAlwaysVisible(
 ): boolean {
 	if (!getStorage) return DEFAULT_MEDIA_LABELS_ALWAYS_VISIBLE
 	try {
-		return getStorage()?.mediaLabelsAlwaysVisible ?? DEFAULT_MEDIA_LABELS_ALWAYS_VISIBLE
+		// 只有明确保存的开启选择才恢复常驻；缺失或无效值沿用悬浮、选中显示。
+		return getStorage()?.mediaLabelsAlwaysVisible === true
 	} catch {
 		return DEFAULT_MEDIA_LABELS_ALWAYS_VISIBLE
 	}

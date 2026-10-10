@@ -734,7 +734,7 @@ class TopicAppService extends AbstractAppService
     }
 
     /**
-     * Get topic messages with project info, for share scenarios.
+     * Get topic messages with project info for the topic page and share detail.
      *
      * @param int $topicId Topic ID
      * @param int $page Page number
@@ -760,6 +760,39 @@ class TopicAppService extends AbstractAppService
         if ($topicEntity !== null) {
             $data['project_id'] = (string) $topicEntity->getProjectId();
             $projectEntity = $this->getAccessibleProject($topicEntity->getProjectId(), $topicEntity->getUserId(), $topicEntity->getUserOrganizationCode());
+            $data['project_name'] = $projectEntity->getProjectName();
+        }
+
+        return $data;
+    }
+
+    /**
+     * Get topic messages with cursor pagination for the topic page and share detail.
+     *
+     * @return array{list: MessageItemDTO[], has_more: bool, next_cursor: ?string, project_id?: string, project_name?: string}
+     */
+    public function getMessagesByTopicIdAfterId(int $topicId, ?int $afterId = null, int $limit = 20): array
+    {
+        $result = $this->taskDomainService->getMessagesByTopicIdAfterId($topicId, $afterId, $limit);
+        $messages = [];
+        foreach ($result['list'] as $message) {
+            $messages[] = new MessageItemDTO($message->toArray());
+        }
+
+        $data = [
+            'list' => $messages,
+            'has_more' => $result['has_more'],
+            'next_cursor' => $result['next_cursor'],
+        ];
+
+        $topicEntity = $this->topicDomainService->getTopicWithDeleted($topicId);
+        if ($topicEntity !== null) {
+            $data['project_id'] = (string) $topicEntity->getProjectId();
+            $projectEntity = $this->getAccessibleProject(
+                $topicEntity->getProjectId(),
+                $topicEntity->getUserId(),
+                $topicEntity->getUserOrganizationCode()
+            );
             $data['project_name'] = $projectEntity->getProjectName();
         }
 

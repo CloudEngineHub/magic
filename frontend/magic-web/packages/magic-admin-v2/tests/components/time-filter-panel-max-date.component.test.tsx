@@ -102,9 +102,26 @@ describe("time filter maximum date", () => {
 		expect(
 			screen.queryByRole("button", { name: "timeFilter.preset.today" }),
 		).not.toBeInTheDocument()
-		expect(
-			screen.getByRole("button", { name: "timeFilter.preset.yesterday" }),
-		).toBeEnabled()
+		expect(screen.getByRole("button", { name: "timeFilter.preset.yesterday" })).toBeEnabled()
+	})
+
+	it("keeps quick presets visible when the range is limited to hours", () => {
+		render(
+			<TimeFilterPanel
+				onChange={vi.fn()}
+				presentation="inline"
+				supportedRelativeUnits={[relativeUnit.hour, relativeUnit.day]}
+				timePrecision="hour"
+			/>,
+		)
+		fireEvent.click(screen.getByRole("button", { name: "timeFilter.placeholder" }))
+
+		const hourPreset = screen.getByRole("button", { name: "timeFilter.preset.last1Hour" })
+		const dayPreset = screen.getByRole("button", { name: "timeFilter.preset.last1Day" })
+
+		expect(hourPreset).toBeVisible()
+		expect(dayPreset).toBeVisible()
+		expect(hourPreset.parentElement?.parentElement).not.toHaveClass("sm:grid-cols-[56px_1fr]")
 	})
 
 	it("hides the alignment switch when relative ranges only support days", () => {

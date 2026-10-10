@@ -18,6 +18,7 @@ import {
 } from "../toolDetailSelection"
 import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import { isToolCallLoading } from "../MessageNode/tool-call/types"
+import FileDownloadCard from "../shared/FileDownloadCard"
 
 function ToolCall(props: NodeProps) {
 	const { onSelectDetail } = props
@@ -54,7 +55,7 @@ function ToolCall(props: NodeProps) {
 		const target = getToolCardInteractionTarget(tool?.name, detail)
 		if (target.type === "disabled" || target.type === "inline") return
 
-		if (target.type === "design") {
+		if (target.type === "canvas") {
 			const { designProjectId, designProject, elements } = getToolDesignProjectInfo(
 				tool,
 				filesStore,
@@ -84,6 +85,7 @@ function ToolCall(props: NodeProps) {
 			return
 		}
 		// Resolve explicit file targets first; legacy sources retain attachment checks.
+
 		if (
 			selectToolFile({
 				detail,
@@ -108,11 +110,28 @@ function ToolCall(props: NodeProps) {
 		handleSelectDetail?.(newDetail)
 	}
 
-	if (tool && isInlineToolDetail(tool.detail)) {
+	if (tool && toolName === "create_client_side_file_bundle") {
+		return (
+			<FileDownloadCard
+				toolData={tool}
+				loading={loading}
+				className={props.classNames?.markdown}
+				onMouseEnter={props.onMouseEnter}
+				onMouseLeave={props.onMouseLeave}
+			/>
+		)
+	}
+
+	if (
+		tool &&
+		(isInlineToolDetail(tool.detail) ||
+			(toolName === "web_search" && tool.detail?.type === "search"))
+	) {
 		return (
 			<OperationResultList
 				toolData={tool}
 				loading={loading}
+				onSelectDetail={onSelectDetail}
 				className={props.classNames?.markdown}
 				onMouseEnter={props.onMouseEnter}
 				onMouseLeave={props.onMouseLeave}

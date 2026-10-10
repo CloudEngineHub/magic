@@ -150,9 +150,7 @@ function createManager(
 				findParentIdForElement: (id: string) => options.parents?.get(id),
 			},
 			geometryCacheManager: {
-				getElementBounds: (elementId: string) =>
-					elements.get(elementId)?.getBoundingRect?.() ?? null,
-				getRevision: () => 0,
+				getRevision: () => 1,
 				queryElementIdsByExpandedRect: () => options.candidateIds ?? [],
 			},
 			eraserManager: { getErasingElementId: () => null },
@@ -184,6 +182,9 @@ function createManager(
 			},
 		} as never,
 	})
+	;(
+		manager.getCanvasForTest() as unknown as { nameLabelManager: TestNameLabelManager }
+	).nameLabelManager = manager
 	if (options.mediaLabelsAlwaysVisible ?? true) {
 		// Layout tests opt into the explicit always-visible mode; production defaults to hover/select.
 		manager.setMediaLabelsAlwaysVisible(true)
@@ -549,7 +550,7 @@ describe("NameLabelManager visibility", () => {
 		manager.destroy()
 	})
 
-	it("suppresses the size label when it would truncate the name", () => {
+	it("keeps the complete name width when the size label cannot fit beside it", () => {
 		const sizeLabelManager = {
 			isLabelVisibleForElement: vi.fn(() => true),
 			refreshVisibilityForNamePriority: vi.fn(() => true),
@@ -569,13 +570,7 @@ describe("NameLabelManager visibility", () => {
 		const manager = createManager(elements, { sizeLabelManager })
 
 		manager.createOrUpdateLabelForTest("audio-1")
-		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(true)
-		expect(sizeLabelManager.refreshVisibilityForNamePriority).toHaveBeenCalledWith(
-			"audio-1",
-			true,
-		)
 		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(100)
-		expect(manager.getTextNodeForTest("audio-1")?.textArr[0]?.text.endsWith("…")).toBe(true)
 
 		manager.destroy()
 	})
@@ -749,14 +744,15 @@ describe("NameLabelManager visibility", () => {
 		expect(manager.isLabelVisible("lower")).toBe(true)
 		manager.destroy()
 	})
-	it("prioritizes the complete title and hides the media row when covered", () => {
+	it("prioritizes the title, hides both labels when covered, and restores size after growth", () => {
 		let upperX = 500
+		let lowerWidth = 320
 		const options = { candidateIds: ["upper"], viewportScale: 1 }
 		const elements = new Map<string, TestElement>([
 			[
 				"lower",
 				{
-					getBoundingRect: () => ({ x: 0, y: 20, width: 320, height: 80 }),
+					getBoundingRect: () => ({ x: 0, y: 20, width: lowerWidth, height: 80 }),
 					getData: () => ({ id: "lower", type: ElementTypeEnum.Image, zIndex: 1 }),
 					getNameLabelText: () => "A long image title that needs enough available space",
 					getSizeLabelText: () => "2560 x 1440",
@@ -774,15 +770,13 @@ describe("NameLabelManager visibility", () => {
 			],
 		])
 		const name = createManager(elements, options)
-		const size = new TestSizeLabelManager({ canvas: name.getCanvasForTest() })
-		Object.assign(name.getCanvasForTest(), {
-			nameLabelManager: name,
-			sizeLabelManager: size,
-		})
+		const canvas = name.getCanvasForTest()
+		const size = new TestSizeLabelManager({ canvas })
+		;(canvas as unknown as { sizeLabelManager: TestSizeLabelManager }).sizeLabelManager = size
 		size.setMediaLabelsAlwaysVisible(true)
 		name.createOrUpdateLabelForTest("lower")
 		size.createForTest("lower")
-		// The 24px rename operation remains inside the name side's budget.
+		// The resolution yields first; the remaining 24px belongs to the rename operation.
 		expect(name.getLabelTextMetrics("lower")?.width).toBe(296)
 		expect(size.visibleForTest("lower")).toBe(false)
 		options.viewportScale = 0.25
@@ -792,7 +786,6 @@ describe("NameLabelManager visibility", () => {
 		name.createOrUpdateLabelForTest("lower")
 		size.createForTest("lower")
 		expect(name.getLabelTextMetrics("lower")?.width).toBe(296)
-		expect(size.visibleForTest("lower")).toBe(false)
 		upperX = 260
 		name.refreshVisibility()
 		size.refreshForTest()
@@ -803,6 +796,10 @@ describe("NameLabelManager visibility", () => {
 		size.refreshForTest()
 		expect(name.isLabelVisible("lower")).toBe(true)
 		expect(size.visibleForTest("lower")).toBe(false)
+		lowerWidth = 600
+		name.createOrUpdateLabelForTest("lower")
+		size.refreshForTest()
+		expect(size.visibleForTest("lower")).toBe(true)
 		name.destroy()
 		size.destroy()
 	})

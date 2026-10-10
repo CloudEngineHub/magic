@@ -31,7 +31,7 @@ import { useDeferUntilFileTabsCacheLoaded } from "@/pages/superMagic/hooks/useDe
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import { loadProjectAttachments } from "@/pages/superMagic/services"
+import SuperMagicService, { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
 	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
@@ -392,6 +392,13 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		setIsInitialAttachmentsLoaded(false)
 		void store.initFromSkillCode(skillCode)
 	}, [skillCode, store])
+
+	const visitScope = useRef({})
+	useEffect(() => {
+		if (!store.project || store.loading || store.error || store.currentSkillCode !== skillCode)
+			return
+		SuperMagicService.project.recordProjectVisit(store.project, visitScope.current)
+	}, [skillCode, store, store.project, store.loading, store.error, store.currentSkillCode])
 
 	useEffect(() => {
 		store.projectFilesStore.setSelectedProject(store.project)

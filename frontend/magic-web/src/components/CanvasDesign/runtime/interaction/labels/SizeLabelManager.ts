@@ -105,8 +105,8 @@ export class SizeLabelManager extends BaseLabelManager {
 	}
 
 	/**
-	 * Re-evaluates visibility after name content changes. The position-update
-	 * guard prevents this one-way notification from recursively refreshing name.
+	 * Re-evaluates visibility after the name takes or releases the shared row.
+	 * The guard keeps the one-way notification from recursively refreshing name.
 	 */
 	public refreshVisibilityForNamePriority(elementId: string, skipBatchDraw = false): boolean {
 		if (this.updatingLabelPositionElementIds.has(elementId)) return false
@@ -144,20 +144,14 @@ export class SizeLabelManager extends BaseLabelManager {
 	}
 
 	/**
-	 * Returns whether this size label is independently eligible by its visibility
-	 * policy. Geometry is evaluated separately with the current element width;
-	 * name-priority suppression is intentionally excluded so a hidden size label
-	 * can be restored when the element becomes wide enough again.
+	 * Reports eligibility without name-priority suppression so a hidden size
+	 * label can be restored when the element becomes wide enough again.
 	 */
 	public isLabelEligibleForNamePriority(elementId: string): boolean {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		const labelGroup = this.labelMap.get(elementId)
 		if (!element || !labelGroup || !this.shouldShowLabel(elementId)) return false
-		if (this.calculateBaseVisibility(elementId, element) !== true) return false
-
-		// Geometry eligibility is evaluated by the caller with the current
-		// element width; this method only reports the independent visibility policy.
-		return true
+		return this.calculateBaseVisibility(elementId, element) === true
 	}
 
 	private doesLabelFitElementWidth(
@@ -208,7 +202,7 @@ export class SizeLabelManager extends BaseLabelManager {
 
 	/**
 	 * 计算自定义可见性（检查 size label 是否超出元素宽度）
-	 * 名称标签会根据当前可见的 size label 预留空间，避免两个标签重叠。
+	 * 图片和视频由统一的整行预算决定；其它元素沿用原有越界协作规则。
 	 * @param elementId - 元素 ID
 	 * @param element - 元素实例
 	 * @param labelGroup - 标签组
@@ -243,8 +237,8 @@ export class SizeLabelManager extends BaseLabelManager {
 		if (boundingRect) {
 			if (!this.doesLabelFitElementWidth(element, labelGroup)) return false
 
-			// Name label 可以通过 ellipsis 保持可见，因此不能再根据其当前
-			// visible 状态推断空间是否足够，改由 name 优先级决策统一判断。
+			// The name can ellipsize, whereas the size is all-or-nothing. Let the
+			// complete name (including its status suffix) own the row first.
 			if (this.canvas.nameLabelManager?.shouldSuppressSizeLabel(elementId)) {
 				return false
 			}

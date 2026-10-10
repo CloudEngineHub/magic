@@ -168,6 +168,7 @@ export type ProviderModelConfig = {
   vector_size?: number;
   creativity?: number | null;
   temperature?: number | null;
+  chat_api?: "chat_completions" | "responses";
   support_function?: boolean;
   support_multi_modal?: boolean;
   support_deep_think?: boolean;
@@ -198,6 +199,10 @@ export type CreateProviderModelPayload = {
   name: string;
   icon?: string;
   description?: string;
+  /** 旧版模型编辑会原样携带这些可见范围字段，更新时不能丢失。 */
+  visible_organizations?: string[];
+  visible_applications?: string[];
+  visible_packages?: string[];
   category: ProviderModelCategory;
   model_type: ProviderModelType;
   service_provider_config_id: string;

@@ -174,7 +174,7 @@ class ModeAssembler
         $array = $modeEntity->toArray();
         unset($array['name_i18n'], $array['placeholder_i18n']);
         $modeDTO = new ModeDTO($array);
-        $modeDTO->setName($modeEntity->getNameI18n()[$locale]);
+        $modeDTO->setName(self::resolveI18nValue($modeEntity->getNameI18n(), $locale));
         $modeDTO->setPlaceholder($modeEntity->getPlaceholderI18n()[$locale] ?? '');
         return $modeDTO;
     }
@@ -183,8 +183,18 @@ class ModeAssembler
     {
         $dto = new ModeGroupDTO($group->toArray());
         $locale = di(TranslatorInterface::class)->getLocale();
-        $dto->setName($group->getNameI18n()[$locale]);
+        $dto->setName(self::resolveI18nValue($group->getNameI18n(), $locale));
         return $dto;
+    }
+
+    /**
+     * i18n 取值兜底：当前语言 -> zh_CN -> default -> 第一个值。
+     * 历史脏数据（如 ZIP 导入产生的 agent name_i18n 回写 mode）可能缺 zh_CN。
+     */
+    private static function resolveI18nValue(array $i18n, string $locale): string
+    {
+        $value = $i18n[$locale] ?? $i18n['zh_CN'] ?? $i18n['default'] ?? reset($i18n);
+        return is_string($value) ? $value : '';
     }
 
     /**

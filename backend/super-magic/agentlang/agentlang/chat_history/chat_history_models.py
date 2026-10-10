@@ -7,6 +7,7 @@
 import json
 import re
 import uuid
+from enum import StrEnum
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
@@ -983,6 +984,22 @@ class AssistantMessage:
 
         return msg
 
+class ContextSource(StrEnum):
+    """内部归类提示；不进入模型消息或改变工具执行语义。"""
+    SKILLS = "skills"
+    MCP = "mcp"
+    MIXED = "mixed"
+
+    @classmethod
+    def from_value(cls, value: object) -> "ContextSource | None":
+        if not isinstance(value, str):
+            return None
+        try:
+            return cls(value)
+        except ValueError:
+            return None
+
+
 @dataclass
 class ToolMessage:
     """工具执行结果消息"""
@@ -994,12 +1011,15 @@ class ToolMessage:
     show_in_ui: bool = True # <--- 重命名并设置默认值 (中断提示会在 append 时设为 False)
     duration_ms: Optional[float] = None # 内部存储为毫秒 float
 
+    context_source: ContextSource | None = None
+
     def to_dict(self) -> Dict[str, Any]:
         result = {
             "id": str(uuid.uuid4()), # 运行时 ID
             "timestamp": self.created_at,
             "role": self.role,
             "content": self.content,
+            "context_source": self.context_source,
             "tool_call_id": self.tool_call_id,
             "system": self.system,
             "show_in_ui": self.show_in_ui,
@@ -1022,6 +1042,7 @@ class ToolMessage:
         """从字典创建工具消息对象"""
         return cls(
             content=data.get("content", ""),
+            context_source=ContextSource.from_value(data.get("context_source")),
             tool_call_id=data.get("tool_call_id", ""),
             role=data.get("role", "tool"),
             system=data.get("system"), # 可以为 None

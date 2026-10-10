@@ -85,9 +85,9 @@ readonly class MagicClawDomainService
      *
      * @return array{total: int, list: MagicClawEntity[]}
      */
-    public function getList(string $userId, string $organizationCode, int $page, int $pageSize): array
+    public function getList(string $userId, string $organizationCode, int $page, int $pageSize, string $keyword = ''): array
     {
-        return $this->magicClawRepository->getList($userId, $organizationCode, $page, $pageSize);
+        return $this->magicClawRepository->getList($userId, $organizationCode, $page, $pageSize, $keyword);
     }
 
     /**

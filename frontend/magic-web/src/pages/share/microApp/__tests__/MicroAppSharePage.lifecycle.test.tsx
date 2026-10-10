@@ -86,17 +86,14 @@ describe("MicroAppSharePage lifecycle", () => {
 				},
 			}),
 		)
-		mocks.getShareResourceFiles.mockImplementation(
-			({ resource_id }: { resource_id: string }) =>
-				resource_id === "resource-app-1"
-					? firstFiles
-					: Promise.resolve(buildFiles("app-2")),
+		mocks.loadShareFilesV2.mockImplementation(({ resourceId }: { resourceId: string }) =>
+			resourceId === "resource-app-1" ? firstFiles : Promise.resolve(buildFiles("app-2")),
 		)
 
 		renderPage()
 		await waitFor(() => {
-			expect(mocks.getShareResourceFiles).toHaveBeenCalledWith({
-				resource_id: "resource-app-1",
+			expect(mocks.loadShareFilesV2).toHaveBeenCalledWith({
+				resourceId: "resource-app-1",
 				password: undefined,
 			})
 		})

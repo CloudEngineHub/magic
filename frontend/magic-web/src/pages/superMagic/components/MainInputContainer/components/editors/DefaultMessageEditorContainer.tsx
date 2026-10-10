@@ -189,6 +189,8 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			(editorContext.editorRef as MutableRefObject<MessageEditorRef | null>).current = editor
 	})
 	const appliedDraftModeRef = useRef<string>()
+	const recoverTopicMode = editorContext?.recoverTopicMode
+	const setTopicMode = editorContext?.setTopicMode
 	useEffect(() => {
 		const metadata = queueContext?.queueDraft?.queueDraft
 		if (!metadata) {
@@ -197,9 +199,14 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		}
 		if (appliedDraftModeRef.current === metadata.clientSyncId) return
 		appliedDraftModeRef.current = metadata.clientSyncId
-		if (metadata.topicMode)
-			(editorContext?.recoverTopicMode ?? editorContext?.setTopicMode)?.(metadata.topicMode)
-	}, [queueContext?.queueDraft, editorContext?.recoverTopicMode, editorContext?.setTopicMode])
+		if (metadata.topicMode) {
+			if (recoverTopicMode) {
+				recoverTopicMode(metadata.topicMode, metadata.agentCode)
+			} else {
+				setTopicMode?.(metadata.topicMode)
+			}
+		}
+	}, [queueContext?.queueDraft, recoverTopicMode, setTopicMode])
 
 	const handleEditorReady = useMemoizedFn(() => {
 		queueContext?.onEditorReady()
@@ -276,7 +283,8 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			}
 		}
 
-		const shouldQueue = showLoading && !isWaitingForUser && !params.isFromQueue && queueContext
+		const shouldQueue =
+			effectiveIsTaskRunning && !isWaitingForUser && !params.isFromQueue && queueContext
 
 		if (shouldQueue) {
 			// Programmatic requests have their own content and must preserve the current draft.

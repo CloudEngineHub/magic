@@ -117,4 +117,7 @@ enum EventErrorCode: int
 
     #[ErrorMessage('event.task.question_expired')]
     case EVENT_USER_TOOL_CALL_EXPIRED = 6607;
+
+    #[ErrorMessage('event.task.question_recovery_failed')]
+    case EVENT_USER_TOOL_CALL_RECOVERY_FAILED = 6608;
 }

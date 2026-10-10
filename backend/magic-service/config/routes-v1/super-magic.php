@@ -366,6 +366,8 @@ Router::addGroup(
             Router::post('/init', [SandboxApi::class, 'initSandboxByAuthorization']);
             // 获取沙盒状态
             Router::get('/status', [SandboxApi::class, 'getSandboxStatus']);
+            // 重启话题绑定的沙盒（普通项目按升级语义执行）
+            Router::put('/restart', [SandboxApi::class, 'restartSandbox']);
             // 预启动沙箱
             Router::post('/pre-warm', [SandboxPreWarmApi::class, 'preWarmSandbox']);
             // 取消沙箱保活
@@ -464,4 +466,12 @@ Router::addGroup(
         });
     },
     ['middleware' => [UserAuthMiddleware::class]]
+);
+
+Router::addGroup(
+    '/api/v2/super-agent',
+    static function () {
+        Router::post('/topics/{id}/messages', [TopicApi::class, 'getMessagesByTopicIdV2']);
+    },
+    ['middleware' => [SandboxUserAuthMiddleware::class]]
 );

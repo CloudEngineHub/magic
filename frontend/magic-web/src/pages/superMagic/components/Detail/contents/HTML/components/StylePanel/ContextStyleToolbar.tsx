@@ -254,6 +254,12 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 		<ContextMorePopover disabled={isDisabled} onReveal={onRevealMoreStyles ?? (() => {})} />
 	)
 
+	const handleRevealLinkSettings = useCallback(() => {
+		if (!selectedElement) return
+		stylePanelStore.rememberMoreStylesTab(selectedElement.selector, "link")
+		onRevealMoreStyles?.()
+	}, [selectedElement, stylePanelStore, onRevealMoreStyles])
+
 	// Build atomic tool groups for contextual editing
 	const groups = useContextToolbarGroups({
 		capabilities,
@@ -281,6 +287,7 @@ export const ContextStyleToolbar = observer(function ContextStyleToolbar({
 		handleStyleChange,
 		showBackgroundImageAction,
 		contextMorePopover,
+		onRevealLinkSettings: onRevealMoreStyles ? handleRevealLinkSettings : undefined,
 		renderContextToolbarItem,
 	})
 

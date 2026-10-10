@@ -67,7 +67,7 @@ class TaskFileDomainService
     // File URL cache constants
     private const FILE_URL_CACHE_PREFIX = 'super_agent:file_url:';
 
-    private const URL_EXPIRES = 3600;
+    public const URL_EXPIRES = 3600;
 
     private const CACHE_TTL = 3540;
 
@@ -300,6 +300,14 @@ class TaskFileDomainService
     public function getTopicRootDirectory(int $projectId, int $topicId, string $organizationCode): ?TaskFileEntity
     {
         return $this->taskFileRepository->findTopicSpaceRootDirectory($projectId, $topicId, $organizationCode);
+    }
+
+    /**
+     * Get topic files using a stable file id cursor.
+     */
+    public function getTopicFilesByCursor(int $topicId, int $rootFileId, ?int $afterFileId, int $limit): array
+    {
+        return $this->taskFileRepository->getTopicFilesByCursor($topicId, $rootFileId, $afterFileId, $limit);
     }
 
     /**
@@ -599,7 +607,8 @@ class TaskFileDomainService
         ?int $afterSort,
         ?int $afterFileId,
         int $limit,
-        array $fileTypes = []
+        array $fileTypes = [],
+        bool $excludeHidden = false
     ): array {
         return $this->taskFileRepository->getProjectFileChildrenByParentCursor(
             $projectId,
@@ -608,7 +617,8 @@ class TaskFileDomainService
             $afterSort,
             $afterFileId,
             $limit,
-            $fileTypes
+            $fileTypes,
+            $excludeHidden
         );
     }
 
@@ -3405,6 +3415,46 @@ class TaskFileDomainService
 
         // 调用 Repository 层统计文件数量
         return $this->taskFileRepository->countFilesByProjectIds($projectIds);
+    }
+
+    /**
+     * 统计项目空间文件数量，最多统计到 $limit 即提前返回.
+     * 返回值为 min(实际数量, $limit)，用于发起沙箱前的「是否达到阈值」判断。
+     */
+    public function countProjectFilesWithLimit(int $projectId, int $limit): int
+    {
+        if ($projectId <= 0 || $limit <= 0) {
+            return 0;
+        }
+        return $this->taskFileRepository->countProjectFilesWithLimit($projectId, $limit);
+    }
+
+    public function countProjectFiles(int $projectId): int
+    {
+        if ($projectId <= 0) {
+            return 0;
+        }
+        return $this->taskFileRepository->countProjectFiles($projectId);
+    }
+
+    /**
+     * 统计用户空间文件数量，最多统计到 $limit 即提前返回.
+     * 返回值为 min(实际数量, $limit)，用于发起沙箱前的「是否达到阈值」判断。
+     */
+    public function countUserSpaceFilesWithLimit(string $userId, string $organizationCode, int $limit): int
+    {
+        if ($userId === '' || $organizationCode === '' || $limit <= 0) {
+            return 0;
+        }
+        return $this->taskFileRepository->countUserSpaceFilesWithLimit($userId, $organizationCode, $limit);
+    }
+
+    public function countUserSpaceFiles(string $userId, string $organizationCode): int
+    {
+        if ($userId === '' || $organizationCode === '') {
+            return 0;
+        }
+        return $this->taskFileRepository->countUserSpaceFiles($userId, $organizationCode);
     }
 
     /**

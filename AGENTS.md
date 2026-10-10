@@ -12,4 +12,10 @@ Magic is an Agent product. Development rules tell contributors how to change thi
 | `backend/super-magic/` | [AGENTS.md](backend/super-magic/AGENTS.md) |
 | `frontend/magic-web/` | [AGENTS.md](frontend/magic-web/AGENTS.md) |
 
-Keep this file brief, English-only, and limited to development rules routing. Update the index when development rules are added, moved, or removed.
+Keep this file brief, English-only, and focused on repository-wide development rules and instruction routing. Update the index when development rules are added, moved, or removed.
+
+## Image assets
+
+- Track binary image assets with Git LFS. Add or update scoped `.gitattributes` rules before staging; keep text-based SVG assets in regular Git.
+- Optimize web raster images for delivery, preferring high-quality WebP where suitable. Preserve visual quality, required dimensions, and transparency.
+- Before committing, verify that staged image blobs are LFS pointers and checked-out assets contain the actual image data.

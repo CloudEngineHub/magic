@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation } from "react-router"
 import { SuperMagicApi } from "@/apis"
 import { userStore } from "@/models/user"
-import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import {
 	createShareFileAccess,
@@ -17,6 +16,7 @@ import {
 } from "../utils/microAppSharePasswordStore"
 import { authEventBus } from "@/services/auth/AuthEventBus"
 import { AuthEventName } from "@/services/auth/AuthEvents"
+import { loadShareFilesV2 } from "@/pages/share/services/shareFilesLoader"
 
 interface UseMicroAppShareDataParams {
 	appId: string
@@ -214,15 +214,11 @@ export default function useMicroAppShareData({ appId }: UseMicroAppShareDataPara
 			password?: string,
 		) => {
 			const meta = resolveShareMeta(nextShareData)
-			const filesResponse = await SuperMagicApi.getShareResourceFiles({
-				resource_id: resolvedResourceId,
+			const processedData = await loadShareFilesV2({
+				resourceId: resolvedResourceId,
 				password,
 			})
 			if (!isRequestCurrent(context)) return
-
-			const processedData = AttachmentDataProcessor.processAttachmentData(
-				unwrapResponse(filesResponse),
-			)
 			const fileAccess =
 				meta.temporaryToken && meta.projectId
 					? createShareFileAccess({

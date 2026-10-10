@@ -2261,7 +2261,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		])
 
 		expect(getCanonicalToolState(store, "generation-tool")).toMatchObject({
-			status: "response_missing",
+			status: "running",
 			detail: { type: "generation_progress" },
 		})
 	})
@@ -2298,7 +2298,7 @@ describe("SuperMagicStore / Tool response 与执行状态", () => {
 		])
 
 		expect(getCanonicalToolState(store, "legacy-generation-tool")).toMatchObject({
-			status: "response_missing",
+			status: "running",
 			detail: { type: "generation_progress" },
 		})
 	})

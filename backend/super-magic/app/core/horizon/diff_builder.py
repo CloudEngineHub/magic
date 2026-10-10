@@ -35,6 +35,7 @@ class FileChangeBlock:
     path: str
     content: str
     new_snapshot: str | None = None
+    is_full_read: bool = False
 
 
 @dataclass
@@ -159,7 +160,7 @@ async def _try_full_read(
             f"  <read_file_result>\n{html.escape(body, quote=False)}\n  </read_file_result>\n"
             f"{_build_size_tag(record.file_size_bytes, size)}\n"
             f"{_build_mtime_tag(record.file_mtime_ms, mtime)}\n</file>"
-        ), current_content)
+        ), current_content, is_full_read=True)
         # 正文放得下不代表最终块放得下；路径、行号、标签及转义均计入单文件额度。
         return change if num_tokens_from_string(change.content) <= max_tokens else None
     except Exception as error:

@@ -8,6 +8,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	classifyMarkdownFileHref,
 	findAttachmentByPath,
+	isMarkdownFileLink,
 } from "@/pages/superMagic/utils/markdownFileReference"
 import {
 	resolveReferencedProjectAttachment,
@@ -20,6 +21,7 @@ import { FileReference, getFileExtensionFromPath } from "./FileReference"
 import { UserFileReference } from "./UserFileReference"
 import { IconExternalLink } from "@tabler/icons-react"
 import MagicTooltip from "@/components/base/MagicTooltip"
+import { getFileMediaMetadata } from "@/pages/superMagic/services/useFileMediaSource"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
 import {
@@ -161,6 +163,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 			: undefined
 		return (
 			<FileReference
+				mediaFile={getFileMediaMetadata(resolvedFileInfo, referencedProjectId || projectId)}
 				presentation={resolveFilePresentation(resolvedFileInfo, {
 					context: referencedProjectId
 						? { kind: "project", projectId: referencedProjectId }
@@ -184,7 +187,15 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 		)
 	}
 
-	if (explicitFileReference) {
+	if (!normalizedHref.trim()) {
+		return (
+			<span {...safeAttributes} style={normalizedStyle}>
+				{children}
+			</span>
+		)
+	}
+
+	if (explicitFileReference || isMarkdownFileLink(normalizedHref)) {
 		const referencedProjectResolved =
 			fileTarget?.scope !== "referenced-project" ||
 			referencedProjectResolution?.href === normalizedHref
@@ -197,7 +208,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 					disabled
 					title={
 						referencedProjectResolved
-							? t("common.fileNotFoundOrLoadFailed")
+							? t("common.fileCannotOpen", { path: normalizedHref })
 							: (normalizedTitle ?? normalizedHref)
 					}
 				/>

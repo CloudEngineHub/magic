@@ -12,15 +12,16 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader
+        testId="dashboard-page"
         title={t("nav.item.overview")}
         description={t("dashboard.description")}
         actions={
           <>
-            <Button variant="outline">
+            <Button variant="outline" data-testid="dashboard-refresh-button">
               <RefreshCcw className="size-4" aria-hidden="true" />
               {t("common.refresh")}
             </Button>
-            <Button>
+            <Button data-testid="dashboard-create-button">
               <Plus className="size-4" aria-hidden="true" />
               {t("common.createAgent")}
             </Button>
@@ -68,7 +69,7 @@ export default function DashboardPage() {
                 {t("dashboard.recentActivityDescription")}
               </p>
             </div>
-            <Button variant="outline" size="sm" disabled>
+            <Button variant="outline" size="sm" disabled data-testid="dashboard-view-all-button">
               {t("common.viewAll")}
             </Button>
           </div>
@@ -84,6 +85,7 @@ export default function DashboardPage() {
           title={t("dashboard.pendingTitle")}
           description={t("dashboard.pendingDescription")}
           actionLabel={t("common.createAgent")}
+          testId="dashboard-pending-empty"
         />
       </section>
     </>

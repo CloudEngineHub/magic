@@ -2,7 +2,7 @@ import { memo } from "react"
 import { getToolIconConfig } from "./config"
 import type { ToolIconBadgeProps } from "./types"
 
-function ToolIconBadge({ toolName, size = 16, iconSize = 10, className = "" }: ToolIconBadgeProps) {
+function ToolIconBadge({ toolName, size = 16, iconSize = 12, className = "" }: ToolIconBadgeProps) {
 	const config = getToolIconConfig(toolName)
 	const IconComponent = config.icon
 

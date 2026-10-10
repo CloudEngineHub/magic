@@ -12,6 +12,10 @@ Instruction priority: system/developer instructions and the user's request take 
 
 ## Environment & Tooling
 - **Runtime**: Node.js ≥ 18, package manager is `pnpm` (v9+). Do not switch managers.
+- **Browser compatibility baseline**: The minimum supported browser is Chrome `100.0.4896.58`. This matches the Android DingTalk embedded browser released in March 2022. Some newer web APIs, JavaScript syntax, CSS features, and browser behaviors are unavailable or incomplete at this baseline.
+- When adding browser-facing code, verify the API and syntax against Chrome 100, use feature detection or a compatible fallback when needed, and validate critical flows in the DingTalk Android embedded browser. Do not assume that support in the latest Chrome or the current `browserslist` output implies support at the minimum baseline.
+- To install the baseline Chromium build locally for compatibility testing, run:
+  `npx @puppeteer/browsers install chromium@971463 --path /your/custom/path`
 - **Key commands**
   - `pnpm install` — install dependencies.
   - `pnpm dev` — HTTPS dev server on port 443.
@@ -46,6 +50,7 @@ Instruction priority: system/developer instructions and the user's request take 
 - **Focus preservation**: Removing a focus outline or ring requires a visible, theme-aware keyboard-focus alternative. Do not hide focus problems with `blur()`, blocked focus, removed tab stops, or global outline/ring resets; preserve dialog focus restoration. Inputs and other controls retain their component-specific focus design.
 - Before adding or changing tooltips, read [Tooltip usage](src/components/base/MagicTooltip/README.md). Use the existing entries for action labels and truncated text; preserve the interaction and lifecycle of rich content and media previews.
 - Maintain strict TypeScript typing; add or update types when altering APIs or props.
+- **Structured reference tags**: Adding or changing a tag requires checking source data, model-readable serialization, standard clipboard formats, paste recognition and earlier input routing, schema, history rendering, and re-editing together. Rendering alone does not complete the feature. Preserve real file identity internally and resolvable paths plus necessary task context in model-readable text; do not replace missing identity with a display name or expose unnecessary editor metadata.
 - Keep React components modular: separate `styles.ts`, `types.ts`, `hooks/`, and `index.tsx` where the pattern already exists.
 - For changes under an edition-shared or edition-specific module, check whether `enterprise/` has a corresponding implementation, adapter, test, or config that must be updated in sync. Do not scan the whole overlay for unrelated changes.
 - **Styling conventions**:
@@ -68,6 +73,26 @@ Instruction priority: system/developer instructions and the user's request take 
   - **Layout & CSS**: For non-obvious styling (e.g., specific `z-index`, `overflow` hacks, or mobile-specific positioning), describe the intended visual behavior.
   - **Hooks & Context**: Annotate the purpose and source of injected data (e.g., `useOutletContext`) to help future maintainers understand component dependencies.
 
+
+## Temporary File URL Lifecycle
+
+临时文件链接包括图片、视频、音频、文档、表格、演示文稿、HTML iframe 内部资源和在线查看器继续使用的文件地址。Media 只是其中一类；判断依据是链接是否会在页面打开后继续被使用。
+
+- 文件链接记录至少保留文件身份、访问范围、文件版本或更新时间、URL、过期时间和当前状态。长期使用的组件不能只保存一个裸 URL，也不能在没有可信过期信息时无限期复用它。
+- 项目文件通过绑定访问身份的 `FileApi` 和 `sharedMediaUrlCache` 获取；聊天文件、知识库文件、Canvas 文件和 HTML iframe 内部文件继续使用各自的获取模块，但必须提供等价的「检查当前链接是否可用」和「重新获取链接」入口。
+- 长时间使用的链接在再次绑定、打开或播放前检查是否仍可用；正在播放的媒体在失效前刷新，加载失败时最多强制重新获取一次。刷新请求要合并、可取消，并阻止旧请求覆盖较新的链接。
+- 重新绑定媒体时保留用户可恢复的状态：视频和音频至少保留播放位置；视频还要保留音量、静音、播放速率和播放意图。刷新失败继续显示原有错误状态，不能循环请求。
+- 文本、Blob 或 ArrayBuffer 已成功下载后，后续渲染使用内存内容，不为已经脱离 URL 的内容设置续期计时器。下载、打开新窗口等一次性动作在动作发生时获取当前可用链接，不能提前保存供未来使用的签名 URL。
+- URL 缓存键必须包含访问身份和必要的文件版本信息，不能只用 `file_id`。新增临时链接入口时，代码说明必须写清负责获取链接的模块、过期判断点、错误恢复点、取消路径和是否需要播放期间刷新。
+
+## Recovery after browser suspension
+
+- New or changed server-backed views that consume real-time events must define how their current data is reconciled after page visibility returns, bfcache restoration, or network recovery. A WebSocket `OPEN` state or receipt of an event does not prove that missed changes were recovered.
+- Reuse the module's existing authorized reads, update queue, and merge logic. Add a recovery trigger at the existing data owner; do not introduce an application-wide scheduler, another store, permanent polling, or migrate unrelated working modules for a local recovery requirement.
+- Background reconciliation must retain rendered content until a successful result is ready. Preserve selection, scroll, pagination, open tabs, viewport, local drafts, editing conflicts, and explicitly selected historical versions; do not simulate manual refresh or remount a view to update it.
+- Coalesce repeated triggers, retain changes received during reconciliation, and reject stale results after project, account, organization, or access-scope changes. Abort or unsubscribe when the consumer leaves; one consumer must not cancel a shared read still needed by another.
+- Notify dependent content only after the recovered data has successfully committed and entered that consumer's context. Request completion, including failure, is not a successful reconciliation. For example, commit the project file snapshot before checking an open canvas version.
+- Recovery re-reads state; it must not restart recording, resend queued messages, repeat writes, broaden share permissions, or replay one-time notifications. Preserve existing error handling, resource expiry rules, and normal polling budgets. State any uncovered recovery path instead of claiming global coverage.
 
 ## Workflow for Agents
 1. **Orient**: Read the user request, applicable parent instructions, this file, and task-specific files. Read `README.md` or `CLAUDE.local.md` only when the task depends on their documented workflow or architecture.

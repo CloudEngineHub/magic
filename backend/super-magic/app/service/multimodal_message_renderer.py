@@ -15,6 +15,7 @@ from agentlang.chat_history.chat_history_models import UserMessage
 from agentlang.config.config import config
 from agentlang.logger import get_logger
 from app.path_manager import PathManager
+from app.service.browser.browser_screenshot_artifact import BrowserScreenshotArtifactStore
 from app.tools.visual_understanding_utils.image_compression_service import (
     WEBP_BASE64_MAX_DIMENSION,
     WEBP_BASE64_MAX_SIZE_BYTES,
@@ -279,6 +280,7 @@ class LLMMessageRenderer:
     def __init__(
         self,
         workspace_dir: str | Path | None = None,
+        browser_artifact_store: BrowserScreenshotArtifactStore | None = None,
     ) -> None:
         """初始化消息渲染器，并从统一配置加载原生视觉策略。"""
         runtime_config = _NativeVisualRuntimeConfig.load(
@@ -295,6 +297,9 @@ class LLMMessageRenderer:
         self.max_cache_entries = runtime_config.cache_max_entries
         self.max_cache_bytes = runtime_config.cache_max_bytes
         self._image_compression_service = ImageCompressionService(workspace_dir=self.workspace_dir)
+        # Browser artifact 只保存稳定引用；每次请求从线上对象存储或本地 .topic 读取，
+        # 再在系统临时目录 staging。`.runtime` 清空后必须能通过同一引用重建图片。
+        self._browser_artifact_store = browser_artifact_store
         self._base64_cache: dict[tuple[str, int, int, int, int, int], str] = {}
 
     def _cache_data_url(self, key: tuple[str, int, int, int, int, int], data_url: str) -> None:
@@ -488,7 +493,22 @@ class LLMMessageRenderer:
         return "native visual input was not selected"
 
     async def _render_image(self, image_path: str) -> tuple[str | None, str | None]:
-        """将图片在系统临时目录压缩为 WebP，再转换为 Base64。"""
+        """将本地图片或稳定 artifact 在系统临时目录压缩为 WebP，再转换为 Base64。"""
+        if BrowserScreenshotArtifactStore.is_source_ref(image_path):
+            if self._browser_artifact_store is None:
+                return None, "Browser screenshot artifact storage is unavailable"
+            try:
+                async with self._browser_artifact_store.materialize(image_path) as target:
+                    return await self._render_file(target, cache_identity=image_path)
+            except FileNotFoundError:
+                return None, "the Browser screenshot artifact was removed"
+            except (ValueError, OSError) as exc:
+                logger.warning("Browser screenshot artifact materialization failed: ref=%s reason=%s", image_path, exc)
+                return None, "Browser screenshot artifact is unavailable"
+            except Exception as exc:
+                logger.warning("Browser screenshot artifact rendering failed: ref=%s reason=%s", image_path, exc)
+                return None, "image conversion failed"
+
         target, path_error = self._resolve_image_target(image_path)
         if path_error:
             return None, path_error
@@ -496,13 +516,17 @@ class LLMMessageRenderer:
             return None, "the image path is invalid"
         if not await async_exists(target):
             return None, "the image file was removed"
+        return await self._render_file(target, cache_identity=str(target))
+
+    async def _render_file(self, target: Path | str, *, cache_identity: str) -> tuple[str | None, str | None]:
+        """读取已准备好的图片文件并复用统一压缩与缓存逻辑。"""
         try:
             stat_result = await async_stat(target)
             if stat_result.st_size <= 0:
                 return None, "the image file is empty"
 
             cache_key = (
-                str(target),
+                cache_identity,
                 stat_result.st_mtime_ns,
                 stat_result.st_size,
                 WEBP_BASE64_QUALITY,
@@ -517,7 +541,7 @@ class LLMMessageRenderer:
             self._cache_data_url(cache_key, data_url)
             return data_url, None
         except Exception as exc:
-            logger.warning("原生视觉图片转换失败: path=%s reason=%s", image_path, exc)
+            logger.warning("原生视觉图片转换失败: path=%s reason=%s", cache_identity, exc)
             return None, "image conversion failed"
 
     def _resolve_image_target(self, image_path: str) -> tuple[Path | None, str | None]:
