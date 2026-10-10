@@ -70,13 +70,13 @@ export default function DesignStyleButton({
 				getPopupContainer={getPopupContainer}
 			>
 				<Button
-					variant="outline"
+					variant="ghost"
 					size="sm"
 					disabled={disabled}
 					onClick={() => setOpen(true)}
 					className={cn(
-						"h-6 rounded-[8px] py-0 text-xs font-normal shadow-xs",
-						showButtonText ? "gap-1.5 px-3" : "gap-0 px-1.5",
+						"h-[var(--detail-action-height,1.5rem)] min-w-[var(--detail-action-height,auto)] rounded-lg px-1.5 text-xs font-normal text-foreground transition-colors hover:bg-accent active:bg-accent/80",
+						showButtonText ? "gap-1" : "gap-0",
 					)}
 					title={label}
 					aria-label={label}
@@ -86,6 +86,7 @@ export default function DesignStyleButton({
 					{showButtonText && <span>{label}</span>}
 				</Button>
 			</ConditionalTooltip>
+
 			<DesignStyleDialog
 				open={open}
 				onOpenChange={handleOpenChange}
