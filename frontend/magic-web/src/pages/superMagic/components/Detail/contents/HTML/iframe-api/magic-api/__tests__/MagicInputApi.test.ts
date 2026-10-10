@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { MagicInputApi } from "../MagicInputApi"
-import { runtimeLoggerHub, type RuntimeLogRecord } from "@dtyq/html-sandbox/runtime"
+import { runtimeLoggerHub, type RuntimeLogRecord } from "@dtyq/html-sandbox"
 
 describe("MagicInputApi", () => {
 	let postMessageSpy: ReturnType<typeof vi.spyOn>

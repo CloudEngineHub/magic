@@ -43,7 +43,7 @@ import {
 import {
 	HTML_SANDBOX_TELEMETRY_MESSAGE,
 	normalizeHtmlSandboxTelemetryMessage,
-} from "@dtyq/html-sandbox/telemetry"
+} from "@dtyq/html-sandbox"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/utils/cn"

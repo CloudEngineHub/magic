@@ -1,5 +1,5 @@
 import { env } from "@/utils/env"
-import { removeRuntimeNodes, SOURCE_NODE_ATTRIBUTE } from "@dtyq/html-sandbox/utils/sourceNodes"
+import { removeRuntimeNodes, SOURCE_NODE_ATTRIBUTE } from "@dtyq/html-sandbox"
 import { normalizeConflictingBackgroundDeclarations } from "./background-style"
 import { restoreHtmlLocationHref } from "./location-href-restore"
 import valueParser from "postcss-value-parser"

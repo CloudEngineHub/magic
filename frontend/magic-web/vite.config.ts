@@ -204,51 +204,6 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 					find: "@magic-web/html2image",
 					replacement: resolve(__dirname, "packages/html2image/src/index.ts"),
 				},
-				{
-					find: /^@dtyq\/html-sandbox\/index\.html(\?raw)?$/,
-					replacement: `${resolve(__dirname, "packages/html-sandbox/index.html")}$1`,
-				},
-				{
-					find: "@dtyq/html-sandbox/runtime",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/safeUrl",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/utils/safeUrl.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/sourceNodes",
-					replacement: resolve(
-						__dirname,
-						"packages/html-sandbox/src/utils/sourceNodes.ts",
-					),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/textContent",
-					replacement: resolve(
-						__dirname,
-						"packages/html-sandbox/src/utils/textContent.ts",
-					),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/inspectableTextContent",
-					replacement: resolve(
-						__dirname,
-						"packages/html-sandbox/src/utils/inspectableTextContent.ts",
-					),
-				},
-				{
-					find: "@dtyq/html-sandbox/telemetry",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
-				},
-				{
-					find: /^@dtyq\/html-sandbox\/(.+)$/,
-					replacement: resolve(__dirname, "packages/html-sandbox/src/$1"),
-				},
 				...(isDev
 					? [
 							{
