@@ -1,6 +1,14 @@
 import { useId, type MouseEventHandler, type ReactNode } from "react"
 import { observer } from "mobx-react-lite"
-import { ChevronRight, CircleAlert, CircleCheck, CircleX, Loader2, MonitorPlay } from "lucide-react"
+import {
+	ChevronRight,
+	CircleAlert,
+	CircleCheck,
+	CircleX,
+	Info,
+	Loader2,
+	MonitorPlay,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -102,12 +110,10 @@ function OperationResultList({
 	const label = search ? toolData.remark : total === 1 ? items?.[0]?.label : unitLabels[unit]
 	const stage =
 		toolData.name === "audio_understanding" ? "transcribed" : (data?.stage ?? "completed")
+	// 单次范围尝试仍保留真实失败状态；面向用户以中性提示说明下一步，不当作整项任务失败。
+	const isRangeTool = toolData.name === "find_file_ranges" || toolData.name === "edit_file_ranges"
 	// 范围批次只有一个文件；定位／修改了几处由工具的实际结果说明，不能按文件项数推算。
-	const rangeSummary =
-		total === 1 &&
-		(toolData.name === "find_file_ranges" || toolData.name === "edit_file_ranges")
-			? items?.[0]?.message
-			: undefined
+	const rangeSummary = total === 1 && isRangeTool ? items?.[0]?.message : undefined
 	const status =
 		loading || resultUnavailable || !items
 			? unavailable
@@ -120,13 +126,15 @@ function OperationResultList({
 						: rangeSummary || stageLabels[stage]
 	const StatusIcon = loading
 		? Loader2
-		: resultUnavailable || !items
-			? CircleAlert
-			: failedCount
-				? successCount
-					? CircleAlert
-					: CircleX
-				: CircleCheck
+		: isRangeTool && (resultUnavailable || !items || failedCount > 0)
+			? Info
+			: resultUnavailable || !items
+				? CircleAlert
+				: failedCount
+					? successCount
+						? CircleAlert
+						: CircleX
+					: CircleCheck
 	const canToggle = !web || Boolean(items && items.length > 3)
 	const displayed = web ? items?.slice(0, open ? 8 : 3) : open ? items : undefined
 	const openReport = () => {
@@ -191,7 +199,11 @@ function OperationResultList({
 						loading && "animate-spin",
 						!loading &&
 							!resultUnavailable &&
-							(failedCount ? "text-destructive" : "text-success"),
+							(failedCount
+								? isRangeTool
+									? "text-muted-foreground"
+									: "text-destructive"
+								: "text-success"),
 					)}
 				/>
 				{rangeSummary ? <span className="truncate">{status}</span> : status}
@@ -268,6 +280,7 @@ function OperationResultList({
 										item={item}
 										stage={data?.stage}
 										loading={loading}
+										errorTone={isRangeTool ? "neutral" : "destructive"}
 										progressAnchorKey={`${toolData.id || "operation-result"}:${
 											item.target?.type === "canvas_element"
 												? `${item.target.element_id}:${item.target.content_id ?? ""}`

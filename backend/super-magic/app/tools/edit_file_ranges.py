@@ -229,7 +229,7 @@ Use edit_file for short edits and multi_edit_file for multiple short edits.
             except Exception as error:
                 logger.warning("Could not save replacement for %s: %s", edit.record.range_id, error)
             recovery.append(item)
-        tool_context.set_metadata("error_type", "edit_file.error_file_modified")
+        tool_context.set_metadata("error_type", "edit_file_ranges.file_changed")
         saved = "\n".join(f"range_id={item['range_id']}: replacement_id={item['replacement_id']}" if "replacement_id" in item else f"range_id={item['range_id']}: replacement text could not be saved; regenerate it" for item in recovery)
         return self._error(
             "The file changed after range lookup. No edits from this call were written. Find all intended ranges again and reuse each available replacement_id for its corresponding new range.\n" + saved,

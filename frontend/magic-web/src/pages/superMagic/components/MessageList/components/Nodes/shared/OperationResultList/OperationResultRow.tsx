@@ -27,6 +27,7 @@ interface OperationResultRowProps {
 	item: OperationResultItem
 	stage?: OperationResultSummary["stage"]
 	loading: boolean
+	errorTone?: "neutral" | "destructive"
 	unavailable?: string
 	progressAnchorKey: string
 	onLocate: (target: OperationResultTarget, showDetails?: boolean) => void
@@ -36,6 +37,7 @@ export default function OperationResultRow({
 	item,
 	stage,
 	loading,
+	errorTone = "destructive",
 	unavailable,
 	progressAnchorKey,
 	onLocate,
@@ -45,11 +47,15 @@ export default function OperationResultRow({
 		loading && item.status === "success" && item.is_processing !== false && !unavailable
 	const ResultIcon =
 		unavailable || item.status === "skipped"
-			? CircleAlert
+			? errorTone === "neutral"
+				? Info
+				: CircleAlert
 			: pending
 				? Loader2
 				: item.status === "error"
-					? CircleX
+					? errorTone === "neutral"
+						? Info
+						: CircleX
 					: CircleCheck
 	const target = item.target
 	const web = target?.type === "url" ? new URL(target.url) : undefined
@@ -121,7 +127,9 @@ export default function OperationResultRow({
 								!pending && !unavailable && item.status === "success"
 									? "text-success"
 									: item.status === "error"
-										? "text-destructive"
+										? errorTone === "neutral"
+											? "text-muted-foreground"
+											: "text-destructive"
 										: "text-muted-foreground",
 							)}
 						/>

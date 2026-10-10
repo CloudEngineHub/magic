@@ -556,16 +556,16 @@
         "en_US": "The saved replacement is no longer available; generate it again"
     },
     "find_file_ranges.error": {
-        "zh_CN": "未能定位编辑位置",
-        "en_US": "Could not locate edit positions"
+        "zh_CN": "需要重新确认编辑位置",
+        "en_US": "Edit positions need another check"
     },
     "find_file_ranges.located": {
         "zh_CN": "已定位 {{count}} 处",
         "en_US": "Located {{count}} positions"
     },
     "find_file_ranges.failed_location": {
-        "zh_CN": "第 {{index}} 处未能定位，本次未修改",
-        "en_US": "Position {{index}} could not be located; no changes made"
+        "zh_CN": "第 {{index}} 处需要重新定位",
+        "en_US": "Position {{index}} needs a new lookup"
     },
     "find_file_ranges.not_modified": {
         "zh_CN": "尚未修改文件",
@@ -582,6 +582,10 @@
     "edit_file_ranges.applied": {
         "zh_CN": "已修改 {{count}} 处",
         "en_US": "Updated {{count}} positions"
+    },
+    "edit_file_ranges.file_changed": {
+        "zh_CN": "内容有更新，需重新定位",
+        "en_US": "Content has changed; locate the positions again"
     },
     "edit_file_ranges.unchanged": {
         "zh_CN": "{{count}} 处内容无需修改",
