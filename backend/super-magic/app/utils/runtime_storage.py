@@ -206,7 +206,7 @@ owner：     ImageBase64Cache、ImageCompressionService
 -------------------------------------------------------------------------------
 路径：      .runtime/file_edits/<range-id 或 replacement-id>.json
 内容：      当前 AgentContext 的单次编辑范围和失败后可复用的新文本。
-owner：     find_file_range、edit_file_range、edit_file、AgentRuntimeResetService
+owner：     find_file_ranges、edit_file_ranges、edit_file、AgentRuntimeResetService
 立即处理：  成功应用的范围标记为已使用；上下文重置时删除当前上下文的记录。
 延后处理：  创建记录后机会式清理。
 活动保护：  范围的 owner_context_id 不匹配时不可读取；沙盒重建后不承诺保留。

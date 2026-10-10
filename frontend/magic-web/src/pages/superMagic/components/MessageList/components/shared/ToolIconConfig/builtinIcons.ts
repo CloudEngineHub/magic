@@ -144,7 +144,7 @@ export const builtinToolIconGroups = [
 	[builtinClock36b84ffIcon, ["browser_keep_alive", "browser_wait"]],
 	[builtinCode26b84ffIcon, ["browser_add_init_script", "browser_evaluate", "browser_read_html"]],
 	[builtinDownload5ea817Icon, ["download_knowledge_source_files"]],
-	[builtinEditIcon, ["edit_file_range"]],
+	[builtinEditIcon, ["edit_file_ranges"]],
 	[
 		builtinFileKey2667085Icon,
 		[
@@ -156,7 +156,7 @@ export const builtinToolIconGroups = [
 	],
 	[builtinFileOutput3586ffIcon, ["export_document_markdown"]],
 	[builtinFileSearch3586ffIcon, ["inspect_document", "sample_document_content"]],
-	[builtinFileSearchFfaf3fIcon, ["find_file_range"]],
+	[builtinFileSearchFfaf3fIcon, ["find_file_ranges"]],
 	[builtinFileText3586ffIcon, ["summarize_document"]],
 	[builtinFileText9747ffIcon, ["summarize"]],
 	[builtinGlobe667085Icon, ["oauth2_request"]],

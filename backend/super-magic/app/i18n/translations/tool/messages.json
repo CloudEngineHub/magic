@@ -555,9 +555,49 @@
         "zh_CN": "替换内容已失效，请重新生成",
         "en_US": "The saved replacement is no longer available; generate it again"
     },
-    "find_file_range.error": {
-        "zh_CN": "查找文件范围时出错",
-        "en_US": "Error finding a file range"
+    "find_file_ranges.error": {
+        "zh_CN": "未能定位编辑位置",
+        "en_US": "Could not locate edit positions"
+    },
+    "find_file_ranges.located": {
+        "zh_CN": "已定位 {{count}} 处",
+        "en_US": "Located {{count}} positions"
+    },
+    "find_file_ranges.failed_location": {
+        "zh_CN": "第 {{index}} 处未能定位，本次未修改",
+        "en_US": "Position {{index}} could not be located; no changes made"
+    },
+    "find_file_ranges.not_modified": {
+        "zh_CN": "尚未修改文件",
+        "en_US": "The file has not been modified"
+    },
+    "find_file_ranges.location": {
+        "zh_CN": "位置 {{index}}：第 {{start}}—{{end}} 行",
+        "en_US": "Position {{index}}: lines {{start}}–{{end}}"
+    },
+    "find_file_ranges.preview_truncated": {
+        "zh_CN": "片段预览不完整，完整内容请查看文件",
+        "en_US": "The excerpt is incomplete; view the file for the full content"
+    },
+    "edit_file_ranges.applied": {
+        "zh_CN": "已修改 {{count}} 处",
+        "en_US": "Updated {{count}} positions"
+    },
+    "edit_file_ranges.unchanged": {
+        "zh_CN": "{{count}} 处内容无需修改",
+        "en_US": "No changes needed at {{count}} positions"
+    },
+    "edit_file_ranges.not_modified": {
+        "zh_CN": "本次批量修改未写入文件",
+        "en_US": "None of this batch's edits were written"
+    },
+    "edit_file_ranges.write_unknown": {
+        "zh_CN": "写入遇到问题，需检查文件的实际内容",
+        "en_US": "The write encountered a problem; check the actual file content"
+    },
+    "edit_file_ranges.write_completed": {
+        "zh_CN": "文件已修改，结果记录未完成，请勿重复执行",
+        "en_US": "The file was updated, but completion could not be recorded; do not repeat"
     },
     "shell_exec.error": {
         "zh_CN": "Shell命令执行失败: {{error}}",

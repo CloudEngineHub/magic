@@ -102,16 +102,22 @@ function OperationResultList({
 	const label = search ? toolData.remark : total === 1 ? items?.[0]?.label : unitLabels[unit]
 	const stage =
 		toolData.name === "audio_understanding" ? "transcribed" : (data?.stage ?? "completed")
+	// 范围批次只有一个文件；定位／修改了几处由工具的实际结果说明，不能按文件项数推算。
+	const rangeSummary =
+		total === 1 &&
+		(toolData.name === "find_file_ranges" || toolData.name === "edit_file_ranges")
+			? items?.[0]?.message
+			: undefined
 	const status =
 		loading || resultUnavailable || !items
 			? unavailable
 			: failedCount > 0
-				? t("operationResultList.failedCount", { count: failedCount })
+				? rangeSummary || t("operationResultList.failedCount", { count: failedCount })
 				: search
 					? t("operationResultList.searchCount", { count: total })
 					: skippedCount === total
 						? t("operationResultList.skipped")
-						: stageLabels[stage]
+						: rangeSummary || stageLabels[stage]
 	const StatusIcon = loading
 		? Loader2
 		: resultUnavailable || !items
@@ -168,7 +174,12 @@ function OperationResultList({
 				</SmartTooltip>
 			)}
 			<span
-				className="ml-1 inline-flex h-4 shrink-0 items-center gap-0.5 text-xs leading-4 text-muted-foreground"
+				className={cn(
+					"inline-flex h-4 items-center gap-0.5 text-xs leading-4 text-muted-foreground",
+					!rangeSummary && "ml-1",
+					// 范围错误说明比计数长；窄屏允许截断，完整原因在展开行和详情中保留。
+					rangeSummary && failedCount > 0 ? "min-w-0 shrink" : "shrink-0",
+				)}
 				aria-live="polite"
 			>
 				<StatusIcon
@@ -183,7 +194,7 @@ function OperationResultList({
 							(failedCount ? "text-destructive" : "text-success"),
 					)}
 				/>
-				{status}
+				{rangeSummary ? <span className="truncate">{status}</span> : status}
 			</span>
 			{canToggle && (
 				<ChevronRight
@@ -215,7 +226,11 @@ function OperationResultList({
 							onClick={toggle}
 							aria-expanded={open}
 							aria-controls={contentId}
-							className="h-8 min-w-0 flex-1 justify-start gap-1.5 rounded-none px-2 text-xs font-normal hover:bg-transparent dark:hover:bg-transparent"
+							className={cn(
+								"h-8 min-w-0 flex-1 justify-start rounded-none text-xs font-normal hover:bg-transparent dark:hover:bg-transparent",
+								// 范围卡片同时展示动作和位置计数，紧凑间距为窄消息列保留详情入口。
+								rangeSummary ? "gap-1 px-1.5" : "gap-1.5 px-2",
+							)}
 						>
 							{headerContent}
 						</Button>

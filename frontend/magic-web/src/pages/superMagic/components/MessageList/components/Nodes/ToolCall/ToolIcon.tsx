@@ -23,7 +23,7 @@ const iconNameMap: Record<string, string> = {
 	image_search: "bing_search",
 	use_browser_click: "click",
 	file_search: "file_search",
-	find_file_range: "file_search",
+	find_file_ranges: "file_search",
 	use_browser: "read_more_as_markdown",
 	read_webpages_as_markdown: "read_more_as_markdown",
 	use_browser_goto: "goto",
@@ -31,7 +31,7 @@ const iconNameMap: Record<string, string> = {
 	run_python_snippet: "python_execute",
 	replace_in_file: "replace_in_file",
 	edit_file: "replace_in_file",
-	edit_file_range: "replace_in_file",
+	edit_file_ranges: "replace_in_file",
 	// Keep the icon mapping for historical messages; the tool is no longer registered or callable.
 	multi_edit_file_range: "replace_in_file",
 	multi_edit_file: "replace_in_file",

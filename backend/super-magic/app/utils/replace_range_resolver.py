@@ -59,6 +59,18 @@ class RangeResolution:
     warnings: list[str] = field(default_factory=list)
 
 
+def validate_non_overlapping_ranges(ranges: list[ContextRange]) -> None:
+    """所有位置属于同一快照；相邻区间可同时修改，重叠或重复区间必须拒绝。"""
+    ordered = sorted(enumerate(ranges), key=lambda item: (item[1].start_index, item[1].end_index))
+    for (previous_index, previous), (current_index, current) in zip(ordered, ordered[1:]):
+        if current.start_index < previous.end_index or current == previous:
+            raise RangeMatchError(
+                f"Ranges {previous_index + 1} and {current_index + 1} overlap. "
+                "Use separate, non-overlapping ranges.",
+                code="range_overlap",
+            )
+
+
 def _find_all_occurrences(content: str, needle: str) -> list[int]:
     """查找子串在内容中的所有起始位置"""
     if not needle:

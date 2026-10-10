@@ -33,8 +33,8 @@ from app.tools.download_from_markdown import DownloadFromMarkdown
 from app.tools.download_from_url import DownloadFromUrl
 from app.tools.download_from_urls import DownloadFromUrls
 from app.tools.edit_file import EditFile
-from app.tools.edit_file_range import EditFileRange
-from app.tools.find_file_range import FindFileRange
+from app.tools.edit_file_ranges import EditFileRanges
+from app.tools.find_file_ranges import FindFileRanges
 from app.tools.multi_edit_file import MultiEditFile
 from app.tools.file_search import FileSearch
 from app.tools.get_js_cdn_address import GetJsCdnAddress
@@ -407,8 +407,8 @@ __all__ = [
     "DownloadFromUrl",
     "DownloadFromUrls",
     "EditFile",
-    "EditFileRange",
-    "FindFileRange",
+    "EditFileRanges",
+    "FindFileRanges",
     "MultiEditFile",
     "FileSearch",
     "GetJsCdnAddress",

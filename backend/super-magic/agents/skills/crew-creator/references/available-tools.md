@@ -54,8 +54,8 @@ tools:
   - shell_exec
   - web_search
   - read_webpages_as_markdown
-  - edit_file_range
-  - find_file_range
+  - edit_file_ranges
+  - find_file_ranges
   - multi_edit_file
   - delete_files
 ```
@@ -85,8 +85,8 @@ tools:
 | `grep_search` | Search file contents by regex |
 | `write_file` | Write content to a file |
 | `edit_file` | Edit a file by replacing matched content |
-| `find_file_range` | Locate a large replacement range and return a single-use range ID |
-| `edit_file_range` | Apply a replacement to a range ID returned by `find_file_range` |
+| `find_file_ranges` | Locate non-overlapping ranges in one file snapshot; accepts a ranges list and returns single-use IDs |
+| `edit_file_ranges` | Apply an edits list of range IDs and replacements together in one file write |
 | `multi_edit_file` | Apply multiple edits to a file |
 | `delete_files` | Delete one or more files |
 

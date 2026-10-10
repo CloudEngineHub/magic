@@ -122,8 +122,8 @@ tools:
   - shell_exec
   - write_file
   - edit_file
-  - find_file_range
-  - edit_file_range
+  - find_file_ranges
+  - edit_file_ranges
   - delete_files
 ---
 
@@ -140,7 +140,7 @@ tools:
 - YAML `exclude_builtin_tools` list → removes specific tools from the builtin baseline
 - No TOOLS.md provided → uses default tool set from `crew.template.agent`
 
-Range editing uses `find_file_range` and `edit_file_range` together. Excluding either removes both from the builtin baseline. Explicit entries in `tools` are added after exclusions: `edit_file_range` includes its required finder, while `find_file_range` alone remains read-only.
+Range editing uses `find_file_ranges` and `edit_file_ranges` together. Excluding either removes both from the builtin baseline. Explicit entries in `tools` are added after exclusions: `edit_file_ranges` includes its required finder, while `find_file_ranges` alone remains read-only.
 
 ### Notes
 

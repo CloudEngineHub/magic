@@ -142,6 +142,14 @@ class FileEditStore:
             return None
 
     @classmethod
+    async def discard_range(cls, context: AgentContext, record: FileEditRangeRecord) -> None:
+        """查找批次保存失败时，只清理本次已创建且属于当前上下文的记录。"""
+        if record.context_id != context.context_id:
+            raise ValueError("File edit range belongs to another agent context.")
+        path = await cls._record_path(_RANGE_PREFIX, record.range_id)
+        await async_unlink(path)
+
+    @classmethod
     async def set_range_state(
         cls,
         context: AgentContext,
