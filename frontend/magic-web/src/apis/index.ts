@@ -26,6 +26,7 @@ import { generateFunctionPermissionApi } from "./modules/function-permission"
 import { generateMagicFSApi } from "./modules/magicFS"
 import { generateMagicBaseApi } from "./modules/magicBase"
 import { generateSlidesTemplateUploadApi } from "./modules/slidesTemplateUpload"
+import { generateNotificationApi } from "./modules/notifications"
 
 /** 重置服务 */
 export const UserApi = generateUserApi(magicClient)
@@ -46,6 +47,7 @@ export const MagicUserApi = generateMagicUserApi(magicClient)
 export const GlobalApi = generateGlobalApi(magicClient)
 export const ScheduledTaskApi = generateScheduledTaskApi(magicClient)
 export const RecycleBinApi = generateRecycleBinApi(magicClient)
+export const NotificationApi = generateNotificationApi(magicClient)
 
 /** 超级麦吉 */
 export const SuperMagicApi = generateSuperMagicApi(magicClient)

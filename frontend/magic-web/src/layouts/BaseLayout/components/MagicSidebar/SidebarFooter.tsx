@@ -1,6 +1,7 @@
 import { cn } from "@/utils/cn"
 import type { SidebarFooterProps } from "./types"
 import { ActionButtons, UserInfoCard } from "./components"
+import InboxSidebarEntry from "./components/InboxSidebarEntry"
 
 function SidebarFooter({ collapsed, onBusyChange }: SidebarFooterProps) {
 	return (
@@ -19,6 +20,7 @@ function SidebarFooter({ collapsed, onBusyChange }: SidebarFooterProps) {
 					collapsed ? "w-full" : "mx-2 self-stretch",
 				)}
 			/>
+			<InboxSidebarEntry collapsed={collapsed} />
 			<UserInfoCard collapsed={collapsed} onOpenChange={onBusyChange} />
 		</div>
 	)

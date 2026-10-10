@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, lazy, Suspense } from "react"
 import { observer } from "mobx-react-lite"
 import { sidebarStore } from "@/stores/layout"
 import { cn } from "@/utils/cn"
@@ -15,6 +15,8 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { userStore } from "@/models/user"
+
+const InboxPanel = lazy(() => import("@/components/business/Inbox/InboxPanel"))
 
 const MagicSidebar = observer(
 	({
@@ -183,6 +185,9 @@ const MagicSidebar = observer(
 						</div>
 					</SheetContent>
 				</Sheet>
+				<Suspense fallback={null}>
+					<InboxPanel />
+				</Suspense>
 			</SidebarProvider>
 		)
 	},
