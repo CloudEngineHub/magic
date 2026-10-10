@@ -1677,6 +1677,7 @@ export default memo(function HTML(props: HTMLProps) {
 											"",
 									}}
 									showButtonText={context.showButtonText}
+										isMobile={context.isMobile}
 									getPopupContainer={context.getPopupContainer}
 									testId={
 										htmlTestIdsEnabled ? "html-design-style-button" : undefined
