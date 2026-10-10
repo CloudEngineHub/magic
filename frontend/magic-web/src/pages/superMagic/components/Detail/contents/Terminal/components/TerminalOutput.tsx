@@ -6,15 +6,21 @@ import { MonacoEditor, type editor } from "@/infrastructure/editors/monaco"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 import { useTerminalOutput } from "./useTerminalOutput"
 import { useStyles, useTerminalTheme } from "./style"
-import { TerminalOutputToolbar } from "./TerminalOutputToolbar"
+import { TerminalOutputToolbar, type TerminalOutputToolbarVariant } from "./TerminalOutputToolbar"
 
 interface TerminalOutputProps {
 	content: string
 	recordKey: string
 	showControls: boolean
+	toolbarVariant?: TerminalOutputToolbarVariant
 }
 
-export function TerminalOutput({ content, recordKey, showControls }: TerminalOutputProps) {
+export function TerminalOutput({
+	content,
+	recordKey,
+	showControls,
+	toolbarVariant,
+}: TerminalOutputProps) {
 	const { t } = useTranslation("super")
 	const { appearance } = useThemeMode()
 	const theme = useTerminalTheme()
@@ -186,6 +192,7 @@ export function TerminalOutput({ content, recordKey, showControls }: TerminalOut
 		<>
 			{showControls && (
 				<TerminalOutputToolbar
+					variant={toolbarVariant}
 					query={query}
 					onQueryChange={setQuery}
 					count={searchResult.count}

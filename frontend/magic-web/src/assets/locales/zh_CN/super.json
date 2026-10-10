@@ -6234,10 +6234,15 @@
 	},
 	"scriptExecution": {
 		"code": "执行代码",
+		"collapseCode": "收起代码",
 		"copyCode": "复制代码",
+		"expandCode": "展开代码",
+		"hasOutput": "有输出",
 		"noCodeToCopy": "没有可复制的代码",
+		"noExecutionOutput": "本次执行没有输出",
 		"noOutput": "无输出",
 		"output": "输出结果",
+		"resizePanels": "调整代码与结果高度",
 		"stderr": "标准错误",
 		"stdout": "标准输出",
 		"title": "Python 脚本"

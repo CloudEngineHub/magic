@@ -6233,10 +6233,15 @@
 	},
 	"scriptExecution": {
 		"code": "Code",
+		"collapseCode": "Hide code",
 		"copyCode": "Copy code",
+		"expandCode": "Show code",
+		"hasOutput": "Has output",
 		"noCodeToCopy": "No code to copy",
+		"noExecutionOutput": "This execution produced no output",
 		"noOutput": "No output",
 		"output": "Output",
+		"resizePanels": "Resize code and output panels",
 		"stderr": "Standard error",
 		"stdout": "Standard output",
 		"title": "Python script"
