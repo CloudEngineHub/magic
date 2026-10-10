@@ -17,6 +17,7 @@ from app.api.http_dto.response import (
 from app.utils.init_client_message_util import InitClientMessageUtil, InitializationError
 from agentlang.config.models.model_config import ModelConfig
 from agentlang.logger import get_logger
+from agentlang.utils.metadata import MetadataUtil
 
 router = APIRouter(prefix="/v1/models", tags=["模型列表"])
 
@@ -42,6 +43,7 @@ async def list_models() -> BaseResponse:
     url = f"{magic_service_host}/v1/models"
     params = {"with_info": "1", "with_dynamic_models": "1"}
     headers = {"user-authorization": authorization}
+    MetadataUtil.add_sandbox_id_header(headers)
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
