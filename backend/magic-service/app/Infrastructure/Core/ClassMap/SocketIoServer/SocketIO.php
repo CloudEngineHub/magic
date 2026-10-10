@@ -114,8 +114,8 @@ class SocketIO implements OnMessageInterface, OnOpenInterface, OnCloseInterface
     /* @phpstan-ignore-next-line */
     public function onMessage($server, $frame): void
     {
-        // 链接不可用时，不再尝试推送消息
-        if (! $server->isAvailable()) {
+        // Swow 的连接对象通过组合持有 Socket，底层连接不可用时不再推送消息。
+        if (! $server->getSocket()->isAvailable()) {
             return;
         }
         try {
