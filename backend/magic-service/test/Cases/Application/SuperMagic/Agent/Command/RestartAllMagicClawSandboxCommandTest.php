@@ -15,6 +15,7 @@ use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use Hyperf\Command\Command as HyperfCommand;
 use Hyperf\Logger\LoggerFactory;
@@ -63,7 +64,7 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         self::assertSame(0, $tester->execute([]));
 
         self::assertSame([102, 103, 101], $this->spy->restartTopicIds, '跑得最久的沙箱必须先重启');
-        self::assertStringContainsString('created_at=2026-09-01T08:30:00Z', $tester->getDisplay());
+        self::assertStringContainsString('warm-102@2026-09-01T08:30:00Z', $tester->getDisplay());
     }
 
     public function testLimitTakesTheOldestSandboxesFirst(): void
@@ -117,7 +118,49 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         self::assertSame(0, $tester->execute([]));
 
         self::assertSame([101, 102], $this->spy->restartTopicIds);
-        self::assertStringContainsString('created_at=unknown', $tester->getDisplay());
+        self::assertStringContainsString('warm-101@unknown', $tester->getDisplay());
+    }
+
+    public function testDuplicateSandboxesOfOneTopicAreAllDeleted(): void
+    {
+        // 现网症状：话题表里的 sandbox_id 与实际 pod 漂移，同一话题下并存 72 天的老 pod 和刚建的新 pod。
+        // 重启必须把清单里看到的两个都删掉，只留最后重建的那一个。
+        $tester = $this->tester(
+            sandboxes: [
+                $this->sandbox('941300468243693569', 'Running', topicId: 101, createdAt: '2026-07-30T03:52:00Z'),
+                $this->sandbox('9675582091886593', 'Running', topicId: 101, createdAt: '2026-10-10T14:30:00Z'),
+            ],
+            topics: [101 => $this->topic(101, 11, '9675582091886593')],
+            claws: [11 => $this->claw('claw-1', 11)],
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('[DUPLICATE] code=claw-1, topic_id=101 有 2 个在跑的沙箱', $display);
+        self::assertStringContainsString('941300468243693569@2026-07-30T03:52:00Z', $display);
+        self::assertSame(['941300468243693569', '9675582091886593'], $this->spy->deletedSandboxIds, '老 pod 和新 pod 都要删掉');
+        self::assertSame([101], $this->spy->restartTopicIds, '同一个话题只重建一次');
+        self::assertStringContainsString('duplicates: 1', $display);
+        self::assertStringContainsString('deleted: 2', $display);
+    }
+
+    public function testDeleteFailureIsReportedButRestartStillProceeds(): void
+    {
+        $tester = $this->tester(
+            sandboxes: [$this->sandbox('warm-101', 'Running', topicId: 101)],
+            topics: [101 => $this->topic(101, 11, 'warm-101')],
+            claws: [11 => $this->claw('claw-1', 11)],
+            deleteFails: true,
+        );
+
+        self::assertSame(0, $tester->execute([]));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('[DELETE_FAIL] code=claw-1, sandbox_id=warm-101', $display);
+        self::assertStringContainsString('[1/1] [OK] code=claw-1', $display, '删不掉也要继续重建，但必须显式报出来');
+        self::assertSame([], $this->spy->deletedSandboxIds);
+        self::assertSame([101], $this->spy->restartTopicIds);
     }
 
     public function testCommandKeepsItsRegisteredName(): void
@@ -146,11 +189,14 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         self::assertSame(0, $tester->execute([]));
 
         $display = $tester->getDisplay();
-        self::assertStringContainsString('[1/1] restarting code=claw-1, sandbox_id=warm-101, status=Running', $display);
+        self::assertStringContainsString('[1/1] restarting code=claw-1, topic_id=101, running_sandbox(es)=1 (warm-101@unknown)', $display);
+        self::assertStringContainsString('  [DELETE] code=claw-1, sandbox_id=warm-101', $display);
         self::assertStringContainsString('[1/1] [OK] code=claw-1, new_sandbox_id=sandbox-new', $display);
         self::assertStringContainsString('Targets: 1 Magic Claw sandbox(es) to restart, oldest first', $display);
         self::assertStringContainsString('project is not a Magic Claw', $display);
         self::assertSame([101], $this->spy->restartTopicIds, '只允许重启属于 Magic Claw 的沙箱');
+        self::assertSame(['warm-101'], $this->spy->deletedSandboxIds, '删除的是清单里看到的 pod，而不是话题表里的 id');
+        self::assertStringContainsString('deleted: 1', $display);
         self::assertStringContainsString('listed: 2', $display);
         self::assertStringContainsString('restarted: 1', $display);
         self::assertStringContainsString('skipped: 1', $display);
@@ -383,8 +429,9 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         array $topics,
         array $claws,
         bool $restartFails = false,
+        bool $deleteFails = false,
     ): CommandTester {
-        return new CommandTester($this->command($sandboxes, $topics, $claws, $restartFails));
+        return new CommandTester($this->command($sandboxes, $topics, $claws, $restartFails, $deleteFails));
     }
 
     /**
@@ -397,6 +444,7 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         array $topics,
         array $claws,
         bool $restartFails = false,
+        bool $deleteFails = false,
     ): TestableRestartAllMagicClawSandboxCommand {
         $topicDomainService = $this->createMock(TopicDomainService::class);
         $topicDomainService->method('getTopicsByIds')->willReturn(array_values($topics));
@@ -407,7 +455,7 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         $command = new TestableRestartAllMagicClawSandboxCommand(
             new RestartCommandClawDomainService($claws),
             $topicDomainService,
-            new RestartCommandAgentAppService($this->spy, $sandboxes),
+            new RestartCommandAgentAppService($this->spy, $sandboxes, $deleteFails),
             $loggerFactory,
             $this->spy,
             $restartFails,
@@ -426,6 +474,9 @@ final class RestartCommandSpy
 
     /** @var int[] 被真正重启的 topic ID */
     public array $restartTopicIds = [];
+
+    /** @var string[] 重启前被删掉的 sandbox ID */
+    public array $deletedSandboxIds = [];
 }
 
 /**
@@ -479,7 +530,19 @@ readonly class RestartCommandAgentAppService extends AgentAppService
     public function __construct(
         private RestartCommandSpy $spy,
         private array $sandboxes,
+        private bool $deleteFails = false,
     ) {
+    }
+
+    public function stopSandbox(string $sandboxId): GatewayResult
+    {
+        if ($this->deleteFails) {
+            throw new RuntimeException('gateway refused to delete ' . $sandboxId);
+        }
+
+        $this->spy->deletedSandboxIds[] = $sandboxId;
+
+        return GatewayResult::success();
     }
 
     public function listSandboxes(array $statuses = []): SandboxListResult

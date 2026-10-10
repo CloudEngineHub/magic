@@ -127,7 +127,8 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
 
         $targets = [];
         $skippedByReason = [];
-        $handledTopicIds = [];
+        // 按话题聚合：同一话题可能同时存在多个 pod（话题表里的 sandbox_id 与实际 pod 漂移过），
+        // 只按“第一个”处理会把其余的留成孤儿，所以这里把该话题名下所有在跑的 pod 都收进来。
         foreach ($sandboxes as $sandbox) {
             $sandboxId = (string) $sandbox['sandbox_id'];
             $status = (string) $sandbox['status'];
@@ -150,13 +151,18 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
             }
 
             $topicId = $topic->getId();
-            if (isset($handledTopicIds[$topicId])) {
-                $skippedByReason[sprintf('topic %d already handled by another sandbox', $topicId)][] = ['sandbox_id' => $sandboxId, 'status' => $status];
-                continue;
+            if (! isset($targets[$topicId])) {
+                $targets[$topicId] = ['claw' => $claw, 'topic' => $topic, 'sandboxes' => []];
             }
-            $handledTopicIds[$topicId] = true;
+            $targets[$topicId]['sandboxes'][] = $sandbox;
+        }
 
-            $targets[] = ['claw' => $claw, 'topic' => $topic, 'sandbox' => $sandbox];
+        $targets = array_values($targets);
+        $duplicateCount = 0;
+        foreach ($targets as $target) {
+            if (count($target['sandboxes']) > 1) {
+                ++$duplicateCount;
+            }
         }
 
         $skippedCount = 0;
@@ -173,6 +179,8 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
         $stats = [
             'listed' => count($sandboxes),
             'matched' => count($targets),
+            'duplicates' => $duplicateCount,
+            'deleted' => 0,
             'restarted' => 0,
             'skipped' => $skippedCount,
             'failed' => 0,
@@ -202,22 +210,57 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
             $ordinal = $index + 1;
             $claw = $target['claw'];
             $topic = $target['topic'];
-            $sandboxId = (string) $target['sandbox']['sandbox_id'];
-            $status = (string) $target['sandbox']['status'];
-            $createdAt = (string) $target['sandbox']['created_at'];
+            /** @var array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $staleSandboxes */
+            $staleSandboxes = $target['sandboxes'];
+            $sandboxIds = array_column($staleSandboxes, 'sandbox_id');
+            $oldestSandbox = $staleSandboxes[0];
 
             $this->line(sprintf(
-                '[%d/%d] restarting code=%s, sandbox_id=%s, status=%s, created_at=%s...',
+                '[%d/%d] restarting code=%s, topic_id=%d, running_sandbox(es)=%d (%s)',
                 $ordinal,
                 $total,
                 $claw->getCode(),
-                $sandboxId,
-                $status,
-                $createdAt === '' ? 'unknown' : $createdAt
+                $topic->getId(),
+                count($sandboxIds),
+                implode(', ', array_map(
+                    static fn (array $sandbox): string => sprintf('%s@%s', $sandbox['sandbox_id'], $sandbox['created_at'] === '' ? 'unknown' : $sandbox['created_at']),
+                    $staleSandboxes
+                ))
             ));
 
             $attemptStartedAt = microtime(true);
             try {
+                // 关键：删“清单里看到的”全部 pod，而不是话题表里记的那一个。
+                // 表里的 sandbox_id 与实际 pod 漂移过时（线上出现过同一龙虾两个 pod），
+                // 只删表里那个会把真正在跑的 pod 留成孤儿。
+                foreach ($sandboxIds as $sandboxIdToDelete) {
+                    try {
+                        $this->agentAppService->stopSandbox((string) $sandboxIdToDelete);
+                        ++$stats['deleted'];
+                        $this->line(sprintf('  [DELETE] code=%s, sandbox_id=%s', $claw->getCode(), $sandboxIdToDelete));
+                        $this->logger->info('Stale Magic Claw sandbox deleted before restart', [
+                            'code' => $claw->getCode(),
+                            'topic_id' => $topic->getId(),
+                            'sandbox_id' => $sandboxIdToDelete,
+                        ]);
+                    } catch (Throwable $deleteError) {
+                        // 删不掉不能阻断重建，但必须显式报出来，否则又会留下重复 pod。
+                        $this->error(sprintf(
+                            '  [DELETE_FAIL] code=%s, sandbox_id=%s, error=%s',
+                            $claw->getCode(),
+                            $sandboxIdToDelete,
+                            $deleteError->getMessage()
+                        ));
+                        $this->logger->error('Failed to delete stale Magic Claw sandbox before restart', [
+                            'code' => $claw->getCode(),
+                            'topic_id' => $topic->getId(),
+                            'sandbox_id' => $sandboxIdToDelete,
+                            'exception' => get_class($deleteError),
+                            'error' => $deleteError->getMessage(),
+                        ]);
+                    }
+                }
+
                 $restartedSandboxId = $this->restartSandbox($topic);
                 $duration = microtime(true) - $attemptStartedAt;
                 ++$stats['restarted'];
@@ -235,21 +278,20 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
                     'organization_code' => $topic->getUserOrganizationCode(),
                     'project_id' => $topic->getProjectId(),
                     'topic_id' => $topic->getId(),
-                    'previous_sandbox_id' => $sandboxId,
-                    'previous_status' => $status,
-                    'previous_sandbox_created_at' => $createdAt,
+                    'previous_sandbox_ids' => $sandboxIds,
+                    'previous_sandbox_created_at' => $oldestSandbox['created_at'],
                     'sandbox_id' => $restartedSandboxId,
                     'duration_seconds' => round($duration, 3),
                 ]);
             } catch (Throwable $e) {
                 ++$stats['failed'];
                 $this->error(sprintf(
-                    '[%d/%d] [FAIL] code=%s, sandbox_id=%s, topic_id=%d, error=%s',
+                    '[%d/%d] [FAIL] code=%s, topic_id=%d, sandbox_ids=%s, error=%s',
                     $ordinal,
                     $total,
                     $claw->getCode(),
-                    $sandboxId,
                     $topic->getId(),
+                    implode(',', $sandboxIds),
                     $e->getMessage()
                 ));
                 $this->logger->error('Failed to restart Magic Claw sandbox', [
@@ -258,7 +300,7 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
                     'organization_code' => $topic->getUserOrganizationCode(),
                     'project_id' => $topic->getProjectId(),
                     'topic_id' => $topic->getId(),
-                    'sandbox_id' => $sandboxId,
+                    'sandbox_ids' => $sandboxIds,
                     'exception' => get_class($e),
                     'error' => $e->getMessage(),
                 ]);
@@ -284,7 +326,7 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
      *
      * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}> $sandboxes
      * @param array<string, int> $statusCounts
-     * @param array<int, array{claw: MagicClawEntity, topic: TopicEntity, sandbox: array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}}> $targets
+     * @param array<int, array{claw: MagicClawEntity, topic: TopicEntity, sandboxes: array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}>}> $targets
      * @param array<string, array<int, array{sandbox_id: string, status: string}>> $skippedByReason
      * @param string[] $statusFilter
      */
@@ -315,23 +357,40 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
             $this->line(sprintf('Targets: %d Magic Claw sandbox(es) to restart, oldest first', count($targets)));
         }
 
+        // 同一个话题下有多个 pod = 话题表 sandbox_id 与实际 pod 漂移过，重启前必须都清掉。
+        foreach ($targets as $target) {
+            if (count($target['sandboxes']) < 2) {
+                continue;
+            }
+            $this->line(sprintf(
+                '[DUPLICATE] code=%s, topic_id=%d 有 %d 个在跑的沙箱：%s',
+                $target['claw']->getCode(),
+                $target['topic']->getId(),
+                count($target['sandboxes']),
+                implode(', ', array_map(
+                    static fn (array $sandbox): string => sprintf('%s@%s', $sandbox['sandbox_id'], $sandbox['created_at'] === '' ? 'unknown' : $sandbox['created_at']),
+                    $target['sandboxes']
+                ))
+            ));
+        }
+
         if ($skippedByReason !== []) {
             $this->line('Skipped: ' . self::formatSkipReasons($skippedByReason));
         }
 
         if ($dryRun) {
             foreach ($targets as $index => $target) {
-                $sandbox = $target['sandbox'];
                 $this->line(sprintf(
-                    '[TARGET] %d/%d code=%s, sandbox_id=%s, status=%s, created_at=%s, topic_id=%d, project_id=%d',
+                    '[TARGET] %d/%d code=%s, topic_id=%d, project_id=%d, deletes=%s, recreates=1',
                     $index + 1,
                     count($targets),
                     $target['claw']->getCode(),
-                    $sandbox['sandbox_id'],
-                    $sandbox['status'],
-                    $sandbox['created_at'] === '' ? 'unknown' : $sandbox['created_at'],
                     $target['topic']->getId(),
-                    $target['topic']->getProjectId()
+                    $target['topic']->getProjectId(),
+                    implode(', ', array_map(
+                        static fn (array $sandbox): string => sprintf('%s@%s', $sandbox['sandbox_id'], $sandbox['created_at'] === '' ? 'unknown' : $sandbox['created_at']),
+                        $target['sandboxes']
+                    ))
                 ));
             }
             return;
@@ -358,7 +417,7 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
      * 长任务的心跳：每 PROGRESS_EVERY 个目标，或距上次打印超过 PROGRESS_INTERVAL_SECONDS 就打一行，
      * 带已完成数、耗时和 ETA，方便判断还要等多久。
      *
-     * @param array{listed: int, matched: int, restarted: int, skipped: int, failed: int} $stats
+     * @param array{listed: int, matched: int, duplicates: int, deleted: int, restarted: int, skipped: int, failed: int} $stats
      */
     private function printProgress(array &$stats, int $ordinal, int $total, float $startedAt): void
     {
@@ -606,7 +665,7 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
     }
 
     /**
-     * @param array{listed: int, matched: int, restarted: int, skipped: int, failed: int} $stats
+     * @param array{listed: int, matched: int, duplicates: int, deleted: int, restarted: int, skipped: int, failed: int} $stats
      * @param array<string, int> $statusCounts
      * @param string[] $statusFilter
      */
@@ -617,6 +676,8 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
         $this->line('  status_filter: ' . ($statusFilter === [] ? self::STATUS_FILTER_ANY . ' (disabled)' : implode(',', $statusFilter)));
         $this->line('  listed: ' . $stats['listed']);
         $this->line('  matched: ' . $stats['matched']);
+        $this->line('  duplicates: ' . $stats['duplicates']);
+        $this->line('  deleted: ' . $stats['deleted']);
         $this->line('  restarted: ' . $stats['restarted']);
         $this->line('  skipped: ' . $stats['skipped']);
         $this->line('  failed: ' . $stats['failed']);
