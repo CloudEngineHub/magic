@@ -381,19 +381,6 @@ function NewUserBenefitsCard() {
 	}, [open, userInfo?.magic_id])
 
 	/**
-	 * A run takes the screen and gives it back on its own schedule, so the card follows it instead of
-	 * working it out from anything it knows. It has nothing to work it out from: every task leads to
-	 * the same thing from the card's side, and the run that opens the introduction dialog is not one
-	 * the card ever asked for.
-	 */
-	useEffect(() => {
-		const syncRun = () => setRunActive(isHomeOnboardingRunActive())
-		syncRun()
-		window.addEventListener(HOME_ONBOARDING_RUN_EVENT, syncRun)
-		return () => window.removeEventListener(HOME_ONBOARDING_RUN_EVENT, syncRun)
-	}, [])
-
-	/**
 	 * Opens a task's guided flow — both the "开始体验" of an unfinished task and the "回看" of a
 	 * finished one. The dialog is closed first on purpose: while a modal dialog is open Radix
 	 * disables pointer events on `body`, so a tour overlay mounted behind it would be rendered but
