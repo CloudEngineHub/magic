@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useDebounce, useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 
@@ -26,6 +27,9 @@ import {
 } from "./shared-workspace-tab-state"
 
 const SHARED_WORKSPACE_PAGE_SIZE = 100
+
+/** Search-param key that persists the currently selected shared-workspace tab. */
+const TAB_SEARCH_PARAM_KEY = "tab"
 
 const TAB_TO_COLLABORATION_TYPE: Record<SharedWorkspaceTab, CollaborationProjectType> = {
 	sharedWithMe: CollaborationProjectType.Received,
@@ -104,11 +108,16 @@ function deriveCreatorOptionsFromProjects(projects: SharedWorkspaceProject[]) {
 export function useSharedWorkspacePage(): UseSharedWorkspacePageReturn {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
+	const [searchParams, setSearchParams] = useSearchParams()
 	const requestSeqByTabRef = useRef<Record<SharedWorkspaceTab, number>>({
 		sharedWithMe: 0,
 		sharedByMe: 0,
 	})
-	const [tab, setTab] = useState<SharedWorkspaceTab>("sharedWithMe")
+	// Restore the tab from the URL so returning to this page keeps the user's last
+	// selection instead of falling back to the default "sharedWithMe".
+	const [tab, setTab] = useState<SharedWorkspaceTab>(() =>
+		searchParams.get(TAB_SEARCH_PARAM_KEY) === "sharedByMe" ? "sharedByMe" : "sharedWithMe",
+	)
 	const [searchValue, setSearchValue] = useState("")
 	const debouncedSearchValue = useDebounce(searchValue.trim(), { wait: 300 })
 	const [tabState, setTabState] = useState(createInitialTabStateMap)
@@ -243,6 +252,11 @@ export function useSharedWorkspacePage(): UseSharedWorkspacePageReturn {
 
 		setTab(nextTab)
 		setSelectedCreatorIds([])
+		// Persist the tab to the URL query (replace, so switching tabs adds no history
+		// entry); the default tab clears the query to keep the URL clean.
+		setSearchParams(nextTab === "sharedByMe" ? { [TAB_SEARCH_PARAM_KEY]: "sharedByMe" } : {}, {
+			replace: true,
+		})
 	})
 
 	/**
