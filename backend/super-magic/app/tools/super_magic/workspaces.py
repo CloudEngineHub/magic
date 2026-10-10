@@ -47,7 +47,7 @@ class GetWorkspace(ProductTool[GetWorkspaceParams]):
 
 
 class CreateWorkspaceParams(ProductParams):
-    name: str = Field(..., min_length=1, max_length=255, description="New workspace name.")
+    name: str = Field(..., min_length=1, max_length=50, description="New workspace name.")
 
 
 @tool(name="create_workspace", code_mode_only=True)
@@ -63,7 +63,7 @@ class CreateWorkspace(ProductTool[CreateWorkspaceParams]):
 
 class UpdateWorkspaceParams(ProductParams):
     workspace_id: str = Field(..., description="Exact workspace ID.")
-    name: str = Field(..., min_length=1, max_length=255, description="Replacement workspace name.")
+    name: str = Field(..., min_length=1, max_length=50, description="Replacement workspace name.")
 
 
 @tool(name="update_workspace", code_mode_only=True)
