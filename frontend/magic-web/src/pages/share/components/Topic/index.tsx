@@ -38,7 +38,7 @@ import { useTranslation } from "react-i18next"
 import ProjectSider from "@/pages/superMagic/components/ProjectSider"
 import BackToLatestButton from "@/pages/superMagic/components/MessageList/components/BackToLatestButton"
 import type { MessageListScrollAdapter } from "@/pages/superMagic/components/MessageList/message-list-scroll-adapter"
-import { filterClickableMessage } from "@/pages/superMagic/utils/handleMessage"
+import { filterPanelMessage } from "@/pages/superMagic/utils/handleMessage"
 import { history } from "@/routes/history"
 import { RouteName } from "@/routes/constants"
 import { messagesTransformer } from "../MessageList/utils"
@@ -289,14 +289,14 @@ function Topic({
 
 			const lastDetailMessage = [...targetMessages]
 				.reverse()
-				.find((msg) => filterClickableMessage(msg))
-			if (filterClickableMessage(lastDetailMessage))
+				.find((msg) => filterPanelMessage(msg))
+			if (filterPanelMessage(lastDetailMessage))
 				setAutoDetail({
 					...lastDetailMessage.tool.detail,
 					id: lastDetailMessage.tool.id,
 					name: lastDetailMessage.tool.name,
 				})
-			if (isMobile) {
+			if (isMobile && filterPanelMessage(lastDetailMessage)) {
 				handlePreviewDetail({
 					...lastDetailMessage.tool.detail,
 					id: lastDetailMessage.tool.id,
@@ -349,7 +349,7 @@ function Topic({
 		timerRef.current.timer = setInterval(() => {
 			if (currentIndex < messagesWithoutRevoked.length) {
 				const newMessage = messagesWithoutRevoked[currentIndex]
-				if (filterClickableMessage(newMessage)) {
+				if (filterPanelMessage(newMessage)) {
 					setAutoDetail?.({
 						...newMessage?.tool?.detail,
 						id: newMessage?.tool?.id,
@@ -421,7 +421,7 @@ function Topic({
 		timerRef.current.timer = setInterval(() => {
 			if (currentIndex < messagesWithoutRevoked.length) {
 				const newMessage = messagesWithoutRevoked[currentIndex]
-				if (filterClickableMessage(newMessage)) {
+				if (filterPanelMessage(newMessage)) {
 					setAutoDetail?.({
 						...newMessage?.tool?.detail,
 						id: newMessage?.tool?.id,
@@ -556,7 +556,7 @@ function Topic({
 		// 确保消息列表已加载且不是文件分享场景
 		if (!isFileShare && messageList.length > 0 && detailRef.current) {
 			// 检查是否有工具调用消息
-			const hasToolMessages = messageList.some((msg) => filterClickableMessage(msg))
+			const hasToolMessages = messageList.some((msg) => filterPanelMessage(msg))
 			if (hasToolMessages) {
 				// 延迟打开，确保Detail组件已完全初始化
 				// 使用默认行为：如果没有激活的文件tab则激活playbackTab
@@ -749,7 +749,7 @@ function Topic({
 		// 查找所有消息中带有详情的最后一条
 		const lastDetailItem = [...messagesWithoutRevoked]
 			.reverse()
-			.find((item) => filterClickableMessage(item))
+			.find((item) => filterPanelMessage(item))
 		if (lastDetailItem && !isFileShare) {
 			setAutoDetail({
 				...lastDetailItem.tool.detail,
@@ -1249,6 +1249,7 @@ function Topic({
 										viewportRef={messageContainerRef}
 									>
 										<MessageList
+											allowDownload={allowDownloadProjectFile === true}
 											topicId={topicId || data?.project_id || ""}
 											messageList={messageList}
 											onSelectDetail={(detail) => {
@@ -1422,6 +1423,7 @@ function Topic({
 									className="h-full w-full overflow-y-auto overflow-x-hidden p-2.5"
 								>
 									<MessageList
+										allowDownload={allowDownloadProjectFile === true}
 										topicId={topicId || data?.project_id || ""}
 										messageList={messageList}
 										onSelectDetail={(detail) => {

@@ -39,7 +39,7 @@ describe("MagicReloadApi", () => {
 		expect(typeof message.timestamp).toBe("number")
 		expect(message.timestamp).toBeGreaterThanOrEqual(before)
 		expect(message.timestamp).toBeLessThanOrEqual(after)
-		expect(origin).toBe("*")
+		expect(origin).toBe(window.location.origin)
 	})
 
 	it("调用 window.reload() 使用同一个宿主刷新桥接", () => {

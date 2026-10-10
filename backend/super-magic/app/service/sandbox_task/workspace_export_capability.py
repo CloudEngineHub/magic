@@ -22,6 +22,8 @@ async def run_workspace_export(
         source_path=str(payload.get("source_path") or ""),
         archive_root=str(payload.get("archive_root") or ""),
         file_name=str(payload.get("file_name") or ""),
+        exclude_paths=payload.get("exclude_paths"),
+        skills_md_hash=payload.get("skills_md_hash"),
         progress_callback=lambda: update_status(SandboxTaskStatus.FINALIZING),
     )
     return result

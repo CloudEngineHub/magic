@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from agentlang.context.tool_context import ToolContext
@@ -64,6 +64,8 @@ class AddElementsService:
         project_path: str,
         items: Sequence[AddElementCommand],
         tool_context: ToolContext | None = None,
+        *,
+        on_placeholders_created: Callable[[AddElementsResult], Awaitable[None]] | None = None,
     ) -> AddElementsResult:
         """创建 Element，并按请求组装 Content、布局和初始 Connection。"""
         generated: list[GenerationSubmissionCommand] = []
@@ -91,12 +93,16 @@ class AddElementsService:
                 element_id = item.element_id or new_canvas_id("element")
                 if project.canvas.get_element(element_id) is not None:
                     raise CanvasDomainError("ELEMENT_ALREADY_EXISTS", f"Element {element_id} already exists.")
+                content = item.content
+                element_name = item.name
+                # 只传 Content 生图名称时，文件与画布标题都沿用该名称；显式 Element 名称优先。
+                if not element_name and content is not None and content.is_generated and content.generation_parameters:
+                    element_name = content.generation_parameters.name
                 element = CanvasElement(
                     element_id=element_id,
                     element_type=item.element_type,
-                    properties=ElementProperties(name=item.name),
+                    properties=ElementProperties(name=element_name),
                 )
-                content = item.content
                 if element.element_type == "video-edit" and content is None:
                     raise CanvasDomainError("VIDEO_EDIT_CONTENT_REQUIRED", "Video Edit Element requires Content.")
                 if element.element_type in {"frame", "group"}:
@@ -270,6 +276,9 @@ class AddElementsService:
             )
         except CanvasDomainError as error:
             raise CanvasApplicationOperations.batch_error(list(item_list), current_item_ref, error) from error
+        # 事务成功后才公布真实 ID；生成尚未完成也能定位，失败回滚的元素不会成为导航目标。
+        if generated and on_placeholders_created is not None:
+            await on_placeholders_created(result)
         result = await self.generation_submission_service.submit_generated(project_path, result, generated, tool_context)
         result_items = {item.item_ref: item for item in result.items}
         for composition in compositions:

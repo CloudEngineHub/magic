@@ -24,7 +24,9 @@ import type {
 	BatchSaveInfo,
 	UploadFileWithKey,
 	FailedFileInfo,
+	UploadedTaskTarget,
 } from "./types"
+import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
 import magicToast from "@/components/base/MagicToaster/utils"
 
 const logger = Logger.createLogger("UploadTaskService", {
@@ -44,6 +46,9 @@ export class FolderUploadTask implements IFolderUploadTask {
 	displayName: string
 	displayFileExtension?: string
 	isSingleFileUploadTask: boolean
+	uploadedTarget: UploadedTaskTarget | undefined = undefined
+	uploadIdentityKey: string | undefined
+	private uploadedRootPath: string | undefined
 	fileKeysMap: Map<string, string> // 文件名到自定义fileKey的映射
 	state: FolderUploadState
 	options: FolderUploadOptions
@@ -94,6 +99,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 		},
 	) {
 		this.id = generateTaskId()
+		this.uploadIdentityKey = getFileReferenceIdentityKey() ?? undefined
 		this.projectId = options.projectId
 		this.projectName = options.projectName
 		this.workspaceId = options.workspaceId
@@ -135,6 +141,10 @@ export class FolderUploadTask implements IFolderUploadTask {
 			(this.isSingleFileUploadTask
 				? firstFile?.name || this.projectName
 				: firstPathParts[0] || firstFile?.name || this.projectName)
+		this.uploadedRootPath =
+			!this.isSingleFileUploadTask && firstPathParts.length > 1
+				? firstPathParts[0]
+				: undefined
 		this.displayFileExtension = options.displayFileExtension
 
 		// 计算总字节数
@@ -675,13 +685,25 @@ export class FolderUploadTask implements IFolderUploadTask {
 			this.updateState({ currentPhase: "uploading" })
 
 			// 返回 API 响应中的文件信息
-			return (batchSaveResult as any[]).map((file: any) => ({
+			const savedFiles = (
+				batchSaveResult as Awaited<ReturnType<FolderUploadTask["saveBatchToProject"]>>
+			).map((file) => ({
 				file_id: file.file_id,
 				file_key: file.file_key,
 				file_name: file.file_name,
 				file_size: file.file_size,
-				relative_file_path: file.relative_file_path,
+				relative_file_path: file.relative_file_path || "",
 			}))
+			const savedFile = savedFiles[0]
+			if (this.isSingleFileUploadTask && savedFile?.file_id && !this.options.fileScope) {
+				this.setUploadedTarget({
+					fileId: savedFile.file_id,
+					fileName: savedFile.file_name,
+					relativePath: savedFile.relative_file_path,
+					isDirectory: false,
+				})
+			}
+			return savedFiles
 		} catch (error) {
 			// 直接透传原始 Error，避免只保留 message 而丢失堆栈。
 			console.error("Failed to save batch to project:", error)
@@ -762,6 +784,14 @@ export class FolderUploadTask implements IFolderUploadTask {
 
 				if (fileId) {
 					this.folderIdMap.set(folderPath, fileId)
+					if (folderPath === this.uploadedRootPath && !this.options.fileScope) {
+						this.setUploadedTarget({
+							fileId,
+							fileName: folderName,
+							relativePath: folderPath,
+							isDirectory: true,
+						})
+					}
 					logger.log("[createFolderStructure] Folder created", {
 						folderPath,
 						file_id: fileId,
@@ -788,6 +818,10 @@ export class FolderUploadTask implements IFolderUploadTask {
 				currentDirectoryPath: sortedPaths[index + 1] || "",
 			})
 		}
+	}
+
+	private setUploadedTarget(target: UploadedTaskTarget): void {
+		this.uploadedTarget = target
 	}
 
 	private getCreatedFolderId(folderPath: string): string | undefined {
@@ -1387,6 +1421,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 	}
 
 	releaseFileReferences(): void {
+		// uploadedTarget 与身份供完成记录使用；文件和中间映射仍在此释放。
 		// Completed tasks no longer need original File objects; release them to reduce memory.
 		this.files = []
 		this.fileKeysMap.clear()

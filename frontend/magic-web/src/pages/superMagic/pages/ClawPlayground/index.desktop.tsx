@@ -10,9 +10,9 @@ import { useCompositeDetailPanelController } from "@/pages/superMagic/hooks/useC
 import TopicDesktopPanels from "@/pages/superMagic/pages/TopicPage/components/TopicDesktopPanels"
 import { useTopicFiles } from "@/pages/superMagic/pages/TopicPage/hooks/useTopicFiles"
 import {
-	FileActionVisibilityProvider,
-	HIDE_CLAW_FILE_ACTIONS,
-} from "@/pages/superMagic/providers/file-action-visibility-provider"
+	FileAccessProvider,
+	CLAW_FILE_CONFIG,
+} from "@/pages/superMagic/providers/FileAccessProvider"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import useNavigate from "@/routes/hooks/useNavigate"
@@ -129,7 +129,7 @@ function ClawPlaygroundDesktop() {
 
 	return (
 		<HostConversationProvider selectedProject={selectedProject} topicStore={store.topicStore}>
-			<FileActionVisibilityProvider value={HIDE_CLAW_FILE_ACTIONS}>
+			<FileAccessProvider {...CLAW_FILE_CONFIG}>
 				{dialog}
 				<TopicDesktopPanels
 					containerClassName="flex h-full w-full min-w-0 items-center overflow-hidden"
@@ -197,7 +197,7 @@ function ClawPlaygroundDesktop() {
 					onOpenChange={setIsEditDialogOpen}
 					onUpdated={store.setMagicClaw}
 				/>
-			</FileActionVisibilityProvider>
+			</FileAccessProvider>
 		</HostConversationProvider>
 	)
 }

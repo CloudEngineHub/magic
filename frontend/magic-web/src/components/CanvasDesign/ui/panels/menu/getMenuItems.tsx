@@ -10,15 +10,20 @@ import {
 	FileDown,
 	FolderSearch,
 	Frame,
+	Layers,
 	LockKeyhole,
 	LockOpen,
 	MessageSquarePlus,
 	MessageSquareReply,
 	Pencil,
 	Trash2,
+	ArchiveX,
+	ArchiveRestore,
 } from "lucide-react"
+import { toast } from "sonner"
+import type { ImageDiscardActionOptions } from "../../../runtime/actions/types"
 import { FrameDotted, VIPTag } from "../../primitives/icons/index"
-import type { LayerElement } from "../../../runtime/document/types"
+import type { ImageElementContent, LayerElement } from "../../../runtime/document/types"
 import { ElementTypeEnum } from "../../../runtime/document/types"
 import type { MenuItem, MenuOption, MenuSource } from "./types"
 import type { Canvas } from "../../../runtime/core/Canvas"
@@ -28,6 +33,7 @@ import type { TFunction } from "../../../public/i18n-types"
 import { getSelectedFileElements } from "../../../runtime/shared/ids"
 import type { MagicPermissions } from "../../../public/magic-types"
 import type { CanvasDownloadMenuContext } from "./resolveCanvasDownloadMenuContext"
+import styles from "./index.module.css"
 
 interface RenameMenuConfig {
 	menuSource?: MenuSource | null
@@ -82,6 +88,22 @@ export function getMenuItems({
 	// 判断选中元素的状态
 	const allUnlocked = selectedElements.every((el) => el.locked !== true)
 	const allVisible = selectedElements.every((el) => el.visible !== false)
+	const imageTargets = selectedElements.flatMap((element) => {
+		if (element.type !== ElementTypeEnum.Image) return []
+		const contentId = canvas.getEffectiveContentId(element.id)
+		return contentId ? [{ elementId: element.id, contentId }] : []
+	})
+	const allDiscarded = imageTargets.every(
+		(target) =>
+			canvas.getEffectiveContent<ImageElementContent>(target.elementId)?.discarded === true,
+	)
+	const discardOptions: ImageDiscardActionOptions = {
+		targets: imageTargets,
+		discarded: !allDiscarded,
+	}
+	const canDiscard =
+		imageTargets.length === selectedElements.length &&
+		canvas.userActionRegistry.canExecute("image.set-discarded", discardOptions)
 	const selectedFileElements = getSelectedFileElements(canvas)
 	const hasSelectedImageElement = selectedFileElements.some((element) => element.type === "image")
 	const hasSelectedVideoElement = selectedFileElements.some((element) => element.type === "video")
@@ -122,6 +144,18 @@ export function getMenuItems({
 		visible: () => {
 			return canvas.userActionRegistry.canExecute("edit.copy")
 		},
+	}
+
+	const duplicateOptions = { elementIds: selectedElements.map((element) => element.id) }
+	const duplicateMenuItem: MenuItem = {
+		id: "duplicate",
+		label: translate("menu.duplicate", "创建副本"),
+		icon: CopyPlus,
+		shortcut: getShortcutDisplay("edit.duplicate"),
+		onClick: () => {
+			void canvas.userActionRegistry.execute("edit.duplicate", duplicateOptions)
+		},
+		visible: () => canvas.userActionRegistry.canExecute("edit.duplicate", duplicateOptions),
 	}
 
 	const copyPngMenuItem: MenuItem = {
@@ -321,14 +355,33 @@ export function getMenuItems({
 		},
 	}
 
-	const conversationBlock: MenuItem[] = includeConversationMenuItems
-		? [addToCurrentConversationMenuItem, addToNewConversationMenuItem, { type: "separator" }]
-		: []
+	const discardedMenuItem: MenuOption = {
+		id: "set-discarded",
+		label: allDiscarded
+			? translate("menu.restoreDraft", "取消废稿标记")
+			: translate("menu.discardDraft", "标记为废稿"),
+		description: allDiscarded
+			? translate("menu.restoreDraftDescription", "恢复正常显示")
+			: translate("menu.discardDraftDescription", "保留图片，淡化显示"),
+		icon: allDiscarded ? ArchiveRestore : ArchiveX,
+		rightContentRender: allDiscarded
+			? () => (
+					<span className={styles.draftStatus}>
+						{translate("menu.discardedStatus", "废稿")}
+					</span>
+				)
+			: undefined,
+		onClick: () => {
+			if (!canvas.userActionRegistry.canExecute("image.set-discarded", discardOptions)) {
+				toast.error(translate("menu.draftTargetChanged", "图片状态已变化，请重新操作"))
+				return
+			}
+			void canvas.userActionRegistry.execute("image.set-discarded", discardOptions)
+		},
+	}
+	const discardedBlock: MenuItem[] = canDiscard ? [discardedMenuItem, { type: "separator" }] : []
 
-	return [
-		copyMenuItem,
-		copyPngMenuItem,
-		{ type: "separator" },
+	const layerMenuItems: MenuOption[] = [
 		{
 			id: "move-up",
 			label: translate("menu.moveUp", "上移一层"),
@@ -376,6 +429,26 @@ export function getMenuItems({
 			visible: () => {
 				return canvas.userActionRegistry.canExecute("layer.move-to-bottom")
 			},
+		},
+	]
+
+	const conversationBlock: MenuItem[] = includeConversationMenuItems
+		? [addToCurrentConversationMenuItem, addToNewConversationMenuItem, { type: "separator" }]
+		: []
+
+	return [
+		copyMenuItem,
+		duplicateMenuItem,
+		copyPngMenuItem,
+		{ type: "separator" },
+		...discardedBlock,
+		{
+			id: "layer",
+			label: translate("menu.layer", "图层"),
+			icon: Layers,
+			children: layerMenuItems,
+			// 四项都不可见时隐藏分组，避免只读或锁定选区出现空子菜单。
+			visible: () => layerMenuItems.some((item) => !item.visible || item.visible()),
 		},
 		{ type: "separator" },
 		{
@@ -436,13 +509,42 @@ export function getMenuItems({
 		{ type: "separator" },
 		{
 			id: "delete",
-			label: translate("menu.delete", "删除"),
+			label: translate("menu.removeFromCanvas", "从画布移除"),
+			help:
+				selectedElements.length > 0 &&
+				selectedElements.every((element) => element.type === ElementTypeEnum.Image)
+					? translate(
+							"menu.removeImageDescription",
+							"仅移除画布中的元素，项目里的图片文件仍会保留。",
+						)
+					: translate("menu.removeElementDescription", "只移除画布元素"),
+			variant: "destructive",
 			icon: Trash2,
 			onClick: () => {
 				canvas.userActionRegistry.execute("edit.delete")
 			},
 			visible: () => {
 				return canvas.userActionRegistry.canExecute("edit.delete")
+			},
+		},
+		{
+			id: "delete-image-file",
+			label: translate("menu.deleteImageFile", "移除并删除文件…"),
+			help: translate(
+				"menu.deleteImageFileDescription",
+				"移除画布中的图片，并删除对应项目文件。删除的文件可从全局「回收站」恢复，但不会自动恢复画布中的元素和位置。多版本图片可在确认弹框中选择删除范围。",
+			),
+			variant: "destructive",
+			icon: Trash2,
+			onClick: () => {
+				void canvas.userActionRegistry.execute("edit.delete-image-file", {
+					elementId: currentElementId ?? selectedIds[0],
+				})
+			},
+			visible: () => {
+				return canvas.userActionRegistry.canExecute("edit.delete-image-file", {
+					elementId: currentElementId ?? selectedIds[0],
+				})
 			},
 		},
 	]

@@ -778,6 +778,8 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         $entity->setId($model->id);
         $entity->setWorkspaceId($model->workspace_id);
         $entity->setDeletedAt($model->deleted_at ? (string) $model->deleted_at : null);
+        // 回收站预览仍按项目所属组织授权及签名，不能让实体默认空值误判为跨组织访问。
+        $entity->setUserOrganizationCode($model->user_organization_code);
 
         return $entity;
     }

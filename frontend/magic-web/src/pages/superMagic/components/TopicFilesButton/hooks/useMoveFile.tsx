@@ -29,7 +29,10 @@ import {
 	mergeStaticDependencyFileIds,
 	resolveSingleDocumentStaticDependencies,
 } from "@/pages/superMagic/utils/staticDependencies"
-import type { CanvasProjectPathRepairResult } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
+import {
+	resolveCanvasOperationConfirmTitleKey,
+	type CanvasProjectPathRepairResult,
+} from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasProjectPathRepair"
 import type { DirectorySource } from "../../SelectPathModal/components/SelectDirectoryModal/types"
 
 export interface FileMoveFailure {
@@ -414,7 +417,12 @@ export function useMoveFile(options: UseMoveFileOptions = {}) {
 						})
 					: ""
 				const modal = MagicModal.confirm({
-					title: t("topicFiles.canvasOperationRisk.title"),
+					title: t(
+						resolveCanvasOperationConfirmTitleKey({
+							requiresCanvasRisk: canvasRisk.shouldWarn,
+							hasPathRepairFailures: repairFailures.length > 0,
+						}),
+					),
 					content: [riskContent, repairContent].filter(Boolean).join("\n\n"),
 					icon: (
 						<IconAlertTriangleFilled

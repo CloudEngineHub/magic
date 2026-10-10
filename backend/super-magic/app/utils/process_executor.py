@@ -123,6 +123,13 @@ class ProcessExecutor:
 
         CliManagerService.apply_path_to_env(env_vars)
 
+        # 平台值，始终覆盖：Agent 把构建缓存、编译中间产物等可重建的碎文件指到这里。
+        box_dir = PathManager.get_box_dir()
+        env_vars["MAGIC_BOX_DIR"] = str(box_dir)
+        # Python 默认把字节码写进源码旁的 __pycache__/，在 .workspace 运行时会在网络盘上生成碎文件；
+        # 设置后统一写到 .box/pycache 下的镜像路径，运行结果不变。用户自行设置时不覆盖。
+        env_vars.setdefault("PYTHONPYCACHEPREFIX", str(box_dir / "pycache"))
+
         return env_vars
 
     @staticmethod

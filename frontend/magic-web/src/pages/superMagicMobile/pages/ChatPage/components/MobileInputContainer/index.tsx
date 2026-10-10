@@ -7,7 +7,8 @@ import {
 } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import {
 	SceneStateProvider,
-	sceneStateStore,
+	sceneStateStore as globalSceneStateStore,
+	useOptionalSceneStateStore,
 } from "@/pages/superMagic/components/MainInputContainer/stores"
 import { ScenePanelVariant } from "@/pages/superMagic/components/MainInputContainer/components/LazyScenePanel/types"
 import type { SceneItem } from "@/pages/superMagic/types/skill"
@@ -42,7 +43,8 @@ function MobileInputRouteRenderer({
 		editorContext,
 	})
 
-	if (isRecordSummaryEditor) {
+	// Blank homes always use the send-first composer, even when the default employee is recording.
+	if (isRecordSummaryEditor && !editorContext.deferProjectCreationUntilSend) {
 		return (
 			<MobileRecordSummaryRoute
 				editorContext={editorContext}
@@ -69,6 +71,7 @@ const MobileInputContainer = observer(
 		{ editorContext, editorNodes, enableReEditMessageFromPubSub },
 		ref,
 	) {
+		const sceneStateStore = useOptionalSceneStateStore() ?? globalSceneStateStore
 		const scenes = useMemo(
 			() =>
 				superMagicModeService.getModeConfigWithLegacy(
@@ -90,7 +93,7 @@ const MobileInputContainer = observer(
 
 			const isSceneValid = scenes.some((scene) => scene.id === currentScene.id)
 			if (!isSceneValid) sceneStateStore.setCurrentScene(null)
-		}, [editorContext.topicMode, scenes])
+		}, [editorContext.topicMode, scenes, sceneStateStore])
 
 		const handleCloseRealInput = useMemoizedFn(() => {
 			if (document.activeElement instanceof HTMLElement) document.activeElement.blur()

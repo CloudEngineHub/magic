@@ -1,3 +1,4 @@
+import { serializeWechatChatContent } from "../extensions/wechat-chat-history/transform"
 import { useMemoizedFn } from "ahooks"
 import type { MutableRefObject, RefObject } from "react"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
@@ -24,7 +25,10 @@ interface UseMessageSendHandlerParams {
 	collectMentionItemsFromEditor: () => MentionListItem[]
 	promoteCanvasPendingMentions?: () => void
 	onSendStart?: () => void
+	/** Blank home creation may fail before dispatch; keep its draft until success is confirmed. */
+	awaitSendSuccess?: boolean
 	isMountedRef: MutableRefObject<boolean>
+	isSendSuspended?: () => boolean
 }
 
 export default function useMessageSendHandler({
@@ -40,9 +44,12 @@ export default function useMessageSendHandler({
 	collectMentionItemsFromEditor,
 	promoteCanvasPendingMentions,
 	onSendStart,
+	awaitSendSuccess = false,
 	isMountedRef,
+	isSendSuspended,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
+		if (isSendSuspended?.()) return
 		if (store.draftStore.isDraftSwitching) return
 		if (voiceInputRef.current?.isRecording) voiceInputRef.current.stopRecording()
 		// Sending is also an explicit confirmation path when the editor never received focus.
@@ -75,9 +82,12 @@ export default function useMessageSendHandler({
 			content = store.editorStore.value
 				? serializeInspectorContent(
 						transformMarkerImagePathsToWorkspaceAbsolute(
-							replaceSuperPlaceholderToString(store.editorStore.value, {
-								validate: true,
-							}),
+							replaceSuperPlaceholderToString(
+								serializeWechatChatContent(store.editorStore.value),
+								{
+									validate: true,
+								},
+							),
 							projectFilesStore.workspaceFilesList,
 						),
 					)
@@ -104,6 +114,7 @@ export default function useMessageSendHandler({
 		if (!isQueueDraft) store.draftStore.startSendingGuard()
 		const mentionItems = collectMentionItemsFromEditor()
 
+		const draftValue = store.editorStore.value
 		const sendResult = onSend?.({
 			value: content,
 			topicMode,
@@ -118,9 +129,21 @@ export default function useMessageSendHandler({
 			await sendResult
 			return
 		}
+		if (awaitSendSuccess) {
+			let success = false
+			try {
+				success = (await sendResult) === true
+			} finally {
+				if (!success) {
+					store.draftStore.resetSendingGuard()
+					store.draftStore.saveDraft({ value: store.editorStore.value })
+				}
+			}
+			if (!success) return
+		}
 
 		store.draftStore.createSentDraft({
-			value: store.editorStore.value,
+			value: awaitSendSuccess ? draftValue : store.editorStore.value,
 			onError: (error) => {
 				if (isMountedRef.current) {
 					console.error("Failed to clear draft:", error)

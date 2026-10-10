@@ -1,6 +1,7 @@
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { memo, useMemo, useRef, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -22,7 +23,10 @@ import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import { useFilePathAttachmentDownload } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/hooks/useFilePathAttachmentDownload"
-import { resolveAttachmentList } from "@/pages/superMagic/components/MessageList/message-render-contract"
+import {
+	canRenderFinalAttachments,
+	resolveAttachmentList,
+} from "@/pages/superMagic/components/MessageList/message-render-contract"
 import {
 	HomeOnboardingAnchor,
 	startHomeOnboardingDeliverableRunIfDue,
@@ -47,10 +51,13 @@ export const AttachmentSection = observer(function AttachmentSection({
 	className,
 }: AttachmentSectionProps) {
 	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
-	const attachments = resolveAttachmentList(node, fallbackNode) as AttachmentProps[]
+	const canDisplayAttachments = canRenderFinalAttachments(node)
+	const attachments = canDisplayAttachments
+		? (resolveAttachmentList(node, fallbackNode) as AttachmentProps[])
+		: []
 
 	const rawFilePathAttachments = useMemo(() => {
-		if (!prevSuperMessageId) return []
+		if (!canDisplayAttachments || !prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
 			Record<string, unknown> | undefined
 		const prevContent =
@@ -64,7 +71,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 			seenReferences.add(referenceKey)
 			return true
 		})
-	}, [prevSuperMessageId])
+	}, [canDisplayAttachments, prevSuperMessageId])
 
 	const seenFilePaths = new Set<string>()
 	const filePathAttachments = rawFilePathAttachments.flatMap((attachment) => {
@@ -97,6 +104,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 		onSelectDetail?.(item)
 	})
 
+	if (!canDisplayAttachments) return null
 	if (filePathAttachments.length > 0) {
 		return <FilePathAttachmentList attachments={filePathAttachments} className={className} />
 	}
@@ -134,6 +142,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 	 * block it belongs on.
 	 */
 	const sectionRef = useRef<HTMLDivElement>(null)
+	const { permissions: access } = useFileAccess()
 
 	if (attachments.length === 0) return null
 
@@ -201,7 +210,9 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 						<div
 							key={attachment.filePath}
 							className="w-full cursor-pointer"
-							onClick={() => openAttachment(attachment)}
+							onClick={() => {
+								if (access.view && access.preview) openAttachment(attachment)
+							}}
 							data-testid="open-file-by-path"
 						>
 							<div
@@ -218,26 +229,31 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 								<span className="mr-2 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground">
 									{attachment.fileName}
 								</span>
-								<MagicIcon
-									className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
-									onClick={(event: MouseEvent) => {
-										event.stopPropagation()
-										openAttachment(attachment)
-									}}
-									component={IconEye}
-									stroke={2}
-									size={18}
-								/>
-								<MagicIcon
-									className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
-									onClick={(event: MouseEvent) => {
-										event.stopPropagation()
-										downloadFileByPath(attachment)
-									}}
-									component={IconDownload}
-									stroke={2}
-									size={18}
-								/>
+								{access.view && access.preview && (
+									<MagicIcon
+										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
+										onClick={(event: MouseEvent) => {
+											event.stopPropagation()
+											if (access.view && access.preview)
+												openAttachment(attachment)
+										}}
+										component={IconEye}
+										stroke={2}
+										size={18}
+									/>
+								)}
+								{access.download && (
+									<MagicIcon
+										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
+										onClick={(event: MouseEvent) => {
+											event.stopPropagation()
+											downloadFileByPath(attachment)
+										}}
+										component={IconDownload}
+										stroke={2}
+										size={18}
+									/>
+								)}
 							</div>
 						</div>
 					))}

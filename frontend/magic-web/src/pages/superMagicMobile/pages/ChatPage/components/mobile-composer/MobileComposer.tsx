@@ -13,7 +13,10 @@ import type {
 } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { useSceneSelection } from "@/pages/superMagic/components/MainInputContainer/hooks"
 import { useCurrentSceneConfig } from "@/pages/superMagic/components/MainInputContainer/hooks/useCurrentSceneConfig"
-import { sceneStateStore } from "@/pages/superMagic/components/MainInputContainer/stores"
+import {
+	sceneStateStore as globalSceneStateStore,
+	useOptionalSceneStateStore,
+} from "@/pages/superMagic/components/MainInputContainer/stores"
 import SuperMagicVoiceInput from "@/pages/superMagic/components/MessageEditor/components/VoiceInput"
 import { MessageEditorStoreProvider } from "@/pages/superMagic/components/MessageEditor/stores"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -27,6 +30,8 @@ import MobileVoiceEdgeGlow from "./MobileVoiceEdgeGlow"
 import MobileScenePanels from "./MobileScenePanels"
 import useMobileComposerLogic from "./useMobileComposerLogic"
 import { useInvalidTopicModeFallback } from "@/pages/superMagic/components/MessageEditor/hooks/useInvalidTopicModeFallback"
+import EditorHost from "@/pages/superMagic/components/MessageEditor/components/WechatChatHistory/EditorHost"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 interface MobileComposerProps {
 	editorContext: SceneEditorContext
@@ -41,12 +46,13 @@ const mobileComposerEditorClassName = cn(
 	"[&_.ProseMirror]:break-words [&_.ProseMirror]:text-sm [&_.ProseMirror]:outline-none",
 	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0",
 	"[&_.ProseMirror_.is-editor-empty:first-child]:relative",
+	// Absolute pseudo-elements shrink to their content unless their width is explicit.
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:pointer-events-none",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:absolute",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:left-0",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:top-0",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:block",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:max-w-[84%]",
+	"[&_.ProseMirror_.is-editor-empty:first-child::before]:w-full",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:overflow-hidden",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:whitespace-nowrap",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:text-ellipsis",
@@ -216,6 +222,7 @@ function MobileComposerComponent({
 	scenes,
 	enableReEditMessageFromPubSub = false,
 }: MobileComposerProps) {
+	const sceneStateStore = useOptionalSceneStateStore() ?? globalSceneStateStore
 	const { isActive, InvalidModeFallback, onCreateTopic } =
 		useInvalidTopicModeFallback(editorContext)
 	const [isAddSheetOpen, setIsAddSheetOpen] = useState(false)
@@ -232,7 +239,10 @@ function MobileComposerComponent({
 		editorContext,
 		enableReEditMessageFromPubSub,
 	})
-	const isRecordSummaryMode = editorContext.topicMode === TopicMode.RecordSummary
+	const wechatScrollRef = useRef<HTMLDivElement>(null)
+	const isRecordSummaryMode =
+		editorContext.topicMode === TopicMode.RecordSummary &&
+		!editorContext.deferProjectCreationUntilSend
 	const effectiveScenes =
 		scenes ??
 		superMagicModeService.getModeConfigWithLegacy(
@@ -505,9 +515,13 @@ function MobileComposerComponent({
 		) : null
 
 	const composerInnerContent = (
-		<div className="relative" data-queue-editor-surface>
+		<div
+			className={cn("relative", logic.wechatChat.activeId && "flex h-full min-h-0 flex-col")}
+			data-queue-editor-surface
+		>
 			<div
 				className={cn(
+					logic.wechatChat.activeId && "flex min-h-0 flex-1 flex-col",
 					shouldShowVoiceRecordingUi &&
 						"pointer-events-none absolute inset-x-0 top-0 opacity-0",
 				)}
@@ -522,19 +536,34 @@ function MobileComposerComponent({
 				</div>
 
 				<div
-					className="px-4 pb-1.5 pt-3"
-					onPaste={logic.handlePaste}
+					className={cn(
+						"px-4 pb-1.5 pt-3",
+						logic.wechatChat.activeId && "flex min-h-0 flex-1 flex-col",
+					)}
+					onPasteCapture={logic.handlePaste}
 					onCompositionStart={logic.handleCompositionStart}
 					onCompositionEnd={logic.handleCompositionEnd}
 					data-testid="handle-paste"
 				>
-					<div
-						ref={logic.domRef}
-						className={mobileComposerEditorClassName}
-						data-testid="mobile-composer-editor"
+					<ScrollArea
+						className={cn(
+							logic.wechatChat.activeId ? "min-h-0 flex-1" : "max-h-[100px]",
+						)}
+						viewportRef={wechatScrollRef}
+						viewportClassName={logic.wechatChat.activeId ? "h-full" : "max-h-[100px]"}
 					>
-						<EditorContent editor={logic.tiptapEditor} />
-					</div>
+						<div
+							ref={logic.domRef}
+							className={cn(
+								mobileComposerEditorClassName,
+								"max-h-none [&_.ProseMirror]:max-h-none [&_.ProseMirror]:overflow-visible",
+								logic.wechatChat.activeId && "[&_.ProseMirror>p]:hidden",
+							)}
+							data-testid="mobile-composer-editor"
+						>
+							<EditorContent editor={logic.tiptapEditor} />
+						</div>
+					</ScrollArea>
 				</div>
 
 				<div className="flex items-center justify-between gap-2 pb-2 pl-1.5 pr-2">
@@ -575,7 +604,7 @@ function MobileComposerComponent({
 								"size-10 rounded-full bg-primary text-background shadow-none",
 								sendButtonDisabled && "disabled:opacity-40",
 							)}
-							disabled={sendButtonDisabled}
+							disabled={sendButtonDisabled || logic.wechatChat.activeId !== null}
 							onClick={handleActionClick}
 							aria-label={shouldShowInterrupt ? "interrupt task" : "send message"}
 							data-testid="mobile-composer-send-button"
@@ -596,11 +625,21 @@ function MobileComposerComponent({
 			)}
 		</div>
 	)
+	const composerEditor = (
+		<EditorHost
+			editor={logic.tiptapEditor}
+			controller={logic.wechatChat}
+			fileUploadStore={logic.store.fileUploadStore}
+			scrollRef={wechatScrollRef}
+		>
+			{composerInnerContent}
+		</EditorHost>
+	)
 
 	const content = isRecordSummaryMode ? (
 		<>
 			{taskAndQueueNodes}
-			{composerInnerContent}
+			{composerEditor}
 			<MobileComposerAddSheet
 				open={isAddSheetOpen}
 				onOpenChange={setIsAddSheetOpen}
@@ -652,7 +691,7 @@ function MobileComposerComponent({
 						renderScenePanels={!shouldRenderPanelsInHeader}
 					/>
 				</div>
-				{composerInnerContent}
+				{composerEditor}
 			</div>
 
 			<MobileComposerAddSheet

@@ -3,9 +3,10 @@ import type { ExportFailureCode, ExportFailureDiagnostic, ExportFailurePhase } f
 export type ExportFidelityFailureKind = "script" | "render-timeout" | "capture" | "page-size"
 
 /**
- * A fidelity failure means continuing would produce a PPTX with missing or incomplete content.
- * These errors must abort the whole export even when callers allow ordinary failed pages to be
- * skipped, otherwise a large batch can appear successful while silently dropping charts.
+ * A fidelity failure means the current page may contain missing or incomplete content.
+ * The page pipeline can turn it into a diagnostic placeholder when skipFailedPages is enabled;
+ * the error remains marked as a fidelity error so the host can report it for repair. Errors from
+ * the destination, packaging Worker, ZIP writer, or finalization are still terminal failures.
  */
 export class ExportFidelityError extends Error {
 	readonly code = "HTML2PPTX_FIDELITY_FAILURE"

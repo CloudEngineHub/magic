@@ -5,6 +5,7 @@ import {
 	iterateExportSlides,
 	iterateSingleExportSlide,
 	prepareExportSlides,
+	resolvePptExportSlides,
 	prepareSingleSlideExport,
 } from "@/pages/superMagic/services/pptService"
 import {
@@ -13,7 +14,7 @@ import {
 	iteratePreparedPptxPages,
 	openPptxDestination,
 	startPptxStreamingExportFromFactory,
-	supportsPptxFileStreaming,
+	supportsPptxExport,
 	type PptxStreamingPageSourceFactory,
 } from "@/pages/superMagic/services/pptxStreamingExport"
 import {
@@ -265,15 +266,15 @@ async function openPptxDestinationInDirectory(
 	return createPptxDestinationLease(await handle.createWritable())
 }
 
-function createPptxTargetStreamingInput(
+async function createPptxTargetStreamingInput(
 	target: ClientBatchExportTarget,
 	attachments: ClientBatchAttachment[],
 	access?: ClientBatchExportRunOptions["access"],
 	fileApi?: ClientBatchExportRunOptions["fileApi"],
-): PptxTargetStreamingInput {
+): Promise<PptxTargetStreamingInput> {
 	const entryFile = getTargetEntryFile(target)
 	const displayConfig = getTargetDisplayConfig(target)
-	const slidePaths: string[] = Array.isArray(displayConfig?.slides) ? displayConfig.slides : []
+	let slidePaths: string[] = Array.isArray(displayConfig?.slides) ? displayConfig.slides : []
 	const fileId = entryFile.file_id || target.item.file_id || ""
 	const sourceFileName = entryFile.file_name || target.item.file_name || target.item.name
 	const fileName = String(displayConfig?.name || sourceFileName || "export").replace(
@@ -281,6 +282,19 @@ function createPptxTargetStreamingInput(
 		"",
 	)
 
+	const isDeck = slidePaths.length > 0
+	if (isDeck) {
+		const resolved = await resolvePptExportSlides({
+			slidePaths,
+			displayConfig,
+			attachmentList: attachments,
+			mainFileId: fileId,
+			access,
+			fileApi,
+		})
+		slidePaths = resolved.slidePaths
+		if (!slidePaths.length) throw new Error("No visible slides to export")
+	}
 	return {
 		fileName,
 		pageCount: slidePaths.length || 1,
@@ -289,6 +303,7 @@ function createPptxTargetStreamingInput(
 			const pages: AsyncIterable<StreamingHtmlPageInput> = slidePaths.length
 				? iterateExportSlides({
 						slidePaths,
+						configResolved: true,
 						attachmentList: attachments,
 						mainFileId: fileId,
 						mainFileName: sourceFileName,
@@ -319,6 +334,7 @@ function createPptxTargetStreamingInput(
 }
 
 async function streamPptxTarget(options: {
+	input?: PptxTargetStreamingInput
 	target: ClientBatchExportTarget
 	attachments: ClientBatchAttachment[]
 	destination: PptxDestination
@@ -331,7 +347,9 @@ async function streamPptxTarget(options: {
 	const { target, attachments, destination, fileName, onProgress, signal, access, fileApi } =
 		options
 	throwIfAborted(signal)
-	const input = createPptxTargetStreamingInput(target, attachments, access, fileApi)
+	const input =
+		options.input ??
+		(await createPptxTargetStreamingInput(target, attachments, access, fileApi))
 	let warnings = 0
 	const fontResolver = documentExportService.get()?.getPptFontResolver?.()
 	const handle = startPptxStreamingExportFromFactory(input.createPages, (firstPage) => ({
@@ -378,19 +396,28 @@ async function runStreamingPptxBatch(options: {
 	let warnings = 0
 	if (signal?.aborted) return createCancelledBatchResult(successCount, failures, warnings)
 
-	if (targets.length === 1 && supportsPptxFileStreaming()) {
-		const input = createPptxTargetStreamingInput(
-			targets[0],
-			resolveAttachmentScope(targets[0]),
-			access,
-			fileApi,
-		)
-		const lease = await openPptxDestination({ suggestedName: input.fileName })
-		if (!lease) {
-			return { successCount: 0, failureCount: 0, failures, warnings: 0, cancelled: true }
-		}
+	if (targets.length === 1 && supportsPptxExport()) {
+		let lease: Awaited<ReturnType<typeof openPptxDestination>> = null
 		try {
+			// Open the picker in the click gesture, before canonical config needs a network read.
+			const target = targets[0]
+			const suggestedName = String(
+				getTargetDisplayConfig(target)?.name ||
+					getTargetEntryFile(target).file_name ||
+					"export",
+			).replace(/\.html?$/i, "")
+			lease = await openPptxDestination({ suggestedName })
+			if (!lease) {
+				return { successCount: 0, failureCount: 0, failures, warnings: 0, cancelled: true }
+			}
+			const input = await createPptxTargetStreamingInput(
+				target,
+				resolveAttachmentScope(target),
+				access,
+				fileApi,
+			)
 			const result = await streamPptxTarget({
+				input,
 				target: targets[0],
 				attachments: resolveAttachmentScope(targets[0]),
 				destination: lease.destination,
@@ -402,7 +429,7 @@ async function runStreamingPptxBatch(options: {
 			warnings += result.warnings
 			successCount = 1
 		} catch (error) {
-			await lease.abort(error).catch(() => undefined)
+			await lease?.abort(error).catch(() => undefined)
 			if (signal?.aborted || isAbortError(error)) {
 				return createCancelledBatchResult(successCount, failures, warnings)
 			}
@@ -438,12 +465,13 @@ async function runStreamingPptxBatch(options: {
 		if (signal?.aborted) return createCancelledBatchResult(successCount, failures, warnings)
 		const target = targets[index]
 		const attachments = resolveAttachmentScope(target)
-		const input = createPptxTargetStreamingInput(target, attachments, access, fileApi)
-		const fileName = uniqueFileName(ensurePptxFileName(input.fileName), usedNames)
 		let lease: ReturnType<typeof createPptxDestinationLease> | null = null
 		try {
+			const input = await createPptxTargetStreamingInput(target, attachments, access, fileApi)
+			const fileName = uniqueFileName(ensurePptxFileName(input.fileName), usedNames)
 			lease = await openPptxDestinationInDirectory(directory, fileName)
 			const result = await streamPptxTarget({
+				input,
 				target,
 				attachments,
 				destination: lease.destination,

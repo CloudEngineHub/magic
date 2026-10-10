@@ -41,8 +41,8 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\MemberRole;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Event\ForkProjectStartEvent;
 use App\Domain\SuperMagic\Project\Event\ProjectForkEvent;
-use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Facade\ProjectForkRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -676,39 +676,6 @@ class ResourceShareAppService extends AbstractShareAppService
         }
 
         return $result;
-    }
-
-    private function assertHistoricalShareOwnerPermission(ResourceShareEntity $shareEntity): void
-    {
-        $resourceType = ResourceType::tryFrom($shareEntity->getResourceType());
-        $resourceKind = match ($resourceType) {
-            ResourceType::Topic => ResourceType::Topic->getBusinessName(),
-            ResourceType::Project => $this->microAppRepository->findByResourceIdWithTrashed($shareEntity->getResourceId()) !== null
-                ? 'micro_app'
-                : ResourceType::Project->getBusinessName(),
-            default => null,
-        };
-        if ($resourceKind === null) {
-            return;
-        }
-
-        if ($resourceType === ResourceType::Topic && $shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
-            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
-        }
-
-        $owner = $this->magicUserDomainService->getUserById($shareEntity->getCreatedUid());
-        if ($owner === null) {
-            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
-        }
-
-        // 访问已有分享时，应提示链接失效，而不是让访问者“换一种分享方式”。
-        if (! $this->isShareMethodAllowed(
-            MagicUserAuthorization::fromUserEntity($owner),
-            $resourceKind,
-            $shareEntity->getShareType()
-        )) {
-            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
-        }
     }
 
     public function getShareList(MagicUserAuthorization $userAuthorization, ResourceListRequestDTO $dto): array
@@ -1383,17 +1350,12 @@ class ResourceShareAppService extends AbstractShareAppService
         string $resourceId,
         DataIsolation $dataIsolation
     ): ShareMembersResponseDTO {
-        // 1. 获取分享信息
-        $shareEntity = $this->shareDomainService->getShareByResourceId($resourceId);
-
-        if ($shareEntity === null) {
-            ExceptionBuilder::throw(ShareErrorCode::NOT_FOUND, 'share.not_found', [$resourceId]);
-        }
-
-        // 2. 权限验证：只有分享创建者可以查看成员列表
-        if ($shareEntity->getCreatedUid() !== $userAuthorization->getId()) {
-            ExceptionBuilder::throw(ShareErrorCode::PERMISSION_DENIED, 'share.permission_denied', [$resourceId]);
-        }
+        // 取消分享后仍需回显成员配置；与分享设置复用创建者和组织权限校验。
+        $shareEntity = $this->validateSharePermission(
+            $userAuthorization,
+            $resourceId,
+            'share.permission_denied'
+        );
 
         // 3. 获取 target_ids
         $targetIds = $shareEntity->getTargetIdsArray();
@@ -1677,6 +1639,39 @@ class ResourceShareAppService extends AbstractShareAppService
             MemberRole::EDITOR,
             false,
         );
+    }
+
+    private function assertHistoricalShareOwnerPermission(ResourceShareEntity $shareEntity): void
+    {
+        $resourceType = ResourceType::tryFrom($shareEntity->getResourceType());
+        $resourceKind = match ($resourceType) {
+            ResourceType::Topic => ResourceType::Topic->getBusinessName(),
+            ResourceType::Project => $this->microAppRepository->findByResourceIdWithTrashed($shareEntity->getResourceId()) !== null
+                ? 'micro_app'
+                : ResourceType::Project->getBusinessName(),
+            default => null,
+        };
+        if ($resourceKind === null) {
+            return;
+        }
+
+        if ($resourceType === ResourceType::Topic && $shareEntity->getShareType() === ShareAccessType::TeamShare->value) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
+
+        $owner = $this->magicUserDomainService->getUserById($shareEntity->getCreatedUid());
+        if ($owner === null) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
+
+        // 访问已有分享时，应提示链接失效，而不是让访问者“换一种分享方式”。
+        if (! $this->isShareMethodAllowed(
+            MagicUserAuthorization::fromUserEntity($owner),
+            $resourceKind,
+            $shareEntity->getShareType()
+        )) {
+            ExceptionBuilder::throw(ShareErrorCode::SHARE_OWNER_PERMISSION_REVOKED, 'share.share_owner_permission_revoked', []);
+        }
     }
 
     private function isShareMethodAllowed(

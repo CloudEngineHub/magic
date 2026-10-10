@@ -51,6 +51,10 @@ export interface SceneEditorContext {
 	/** Optional rotating examples shown while the editor is empty */
 	promptCarousel?: EditorPromptCarouselConfig
 	draftKey?: DraftKey
+	/** Portal target for the scene editor; blank chat uses its own target during route transitions. */
+	sceneInputContainerId?: string
+	/** Blank composers upload temporary attachments without creating a project before send. */
+	deferProjectCreationUntilSend?: boolean
 	selectedTopic: Topic | null
 	selectedProject: ProjectListItem | null
 	selectedWorkspace?: Workspace | null
@@ -68,7 +72,7 @@ export interface SceneEditorContext {
 	agentCode?: string
 	setTopicMode?: (mode: TopicMode) => void
 	/** Runtime recovery that must not persist user preferences. */
-	recoverTopicMode?: (mode: TopicMode) => void
+	recoverTopicMode?: (mode: TopicMode, agentCode?: string | null) => void
 	topicExamplesMode?: TopicMode
 	size?: MessageEditorSize
 	className?: string
@@ -103,6 +107,8 @@ export interface SceneEditorContext {
 		content: JSONContent | undefined
 		mentionItems: MentionListItem[]
 	}) => void
+	/** Validate the destination before preparing a new mobile home message, including retries. */
+	beforeSend?: () => Promise<boolean>
 	onSendComplete?: (params: {
 		success: boolean
 		currentProject: ProjectListItem | null

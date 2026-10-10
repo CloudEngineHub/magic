@@ -1600,6 +1600,14 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	getTopicSandboxStatus({ id }: { id: string }) {
 		return fetch.get(`/api/v1/super-agent/admin/topic/${id}/sandbox`)
 	},
+	/**
+	 * @description 重启普通项目话题绑定的沙盒（服务端按升级语义执行）
+	 */
+	restartTopicSandbox({ topic_id }: { topic_id: string }) {
+		return fetch.put<{ sandbox_id: string }>("/api/v1/super-agent/sandbox/restart", {
+			topic_id,
+		})
+	},
 
 	/**
 	 * @description 通过工作区id获取话题列表
@@ -2258,6 +2266,10 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			page_size,
 			show_collaboration = 1,
 			sort_mode,
+			include_special = 0,
+			project_type,
+			sort_field,
+			sort_direction,
 		}: {
 			workspace_id?: string
 			project_name?: string
@@ -2265,12 +2277,27 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			page_size: number
 			show_collaboration?: number
 			sort_mode?: "workspace" | "recent"
+			include_special?: number
+			project_type?: "all" | "general" | "claw" | "micro-app" | "agent" | "skill"
+			sort_field?: "last_active_at" | "updated_at" | "created_at"
+			sort_direction?: "asc" | "desc"
 		},
 		options?: Omit<RequestConfig, "url">,
 	) {
 		return fetch.post<WithPage<ProjectListItem>>(
 			"/api/v1/super-agent/projects/participated",
-			{ workspace_id, project_name, page, page_size, show_collaboration, sort_mode },
+			{
+				workspace_id,
+				project_name,
+				page,
+				page_size,
+				show_collaboration,
+				sort_mode,
+				include_special,
+				project_type,
+				sort_field,
+				sort_direction,
+			},
 			options,
 		)
 	},

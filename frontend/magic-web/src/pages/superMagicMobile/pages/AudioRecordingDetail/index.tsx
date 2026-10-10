@@ -1138,6 +1138,7 @@ export default function MobileAudioRecordingDetailPage() {
 						setTopicRenameOpen(false)
 						setTopicActionItem(null)
 					},
+					testId: "mobile-recording-topic-rename-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
@@ -1145,6 +1146,7 @@ export default function MobileAudioRecordingDetailPage() {
 					onClick: () => void submitRecordingTopicRename(),
 					disabled: !topicRenameValue.trim(),
 					tone: "primary",
+					testId: "mobile-recording-topic-rename-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-4"
 			>
@@ -1172,12 +1174,14 @@ export default function MobileAudioRecordingDetailPage() {
 						setTopicDeleteOpen(false)
 						setTopicActionItem(null)
 					},
+					testId: "mobile-recording-topic-delete-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
 					ariaLabel: t("super:common.confirm"),
 					onClick: () => void confirmRecordingTopicDelete(),
 					tone: "destructive",
+					testId: "mobile-recording-topic-delete-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-6"
 			>

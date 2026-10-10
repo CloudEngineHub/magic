@@ -78,10 +78,16 @@ export function createPptxStreamingExporter(runtime: Html2PptxStreamingRuntime =
 /** Export an AsyncIterable page source to a caller-selected streaming destination. */
 export const exportPPTXStreaming = createPptxStreamingExporter()
 
+/** Compatibility Blob exporter for browsers without File System Access/OPFS. */
+export { createPptxLegacyExporter, exportPPTXLegacy } from "./pipeline/legacy-export"
+export { detectImageContentType, validateImageBlobResponse } from "./media/image-response"
 export {
-	detectImageContentType,
-	validateImageBlobResponse,
-} from "./media/image-response"
+	createBufferedPptxSink,
+	PPTX_MIME_TYPE,
+	type BufferedPptxSink,
+} from "./packaging/buffered-sink"
+export { createInMemoryStreamingStagingStore } from "./packaging/in-memory-staging-store"
+export type { InMemoryStreamingStagingStoreOptions } from "./packaging/in-memory-staging-store"
 
 async function runStreamingExportPipeline(
 	content: StreamingExportContent,
@@ -291,6 +297,10 @@ export type {
 	StagingPolicy,
 	StreamingExportContent,
 	StreamingExportHandle,
+	LegacyExportHandle,
+	LegacyExportOptions,
+	LegacyExportSummary,
+	StreamingOptionsBase,
 	StreamingHtmlPage,
 	StreamingHtmlPageInput,
 	ZipMode,

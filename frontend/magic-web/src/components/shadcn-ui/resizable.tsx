@@ -20,10 +20,12 @@ function ResizeGrip({
 	return (
 		<span
 			aria-hidden="true"
+			data-testid="resize-grip"
+			data-orientation={orientation}
 			className={cn(
 				"pointer-events-none relative z-10 flex shrink-0 gap-0.5 text-muted-foreground/[0.45] transition-colors group-hover/resize:text-muted-foreground group-focus-visible/resize:text-muted-foreground group-data-[resize-handle-active]/resize:text-muted-foreground motion-reduce:transition-none",
 				orientation === "vertical" &&
-					"flex-col group-hover/resize:text-blue-400 group-focus-visible/resize:text-blue-400 group-data-[dragging=true]/resize:text-blue-400 group-data-[resize-handle-active]/resize:text-blue-400",
+					"flex-col rounded-md border border-gray-200 bg-white px-0.5 py-1 group-hover/resize:text-blue-400 group-focus-visible/resize:text-blue-400 group-data-[dragging=true]/resize:text-blue-400 group-data-[resize-handle-active]/resize:text-blue-400",
 				className,
 			)}
 		>

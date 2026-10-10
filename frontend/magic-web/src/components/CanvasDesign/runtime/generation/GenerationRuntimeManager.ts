@@ -31,6 +31,7 @@ export interface GenerationAttemptTarget {
 }
 
 export interface GenerationAttempt {
+	startedAt: number
 	attemptId: string
 	operation: GenerationOperation
 	originElementId?: string
@@ -40,6 +41,7 @@ export interface GenerationAttempt {
 }
 
 export interface GenerationRuntimeTargetState extends GenerationAttemptTarget {
+	startedAt: number
 	attemptId: string
 	operation: GenerationOperation
 	originElementId?: string
@@ -115,6 +117,7 @@ export class GenerationRuntimeManager {
 		}
 
 		const attempt: GenerationAttempt = {
+			startedAt: Date.now(),
 			attemptId,
 			operation: options.operation,
 			originElementId: options.originElementId,
@@ -294,6 +297,7 @@ export class GenerationRuntimeManager {
 		target: GenerationAttemptTarget,
 	): GenerationRuntimeTargetState {
 		return {
+			startedAt: attempt.startedAt,
 			...target,
 			attemptId: attempt.attemptId,
 			operation: attempt.operation,

@@ -4,14 +4,24 @@ import { getFileReferenceIdentityKey } from "../../../services/userFileReference
 import type { ProjectListItem, Topic } from "../../../pages/Workspace/types"
 import type { AttachmentItem } from "../hooks/types"
 import { FileManager } from "./FileManager/FileManager"
+import { RecentFiles } from "./FileManager/RecentFiles"
+import { getFilePresentationIndex } from "../utils/file-presentation"
 import { requestProjectAttachmentsFullRefresh } from "../../../services/attachmentsTopicSync"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import type { ProjectFileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
-import type { FileManagerStateChangeOptions } from "../../Detail/components/FilesViewer/types"
+import type {
+	FileItem,
+	FileManagerAreaRequest,
+	FileManagerStateChangeOptions,
+} from "../../Detail/components/FilesViewer/types"
 
 export interface ProjectFileManagerProps {
+	onPreviewFile?: (file: FileItem, activate: boolean) => void
+	onPreviewRemoved?: (recordIds: string[]) => void
+
 	projectId: string
 	initialDirectoryId?: string
+	areaRequest?: FileManagerAreaRequest
 	attachments: AttachmentItem[]
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
@@ -66,6 +76,15 @@ export default observer(function ProjectFileManager({
 			allowEdit={allowEdit}
 			allowDownload={allowDownload}
 			onOpen={props.onFileClick}
+			placesBefore={
+				<RecentFiles
+					presentationIndex={getFilePresentationIndex(props.attachments)}
+					attachmentLoadState={props.attachmentLoadState}
+					context={{ kind: "project", projectId: props.projectId }}
+					onOpen={props.onFileClick}
+					getPopupContainer={() => null}
+				/>
+			}
 			onRefresh={() => requestProjectAttachmentsFullRefresh({ projectId: props.projectId })}
 		/>
 	)

@@ -23,6 +23,7 @@ import {
 } from "../../../runtime/document/types"
 import { useReferenceAudioSrc } from "../../previews/reference-media/useReferenceAudioSrc"
 import { useReferenceVideoPoster } from "../../previews/reference-media/useReferenceVideoPoster"
+import { useCanvasImagePreviewActions } from "../../previews/reference-media/useCanvasImagePreviewActions"
 import styles from "../drawer/index.module.css"
 
 const TOOLTIP_PREVIEW_MAX_SIZE = 250
@@ -186,12 +187,21 @@ export function useLayerMediaPreviewSource(
 		})
 	}, [crop, imageInfo])
 
+	const imageActions = useCanvasImagePreviewActions(
+		mediaType === "image" ? path : undefined,
+		fileName,
+		{
+			crop: normalizedCrop,
+			element: element.type === ElementTypeEnum.Image ? element : undefined,
+		},
+	)
 	const source = useMemo<MediaPreviewSource | null>(() => {
 		if (!path || !mediaType) return null
 
 		if (mediaType === "image") {
 			return {
 				mediaType,
+				imageActions,
 				thumbnailUrl: image.lowUrl,
 				previewUrl: fullImageUrl,
 				crop: normalizedCrop,
@@ -270,6 +280,7 @@ export function useLayerMediaPreviewSource(
 		path,
 		video,
 		visible,
+		imageActions,
 	])
 
 	const fallback =

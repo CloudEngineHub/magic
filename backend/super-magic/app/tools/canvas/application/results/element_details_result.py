@@ -46,6 +46,16 @@ class CanvasContentDetailResult:
     generation_parameters: JsonObject | None
     payload: JsonObject | None
     runtime: JsonObject | None
+    version_index: int = 1
+    file_name: str | None = None
+    generation_name: str | None = None
+    is_current: bool = False
+    is_main: bool = False
+    file_id: str | None = None
+    file_exists: bool | None = None
+    can_rename_file: bool = False
+    file_rename_reason: str | None = None
+    discarded: bool = False
 
     def to_dict(self) -> JsonObject:
         """转换为 Content 详情 JSON 对象。"""
@@ -60,6 +70,16 @@ class CanvasContentDetailResult:
             "generation_parameters": self.generation_parameters,
             "payload": self.payload,
             "runtime": self.runtime,
+            "version_index": self.version_index,
+            "file_name": self.file_name,
+            "generation_name": self.generation_name,
+            "is_current": self.is_current,
+            "is_main": self.is_main,
+            "file_id": self.file_id,
+            "file_exists": self.file_exists,
+            "can_rename_file": self.can_rename_file,
+            "file_rename_reason": self.file_rename_reason,
+            "discarded": True if self.discarded else None,
         }
         return {key: value for key, value in values.items() if value is not None}
 

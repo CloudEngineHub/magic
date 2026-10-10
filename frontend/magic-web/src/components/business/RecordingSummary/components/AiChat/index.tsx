@@ -576,12 +576,14 @@ const LiveRecordingAiChat = observer(function LiveRecordingAiChat(props: AiChatP
 						showLoading={showLoading}
 						currentTopicStatus={selectedTopic?.task_status}
 						handleSendMsg={handleSendMsg}
-						className={`${styles.messageList} min-h-0 flex-1`}
+						className={`${styles.messageList} min-h-0 flex-1 [--message-list-surface:rgb(255_255_255)]`}
 						classNames={{
-							scrollWrapper: "pt-[10px] pr-2",
+							// The virtualizer reads this padding directly from the rendered layout.
+							content: "pl-2 pt-[10px] pr-2",
 						}}
 						onFileClick={onFileClick}
-						stickyMessageClassName="top-0 [--sticky-message-mask-bg:rgb(255_255_255)] [--sticky-message-mask-fade-from:rgb(255_255_255)]"
+						// Padding stays inside the mask so the timestamp is not flush.
+						stickyMessageClassName="pt-2"
 					/>
 				)}
 			</MessageListProvider>

@@ -1,4 +1,4 @@
-import MarkdownIt from "markdown-it"
+import { parseMarkdownFileLinkSyntaxAt } from "./markdownFileLinkSyntax"
 import {
 	classifyMarkdownFileHref,
 	parseCanonicalWorkspaceHref,
@@ -71,70 +71,9 @@ export function escapeHtmlText(value: string): string {
 	})
 }
 
-const markdownLinkParser = new MarkdownIt({ html: false, linkify: false })
-
-interface MarkdownLinkSyntaxMatch {
-	label: string
-	href: string
-	startIndex: number
-	endIndex: number
-	fullMatch: string
-}
-
-function parseMarkdownLinkSyntaxAt(
-	content: string,
-	startIndex: number,
-): MarkdownLinkSyntaxMatch | null {
-	if (content[startIndex] !== "[" || content[startIndex - 1] === "!") return null
-
-	let index = startIndex + 1
-	let labelEnd = -1
-	let labelDepth = 0
-	while (index < content.length) {
-		if (content[index] === "\\") {
-			index += 2
-			continue
-		}
-		if (content[index] === "[") labelDepth++
-		if (content[index] === "]") {
-			if (labelDepth === 0) {
-				labelEnd = index
-				break
-			}
-			labelDepth--
-		}
-		index++
-	}
-	if (labelEnd === -1 || content[labelEnd + 1] !== "(") return null
-
-	index = labelEnd + 2
-	while (/[ \t\r\n]/.test(content[index] || "")) index++
-	// 复用 Markdown 语法规则，只记录原文区间，不重新序列化正文。
-	const destination = markdownLinkParser.helpers.parseLinkDestination(
-		content,
-		index,
-		content.length,
-	)
-	if (!destination.ok) return null
-	index = destination.pos
-	const destinationEnd = index
-	while (/[ \t\r\n]/.test(content[index] || "")) index++
-	if (index > destinationEnd && content[index] !== ")") {
-		const title = markdownLinkParser.helpers.parseLinkTitle(content, index, content.length)
-		if (!title.ok) return null
-		index = title.pos
-		while (/[ \t\r\n]/.test(content[index] || "")) index++
-	}
-	if (content[index] !== ")") return null
-
-	const endIndex = index + 1
-	return {
-		label: markdownLinkParser.utils.unescapeAll(content.slice(startIndex + 1, labelEnd)),
-		href: destination.str,
-		startIndex,
-		endIndex,
-		fullMatch: content.slice(startIndex, endIndex),
-	}
+function parseMarkdownLinkSyntaxAt(content: string, startIndex: number) {
+	const match = parseMarkdownFileLinkSyntaxAt(content, startIndex)
+	return match && !match.image ? match : null
 }
 
 function parseWorkspaceMarkdownLinkAt(

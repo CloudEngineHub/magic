@@ -64,7 +64,11 @@ import { exportPPTXStreaming } from "@magic/html2pptx"
 ```
 
 Version 2 removes the buffered `exportPPTX` and `generatePPTX` APIs. All exports must provide a
-caller-owned destination and use `exportPPTXStreaming`; there is no Blob or in-memory fallback.
+caller-owned destination and use `exportPPTXStreaming`. The package never chooses a Blob output
+destination by itself. A browser host that intentionally owns a buffered-download sink
+may mark that sink with `replayPolicy: "buffered"`; the export still runs through the Packaging
+Worker and may use an in-memory replay store when OPFS is unavailable. File-stream sinks remain
+OPFS-backed and are never silently converted to an unbounded memory export.
 
 The package must be built before a workspace consumer resolves its `dist` exports. Commercial
 applications may compose their own integration around these public exports, but no commercial

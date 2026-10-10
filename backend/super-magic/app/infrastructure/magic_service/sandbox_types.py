@@ -3,7 +3,7 @@
 from typing import Literal, Optional, TypedDict
 
 SandboxUpgradeScheduleOperation = Literal["upgrade_scheduled", "already_current"]
-SandboxRestartScheduleOperation = Literal["restart_scheduled"]
+SandboxRestartScheduleOperation = Literal["restart_requested"]
 
 
 class SandboxVersionData(TypedDict):
@@ -30,7 +30,6 @@ class SandboxUpgradeScheduleData(SandboxVersionData):
 class SandboxRestartScheduleData(TypedDict):
     sandbox_id: str
     operation: SandboxRestartScheduleOperation
-    delay_seconds: int
 
 
 __all__ = [

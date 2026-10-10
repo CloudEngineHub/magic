@@ -6,7 +6,7 @@ import asyncio
 import os
 import threading
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from agentlang.logger import get_logger
 from app.service.memory.runtime.extraction.memory_extraction_prompt_provider import (
@@ -26,14 +26,16 @@ class MemoryExtractionService:
 
     _run_lock_guard = threading.Lock()
     _run_lock = threading.Lock()
+    # 与进程级整理锁保持同一范围，重启时能取消外层任务，避免子 Agent
+    # 被中断后，外层仍继续发布档案和上传。
+    _tasks: ClassVar[set[asyncio.Task[None]]] = set()
 
     def __init__(
         self,
         prompt_provider: MemoryExtractionPromptProvider | None = None,
     ) -> None:
-        """初始化提示词提供者和后台任务强引用集合。"""
+        """初始化记忆整理提示词提供者。"""
         self._prompt_provider = prompt_provider or MemoryExtractionPromptProvider()
-        self._tasks: set[asyncio.Task[None]] = set()
 
     def submit(
         self,
@@ -41,6 +43,10 @@ class MemoryExtractionService:
         snapshot: "AgentContextSnapshot",
     ) -> bool:
         """提交当前回合；已有记忆整理任务运行时直接跳过并返回 False。"""
+        from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
+
+        if sandbox_restart_coordinator.is_restarting:
+            return False
         if not self._try_acquire_run_lock():
             source = snapshot.source
             logger.info(
@@ -67,6 +73,18 @@ class MemoryExtractionService:
             f"source={source.target.agent_name}<{source.agent_id}>, generation={generation}"
         )
         return True
+
+    @classmethod
+    async def interrupt_all(cls, timeout: float = 10.0) -> None:
+        """取消所有记忆提取外层任务，限时等待清理，不延迟强制重启。"""
+        tasks = [task for task in cls._tasks if not task.done()]
+        if not tasks:
+            return
+        for task in tasks:
+            task.cancel()
+        _, pending = await asyncio.wait(tasks, timeout=timeout)
+        if pending:
+            logger.warning("记忆提取任务未在重启收尾时限内结束: count=%s", len(pending))
 
     async def _run_extraction(
         self,

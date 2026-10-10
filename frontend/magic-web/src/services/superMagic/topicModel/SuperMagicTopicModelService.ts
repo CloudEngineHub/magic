@@ -1059,6 +1059,36 @@ class SuperMagicTopicModelService {
 		})
 
 		try {
+			// A mode owns its model list, so every level below "Topic" is only meaningful
+			// once the featured crew list has arrived. A cold start (nothing hydrated from
+			// storage yet) can reach this point first: settling with an empty list clears
+			// `isLoading` and leaves nothing to retry when the list lands, so the composer
+			// reports "no language model" forever and its send button stays disabled.
+			// `fetchModeList` joins the request the page already started, when there is one.
+			if (modelList.length === 0 && !superMagicModeService.isModeAvailabilityResolved) {
+				report("[Fallback] Waiting for featured mode list before cascading", {
+					topicMode,
+					agentCode,
+				})
+				try {
+					await superMagicModeService.fetchModeList()
+				} catch (error) {
+					// Keep going: the cascade still has its own remote/cache levels.
+					report("[Fallback] Featured mode list unavailable, continuing cascade", {
+						topicMode,
+						...toErrorLogFields(error),
+					})
+				}
+
+				if (!isCurrentRequest()) return
+
+				modelList = superMagicModeService.getModelListByMode(topicMode, agentCode)
+				imageModelList = superMagicModeService.getImageModelListByMode(topicMode, agentCode)
+				videoModelList = superMagicModeService.getVideoModelListByMode(topicMode, agentCode)
+				supportsImageModel = imageModelList.length > 0
+				supportsVideoModel = videoModelList.length > 0
+			}
+
 			if (topicMode === TopicMode.Default && modelList.length === 0) {
 				await superMagicModeService.fetchDefaultModeModelList()
 				modelList = superMagicModeService.getModelListByMode(topicMode, agentCode)

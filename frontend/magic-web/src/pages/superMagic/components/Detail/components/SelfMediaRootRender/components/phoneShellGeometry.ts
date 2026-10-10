@@ -1,11 +1,5 @@
 export type PhoneShellProfile =
-	| "modern"
-	| "home-button"
-	| "notch"
-	| "punch-hole"
-	| "tablet"
-	| "foldable"
-	| "flip"
+	"modern" | "home-button" | "notch" | "punch-hole" | "tablet" | "foldable" | "flip"
 
 export interface PhoneShellInsets {
 	left: number

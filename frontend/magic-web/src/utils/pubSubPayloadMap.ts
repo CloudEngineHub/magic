@@ -4,6 +4,7 @@ import type {
 	SuperMagicEnterEditModeArgs,
 	SuperMagicInsertDragDataToEditorArgs,
 	SuperMagicLocateFileInTreeArgs,
+	SuperMagicProjectAttachmentsReconciledPayload,
 	SuperMagicRefreshClawScheduledTasksArgs,
 	SuperMagicUpdateActiveFileIdArgs,
 	SuperMagicUpdateAttachmentsArgs,
@@ -149,6 +150,9 @@ export interface PubSubTypedPayloadMap {
 	/** Intermediate 文件变更：传入完整 seq，订阅方自行解析。 */
 	[PubSubEvents.Super_Magic_File_Change_Intermediate]: [
 		payload: SeqResponse<SuperMagicFileChangeMessage>,
+	]
+	[PubSubEvents.Super_Magic_Project_Attachments_Reconciled]: [
+		payload: SuperMagicProjectAttachmentsReconciledPayload,
 	]
 	/** Intermediate 检查点事件：保留完整 seq，外层 seq_id 只作为领域事件 ID。 */
 	[PubSubEvents.Super_Magic_Checkpoint_Rollback]: [

@@ -228,6 +228,8 @@ export class Canvas {
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
 	public videoCompositionManager: VideoCompositionManager
+	/** 当前图片和视频标签是否常驻显示。 */
+	private mediaLabelsAlwaysVisible = false
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
@@ -937,6 +939,10 @@ export class Canvas {
 			this.userActionRegistry.execute("selection.select-all")
 		})
 
+		this.eventEmitter.on("keyboard:duplicate", () => {
+			void this.userActionRegistry.execute("edit.duplicate")
+		})
+
 		// 监听复制快捷键
 		this.eventEmitter.on("keyboard:copy", () => {
 			this.userActionRegistry.execute("edit.copy")
@@ -1239,15 +1245,22 @@ export class Canvas {
 	 */
 	public toggleElementsVisibility(visible: boolean): void {
 		const selectedIds = this.selectionManager.getSelectedIds()
-		if (selectedIds.length === 0) return
+		const changedIds = selectedIds.filter((id) => {
+			const element = this.elementManager.getElementData(id)
+			return element !== undefined && (element.visible ?? true) !== visible
+		})
+		if (changedIds.length === 0) return
 
 		// 批量更新
-		const updates = selectedIds.map((id) => ({
+		const updates = changedIds.map((id) => ({
 			id,
 			data: { visible },
 		}))
 
-		this.elementManager.batchUpdate(updates)
+		this.historyManager.runTransaction(() => {
+			this.elementManager.batchUpdate(updates)
+			if (!visible) this.deselectHiddenElements()
+		})
 	}
 
 	/**
@@ -1320,7 +1333,23 @@ export class Canvas {
 	 * @param visible - 可见性状态
 	 */
 	public setElementVisible(elementId: string, visible: boolean): void {
-		this.elementManager.setElementVisible(elementId, visible)
+		const element = this.elementManager.getElementData(elementId)
+		if (!element || (element.visible ?? true) === visible) return
+
+		// 图层眼睛的一次点击立即形成历史，不等待普通连续更新的防抖。
+		this.historyManager.runTransaction(() => {
+			this.elementManager.setElementVisible(elementId, visible)
+			if (!visible) this.deselectHiddenElements()
+		})
+	}
+
+	private deselectHiddenElements(): void {
+		// 隐藏父容器也会让已选择的子项不可见；以后仍可从图层面板主动选择它们。
+		for (const id of this.selectionManager.getSelectedIds()) {
+			if (!this.elementManager.isElementVisibleInDataTree(id)) {
+				this.selectionManager.deselect(id)
+			}
+		}
 	}
 
 	/**
@@ -1643,6 +1672,23 @@ export class Canvas {
 			if (affectedElementIds && !affectedElementIds.has(elementId)) return
 			this.elementManager.getElementInstance(elementId)?.onResourceReferenceResolverChanged()
 		})
+	}
+
+	/**
+	 * 统一切换图片和视频的标题、分辨率标签显示模式，确保两个标签管理器保持一致。
+	 */
+	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean): void {
+		if (this.mediaLabelsAlwaysVisible === alwaysVisible) return
+		this.mediaLabelsAlwaysVisible = alwaysVisible
+		// 两种标签会互相通知；先统一模式，关闭时不再按另一管理器的旧常驻状态布局。
+		this.nameLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible, false)
+		this.sizeLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible, false)
+		this.nameLabelManager.syncMediaLabelsVisibility()
+		this.sizeLabelManager.syncMediaLabelsVisibility()
+	}
+
+	public isMediaLabelsAlwaysVisible(): boolean {
+		return this.mediaLabelsAlwaysVisible
 	}
 
 	/**

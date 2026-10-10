@@ -1486,10 +1486,12 @@
 	"contextHelp": {
 		"actions": "什么时候需要调整？",
 		"catalogHint": "按场景查找常见文件说明，不代表当前空间的实际文件清单",
+		"clickToViewGuide": "点击查看详情教程",
 		"close": "知道了",
 		"collapse": "收起",
 		"contents": "帮助目录",
 		"dismiss": "关闭用途指南",
+		"dismissWithTitle": "关闭{{title}}",
 		"example": "例如",
 		"expand": "展开",
 		"furtherReading": "拓展阅读",

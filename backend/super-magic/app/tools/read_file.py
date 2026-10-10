@@ -12,6 +12,8 @@ from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.token_estimator import num_tokens_from_string
 from app.core.entity.attachment import AttachmentStorageType
+from app.core.entity.factory.tool_detail_factory import ToolDetailFactory
+from app.core.entity.message.server_message import OperationResultStatus
 from app.core.entity.message.server_message import (DisplayType, FileContent,
                                                     ToolDetail)
 from app.tools.abstract_file_tool import AbstractFileTool
@@ -337,6 +339,7 @@ Suggestions:
         *,
         allow_fuzzy_match: bool = True,
         use_context_budget: bool = True,
+        record_read: bool = True,
     ) -> ToolResult:
         """
         执行文件读取操作
@@ -355,6 +358,7 @@ Suggestions:
             params, tool_context, raw_mode,
             max_tokens=max_tokens, allow_fuzzy_match=allow_fuzzy_match,
             use_context_budget=use_context_budget,
+            record_read=record_read,
         )
 
     async def execute_purely(
@@ -366,6 +370,7 @@ Suggestions:
         *,
         allow_fuzzy_match: bool = True,
         use_context_budget: bool = True,
+        record_read: bool = True,
     ) -> ToolResult:
         """
         执行文件读取操作，专注于读取可读文件
@@ -552,34 +557,13 @@ Suggestions:
             if fuzzy_warning:
                 content_with_meta = f"{content_with_meta}\n\n---\n\n{fuzzy_warning}"
 
-            # Horizon 自主决定是否保存整文件快照，调用方只传元信息
-            if tool_context:
-                try:
-                    from app.utils.file_utils import calculate_file_hash, get_fresh_file_stat
-
-                    _stat = await get_fresh_file_stat(str(file_path))
-                    _file_hash = await calculate_file_hash(str(file_path))
-
-                    _offset = params.offset if params.offset else 0
-                    _limit = params.limit if params.limit and params.limit > 0 else -1
-                    _end = _offset + _limit if _limit > 0 else -1
-
-                    await self.get_horizon(tool_context).record_file_read(
-                        path=file_path,
-                        file_hash=_file_hash,
-                        mtime_ms=_stat.mtime * 1000,
-                        size=_stat.size,
-                        truncated=extra_info.get("was_truncated", False),
-                        tool_name="read_file",
-                        ranges=[(_offset, _end)],
-                    )
-                except Exception as _horizon_err:
-                    logger.warning(f"[read_file] record_file_read 失败: {_horizon_err}")
-
-            return ToolResult(
+            result = ToolResult(
                 content=content_with_meta,
                 extra_info=extra_info
             )
+            if tool_context and record_read:
+                await self.record_read_result(tool_context, params, result)
+            return result
 
         except Exception as e:
             logger.exception(f"读取文件失败 (原始请求: {params.file_path}): {e!s}")
@@ -587,6 +571,47 @@ Suggestions:
                 tool_context.set_metadata("error_type", "read_file.error_unexpected")
                 tool_context.set_metadata("error_file_path", params.file_path)
             return ToolResult.error("The read_file tool encountered an unexpected error. Try using shell commands (e.g., cat, head, tail) or write a Python script to read this file instead.")
+
+    async def record_read_result(
+        self,
+        tool_context: ToolContext,
+        params: ReadFileParams,
+        result: ToolResult,
+        *,
+        truncated: bool = False,
+    ) -> None:
+        """在最终交付范围确定后登记；批量截断和 AutoRead 追加失败不能提前获得完整凭据。"""
+        if not result.ok:
+            return
+        info = result.extra_info or {}
+        file_path = info.get("original_file_path")
+        if not isinstance(file_path, str):
+            return
+        try:
+            from app.utils.file_utils import calculate_file_hash, get_fresh_file_stat
+
+            stat = await get_fresh_file_stat(file_path)
+            file_hash = await calculate_file_hash(file_path)
+            offset = params.offset if params.offset else 0
+            limit = params.limit if params.limit and params.limit > 0 else -1
+            end = offset + limit if limit > 0 else -1
+            was_truncated = truncated or bool(info.get("was_truncated"))
+            source_content = info.get("source_content")
+            complete = not was_truncated and offset == 0 and limit == -1
+
+            # Horizon 自主决定是否保存整文件快照，调用方只传元信息
+            await self.get_horizon(tool_context).record_file_read(
+                path=file_path,
+                file_hash=file_hash,
+                mtime_ms=stat.mtime * 1000,
+                size=stat.size,
+                truncated=was_truncated,
+                tool_name="read_file",
+                ranges=[(offset, end)],
+                source_content=source_content if complete and isinstance(source_content, str) else None,
+            )
+        except Exception as error:
+            logger.warning(f"[read_file] record_file_read 失败: {error}")
 
     async def _read_text_file(self, file_path: Path) -> TextReadResult:
         """读取整个文本文件内容，返回带行号和不带行号的两个版本
@@ -782,7 +807,7 @@ Suggestions:
             # Absolute paths outside the workspace have no workspace attachment identity.
             pass
 
-        return ToolDetail(
+        report = ToolDetail(
             type=display_type,
             data=FileContent(
                 file_name=original_file_name,
@@ -790,6 +815,13 @@ Suggestions:
                 relative_file_path=relative_file_path,
                 storage_type=storage_type,
             )
+        )
+
+        return ToolDetailFactory.create_operation_result_detail(
+            [ToolDetailFactory.create_file_result_item(
+                original_file_path_str, self.base_dir, OperationResultStatus.SUCCESS,
+                message=self._get_read_range_remark(result, arguments),
+            )], report=report, stage="read",
         )
 
     def _get_remark_content(self, result: ToolResult, arguments: Dict[str, Any] = None) -> str:

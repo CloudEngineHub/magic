@@ -154,6 +154,7 @@ export function WorkspaceMoreSheet({
 					icon: <X />,
 					ariaLabel: t("common.cancel"),
 					onClick: handleMenuClose,
+					testId: "mobile-workspace-more-close-button",
 				}}
 				className="flex flex-col overflow-hidden rounded-t-[14px] border-0 bg-muted p-0"
 				bodyClassName="no-scrollbar flex flex-col gap-2.5 overflow-y-auto px-[14px] py-[10px]"
@@ -201,6 +202,7 @@ export function WorkspaceMoreSheet({
 					icon: <X />,
 					ariaLabel: t("common.cancel"),
 					onClick: handleRenameClose,
+					testId: "mobile-workspace-rename-close-button",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
@@ -210,6 +212,7 @@ export function WorkspaceMoreSheet({
 					},
 					disabled: !renameValue.trim(),
 					tone: "primary",
+					testId: "mobile-workspace-rename-confirm-button",
 				}}
 				className="flex flex-col overflow-hidden rounded-t-[14px] border-0 bg-muted p-0"
 				bodyClassName="no-scrollbar flex flex-col gap-2.5 overflow-y-auto px-[14px] py-[10px]"

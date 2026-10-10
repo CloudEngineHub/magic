@@ -23,6 +23,8 @@ class ExportWorkspaceRequest implements RequestInterface
         private readonly ?string $archiveRoot = null,
         private readonly ?string $fileName = null,
         private readonly ?array $publicUploadConfig = null,
+        private readonly array $excludePaths = [],
+        private readonly ?string $skillsMdHash = null,
     ) {
     }
 
@@ -83,6 +85,13 @@ class ExportWorkspaceRequest implements RequestInterface
 
         if ($this->publicUploadConfig !== null && $this->publicUploadConfig !== []) {
             $request['public_upload_config'] = $this->publicUploadConfig;
+        }
+
+        if ($this->excludePaths !== []) {
+            $request['exclude_paths'] = $this->excludePaths;
+        }
+        if ($this->skillsMdHash !== null) {
+            $request['skills_md_hash'] = $this->skillsMdHash;
         }
 
         return $request;

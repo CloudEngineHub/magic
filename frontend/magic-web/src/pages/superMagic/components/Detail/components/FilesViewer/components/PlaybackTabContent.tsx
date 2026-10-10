@@ -134,8 +134,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 		currentStepIndex,
 	})
 	const currentStepDetail = currentToolStep?.detail as
-		| { type?: DetailType; data?: { groups?: unknown } }
-		| undefined
+		{ type?: DetailType; data?: { groups?: unknown } } | undefined
 	// 搜索结果已展示查询和条数，旧备注中的需求名称无需重复显示；错误文本和其他工具仍保留备注。
 	const hasSearchResults =
 		currentStepDetail?.type === DetailType.Search &&
@@ -243,7 +242,7 @@ function PlaybackTabContent(props: PlaybackTabContentProps) {
 									<ToolIconBadge
 										toolName={currentToolStep?.name}
 										size={16}
-										iconSize={10}
+										iconSize={12}
 									/>
 									<div className="flex items-center gap-2">
 										<span

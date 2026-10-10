@@ -5,14 +5,17 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react"
 import ReactDOM from "react-dom"
-import { ResizeGrip } from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
-import { ResizableCollapseFeedback, resizeGlowClassName } from "@/components/shadcn-ui/resizable"
+import {
+	ResizableCollapseFeedback,
+	ResizeGrip,
+	resizeGlowClassName,
+} from "@/components/shadcn-ui/resizable"
 
 interface TopicResizeHandleProps {
 	className?: string
-	gripVariant?: "default" | "dots"
+	withDivider?: boolean
 	disabled?: boolean
 	onResizeStart: (clientX: number) => void
 	style?: CSSProperties
@@ -25,7 +28,7 @@ interface TopicResizeHandleProps {
 /** Keeps the layout divider narrow while exposing a wider pointer target for reliable resizing. */
 function TopicResizeHandle({
 	className,
-	gripVariant = "default",
+	withDivider = false,
 	disabled = false,
 	onResizeStart,
 	style,
@@ -74,9 +77,8 @@ function TopicResizeHandle({
 					"relative flex w-px items-center justify-center bg-border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full [&[data-panel-group-direction=vertical]>div]:rotate-90",
 					"group relative flex !w-2 cursor-col-resize touch-none items-center justify-center !bg-transparent",
 					resizeGlowClassName,
-					gripVariant === "dots" &&
-						"group/resize outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
-					gripVariant === "dots" && isDragging && "before:opacity-100",
+					"group/resize outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:before:opacity-100 dark:[--resize-glow-rgb:52,88,136]",
+					isDragging && "before:opacity-100",
 					"data-[panel-group-direction=vertical]:!h-2 data-[panel-group-direction=vertical]:!w-full",
 					"data-[panel-group-direction=vertical]:before:bg-gradient-to-r",
 					disabled && "pointer-events-none",
@@ -86,6 +88,14 @@ function TopicResizeHandle({
 				data-testid="handle-mouse-down"
 				data-pointer-testid="handle-pointer-down"
 			>
+				{/* Keep the visible divider on the grip axis, independent of the wider drag target. */}
+				{withDivider && (
+					<span
+						aria-hidden="true"
+						data-slot="resize-divider"
+						className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border"
+					/>
+				)}
 				<div
 					className="absolute inset-y-0 left-1/2 z-20 w-4 -translate-x-1/2 cursor-col-resize touch-none"
 					data-testid="resize-handle-hit-area"
@@ -110,14 +120,7 @@ function TopicResizeHandle({
 					}
 					releaseLabel={t("sidebarPanels.releaseToCollapse")}
 				/>
-				{gripVariant === "dots" ? (
-					<ResizeGrip orientation="vertical" />
-				) : (
-					<div className="pointer-events-none relative z-10 flex h-5 shrink-0 items-center justify-center gap-0.5 data-[panel-group-direction=vertical]:h-auto data-[panel-group-direction=vertical]:w-5 data-[panel-group-direction=vertical]:flex-col">
-						<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
-						<div className="h-full w-px shrink-0 rounded-xs bg-muted-foreground transition-colors duration-200 group-hover:bg-primary data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full" />
-					</div>
-				)}
+				<ResizeGrip orientation="vertical" />
 			</div>
 
 			{isDragging &&

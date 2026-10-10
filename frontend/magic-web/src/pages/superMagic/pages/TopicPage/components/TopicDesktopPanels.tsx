@@ -1,3 +1,11 @@
+import { useLocation } from "react-router"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { projectStore } from "../../../stores/core"
+import { getFileReferenceIdentityKey } from "../../../services/userFileReferenceResolver"
+import {
+	isUploadedFileNavigationTarget,
+	type SuperMagicLocateFileContext,
+} from "../../../events/files"
 import type { FileSidebarControl } from "../../../components/Detail/components/FilesViewer/types"
 import {
 	useEffect,
@@ -49,8 +57,7 @@ interface TopicDesktopPanelsProps {
 	detailPanelClassName: string
 	isDetailPanelFullscreen: boolean
 	sidebar:
-		| ReactNode
-		| ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
+		ReactNode | ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
 	enableProjectCollapse?: boolean
 	detailPanel: ReactNode | ((control?: FileSidebarControl) => ReactNode)
 	isReadOnly: boolean
@@ -63,7 +70,6 @@ interface TopicDesktopPanelsProps {
 	/** Embedding pages can reserve horizontal padding around the collapsed navigation. */
 	collapsedConversationPanelWidth?: number
 	conversationResizeHandleClassName?: string
-	conversationResizeHandleGripVariant?: "default" | "dots"
 	/** Keep overlays inside an embedding page instead of anchoring them to the viewport. */
 	historyOverlayScope?: "viewport" | "container"
 	historyLayout?: TopicDesktopPanelsHistoryLayout
@@ -100,7 +106,6 @@ function TopicDesktopPanels({
 	initialConversationPanelCollapsed = false,
 	collapsedConversationPanelWidth,
 	conversationResizeHandleClassName,
-	conversationResizeHandleGripVariant = "default",
 	historyOverlayScope = "viewport",
 	historyLayout,
 	shouldShowDetailPanel,
@@ -167,6 +172,25 @@ function TopicDesktopPanels({
 			historyResize?.onWidthCommit(result.width)
 		},
 	})
+	const location = useLocation()
+	const currentProjectId = projectStore.selectedProject?.id
+	useEffect(() => {
+		const revealFiles = (_fileId: string, context?: SuperMagicLocateFileContext) => {
+			if (context?.projectId === projectStore.selectedProject?.id) expandProjectSider()
+		}
+		pubsub.subscribe(PubSubEvents.Locate_File_In_Tree, revealFiles)
+		return () => pubsub.unsubscribe(PubSubEvents.Locate_File_In_Tree, revealFiles)
+	}, [expandProjectSider])
+	useEffect(() => {
+		const target = location.state?.uploadedFileTarget
+		if (
+			isUploadedFileNavigationTarget(target) &&
+			target.projectId === currentProjectId &&
+			target.identityKey === getFileReferenceIdentityKey()
+		)
+			expandProjectSider()
+	}, [location.key, location.state?.uploadedFileTarget, expandProjectSider, currentProjectId])
+
 	const collapsedMessagePanelWidthPx =
 		collapsedConversationPanelWidth ?? defaultCollapsedMessagePanelWidthPx
 	// Preserve the stored project width while removing both its visual slot and resize affordance.
@@ -519,7 +543,6 @@ function TopicDesktopPanels({
 
 				{shouldShowProjectResizeHandle && (
 					<TopicResizeHandle
-						gripVariant="dots"
 						dragging={isDraggingProjectSider}
 						collapseProgress={isDraggingProjectSider ? collapseProgress : 0}
 						collapseArmed={isDraggingProjectSider && isCollapseArmed}
@@ -654,7 +677,6 @@ function TopicDesktopPanels({
 									isCollapseArmed
 								}
 								disabled={isConversationPanelCollapsed || !shouldShowDetailPanel}
-								gripVariant={conversationResizeHandleGripVariant}
 								onResizeStart={(clientX) => {
 									startDragMessagePanel(
 										clientX,

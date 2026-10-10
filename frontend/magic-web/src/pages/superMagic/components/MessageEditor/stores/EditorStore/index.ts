@@ -1,4 +1,5 @@
 import { makeAutoObservable } from "mobx"
+import { restoreWechatChatContent } from "../../extensions/wechat-chat-history/transform"
 import { Editor, JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { isEditorActive, runActiveEditor } from "../../utils/editorLifecycle"
 import type { TiptapMentionAttributes } from "@/components/business/MentionPanel/tiptap-plugin"
@@ -119,19 +120,20 @@ export class EditorStore {
 		content: JSONContent | undefined,
 		options: { preserveMentionValidation?: boolean } = {},
 	) {
-		this.value = content
+		const restoredContent = content ? restoreWechatChatContent(content) : undefined
+		this.value = restoredContent
 		if (options.preserveMentionValidation) {
 			this.preserveMentionValidation = true
 			this.preserveMentionContent = true
 			this.trustedMentionIds.clear()
-			this.collectTrustedMentionIds(content)
+			this.collectTrustedMentionIds(restoredContent)
 		} else {
 			this.trustedMentionIds.clear()
 			this.preserveMentionContent = false
 		}
-		if (content) {
+		if (restoredContent) {
 			runActiveEditor(this.tiptapEditor, (editor) => {
-				editor.commands.setContent(content)
+				editor.commands.setContent(restoredContent)
 			})
 			// Mention validation runs inside the setContent transaction; release the bypass afterwards.
 			queueMicrotask(() => {

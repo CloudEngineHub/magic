@@ -720,8 +720,8 @@ class ResourceShareDomainService
     public function deleteAllSharesByResource(string $resourceId, int $resourceType): bool
     {
         try {
-            // 这里可以扩展为批量删除，目前先用单个删除
-            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType);
+            // 已取消的分享已完成清理，不能再次删除并将其误判为失败。
+            $shareEntity = $this->shareRepository->getShareByResource('', $resourceId, $resourceType, false);
             if (! $shareEntity) {
                 return true;
             }

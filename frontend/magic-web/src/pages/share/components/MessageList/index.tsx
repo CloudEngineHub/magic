@@ -10,12 +10,13 @@ import {
 	createCheckIsLastMessage,
 } from "@/pages/superMagic/components/MessageList/helpers"
 import { MessageListProvider } from "@/pages/superMagic/components/MessageList/context"
-import { useIsMobile } from "@/hooks/useIsMobile"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import { buildVirtualMessageProjection } from "@/pages/superMagic/components/MessageList/virtual-message-items"
 import { VirtualMessageList } from "@/pages/superMagic/components/MessageList/components/VirtualMessageList"
 import { MessageViewStateProvider } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import type { MessageListScrollAdapter } from "@/pages/superMagic/components/MessageList/message-list-scroll-adapter"
+
+import { useFileBundleDownload } from "@/pages/superMagic/hooks/useFileBundleDownload"
 
 function MessageList({
 	topicId,
@@ -24,6 +25,7 @@ function MessageList({
 	currentTopicStatus,
 	stickyMessageClassName,
 	projectFilesStore,
+	allowDownload = false,
 	scrollContainerRef,
 	virtualizerRef,
 	onVirtualizerChange,
@@ -39,6 +41,7 @@ function MessageList({
 	 */
 	stickyMessageClassName?: string
 	projectFilesStore: ProjectFilesStore
+	allowDownload?: boolean
 	/** Scroll owner supplied by the share shell; virtualization does not create a nested viewport. */
 	scrollContainerRef: RefObject<HTMLDivElement | null>
 	/**
@@ -56,7 +59,8 @@ function MessageList({
 }) {
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
-	const isMobile = useIsMobile()
+
+	const fileBundleDownload = useFileBundleDownload(topicId, projectFilesStore, allowDownload)
 
 	const messages = messageList
 
@@ -76,8 +80,9 @@ function MessageList({
 		return {
 			allowRevoke: false,
 			projectFilesStore,
+			fileBundleDownload,
 		}
-	}, [projectFilesStore])
+	}, [projectFilesStore, fileBundleDownload])
 	const getScrollElement = useCallback(() => scrollContainerRef.current, [scrollContainerRef])
 	// Stable identity so the memoized list is not rebuilt on every shell render.
 	const handleVirtualizerChange = useMemoizedFn((virtualizer: MessageListScrollAdapter) =>
@@ -87,16 +92,11 @@ function MessageList({
 	return (
 		<MessageListProvider value={value}>
 			<MessageViewStateProvider topicKey={topicId}>
+				{fileBundleDownload.agreementModal}
 				<div className="relative flex flex-col gap-2">
-					{/* Topic shares keep mobile positioning while reusing the desktop sticky mask. */}
 					<VirtualMessageList
 						items={virtualProjection.items}
 						userIndices={virtualProjection.userIndices}
-						isMobile={isMobile}
-						useMobileStickyOverlay={false}
-						// The share shell has no header over its scroll viewport, so the pinned
-						// turn parks flush with the top instead of below the workspace's line.
-						stickyTopOffset={0}
 						getScrollElement={getScrollElement}
 						virtualizerRef={virtualizerRef}
 						onVirtualizerChange={handleVirtualizerChange}

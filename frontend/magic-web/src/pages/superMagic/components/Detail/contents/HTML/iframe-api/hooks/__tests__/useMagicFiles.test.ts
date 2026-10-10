@@ -84,12 +84,15 @@ vi.mock("@/pages/superMagic/utils/api", () => ({
 	getTemporaryDownloadUrl: vi.fn(),
 }))
 
+// File downloads now enter through the access-bound client; keep the network
+// dependency mocked while exercising the real useMagicFiles request/response flow.
+vi.mock("@/pages/superMagic/fileAccess/fileApi", async () => {
+	const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
+	return { useFileApi: () => ({ getTemporaryDownloadUrl }) }
+})
+
 vi.mock("@/pages/superMagic/utils/handleFIle", () => ({
 	downloadFileWithAnchor: vi.fn(),
-}))
-
-vi.mock("mobx", () => ({
-	runInAction: vi.fn((fn: () => void) => fn()),
 }))
 
 vi.mock("@/utils/pubsub", () => ({

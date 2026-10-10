@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import { runInAction } from "mobx"
@@ -42,7 +42,8 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/components/base-mobile/MagicPopup", () => ({
-	default: () => null,
+	default: ({ visible, children }: { visible?: boolean; children?: ReactNode }) =>
+		visible ? <div>{children}</div> : null,
 }))
 
 vi.mock("@/pages/superMagic/hooks/useFeaturedModeListRefresh", () => ({
@@ -110,13 +111,43 @@ vi.mock("@/utils/pubsub", () => ({
 }))
 
 vi.mock("../MobileCrewModeList", () => ({
-	default: () => null,
+	default: ({
+		modes,
+		onSelectCrew,
+	}: {
+		modes: SyntheticModeItem[]
+		onSelectCrew: (crew: SyntheticModeItem) => void
+	}) => (
+		<>
+			{modes.map((mode) => (
+				<button
+					key={mode.mode.identifier}
+					type="button"
+					data-testid={`synthetic-crew-${mode.mode.identifier}`}
+					onClick={() => onSelectCrew(mode)}
+				/>
+			))}
+		</>
+	),
 }))
 
 /** Return the initialized observable mode service used by this test module. */
 function getModeServiceMock(): SyntheticModeService {
 	if (!modeServiceControl.current) throw new Error("Synthetic mode service is not initialized")
 	return modeServiceControl.current
+}
+
+/** Seed the synthetic featured list with the selected crew plus one switch candidate. */
+function seedSwitchableModeList(selectedIdentifier: string) {
+	const modeServiceMock = getModeServiceMock()
+	act(() => {
+		runInAction(() => {
+			modeServiceMock.modeList = [
+				{ mode: { identifier: selectedIdentifier, name: "Selected crew" } },
+				{ mode: { identifier: "synthetic-other-crew", name: "Other crew" } },
+			]
+		})
+	})
 }
 
 describe("MobileComposerModeSelector", () => {
@@ -169,6 +200,52 @@ describe("MobileComposerModeSelector", () => {
 		expect(screen.getByTestId("mobile-composer-mode-selector-trigger")).toBeInTheDocument()
 		expect(
 			screen.queryByTestId("mobile-composer-claw-model-selector-trigger"),
+		).not.toBeInTheDocument()
+	})
+
+	it("keeps a non-empty topic on its own crew instead of switching in place", () => {
+		seedSwitchableModeList(TopicMode.General)
+		const onModeChange = vi.fn()
+
+		render(
+			<MobileComposerModeSelector
+				topicMode={TopicMode.General}
+				selectedTopic={{ id: "synthetic-topic" } as never}
+				messagesLength={2}
+				onModeChange={onModeChange}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-composer-mode-selector-trigger"))
+		fireEvent.click(screen.getByTestId("synthetic-crew-synthetic-other-crew"))
+
+		// Same rule as the desktop ModeToggle: with messages present, picking another crew offers a
+		// new topic instead of handing the existing one to an unrelated crew.
+		expect(
+			screen.getByTestId("mobile-composer-mode-selector-create-topic-dialog"),
+		).toBeInTheDocument()
+		expect(onModeChange).not.toHaveBeenCalled()
+	})
+
+	it("switches crews directly while the topic is still empty", () => {
+		seedSwitchableModeList(TopicMode.General)
+		const onModeChange = vi.fn()
+
+		render(
+			<MobileComposerModeSelector
+				topicMode={TopicMode.General}
+				selectedTopic={{ id: "synthetic-topic" } as never}
+				messagesLength={0}
+				onModeChange={onModeChange}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-composer-mode-selector-trigger"))
+		fireEvent.click(screen.getByTestId("synthetic-crew-synthetic-other-crew"))
+
+		expect(onModeChange).toHaveBeenCalledWith("synthetic-other-crew")
+		expect(
+			screen.queryByTestId("mobile-composer-mode-selector-create-topic-dialog"),
 		).not.toBeInTheDocument()
 	})
 })

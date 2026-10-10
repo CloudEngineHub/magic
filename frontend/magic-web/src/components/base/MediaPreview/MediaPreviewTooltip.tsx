@@ -8,9 +8,14 @@ import {
 	type MutableRefObject,
 	type PointerEvent as ReactPointerEvent,
 	type SyntheticEvent,
+	type ReactNode,
 } from "react"
+import { MediaPreviewImageActions } from "./MediaPreviewImageActions"
+import { MediaPreviewImageHover } from "./MediaPreviewImageHover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
+import { useMediaPreviewPlayback } from "./useMediaPreviewPlayback"
 import { MEDIA_PREVIEW_POLICY, type MediaPreviewCrop, type MediaPreviewTooltipProps } from "./types"
 
 function isInteractiveTriggerTarget(target: EventTarget | null): boolean {
@@ -72,12 +77,14 @@ function AudioPlayer({
 	audioRef,
 	onError,
 	labels,
+	playback,
 }: {
 	src: string
 	fileName: string
 	audioRef: MutableRefObject<HTMLAudioElement | null>
 	onError?: () => void
 	labels: MediaPreviewTooltipProps["audioLabels"]
+	playback: ReturnType<typeof useMediaPreviewPlayback>
 }) {
 	const [playing, setPlaying] = useState(false)
 	const [currentTime, setCurrentTime] = useState(0)
@@ -86,6 +93,7 @@ function AudioPlayer({
 	const playRequestRef = useRef(0)
 	const playbackIntentRef = useRef(false)
 	const [isLoading, setIsLoading] = useState(false)
+	const { remember: rememberPlayback, restore: restorePlayback } = playback
 	const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0
 
 	const playAudio = useCallback((audio: HTMLAudioElement) => {
@@ -126,7 +134,8 @@ function AudioPlayer({
 		const audio = audioRef.current
 		if (!audio || isSeekingRef.current) return
 		setCurrentTime(audio.currentTime)
-	}, [audioRef])
+		rememberPlayback(audio)
+	}, [audioRef, rememberPlayback])
 
 	useEffect(() => {
 		invalidatePlayback()
@@ -194,7 +203,15 @@ function AudioPlayer({
 				aria-label={fileName}
 				// 避免 display:none：部分环境下会让 timeupdate 不可靠；用 sr-only 隐藏即可。
 				className="sr-only"
-				onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
+				onLoadedMetadata={(event) => {
+					const audio = event.currentTarget
+					setDuration(audio.duration || 0)
+					const saved = restorePlayback(audio)
+					setCurrentTime(audio.currentTime)
+					if (saved?.shouldResume) playAudio(audio)
+				}}
+				onVolumeChange={(event) => rememberPlayback(event.currentTarget)}
+				onRateChange={(event) => rememberPlayback(event.currentTarget)}
 				onDurationChange={(event) => setDuration(event.currentTarget.duration || 0)}
 				onTimeUpdate={syncCurrentTimeFromAudio}
 				onLoadStart={() => {
@@ -338,6 +355,8 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		children,
 		mediaType,
 		fileName,
+		resourceKey,
+		imageActions,
 		previewUrl,
 		posterUrl,
 		audioUrl,
@@ -356,11 +375,17 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		container,
 		open: controlledOpen,
 		onOpenChange,
+		onMediaError,
 	} = props
 	const isMobile = useIsMobile()
+	const { permissions } = useFileAccess()
 	const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
 	const videoRef = useRef<HTMLVideoElement>(null)
 	const audioRef = useRef<HTMLAudioElement>(null)
+	const videoPlayback = useMediaPreviewPlayback()
+	const audioPlayback = useMediaPreviewPlayback()
+	const { reset: resetVideoPlayback } = videoPlayback
+	const { reset: resetAudioPlayback } = audioPlayback
 	const [videoReady, setVideoReady] = useState(false)
 	const [mediaError, setMediaError] = useState(false)
 	const [intrinsicPreviewSize, setIntrinsicPreviewSize] = useState<
@@ -398,11 +423,18 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 	const cropDisplayScale =
 		cropRect && cropDisplaySize ? cropDisplaySize.width / cropRect.width : 1
 	const touchInteractionRef = useRef(false)
+	const triggerElementRef = useRef<HTMLElement | null>(null)
+	const suppressFocusPreviewRef = useRef(false)
 	const lastContentInteractionAtRef = useRef(0)
 	const handleContentInteraction = useCallback((event: SyntheticEvent) => {
 		lastContentInteractionAtRef.current = Date.now()
 		event.stopPropagation()
 	}, [])
+	const handleMediaError = useCallback(() => {
+		setMediaError(true)
+		const recovery = onMediaError?.()
+		if (recovery) void recovery.then(() => setMediaError(false))
+	}, [onMediaError])
 
 	useEffect(() => {
 		setMediaError(false)
@@ -419,6 +451,8 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		(nextOpen: boolean) => {
 			if (controlledOpen === undefined) setUncontrolledOpen(nextOpen)
 			if (!nextOpen) {
+				resetVideoPlayback()
+				resetAudioPlayback()
 				videoRef.current?.pause()
 				if (videoRef.current) videoRef.current.currentTime = 0
 				audioRef.current?.pause()
@@ -428,7 +462,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 			}
 			onOpenChange?.(nextOpen)
 		},
-		[controlledOpen, onOpenChange],
+		[controlledOpen, onOpenChange, resetVideoPlayback, resetAudioPlayback],
 	)
 
 	useEffect(() => {
@@ -443,11 +477,23 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		return () => document.removeEventListener("pointerdown", handlePointerDown, true)
 	}, [enableTouchTrigger, handleOpenChange, open])
 
-	if (disabled || (isMobile && !enableTouchTrigger)) return <>{children}</>
+	if (disabled || !permissions.preview || (isMobile && !enableTouchTrigger))
+		return <>{children}</>
 
 	const trigger = cloneElement(children, {
 		"data-media-preview-trigger": "",
+		onFocus: (event: React.FocusEvent<HTMLElement>) => {
+			triggerElementRef.current = event.currentTarget
+			children.props.onFocus?.(event)
+			if (suppressFocusPreviewRef.current) event.preventDefault()
+		},
+		onBlur: (event: React.FocusEvent<HTMLElement>) => {
+			children.props.onBlur?.(event)
+			suppressFocusPreviewRef.current = false
+		},
 		onPointerMove: (event: ReactPointerEvent<HTMLElement>) => {
+			triggerElementRef.current = event.currentTarget
+			suppressFocusPreviewRef.current = false
 			children.props.onPointerMove?.(event)
 			if (isHoverExcludedTriggerTarget(event.target)) event.preventDefault()
 		},
@@ -482,18 +528,21 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 			touchInteractionRef.current = false
 		},
 	})
-	const content = (
+	const renderContent = (controls?: ReactNode) => (
 		<div
 			className="relative overflow-hidden rounded-md border border-white/15 bg-black/90 text-white shadow-lg"
 			data-media-preview-content=""
+			onPointerDown={imageActions ? handleContentInteraction : undefined}
+			onDoubleClickCapture={imageActions ? handleContentInteraction : undefined}
 		>
 			<div
 				className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-gradient-to-b from-black/80 to-transparent px-2.5 py-1.5"
 				data-reference-media-tooltip-header=""
 			>
-				<span className="min-w-0 truncate text-xs font-medium" title={fileName}>
+				<span className="min-w-0 flex-1 truncate text-xs font-medium" title={fileName}>
 					{fileName}
 				</span>
+				{controls}
 			</div>
 			{isLoading ? (
 				mediaType === "audio" ? (
@@ -536,7 +585,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 									})
 								}
 							}}
-							onError={() => setMediaError(true)}
+							onError={handleMediaError}
 						/>
 					</div>
 				) : (
@@ -560,7 +609,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 								})
 							}
 						}}
-						onError={() => setMediaError(true)}
+						onError={handleMediaError}
 					/>
 				)
 			) : mediaType === "video" ? (
@@ -584,6 +633,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 							aria-label={fileName}
 							className="block h-full w-full object-contain"
 							onLoadedMetadata={(event) => {
+								videoPlayback.restore(event.currentTarget)
 								const { videoWidth, videoHeight } = event.currentTarget
 								if (videoWidth > 0 && videoHeight > 0) {
 									setIntrinsicPreviewSize({
@@ -593,9 +643,12 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 								}
 							}}
 							onCanPlay={() => setVideoReady(true)}
+							onTimeUpdate={(event) => videoPlayback.remember(event.currentTarget)}
+							onVolumeChange={(event) => videoPlayback.remember(event.currentTarget)}
+							onRateChange={(event) => videoPlayback.remember(event.currentTarget)}
 							onError={() => {
 								setVideoReady(false)
-								setMediaError(true)
+								handleMediaError()
 							}}
 						/>
 					) : null}
@@ -609,7 +662,8 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 						src={audioUrl ?? previewUrl ?? ""}
 						fileName={fileName}
 						audioRef={audioRef}
-						onError={() => setMediaError(true)}
+						playback={audioPlayback}
+						onError={handleMediaError}
 						labels={audioLabels}
 					/>
 				</div>
@@ -617,7 +671,7 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 		</div>
 	)
 
-	return (
+	const renderTooltip = () => (
 		<Tooltip open={open} onOpenChange={handleOpenChange} delayDuration={250}>
 			<TooltipTrigger asChild>{trigger}</TooltipTrigger>
 			<TooltipContent
@@ -637,8 +691,47 @@ export function MediaPreviewTooltip(props: MediaPreviewTooltipProps) {
 					maxHeight: policy.maxHeight,
 				}}
 			>
-				{content}
+				{renderContent()}
 			</TooltipContent>
 		</Tooltip>
+	)
+	if (mediaType !== "image" || !imageActions) return renderTooltip()
+	return (
+		<MediaPreviewImageActions
+			key={resourceKey ?? imageActions.resourceKey ?? previewUrl ?? fileName}
+			fileName={fileName}
+			resourceKey={resourceKey ?? imageActions.resourceKey}
+			imageActions={imageActions}
+			container={container}
+			crop={crop}
+			sourceSize={sourceSize}
+			getTrigger={() => triggerElementRef.current}
+			onExpand={() => {
+				suppressFocusPreviewRef.current = true
+				handleOpenChange(false)
+			}}
+		>
+			{(controls, modalOpen, menuOpen) => (
+				<MediaPreviewImageHover
+					open={open && !modalOpen}
+					onOpenChange={(nextOpen) => {
+						if (nextOpen && (modalOpen || suppressFocusPreviewRef.current)) return
+						if (!nextOpen && menuOpen && !modalOpen) return
+						handleOpenChange(nextOpen)
+					}}
+					trigger={trigger}
+					getTrigger={(element) => {
+						triggerElementRef.current = element
+					}}
+					side={side}
+					sideOffset={sideOffset}
+					container={container}
+					width={contentWidth}
+					maxHeight={policy.maxHeight}
+				>
+					{renderContent(controls)}
+				</MediaPreviewImageHover>
+			)}
+		</MediaPreviewImageActions>
 	)
 }

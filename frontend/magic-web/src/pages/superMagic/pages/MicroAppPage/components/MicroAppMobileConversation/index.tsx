@@ -17,6 +17,7 @@ import { useRefreshTopicDetailOnTaskComplete } from "@/pages/superMagic/hooks/us
 import { useScopedTopicReadProgress } from "@/pages/superMagic/hooks/useScopedTopicReadProgress"
 import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicConversationLoading"
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
+import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { applyOptimisticTopicRunningState } from "@/pages/superMagic/services/topicStatusSyncService"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode"
@@ -25,9 +26,13 @@ import { userStore } from "@/models/user"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 import type { MessageEditorRef } from "@/pages/superMagic/components/MessageEditor/MessageEditor"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 import MicroAppTopicPicker from "./MicroAppTopicPicker"
 import MicroAppRuntimeMentionHint from "../MicroAppRuntimeMentionHint"
-import { resolveMicroAppModelSelectionMode } from "../../utils/microAppModelMode"
+import {
+	resolveMicroAppModelSelectionMode,
+	resolveMicroAppRuntimeModelSelectionMode,
+} from "../../utils/microAppModelMode"
 import { TopicMode } from "../../../Workspace/TopicMode"
 import { usePinnedCurrentMicroAppMention } from "../../hooks/usePinnedCurrentMicroAppMention"
 import { insertCurrentMicroAppMention } from "../../utils/insertCurrentMicroAppMention"
@@ -106,7 +111,14 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 	})
 	const [topicPickerOpen, setTopicPickerOpen] = useState(false)
 	const selectedTopic = topicStore.selectedTopic
-	const modelTopicMode = lockToMicroAppMode ? resolveMicroAppModelSelectionMode() : undefined
+	const selectableTopicMode = useTopicMode({ selectedTopic, selectedProject })
+	const topicMode = lockToMicroAppMode ? TopicMode.MicroApp : selectableTopicMode.topicMode
+	const agentCode = lockToMicroAppMode
+		? undefined
+		: resolveAgentSelection(topicMode, selectedTopic?.agent_code).agentCode
+	const modelTopicMode = lockToMicroAppMode
+		? resolveMicroAppModelSelectionMode()
+		: resolveMicroAppRuntimeModelSelectionMode(topicMode, agentCode)
 	const keepMicroAppMode = useMemoizedFn((mode: TopicMode) => void mode)
 
 	useCreateTopicListener({
@@ -234,7 +246,9 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 								fallbackRender={
 									lockToMicroAppMode ? <MobileConversationEmpty /> : undefined
 								}
-								className="bg-mobile-background"
+								className="bg-mobile-background [--message-list-sticky-fade-height:0px] [--message-list-surface:rgb(var(--mobile-background-rgb))]"
+								classNames={{ content: "px-4 pt-[10px]" }}
+								scrollEdgeFade
 							/>
 						</MessageListProvider>
 					</div>

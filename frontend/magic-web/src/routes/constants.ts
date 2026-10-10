@@ -28,6 +28,8 @@ export enum RouteName {
 	MobileHome = "MobileHome",
 	/** 超级麦吉 - 对话列表（移动端一级页） */
 	SuperChatsList = "SuperChatsList",
+	/** Desktop blank conversation composer; no project exists until sending. */
+	SuperChatHome = "SuperChatHome",
 	/** 超级麦吉 - 应用目录（移动端首期独立页） */
 	SuperApps = "SuperApps",
 	/**  */

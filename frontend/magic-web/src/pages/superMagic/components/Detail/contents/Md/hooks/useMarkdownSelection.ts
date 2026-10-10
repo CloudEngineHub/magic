@@ -137,13 +137,15 @@ export function useMarkdownSelection({
 			const controller = new AbortController()
 			request = controller
 			try {
+				// 文件详情可能只有 ID／名称；预览已解析的同一文件路径仍须补入引用。
 				const fileMention = await createFileReferenceMention(
-					file ?? {
-						file_id: fileId,
-						file_name: fileName,
-						relative_file_path: filePath,
-						project_id: projectId,
-						file_extension: fileName.split(".").pop() ?? "",
+					{
+						...file,
+						file_id: file?.file_id || fileId,
+						file_name: file?.file_name || fileName,
+						relative_file_path: file?.relative_file_path || filePath,
+						project_id: file?.project_id ?? projectId,
+						file_extension: file?.file_extension || fileName.split(".").pop() || "",
 					},
 					undefined,
 					controller.signal,

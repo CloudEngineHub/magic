@@ -20,16 +20,12 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import useExportMenuItems from "../HTML/useExportMenuItems"
 import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
 import { textToHtml } from "../../../../utils/textToHtml"
-import {
-	FileActionVisibilityProvider,
-	useFileActionVisibility,
-} from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 
 export default function Text(props: any) {
 	const textFileSession: TextFileSession | undefined = props.textFileSession
 	const isTabActive: boolean = props.isTabActive ?? true
 	const readOnlyPreview: TextReadOnlyPreview | undefined = props.readOnlyPreview
-	const inheritedFileActionVisibility = useFileActionVisibility()
 	const {
 		type,
 		data,
@@ -76,8 +72,12 @@ export default function Text(props: any) {
 		fetchFileVersions,
 		isNewestVersion,
 		isDeleted,
+		loadError: fileLoadError,
+		refreshFile,
 	} = useFileData({
-		enabled: !textFileSession && !readOnlyPreview,
+		enabled: !readOnlyPreview,
+		loadContent: !textFileSession,
+		isTabActive,
 		file_id,
 		updatedAt,
 		isEditing: isEditMode,
@@ -89,7 +89,11 @@ export default function Text(props: any) {
 	const textAreaRef = useRef<any>(null)
 
 	const [localContent, setContent] = useState<string>("")
-	const content = readOnlyPreview?.content ?? textFileSession?.content ?? localContent
+	const content =
+		readOnlyPreview?.content ??
+		(fileVersion !== undefined
+			? (initialContent ?? textFileSession?.content ?? "")
+			: (textFileSession?.content ?? localContent))
 	const loading = textFileSession?.loading ?? fileLoading
 	const [localDraft, setLocalDraft] = useState<string>("")
 	const editingContent = textFileSession?.draft ?? localDraft
@@ -365,10 +369,10 @@ export default function Text(props: any) {
 			)}
 		>
 			{showFileHeader && <CommonHeaderV2 {...headerContext} />}
-			{textFileSession?.loadError ? (
+			{textFileSession?.loadError || fileLoadError ? (
 				<DetailEmpty
 					title={t("common.fileNotFoundOrLoadFailed")}
-					onRetry={textFileSession.refresh}
+					onRetry={textFileSession?.refresh ?? refreshFile}
 				/>
 			) : textFileSession && loading ? (
 				<div
@@ -431,11 +435,7 @@ export default function Text(props: any) {
 
 	// 只读仅限制内容修改与历史还原；继承分享、下载等原有权限。
 	return readOnlyPreview ? (
-		<FileActionVisibilityProvider
-			value={{ ...inheritedFileActionVisibility, hideVersionHistory: true }}
-		>
-			{preview}
-		</FileActionVisibilityProvider>
+		<FileAccessProvider options={{ versionHistory: false }}>{preview}</FileAccessProvider>
 	) : (
 		preview
 	)

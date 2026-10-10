@@ -1,3 +1,4 @@
+import { reaction, isObservable, isObservableProp } from "mobx"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PPTStore } from "../PPTStore"
 import type { SlideItem } from "../../PPTSidebar/types"
@@ -447,6 +448,25 @@ describe("PPTStore", () => {
 	})
 
 	describe("updateConfig", () => {
+		it("notifies render consumers for hidden-only updates without observing attachment data", async () => {
+			const onHiddenChange = vi.fn()
+			const dispose = reaction(
+				() => store.getConfigForExport().displayConfig?.hidden_slides,
+				onHiddenChange,
+			)
+			const attachments = [{ file_id: "unrelated", children: [{ file_id: "nested" }] }]
+			const hidden = ["slide-0.html"]
+			await store.updateConfig({ displayConfig: { hidden_slides: hidden }, attachments })
+			expect(onHiddenChange).toHaveBeenCalledTimes(1)
+			expect(store.getConfigForExport().displayConfig.hidden_slides).toEqual(hidden)
+			expect(isObservableProp(store, "config")).toBe(false)
+			expect(isObservable(store.getConfigForExport().attachments)).toBe(false)
+			await store.updateConfig({ displayConfig: {} })
+			expect(onHiddenChange).toHaveBeenCalledTimes(2)
+			expect(store.getConfigForExport().displayConfig.hidden_slides).toBeUndefined()
+			dispose()
+		})
+
 		it("should update store configuration", () => {
 			store.updateConfig({
 				attachmentList: [

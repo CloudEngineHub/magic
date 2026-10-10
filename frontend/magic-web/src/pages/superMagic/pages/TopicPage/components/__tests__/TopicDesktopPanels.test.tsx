@@ -21,12 +21,8 @@ vi.mock("../../hooks/useTopicDesktopPanelMotion", () => ({
 }))
 
 vi.mock("../TopicResizeHandle", () => ({
-	default: ({ className, gripVariant }: { className?: string; gripVariant?: string }) => (
-		<div
-			className={className}
-			data-grip-variant={gripVariant}
-			data-testid="mock-topic-resize-handle"
-		/>
+	default: ({ className }: { className?: string }) => (
+		<div className={className} data-testid="mock-topic-resize-handle" />
 	),
 }))
 
@@ -169,7 +165,6 @@ describe("TopicDesktopPanels", () => {
 	it("forwards the embedded conversation resize-handle appearance", () => {
 		renderComponent({
 			showProjectSidebar: false,
-			conversationResizeHandleGripVariant: "dots",
 			conversationResizeHandleClassName: "border-l border-border !bg-sidebar",
 			detailResizeHandleClassName: "border-l border-border",
 		})
@@ -182,10 +177,6 @@ describe("TopicDesktopPanels", () => {
 			"border-l",
 			"border-border",
 			"!bg-sidebar",
-		)
-		expect(screen.getByTestId("mock-topic-resize-handle")).toHaveAttribute(
-			"data-grip-variant",
-			"dots",
 		)
 	})
 

@@ -791,7 +791,7 @@ export function usePPTSidebar({
 
 	// Handle rename slide with optimistic update
 	const handleRenameSlide = useMemoizedFn(async (index: number, newFileName: string) => {
-		if (!allowEdit) return
+		if (!allowEdit) return false
 
 		// Capture slide info at the start based on index
 		const slideToRename = store.slides[index]
@@ -799,14 +799,14 @@ export function usePPTSidebar({
 
 		if (!oldPath) {
 			magicToast.error(t("fileViewer.renameSlideFailed"))
-			return
+			return false
 		}
 
 		// Get file ID
 		const fileId = store.getFileIdByPath(oldPath)
 		if (!fileId) {
 			magicToast.error(t("fileViewer.renameSlideFailed"))
-			return
+			return false
 		}
 
 		// Calculate new path (optimistic)
@@ -868,7 +868,7 @@ export function usePPTSidebar({
 					projectId,
 					reason: "ppt-template-rename-slide",
 				})
-				return
+				return true
 			}
 
 			// Background API calls (renameSlide API will update magic.project.js)
@@ -920,6 +920,7 @@ export function usePPTSidebar({
 				projectId,
 				reason: "ppt-rename-slide",
 			})
+			return true
 		} catch (error) {
 			console.error("Failed to rename slide:", error)
 
@@ -940,6 +941,7 @@ export function usePPTSidebar({
 			}
 
 			magicToast.error(t("fileViewer.renameSlideFailed"))
+			return false
 		}
 	})
 

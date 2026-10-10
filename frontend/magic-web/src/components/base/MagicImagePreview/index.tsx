@@ -38,6 +38,8 @@ const MAX_SCALE = 10
 const SCALE_STEP = 0.1
 
 interface Props extends HTMLAttributes<HTMLImageElement> {
+	/** 临时签名地址续期不代表换图，调用方可提供稳定的内容身份。 */
+	contentKey?: string
 	src?: string
 	onNext?: () => void
 	onPrev?: () => void
@@ -80,6 +82,7 @@ const MagicImagePreview = (props: Props) => {
 		onDownload,
 		isAIImage = false,
 		contentType = "raster",
+		contentKey,
 		...rest
 	} = props
 	const { styles, cx } = useStyles()
@@ -118,7 +121,10 @@ const MagicImagePreview = (props: Props) => {
 			onWheelZoom: handleWheelZoom,
 		})
 	const { rotate, rotateImage } = useRotate()
-	const previewContentKey = useMemo(() => src ?? getPreviewContentKey(children), [children, src])
+	const previewContentKey = useMemo(
+		() => contentKey ?? src ?? getPreviewContentKey(children),
+		[contentKey, children, src],
+	)
 	const isVectorContent = contentType === "vector"
 	useVectorContentLayout(contentRef, isVectorContent, scale, previewContentKey)
 	const sliderValue = useMemo(

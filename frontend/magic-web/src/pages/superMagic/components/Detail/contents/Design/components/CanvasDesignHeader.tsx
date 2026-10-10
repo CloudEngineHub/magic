@@ -1,3 +1,4 @@
+import { packAndDownloadFiles } from "@/pages/superMagic/services/fileBundleDownload"
 import { createStyles, cx } from "antd-style"
 import canvasIcon from "@/components/base/MagicFileIcon/assets/design.svg"
 import { DesignData } from "../types"
@@ -16,7 +17,6 @@ import { useTranslation } from "react-i18next"
 import {
 	getDesignDirectoryInfo,
 	collectFilesInDirectory,
-	packAndDownloadFiles,
 	getZipFileNameFromFiles,
 } from "../utils/utils"
 import ShareModal from "@/pages/superMagic/components/Share/Modal"

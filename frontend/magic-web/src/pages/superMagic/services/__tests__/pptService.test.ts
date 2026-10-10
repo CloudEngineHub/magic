@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
 	collectFileIds: vi.fn(),
 	getTemporaryDownloadUrl: vi.fn(),
+	getFileContentById: vi.fn(),
 	loadSlide: vi.fn(),
 	processSlideWithUrlMapping: vi.fn(),
 	processorConfigs: [] as unknown[],
@@ -23,9 +24,15 @@ vi.mock("@/pages/superMagic/components/Detail/components/PPTRender/services", ()
 
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getTemporaryDownloadUrl: mocks.getTemporaryDownloadUrl,
+	getFileContentById: mocks.getFileContentById,
 }))
 
-import { iterateExportSlides, iterateSingleExportSlide } from "../pptService"
+import {
+	iterateExportSlides,
+	iterateSingleExportSlide,
+	prepareExportSlides,
+	resolvePptExportSlides,
+} from "../pptService"
 
 const slidePath = "./slides/slide-1.html"
 const attachmentList = [
@@ -71,6 +78,30 @@ describe("pptService lazy export providers", () => {
 		controller.abort()
 
 		await expect(nextPage).rejects.toMatchObject({ name: "AbortError" })
+	})
+
+	it("exports a single HTML file when no cancellation signal is provided", async () => {
+		mocks.loadSlide.mockResolvedValue("<main>single</main>")
+
+		const pages = []
+		for await (const page of iterateSingleExportSlide({
+			fileId: "slide-1",
+			fileName: "slide-1.html",
+			attachmentList,
+		})) {
+			pages.push(page)
+		}
+
+		expect(pages).toEqual([
+			{
+				index: 0,
+				html: "<main>single</main>",
+				key: "slide-1",
+				pageName: "slide-1.html",
+				pagePath: "slide-1.html",
+				pageFileId: "slide-1",
+			},
+		])
 	})
 
 	it("does not convert an AbortError from a multi-slide loader into an empty page", async () => {
@@ -121,7 +152,16 @@ describe("pptService lazy export providers", () => {
 			pages.push(page)
 		}
 
-		expect(pages).toEqual([{ index: 1, key: secondSlidePath, html: "<main>second</main>" }])
+		expect(pages).toEqual([
+			{
+				index: 1,
+				key: secondSlidePath,
+				html: "<main>second</main>",
+				pageName: "slide-2.html",
+				pagePath: secondSlidePath,
+				pageFileId: "slide-2",
+			},
+		])
 		expect(consoleError).toHaveBeenCalled()
 	})
 
@@ -149,5 +189,67 @@ describe("pptService lazy export providers", () => {
 		await iterator.next()
 
 		expect(mocks.processorConfigs).toContainEqual(expect.objectContaining({ fileApi }))
+	})
+})
+
+describe("PPT export hidden configuration", () => {
+	const configFile = {
+		file_id: "config",
+		file_name: "magic.project.js",
+		relative_file_path: "/deck/magic.project.js",
+	}
+	it("reads canonical hidden paths with the bound file identity before requesting pages", async () => {
+		const getFileContentById = vi
+			.fn()
+			.mockResolvedValue(
+				`window.magicProjectConfig = { slides: ['${slidePath}'], hidden_slides: ['slides/slide-1.html'] };`,
+			)
+		const getTemporaryDownloadUrl = vi.fn()
+		const fileApi = { getFileContentById, getTemporaryDownloadUrl } as any
+		const input = {
+			slidePaths: [slidePath],
+			attachmentList: [...attachmentList, configFile],
+			mainFileId: "main",
+			fileApi,
+		}
+		expect((await prepareExportSlides(input)).htmlSlides).toEqual([])
+		const pages = []
+		for await (const page of iterateExportSlides(input)) pages.push(page)
+		expect(pages).toEqual([])
+		expect(getFileContentById).toHaveBeenCalledWith("config", {
+			responseType: "text",
+			access: undefined,
+		})
+		expect(getTemporaryDownloadUrl).not.toHaveBeenCalled()
+	})
+
+	it("does not revive stale metadata hidden pages when the source omits hidden_slides", async () => {
+		const getFileContentById = vi
+			.fn()
+			.mockResolvedValue(`window.magicProjectConfig = { slides: ['${slidePath}'] };`)
+		const resolved = await resolvePptExportSlides({
+			slidePaths: [slidePath],
+			displayConfig: { hidden_slides: [slidePath] },
+			attachmentList: [...attachmentList, configFile],
+			mainFileId: "main",
+			fileApi: { getFileContentById } as any,
+		})
+		expect(resolved.slidePaths).toEqual([slidePath])
+	})
+
+	it("does not read a different deck's configuration by filename alone", async () => {
+		const getFileContentById = vi.fn()
+		const resolved = await resolvePptExportSlides({
+			slidePaths: [slidePath],
+			displayConfig: { hidden_slides: [slidePath] },
+			attachmentList: [
+				...attachmentList,
+				{ ...configFile, relative_file_path: "/other/magic.project.js" },
+			],
+			mainFileId: "main",
+			fileApi: { getFileContentById } as any,
+		})
+		expect(resolved.slidePaths).toEqual([])
+		expect(getFileContentById).not.toHaveBeenCalled()
 	})
 })

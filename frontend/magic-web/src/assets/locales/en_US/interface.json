@@ -1484,10 +1484,12 @@
 	"contextHelp": {
 		"actions": "When should you make changes?",
 		"catalogHint": "Common file guides by context, not the files currently in your space",
+		"clickToViewGuide": "Click to view the detailed guide",
 		"close": "Got it",
 		"collapse": "Collapse",
 		"contents": "Guide contents",
 		"dismiss": "Close file guide",
+		"dismissWithTitle": "Close {{title}}",
 		"example": "Example",
 		"expand": "Expand",
 		"furtherReading": "Further reading",

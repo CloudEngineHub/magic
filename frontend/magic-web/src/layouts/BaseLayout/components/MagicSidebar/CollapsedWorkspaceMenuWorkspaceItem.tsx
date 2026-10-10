@@ -254,7 +254,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 						onInteractionChange={list.onInteractionChange}
 						project={project}
 						workspaceId={workspace.id}
-						isSelected={selectedProject?.id === project.id}
+						isSelected={isActive && selectedProject?.id === project.id}
 						projectMenuContentRef={projectMenuContentRef}
 						onOpenInNewWindow={openProjectInNewTab}
 						onPinProject={handleTogglePinProject}

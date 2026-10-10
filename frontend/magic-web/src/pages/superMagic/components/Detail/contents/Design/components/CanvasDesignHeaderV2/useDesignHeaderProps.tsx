@@ -1,3 +1,4 @@
+import { packAndDownloadFiles } from "@/pages/superMagic/services/fileBundleDownload"
 import { useCallback, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { BadgeCent, RefreshCw, Fullscreen } from "lucide-react"
@@ -17,7 +18,6 @@ import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton
 import {
 	getDesignDirectoryInfo,
 	collectFilesInDirectory,
-	packAndDownloadFiles,
 	getZipFileNameFromFiles,
 } from "../../utils/utils"
 import magicToast from "@/components/base/MagicToaster/utils"

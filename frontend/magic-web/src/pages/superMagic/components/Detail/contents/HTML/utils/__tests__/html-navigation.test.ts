@@ -110,6 +110,27 @@ describe("html preview path matching", () => {
 		expect(normalizeHtmlPreviewPath("/admin/index.html")).toBe("admin/index.html")
 	})
 
+	it("decodes UTF-8 percent-encoded preview paths for file matching", () => {
+		expect(
+			normalizeHtmlPreviewPath(
+				"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/%E7%9B%AE%E6%A0%87%E9%A1%B5%E9%9D%A2.html",
+			),
+		).toBe("中文场景/目标页面.html")
+		expect(
+			normalizeHtmlPreviewPath(
+				"/%E4%B8%AD%E6%96%87%E5%9C%BA%E6%99%AF/%E5%AD%90%E6%96%87%E4%BB%B6%E5%A4%B9/%E6%B7%B1%E5%B1%82%E9%A1%B5%E9%9D%A2.html",
+			),
+		).toBe("中文场景/子文件夹/深层页面.html")
+		expect(normalizeHtmlPreviewPath("my%20file.html")).toBe("my file.html")
+	})
+
+	it("keeps unicode paths and malformed encodings unchanged", () => {
+		expect(normalizeHtmlPreviewPath("中文场景/目标页面.html")).toBe("中文场景/目标页面.html")
+		expect(normalizeHtmlPreviewPath("%E7%ZZ.html")).toBe("%E7%ZZ.html")
+		// decodeURI must not turn an encoded slash into a new path segment.
+		expect(normalizeHtmlPreviewPath("folder/foo%2Fbar.html")).toBe("folder/foo%2Fbar.html")
+	})
+
 	it("only falls back to a unique root index.html path", () => {
 		const nested = {
 			file_id: "nested",

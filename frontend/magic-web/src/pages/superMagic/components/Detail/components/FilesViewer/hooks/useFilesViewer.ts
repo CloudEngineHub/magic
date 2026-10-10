@@ -28,7 +28,7 @@ import type { AttachmentItem } from "../../../../TopicFilesButton/hooks/types"
 import { TabActionType } from "../types"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
 import { copyFileContent } from "@/pages/superMagic/utils/share"
-import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import { createFileApi, useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
 	convertFileToTabItem,
@@ -242,6 +242,9 @@ export function useFilesViewer(props: FilesViewerProps) {
 		if (action.type !== TabActionType.DEACTIVATE_ALL) tabActionListenerRef.current(action)
 		restoreTabs(action)
 	}, [])
+	useEffect(() => {
+		if (!tabs.length) props.onTabsEmpty?.()
+	}, [tabs.length, props.onTabsEmpty])
 	const tabsRef = useRef(tabs)
 	tabsRef.current = tabs
 	const userIdentityKey = getFileReferenceIdentityKey()
@@ -520,7 +523,9 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 	useEffect(() => {
 		mentionPanelStore.setCurrentTabs(
-			visibleTabs.filter((tab) => tab.type !== "file_manager") as TabItem[],
+			visibleTabs.filter(
+				(tab) => tab.type !== "file_manager" && !tab.fileData.recycleBin,
+			) as TabItem[],
 		)
 
 		return () => {
@@ -662,7 +667,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 	})
 
 	// Tab operations
-	const openFileTab = useMemoizedFn((fileItem: any, autoEdit?: boolean) => {
+	const fileManagerAreaRequestId = useRef(0)
+	const openFileTab = useMemoizedFn((fileItem: any, autoEdit?: boolean, activate = true) => {
 		// Reset manual close flag when opening new tab
 		manuallyClosedLastTabRef.current = false
 
@@ -682,6 +688,13 @@ export function useFilesViewer(props: FilesViewerProps) {
 				activeTab?.type === "file_manager" ? activeTab.returnTabId : activeTab?.id,
 			)
 			manager.fileManagerState = getFileManagerState(managerContext)
+			if (managerContext.spaceType === "project" && managerContext.area) {
+				// 每次点击都产生新请求：在内部返回文件后，再点同一入口仍要进入回收站。
+				manager.fileManagerAreaRequest = {
+					requestId: ++fileManagerAreaRequestId.current,
+					area: managerContext.area,
+				}
+			}
 			if (
 				managerContext.spaceType === "user" &&
 				manager.fileManagerState?.spaceType === "user"
@@ -733,6 +746,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		// Use real attachment first; otherwise use a loading placeholder.
 		let targetFile =
+			(normalizedPreviewFile?.recycleBin ? normalizedPreviewFile : null) ||
 			file ||
 			(attachmentFile?.is_directory && attachmentFile?.file_id ? attachmentFile : null) ||
 			(isHiddenProjectFile(normalizedPreviewFile) ? normalizedPreviewFile : null) ||
@@ -766,12 +780,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 
 		const newTab = convertFileToTabItem(mergedTargetFile, attachments, {
 			display_config: mergedTargetFile.display_config,
+			active: activate,
 		})
 
 		if (!newTab) {
 			return
 		}
-		if (newTab.fileData.space_type === "user") newTab.userIdentityKey = userIdentityKey
+		if (newTab.fileData.space_type === "user" || newTab.fileData.recycleBin)
+			newTab.userIdentityKey = userIdentityKey
 		onPreviewOpen?.()
 		newTab.closeable = !(
 			nonClosableFileIdSet.has(newTab.id) ||
@@ -781,6 +797,17 @@ export function useFilesViewer(props: FilesViewerProps) {
 		if (isPendingAttachmentOpen) {
 			newTab.isLoading = true
 			newTab.isDeleted = false
+		}
+		if (newTab.fileData.recycleBin) {
+			// 回收站内容独立于正常附件及删除占位；不通知正常文件树选中，也不触发编辑。
+			newTab.isDeleted = false
+			if (newTab.active) {
+				updatePlaybackTab({ active: false })
+				deactivateAllKnowledgeBaseTabs()
+				deactivateAllPublishedMicroAppTabs()
+			}
+			dispatchTabs({ type: TabActionType.ADD_TAB, payload: { tab: newTab } })
+			return
 		}
 		const openedFileId = newTab.fileData.file_id || newTab.id
 
@@ -1626,7 +1653,8 @@ export function useFilesViewer(props: FilesViewerProps) {
 	useEffect(() => {
 		if (!userMutationVersion) return
 		const files = tabsRef.current.filter(
-			(tab) => isCurrentUserTab(tab) && tab.type !== "file_manager",
+			(tab) =>
+				isCurrentUserTab(tab) && tab.type !== "file_manager" && !tab.fileData.recycleBin,
 		)
 		if (!files.length) return
 		const controller = new AbortController()
@@ -2019,7 +2047,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const handleRefresh = useMemoizedFn(async () => {
 		if (activeTab?.type === "file_manager") return
 		let refreshedUserFile: FileItem | undefined
-		if (activeTab?.fileData.space_type === "user") {
+		if (activeTab?.fileData.space_type === "user" && !activeTab.fileData.recycleBin) {
 			const identity = userIdentityKey
 			if (!(await userFilesStore.confirmFileChanges([activeTab.fileData.file_id]))) return
 			if (
@@ -2054,7 +2082,9 @@ export function useFilesViewer(props: FilesViewerProps) {
 		// 如果有活跃的 tab，强制刷新其内容
 		if (activeTab) {
 			// 项目文件使用附件索引；独立预览文件使用 Tab 自身数据重新拉取内容。
-			const indexedFile = fileById.get(String(activeTab.id))
+			const indexedFile = activeTab.fileData.recycleBin
+				? undefined
+				: fileById.get(String(activeTab.id))
 			const file =
 				refreshedUserFile ||
 				indexedFile ||
@@ -2137,7 +2167,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 
 		lastNotifiedActiveFileIdRef.current = currentActiveFileId
-		onActiveFileChange?.(currentActiveFileId)
+		onActiveFileChange?.(activeTab?.fileData.recycleBin ? null : currentActiveFileId)
 	}, [activeTabFileId, activeTabId, activeTabType, onActiveFileChange])
 
 	// Notify parent with current active tab type
@@ -2291,15 +2321,14 @@ export function useFilesViewer(props: FilesViewerProps) {
 				onNext: () => {
 					// TODO: Implement next file navigation
 				},
-				onFullscreen: () => handleFileFullscreen(tab.fileData.file_id),
+				onFullscreen: () => handleFileFullscreen(tab.id),
 				onDownload: (fileId?: string, fileVersion?: number, mode?: DownloadImageMode) =>
 					onDownload?.(fileId || tab.fileData.file_id, fileVersion, mode),
 				totalFiles: fileList.length,
 				hasUserSelectDetail: false,
 				isFromNode: false,
 				userSelectDetail,
-				isFullscreen:
-					Boolean(forceFullscreenMode) || fullscreenFileId === tab.fileData.file_id,
+				isFullscreen: Boolean(forceFullscreenMode) || fullscreenFileId === tab.id,
 				attachmentList,
 				viewMode,
 				onViewModeChange: (mode: "code" | "desktop" | "phone") =>
@@ -2313,6 +2342,24 @@ export function useFilesViewer(props: FilesViewerProps) {
 							? tab.fileData.content
 							: undefined
 
+					const recycleBin = tab.fileData.recycleBin
+					if (recycleBin) {
+						void copyFileContent(
+							[],
+							t,
+							tab.fileData.file_id,
+							undefined,
+							undefined,
+							createFileApi({
+								kind: "recycle-bin",
+								recycleBinId: recycleBin.id,
+								fileId: tab.fileData.file_id,
+								identityKey: recycleBin.identityKey,
+								projectId: recycleBin.projectId,
+							}),
+						)
+						return
+					}
 					handleCopy(fileId || tab.fileData.file_id, copySourceContent, fileVersion)
 				},
 				onShare: () => handleShare(tab.fileData.file_id),

@@ -36,7 +36,7 @@ interface MagicClawRepositoryInterface
      *
      * @return array{total: int, list: MagicClawEntity[]}
      */
-    public function getList(string $userId, string $organizationCode, int $page, int $pageSize): array;
+    public function getList(string $userId, string $organizationCode, int $page, int $pageSize, string $keyword = ''): array;
 
     /**
      * Get paginated list of all non-deleted magic claws across users.

@@ -2,6 +2,11 @@ import Konva from "konva"
 import { ElementTypeEnum, type LayerElement } from "../../document/types"
 import type { Canvas } from "../../core/Canvas"
 import type { CanvasEvent, CanvasEventMap } from "../../core/EventEmitter"
+import {
+	getMediaLabelLayout,
+	invalidateMediaLabelLayouts,
+	type MediaLabelLayout,
+} from "./mediaLabelLayout"
 
 interface VisibleLabelQueryCache {
 	viewportGeneration: number
@@ -9,7 +14,7 @@ interface VisibleLabelQueryCache {
 	candidateRevision: number
 }
 
-type VisibleLabelSyncMode = "existing" | "full"
+type VisibleLabelSyncMode = "existing" | "full" | "visibility"
 
 /**
  * 标签配置
@@ -37,6 +42,11 @@ export interface LabelVisibilityConfig {
 	alwaysVisibleTypes: Set<string>
 	/** 哪些元素类型在选中或 hover 时显示（如 Image） */
 	hoverOrSelectTypes: Set<string>
+}
+
+export interface LabelSize {
+	width: number
+	height: number
 }
 
 /**
@@ -181,12 +191,16 @@ export abstract class BaseLabelManager {
 	private visibleLabelSyncRafId: number | null = null
 	private pendingVisibleLabelSyncMode: VisibleLabelSyncMode | null = null
 	private pendingVisibleLabelSyncReason = "unknown"
+	private pendingLabelVisibilityRefresh = false
 	private visibleLabelQueryCache: VisibleLabelQueryCache | null = null
 	private lastSyncedViewportScale: number | null = null
 	private labelZIndexes = new Map<string, number>()
 	private labelCandidateIndex: LabelCandidateIndex
 	private eventUnsubscribers: Array<() => void> = []
 	private destroyed = false
+	private mediaLabelsAlwaysVisible = false
+	private labelMeasureNode: Konva.Text | null = null
+	private intrinsicLabelSizes = new WeakMap<object, { text: string; size: LabelSize }>()
 
 	// 静态注册表，用于不同 LabelManager 之间的协调
 	protected static labelManagers: BaseLabelManager[] = []
@@ -244,7 +258,14 @@ export abstract class BaseLabelManager {
 	}
 
 	private scheduleVisibleLabelSync(reason: string, mode: VisibleLabelSyncMode): void {
-		if (mode === "full" || this.pendingVisibleLabelSyncMode === null) {
+		if (reason === "media-geometry") invalidateMediaLabelLayouts(this.canvas)
+		// 同一帧的缩放/视口同步可以合并调度，但不能丢掉几何变化引起的遮挡刷新。
+		if (mode === "visibility") this.pendingLabelVisibilityRefresh = true
+		if (
+			mode === "full" ||
+			this.pendingVisibleLabelSyncMode === null ||
+			(mode === "existing" && this.pendingVisibleLabelSyncMode === "visibility")
+		) {
 			this.pendingVisibleLabelSyncMode = mode
 			this.pendingVisibleLabelSyncReason = reason
 		}
@@ -260,14 +281,21 @@ export abstract class BaseLabelManager {
 		this.visibleLabelSyncRafId = schedule(() => {
 			const pendingMode = this.pendingVisibleLabelSyncMode
 			const pendingReason = this.pendingVisibleLabelSyncReason
+			const refreshVisibility = this.pendingLabelVisibilityRefresh
+			this.pendingLabelVisibilityRefresh = false
 			this.visibleLabelSyncRafId = null
 			this.pendingVisibleLabelSyncMode = null
 			this.pendingVisibleLabelSyncReason = "unknown"
 			if (pendingMode === "full") {
 				this.syncVisibleLabels(pendingReason)
-				return
+			} else if (pendingMode === "existing") {
+				this.syncExistingLabels(pendingReason)
 			}
-			this.syncExistingLabels(pendingReason)
+			if (refreshVisibility) {
+				// 邻图变化也会改变排间空隙；倍率不变时仍需同步几何布局。
+				if (this.updateExistingLabels(true)) this.requestOverlayDraw("media-geometry")
+				this.updateAllLabelsVisibility()
+			}
 		})
 	}
 
@@ -282,6 +310,7 @@ export abstract class BaseLabelManager {
 		this.visibleLabelSyncRafId = null
 		this.pendingVisibleLabelSyncMode = null
 		this.pendingVisibleLabelSyncReason = "unknown"
+		this.pendingLabelVisibilityRefresh = false
 	}
 
 	private markLabelCandidatesDirty(): void {
@@ -308,6 +337,121 @@ export abstract class BaseLabelManager {
 	): { x: number; y: number }
 
 	/**
+	 * 返回标签在自身坐标系中的布局尺寸。
+	 * 子类可以覆盖它来包含图标或其它局部布局；基类默认使用文本尺寸。
+	 */
+	protected getLabelSize(labelGroup: Konva.Group): LabelSize | null {
+		const textNode = labelGroup.findOne("Text") as Konva.Text | null
+		if (!textNode) return null
+		return {
+			width: textNode.width(),
+			height: textNode.height(),
+		}
+	}
+
+	/** 完整文本度量不依赖可见性、节点是否创建或上一次省略宽度。 */
+	protected getIntrinsicLabelSize(elementId: string): LabelSize {
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		if (!element) return { width: 0, height: this.labelConfig.fontSize }
+		const text = this.getLabelText(elementId)
+		const cached = this.intrinsicLabelSizes.get(element)
+		if (cached?.text === text) return cached.size
+		this.labelMeasureNode ??= new Konva.Text({
+			fontSize: this.labelConfig.fontSize,
+			fontFamily: this.labelConfig.fontFamily,
+		})
+		const size = this.labelMeasureNode.measureSize(text)
+		this.intrinsicLabelSizes.set(element, { text, size })
+		return size
+	}
+
+	/** 默认无附加操作；已有 DOM 改名入口可在名称管理器中提供屏幕操作区。 */
+	protected getLabelOperationScreenWidth(elementId: string): number {
+		void elementId
+		return 0
+	}
+
+	protected getLabelGap(): number {
+		return 0
+	}
+
+	protected getMediaRowLayout(elementId: string): MediaLabelLayout | null {
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		const type = element?.getData().type
+		if (type !== ElementTypeEnum.Image && type !== ElementTypeEnum.Video) return null
+		const nameManager: BaseLabelManager = this.canvas.nameLabelManager
+		const sizeManager: BaseLabelManager = this.canvas.sizeLabelManager
+		if (!nameManager || !sizeManager) return null
+		return getMediaLabelLayout(this.canvas, elementId, {
+			name: nameManager.getIntrinsicLabelSize(elementId),
+			size: element?.supportsSizeEditing()
+				? sizeManager.getIntrinsicLabelSize(elementId)
+				: { width: 0, height: sizeManager.labelConfig.fontSize },
+			fontSize: nameManager.labelConfig.fontSize,
+			offsetTop: Math.max(
+				nameManager.labelConfig.offsetTop,
+				sizeManager.labelConfig.offsetTop,
+			),
+			gap: nameManager.getLabelGap(),
+			operationScreenWidth: nameManager.getLabelOperationScreenWidth(elementId),
+		})
+	}
+
+	/**
+	 * 在应用共同缩放后调整标签的局部布局。
+	 * 子类可以只收窄文字宽度，不改变原始文本，保留重命名等完整文本场景。
+	 */
+	protected updateLabelLayout(
+		elementId: string,
+		element: ReturnType<typeof this.canvas.elementManager.getElementInstance>,
+		labelGroup: Konva.Group,
+		boundingRect: { x: number; y: number; width: number; height: number },
+		inverseScale: number,
+	): boolean {
+		void elementId
+		void element
+		void labelGroup
+		void boundingRect
+		void inverseScale
+		return false
+	}
+
+	/** 媒体按共同几何预算缩小；其它类型继续保持原来的固定屏幕字号。 */
+	private getEffectiveInverseScale(elementId: string, viewportScale: number): number {
+		const safeViewportScale =
+			Number.isFinite(viewportScale) && viewportScale > 0 ? viewportScale : 1
+		return this.getMediaRowLayout(elementId)?.inverseScale ?? 1 / safeViewportScale
+	}
+
+	/**
+	 * 更新图片和视频标签的显示模式，并立即同步现有及当前视口内的标签。
+	 * 常驻模式需要把媒体加入候选索引，否则缩小时标签尚未创建就无法显示。
+	 */
+	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean, syncLabels = true): void {
+		if (this.mediaLabelsAlwaysVisible === alwaysVisible) return
+		this.mediaLabelsAlwaysVisible = alwaysVisible
+		if (syncLabels) this.syncMediaLabelsVisibility()
+	}
+
+	/** Canvas 先统一标题与分辨率的模式，再沿用现有同步和清理流程。 */
+	public syncMediaLabelsVisibility(): void {
+		this.visibleLabelQueryCache = null
+		this.syncVisibleLabels("media-label-visibility")
+	}
+
+	public isMediaLabelsAlwaysVisible(): boolean {
+		return this.mediaLabelsAlwaysVisible
+	}
+
+	protected shouldTreatAsAlwaysVisible(elementType: string): boolean {
+		return (
+			this.visibilityConfig.alwaysVisibleTypes.has(elementType) ||
+			(this.mediaLabelsAlwaysVisible &&
+				this.visibilityConfig.hoverOrSelectTypes.has(elementType))
+		)
+	}
+
+	/**
 	 * 设置事件监听器
 	 */
 	private setupEventListeners(): void {
@@ -315,12 +459,14 @@ export abstract class BaseLabelManager {
 		this.listen("element:created", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听元素删除
 		this.listen("element:deleted", (event) => {
 			this.labelCandidateIndex.removeElement(event.data.elementId)
 			this.removeLabel(event.data.elementId)
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 处理拖拽移动事件
@@ -339,23 +485,31 @@ export abstract class BaseLabelManager {
 		// 监听拖拽移动事件
 		this.listen("elements:transform:dragmove", ({ data }) => {
 			data.elementIds.forEach((elementId) => handleDragMove(elementId))
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听缩放移动事件
 		this.listen("elements:transform:anchorDragmove", ({ data }) => {
 			data.elementIds.forEach((elementId) => handleDragMove(elementId))
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听元素数据更新（属性变化，如名称变化或 zIndex 变化）
 		this.listen("element:updated", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
+			const { data, previousData } = event.data
+			if (data.visible !== previousData?.visible && "children" in data && data.children) {
+				this.refreshChildLabelsVisibility(data.children)
+			}
 		})
 
 		// 监听元素重新渲染（位置、尺寸变化等）
 		this.listen("element:rerendered", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
 			this.createOrUpdateLabel(event.data.elementId)
+			this.scheduleVisibleLabelSync("media-geometry", "visibility")
 		})
 
 		// 监听选择变化
@@ -512,6 +666,9 @@ export abstract class BaseLabelManager {
 
 		// 更新标签位置（内部会调用 updateLabelVisibility）
 		this.updateLabelPosition(elementId, options?.skipBatchDraw)
+		if (createdLabel || this.isMediaLabelsAlwaysVisible()) {
+			this.updateOtherLabelPositions(elementId, options?.skipBatchDraw)
+		}
 
 		// 通知其他 LabelManager 也更新该元素的可见性（单个更新，需要立即 batchDraw）
 		if (!options?.skipNotify) {
@@ -519,6 +676,18 @@ export abstract class BaseLabelManager {
 		}
 
 		return createdLabel
+	}
+
+	/**
+	 * 当第二种标签刚创建时，重新布局同一元素上已经存在的其它标签，
+	 * 让名称和尺寸标签从首次渲染开始就共享同一个自适应比例。
+	 */
+	private updateOtherLabelPositions(elementId: string, skipBatchDraw = false): void {
+		for (const manager of BaseLabelManager.labelManagers) {
+			if (manager === this || manager.canvas !== this.canvas) continue
+			if (!manager.labelMap.has(elementId)) continue
+			manager.updateLabelPosition(elementId, skipBatchDraw)
+		}
 	}
 
 	/**
@@ -579,6 +748,23 @@ export abstract class BaseLabelManager {
 		}
 	}
 
+	private refreshChildLabelsVisibility(children: LayerElement[]): void {
+		// 父级隐藏时同步隐藏独立 overlay 标题；恢复父级时也创建初始隐藏子项的标题。
+		const visit = (items: LayerElement[]): void => {
+			for (const child of items) {
+				this.createOrUpdateLabel(child.id, {
+					skipReorder: true,
+					skipNotify: true,
+					skipBatchDraw: true,
+				})
+				if ("children" in child && child.children) visit(child.children)
+			}
+		}
+		visit(children)
+		this.reorderAllLabels(true)
+		this.requestOverlayDraw("child-labels-visibility")
+	}
+
 	/**
 	 * 更新标签位置
 	 * @param elementId - 元素 ID
@@ -595,6 +781,18 @@ export abstract class BaseLabelManager {
 			return false
 		}
 
+		// 关闭常驻后先移除非交互标签，避免移除前仍为整批媒体度量文本、布局和计算遮挡。
+		// 悬浮、选中与重命名标签继续由原有保留规则处理。
+		if (
+			!this.shouldRetainLabel(
+				elementId,
+				element,
+				this.calculateBaseVisibility(elementId, element),
+			)
+		) {
+			return this.updateLabelVisibility(elementId, skipBatchDraw)
+		}
+
 		// 更新标签文本（因为 transform 时文本内容可能变化，如尺寸标签）
 		const newLabelText = this.getLabelText(elementId)
 		let layoutChanged = this.updateLabelText(labelGroup, newLabelText)
@@ -608,11 +806,23 @@ export abstract class BaseLabelManager {
 			return layoutChanged && labelGroup.visible()
 		}
 
-		// 获取 viewport 缩放
+		// 获取 viewport 缩放，并在标签即将超出元素可用宽度时限制反向缩放。
 		const viewportScale = this.canvas.stage.scaleX()
+		const safeViewportScale =
+			Number.isFinite(viewportScale) && viewportScale > 0 ? viewportScale : 1
+		const desiredInverseScale = 1 / safeViewportScale
 
-		// 计算反向缩放（使标签不受 viewport 缩放影响）
-		const inverseScale = 1 / viewportScale
+		// 先按常规字号收窄名称文本，避免正常缩放时为了容纳长标题而缩小整行文字。
+		layoutChanged =
+			this.updateLabelLayout(
+				elementId,
+				element,
+				labelGroup,
+				boundingRect,
+				desiredInverseScale,
+			) || layoutChanged
+
+		const inverseScale = this.getEffectiveInverseScale(elementId, viewportScale)
 
 		// 应用反向缩放
 		if (labelGroup.scaleX() !== inverseScale || labelGroup.scaleY() !== inverseScale) {
@@ -620,16 +830,19 @@ export abstract class BaseLabelManager {
 			layoutChanged = true
 		}
 
+		// 反向缩放在极小画布下可能再次改变可用局部宽度，再同步一次省略布局。
+		layoutChanged =
+			this.updateLabelLayout(elementId, element, labelGroup, boundingRect, inverseScale) ||
+			layoutChanged
+
 		// 获取文本节点以计算标签尺寸
 		const textNode = labelGroup.findOne("Text") as Konva.Text
 		if (!textNode) {
 			return false
 		}
 
-		const labelSize = {
-			width: textNode.width(),
-			height: textNode.height(),
-		}
+		const labelSize = this.getLabelSize(labelGroup)
+		if (!labelSize) return false
 
 		// 调用子类实现的位置计算方法
 		const position = this.calculateLabelPosition(boundingRect, labelSize, inverseScale)
@@ -662,6 +875,9 @@ export abstract class BaseLabelManager {
 			return null
 		}
 
+		// 标签位于独立 Overlay Layer，必须同时遵守元素自身和祖先的隐藏状态。
+		if (!this.canvas.elementManager.isElementVisibleInDataTree(elementId)) return false
+
 		// 检查是否在裁剪状态下，如果是裁剪的元素，强制显示标签
 		const croppingElementId = this.canvas.cropManager.getCroppingElementId()
 		if (croppingElementId === elementId) {
@@ -682,7 +898,7 @@ export abstract class BaseLabelManager {
 		const elementType = elementData.type
 
 		// 检查是否为一直显示的类型
-		if (this.visibilityConfig.alwaysVisibleTypes.has(elementType)) {
+		if (this.shouldTreatAsAlwaysVisible(elementType)) {
 			return true
 		}
 		// 检查是否为选中或 hover 时显示的类型
@@ -766,6 +982,9 @@ export abstract class BaseLabelManager {
 			shouldShow = customVisibility !== null ? customVisibility : baseVisibility
 		}
 
+		if (shouldShow && this.isMediaLabelRowCovered(elementId)) shouldShow = false
+		if (shouldShow && this.getMediaRowLayout(elementId)?.hasSpace === false) shouldShow = false
+
 		if (labelGroup.visible() === shouldShow) return false
 		labelGroup.visible(shouldShow)
 
@@ -786,12 +1005,78 @@ export abstract class BaseLabelManager {
 		baseVisibility: boolean | null,
 	): boolean {
 		if (!element || baseVisibility === null) return false
-		if (this.visibilityConfig.alwaysVisibleTypes.has(element.getData().type)) return true
+		if (this.shouldTreatAsAlwaysVisible(element.getData().type)) return true
 		return baseVisibility || this.shouldRetainHiddenLabel(elementId)
 	}
 
 	protected shouldRetainHiddenLabel(elementId: string): boolean {
 		void elementId
+		return false
+	}
+
+	/** 读取局部尺寸而非上一帧缩放后的边界，隐藏或缩放不改变分辨率预留空间。 */
+	protected getOtherLabelSizes(elementId: string): LabelSize[] {
+		const sizes: LabelSize[] = []
+		for (const manager of BaseLabelManager.labelManagers) {
+			if (manager === this || manager.canvas !== this.canvas) continue
+			const group = manager.labelMap.get(elementId)
+			const size = group ? manager.getLabelSize(group) : null
+			if (size) sizes.push(size)
+		}
+		return sizes
+	}
+
+	/**
+	 * 标签层位于媒体层之上，因此需要显式遵守同父级媒体的遮挡关系。
+	 * 任一标签被上层媒体覆盖时整行隐藏；不依赖标签当前 visible，移开后可以恢复。
+	 */
+	private isMediaLabelRowCovered(elementId: string): boolean {
+		const element = this.canvas.elementManager.getElementInstance(elementId)
+		if (!element) return false
+		const data = element.getData()
+		if (data.type !== ElementTypeEnum.Image && data.type !== ElementTypeEnum.Video) return false
+		const parentId = this.canvas.elementManager.findParentIdForElement(elementId)
+		for (const manager of BaseLabelManager.labelManagers) {
+			if (manager.canvas !== this.canvas) continue
+			// 尺寸已让位给标题时，其隐藏节点不参与整行遮挡判断。
+			if (
+				manager === this.canvas.sizeLabelManager &&
+				!this.getMediaRowLayout(elementId)?.showSize
+			)
+				continue
+			const group = manager.labelMap.get(elementId)
+			const size = group ? manager.getLabelSize(group) : null
+			if (!group || !size) continue
+			const bounds = {
+				x: group.x(),
+				y: group.y(),
+				width: size.width * group.scaleX(),
+				height: size.height * group.scaleY(),
+			}
+			const candidates = this.canvas.geometryCacheManager.queryElementIdsByExpandedRect(
+				bounds,
+				0,
+			)
+			for (const candidateId of candidates) {
+				if (candidateId === elementId) continue
+				const candidate = this.canvas.elementManager.getElementInstance(candidateId)
+				if (!candidate) continue
+				const candidateData = candidate.getData()
+				if (
+					candidateData.type !== ElementTypeEnum.Image &&
+					candidateData.type !== ElementTypeEnum.Video
+				)
+					continue
+				if ((candidateData.zIndex ?? 0) <= (data.zIndex ?? 0)) continue
+				if (this.canvas.elementManager.findParentIdForElement(candidateId) !== parentId)
+					continue
+				const node = candidate.getNode()
+				if (!node?.isVisible() || node.getAbsoluteOpacity() === 0) continue
+				const candidateBounds = candidate.getBoundingRect()
+				if (candidateBounds && this.checkRectOverlap(bounds, candidateBounds, 0))
+					return true
+			}
+		}
 		return false
 	}
 
@@ -927,7 +1212,13 @@ export abstract class BaseLabelManager {
 	}
 
 	private getLabelCandidateElementIds(): ReadonlySet<string> {
-		return this.labelCandidateIndex.getCandidateIds(this.visibilityConfig.alwaysVisibleTypes)
+		const candidateTypes = new Set(this.visibilityConfig.alwaysVisibleTypes)
+		if (this.mediaLabelsAlwaysVisible) {
+			this.visibilityConfig.hoverOrSelectTypes.forEach((elementType) =>
+				candidateTypes.add(elementType),
+			)
+		}
+		return this.labelCandidateIndex.getCandidateIds(candidateTypes)
 	}
 
 	private updateExistingLabels(skipBatchDraw = true): boolean {
@@ -964,7 +1255,8 @@ export abstract class BaseLabelManager {
 			this.lastSyncedViewportScale === null ||
 			this.lastSyncedViewportScale !== currentViewportScale ||
 			reason === "document-restored" ||
-			reason === "locale"
+			reason === "locale" ||
+			reason === "media-label-visibility"
 
 		if (shouldUpdateExistingLabels) {
 			requiresDraw = this.updateExistingLabels(true)
@@ -1116,6 +1408,8 @@ export abstract class BaseLabelManager {
 			labelGroup.destroy()
 		}
 		this.labelMap.clear()
+		this.labelMeasureNode?.destroy()
+		this.labelMeasureNode = null
 		this.labelZIndexes.clear()
 		this.visibleLabelQueryCache = null
 		this.lastSyncedViewportScale = null

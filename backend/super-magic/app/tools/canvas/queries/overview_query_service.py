@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
+
 from app.tools.canvas.application.results import CanvasOverviewElementResult, CanvasOverviewResult
 from app.tools.canvas.domain.content_fields import ContentFieldsFactory
 from app.tools.canvas.domain.models import CanvasContent
@@ -32,6 +34,12 @@ class OverviewQueryService:
                 connection_map[connection.source_element_id]["outgoing"].append(connection.target_element_id)
             if connection.target_element_id in connection_map:
                 connection_map[connection.target_element_id]["incoming"].append(connection.source_element_id)
+        # 概览只读当前持久化版本，不查询文件系统或生成详情；文件存在性由精确详情核实。
+        active_contents = {
+            element.element_id: element.get_content(element.active_content_id)
+            or CanvasContent("", ContentFieldsFactory.empty(element.element_type))
+            for element in page_items
+        }
         return CanvasOverviewResult(
             project_path=project_path,
             project_name=project.name,
@@ -52,10 +60,9 @@ class OverviewQueryService:
                     content_count=len(element.contents),
                     active_content_id=element.active_content_id,
                     main_content_id=element.main_content_id,
-                    status=(
-                        element.get_content(element.active_content_id)
-                        or CanvasContent("", ContentFieldsFactory.empty(element.element_type))
-                    ).fields.generation_status,
+                    status=active_contents[element.element_id].fields.generation_status,
+                    asset_path=active_contents[element.element_id].fields.asset_path,
+                    file_name=self._file_name(active_contents[element.element_id].fields.asset_path),
                     parent_element_id=tree.parent_id(element.element_id),
                     depth=tree.depth(element.element_id),
                     child_count=len(tree.child_ids(element.element_id)),
@@ -65,3 +72,10 @@ class OverviewQueryService:
                 for element in page_items
             ),
         )
+
+    @staticmethod
+    def _file_name(asset_path: str | None) -> str | None:
+        """只为项目文件路径返回名称；远程资源和内嵌数据没有可管理的文件名。"""
+        if not asset_path or "://" in asset_path or asset_path.startswith("data:"):
+            return None
+        return PurePosixPath(asset_path).name

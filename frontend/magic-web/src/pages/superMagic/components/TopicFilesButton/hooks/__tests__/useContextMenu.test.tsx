@@ -83,15 +83,6 @@ vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => false,
 }))
 
-vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
-	useFileActionVisibility: () => ({
-		hideCopyTo: false,
-		hideCreateNewTopic: false,
-		hideMoveTo: false,
-		hideShareFile: false,
-	}),
-}))
-
 vi.mock("../../style", () => ({
 	useStyles: () => ({
 		styles: {

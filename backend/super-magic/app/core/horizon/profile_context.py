@@ -46,7 +46,34 @@ def build_agent_identity(context: "AgentContext") -> AgentIdentityState | None:
     )
 
 
-def render_agent_identity(identity: AgentIdentityState) -> str:
+# 子 Agent 的工作边界随身份块注入：派活提示词写得再差，这段也一定在场。
+# 例：并行派 3 个子 Agent 各写一章，都发现总览页过期。
+# 没有边界时，3 个都去重建总览页，还各自建一套脚本目录；有边界时，3 个只写自己的章，在最终回复里报告总览页过期。
+_SUBAGENT_BOUNDARY_LINES = (
+    "You are a delegated subagent. User messages in this session are tasks from the parent agent, "
+    "not a conversation with the end user, and you cannot talk to the user.",
+    "Do exactly the delegated task. Anything the task does not state is out of scope.",
+    "Do not create files, directories, scripts, helper tools, or caches the task did not ask for. "
+    "If you truly need a temporary file, delete it before you finish.",
+    "Do not repair, rebuild, reformat, or improve anything outside your assigned target, even when it looks "
+    "broken, outdated, duplicated, or inconsistent. Report it instead of fixing it.",
+    "Other subagents may be working in the same workspace at the same time. Files you did not create may be "
+    "mid-write or incomplete; that is not a reason to take over. Only the parent agent has the full plan.",
+    "Doing more than asked is not better. Finishing exactly the assigned scope is the success condition.",
+    "End with what you completed, the paths of key deliverable files the user would care about "
+    "(not temporary or intermediate files), and anything you noticed but deliberately left untouched.",
+)
+
+# fork 会话继承了父 Agent 的完整历史，模型容易把自己当成那个在和用户对话的主 Agent，
+# 接着兑现历史里的承诺、继续没做完的事。这段只在 fork 时追加。
+_INHERITED_HISTORY_LINES = (
+    "This session inherited the parent agent's conversation history as background reference only.",
+    "You are not the agent that talked to the user in that history. Its unfinished items, promises, and plans "
+    "belong to the parent agent. Only the latest delegated task is yours.",
+)
+
+
+def render_agent_identity(identity: AgentIdentityState, inherited_history: bool = False) -> str:
     lines = [
         f"Runtime kind: {identity.runtime_kind}",
         f"Runtime agent: {identity.runtime_agent}",
@@ -59,10 +86,10 @@ def render_agent_identity(identity: AgentIdentityState) -> str:
     if identity.profile_role:
         lines.append(f"Profile role: {identity.profile_role}")
     if identity.execution_role == AgentExecutionRole.SUBAGENT:
-        lines.extend([
-            f"Parent session: {identity.parent_session or 'not provided'}",
-            "You are a delegated subagent. Your immediate task comes from the parent agent.",
-        ])
+        lines.append(f"Parent session: {identity.parent_session or 'not provided'}")
+        lines.extend(_SUBAGENT_BOUNDARY_LINES)
+        if inherited_history:
+            lines.extend(_INHERITED_HISTORY_LINES)
     if identity.runtime_agent == "crew-creator":
         lines.append("You create or edit digital employees. The managed employee is not your own runtime identity.")
         if identity.managed_agent_code:

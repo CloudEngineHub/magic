@@ -111,7 +111,9 @@ function useChooseUploadDirModal({
 		}
 	})
 
+	// 隐藏弹窗会触发内部 resetFiles；先清空父级输入，避免它恢复上一批待上传文件。
 	const onModalClose = useMemoizedFn(() => {
+		setUploadFiles([])
 		chooseDirReject.current?.({ type: "cancel" })
 		chooseDirResolve.current = null
 		chooseDirReject.current = null
@@ -119,6 +121,7 @@ function useChooseUploadDirModal({
 	})
 
 	const onModalSubmit = useMemoizedFn((value: UploadModalSubmitParams) => {
+		setUploadFiles([])
 		chooseDirResolve.current?.(value)
 		chooseDirResolve.current = null
 		chooseDirReject.current = null

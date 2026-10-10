@@ -1,3 +1,4 @@
+import MicroAppPermissionsProvider from "./components/MicroAppPermissionsProvider"
 import { useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -7,7 +8,7 @@ import Detail from "@/pages/superMagic/components/Detail"
 import type { HtmlPermissionManagerHandle } from "@/pages/superMagic/components/Detail/contents/HTML/hooks/useHtmlPermissionManagerBridge"
 import MagicModal from "@/components/base/MagicModal"
 import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
-import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import { SharePermissionResourceProvider } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
@@ -30,6 +31,8 @@ import MicroAppPreviewWorkspace from "./components/MicroAppPreviewWorkspace"
 import MicroAppHeader from "./components/MicroAppHeader"
 import MicroAppDesktopRoute from "./components/MicroAppDesktopRoute"
 import MicroAppEntryPreview from "./components/MicroAppEntryPreview"
+import MicroAppPreviewPages from "./components/MicroAppPreviewPages"
+import MicroAppNoOpenPages from "./components/MicroAppNoOpenPages"
 import MicroAppFallbackState from "./components/MicroAppFallbackState"
 import MicroAppPageOverlays from "./components/MicroAppPageOverlays"
 import MicroAppPageLoadingState from "./components/MicroAppPageLoadingState"
@@ -61,7 +64,6 @@ function MicroAppPageInner({
 	const fileDetailVisited = useRef(false)
 	if (activeView !== "preview") fileDetailVisited.current = true
 	const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop")
-	const [previewRefreshKey, setPreviewRefreshKey] = useState(0)
 	const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
 	const [isAIEditActive, setIsAIEditActive] = useState(false)
 	const [isDevConsoleActive, setIsDevConsoleActive] = useState(false)
@@ -138,14 +140,13 @@ function MicroAppPageInner({
 		}
 	}, [canUseDevelopment, selectedProject?.id])
 
-	const {
-		previewEntryFile,
-		setPreviewEntryFile,
-		previewFileOptions,
-		activePreviewFileId,
-		handlePreviewFileChange,
-		handlePreviewOpenFile,
-	} = useMicroAppPreviewFiles({ attachmentList, defaultEntryFile })
+	const previewBrowser = useMicroAppPreviewFiles({
+		attachmentList,
+		defaultEntryFile,
+		scopeKey: projectId,
+		allowCloseLastTab: true,
+	})
+	const { previewEntryFile } = previewBrowser
 
 	const topicActions = useScopedMessageHeaderTopicActions({
 		selectedProject: panelSelectedProject,
@@ -261,7 +262,6 @@ function MicroAppPageInner({
 
 		setActiveView(nextView)
 		if (nextView === "preview" && defaultEntryFile) {
-			setPreviewEntryFile(defaultEntryFile)
 			detailRef.current?.openFileTab(defaultEntryFile)
 		}
 	})
@@ -313,16 +313,20 @@ function MicroAppPageInner({
 		pageModeRef.current = "development"
 		usageConversationRequestedRef.current = false
 		setPageMode("development")
-		setPreviewEntryFile(null)
 		setPreviewMode("desktop")
-		setPreviewRefreshKey(0)
 		setIsPreviewFullscreen(false)
+	}, [projectId, setIsMessagePanelCollapsed])
+
+	useEffect(() => {
+		if (previewBrowser.activePreviewTabId) return
+		// An empty editor has no document-owned toolbar actions or permission panel.
+		aiEditHandlerRef.current = null
+		devConsoleToggleHandlerRef.current = null
 		setIsAIEditActive(false)
 		setIsDevConsoleActive(false)
 		setIsDevConsoleAvailable(false)
-		// Clear the previous app's manager before the next preview registers its own handle.
 		setHtmlPermissionManager(null)
-	}, [projectId, setIsMessagePanelCollapsed, setHtmlPermissionManager, setPreviewEntryFile])
+	}, [previewBrowser.activePreviewTabId])
 
 	useEffect(() => {
 		if (!isPreviewFullscreen) return undefined
@@ -379,142 +383,148 @@ function MicroAppPageInner({
 			ensureConversation={ensureHostConversation}
 			requestPreviewMode={requestPreviewMode}
 		>
-			<FileActionVisibilityProvider>
-				<div
-					className={cn(
-						"flex h-full w-full flex-col rounded-lg border border-border bg-background",
-						isPreviewFullscreen ? "overflow-visible" : "overflow-hidden",
-					)}
-					data-testid="micro-app-page"
-				>
-					<MicroAppHeader
-						selectedProject={selectedProject}
-						hasEntries={Boolean(defaultEntryFile)}
-						canPublish={canPublish}
-						isPublished={isPublished}
-						onBack={handleBackToMicroApps}
-						onPublish={handleOpenPublishDialog}
-						canEdit={canEdit}
-						onEdit={handleOpenEditDialog}
-						canManageCollaborators={canManageCollaborators}
-						onManageCollaborators={handleManageCollaborators}
-						canManageHtmlPermissions={Boolean(htmlPermissionManager)}
-						onManageHtmlPermissions={() => htmlPermissionManager?.open()}
-						canUseDevelopment={canUseDevelopment}
-						pageMode={pageMode}
-						onPageModeChange={handlePageModeChange}
-					/>
-
+			<MicroAppPermissionsProvider projectId={projectId} attachmentList={attachmentList}>
+				<FileAccessProvider>
 					<div
-						ref={workspacePanelsRef}
 						className={cn(
-							"flex min-h-0 flex-1",
+							"flex h-full w-full flex-col rounded-lg border border-border bg-background",
 							isPreviewFullscreen ? "overflow-visible" : "overflow-hidden",
 						)}
+						data-testid="micro-app-page"
 					>
-						{pageMode === "preview" ? (
-							<MicroAppPreviewWorkspace
-								appId={appId}
-								entryFile={previewEntryFile}
-								attachments={attachments}
-								attachmentList={attachmentList}
-								projectId={projectId}
-								selectedProject={selectedProject}
-								sourceOrganizationCode={sourceOrganizationCode}
-								storageMarkerId={defaultEntryFile?.file_id}
-								onOpenFile={handlePreviewOpenFile}
-								onHtmlPermissionManagerChange={setHtmlPermissionManager}
-							/>
-						) : (
-							<>
-								<MicroAppWorkspaceNav
-									activeView={activeView}
-									databaseDisabled={!selectedProject?.id}
-									projectPanelDisabled={!selectedProject?.id}
-									hideScheduledTasks={isReadOnly}
-									onViewChange={handleWorkspaceViewChange}
+						<MicroAppHeader
+							selectedProject={selectedProject}
+							hasEntries={Boolean(defaultEntryFile)}
+							canPublish={canPublish}
+							isPublished={isPublished}
+							onBack={handleBackToMicroApps}
+							onPublish={handleOpenPublishDialog}
+							canEdit={canEdit}
+							onEdit={handleOpenEditDialog}
+							canManageCollaborators={canManageCollaborators}
+							onManageCollaborators={handleManageCollaborators}
+							canManageHtmlPermissions={Boolean(htmlPermissionManager)}
+							onManageHtmlPermissions={() => htmlPermissionManager?.open()}
+							canUseDevelopment={canUseDevelopment}
+							pageMode={pageMode}
+							onPageModeChange={handlePageModeChange}
+						/>
+
+						<div
+							ref={workspacePanelsRef}
+							className={cn(
+								"flex min-h-0 flex-1",
+								isPreviewFullscreen ? "overflow-visible" : "overflow-hidden",
+							)}
+						>
+							{pageMode === "preview" ? (
+								<MicroAppPreviewWorkspace
+									appId={appId}
+									entryFile={defaultEntryFile}
+									attachments={attachments}
+									attachmentList={attachmentList}
+									projectId={projectId}
+									selectedProject={selectedProject}
+									sourceOrganizationCode={sourceOrganizationCode}
+									storageMarkerId={defaultEntryFile?.file_id}
+									onHtmlPermissionManagerChange={setHtmlPermissionManager}
 								/>
+							) : (
+								<>
+									<MicroAppWorkspaceNav
+										activeView={activeView}
+										databaseDisabled={!selectedProject?.id}
+										projectPanelDisabled={!selectedProject?.id}
+										hideScheduledTasks={isReadOnly}
+										onViewChange={handleWorkspaceViewChange}
+									/>
 
-								<main
-									className={cn(
-										"relative h-full min-w-0 flex-1",
-										isPreviewFullscreen
-											? "overflow-visible"
-											: "overflow-hidden",
-									)}
-								>
-									{/* Use display:none for the inactive view: FilesViewer can set visibility on descendants. */}
-									<div
+									<main
 										className={cn(
-											"inset-0 min-w-0 overflow-hidden",
+											"relative h-full min-w-0 flex-1",
 											isPreviewFullscreen
-												? "fixed z-detail-fullscreen h-dvh w-screen bg-background"
-												: "absolute",
-											activeView === "preview" ||
-												activeView === "files" ||
-												activeView === "userSpace"
-												? "flex"
-												: "hidden",
+												? "overflow-visible"
+												: "overflow-hidden",
 										)}
-										aria-hidden={
-											activeView !== "preview" &&
-											activeView !== "files" &&
-											activeView !== "userSpace"
-										}
-										data-fullscreen={isPreviewFullscreen ? "true" : "false"}
-										data-testid="micro-app-preview-workspace"
 									>
-										{activeView === "files" || activeView === "userSpace" ? (
-											<>
-												<aside
-													className="flex h-full shrink-0 flex-col overflow-hidden border-r border-border bg-background"
-													style={{ width: sidebarWidthPx }}
-													data-testid="micro-app-file-sidebar"
-												>
-													<div className="min-h-0 flex-1 overflow-hidden py-1">
-														{activeView === "userSpace" ? (
-															<MicroAppProjectPanels
-																placement="sidebar"
-																activeView={activeView}
-																projectId={selectedProject?.id}
-																projectName={
-																	selectedProject?.project_name
-																}
-																topicId={selectedTopic?.id}
-																activeUserFileId={activeFileId}
-																onUserFileClick={
-																	handleUserFileClick
-																}
-															/>
-														) : (
-															<TopicFilesButton
-																{...topicFilesProps}
-																showFileManager
-																title={t(
-																	"microAppPage.header.codeFiles",
-																)}
-															/>
-														)}
-													</div>
-												</aside>
-												<TopicResizeHandle
-													onResizeStart={onSidebarResizeStart}
-													className={
-														isDraggingSidebar
-															? "before:opacity-100"
-															: undefined
-													}
-												/>
-											</>
-										) : null}
-
-										<div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-											{activeView === "preview" ? (
+										{/* Use display:none for the inactive view: FilesViewer can set visibility on descendants. */}
+										<div
+											className={cn(
+												"inset-0 min-w-0 overflow-hidden",
+												isPreviewFullscreen
+													? "fixed z-detail-fullscreen h-dvh w-screen bg-background"
+													: "absolute",
+												activeView === "preview" ||
+													activeView === "files" ||
+													activeView === "userSpace"
+													? "flex"
+													: "hidden",
+											)}
+											aria-hidden={
+												activeView !== "preview" &&
+												activeView !== "files" &&
+												activeView !== "userSpace"
+											}
+											data-fullscreen={isPreviewFullscreen ? "true" : "false"}
+											data-testid="micro-app-preview-workspace"
+										>
+											{activeView === "files" ||
+											activeView === "userSpace" ? (
 												<>
+													<aside
+														className="flex h-full shrink-0 flex-col overflow-hidden bg-background"
+														style={{ width: sidebarWidthPx }}
+														data-testid="micro-app-file-sidebar"
+													>
+														<div className="min-h-0 flex-1 overflow-hidden py-1">
+															{activeView === "userSpace" ? (
+																<MicroAppProjectPanels
+																	placement="sidebar"
+																	activeView={activeView}
+																	projectId={selectedProject?.id}
+																	projectName={
+																		selectedProject?.project_name
+																	}
+																	topicId={selectedTopic?.id}
+																	activeUserFileId={activeFileId}
+																	onUserFileClick={
+																		handleUserFileClick
+																	}
+																/>
+															) : (
+																<TopicFilesButton
+																	{...topicFilesProps}
+																	showFileManager
+																	title={t(
+																		"microAppPage.header.codeFiles",
+																	)}
+																/>
+															)}
+														</div>
+													</aside>
+													<TopicResizeHandle
+														withDivider
+														onResizeStart={onSidebarResizeStart}
+														className={
+															isDraggingSidebar
+																? "before:opacity-100"
+																: undefined
+														}
+													/>
+												</>
+											) : null}
+
+											<div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+												{/* Keep preview documents alive when visiting files, skills, or database panels. */}
+												<div
+													className={cn(
+														"flex h-full min-h-0 flex-col",
+														activeView !== "preview" && "hidden",
+													)}
+												>
 													<MicroAppPreviewToolbar
 														viewMode={previewMode}
-														activeFileId={activePreviewFileId}
-														htmlFiles={previewFileOptions}
+														browser={previewBrowser}
 														allowEdit={
 															!isReadOnly && Boolean(previewEntryFile)
 														}
@@ -523,9 +533,8 @@ function MicroAppPageInner({
 														devConsoleAvailable={isDevConsoleAvailable}
 														isFullscreen={isPreviewFullscreen}
 														onViewModeChange={setPreviewMode}
-														onFileChange={handlePreviewFileChange}
-														onRefresh={() =>
-															setPreviewRefreshKey((key) => key + 1)
+														onRefresh={
+															previewBrowser.handlePreviewRefresh
 														}
 														onAIEdit={() =>
 															aiEditHandlerRef.current?.()
@@ -540,157 +549,204 @@ function MicroAppPageInner({
 														}
 													/>
 													<div className="min-h-0 flex-1 overflow-hidden">
-														<MicroAppEntryPreview
-															entryFile={previewEntryFile}
+														<MicroAppPreviewPages
+															browser={previewBrowser}
+														>
+															{({ tab, active, onOpenFile }) => (
+																<MicroAppEntryPreview
+																	entryFile={tab.file}
+																	onOpenFile={onOpenFile}
+																	attachments={attachments}
+																	attachmentList={attachmentList}
+																	projectId={projectId}
+																	selectedProject={
+																		selectedProject
+																	}
+																	allowEdit={!isReadOnly}
+																	viewMode={previewMode}
+																	refreshKey={tab.revision}
+																	storageMarkerId={
+																		defaultEntryFile?.file_id
+																	}
+																	onRegisterAIEdit={
+																		active
+																			? handleRegisterAIEdit
+																			: undefined
+																	}
+																	onAIEditActiveChange={
+																		active
+																			? setIsAIEditActive
+																			: undefined
+																	}
+																	onRegisterDevConsoleToggle={
+																		active
+																			? handleRegisterDevConsoleToggle
+																			: undefined
+																	}
+																	onDevConsoleActiveChange={
+																		active
+																			? setIsDevConsoleActive
+																			: undefined
+																	}
+																	onHtmlPermissionManagerChange={
+																		active
+																			? setHtmlPermissionManager
+																			: undefined
+																	}
+																	isBuilding={hasRunningTopic}
+																/>
+															)}
+														</MicroAppPreviewPages>
+														{!previewBrowser.previewTabs.length &&
+															defaultEntryFile && (
+																<MicroAppNoOpenPages />
+															)}
+														{!previewBrowser.previewTabs.length &&
+															!defaultEntryFile && (
+																<MicroAppEntryPreview
+																	entryFile={null}
+																	attachments={attachments}
+																	attachmentList={attachmentList}
+																	selectedProject={
+																		selectedProject
+																	}
+																	allowEdit={!isReadOnly}
+																	isBuilding={hasRunningTopic}
+																/>
+															)}
+													</div>
+												</div>
+												{fileDetailVisited.current && (
+													<div
+														className={cn(
+															"h-full min-h-0 flex-1",
+															activeView === "preview" && "hidden",
+														)}
+													>
+														<Detail
+															className="my-2"
+															ref={detailRef}
+															disPlayDetail={userSelectDetail}
+															userSelectDetail={userSelectDetail}
+															setUserSelectDetail={
+																setUserSelectDetail
+															}
 															attachments={attachments}
 															attachmentList={attachmentList}
-															projectId={projectId}
-															selectedProject={selectedProject}
+															topicId={selectedTopic?.id}
+															baseShareUrl={`${window.location.origin}/share`}
+															currentTopicStatus={
+																selectedTopic?.task_status
+															}
+															messages={[]}
 															allowEdit={!isReadOnly}
-															onOpenFile={handlePreviewOpenFile}
-															viewMode={previewMode}
-															refreshKey={previewRefreshKey}
-															storageMarkerId={
-																defaultEntryFile?.file_id
+															selectedTopic={selectedTopic}
+															selectedProject={selectedProject}
+															activeFileId={activeFileId}
+															onActiveFileChange={
+																handleActiveFileChange
 															}
-															onRegisterAIEdit={handleRegisterAIEdit}
-															onAIEditActiveChange={setIsAIEditActive}
-															onRegisterDevConsoleToggle={
-																handleRegisterDevConsoleToggle
+															projectId={selectedProject?.id}
+															showFileHeader
+															showFileFooter={false}
+															showFallbackWhenEmpty
+															onFileTabsCacheLoaded={
+																handleFileTabsCacheLoaded
 															}
-															onDevConsoleActiveChange={
-																setIsDevConsoleActive
-															}
-															onHtmlPermissionManagerChange={
-																setHtmlPermissionManager
-															}
-															isBuilding={hasRunningTopic}
 														/>
 													</div>
-												</>
-											) : null}
-											{fileDetailVisited.current && (
-												<div
-													className={cn(
-														"h-full min-h-0 flex-1",
-														activeView === "preview" && "hidden",
-													)}
-												>
-													<Detail
-														className="my-2"
-														ref={detailRef}
-														disPlayDetail={userSelectDetail}
-														userSelectDetail={userSelectDetail}
-														setUserSelectDetail={setUserSelectDetail}
-														attachments={attachments}
-														attachmentList={attachmentList}
-														topicId={selectedTopic?.id}
-														baseShareUrl={`${window.location.origin}/share`}
-														currentTopicStatus={
-															selectedTopic?.task_status
-														}
-														messages={[]}
-														allowEdit={!isReadOnly}
-														selectedTopic={selectedTopic}
-														selectedProject={selectedProject}
-														activeFileId={activeFileId}
-														onActiveFileChange={handleActiveFileChange}
-														projectId={selectedProject?.id}
-														showFileHeader
-														showFileFooter={false}
-														showFallbackWhenEmpty
-														onFileTabsCacheLoaded={
-															handleFileTabsCacheLoaded
-														}
-													/>
-												</div>
-											)}
+												)}
+											</div>
 										</div>
-									</div>
 
-									<MicroAppProjectPanels
-										activeView={activeView}
-										attachmentList={attachmentList}
-										canEdit={canEdit}
-										projectId={selectedProject?.id}
-										projectRole={selectedProject?.user_role}
-										workspaceId={selectedProject?.workspace_id}
-										workspaceName={selectedProject?.workspace_name}
-										projectName={selectedProject?.project_name}
-										topicId={selectedTopic?.id}
-									/>
-								</main>
+										<MicroAppProjectPanels
+											activeView={activeView}
+											attachmentList={attachmentList}
+											canEdit={canEdit}
+											projectId={selectedProject?.id}
+											projectRole={selectedProject?.user_role}
+											workspaceId={selectedProject?.workspace_id}
+											workspaceName={selectedProject?.workspace_name}
+											projectName={selectedProject?.project_name}
+											topicId={selectedTopic?.id}
+										/>
+									</main>
 
-								{canUseDevelopment !== false ? (
-									<MicroAppDesktopConversationPanels
-										selectedProject={panelSelectedProject}
-										topicStore={panelConversation.topicStore}
-										mentionPanelStore={store.mentionPanelStore}
-										projectFilesStore={store.projectFilesStore}
-										topicActions={topicActions}
-										isMessagePanelCollapsed={isMessagePanelCollapsed}
-										isMessagePanelDragging={isDraggingMessagePanel}
-										messagePanelWidthPx={messagePanelWidthPx}
-										isTopicHistoryPanelOpen={isTopicHistoryPanelOpen}
-										onMessagePanelResizeStart={onMessagePanelResizeStart}
-										onTerminalTopicStatusChange={checkAttachmentsNowDebounced}
-										onToggleConversationPanel={handleToggleMessagePanelCollapse}
-										onExpandConversationPanel={() =>
-											setIsMessagePanelCollapsed(false)
-										}
-										onToggleHistoryPanel={toggleTopicHistoryPanel}
-										onCloseHistoryPanel={closeTopicHistoryPanel}
-										onSelectDetail={handleConversationSelectDetail}
-										onExpandCollapsedPanel={toggleMessagePanelCollapse}
-										showConversationLabel={t(
-											"microAppPage.header.showConversation",
-										)}
-										lockToMicroAppMode={pageMode === "development"}
-									/>
-								) : null}
-							</>
-						)}
+									{canUseDevelopment !== false ? (
+										<MicroAppDesktopConversationPanels
+											selectedProject={panelSelectedProject}
+											topicStore={panelConversation.topicStore}
+											mentionPanelStore={store.mentionPanelStore}
+											projectFilesStore={store.projectFilesStore}
+											topicActions={topicActions}
+											isMessagePanelCollapsed={isMessagePanelCollapsed}
+											isMessagePanelDragging={isDraggingMessagePanel}
+											messagePanelWidthPx={messagePanelWidthPx}
+											isTopicHistoryPanelOpen={isTopicHistoryPanelOpen}
+											onMessagePanelResizeStart={onMessagePanelResizeStart}
+											onTerminalTopicStatusChange={
+												checkAttachmentsNowDebounced
+											}
+											onToggleConversationPanel={
+												handleToggleMessagePanelCollapse
+											}
+											onExpandConversationPanel={() =>
+												setIsMessagePanelCollapsed(false)
+											}
+											onToggleHistoryPanel={toggleTopicHistoryPanel}
+											onCloseHistoryPanel={closeTopicHistoryPanel}
+											onSelectDetail={handleConversationSelectDetail}
+											onExpandCollapsedPanel={toggleMessagePanelCollapse}
+											showConversationLabel={t(
+												"microAppPage.header.showConversation",
+											)}
+											lockToMicroAppMode={pageMode === "development"}
+										/>
+									) : null}
+								</>
+							)}
+						</div>
 					</div>
-				</div>
 
-				<MicroAppPageOverlays
-					appId={appId}
-					projectName={selectedProject?.project_name}
-					attachmentList={attachmentList}
-					publishDialogOpen={publishDialogOpen}
-					onPublishDialogOpenChange={setPublishDialogOpen}
-					onPublishStatusChange={onPublishStatusChange}
-					onDefaultOpenFileChange={setPublishedDefaultOpenFileId}
-					onProjectNameChange={handleProjectNameChange}
-					editDialogOpen={editDialogOpen}
-					editSubmitting={editSubmitting}
-					onEditDialogOpenChange={setEditDialogOpen}
-					onEditMicroApp={handleEditMicroApp}
-					onCaptureCover={captureCoverReady ? handleCaptureCover : undefined}
-					collaboratorPanel={CollaboratorUpdatePanel}
-				/>
-				<PreviewDetailPopup
-					ref={previewDetailPopupRef}
-					setUserSelectDetail={setPreviewDetail}
-					selectedTopic={selectedTopic}
-					selectedProject={selectedProject}
-					allowEdit={!isReadOnly}
-					onOpenNewPopup={(detail, attachmentTree, nextAttachmentList) => {
-						linkPreviewPopupRef.current?.open(
-							detail,
-							attachmentTree,
-							nextAttachmentList,
-						)
-					}}
-				/>
-				<PreviewDetailPopup
-					ref={linkPreviewPopupRef}
-					setUserSelectDetail={setLinkPreviewDetail}
-					selectedTopic={selectedTopic}
-					selectedProject={selectedProject}
-					allowEdit={!isReadOnly}
-				/>
-			</FileActionVisibilityProvider>
+					<MicroAppPageOverlays
+						appId={appId}
+						projectName={selectedProject?.project_name}
+						attachmentList={attachmentList}
+						publishDialogOpen={publishDialogOpen}
+						onPublishDialogOpenChange={setPublishDialogOpen}
+						onPublishStatusChange={onPublishStatusChange}
+						onDefaultOpenFileChange={setPublishedDefaultOpenFileId}
+						onProjectNameChange={handleProjectNameChange}
+						editDialogOpen={editDialogOpen}
+						editSubmitting={editSubmitting}
+						onEditDialogOpenChange={setEditDialogOpen}
+						onEditMicroApp={handleEditMicroApp}
+						onCaptureCover={captureCoverReady ? handleCaptureCover : undefined}
+						collaboratorPanel={CollaboratorUpdatePanel}
+					/>
+					<PreviewDetailPopup
+						ref={previewDetailPopupRef}
+						setUserSelectDetail={setPreviewDetail}
+						selectedTopic={selectedTopic}
+						selectedProject={selectedProject}
+						allowEdit={!isReadOnly}
+						onOpenNewPopup={(detail, attachmentTree, nextAttachmentList) => {
+							linkPreviewPopupRef.current?.open(
+								detail,
+								attachmentTree,
+								nextAttachmentList,
+							)
+						}}
+					/>
+					<PreviewDetailPopup
+						ref={linkPreviewPopupRef}
+						setUserSelectDetail={setLinkPreviewDetail}
+						selectedTopic={selectedTopic}
+						selectedProject={selectedProject}
+						allowEdit={!isReadOnly}
+					/>
+				</FileAccessProvider>
+			</MicroAppPermissionsProvider>
 		</HostConversationProvider>
 	)
 }
@@ -703,8 +759,10 @@ function MicroAppPageDesktop() {
 
 export default function FileAccessPage() {
 	return (
-		<SharePermissionResourceProvider value="microApp">
-			<MicroAppPageDesktop />
-		</SharePermissionResourceProvider>
+		<FileAccessProvider>
+			<SharePermissionResourceProvider value="microApp">
+				<MicroAppPageDesktop />
+			</SharePermissionResourceProvider>
+		</FileAccessProvider>
 	)
 }
