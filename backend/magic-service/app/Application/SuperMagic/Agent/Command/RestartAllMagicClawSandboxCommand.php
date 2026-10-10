@@ -36,6 +36,8 @@ class RestartAllMagicClawSandboxCommand extends HyperfCommand
      */
     private const STATUS_FILTER_ANY = 'any';
 
+    protected ?string $name = 'magic-claw:restart-sandbox-all';
+
     private LoggerInterface $logger;
 
     public function __construct(

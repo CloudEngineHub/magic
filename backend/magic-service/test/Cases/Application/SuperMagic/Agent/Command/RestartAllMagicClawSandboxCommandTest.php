@@ -22,6 +22,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use ReflectionProperty;
 use RuntimeException;
+use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Tester\CommandTester;
 
 /**
@@ -39,6 +40,18 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
     {
         parent::setUp();
         $this->spy = new RestartCommandSpy();
+    }
+
+    public function testCommandKeepsItsRegisteredName(): void
+    {
+        $command = $this->command(sandboxes: [], topics: [], claws: []);
+
+        self::assertSame('magic-claw:restart-sandbox-all', $command->getName());
+
+        // bin/hyperf.php 启动时会把命令 add() 进 Symfony Application，名字为空会直接 fatal。
+        $application = new Application();
+        $application->add($command);
+        self::assertTrue($application->has('magic-claw:restart-sandbox-all'));
     }
 
     public function testRestartsRunningSandboxOfMagicClawOnly(): void
@@ -265,6 +278,20 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         array $claws,
         bool $restartFails = false,
     ): CommandTester {
+        return new CommandTester($this->command($sandboxes, $topics, $claws, $restartFails));
+    }
+
+    /**
+     * @param array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool}> $sandboxes
+     * @param array<int, TopicEntity> $topics
+     * @param array<int, MagicClawEntity> $claws
+     */
+    private function command(
+        array $sandboxes,
+        array $topics,
+        array $claws,
+        bool $restartFails = false,
+    ): TestableRestartAllMagicClawSandboxCommand {
         $topicDomainService = $this->createMock(TopicDomainService::class);
         $topicDomainService->method('getTopicsByIds')->willReturn(array_values($topics));
 
@@ -282,7 +309,7 @@ class RestartAllMagicClawSandboxCommandTest extends TestCase
         // 测试进程没有 Swoole，命令默认会切到协程里执行；这里关掉协程，只验证命令逻辑。
         (new ReflectionProperty(HyperfCommand::class, 'coroutine'))->setValue($command, false);
 
-        return new CommandTester($command);
+        return $command;
     }
 }
 
