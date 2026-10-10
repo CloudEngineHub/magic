@@ -20,6 +20,7 @@ use App\Infrastructure\Core\DataIsolation\DataIsolationInterface;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use Hyperf\Context\ApplicationContext;
+use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -97,6 +98,13 @@ class OrganizationAdminDomainService
      */
     public function destroy(DataIsolation $dataIsolation, OrganizationAdminEntity $organizationAdminEntity): void
     {
+        if ($organizationAdminEntity->isOrganizationCreator()
+            || $this->isOrganizationCreator($dataIsolation, $organizationAdminEntity->getUserId())) {
+            ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.organization_creator_cannot_be_revoked', [
+                'userId' => $organizationAdminEntity->getUserId(),
+            ]);
+        }
+
         // 在删除组织管理员记录之前，先移除其在权限系统中的 role_user 关联
         try {
             // 创建权限隔离对象，用于操作角色服务
@@ -126,9 +134,10 @@ class OrganizationAdminDomainService
         }
 
         $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
-        // 个人组织的管理员身份由组织拥有者直接派生，不依赖管理员记录。
-        if ($organization?->isPersonal()) {
-            return $organization->isOwnedBy($userId);
+        // 所有组织的创建人身份都由 magic_organizations.creator_id 直接派生，
+        // 不因历史管理员记录缺失而丢失管理员权限。
+        if ($organization?->isOwnedBy($userId)) {
+            return true;
         }
 
         return $this->organizationAdminRepository->isOrganizationAdmin($dataIsolation, $userId);
@@ -151,8 +160,10 @@ class OrganizationAdminDomainService
             ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.personal_organization_cannot_grant_admin');
         }
 
-        // 检查用户是否已经是组织管理员
-        if ($this->isOrganizationAdmin($dataIsolation, $userId)) {
+        $isOrganizationCreator = $organization->isOwnedBy($userId);
+        $existingAdmin = $this->organizationAdminRepository->getByUserId($dataIsolation, $userId);
+        // 创建人可能只有组织表记录而没有历史管理员记录，此时仍需补建管理员镜像。
+        if ($existingAdmin !== null || (! $isOrganizationCreator && $this->isOrganizationAdmin($dataIsolation, $userId))) {
             ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.user_already_organization_admin', ['userId' => $userId]);
         }
         // 检查用户是否有效
@@ -161,7 +172,8 @@ class OrganizationAdminDomainService
             ExceptionBuilder::throw(UserErrorCode::USER_NOT_EXIST, 'user.not_exist', ['userId' => $userId]);
         }
 
-        // 授予组织管理员实体
+        // 创建人标记只能由 magic_organizations.creator_id 派生。保留参数是为了兼容
+        // 旧调用方，但不再允许调用方自行声明创建人。
         $organizationAdmin = $this->organizationAdminRepository->grant($dataIsolation, $userId, $grantorUserId, $remarks, $isOrganizationCreator);
 
         // 同步创建 / 更新组织管理员角色
@@ -180,6 +192,67 @@ class OrganizationAdminDomainService
         }
 
         return $organizationAdmin;
+    }
+
+    /**
+     * 同步组织表创建人与管理员/RBAC 的兼容关系。
+     *
+     * magic_organizations.creator_id 是唯一事实来源，管理员表中的
+     * is_organization_creator 仅作为历史镜像维护。
+     */
+    public function synchronizeOrganizationCreator(DataIsolation $dataIsolation, ?string $previousCreatorUserId = null, ?string $operatorUserId = null): void
+    {
+        $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
+        $creatorUserId = $organization?->getCreatorId();
+        if (! $organization || $creatorUserId === null || $creatorUserId === '') {
+            return;
+        }
+
+        $operatorUserId ??= $creatorUserId;
+
+        Db::transaction(function () use ($dataIsolation, $organization, $creatorUserId, $previousCreatorUserId, $operatorUserId): void {
+            if ($organization->isPersonal()) {
+                // 个人组织没有管理员记录，但创建人仍必须拥有组织管理员角色。
+                $permissionIsolation = PermissionDataIsolation::create(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $operatorUserId
+                );
+                $this->roleDomainService->addOrganizationAdmin($permissionIsolation, [$creatorUserId]);
+                if ($previousCreatorUserId !== null && $previousCreatorUserId !== '' && $previousCreatorUserId !== $creatorUserId) {
+                    $this->roleDomainService->removeOrganizationAdmin($permissionIsolation, $previousCreatorUserId);
+                }
+                return;
+            }
+
+            $creatorAdmin = $this->getByUserId($dataIsolation, $creatorUserId);
+            if ($creatorAdmin === null) {
+                $creatorAdmin = $this->grant(
+                    $dataIsolation,
+                    $creatorUserId,
+                    $operatorUserId,
+                    '组织创建人自动获得管理员权限'
+                );
+            } else {
+                $creatorAdmin->enable();
+                $creatorAdmin->markAsOrganizationCreator();
+                $creatorAdmin->prepareForModification();
+                $this->organizationAdminRepository->save($dataIsolation, $creatorAdmin);
+                $permissionIsolation = PermissionDataIsolation::create(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $operatorUserId
+                );
+                $this->roleDomainService->addOrganizationAdmin($permissionIsolation, [$creatorUserId]);
+            }
+
+            if ($previousCreatorUserId !== null && $previousCreatorUserId !== '' && $previousCreatorUserId !== $creatorUserId) {
+                $previousCreator = $this->getByUserId($dataIsolation, $previousCreatorUserId);
+                if ($previousCreator !== null && $previousCreator->isOrganizationCreator()) {
+                    $previousCreator->unmarkAsOrganizationCreator();
+                    $previousCreator->prepareForModification();
+                    $this->organizationAdminRepository->save($dataIsolation, $previousCreator);
+                }
+            }
+        });
     }
 
     /**
@@ -229,15 +302,13 @@ class OrganizationAdminDomainService
     public function batchCheckOrganizationAdmin(DataIsolation $dataIsolation, array $userIds): array
     {
         $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
-        if ($organization?->isPersonal()) {
-            $result = [];
-            foreach ($userIds as $userId) {
-                $result[$userId] = $organization->isOwnedBy((string) $userId);
+        $result = $this->organizationAdminRepository->batchCheckOrganizationAdmin($dataIsolation, $userIds);
+        foreach ($userIds as $userId) {
+            if ($organization?->isOwnedBy((string) $userId)) {
+                $result[$userId] = true;
             }
-            return $result;
         }
-
-        return $this->organizationAdminRepository->batchCheckOrganizationAdmin($dataIsolation, $userIds);
+        return $result;
     }
 
     /**
@@ -255,28 +326,59 @@ class OrganizationAdminDomainService
             ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.personal_organization_cannot_transfer_owner');
         }
 
-        // 检查当前创建人是否存在且确实是创建人
-        $currentCreator = $this->getByUserId($dataIsolation, $currentCreatorUserId);
-        if (! $currentCreator || ! $currentCreator->isOrganizationCreator()) {
-            ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.current_user_not_organization_creator', ['userId' => $currentCreatorUserId]);
-        }
+        Db::transaction(function () use (
+            $dataIsolation,
+            $currentCreatorUserId,
+            $newCreatorUserId,
+            $operatorUserId,
+            $organization
+        ): void {
+            // 创建人以 magic_organizations.creator_id 为准，不依赖历史管理员标记。
+            if ($organization->getCreatorId() !== $currentCreatorUserId) {
+                ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.current_user_not_organization_creator', ['userId' => $currentCreatorUserId]);
+            }
 
-        // 检查新创建人是否已经是组织管理员
-        $newCreator = $this->getByUserId($dataIsolation, $newCreatorUserId);
-        if (! $newCreator) {
-            // 如果新创建人还不是管理员，先授予管理员权限
-            $newCreator = $this->grant($dataIsolation, $newCreatorUserId, $operatorUserId, '转让组织创建人身份时自动授予管理员权限');
-        }
+            $organizationUsers = $this->userRepository->getUserByIdsAndOrganizations(
+                [$newCreatorUserId],
+                [$dataIsolation->getCurrentOrganizationCode()]
+            );
+            if ($organizationUsers === []) {
+                ExceptionBuilder::throw(UserErrorCode::USER_NOT_EXIST, 'user.not_exist', ['userId' => $newCreatorUserId]);
+            }
 
-        // 取消当前创建人的创建人身份
-        $currentCreator->unmarkAsOrganizationCreator();
-        $currentCreator->prepareForModification();
-        $this->organizationAdminRepository->save($dataIsolation, $currentCreator);
+            // 查询旧管理员记录，仅用于维护历史 is_organization_creator 镜像。
+            $currentCreator = $this->getByUserId($dataIsolation, $currentCreatorUserId);
 
-        // 授予新创建人的创建人身份
-        $newCreator->markAsOrganizationCreator();
-        $newCreator->prepareForModification();
-        $this->organizationAdminRepository->save($dataIsolation, $newCreator);
+            // 检查新创建人是否已经是组织管理员
+            $newCreator = $this->getByUserId($dataIsolation, $newCreatorUserId);
+            if (! $newCreator) {
+                // 如果新创建人还不是管理员，先授予管理员权限
+                $newCreator = $this->grant($dataIsolation, $newCreatorUserId, $operatorUserId, '转让组织创建人身份时自动授予管理员权限');
+            }
+            if (! $newCreator->isEnabled()) {
+                // 创建人必须保持启用状态，避免转让后出现“创建人存在但没有管理员权限”。
+                $newCreator->setStatus(1);
+            }
+
+            // 取消旧管理员记录上的历史创建人镜像
+            if ($currentCreator !== null) {
+                $currentCreator->unmarkAsOrganizationCreator();
+                $currentCreator->prepareForModification();
+                $this->organizationAdminRepository->save($dataIsolation, $currentCreator);
+            }
+
+            // 授予新创建人的创建人身份
+            $newCreator->markAsOrganizationCreator();
+            $newCreator->prepareForModification();
+            $this->organizationAdminRepository->save($dataIsolation, $newCreator);
+
+            // TODO: magic_organizations 由 keewood-service 同步而来；后续应先在
+            // keewood-service 完成创建人转让，再同步回本服务，不能由这里直接改组织表。
+            // 当前暂保留本地写入，待跨服务转让流程落地后移除。
+            $organization->setCreatorId($newCreatorUserId);
+            $organization->prepareForModification();
+            $this->organizationRepository->save($organization);
+        });
     }
 
     /**
@@ -284,7 +386,18 @@ class OrganizationAdminDomainService
      */
     public function getOrganizationCreator(DataIsolation $dataIsolation): ?OrganizationAdminEntity
     {
-        return $this->organizationAdminRepository->getOrganizationCreator($dataIsolation);
+        $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
+        $creatorUserId = $organization?->getCreatorId();
+        if ($creatorUserId === null || $creatorUserId === '') {
+            return null;
+        }
+
+        // 创建人统一由 magic_organizations.creator_id 派生；返回实体仅用于兼容既有调用方。
+        $organizationCreator = new OrganizationAdminEntity();
+        $organizationCreator->setUserId($creatorUserId);
+        $organizationCreator->setOrganizationCode($organization->getMagicOrganizationCode());
+        $organizationCreator->setIsOrganizationCreator(true);
+        return $organizationCreator;
     }
 
     /**
@@ -293,12 +406,7 @@ class OrganizationAdminDomainService
     public function isOrganizationCreator(DataIsolation $dataIsolation, string $userId): bool
     {
         $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
-        if ($organization?->isPersonal()) {
-            return $organization->isOwnedBy($userId);
-        }
-
-        $admin = $this->getByUserId($dataIsolation, $userId);
-        return $admin !== null && $admin->isOrganizationCreator();
+        return $organization?->isOwnedBy($userId) ?? false;
     }
 
     /**

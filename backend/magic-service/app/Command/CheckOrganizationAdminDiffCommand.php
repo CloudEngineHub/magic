@@ -11,6 +11,7 @@ use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicAccountDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\OrganizationEnvironment\Service\MagicOrganizationEnvDomainService;
+use App\Domain\OrganizationEnvironment\Service\OrganizationDomainService;
 use App\Domain\Permission\Entity\OrganizationAdminEntity;
 use App\Domain\Permission\Repository\Facade\OrganizationAdminRepositoryInterface;
 use Hyperf\Codec\Json;
@@ -27,6 +28,7 @@ class CheckOrganizationAdminDiffCommand extends HyperfCommand
 
     public function __construct(
         private readonly MagicOrganizationEnvDomainService $organizationEnvDomainService,
+        private readonly OrganizationDomainService $organizationDomainService,
         private readonly OrganizationAdminRepositoryInterface $organizationAdminRepository,
         private readonly MagicAccountDomainService $magicAccountDomainService,
         private readonly MagicUserDomainService $magicUserDomainService,
@@ -214,6 +216,20 @@ class CheckOrganizationAdminDiffCommand extends HyperfCommand
             }
 
             $magicIds[] = (string) $magicId;
+        }
+
+        // 创建人唯一由 magic_organizations.creator_id 提供；即使历史管理员镜像缺失，
+        // 对账结果也必须把创建人纳入新权限集合。
+        $organization = $this->organizationDomainService->getByCode($organizationCode);
+        $creatorUserId = $organization?->getCreatorId();
+        if ($creatorUserId !== null && $creatorUserId !== '') {
+            $creator = $this->magicUserDomainService->getUserById($creatorUserId);
+            $creatorMagicId = $creator?->getMagicId();
+            if ($creatorMagicId !== null && $creatorMagicId !== '') {
+                $magicIds[] = (string) $creatorMagicId;
+            } else {
+                $missingMagicIds[] = $creatorUserId;
+            }
         }
 
         $magicIds = $this->uniqueValues($magicIds);
