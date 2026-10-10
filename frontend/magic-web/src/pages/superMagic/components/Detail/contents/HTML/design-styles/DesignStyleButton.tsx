@@ -20,7 +20,6 @@ interface DesignStyleButtonProps {
 	disabled?: boolean
 	testId?: string
 	getPopupContainer?: () => HTMLElement | null
-	isMobile?: boolean
 }
 
 export default function DesignStyleButton({
@@ -29,7 +28,6 @@ export default function DesignStyleButton({
 	disabled = false,
 	testId,
 	getPopupContainer,
-	isMobile = false,
 }: DesignStyleButtonProps) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
@@ -94,7 +92,6 @@ export default function DesignStyleButton({
 				onOpenChange={handleOpenChange}
 				onApply={handleApply}
 				canApply={canApply}
-				isMobile={isMobile}
 			/>
 		</>
 	)

@@ -9,10 +9,7 @@ import MagicModalDesktop, {
 import MagicModalMobile from "./MagicModalMobile"
 import type { MagicModalMobileProps } from "./MagicModalMobile"
 
-export type MagicModalProps = MagicModalDesktopProps & MagicModalMobileProps & {
-	/** Force the mobile bottom-sheet implementation when the host viewport is desktop-sized. */
-	forceMobile?: boolean
-}
+export type MagicModalProps = MagicModalDesktopProps & MagicModalMobileProps
 
 /**
  * MagicModal - A responsive modal component that adapts to desktop and mobile
@@ -42,8 +39,8 @@ export type MagicModalProps = MagicModalDesktopProps & MagicModalMobileProps & {
  * })
  * ```
  */
-function MagicModal({ forceMobile, ...props }: MagicModalProps) {
-	const isMobile = forceMobile ?? useIsMobile()
+function MagicModal(props: MagicModalProps) {
+	const isMobile = useIsMobile()
 
 	if (isMobile) {
 		return <MagicModalMobile {...props} />
