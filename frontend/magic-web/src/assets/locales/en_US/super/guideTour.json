@@ -137,7 +137,6 @@
 				"title": "Saved automatically"
 			}
 		},
-		"demoNote": "This is a guided demo — nothing is really created and no credits are spent.",
 		"employee": {
 			"actions": {
 				"finish": "Finish the tour and claim 50 points"
@@ -172,15 +171,15 @@
 		"featured": {
 			"case1": {
 				"prompt": "Turn these notes into a weekly report. Notes: held 3 meetings, met 10 clients and closed 4 deals, and pushed the AI office assistant project forward.",
-				"title": "Weekly report"
+				"title": "Project weekly report"
 			},
 			"case2": {
 				"prompt": "Research how much Chinese creators earn from AI comic dramas in 2026, and deliver a standard short-form report in 3 minutes.",
-				"title": "Research"
+				"title": "Industry research report"
 			},
 			"case3": {
 				"prompt": "Around 「how AI makes work easier for workplace newcomers」, write 5 titles, one Xiaohongshu post under 500 characters, and a practical-tip style.",
-				"title": "Content creation"
+				"title": "Bulk original copywriting"
 			},
 			"description": "You can normally enter any request here. For your first task, start with a stable example and experience the complete AI workflow.",
 			"footer": "The prompt will be filled into the input after you choose an example",
@@ -400,8 +399,7 @@
 			"recommended": "Recommended",
 			"replay": "Review",
 			"reward": "+{{points}} points",
-			"start": "Start",
-			"validity": "valid for {{days}} days"
+			"start": "Start"
 		},
 		"tasks": {
 			"aiPpt": {

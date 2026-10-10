@@ -440,13 +440,23 @@ describe("NewUserBenefits dialog copy", () => {
 		)
 	})
 
-	it("gives every row its duration, reward and 7-day window", () => {
+	it("gives every row its duration and reward", () => {
 		openDialog()
 
 		expect(screen.getAllByText("newUserBenefits.task.duration")).toHaveLength(ROW_ORDER.length)
-		expect(
-			screen.getAllByText("newUserBenefits.task.reward · newUserBenefits.task.validity"),
-		).toHaveLength(ROW_ORDER.length)
+		expect(screen.getAllByText("newUserBenefits.task.reward")).toHaveLength(ROW_ORDER.length)
+
+		/*
+		 * The reward is the row's last word. It used to trail an expiry window
+		 * (`task.validity`), which the product dropped, so the row must not render one — and the
+		 * keys have to leave both locales rather than merely stop being referenced: a translation
+		 * left behind is what the next person wires back in when they want a label.
+		 */
+		expect(screen.queryByText("newUserBenefits.task.validity")).toBeNull()
+
+		for (const locale of [zhGuideTour, enGuideTour]) {
+			expect(locale.newUserBenefits.task).not.toHaveProperty("validity")
+		}
 	})
 })
 

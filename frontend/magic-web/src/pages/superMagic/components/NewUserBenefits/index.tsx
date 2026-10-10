@@ -159,7 +159,6 @@ interface BenefitRow {
 	icon: LucideIcon
 	strokeWidth: number
 	points: number
-	validityDays: number
 	/** The backend's verdict on the task itself. */
 	completed: boolean
 	/** The points actually landed in the account. Not the same as `completed`. */
@@ -232,14 +231,12 @@ function NewUserBenefitsTaskRow({ row }: { row: BenefitRow }) {
 				<div className="mt-1.5 flex items-center gap-3 text-[11px] text-[#888]">
 					<span>{t("newUserBenefits.task.duration")}</span>
 					{/*
-					 * The reward and its expiry sit in one emphasised segment: both are what the row is
-					 * offering, and the design reads them as a single green phrase. Both figures are the
-					 * backend's — the points a completion pays, and the window it stays payable for.
+					 * The reward is the row's one emphasised segment: the points a completion pays,
+					 * which is the backend's figure. It used to carry an expiry window beside it; the
+					 * product dropped the window, so the row no longer mentions one.
 					 */}
 					<span className="font-bold text-[#20a66a]">
 						{t("newUserBenefits.task.reward", { points: row.points })}
-						{" · "}
-						{t("newUserBenefits.task.validity", { days: row.validityDays })}
 					</span>
 				</div>
 			</div>
@@ -567,7 +564,6 @@ function NewUserBenefitsCard() {
 				icon: presentation.icon,
 				strokeWidth: presentation.strokeWidth ?? ICON_STROKE_WIDTH,
 				points: reward.points,
-				validityDays: reward.validityDays,
 				completed,
 				granted,
 				recommended: presentation.recommended === true,

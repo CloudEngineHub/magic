@@ -1018,6 +1018,11 @@ const MessageList = observer(
 									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
 									classNames?.content,
 								)}
+								// The conversation itself, for the step that frames it. The anchor
+								// above is the scroll container, which is full-bleed: the guide would
+								// draw a box as wide as the panel while the messages it is talking
+								// about occupy this centred column.
+								data-guide-anchor="message-list-column"
 							>
 								{visibleData.length > 0 || !isEmptyStatus ? (
 									<VirtualMessageList

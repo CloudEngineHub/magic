@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react"
+import { act, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
@@ -89,6 +89,80 @@ function publishAnchor(anchorName: string, box: Box) {
 		}) as DOMRect
 	document.body.appendChild(marker)
 	markers.push(marker)
+}
+
+/**
+ * The same marker, measured freshly every time the tour asks rather than frozen at publish time.
+ *
+ * The step under test here is the one whose composer the user may edit, so its box moves while the
+ * step is up; a rect captured once cannot express that, and reading it back per call is what a real
+ * page does.
+ */
+function publishLiveAnchor(anchorName: string, box: Box) {
+	const marker = document.createElement("div")
+	marker.setAttribute("data-guide-anchor", anchorName)
+	marker.getBoundingClientRect = () =>
+		({
+			...box,
+			right: box.left + box.width,
+			bottom: box.top + box.height,
+			x: box.left,
+			y: box.top,
+			toJSON: () => box,
+		}) as DOMRect
+	document.body.appendChild(marker)
+	markers.push(marker)
+}
+
+/**
+ * The white ring the step draws over the button it is asking for. It is the overlay's one element
+ * at `z-[1201]`: the card sits a step above it and the dimming plane is part of its own shadow.
+ */
+function ringBox(dialog: HTMLElement): Box {
+	const ring = dialog.querySelector<HTMLElement>('[class*="z-[1201]"]')
+	if (!ring) throw new Error("Expected the step's highlight ring")
+	return {
+		left: Number.parseFloat(ring.style.left),
+		top: Number.parseFloat(ring.style.top),
+		width: Number.parseFloat(ring.style.width),
+		height: Number.parseFloat(ring.style.height),
+	}
+}
+
+/**
+ * ResizeObserver, as something the case can fire.
+ *
+ * The setup file installs one that records nothing and never calls back, which is enough for the
+ * components that only need the constructor to exist. Seeing the composer grow means driving the
+ * callback, so this replaces it with a recorder for the duration of one case.
+ */
+function captureResizeObservers() {
+	const callbacks: Array<() => void> = []
+	const observed: HTMLElement[] = []
+	class RecordingResizeObserver {
+		private readonly callback: () => void
+		constructor(callback: () => void) {
+			this.callback = callback
+			callbacks.push(callback)
+		}
+		observe(element: HTMLElement) {
+			observed.push(element)
+		}
+		unobserve(element: HTMLElement) {
+			observed.splice(observed.indexOf(element), 1)
+		}
+		// A disconnected observer reports nothing, exactly as a real one stops.
+		disconnect() {
+			callbacks.splice(callbacks.indexOf(this.callback), 1)
+		}
+	}
+	vi.stubGlobal("ResizeObserver", RecordingResizeObserver)
+	return {
+		/** Everything a real observer would have reported, once the browser has laid the page out. */
+		report: () => callbacks.forEach((callback) => callback()),
+		/** What the step put under observation, by the anchor each element carries. */
+		watchedAnchors: () => observed.map((element) => element.getAttribute("data-guide-anchor")),
+	}
 }
 
 /**
@@ -224,5 +298,65 @@ describe("home onboarding: the mask of the prompt-ready step stops the page unde
 		// Where the composer would have been, the page is now unreachable like the rest of it.
 		const { x, y } = centre(COMPOSER)
 		expect(cover.some((box) => holdsPoint(box, x, y))).toBe(true)
+	})
+
+	it("follows the composer and the button with it when the prompt is made longer", async () => {
+		const observed = captureResizeObservers()
+		try {
+			const { tour } = await startPromptReadyRun()
+			/*
+			 * Both boxes answer with what they hold now. The composer grows once the prefilled
+			 * prompt is typed into and starts wrapping, and the toolbar — with the button the step
+			 * is asking for — is carried down with it. Only the composer is watched; the button
+			 * travelling alongside it is the thing the step then re-measures.
+			 */
+			const composer: Box = { ...COMPOSER }
+			const send: Box = { ...SEND }
+			publishLiveAnchor("message-editor-content", composer)
+			publishLiveAnchor("message-editor-send-button", send)
+
+			render(<tour.default page="home" userMagicId={MAGIC_ID} />)
+			expect(within(screen.getByRole("dialog")).getByText(SEND_TITLE)).toBeInTheDocument()
+
+			/*
+			 * The composer itself is what the step put under observation. Nothing else on this page
+			 * may be: a step that watched the window would not see the typing at all, and one that
+			 * watched nothing would never measure again.
+			 */
+			expect(observed.watchedAnchors()).toContain("message-editor-content")
+
+			// Two more lines of prompt: the composer reaches further down, and so does the button.
+			composer.height += 80
+			send.top += 80
+
+			await act(async () => observed.report())
+
+			const dialog = screen.getByRole("dialog")
+			/*
+			 * The ring is on the button where it now is rather than where it was measured. It is
+			 * stroked a few pixels outside its target, which is the whole of the correction.
+			 */
+			expect(ringBox(dialog)).toEqual({
+				left: send.left - 4,
+				top: send.top - 4,
+				width: send.width + 8,
+				height: send.height + 8,
+			})
+
+			/*
+			 * And the two cut-outs are still the two cut-outs: the taller composer still takes the
+			 * caret and the button that moved with it still takes the click that ends the step. A
+			 * mask left where the composer was would dim both of them.
+			 */
+			const cover = coverBoxes(dialog)
+			expect(cover.filter((box) => overlaps(box, composer))).toEqual([])
+			expect(cover.filter((box) => overlaps(box, send))).toEqual([])
+
+			// Where the button used to be is covered again, since nothing is there any more.
+			const vacated = centre({ ...SEND })
+			expect(cover.some((box) => holdsPoint(box, vacated.x, vacated.y))).toBe(true)
+		} finally {
+			vi.unstubAllGlobals()
+		}
 	})
 })

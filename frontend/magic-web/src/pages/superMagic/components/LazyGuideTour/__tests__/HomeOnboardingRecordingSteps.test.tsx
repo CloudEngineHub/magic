@@ -50,7 +50,6 @@ const MAGIC_ID = "magic-guide-recording"
 
 const NEXT = "homeOnboarding.actions.next"
 const FINISH = "homeOnboarding.audioRecording.actions.finish"
-const DEMO_NOTE = "homeOnboarding.demoNote"
 
 /** The title and the hand-over label of each of the run's seven steps, in the order it walks them. */
 const STEPS = [
@@ -94,7 +93,7 @@ function publishAnchor(anchorName: string) {
 
 /**
  * The primary action is the last button of the popover: the footer keeps "上一步" and "退出引导" on
- * the left and the primary action on the right, and only the demo note follows it.
+ * the left and the primary action on the right.
  */
 function primaryAction() {
 	const buttons = within(screen.getByRole("dialog")).getAllByRole("button")
@@ -157,8 +156,6 @@ describe("home onboarding: walking the recording tour", () => {
 			expect(primaryAction().textContent).toBe(step.action)
 			// The copy gives every one of these steps its own hand-over, so none carries the arrow.
 			expect(hasAdvanceArrow(primaryAction())).toBe(false)
-			// The page is not the home shell, so the popover says the run is only a demonstration.
-			expect(screen.getByText(DEMO_NOTE)).toBeInTheDocument()
 		}
 
 		/*

@@ -59,7 +59,7 @@ function publishAnchor(anchorName: string) {
 
 /**
  * The primary action is the last button of the popover: the footer keeps "上一步" and "退出引导" on
- * the left and the primary action on the right, and only the demo note follows it.
+ * the left and the primary action on the right.
  */
 function primaryAction() {
 	const buttons = within(screen.getByRole("dialog")).getAllByRole("button")

@@ -62,9 +62,9 @@ const ONBOARDING_PAGE_ROUTE_NAME: Partial<Record<HomeOnboardingTaskPage, string>
 
 /**
  * How tall a step card is assumed to be until it has actually been measured. Only a starting
- * point: the card is measured after its first render, because its height is decided by the copy,
- * the demo note and the wrapping, and a card placed against a stale guess ends up sitting on top
- * of the very control it points at.
+ * point: the card is measured after its first render, because its height is decided by the copy
+ * and the wrapping, and a card placed against a stale guess ends up sitting on top of the very
+ * control it points at.
  */
 const CARD_HEIGHT_FALLBACK = 240
 const ONBOARDING_EXPOSURE_RATIO = 0.01
@@ -458,7 +458,10 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			},
 			{
 				flow: "project-orientation",
-				anchor: "message-list-container",
+				// The message column rather than the scroll container it is centred in: the
+				// container is full-bleed, so framing it draws a box as wide as the panel and
+				// the step reads as pointing at the whole screen.
+				anchor: "message-list-column",
 				analyticsStepIndex: 6,
 				title: t("homeOnboarding.project.result.title"),
 				text: t("homeOnboarding.project.result.description"),
@@ -956,8 +959,9 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const isAudioRecordingRun = entry.task === "audio-recording"
 	/**
 	 * Whether this run is served by a page that is not the home shell. The steps are highlighted
-	 * elsewhere, so the sidebar is left exactly as the user left it and the popover carries the
-	 * demo note — nothing on those pages is really produced.
+	 * elsewhere, so the sidebar is left exactly as the user left it — nothing on those pages is
+	 * really produced, and a guide that rearranged the shell for one would be rearranging it for a
+	 * demonstration.
 	 */
 	const isStandaloneRun =
 		isClawRun ||
@@ -1527,6 +1531,39 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			window.removeEventListener("scroll", handleViewportChange, true)
 		}
 	}, [started, updateRect])
+
+	/**
+	 * The "prompt-ready" step has to keep measuring, because its page moves under the user's hands.
+	 *
+	 * Every other step frames a page that holds still, and a resize or a scroll is the whole of what
+	 * can change its anchor — both are already listened for above. This one differs: the prefilled
+	 * prompt is an ordinary editable document, so the user may type into it before sending, and once
+	 * the text wraps the composer grows taller. That lifts the toolbar and with it the send button
+	 * the step is asking for, and a box measured before the typing is a mask that has left its hole
+	 * behind: the ring no longer frames the composer, and the cover dims the very button the copy
+	 * tells the user to press — which is the whole of what "the button cannot be clicked" is.
+	 *
+	 * Following the anchor frame by frame does not cover this either: that ends once the page first
+	 * holds still, and this change comes later, from the user's own typing. So the composer is
+	 * watched rather than measured, and re-measured on every change of its own size.
+	 *
+	 * The editor is what actually resizes, but both it and the container are observed: a composer
+	 * that grows past its own limit has a container that grows while the editor scrolls inside it,
+	 * and watching the pair costs one observer. `updateRect` re-reads the send button as well, so
+	 * the second cut-out follows the first without being watched itself.
+	 */
+	useEffect(() => {
+		if (flow !== "prompt-ready" || !started || !stepOnThisPage) return
+		// Absent in SSR and in older browsers; the step then keeps the behaviour it had.
+		if (typeof ResizeObserver === "undefined") return
+		const watched = ["message-editor-content", "message-editor-container"]
+			.map((name) => document.querySelector<HTMLElement>(`[data-guide-anchor="${name}"]`))
+			.filter((element): element is HTMLElement => element !== null)
+		if (watched.length === 0) return
+		const observer = new ResizeObserver(() => updateRect())
+		watched.forEach((element) => observer.observe(element))
+		return () => observer.disconnect()
+	}, [flow, started, stepOnThisPage, updateRect])
 
 	/**
 	 * A mount nothing asked for has nothing to show. The automatic run exists to offer the
@@ -2372,17 +2409,6 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 						)}
 					</button>
 				</div>
-				{/*
-				 * The standalone tours — MagiClaw, the crew market, the skill library, the app
-				 * space and the slides templates — are demonstrations: nothing on those pages is
-				 * really created, so their popover says so. The other flows do produce a real
-				 * result and would contradict it.
-				 */}
-				{isStandaloneRun && (
-					<p className="mt-3 text-[11px] leading-[1.5] text-muted-foreground">
-						{t("homeOnboarding.demoNote")}
-					</p>
-				)}
 			</section>
 		</div>,
 		document.body,
