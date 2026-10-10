@@ -122,7 +122,7 @@ Do not create a storyboard, initialization image, first frame, `video-edit`, or 
 
 ### Direct professional mode references
 
-For a generated video Content, use `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, and `watermark` as supported by the current `<media_model_info>`.
+For a generated video Content, use `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, and `draft` as supported by the current `<media_model_info>`.
 
 Bind reference assets in the prompt by array order:
 

@@ -31,7 +31,7 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 Fill the point-estimate request with the fields listed by the estimate tool. Do not add `audioPolicy` to the estimate request. For the actual generated video Content, set `content.audioPolicy` only when the requested audio behavior must be explicit; omit it when the user did not specify an audio requirement.
 
-For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, and the conditional `audioPolicy` field. Use `audioPolicy="mute"` for a silent result or `audioPolicy="generate"` when generated audio is explicitly requested. Use `audioPolicy="auto"` only when the model rules require an explicit default. Missing audio capability metadata means unknown, not unsupported; do not claim that narration or audio is impossible unless the model explicitly declares audio output unsupported. Distinguish generated voice from recording the user's real voice. This field belongs directly under `content`; it is not a prompt instruction and it is not an estimate parameter.
+For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, `draft`, and the conditional `audioPolicy` field. Use `audioPolicy="mute"` for a silent result or `audioPolicy="generate"` when generated audio is explicitly requested. Use `audioPolicy="auto"` only when the model rules require an explicit default. Missing audio capability metadata means unknown, not unsupported; do not claim that narration or audio is impossible unless the model explicitly declares audio output unsupported. Distinguish generated voice from recording the user's real voice. This field belongs directly under `content`; it is not a prompt instruction and it is not an estimate parameter.
 
 Before submitting a generated video, check the user request for voiceover, dubbing, narration, spoken lines, dialogue, sound effects, or ambient sound. If any of those are present, keep the complete text, speaker or voice, tone, and sound description in `prompt`, state that the video must include those sounds, and set `content.audioPolicy="generate"`. Do not let the visual description replace or drop those audio requirements, and do not use `mute` or omit the field. If the user asked for a silent result, set `mute`. If no audio behavior was requested, omit `audioPolicy`. Never pass `generate` on `task="compose"`; composition uses `output.audioPolicy` as `preserve` or `mute`.
 
@@ -66,6 +66,16 @@ print(result.content)
 - Do not put file paths in the prompt. Paths belong in their corresponding reference arrays.
 - Use `frame_start_path` and optional `frame_end_path` for a start/end-frame transition; do not duplicate those files in `reference_image_paths`.
 - Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit.
+
+## Draft mode
+
+A model may support a cheap draft render before the expensive final video. The current `<media_model_info>` declares this with a `draft` capability. When that capability is absent, the model has no draft mode and `draft` must not be sent at all.
+
+- Use draft mode only when the user asks for a draft or a preview. Otherwise omit `draft`.
+- Draft request: set `content.draft=true`. The resolution collapses to the value declared on the `draft` capability in `<media_model_info>` (for example `resolution="480p"`); do not send any other resolution.
+- Draft and final are two separate billable renders. Estimate and confirm each one separately.
+- Once the draft completes, tell the user they can approve it and render the final video at full resolution from that draft video in the canvas. Do not submit the final render yourself or hand-build its request.
+- The final render inherits the draft's prompt, reference assets, and duration; only the resolution changes. Its input mode is declared as `draft_task` in `<media_model_info>`, and it must never carry reference assets or frames of its own.
 
 ## Code Mode example: estimate
 
