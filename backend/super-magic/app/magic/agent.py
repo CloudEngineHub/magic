@@ -3892,7 +3892,7 @@ Since your subsequent output will be merged with pre-interruption content and di
         try:
             tool_instance = tool_factory.get_tool_instance(tool_name)
         except Exception:
-            logger.warning(f"工具 {tool_name} 实例化失败，跳过添加。", exc_info=True)
+            logger.opt(exception=True).warning(f"工具 {tool_name} 实例化失败，跳过添加。")
             return False
         return tool_instance.is_visible_in_context(self.agent_context)
 
