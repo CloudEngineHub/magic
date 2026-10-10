@@ -5,7 +5,7 @@
   "expected_tools": ["add_canvas_elements", "ask_user"],
   "constraints": [
     "Honor the explicit detailed generation mode as a hard constraint.",
-    "Load professional-video-production.md for 生成模式: 精细 even when the user does not name storyboard or first frames.",
+    "Load professional-video-production.md for 生成模式: 精细 even when the user does not name storyboard or shot reference images.",
     "Use detailed staged production with confirmation gates.",
     "Do not fall back to basic video generation."
   ]

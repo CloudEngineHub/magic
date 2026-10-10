@@ -205,8 +205,8 @@ Generated video aspect ratio, optional, e.g. 16:9, 9:16, 1:1. When the user asks
     )
     input_mode: str = Field(
         "",
-        description="""<!--zh: 视频输入模式，可选。必须使用媒体模型上下文 <mode name="..."> 的精确值，例如 video_edit。不要使用 inputMode，也不要写 video_editing。-->
-Video input mode, optional. Use the exact <mode name="..."> value from media model context, e.g. video_edit. Do not use inputMode or video_editing."""
+        description="""<!--zh: 视频输入模式，可选。必须使用媒体模型上下文 <mode name="..."> 的精确值；镜头参考图使用 omni_reference，只有显式首尾帧过渡才使用 keyframe_guided。不要使用 inputMode，也不要写 video_editing。-->
+Video input mode, optional. Use the exact <mode name="..."> value from media model context. Use omni_reference for shot reference images; use keyframe_guided only for an explicit start/end-frame transition. Do not use inputMode or video_editing."""
     )
     task: str = Field(
         "generate",
@@ -1296,6 +1296,8 @@ class GenerateCanvasVideos(BaseGenerateCanvasElements[GenerateCanvasVideosParams
             return "video_edit"
         if task.frame_start_path or task.frame_end_path:
             return "keyframe_guided"
+        # 精细模式的镜头图片是参考输入；只有显式起止帧才进入 keyframe_guided。
+        # 其余参考素材统一使用全能参考模式 omni_reference。
         if (
             task.reference_image_paths
             or task.reference_video_paths
