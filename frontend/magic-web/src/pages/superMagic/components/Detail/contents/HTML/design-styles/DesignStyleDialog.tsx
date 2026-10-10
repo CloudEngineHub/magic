@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useLayoutEffect, useState } fr
 import { AlertCircle, LoaderCircle, RefreshCw, Search, X } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicModal from "@/components/base/MagicModal"
-import { useIsMobile } from "@/hooks/useIsMobile"
 import {
 	DialogRestoreSizeButton,
 	DialogWindowDecorations,
@@ -36,6 +35,7 @@ interface DesignStyleDialogProps {
 	onOpenChange: (open: boolean) => void
 	onApply: (style: DesignStyle) => void
 	canApply: boolean
+	isMobile?: boolean
 }
 
 export default function DesignStyleDialog({
@@ -43,9 +43,9 @@ export default function DesignStyleDialog({
 	onOpenChange,
 	onApply,
 	canApply,
+	isMobile = false,
 }: DesignStyleDialogProps) {
 	const { t } = useTranslation("super")
-	const isMobile = useIsMobile()
 	const frame = useDesignStyleWindow(open)
 	const { windowOptions } = frame
 	const [query, setQuery] = useState("")
@@ -110,6 +110,7 @@ export default function DesignStyleDialog({
 	return (
 		<MagicModal
 			open={open}
+			forceMobile={isMobile}
 			onCancel={() => (selectedStyle ? returnToGallery() : onOpenChange(false))}
 			footer={null}
 			closable={false}
