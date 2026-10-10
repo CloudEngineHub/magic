@@ -40,6 +40,22 @@ describe("decodeHTMLEntities", () => {
 })
 
 describe("getFullContent", () => {
+	it("marks authored elements before user scripts can create runtime nodes", async () => {
+		const { getFullContent } = await import("../full-content")
+		const html = getFullContent(
+			'<html><body><section id="static"><p>Fixed</p><div id="dynamic"></div></section><script>document.querySelector("#dynamic").innerHTML = "<p>Dynamic</p>"</script></body></html>',
+		)
+		const doc = new DOMParser().parseFromString(html, "text/html")
+
+		expect(doc.documentElement.hasAttribute("data-magic-source-node")).toBe(true)
+		expect(doc.querySelector("#static p")?.hasAttribute("data-magic-source-node")).toBe(true)
+		expect(
+			doc
+				.querySelector('script[data-injected="true"]')
+				?.hasAttribute("data-magic-source-node"),
+		).toBe(false)
+	})
+
 	it("installs PPT touch zoom only when requested through compiled runtime preparation", async () => {
 		const { getFullContent } = await import("../full-content")
 		const html = "<!DOCTYPE html><html><body><h1>Slide</h1></body></html>"

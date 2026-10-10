@@ -94,6 +94,13 @@ const getVitestBaseConfig = () => {
 					replacement: resolve(__dirname, "packages/html-sandbox/src/utils/safeUrl.ts"),
 				},
 				{
+					find: "@dtyq/html-sandbox/utils/sourceNodes",
+					replacement: resolve(
+						__dirname,
+						"packages/html-sandbox/src/utils/sourceNodes.ts",
+					),
+				},
+				{
 					find: "@dtyq/html-sandbox/utils/textContent",
 					replacement: resolve(
 						__dirname,

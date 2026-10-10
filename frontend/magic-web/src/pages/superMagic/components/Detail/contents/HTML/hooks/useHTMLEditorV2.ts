@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useImperativeHandle, useState } from "react"
+import { useTranslation } from "react-i18next"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { MessageBridge } from "../iframe-bridge/bridge/MessageBridge"
 import { useStylePanelStore } from "../iframe-bridge/contexts/StylePanelContext"
 import {
@@ -57,6 +59,7 @@ interface UseHTMLEditorV2Options {
  * 管理 V2 编辑脚本的注入、MessageBridge 的初始化和编辑器 ref 的创建
  */
 export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
+	const { t } = useTranslation("super")
 	const {
 		iframeRef,
 		isEditMode,
@@ -216,6 +219,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				attributes: payload.attributes,
 				computedStyles: payload.computedStyles,
 			})
+		})
+		bridge.on(EditorMessageType.DYNAMIC_ELEMENT_CLICKED, () => {
+			magicToast.info(t("htmlEditor.dynamicElementNotEditable"))
 		})
 
 		// 监听 ELEMENTS_DESELECTED 事件

@@ -1,4 +1,5 @@
 import { getElementSelector, isInjectedElement } from "../utils/dom"
+import { isSourceNode } from "../utils/sourceNodes"
 import { EditorLogger } from "../utils/EditorLogger"
 
 export const EDITOR_NODE_ID_ATTRIBUTE = "data-magic-editor-node-id"
@@ -226,7 +227,10 @@ function getVisibleElementChildren(element: HTMLElement): HTMLElement[] {
 	return Array.from(element.children)
 		.filter((child): child is HTMLElement => child instanceof HTMLElement)
 		.filter(
-			(child) => !isInjectedElement(child) && !EXCLUDED_TAGS.has(child.tagName.toLowerCase()),
+			(child) =>
+				!isInjectedElement(child) &&
+				isSourceNode(child) &&
+				!EXCLUDED_TAGS.has(child.tagName.toLowerCase()),
 		)
 }
 
@@ -253,7 +257,8 @@ function describeNode(
 ) {
 	const tagName = element.tagName.toLowerCase()
 	const selector = getElementSelector(element)
-	const isExcluded = isInjectedElement(element) || EXCLUDED_TAGS.has(tagName)
+	const isExcluded =
+		isInjectedElement(element) || !isSourceNode(element) || EXCLUDED_TAGS.has(tagName)
 	// The selector path is rooted at body and disambiguates same-tag siblings
 	// with :nth-of-type(). Only duplicate ids can make that path ambiguous, so
 	// count ids once per snapshot instead of querying the whole document per node.
