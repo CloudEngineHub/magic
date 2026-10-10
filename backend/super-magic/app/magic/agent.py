@@ -3243,9 +3243,9 @@ Since your subsequent output will be merged with pre-interruption content and di
         )
 
         # Hard 是模型配置允许的物理最大上下文，可能达到 1M；Soft 是 Super Magic 当前
-        # 实际采用的产品上下文，默认是 200K，也可以来自用户手动设置或模型专属档位。
-        # 例如 Hard=1,048,576 且使用默认 Soft 时，这里返回 200,000，主动压缩阈值为
-        # 180,000（200K × 90%），而不是等到接近 1M 时才压缩。
+        # 实际采用的产品上下文，默认是 300K，也可以来自用户手动设置、旧型号或成本例外。
+        # 例如 Hard=1,048,576 且使用默认 Soft 时，这里返回 300,000，主动压缩阈值为
+        # 270,000（300K × 90%），而不是等到接近 1M 时才压缩；自动窗口不超过 Hard。
         # 同一个 current_max_context_tokens 会用于前端、Horizon 和压缩判断，避免三处口径不同。
         model_key = (text_model_state.resolved_model_id or text_model_state.model_id).strip()
         user_manual_max_context_tokens = self.agent_context.horizon.get_user_manual_max_context_tokens(
@@ -3263,6 +3263,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             text_model_state.model_id,
             resolved_model_id=text_model_state.resolved_model_id,
             model_name=text_model_state.model_name,
+            max_context_tokens=text_model_state.max_context_tokens,
         )
         return user_facing_max_context_tokens or text_model_state.max_context_tokens
 

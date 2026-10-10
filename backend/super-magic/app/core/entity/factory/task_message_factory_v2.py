@@ -115,6 +115,13 @@ class TaskMessageFactoryV2(TaskMessageFactoryProtocol):
                 )
                 if limits.contains(user_manual_max_context_tokens):
                     return user_manual_max_context_tokens
+            # usage.max_context_tokens 已可能是产品窗口，物理容量必须取当前运行时文本模型。
+            return resolve_user_facing_max_context_tokens(
+                text_model_state.model_id,
+                resolved_model_id=text_model_state.resolved_model_id,
+                model_name=text_model_state.model_name,
+                max_context_tokens=text_model_state.max_context_tokens,
+            )
         except Exception:
             pass
 

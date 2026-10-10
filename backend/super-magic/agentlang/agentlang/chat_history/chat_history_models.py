@@ -31,7 +31,7 @@ ASSISTANT_TOOL_CONTENT_PLACEHOLDER = "我将继续执行任务"
 # ==============================================================================
 # 聊天记录压缩配置数据类
 # ==============================================================================
-FALLBACK_USER_FACING_MAX_CONTEXT_TOKENS = 200_000
+FALLBACK_USER_FACING_MAX_CONTEXT_TOKENS = 300_000
 FALLBACK_DEFAULT_COMPACTION_THRESHOLD_TOKENS = 180_000
 FALLBACK_MIN_COMPACTION_THRESHOLD_TOKENS = 100_000
 FALLBACK_MAX_COMPACTION_THRESHOLD_TOKENS = 180_000
@@ -40,11 +40,24 @@ FALLBACK_CONTEXT_USAGE_RATIO = 0.9
 
 @dataclass(frozen=True)
 class ContextWindowRule:
-    """按模型关键词匹配用户可见上下文窗口。"""
+    """同一模型名称的关键词、版本共同决定旧模型或成本例外窗口。"""
 
     name: str
     user_facing_max_context_tokens: int
     model_keywords: tuple[str, ...]
+    version_patterns: tuple[re.Pattern[str], ...]
+    version_lt: tuple[int, ...] | None = None
+    versions: tuple[tuple[int, ...], ...] = ()
+
+
+def _parse_model_version(value: str) -> tuple[int, ...]:
+    """按整数分段比较；4 与 4.0 等价，4.10 大于 4.6，不能使用浮点数。"""
+    if not re.fullmatch(r"v?[0-9]+(?:[.-][0-9]+)*", value):
+        raise ValueError(f"Invalid model version: {value}")
+    parts = [int(part) for part in re.split(r"[.-]", value.removeprefix("v"))]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
 
 
 def _parse_token_count(value: Any) -> Optional[int]:
@@ -121,11 +134,37 @@ def _load_context_window_rules_from_config() -> List[ContextWindowRule]:
         if not model_keywords:
             raise ValueError(f"context_window.tiers[{index}].model_keywords cannot be empty")
 
+        raw_patterns = raw_rule.get("version_patterns")
+        if not isinstance(raw_patterns, list) or not raw_patterns:
+            raise ValueError(f"context_window.tiers[{index}].version_patterns must be a nonempty list")
+        patterns: list[re.Pattern[str]] = []
+        for pattern in raw_patterns:
+            if not isinstance(pattern, str) or not pattern.strip():
+                raise ValueError(f"context_window.tiers[{index}].version_patterns must contain strings")
+            patterns.append(re.compile(pattern, re.IGNORECASE))
+
+        raw_version_lt = raw_rule.get("version_lt")
+        version_lt: tuple[int, ...] | None = None
+        if raw_version_lt is not None:
+            if not isinstance(raw_version_lt, str):
+                raise ValueError(f"context_window.tiers[{index}].version_lt must be a string")
+            version_lt = _parse_model_version(raw_version_lt)
+        raw_versions = raw_rule.get("versions", [])
+        if not isinstance(raw_versions, list) or any(not isinstance(v, str) for v in raw_versions):
+            raise ValueError(f"context_window.tiers[{index}].versions must be a list of strings")
+        versions = tuple(_parse_model_version(version) for version in raw_versions)
+        if version_lt is not None or versions:
+            if any("version" not in pattern.groupindex for pattern in patterns):
+                raise ValueError(f"context_window.tiers[{index}] patterns must capture 'version'")
+
         rules.append(
             ContextWindowRule(
                 name=name,
                 user_facing_max_context_tokens=user_facing_max_context_tokens,
                 model_keywords=model_keywords,
+                version_patterns=tuple(patterns),
+                version_lt=version_lt,
+                versions=versions,
             )
         )
 
@@ -144,31 +183,72 @@ def resolve_default_user_facing_max_context_tokens() -> int:
     return _resolve_default_user_facing_max_context_tokens()
 
 
-def _collect_model_match_texts(*model_ids: Any) -> List[str]:
-    """收集用于上下文窗口规则匹配的模型文本。"""
-    candidates: List[Any] = list(model_ids)
-    for candidate in list(candidates):
-        if not candidate or not str(candidate).strip():
-            continue
-        model_config = model_config_utils.get_model_config(str(candidate).strip())
-        if not model_config:
-            continue
-        metadata = model_config.metadata or {}
-        candidates.extend([
-            model_config.model_id,
-            model_config.name,
-            model_config.provider,
-            model_config.resolved_model_id,
-            metadata.get("label"),
-            metadata.get("api_model"),
-            metadata.get("profile"),
-        ])
-
+def _collect_model_match_texts(
+    model_id: str,
+    *,
+    resolved_model_id: str | None = None,
+    model_name: str | None = None,
+) -> List[str]:
+    """真实 ID／api_model／profile 优先，内部 ID 不可识别时再使用名称与 label。"""
+    candidates: list[object] = [resolved_model_id]
+    model_configs = [
+        model_config_utils.get_model_config(candidate.strip())
+        for candidate in (resolved_model_id, model_id)
+        if candidate and candidate.strip()
+    ]
+    for model_config in model_configs:
+        if model_config is not None:
+            metadata = model_config.metadata or {}
+            candidates.extend([
+                model_config.resolved_model_id,
+                metadata.get("api_model"),
+                metadata.get("profile"),
+            ])
+    candidates.extend(
+        model_config.model_id for model_config in model_configs if model_config is not None
+    )
+    candidates.extend([model_id, model_name])
+    for model_config in model_configs:
+        if model_config is not None:
+            candidates.extend([
+                model_config.name,
+                (model_config.metadata or {}).get("label"),
+            ])
     return list(dict.fromkeys(
-        str(value).strip().lower()
+        value.strip().lower()
         for value in candidates
-        if value and str(value).strip()
+        if isinstance(value, str) and value.strip()
     ))
+
+
+def _match_context_window_rule(
+    rules: List[ContextWindowRule],
+    match_texts: List[str],
+) -> ContextWindowRule | None:
+    """先判断可信名称，再判断规则；新版本不能被低优先级的旧别名覆盖。"""
+    for text in match_texts:
+        recognized = False
+        for rule in rules:
+            keywords_match = all(keyword.lower() in text for keyword in rule.model_keywords)
+            for pattern in rule.version_patterns:
+                match = pattern.search(text)
+                if match is None:
+                    continue
+                recognized = True
+                if not keywords_match:
+                    continue
+                if rule.version_lt is not None or rule.versions:
+                    version = _parse_model_version(match.group("version"))
+                    if rule.version_lt is not None and version >= rule.version_lt:
+                        continue
+                    if rule.versions and version not in rule.versions:
+                        continue
+                return rule
+            # 已识别型号但名称没有数字版本时使用默认，不能猜成旧版本。
+            recognized = recognized or keywords_match
+        if recognized:
+            return None
+    return None
 
 @dataclass(frozen=True)
 class CompactionThresholdResult:
@@ -246,7 +326,7 @@ class CompactionConfig:
 
     # 模型缺失或没有 agent_model_id 时使用 default_compaction_threshold_tokens；有模型时先读取
     # max_context_tokens，再按「命中 context_window_rules 则使用该用户可见窗口，
-    # 否则使用模型物理窗口」乘以 context_usage_ratio 计算。若模型容量不小于
+    # 否则使用产品默认窗口，并限制到模型物理容量」乘以 context_usage_ratio 计算。若模型容量不小于
     # min_compaction_threshold_tokens，结果至少为 min_compaction_threshold_tokens，
     # 最后不超过模型物理窗口。
     default_compaction_threshold_tokens: int = FALLBACK_DEFAULT_COMPACTION_THRESHOLD_TOKENS
@@ -325,30 +405,19 @@ class CompactionConfig:
         """收集用于匹配上下文窗口规则的模型文本。"""
         return _collect_model_match_texts(model_id)
 
-    def _get_model_match_texts(self) -> List[str]:
-        """收集用于匹配上下文窗口规则的基准模型文本。"""
-        return self._get_model_match_texts_for_model(self.agent_model_id)
-
     def _match_context_window_rule_for_model(
         self,
         model_id: str,
         match_texts: List[str],
     ) -> Optional[ContextWindowRule]:
         """根据用户可见上下文窗口规则匹配命中项。"""
-        for rule in self.context_window_rules:
-            for keyword in rule.model_keywords:
-                keyword_lower = keyword.lower()
-                if any(keyword_lower in text for text in match_texts):
-                    logger.info(
-                        f"模型 {model_id} 命中上下文窗口 {rule.user_facing_max_context_tokens:,} "
-                        f"(strategy={rule.name}, keyword={keyword})"
-                    )
-                    return rule
-        return None
-
-    def _match_context_window_rule(self, match_texts: List[str]) -> Optional[ContextWindowRule]:
-        """根据基准模型文本匹配用户可见上下文窗口规则。"""
-        return self._match_context_window_rule_for_model(self.agent_model_id, match_texts)
+        rule = _match_context_window_rule(self.context_window_rules, match_texts)
+        if rule is not None:
+            logger.info(
+                f"模型 {model_id} 命中上下文窗口 {rule.user_facing_max_context_tokens:,} "
+                f"(strategy={rule.name})"
+            )
+        return rule
 
     def resolve_threshold_for_model(
         self,
@@ -364,7 +433,9 @@ class CompactionConfig:
                 used_default=True,
             )
 
-        max_context_tokens = model_config_utils.get_max_context_tokens(model_id, default=0)
+        max_context_tokens = model_config_utils.get_max_context_tokens(
+            model_id or resolved_model_id or "", default=0,
+        )
         if max_context_tokens <= 0:
             logger.warning(
                 f"无法获取模型 {model_id} 的 max_context_tokens，"
@@ -386,9 +457,10 @@ class CompactionConfig:
             threshold_context_tokens = (
                 matched_rule.user_facing_max_context_tokens
                 if matched_rule is not None
-                else max_context_tokens
+                else _resolve_default_user_facing_max_context_tokens()
             )
             matched_rule_name = matched_rule.name if matched_rule is not None else None
+        threshold_context_tokens = min(threshold_context_tokens, max_context_tokens)
         threshold = int(threshold_context_tokens * self.context_usage_ratio)
 
         if max_context_tokens >= self.min_compaction_threshold_tokens:
@@ -1083,31 +1155,34 @@ def resolve_user_facing_max_context_tokens(
     *,
     resolved_model_id: Optional[str] = None,
     model_name: Optional[str] = None,
+    max_context_tokens: int | None = None,
 ) -> Optional[int]:
     """计算 `model_id` 对外暴露的最大上下文 token 容量。
 
     与 [CompactionConfig._calculate_model_based_threshold] 保持取值口径一致：
-      1. 优先命中 config.yaml 的 `context_window.tiers`，返回该规则的
+      1. 优先命中 config.yaml 的 `context_window.tiers`，使用该规则的
          `user_facing_max_context_tokens`。
       2. 未命中时统一回退到 `context_window.default_user_facing_max_context_tokens`，
          避免使用模型原始物理窗口造成前端展示与系统对外口径不一致。
+      3. 有有效物理容量时取较小值；运行时容量优先于静态配置。
 
     供压缩以外的消费者（如消息工厂的实时 token_usage 输出）复用，避免重复实现查表逻辑。
     """
     default_context_tokens = _resolve_default_user_facing_max_context_tokens()
-    if not (model_id or resolved_model_id or model_name):
-        return default_context_tokens
+    user_facing_context_tokens = default_context_tokens
     try:
         # auto 本身不表达具体模型，必须把运行时解析结果和配置别名都纳入匹配。
-        match_texts = _collect_model_match_texts(resolved_model_id, model_name, model_id)
+        match_texts = _collect_model_match_texts(
+            model_id, resolved_model_id=resolved_model_id, model_name=model_name,
+        )
         rules = _load_context_window_rules_from_config()
-        for rule in rules:
-            for keyword in rule.model_keywords:
-                keyword_lower = keyword.lower()
-                if any(keyword_lower in text for text in match_texts):
-                    return rule.user_facing_max_context_tokens
-
-        return default_context_tokens
+        rule = _match_context_window_rule(rules, match_texts)
+        if rule is not None:
+            user_facing_context_tokens = rule.user_facing_max_context_tokens
     except Exception as e:
         logger.warning(f"resolve_user_facing_max_context_tokens 失败 model_id={model_id}: {e}")
-        return default_context_tokens
+    if max_context_tokens is None:
+        max_context_tokens = model_config_utils.get_max_context_tokens(model_id, default=0)
+    if max_context_tokens > 0:
+        return min(user_facing_context_tokens, max_context_tokens)
+    return user_facing_context_tokens

@@ -137,56 +137,138 @@ llm:
 # 用户可见上下文窗口配置
 #
 # 这里配置的是产品对外展示和压缩策略共同使用的上下文窗口档位。
-# Python 只负责按模型关键词匹配档位，并用 context_usage_ratio 计算压缩阈值。
+# Python 按同一名称的全部关键词与数字版本匹配，并用 context_usage_ratio 计算压缩阈值。
+# 未命中默认 300K，实际不超过运行时物理容量；不再为每个新型号维护大窗口白名单。
 context_window:
-  default_user_facing_max_context_tokens: 200000
+  default_user_facing_max_context_tokens: 300000
   compaction:
     default_compaction_threshold_tokens: 180000
     min_compaction_threshold_tokens: 100000
     max_compaction_threshold_tokens: 180000
     context_usage_ratio: 0.9
   tiers:
-    # 200K 档：产品对外按 200K 展示，压缩阈值由 context_usage_ratio 派生。
-    # Claude 关键词同时兼容两种命名顺序（历史遗留的命名不规范问题）。
-    - name: context_window_200k
+    # 版本按整数分段比较：4=4.0，4.10>4.6；version_lt 是严格小于。
+    # 配置版本必须带 v 前缀，防止全局配置器把 "4.10" 转成浮点数 4.1 而丢失版本信息。
+    # 模式同时接受 claude-sonnet-4.5、claude-4.5-sonnet 和官方 4-5 写法，八位日期不进入版本。
+    - name: claude_sonnet_legacy
       user_facing_max_context_tokens: 200000
-      model_keywords:
-        - claude-sonnet-4.6
-        - claude-4.6-sonnet
-        - claude-opus-4.6
-        - claude-4.6-opus
-        - claude-sonnet-4.5
-        - claude-4.5-sonnet
-        - claude-sonnet-4
-        - claude-4-sonnet
-        - gemini-3-pro
-        - gemini-3-pro-preview
-        - gemini-3.1-pro
-        - gemini-3.1-pro-preview
-        # Step / MiMo 系列上下文窗口待确认，先保守归入 200K 档。
-        - step-3.5-flash
-        - mimo-v2.5
+      model_keywords: [claude, sonnet]
+      version_lt: "v4.6"
+      version_patterns: &claude_version_patterns
+        - 'claude[-_ ]+(?:sonnet|opus|haiku)[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+|-[0-9]{1,2}(?![0-9]))*)(?![0-9.])'
+        - 'claude[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+|-[0-9]{1,2}(?![0-9]))*)[-_ ]+(?:sonnet|opus|haiku)(?:[-_ ]|$)'
+    - name: claude_opus_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [claude, opus]
+      version_lt: "v4.6"
+      version_patterns: *claude_version_patterns
+    - name: claude_haiku_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [claude, haiku]
+      version_lt: "v5.5"
+      version_patterns: *claude_version_patterns
+    - name: glm_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [glm]
+      version_lt: "v5.2"
+      version_patterns:
+        - 'glm[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])(?![-_ ]?(?:v|vision|image|audio)(?:[-_ ]|$))'
+    - name: minimax_m_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [minimax]
+      version_lt: "v3.0"
+      version_patterns:
+        - 'minimax[-_ ]+m(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
+    - name: kimi_k_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [kimi]
+      version_lt: "v3.0"
+      version_patterns:
+        - 'kimi[-_ ]+k(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
+    - name: mimo_flash_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [mimo, flash]
+      version_lt: "v2.5"
+      version_patterns: &mimo_version_patterns
+        - 'mimo[-_ ]+v(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
+    - name: deepseek_v_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [deepseek]
+      version_lt: "v4.0"
+      version_patterns:
+        - 'deepseek[-_ ]+v(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
+    - name: doubao_seed_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [doubao, seed]
+      version_lt: "v2.0"
+      version_patterns: &doubao_version_patterns
+        - 'doubao[-_ ]+seed[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
 
-    # 256K 档：产品对外按 256K 展示，压缩阈值由 context_usage_ratio 派生。
-    # 子串匹配：如 gpt-5.x 覆盖 mini/nano，doubao-seed-2.0 覆盖 pro/lite/code。
-    - name: context_window_256k
+    # 大容量不代表没有长上下文加价。versions 只列已知成本例外，不推断未来版本的价格。
+    # Gemini Pro 输入超过 200K 会整单跳档；GPT 5.4/5.5 超过 272K 会跳档，保留原 256K 余量。
+    # 90% 压缩触发点不是最终请求的严格计费上限，检查后仍可能加入自动读取与 Horizon 内容。
+    - name: gemini_pro_cost_limit
+      user_facing_max_context_tokens: 200000
+      model_keywords: [gemini, pro]
+      versions: ["v3", "v3.1"]
+      version_patterns:
+        - 'gemini[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
+    - name: gpt_cost_limit
       user_facing_max_context_tokens: 256000
-      model_keywords:
-        - claude-opus-4.8
-        - gpt-5.5
-        - gpt-5.4
-        - glm-5.2
-        - qwen3.7-max
-        - qwen3.7-plus
-        - qwen3.6-plus
-        - qwen3.5-plus
-        - qwen3.5-flash
-        - qwen-plus
-        - doubao-seed-2.0
-        - deepseek-v4
-        - deepseek-v4-flash
-        - kimi-k2
-        - gemini-3-flash
+      model_keywords: [gpt]
+      versions: ["v5.4", "v5.5"]
+      version_patterns:
+        - 'gpt[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
+    # Qwen 已知 Plus／Flash 在 256K 以上存在阶梯价，地域与快照影响实际费率。
+    - name: qwen_plus_cost_limit
+      user_facing_max_context_tokens: 256000
+      model_keywords: [qwen, plus]
+      versions: ["v3.5", "v3.6", "v3.7"]
+      version_patterns: &qwen_version_patterns
+        - 'qwen[-_ ]*(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
+    - name: qwen_flash_cost_limit
+      user_facing_max_context_tokens: 256000
+      model_keywords: [qwen, flash]
+      versions: ["v3.5"]
+      version_patterns: *qwen_version_patterns
+    - name: qwen_plus_alias_cost_limit
+      user_facing_max_context_tokens: 256000
+      model_keywords: [qwen, plus]
+      version_patterns:
+        - 'qwen-plus(?:-|$)'
+
+    # 以下已知型号的容量／渠道价格仍待确认，保留现有小窗口；不猜测下一大窗口版本。
+    - name: qwen_max_legacy
+      user_facing_max_context_tokens: 200000
+      model_keywords: [qwen, max]
+      versions: ["v3"]
+      version_patterns: *qwen_version_patterns
+    - name: qwen_coder_cost_pending
+      user_facing_max_context_tokens: 200000
+      model_keywords: [qwen, coder, plus]
+      versions: ["v3"]
+      version_patterns: *qwen_version_patterns
+    - name: step_flash_capacity_pending
+      user_facing_max_context_tokens: 200000
+      model_keywords: [step, flash]
+      versions: ["v3.5", "v3.7"]
+      version_patterns:
+        - 'step[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
+    - name: mimo_cost_pending
+      user_facing_max_context_tokens: 200000
+      model_keywords: [mimo]
+      versions: ["v2.5"]
+      version_patterns: *mimo_version_patterns
+    - name: mimo_pro_cost_pending
+      user_facing_max_context_tokens: 200000
+      model_keywords: [mimo, pro]
+      versions: ["v2"]
+      version_patterns: *mimo_version_patterns
+    - name: doubao_seed_capacity_pending
+      user_facing_max_context_tokens: 256000
+      model_keywords: [doubao, seed]
+      versions: ["v2.0"]
+      version_patterns: *doubao_version_patterns
 
 # 自定义默认模型。没有管理后台模型列表时，auto 必须能在 providers.*.models 中解析到。
 default_model: auto
