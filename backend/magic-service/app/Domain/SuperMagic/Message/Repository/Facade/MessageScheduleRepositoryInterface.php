@@ -19,6 +19,8 @@ interface MessageScheduleRepositoryInterface
      */
     public function findById(int $id): ?MessageScheduleEntity;
 
+    public function findByIdForUpdate(int $id): ?MessageScheduleEntity;
+
     /**
      * Save message schedule.
      */
