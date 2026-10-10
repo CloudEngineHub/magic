@@ -120,7 +120,7 @@ test("transformHtmlForShimMode rewrites script and modulepreload tags for shim m
 
 	// es-module-shims script tag is injected AFTER importmap-shim
 	const importMapEndIndex = transformed.indexOf("</script>")
-	const shimScriptIndex = transformed.indexOf("es-module-shims@2.8.4")
+	const shimScriptIndex = transformed.indexOf("es-module-shims")
 	assert.ok(shimScriptIndex > importMapEndIndex)
 
 	// <script type="importmap"> is converted to <script type="importmap-shim">

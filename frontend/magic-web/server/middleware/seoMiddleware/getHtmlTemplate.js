@@ -61,7 +61,7 @@ function shouldShimImportMap(userAgent) {
 function transformHtmlForShimMode(html) {
 	if (typeof html !== "string") return html
 
-	const esModuleShimsTag = `<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.4/dist/es-module-shims.min.js" crossorigin="anonymous"></script>\n`
+	const esModuleShimsTag = `<script async src="${CDNUrl}/es-module-shims/2.8.4/es-module-shims.min.js" crossorigin="anonymous"></script>\n`
 
 	let transformed = html
 
