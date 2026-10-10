@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Application\Notification\Service;
 
 use App\Application\Notification\Contract\EventEnvelope;
+use App\Application\Notification\Exception\NotificationEventValidationException;
 use App\Application\Notification\Strategy\NotificationCatalogStrategyInterface;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Domain\Notification\Constant\NotificationActionStatus;
@@ -90,6 +91,7 @@ final readonly class NotificationConsumerService
             unset($notificationCount);
         } catch (Throwable $throwable) {
             $retryable = ! $throwable instanceof InvalidArgumentException
+                && ! $throwable instanceof NotificationEventValidationException
                 && (int) $throwable->getCode() !== NotificationErrorCode::TEMPLATE_NOT_FOUND->value
                 && $event->getAttempts() < self::MAX_ATTEMPTS;
             $this->events->markFailed(
@@ -99,7 +101,9 @@ final readonly class NotificationConsumerService
                     $throwable,
                     $throwable instanceof InvalidArgumentException
                         ? EventErrorCode::EVENT_CONSUMER_VALIDATION_FAILED->value
-                        : EventErrorCode::EVENT_CONSUMER_EXECUTION_FAILED->value
+                        : ($throwable instanceof NotificationEventValidationException
+                            ? NotificationErrorCode::EVENT_PAYLOAD_INVALID->value
+                            : EventErrorCode::EVENT_CONSUMER_EXECUTION_FAILED->value)
                 ),
                 NotificationErrorFormatter::message($throwable),
                 $retryable,
@@ -116,7 +120,9 @@ final readonly class NotificationConsumerService
                     $throwable,
                     $throwable instanceof InvalidArgumentException
                         ? EventErrorCode::EVENT_CONSUMER_VALIDATION_FAILED->value
-                        : EventErrorCode::EVENT_CONSUMER_EXECUTION_FAILED->value
+                        : ($throwable instanceof NotificationEventValidationException
+                            ? NotificationErrorCode::EVENT_PAYLOAD_INVALID->value
+                            : EventErrorCode::EVENT_CONSUMER_EXECUTION_FAILED->value)
                 ),
                 'error' => $throwable->getMessage(),
                 'trace' => $throwable->getTraceAsString(),

@@ -177,6 +177,40 @@ final class NotificationAmqpFailureIntegrationTest extends TestCase
         self::assertSame(0, $stored->getNotificationCount());
     }
 
+    public function testInvalidEnvelopeFailsOnFirstAttemptWithNumericContractErrorCode(): void
+    {
+        $event = $this->persistEvent();
+        Db::table('magic_notification_events')
+            ->where('event_id', $event->getEventId())
+            ->update([
+                'event_payload' => json_encode(
+                    array_merge($event->getEventPayload(), ['schema_version' => 2]),
+                    JSON_THROW_ON_ERROR,
+                ),
+            ]);
+
+        $consumer = $this->consumer(
+            $this->createMock(NotificationRepositoryInterface::class),
+            $this->templatesWithPublicTaskTemplate(),
+        );
+
+        try {
+            $consumer->consume($event->getEventId());
+            self::fail('An unsupported schema must fail without an automatic retry.');
+        } catch (\Throwable $throwable) {
+            self::assertSame(35007, $throwable->getCode());
+        }
+
+        $stored = $this->eventRepository()->findByEventId($event->getEventId());
+        self::assertNotNull($stored);
+        self::assertSame(NotificationEventStatus::FAILED, $stored->getStatus());
+        self::assertSame(1, $stored->getAttempts());
+        self::assertNull($stored->getNextRetryAt());
+        self::assertSame('35007', $stored->getLastErrorCode());
+        self::assertSame(0, $stored->getNotificationCount());
+        self::assertSame(0, (int) Db::table('magic_notifications')->where('source_id', $event->getSourceId())->count());
+    }
+
     public function testDuplicateMessageKeepsOriginalPayloadAndDoesNotIncreaseCount(): void
     {
         $event = $this->persistEvent();

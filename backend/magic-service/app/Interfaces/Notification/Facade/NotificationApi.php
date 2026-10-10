@@ -7,6 +7,7 @@ namespace App\Interfaces\Notification\Facade;
 use App\Application\Notification\Service\NotificationAppService;
 use App\Domain\Notification\Entity\ValueObject\NotificationDataIsolation;
 use App\ErrorCode\GenericErrorCode;
+use App\ErrorCode\NotificationErrorCode;
 use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\PersonalAccessToken\PersonalAccessTokenAuthorization;
@@ -47,6 +48,22 @@ final class NotificationApi extends AbstractApi
         return $this->service->markRead($this->isolation(), $notificationId);
     }
 
+    /** @return array<string,mixed> */
+    public function accept(string $notificationId): array
+    {
+        return $this->service->action($this->isolation(), $notificationId, true);
+    }
+
+    /** @return array<string,mixed> */
+    public function reject(string $notificationId): array
+    {
+        $reason = $this->request->input('reason', '');
+        if (! is_string($reason) || mb_strlen($reason) > 500) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'reason must not exceed 500 characters');
+        }
+        return $this->service->action($this->isolation(), $notificationId, false, ['reason' => $reason]);
+    }
+
     private function isolation(): NotificationDataIsolation
     {
         $authorization = $this->getAuthorization();
@@ -55,9 +72,13 @@ final class NotificationApi extends AbstractApi
         }
         $organizationCode = trim($authorization->getOrganizationCode());
         if ($organizationCode === '') {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'organization_code is required');
+            ExceptionBuilder::throw(NotificationErrorCode::ORGANIZATION_CONTEXT_REQUIRED);
         }
-        return NotificationDataIsolation::create($organizationCode, $authorization->getId(), $authorization->getMagicId());
+        return NotificationDataIsolation::create(
+            $organizationCode,
+            $authorization->getId(),
+            $authorization->getMagicId()
+        );
     }
 
     private function optionalString(string $key): ?string

@@ -9,9 +9,10 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Unit\Notification;
 
 use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
+use App\Application\Notification\Exception\NotificationEventValidationException;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Domain\Notification\Service\NotificationEventTypeRegistry;
-use InvalidArgumentException;
+use App\ErrorCode\NotificationErrorCode;
 use PHPUnit\Framework\TestCase;
 
 /** @internal */
@@ -49,7 +50,7 @@ final class NotificationEventEnvelopeValidatorTest extends TestCase
         $envelope['recipients'][0]['user_id'] = 'usi:invalid';
         $envelope['recipients'][0]['source_event_key'] = 'task:MAGIC:785205968218931201:usi:invalid:finished';
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(NotificationEventValidationException::class);
         $this->validator->validate($envelope);
     }
 
@@ -58,7 +59,7 @@ final class NotificationEventEnvelopeValidatorTest extends TestCase
         $envelope = $this->envelope();
         $envelope['recipients'][0]['user_id'] = 'usi_dg_dashboard_admin';
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(NotificationEventValidationException::class);
         $this->expectExceptionMessage('source_event_key user_id does not match recipient.user_id');
         $this->validator->validate($envelope);
     }
@@ -68,7 +69,7 @@ final class NotificationEventEnvelopeValidatorTest extends TestCase
         $envelope = $this->envelope();
         $envelope['recipients'][] = $envelope['recipients'][0];
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(NotificationEventValidationException::class);
         $this->validator->validate($envelope);
     }
 
@@ -88,8 +89,47 @@ final class NotificationEventEnvelopeValidatorTest extends TestCase
         $envelope['event_type'] = 'unknown.succeeded';
         $envelope['source']['domain'] = 'unknown';
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(NotificationEventValidationException::class);
         $this->validator->validate($envelope);
+    }
+
+    public function testUnsupportedSchemaVersionUsesNotificationErrorCode(): void
+    {
+        $envelope = $this->envelope();
+        $envelope['schema_version'] = 2;
+
+        try {
+            $this->validator->validate($envelope);
+            self::fail('Unsupported schema versions must be rejected.');
+        } catch (NotificationEventValidationException $exception) {
+            self::assertSame(NotificationErrorCode::UNSUPPORTED_SCHEMA_VERSION->value, $exception->getCode());
+        }
+    }
+
+    public function testUnknownEventTypeUsesNotificationErrorCode(): void
+    {
+        $envelope = $this->envelope();
+        $envelope['event_type'] = 'task.not_registered';
+
+        try {
+            $this->validator->validate($envelope);
+            self::fail('Unknown event types must be rejected.');
+        } catch (NotificationEventValidationException $exception) {
+            self::assertSame(NotificationErrorCode::EVENT_TYPE_NOT_REGISTERED->value, $exception->getCode());
+        }
+    }
+
+    public function testInvalidPayloadUsesNotificationErrorCode(): void
+    {
+        $envelope = $this->envelope();
+        $envelope['payload'] = 'invalid';
+
+        try {
+            $this->validator->validate($envelope);
+            self::fail('Invalid payloads must be rejected.');
+        } catch (NotificationEventValidationException $exception) {
+            self::assertSame(NotificationErrorCode::EVENT_PAYLOAD_INVALID->value, $exception->getCode());
+        }
     }
 
     public function testEveryPublicEventHasAValidEnvelopeShape(): void
