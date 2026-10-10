@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import type { CSSProperties } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { LucideIcon } from "lucide-react"
@@ -38,10 +38,10 @@ import {
 	getHomeOnboardingRewardList,
 	getHomeOnboardingTaskEntryPage,
 	homeOnboardingClaimFailureKey,
-	HOME_ONBOARDING_RUN_EVENT,
 	HOME_ONBOARDING_STATE_EVENT,
-	isHomeOnboardingRunActive,
+	isHomeOnboardingRunBlocking,
 	isReplayableHomeOnboardingTask,
+	subscribeHomeOnboardingRun,
 	consumeHomeOnboardingSurfaceExposure,
 	startHomeOnboarding,
 	type HomeOnboardingReward,
@@ -294,13 +294,15 @@ function NewUserBenefitsCard() {
 	 */
 	const [claiming, setClaiming] = useState<HomeOnboardingTaskId | null>(null)
 	/**
-	 * Whether a guided run holds the screen at this moment — the introduction dialog of a first
-	 * visit, or the step overlays of any task this card leads into. Read once on mount as well as
-	 * followed, because the card cannot work it out for itself and the two mount in whichever order
-	 * the page takes: the automatic run opens its dialog on a first visit, before anything asks for
-	 * this card at all.
+	 * Whether a guided run has reserved or currently holds the screen. `useSyncExternalStore` closes
+	 * the render-to-subscribe gap: a lazy fallback can reserve the screen during this component's
+	 * commit without letting the card install an observer from a stale `false` snapshot.
 	 */
-	const [runActive, setRunActive] = useState(isHomeOnboardingRunActive)
+	const runBlocking = useSyncExternalStore(
+		subscribeHomeOnboardingRun,
+		isHomeOnboardingRunBlocking,
+		isHomeOnboardingRunBlocking,
+	)
 
 	/**
 	 * Whether the entry card is folded down to its pill. Read once on mount so a stored preference
@@ -359,19 +361,6 @@ function NewUserBenefitsCard() {
 		window.addEventListener(HOME_ONBOARDING_STATE_EVENT, syncStatus)
 		return () => window.removeEventListener(HOME_ONBOARDING_STATE_EVENT, syncStatus)
 	}, [userInfo?.magic_id])
-
-	/**
-	 * A run takes the screen and gives it back on its own schedule, so the card follows it instead of
-	 * working it out from anything it knows. It has nothing to work it out from: every task leads to
-	 * the same thing from the card's side, and the run that opens the introduction dialog is not one
-	 * the card ever asked for.
-	 */
-	useEffect(() => {
-		const syncRun = () => setRunActive(isHomeOnboardingRunActive())
-		syncRun()
-		window.addEventListener(HOME_ONBOARDING_RUN_EVENT, syncRun)
-		return () => window.removeEventListener(HOME_ONBOARDING_RUN_EVENT, syncRun)
-	}, [])
 
 	/**
 	 * Opens a task's guided flow — both the "开始体验" of an unfinished task and the "回看" of a
@@ -610,7 +599,7 @@ function NewUserBenefitsCard() {
 	const hasUnfinishedTasks = remainingCount > 0
 	const recommendedTaskId = rows.find((row) => row.recommended)?.taskId
 	const cardVisible = useElementVisibility(cardContainerRef, {
-		enabled: Boolean(rows.length) && !open && !runActive,
+		enabled: Boolean(rows.length) && !open && !runBlocking,
 		minimumIntersectionRatio: ONBOARDING_EXPOSURE_RATIO,
 		requireDocumentVisible: true,
 		threshold: ONBOARDING_EXPOSURE_THRESHOLDS,
@@ -761,7 +750,7 @@ function NewUserBenefitsCard() {
 					 * away — the pill would then grow under two transforms at once.
 					 */
 					!foldingOut && "transition-transform duration-200",
-					!open && !runActive && "md:block",
+					!open && !runBlocking && "md:block",
 					foldingOut && "nb-entry-leaving pointer-events-none",
 				)}
 			>

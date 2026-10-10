@@ -14,6 +14,7 @@ import {
 	isHomeOnboardingIntroSpent,
 	isHomeOnboardingTaskOnPage,
 	isHomeOnboardingTaskPending,
+	setHomeOnboardingRunPending,
 	setHomeOnboardingUserMagicId,
 	setHomeOnboardingAnalyticsScope,
 	type HomeOnboardingRewardListStatus,
@@ -30,6 +31,20 @@ const HomeOnboardingTour = lazy(() => import("./HomeOnboardingTour"))
  * dependencies for them. They are fetched on the one page that can show them, and nowhere else.
  */
 const HomeOnboardingFirstWorkCongrats = lazy(() => import("./HomeOnboardingFirstWorkCongrats"))
+
+/**
+ * Suspense renders this after the wrapper has selected a tour but before the lazy component is
+ * available. Reserving the screen here closes the only frame in which the benefits card could be
+ * observed before the tour had a chance to publish `runActive`.
+ */
+function HomeOnboardingTourLoadingFallback() {
+	useLayoutEffect(() => {
+		setHomeOnboardingRunPending(true)
+		return () => setHomeOnboardingRunPending(false)
+	}, [])
+
+	return null
+}
 
 interface GuideTourWrapperProps {
 	/**
@@ -212,7 +227,7 @@ function GuideTourGate({ isMobile, page = "home" }: GuideTourWrapperProps) {
 				</Suspense>
 			) : null}
 			{tourRequested ? (
-				<Suspense fallback={null}>
+				<Suspense fallback={<HomeOnboardingTourLoadingFallback />}>
 					{/*
 					 * `key` forces a fresh tour on every replay request. A finished tour stays mounted
 					 * while rendering null, so reusing the instance would keep its internal
@@ -274,10 +289,12 @@ export {
 	HOME_ONBOARDING_TASK_CODE,
 	HomeOnboardingAnchor,
 	isHomeOnboardingCompleted,
+	isHomeOnboardingRunBlocking,
 	isHomeOnboardingRunActive,
 	isHomeOnboardingTaskOnPage,
 	isReplayableHomeOnboardingTask,
 	refreshHomeOnboardingRewardList,
+	subscribeHomeOnboardingRun,
 	startHomeOnboarding,
 } from "./GuideTourManager"
 export type {

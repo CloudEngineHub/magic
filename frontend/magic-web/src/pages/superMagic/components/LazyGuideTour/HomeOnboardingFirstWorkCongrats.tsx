@@ -20,7 +20,7 @@ import {
 	hasHomeOnboardingTasks,
 	HOME_ONBOARDING_TASK_CODE,
 	isHomeOnboardingFirstWorkCongratsSpent,
-	isHomeOnboardingRunActive,
+	isHomeOnboardingRunBlocking,
 	refreshHomeOnboardingRewardList,
 	spendHomeOnboardingFirstWorkCongrats,
 } from "./GuideTourManager"
@@ -297,7 +297,7 @@ const HomeOnboardingFirstWorkCongrats = observer(function HomeOnboardingFirstWor
 			if (readTopicEnding(topicId) !== TaskStatus.FINISHED) return
 			if (isHomeOnboardingFirstWorkCongratsSpent(userMagicId)) return
 			if (!hasHomeOnboardingTasks(userMagicId)) return
-			if (isHomeOnboardingRunActive()) return
+			if (isHomeOnboardingRunBlocking()) return
 
 			/*
 			 * The figure is the backend's for the task just finished, read off the reward row

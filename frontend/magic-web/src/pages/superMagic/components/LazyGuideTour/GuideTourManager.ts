@@ -368,6 +368,12 @@ let onboardingEntryTask: HomeOnboardingTaskId | null = null
  * tour, which announces its own state on the way in.
  */
 let onboardingRunActive = false
+/**
+ * Whether the lazy tour has already been selected but has not mounted yet. Its loading fallback
+ * owns this reservation so surfaces that yield to the tour cannot flash — or spend an exposure —
+ * in the gap between deciding to show the tour and downloading its component.
+ */
+let onboardingRunPending = false
 
 /** Analytics follows a run across route remounts; completion status must not change replay mid-run. */
 interface OnboardingAnalyticsRun {
@@ -547,6 +553,30 @@ export function clearHomeOnboardingEntryTask() {
  */
 export function isHomeOnboardingRunActive() {
 	return onboardingRunActive
+}
+
+/** The screen is unavailable to sibling onboarding surfaces while a run is loading or active. */
+export function isHomeOnboardingRunBlocking() {
+	return onboardingRunPending || onboardingRunActive
+}
+
+/** Subscribe to the shared loading/active verdict without missing a change during React commit. */
+export function subscribeHomeOnboardingRun(listener: () => void) {
+	if (typeof window === "undefined") return () => undefined
+	window.addEventListener(HOME_ONBOARDING_RUN_EVENT, listener)
+	return () => window.removeEventListener(HOME_ONBOARDING_RUN_EVENT, listener)
+}
+
+/**
+ * Reserve the screen for the lazy tour. The Suspense fallback releases this immediately before the
+ * real tour mounts; the real tour then publishes its active verdict in the same commit.
+ */
+export function setHomeOnboardingRunPending(pending: boolean) {
+	if (onboardingRunPending === pending) return
+	onboardingRunPending = pending
+	if (typeof window !== "undefined") {
+		window.dispatchEvent(new Event(HOME_ONBOARDING_RUN_EVENT))
+	}
 }
 
 /**

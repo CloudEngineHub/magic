@@ -277,6 +277,33 @@ describe("the wrapper owns the analytics scope", () => {
 })
 
 describe("the wrapper's gate on the automatic run", () => {
+	it("reserves the screen while the lazy introduction is loading", async () => {
+		const transitions: Array<{ active: boolean; blocking: boolean }> = []
+		let stopListening = () => undefined
+		const mounted = await mountWrapper(({ onboarding }) => {
+			getOnboardingTasks.mockResolvedValue({ tasks: [task("first_ai_work", "PENDING")] })
+			const record = () =>
+				transitions.push({
+					active: onboarding.isHomeOnboardingRunActive(),
+					blocking: onboarding.isHomeOnboardingRunBlocking(),
+				})
+			window.addEventListener(onboarding.HOME_ONBOARDING_RUN_EVENT, record)
+			stopListening = () =>
+				window.removeEventListener(onboarding.HOME_ONBOARDING_RUN_EVENT, record)
+		})
+
+		try {
+			// The fallback must block sibling surfaces before the lazy tour can call itself active.
+			expect(transitions).toContainEqual({ active: false, blocking: true })
+			expect(
+				await screen.findByRole("dialog", { name: INTRO }, { timeout: 15000 }),
+			).toBeTruthy()
+			expect(mounted.onboarding.isHomeOnboardingRunActive()).toBe(true)
+		} finally {
+			stopListening()
+		}
+	})
+
 	it("stays off the screen on a deployment that does not offer the feature", async () => {
 		const { onboarding } = await mountWrapper(() => {
 			getOnboardingTasks.mockRejectedValue({ code: 9301, message: "功能未开启" })

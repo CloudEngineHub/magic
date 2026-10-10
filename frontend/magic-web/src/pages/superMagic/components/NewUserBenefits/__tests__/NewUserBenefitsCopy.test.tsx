@@ -19,6 +19,7 @@ import { BASE_MARKET_MENU_ITEMS } from "@/layouts/BaseLayout/components/MagicSid
 import {
 	setHomeOnboardingAnalyticsScope,
 	setHomeOnboardingRunActive,
+	setHomeOnboardingRunPending,
 } from "../../LazyGuideTour/GuideTourManager"
 import {
 	holdHomeOnboardingPrelude,
@@ -221,6 +222,7 @@ beforeEach(() => {
 	// Likewise for the run signal: it lives in the tour's module, which this file does not reset, so
 	// a test that hands the screen to a run would otherwise hide the card for every later one.
 	setHomeOnboardingRunActive(false)
+	setHomeOnboardingRunPending(false)
 	// And for the holds that put a dialog in front of the card, which live in their own module for
 	// the same reason.
 	releaseHomeOnboardingPrelude("user-profile-dialog")
@@ -654,6 +656,36 @@ describe("NewUserBenefits row icons", () => {
 })
 
 describe("NewUserBenefits entry card", () => {
+	it("does not expose the card while the lazy tour has reserved the screen", async () => {
+		setHomeOnboardingAnalyticsScope("magic-benefits-copy")
+		setHomeOnboardingRunPending(true)
+		const observe = vi.fn()
+		vi.stubGlobal(
+			"IntersectionObserver",
+			vi.fn(() => ({ disconnect: vi.fn(), observe })),
+		)
+
+		try {
+			render(<NewUserBenefits />)
+			await act(async () => Promise.resolve())
+
+			// The loading fallback has claimed the upcoming paint, so the card must not even start
+			// observing itself; otherwise a fast observer callback can spend the one-shot exposure.
+			expect(observe).not.toHaveBeenCalled()
+			expect(analyticsReport).not.toHaveBeenCalledWith(
+				"onboarding_floating_card_exposure",
+				expect.anything(),
+			)
+			const cardWrapper = screen.getByLabelText(
+				"newUserBenefits.entry.ariaLabel",
+			).parentElement
+			expect(cardWrapper?.className.split(/\s+/)).not.toContain("md:block")
+		} finally {
+			act(() => setHomeOnboardingRunPending(false))
+			vi.unstubAllGlobals()
+		}
+	})
+
 	it("reports only actually visible card and dialog content", async () => {
 		setHomeOnboardingAnalyticsScope("other-user", "other-org")
 		// Isolated card tests seed the scope normally owned by GuideTourWrapper.
