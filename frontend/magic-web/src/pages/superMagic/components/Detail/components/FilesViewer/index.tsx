@@ -749,6 +749,15 @@ const FilesViewer = memo(
 						isActive,
 						node: (
 							<TabCache
+								onOpenProjectRecycle={(projectId) =>
+									openFileTab({
+										file_manager: {
+											spaceType: "project",
+											projectId,
+											area: "recycle",
+										},
+									})
+								}
 								getFileManagerState={getFileManagerState}
 								onFileManagerStateChange={updateFileManagerState}
 								managerProps={{
@@ -762,8 +771,18 @@ const FilesViewer = memo(
 									onFileClick: openFileTab,
 									onPreviewFile: (file, activate) =>
 										openFileTab(file, false, activate),
-									onPreviewRemoved: (ids) =>
-										ids.forEach((id) => closeFileTab(`recycle-bin:${id}`)),
+									onPreviewRemoved: (ids) => {
+										const tabIds = ids.map((id) => `recycle-bin:${id}`)
+										// 一批恢复共用关闭确认，避免单项并发关闭被批次锁跳过。
+										void runConfirmedTabClose({
+											tabIds,
+											close: () =>
+												tabIds.forEach((id) => {
+													closeFileTabState(id)
+													removeFromCache(id)
+												}),
+										})
+									},
 								}}
 								key={tab.id}
 								tab={tab as any}

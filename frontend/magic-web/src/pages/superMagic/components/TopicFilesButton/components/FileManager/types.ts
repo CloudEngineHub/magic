@@ -61,6 +61,8 @@ export interface FileManagerRevealRequest {
 }
 
 interface FileManagerBaseProps {
+	/** 宿主提供独立回收站 Tab 时，管理器只请求打开，不切换自身内容。 */
+	onOpenRecycle?: () => void
 	onPreviewFile?: (file: FileItem, activate: boolean) => void
 	onPreviewRemoved?: (recordIds: string[]) => void
 	hidePlaces?: boolean

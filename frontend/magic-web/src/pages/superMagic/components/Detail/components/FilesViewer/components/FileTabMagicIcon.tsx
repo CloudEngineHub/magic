@@ -6,7 +6,7 @@ import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesBu
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { memo } from "react"
 import type { FileItem, TabItem } from "../types"
-import { AppWindow, Globe2, PanelsTopLeft } from "lucide-react"
+import { AppWindow, Globe2, PanelsTopLeft, Trash2 } from "lucide-react"
 import { isWebsiteTab } from "../utils/websiteTabs"
 
 interface FileTabMagicIconProps {
@@ -34,7 +34,13 @@ export const FileTabMagicIcon = memo(function FileTabMagicIcon({
 			: undefined,
 	})
 	if (isPlayback) return <MagicFileIcon type="replay" size={size} className={className} />
-	if (tab.type === "file_manager") return <PanelsTopLeft size={size} className={className} />
+	if (tab.type === "file_manager") {
+		const Icon =
+			tab.fileManager?.spaceType === "project" && tab.fileManager.area === "recycle"
+				? Trash2
+				: PanelsTopLeft
+		return <Icon size={size} className={className} />
+	}
 	if (isWebsiteTab(tab)) return <Globe2 size={size} className={className} />
 	if (tab.type === "micro_app")
 		return <AppWindow size={size} className={className} data-testid="micro-app-tab-icon" />

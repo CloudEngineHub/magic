@@ -16,6 +16,7 @@ import type {
 } from "../../Detail/components/FilesViewer/types"
 
 export interface ProjectFileManagerProps {
+	onOpenRecycle?: () => void
 	onPreviewFile?: (file: FileItem, activate: boolean) => void
 	onPreviewRemoved?: (recordIds: string[]) => void
 

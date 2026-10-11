@@ -50,6 +50,7 @@ export function FileManager(props: FileManagerProps) {
 		props.initialDirectoryId !== (initialState?.directoryId || props.rootId)
 	const [recycle, setRecycle] = useState(
 		!selecting &&
+			!props.onOpenRecycle &&
 			(props.areaRequest
 				? props.areaRequest.area === "recycle"
 				: !locating && initialState?.area === "recycle"),
@@ -60,6 +61,7 @@ export function FileManager(props: FileManagerProps) {
 		const request = props.areaRequest
 		if (
 			selecting ||
+			props.onOpenRecycle ||
 			!props.isActive ||
 			!request ||
 			handledAreaRequest.current === request.requestId
@@ -69,7 +71,7 @@ export function FileManager(props: FileManagerProps) {
 		interacted.current = true
 		// 只切换显示区域，文件目录、选择和滚动状态保留；附件加载失败也不阻止查看回收站。
 		setRecycle(request.area === "recycle")
-	}, [props.areaRequest, props.isActive, selecting])
+	}, [props.areaRequest, props.isActive, props.onOpenRecycle, selecting])
 	const projectRecycle = props.context.kind === "project" && !props.spaceConfig?.scope
 	const places = useRef(
 		initialState?.places ?? { expandedIds: [], rootExpanded: true, scrollTop: 0 },
@@ -612,7 +614,8 @@ export function FileManager(props: FileManagerProps) {
 							management={
 								operations && commands
 									? {
-											onOpenRecycle: () => setRecycle(true),
+											onOpenRecycle:
+												props.onOpenRecycle ?? (() => setRecycle(true)),
 											actions: commands,
 											createMenu: {
 												onAddFile: operations.createFile,

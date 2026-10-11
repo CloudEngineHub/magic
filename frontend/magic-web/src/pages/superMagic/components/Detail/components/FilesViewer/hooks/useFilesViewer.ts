@@ -680,15 +680,33 @@ export function useFilesViewer(props: FilesViewerProps) {
 					managerContext.projectId !== viewerProjectId)
 			)
 				return
-			const title =
-				managerContext.spaceType === "user" ? t("userSpace.title") : t("topicFiles.title")
+			const isProjectRecycle =
+				managerContext.spaceType === "project" && managerContext.area === "recycle"
+			const title = isProjectRecycle
+				? t("fileManager.recycle.title")
+				: managerContext.spaceType === "user"
+					? t("userSpace.title")
+					: t("topicFiles.title")
 			const manager = createFileManagerTab(
 				managerContext,
 				title,
-				activeTab?.type === "file_manager" ? activeTab.returnTabId : activeTab?.id,
+				isProjectRecycle
+					? activeTab?.id
+					: activeTab?.type === "file_manager"
+						? activeTab.returnTabId
+						: activeTab?.id,
 			)
-			manager.fileManagerState = getFileManagerState(managerContext)
-			if (managerContext.spaceType === "project" && managerContext.area) {
+			// 回收站有自己的标签和查询状态，不能改写文件目录、选择及滚动快照。
+			if (manager.returnTabId === manager.id)
+				manager.returnTabId = tabsRef.current.find(
+					(tab) => tab.id === manager.id,
+				)?.returnTabId
+			if (!isProjectRecycle) manager.fileManagerState = getFileManagerState(managerContext)
+			if (
+				managerContext.spaceType === "project" &&
+				managerContext.area &&
+				!isProjectRecycle
+			) {
 				// 每次点击都产生新请求：在内部返回文件后，再点同一入口仍要进入回收站。
 				manager.fileManagerAreaRequest = {
 					requestId: ++fileManagerAreaRequestId.current,
@@ -705,7 +723,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				}
 				setUserFileManagerState(manager.fileManagerState)
 			}
-			if (!manager.fileManagerState && userIdentityKey) {
+			if (!isProjectRecycle && !manager.fileManagerState && userIdentityKey) {
 				if (managerContext.spaceType === "project") {
 					manager.fileManagerState = {
 						spaceType: "project",
@@ -1380,10 +1398,12 @@ export function useFilesViewer(props: FilesViewerProps) {
 							try {
 								// 只过滤掉数据完整性有问题的 tab
 								if (tab.type === "file_manager")
-									return Boolean(
-										savedManager?.identityKey === restoreIdentity &&
-										savedManager.projectId === restoreProjectId,
-									)
+									return tab.area === "recycle"
+										? tab.identityKey === restoreIdentity
+										: Boolean(
+												savedManager?.identityKey === restoreIdentity &&
+												savedManager.projectId === restoreProjectId,
+											)
 								if (!tab.id || !tab.fileData?.file_id) {
 									return false
 								}
@@ -1396,15 +1416,22 @@ export function useFilesViewer(props: FilesViewerProps) {
 							try {
 								if (tab.type === "file_manager") {
 									const manager = createFileManagerTab(
-										{ spaceType: "project", projectId: restoreProjectId },
-										t("topicFiles.title"),
+										{
+											spaceType: "project",
+											projectId: restoreProjectId,
+											area: tab.area,
+										},
+										tab.area === "recycle"
+											? t("fileManager.recycle.title")
+											: t("topicFiles.title"),
 										tab.returnTabId,
 									)
 									return {
 										...manager,
 										active: false,
 										userIdentityKey: restoreIdentity,
-										fileManagerState: savedManager,
+										fileManagerState:
+											tab.area === "recycle" ? undefined : savedManager,
 									}
 								}
 								let file: FileItem | undefined
@@ -1922,6 +1949,12 @@ export function useFilesViewer(props: FilesViewerProps) {
 					type,
 					title: tab.title,
 					returnTabId: tab.returnTabId,
+					identityKey: identity ?? undefined,
+					area:
+						tab.fileManager?.spaceType === "project" &&
+						tab.fileManager.area === "recycle"
+							? "recycle"
+							: undefined,
 					active: tab.id === persistedActiveTabId,
 				}
 			return {
