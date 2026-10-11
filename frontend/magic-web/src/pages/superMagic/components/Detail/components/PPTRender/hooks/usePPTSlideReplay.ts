@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import {
 	holdIframeAnimations,
+	observeIframeAnimationPreparation,
 	prepareIframeAnimations,
 	releaseIframeAnimations,
 	renewIframeAnimationHold,
@@ -42,6 +43,7 @@ export function usePPTSlideReplay(options: Options) {
 	const generationRef = useRef(0)
 	const heldRef = useRef(false)
 	const preparedAtRef = useRef<number | null>(null)
+	const prepareRequestRef = useRef<string | null>(null)
 	const unsupportedRef = useRef(false)
 	const wasActiveRef = useRef(options.isActive)
 	const wasPresentedRef = useRef(options.isPresented)
@@ -76,7 +78,9 @@ export function usePPTSlideReplay(options: Options) {
 			options.restartDocument()
 			return
 		}
-		void prepareIframeAnimations(getIframe()).then((ready) => {
+		const requestId = `ppt-prepare-${generation}`
+		prepareRequestRef.current = requestId
+		void prepareIframeAnimations(getIframe(), options.documentKey, requestId).then((ready) => {
 			if (generation !== generationRef.current) return
 			if (!ready) {
 				unsupportedRef.current = true
@@ -117,11 +121,35 @@ export function usePPTSlideReplay(options: Options) {
 		cancel()
 		if (heldRef.current) releaseIframeAnimations(getIframe())
 		preparedAtRef.current = null
+		prepareRequestRef.current = null
 		unsupportedRef.current = false
 		heldRef.current = false
 		isReplayPendingRef.current = false
 		setIsPreparingReplay(false)
 	}, [content, documentKey, isEditing, isCodeView, cancel, getIframe])
+
+	useEffect(() => {
+		if (!iframeMounted || !canReplayInPlace || isEditing || isCodeView) return
+		return observeIframeAnimationPreparation(getIframe(), documentKey, (requestId) => {
+			if (prepareRequestRef.current !== requestId) return
+			if (latestRef.current.isPresented) return
+			// 样式晚到时重新证明当前文档可重播；不能继续沿用之前的 ready 和动画起点。
+			cancel()
+			preparedAtRef.current = null
+			heldRef.current = false
+			isReplayPendingRef.current = false
+			prepare()
+		})
+	}, [
+		iframeMounted,
+		canReplayInPlace,
+		isEditing,
+		isCodeView,
+		documentKey,
+		getIframe,
+		cancel,
+		prepare,
+	])
 
 	useLayoutEffect(() => {
 		const becameActive = isActive && !wasActiveRef.current

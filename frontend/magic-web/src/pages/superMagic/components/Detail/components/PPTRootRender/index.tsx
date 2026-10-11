@@ -17,6 +17,7 @@ import { shouldWaitForShareAccess } from "@/pages/superMagic/fileAccess/fileAcce
 import { parseMagicProjectJsContent } from "../../contents/HTML/utils/magicProjectParser"
 import { normalizeHiddenSlides } from "@/pages/superMagic/utils/pptHiddenSlides"
 import { generateUpdatedMagicProjectJs } from "../../contents/HTML/utils/magicProjectUpdater"
+import type { ProjectAttachmentNode } from "../../contents/HTML/utils/file-utils"
 
 const MAGIC_PROJECT_FILE_NAME = "magic.project.js"
 
@@ -35,14 +36,41 @@ interface PPTEntryData {
 	children?: any[]
 }
 
-function collectAttachmentNodes(items: any[] | undefined, result: any[] = []): any[] {
-	if (!Array.isArray(items)) return result
-	for (const item of items) {
+function collectAttachmentNodes(
+	items: ProjectAttachmentNode[] | undefined,
+): ProjectAttachmentNode[] {
+	const result: ProjectAttachmentNode[] = []
+	const visited = new Set<ProjectAttachmentNode>()
+	const stack = [...(items || [])].reverse()
+	while (stack.length) {
+		const item = stack.pop()
 		if (!item) continue
 		result.push(item)
-		collectAttachmentNodes(item?.children, result)
+		// 保留重复节点的覆盖顺序，只省去同一对象 children 的重复展开。
+		if (visited.has(item)) continue
+		visited.add(item)
+		for (let index = (item.children?.length || 0) - 1; index >= 0; index--) {
+			stack.push(item.children![index])
+		}
 	}
 	return result
+}
+
+function sameEntryFields(
+	previous: PPTRootRenderProps["data"],
+	next: PPTRootRenderProps["data"],
+): boolean {
+	if (previous === next) return true
+	if (!previous || !next) return false
+	const keys = Object.keys(next) as (keyof PPTRootRenderProps["data"])[]
+	return (
+		keys.length === Object.keys(previous).length &&
+		keys.every(
+			(key) =>
+				Object.prototype.hasOwnProperty.call(previous, key) &&
+				Object.is(previous[key], next[key]),
+		)
+	)
 }
 
 function findAttachmentNodeByFileId(items: any[] | undefined, fileId: string): any | undefined {
@@ -109,7 +137,7 @@ function getSlidesSignature(slides: string[] | undefined): string {
  */
 export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 	const {
-		data: displayData,
+		data: nextDisplayData,
 		attachments,
 		type,
 		currentIndex,
@@ -143,6 +171,13 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 		disableMagicProjectLookup = false,
 		showRefresh,
 	} = props
+	// FilesViewer 在切页时重建入口对象；只比较入口自身字段，不能深比较万级附件树。
+	// 路径、版本或嵌套快照真正变化时仍更换入口，保留内容与权限的更新语义。
+	const entrySnapshotRef = useRef(nextDisplayData)
+	if (!sameEntryFields(entrySnapshotRef.current, nextDisplayData)) {
+		entrySnapshotRef.current = nextDisplayData
+	}
+	const displayData = entrySnapshotRef.current
 
 	const [filePathMapping, setFilePathMapping] = useState<Map<string, string>>(new Map())
 	// PPT directory preview appears on share pages; bind the ambient identity so
@@ -164,13 +199,25 @@ export default memo(function PPTRootRender(props: PPTRootRenderProps) {
 	const entryData = displayData as PPTEntryData | undefined
 	// 标记是否至少完成过一次内容解析，避免路径计算中误展示空态
 	const [hasProcessedContent, setHasProcessedContent] = useState(false)
-	const pptAttachmentList = useMemo(() => {
-		return mergeAttachmentNodes([
-			...collectAttachmentNodes((attachments || []) as any[]),
-			...collectAttachmentNodes((attachmentList || []) as any[]),
-			...collectAttachmentNodes(displayData ? [displayData] : []),
-		])
-	}, [attachments, attachmentList, displayData])
+	const projectAttachmentNodes = useMemo(
+		() =>
+			mergeAttachmentNodes([
+				...collectAttachmentNodes(attachments),
+				...collectAttachmentNodes(attachmentList),
+			]),
+		[attachments, attachmentList],
+	)
+	const entryChildren = entryData?.children
+	const entryChildNodes = useMemo(() => collectAttachmentNodes(entryChildren), [entryChildren])
+	const pptAttachmentList = useMemo(
+		() =>
+			mergeAttachmentNodes([
+				...projectAttachmentNodes,
+				...(displayData ? [displayData] : []),
+				...entryChildNodes,
+			]),
+		[projectAttachmentNodes, displayData, entryChildNodes],
+	)
 	const pptAttachments = useMemo(() => {
 		// PPTRender uses attachments as a tree. Keep the source tree when available,
 		// while preserving folder previews whose tree only exists on displayData.

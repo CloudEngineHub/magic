@@ -4,8 +4,7 @@ export function canReplaySlideInPlace(content: string): boolean {
 	// Event handlers and embedded documents can own state that animation APIs cannot reset.
 	if (doc.querySelector("iframe, object, embed, form, input, textarea, select, details"))
 		return false
-	// External styles cannot be inspected here, and may override the universal reset rule.
-	if (doc.querySelector('link[rel~="stylesheet" i]')) return false
+	// 外部 stylesheet／@import 的动画是否能完整重置，由真实 iframe 的 prepare 回执证明。
 	// Important authored animation rules can override the temporary reset stylesheet. They
 	// retain document replay rather than silently failing to replay a completed entrance.
 	for (const element of doc.querySelectorAll("style, [style]")) {
@@ -14,11 +13,7 @@ export function canReplaySlideInPlace(content: string): boolean {
 				? (element.textContent ?? "")
 				: (element.getAttribute("style") ?? "")
 		const declarations = css.replace(/\/\*[\s\S]*?\*\//g, "")
-		if (
-			/@import\b/i.test(declarations) ||
-			/animation(?:-[a-z-]+)?\s*:[^;{}]*!\s*important/i.test(declarations)
-		)
-			return false
+		if (/animation(?:-[a-z-]+)?\s*:[^;{}]*!\s*important/i.test(declarations)) return false
 	}
 	for (const element of doc.querySelectorAll("*")) {
 		if (element.getAttributeNames().some((name) => /^on/i.test(name))) return false

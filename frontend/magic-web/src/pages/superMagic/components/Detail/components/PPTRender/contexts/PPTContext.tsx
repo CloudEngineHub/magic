@@ -47,6 +47,12 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		storeRef.current = createPPTStore(storeConfig)
 	}
 	const store = storeRef.current
+	// 签名仅随文件快照和 PPT 入口更新；切页或展示配置变化不再次扫描整个项目。
+	const attachmentListSignature = useMemo(
+		() =>
+			getFolderScopedAttachmentSignature(storeConfig.attachmentList, storeConfig.mainFileId),
+		[storeConfig.attachmentList, storeConfig.mainFileId],
+	)
 
 	// Track previous config to detect actual changes without deep comparison
 	const prevConfigRef = useRef<{
@@ -66,10 +72,6 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 	useLayoutEffect(() => {
 		const prev = prevConfigRef.current
 		const displayConfigSlidesSignature = getJsonSignature(storeConfig.displayConfig?.slides)
-		const attachmentListSignature = getFolderScopedAttachmentSignature(
-			storeConfig.attachmentList,
-			storeConfig.mainFileId,
-		)
 		const fileApiIdentityKey = storeConfig.fileApi?.identityKey ?? "none"
 		const slidesChanged =
 			!prev || prev.displayConfigSlidesSignature !== displayConfigSlidesSignature
@@ -123,6 +125,7 @@ export function PPTProvider({ children, storeConfig }: PPTProviderProps) {
 		}
 	}, [
 		store,
+		attachmentListSignature,
 		storeConfig.attachments,
 		storeConfig.attachmentList,
 		storeConfig.attachmentLoadState,

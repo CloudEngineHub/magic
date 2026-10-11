@@ -81,6 +81,7 @@ import type { CanonicalContentDimensions } from "./utils/slide-dimensions"
 import { DevicePreviewViewport } from "../../components/DevicePreview/DevicePreviewViewport"
 import { DEFAULT_DEVICE_PREVIEW } from "../../components/DevicePreview/constants"
 import type { DevicePreviewControls } from "../../components/DevicePreview/types"
+import { getIframeFileList } from "./utils/file-utils"
 
 /**
  * Nested HTML documents may relay navigation directly to the host window. Check
@@ -1272,25 +1273,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		// 消息列表预览这类只依赖预处理结果的场景，不需要再启用运行时相对路径拦截，
 		// 避免把不在附件树里的原始相对路径也带进通用业务拦截链。
 		// 扁平化 attachmentList，供 IframeFS 使用
-		const flatFileList = useMemo(() => {
-			const seen = new Set<string>()
-			const result: { file_id: string; relative_file_path: string; updated_at?: string }[] =
-				[]
-			const flatten = (items: any[]) => {
-				for (const item of items) {
-					if (item.file_id && item.relative_file_path) {
-						const key = item.relative_file_path.replace(/^\/+/, "")
-						if (!seen.has(key)) {
-							seen.add(key)
-							result.push(item)
-						}
-					}
-					if (item.children?.length) flatten(item.children)
-				}
-			}
-			if (attachmentList?.length) flatten(attachmentList)
-			return result
-		}, [attachmentList])
+		const flatFileList = useMemo(() => getIframeFileList(attachmentList), [attachmentList])
 		const fallbackPermissionController = useHtmlAppPermissions({
 			content,
 			rawSourceCode,
