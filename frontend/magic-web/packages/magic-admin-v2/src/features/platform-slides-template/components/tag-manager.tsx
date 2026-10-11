@@ -17,6 +17,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
+	DropdownMenuSeparator,
 } from "@magic-admin-v2/components/ui/dropdown-menu"
 import { Input } from "@magic-admin-v2/components/ui/input"
 import {
@@ -84,8 +85,11 @@ function toTagListParams(
 
 type TagManagerProps = {
 	canEdit: boolean
+	mobileFilterOpen: boolean
 	onCreateAvailabilityChange: (available: boolean) => void
 	onDelete: (record: SlidesTemplateTag) => void
+	onFilterCountChange: (count: number) => void
+	onMobileFilterOpenChange: (open: boolean) => void
 }
 
 export type TagManagerHandle = {
@@ -94,7 +98,14 @@ export type TagManagerHandle = {
 }
 
 export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function TagManager(
-	{ canEdit, onCreateAvailabilityChange, onDelete },
+	{
+		canEdit,
+		mobileFilterOpen,
+		onCreateAvailabilityChange,
+		onDelete,
+		onFilterCountChange,
+		onMobileFilterOpenChange,
+	},
 	ref,
 ) {
 	const { t } = useTranslation()
@@ -169,6 +180,13 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 		setFilterDraft(createDefaultTagFilterDraft())
 		setSelectedTagId(null)
 	}, [setFilterDraft])
+
+	useEffect(() => {
+		onFilterCountChange(
+			[filters.code, filters.keyword, filters.status !== emptyStatus ? filters.status : ""]
+				.filter((value) => value.trim().length > 0).length,
+		)
+	}, [filters, onFilterCountChange])
 	const selectGroup = useCallback((groupId: string | null) => {
 		setSelectedGroupId(groupId)
 		setSelectedTagId(null)
@@ -315,6 +333,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 									<Pencil className="mr-2 size-4" aria-hidden="true" />
 									{t("common.edit")}
 								</DropdownMenuItem>
+								<DropdownMenuSeparator />
 								<DropdownMenuItem
 									className="text-destructive"
 									disabled={!canEdit}
@@ -524,7 +543,11 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 				</div>
 				<ListFilterPanel
 					applyLabel={t("slidesTemplate.applyFilters")}
+					className="mb-3 md:mb-0 md:p-4"
 					createDefaultValue={createDefaultTagFilterDraft}
+					mobileOpen={mobileFilterOpen}
+					onMobileOpenChange={onMobileFilterOpenChange}
+					showMobileTrigger={false}
 					onApply={(draft) => {
 						setFilterDraft(draft)
 						setSelectedTagId(null)

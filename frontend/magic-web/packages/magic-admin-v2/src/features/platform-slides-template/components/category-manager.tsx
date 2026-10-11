@@ -1,5 +1,5 @@
 import { MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -73,7 +73,10 @@ function toCategoryListParams(
 
 type CategoryManagerProps = {
 	canEdit: boolean
+	mobileFilterOpen: boolean
 	onDelete: (record: SlidesTemplateCategory) => void
+	onFilterCountChange: (count: number) => void
+	onMobileFilterOpenChange: (open: boolean) => void
 }
 
 export type CategoryManagerHandle = {
@@ -82,7 +85,10 @@ export type CategoryManagerHandle = {
 }
 
 export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManagerProps>(
-	function CategoryManager({ canEdit, onDelete }, ref) {
+	function CategoryManager(
+		{ canEdit, mobileFilterOpen, onDelete, onFilterCountChange, onMobileFilterOpenChange },
+		ref,
+	) {
 		const { t } = useTranslation()
 		const { language } = useRuntime()
 		const { pageSize, setPageSize } = usePagination()
@@ -264,6 +270,13 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 			setFilterDraft(createDefaultCategoryFilterDraft())
 		}, [setFilterDraft])
 
+		useEffect(() => {
+			onFilterCountChange(
+				[filters.code, filters.keyword, filters.status !== emptyStatus ? filters.status : ""]
+					.filter((value) => value.trim().length > 0).length,
+			)
+		}, [filters, onFilterCountChange])
+
 		useImperativeHandle(ref, () => ({ create, reset }), [create, reset])
 
 		return (
@@ -271,6 +284,9 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 				<ListFilterPanel
 					applyLabel={t("slidesTemplate.applyFilters")}
 					createDefaultValue={createDefaultCategoryFilterDraft}
+					mobileOpen={mobileFilterOpen}
+					onMobileOpenChange={onMobileFilterOpenChange}
+					showMobileTrigger={false}
 					onApply={(draft) => setFilterDraft(draft)}
 					onChange={(patch) => {
 						if (patch.keyword !== undefined) setDebouncedField("keyword", patch.keyword)

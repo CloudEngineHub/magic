@@ -1,5 +1,5 @@
 import { Eye, FileImage, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -16,6 +16,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
+	DropdownMenuSeparator,
 } from "@magic-admin-v2/components/ui/dropdown-menu"
 import { Input } from "@magic-admin-v2/components/ui/input"
 import {
@@ -104,8 +105,11 @@ function toTemplateLibraryParams(
 
 type TemplateLibraryProps = {
 	canEdit: boolean
+	mobileFilterOpen: boolean
 	onDelete: (record: SlidesTemplate) => void
 	onEdit: (record?: SlidesTemplate) => void
+	onFilterCountChange: (count: number) => void
+	onMobileFilterOpenChange: (open: boolean) => void
 }
 
 export type TemplateLibraryHandle = {
@@ -113,7 +117,17 @@ export type TemplateLibraryHandle = {
 }
 
 export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibraryProps>(
-	function TemplateLibrary({ canEdit, onDelete, onEdit }, ref) {
+	function TemplateLibrary(
+		{
+			canEdit,
+			mobileFilterOpen,
+			onDelete,
+			onEdit,
+			onFilterCountChange,
+			onMobileFilterOpenChange,
+		},
+		ref,
+	) {
 		const { t } = useTranslation()
 		const { language } = useRuntime()
 		const { pageSize, setPageSize } = usePagination()
@@ -156,6 +170,18 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 		const reset = useCallback(() => {
 			setFilterDraft(createDefaultTemplateLibraryDraft())
 		}, [setFilterDraft])
+
+		useEffect(() => {
+			onFilterCountChange(
+				[
+					filters.category,
+					filters.code,
+					filters.keyword,
+					filters.status !== emptyStatus ? filters.status : "",
+					filters.tagCodes.length > 0 ? "tags" : "",
+					].filter((value) => value.trim().length > 0).length,
+			)
+		}, [filters, onFilterCountChange])
 
 		useImperativeHandle(ref, () => ({ reset }), [reset])
 		const updateStatus = useCallback(
@@ -398,6 +424,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 										<Pencil className="mr-2 size-4" />
 										{t("common.edit")}
 									</DropdownMenuItem>
+									<DropdownMenuSeparator />
 									<DropdownMenuItem
 										className="text-destructive"
 										disabled={!canEdit || isSystemSlidesTemplate(row.original)}
@@ -431,6 +458,9 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 				<ListFilterPanel
 					applyLabel={t("slidesTemplate.applyFilters")}
 					createDefaultValue={createDefaultTemplateLibraryDraft}
+					mobileOpen={mobileFilterOpen}
+					onMobileOpenChange={onMobileFilterOpenChange}
+					showMobileTrigger={false}
 					onApply={(draft) => setFilterDraft(draft)}
 					onChange={(patch) => {
 						if (patch.keyword !== undefined) setDebouncedField("keyword", patch.keyword)
