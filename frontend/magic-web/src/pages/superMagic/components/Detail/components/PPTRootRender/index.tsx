@@ -39,9 +39,10 @@ interface PPTEntryData {
 function collectAttachmentNodes(
 	items: ProjectAttachmentNode[] | undefined,
 ): ProjectAttachmentNode[] {
+	if (!Array.isArray(items)) return []
 	const result: ProjectAttachmentNode[] = []
 	const visited = new Set<ProjectAttachmentNode>()
-	const stack = [...(items || [])].reverse()
+	const stack = [...items].reverse()
 	while (stack.length) {
 		const item = stack.pop()
 		if (!item) continue
@@ -49,8 +50,9 @@ function collectAttachmentNodes(
 		// 保留重复节点的覆盖顺序，只省去同一对象 children 的重复展开。
 		if (visited.has(item)) continue
 		visited.add(item)
-		for (let index = (item.children?.length || 0) - 1; index >= 0; index--) {
-			stack.push(item.children![index])
+		if (!Array.isArray(item.children)) continue
+		for (let index = item.children.length - 1; index >= 0; index--) {
+			stack.push(item.children[index])
 		}
 	}
 	return result
