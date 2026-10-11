@@ -39,7 +39,7 @@ describe("platform provider list utils", () => {
     assert.deepEqual(createDefaultProviderFilterDraft(), {
       alias: "",
       name: "",
-      provider_code: "",
+      id: "",
       provider_type: providerSelectAllValue,
       status: providerSelectAllValue,
     });
@@ -67,17 +67,17 @@ describe("platform provider list utils", () => {
     );
   });
 
-  it("searches name, alias, and provider code independently and case-insensitively", () => {
+  it("searches name, alias, and provider ID independently and case-insensitively", () => {
     const items = [
       createProvider("openai", {
         name: "OpenAI",
         alias: "Primary GPT",
-        provider_code: "OPEN_AI",
+        provider_code: "different-code",
       }),
       createProvider("azure", {
         name: "Microsoft Azure",
         alias: "Enterprise Cloud",
-        provider_code: "MicrosoftAzure",
+        provider_code: "different-azure-code",
       }),
     ];
     const baseFilter = createDefaultProviderFilterDraft();
@@ -96,7 +96,7 @@ describe("platform provider list utils", () => {
     assert.deepEqual(
       filterProviders(items, {
         ...baseFilter,
-        provider_code: "open_ai",
+        id: "openai",
       }).map((item) => item.id),
       ["openai"],
     );
