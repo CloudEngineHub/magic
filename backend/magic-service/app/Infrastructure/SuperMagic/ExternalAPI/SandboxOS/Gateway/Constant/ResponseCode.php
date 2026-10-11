@@ -34,6 +34,9 @@ class ResponseCode
      */
     public const int USER_TOOL_CALL_NOT_FOUND = 4100;
 
+    // 同步 Python ErrorCode；环境退出不会结束等待中的问题。
+    public const int USER_TOOL_CALL_ENVIRONMENT_CLOSING = 4101;
+
     /**
      * Check if response code indicates success.
      */
@@ -77,6 +80,7 @@ class ResponseCode
             self::ERROR => 'Error',
             self::NOT_FOUND => 'Not Found',
             self::USER_TOOL_CALL_NOT_FOUND => 'User Tool Call Not Found',
+            self::USER_TOOL_CALL_ENVIRONMENT_CLOSING => 'User Tool Call Environment Closing',
             default => 'Unknown',
         };
     }

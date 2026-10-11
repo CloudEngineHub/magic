@@ -37,6 +37,7 @@ class IdleMonitorService:
         self._on_idle_timeout: Optional[Callable[[], None]] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._wake_event = threading.Event()
+        self._prepare_task: Optional[asyncio.Task[None]] = None
 
         self._check_interval = Environment.get_idle_monitor_interval()
 
@@ -93,22 +94,45 @@ class IdleMonitorService:
             dispatcher = AgentDispatcher.get_instance()
             if not dispatcher.agent_context.is_idle_timeout():
                 return
+            if self._prepare_task is None or self._prepare_task.done():
+                self._prepare_task = asyncio.create_task(
+                    self._prepare_idle_exit(), name="prepare-ask-user-idle-exit"
+                )
+        except Exception as e:
+            logger.error(f"监控任务异常: {e}")
 
+    async def _prepare_idle_exit(self) -> None:
+        from app.service.agent_dispatcher import AgentDispatcher
+        from app.service.user_tool_call_service import UserToolCallService
+
+        context = AgentDispatcher.get_instance().agent_context
+        service = UserToolCallService.get_instance()
+        try:
+            async with asyncio.timeout(Environment.get_sandbox_graceful_shutdown_timeout_seconds()):
+                ready = await service.prepare_ask_user_idle_exit(context)
+            if not ready or not self._running or not context.is_idle_timeout():
+                return
+            # 最终检查和关闭请求之间不能让出事件循环，避免刚收到回答就关闭环境。
+            if not service.begin_idle_exit():
+                return
             idle_timeout_seconds = Environment.get_agent_idle_timeout()
             logger.info(f"Agent已超过{idle_timeout_seconds}秒未执行任何任务，请求关闭服务")
             self._running = False
             self._wake_event.set()
-            on_idle_timeout = self._on_idle_timeout
-            if on_idle_timeout is not None:
-                on_idle_timeout()
-        except Exception as e:
-            logger.error(f"监控任务异常: {e}")
+            if self._on_idle_timeout is not None:
+                self._on_idle_timeout()
+        except TimeoutError:
+            logger.warning("AskUser idle-exit persistence timed out; retry on next idle check")
+        except Exception as error:
+            logger.error("Idle-exit preparation failed: %s", error, exc_info=True)
 
     def stop(self) -> None:
         """停止监控服务"""
         self._running = False
         self._wake_event.set()
         self._on_idle_timeout = None
+        if self._prepare_task is not None and not self._prepare_task.done():
+            self._prepare_task.cancel()
         self._loop = None
         if self._monitor_thread and self._monitor_thread.is_alive():
             logger.info("正在停止空闲监控服务")

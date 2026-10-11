@@ -481,7 +481,7 @@ class FileStorageListenerService:
         return info_response
 
     @staticmethod
-    async def _archive_and_upload_project(agent_context: AgentContext) -> None:
+    async def _archive_and_upload_project(agent_context: AgentContext) -> bool:
         """
         Compress and upload project directories separately with independent versioning
 
@@ -492,7 +492,7 @@ class FileStorageListenerService:
         enable_archive = os.getenv("ENABLE_PROJECT_ARCHIVE", "true").lower() == "true"
         if not enable_archive:
             logger.info("ENABLE_PROJECT_ARCHIVE=false，跳过项目归档上传")
-            return
+            return False
 
         try:
             # Get directory paths
@@ -502,7 +502,7 @@ class FileStorageListenerService:
 
             if not topic_id:
                 logger.error("无法获取topic_id，无法进行分离式打包")
-                return
+                return False
 
             # Load local manifest to check current state
             # local_manifest = FileStorageListenerService._load_local_manifest()
@@ -552,6 +552,7 @@ class FileStorageListenerService:
 
             # 每轮只上传本轮 checkpoint 归档与 manifest（不再整目录打包全量上传）
             await FileStorageListenerService._sync_checkpoints_archive(topic_id, storage_service)
+            return uploaded
 
             # Save and upload the final manifest
             # await FileStorageListenerService._save_and_upload_project_archive_info(project_archive_info, agent_context)
@@ -559,6 +560,7 @@ class FileStorageListenerService:
         except Exception as e:
             logger.error(f"分离式打包和上传过程中发生错误: {e}")
             logger.error(traceback.format_exc())
+            return False
 
     @staticmethod
     async def _process_workspace_archive(

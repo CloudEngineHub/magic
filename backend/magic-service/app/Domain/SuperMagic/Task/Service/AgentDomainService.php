@@ -59,6 +59,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResp
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\SandboxAgentInterface;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallRecoveryException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
@@ -938,6 +939,10 @@ class AgentDomainService
             // 抛专用异常让上层转换为温和提醒而不是任务错误。
             if (ResponseCode::isUserToolCallNotFound($result->getCode())) {
                 throw new UserToolCallNotFoundException($result->getMessage(), $result->getCode());
+            }
+            if ($name === 'ask_user' && $result->getCode() === ResponseCode::USER_TOOL_CALL_ENVIRONMENT_CLOSING) {
+                // 旧环境未消费回答；沿用恢复失败提示与幂等锁释放，不能改成任务 ERROR。
+                throw new UserToolCallRecoveryException('The execution environment is closing; the question is still pending.');
             }
             throw new SandboxOperationException('Send user_tool_call feedback', $result->getMessage(), $result->getCode());
         }

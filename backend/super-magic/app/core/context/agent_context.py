@@ -936,8 +936,10 @@ class AgentContext(BaseAgentContext):
         Returns:
             bool: 如果超时则返回True，否则返回False
         """
-        # 等待前端工具调用完成期间，不触发空闲超时
-        if self.has_user_tool_call_pending():
+        from app.service.user_tool_call_service import UserToolCallService
+        # AskUser 只等待真人，状态可恢复后允许释放环境；其它前端工具沿用保护。
+        if not UserToolCallService.get_instance().can_release_idle_context(self):
+            # 等待前端工具调用完成期间，不触发空闲超时
             return False
         return self.shared_context.is_idle_timeout()
 
