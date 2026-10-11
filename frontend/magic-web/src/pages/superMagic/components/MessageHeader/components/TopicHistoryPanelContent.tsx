@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { Button } from "@/components/shadcn-ui/button"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { Input } from "@/components/shadcn-ui/input"
 import {
 	DropdownMenu,
@@ -803,13 +804,33 @@ function TopicHistoryPanelContentInner({
 				className="flex h-11 shrink-0 items-center border-b border-border bg-background/80 px-2.5 backdrop-blur-lg"
 				data-testid="message-header-history-toolbar"
 			>
+				{onClose && onCollapse ? (
+					<Button
+						ref={closeButtonRef}
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="mr-1.5 size-7 shrink-0 rounded-md"
+						onClick={onCollapse}
+						aria-label={t("sidebarPanels.collapseHistory")}
+						data-testid="message-header-history-close-button"
+					>
+						<PanelRightClose className="size-4" />
+					</Button>
+				) : null}
 				<div
-					className="min-w-0 flex-1 truncate text-sm font-medium leading-5 text-foreground"
+					className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium leading-5 text-foreground"
 					data-testid="message-header-history-panel-title"
 				>
-					{t("messageHeader.topicPanelTitle", {
-						count: topicsTotalFromServer,
-					})}
+					<span className="truncate">{t("messageHeader.topicPanelTitle")}</span>
+					{/* 数量独立展示并按内容扩宽，保留完整统计值，不挤压成括号正文。 */}
+					<Badge
+						variant="secondary"
+						className="h-5 min-w-5 rounded-md bg-muted px-1.5 py-0 text-[11px] font-medium tabular-nums text-muted-foreground"
+						data-testid="message-header-history-topic-count"
+					>
+						{topicsTotalFromServer}
+					</Badge>
 				</div>
 				{onClose ? (
 					<Button
@@ -825,26 +846,18 @@ function TopicHistoryPanelContentInner({
 						<RefreshCw className={cn("size-4", isTopicListBusy && "animate-spin")} />
 					</Button>
 				) : null}
-				{onClose ? (
+				{onClose && !onCollapse ? (
 					<Button
 						ref={closeButtonRef}
 						type="button"
 						variant="ghost"
 						size="icon"
 						className="size-7 shrink-0 rounded-md"
-						onClick={onCollapse || onClose}
-						aria-label={
-							onCollapse
-								? t("sidebarPanels.collapseHistory")
-								: t("button.close", { ns: "interface" })
-						}
+						onClick={onClose}
+						aria-label={t("button.close", { ns: "interface" })}
 						data-testid="message-header-history-close-button"
 					>
-						{onCollapse ? (
-							<PanelRightClose className="size-4" />
-						) : (
-							<X className="size-4" />
-						)}
+						<X className="size-4" />
 					</Button>
 				) : null}
 			</div>
