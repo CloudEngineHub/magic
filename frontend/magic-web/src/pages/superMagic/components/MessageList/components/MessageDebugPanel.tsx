@@ -29,7 +29,7 @@ interface MessageDebugPanelProps {
 
 const WINDOW_CONFIG: DialogWindowFrameConfig = {
 	storageKeyPrefix: "super_magic/message_debug_dialog",
-	recommendedSize: { width: 880, height: 640 },
+	recommendedSize: { width: 720, height: 900 },
 	minSize: { width: 560, height: 360 },
 }
 
