@@ -39,12 +39,17 @@ const noExpandedKeys: React.Key[] = []
 /** 完整管理器负责桌面交互；附件索引仍由原文件数据提供，不另建 store。 */
 export function FileManager(props: FileManagerProps) {
 	const { t, i18n } = useTranslation("super")
-	const selecting = props.mode === "select"
+	const selecting = props.mode === "select" || props.mode === "destination"
+	const destination = props.mode === "destination"
+	const disabledFolderIds = props.mode === "destination" ? props.disabledFolderIds : undefined
 	const initialState = useRef(props.initialState).current
-	const initialDirectoryId =
+	const requestedInitialDirectoryId =
 		props.rootId === null
 			? null
 			: (props.initialDirectoryId ?? (initialState?.directoryId || props.rootId))
+	const initialDirectoryId = disabledFolderIds?.has(requestedInitialDirectoryId ?? "")
+		? props.rootId
+		: requestedInitialDirectoryId
 	const locating =
 		props.initialDirectoryId !== undefined &&
 		props.initialDirectoryId !== (initialState?.directoryId || props.rootId)
@@ -198,6 +203,11 @@ export function FileManager(props: FileManagerProps) {
 			return state === "unloaded" || state === "loading"
 		})
 	const navigate = navigation.navigate
+	useEffect(() => {
+		// 已保存位置或外部初始路径也要遵守移动限制，不能绕过目录行的禁用状态。
+		if (props.rootId !== null && disabledFolderIds?.has(location.directoryId ?? ""))
+			navigate(props.rootId)
+	}, [disabledFolderIds, location.directoryId, props.rootId, navigate])
 	const expandedError = expandedKeys.some(
 		(id) => index.getItemById(String(id))?.directoryLoadState === "error",
 	)
@@ -220,7 +230,9 @@ export function FileManager(props: FileManagerProps) {
 			files
 				.filter(
 					(item) =>
-						!item.is_hidden && (selecting ? resolveAttachmentId(item) : item.file_id),
+						!item.is_hidden &&
+						(!destination || item.is_directory) &&
+						(selecting ? resolveAttachmentId(item) : item.file_id),
 				)
 				.map((item) => {
 					const id = selecting ? resolveAttachmentId(item) : item.file_id
@@ -272,6 +284,7 @@ export function FileManager(props: FileManagerProps) {
 		navigation.sortDirection,
 		i18n.language,
 		selecting,
+		destination,
 	])
 	const searchTree = useMemo(() => {
 		if (!searchingProject) return null
@@ -288,8 +301,9 @@ export function FileManager(props: FileManagerProps) {
 				index: presentationIndex,
 			})
 			if (
-				presentation.name.toLocaleLowerCase(locale).includes(query) ||
-				(entry.item.relative_file_path ?? "").toLocaleLowerCase(locale).includes(query)
+				(!destination || entry.item.is_directory) &&
+				(presentation.name.toLocaleLowerCase(locale).includes(query) ||
+					(entry.item.relative_file_path ?? "").toLocaleLowerCase(locale).includes(query))
 			)
 				included.add(key)
 			if (included.has(key) && entry.parentKey) included.add(entry.parentKey)
@@ -319,7 +333,16 @@ export function FileManager(props: FileManagerProps) {
 				),
 			expanded,
 		}
-	}, [searchingProject, query, index, sorted, presentationIndex, props.context, i18n.language])
+	}, [
+		searchingProject,
+		query,
+		index,
+		sorted,
+		presentationIndex,
+		props.context,
+		i18n.language,
+		destination,
+	])
 	useEffect(() => {
 		setSearchExpandedKeys(searchTree?.expanded ?? [])
 	}, [searchTree])
@@ -386,6 +409,7 @@ export function FileManager(props: FileManagerProps) {
 		[visible.visibleNodes, visible.expandedKeySet],
 	)
 	const toggleListFolder = (file: AttachmentItem, all = false) => {
+		if (disabledFolderIds?.has(file.file_id ?? "")) return
 		if (!file.file_id || file.directoryLoadState === "loading") return
 		const id = file.file_id
 		const opening = !visible.expandedKeySet.has(id) || file.directoryLoadState === "error"
@@ -438,6 +462,7 @@ export function FileManager(props: FileManagerProps) {
 				: undefined,
 	})
 	const onOpen = useMemoizedFn((file: AttachmentItem) => {
+		if (disabledFolderIds?.has(file.file_id ?? "")) return
 		if (file.is_directory && file.file_id) navigation.navigate(file.file_id)
 		else if (!selecting) props.onOpen(file)
 	})
@@ -475,8 +500,9 @@ export function FileManager(props: FileManagerProps) {
 	const getPopupContainer = () => container.current
 	const onDirectoryChange = props.onDirectoryChange
 	useEffect(() => {
-		if (location.directoryId !== null) onDirectoryChange?.(location.directoryId)
-	}, [location.directoryId, onDirectoryChange])
+		if (location.directoryId !== null && !disabledFolderIds?.has(location.directoryId))
+			onDirectoryChange?.(location.directoryId)
+	}, [location.directoryId, onDirectoryChange, disabledFolderIds])
 	const emitState = useMemoizedFn((deferred = false) => {
 		if (loading || error) return
 		const snapshot: FileManagerLocationSnapshot = {
@@ -653,6 +679,8 @@ export function FileManager(props: FileManagerProps) {
 							getPopupContainer={getPopupContainer}
 						/>
 						<FileManagerContent
+							mode={props.mode ?? "manage"}
+							disabledFolderIds={disabledFolderIds}
 							listColumns={listColumns}
 							sort={navigation.sort}
 							sortDirection={navigation.sortDirection}
@@ -698,7 +726,12 @@ export function FileManager(props: FileManagerProps) {
 										})
 									: t("fileManager.itemCount", { count: items.length })}
 							</span>
-							<span>{management?.status ?? t("fileManager.checkSelectionHint")}</span>
+							<span>
+								{management?.status ??
+									(destination
+										? t("selectPathModal.selectStorageLocation")
+										: t("fileManager.checkSelectionHint"))}
+							</span>
 						</div>
 					</div>
 				</div>

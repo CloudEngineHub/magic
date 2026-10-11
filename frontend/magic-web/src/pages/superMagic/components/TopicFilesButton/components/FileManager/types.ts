@@ -112,6 +112,13 @@ export type FileManagerProps = FileManagerBaseProps &
 	(
 		| { mode?: "manage"; checkedIds?: never; onCheckChange?: never }
 		| {
+				mode: "destination"
+				/** 移动目录时禁止进入自身及后代；复制传空集合。 */
+				disabledFolderIds: ReadonlySet<string>
+				checkedIds?: never
+				onCheckChange?: never
+		  }
+		| {
 				mode: "select"
 				/** 调用方持有当前项目的完整勾选集，目录折叠、搜索和导航不能删除它。 */
 				checkedIds: ReadonlySet<string>

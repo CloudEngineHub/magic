@@ -75,6 +75,11 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
 import { MentionDesktopPicker } from "./MentionDesktopPicker"
+import {
+	DestinationCreationDialog,
+	type DestinationCreationOptions,
+} from "./DestinationCreationDialog"
+import { buildAttachmentIndex } from "../../../TopicFilesButton/utils/attachmentIndex"
 import { useResourceProjects, RESOURCE_WORKSPACE_IDS } from "./useResourceProjects"
 import type { ResourceProject } from "../../resourceProjectTypes"
 import type { FileManagerCheckChange } from "../../../TopicFilesButton/components/FileManager/types"
@@ -176,6 +181,7 @@ function ProjectResourceSelectorModal({
 	const [selectedResources, setSelectedResources] = useState<ProjectResourceSelection[]>([])
 	const isMentionMode = selectionMode === "mention"
 	const isResourceSelectionMode = isMentionMode || selectionMode === "import"
+	const isDesktopDestination = !isMobile && !isProjectOnly && !isResourceSelectionMode
 	const allowProjectSelection = isMentionMode
 	const {
 		availableProjects,
@@ -304,6 +310,27 @@ function ProjectResourceSelectorModal({
 		}
 		return [] // 复制操作不限制
 	}, [sourceAttachments, fileIds, operationType])
+	const disabledFolderIdSet = useMemo(() => new Set(disabledFolderIds), [disabledFolderIds])
+	const attachmentIndex = useMemo(() => buildAttachmentIndex(attachments), [attachments])
+	const handleTargetDirectoryChange = useMemoizedFn((directoryId: string) => {
+		const directory = directoryId ? attachmentIndex.getItemById(directoryId) : undefined
+		if (directoryId && (!directory?.is_directory || disabledFolderIdSet.has(directoryId)))
+			return
+		// 根目录提交空路径；子目录必须携带完整祖先，供复制准备与父路径处理复用。
+		const nextPath = directory
+			? [...attachmentIndex.getParentItemsById(directoryId), directory].filter(
+					(item) => item.is_directory && getItemId(item),
+				)
+			: []
+		if (
+			path.length === nextPath.length &&
+			path.every((item, index) => getItemId(item) === getItemId(nextPath[index]))
+		)
+			return
+		pathRef.current = nextPath
+		setPath(nextPath)
+		setDirectories(filesSort(getDirectoriesFromPath(attachments, nextPath)))
+	})
 
 	// Check whether creation is allowed at the current location.
 	const canEdit = useMemo(() => {
@@ -423,9 +450,7 @@ function ProjectResourceSelectorModal({
 				refreshedWorkspaces.find((w: Workspace) => w.id === workspace.id) || workspace
 
 			// 自动选中新创建的工作区并进入项目视图
-			setCurrentWorkspace(foundWorkspace)
-			setViewMode("project")
-			await fetchProjectsByWorkspace(foundWorkspace.id)
+			await handleWorkspaceClick(foundWorkspace)
 		},
 		onWorkspacesRefresh: async () => {
 			// 刷新工作区列表
@@ -554,6 +579,7 @@ function ProjectResourceSelectorModal({
 			workspaceOverride?: Workspace,
 		) => {
 			const selectionWorkspace = workspaceOverride ?? currentWorkspace
+			if (isDesktopDestination && !hasEditPermission(project.user_role)) return
 			if (
 				(project as ResourceProject).resourceType &&
 				!(project as ResourceProject).project_id
@@ -1026,6 +1052,15 @@ function ProjectResourceSelectorModal({
 	)
 
 	const submit = useMemoizedFn(async () => {
+		if (
+			isDesktopDestination &&
+			(loading ||
+				loadError ||
+				documentStaticDependencies.isLoading ||
+				path.some((item) => disabledFolderIdSet.has(getItemId(item))) ||
+				(currentProject && !hasEditPermission(currentProject.user_role)))
+		)
+			return
 		if (isResourceSelectionMode) {
 			if (submittingRef.current || externalSubmitting) return
 			const firstSelection = selectedResources[0]
@@ -1290,13 +1325,13 @@ function ProjectResourceSelectorModal({
 	})
 
 	useEffect(() => {
-		if (visible && !isResourceSelectionMode) {
+		if (visible && !isResourceSelectionMode && !isDesktopDestination) {
 			window.addEventListener("keydown", handleKeyDown)
 			return () => window.removeEventListener("keydown", handleKeyDown)
 		} else {
 			window.removeEventListener("keydown", handleKeyDown)
 		}
-	}, [visible, handleKeyDown, isResourceSelectionMode])
+	}, [visible, handleKeyDown, isResourceSelectionMode, isDesktopDestination])
 
 	// 渲染工作区列表
 	const renderWorkspaceList = () => {
@@ -1766,6 +1801,66 @@ function ProjectResourceSelectorModal({
 		"inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-sm hover:bg-fill active:bg-fill-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:text-foreground"
 	const breadcrumbItemBase =
 		"relative flex max-w-[150px] cursor-pointer items-center rounded-[4px] text-foreground transition-colors hover:not(.disable):not(.current):text-primary [&.disable]:cursor-not-allowed [&.disable]:opacity-50"
+	const destinationCreation: DestinationCreationOptions | null =
+		createWorkspaceHook.createWorkspaceShown
+			? {
+					title: t("selectPathModal.newWorkspace"),
+					name: createWorkspaceHook.createWorkspaceName,
+					error: createWorkspaceHook.createWorkspaceErrorMessage,
+					loading: createWorkspaceHook.loading,
+					onChange: createWorkspaceHook.onCreateWorkspaceInputChange,
+					onSubmit: createWorkspaceHook.submitCreateWorkspace,
+					onClose: createWorkspaceHook.cancelCreateWorkspace,
+				}
+			: createProjectHook.createProjectShown
+				? {
+						title: t("selectPathModal.newProject"),
+						name: createProjectHook.createProjectName,
+						error: createProjectHook.createProjectErrorMessage,
+						loading: createProjectHook.loading,
+						onChange: createProjectHook.onCreateProjectInputChange,
+						onSubmit: createProjectHook.submitCreateProject,
+						onClose: createProjectHook.cancelCreateProject,
+					}
+				: createDirectoryHook.createDirectoryShown
+					? {
+							title: t("selectPathModal.newSubfolder"),
+							name: createDirectoryHook.createDirectoryName,
+							error: createDirectoryHook.createDirectoryErrorMessage,
+							loading: createDirectoryHook.loading,
+							onChange: createDirectoryHook.onCreateDirectoryInputChange,
+							onSubmit: createDirectoryHook.submitCreateDirectory,
+							onClose: createDirectoryHook.cancelCreateDirectory,
+						}
+					: null
+	const documentDependenciesOption =
+		documentStaticDependencies.fileType &&
+		documentStaticDependencies.dependencyFileIds.length > 0 ? (
+			<label
+				className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5"
+				data-testid="cross-project-file-document-dependencies-option"
+			>
+				<Checkbox
+					checked={includeDocumentDependencies}
+					onChange={(event) => setIncludeDocumentDependencies(event.target.checked)}
+				/>
+				<span className="flex flex-col gap-1 text-left">
+					<span className="text-sm font-medium leading-5 text-foreground">
+						{t("share.includeDocumentDependencies", {
+							count: documentStaticDependencies.dependencyFileIds.length,
+						})}
+					</span>
+					<span className="text-xs leading-4 text-muted-foreground">
+						{t("share.includeDocumentDependenciesDescription", {
+							type:
+								documentStaticDependencies.fileType === "markdown"
+									? "Markdown"
+									: "HTML",
+						})}
+					</span>
+				</span>
+			</label>
+		) : null
 
 	if (isMobile && isResourceSelectionMode) {
 		return (
@@ -1817,7 +1912,7 @@ function ProjectResourceSelectorModal({
 		)
 	}
 
-	if (isResourceSelectionMode) {
+	if (isResourceSelectionMode || isDesktopDestination) {
 		return visible ? (
 			<MentionDesktopPicker
 				title={title}
@@ -1827,6 +1922,55 @@ function ProjectResourceSelectorModal({
 				projects={availableProjects}
 				selectionMode={selectionMode === "import" ? "import" : "mention"}
 				allowProjectSelection={allowProjectSelection}
+				destination={
+					isDesktopDestination
+						? {
+								path,
+								canSubmit:
+									canSubmit &&
+									!loading &&
+									!loadError &&
+									!documentStaticDependencies.isLoading &&
+									!path.some((item) =>
+										disabledFolderIdSet.has(getItemId(item)),
+									) &&
+									(!currentProject ||
+										hasEditPermission(currentProject.user_role)),
+								disabledFolderIds: disabledFolderIdSet,
+								onDirectoryChange: handleTargetDirectoryChange,
+								createWorkspaceAction: (
+									<Button
+										variant="ghost"
+										size="sm"
+										className="w-full justify-start text-xs"
+										onClick={createWorkspaceHook.showCreateWorkspace}
+									>
+										{t("selectPathModal.newWorkspace")}
+									</Button>
+								),
+								createAction:
+									currentWorkspace && createAction ? (
+										<Button
+											variant="outline"
+											size="sm"
+											className="h-7 shrink-0 text-xs"
+											onClick={createAction.onClick}
+											data-testid={createAction.testId}
+										>
+											{createAction.label}
+										</Button>
+									) : undefined,
+								creationDialog: (
+									<DestinationCreationDialog options={destinationCreation} />
+								),
+								footerOptions: documentDependenciesOption ? (
+									<div className="shrink-0 border-t px-4 py-2">
+										{documentDependenciesOption}
+									</div>
+								) : undefined,
+							}
+						: undefined
+				}
 				attachments={attachments}
 				loading={loading}
 				error={loadError}
@@ -1908,35 +2052,7 @@ function ProjectResourceSelectorModal({
 				isMobile && "h-[calc(100%-141px)]",
 			)}
 		>
-			{documentStaticDependencies.fileType &&
-				documentStaticDependencies.dependencyFileIds.length > 0 && (
-					<label
-						className="mb-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5"
-						data-testid="cross-project-file-document-dependencies-option"
-					>
-						<Checkbox
-							checked={includeDocumentDependencies}
-							onChange={(event) =>
-								setIncludeDocumentDependencies(event.target.checked)
-							}
-						/>
-						<span className="flex flex-col gap-1 text-left">
-							<span className="text-sm font-medium leading-5 text-foreground">
-								{t("share.includeDocumentDependencies", {
-									count: documentStaticDependencies.dependencyFileIds.length,
-								})}
-							</span>
-							<span className="text-xs leading-4 text-muted-foreground">
-								{t("share.includeDocumentDependenciesDescription", {
-									type:
-										documentStaticDependencies.fileType === "markdown"
-											? "Markdown"
-											: "HTML",
-								})}
-							</span>
-						</span>
-					</label>
-				)}
+			{documentDependenciesOption && <div className="mb-3">{documentDependenciesOption}</div>}
 			<div
 				className="flex items-center justify-start gap-2.5 p-0"
 				data-testid="cross-project-file-modal-toolbar"

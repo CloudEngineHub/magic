@@ -32,6 +32,8 @@ import type {
 } from "./types"
 
 interface Props {
+	mode: "manage" | "select" | "destination"
+	disabledFolderIds?: ReadonlySet<string>
 	listColumns: ReturnType<typeof useFileManagerColumns>
 	sort: FileManagerSort
 	sortDirection: FileManagerSortDirection
@@ -267,7 +269,7 @@ export function FileManagerContent(props: Props) {
 		}
 		if (!selecting && (key === "delete" || (mac && event.metaKey && key === "backspace")))
 			return execute("trash")
-		if (selecting && (key === " " || key === "enter")) {
+		if (props.mode === "select" && (key === " " || key === "enter")) {
 			event.preventDefault()
 			const id = props.selection.focusedId
 			if (!id) return
@@ -276,6 +278,14 @@ export function FileManagerContent(props: Props) {
 				const position = props.selection.positions.get(id)
 				if (position !== undefined) props.onOpen(props.items[position].item)
 			}
+			return
+		}
+		if (props.mode === "destination" && key === "enter") {
+			event.preventDefault()
+			const position = props.selection.focusedId
+				? props.selection.positions.get(props.selection.focusedId)
+				: undefined
+			if (position !== undefined) props.onOpen(props.items[position].item)
 			return
 		}
 		if (
@@ -440,11 +450,15 @@ export function FileManagerContent(props: Props) {
 							.slice(row.index * columns, (row.index + 1) * columns)
 							.map((resource) => (
 								<FileManagerItem
+									readOnly={selecting}
+									disabled={props.disabledFolderIds?.has(
+										resource.item.file_id ?? "",
+									)}
 									columns={props.listColumns.visibleIds}
 									getColumnText={props.getColumnText}
 									showActions={!selecting && showActions}
 									onCheck={
-										selecting
+										props.mode === "select"
 											? () => {
 													if (resource.item.file_id)
 														props.selection.toggle(
@@ -478,6 +492,10 @@ export function FileManagerContent(props: Props) {
 									menuItems={actions?.getMenuItems(resource.item)}
 									onSelect={(event) => {
 										viewport.current?.focus({ preventScroll: true })
+										if (props.mode === "destination") {
+											props.onOpen(resource.item)
+											return
+										}
 										if (resource.item.file_id)
 											props.selection.select(resource.item.file_id, event)
 									}}

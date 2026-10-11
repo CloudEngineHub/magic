@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react"
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { useDebounce } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -36,6 +36,7 @@ import {
 	MY_AGENTS_WORKSPACE_ID,
 	MY_CLAW_WORKSPACE_DATA,
 	MY_CLAW_WORKSPACE_ID,
+	SHARE_WORKSPACE_ID,
 	MICRO_APPS_WORKSPACE_DATA,
 	MY_SKILLS_WORKSPACE_DATA,
 	SHARE_WORKSPACE_DATA,
@@ -52,6 +53,19 @@ import { TopicMode } from "../../../../pages/Workspace/TopicMode"
 import { WorkspaceStatus } from "../../../../pages/Workspace/types"
 import { isOwner } from "../../../../utils/permission"
 import { isResourceWorkspace } from "../../utils/resourceProjects"
+import { getItemName, hasEditPermission } from "../../utils/attachmentUtils"
+import SmartTooltip from "@/components/other/SmartTooltip"
+
+export interface DestinationPickerOptions {
+	path: AttachmentItem[]
+	canSubmit: boolean
+	disabledFolderIds: ReadonlySet<string>
+	onDirectoryChange: (directoryId: string) => void
+	createWorkspaceAction?: ReactNode
+	createAction?: ReactNode
+	footerOptions?: ReactNode
+	creationDialog?: ReactNode
+}
 
 interface Props {
 	title: string
@@ -65,6 +79,7 @@ interface Props {
 	submitting: boolean
 	selectionMode?: "mention" | "import"
 	allowProjectSelection?: boolean
+	destination?: DestinationPickerOptions
 	includeFixedWorkspaces: boolean
 	excludeProjectIds: string[]
 	selections: ProjectResourceSelection[]
@@ -94,6 +109,8 @@ function selectionKey(selection: ProjectResourceSelection) {
 /** 只组合现有管理器的选择模式；项目、附件请求和全局勾选仍由 selector 持有。 */
 export const MentionDesktopPicker = observer(function MentionDesktopPicker(props: Props) {
 	const { t } = useTranslation("super")
+	const destination = props.destination
+	const isDestination = Boolean(destination)
 	const allowProjectSelection = props.allowProjectSelection ?? props.selectionMode === "mention"
 	const { userInfo } = useUserInfo()
 	const layer = useOverlayZIndex({ open: true, zIndexScope: "fullscreen" })
@@ -110,7 +127,11 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 		if (query === debouncedQuery && searchWorkspace && !searchProject)
 			onProjectSearch(debouncedQuery)
 	}, [query, debouncedQuery, searchWorkspace, searchProject, onProjectSearch])
-	const [recentMode, setRecentMode] = useState(true)
+	const [recentMode, setRecentMode] = useState(!destination || !props.workspace)
+	const workspaceId = props.workspace?.id
+	useEffect(() => {
+		if (isDestination && workspaceId) setRecentMode(false)
+	}, [isDestination, workspaceId])
 	const [reveal, setReveal] = useState<FileManagerRevealRequest>()
 	const [rootVisit, setRootVisit] = useState(0)
 	const revealId = useRef(0)
@@ -126,10 +147,16 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 		void recentProjectsStore.loadMore()
 	}, [userInfo?.user_id, userInfo?.organization_code])
 	const recentSearch = useRecentProjectSearch(query, recentMode && !props.project, props.loading)
-	const projects = useMemo(
-		() => props.projects.filter((project) => !props.excludeProjectIds.includes(project.id)),
-		[props.projects, props.excludeProjectIds],
-	)
+	// 最近入口与工作区列表遵循同一目标权限，不能借新入口扩大复制可写范围。
+	const canUseProject = (project: ProjectListItem) =>
+		!props.excludeProjectIds.includes(project.id) &&
+		(!destination ||
+			(hasEditPermission(project.user_role) &&
+				project.project_mode !== TopicMode.MicroApp &&
+				(props.includeFixedWorkspaces ||
+					(project.project_mode !== TopicMode.MagiClaw &&
+						project.workspace_id !== SHARE_WORKSPACE_ID))))
+	const projects = props.projects.filter(canUseProject)
 	const viewport = useSelectionListViewport(
 		'[data-testid="shared-workspace-dialog-project-item"]',
 		projects.length,
@@ -143,7 +170,7 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 						.toLocaleLowerCase()
 						.includes(query.trim().toLocaleLowerCase()),
 				)
-	).filter((project) => !props.excludeProjectIds.includes(project.id))
+	).filter(canUseProject)
 	const recentViewport = useSelectionListViewport(
 		'[data-testid="shared-workspace-dialog-project-item"]',
 		recentProjects.length,
@@ -181,7 +208,7 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 			: []),
 		MY_SKILLS_WORKSPACE_DATA(t),
 		MY_AGENTS_WORKSPACE_DATA(t),
-		...(isMicroAppEnabled() ? [MICRO_APPS_WORKSPACE_DATA(t)] : []),
+		...(!destination && isMicroAppEnabled() ? [MICRO_APPS_WORKSPACE_DATA(t)] : []),
 	]
 	const specialIds = new Set(special.map((workspace) => workspace.id))
 	const regular = props.workspaces.filter(
@@ -353,6 +380,7 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 						workspaces={regular}
 						specialWorkspaces={special}
 						current={props.workspace}
+						footer={destination?.createWorkspaceAction}
 						recentActive={recentMode && !props.project}
 						onSelectRecent={() => {
 							setRecentMode(true)
@@ -373,7 +401,26 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 								<div className="min-h-0 flex-1">
 									<FileManager
 										key={`${identity}:${props.project.id}:${rootVisit}`}
-										mode="select"
+										{...(destination
+											? {
+													mode: "destination" as const,
+													disabledFolderIds:
+														destination.disabledFolderIds,
+													onDirectoryChange:
+														destination.onDirectoryChange,
+													initialDirectoryId: destination.path.length
+														? (resolveAttachmentId(
+																destination.path[
+																	destination.path.length - 1
+																],
+															) ?? "")
+														: "",
+												}
+											: {
+													mode: "select" as const,
+													checkedIds,
+													onCheckChange: props.onCheck,
+												})}
 										rootId=""
 										rootName={
 											props.project.project_name ||
@@ -385,34 +432,39 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 										selectedProject={props.project}
 										context={context}
 										attachments={props.attachments}
-										checkedIds={checkedIds}
-										onCheckChange={props.onCheck}
 										isActive
 										dataReady={!props.loading && !props.error}
 										loading={props.loading}
 										error={props.error}
 										onRefresh={props.onRefresh}
 										onOpen={() => undefined}
-										initialState={locations.current.get(props.project.id)}
+										initialState={
+											destination
+												? undefined
+												: locations.current.get(props.project.id)
+										}
 										onStateChange={(snapshot) => {
 											if (props.project)
 												locations.current.set(props.project.id, snapshot)
 										}}
 										revealRequest={reveal}
 										toolbarLeading={
-											<Button
-												variant="ghost"
-												size="sm"
-												className="h-7 shrink-0 gap-1 px-1.5 text-xs font-normal"
-												onClick={() => {
-													setReveal(undefined)
-													setRecentMode(false)
-													props.onBack()
-												}}
-											>
-												<ArrowLeft size={16} />
-												{props.workspace.name}
-											</Button>
+											<div className="flex shrink-0 items-center gap-1">
+												<Button
+													variant="ghost"
+													size="sm"
+													className="h-7 shrink-0 gap-1 px-1.5 text-xs font-normal"
+													onClick={() => {
+														setReveal(undefined)
+														setRecentMode(false)
+														props.onBack()
+													}}
+												>
+													<ArrowLeft size={16} />
+													{props.workspace.name}
+												</Button>
+												{destination?.createAction}
+											</div>
 										}
 									/>
 								</div>
@@ -426,7 +478,9 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 									viewToggle={
 										<ViewToggle value={viewMode} onChange={setViewMode} />
 									}
-								/>
+								>
+									{destination?.createAction}
+								</ProjectsPanelToolbar>
 								<ProjectsPanelList
 									projects={recentProjects}
 									loading={
@@ -503,7 +557,9 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 									viewToggle={
 										<ViewToggle value={viewMode} onChange={setViewMode} />
 									}
-								/>
+								>
+									{destination?.createAction}
+								</ProjectsPanelToolbar>
 								<ProjectsPanelList
 									projects={projects}
 									listLayout={
@@ -543,25 +599,49 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 							</>
 						)}
 					</div>
-					<div className="flex min-h-0 w-60 shrink-0">{panel}</div>
+					{!destination && <div className="flex min-h-0 w-60 shrink-0">{panel}</div>}
 				</div>
+				{destination?.footerOptions}
 				<div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-t px-4">
-					<span className="text-xs text-muted-foreground">
-						{t("fileManager.selectedCount", { count: props.selections.length })}
-					</span>
+					{destination ? (
+						<SmartTooltip className="min-w-0 flex-1 text-xs text-muted-foreground">
+							{props.workspace
+								? [
+										props.workspace.name,
+										props.project?.project_name,
+										...(props.project
+											? destination.path.length
+												? destination.path.map(getItemName)
+												: [t("selectPathModal.rootDirectory")]
+											: []),
+									]
+										.filter(Boolean)
+										.join(" / ")
+								: t("selectPathModal.selectStorageLocation")}
+						</SmartTooltip>
+					) : (
+						<span className="text-xs text-muted-foreground">
+							{t("fileManager.selectedCount", { count: props.selections.length })}
+						</span>
+					)}
 					<div className="flex items-center gap-2">
 						<Button variant="outline" onClick={props.onClose}>
 							{t("common.cancel")}
 						</Button>
 						<Button
-							disabled={!props.selections.length || props.submitting}
+							disabled={
+								(destination ? !destination.canSubmit : !props.selections.length) ||
+								props.submitting
+							}
 							onClick={props.onSubmit}
 						>
-							{t("selectPathModal.confirm")} ({props.selections.length})
+							{t("selectPathModal.confirm")}
+							{!destination && ` (${props.selections.length})`}
 						</Button>
 					</div>
 				</div>
 			</div>
+			{destination?.creationDialog}
 		</ProjectsPanel>
 	)
 })
