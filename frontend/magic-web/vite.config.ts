@@ -301,7 +301,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 				editor: "code",
 				// The inspector injects globals into every JSX module. Keep it opt-in so a
 				// missing inspector runtime cannot break normal local pages.
-				needEnvInspector: true,
+				// needEnvInspector: true,
 			}),
 			react(),
 			babel({
