@@ -44,7 +44,6 @@ import {
 } from "@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions"
 import { getAppEntryFile } from "../../MessageList/components/MessageAttachment/utils"
 import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/projectAttachments/attachmentMutationWaiter"
-import { exportHtmlToImage } from "@magic-web/html2image"
 import { textToHtml } from "../../../utils/textToHtml"
 import { createUploadRefreshCoordinator } from "../utils/uploadRefreshController"
 import { createDesignProjectFiles } from "../../Detail/contents/Design/utils/designProjectCreation"
@@ -1511,6 +1510,8 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			try {
 				const ext = (item.file_extension || "").toLowerCase()
 				const isHtml = ext === "html" || ext === "htm"
+				// 文件树始终挂载，图片导出引擎仅在本操作内加载，失败沿用原有状态清理。
+				const { exportHtmlToImage } = await import("@magic-web/html2image")
 
 				if (!isHtml) {
 					// 文本类文件（md, txt, code）使用 exportTextToImage
