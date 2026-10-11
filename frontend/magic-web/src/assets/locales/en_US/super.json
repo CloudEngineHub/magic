@@ -6880,15 +6880,17 @@
 	},
 	"simpleMode": {
 		"collapse": "Hide process",
-		"description": "Collapse the process after a task completes and keep the final reply.",
+		"description": "Collapse the process after a task ends and keep the reply or latest progress.",
 		"dismiss": "Got it",
 		"enable": "Enable simple mode",
 		"enabled": "Enabled",
 		"expand": "View process",
 		"guideHelp": "You can turn it off anytime in More.",
 		"guideTitle": "Try simple mode",
+		"lastProgress": "Latest progress",
 		"messageCount_one": "{{count}} message",
 		"messageCount_other": "{{count}} messages",
+		"noReplyBeforeStop": "No reply was produced in this run. Expand to view the process.",
 		"title": "Simple mode"
 	},
 	"slidesTemplatePreview": {

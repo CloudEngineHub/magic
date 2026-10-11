@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { VirtualProcessToggleItem } from "../virtual-message-items"
 import { AssistantMessageHeader } from "./Nodes/AssistantMessageHeader"
+import { TaskStatus } from "../../../pages/Workspace/types"
+import { StatusBadge } from "./Card/components/StatusBadge"
 
 export function MessageProcessToggle({
 	item,
@@ -40,6 +42,16 @@ export function MessageProcessToggle({
 					)}
 				/>
 			</button>
+			{item.status !== TaskStatus.FINISHED && (
+				<div className="mb-1 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 px-2">
+					<span className="text-xs leading-5 text-muted-foreground">
+						{item.hasRetainedContent
+							? t("simpleMode.lastProgress")
+							: t("simpleMode.noReplyBeforeStop")}
+					</span>
+					{item.showStatus && <StatusBadge status={item.status} />}
+				</div>
+			)}
 			{item.expanded && (
 				<div
 					aria-hidden

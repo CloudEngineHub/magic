@@ -364,7 +364,7 @@ const MessageList = observer(
 				)
 			: []
 		const processInteractionKey = `${collapseProcesses}:${processViewState.interactionKey}`
-		const processProjectionKey = `${collapseProcesses}:${processGroups.map((group) => `${group.key}:${group.answerIndex}:${[...group.processIndices].join(",")}:${processViewState.isExpanded(group.key)}`).join("\u0000")}`
+		const processProjectionKey = `${collapseProcesses}:${processGroups.map((group) => `${group.key}:${group.status}:${group.answerIndex}:${group.retainedContentMode}:${[...group.processIndices].join(",")}:${processViewState.isExpanded(group.key)}`).join("\u0000")}`
 		const displayedNormalItems = useMemo(
 			() =>
 				collapseProcesses

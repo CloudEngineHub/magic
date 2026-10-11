@@ -10,12 +10,77 @@ export interface ProcessNode {
 	reasoning_content?: string
 	tool_calls?: unknown[]
 	status?: string
+	event?: string
 	tool?: { name?: string; status?: string }
 }
 export interface MessageProcessGroup {
 	key: string
-	answerIndex: number
+	endIndex: number
+	answerIndex: number | null
+	status: TaskStatus.FINISHED | TaskStatus.SUSPENDED | TaskStatus.ERROR
+	retainedContentMode: "answer" | "full"
 	processIndices: ReadonlySet<number>
+}
+
+/**
+ * 中断／失败保留最后进展，不把阶段性正文当成最终交付。
+ * 例：3 次工具调用后中断，保留最近正文；没有正文则保留最近工具卡。
+ * 普通工具的失败只结束该步骤，不能据此折叠仍在执行的任务。
+ */
+function buildStoppedProcessGroup(
+	messages: ReadonlyArray<SuperMagicMessageItem>,
+	taskId: string,
+	indices: ReadonlyArray<number>,
+	resolveNode: (message: SuperMagicMessageItem) => ProcessNode,
+	visibleSourceIndices: ReadonlySet<number>,
+): MessageProcessGroup | undefined {
+	const endIndex = indices[indices.length - 1]
+	const end = resolveNode(messages[endIndex])
+	if (end.status !== TaskStatus.SUSPENDED && end.status !== TaskStatus.ERROR) return
+	if (
+		end.role !== "assistant" &&
+		end.event !== "agent_suspended" &&
+		end.tool?.name !== "finish_task"
+	)
+		return
+	const hasVisibleTools = (node: ProcessNode) =>
+		node.tool_calls?.some(
+			(call) => isRenderableToolCall(call) && call.function.name !== "run_sdk_snippet",
+		)
+	const assistantIndices = indices.filter(
+		(index) =>
+			visibleSourceIndices.has(index) && resolveNode(messages[index]).role === "assistant",
+	)
+	const contentIndex = [...assistantIndices]
+		.reverse()
+		.find((index) => resolveNode(messages[index]).content?.trim())
+	const toolIndex = [...assistantIndices]
+		.reverse()
+		.find((index) => hasVisibleTools(resolveNode(messages[index])))
+	const answerIndex = contentIndex ?? toolIndex ?? null
+	const retainedContentMode = contentIndex === undefined ? "full" : "answer"
+	const processIndices = new Set(
+		indices.filter((index) => {
+			if (!visibleSourceIndices.has(index)) return false
+			const node = resolveNode(messages[index])
+			if (index === answerIndex)
+				return (
+					retainedContentMode === "answer" &&
+					Boolean(node.reasoning_content?.trim() || hasVisibleTools(node))
+				)
+			// 终止记录的原因和状态继续由原卡片展示，不藏进执行过程。
+			return index !== endIndex && (node.role === "assistant" || node.role === "tool")
+		}),
+	)
+	if (!processIndices.size) return
+	return {
+		key: `${taskId}:${String(messages[endIndex].super_message_id || messages[endIndex].app_message_id)}`,
+		endIndex,
+		answerIndex,
+		status: end.status,
+		retainedContentMode,
+		processIndices,
+	}
 }
 
 /**
@@ -44,6 +109,18 @@ export function buildMessageProcessGroups(
 	const groups: MessageProcessGroup[] = []
 	for (const [taskId, task] of tasks) {
 		if (!task.hasUser) continue
+		if (task.indices.some((index) => isRendering(messages[index]))) continue
+		const stoppedGroup = buildStoppedProcessGroup(
+			messages,
+			taskId,
+			task.indices,
+			resolveNode,
+			visibleSourceIndices,
+		)
+		if (stoppedGroup) {
+			groups.push(stoppedGroup)
+			continue
+		}
 		const finishIndex = task.indices[task.indices.length - 1]
 		const finish = resolveNode(messages[finishIndex])
 		// 等待回答时也会发送 tool.status=finished 的收尾消息；只有节点任务状态
@@ -102,7 +179,10 @@ export function buildMessageProcessGroups(
 		if (!processIndices.size) continue
 		groups.push({
 			key: `${taskId}:${String(messages[finishIndex].super_message_id || messages[finishIndex].app_message_id)}`,
+			endIndex: finishIndex,
 			answerIndex,
+			status: TaskStatus.FINISHED,
+			retainedContentMode: "answer",
 			processIndices,
 		})
 	}
@@ -117,9 +197,10 @@ export function projectMessageProcesses(
 	messages: ReadonlyArray<SuperMagicMessageItem>,
 ): VirtualMessageItem[] {
 	const membership = new Map<number, MessageProcessGroup>()
+	const visibleSourceIndices = new Set(items.map((item) => item.sourceIndex))
 	for (const group of groups) {
 		for (const index of group.processIndices) membership.set(index, group)
-		membership.set(group.answerIndex, group)
+		if (group.answerIndex !== null) membership.set(group.answerIndex, group)
 	}
 	const inserted = new Set<string>()
 	const result: VirtualMessageItem[] = []
@@ -138,6 +219,9 @@ export function projectMessageProcesses(
 				kind: "process-toggle",
 				key: `process:${group.key}`,
 				groupKey: group.key,
+				status: group.status,
+				showStatus: !visibleSourceIndices.has(group.endIndex),
+				hasRetainedContent: group.answerIndex !== null,
 				index: result.length,
 				sourceIndex: item.sourceIndex,
 				turnKey: item.turnKey,
@@ -162,7 +246,11 @@ export function projectMessageProcesses(
 					contentMode: "process",
 					suppressHeader: isFirstProcessRow,
 				})
-			result.push({ ...item, contentMode: "answer", suppressHeader: isFirstProcessRow })
+			result.push({
+				...item,
+				contentMode: group.retainedContentMode,
+				suppressHeader: isFirstProcessRow,
+			})
 		} else if (expanded) {
 			result.push({ ...item, suppressHeader: isFirstProcessRow })
 		}
