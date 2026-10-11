@@ -187,24 +187,30 @@ export class DatabaseManager {
 		}
 
 		// 检查存储配额
-		const storageStatus = await checkStorageQuota()
-		if (!storageStatus.available) {
-			logger.error({
-				eventKey: STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
-				errorKind: STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
-				message: "storageQuotaInsufficient",
-				context: {
-					source: "database_manager_estimate",
-					usage: storageStatus.usage,
-					quota: storageStatus.quota,
-					usageRatio:
-						storageStatus.quota > 0
-							? ((storageStatus.usage / storageStatus.quota) * 100).toFixed(2) + "%"
-							: "unknown",
-				},
+		// 配额估计只负责诊断，不决定连接是否可用；不能让统计等待阻塞用户与账号恢复。
+		void checkStorageQuota()
+			.then((storageStatus) => {
+				if (storageStatus.available) return
+				logger.error({
+					eventKey: STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
+					errorKind: STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
+					message: "storageQuotaInsufficient",
+					context: {
+						source: "database_manager_estimate",
+						usage: storageStatus.usage,
+						quota: storageStatus.quota,
+						usageRatio:
+							storageStatus.quota > 0
+								? ((storageStatus.usage / storageStatus.quota) * 100).toFixed(2) +
+									"%"
+								: "unknown",
+					},
+				})
+				// 不抛出错误，而是记录警告，让应用继续运行
 			})
-			// 不抛出错误，而是记录警告，让应用继续运行
-		}
+			.catch(() => {
+				// estimate 的异常沿用可继续运行的语义，不影响真实连接检查。
+			})
 
 		// 测试数据库连接
 		const fn = async () => {

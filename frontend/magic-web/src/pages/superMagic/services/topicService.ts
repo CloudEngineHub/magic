@@ -9,6 +9,10 @@ import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import { interfaceStore } from "@/stores/interface"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import {
+	readProjectInitializationIdentity,
+	type ProjectInitializationScope,
+} from "./projectStateInitialization"
 
 export interface FetchTopicsParams {
 	projectId: string
@@ -92,7 +96,7 @@ class TopicService {
 	private frontendModePatches = new Map<string, TopicFrontendModePatch>()
 
 	private getRequestKey(apiName: string, ...params: (string | number)[]): string {
-		return `${apiName}:${JSON.stringify(params)}`
+		return `${apiName}:${JSON.stringify([readProjectInitializationIdentity().sessionEpoch, ...params])}`
 	}
 
 	private get frontendModePatchStorageKey() {
@@ -195,14 +199,14 @@ class TopicService {
 		return this.getTopicsByProjectId(projectId, page, PROJECT_TOPICS_PAGE_SIZE)
 	}
 
-	async fetchTopics({
-		projectId,
-		isAutoSelect = true,
-		isSelectLast = false,
-		page = 1,
-	}: FetchTopicsParams): Promise<Topic[]> {
+	async fetchTopics(
+		{ projectId, isAutoSelect = true, isSelectLast = false, page = 1 }: FetchTopicsParams,
+		scope?: ProjectInitializationScope,
+	): Promise<Topic[]> {
+		if (scope && !scope.isCurrent()) return []
 		try {
 			const res = await this.getTopicsForCurrentInterface(projectId, page)
+			if (scope && !scope.isCurrent()) return res.list
 			const updatedTopics = Array.isArray(res.list) ? res.list : []
 
 			runInAction(() => {
@@ -244,19 +248,22 @@ class TopicService {
 		)
 	}
 
-	async createTopic({
-		projectId,
-		topicName,
-		sourceTopic,
-	}: CreateTopicParams): Promise<Topic | null> {
+	async createTopic(
+		{ projectId, topicName, sourceTopic }: CreateTopicParams,
+		scope?: ProjectInitializationScope,
+	): Promise<Topic | null> {
+		if (scope && !scope.isCurrent()) return null
 		try {
 			const newTopic = await SuperMagicApi.createTopic({
 				topic_name: topicName,
 				project_id: projectId,
 			})
+			// 已提交的创建不重复、不假装回滚；离开后只阻止旧响应重选当前会话。
+			if (scope && !scope.isCurrent()) return newTopic ?? null
 
 			// 创建后按当前端形态重新拉取项目话题列表，避免移动端被旧接口结果覆盖。
 			const topicsRes = await this.getTopicsForCurrentInterface(projectId, 1)
+			if (scope && !scope.isCurrent()) return newTopic ?? null
 			const updatedTopics = Array.isArray(topicsRes?.list) ? topicsRes?.list : []
 			const targetTopic = updatedTopics.find((topic: Topic) => topic?.id === newTopic?.id)
 			const backendTopic = targetTopic ?? newTopic ?? null

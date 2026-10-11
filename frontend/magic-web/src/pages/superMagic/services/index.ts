@@ -30,6 +30,11 @@ import { SuperMagicApi } from "@/apis"
 import type { TopicStore } from "../stores/core/topic"
 import topicReadProgressService from "./topicReadProgressService"
 import { mergeProjectListItemWithStoreCache } from "@/pages/superMagicMobile/utils/mergeProjectListItemWithStoreCache"
+import {
+	ProjectStateInitialization,
+	type ProjectInitializationParams,
+	type ProjectInitializationScope,
+} from "./projectStateInitialization"
 export {
 	syncChatConversationName,
 	resolveChatTopicId,
@@ -56,6 +61,7 @@ class SuperMagicService {
 	private desktopChatSwitchGeneration = 0
 
 	private desktopChatSwitchInFlight = false
+	private readonly stateInitialization: ProjectStateInitialization
 
 	/** Exposed for ChatProjectPageDesktop to skip refreshState during optimistic chat switches. */
 	isDesktopChatSwitchInProgress(): boolean {
@@ -76,6 +82,7 @@ class SuperMagicService {
 		})
 		this.topicStore = topicStore
 		this.route = routeManageService
+		this.stateInitialization = new ProjectStateInitialization(this)
 	}
 
 	/**
@@ -85,16 +92,24 @@ class SuperMagicService {
 	async initializeWorkspace(
 		workspaceId?: string,
 		fallbackWorkspaceId?: string,
+		scope?: ProjectInitializationScope,
+		selectWorkspace = true,
 	): Promise<Workspace | null> {
+		if (scope && !scope.isCurrent()) return null
 		if (workspaceId === SHARE_WORKSPACE_ID) {
 			const workspace = SHARE_WORKSPACE_DATA(t)
-			workspaceStore.setSelectedWorkspace(workspace)
+			if (selectWorkspace) workspaceStore.setSelectedWorkspace(workspace)
 
 			requestIdleCallback(() => {
-				this.workspace.fetchWorkspaces({
-					isAutoSelect: false,
-					page: 1,
-				})
+				if (scope && !scope.isCurrent()) return
+				this.workspace.fetchWorkspaces(
+					{
+						isAutoSelect: false,
+						page: 1,
+					},
+					undefined,
+					scope,
+				)
 			})
 
 			return workspace
@@ -102,19 +117,28 @@ class SuperMagicService {
 
 		const workspace = workspaceId
 			? await this.workspace
-					.getWorkspaceDetail(workspaceId, { enableErrorMessagePrompt: false })
+					.getWorkspaceDetail(workspaceId, {
+						enableErrorMessagePrompt: false,
+						signal: scope?.signal,
+					})
 					.catch(() => null)
 			: null
+		if (scope && !scope.isCurrent()) return null
 		// 获取工作区详情成功
 		if (workspace) {
 			requestIdleCallback(() => {
-				this.workspace.fetchWorkspaces({
-					isAutoSelect: false,
-					page: 1,
-				})
+				if (scope && !scope.isCurrent()) return
+				this.workspace.fetchWorkspaces(
+					{
+						isAutoSelect: false,
+						page: 1,
+					},
+					undefined,
+					scope,
+				)
 			})
 
-			workspaceStore.setSelectedWorkspace(workspace)
+			if (selectWorkspace) workspaceStore.setSelectedWorkspace(workspace)
 			return workspace
 		} else {
 			// 获取工作区详情失败，尝试获取第一个工作区
@@ -125,13 +149,15 @@ class SuperMagicService {
 						page: 1,
 					},
 					{ enableErrorMessagePrompt: false },
+					scope,
 				)
 				.catch(() => [])
+			if (scope && !scope.isCurrent()) return null
 			const fallbackWorkspace = fallbackWorkspaceId
 				? workspaceStore.workspaces.find((ws) => ws.id === fallbackWorkspaceId) ||
 					workspaceStore.firstWorkspace
 				: workspaceStore.firstWorkspace
-			workspaceStore.setSelectedWorkspace(fallbackWorkspace)
+			if (selectWorkspace) workspaceStore.setSelectedWorkspace(fallbackWorkspace)
 			return fallbackWorkspace
 		}
 	}
@@ -847,30 +873,43 @@ class SuperMagicService {
 	 * @param topicId 话题ID
 	 * @returns 话题详情
 	 */
-	async getTopicDataByProject(project: ProjectListItem, topicId?: string): Promise<Topic | null> {
+	async getTopicDataByProject(
+		project: ProjectListItem,
+		topicId?: string,
+		scope?: ProjectInitializationScope,
+	): Promise<Topic | null> {
+		if (scope && !scope.isCurrent()) return null
 		let _topicId = topicId
 		let _selectedTopic: Topic | null = null
 
 		if (!_topicId) {
 			const topics = await this.topic
-				.fetchTopics({
-					projectId: project.id,
-					isAutoSelect: true,
-					isSelectLast: true,
-					page: 1,
-				})
+				.fetchTopics(
+					{
+						projectId: project.id,
+						isAutoSelect: true,
+						isSelectLast: true,
+						page: 1,
+					},
+					scope,
+				)
 				.catch(() => [])
+			if (scope && !scope.isCurrent()) return null
 			if (topics.length > 0) {
 				_topicId = topics[0].id
 				_selectedTopic = topics[0]
 			} else {
 				// 如果话题列表为空，则自动创建一个话题
 				const newTopic = await this.topic
-					.createTopic({
-						projectId: project.id,
-						topicName: "",
-					})
+					.createTopic(
+						{
+							projectId: project.id,
+							topicName: "",
+						},
+						scope,
+					)
 					.catch(() => null)
+				if (scope && !scope.isCurrent()) return null
 				if (newTopic) {
 					_topicId = newTopic.id
 					_selectedTopic = newTopic
@@ -878,13 +917,17 @@ class SuperMagicService {
 			}
 		} else {
 			const topicDetail = await this.topic
-				.getTopicDetail(_topicId, { enableErrorMessagePrompt: false })
+				.getTopicDetail(_topicId, {
+					enableErrorMessagePrompt: false,
+					signal: scope?.signal,
+				})
 				.catch(() => null)
+			if (scope && !scope.isCurrent()) return null
 			if (topicDetail) {
 				_selectedTopic = topicDetail
 			} else {
 				// 话题无效, 重新获取
-				return this.getTopicDataByProject(project)
+				return this.getTopicDataByProject(project, undefined, scope)
 			}
 		}
 		return _selectedTopic
@@ -990,95 +1033,8 @@ class SuperMagicService {
 	 * @param projectId Project ID
 	 * @param topicId Topic ID
 	 */
-	async initializeState({
-		workspaceId,
-		projectId,
-		topicId,
-	}: {
-		workspaceId?: string
-		projectId?: string
-		topicId?: string
-	}) {
-		this.resetState(false)
-
-		/** 备用工作区ID，用于在初始化工作区失败时使用 */
-		const fallbackWorkspaceId = UserWorkspaceMapCache.get(userStore.user.userInfo) || undefined
-
-		// 先判断是不是有项目，并且有效
-		const project = !projectId
-			? null
-			: await this.project
-					.getProjectDetail(projectId, {
-						enableErrorMessagePrompt: false,
-					})
-					.catch(() => null)
-
-		const onlyCollWorkspaceId = workspaceId && workspaceId === SHARE_WORKSPACE_ID && !project
-
-		// 新路由 path 不含 workspaceId，优先从 project 反查
-		const resolvedWorkspaceId = workspaceId || project?.workspace_id
-
-		const workspace = await this.initializeWorkspace(
-			// 不能基于共享工作区ID初始化工作区
-			onlyCollWorkspaceId ? undefined : resolvedWorkspaceId,
-			fallbackWorkspaceId,
-		)
-
-		// 如果工作区存在，则获取项目列表
-		if (workspace) {
-			projectStore.setFetchingProjects(true)
-			// 获取项目列表
-			this.project
-				.fetchProjects(
-					{
-						workspaceId: workspace.id,
-						page: 1,
-						clearWhenNoProjects: false,
-					},
-					{ enableErrorMessagePrompt: false },
-				)
-				.finally(() => {
-					projectStore.setFetchingProjects(false)
-				})
-		}
-
-		// 如果项目不存在，则直接返回
-		if (project) {
-			this.project.recordProjectVisit(project)
-			projectStore.setSelectedProject(project)
-			// 校验工作区
-			const _isOwner = isOwner(project.user_role)
-			if (!_isOwner) {
-				workspaceStore.setSelectedWorkspace(SHARE_WORKSPACE_DATA(t))
-			}
-			// 校验工作区是否匹配，如果不匹配，则更新工作区
-			else if (workspaceStore.selectedWorkspace?.id !== project.workspace_id) {
-				const workspaceDetail = await this.workspace
-					.getWorkspaceDetail(project.workspace_id, { enableErrorMessagePrompt: false })
-					.catch(() => null)
-				if (workspaceDetail) {
-					workspaceStore.setSelectedWorkspace(workspaceDetail)
-				}
-			}
-
-			// 只有选中了某个项目，才需要加载这个项目下的话题
-			if (!isReadOnlyProject(project.user_role)) {
-				// PC端，如果没有传话题ID，也进行话题初始化
-				const selectedTopic = await this.getTopicDataByProject(project, topicId)
-				if (selectedTopic) {
-					this.topicStore.setSelectedTopic(selectedTopic)
-				}
-
-				// 加载话题列表
-				this.topic.fetchTopics({
-					projectId: project.id,
-					isAutoSelect: false,
-					page: 1,
-				})
-			}
-		}
-
-		this.route.fixRouteParams()
+	initializeState(params: ProjectInitializationParams): Promise<void> {
+		return this.stateInitialization.initialize(params)
 	}
 
 	/**

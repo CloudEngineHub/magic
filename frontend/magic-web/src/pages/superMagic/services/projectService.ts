@@ -22,6 +22,10 @@ import { topicStore, workspaceStore } from "../stores/core"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
+import {
+	readProjectInitializationIdentity,
+	type ProjectInitializationScope,
+} from "./projectStateInitialization"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -191,14 +195,17 @@ class ProjectService {
 			collaborationTabKey = CollaborationProjectType.Received,
 		}: UpdateProjectsParams,
 		options?: Omit<RequestConfig, "url">,
+		scope?: ProjectInitializationScope,
 	): Promise<ProjectListItem[]> => {
+		if (scope && !scope.isCurrent()) return []
 		const requestKey = this.getRequestKey("updateProjects", {
 			workspaceId,
 			page,
 			collaborationTabKey,
+			sessionEpoch: readProjectInitializationIdentity().sessionEpoch,
 		})
 
-		return this.getOrCreateRequest(requestKey, async () => {
+		const updatedProjects = await this.getOrCreateRequest(requestKey, async () => {
 			try {
 				const res =
 					workspaceId === SHARE_WORKSPACE_ID
@@ -219,19 +226,23 @@ class ProjectService {
 								options,
 							)
 				const updatedProjects = res.list
-				runInAction(() => {
-					projectStore.setProjects(updatedProjects)
-					// Sync to projectsByWorkspace so sidebar list updates (used by getProjectsByWorkspace)
-					if (workspaceId !== SHARE_WORKSPACE_ID) {
-						projectStore.setProjectsForWorkspace(workspaceId, updatedProjects)
-					}
-				})
 				return updatedProjects
 			} catch (error) {
 				console.log("更新项目列表失败，失败原因：", error)
-				return []
+				return null
 			}
 		})
+		if (!updatedProjects) return []
+		// 共享服务器读取，每个调用方分别决定是否提交；旧初始化不能取消或覆盖新调用方。
+		if (scope && !scope.isCurrent()) return updatedProjects
+		runInAction(() => {
+			projectStore.setProjects(updatedProjects)
+			// Sync to projectsByWorkspace so sidebar list updates (used by getProjectsByWorkspace)
+			if (workspaceId !== SHARE_WORKSPACE_ID) {
+				projectStore.setProjectsForWorkspace(workspaceId, updatedProjects)
+			}
+		})
+		return updatedProjects
 	}
 
 	fetchProjects = async (
@@ -242,6 +253,7 @@ class ProjectService {
 			clearWhenNoProjects = true,
 		}: FetchProjectsParams,
 		options?: Omit<RequestConfig, "url">,
+		scope?: ProjectInitializationScope,
 	): Promise<ProjectListItem[]> => {
 		try {
 			const updatedProjects = await this.updateProjects(
@@ -251,7 +263,9 @@ class ProjectService {
 					collaborationTabKey,
 				},
 				options,
+				scope,
 			)
+			if (scope && !scope.isCurrent()) return updatedProjects
 
 			if (updatedProjects.length === 0) {
 				if (clearWhenNoProjects) {

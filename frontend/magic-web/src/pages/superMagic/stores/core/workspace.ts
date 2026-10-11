@@ -13,6 +13,7 @@ class WorkspaceStore {
 	workspaceStateMap: Map<string, WorkspaceState> = new Map()
 	/** Tracks concurrent workspace list fetches for loading UI */
 	workspaceListFetchInFlight = 0
+	private workspaceListFetchGeneration = 0
 
 	constructor() {
 		makeAutoObservable(this, {}, { autoBind: true })
@@ -26,11 +27,14 @@ class WorkspaceStore {
 		return this.workspaceListFetchInFlight > 0
 	}
 
-	beginWorkspaceListFetch() {
+	beginWorkspaceListFetch(): number {
 		this.workspaceListFetchInFlight++
+		return this.workspaceListFetchGeneration
 	}
 
-	endWorkspaceListFetch() {
+	endWorkspaceListFetch(generation?: number): void {
+		// reset 后忽略旧请求的结束回调，不能提前结束新账号／项目的 loading。
+		if (generation !== undefined && generation !== this.workspaceListFetchGeneration) return
 		this.workspaceListFetchInFlight = Math.max(0, this.workspaceListFetchInFlight - 1)
 	}
 
@@ -132,6 +136,7 @@ class WorkspaceStore {
 	}
 
 	reset() {
+		this.workspaceListFetchGeneration++
 		this.workspaces = []
 		this.selectedWorkspace = null
 		this.workspaceStateMap.clear()
