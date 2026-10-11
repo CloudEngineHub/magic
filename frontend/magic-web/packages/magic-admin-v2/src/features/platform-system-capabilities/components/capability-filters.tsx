@@ -23,11 +23,19 @@ export function createDefaultCapabilityFilterDraft(): CapabilityFilterDraft {
 	return { keyword: "", status: ALL_VALUE }
 }
 
+export function getCapabilityFilterActiveCount(filter: CapabilityFilterDraft) {
+	return Number(Boolean(filter.keyword.trim())) + Number(filter.status !== ALL_VALUE)
+}
+
 export function CapabilityFilters({
+	mobileOpen,
 	onChange,
+	onMobileOpenChange,
 	value,
 }: {
+	mobileOpen?: boolean
 	onChange: (value: CapabilityFilterDraft) => void
+	onMobileOpenChange?: (open: boolean) => void
 	value: CapabilityFilterDraft
 }) {
 	const { t } = useTranslation()
@@ -35,6 +43,9 @@ export function CapabilityFilters({
 	return (
 		<ListFilterPanel
 			applyLabel={t("systemCapabilities.filter.apply")}
+			mobileOpen={mobileOpen}
+			onMobileOpenChange={onMobileOpenChange}
+			showMobileTrigger={false}
 			createDefaultValue={createDefaultCapabilityFilterDraft}
 			onChange={(patch) => onChange({ ...value, ...patch })}
 			onReset={() => onChange(createDefaultCapabilityFilterDraft())}

@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import { CapabilityCardList } from "@magic-admin-v2/features/platform-system-capabilities/components/capability-card-list"
 import { CapabilityConfigDialog } from "@magic-admin-v2/features/platform-system-capabilities/components/capability-config-dialog"
@@ -12,6 +13,7 @@ import { CapabilityListSkeleton } from "@magic-admin-v2/features/platform-system
 import {
 	CapabilityFilters,
 	createDefaultCapabilityFilterDraft,
+	getCapabilityFilterActiveCount,
 } from "@magic-admin-v2/features/platform-system-capabilities/components/capability-filters"
 import { ALL_VALUE } from "@magic-admin-v2/features/platform-system-capabilities/consts"
 import { useUpdateSystemCapabilityMutation } from "@magic-admin-v2/features/platform-system-capabilities/mutations"
@@ -32,6 +34,8 @@ export default function PlatformSystemCapabilitiesPage() {
 	const { t } = useTranslation()
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_EDIT)
 	const [filters, setFilters] = useState(createDefaultCapabilityFilterDraft)
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+	const activeFilterCount = getCapabilityFilterActiveCount(filters)
 	const { keyword, status: statusFilter } = filters
 	const [configTarget, setConfigTarget] = useState<AiPower | null>(null)
 	const listQuery = useSystemCapabilityListQuery()
@@ -88,27 +92,40 @@ export default function PlatformSystemCapabilitiesPage() {
 		<>
 			<ListShell
 				actions={
-					<Button
-						disabled={listQuery.isFetching}
-						onClick={() => listQuery.refetch()}
-						variant="outline"
-					>
-						<RefreshCw
-							aria-hidden="true"
-							className={cn("size-4", listQuery.isFetching && "animate-spin")}
+					<>
+						<PageHeaderFilterButton
+							count={activeFilterCount}
+							label={t("systemCapabilities.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
 						/>
-						{t("common.refresh")}
-					</Button>
+						<PageHeaderActionButton
+							disabled={listQuery.isFetching}
+							onClick={() => listQuery.refetch()}
+							variant="outline"
+						>
+							<RefreshCw
+								aria-hidden="true"
+								className={cn("size-4", listQuery.isFetching && "animate-spin")}
+							/>
+							{t("common.refresh")}
+						</PageHeaderActionButton>
+					</>
 				}
 				description={t("nav.desc.systemCapabilities")}
 				title={t("nav.item.systemCapabilities")}
+				contentHeader={
+					<CapabilityFilters
+						mobileOpen={mobileFilterOpen}
+						onChange={setFilters}
+						onMobileOpenChange={setMobileFilterOpen}
+						value={filters}
+					/>
+				}
 			>
 				{listQuery.isLoading ? (
 					<CapabilityListSkeleton />
 				) : (
 					<div className="space-y-4 pb-6">
-						<CapabilityFilters onChange={setFilters} value={filters} />
-
 						{listQuery.error ? (
 							<div className="rounded-lg border border-border/50 p-4">
 								<EmptyState

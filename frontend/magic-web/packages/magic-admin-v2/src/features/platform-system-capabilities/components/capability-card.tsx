@@ -10,6 +10,7 @@ import {
 	type LucideIcon,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import { Card, CardContent } from "@magic-admin-v2/components/ui/card"
 import { Switch } from "@magic-admin-v2/components/ui/switch"
@@ -73,9 +74,7 @@ export const CapabilityCard = memo(function CapabilityCard({
 						<h2 className="min-w-0 truncate text-base font-semibold">
 							{displayName || t("common.emptyValue")}
 						</h2>
-						<p className="truncate font-mono text-xs text-muted-foreground">
-							{item.code}
-						</p>
+						<CopyableValue className="max-w-full" value={item.code} />
 					</div>
 				</div>
 
