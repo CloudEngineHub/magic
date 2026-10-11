@@ -602,6 +602,17 @@
 	"debug": {
 		"downloadFailed": "下载项目状态失败",
 		"downloadProjectState": "下载当前项目状态",
+		"message": {
+			"close": "关闭",
+			"copyJson": "复制 JSON",
+			"copySandboxId": "复制沙盒 ID",
+			"fullJson": "完整消息 JSON",
+			"sandboxId": "沙盒 ID",
+			"sandboxMissing": "此消息未包含沙盒 ID",
+			"serializeFailed": "无法读取此消息的 JSON",
+			"snapshot": "打开时的消息快照",
+			"title": "消息调试信息"
+		},
 		"title": "Super Magic 调试"
 	},
 	"deletedFile": {

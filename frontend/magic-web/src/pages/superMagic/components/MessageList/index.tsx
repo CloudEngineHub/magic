@@ -50,6 +50,8 @@ import {
 } from "./hooks/useExportSelection"
 import { ExportToolbar } from "./components/ExportToolbar"
 import { ExportPreviewModal } from "./components/ExportPreviewModal"
+import MessageDebugPanel from "./components/MessageDebugPanel"
+import { useMessageDebugPanel } from "./hooks/useMessageDebugPanel"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
@@ -591,6 +593,10 @@ const MessageList = observer(
 
 		const exportLimitReached = exportStore.count >= MAX_EXPORT_COUNT
 		const exportModeActive = enableExport && exportStore.exportMode
+		const messageDebug = useMessageDebugPanel({
+			topicKey: currentTopicKey,
+			enabled: !isShare && !exportModeActive,
+		})
 
 		const exportEnterRequest = useMemoizedFn(() => exportStore.enter())
 		const augmentedMessageListContext = useMemo(
@@ -601,6 +607,7 @@ const MessageList = observer(
 				allowExport: enableExport,
 				exportModeActive,
 				onExportRequest: enableExport ? exportEnterRequest : undefined,
+				onMessageDebugClick: messageDebug.handleNodeClick,
 			}),
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 			[
@@ -620,6 +627,7 @@ const MessageList = observer(
 				enableExport,
 				exportModeActive,
 				exportEnterRequest,
+				messageDebug.handleNodeClick,
 			],
 		)
 
@@ -964,6 +972,12 @@ const MessageList = observer(
 								store={exportStore}
 								turns={exportTurns}
 								title={exportTitle || selectedTopic?.topic_name || "conversation"}
+							/>
+						)}
+						{messageDebug.snapshot && (
+							<MessageDebugPanel
+								snapshot={messageDebug.snapshot}
+								onClose={messageDebug.close}
 							/>
 						)}
 					</div>

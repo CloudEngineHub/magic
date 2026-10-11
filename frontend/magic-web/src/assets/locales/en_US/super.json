@@ -601,6 +601,17 @@
 	"debug": {
 		"downloadFailed": "Failed to download project state",
 		"downloadProjectState": "Download Current Project State",
+		"message": {
+			"close": "Close",
+			"copyJson": "Copy JSON",
+			"copySandboxId": "Copy sandbox ID",
+			"fullJson": "Full message JSON",
+			"sandboxId": "Sandbox ID",
+			"sandboxMissing": "This message has no sandbox ID",
+			"serializeFailed": "Unable to read this message as JSON",
+			"snapshot": "Message snapshot captured when opened",
+			"title": "Message debug information"
+		},
 		"title": "Super Magic Debug"
 	},
 	"deletedFile": {

@@ -1,9 +1,17 @@
 import { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
-import { createContext, type PropsWithChildren, type ReactNode, useContext } from "react"
+import {
+	createContext,
+	type MouseEvent,
+	type PropsWithChildren,
+	type ReactNode,
+	useContext,
+} from "react"
 import defaultProjectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
 
 export interface MessageListContextState {
+	/** 消息正文转交列表级调试入口，不由虚拟消息行持有弹窗状态。 */
+	onMessageDebugClick?: (node: unknown, event: MouseEvent<HTMLDivElement>) => void
 	/** 仅登录的非分享会话解析当前用户的个人文件引用。 */
 	allowUserFileReferences?: boolean
 	/** 是否允许撤回 */
