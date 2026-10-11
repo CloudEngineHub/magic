@@ -4,7 +4,8 @@ import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
 import { useAppliedProviderFilter } from "@magic-admin-v2/features/platform-provider-list/hooks/use-applied-provider-filter"
 import { ProviderAddDialog } from "@magic-admin-v2/features/platform-provider-list/components/provider-add-dialog"
 import { ProviderCategoryTabs } from "@magic-admin-v2/features/platform-provider-list/components/provider-category-controls"
@@ -41,6 +42,7 @@ import {
 import {
 	createDefaultProviderFilterDraft,
 	filterProviders,
+	getProviderFilterActiveCount,
 	getProviderStatusStats,
 	paginateProviders,
 	providerPageSize,
@@ -68,6 +70,7 @@ export default function PlatformProviderListPage() {
 		resolveProviderCategory(selectedCategory, accessibleCategories) ?? providerCategory.llm
 	const currentCategoryAccess = categoryAccess[activeCategory]
 	const [filterDraft, setFilterDraft] = useState(createDefaultProviderFilterDraft)
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
 	const [page, setPage] = useState(1)
 	const [pageSize, setPageSize] = useState(providerPageSize)
 	const [isAddOpen, setIsAddOpen] = useState(false)
@@ -77,6 +80,7 @@ export default function PlatformProviderListPage() {
 	const { pendingIds: statusPendingIds, run: runStatusPending } = useRowPendingIds()
 	const canEditAddCategory = categoryAccess[addCategory]?.canEdit ?? false
 	const appliedFilter = useAppliedProviderFilter(filterDraft)
+	const activeFilterCount = getProviderFilterActiveCount(filterDraft)
 	const listQuery = useProviderListQuery(activeCategory, {
 		enabled: currentCategoryAccess.canView,
 	})
@@ -191,10 +195,10 @@ export default function PlatformProviderListPage() {
 		return (
 			<ListShell
 				actions={
-					<Button onClick={() => listQuery.refetch()} variant="outline">
+					<PageHeaderActionButton onClick={() => listQuery.refetch()} variant="outline">
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
-					</Button>
+					</PageHeaderActionButton>
 				}
 				description={t("providerList.description")}
 				title={t("providerList.title")}
@@ -220,7 +224,12 @@ export default function PlatformProviderListPage() {
 			<ListShell
 				actions={
 					<>
-						<Button
+						<PageHeaderFilterButton
+							count={activeFilterCount}
+							label={t("providerList.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
+						/>
+						<PageHeaderActionButton
 							disabled={listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
@@ -230,9 +239,9 @@ export default function PlatformProviderListPage() {
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
-						</Button>
+						</PageHeaderActionButton>
 						{currentCategoryAccess.canEdit ? (
-							<Button
+							<PageHeaderActionButton
 								onClick={() => {
 									setAddCategory(activeCategory)
 									setIsAddOpen(true)
@@ -240,7 +249,7 @@ export default function PlatformProviderListPage() {
 							>
 								<Plus className="size-4" aria-hidden="true" />
 								{t("providerList.action.add")}
-							</Button>
+							</PageHeaderActionButton>
 						) : null}
 					</>
 				}
@@ -257,9 +266,11 @@ export default function PlatformProviderListPage() {
 					deleting={deleteMutation.isPending}
 					filter={filterDraft}
 					items={pageItems}
+					mobileFilterOpen={mobileFilterOpen}
 					loading={listQuery.isFetching && !listQuery.data}
 					onDelete={handleDelete}
 					onFilterChange={setFilterDraft}
+					onMobileFilterOpenChange={setMobileFilterOpen}
 					onOpenDetail={(provider) => setDetailId(provider.id)}
 					onPageChange={setPage}
 					onPageSizeChange={(nextPageSize) => {

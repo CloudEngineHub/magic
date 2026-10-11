@@ -14,16 +14,16 @@ function useAppliedText(value: string) {
 /**
  * Derives the filter used for client-side provider filtering.
  *
- * Name, alias and provider code are independent text conditions, so each one is
+ * Name, alias and provider ID are independent text conditions, so each one is
  * debounced separately while the select filters apply immediately.
  */
 export function useAppliedProviderFilter(filterDraft: ProviderFilterDraft): ProviderFilterDraft {
 	const name = useAppliedText(filterDraft.name)
 	const alias = useAppliedText(filterDraft.alias)
-	const providerCode = useAppliedText(filterDraft.provider_code)
+	const providerId = useAppliedText(filterDraft.id)
 
 	return useMemo(
-		() => ({ ...filterDraft, name, alias, provider_code: providerCode }),
-		[alias, filterDraft, name, providerCode],
+		() => ({ ...filterDraft, name, alias, id: providerId }),
+		[alias, filterDraft, name, providerId],
 	)
 }

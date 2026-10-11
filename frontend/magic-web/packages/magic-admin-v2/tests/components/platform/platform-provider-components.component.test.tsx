@@ -178,7 +178,7 @@ describe("platform provider components", () => {
 
     renderList({ filter, onFilterChange, onOpenDetail, onStatusChange });
 
-    // Name, alias and provider code are independent fields instead of a field selector.
+    // Name, alias and provider ID are independent fields instead of a field selector.
     fireEvent.change(screen.getByPlaceholderText("providerList.filter.name"), {
       target: { value: "open" },
     });
@@ -187,10 +187,10 @@ describe("platform provider components", () => {
       target: { value: "oa" },
     });
     expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, alias: "oa" });
-    fireEvent.change(screen.getByPlaceholderText("providerList.filter.providerCode"), {
+    fireEvent.change(screen.getByPlaceholderText("providerList.filter.providerId"), {
       target: { value: "code" },
     });
-    expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, provider_code: "code" });
+    expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, id: "code" });
 
     const comboboxes = screen.getAllByRole("combobox");
     fireEvent.click(comboboxes[0]);

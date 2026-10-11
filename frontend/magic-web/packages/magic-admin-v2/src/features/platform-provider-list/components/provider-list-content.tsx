@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { CheckCircle2, Eye, ServerCog, Trash2, X } from "lucide-react"
 import { useMemo, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { DataTable } from "@magic-admin-v2/components/data-table"
 import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
@@ -52,12 +53,14 @@ type ProviderStatusStats = {
 
 export function ProviderListContent({
 	categoryAccess,
+	mobileFilterOpen,
 	filter,
 	items,
 	deleting,
 	loading,
 	onDelete,
 	onFilterChange,
+	onMobileFilterOpenChange,
 	onOpenDetail,
 	onPageChange,
 	onPageSizeChange,
@@ -72,9 +75,11 @@ export function ProviderListContent({
 	deleting: boolean
 	filter: ProviderFilterDraft
 	items: ProviderListItem[]
+	mobileFilterOpen?: boolean
 	loading: boolean
 	onDelete: (provider: ProviderListItem) => Promise<void>
 	onFilterChange: (filter: ProviderFilterDraft) => void
+	onMobileFilterOpenChange?: (open: boolean) => void
 	onOpenDetail: (provider: ProviderListItem) => void
 	onPageChange: (page: number) => void
 	onPageSizeChange: (pageSize: number) => void
@@ -122,7 +127,7 @@ export function ProviderListContent({
 			},
 			{
 				id: "sort",
-				size: 120,
+				size: 140,
 				header: t("providerList.column.sort"),
 				cell: ({ row }) => <span className="text-sm">{row.original.sort ?? 0}</span>,
 			},
@@ -212,6 +217,9 @@ export function ProviderListContent({
 
 			<ListFilterPanel
 				applyLabel={t("providerList.action.applyFilters")}
+				mobileOpen={mobileFilterOpen}
+				onMobileOpenChange={onMobileFilterOpenChange}
+				showMobileTrigger={false}
 				className="mt-5"
 				createDefaultValue={createDefaultProviderFilterDraft}
 				onChange={(patch) => onFilterChange({ ...filter, ...patch })}
@@ -287,13 +295,13 @@ function ProviderFilterFields({
 					value={value.alias}
 				/>
 			</FilterControlField>
-			<FilterControlField label={t("providerList.filter.providerCode")}>
+			<FilterControlField label={t("providerList.filter.providerId")}>
 				<FilterSearchInput
-					aria-label={t("providerList.filter.providerCode")}
+					aria-label={t("providerList.filter.providerId")}
 					clearLabel={t("providerList.action.clearSearch")}
-					onValueChange={(provider_code) => onChange({ provider_code })}
-					placeholder={t("providerList.filter.providerCode")}
-					value={value.provider_code}
+					onValueChange={(id) => onChange({ id })}
+					placeholder={t("providerList.filter.providerId")}
+					value={value.id}
 				/>
 			</FilterControlField>
 			<FilterControlField label={t("providerList.filter.status")}>
@@ -394,10 +402,14 @@ function ProviderDateCell({ value }: { value?: string }) {
 }
 
 function ProviderIdCell({ value }: { value: string }) {
+	const { t } = useTranslation()
+
 	return (
-		<span className="block truncate font-mono text-xs text-muted-foreground" title={value}>
-			{value}
-		</span>
+		<CopyableValue
+			className="text-left hover:text-muted-foreground"
+			copyLabel={t("providerList.action.copyId")}
+			value={value}
+		/>
 	)
 }
 

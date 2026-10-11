@@ -10,7 +10,7 @@ export const providerPageSize = 20;
 export type ProviderFilterDraft = {
   alias: string;
   name: string;
-  provider_code: string;
+  id: string;
   provider_type: string;
   status: string;
 };
@@ -19,10 +19,20 @@ export function createDefaultProviderFilterDraft(): ProviderFilterDraft {
   return {
     alias: "",
     name: "",
-    provider_code: "",
+    id: "",
     provider_type: providerSelectAllValue,
     status: providerSelectAllValue,
   };
+}
+
+export function getProviderFilterActiveCount(filter: ProviderFilterDraft) {
+  return (
+    Number(Boolean(filter.alias.trim())) +
+    Number(Boolean(filter.name.trim())) +
+    Number(Boolean(filter.id.trim())) +
+    Number(filter.provider_type !== providerSelectAllValue) +
+    Number(filter.status !== providerSelectAllValue)
+  );
 }
 
 /** 官方服务商优先，其次按启用状态和升序排序值展示列表。 */
@@ -42,7 +52,7 @@ export function filterProviders(items: ProviderListItem[], filter: ProviderFilte
   const searchConditions = [
     [filter.name, (item: ProviderListItem) => item.name],
     [filter.alias, (item: ProviderListItem) => item.alias],
-    [filter.provider_code, (item: ProviderListItem) => item.provider_code],
+    [filter.id, (item: ProviderListItem) => item.id],
   ].filter(([value]) => typeof value === "string" && Boolean(value.trim())) as Array<[
     string,
     (item: ProviderListItem) => unknown,
