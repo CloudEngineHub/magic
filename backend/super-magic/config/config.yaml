@@ -148,59 +148,58 @@ context_window:
     context_usage_ratio: 0.9
   tiers:
     # 版本按整数分段比较：4=4.0，4.10>4.6；version_lt 是严格小于。
-    # 配置版本必须带 v 前缀，防止全局配置器把 "4.10" 转成浮点数 4.1 而丢失版本信息。
     # 模式同时接受 claude-sonnet-4.5、claude-4.5-sonnet 和官方 4-5 写法，八位日期不进入版本。
     - name: claude_sonnet_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [claude, sonnet]
-      version_lt: "v4.6"
+      version_lt: "4.6"
       version_patterns: &claude_version_patterns
         - 'claude[-_ ]+(?:sonnet|opus|haiku)[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+|-[0-9]{1,2}(?![0-9]))*)(?![0-9.])'
         - 'claude[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+|-[0-9]{1,2}(?![0-9]))*)[-_ ]+(?:sonnet|opus|haiku)(?:[-_ ]|$)'
     - name: claude_opus_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [claude, opus]
-      version_lt: "v4.6"
+      version_lt: "4.6"
       version_patterns: *claude_version_patterns
     - name: claude_haiku_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [claude, haiku]
-      version_lt: "v5.5"
+      version_lt: "5.5"
       version_patterns: *claude_version_patterns
     - name: glm_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [glm]
-      version_lt: "v5.2"
+      version_lt: "5.2"
       version_patterns:
         - 'glm[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])(?![-_ ]?(?:v|vision|image|audio)(?:[-_ ]|$))'
     - name: minimax_m_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [minimax]
-      version_lt: "v3.0"
+      version_lt: "3.0"
       version_patterns:
         - 'minimax[-_ ]+m(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
     - name: kimi_k_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [kimi]
-      version_lt: "v3.0"
+      version_lt: "3.0"
       version_patterns:
         - 'kimi[-_ ]+k(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
     - name: mimo_flash_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [mimo, flash]
-      version_lt: "v2.5"
+      version_lt: "2.5"
       version_patterns: &mimo_version_patterns
         - 'mimo[-_ ]+v(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
     - name: deepseek_v_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [deepseek]
-      version_lt: "v4.0"
+      version_lt: "4.0"
       version_patterns:
         - 'deepseek[-_ ]+v(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
     - name: doubao_seed_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [doubao, seed]
-      version_lt: "v2.0"
+      version_lt: "2.0"
       version_patterns: &doubao_version_patterns
         - 'doubao[-_ ]+seed[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
 
@@ -210,26 +209,26 @@ context_window:
     - name: gemini_pro_cost_limit
       user_facing_max_context_tokens: 200000
       model_keywords: [gemini, pro]
-      versions: ["v3", "v3.1"]
+      versions: ["3", "3.1"]
       version_patterns:
         - 'gemini[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
     - name: gpt_cost_limit
       user_facing_max_context_tokens: 256000
       model_keywords: [gpt]
-      versions: ["v5.4", "v5.5"]
+      versions: ["5.4", "5.5"]
       version_patterns:
         - 'gpt[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
     # Qwen 已知 Plus／Flash 在 256K 以上存在阶梯价，地域与快照影响实际费率。
     - name: qwen_plus_cost_limit
       user_facing_max_context_tokens: 256000
       model_keywords: [qwen, plus]
-      versions: ["v3.5", "v3.6", "v3.7"]
+      versions: ["3.5", "3.6", "3.7"]
       version_patterns: &qwen_version_patterns
         - 'qwen[-_ ]*(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
     - name: qwen_flash_cost_limit
       user_facing_max_context_tokens: 256000
       model_keywords: [qwen, flash]
-      versions: ["v3.5"]
+      versions: ["3.5"]
       version_patterns: *qwen_version_patterns
     - name: qwen_plus_alias_cost_limit
       user_facing_max_context_tokens: 256000
@@ -241,33 +240,33 @@ context_window:
     - name: qwen_max_legacy
       user_facing_max_context_tokens: 200000
       model_keywords: [qwen, max]
-      versions: ["v3"]
+      versions: ["3"]
       version_patterns: *qwen_version_patterns
     - name: qwen_coder_cost_pending
       user_facing_max_context_tokens: 200000
       model_keywords: [qwen, coder, plus]
-      versions: ["v3"]
+      versions: ["3"]
       version_patterns: *qwen_version_patterns
     - name: step_flash_capacity_pending
       user_facing_max_context_tokens: 200000
       model_keywords: [step, flash]
-      versions: ["v3.5", "v3.7"]
+      versions: ["3.5", "3.7"]
       version_patterns:
         - 'step[-_ ]+(?P<version>[0-9]+(?:\.[0-9]+)*)(?![0-9.])'
     - name: mimo_cost_pending
       user_facing_max_context_tokens: 200000
       model_keywords: [mimo]
-      versions: ["v2.5"]
+      versions: ["2.5"]
       version_patterns: *mimo_version_patterns
     - name: mimo_pro_cost_pending
       user_facing_max_context_tokens: 200000
       model_keywords: [mimo, pro]
-      versions: ["v2"]
+      versions: ["2"]
       version_patterns: *mimo_version_patterns
     - name: doubao_seed_capacity_pending
       user_facing_max_context_tokens: 256000
       model_keywords: [doubao, seed]
-      versions: ["v2.0"]
+      versions: ["2.0"]
       version_patterns: *doubao_version_patterns
 
 # 自定义默认模型。没有管理后台模型列表时，auto 必须能在 providers.*.models 中解析到。

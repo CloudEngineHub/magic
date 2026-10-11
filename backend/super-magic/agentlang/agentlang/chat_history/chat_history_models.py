@@ -52,9 +52,9 @@ class ContextWindowRule:
 
 def _parse_model_version(value: str) -> tuple[int, ...]:
     """按整数分段比较；4 与 4.0 等价，4.10 大于 4.6，不能使用浮点数。"""
-    if not re.fullmatch(r"v?[0-9]+(?:[.-][0-9]+)*", value):
+    if not re.fullmatch(r"[0-9]+(?:[.-][0-9]+)*", value):
         raise ValueError(f"Invalid model version: {value}")
-    parts = [int(part) for part in re.split(r"[.-]", value.removeprefix("v"))]
+    parts = [int(part) for part in re.split(r"[.-]", value)]
     while len(parts) > 1 and parts[-1] == 0:
         parts.pop()
     return tuple(parts)
