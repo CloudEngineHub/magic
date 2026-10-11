@@ -1,4 +1,3 @@
-import type { ReactNode } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import { AlertCircle, type LucideIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -36,8 +35,9 @@ type MarketListPanelProps<TData> = {
 	queryError: ApiError | null
 	showCategoryFilter?: boolean
 	showPackageName: boolean
+	mobileOpen?: boolean
+	onMobileOpenChange?: (open: boolean) => void
 	stickyLeftColumnId?: string
-	toolbarActions?: ReactNode
 	total: number
 }
 
@@ -64,8 +64,9 @@ export function MarketListPanel<TData>({
 	queryError,
 	showCategoryFilter,
 	showPackageName,
+	mobileOpen,
+	onMobileOpenChange,
 	stickyLeftColumnId,
-	toolbarActions,
 	total,
 }: MarketListPanelProps<TData>) {
 	const { t } = useTranslation()
@@ -82,7 +83,8 @@ export function MarketListPanel<TData>({
 				onDraftChange={onDraftChange}
 				showCategoryFilter={showCategoryFilter}
 				showPackageName={showPackageName}
-				toolbarActions={toolbarActions}
+				mobileOpen={mobileOpen}
+				onMobileOpenChange={onMobileOpenChange}
 			/>
 
 			{queryError ? (

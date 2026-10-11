@@ -1,8 +1,10 @@
 import { RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ListShell } from "@magic-admin-v2/components/list-shell";
-import { Button } from "@magic-admin-v2/components/ui/button";
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs";
 import { EmployeeMarketPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/employee-market-panel";
 import { SkillMarketPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/skill-market-panel";
@@ -21,6 +23,12 @@ export default function PlatformOfficialMarketplacePage() {
   const [selectedTab, setSelectedTab] = useState<MarketKind>("employee");
   const [activeTabFetching, setActiveTabFetching] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
+  const [tabActions, setTabActions] = useState<ReactNode>(null);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [filterCounts, setFilterCounts] = useState<Record<MarketKind, number>>({
+    employee: 0,
+    skill: 0,
+  });
   const {
     availableTabs,
     canEditEmployee,
@@ -33,57 +41,87 @@ export default function PlatformOfficialMarketplacePage() {
   const handleActiveFetchingChange = useCallback((isFetching: boolean) => {
     setActiveTabFetching(isFetching);
   }, []);
+  const handleTabChange = useCallback((value: string) => {
+    setMobileFilterOpen(false);
+    setTabActions(null);
+    setSelectedTab(value as MarketKind);
+  }, []);
+  const handleFilterCountChange = useCallback((kind: MarketKind, count: number) => {
+    setFilterCounts((previous) =>
+      previous[kind] === count ? previous : { ...previous, [kind]: count },
+    );
+  }, []);
 
   return (
     <ListShell
       actions={
-        <Button
-          disabled={!activeTab || activeTabFetching}
-          onClick={() => setRefreshToken((previous) => previous + 1)}
-          variant="outline"
-        >
-          <RefreshCw
-            className={cn("size-4", activeTabFetching && "animate-spin")}
-            aria-hidden="true"
-          />
-          {t("common.refresh")}
-        </Button>
+        <>
+          {activeTab ? (
+            <PageHeaderFilterButton
+              count={filterCounts[activeTab]}
+              label={t("officialMarketplace.filter.title")}
+              onClick={() => setMobileFilterOpen(true)}
+            />
+          ) : null}
+          <PageHeaderActionButton
+            disabled={!activeTab || activeTabFetching}
+            onClick={() => setRefreshToken((previous) => previous + 1)}
+            variant="outline"
+          >
+            <RefreshCw
+              className={cn("size-4", activeTabFetching && "animate-spin")}
+              aria-hidden="true"
+            />
+            {t("common.refresh")}
+          </PageHeaderActionButton>
+        </>
       }
       description={t("officialMarketplace.description")}
       title={t("officialMarketplace.title")}
     >
       <Tabs
         value={activeTab ?? ""}
-        onValueChange={(value) => setSelectedTab(value as MarketKind)}
+        onValueChange={handleTabChange}
       >
-        <TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
           {canViewEmployee ? (
             <TabsTrigger value="employee">{t("officialMarketplace.tab.employee")}</TabsTrigger>
           ) : null}
           {canViewSkill ? (
             <TabsTrigger value="skill">{t("officialMarketplace.tab.skill")}</TabsTrigger>
           ) : null}
-        </TabsList>
+          </TabsList>
+          {tabActions}
+        </div>
 
         {canViewEmployee ? (
-          <TabsContent value="employee" className="mt-5">
+          <TabsContent forceMount value="employee" className="mt-5 data-[state=inactive]:hidden">
             <EmployeeMarketPanel
               canEdit={canEditEmployee}
               isActive={activeTab === "employee"}
               onFetchingChange={handleActiveFetchingChange}
               onInitialLoadingChange={handleInitialLoadingChange}
+              onFilterCountChange={(count) => handleFilterCountChange("employee", count)}
+              onMobileFilterOpenChange={setMobileFilterOpen}
+              mobileFilterOpen={mobileFilterOpen}
+              onToolbarActionsChange={setTabActions}
               refreshToken={refreshToken}
             />
           </TabsContent>
         ) : null}
 
         {canViewSkill ? (
-          <TabsContent value="skill" className="mt-5">
+          <TabsContent forceMount value="skill" className="mt-5 data-[state=inactive]:hidden">
             <SkillMarketPanel
               canEdit={canEditSkill}
               isActive={activeTab === "skill"}
               onFetchingChange={handleActiveFetchingChange}
               onInitialLoadingChange={handleInitialLoadingChange}
+              onFilterCountChange={(count) => handleFilterCountChange("skill", count)}
+              onMobileFilterOpenChange={setMobileFilterOpen}
+              mobileFilterOpen={mobileFilterOpen}
+              onToolbarActionsChange={setTabActions}
               refreshToken={refreshToken}
             />
           </TabsContent>

@@ -54,6 +54,19 @@ export function createDefaultFilterDraft(): MarketFilterDraft {
 	}
 }
 
+export function countActiveMarketFilters(draft: MarketFilterDraft): number {
+	return [
+		draft.category_ids.length > 0,
+		draft.code.trim().length > 0,
+		draft.name_i18n.trim().length > 0,
+		draft.package_name.trim().length > 0,
+		draft.organization_code.trim().length > 0,
+		draft.publish_status !== marketDefaultPublishStatus,
+		draft.publisher_type !== marketSelectAllValue,
+		Boolean(draft.start_time || draft.end_time || draft.time_range),
+	].filter(Boolean).length
+}
+
 export function getMarketSearchParams(
 	draft: MarketFilterDraft,
 	kind: MarketKind,

@@ -2,6 +2,7 @@
 	"action.copy": "复制",
 	"action.copyEmployeeCode": "复制员工编码",
 	"action.copyPackageName": "复制包名",
+	"action.copySkillCode": "复制 Skill 编码",
 	"action.reset": "重置",
 	"category.action.create": "新增分类",
 	"category.action.deleteAria": "删除分类：{{name}}",

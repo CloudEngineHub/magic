@@ -1,4 +1,3 @@
-import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
 import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
@@ -42,7 +41,8 @@ type MarketFiltersProps = {
 	onDraftChange: (value: MarketDraftUpdater) => void
 	showCategoryFilter?: boolean
 	showPackageName: boolean
-	toolbarActions?: ReactNode
+	mobileOpen?: boolean
+	onMobileOpenChange?: (open: boolean) => void
 }
 
 /** Shared search area for both marketplace tabs. */
@@ -55,17 +55,20 @@ export function MarketFilters({
 	onDraftChange,
 	showCategoryFilter = false,
 	showPackageName,
-	toolbarActions,
+	mobileOpen,
+	onMobileOpenChange,
 }: MarketFiltersProps) {
 	const { t } = useTranslation()
 
 	return (
 		<ListFilterPanel
-			actions={toolbarActions}
 			applyLabel={t("officialMarketplace.filter.apply")}
 			createDefaultValue={createDefaultFilterDraft}
 			onChange={(patch) => onDraftChange((previous) => ({ ...previous, ...patch }))}
 			onReset={() => onDraftChange(createDefaultFilterDraft())}
+			mobileOpen={mobileOpen}
+			onMobileOpenChange={onMobileOpenChange}
+			showMobileTrigger={false}
 			renderFields={(props) => (
 				<MarketFilterFields
 					{...props}

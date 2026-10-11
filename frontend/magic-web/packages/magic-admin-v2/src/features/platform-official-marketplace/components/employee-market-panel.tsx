@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table"
+import type { ReactNode } from "react"
 import { Bot, Tags } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -32,6 +33,7 @@ import type {
 import {
 	areSameCategoryIds,
 	createDefaultFilterDraft,
+	countActiveMarketFilters,
 	getAgentMarketCategoryIds,
 	getAgentMarketCategoryLabels,
 	getApiErrorMessage,
@@ -50,6 +52,10 @@ type EmployeeMarketPanelProps = {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
 	onInitialLoadingChange: (isLoading: boolean) => void
+	onFilterCountChange: (count: number) => void
+	onMobileFilterOpenChange: (open: boolean) => void
+	mobileFilterOpen: boolean
+	onToolbarActionsChange: (actions: ReactNode) => void
 	refreshToken: number
 }
 
@@ -59,6 +65,10 @@ export function EmployeeMarketPanel({
 	isActive,
 	onFetchingChange,
 	onInitialLoadingChange,
+	onFilterCountChange,
+	onMobileFilterOpenChange,
+	mobileFilterOpen,
+	onToolbarActionsChange,
 	refreshToken,
 }: EmployeeMarketPanelProps) {
 	const { t } = useTranslation()
@@ -233,6 +243,28 @@ export function EmployeeMarketPanel({
 	}, [isActive, isInitialLoading, onInitialLoadingChange])
 
 	useEffect(() => {
+		if (isActive) onFilterCountChange(countActiveMarketFilters(filterDraft))
+	}, [countActiveMarketFilters, filterDraft, isActive, onFilterCountChange])
+
+	useEffect(() => {
+		if (!isActive) return
+
+		onToolbarActionsChange(
+			<Button
+				aria-label={t("officialMarketplace.category.manageTitle")}
+				className="h-9 w-9 px-0 md:w-auto md:px-3"
+				onClick={() => setCategoryManagerOpen(true)}
+				variant="outline"
+			>
+				<Tags className="size-4" aria-hidden="true" />
+				<span className="hidden md:inline">
+					{t("officialMarketplace.category.manageButton")}
+				</span>
+			</Button>,
+		)
+	}, [isActive, onToolbarActionsChange, t])
+
+	useEffect(() => {
 		if (isActive) onFetchingChange(query.isFetching)
 	}, [isActive, onFetchingChange, query.isFetching])
 
@@ -259,6 +291,8 @@ export function EmployeeMarketPanel({
 				kind="employee"
 				minWidth={2480}
 				onDraftChange={setFilterDraft}
+				mobileOpen={isActive && mobileFilterOpen}
+				onMobileOpenChange={onMobileFilterOpenChange}
 				onPageChange={setPage}
 				page={page}
 				queryError={query.error as ApiError | null}
@@ -267,19 +301,6 @@ export function EmployeeMarketPanel({
 				showCategoryFilter
 				showPackageName={false}
 				stickyLeftColumnId="name"
-				toolbarActions={
-					<Button
-						aria-label={t("officialMarketplace.category.manageTitle")}
-						className="h-9 w-9 px-0 md:w-auto md:px-3"
-						onClick={() => setCategoryManagerOpen(true)}
-						variant="outline"
-					>
-						<Tags className="size-4" aria-hidden="true" />
-						<span className="hidden md:inline">
-							{t("officialMarketplace.category.manageButton")}
-						</span>
-					</Button>
-				}
 				total={query.data?.total ?? 0}
 			/>
 
