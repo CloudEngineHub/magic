@@ -42,11 +42,17 @@ import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 export function SkillReviewPanel({
 	isActive,
 	onFetchingChange,
+	onFilterCountChange,
+	onMobileFilterOpenChange,
+	mobileFilterOpen,
 	refreshToken,
 	variant,
 }: {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
+	onFilterCountChange: (count: number) => void
+	onMobileFilterOpenChange: (open: boolean) => void
+	mobileFilterOpen: boolean
 	refreshToken: number
 	variant: PublishReviewVariant
 }) {
@@ -60,12 +66,11 @@ export function SkillReviewPanel({
 		page,
 		pageSize,
 		params,
-		setDebouncedField,
 		setFilterDraft,
 		setPage,
 		setPageSize,
 	} = useListQueryParams({
-		debounceFields: ["search_value"],
+		debounceFields: ["package_name", "skill_name", "version"],
 		initialDraft: () => createDefaultFilterDraft("skill", variant),
 		toParams: toSkillReviewParams,
 	})
@@ -94,6 +99,7 @@ export function SkillReviewPanel({
 						fallbackIcon={<Sparkles className="size-4" aria-hidden="true" />}
 						name={getLocalizedText(row.original.name_i18n, language)}
 						secondary={`${t("publishReview.column.packageName")}: ${row.original.package_name || t("common.emptyValue")}`}
+						secondaryCopyValue={row.original.package_name || undefined}
 					/>
 				),
 			},
@@ -160,9 +166,11 @@ export function SkillReviewPanel({
 				kind="skill"
 				minWidth={1640}
 				onDraftChange={setFilterDraft}
+				onFilterCountChange={onFilterCountChange}
+				onMobileFilterOpenChange={onMobileFilterOpenChange}
+				mobileFilterOpen={isActive && mobileFilterOpen}
 				onPageChange={setPage}
 				onPageSizeChange={setPageSize}
-				onSearchValueChange={(value) => setDebouncedField("search_value", value)}
 				page={page}
 				pageSize={pageSize}
 				queryError={query.error as ApiError | null}

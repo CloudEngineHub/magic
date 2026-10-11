@@ -44,11 +44,17 @@ import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 export function EmployeeReviewPanel({
 	isActive,
 	onFetchingChange,
+	onFilterCountChange,
+	onMobileFilterOpenChange,
+	mobileFilterOpen,
 	refreshToken,
 	variant,
 }: {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
+	onFilterCountChange: (count: number) => void
+	onMobileFilterOpenChange: (open: boolean) => void
+	mobileFilterOpen: boolean
 	refreshToken: number
 	variant: PublishReviewVariant
 }) {
@@ -62,12 +68,11 @@ export function EmployeeReviewPanel({
 		page,
 		pageSize,
 		params,
-		setDebouncedField,
 		setFilterDraft,
 		setPage,
 		setPageSize,
 	} = useListQueryParams({
-		debounceFields: ["search_value"],
+		debounceFields: ["name_i18n", "organization_code", "version"],
 		initialDraft: () => createDefaultFilterDraft("employee", variant),
 		toParams: toAgentReviewParams,
 	})
@@ -91,13 +96,18 @@ export function EmployeeReviewPanel({
 				id: "name",
 				size: 260,
 				header: t("publishReview.column.employeeName"),
-				cell: ({ row }) => (
-					<NameCell
-						fallbackIcon={<Bot className="size-4" aria-hidden="true" />}
-						name={getLocalizedText(row.original.name_i18n, language)}
-						secondary={`${t("publishReview.column.employeeCode")}: ${row.original.code || t("common.emptyValue")}`}
-					/>
-				),
+				cell: ({ row }) => {
+					const name = getLocalizedText(row.original.name_i18n, language)
+
+					return (
+						<NameCell
+							copyValue={name === "-" ? undefined : name}
+							fallbackIcon={<Bot className="size-4" aria-hidden="true" />}
+							name={name}
+							secondary={`${t("publishReview.column.employeeCode")}: ${row.original.code || t("common.emptyValue")}`}
+						/>
+					)
+				},
 			},
 			{
 				id: "organization",
@@ -178,9 +188,11 @@ export function EmployeeReviewPanel({
 				kind="employee"
 				minWidth={1960}
 				onDraftChange={setFilterDraft}
+				onFilterCountChange={onFilterCountChange}
+				onMobileFilterOpenChange={onMobileFilterOpenChange}
+				mobileFilterOpen={isActive && mobileFilterOpen}
 				onPageChange={setPage}
 				onPageSizeChange={setPageSize}
-				onSearchValueChange={(value) => setDebouncedField("search_value", value)}
 				page={page}
 				pageSize={pageSize}
 				queryError={query.error as ApiError | null}

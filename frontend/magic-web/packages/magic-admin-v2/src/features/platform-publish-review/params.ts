@@ -43,6 +43,31 @@ export function createDefaultFilterDraft(
 	}
 }
 
+export function countActiveReviewFilters(
+	draft: PublishReviewFilterDraft,
+	kind: PublishReviewKind,
+): number {
+	const kindSpecificValues =
+		kind === "employee"
+			? [draft.name_i18n, draft.organization_code]
+			: [
+					draft.package_name,
+					draft.skill_name,
+					draft.source_type === publishReviewSelectAllValue ? "" : draft.source_type,
+				]
+
+	return [
+		...kindSpecificValues,
+		draft.version,
+		draft.review_status === publishReviewSelectAllValue ? "" : draft.review_status,
+		draft.publish_status === publishReviewSelectAllValue ? "" : draft.publish_status,
+		draft.publish_target_type === publishReviewSelectAllValue
+			? ""
+			: draft.publish_target_type,
+		draft.start_time || draft.end_time || draft.time_range ? "active" : "",
+	].filter((value) => typeof value === "string" && value.trim().length > 0).length
+}
+
 export function toAgentReviewParams(
 	draft: PublishReviewFilterDraft,
 	page: number,

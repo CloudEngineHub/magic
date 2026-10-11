@@ -1,22 +1,19 @@
 import type { ColumnDef } from "@tanstack/react-table"
+import { useEffect } from "react"
 import { AlertCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListFilterPanel } from "@magic-admin-v2/components/list-filter-panel"
-import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
-import { FieldSearchControl } from "@magic-admin-v2/components/field-search-control"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import {
 	type PublishReviewFilterDraft,
 	type PublishReviewKind,
-	type PublishReviewSearchField,
 	type PublishReviewVariant,
 } from "@magic-admin-v2/features/platform-publish-review/types"
 import {
+	countActiveReviewFilters,
 	createDefaultFilterDraft,
-	getSearchFieldOptions,
-	getSearchFieldPlaceholder,
 	type ReviewDraftUpdater,
 } from "@magic-admin-v2/features/platform-publish-review/params"
 import { AdvancedFilterControls } from "@magic-admin-v2/features/platform-publish-review/components/review-filters"
@@ -35,9 +32,11 @@ export function ReviewListPanel<TData>({
 	onDraftChange,
 	onPageChange,
 	onPageSizeChange,
-	onSearchValueChange,
 	page,
 	pageSize,
+	mobileFilterOpen,
+	onMobileFilterOpenChange,
+	onFilterCountChange,
 	queryError,
 	total,
 	variant,
@@ -54,14 +53,20 @@ export function ReviewListPanel<TData>({
 	onDraftChange: (value: ReviewDraftUpdater) => void
 	onPageChange: (page: number) => void
 	onPageSizeChange: (pageSize: number) => void
-	onSearchValueChange: (value: string) => void
 	page: number
 	pageSize: number
+	mobileFilterOpen: boolean
+	onMobileFilterOpenChange: (open: boolean) => void
+	onFilterCountChange: (count: number) => void
 	queryError: ApiError | null
 	total: number
 	variant: PublishReviewVariant
 }) {
 	const { t } = useTranslation()
+
+	useEffect(() => {
+		onFilterCountChange(countActiveReviewFilters(filterDraft, kind))
+	}, [filterDraft, kind, onFilterCountChange])
 
 	return (
 		<div className="space-y-4">
@@ -70,34 +75,11 @@ export function ReviewListPanel<TData>({
 				createDefaultValue={() => createDefaultFilterDraft(kind, variant)}
 				onChange={(patch) => onDraftChange((previous) => ({ ...previous, ...patch }))}
 				onReset={() => onDraftChange(createDefaultFilterDraft(kind, variant))}
-				renderFields={({ layout, onChange, value }) => (
-					<>
-						<FilterControlField
-							className="w-full"
-							label={t("publishReview.filter.searchCondition")}
-						>
-							<FieldSearchControl<PublishReviewSearchField>
-								ariaLabel={t("publishReview.filter.searchField")}
-								clearLabel={t("common.clear")}
-								inputValue={value.search_value}
-								onInputChange={(nextValue) => {
-									if (layout === "grid") onSearchValueChange(nextValue)
-									else onChange({ search_value: nextValue })
-								}}
-								onValueChange={(nextValue) => onChange({ search_field: nextValue })}
-								options={getSearchFieldOptions(kind, t, variant)}
-								placeholder={getSearchFieldPlaceholder(value.search_field, kind, t)}
-								value={value.search_field}
-							/>
-						</FilterControlField>
-						<AdvancedFilterControls
-							kind={kind}
-							layout={layout}
-							onChange={onChange}
-							value={value}
-							variant={variant}
-						/>
-					</>
+				mobileOpen={mobileFilterOpen}
+				onMobileOpenChange={onMobileFilterOpenChange}
+				showMobileTrigger={false}
+				renderFields={(props) => (
+					<AdvancedFilterControls {...props} kind={kind} variant={variant} />
 				)}
 				resetLabel={t("publishReview.action.reset")}
 				title={t("publishReview.filter.title")}

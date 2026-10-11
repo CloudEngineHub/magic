@@ -13,9 +13,9 @@ import {
 } from "@magic-admin-v2/features/platform-publish-review/formatters"
 import type { PublishReviewAction } from "@magic-admin-v2/features/platform-publish-review/types"
 import {
+	CopyableTableText,
 	PublishTargetCell,
 	StatusBadge,
-	TableText,
 } from "@magic-admin-v2/features/platform-publish-review/components/review-cells"
 
 export function createReviewVersionColumn<TRecord extends ReviewRecordBase>({
@@ -27,7 +27,7 @@ export function createReviewVersionColumn<TRecord extends ReviewRecordBase>({
 		id: "version",
 		size: 120,
 		header: t("publishReview.column.version"),
-		cell: ({ row }) => <TableText value={row.original.version} />,
+		cell: ({ row }) => <CopyableTableText value={row.original.version} />,
 	}
 }
 

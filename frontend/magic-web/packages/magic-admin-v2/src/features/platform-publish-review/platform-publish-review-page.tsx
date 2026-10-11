@@ -2,7 +2,8 @@ import { RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import { EmployeeReviewPanel } from "@magic-admin-v2/features/platform-publish-review/components/employee-review-panel"
@@ -43,8 +44,22 @@ export default function PlatformPublishReviewPage({
 	const [activeTab, setActiveTab] = useState<PublishReviewKind>("employee")
 	const [activeTabFetching, setActiveTabFetching] = useState(false)
 	const [refreshToken, setRefreshToken] = useState(0)
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+	const [filterCounts, setFilterCounts] = useState<Record<PublishReviewKind, number>>({
+		employee: 0,
+		skill: 0,
+	})
 	const handleActiveFetchingChange = useCallback((isFetching: boolean) => {
 		setActiveTabFetching(isFetching)
+	}, [])
+	const handleTabChange = useCallback((value: string) => {
+		setMobileFilterOpen(false)
+		setActiveTab(value as PublishReviewKind)
+	}, [])
+	const handleFilterCountChange = useCallback((kind: PublishReviewKind, count: number) => {
+		setFilterCounts((previous) =>
+			previous[kind] === count ? previous : { ...previous, [kind]: count },
+		)
 	}, [])
 
 	useEffect(() => {
@@ -59,17 +74,26 @@ export default function PlatformPublishReviewPage({
 	return (
 		<ListShell
 			actions={
-				<Button
-					disabled={activeTabFetching}
-					onClick={() => setRefreshToken((previous) => previous + 1)}
-					variant="outline"
-				>
-					<RefreshCw
-						className={cn("size-4", activeTabFetching && "animate-spin")}
-						aria-hidden="true"
-					/>
-					{t("common.refresh")}
-				</Button>
+				<>
+					{canViewEmployeeReview || canViewSkillReview ? (
+						<PageHeaderFilterButton
+							count={filterCounts[activeTab]}
+							label={t("publishReview.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
+						/>
+					) : null}
+					<PageHeaderActionButton
+						disabled={activeTabFetching}
+						onClick={() => setRefreshToken((previous) => previous + 1)}
+						variant="outline"
+					>
+						<RefreshCw
+							className={cn("size-4", activeTabFetching && "animate-spin")}
+							aria-hidden="true"
+						/>
+						{t("common.refresh")}
+					</PageHeaderActionButton>
+				</>
 			}
 			description={t(
 				variant === "internal"
@@ -82,7 +106,7 @@ export default function PlatformPublishReviewPage({
 		>
 			<Tabs
 				value={activeTab}
-				onValueChange={(value) => setActiveTab(value as PublishReviewKind)}
+				onValueChange={handleTabChange}
 			>
 				<TabsList>
 					{canViewEmployeeReview ? (
@@ -95,20 +119,26 @@ export default function PlatformPublishReviewPage({
 					) : null}
 				</TabsList>
 				{canViewEmployeeReview ? (
-					<TabsContent value="employee" className="mt-5">
+					<TabsContent forceMount value="employee" className="mt-5 data-[state=inactive]:hidden">
 						<EmployeeReviewPanel
 							isActive={activeTab === "employee"}
 							onFetchingChange={handleActiveFetchingChange}
+							onFilterCountChange={(count) => handleFilterCountChange("employee", count)}
+							onMobileFilterOpenChange={setMobileFilterOpen}
+							mobileFilterOpen={mobileFilterOpen}
 							refreshToken={refreshToken}
 							variant={variant}
 						/>
 					</TabsContent>
 				) : null}
 				{canViewSkillReview ? (
-					<TabsContent value="skill" className="mt-5">
+					<TabsContent forceMount value="skill" className="mt-5 data-[state=inactive]:hidden">
 						<SkillReviewPanel
 							isActive={activeTab === "skill"}
 							onFetchingChange={handleActiveFetchingChange}
+							onFilterCountChange={(count) => handleFilterCountChange("skill", count)}
+							onMobileFilterOpenChange={setMobileFilterOpen}
+							mobileFilterOpen={mobileFilterOpen}
 							refreshToken={refreshToken}
 							variant={variant}
 						/>
