@@ -28,7 +28,9 @@ import {
 
 type ModelListFiltersProps = {
 	modelTypeOptions: Array<FilterOption<ProviderModelType>>
+	mobileOpen?: boolean
 	onChange: Dispatch<SetStateAction<ModelListFilterDraft>>
+	onMobileOpenChange?: (open: boolean) => void
 	/** The model type filter is hidden for categories that only contain a single type. */
 	showModelTypes: boolean
 	value: ModelListFilterDraft
@@ -36,7 +38,9 @@ type ModelListFiltersProps = {
 
 export function ModelListFilters({
 	modelTypeOptions,
+	mobileOpen,
 	onChange,
+	onMobileOpenChange,
 	showModelTypes,
 	value,
 }: ModelListFiltersProps) {
@@ -45,6 +49,9 @@ export function ModelListFilters({
 	return (
 		<ListFilterPanel
 			applyLabel={t("modelList.action.applyFilters")}
+			mobileOpen={mobileOpen}
+			onMobileOpenChange={onMobileOpenChange}
+			showMobileTrigger={false}
 			createDefaultValue={createDefaultFilterDraft}
 			onChange={(patch) => onChange((previous) => ({ ...previous, ...patch }))}
 			onReset={() => onChange(createDefaultFilterDraft())}

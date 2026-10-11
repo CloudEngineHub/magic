@@ -6,13 +6,15 @@ import type { ApiError } from "@magic-admin-v2/api/types"
 import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
 import { PlatformAppMenuFilters } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-filters"
 import { PlatformAppMenuFormDialog } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-form-dialog"
 import { PlatformAppMenuTable } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-table"
 import {
 	APP_MENU_ALL_VALUE,
 	createDefaultAppMenuFilterDraft,
+	getAppMenuFilterActiveCount,
 	type AppMenuFilterDraft,
 } from "@magic-admin-v2/features/platform-app-menu/utils"
 import {
@@ -58,13 +60,23 @@ export default function PlatformAppMenuPage() {
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.APP_MENU_EDIT)
-	const { filterDraft, page, pageSize, params, setDebouncedField, setFilterDraft, setPage, setPageSize } =
-		useListQueryParams({
-			debounceFields: ["name"],
-			initialDraft: createDefaultAppMenuFilterDraft,
-			initialPageSize: defaultPageSize,
-			toParams: toAppMenuListParams,
-		})
+	const {
+		filterDraft,
+		page,
+		pageSize,
+		params,
+		setDebouncedField,
+		setFilterDraft,
+		setPage,
+		setPageSize,
+	} = useListQueryParams({
+		debounceFields: ["name"],
+		initialDraft: createDefaultAppMenuFilterDraft,
+		initialPageSize: defaultPageSize,
+		toParams: toAppMenuListParams,
+	})
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+	const activeFilterCount = getAppMenuFilterActiveCount(filterDraft)
 	const [isFormOpen, setIsFormOpen] = useState(false)
 	const [editingId, setEditingId] = useState<string | null>(null)
 	const [editingFallback, setEditingFallback] = useState<AppMenuItem | null>(null)
@@ -156,21 +168,29 @@ export default function PlatformAppMenuPage() {
 			<ListShell
 				actions={
 					<>
-						<Button
+						<PageHeaderFilterButton
+							count={activeFilterCount}
+							label={t("appMenu.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
+						/>
+						<PageHeaderActionButton
 							disabled={listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
 						>
 							<RefreshCw
-								className={cn("size-4", listQuery.isFetching ? "animate-spin" : null)}
+								className={cn(
+									"size-4",
+									listQuery.isFetching ? "animate-spin" : null,
+								)}
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
-						</Button>
-						<Button disabled={!hasEditRight} onClick={openCreateForm}>
+						</PageHeaderActionButton>
+						<PageHeaderActionButton disabled={!hasEditRight} onClick={openCreateForm}>
 							<Plus className="size-4" aria-hidden="true" />
 							{t("appMenu.action.create")}
-						</Button>
+						</PageHeaderActionButton>
 					</>
 				}
 				description={t("nav.desc.appMenu")}
@@ -178,7 +198,9 @@ export default function PlatformAppMenuPage() {
 			>
 				<div className="space-y-4">
 					<PlatformAppMenuFilters
+						mobileOpen={mobileFilterOpen}
 						onChange={setFilterDraft}
+						onMobileOpenChange={setMobileFilterOpen}
 						onSearchValueChange={(value) => setDebouncedField("name", value)}
 						value={filterDraft}
 					/>

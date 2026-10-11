@@ -6,7 +6,10 @@ import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
 import { EntityAvatarRender } from "@magic-admin-v2/components/entity-avatar-render"
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
@@ -42,6 +45,7 @@ import {
 	type ModelCategoryTab,
 	type ModelListFilterDraft,
 	modelTypesByCategory,
+	getModelListFilterActiveCount,
 	resolveModelCategoryTab,
 	restrictQueryParamsToAccess,
 	toQueryParams,
@@ -87,12 +91,21 @@ export default function PlatformModelListPage() {
 			),
 		[accessibleCategories, resolvedActiveCategory, serviceProviderConfigId],
 	)
-	const { filterDraft, pageSize: currentPageSize, params, setFilterDraft, setPage, setPageSize } = useListQueryParams({
+	const {
+		filterDraft,
+		pageSize: currentPageSize,
+		params,
+		setFilterDraft,
+		setPage,
+		setPageSize,
+	} = useListQueryParams({
 		debounceFields: ["keyword"],
 		extraResetKey: `${resolvedActiveCategory}:${serviceProviderConfigId}`,
 		initialDraft: createDefaultFilterDraft,
 		toParams,
 	})
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+	const activeFilterCount = getModelListFilterActiveCount(filterDraft)
 	const [detailTarget, setDetailTarget] = useState<ProviderModelGroup | null>(null)
 	const [editorTarget, setEditorTarget] = useState<ProviderModelGroup | null>(null)
 	const [isEditorOpen, setIsEditorOpen] = useState(false)
@@ -290,7 +303,12 @@ export default function PlatformModelListPage() {
 			<ListShell
 				actions={
 					<div className="flex items-center gap-2">
-						<Button
+						<PageHeaderFilterButton
+							count={activeFilterCount}
+							label={t("modelList.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
+						/>
+						<PageHeaderActionButton
 							disabled={!hasViewAccess || listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
@@ -300,9 +318,9 @@ export default function PlatformModelListPage() {
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
-						</Button>
+						</PageHeaderActionButton>
 						{canCreateModel ? (
-							<Button
+							<PageHeaderActionButton
 								onClick={() => {
 									setEditorTarget(null)
 									setIsEditorOpen(true)
@@ -310,7 +328,7 @@ export default function PlatformModelListPage() {
 							>
 								<Plus className="size-4" aria-hidden="true" />
 								{t("modelList.action.create")}
-							</Button>
+							</PageHeaderActionButton>
 						) : null}
 					</div>
 				}
@@ -325,8 +343,10 @@ export default function PlatformModelListPage() {
 
 				<div className="mt-5">
 					<ModelListFilters
+						mobileOpen={mobileFilterOpen}
 						modelTypeOptions={modelTypeOptions}
 						onChange={setFilterDraft}
+						onMobileOpenChange={setMobileFilterOpen}
 						showModelTypes={shouldShowModelTypeFilter}
 						value={filterDraft}
 					/>
@@ -366,7 +386,7 @@ export default function PlatformModelListPage() {
 							onPageChange={setPage}
 							page={currentPage}
 							pageSize={currentPageSize}
-						onPageSizeChange={setPageSize}
+							onPageSizeChange={setPageSize}
 							total={total}
 						/>
 					</>
@@ -435,9 +455,16 @@ function ModelCell({ item }: { item: ProviderModelGroup }) {
 				name={displayName}
 				src={item.icon}
 			/>
-			<div className="min-w-0">
-				<div className="truncate font-medium text-foreground">{displayName}</div>
-				<div className="truncate text-xs text-muted-foreground">{item.model_id}</div>
+			<div className="min-w-0 flex flex-col gap-1">
+				<CopyableValue
+					className="min-w-0 font-sans text-sm font-medium text-foreground"
+					value={displayName}
+				/>
+				<CopyableValue
+					className="min-w-0 font-sans text-xs text-muted-foreground"
+					label="ModelID"
+					value={item.model_id}
+				/>
 			</div>
 		</div>
 	)

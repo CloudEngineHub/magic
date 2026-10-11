@@ -18,13 +18,13 @@ import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import {
 	SectionNavigation,
 	SectionNavigationSkeleton,
 	type SectionNavigationItem,
 } from "@magic-admin-v2/components/section-navigation"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
-import { Button } from "@magic-admin-v2/components/ui/button"
 import { Skeleton } from "@magic-admin-v2/components/ui/skeleton"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import {
@@ -166,10 +166,13 @@ export default function PlatformInfoPage() {
 		return (
 			<ListShell
 				actions={
-					<Button onClick={() => platformInfoQuery.refetch()} variant="outline">
+					<PageHeaderActionButton
+						onClick={() => platformInfoQuery.refetch()}
+						variant="outline"
+					>
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
-					</Button>
+					</PageHeaderActionButton>
 				}
 				description={t("nav.desc.platformInfo")}
 				title={t("nav.item.platformInfo")}
@@ -192,15 +195,15 @@ export default function PlatformInfoPage() {
 			actions={
 				isEditing ? (
 					<>
-						<Button
+						<PageHeaderActionButton
 							disabled={updateMutation.isPending}
 							onClick={cancelEditing}
 							variant="outline"
 						>
 							<X className="size-4" aria-hidden="true" />
 							{t("common.cancel")}
-						</Button>
-						<Button
+						</PageHeaderActionButton>
+						<PageHeaderActionButton
 							disabled={
 								updateMutation.isPending ||
 								isImageUploading ||
@@ -210,11 +213,11 @@ export default function PlatformInfoPage() {
 						>
 							<Save className="size-4" aria-hidden="true" />
 							{updateMutation.isPending ? t("common.saving") : t("common.save")}
-						</Button>
+						</PageHeaderActionButton>
 					</>
 				) : (
 					<>
-						<Button
+						<PageHeaderActionButton
 							disabled={platformInfoQuery.isFetching}
 							onClick={() => platformInfoQuery.refetch()}
 							variant="outline"
@@ -227,12 +230,12 @@ export default function PlatformInfoPage() {
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
-						</Button>
+						</PageHeaderActionButton>
 						{hasEditRight ? (
-							<Button onClick={startEditing}>
+							<PageHeaderActionButton onClick={startEditing}>
 								<Edit3 className="size-4" aria-hidden="true" />
 								{t("common.edit")}
-							</Button>
+							</PageHeaderActionButton>
 						) : null}
 					</>
 				)
@@ -302,15 +305,15 @@ function PlatformInfoSkeleton({ hasEditRight }: { hasEditRight: boolean }) {
 		<ListShell
 			actions={
 				<>
-					<Button disabled variant="outline">
+					<PageHeaderActionButton disabled variant="outline">
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
-					</Button>
+					</PageHeaderActionButton>
 					{hasEditRight ? (
-						<Button disabled>
+						<PageHeaderActionButton disabled>
 							<Edit3 className="size-4" aria-hidden="true" />
 							{t("common.edit")}
-						</Button>
+						</PageHeaderActionButton>
 					) : null}
 				</>
 			}
