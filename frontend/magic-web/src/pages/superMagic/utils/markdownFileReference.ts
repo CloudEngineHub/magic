@@ -360,38 +360,51 @@ export function findAttachmentByPath(
 	const normalizedSearchPath = normalizeWorkspacePathForComparison(relativePath)
 	if (!normalizedSearchPath) return undefined
 
-	return findAttachmentByNormalizedPath(attachments, normalizedSearchPath)
+	return getAttachmentPathIndex(attachments).get(normalizedSearchPath)
 }
 
-function findAttachmentByNormalizedPath(
+const attachmentPathIndexes = new WeakMap<AttachmentItem[], ReadonlyMap<string, AttachmentItem>>()
+
+/** 同一文件快照只规范化一次；文件更新替换数组，旧索引随快照释放。 */
+function getAttachmentPathIndex(
 	attachments: AttachmentItem[],
-	normalizedSearchPath: string,
-): AttachmentItem | undefined {
-	for (const item of attachments) {
-		// 递归搜索子节点
-		if (item.children) {
-			const found = findAttachmentByNormalizedPath(item.children, normalizedSearchPath)
-			if (found) return found
+): ReadonlyMap<string, AttachmentItem> {
+	const cached = attachmentPathIndexes.get(attachments)
+	if (cached) return cached
+
+	const index = new Map<string, AttachmentItem>()
+	const visited = new Set<AttachmentItem>()
+	const stack: { item: AttachmentItem; childrenVisited: boolean }[] = []
+	for (let position = attachments.length - 1; position >= 0; position -= 1) {
+		stack.push({ item: attachments[position], childrenVisited: false })
+	}
+
+	while (stack.length > 0) {
+		const frame = stack.pop()
+		if (!frame) break
+		const { item } = frame
+		if (!frame.childrenVisited) {
+			// 平铺列表仍可能包含同一子树；按对象去重，不合并同 file_id 的不同记录。
+			if (visited.has(item)) continue
+			visited.add(item)
+			stack.push({ item, childrenVisited: true })
+			const children = item.children ?? []
+			for (let position = children.length - 1; position >= 0; position -= 1) {
+				stack.push({ item: children[position], childrenVisited: false })
+			}
+			continue
 		}
 
-		// 检查 relative_file_path 是否匹配
-		if (item.relative_file_path) {
-			const normalizedItemPath = normalizeWorkspacePathForComparison(item.relative_file_path)
-			if (normalizedItemPath === normalizedSearchPath) {
-				return item
-			}
-		}
-
-		// 也检查 path 字段作为备选
-		if (item.path) {
-			const normalizedItemPath = normalizeWorkspacePathForComparison(item.path)
-			if (normalizedItemPath === normalizedSearchPath) {
-				return item
-			}
+		// 与原查找一致：子节点先于父节点，重复路径保留首次匹配，两类路径均可查找。
+		for (const path of [item.relative_file_path, item.path]) {
+			if (!path) continue
+			const normalizedPath = normalizeWorkspacePathForComparison(path)
+			if (normalizedPath && !index.has(normalizedPath)) index.set(normalizedPath, item)
 		}
 	}
 
-	return undefined
+	attachmentPathIndexes.set(attachments, index)
+	return index
 }
 
 /** 旧 file_path 优先按原始文件名匹配，只有未命中时才兼容一次 href 解码。 */
