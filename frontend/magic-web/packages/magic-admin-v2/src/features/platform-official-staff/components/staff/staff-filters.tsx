@@ -20,10 +20,14 @@ import {
 } from "@magic-admin-v2/features/platform-official-staff/utils/page-utils"
 
 export function StaffFilters({
+	mobileOpen,
 	onChange,
+	onMobileOpenChange,
 	value,
 }: {
+	mobileOpen?: boolean
 	onChange: Dispatch<SetStateAction<FilterDraft>>
+	onMobileOpenChange?: (open: boolean) => void
 	value: FilterDraft
 }) {
 	const { t } = useTranslation()
@@ -31,6 +35,9 @@ export function StaffFilters({
 	return (
 		<ListFilterPanel
 			applyLabel={t("officialStaff.action.applyFilters")}
+			mobileOpen={mobileOpen}
+			onMobileOpenChange={onMobileOpenChange}
+			showMobileTrigger={false}
 			createDefaultValue={createDefaultFilterDraft}
 			onChange={(patch) => onChange((previous) => ({ ...previous, ...patch }))}
 			onReset={() => onChange(createDefaultFilterDraft())}

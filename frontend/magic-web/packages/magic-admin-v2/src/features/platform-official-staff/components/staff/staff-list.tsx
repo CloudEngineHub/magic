@@ -1,15 +1,10 @@
-import { Bot, Edit3, MoreHorizontal, Settings2, SlidersHorizontal } from "lucide-react";
+import { Bot, Edit3, Settings2, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value";
 import { EntityAvatarRender } from "@magic-admin-v2/components/entity-avatar-render";
 import { Badge } from "@magic-admin-v2/components/ui/badge";
 import { Button } from "@magic-admin-v2/components/ui/button";
 import { Card, CardContent } from "@magic-admin-v2/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@magic-admin-v2/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -31,16 +26,12 @@ export function StaffCard({
   item,
   onAssign,
   onEdit,
-  onFloatingOpenChange,
-  openFloatingId,
   onStatusChange,
 }: {
   canEdit: boolean;
   item: OfficialStaff;
   onAssign: (item: OfficialStaff) => void;
   onEdit: (item: OfficialStaff) => void;
-  onFloatingOpenChange: (id: string | null) => void;
-  openFloatingId: string | null;
   onStatusChange: (item: OfficialStaff, status: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -59,7 +50,11 @@ export function StaffCard({
               <div className="truncate font-medium text-foreground">{name}</div>
               {isDefault ? <Badge variant="secondary">{t("officialStaff.badge.default")}</Badge> : null}
             </div>
-            <div className="truncate font-mono text-xs text-muted-foreground">{item.identifier}</div>
+            <CopyableValue
+              className="max-w-full"
+              displayValue={item.identifier}
+              value={item.identifier}
+            />
           </div>
         </div>
         <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
@@ -83,22 +78,15 @@ export function StaffCard({
               {t("officialStaff.action.assignModels")}
             </Button>
             {canEdit ? (
-              <DropdownMenu
-                onOpenChange={(open) => onFloatingOpenChange(open ? `staff-more-${item.id}` : null)}
-                open={openFloatingId === `staff-more-${item.id}`}
+              <Button
+                disabled={isDefault}
+                onClick={() => onEdit(item)}
+                size="sm"
+                variant="outline"
               >
-                <DropdownMenuTrigger asChild>
-                  <Button aria-label={t("officialStaff.action.more")} size="icon" variant="ghost">
-                    <MoreHorizontal className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem disabled={isDefault} onSelect={() => onEdit(item)}>
-                    <Edit3 className="mr-2 size-4" />
-                    {t("common.edit")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                <Edit3 className="size-4" aria-hidden="true" />
+                {t("common.edit")}
+              </Button>
             ) : null}
           </div>
         </div>

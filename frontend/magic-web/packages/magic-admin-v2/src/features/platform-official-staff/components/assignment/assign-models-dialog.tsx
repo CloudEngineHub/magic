@@ -402,7 +402,7 @@ export function AssignModelsDialog({
 													</SelectTrigger>
 													<SelectContent data-testid="platform-official-staff-select-content">
 														{modeOptions
-															.filter((item) => item.id !== staff?.id)
+															.filter((item) => item.id && item.id !== staff?.id)
 															.map((item) => (
 																<SelectItem
 																	key={item.id}

@@ -6,7 +6,8 @@ import { ConfirmDialog } from "@magic-admin-v2/components/confirm-dialog"
 import { ListPageSkeleton } from "@magic-admin-v2/components/list-page-skeleton"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
 import { AssignModelsDialog } from "@magic-admin-v2/features/platform-official-staff/components/assignment/assign-models-dialog"
 import { OfficialStaffFormDialog } from "@magic-admin-v2/features/platform-official-staff/components/staff/official-staff-form-dialog"
 import { StaffFilters } from "@magic-admin-v2/features/platform-official-staff/components/staff/staff-filters"
@@ -27,6 +28,7 @@ import {
 import { buildDefaultAgentOptions } from "@magic-admin-v2/features/platform-official-staff/utils/default-agent"
 import {
 	createDefaultFilterDraft,
+	getOfficialStaffFilterActiveCount,
 	normalizeErrorMessage,
 	pageSize,
 	selectAllValue,
@@ -75,13 +77,22 @@ export default function PlatformOfficialStaffPage() {
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT)
-	const { filterDraft, page, pageSize: currentPageSize, params, setFilterDraft, setPage, setPageSize } =
-		useListQueryParams({
-			debounceFields: ["keyword", "identifier"],
-			initialDraft: createDefaultFilterDraft,
-			initialPageSize: pageSize,
-			toParams: toOfficialStaffListParams,
-		})
+	const {
+		filterDraft,
+		page,
+		pageSize: currentPageSize,
+		params,
+		setFilterDraft,
+		setPage,
+		setPageSize,
+	} = useListQueryParams({
+		debounceFields: ["keyword", "identifier"],
+		initialDraft: createDefaultFilterDraft,
+		initialPageSize: pageSize,
+		toParams: toOfficialStaffListParams,
+	})
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+	const activeFilterCount = getOfficialStaffFilterActiveCount(filterDraft)
 	const [staffDialog, setStaffDialog] = useState<StaffDialogState>({ open: false, staff: null })
 	const [assignDialog, setAssignDialog] = useState<AssignDialogState>({
 		open: false,
@@ -176,17 +187,24 @@ export default function PlatformOfficialStaffPage() {
 			<OfficialStaffShell
 				actions={
 					<>
-						<Button onClick={handleRefresh} variant="outline">
+						<PageHeaderFilterButton
+							count={activeFilterCount}
+							label={t("officialStaff.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
+						/>
+						<PageHeaderActionButton onClick={handleRefresh} variant="outline">
 							<RefreshCw
 								className={cn("size-4", listQuery.isFetching && "animate-spin")}
 							/>
 							{t("common.refresh")}
-						</Button>
+						</PageHeaderActionButton>
 						{hasEditRight ? (
-							<Button onClick={() => setStaffDialog({ open: true, staff: null })}>
+							<PageHeaderActionButton
+								onClick={() => setStaffDialog({ open: true, staff: null })}
+							>
 								<Plus className="size-4" />
 								{t("officialStaff.action.addStaff")}
-							</Button>
+							</PageHeaderActionButton>
 						) : null}
 					</>
 				}
@@ -213,7 +231,12 @@ export default function PlatformOfficialStaffPage() {
 					/>
 
 					<div className="space-y-4">
-						<StaffFilters onChange={setFilterDraft} value={filterDraft} />
+						<StaffFilters
+							mobileOpen={mobileFilterOpen}
+							onChange={setFilterDraft}
+							onMobileOpenChange={setMobileFilterOpen}
+							value={filterDraft}
+						/>
 
 						{listQuery.isLoading ? (
 							<ListPageSkeleton rows={6} />
@@ -252,8 +275,6 @@ export default function PlatformOfficialStaffPage() {
 												setOpenFloatingId(null)
 												setStaffDialog({ open: true, staff })
 											}}
-											onFloatingOpenChange={setOpenFloatingId}
-											openFloatingId={openFloatingId}
 											onStatusChange={(staff, status) => {
 												if (hasEditRight) setStatusDialog({ staff, status })
 											}}
