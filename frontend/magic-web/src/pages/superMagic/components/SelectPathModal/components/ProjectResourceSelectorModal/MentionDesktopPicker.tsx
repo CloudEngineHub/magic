@@ -116,9 +116,10 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 	const layer = useOverlayZIndex({ open: true, zIndexScope: "fullscreen" })
 	const identity = `${userInfo?.organization_code ?? ""}/${userInfo?.user_id ?? ""}`
 	const frame = useProjectManagerWindow(true, {
-		preferenceKey: "file_picker",
-		recommendedSize: { width: 1160, height: 740 },
-		minSize: { width: 960, height: 560 },
+		// 单一目标没有右侧已选清单；尺寸与视图偏好分开保存，避免沿用多选窗口的宽度。
+		preferenceKey: isDestination ? "file_destination_picker" : "file_picker",
+		recommendedSize: isDestination ? { width: 960, height: 680 } : { width: 1160, height: 740 },
+		minSize: { width: isDestination ? 720 : 960, height: 560 },
 	})
 	const [query, setQuery] = useState("")
 	const { workspace: searchWorkspace, project: searchProject, onProjectSearch } = props
@@ -136,9 +137,12 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 	const [rootVisit, setRootVisit] = useState(0)
 	const revealId = useRef(0)
 	const locations = useRef(new Map<string, FileManagerLocationSnapshot>())
-	const { viewMode = ViewMode.LIST, setViewMode } = useViewTogglePersistValue({
-		localStorageKey: "file_picker_projects_view",
-		defaultValue: ViewMode.LIST,
+	const defaultViewMode = isDestination ? ViewMode.GRID : ViewMode.LIST
+	const { viewMode = defaultViewMode, setViewMode } = useViewTogglePersistValue({
+		localStorageKey: isDestination
+			? "file_destination_projects_view"
+			: "file_picker_projects_view",
+		defaultValue: defaultViewMode,
 	})
 	useEffect(() => {
 		if (!userInfo?.user_id || !userInfo.organization_code) return

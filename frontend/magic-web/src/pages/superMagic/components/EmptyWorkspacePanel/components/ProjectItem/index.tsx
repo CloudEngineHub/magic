@@ -288,7 +288,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 					"grid grid-cols-[16px_minmax(0,1fr)_24px] items-center gap-x-3 gap-y-1 px-3 py-2 hover:bg-accent/50",
 				isCompact && !isListMode && "min-h-[88px]",
 				isCompactList &&
-					"min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] rounded-none border-0 border-b bg-transparent [@container_(min-width:800px)]:[grid-template-columns:var(--project-list-columns)]",
+					"min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] rounded-none border-0 border-b bg-transparent [@container_(min-width:800px)]:[grid-template-columns:var(--project-list-columns)] [@container_project-list_(min-width:520px)]:[grid-template-columns:var(--project-list-columns)]",
 				isRecentLayout && "grid-cols-[32px_minmax(0,1fr)_auto] items-start",
 				mobileLayout && "min-h-14 grid-cols-[32px_minmax(0,1fr)_auto] gap-x-2 py-3",
 			)}
@@ -404,7 +404,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 								)}
 								onClick={isListMode || isCompact ? undefined : handleNameClick}
 								data-testid="project-item-title"
-								maxLines={mobileLayout ? 2 : 1}
+								maxLines={mobileLayout || (isCompact && !isListMode) ? 2 : 1}
 								data-editable={!isListMode && !isCompact && !!onRenameProject}
 							>
 								{item.project_name || t("project.unnamedProject")}
@@ -449,16 +449,29 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 						<SmartTooltip
 							className={cn(
 								"project-item-updated-at text-[10px] font-normal leading-[13px] text-muted-foreground",
-								isCompact && "truncate text-xs leading-4",
+								isCompact && "text-xs leading-4",
 								isCompactList &&
-									"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1",
+									"col-start-2 row-start-2 [@container_(min-width:800px)]:col-start-[time] [@container_(min-width:800px)]:row-start-1 [@container_project-list_(min-width:520px)]:col-start-[time] [@container_project-list_(min-width:520px)]:row-start-1",
 								isRecentLayout && isCompactList && "leading-5",
 								mobileLayout && "whitespace-normal",
 							)}
 							data-testid="project-item-time"
 							data-sort-type={sortType}
+							maxLines={isCompactList ? 0 : 1}
 						>
-							{isCompactList && !mobileLayout ? time.value : time.label}
+							{/* 有表头时仅显示值；窄行与不支持容器查询的浏览器保留时间含义。 */}
+							{isCompactList && !mobileLayout ? (
+								<>
+									<span className="[@container_(min-width:800px)]:hidden [@container_project-list_(min-width:520px)]:hidden">
+										{time.label}
+									</span>
+									<span className="hidden [@container_(min-width:800px)]:inline [@container_project-list_(min-width:520px)]:inline">
+										{time.value}
+									</span>
+								</>
+							) : (
+								time.label
+							)}
 						</SmartTooltip>
 					)
 				)}
@@ -467,7 +480,7 @@ function ProjectItem<T extends ProjectListItem | CollaborationProjectListItem>({
 			<div
 				className={cn(
 					isCompactList
-						? "col-start-3 row-span-2 row-start-1 flex items-center justify-end gap-2 [@container_(min-width:800px)]:col-start-[actions] [@container_(min-width:800px)]:row-span-1"
+						? "col-start-3 row-span-2 row-start-1 flex items-center justify-end gap-2 [@container_(min-width:800px)]:col-start-[actions] [@container_(min-width:800px)]:row-span-1 [@container_project-list_(min-width:520px)]:col-start-[actions] [@container_project-list_(min-width:520px)]:row-span-1"
 						: "contents",
 					isRecentLayout && "self-start",
 				)}

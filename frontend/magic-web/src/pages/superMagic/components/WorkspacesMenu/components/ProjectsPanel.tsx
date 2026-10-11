@@ -237,6 +237,8 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 	// 最近项目使用资源缩略图，表头首列与条目的 32px 图标保持一致。
 	const iconColumn = itemProps.titleLayout === "recent" ? "32px" : "16px"
 	const showCreator = isShared && tabType === CollaborationProjectType.Received
+	// 普通列表仅含名称和时间，520px 即可保持列展示；具有人数／创建者的列表仍需 800px。
+	// 命名容器只供普通条目使用，表头和条目随同一个内容宽度切换。
 	// 表头与条目共用列宽；800px 可容纳最完整的人员列和至少 120px 名称，窄容器改为多行。
 	const listStyle: CSSProperties & { "--project-list-columns": string } = {
 		"--project-list-columns": showCreator
@@ -276,12 +278,14 @@ export function ProjectsPanelList<T extends ProjectListItem>({
 							className={cn(
 								"min-w-0 bg-muted/20 p-3",
 								isList && "[container-type:inline-size]",
+								isList && !isShared && "[container-name:project-list]",
 							)}
 							style={isList ? listStyle : undefined}
+							data-list-layout={isShared ? "collaboration" : "project"}
 						>
 							{error}
 							{isList && !isResourceLayout && projects.length > 0 && (
-								<div className="hidden items-center gap-x-3 border-b border-border px-3 py-2 text-xs text-muted-foreground [grid-template-columns:var(--project-list-columns)] [@container_(min-width:800px)]:grid">
+								<div className="hidden items-center gap-x-3 border-b border-border px-3 py-2 text-xs text-muted-foreground [grid-template-columns:var(--project-list-columns)] [@container_(min-width:800px)]:grid [@container_project-list_(min-width:520px)]:grid">
 									<span className="col-span-2">
 										{t("sidebarPanels.projectName")}
 									</span>
