@@ -518,9 +518,12 @@ class AgentService(Base):
         await agent_context.horizon.reload_from_store()
         CliManagerService.schedule_initial_status_detection(agent_context)
 
-        # 等待恢复失败必须阻止初始化成功；事件分发器会吞掉监听器异常，不能承担此门槛。
+        # 恢复先于接收回答；失败时保留话题可用性，未恢复的旧问题仍由回执入口拒绝。
         from app.service.user_tool_call_service import UserToolCallService
-        await UserToolCallService.get_instance().restore_pending_from_disk(agent_context)
+        try:
+            await UserToolCallService.get_instance().restore_pending_from_disk(agent_context)
+        except Exception as e:
+            logger.warning("User tool call recovery failed; initialization continues: %s", e, exc_info=True)
 
         # 触发初始化后事件
         after_init_data = AfterInitEventData(tool_context=tool_context, agent_context=agent_context, success=True)

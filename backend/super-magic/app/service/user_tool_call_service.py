@@ -568,38 +568,43 @@ class UserToolCallService:
         chat_history_dir = PathManager.get_chat_history_dir()
         try:
             entries = await async_scandir(chat_history_dir)
-        except Exception:
-            raise
+        except Exception as e:
+            logger.warning("Could not scan user_tool_call persistence; initialization continues: %s", e, exc_info=True)
+            return
 
+        # 旧等待恢复失败只影响该问题；保留源文件供排查，不能让一份坏记录阻断整个话题。
         for entry in entries:
             if not entry.name.endswith(".user_tool_call.json"):
                 continue
             try:
                 data = await async_read_json(entry.path)
             except Exception as e:
-                logger.error(f"Failed to read user_tool_call persistence file {entry.name}: {e}")
-                raise
+                logger.warning(f"Failed to read user_tool_call persistence file {entry.name}; skipping: {e}")
+                continue
 
             try:
+                if not isinstance(data, dict):
+                    raise ValueError("Pending tool call record must be an object")
                 tool_call_id = data["tool_call_id"]
                 tool_name = data["tool_name"]
                 expires_at = data["expires_at"]
+                if not isinstance(tool_call_id, str) or not tool_call_id:
+                    raise ValueError("Pending tool call ID must be a non-empty string")
+                if not isinstance(tool_name, str) or not tool_name:
+                    raise ValueError("Pending tool name must be a non-empty string")
+                if not isinstance(expires_at, int):
+                    raise ValueError("Pending tool call expiry must be an integer")
                 agent_name = data.get("agent_name", "magic")
                 agent_id = data.get("agent_id", "main")
                 raw_params = data.get("raw_params", {})
                 tool_data = data.get("tool_data", {})
-            except (KeyError, TypeError) as e:
-                logger.error(f"Failed to parse user_tool_call persistence data from {entry.name}: {e}")
-                raise
+            except (KeyError, TypeError, ValueError) as e:
+                logger.warning(f"Failed to parse user_tool_call persistence data from {entry.name}; skipping: {e}")
+                continue
 
             if tool_call_id in self._pending:
                 logger.info(f"user_tool_call already in memory, skip restore: tool_call_id={tool_call_id}")
                 continue
-
-            resume_message = (
-                await self._restore_ask_user_context(agent_context, data)
-                if tool_name == "ask_user" else None
-            )
 
             factory = self._RESTORE_FACTORIES.get(tool_name)
             if factory is None and tool_name != "ask_user":
@@ -618,10 +623,15 @@ class UserToolCallService:
                     timeout_answer_builder = tool.build_timeout_answer_builder(tool_data)
                 else:
                     result_builder, timeout_answer_builder = factory(tool_data)
+                resume_message = (
+                    await self._restore_ask_user_context(agent_context, data)
+                    if tool_name == "ask_user" else None
+                )
             except Exception as e:
-                logger.error(f"Restore factory failed for tool_name={tool_name!r}: {e}", exc_info=True)
-                if tool_name == "ask_user":
-                    raise
+                logger.warning(
+                    "Could not restore user_tool_call; skipping: file=%s tool_name=%s tool_call_id=%s error=%s",
+                    entry.name, tool_name, tool_call_id, e, exc_info=True,
+                )
                 continue
 
             timeout_task: Optional[asyncio.Task] = None
