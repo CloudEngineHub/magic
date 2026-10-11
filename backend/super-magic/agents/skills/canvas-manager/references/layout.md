@@ -31,9 +31,10 @@ Required: `project_path`, ordered `element_ids`. The program retains dimensions,
 - `operation=arrange` (default): `pattern=row|column|grid`, `columns` required for grid; optional `anchor_element_ids`, `side=left|right|above|below`, `alignment=start|center|end`, `gap` in Canvas units (default existing spacing 200).
 - Targets and references must share the same immediate parent; reference Elements stay still. The target order defines row/column/grid order. A collision moves the entire group farther along the specified side, without moving other Elements. Without a reference, the group starts at its current bounds; a collision is rejected.
 - `operation=align`: `direction=left|center|right|top|middle|bottom`.
-- `operation=distribute`: `direction=horizontal|vertical`, at least three Elements; preserves the outer bounds while computing equal gaps.
-- For alignment/distribution inside one Frame, set `scope=children` and pass only the Frame ID. Visible direct children are used; locked children still cause rejection. Distribution includes equal gaps at the Frame edges.
-- `dry_run=true` returns before/after positions without writing. Execute recalculates from current persisted state. Locked targets/ancestors are never silently unlocked; hidden targets are not automatically revealed.
+- `operation=distribute`: `direction=horizontal|vertical`; uses the same row/column arrangement, exact target order and nonnegative spacing as `arrange`. Supports `gap`, `anchor_element_ids`, `side` and `alignment`; do not pass `pattern` or `columns`. Prefer `arrange` for ordinary material organization.
+- Rearrangement uses actual display sizes and spacing, never squeezes Elements into their previous outer bounds or the visible viewport. For widths 600/1000/700 with gap 200, the new row is 2700 wide even if the previous bounds were only 1900. Elements are not resized.
+- For alignment/distribution inside one Frame, set `scope=children` and pass only the Frame ID. Visible direct children are used; locked children still cause rejection. Distribution retains their spatial order along the requested axis, starts at their current top-left and uses the same spacing; it does not spread spare Frame space to edge margins. A fixed Frame is a real container: a layout exceeding its boundaries fails without moving Elements. Do not treat a viewport as a Frame or silently enlarge a Frame.
+- `dry_run=true` returns the direction, spacing, before/after positions and bounds without writing. Execute recalculates from current persisted state. Locked targets/ancestors are never silently unlocked; hidden targets are not automatically revealed.
 
 ```python
 from sdk.tool import tool

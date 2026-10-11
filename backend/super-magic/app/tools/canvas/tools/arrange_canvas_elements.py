@@ -31,6 +31,17 @@ class ArrangeCanvasElements(CanvasManagementTool):
                 params.project_path, params
             )
             lines = [f"Canvas {params.operation} {'calculated without writing' if params.dry_run else 'completed'}."]
+            lines.append(f"Layout: {result['direction']}; bounds coordinate space: {result['bounds_coordinate_space']}.")
+            if params.operation != "align":
+                lines.append(
+                    f"Spacing: {result['gap']} Canvas units; previous bounds and viewport do not constrain rearrangement."
+                )
+            before_bounds, bounds = result["before_bounds"], result["bounds"]
+            lines.append(
+                f"Bounds: ({before_bounds['x']}, {before_bounds['y']}, {before_bounds['width']}, {before_bounds['height']})"
+                f" -> ({bounds['x']}, {bounds['y']}, {bounds['width']}, {bounds['height']})."
+                " Parent Frame boundaries remain enforced."
+            )
             for item in result["items"]:
                 before, after = item["before"], item["after"]
                 lines.append(
