@@ -68,7 +68,7 @@ function FieldDescriptionTooltip({ description, testId }: { description: string;
 				<HelpCircle className="size-3.5" aria-hidden="true" />
 			</button>
 			<span
-				className="pointer-events-none absolute left-1/2 top-[calc(100%+0.375rem)] z-[120] hidden w-64 max-w-[calc(100vw-3rem)] -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1.5 text-xs font-normal leading-5 text-popover-foreground shadow-md group-hover:block"
+				className="pointer-events-none absolute left-0 top-[calc(100%+0.375rem)] z-[120] hidden w-64 max-w-[calc(100vw-3rem)] rounded-md border bg-popover px-2.5 py-1.5 text-xs font-normal leading-5 text-popover-foreground shadow-md group-hover:block"
 				role="tooltip"
 			>
 				{description}

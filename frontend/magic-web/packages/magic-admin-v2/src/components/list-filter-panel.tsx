@@ -1,5 +1,5 @@
-import { Filter } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { Filter, RotateCcw } from "lucide-react"
+import { useEffect, useState, type ReactNode } from "react"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import {
@@ -54,6 +54,12 @@ export type ListFilterPanelProps<T extends object> = {
 	 * above the fields; mobile shows them next to the filter trigger.
 	 */
 	actions?: ReactNode
+	/** Controlled mobile panel state for triggers rendered outside this component. */
+	mobileOpen?: boolean
+	/** Controlled mobile panel state change handler. */
+	onMobileOpenChange?: (open: boolean) => void
+	/** Hide the default mobile filter trigger when the page renders its own trigger. */
+	showMobileTrigger?: boolean
 	className?: string
 }
 
@@ -75,12 +81,21 @@ export function ListFilterPanel<T extends object>({
 	onReset,
 	renderFields,
 	resetLabel,
+	showMobileTrigger = true,
 	title,
 	value,
+	mobileOpen,
+	onMobileOpenChange,
 }: ListFilterPanelProps<T>) {
 	const isMobile = useIsMobile()
-	const [open, setOpen] = useState(false)
+	const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
 	const [draft, setDraft] = useState<T>(value)
+	const open = mobileOpen ?? uncontrolledOpen
+	const updateOpen = onMobileOpenChange ?? setUncontrolledOpen
+
+	useEffect(() => {
+		if (open) setDraft(value)
+	}, [open, value])
 
 	if (!isMobile) {
 		const grid = (
@@ -95,6 +110,7 @@ export function ListFilterPanel<T extends object>({
 				{/* Reset sits in the last column so it never shifts the field order. */}
 				<div className="flex justify-end sm:col-start-2 xl:col-start-4">
 					<Button onClick={onReset} type="button" variant="outline">
+						<RotateCcw className="size-4" aria-hidden="true" />
 						{resetLabel}
 					</Button>
 				</div>
@@ -117,17 +133,21 @@ export function ListFilterPanel<T extends object>({
 			onOpenChange={(nextOpen) => {
 				// Reopening starts from the applied conditions; dismissing discards unsaved edits.
 				if (nextOpen) setDraft(value)
-				setOpen(nextOpen)
+				updateOpen(nextOpen)
 			}}
 		>
-			<div className={cn("flex items-center justify-end gap-2", className)}>
-				{actions}
-				<SheetTrigger asChild>
-					<Button aria-label={title} size="icon" type="button" variant="outline">
-						<Filter className="size-4" aria-hidden="true" />
-					</Button>
-				</SheetTrigger>
-			</div>
+			{actions || showMobileTrigger ? (
+				<div className={cn("flex items-center justify-end gap-2", className)}>
+					{actions}
+					{showMobileTrigger ? (
+						<SheetTrigger asChild>
+							<Button aria-label={title} size="icon" type="button" variant="outline">
+								<Filter className="size-4" aria-hidden="true" />
+							</Button>
+						</SheetTrigger>
+					) : null}
+				</div>
+			) : null}
 			<SheetContent
 				side="right"
 				className="w-[calc(100%-2rem)] max-w-sm gap-0 p-0"
@@ -148,13 +168,14 @@ export function ListFilterPanel<T extends object>({
 				</ScrollArea>
 				<SheetFooter className="grid shrink-0 grid-cols-2 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
 					<Button onClick={() => setDraft(createDefaultValue())} type="button" variant="outline">
+						<RotateCcw className="size-4" aria-hidden="true" />
 						{resetLabel}
 					</Button>
 					<Button
 						onClick={() => {
 							if (onApply) onApply(draft)
 							else onChange(draft)
-							setOpen(false)
+							updateOpen(false)
 						}}
 						type="button"
 					>

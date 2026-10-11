@@ -8,13 +8,29 @@ type PageHeaderProps = {
 	testId?: string
 }
 
+type PageHeaderActionsProps = {
+	children: ReactNode
+}
+
+/** Shared action slot for the page title area. Use PageHeaderActionButton for responsive buttons. */
+export function PageHeaderActions({ children }: PageHeaderActionsProps) {
+	return (
+		<div
+			className="flex w-auto min-w-0 shrink-0 flex-wrap items-center justify-end gap-2"
+			data-slot="page-header-actions"
+		>
+			{children}
+		</div>
+	)
+}
+
 export function PageHeader({ title, titleAddon, description, actions, testId }: PageHeaderProps) {
 	return (
 		<div
-			className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+			className="flex min-w-0 flex-row items-start justify-between gap-4"
 			data-testid={testId}
 		>
-			<div className="min-w-0 space-y-2">
+			<div className="min-w-0 flex-1 space-y-2">
 				<div className="flex min-w-0 items-center gap-2">
 					<h1 className="truncate text-2xl font-bold tracking-tight text-foreground">
 						{title}
@@ -25,12 +41,7 @@ export function PageHeader({ title, titleAddon, description, actions, testId }: 
 					<p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
 				) : null}
 			</div>
-			{/* Wrap dense action groups so page headers do not widen the viewport on narrow screens. */}
-			{actions ? (
-				<div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-					{actions}
-				</div>
-			) : null}
+			{actions ? <PageHeaderActions>{actions}</PageHeaderActions> : null}
 		</div>
 	)
 }

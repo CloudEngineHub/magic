@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react"
+import { Loader2, RotateCcw } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import {
@@ -151,6 +151,7 @@ export function FilterSheet({
 							type="button"
 							variant="outline"
 						>
+							<RotateCcw className="size-4" aria-hidden="true" />
 							{resetLabel}
 						</Button>
 						<Button
