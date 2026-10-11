@@ -118,18 +118,18 @@ const SmartTooltip = memo(function SmartTooltip({
 
 	useEffect(() => {
 		// Delayed detection to ensure DOM rendering is complete
-		const timer = setTimeout(checkOverflow, 100)
+		const timer = fileName ? undefined : setTimeout(checkOverflow, 100)
 
 		if (fileName) {
 			setOpen(false)
-			checkOverflow()
 		}
 
 		// Listen for window resize
-		window.addEventListener("resize", checkOverflow)
+		// 文件名在进入、聚焦和打开前读取当前尺寸；未交互行不随挂载或窗口变化批量测量。
+		if (!fileName) window.addEventListener("resize", checkOverflow)
 
 		return () => {
-			clearTimeout(timer)
+			if (timer !== undefined) clearTimeout(timer)
 			window.removeEventListener("resize", checkOverflow)
 		}
 	}, [children, fileName, checkOverflow])
@@ -176,8 +176,12 @@ const SmartTooltip = memo(function SmartTooltip({
 	}
 
 	const handleTriggerClick = (e: React.MouseEvent<HTMLElement>) => {
-		if (trigger.includes("click") && effectiveShowTooltip && !disabled) {
-			setOpen(!open)
+		if (trigger.includes("click") && !disabled) {
+			// fileName 不预先测量，点击触发也必须使用当前尺寸；其它模式保持原显示资格。
+			const canShowTooltip = fileName
+				? forceShowTooltip || checkOverflow()
+				: effectiveShowTooltip
+			if (canShowTooltip) setOpen(!open)
 		}
 		onClick?.(e)
 	}
