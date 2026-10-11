@@ -574,7 +574,11 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		}
 	}, [selectedTopic?.id, isSelectedTopicMessagesReady])
 
-	const updateAttachments = useDebounceFn(
+	const {
+		run: updateAttachments,
+		flush: flushAttachmentsUpdate,
+		cancel: cancelAttachmentsUpdate,
+	} = useDebounceFn(
 		(selectedProject: any, callback?: () => void) => {
 			const projectId = selectedProject?.id as string | undefined
 			if (!projectId) {
@@ -684,7 +688,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		{
 			wait: 500,
 		},
-	).run
+	)
 
 	useDeepCompareEffect(() => {
 		const projectId = selectedProject?.id
@@ -692,9 +696,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			// 初始化加载附件的Promise
 			GlobalMentionPanelStore.initLoadAttachments(selectedProject?.id)
 			updateAttachments(selectedProject)
+			// 初次选择项目立即读取；后续刷新事件仍通过同一个 500ms 防抖合并。
+			flushAttachmentsUpdate()
 		}
 
 		return () => {
+			cancelAttachmentsUpdate()
 			cancelAttachmentsRequest()
 			if (projectId) {
 				GlobalMentionPanelStore.clearInitLoadAttachmentsPromise(projectId)

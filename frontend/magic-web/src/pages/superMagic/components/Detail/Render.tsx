@@ -30,7 +30,7 @@ import {
 import type { ExportIssue } from "@magic/html2pptx"
 import { isFileInPPTMode, isFileInSlideCanvasMode } from "./utils/file"
 import { prepareHtmlPagesForExport } from "@/utils/htmlExportPrepare"
-import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
+import type { ImageExportFormat } from "@magic-web/html2image"
 import {
 	createPptxSlideConfig,
 	resolvePptScaleContentDimensions,
@@ -769,6 +769,8 @@ function FileContentRender(props: any) {
 				fileApi,
 			})
 
+			// 图片导出引擎只用于显式导出，普通文件预览不加载；失败沿用本操作的错误出口。
+			const { exportHtmlToImage } = await import("@magic-web/html2image")
 			await exportHtmlToImage({
 				pages: preparedHtmlSlides,
 				format,

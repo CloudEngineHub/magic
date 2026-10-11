@@ -7,7 +7,6 @@ import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"
-import KnowledgeBaseTabContent from "./KnowledgeBaseTabContent"
 import MicroAppTabContent from "./MicroAppTabContent"
 import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
 import { getWebsiteTabData } from "../utils/websiteTabs"
@@ -28,6 +27,8 @@ const ProjectFileManager = lazy(
 	() => import("../../../../TopicFilesButton/components/ProjectFileManager"),
 )
 const UserSpaceFileManager = lazy(() => import("../../../../UserSpace/UserSpaceFileManager"))
+// 普通项目文件不需要知识库来源预览，保留标签后再加载对应内容。
+const KnowledgeBaseTabContent = lazy(() => import("./KnowledgeBaseTabContent"))
 
 type CachedTab = Partial<TabItem> & {
 	id: string
@@ -232,7 +233,9 @@ const TabCache = memo(
 				) : isWebsite ? (
 					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
 				) : isKnowledgeBaseTab && knowledgeBaseData ? (
-					<KnowledgeBaseTabContent data={knowledgeBaseData} />
+					<Suspense fallback={null}>
+						<KnowledgeBaseTabContent data={knowledgeBaseData} />
+					</Suspense>
 				) : isMicroAppTab && microAppData ? (
 					<MicroAppTabContent data={microAppData} onLeave={handleMicroAppLeave} />
 				) : (

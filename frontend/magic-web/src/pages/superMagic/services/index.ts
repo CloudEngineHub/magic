@@ -1018,6 +1018,15 @@ class SuperMagicService {
 		// 新路由 path 不含 workspaceId，优先从 project 反查
 		const resolvedWorkspaceId = workspaceId || project?.workspace_id
 
+		// 明确的话题详情是独立读取，可与工作区初始化并行；选中状态仍在原位置提交。
+		// 无效话题的默认选择／创建必须等工作区就绪，不能放进这段预读取。
+		const topicDetailPromise =
+			project && topicId && !isReadOnlyProject(project.user_role)
+				? this.topic
+						.getTopicDetail(topicId, { enableErrorMessagePrompt: false })
+						.catch(() => null)
+				: null
+
 		const workspace = await this.initializeWorkspace(
 			// 不能基于共享工作区ID初始化工作区
 			onlyCollWorkspaceId ? undefined : resolvedWorkspaceId,
@@ -1064,7 +1073,9 @@ class SuperMagicService {
 			// 只有选中了某个项目，才需要加载这个项目下的话题
 			if (!isReadOnlyProject(project.user_role)) {
 				// PC端，如果没有传话题ID，也进行话题初始化
-				const selectedTopic = await this.getTopicDataByProject(project, topicId)
+				const selectedTopic = topicDetailPromise
+					? ((await topicDetailPromise) ?? (await this.getTopicDataByProject(project)))
+					: await this.getTopicDataByProject(project, topicId)
 				if (selectedTopic) {
 					this.topicStore.setSelectedTopic(selectedTopic)
 				}
