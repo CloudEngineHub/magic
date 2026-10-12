@@ -1,4 +1,3 @@
-import { AssetsApi, type AssetTagGroupItem } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	Dialog,
@@ -33,6 +32,7 @@ import type {
 	ImageContentAssetBindingParams,
 	ImageContentAssetBindingResult,
 } from "@/components/CanvasDesign/runtime/resources/asset/imageContentAssetBinding"
+import { useAssetTags } from "@/components/CanvasDesign/runtime/resources/asset/useAssetTags"
 import AssetTagMultiSelect from "./AssetTagMultiSelect"
 
 export interface LocalAssetFileDialogSource {
@@ -104,6 +104,13 @@ function toFallbackTreeNode(id: string, type: CanvasAssetVisibilityTarget["type"
 	return toTreeNode({ id, name: id, type })
 }
 
+/** The response interceptor already toasts business errors that include a message. */
+function hasPromptedApiMessage(error: unknown): boolean {
+	if (!error || typeof error !== "object" || error instanceof Error) return false
+	const message = (error as { message?: unknown }).message
+	return typeof message === "string" && message.length > 0
+}
+
 export default function SaveAssetToLibraryDialog({
 	open,
 	source,
@@ -121,13 +128,13 @@ export default function SaveAssetToLibraryDialog({
 	const [selectedTargets, setSelectedTargets] = useState<TreeNode[]>([])
 	const [pendingTargets, setPendingTargets] = useState<TreeNode[]>([])
 	const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
-	const [tagGroups, setTagGroups] = useState<AssetTagGroupItem[]>([])
 	const [previewUrl, setPreviewUrl] = useState<string>()
 	const [loading, setLoading] = useState(false)
-	const [loadingTags, setLoadingTags] = useState(false)
 	const [saving, setSaving] = useState(false)
 	const [selectorOpen, setSelectorOpen] = useState(false)
+	const [tagManagerOpen, setTagManagerOpen] = useState(false)
 	const [error, setError] = useState<string>()
+	const { tagGroups, loading: loadingTags, createTag, updateTag, deleteTag } = useAssetTags(open)
 	const getPreviewUrlRef = useRef(getPreviewUrl)
 	const localFileSource = isLocalAssetFileSource(source) ? source : null
 	const editSource = isEditAssetSource(source) ? source : null
@@ -216,37 +223,6 @@ export default function SaveAssetToLibraryDialog({
 			cancelled = true
 		}
 	}, [localFileSource, open, sourcePath])
-
-	// 标签是独立的表单数据，只在弹窗打开时加载，不影响图片预览请求的生命周期。
-	useEffect(() => {
-		if (!open) return
-
-		let cancelled = false
-		setTagGroups([])
-		setLoadingTags(true)
-		void AssetsApi.getAssetTags()
-			.then((groups) => {
-				if (!cancelled) setTagGroups(groups)
-			})
-			.catch(() => {
-				if (!cancelled) setTagGroups([])
-			})
-			.finally(() => {
-				if (!cancelled) setLoadingTags(false)
-			})
-
-		return () => {
-			cancelled = true
-		}
-	}, [open])
-
-	const tags = useMemo(
-		() =>
-			tagGroups.flatMap((group) =>
-				group.tags.map((tag) => ({ ...tag, groupName: group.name })),
-			),
-		[tagGroups],
-	)
 
 	const handleSubmit = async () => {
 		const trimmedName = name.trim()
@@ -380,20 +356,22 @@ export default function SaveAssetToLibraryDialog({
 				className="w-[min(780px,calc(100vw-32px))] max-w-[780px] gap-0 overflow-hidden p-0 sm:max-w-[780px]"
 				onOpenAutoFocus={(event) => event.preventDefault()}
 				onPointerDownOutside={(event) => {
-					// MemberDepartmentSelector uses its own portal; keep its pointer events from
-					// being interpreted as an outside click by this parent dialog.
-					if (selectorOpen) {
+					// Nested pickers portal outside this dialog. Ignore those events so
+					// choosing members or managing tags does not dismiss the save form.
+					if (selectorOpen || tagManagerOpen) {
 						event.preventDefault()
 						event.stopPropagation()
 					}
 				}}
 				onFocusOutside={(event) => {
-					if (selectorOpen) {
+					if (selectorOpen || tagManagerOpen) {
 						event.preventDefault()
 						event.stopPropagation()
 					}
 				}}
 				onEscapeKeyDown={(event) => {
+					// The tag manager is its own dialog layer and consumes Escape.
+					// The member selector is not, so this dialog must ignore Escape while it is open.
 					if (selectorOpen) {
 						event.preventDefault()
 						event.stopPropagation()
@@ -583,9 +561,9 @@ export default function SaveAssetToLibraryDialog({
 										/>
 										{t("assetLibrarySave.loadingTags")}
 									</div>
-								) : tags.length > 0 ? (
+								) : (
 									<AssetTagMultiSelect
-										options={tags}
+										groups={tagGroups}
 										value={selectedTagIds}
 										onChange={setSelectedTagIds}
 										label={t("assetLibrarySave.tagsLabel")}
@@ -595,11 +573,33 @@ export default function SaveAssetToLibraryDialog({
 										)}
 										emptyText={t("assetLibrarySave.noMatchingTags")}
 										removeLabel={t("assetLibrarySave.removeTag")}
+										labels={{
+											manage: t("assetLibrarySave.manageTags"),
+											title: t("assetLibrarySave.manageTags"),
+											createTag: t("assetLibrarySave.createTag"),
+											tagPlaceholder: t("assetLibrarySave.tagPlaceholder"),
+											edit: t("assetLibrarySave.editTag"),
+											delete: t("assetLibrarySave.deleteTag"),
+											deleting: t("assetLibrarySave.deletingTag"),
+											cancelEdit: t("assetLibrarySave.cancelEdit"),
+											cancelCreate: t("assetLibrarySave.cancelCreate"),
+											empty: t("assetLibrarySave.noCustomTags"),
+											selected: t("assetLibrarySave.tagSelected"),
+											duplicate: t("assetLibrarySave.tagDuplicate"),
+										}}
+										onManagerOpenChange={setTagManagerOpen}
+										onCreateTag={createTag}
+										onUpdateTag={updateTag}
+										onDeleteTag={deleteTag}
+										onMutationError={(mutationError) => {
+											if (hasPromptedApiMessage(mutationError)) return
+											toast.error(
+												mutationError instanceof Error
+													? mutationError.message
+													: t("assetLibrarySave.tagMutationFailed"),
+											)
+										}}
 									/>
-								) : (
-									<p className="text-xs text-muted-foreground">
-										{t("assetLibrarySave.noTags")}
-									</p>
 								)}
 							</div>
 

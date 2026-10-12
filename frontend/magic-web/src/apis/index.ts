@@ -125,6 +125,7 @@ export type {
 	AssetTagGroupItem,
 	AssetTagItem,
 	AssetTagListResponse,
+	AssetTagTreeNode,
 	AssetTagMatch,
 	AssetTagMutationResponse,
 	AssetTagNodeType,

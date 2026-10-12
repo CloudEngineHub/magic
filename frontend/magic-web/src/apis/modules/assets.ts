@@ -196,7 +196,7 @@ export interface AssetComplianceResponse {
 
 export interface AssetTagGroupItem {
 	id: string
-	parentId: string
+	parentId: string | null
 	nodeType: "group"
 	name: string
 	ownerUid: string | null
@@ -206,26 +206,29 @@ export interface AssetTagGroupItem {
 
 export interface AssetTagItem {
 	id: string
-	parentId: string
+	parentId: string | null
 	nodeType: "tag"
 	name: string
 	ownerUid: string | null
 	isOfficial: boolean
 }
 
-export type AssetTagListResponse = AssetTagGroupItem[]
+export type AssetTagTreeNode = AssetTagGroupItem | AssetTagItem
+
+export type AssetTagListResponse = AssetTagTreeNode[]
 
 export interface CreateAssetTagParams {
 	name: string
 	node_type?: AssetTagNodeType
-	parent_id?: string
+	/** `null` means the tag has no group and is a custom tag. `"0"` is a top-level group. */
+	parent_id?: string | null
 }
 
 export interface UpdateAssetTagParams extends CreateAssetTagParams {}
 
 export interface AssetTagMutationResponse {
 	id: string
-	parentId?: string
+	parentId?: string | null
 	nodeType?: AssetTagNodeType
 	name?: string
 	ownerUid?: string | null
