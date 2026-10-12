@@ -670,6 +670,7 @@
 		"replaceFailed": "Failed to replace video. Please try again.",
 		"replaceUnsupported": "Unsupported video format",
 		"retryEditing": "Please edit your video generation request again",
+		"sampleTag": "Sample",
 		"uploading": "Uploading..."
 	},
 	"videoContinuation": {

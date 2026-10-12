@@ -1078,6 +1078,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private renderPreview(group: Konva.Group, width: number, height: number): void {
 		const playerGroup = this.renderer.createPlayerNode(width, height, this.canvas, {
 			showLoadingOverlay: this.isInlinePlaybackPending || this.isInlinePlaybackRefreshing,
+			showDraftTag: this.getVideoContent()?.generateVideoRequest?.generation?.draft === true,
 			onPlayButtonClick: () => {
 				this.canvas.videoPlaybackInteractionManager.toggleElementPlayback(
 					this.data.id,

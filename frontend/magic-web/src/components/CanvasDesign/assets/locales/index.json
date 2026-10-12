@@ -683,6 +683,7 @@
 		"replaceFailed": "视频替换失败，请重试",
 		"replaceUnsupported": "不支持的视频格式",
 		"retryEditing": "请重新编辑视频生成需求",
+		"sampleTag": "样片",
 		"uploading": "正在上传中..."
 	},
 	"videoContinuation": {

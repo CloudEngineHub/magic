@@ -439,6 +439,8 @@ export interface GenerateVideoInputs {
 
 /** 单次视频生成的参数（与 inputs 并列） */
 export interface GenerateVideoGeneration {
+	/** 是否生成样片；样片视频在画布播放器中显示样片标识。 */
+	draft?: boolean
 	/** 宽高比，如 16:9 */
 	aspect_ratio?: string
 	/** 分辨率，如 1080p */
