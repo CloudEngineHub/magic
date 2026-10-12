@@ -90,7 +90,7 @@ class AssetAppService extends AbstractAssetAppService
                             $dataIsolation,
                             $existing->getId(),
                             $existingFileUrl,
-                            $this->shouldSkipProviderReview($dataIsolation, $existing, $existingFileUrl),
+                            ! $this->shouldSkipProviderReview($dataIsolation, $existing, $existingFileUrl),
                         );
                     } else {
                         $this->dispatchPersonalAssetSync($dataIsolation, $existing, $existingFileUrl);
@@ -111,7 +111,7 @@ class AssetAppService extends AbstractAssetAppService
                 $dataIsolation,
                 $asset->getId(),
                 $fileUrl,
-                $this->shouldSkipProviderReview($dataIsolation, $asset, $fileUrl),
+                ! $this->shouldSkipProviderReview($dataIsolation, $asset, $fileUrl),
             );
         } else {
             $this->dispatchPersonalAssetSync($dataIsolation, $asset, $fileUrl);
@@ -490,7 +490,7 @@ class AssetAppService extends AbstractAssetAppService
                     $dataIsolation,
                     $assetId,
                     $fileUrl,
-                    $this->shouldSkipProviderReview($dataIsolation, $asset, $fileUrl),
+                    ! $this->shouldSkipProviderReview($dataIsolation, $asset, $fileUrl),
                 );
             } catch (Throwable $throwable) {
                 $this->logger->error('个人素材异步同步失败', [

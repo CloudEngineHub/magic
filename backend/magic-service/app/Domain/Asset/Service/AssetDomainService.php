@@ -330,8 +330,8 @@ class AssetDomainService
     /**
      * 异步同步当前用户的个人素材到默认 Provider。
      *
-     * @param bool $hasPerson 素材是否含人像（含无法排除的情况）：true 走第三方合规审核；
-     *                        false 表示调用方已确认无人像，凭证创建后直接标记通过
+     * @param bool $hasPerson 素材是否含人像（含无法排除的情况）：true 走第三方素材注册与合规审核；
+     *                        false 表示调用方已确认无人像，跳过第三方注册，仅保留本地记录并直接标记通过
      */
     public function syncPersonalAsset(
         AssetDataIsolation $dataIsolation,
@@ -354,9 +354,12 @@ class AssetDomainService
         );
         if ($mapping !== null) {
             $providerAsset = new ProviderAssetEntity($mapping->toArray());
-            // PASS 可以直接复用；FAILED 仍需继续走全局 SHA-256 查找，避免当前记录的失败状态
-            // 遮蔽其他用户或组织已经通过审核的同内容 Provider 素材。
-            if ($providerAsset->getProviderStatus()->isPassed()) {
+            // PASS 且已拿到第三方素材 ID 才可以直接复用；FAILED 仍需继续走全局 SHA-256 查找，
+            // 避免当前记录的失败状态遮蔽其他用户或组织已经通过审核的同内容 Provider 素材。
+            //
+            // 无人像素材在创建时刻不注册第三方，状态虽为 PASS 但 provider_asset_id 为空，
+            // 这里必须继续往下走，等到真正被生成链路引用时才按需注册出可用凭证。
+            if ($providerAsset->getProviderStatus()->isPassed() && $providerAsset->getProviderAssetId() !== '') {
                 return $providerAsset;
             }
         }
@@ -578,8 +581,9 @@ class AssetDomainService
      *
      * 失败只回写 Provider 映射状态，不回收远程资源：凭证可查、可重试、可人工处置。
      *
-     * @param bool $hasPerson 素材是否含人像（含无法排除的情况）：true 必须走第三方合规审核；
-     *                        只有调用方已确认无人像时才允许直接标记通过，公开资产创建固定传 true
+     * @param bool $hasPerson 素材是否含人像（含无法排除的情况）：true 注册第三方素材并等待合规审核；
+     *                        false 表示调用方已确认无人像，不建素材组、不建素材，仅保留本地记录后直接标记通过，
+     *                        公开资产创建固定传 true
      */
     private function syncToProvider(
         AssetDataIsolation $dataIsolation,
@@ -602,17 +606,19 @@ class AssetDomainService
                 return $providerAsset;
             }
 
+            // 调用方已确认无人像：无需第三方合规审核，不建素材组、不建素材，仅保留本地记录后直接标记通过。
+            if (! $hasPerson) {
+                $this->logger->info('已确认无人像，跳过第三方素材注册', [
+                    'asset_id' => $asset->getId(),
+                ]);
+                return $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PASS);
+            }
+
             // 为素材创建专属第三方素材组，满足 GroupId 必填约束。
             $providerGroupId = $this->createProviderAssetGroup($this->resolveProviderGroupName($asset));
             $this->persistGroupMapping($dataIsolation, $asset, $providerGroupId);
             $providerAssetEntity = $this->createProviderAsset($dataIsolation, $asset, $providerGroupId);
-            if ($hasPerson) {
-                $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAssetEntity);
-            } else {
-                $providerAssetEntity->setProviderStatus(ProviderAssetStatus::PASS);
-                $providerAssetEntity->setProviderFailedReason(null);
-                $this->providerAssets->saveMapping($dataIsolation, $providerAssetEntity);
-            }
+            $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAssetEntity);
         } catch (Throwable $throwable) {
             $this->markProviderStatus(
                 $dataIsolation,
