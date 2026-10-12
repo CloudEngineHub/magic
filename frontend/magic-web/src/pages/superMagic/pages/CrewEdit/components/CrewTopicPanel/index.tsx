@@ -185,6 +185,8 @@ function CrewTopicPanel({
 			selectedTopic,
 			selectedProject,
 			topicMode: TopicMode.CrewCreator,
+			// Crew creation is a business mode; its model picker uses the default catalog.
+			modelTopicMode: TopicMode.Default,
 			agentCode: crewId,
 			topicStore,
 			setSelectedTopic: topicStore.setSelectedTopic,
