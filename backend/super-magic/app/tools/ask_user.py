@@ -4,7 +4,7 @@ import json
 import time
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
@@ -31,12 +31,7 @@ ASK_USER_NO_TIMEOUT = 0
 ASK_USER_POLICY_SKIP_SECONDS = 1
 
 class AskUserParams(BaseToolParams):
-    prepared_tool_call_id: str | None = Field(
-        default=None,
-        description="Bind a prepared Canvas deletion or batch file rename. Omit questions: the runtime supplies the exact confirmation question. Never invent a confirmation ID.",
-    )
     questions: str = Field(
-        default="",
         description="""<!--zh: 用 XML 格式描述要问用户的问题。支持 type: confirm / input / select / multi_select。每个问题用 <question> 标签包裹。-->
 Questions in XML format. Wrap each question in a <question> tag with a `type` attribute (confirm / input / select / multi_select). For select/multi_select, add <option> children. Optional attributes: default, placeholder, min, max.""",
     )
@@ -45,13 +40,6 @@ Questions in XML format. Wrap each question in a <question> tag with a `type` at
         description="""<!--zh: 可选等待时间。默认不传，表示一直等用户回答；只有简单的是否确认或单选、每题都有安全默认值时才传 60。包含输入题、需要思考或会明显影响后续方向的问题不要传 timeout。-->
 Optional response deadline. Omit it by default to wait for the user indefinitely. Set it to 60 only for simple confirm or single-select questions where every question has a safe default. Omit timeout for input questions, questions that need thought, or decisions that can materially change the next steps.""",
     )
-
-
-    @model_validator(mode="after")
-    def require_questions_or_preparation(self) -> "AskUserParams":
-        if not self.questions and not self.prepared_tool_call_id:
-            raise ValueError("questions is required unless prepared_tool_call_id is supplied")
-        return self
 
 
 @tool()
@@ -206,15 +194,6 @@ When using timeout=60, every question must have a safe `default` attribute. With
 
         raw_xml = tool_context.arguments.get("questions", "")
         source = self._get_execution_source(tool_context)
-        prepared_id = tool_context.arguments.get("prepared_tool_call_id")
-        if prepared_id and is_ask_user_allowed_source(source):
-            from xml.sax.saxutils import escape
-            from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
-
-            confirmation = CanvasOperationConfirmation.from_tool(tool_context)
-            prepared = await confirmation.read(str(prepared_id))
-            raw_xml = f'<question type="confirm">{escape(prepared.question)}</question>'
-            tool_context.arguments["questions"] = raw_xml
         tool_context.arguments["parsed_questions"] = parse_questions_xml(raw_xml)
         tool_context.arguments["status"] = "pending"
 
@@ -224,13 +203,6 @@ When using timeout=60, every question must have a safe `default` attribute. With
 
         if policy_blocked:
             tool_context.arguments["expires_at"] = int(time.time()) + ASK_USER_POLICY_SKIP_SECONDS
-            return
-
-        if prepared_id:
-            parsed = tool_context.arguments["parsed_questions"]
-            await confirmation.bind(str(prepared_id), tool_context.tool_call_id, parsed[0]["sub_id"])
-            # 画布危险操作等待真人决定，默认不以超时答案代替确认。
-            tool_context.arguments["expires_at"] = 0
             return
 
         # 默认一直等待；只有简单选择题才允许使用 60 秒。
@@ -280,7 +252,6 @@ When using timeout=60, every question must have a safe `default` attribute. With
         """
         return {
             "parsed_questions": tool_context.arguments.get("parsed_questions", []),
-            "prepared_tool_call_id": tool_context.arguments.get("prepared_tool_call_id"),
             "policy_blocked": bool(tool_context.arguments.get("ask_user_policy_blocked", False)),
             "policy_source": tool_context.arguments.get(
                 "ask_user_policy_source",

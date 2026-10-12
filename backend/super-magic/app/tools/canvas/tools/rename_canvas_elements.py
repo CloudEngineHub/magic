@@ -29,8 +29,10 @@ class RenameCanvasElements(CanvasManagementTool):
         items: list[RenameElement] = Field(default_factory=list)
         batch_naming: BatchNaming | None = None
         stage: Literal["prepare", "execute", "recover"] = "prepare"
-        prepared_tool_call_id: str | None = None
-        confirmation_tool_call_id: str | None = None
+        recovery_tool_call_id: str | None = Field(
+            default=None,
+            description="Execution call ID returned by an incomplete rename; used only for stage=recover.",
+        )
 
     params_class = Params
 
@@ -40,12 +42,11 @@ class RenameCanvasElements(CanvasManagementTool):
                 params.project_path,
                 params.items,
                 params.stage,
-                params.prepared_tool_call_id,
-                params.confirmation_tool_call_id,
+                params.recovery_tool_call_id,
                 params.batch_naming,
             )
             lines = [f"Canvas rename stage: {result['stage']}."]
-            for item in result.get("files", result.get("items", [])):
+            for item in result.get("items", []):
                 if item.get("content_id") and "file_name" not in item:
                     lines.append(
                         f"- element_id={item['element_id']} | content_id={item['content_id']} | status={item['status']} | no completed file to rename."
@@ -56,7 +57,7 @@ class RenameCanvasElements(CanvasManagementTool):
                     )
                 else:
                     lines.append(
-                        f"- element_id={item['element_id']} | canvas_title={item.get('name')} | status={item.get('status', 'prepared')}"
+                        f"- element_id={item['element_id']} | canvas_title={item.get('previous_title')} -> {item.get('name')} | status={item.get('status', 'prepared')}"
                     )
                 if item.get("error"):
                     lines.append(str(item["error"]))
@@ -64,13 +65,13 @@ class RenameCanvasElements(CanvasManagementTool):
                     lines.append(str(item["reason"]))
             for item in result.get("skipped", []):
                 lines.append(f"- content_id={item['content_id']} skipped: no completed file yet.")
-            if result.get("prepared_tool_call_id"):
+            if result["stage"] == "prepared":
                 lines.append(
-                    f"prepared_tool_call_id={result['prepared_tool_call_id']}. Call ask_user directly with this binding, then execute with the resulting confirmation_tool_call_id."
+                    "No changes were made. For batch filenames, confirm the exact before/after list using ordinary ask_user questions XML; execute only after explicit agreement."
                 )
-            if result.get("complete") is False and result.get("recovery_prepared_tool_call_id"):
+            if result.get("complete") is False and result.get("recovery_tool_call_id"):
                 lines.append(
-                    f"For incomplete file outcomes, use stage=recover, prepared_tool_call_id={result['recovery_prepared_tool_call_id']}, confirmation_tool_call_id={result['recovery_confirmation_tool_call_id']}. This only checks file identity and repairs references; it never repeats file writes."
+                    f"For incomplete file outcomes, use stage=recover, recovery_tool_call_id={result['recovery_tool_call_id']}. This only checks file identity and repairs references; it never repeats file writes."
                 )
             return ToolResult(content="\n".join(lines), ok=result.get("complete", True), data=result)
         except Exception as error:

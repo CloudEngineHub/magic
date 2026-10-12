@@ -7021,22 +7021,6 @@
         "zh_CN": "移除画布元素",
         "en_US": "Remove canvas elements"
     },
-    "canvas.shared_file_kept": {
-        "zh_CN": "其他版本仍在使用，保留文件",
-        "en_US": "Shared by other versions; file retained"
-    },
-    "canvas.rename_confirmation": {
-        "zh_CN": "将以下 {{count}} 个文件改名？图片内容不变，同目录重名会拒绝。\n\n{{comparison}}",
-        "en_US": "Rename these {{count}} files? Image content stays unchanged; duplicate names in the same directory are rejected.\n\n{{comparison}}"
-    },
-    "canvas.delete_confirmation": {
-        "zh_CN": "从画布移除以下 {{count}} 个元素及所列版本／子元素？真实文件会保留。相关连接：{{connections}} 条。\n\n{{elements}}",
-        "en_US": "Remove these {{count}} Elements and the listed versions/descendants from the Canvas? Actual files are retained. Related connections: {{connections}}.\n\n{{elements}}"
-    },
-    "canvas.delete_confirmation_files": {
-        "zh_CN": "移除以下 {{count}} 个图片目标，并删除所列文件？文件按项目回收站规则处理；恢复文件不会恢复画布位置和连接。标记为共享的文件会保留。相关连接：{{connections}} 条。\n\n{{elements}}\n\n文件：\n{{files}}",
-        "en_US": "Remove these {{count}} image targets and delete the listed files? Files follow project recycle-bin rules; restoring files does not restore Canvas positions or connections. Shared files remain. Related connections: {{connections}}.\n\n{{elements}}\n\nFiles:\n{{files}}"
-    },
     "canvas.detail.field.matched": {
         "zh_CN": "匹配数量",
         "en_US": "Matches"
@@ -7097,10 +7081,6 @@
         "zh_CN": "文件删除未确认",
         "en_US": "File deletion unconfirmed"
     },
-    "canvas.confirmation_element": {
-        "zh_CN": "{{name}}（{{versions}} 个版本）",
-        "en_US": "{{name}} ({{versions}} versions)"
-    },
     "canvas.detail.status.rename_unconfirmed": {
         "zh_CN": "文件改名未确认",
         "en_US": "File rename unconfirmed"
@@ -7112,10 +7092,6 @@
     "canvas.detail.status.recovered": {
         "zh_CN": "引用已恢复",
         "en_US": "References recovered"
-    },
-    "canvas.rename_title_comparison": {
-        "zh_CN": "画布标题将改为：{{name}}",
-        "en_US": "Canvas title will become: {{name}}"
     },
     "canvas.management_error.ELEMENT_LOCKED": {
         "zh_CN": "目标或所在画框已锁定，请先手动解锁。",
@@ -7157,25 +7133,9 @@
         "zh_CN": "存在多个版本，请明确选择当前版本或全部版本。",
         "en_US": "This image has multiple versions. Choose current or all explicitly."
     },
-    "canvas.management_error.CONFIRMATION_REQUIRED": {
-        "zh_CN": "尚未取得这次操作的用户确认，请重新确认。",
-        "en_US": "This operation has no valid human confirmation. Confirm it again."
-    },
-    "canvas.management_error.CONFIRMATION_STALE": {
-        "zh_CN": "确认后的目标已变化，请重新确认当前清单。",
-        "en_US": "The targets changed after confirmation. Confirm the current list again."
-    },
-    "canvas.management_error.CONFIRMATION_UNAVAILABLE": {
-        "zh_CN": "这项操作需要在可交互的主对话中确认。",
-        "en_US": "This operation requires confirmation in an interactive main conversation."
-    },
-    "canvas.management_error.CONFIRMATION_MISMATCH": {
-        "zh_CN": "确认记录与当前操作不匹配，请重新确认。",
-        "en_US": "The confirmation does not match this operation. Confirm it again."
-    },
-    "canvas.management_error.CONFIRMATION_PENDING": {
-        "zh_CN": "已有确认正在等待或已被使用，请重新准备操作。",
-        "en_US": "The confirmation is pending or already used. Prepare a new operation."
+    "canvas.management_error.CANVAS_TARGET_CHANGED": {
+        "zh_CN": "执行期间目标已变化，请重新查看当前清单。",
+        "en_US": "The targets changed during execution. Query the current list again."
     },
     "canvas.management_error.DIFFERENT_PARENTS": {
         "zh_CN": "只能整理同一个画框或同一层的元素。",
