@@ -109,12 +109,16 @@ export default function DashboardLayout() {
 	}, [toggleSidebar])
 
 	return (
-		<div className="flex h-svh min-h-0 w-full overflow-hidden bg-background text-foreground">
+		<div
+			className="flex h-svh min-h-0 w-full overflow-hidden bg-background text-foreground"
+			data-testid="dashboard-layout"
+		>
 			<aside
 				className={cn(
 					"fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-linear lg:flex",
 					isSidebarCollapsed ? "w-12" : "w-64",
 				)}
+				data-testid="dashboard-sidebar"
 			>
 				<AppSidebar
 					activePathname={location.pathname}
@@ -132,9 +136,11 @@ export default function DashboardLayout() {
 						"fixed inset-0 z-[60] isolate lg:hidden",
 						!isMobileSidebarEntered && "pointer-events-none",
 					)}
+					data-testid="dashboard-mobile-sidebar"
 				>
 					<button
 						aria-label={t("aria.closeNavigationOverlay")}
+						data-testid="dashboard-mobile-menu-button"
 						className={cn(
 							"absolute inset-0 z-0 bg-black/50 transition-opacity duration-300 ease-out motion-reduce:transition-none",
 							isMobileSidebarEntered ? "opacity-100" : "opacity-0",
@@ -169,6 +175,7 @@ export default function DashboardLayout() {
 				<header className="sticky top-0 z-50 flex h-16 shrink-0 items-center gap-2 border-b border-border/50 bg-background/80 px-4 backdrop-blur-xl">
 					<Button
 						aria-label={t("aria.openNavigation")}
+						data-testid="dashboard-open-navigation-button"
 						className="-ml-1 text-muted-foreground transition-colors hover:text-foreground lg:hidden"
 						onClick={toggleMobileSidebar}
 						size="icon-sm"
@@ -180,6 +187,7 @@ export default function DashboardLayout() {
 						aria-label={
 							isSidebarCollapsed ? t("aria.expandSidebar") : t("aria.collapseSidebar")
 						}
+						data-testid="dashboard-toggle-sidebar-button"
 						className="-ml-1 hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
 						onClick={toggleSidebar}
 						size="icon-sm"
@@ -209,7 +217,10 @@ export default function DashboardLayout() {
 					</div>
 				</header>
 
-				<main className="dashboard-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 pt-0">
+				<main
+					data-testid="dashboard-main-content"
+					className="dashboard-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 pt-0"
+				>
 					<div className="@container/main min-w-0 px-4 py-4 lg:px-6">
 						<Outlet />
 					</div>
@@ -307,6 +318,7 @@ function AppSidebar({
 							"h-8 justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
 							isCollapsed && "justify-center px-0",
 						)}
+						data-testid="dashboard-access-button"
 						onClick={onToggleSidebar}
 						variant="ghost"
 					>
@@ -714,6 +726,7 @@ function BrandMark({ brand, href, isCollapsed = false }: BrandMarkProps) {
 				"group/team relative flex min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent focus-visible:ring-2",
 				isCollapsed && "justify-center px-0",
 			)}
+			data-testid="dashboard-brand-link"
 			to={href}
 		>
 			{brand.isLoading ? (

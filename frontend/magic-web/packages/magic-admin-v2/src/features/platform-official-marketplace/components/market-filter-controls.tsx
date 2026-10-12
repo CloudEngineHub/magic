@@ -83,6 +83,7 @@ export function MarketFilters({
 			resetLabel={t("officialMarketplace.action.reset")}
 			title={t("officialMarketplace.filter.title")}
 			value={filterDraft}
+			desktopResetTestId="platform-official-marketplace-reset-button"
 		/>
 	)
 }
@@ -187,15 +188,26 @@ function MarketFilterFields({
 					onValueChange={(publish_status) => onChange({ publish_status })}
 					value={value.publish_status}
 				>
-					<SelectTrigger aria-label={t("officialMarketplace.filter.publishStatus")} className="w-full">
+					<SelectTrigger
+						aria-label={t("officialMarketplace.filter.publishStatus")}
+						className="w-full"
+						data-testid="platform-official-marketplace-select-trigger"
+					>
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={marketSelectAllValue}>
+					<SelectContent data-testid="platform-official-marketplace-select-content">
+						<SelectItem
+							data-testid="platform-official-marketplace-option"
+							value={marketSelectAllValue}
+						>
 							{t("officialMarketplace.filter.all")}
 						</SelectItem>
 						{Object.values(marketPublishStatus).map((status) => (
-							<SelectItem key={status} value={status}>
+							<SelectItem
+								data-testid="platform-official-marketplace-option"
+								key={status}
+								value={status}
+							>
 								{getPublishStatusLabel(status, t)}
 							</SelectItem>
 						))}
@@ -207,15 +219,26 @@ function MarketFilterFields({
 					onValueChange={(publisher_type) => onChange({ publisher_type })}
 					value={value.publisher_type}
 				>
-					<SelectTrigger aria-label={t("officialMarketplace.filter.publisherType")} className="w-full">
+					<SelectTrigger
+						aria-label={t("officialMarketplace.filter.publisherType")}
+						className="w-full"
+						data-testid="platform-official-marketplace-select-trigger"
+					>
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={marketSelectAllValue}>
+					<SelectContent data-testid="platform-official-marketplace-select-content">
+						<SelectItem
+							data-testid="platform-official-marketplace-option"
+							value={marketSelectAllValue}
+						>
 							{t("officialMarketplace.filter.all")}
 						</SelectItem>
 						{Object.values(marketPublisherType).map((type) => (
-							<SelectItem key={type} value={type}>
+							<SelectItem
+								data-testid="platform-official-marketplace-option"
+								key={type}
+								value={type}
+							>
 								{getPublisherTypeLabel(type, t)}
 							</SelectItem>
 						))}
@@ -227,12 +250,20 @@ function MarketFilterFields({
 					onValueChange={(order_by) => onChange({ order_by: order_by as MarketOrderBy })}
 					value={value.order_by}
 				>
-					<SelectTrigger aria-label={t("officialMarketplace.filter.orderBy")} className="w-full">
+					<SelectTrigger
+						aria-label={t("officialMarketplace.filter.orderBy")}
+						className="w-full"
+						data-testid="platform-official-marketplace-select-trigger"
+					>
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="desc">{t("officialMarketplace.order.desc")}</SelectItem>
-						<SelectItem value="asc">{t("officialMarketplace.order.asc")}</SelectItem>
+					<SelectContent data-testid="platform-official-marketplace-select-content">
+						<SelectItem data-testid="platform-official-marketplace-option" value="desc">
+							{t("officialMarketplace.order.desc")}
+						</SelectItem>
+						<SelectItem data-testid="platform-official-marketplace-option" value="asc">
+							{t("officialMarketplace.order.asc")}
+						</SelectItem>
 					</SelectContent>
 				</Select>
 			</FilterControlField>

@@ -127,12 +127,19 @@ export function PlatformInfoForm({
 												)
 											}
 										>
-											<SelectTrigger className="w-full">
+											<SelectTrigger
+												className="w-full"
+												data-testid="platform-info-select-trigger"
+											>
 												<SelectValue />
 											</SelectTrigger>
-											<SelectContent>
+											<SelectContent data-testid="platform-info-select-content">
 												{platformLocales.map((locale) => (
-													<SelectItem key={locale} value={locale}>
+													<SelectItem
+														data-testid="platform-info-option"
+														key={locale}
+														value={locale}
+													>
 														{localeLabels[locale]}
 													</SelectItem>
 												))}
@@ -146,6 +153,7 @@ export function PlatformInfoForm({
 											error={errors.name_i18n?.zh_CN?.message}
 										>
 											<Input
+												data-testid="platform-info-input"
 												placeholder={t(
 													"platformInfo.placeholder.platformNameZh",
 												)}
@@ -167,6 +175,7 @@ export function PlatformInfoForm({
 											error={errors.name_i18n?.en_US?.message}
 										>
 											<Input
+												data-testid="platform-info-input"
 												placeholder={t(
 													"platformInfo.placeholder.platformNameEn",
 												)}
@@ -193,6 +202,7 @@ export function PlatformInfoForm({
 								[
 									"Title",
 									<Textarea
+										data-testid="platform-info-textarea-input"
 										placeholder={t("platformInfo.placeholder.seoTitle")}
 										value={value.title_i18n[contentLocale]}
 										onChange={(event) =>
@@ -208,6 +218,7 @@ export function PlatformInfoForm({
 								[
 									"Keywords",
 									<Textarea
+										data-testid="platform-info-textarea-input"
 										placeholder={t("platformInfo.placeholder.seoKeywords")}
 										value={value.keywords_i18n[contentLocale]}
 										onChange={(event) =>
@@ -223,6 +234,7 @@ export function PlatformInfoForm({
 								[
 									"Description",
 									<Textarea
+										data-testid="platform-info-textarea-input"
 										placeholder={t("platformInfo.placeholder.seoDescription")}
 										value={value.description_i18n[contentLocale]}
 										onChange={(event) =>
@@ -250,6 +262,7 @@ export function PlatformInfoForm({
 										}
 									>
 										<Input
+											data-testid="platform-info-input"
 											placeholder={t(
 												"platformInfo.placeholder.agentRoleName",
 											)}
@@ -274,6 +287,7 @@ export function PlatformInfoForm({
 										}
 									>
 										<Textarea
+											data-testid="platform-info-textarea-input"
 											placeholder={t(
 												"platformInfo.placeholder.agentRoleDescription",
 											)}
@@ -296,6 +310,7 @@ export function PlatformInfoForm({
 						<div className="rounded-md border bg-background p-4">
 							<PlatformInfoFieldControl error={errors.global_system_prompt?.message}>
 								<Textarea
+									data-testid="platform-info-textarea-input"
 									aria-label={t("platformInfo.field.globalSystemPrompt")}
 									className="min-h-48 resize-y"
 									maxLength={GLOBAL_SYSTEM_PROMPT_MAX_LENGTH}
@@ -325,6 +340,7 @@ export function PlatformInfoForm({
 								[
 									t("platformInfo.field.copyright"),
 									<Textarea
+										data-testid="platform-info-textarea-input"
 										placeholder={t("platformInfo.placeholder.copyright")}
 										value={value.footer.copyright_i18n[contentLocale]}
 										onChange={(event) =>
@@ -341,6 +357,7 @@ export function PlatformInfoForm({
 									t("platformInfo.field.filingEnabled"),
 									<div className="flex h-9 items-center gap-3">
 										<Switch
+											data-testid="platform-info-switch"
 											checked={value.footer.filing.enabled}
 											onCheckedChange={(checked) =>
 												setValue(
@@ -366,6 +383,7 @@ export function PlatformInfoForm({
 													error={errors.footer?.filing?.number?.message}
 												>
 													<Input
+														data-testid="platform-info-input"
 														placeholder={t(
 															"platformInfo.placeholder.filingNumber",
 														)}

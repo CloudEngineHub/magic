@@ -61,6 +61,13 @@ export type ListFilterPanelProps<T extends object> = {
 	/** Hide the default mobile filter trigger when the page renders its own trigger. */
 	showMobileTrigger?: boolean
 	className?: string
+	/** Stable selectors for the desktop/mobile filter surfaces. */
+	desktopTestId?: string
+	desktopResetTestId?: string
+	mobileTriggerTestId?: string
+	mobileContentTestId?: string
+	mobileResetTestId?: string
+	mobileApplyTestId?: string
 }
 
 /**
@@ -86,6 +93,12 @@ export function ListFilterPanel<T extends object>({
 	value,
 	mobileOpen,
 	onMobileOpenChange,
+	desktopTestId,
+	desktopResetTestId,
+	mobileTriggerTestId,
+	mobileContentTestId,
+	mobileResetTestId,
+	mobileApplyTestId,
 }: ListFilterPanelProps<T>) {
 	const isMobile = useIsMobile()
 	const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
@@ -100,6 +113,7 @@ export function ListFilterPanel<T extends object>({
 	if (!isMobile) {
 		const grid = (
 			<div
+				data-testid={desktopTestId}
 				className={cn(
 					// Four equal columns on wide screens, two on narrow desktop windows.
 					"grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4",
@@ -109,7 +123,12 @@ export function ListFilterPanel<T extends object>({
 				{renderFields({ value, onChange, layout: "grid" })}
 				{/* Reset sits in the last column so it never shifts the field order. */}
 				<div className="flex justify-end sm:col-start-2 xl:col-start-4">
-					<Button onClick={onReset} type="button" variant="outline">
+					<Button
+						data-testid={desktopResetTestId}
+						onClick={onReset}
+						type="button"
+						variant="outline"
+					>
 						<RotateCcw className="size-4" aria-hidden="true" />
 						{resetLabel}
 					</Button>
@@ -141,7 +160,13 @@ export function ListFilterPanel<T extends object>({
 					{actions}
 					{showMobileTrigger ? (
 						<SheetTrigger asChild>
-							<Button aria-label={title} size="icon" type="button" variant="outline">
+							<Button
+								aria-label={title}
+								data-testid={mobileTriggerTestId}
+								size="icon"
+								type="button"
+								variant="outline"
+							>
 								<Filter className="size-4" aria-hidden="true" />
 							</Button>
 						</SheetTrigger>
@@ -149,6 +174,7 @@ export function ListFilterPanel<T extends object>({
 				</div>
 			) : null}
 			<SheetContent
+				data-testid={mobileContentTestId}
 				side="right"
 				className="w-[calc(100%-2rem)] max-w-sm gap-0 p-0"
 				aria-describedby={undefined}
@@ -161,17 +187,24 @@ export function ListFilterPanel<T extends object>({
 					<div className="grid gap-3 p-4">
 						{renderFields({
 							value: draft,
-							onChange: (patch) => setDraft((previous) => ({ ...previous, ...patch })),
+							onChange: (patch) =>
+								setDraft((previous) => ({ ...previous, ...patch })),
 							layout: "sheet",
 						})}
 					</div>
 				</ScrollArea>
 				<SheetFooter className="grid shrink-0 grid-cols-2 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
-					<Button onClick={() => setDraft(createDefaultValue())} type="button" variant="outline">
+					<Button
+						data-testid={mobileResetTestId}
+						onClick={() => setDraft(createDefaultValue())}
+						type="button"
+						variant="outline"
+					>
 						<RotateCcw className="size-4" aria-hidden="true" />
 						{resetLabel}
 					</Button>
 					<Button
+						data-testid={mobileApplyTestId}
 						onClick={() => {
 							if (onApply) onApply(draft)
 							else onChange(draft)

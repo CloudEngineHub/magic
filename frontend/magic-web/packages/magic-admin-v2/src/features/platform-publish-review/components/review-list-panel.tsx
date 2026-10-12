@@ -10,7 +10,10 @@ import {
 	type PublishReviewKind,
 	type PublishReviewVariant,
 } from "@magic-admin-v2/features/platform-publish-review/types"
-import { createDefaultFilterDraft, type ReviewDraftUpdater } from "@magic-admin-v2/features/platform-publish-review/params"
+import {
+	createDefaultFilterDraft,
+	type ReviewDraftUpdater,
+} from "@magic-admin-v2/features/platform-publish-review/params"
 import { AdvancedFilterControls } from "@magic-admin-v2/features/platform-publish-review/components/review-filters"
 import type { ApiError } from "@magic-admin-v2/api/types"
 
@@ -60,6 +63,7 @@ export function ReviewListPanel<TData>({
 	return (
 		<div className="space-y-4">
 			<ListFilterPanel
+				desktopResetTestId="platform-publish-review-reset-button"
 				applyLabel={t("publishReview.filter.apply")}
 				createDefaultValue={() => createDefaultFilterDraft(kind, variant)}
 				onChange={(patch) => onDraftChange((previous) => ({ ...previous, ...patch }))}

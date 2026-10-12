@@ -2,10 +2,7 @@ import { useTranslation } from "react-i18next"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
 import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
 import type { ListFilterPanelFieldsProps } from "@magic-admin-v2/components/list-filter-panel"
-import {
-	relativeUnit,
-	TimeFilterPanel,
-} from "@magic-admin-v2/components/time-filter-panel"
+import { relativeUnit, TimeFilterPanel } from "@magic-admin-v2/components/time-filter-panel"
 import {
 	Select,
 	SelectContent,
@@ -109,14 +106,20 @@ export function AdvancedFilterControls({
 			<FilterControlField className="w-full" label={t("publishReview.filter.orderBy")}>
 				<Select
 					value={value.order_by}
-					onValueChange={(order_by) => onChange({ order_by: order_by as PublishReviewOrderBy })}
+					onValueChange={(order_by) =>
+						onChange({ order_by: order_by as PublishReviewOrderBy })
+					}
 				>
 					<SelectTrigger className="w-full">
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="desc">{t("publishReview.order.desc")}</SelectItem>
-						<SelectItem value="asc">{t("publishReview.order.asc")}</SelectItem>
+					<SelectContent data-testid="platform-publish-review-select-content">
+						<SelectItem data-testid="platform-publish-review-option" value="desc">
+							{t("publishReview.order.desc")}
+						</SelectItem>
+						<SelectItem data-testid="platform-publish-review-option" value="asc">
+							{t("publishReview.order.asc")}
+						</SelectItem>
 					</SelectContent>
 				</Select>
 			</FilterControlField>
@@ -196,15 +199,25 @@ export function ReviewStatusSelect({
 	return (
 		<FilterControlField className={className} label={label}>
 			<Select value={value} onValueChange={onChange}>
-				<SelectTrigger className={triggerClassName}>
+				<SelectTrigger
+					className={triggerClassName}
+					data-testid="platform-publish-review-select-trigger"
+				>
 					<SelectValue />
 				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value={publishReviewSelectAllValue}>
+				<SelectContent data-testid="platform-publish-review-select-content">
+					<SelectItem
+						data-testid="platform-publish-review-option"
+						value={publishReviewSelectAllValue}
+					>
 						{t("publishReview.filter.all")}
 					</SelectItem>
 					{statuses.map((status) => (
-						<SelectItem key={status} value={status}>
+						<SelectItem
+							data-testid="platform-publish-review-option"
+							key={status}
+							value={status}
+						>
 							{getReviewStatusLabel(status, t)}
 						</SelectItem>
 					))}
@@ -242,15 +255,25 @@ export function PublishStatusSelect({
 	return (
 		<FilterControlField className={className} label={label}>
 			<Select value={value} onValueChange={onChange}>
-				<SelectTrigger className={triggerClassName}>
+				<SelectTrigger
+					className={triggerClassName}
+					data-testid="platform-publish-review-select-trigger"
+				>
 					<SelectValue />
 				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value={publishReviewSelectAllValue}>
+				<SelectContent data-testid="platform-publish-review-select-content">
+					<SelectItem
+						data-testid="platform-publish-review-option"
+						value={publishReviewSelectAllValue}
+					>
 						{t("publishReview.filter.all")}
 					</SelectItem>
 					{statuses.map((status) => (
-						<SelectItem key={status} value={status}>
+						<SelectItem
+							data-testid="platform-publish-review-option"
+							key={status}
+							value={status}
+						>
 							{getPublishStatusLabel(status, t)}
 						</SelectItem>
 					))}
@@ -284,15 +307,25 @@ export function PublishTargetTypeSelect({
 	return (
 		<FilterControlField className={className} label={label}>
 			<Select value={value} onValueChange={onChange}>
-				<SelectTrigger className={triggerClassName}>
+				<SelectTrigger
+					className={triggerClassName}
+					data-testid="platform-publish-review-select-trigger"
+				>
 					<SelectValue />
 				</SelectTrigger>
-				<SelectContent>
-					<SelectItem value={publishReviewSelectAllValue}>
+				<SelectContent data-testid="platform-publish-review-select-content">
+					<SelectItem
+						data-testid="platform-publish-review-option"
+						value={publishReviewSelectAllValue}
+					>
 						{t("publishReview.filter.all")}
 					</SelectItem>
 					{targetTypes.map((type) => (
-						<SelectItem key={type} value={type}>
+						<SelectItem
+							data-testid="platform-publish-review-option"
+							key={type}
+							value={type}
+						>
 							{getPublishTargetTypeLabel(type, t)}
 						</SelectItem>
 					))}

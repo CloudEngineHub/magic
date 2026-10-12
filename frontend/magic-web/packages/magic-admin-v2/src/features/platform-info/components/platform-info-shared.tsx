@@ -56,7 +56,12 @@ export function PlatformInfoContentLanguageBar({
 			>
 				<TabsList>
 					{platformLocales.map((locale) => (
-						<TabsTrigger className="gap-2" key={locale} value={locale}>
+						<TabsTrigger
+							className="gap-2"
+							data-testid="platform-info-tab-trigger"
+							key={locale}
+							value={locale}
+						>
 							<span>{localeLabels[locale]}</span>
 							<Badge
 								className="h-5 px-1.5 text-[11px] leading-none shadow-none"

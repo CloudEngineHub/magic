@@ -188,11 +188,16 @@ export default function PlatformOfficialStaffPage() {
 				actions={
 					<>
 						<PageHeaderFilterButton
+							data-testid="platform-official-staff-filter-button"
 							count={activeFilterCount}
 							label={t("officialStaff.filter.title")}
 							onClick={() => setMobileFilterOpen(true)}
 						/>
-						<PageHeaderActionButton onClick={handleRefresh} variant="outline">
+						<PageHeaderActionButton
+							data-testid="platform-official-staff-refresh-button"
+							onClick={handleRefresh}
+							variant="outline"
+						>
 							<RefreshCw
 								className={cn("size-4", listQuery.isFetching && "animate-spin")}
 							/>
@@ -200,6 +205,7 @@ export default function PlatformOfficialStaffPage() {
 						</PageHeaderActionButton>
 						{hasEditRight ? (
 							<PageHeaderActionButton
+								data-testid="platform-official-staff-create-button"
 								onClick={() => setStaffDialog({ open: true, staff: null })}
 							>
 								<Plus className="size-4" />

@@ -195,7 +195,11 @@ export default function PlatformProviderListPage() {
 		return (
 			<ListShell
 				actions={
-					<PageHeaderActionButton onClick={() => listQuery.refetch()} variant="outline">
+					<PageHeaderActionButton
+						data-testid="provider-list-refresh-button"
+						onClick={() => listQuery.refetch()}
+						variant="outline"
+					>
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
 					</PageHeaderActionButton>
@@ -225,11 +229,13 @@ export default function PlatformProviderListPage() {
 				actions={
 					<>
 						<PageHeaderFilterButton
+							data-testid="provider-advanced-trigger"
 							count={activeFilterCount}
 							label={t("providerList.filter.title")}
 							onClick={() => setMobileFilterOpen(true)}
 						/>
 						<PageHeaderActionButton
+							data-testid="provider-list-refresh-button"
 							disabled={listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
@@ -242,6 +248,7 @@ export default function PlatformProviderListPage() {
 						</PageHeaderActionButton>
 						{currentCategoryAccess.canEdit ? (
 							<PageHeaderActionButton
+								data-testid="provider-list-add-button"
 								onClick={() => {
 									setAddCategory(activeCategory)
 									setIsAddOpen(true)

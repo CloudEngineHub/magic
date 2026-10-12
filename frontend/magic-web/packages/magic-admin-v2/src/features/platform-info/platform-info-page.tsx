@@ -167,6 +167,7 @@ export default function PlatformInfoPage() {
 			<ListShell
 				actions={
 					<PageHeaderActionButton
+						data-testid="platform-info-refresh-button"
 						onClick={() => platformInfoQuery.refetch()}
 						variant="outline"
 					>
@@ -196,6 +197,7 @@ export default function PlatformInfoPage() {
 				isEditing ? (
 					<>
 						<PageHeaderActionButton
+							data-testid="platform-info-cancel-button"
 							disabled={updateMutation.isPending}
 							onClick={cancelEditing}
 							variant="outline"
@@ -204,6 +206,7 @@ export default function PlatformInfoPage() {
 							{t("common.cancel")}
 						</PageHeaderActionButton>
 						<PageHeaderActionButton
+							data-testid="platform-info-save-button"
 							disabled={
 								updateMutation.isPending ||
 								isImageUploading ||
@@ -218,6 +221,7 @@ export default function PlatformInfoPage() {
 				) : (
 					<>
 						<PageHeaderActionButton
+							data-testid="platform-info-refresh-button"
 							disabled={platformInfoQuery.isFetching}
 							onClick={() => platformInfoQuery.refetch()}
 							variant="outline"
@@ -232,7 +236,10 @@ export default function PlatformInfoPage() {
 							{t("common.refresh")}
 						</PageHeaderActionButton>
 						{hasEditRight ? (
-							<PageHeaderActionButton onClick={startEditing}>
+							<PageHeaderActionButton
+								data-testid="platform-info-edit-button"
+								onClick={startEditing}
+							>
 								<Edit3 className="size-4" aria-hidden="true" />
 								{t("common.edit")}
 							</PageHeaderActionButton>
@@ -265,7 +272,7 @@ export default function PlatformInfoPage() {
 					onValueChange={setActiveSection}
 				/>
 			</div>
-			<div className="flex min-h-0 gap-12">
+			<div className="flex min-h-0 gap-12" data-testid="platform-info-loading">
 				<aside className="hidden shrink-0 lg:block lg:w-52">
 					<SectionNavigation
 						mode="nav"
@@ -305,12 +312,16 @@ function PlatformInfoSkeleton({ hasEditRight }: { hasEditRight: boolean }) {
 		<ListShell
 			actions={
 				<>
-					<PageHeaderActionButton disabled variant="outline">
+					<PageHeaderActionButton
+						data-testid="platform-info-refresh-button"
+						disabled
+						variant="outline"
+					>
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
 					</PageHeaderActionButton>
 					{hasEditRight ? (
-						<PageHeaderActionButton disabled>
+						<PageHeaderActionButton data-testid="platform-info-edit-button" disabled>
 							<Edit3 className="size-4" aria-hidden="true" />
 							{t("common.edit")}
 						</PageHeaderActionButton>

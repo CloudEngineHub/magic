@@ -94,11 +94,13 @@ export default function PlatformSystemCapabilitiesPage() {
 				actions={
 					<>
 						<PageHeaderFilterButton
+							data-testid="platform-system-capabilities-mobile-filters"
 							count={activeFilterCount}
 							label={t("systemCapabilities.filter.title")}
 							onClick={() => setMobileFilterOpen(true)}
 						/>
 						<PageHeaderActionButton
+							data-testid="platform-system-capabilities-refresh-button"
 							disabled={listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"

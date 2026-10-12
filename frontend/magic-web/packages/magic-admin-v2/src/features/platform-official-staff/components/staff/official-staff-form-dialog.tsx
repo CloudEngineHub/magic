@@ -142,7 +142,10 @@ export function OfficialStaffFormDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-2xl">
+			<DialogContent
+				className="sm:max-w-2xl"
+				data-testid="platform-official-staff-dialog-content"
+			>
 				<DialogHeader>
 					<DialogTitle>
 						{isEdit
@@ -171,11 +174,13 @@ export function OfficialStaffFormDialog({
 									scheduleAgentLookup(event.target.value)
 								}}
 								placeholder={t("officialStaff.placeholder.staffIdentifier")}
+								data-testid="platform-official-staff-official-staff-identifier-input"
 							/>
 							<Button
 								disabled={!identifier.trim() || agentQuery.isFetching}
 								onClick={handleAgentLookup}
 								type="button"
+								data-testid="platform-official-staff-search-button"
 								variant="outline"
 							>
 								{agentQuery.isFetching ? (
@@ -203,10 +208,16 @@ export function OfficialStaffFormDialog({
 								value={activeLocale}
 							>
 								<TabsList>
-									<TabsTrigger value={Language.ZhCN}>
+									<TabsTrigger
+										data-testid="platform-official-staff-tab-trigger"
+										value={Language.ZhCN}
+									>
 										{t("language.zhCN")}
 									</TabsTrigger>
-									<TabsTrigger value={Language.EnUS}>
+									<TabsTrigger
+										data-testid="platform-official-staff-tab-trigger"
+										value={Language.EnUS}
+									>
 										{t("language.enUS")}
 									</TabsTrigger>
 								</TabsList>
@@ -216,6 +227,7 @@ export function OfficialStaffFormDialog({
 							disabled
 							value={form.watch(`name_i18n.${activeLocale}`)}
 							placeholder={t("officialStaff.placeholder.staffName")}
+							data-testid="platform-official-staff-input"
 						/>
 						<FieldError
 							message={
@@ -236,6 +248,7 @@ export function OfficialStaffFormDialog({
 							name={`placeholder_i18n.${activeLocale}`}
 							render={({ field }) => (
 								<Textarea
+									data-testid="platform-official-staff-textarea-input"
 									{...field}
 									placeholder={
 										activeLocale === Language.ZhCN
@@ -261,6 +274,7 @@ export function OfficialStaffFormDialog({
 								min={0}
 								placeholder={t("officialStaff.placeholder.sort")}
 								type="number"
+								data-testid="platform-official-staff-official-staff-sort-input"
 								{...form.register("sort", { valueAsNumber: true })}
 							/>
 							<FieldError message={form.formState.errors.sort?.message} />
@@ -275,18 +289,25 @@ export function OfficialStaffFormDialog({
 								id="official-staff-organization-whitelist"
 								placeholder={t("officialStaff.placeholder.organizationWhitelist")}
 								{...form.register("organization_whitelist")}
+								data-testid="platform-official-staff-official-staff-organization-whitelist-input"
 							/>
 						</DialogFormField>
 					</div>
 				</form>
 				<DialogFooter>
-					<Button onClick={() => handleOpenChange(false)} type="button" variant="outline">
+					<Button
+						data-testid="platform-official-staff-cancel-button"
+						onClick={() => handleOpenChange(false)}
+						type="button"
+						variant="outline"
+					>
 						{t("common.cancel")}
 					</Button>
 					<Button
 						disabled={!canEdit || saveMutation.isPending}
 						form="official-staff-form"
 						type="submit"
+						data-testid="platform-official-staff-save-button"
 					>
 						{saveMutation.isPending ? (
 							<Loader2 className="size-4 animate-spin" />

@@ -90,7 +90,10 @@ export default function PlatformPublishReviewPage({
 						<PageHeaderFilterButton
 							count={
 								activeTab === "employee"
-									? countActiveReviewFilters(employeeQueryState.filterDraft, "employee")
+									? countActiveReviewFilters(
+											employeeQueryState.filterDraft,
+											"employee",
+										)
 									: countActiveReviewFilters(skillQueryState.filterDraft, "skill")
 							}
 							label={t("publishReview.filter.title")}
@@ -98,6 +101,7 @@ export default function PlatformPublishReviewPage({
 						/>
 					) : null}
 					<PageHeaderActionButton
+						data-testid="publish-review-refresh-button"
 						disabled={activeTabFetching}
 						onClick={() => setRefreshToken((previous) => previous + 1)}
 						variant="outline"
@@ -119,18 +123,17 @@ export default function PlatformPublishReviewPage({
 				variant === "internal" ? "internalPublishReview.title" : "publishReview.title",
 			)}
 		>
-			<Tabs
-				value={activeTab}
-				onValueChange={handleTabChange}
-			>
+			<Tabs value={activeTab} onValueChange={handleTabChange}>
 				<TabsList>
 					{canViewEmployeeReview ? (
-						<TabsTrigger value="employee">
+						<TabsTrigger data-testid="publish-review-employee-tab" value="employee">
 							{t("publishReview.tab.employee")}
 						</TabsTrigger>
 					) : null}
 					{canViewSkillReview ? (
-						<TabsTrigger value="skill">{t("publishReview.tab.skill")}</TabsTrigger>
+						<TabsTrigger data-testid="publish-review-skill-tab" value="skill">
+							{t("publishReview.tab.skill")}
+						</TabsTrigger>
 					) : null}
 				</TabsList>
 				{canViewEmployeeReview ? (

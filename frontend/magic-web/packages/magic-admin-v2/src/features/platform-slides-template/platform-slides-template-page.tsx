@@ -87,12 +87,18 @@ export default function PlatformSlidesTemplatePage() {
 	const templateMutations = useSlidesTemplateMutations()
 	const categoryMutations = useSlidesTemplateCategoryMutations()
 	const tagMutations = useSlidesTemplateTagMutations()
-	const libraryQueryState = useListQueryParams<TemplateLibraryFilterDraft, SlidesTemplateQueryParams>({
+	const libraryQueryState = useListQueryParams<
+		TemplateLibraryFilterDraft,
+		SlidesTemplateQueryParams
+	>({
 		debounceFields: ["keyword", "code"],
 		initialDraft: createDefaultTemplateLibraryDraft,
 		toParams: toTemplateLibraryParams,
 	})
-	const categoryQueryState = useListQueryParams<CategoryFilterDraft, SlidesTemplateCategoryQueryParams>({
+	const categoryQueryState = useListQueryParams<
+		CategoryFilterDraft,
+		SlidesTemplateCategoryQueryParams
+	>({
 		debounceFields: ["keyword", "code"],
 		initialDraft: createDefaultCategoryFilterDraft,
 		toParams: toCategoryListParams,
@@ -212,14 +218,17 @@ export default function PlatformSlidesTemplatePage() {
 					<>
 						<PageHeaderFilterButton
 							count={
-							tab === "library"
-								? countActiveTemplateLibraryFilters(libraryQueryState.filterDraft)
-								: tab === "categories"
-									? countActiveCategoryFilters(categoryQueryState.filterDraft)
-									: countActiveTagFilters(tagQueryState.filterDraft)
+								tab === "library"
+									? countActiveTemplateLibraryFilters(
+											libraryQueryState.filterDraft,
+										)
+									: tab === "categories"
+										? countActiveCategoryFilters(categoryQueryState.filterDraft)
+										: countActiveTagFilters(tagQueryState.filterDraft)
 							}
 							label={t("slidesTemplate.filterTitle")}
 							onClick={() => setMobileFilterOpen(true)}
+							data-testid="platform-slides-template-filter-button"
 						/>
 						<PageHeaderActionButton
 							onClick={refresh}

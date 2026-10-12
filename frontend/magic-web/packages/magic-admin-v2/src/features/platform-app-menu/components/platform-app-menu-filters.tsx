@@ -52,6 +52,7 @@ export function PlatformAppMenuFilters({
 			resetLabel={t("appMenu.action.reset")}
 			title={t("appMenu.filter.title")}
 			value={value}
+			desktopTestId="app-menu-filters"
 		/>
 	)
 }
@@ -80,21 +81,31 @@ function AppMenuFilterFields({
 				/>
 			</FilterControlField>
 			<FilterControlField label={t("appMenu.filter.status")}>
-				<Select
-					onValueChange={(status) => onChange({ status })}
-					value={value.status}
-				>
-					<SelectTrigger aria-label={t("appMenu.filter.status")} className="w-full">
+				<Select onValueChange={(status) => onChange({ status })} value={value.status}>
+					<SelectTrigger
+						aria-label={t("appMenu.filter.status")}
+						className="w-full"
+						data-testid="platform-app-menu-select-trigger"
+					>
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={APP_MENU_ALL_VALUE}>
+					<SelectContent data-testid="platform-app-menu-filter-content">
+						<SelectItem
+							data-testid="platform-app-menu-option"
+							value={APP_MENU_ALL_VALUE}
+						>
 							{t("appMenu.filter.statusAll")}
 						</SelectItem>
-						<SelectItem value={String(appMenuStatus.enabled)}>
+						<SelectItem
+							data-testid="platform-app-menu-option"
+							value={String(appMenuStatus.enabled)}
+						>
 							{t("appMenu.status.enabled")}
 						</SelectItem>
-						<SelectItem value={String(appMenuStatus.disabled)}>
+						<SelectItem
+							data-testid="platform-app-menu-option"
+							value={String(appMenuStatus.disabled)}
+						>
 							{t("appMenu.status.disabled")}
 						</SelectItem>
 					</SelectContent>

@@ -90,7 +90,10 @@ export function PlatformAppMenuFormDialog({
 
 	return (
 		<Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-			<DialogContent className="max-h-[calc(100vh-2rem)] overflow-visible sm:max-w-2xl">
+			<DialogContent
+				data-testid="platform-app-menu-dialog-content"
+				className="max-h-[calc(100vh-2rem)] overflow-visible sm:max-w-2xl"
+			>
 				<DialogHeader>
 					<DialogTitle>
 						{formItem || fallbackItem
@@ -120,6 +123,7 @@ export function PlatformAppMenuFormDialog({
 								<Input
 									disabled={isSaving}
 									id="platform-app-menu-name-zh"
+									data-testid="platform-app-menu-platform-app-menu-name-zh-input"
 									placeholder={t("appMenu.placeholder.nameZh")}
 									{...form.register("name_i18n.zh_CN")}
 								/>
@@ -136,6 +140,7 @@ export function PlatformAppMenuFormDialog({
 								<Input
 									disabled={isSaving}
 									id="platform-app-menu-name-en"
+									data-testid="platform-app-menu-platform-app-menu-name-en-input"
 									placeholder={t("appMenu.placeholder.nameEn")}
 									{...form.register("name_i18n.en_US")}
 								/>
@@ -154,6 +159,7 @@ export function PlatformAppMenuFormDialog({
 							<Input
 								disabled={isSaving}
 								id="platform-app-menu-path"
+								data-testid="platform-app-menu-platform-app-menu-path-input"
 								placeholder={t("appMenu.placeholder.path")}
 								{...form.register("path")}
 							/>
@@ -192,6 +198,7 @@ export function PlatformAppMenuFormDialog({
 								<Input
 									disabled={isSaving}
 									id="platform-app-menu-sort-order"
+									data-testid="platform-app-menu-platform-app-menu-sort-order-input"
 									min={0}
 									placeholder={t("appMenu.placeholder.sortOrder")}
 									type="number"
@@ -312,6 +319,7 @@ export function PlatformAppMenuFormDialog({
 									name="status"
 									render={({ field }) => (
 										<Switch
+											data-testid="platform-app-menu-platform-app-menu-status-switch"
 											checked={field.value}
 											disabled={isSaving}
 											id="platform-app-menu-status"
@@ -329,6 +337,7 @@ export function PlatformAppMenuFormDialog({
 
 						<DialogFooter className="pt-2">
 							<Button
+								data-testid="platform-app-menu-cancel-button"
 								disabled={isSaving}
 								onClick={onClose}
 								type="button"
@@ -337,6 +346,7 @@ export function PlatformAppMenuFormDialog({
 								{t("common.cancel")}
 							</Button>
 							<Button
+								data-testid="platform-app-menu-save-button"
 								disabled={isSaving || isDetailLoading || isImageUploading}
 								type="submit"
 							>
@@ -402,7 +412,7 @@ function createAppMenuSchema(t: (key: string) => string) {
 
 function AppMenuFormSkeleton() {
 	return (
-		<div className="space-y-5">
+		<div className="space-y-5" data-testid="platform-app-menu-loading">
 			{Array.from({ length: 3 }, (_, section) => (
 				<section className="space-y-3" key={section}>
 					<Skeleton className="h-4 w-24" />

@@ -151,6 +151,7 @@ export function ProviderListContent({
 						<div className="flex justify-end gap-1">
 							<Button
 								className="whitespace-nowrap"
+								data-testid="provider-list-configure-button"
 								onClick={() => onOpenDetail(provider)}
 								size="sm"
 								variant="outline"
@@ -166,6 +167,7 @@ export function ProviderListContent({
 							{canDelete ? (
 								<Button
 									aria-label={t("common.delete")}
+									data-testid="provider-list-delete-button"
 									disabled={deleting}
 									onClick={() => setDeleteTarget(provider)}
 									size="sm"
@@ -221,6 +223,8 @@ export function ProviderListContent({
 				onMobileOpenChange={onMobileFilterOpenChange}
 				showMobileTrigger={false}
 				className="mt-5"
+				desktopTestId="provider-desktop-filters"
+				mobileContentTestId="provider-mobile-filters"
 				createDefaultValue={createDefaultProviderFilterDraft}
 				onChange={(patch) => onFilterChange({ ...filter, ...patch })}
 				onReset={() => onFilterChange(createDefaultProviderFilterDraft())}
@@ -426,15 +430,29 @@ function ProviderStatusSelect({
 
 	return (
 		<Select value={value} onValueChange={onChange}>
-			<SelectTrigger className={className}>
+			<SelectTrigger
+				className={className}
+				data-testid="platform-provider-list-filter-content"
+			>
 				<SelectValue />
 			</SelectTrigger>
-			<SelectContent>
-				<SelectItem value={providerSelectAllValue}>{t("common.all")}</SelectItem>
-				<SelectItem value={String(providerStatus.enabled)}>
+			<SelectContent data-testid="platform-provider-list-filter-content">
+				<SelectItem
+					data-testid="platform-provider-list-option"
+					value={providerSelectAllValue}
+				>
+					{t("common.all")}
+				</SelectItem>
+				<SelectItem
+					data-testid="platform-provider-list-option"
+					value={String(providerStatus.enabled)}
+				>
 					{t("providerList.status.enabled")}
 				</SelectItem>
-				<SelectItem value={String(providerStatus.disabled)}>
+				<SelectItem
+					data-testid="platform-provider-list-option"
+					value={String(providerStatus.disabled)}
+				>
 					{t("providerList.status.disabled")}
 				</SelectItem>
 			</SelectContent>
@@ -455,18 +473,35 @@ function ProviderTypeSelect({
 
 	return (
 		<Select value={value} onValueChange={onChange}>
-			<SelectTrigger className={className}>
+			<SelectTrigger
+				className={className}
+				data-testid="platform-provider-list-platform-provider-list-content"
+			>
 				<SelectValue />
 			</SelectTrigger>
-			<SelectContent>
-				<SelectItem value={providerSelectAllValue}>{t("common.all")}</SelectItem>
-				<SelectItem value={String(providerType.official)}>
+			<SelectContent data-testid="platform-provider-list-platform-provider-list-content">
+				<SelectItem
+					data-testid="platform-provider-list-option"
+					value={providerSelectAllValue}
+				>
+					{t("common.all")}
+				</SelectItem>
+				<SelectItem
+					data-testid="platform-provider-list-option"
+					value={String(providerType.official)}
+				>
 					{getProviderTypeLabel(providerType.official, t)}
 				</SelectItem>
-				<SelectItem value={String(providerType.nonOfficial)}>
+				<SelectItem
+					data-testid="platform-provider-list-option"
+					value={String(providerType.nonOfficial)}
+				>
 					{getProviderTypeLabel(providerType.nonOfficial, t)}
 				</SelectItem>
-				<SelectItem value={String(providerType.custom)}>
+				<SelectItem
+					data-testid="platform-provider-list-option"
+					value={String(providerType.custom)}
+				>
 					{getProviderTypeLabel(providerType.custom, t)}
 				</SelectItem>
 			</SelectContent>

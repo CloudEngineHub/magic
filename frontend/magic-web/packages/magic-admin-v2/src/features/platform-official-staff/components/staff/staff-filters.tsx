@@ -35,6 +35,7 @@ export function StaffFilters({
 	return (
 		<ListFilterPanel
 			applyLabel={t("officialStaff.action.applyFilters")}
+			mobileContentTestId="platform-official-staff-filter-content"
 			mobileOpen={mobileOpen}
 			onMobileOpenChange={onMobileOpenChange}
 			showMobileTrigger={false}
@@ -74,15 +75,25 @@ function StaffFilterFields({ onChange, value }: ListFilterPanelFieldsProps<Filte
 			</FilterControlField>
 			<FilterControlField label={t("officialStaff.filter.status")}>
 				<Select onValueChange={(status) => onChange({ status })} value={value.status}>
-					<SelectTrigger className="w-full">
+					<SelectTrigger
+						className="w-full"
+						data-testid="platform-official-staff-select-trigger"
+					>
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={selectAllValue}>
+					<SelectContent data-testid="platform-official-staff-select-content">
+						<SelectItem
+							data-testid="platform-official-staff-option"
+							value={selectAllValue}
+						>
 							{t("officialStaff.filter.allStatuses")}
 						</SelectItem>
-						<SelectItem value="1">{t("common.enabled")}</SelectItem>
-						<SelectItem value="0">{t("common.disabled")}</SelectItem>
+						<SelectItem data-testid="platform-official-staff-option" value="1">
+							{t("common.enabled")}
+						</SelectItem>
+						<SelectItem data-testid="platform-official-staff-option" value="0">
+							{t("common.disabled")}
+						</SelectItem>
 					</SelectContent>
 				</Select>
 			</FilterControlField>

@@ -256,6 +256,7 @@ export function AppMenuIconPicker({ disabled, id, onChange, value }: AppMenuIcon
 	return (
 		<Popover open={isOpen} onOpenChange={handleOpenChange}>
 			<PopoverTrigger
+				data-testid="platform-app-menu-icon-picker-trigger"
 				className={cn(
 					"flex h-9 w-full items-center justify-between rounded-md border bg-background px-3 text-left text-sm shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50",
 					!selectedIcon && "text-muted-foreground",
@@ -287,7 +288,11 @@ export function AppMenuIconPicker({ disabled, id, onChange, value }: AppMenuIcon
 					aria-hidden="true"
 				/>
 			</PopoverTrigger>
-			<PopoverContent align="start" className="w-[min(480px,calc(100vw-24px))] p-0">
+			<PopoverContent
+				data-testid="platform-app-menu-filter-content"
+				align="start"
+				className="w-[min(480px,calc(100vw-24px))] p-0"
+			>
 				<div className="border-b p-3">
 					<FilterSearchInput
 						autoFocus
@@ -302,6 +307,7 @@ export function AppMenuIconPicker({ disabled, id, onChange, value }: AppMenuIcon
 						<div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
 							{filteredIcons.map((item) => (
 								<button
+									data-testid="platform-app-menu-icon-option"
 									key={item.value}
 									type="button"
 									data-selected={value === item.value ? "true" : undefined}

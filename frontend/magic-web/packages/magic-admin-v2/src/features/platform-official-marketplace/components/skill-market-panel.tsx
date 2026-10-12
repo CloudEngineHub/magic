@@ -73,8 +73,7 @@ export function SkillMarketPanel({
 	const { language } = useI18n()
 	const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
 	const [importOpen, setImportOpen] = useState(false)
-	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } =
-		queryState
+	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } = queryState
 	const query = useSkillMarketListQuery(params, isActive)
 	const categoryQuery = useSkillMarketCategoryListQuery({}, isActive)
 	const importCategoryQuery = useSkillMarketCategoryListQuery(
@@ -257,7 +256,10 @@ export function SkillMarketPanel({
 					</span>
 				</Button>
 				{canEdit ? (
-					<Button onClick={() => setImportOpen(true)}>
+					<Button
+						data-testid="platform-official-marketplace-edit-button"
+						onClick={() => setImportOpen(true)}
+					>
 						<Upload className="size-4" aria-hidden="true" />
 						<span className="hidden md:inline">
 							{t("officialMarketplace.skillImport.openButton")}

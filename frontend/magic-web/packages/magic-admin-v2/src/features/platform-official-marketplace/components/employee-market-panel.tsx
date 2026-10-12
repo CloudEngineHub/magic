@@ -73,8 +73,7 @@ export function EmployeeMarketPanel({
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
-	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } =
-		queryState
+	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } = queryState
 	const query = useAgentMarketListQuery(params, isActive)
 	const categoryQuery = useAgentMarketCategoryListQuery({}, isActive)
 	const items = query.data?.list ?? emptyAgentMarketItems
@@ -244,6 +243,7 @@ export function EmployeeMarketPanel({
 			<Button
 				aria-label={t("officialMarketplace.category.manageTitle")}
 				className="h-9 w-9 px-0 md:w-auto md:px-3"
+				data-testid="platform-official-marketplace-edit-button"
 				onClick={() => setCategoryManagerOpen(true)}
 				variant="outline"
 			>

@@ -32,12 +32,21 @@ export function NumberSelect({
 			value={String(value)}
 			onValueChange={(nextValue) => onChange(Number(nextValue))}
 		>
-			<SelectTrigger aria-label={ariaLabel} className="w-full" id={id}>
+			<SelectTrigger
+				aria-label={ariaLabel}
+				className="w-full"
+				data-testid="platform-app-menu-select-trigger"
+				id={id}
+			>
 				<SelectValue />
 			</SelectTrigger>
-			<SelectContent>
+			<SelectContent data-testid="platform-app-menu-select-content">
 				{options.map(([optionValue, label]) => (
-					<SelectItem key={optionValue} value={String(optionValue)}>
+					<SelectItem
+						data-testid="platform-app-menu-option"
+						key={optionValue}
+						value={String(optionValue)}
+					>
 						{label}
 					</SelectItem>
 				))}
@@ -87,6 +96,7 @@ export function RadioChoiceGroup({
 						)}
 					>
 						<input
+							data-testid="platform-app-menu-input"
 							checked={isSelected}
 							className="sr-only"
 							disabled={disabled}

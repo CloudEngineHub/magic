@@ -84,14 +84,7 @@ export type TemplateLibraryHandle = {
 
 export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibraryProps>(
 	function TemplateLibrary(
-		{
-			canEdit,
-			mobileFilterOpen,
-			onDelete,
-			onEdit,
-			onMobileFilterOpenChange,
-			queryState,
-		},
+		{ canEdit, mobileFilterOpen, onDelete, onEdit, onMobileFilterOpenChange, queryState },
 		ref,
 	) {
 		const { t } = useTranslation()
@@ -401,6 +394,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 		return (
 			<div className="space-y-4">
 				<ListFilterPanel
+					desktopResetTestId="platform-slides-template-reset-button"
 					applyLabel={t("slidesTemplate.applyFilters")}
 					createDefaultValue={createDefaultTemplateLibraryDraft}
 					mobileOpen={mobileFilterOpen}
@@ -467,17 +461,29 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 									value={value.status}
 									onValueChange={(status) => onChange({ status })}
 								>
-									<SelectTrigger className="w-full">
+									<SelectTrigger
+										className="w-full"
+										data-testid="platform-slides-template-select-trigger"
+									>
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={emptySlidesTemplateStatus}>
+									<SelectContent data-testid="platform-slides-template-select-content">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value={emptySlidesTemplateStatus}
+										>
 											{t("slidesTemplate.all")}
 										</SelectItem>
-										<SelectItem value="1">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value="1"
+										>
 											{t("slidesTemplate.enabled")}
 										</SelectItem>
-										<SelectItem value="0">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value="0"
+										>
 											{t("slidesTemplate.disabled")}
 										</SelectItem>
 									</SelectContent>
@@ -490,14 +496,23 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 										onChange({ tagMatch })
 									}
 								>
-									<SelectTrigger className="w-full">
+									<SelectTrigger
+										className="w-full"
+										data-testid="platform-slides-template-select-trigger"
+									>
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="any">
+									<SelectContent data-testid="platform-slides-template-select-content">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value="any"
+										>
 											{t("slidesTemplate.any")}
 										</SelectItem>
-										<SelectItem value="all">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value="all"
+										>
 											{t("slidesTemplate.all")}
 										</SelectItem>
 									</SelectContent>

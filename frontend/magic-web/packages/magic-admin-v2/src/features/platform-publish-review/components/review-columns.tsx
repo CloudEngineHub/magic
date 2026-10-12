@@ -117,6 +117,7 @@ export function createReviewActionColumn<TRecord extends ReviewRecordBase>({
 			return (
 				<div className="flex items-center gap-2">
 					<Button
+						data-testid="platform-publish-review-view-button"
 						disabled={!canReview || rowPending}
 						onClick={() => onReview(row.original, "APPROVED")}
 						size="sm"
@@ -133,6 +134,7 @@ export function createReviewActionColumn<TRecord extends ReviewRecordBase>({
 					</Button>
 					<Button
 						className="text-destructive hover:text-destructive"
+						data-testid="platform-publish-review-view-button"
 						disabled={!canReview || rowPending}
 						onClick={() => onReview(row.original, "REJECTED")}
 						size="sm"

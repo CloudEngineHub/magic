@@ -169,11 +169,13 @@ export default function PlatformAppMenuPage() {
 				actions={
 					<>
 						<PageHeaderFilterButton
+							data-testid="app-menu-advanced-trigger"
 							count={activeFilterCount}
 							label={t("appMenu.filter.title")}
 							onClick={() => setMobileFilterOpen(true)}
 						/>
 						<PageHeaderActionButton
+							data-testid="app-menu-refresh-button"
 							disabled={listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
@@ -187,7 +189,11 @@ export default function PlatformAppMenuPage() {
 							/>
 							{t("common.refresh")}
 						</PageHeaderActionButton>
-						<PageHeaderActionButton disabled={!hasEditRight} onClick={openCreateForm}>
+						<PageHeaderActionButton
+							data-testid="app-menu-create-button"
+							disabled={!hasEditRight}
+							onClick={openCreateForm}
+						>
 							<Plus className="size-4" aria-hidden="true" />
 							{t("appMenu.action.create")}
 						</PageHeaderActionButton>

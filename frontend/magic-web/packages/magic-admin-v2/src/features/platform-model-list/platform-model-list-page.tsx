@@ -216,6 +216,7 @@ export default function PlatformModelListPage() {
 							<div className="flex items-center gap-2">
 								<Button
 									className="whitespace-nowrap"
+									data-testid="model-list-view-button"
 									onClick={() => setDetailTarget(row.original)}
 									size="sm"
 									variant="outline"
@@ -226,6 +227,7 @@ export default function PlatformModelListPage() {
 								{rowCanEdit ? (
 									<Button
 										className="whitespace-nowrap"
+										data-testid="model-list-edit-button"
 										onClick={() => {
 											setEditorTarget(row.original)
 											setIsEditorOpen(true)
@@ -304,11 +306,13 @@ export default function PlatformModelListPage() {
 				actions={
 					<div className="flex items-center gap-2">
 						<PageHeaderFilterButton
+							data-testid="model-list-advanced-trigger"
 							count={activeFilterCount}
 							label={t("modelList.filter.title")}
 							onClick={() => setMobileFilterOpen(true)}
 						/>
 						<PageHeaderActionButton
+							data-testid="model-list-refresh-button"
 							disabled={!hasViewAccess || listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
@@ -321,6 +325,7 @@ export default function PlatformModelListPage() {
 						</PageHeaderActionButton>
 						{canCreateModel ? (
 							<PageHeaderActionButton
+								data-testid="model-list-create-button"
 								onClick={() => {
 									setEditorTarget(null)
 									setIsEditorOpen(true)
@@ -426,12 +431,22 @@ function ModelCategoryTabs({
 	const { t } = useTranslation()
 
 	return (
-		<Tabs value={activeCategory} onValueChange={(value) => onChange(value as ModelCategoryTab)}>
+		<Tabs
+			data-testid="model-list-category-tabs"
+			value={activeCategory}
+			onValueChange={(value) => onChange(value as ModelCategoryTab)}
+		>
 			<div className="overflow-x-auto">
 				<TabsList className="min-w-max">
-					<TabsTrigger value={allCategoriesTab}>{t("modelList.tab.all")}</TabsTrigger>
+					<TabsTrigger data-testid="model-list-category-trigger" value={allCategoriesTab}>
+						{t("modelList.tab.all")}
+					</TabsTrigger>
 					{categories.map((category) => (
-						<TabsTrigger key={category} value={category}>
+						<TabsTrigger
+							data-testid="model-list-category-trigger"
+							key={category}
+							value={category}
+						>
 							{t(`modelList.category.${category}`)}
 						</TabsTrigger>
 					))}

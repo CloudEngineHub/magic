@@ -53,6 +53,7 @@ export function CapabilityFilters({
 			resetLabel={t("systemCapabilities.action.reset")}
 			title={t("systemCapabilities.filter.title")}
 			value={value}
+			desktopTestId="platform-system-capabilities-filters"
 		/>
 	)
 }
@@ -60,6 +61,7 @@ export function CapabilityFilters({
 function CapabilityFilterFields({
 	onChange,
 	value,
+	layout,
 }: ListFilterPanelFieldsProps<CapabilityFilterDraft>) {
 	const { t } = useTranslation()
 
@@ -76,15 +78,31 @@ function CapabilityFilterFields({
 			</FilterControlField>
 			<FilterControlField label={t("systemCapabilities.filter.status")}>
 				<Select onValueChange={(status) => onChange({ status })} value={value.status}>
-					<SelectTrigger className="w-full">
+					<SelectTrigger
+						className="w-full"
+						data-testid="platform-system-capabilities-select-trigger"
+					>
 						<SelectValue placeholder={t("systemCapabilities.filter.status")} />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={ALL_VALUE}>
+					<SelectContent data-testid="platform-system-capabilities-select-content">
+						<SelectItem
+							data-testid="platform-system-capabilities-option"
+							value={ALL_VALUE}
+						>
 							{t("systemCapabilities.filter.allStatuses")}
 						</SelectItem>
-						<SelectItem value="enabled">{t("common.enabled")}</SelectItem>
-						<SelectItem value="disabled">{t("common.disabled")}</SelectItem>
+						<SelectItem
+							data-testid="platform-system-capabilities-option"
+							value="enabled"
+						>
+							{t("common.enabled")}
+						</SelectItem>
+						<SelectItem
+							data-testid="platform-system-capabilities-option"
+							value="disabled"
+						>
+							{t("common.disabled")}
+						</SelectItem>
 					</SelectContent>
 				</Select>
 			</FilterControlField>

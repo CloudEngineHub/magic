@@ -65,6 +65,8 @@ export function ModelListFilters({
 			resetLabel={t("modelList.action.reset")}
 			title={t("modelList.filter.title")}
 			value={value}
+			desktopTestId="model-list-filters"
+			mobileContentTestId="model-list-mobile-filters"
 		/>
 	)
 }
@@ -74,6 +76,7 @@ function ModelListFilterFields({
 	onChange,
 	showModelTypes,
 	value,
+	layout,
 }: ListFilterPanelFieldsProps<ModelListFilterDraft> &
 	Pick<ModelListFiltersProps, "modelTypeOptions" | "showModelTypes">) {
 	const { t } = useTranslation()
@@ -105,15 +108,36 @@ function ModelListFilterFields({
 					}
 					value={value.status === null ? allStatusFilterValue : String(value.status)}
 				>
-					<SelectTrigger aria-label={t("modelList.filter.statuses")} className="w-full">
+					<SelectTrigger
+						aria-label={t("modelList.filter.statuses")}
+						className="w-full"
+						data-testid={
+							layout === "sheet"
+								? "model-list-advanced-status-trigger"
+								: "model-list-status-trigger"
+						}
+					>
 						<SelectValue />
 					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={allStatusFilterValue}>
+					<SelectContent
+						data-testid={
+							layout === "sheet"
+								? "platform-model-list-model-list-advanced-status-content"
+								: "platform-model-list-model-list-status-content"
+						}
+					>
+						<SelectItem
+							data-testid="platform-model-list-option"
+							value={allStatusFilterValue}
+						>
 							{t("modelList.filter.allStatuses")}
 						</SelectItem>
 						{statusOptions.map((option) => (
-							<SelectItem key={option.value} value={String(option.value)}>
+							<SelectItem
+								data-testid="platform-model-list-option"
+								key={option.value}
+								value={String(option.value)}
+							>
 								{option.label}
 							</SelectItem>
 						))}
@@ -127,6 +151,17 @@ function ModelListFilterFields({
 						ariaLabel={t("modelList.filter.modelTypes")}
 						onChange={(modelTypes) => onChange({ modelTypes })}
 						options={modelTypeOptions}
+						triggerTestId={
+							layout === "sheet"
+								? "model-list-advanced-model-type-trigger"
+								: "model-list-model-type-trigger"
+						}
+						contentTestId={
+							layout === "sheet"
+								? "model-list-advanced-model-type-content"
+								: "model-list-model-type-content"
+						}
+						optionTestId="platform-model-list-option"
 						value={value.modelTypes}
 					/>
 				</FilterControlField>

@@ -107,11 +107,11 @@ export function AssignModelsDialog({
 		setOpenFloatingId(null)
 		setConfirmAction(null)
 		setCategory(staffModelCategory.text)
-	}, [open, staff?.id]);
+	}, [open, staff?.id])
 
 	useEffect(() => {
 		if (!open || !detailQuery.data) return
-		setDetail((current) => current ?? detailQuery.data);
+		setDetail((current) => current ?? detailQuery.data)
 	}, [detailQuery.data, open])
 
 	const modelOptions = useMemo<OfficialStaffModelOption[]>(
@@ -135,7 +135,7 @@ export function AssignModelsDialog({
 	const isDefaultConfig = staff?.is_default === 1
 	const isFollow =
 		!isDefaultConfig && detail?.mode.distribution_type === staffDistributionType.follow
-	const editable = canEdit && Boolean(detail) && !isFollow;
+	const editable = canEdit && Boolean(detail) && !isFollow
 
 	const {
 		defaultDetailPending,
@@ -402,7 +402,11 @@ export function AssignModelsDialog({
 													</SelectTrigger>
 													<SelectContent data-testid="platform-official-staff-select-content">
 														{modeOptions
-															.filter((item) => item.id && item.id !== staff?.id)
+															.filter(
+																(item) =>
+																	item.id &&
+																	item.id !== staff?.id,
+															)
 															.map((item) => (
 																<SelectItem
 																	key={item.id}
@@ -421,7 +425,9 @@ export function AssignModelsDialog({
 												<div className="flex items-center gap-2">
 													{canEdit && detail.mode.is_default !== 1 ? (
 														<Button
-															onClick={() => setConfirmAction({ kind: "reset" })}
+															onClick={() =>
+																setConfirmAction({ kind: "reset" })
+															}
 															variant="outline"
 															data-testid="platform-official-staff-confirm-button"
 														>
@@ -515,7 +521,11 @@ export function AssignModelsDialog({
 					>
 						{t("common.cancel")}
 					</Button>
-					<Button disabled={!canEdit || !detail || saveConfigPending} onClick={handleSave}>
+					<Button
+						data-testid="platform-official-staff-save-button"
+						disabled={!canEdit || !detail || saveConfigPending}
+						onClick={handleSave}
+					>
 						{saveConfigPending ? (
 							<Loader2 className="size-4 animate-spin" />
 						) : (

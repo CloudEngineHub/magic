@@ -289,17 +289,29 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 									value={value.status}
 									onValueChange={(status) => onChange({ status })}
 								>
-									<SelectTrigger className="w-full">
+									<SelectTrigger
+										className="w-full"
+										data-testid="platform-slides-template-select-trigger"
+									>
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value={emptySlidesTemplateStatus}>
+									<SelectContent data-testid="platform-slides-template-select-content">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value={emptySlidesTemplateStatus}
+										>
 											{t("slidesTemplate.all")}
 										</SelectItem>
-										<SelectItem value="1">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value="1"
+										>
 											{t("slidesTemplate.enabled")}
 										</SelectItem>
-										<SelectItem value="0">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value="0"
+										>
 											{t("slidesTemplate.disabled")}
 										</SelectItem>
 									</SelectContent>
