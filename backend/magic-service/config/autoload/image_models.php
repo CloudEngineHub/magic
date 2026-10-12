@@ -752,5 +752,82 @@ return [
                 'prefer_declared_sizes' => true,
             ],
         ],
+
+        // ==========================================================
+        // 兜底：所有 Gemini 系列生图模型（未在上面精确命中的）
+        // 尺寸沿用 Nano Banana 2（gemini-3.1-flash-image）那套：1K/2K/4K，14 种比例。
+        //
+        // ⚠️ 必须放在 models 的最后一项：SizeManager::matchConfig 是「按块顺序遍历、
+        // 首个命中即返回」，所以上面那些更精确的 gemini 块必须先于本块被检查。
+        // 新增更精确的 gemini 块时，请插到本块之前，不要插到它后面。
+        // ==========================================================
+        [
+            'match' => [
+                ['field' => 'model_version', 'value' => 'gemini', 'match_type' => 'fuzzy'],
+                ['field' => 'model_id', 'value' => 'gemini', 'match_type' => 'fuzzy'],
+            ],
+            'config' => [
+                'sizes' => [
+                    // 1:1
+                    ['label' => '1:1', 'value' => '1024x1024', 'scale' => '1K'],
+                    ['label' => '1:1', 'value' => '2048x2048', 'scale' => '2K'],
+                    ['label' => '1:1', 'value' => '4096x4096', 'scale' => '4K'],
+                    // 1:4
+                    ['label' => '1:4', 'value' => '512x2048', 'scale' => '1K'],
+                    ['label' => '1:4', 'value' => '1024x4096', 'scale' => '2K'],
+                    ['label' => '1:4', 'value' => '2048x8192', 'scale' => '4K'],
+                    // 1:8
+                    ['label' => '1:8', 'value' => '384x3072', 'scale' => '1K'],
+                    ['label' => '1:8', 'value' => '768x6144', 'scale' => '2K'],
+                    ['label' => '1:8', 'value' => '1536x12288', 'scale' => '4K'],
+                    // 2:3
+                    ['label' => '2:3', 'value' => '848x1264', 'scale' => '1K'],
+                    ['label' => '2:3', 'value' => '1696x2528', 'scale' => '2K'],
+                    ['label' => '2:3', 'value' => '3392x5056', 'scale' => '4K'],
+                    // 3:2
+                    ['label' => '3:2', 'value' => '1264x848', 'scale' => '1K'],
+                    ['label' => '3:2', 'value' => '2528x1696', 'scale' => '2K'],
+                    ['label' => '3:2', 'value' => '5056x3392', 'scale' => '4K'],
+                    // 3:4
+                    ['label' => '3:4', 'value' => '896x1200', 'scale' => '1K'],
+                    ['label' => '3:4', 'value' => '1792x2400', 'scale' => '2K'],
+                    ['label' => '3:4', 'value' => '3584x4800', 'scale' => '4K'],
+                    // 4:1
+                    ['label' => '4:1', 'value' => '2048x512', 'scale' => '1K'],
+                    ['label' => '4:1', 'value' => '4096x1024', 'scale' => '2K'],
+                    ['label' => '4:1', 'value' => '8192x2048', 'scale' => '4K'],
+                    // 4:3
+                    ['label' => '4:3', 'value' => '1200x896', 'scale' => '1K'],
+                    ['label' => '4:3', 'value' => '2400x1792', 'scale' => '2K'],
+                    ['label' => '4:3', 'value' => '4800x3584', 'scale' => '4K'],
+                    // 4:5
+                    ['label' => '4:5', 'value' => '928x1152', 'scale' => '1K'],
+                    ['label' => '4:5', 'value' => '1856x2304', 'scale' => '2K'],
+                    ['label' => '4:5', 'value' => '3712x4608', 'scale' => '4K'],
+                    // 5:4
+                    ['label' => '5:4', 'value' => '1152x928', 'scale' => '1K'],
+                    ['label' => '5:4', 'value' => '2304x1856', 'scale' => '2K'],
+                    ['label' => '5:4', 'value' => '4608x3712', 'scale' => '4K'],
+                    // 8:1
+                    ['label' => '8:1', 'value' => '3072x384', 'scale' => '1K'],
+                    ['label' => '8:1', 'value' => '6144x768', 'scale' => '2K'],
+                    ['label' => '8:1', 'value' => '12288x1536', 'scale' => '4K'],
+                    // 9:16
+                    ['label' => '9:16', 'value' => '768x1376', 'scale' => '1K'],
+                    ['label' => '9:16', 'value' => '1536x2752', 'scale' => '2K'],
+                    ['label' => '9:16', 'value' => '3072x5504', 'scale' => '4K'],
+                    // 16:9
+                    ['label' => '16:9', 'value' => '1376x768', 'scale' => '1K'],
+                    ['label' => '16:9', 'value' => '2752x1536', 'scale' => '2K'],
+                    ['label' => '16:9', 'value' => '5504x3072', 'scale' => '4K'],
+                    // 21:9
+                    ['label' => '21:9', 'value' => '1584x672', 'scale' => '1K'],
+                    ['label' => '21:9', 'value' => '3168x1344', 'scale' => '2K'],
+                    ['label' => '21:9', 'value' => '6336x2688', 'scale' => '4K'],
+                ],
+                'max_reference_images' => 14,
+                'max_output_images' => 1,
+            ],
+        ],
     ],
 ];
