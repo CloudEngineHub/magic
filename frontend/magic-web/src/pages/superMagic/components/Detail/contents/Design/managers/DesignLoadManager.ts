@@ -1,24 +1,19 @@
-import {
-	findMagicProjectJsFile,
-	resolveDesignDirectoryNameFromAttachments,
-	resolveDesignProjectBasePathFromAttachments,
-	resolveActualDesignCurrentFile,
-} from "../utils/utils"
+import { findMagicProjectJsFile, resolveActualDesignCurrentFile } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import { SuperMagicApi } from "@/apis"
 import {
 	resolveDesignAccessMode,
+	getDesignRequestIdentity,
 	type DesignProjectStateBag,
 	type DesignProjectManagerOptions,
 	type PendingDesignUpgrade,
 } from "./types"
 import {
 	DesignLoadError,
-	loadDesignDataToRuntime,
 	type DesignLoadIssue,
 	type DesignSidecarStatus,
 } from "../utils/designDataLoader"
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
+import type { DesignVersionLoadResult } from "./DesignVersionManager"
 import { stringifyUnknownError } from "@/utils/error"
 
 export interface DesignLoadResult {
@@ -47,7 +42,14 @@ export class DesignLoadManager {
 	private currentProjectId: string | null = null
 	private lastLoadResult: DesignLoadResult | undefined
 
-	constructor(stateBag: DesignProjectStateBag, options: DesignProjectManagerOptions) {
+	constructor(
+		stateBag: DesignProjectStateBag,
+		options: DesignProjectManagerOptions,
+		private readCurrentSnapshot: (
+			fileId: string,
+			options: DesignProjectManagerOptions,
+		) => Promise<DesignVersionLoadResult>,
+	) {
 		this.stateBag = stateBag
 		this.options = options
 	}
@@ -134,7 +136,7 @@ export class DesignLoadManager {
 			identityKey: JSON.stringify([
 				projectId ?? null,
 				actualCurrentFile.id,
-				this.options.fileApi?.identityKey ?? "none",
+				getDesignRequestIdentity(this.options),
 			]),
 			options: this.options,
 			currentFile: actualCurrentFile,
@@ -147,7 +149,7 @@ export class DesignLoadManager {
 
 	private async loadFromRemoteInternal(request: DesignLoadRequest): Promise<DesignLoadResult> {
 		const {
-			options: { attachments, flatAttachments, projectPath, projectId, attachmentIndex },
+			options: { attachments, projectId },
 			currentFile: { id: currentFileId, name: currentFileName },
 		} = request
 		if (!attachments) {
@@ -176,43 +178,19 @@ export class DesignLoadManager {
 				attachments,
 				currentFileId,
 				currentFileName,
-				fileApi: this.options.fileApi,
+				fileApi: request.options.fileApi,
 			})
 			if (!this.isCurrentLoadRequest(request)) {
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			}
-			if (!result?.fileId || result.content === undefined || result.content === null) {
+			if (!result?.fileId) {
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			}
 
-			const directoryName = resolveDesignDirectoryNameFromAttachments({
-				currentFile: { id: currentFileId, name: currentFileName },
-				flatAttachments,
-				attachments,
-				projectPath,
-			})
-			const dslBase = resolveDesignProjectBasePathFromAttachments({
-				currentFile: { id: currentFileId, name: currentFileName },
-				flatAttachments,
-				attachments,
-			})
-			const loaded = await loadDesignDataToRuntime({
-				content: result.content,
-				nameOverride: directoryName,
-				elementDetailsContext: {
-					attachments,
-					flatAttachments,
-					mainFileId: result.fileId,
-					projectId: projectId ?? undefined,
-					fileApi: request.options.fileApi,
-				},
-				pathContext: {
-					projectBasePath: dslBase,
-					flatAttachments,
-					attachmentIndex,
-				},
-				fileId: result.fileId,
-			})
+			const snapshot = await this.readCurrentSnapshot(result.fileId, request.options)
+			const loaded = snapshot.loadResult
+			if (!snapshot.data || !loaded)
+				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			if (!this.isCurrentLoadRequest(request)) {
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			}
@@ -242,16 +220,7 @@ export class DesignLoadManager {
 				sidecarStatus === "unsupported" ? "readonly" : accessMode,
 			)
 
-			if (accessMode !== "share") {
-				try {
-					const fileInfo = await SuperMagicApi.getFileInfo({ file_id: result.fileId })
-					if (this.isCurrentLoadRequest(request) && fileInfo?.version !== undefined) {
-						this.stateBag.setMagicProjectJsVersion(fileInfo.version)
-					}
-				} catch {
-					// ignore
-				}
-			}
+			this.stateBag.setMagicProjectJsVersion(snapshot.version)
 
 			return { didLoad: true, pendingUpgrade, issue: loadIssue, sidecarStatus }
 		} catch (error) {

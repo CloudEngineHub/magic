@@ -23,14 +23,11 @@ import {
 	registerWaitForNextAttachmentsRefreshForProject,
 	waitForNextAttachmentsRefreshForProject,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
-import {
-	loadMagicProjectJsContent,
-	resolveDesignProjectBasePathFromAttachments,
-} from "../utils/utils"
+import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { resolveDesignCanvasResourceReference } from "../utils/designResourceReferenceResolver"
 import { SuperMagicApi } from "@/apis"
-import { loadDesignDataToRuntime } from "../utils/designDataLoader"
+import type { DesignVersionLoadResult } from "./DesignVersionManager"
 import type { LoadDesignDataToRuntimeResult } from "../utils/designDataLoader"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import type { SuperMagicProjectAttachmentsReconciledPayload } from "@/pages/superMagic/events/files"
@@ -180,7 +177,7 @@ export type LoadAndApplyRemoteFn = (
 ) => Promise<boolean>
 
 /** 仅拉取远端设计数据，不写状态、不触画布（与等待附件并行） */
-export type FetchRemoteDesignDataFn = () => Promise<DesignData | null>
+export type FetchRemoteDesignDataFn = () => Promise<DesignVersionLoadResult | null>
 
 /** 将已拉取的数据写入状态并通知画布更新；attachments 就绪后调用 */
 export type ApplyRemoteDesignDataFn = (
@@ -754,95 +751,34 @@ export class DesignRemoteListener {
 	 * file-change 链路：读远端 magic.project.js，媒体或生成配置未同步时等待附件刷新后重读；
 	 * 返回可直接 apply 的数据；返回 null 表示应由 fetchRemoteDesignData（loadLatest）兜底。
 	 */
-	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<{
-		data: DesignData
-		loadResult: LoadDesignDataToRuntimeResult
-	} | null> {
+	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<DesignVersionLoadResult | null> {
 		const fid = this.options.getMagicProjectJsFileId()
 		if (!fid) return null
-
 		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
-
-		let parsed: DesignData | null = null
-		let parsedLoadResult: LoadDesignDataToRuntimeResult | null = null
-		try {
-			const content = await loadMagicProjectJsContent(fid, {
-				fileApi: this.options.fileApi,
-			})
-			const loaded = await loadDesignDataToRuntime({
-				content,
-				elementDetailsContext: {
-					attachments: this.options.attachments,
-					flatAttachments: this.options.flatAttachments,
-					mainFileId: fid,
-					projectId: this.options.projectId,
-					fileApi: this.options.fileApi,
-				},
-				pathContext: {
-					projectBasePath: dslBase,
-					flatAttachments: this.options.flatAttachments,
-					attachmentIndex: this.options.attachmentIndex,
-				},
-				fileId: fid,
-			})
-			parsed = loaded.data
-			parsedLoadResult = loaded
-		} catch {
-			return null
-		}
-
-		if (!parsed || !parsedLoadResult) return null
-
+		const snapshot = await this.options.fetchRemoteDesignData()
+		if (!snapshot?.data) return null
 		const storeFiles = [
 			...(this.options.flatAttachments ?? []),
 			...flattenFileItems(this.options.attachments ?? []),
 		]
-
 		const hasMissingMedia = designDataHasMediaMissingFromAttachments(
-			parsed,
+			snapshot.data,
 			storeFiles,
 			dslBase,
 		)
-		const hasPendingGenerationWithoutInfo =
-			designDataHasPendingMediaWithoutGenerationDetails(parsed)
-		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo)
-			return { data: parsed, loadResult: parsedLoadResult }
-
+		const hasPendingGenerationWithoutInfo = designDataHasPendingMediaWithoutGenerationDetails(
+			snapshot.data,
+		)
+		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo) return snapshot
 		const projectId = this.options.projectId
-		if (!projectId)
-			return hasMissingMedia ? null : { data: parsed, loadResult: parsedLoadResult }
-
+		if (!projectId) return hasMissingMedia ? null : snapshot
 		try {
 			await waitForNextAttachmentsRefreshForProject(projectId, { timeoutMs: 15_000 })
 		} catch {
 			// 生成配置同步超时不应阻塞占位符展示；媒体缺失仍沿用原有失败策略。
-			return hasMissingMedia ? null : { data: parsed, loadResult: parsedLoadResult }
+			return hasMissingMedia ? null : snapshot
 		}
-
-		try {
-			const content = await loadMagicProjectJsContent(fid, {
-				fileApi: this.options.fileApi,
-			})
-			const loaded = await loadDesignDataToRuntime({
-				content,
-				elementDetailsContext: {
-					attachments: this.options.attachments,
-					flatAttachments: this.options.flatAttachments,
-					mainFileId: fid,
-					projectId: this.options.projectId,
-					fileApi: this.options.fileApi,
-				},
-				pathContext: {
-					projectBasePath: dslBase,
-					flatAttachments: this.options.flatAttachments,
-					attachmentIndex: this.options.attachmentIndex,
-				},
-				fileId: fid,
-			})
-			return { data: loaded.data, loadResult: loaded }
-		} catch {
-			return null
-		}
+		return this.options.fetchRemoteDesignData()
 	}
 
 	private getMagicProjectJsUpdatedAtFromOptions(): number | null {
@@ -888,7 +824,6 @@ export class DesignRemoteListener {
 		if (!isLatestApply()) return
 		if (didApplyRemote) {
 			this.markMagicProjectJsUpdatedAtApplied(options?.fileUpdatedAtMs)
-			await this.markRemoteVersionApplied(null)
 			if (!isLatestApply()) return
 		}
 
@@ -898,19 +833,6 @@ export class DesignRemoteListener {
 			await this.options.fetchAndSetVersions()
 		} catch {
 			// ignore
-		}
-	}
-
-	private async markRemoteVersionApplied(fileVersion?: number | null): Promise<void> {
-		const normalizedVersion = normalizeFileVersion(fileVersion)
-		if (normalizedVersion !== null) {
-			this.options.updateLocalVersion(normalizedVersion)
-			return
-		}
-
-		const latestVersion = await this.fetchLatestMagicProjectJsVersion()
-		if (latestVersion !== null) {
-			this.options.updateLocalVersion(latestVersion)
 		}
 	}
 
@@ -981,48 +903,33 @@ export class DesignRemoteListener {
 					this.isMounted && this.latestRemoteApplyToken === applyToken
 
 				const run = (async () => {
-					const resolvedFileVersion =
-						pendingFileVersion ?? (await this.fetchLatestMagicProjectJsVersion())
+					let snapshot = await this.maybePrepareRemoteDesignDataFromMagicProjectFile()
 					if (!isLatestApply()) return
-
-					const preloaded = await this.maybePrepareRemoteDesignDataFromMagicProjectFile()
-					if (!isLatestApply()) return
-					if (preloaded) {
-						const preloadedData =
-							"data" in preloaded
-								? preloaded.data
-								: (preloaded as unknown as DesignData)
-						const preloadedLoadResult =
-							"loadResult" in preloaded ? preloaded.loadResult : undefined
-						const applied = this.options.applyRemoteDesignData(
-							preloadedData,
-							"message",
-							preloadedLoadResult
-								? {
-										remoteVersion: resolvedFileVersion,
-										loadResult: preloadedLoadResult,
-									}
-								: { remoteVersion: resolvedFileVersion },
+					if (!snapshot?.data) snapshot = await this.options.fetchRemoteDesignData()
+					if (!isLatestApply() || !snapshot?.data) return
+					// 通知版本只提示重读；不能用 V11 通知给 V10 正文贴标签。
+					if (
+						pendingFileVersion != null &&
+						snapshot.version != null &&
+						snapshot.version < pendingFileVersion
+					) {
+						snapshot = await this.options.fetchRemoteDesignData()
+						if (
+							!isLatestApply() ||
+							!snapshot?.data ||
+							snapshot.version == null ||
+							snapshot.version < pendingFileVersion
 						)
-						if (applied) {
-							this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
-							await this.markRemoteVersionApplied(resolvedFileVersion)
-						}
-						return
+							return
 					}
-					const newData = await this.options.fetchRemoteDesignData()
-					if (!isLatestApply()) return
-					if (!newData) return
-					const applied = this.options.applyRemoteDesignData(newData, "message", {
-						remoteVersion: resolvedFileVersion,
+					const applied = this.options.applyRemoteDesignData(snapshot.data, "message", {
+						remoteVersion: snapshot.version,
+						loadResult: snapshot.loadResult,
 					})
-					if (applied) {
-						this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
-						await this.markRemoteVersionApplied(resolvedFileVersion)
-					}
+					if (applied) this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
 				})()
 
-				void run
+				void run.catch(() => undefined)
 			} else {
 				void this.handleRemoteRefresh("message", {
 					fileUpdatedAtMs: pendingFileUpdatedAtMs,

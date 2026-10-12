@@ -26,6 +26,7 @@ vi.mock("@/apis", () => ({
 
 vi.mock("../../utils/elementDetailsIo", () => ({
 	getElementDetailsSidecarStatus: vi.fn(),
+	getHydratedElementDetailsProvenance: vi.fn(() => ({})),
 	writeUserElementDetails: vi.fn(),
 }))
 
@@ -103,7 +104,12 @@ function createSaveManager(
 describe("DesignSaveManager remote checks", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		vi.mocked(SuperMagicApi.saveFileContent).mockResolvedValue({} as never)
+		vi.mocked(SuperMagicApi.saveFileContent).mockResolvedValue({
+			success_files: [
+				{ file_id: "file-1", data: { version: 3, updated_at: "2026-10-12 00:00:00 UTC" } },
+			],
+			error_files: [],
+		} as never)
 		vi.mocked(getElementDetailsSidecarStatus).mockResolvedValue("missing")
 		vi.mocked(writeUserElementDetails).mockResolvedValue("skipped")
 	})
@@ -155,6 +161,11 @@ describe("DesignSaveManager remote checks", () => {
 			isCheckReliable: true,
 		})
 		vi.mocked(SuperMagicApi.getFileInfo).mockResolvedValue({ version: 4 } as never)
+
+		vi.mocked(SuperMagicApi.saveFileContent).mockResolvedValue({
+			success_files: [{ file_id: "file-1", data: { version: 4 } }],
+			error_files: [],
+		} as never)
 
 		const result = await saveManager.commitSave({ skipRemoteUpdateCheck: true })
 

@@ -14,7 +14,11 @@ import {
 import { isContentProjectVersion } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
-import { type DesignProjectStateBag, type DesignProjectManagerOptions } from "./types"
+import {
+	type DesignProjectStateBag,
+	type DesignProjectManagerOptions,
+	getDesignRequestIdentity,
+} from "./types"
 
 const AUTO_SAVE_DEBOUNCE_MS = 3000
 
@@ -24,6 +28,20 @@ function getTopLevelElementCount(data: DesignData | null | undefined): number {
 
 function normalizeElementIds(ids?: string[]): string[] {
 	return ids?.length ? Array.from(new Set(ids)) : []
+}
+
+interface DesignCommitSaveOptions {
+	allowRemoteConflict?: boolean
+	allowReadOnlyRetry?: boolean
+	designData?: DesignData
+	updateCurrentDesignData?: boolean
+	skipRemoteUpdateCheck?: boolean
+	source?: DesignSaveSource
+	deletedElementIds?: string[]
+	beforeElementCount?: number
+	nextElementCount?: number
+	isRemoteApplying?: boolean
+	fromDraft?: boolean
 }
 
 export interface RemoteUpdateCheckResult {
@@ -80,6 +98,8 @@ export interface DesignSaveContext {
 export type DesignSaveResult =
 	| {
 			ok: true
+			fileId: string
+			accessIdentity: string
 			savedVersion: number | null
 			savedUpdatedAt: string | null
 			fullyPersisted: boolean
@@ -96,6 +116,7 @@ export type DesignSaveResult =
 
 export interface DesignSaveLifecycleHandlers {
 	onSaveStart?: () => number | null
+	onSaveCommitted?: (result: Extract<DesignSaveResult, { ok: true }>) => void
 	onSaveEnd?: (
 		saveToken: number | null | undefined,
 		didSave: boolean,
@@ -116,6 +137,9 @@ export class DesignSaveManager {
 	private pendingAutoSaveMetadata: DesignSaveMetadata | null = null
 	private hasRemoteConflictPending = false
 	private lastSaveFullyPersisted = false
+	private saveQueue: Promise<void> = Promise.resolve()
+	private pendingSaveCount = 0
+	private lastCommittedVersion: number | null = null
 
 	constructor(
 		stateBag: DesignProjectStateBag,
@@ -130,6 +154,8 @@ export class DesignSaveManager {
 	}
 
 	updateOptions(options: DesignProjectManagerOptions) {
+		if (getDesignRequestIdentity(options) !== getDesignRequestIdentity(this.options))
+			this.lastCommittedVersion = null
 		this.options = options
 	}
 
@@ -143,8 +169,9 @@ export class DesignSaveManager {
 
 	private getDesignDataForSave(
 		designData: DesignData = this.stateBag.getDesignData(),
+		requestOptions: DesignProjectManagerOptions = this.options,
 	): DesignData {
-		const directoryName = resolveDesignDirectoryNameFromAttachments(this.options)
+		const directoryName = resolveDesignDirectoryNameFromAttachments(requestOptions)
 		if (!directoryName || directoryName === designData.name) {
 			return designData
 		}
@@ -194,7 +221,7 @@ export class DesignSaveManager {
 	}
 
 	hasPendingAutoSave(): boolean {
-		return this.debounceTimer !== null
+		return this.debounceTimer !== null || this.pendingSaveCount > 0
 	}
 
 	isLocalDirty(): boolean {
@@ -287,19 +314,53 @@ export class DesignSaveManager {
 		}
 	}
 
-	async commitSave(options?: {
-		allowRemoteConflict?: boolean
-		allowReadOnlyRetry?: boolean
-		designData?: DesignData
-		updateCurrentDesignData?: boolean
-		skipRemoteUpdateCheck?: boolean
-		source?: DesignSaveSource
-		deletedElementIds?: string[]
-		beforeElementCount?: number
-		nextElementCount?: number
-		isRemoteApplying?: boolean
-		fromDraft?: boolean
-	}): Promise<DesignSaveResult> {
+	commitSave(options?: DesignCommitSaveOptions): Promise<DesignSaveResult> {
+		const requestOptions = this.options
+		const fileId = this.stateBag.getMagicProjectJsFileId()
+		const accessIdentity = getDesignRequestIdentity(requestOptions)
+		const version = this.stateBag.getMagicProjectJsVersion()
+		const requestAccessMode = this.stateBag.getAccessMode()
+		const data = cloneDeep(options?.designData ?? this.stateBag.getDesignData()) as DesignData
+		const capturedOptions = { ...options, designData: data }
+		// 自动、手动和关闭标签共用一个顺序；载荷和身份在等待前捕获。
+		this.pendingSaveCount += 1
+		const result = this.saveQueue.then(() => {
+			if (
+				fileId !== this.stateBag.getMagicProjectJsFileId() ||
+				accessIdentity !== getDesignRequestIdentity(this.options) ||
+				requestAccessMode !== this.stateBag.getAccessMode()
+			)
+				return { ok: false, reason: "no-file" } as DesignSaveResult
+			const currentVersion = this.stateBag.getMagicProjectJsVersion()
+			// 同一队列前项成功可以推进版本；远端推进的版本必须先重新合并。
+			if (version !== currentVersion && currentVersion !== this.lastCommittedVersion)
+				return {
+					ok: false,
+					reason: "remote-updated",
+					remoteVersion: currentVersion,
+				} as DesignSaveResult
+			return this.commitSaveInternal(capturedOptions, requestOptions, requestAccessMode)
+		})
+		const completed = result.finally(() => {
+			this.pendingSaveCount -= 1
+			if (
+				fileId === this.stateBag.getMagicProjectJsFileId() &&
+				accessIdentity === getDesignRequestIdentity(this.options)
+			)
+				this.stateBag.setters.setIsSaving(this.pendingSaveCount > 0)
+		})
+		this.saveQueue = completed.then(
+			() => undefined,
+			() => undefined,
+		)
+		return completed
+	}
+
+	private async commitSaveInternal(
+		options: DesignCommitSaveOptions,
+		requestOptions: DesignProjectManagerOptions,
+		requestAccessMode: ReturnType<DesignProjectStateBag["getAccessMode"]>,
+	): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
 		if (this.stateBag.getAccessMode() !== "edit" && !options?.allowReadOnlyRetry) {
 			this.stateBag.setters.setIsSaving(false)
@@ -315,6 +376,16 @@ export class DesignSaveManager {
 			return { ok: false, reason: "remote-conflict" }
 		}
 
+		const provenance = cloneDeep(
+			this.stateBag.getElementDetailsProvenance?.() ??
+				getHydratedElementDetailsProvenance(
+					options.designData ?? this.stateBag.getDesignData(),
+				),
+		)
+		const isCurrentRequest = () =>
+			magicProjectJsFileId === this.stateBag.getMagicProjectJsFileId() &&
+			getDesignRequestIdentity(requestOptions) === getDesignRequestIdentity(this.options) &&
+			requestAccessMode === this.stateBag.getAccessMode()
 		let saveToken: number | null | undefined
 		let didSave = false
 		let savedUpdatedAt: string | null = null
@@ -323,6 +394,7 @@ export class DesignSaveManager {
 			saveToken = this.saveLifecycleHandlers.onSaveStart?.()
 			if (!options?.skipRemoteUpdateCheck) {
 				const remoteUpdateCheck = await this.checkRemoteUpdate()
+				if (!isCurrentRequest()) return { ok: false, reason: "no-file" }
 				const { hasUpdate, isCheckReliable, currentVersion } = remoteUpdateCheck
 				if (hasUpdate) {
 					this.markRemoteConflict()
@@ -345,8 +417,10 @@ export class DesignSaveManager {
 				}
 			}
 
+			if (!isCurrentRequest()) return { ok: false, reason: "no-file" }
+
 			const currentDesignData = options?.designData ?? this.stateBag.getDesignData()
-			const designDataToSave = this.getDesignDataForSave(currentDesignData)
+			const designDataToSave = this.getDesignDataForSave(currentDesignData, requestOptions)
 			const saveSource = options?.source ?? "unknown-auto"
 			const saveContext = this.buildSaveContext(designDataToSave, saveSource, options)
 			if (this.saveLifecycleHandlers.shouldBlockEmptyCanvasSave?.(saveContext)) {
@@ -355,9 +429,9 @@ export class DesignSaveManager {
 			}
 			const fp = hashDesignDataComparable(designDataToSave)
 			const content = generateMagicProjectJsContent(designDataToSave, {
-				projectBasePath: this.getProjectBasePathForDsl(),
-				flatAttachments: this.options.flatAttachments,
-				attachmentIndex: this.options.attachmentIndex,
+				projectBasePath: resolveDesignProjectBasePathFromAttachments(requestOptions),
+				flatAttachments: requestOptions.flatAttachments,
+				attachmentIndex: requestOptions.attachmentIndex,
 			})
 			if (!content?.trim()) {
 				this.stateBag.setters.setIsSaving(false)
@@ -365,10 +439,11 @@ export class DesignSaveManager {
 			}
 
 			const sidecarContext = {
-				attachments: this.options.attachments,
-				flatAttachments: this.options.flatAttachments,
+				attachments: requestOptions.attachments,
+				flatAttachments: requestOptions.flatAttachments,
 				mainFileId: magicProjectJsFileId,
-				projectId: this.options.projectId,
+				projectId: requestOptions.projectId,
+				fileApi: requestOptions.fileApi,
 			}
 			if (isContentProjectVersion(designDataToSave.version)) {
 				const sidecarStatus = await getElementDetailsSidecarStatus(sidecarContext)
@@ -378,11 +453,30 @@ export class DesignSaveManager {
 				}
 			}
 
+			if (!isCurrentRequest()) return { ok: false, reason: "no-file" }
 			const saveResponse = await SuperMagicApi.saveFileContent([
 				{ file_id: magicProjectJsFileId, content, enable_shadow: true },
 			])
+			const savedFile = saveResponse.success_files?.find(
+				(file) => file.file_id === magicProjectJsFileId,
+			)
+			if (!savedFile)
+				return {
+					ok: false,
+					reason: "error",
+					error:
+						saveResponse.error_files?.find(
+							(file) => file.file_id === magicProjectJsFileId,
+						)?.error ?? "Canvas file was not saved",
+				}
 			didSave = true
-			savedUpdatedAt = saveResponse?.success_files?.[0]?.data?.updated_at ?? null
+			savedUpdatedAt = savedFile.data.updated_at ?? null
+			savedVersion =
+				typeof savedFile.data.version === "number" &&
+				Number.isInteger(savedFile.data.version) &&
+				savedFile.data.version > 0
+					? savedFile.data.version
+					: null
 
 			// v3：主文件保存成功后只写用户 sidecar，不触碰 element-details.json
 			let didPersistDetails = true
@@ -390,8 +484,7 @@ export class DesignSaveManager {
 				const sidecarResult = await writeUserElementDetails(
 					designDataToSave,
 					sidecarContext,
-					this.stateBag.getElementDetailsProvenance?.() ??
-						getHydratedElementDetailsProvenance(designDataToSave),
+					provenance,
 				)
 				didPersistDetails =
 					sidecarResult === "persisted" ||
@@ -402,44 +495,49 @@ export class DesignSaveManager {
 					return { ok: false, reason: "unsupported-sidecar" }
 				}
 			}
-			this.lastSaveFullyPersisted = didPersistDetails
-			const shouldUpdateCurrentDesignData = options?.updateCurrentDesignData ?? true
-			if (shouldUpdateCurrentDesignData && designDataToSave !== currentDesignData) {
-				this.stateBag.setters.setDesignData(designDataToSave)
-			}
-			if (didPersistDetails) {
-				this.stateBag.setPrevDesignDataFingerprint(fp)
-			}
-			this.clearRemoteConflict()
-
-			if (this.stateBag.getAccessMode() !== "share") {
-				try {
-					const fileInfo = await SuperMagicApi.getFileInfo({
-						file_id: magicProjectJsFileId,
-					})
-					if (fileInfo?.version !== undefined) {
-						savedVersion = fileInfo.version
-						this.stateBag.setMagicProjectJsVersion(fileInfo.version)
-					}
-				} catch {
-					// ignore
+			const requestIsCurrent = isCurrentRequest()
+			const currentVersion = this.stateBag.getMagicProjectJsVersion()
+			const canAccept =
+				requestIsCurrent &&
+				savedVersion !== null &&
+				(currentVersion === null || savedVersion >= currentVersion)
+			this.lastSaveFullyPersisted = didPersistDetails && canAccept
+			if (canAccept) {
+				this.lastCommittedVersion = savedVersion
+				const shouldUpdateCurrentDesignData = options.updateCurrentDesignData ?? true
+				if (
+					shouldUpdateCurrentDesignData &&
+					designDataToSave !== currentDesignData &&
+					hashDesignDataComparable(this.stateBag.getDesignData()) ===
+						hashDesignDataComparable(currentDesignData)
+				)
+					this.stateBag.setters.setDesignData(designDataToSave)
+				if (didPersistDetails) {
+					this.stateBag.setPrevDesignDataFingerprint(fp)
+					this.stateBag.setMagicProjectJsVersion(savedVersion)
 				}
-				await this.fetchAndSetVersions()
+				this.clearRemoteConflict()
 			}
-			return {
+			const result: Extract<DesignSaveResult, { ok: true }> = {
 				ok: true,
+				fileId: magicProjectJsFileId,
+				accessIdentity: getDesignRequestIdentity(requestOptions),
 				savedVersion,
 				savedUpdatedAt,
 				fullyPersisted: didPersistDetails,
 				savedDesignData: designDataToSave,
 				savedFingerprint: fp,
 			}
+			if (requestIsCurrent) this.saveLifecycleHandlers.onSaveCommitted?.(result)
+			// 版本菜单刷新失败不改变已经确认的保存结果。
+			if (requestIsCurrent) await this.fetchAndSetVersions().catch(() => [])
+			return result
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error)
 			return { ok: false, reason: "error", error: errorMessage }
 		} finally {
 			await this.saveLifecycleHandlers.onSaveEnd?.(saveToken, didSave, savedUpdatedAt)
-			this.stateBag.setters.setIsSaving(false)
+			if (isCurrentRequest()) this.stateBag.setters.setIsSaving(this.pendingSaveCount > 1)
 		}
 	}
 

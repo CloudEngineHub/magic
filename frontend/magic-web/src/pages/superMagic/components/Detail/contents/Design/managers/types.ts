@@ -197,3 +197,12 @@ export function getDataToCompare(data: DesignData) {
 		},
 	}
 }
+
+/** 异步读写必须仍属于发起时的项目、文件访问凭据和权限。 */
+export function getDesignRequestIdentity(options: DesignProjectManagerOptions): string {
+	return JSON.stringify([
+		options.projectId ?? null,
+		options.fileApi?.identityKey ?? "none",
+		getDesignBaseAccessMode(options),
+	])
+}

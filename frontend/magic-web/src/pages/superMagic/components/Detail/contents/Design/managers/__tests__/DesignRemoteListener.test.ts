@@ -5,6 +5,7 @@ import {
 	type DesignRemoteListenerOptions,
 } from "../DesignRemoteListener"
 import { ElementTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
+import type { DesignVersionLoadResult } from "../DesignVersionManager"
 import type { DesignData } from "../../types"
 
 const DESIGN_DATA: DesignData = {
@@ -12,6 +13,13 @@ const DESIGN_DATA: DesignData = {
 	name: "design",
 	version: "3.0.0",
 	canvas: { elements: [] },
+}
+
+const SNAPSHOT: DesignVersionLoadResult = {
+	fileId: "file-1",
+	accessIdentity: "test",
+	data: DESIGN_DATA,
+	version: 4,
 }
 
 afterEach(() => {
@@ -184,18 +192,19 @@ describe("DesignRemoteListener file-change freshness", () => {
 			updateLocalVersion,
 		})
 		const listenerInternals = listener as unknown as {
-			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignData>
+			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignVersionLoadResult>
 			debouncedLoadAndApply: (ms: null, version: number) => void
 		}
 		listenerInternals.maybePrepareRemoteDesignDataFromMagicProjectFile = vi
 			.fn()
-			.mockResolvedValue(DESIGN_DATA)
+			.mockResolvedValue(SNAPSHOT)
 
 		listenerInternals.debouncedLoadAndApply(null, 4)
 		await vi.runOnlyPendingTimersAsync()
 
 		expect(applyRemoteDesignData).toHaveBeenCalledWith(DESIGN_DATA, "message", {
 			remoteVersion: 4,
+			loadResult: undefined,
 		})
 		expect(updateLocalVersion).not.toHaveBeenCalled()
 	})
@@ -212,12 +221,12 @@ describe("DesignRemoteListener file-change freshness", () => {
 			updateLocalVersion,
 		})
 		const listenerInternals = listener as unknown as {
-			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignData>
+			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignVersionLoadResult>
 			debouncedLoadAndApply: (ms: null, version: number) => void
 		}
 		listenerInternals.maybePrepareRemoteDesignDataFromMagicProjectFile = vi
 			.fn()
-			.mockResolvedValue(DESIGN_DATA)
+			.mockResolvedValue(SNAPSHOT)
 
 		listenerInternals.debouncedLoadAndApply(null, 4)
 		await vi.runOnlyPendingTimersAsync()
@@ -227,7 +236,7 @@ describe("DesignRemoteListener file-change freshness", () => {
 		expect(updateLocalVersion).not.toHaveBeenCalled()
 	})
 
-	it("marks the remote version applied after preloaded remote data is applied", async () => {
+	it("applies the snapshot version with its body without a separate version-only update", async () => {
 		vi.useFakeTimers()
 		const updateLocalVersion = vi.fn()
 		const applyRemoteDesignData = vi.fn().mockReturnValue(true)
@@ -236,29 +245,30 @@ describe("DesignRemoteListener file-change freshness", () => {
 			updateLocalVersion,
 		})
 		const listenerInternals = listener as unknown as {
-			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignData>
+			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignVersionLoadResult>
 			debouncedLoadAndApply: (ms: null, version: number) => void
 		}
 		listenerInternals.maybePrepareRemoteDesignDataFromMagicProjectFile = vi
 			.fn()
-			.mockResolvedValue(DESIGN_DATA)
+			.mockResolvedValue(SNAPSHOT)
 
 		listenerInternals.debouncedLoadAndApply(null, 4)
 		await vi.runOnlyPendingTimersAsync()
 
 		expect(applyRemoteDesignData).toHaveBeenCalledWith(DESIGN_DATA, "message", {
 			remoteVersion: 4,
+			loadResult: undefined,
 		})
-		expect(updateLocalVersion).toHaveBeenCalledWith(4)
+		expect(updateLocalVersion).not.toHaveBeenCalled()
 	})
 
 	it("discards an in-flight file-change load after the project changes", async () => {
 		vi.useFakeTimers()
-		const deferredData = createDeferred<DesignData>()
+		const deferredData = createDeferred<DesignVersionLoadResult>()
 		const applyRemoteDesignData = vi.fn().mockReturnValue(true)
 		const listener = createListener({ applyRemoteDesignData })
 		const listenerInternals = listener as unknown as {
-			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignData>
+			maybePrepareRemoteDesignDataFromMagicProjectFile: () => Promise<DesignVersionLoadResult>
 			debouncedLoadAndApply: (ms: null, version: number) => void
 		}
 		listenerInternals.maybePrepareRemoteDesignDataFromMagicProjectFile = vi
@@ -268,7 +278,7 @@ describe("DesignRemoteListener file-change freshness", () => {
 		listenerInternals.debouncedLoadAndApply(null, 4)
 		await vi.advanceTimersByTimeAsync(0)
 		listener.updateOptions({ projectId: "project-2", designProjectId: "design-2" })
-		deferredData.resolve(DESIGN_DATA)
+		deferredData.resolve(SNAPSHOT)
 		await Promise.resolve()
 		await Promise.resolve()
 

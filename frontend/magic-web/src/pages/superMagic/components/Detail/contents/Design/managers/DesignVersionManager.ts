@@ -4,11 +4,13 @@ import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/type
 import {
 	loadMagicProjectJsContent,
 	resolveDesignProjectBasePathFromAttachments,
+	resolveDesignDirectoryNameFromAttachments,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
 import { getHydratedElementDetailsProvenance } from "../utils/elementDetailsIo"
 import {
 	getDesignBaseAccessMode,
+	getDesignRequestIdentity,
 	type DesignProjectStateBag,
 	type DesignProjectManagerOptions,
 } from "./types"
@@ -23,6 +25,8 @@ import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 import { stringifyUnknownError } from "@/utils/error"
 
 export interface DesignVersionLoadResult {
+	fileId: string | null
+	accessIdentity: string
 	data: DesignData | null
 	version: number | null
 	loadResult?: LoadDesignDataToRuntimeResult
@@ -66,11 +70,12 @@ export class DesignVersionManager {
 		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
 		if (!magicProjectJsFileId) return null
 
+		const requestOptions = this.options
 		let content: string
 		try {
 			content = await loadMagicProjectJsContent(magicProjectJsFileId, {
 				file_versions: { [magicProjectJsFileId]: version },
-				fileApi: this.options.fileApi,
+				fileApi: requestOptions.fileApi,
 			})
 		} catch (error) {
 			throw new DesignLoadError({
@@ -80,71 +85,96 @@ export class DesignVersionManager {
 				fileId: magicProjectJsFileId,
 			})
 		}
-		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
+		const dslBase = resolveDesignProjectBasePathFromAttachments(requestOptions)
 		const loaded = await loadDesignDataToRuntime({
 			content,
 			sidecarMode: "none",
 			fileId: magicProjectJsFileId,
 			pathContext: {
 				projectBasePath: dslBase,
-				flatAttachments: this.options.flatAttachments,
-				attachmentIndex: this.options.attachmentIndex,
+				flatAttachments: requestOptions.flatAttachments,
+				attachmentIndex: requestOptions.attachmentIndex,
 			},
 		})
+		if (
+			magicProjectJsFileId !== this.stateBag.getMagicProjectJsFileId() ||
+			getDesignRequestIdentity(requestOptions) !== getDesignRequestIdentity(this.options)
+		)
+			return null
 		return loaded.data
 	}
 
 	async loadLatest(): Promise<DesignVersionLoadResult> {
-		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
-		if (!magicProjectJsFileId) return { data: null, version: null }
+		const fileId = this.stateBag.getMagicProjectJsFileId()
+		const requestOptions = this.options
+		if (!fileId)
+			return {
+				fileId: null,
+				accessIdentity: getDesignRequestIdentity(requestOptions),
+				data: null,
+				version: null,
+			}
+		return this.loadCurrentSnapshot(fileId, requestOptions)
+	}
 
-		let content: string
-		try {
-			content = await loadMagicProjectJsContent(magicProjectJsFileId, {
-				fileApi: this.options.fileApi,
+	async loadCurrentSnapshot(
+		fileId: string,
+		requestOptions: DesignProjectManagerOptions,
+	): Promise<DesignVersionLoadResult> {
+		const accessIdentity = getDesignRequestIdentity(requestOptions)
+		if (getDesignBaseAccessMode(requestOptions) === "share" && !requestOptions.fileApi)
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: "Shared Canvas requires its bound file client",
+				fileId,
 			})
+		let version: number | null = null
+		try {
+			// V10 正文只能绑定 V10；读取期间出现 V11 也不能事后重标。
+			if (getDesignBaseAccessMode(requestOptions) !== "share") {
+				const info = await SuperMagicApi.getFileInfo({ file_id: fileId })
+				if (
+					typeof info?.version !== "number" ||
+					!Number.isInteger(info.version) ||
+					info.version < 1
+				) {
+					throw new Error("Canvas file version is unavailable")
+				}
+				version = info.version
+			}
+			const content = await loadMagicProjectJsContent(fileId, {
+				file_versions: version === null ? undefined : { [fileId]: version },
+				fileApi: requestOptions.fileApi,
+				forceRefresh: true,
+			})
+			const loaded = await loadDesignDataToRuntime({
+				content,
+				nameOverride: resolveDesignDirectoryNameFromAttachments(requestOptions),
+				elementDetailsContext: {
+					attachments: requestOptions.attachments,
+					flatAttachments: requestOptions.flatAttachments,
+					mainFileId: fileId,
+					projectId: requestOptions.projectId,
+					fileApi: requestOptions.fileApi,
+				},
+				pathContext: {
+					projectBasePath: resolveDesignProjectBasePathFromAttachments(requestOptions),
+					flatAttachments: requestOptions.flatAttachments,
+					attachmentIndex: requestOptions.attachmentIndex,
+				},
+				fileId,
+			})
+			return { fileId, accessIdentity, data: loaded.data, version, loadResult: loaded }
 		} catch (error) {
+			if (error instanceof DesignLoadError) throw error
 			throw new DesignLoadError({
 				kind: "invalid-envelope",
 				stage: "parse-envelope",
 				message: stringifyUnknownError(error),
-				fileId: magicProjectJsFileId,
+				fileId,
 			})
 		}
-		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
-		const loaded = await loadDesignDataToRuntime({
-			content,
-			elementDetailsContext: {
-				attachments: this.options.attachments,
-				flatAttachments: this.options.flatAttachments,
-				mainFileId: magicProjectJsFileId,
-				projectId: this.options.projectId,
-				fileApi: this.options.fileApi,
-			},
-			pathContext: {
-				projectBasePath: dslBase,
-				flatAttachments: this.options.flatAttachments,
-				attachmentIndex: this.options.attachmentIndex,
-			},
-			fileId: magicProjectJsFileId,
-		})
-		const data = loaded.data
-
-		let version: number | null = null
-		if (this.getBaseAccessMode() !== "share") {
-			try {
-				const fileInfo = await SuperMagicApi.getFileInfo({
-					file_id: magicProjectJsFileId,
-				})
-				if (fileInfo?.version !== undefined) {
-					version = fileInfo.version
-				}
-			} catch {
-				// ignore
-			}
-		}
-
-		return { data, version, loadResult: loaded }
 	}
 
 	/** 重新加载当前正在查看的历史版本，不能退回到最新版本。 */
@@ -216,6 +246,11 @@ export class DesignVersionManager {
 			let latestLoadResult: LoadDesignDataToRuntimeResult | undefined
 			if (isNewestVersionTarget) {
 				const result = await this.loadLatest()
+				if (
+					result.fileId !== this.stateBag.getMagicProjectJsFileId() ||
+					result.accessIdentity !== getDesignRequestIdentity(this.options)
+				)
+					return
 				parsedDesignData = result.data
 				latestVersion = result.version
 				latestLoadResult = result.loadResult

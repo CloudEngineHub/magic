@@ -5,6 +5,8 @@ import type {
 	RectangleElement,
 } from "@/components/CanvasDesign/runtime/document/types"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
+import type { DesignSaveResult, DesignSaveLifecycleHandlers } from "../DesignSaveManager"
+import { getDesignRequestIdentity } from "../types"
 import { DesignProjectManager } from "../DesignProjectManager"
 import type {
 	DesignConflict,
@@ -97,7 +99,7 @@ function createManager(
 	let conflictState: DesignConflict | null = null
 	let magicProjectJsFileId: string | null = "file-1"
 	let magicProjectJsVersion: number | null = 2
-	let prevDesignDataFingerprint = "initial-fingerprint"
+	let prevDesignDataFingerprint = hashDesignDataComparable(initialData)
 	let accessMode: CanvasAccessMode = "edit"
 	let pendingDesignUpgrade: PendingDesignUpgrade | null = null
 
@@ -160,6 +162,7 @@ function createManager(
 		getFileVersion: () => undefined,
 	})
 
+	manager.syncDesignData(initialData)
 	return {
 		manager,
 		stateBag,
@@ -171,6 +174,32 @@ function createManager(
 			pendingDesignUpgrade,
 		}),
 	}
+}
+
+function notifyCommittedSave(
+	manager: DesignProjectManager,
+	result: Omit<Extract<DesignSaveResult, { ok: true }>, "fileId" | "accessIdentity">,
+): Extract<DesignSaveResult, { ok: true }> {
+	const internals = manager as unknown as {
+		options: DesignProjectManagerOptions
+		stateBag: DesignProjectStateBag
+		saveManager: { saveLifecycleHandlers: DesignSaveLifecycleHandlers }
+	}
+	const fileId = internals.stateBag.getMagicProjectJsFileId()
+	if (!fileId) throw new Error("Saved fixture requires its current Canvas file")
+	const complete = {
+		...result,
+		fileId,
+		accessIdentity: getDesignRequestIdentity(internals.options),
+	}
+	internals.saveManager.saveLifecycleHandlers.onSaveCommitted?.(complete)
+	return complete
+}
+function mockSuccessfulSave(
+	manager: DesignProjectManager,
+	result: Omit<Extract<DesignSaveResult, { ok: true }>, "fileId" | "accessIdentity">,
+) {
+	return vi.fn(async () => notifyCommittedSave(manager, result))
 }
 
 describe("DesignProjectManager conflict boundaries", () => {
@@ -229,7 +258,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 			}
 		}
 		managerInternals.saveManager.cancelAutoSave = vi.fn()
-		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+		managerInternals.saveManager.commitSave = mockSuccessfulSave(manager, {
 			ok: true,
 			savedVersion: 3,
 			savedUpdatedAt: null,
@@ -266,7 +295,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 			}
 		}
 		managerInternals.saveManager.cancelAutoSave = vi.fn()
-		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+		managerInternals.saveManager.commitSave = mockSuccessfulSave(manager, {
 			ok: true,
 			savedVersion: 3,
 			savedUpdatedAt: null,
@@ -508,7 +537,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 				wasLastSaveFullyPersisted: () => boolean
 			}
 		}
-		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+		managerInternals.saveManager.commitSave = mockSuccessfulSave(manager, {
 			ok: true,
 			savedVersion: 3,
 			savedUpdatedAt: "2026-01-01 00:00:00",
@@ -532,7 +561,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 				wasLastSaveFullyPersisted: () => boolean
 			}
 		}
-		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+		managerInternals.saveManager.commitSave = mockSuccessfulSave(manager, {
 			ok: true,
 			savedVersion: 3,
 			savedUpdatedAt: "2026-01-01 00:00:00",
@@ -694,8 +723,10 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.saveManager.syncDesignData).not.toHaveBeenCalled()
 		expect(managerInternals.saveManager.manualSave).not.toHaveBeenCalled()
 		expect(managerInternals.saveManager.commitSave).not.toHaveBeenCalled()
-		expect(getState().prevDesignDataFingerprint).toBe("initial-fingerprint")
-		expect(getBaseDesignData(manager)).toBeNull()
+		expect(getState().prevDesignDataFingerprint).toBe(
+			hashDesignDataComparable(createDesignData("local")),
+		)
+		expect(getBaseDesignData(manager)).toEqual(createDesignData("local"))
 	})
 
 	it("does not queue or write local drafts while the version data source is locked", () => {
@@ -899,7 +930,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 		}
 		managerInternals.pendingRemoteDesignData = { data: remoteData, remoteVersion: 3 }
 		managerInternals.saveManager.markRemoteConflict()
-		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+		managerInternals.saveManager.commitSave = mockSuccessfulSave(manager, {
 			ok: true,
 			savedVersion: 5,
 			savedUpdatedAt: "2026-01-01 00:00:00",
@@ -998,7 +1029,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 			remoteVersion: 3,
 		}
 		managerInternals.saveManager.markRemoteConflict()
-		managerInternals.saveManager.commitSave = vi.fn().mockResolvedValue({
+		managerInternals.saveManager.commitSave = mockSuccessfulSave(manager, {
 			ok: true,
 			savedVersion: 5,
 			savedUpdatedAt: "2026-01-01 00:00:00",
@@ -1058,14 +1089,16 @@ describe("DesignProjectManager conflict boundaries", () => {
 		expect(managerInternals.pendingRemoteDesignData).toBe(pendingRemoteDesignData)
 		expect(managerInternals.saveManager.hasRemoteConflict()).toBe(true)
 
-		resolveSave({
-			ok: true,
-			savedVersion: 5,
-			savedUpdatedAt: "2026-01-01 00:00:00",
-			fullyPersisted: true,
-			savedDesignData: localData,
-			savedFingerprint: hashDesignDataComparable(localData),
-		})
+		resolveSave(
+			notifyCommittedSave(manager, {
+				ok: true,
+				savedVersion: 5,
+				savedUpdatedAt: "2026-01-01 00:00:00",
+				fullyPersisted: true,
+				savedDesignData: localData,
+				savedFingerprint: hashDesignDataComparable(localData),
+			}),
+		)
 		await expect(resolvePromise).resolves.toBe(true)
 		expect(getState().conflictState).toBeNull()
 		expect(managerInternals.pendingRemoteDesignData).toBeNull()
@@ -2029,7 +2062,8 @@ describe("DesignProjectManager conflict boundaries", () => {
 	it("turns a remote-updated save result into a conflict with pending remote data", async () => {
 		const localData = createDesignData("local")
 		const remoteData = createDesignData("remote")
-		const { manager, getState } = createManager(localData)
+		const { manager, stateBag, getState } = createManager(createDesignData("base"))
+		stateBag.setters.setDesignData(localData)
 		const managerInternals = manager as unknown as {
 			saveManager: { commitSave: () => Promise<unknown>; hasRemoteConflict: () => boolean }
 			versionManager: { loadLatest: () => Promise<{ data: DesignData; version: number }> }
@@ -2041,9 +2075,14 @@ describe("DesignProjectManager conflict boundaries", () => {
 			remoteVersion: 3,
 			isCheckReliable: true,
 		})
-		managerInternals.versionManager.loadLatest = vi
-			.fn()
-			.mockResolvedValue({ data: remoteData, version: 3 })
+		managerInternals.versionManager.loadLatest = vi.fn().mockResolvedValue({
+			data: remoteData,
+			version: 3,
+			fileId: "file-1",
+			accessIdentity: getDesignRequestIdentity(
+				(manager as unknown as { options: DesignProjectManagerOptions }).options,
+			),
+		})
 
 		await manager.saveToRemote()
 
@@ -2088,9 +2127,14 @@ describe("DesignProjectManager conflict boundaries", () => {
 			isCheckReliable: true,
 		})
 		managerInternals.saveManager.scheduleAutoSave = vi.fn()
-		managerInternals.versionManager.loadLatest = vi
-			.fn()
-			.mockResolvedValue({ data: remoteData, version: 3 })
+		managerInternals.versionManager.loadLatest = vi.fn().mockResolvedValue({
+			data: remoteData,
+			version: 3,
+			fileId: "file-1",
+			accessIdentity: getDesignRequestIdentity(
+				(manager as unknown as { options: DesignProjectManagerOptions }).options,
+			),
+		})
 
 		await manager.saveToRemote()
 
@@ -2283,6 +2327,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 			magicProjectJsFileId: "file-1",
 			baseRemoteVersion: 2,
 			baseRemoteFingerprint: remoteFingerprint,
+			baseRemoteData: remoteData,
 			localFingerprint: hashDesignDataComparable(draftData),
 			localUpdatedAt: 1,
 			reason: "local-edit",
@@ -2319,6 +2364,7 @@ describe("DesignProjectManager conflict boundaries", () => {
 			magicProjectJsFileId: "file-1",
 			baseRemoteVersion: 2,
 			baseRemoteFingerprint: remoteFingerprint,
+			baseRemoteData: remoteData,
 			localFingerprint: hashDesignDataComparable(draftData),
 			localUpdatedAt: 1,
 			reason: "local-edit",

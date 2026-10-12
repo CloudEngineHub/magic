@@ -67,7 +67,6 @@ function buildCanvasPayload(
  */
 export interface MagicProjectJsFileInfo {
 	fileId: string
-	content: string
 }
 
 /**
@@ -83,6 +82,7 @@ export async function loadMagicProjectJsContent(
 	fileId: string,
 	options?: {
 		file_versions?: Record<string, number>
+		forceRefresh?: boolean
 		/** Bound file client; omitted callers keep the host-session default (unbound leaf). */
 		fileApi?: FileApi
 	},
@@ -102,10 +102,12 @@ export async function loadMagicProjectJsContent(
 			? fileApi.getFileContentById(fileId, {
 					responseType: "text",
 					file_versions: fileVersions,
+					forceRefresh: options?.forceRefresh,
 				})
 			: getFileContentById(fileId, {
 					responseType: "text",
 					file_versions: fileVersions,
+					forceRefresh: options?.forceRefresh,
 				}))) as string | null
 
 		// 检查内容是否为空
@@ -725,7 +727,7 @@ export async function findMagicProjectJsFile(params: {
 	/** Bound file client threaded from the Design boundary (share-aware). */
 	fileApi?: FileApi
 }): Promise<MagicProjectJsFileInfo | null> {
-	const { attachments, currentFileId, currentFileName, fileApi } = params
+	const { attachments, currentFileId, currentFileName } = params
 
 	if (!attachments || !currentFileId || !currentFileName) {
 		return null
@@ -855,12 +857,8 @@ export async function findMagicProjectJsFile(params: {
 			return null
 		}
 
-		// 使用统一的读取函数获取文件内容（带重试机制）
-		const content = await loadMagicProjectJsContent(magicProjectJsFile.file_id, { fileApi })
-
 		return {
 			fileId: magicProjectJsFile.file_id,
-			content,
 		}
 	} catch (error) {
 		// 如果是"内容为空"的错误，重新抛出，让调用者处理
