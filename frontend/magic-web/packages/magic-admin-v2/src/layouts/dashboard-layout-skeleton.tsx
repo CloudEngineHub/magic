@@ -8,6 +8,7 @@ export function DashboardLayoutSkeleton() {
       aria-busy="true"
       aria-label="Loading"
       className="flex h-svh min-h-0 w-full overflow-hidden bg-background text-foreground"
+      data-testid="dashboard-layout-loading"
     >
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex">
         <div className="flex min-h-0 w-full flex-col overflow-hidden">

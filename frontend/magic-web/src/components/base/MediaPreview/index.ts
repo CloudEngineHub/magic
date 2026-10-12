@@ -3,6 +3,8 @@ export { MediaPreviewTooltip } from "./MediaPreviewTooltip"
 export { MediaPreviewTrigger } from "./MediaPreviewTrigger"
 export type {
 	MediaPreviewPolicy,
+	MediaPreviewImageActions,
+	MediaPreviewImageResource,
 	MediaPreviewCrop,
 	MediaPreviewSource,
 	MediaPreviewThumbnailProps,

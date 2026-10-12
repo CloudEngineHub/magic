@@ -13,24 +13,28 @@ export function PhoneCountryCodeSelect({
   disabled,
   onChange,
   value,
+  optionTestId,
+  triggerTestId,
 }: {
   ariaLabel: string;
   className?: string;
   disabled?: boolean;
   onChange: (value: string) => void;
   value?: string;
+  optionTestId?: string;
+  triggerTestId?: string;
 }) {
   const currentValue = value?.trim() || "+86";
   const options = getPhoneCountryCodeOptions(currentValue);
 
   return (
     <Select disabled={disabled} onValueChange={onChange} value={currentValue}>
-      <SelectTrigger aria-label={ariaLabel} className={className}>
+      <SelectTrigger aria-label={ariaLabel} className={className} data-testid={triggerTestId}>
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent data-testid="phone-country-code-select-filter-content">
         {options.map((option) => (
-          <SelectItem key={option} value={option}>
+          <SelectItem data-testid={optionTestId} key={option} value={option}>
             {option}
           </SelectItem>
         ))}

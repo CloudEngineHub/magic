@@ -66,10 +66,26 @@ describe("CanvasDocumentIndex", () => {
 		frameElement = { ...frameElement, children: [] }
 		elements.set("frame", createElement(frameElement))
 		elements.set("child", createElement(child))
-		index.markDirty()
+		index.markTopologyDirty()
 
 		expect(index.getParentId(elements, "child")).toBeUndefined()
 		expect(index.getRootElementIds(elements)).toEqual(["frame", "child"])
+	})
+
+	it("keeps topology revision stable for ordinary invalidation", () => {
+		const index = new CanvasDocumentIndex()
+
+		expect(index.getTopologyRevision()).toBe(0)
+		index.markDirty()
+		expect(index.getTopologyRevision()).toBe(0)
+
+		index.markTopologyDirty()
+		expect(index.getTopologyRevision()).toBe(1)
+		index.markDirty()
+		expect(index.getTopologyRevision()).toBe(1)
+
+		index.clear()
+		expect(index.getTopologyRevision()).toBe(2)
 	})
 
 	it("keeps first parent wins semantics and ignores missing child instances", () => {

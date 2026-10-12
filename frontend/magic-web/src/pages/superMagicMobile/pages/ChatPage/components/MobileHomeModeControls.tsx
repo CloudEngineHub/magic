@@ -23,23 +23,28 @@ export default function MobileHomeModeControls({
 	onChooseWorkspace: () => void
 }) {
 	const { t } = useTranslation("super/mainInput")
+	const { t: tSuper } = useTranslation("super")
 	return (
 		<fieldset
 			disabled={busy}
 			className="mt-6 flex w-full min-w-0 flex-col items-center gap-3"
 			aria-label={t("homeMode.label")}
+			data-testid="mobile-home-mode-controls"
 		>
 			<SmoothTabs<MobileHomeMode>
+				data-testid="mobile-home-mode-tabs"
 				tabs={[
 					{
 						value: "chat",
 						label: t("homeMode.chat"),
 						icon: <MessageCircle className="size-4" />,
+						"data-testid": "mobile-home-mode-chat-tab",
 					},
 					{
 						value: "task",
 						label: t("homeMode.task"),
 						icon: <SquarePen className="size-4" />,
+						"data-testid": "mobile-home-mode-task-tab",
 					},
 				]}
 				value={mode}
@@ -62,7 +67,10 @@ export default function MobileHomeModeControls({
 					>
 						<span className="truncate">
 							{workspace
-								? t("mobileHome.destination", { name: workspace.name })
+								? t("mobileHome.destination", {
+										name:
+											workspace.name || tSuper("workspace.unnamedWorkspace"),
+									})
 								: loading
 									? t("mobileHome.loading")
 									: error

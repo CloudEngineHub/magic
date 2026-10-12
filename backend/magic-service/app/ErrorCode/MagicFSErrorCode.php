@@ -55,4 +55,7 @@ enum MagicFSErrorCode: int
 
     #[ErrorMessage('magicfs.unsupported_space_type')]
     case UNSUPPORTED_SPACE_TYPE = 51313;
+
+    #[ErrorMessage('magicfs.invalid_cursor')]
+    case INVALID_CURSOR = 51314;
 }

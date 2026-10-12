@@ -11,12 +11,20 @@ export function MultiSelectFilter<T extends string | number>({
   onChange,
   options,
   value,
+  triggerTestId,
+  contentTestId,
+  optionTestId,
+  clearButtonTestId,
 }: {
   allLabel: string;
   ariaLabel: string;
   onChange: (value: T[]) => void;
   options: Array<FilterOption<T>>;
   value: T[];
+  triggerTestId?: string;
+  contentTestId?: string;
+  optionTestId?: string;
+  clearButtonTestId?: string;
 }) {
   const { t } = useTranslation();
   const selectedLabels = options
@@ -34,20 +42,20 @@ export function MultiSelectFilter<T extends string | number>({
 
   return (
     <Popover>
-      <PopoverTrigger
+      <PopoverTrigger data-testid={triggerTestId ?? "platform-model-filter-trigger"}
         aria-label={ariaLabel}
         className="inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm font-normal shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         <span className="truncate">{triggerLabel}</span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       </PopoverTrigger>
-      <PopoverContent align="start" className="z-[60] w-64 p-1.5">
+      <PopoverContent align="start" className="z-[60] w-64 p-1.5" data-testid={contentTestId ?? "platform-model-list-platform-model-filter-content"}>
         <div className="grid gap-0.5">
           {options.map((option) => {
             const isSelected = value.includes(option.value);
 
             return (
-              <button
+              <button data-testid={optionTestId ?? "platform-model-filter-option"}
                 aria-checked={isSelected}
                 className={cn(
                   "flex min-h-9 items-center gap-2 rounded-sm px-2 text-left text-sm transition-colors hover:bg-accent",
@@ -73,7 +81,7 @@ export function MultiSelectFilter<T extends string | number>({
         </div>
         {value.length ? (
           <div className="mt-1 border-t pt-1">
-            <Button className="w-full justify-start" onClick={() => onChange([])} size="sm" variant="ghost">
+            <Button className="w-full justify-start" onClick={() => onChange([])} size="sm" variant="ghost" data-testid={clearButtonTestId ?? "platform-model-list-action-button"}>
               {t("common.clear")}
             </Button>
           </div>

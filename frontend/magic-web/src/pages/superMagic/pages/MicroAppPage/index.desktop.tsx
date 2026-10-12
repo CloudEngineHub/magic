@@ -8,7 +8,7 @@ import Detail from "@/pages/superMagic/components/Detail"
 import type { HtmlPermissionManagerHandle } from "@/pages/superMagic/components/Detail/contents/HTML/hooks/useHtmlPermissionManagerBridge"
 import MagicModal from "@/components/base/MagicModal"
 import { getToolDetailSelectionTarget } from "@/pages/superMagic/components/MessageList/components/Nodes/toolDetailSelection"
-import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import { SharePermissionResourceProvider } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
@@ -384,7 +384,7 @@ function MicroAppPageInner({
 			requestPreviewMode={requestPreviewMode}
 		>
 			<MicroAppPermissionsProvider projectId={projectId} attachmentList={attachmentList}>
-				<FileActionVisibilityProvider>
+				<FileAccessProvider>
 					<div
 						className={cn(
 							"flex h-full w-full flex-col rounded-lg border border-border bg-background",
@@ -745,7 +745,7 @@ function MicroAppPageInner({
 						selectedProject={selectedProject}
 						allowEdit={!isReadOnly}
 					/>
-				</FileActionVisibilityProvider>
+				</FileAccessProvider>
 			</MicroAppPermissionsProvider>
 		</HostConversationProvider>
 	)
@@ -759,8 +759,10 @@ function MicroAppPageDesktop() {
 
 export default function FileAccessPage() {
 	return (
-		<SharePermissionResourceProvider value="microApp">
-			<MicroAppPageDesktop />
-		</SharePermissionResourceProvider>
+		<FileAccessProvider>
+			<SharePermissionResourceProvider value="microApp">
+				<MicroAppPageDesktop />
+			</SharePermissionResourceProvider>
+		</FileAccessProvider>
 	)
 }

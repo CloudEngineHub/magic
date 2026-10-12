@@ -11,11 +11,18 @@ const MIN_SIZE: DialogWindowSize = { width: 720, height: 480 }
 
 export type ProjectManagerWindow = DialogWindowFrame
 
-export function useProjectManagerWindow(open: boolean): ProjectManagerWindow {
+export function useProjectManagerWindow(
+	open: boolean,
+	options?: {
+		preferenceKey: string
+		recommendedSize: DialogWindowSize
+		minSize: DialogWindowSize
+	},
+): ProjectManagerWindow {
 	return useDialogWindowFrame(open, {
-		storageKeyPrefix: "super_magic/project_manager",
-		recommendedSize: RECOMMENDED_SIZE,
+		storageKeyPrefix: `super_magic/${options?.preferenceKey ?? "project_manager"}`,
+		recommendedSize: options?.recommendedSize ?? RECOMMENDED_SIZE,
 		viewportRatio: VIEWPORT_RATIO,
-		minSize: MIN_SIZE,
+		minSize: options?.minSize ?? MIN_SIZE,
 	})
 }

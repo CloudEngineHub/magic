@@ -13,7 +13,7 @@ BASE_ELEMENT_FIELDS = {
 CONTENT_FIELDS = {
     "frame": set(),
     "group": set(),
-    "image": set(generated_content_fields("image")),
+    "image": set(generated_content_fields("image")) | {"discarded"},
     "video": set(generated_content_fields("video")),
     "audio": {"src"},
     "text": {"content", "defaultStyle"},

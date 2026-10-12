@@ -4,6 +4,7 @@ import type {
 	SuperMagicEnterEditModeArgs,
 	SuperMagicInsertDragDataToEditorArgs,
 	SuperMagicLocateFileInTreeArgs,
+	SuperMagicProjectAttachmentsReconciledPayload,
 	SuperMagicRefreshClawScheduledTasksArgs,
 	SuperMagicUpdateActiveFileIdArgs,
 	SuperMagicUpdateAttachmentsArgs,
@@ -150,6 +151,9 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Super_Magic_File_Change_Intermediate]: [
 		payload: SeqResponse<SuperMagicFileChangeMessage>,
 	]
+	[PubSubEvents.Super_Magic_Project_Attachments_Reconciled]: [
+		payload: SuperMagicProjectAttachmentsReconciledPayload,
+	]
 	/** Intermediate 检查点事件：保留完整 seq，外层 seq_id 只作为领域事件 ID。 */
 	[PubSubEvents.Super_Magic_Checkpoint_Rollback]: [
 		payload: SeqResponse<SuperMagicCheckpointRollbackMessage>,
@@ -236,6 +240,8 @@ export interface PubSubTypedPayloadMap {
 	[PubSubEvents.Super_Magic_Canvas_Selection_Mentions]: SuperMagicCanvasSelectionMentionsPayload
 	/** 发送打断消息：可选回调，打断完成后执行。 */
 	[PubSubEvents.Send_Interrupt_Message]: SuperMagicSendInterruptMessageArgs
+	/** 终止任务后收敛画布生成中图片节点：零参数。 */
+	[PubSubEvents.Terminate_Generating_Images]: []
 	/** 触发创建新话题：零参数。 */
 	[PubSubEvents.Trigger_Create_Topic]: []
 	/** 添加话题到列表：传入新建的话题对象。 */

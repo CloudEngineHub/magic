@@ -1567,6 +1567,9 @@ describe("HTML", () => {
 				"file-1",
 				true,
 				expect.any(Function),
+				undefined,
+				false,
+				{ silent: true },
 			)
 		})
 		expect(screen.queryByTestId("html-save-with-update-dialog")).not.toBeInTheDocument()
@@ -1658,6 +1661,9 @@ describe("HTML", () => {
 				"file-1",
 				true,
 				expect.any(Function),
+				undefined,
+				false,
+				{ silent: true },
 			)
 		})
 		expect(screen.queryByTestId("html-save-with-update-dialog")).not.toBeInTheDocument()
@@ -1701,7 +1707,7 @@ describe("HTML", () => {
 		expect(screen.queryByTestId("html-save-with-update-dialog")).not.toBeInTheDocument()
 	})
 
-	it("should refresh file after save and exit succeeds", async () => {
+	it("should exit without remounting the tab after save and exit succeeds", async () => {
 		const mockSaveEditContent = vi.fn().mockResolvedValue(undefined)
 		const mockSetIsEditMode = vi.fn()
 		const mockOnRefreshFile = vi.fn()
@@ -1734,10 +1740,13 @@ describe("HTML", () => {
 				"file-1",
 				true,
 				expect.any(Function),
+				undefined,
+				false,
+				{ silent: true },
 			)
 			expect(mockSetIsEditMode).toHaveBeenCalledWith(false)
-			expect(mockOnRefreshFile).toHaveBeenCalledTimes(1)
 		})
+		expect(mockOnRefreshFile).not.toHaveBeenCalled()
 	})
 
 	it("should reset the iframe content when canceling visual edit", async () => {
@@ -1796,6 +1805,9 @@ describe("HTML", () => {
 				"file-1",
 				true,
 				expect.any(Function),
+				undefined,
+				false,
+				{ silent: true },
 			)
 		})
 
@@ -1803,7 +1815,7 @@ describe("HTML", () => {
 		expect(mockOnRefreshFile).not.toHaveBeenCalled()
 	})
 
-	it("should refresh file after confirming save and exit conflict flow", async () => {
+	it("should exit without remounting the tab after confirming save and exit conflict flow", async () => {
 		const mockSaveEditContent = vi.fn().mockResolvedValue(undefined)
 		const mockSetIsEditMode = vi.fn()
 		const mockOnRefreshFile = vi.fn()
@@ -1844,9 +1856,12 @@ describe("HTML", () => {
 				"file-1",
 				true,
 				expect.any(Function),
+				undefined,
+				false,
+				{ silent: true },
 			)
 			expect(mockSetIsEditMode).toHaveBeenCalledWith(false)
-			expect(mockOnRefreshFile).toHaveBeenCalledTimes(1)
 		})
+		expect(mockOnRefreshFile).not.toHaveBeenCalled()
 	})
 })

@@ -19,6 +19,7 @@ import {
 import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
 import { openUserFileReference } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { FileReference } from "./FileReference"
+import { getFileMediaMetadata } from "@/pages/superMagic/services/useFileMediaSource"
 
 type UserReference = Extract<FileReferenceMetadata, { space_type: "user" }>
 
@@ -83,6 +84,9 @@ export const UserFileReference = observer(function UserFileReference({
 
 	return (
 		<FileReference
+			mediaFile={
+				reference ? getFileMediaMetadata({ ...reference, file_reference: reference }) : null
+			}
 			presentation={
 				reference
 					? resolveFilePresentation(

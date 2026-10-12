@@ -56,7 +56,7 @@ describe("streaming export diagnostics", () => {
 		expect(summary.execution).toEqual({
 			outputPolicy: "file-stream",
 			mediaPolicyMode: "direct-stream",
-			zipMode: "zip64",
+			zipMode: "classic",
 			pipeline: "direct",
 		})
 	})

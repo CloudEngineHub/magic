@@ -53,6 +53,7 @@ export class KeyboardManager {
 		"edit.undo": "keyboard:undo",
 		"edit.redo": "keyboard:redo",
 		"edit.copy": "keyboard:copy",
+		"edit.duplicate": "keyboard:duplicate",
 		"edit.copy-png": "keyboard:copy-png",
 		"edit.paste": "keyboard:paste",
 		// 选择快捷键
@@ -391,6 +392,9 @@ export class KeyboardManager {
 			case "keyboard:redo":
 				this.canvas.eventEmitter.emit({ type: "keyboard:redo", data: undefined })
 				break
+			case "keyboard:duplicate":
+				this.canvas.eventEmitter.emit({ type: "keyboard:duplicate", data: undefined })
+				break
 			case "keyboard:copy":
 				this.canvas.eventEmitter.emit({ type: "keyboard:copy", data: undefined })
 				break
@@ -647,6 +651,8 @@ export class KeyboardManager {
 	 * @param target 目标元素
 	 */
 	private isInputElement(target: EventTarget | null): boolean {
+		// 图片标题是只读 DOM 文字：复制所选文字时不能被画布的复制元素快捷键截获。
+		if (target instanceof Element && target.closest("[data-canvas-name-label]")) return true
 		if (!target || !(target instanceof HTMLElement)) {
 			return false
 		}

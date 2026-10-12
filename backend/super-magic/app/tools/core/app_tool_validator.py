@@ -8,16 +8,11 @@ from typing import Dict, List
 
 from agentlang.logger import get_logger
 from agentlang.tools.validator import ToolValidatorProtocol
+from app.core.tool_names import resolve_tool_names
 from app.tools.core.tool_factory import tool_factory
 from app.tools.remote.remote_tool_manager import remote_tool_manager
 
 logger = get_logger(__name__)
-
-# 已废弃工具的兼容映射：旧名称 -> 新名称
-# 当 .agent 文件中声明了旧名称时，自动替换为新名称并记录 warning
-_DEPRECATED_TOOL_ALIASES: Dict[str, str] = {
-    "generate_image": "generate_images",
-}
 
 # 这里只兼容历史 `.agent` 的工具挂载声明，不放宽 Agent 定义、身份模式或 Claw 编译错误。
 
@@ -52,16 +47,19 @@ class AppToolValidator(ToolValidatorProtocol):
         # 先做废弃工具的兼容性重映射，再走后续验证逻辑
         remapped: Dict[str, Dict] = {}
         for tool_name, tool_config in tools_definition.items():
-            if tool_name in _DEPRECATED_TOOL_ALIASES:
-                new_name = _DEPRECATED_TOOL_ALIASES[tool_name]
-                logger.info(
-                    f"工具 '{tool_name}' 已废弃，请在 .agent 文件中改为使用 '{new_name}'，本次自动替换"
-                )
-                # 若 .agent 已同时声明了新名称，跳过，避免重复
-                if new_name not in remapped and new_name not in tools_definition:
-                    remapped[new_name] = tool_config
-            else:
-                remapped[tool_name] = tool_config
+            current_names = (
+                (tool_name,)
+                if remote_tool_manager.is_remote_tool(tool_name)
+                else resolve_tool_names(tool_name)
+            )
+            for current_name in current_names:
+                # 显式当前配置优先；拆分或补出的工具用默认配置，不能继承旧工具参数。
+                if current_name != tool_name and current_name in tools_definition:
+                    continue
+                if current_name not in remapped:
+                    remapped[current_name] = (
+                        tool_config if current_name == tool_name or len(current_names) == 1 else {}
+                    )
 
         code_mode_only_tools: List[str] = []
         auto_mount_tools: List[str] = []

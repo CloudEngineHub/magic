@@ -1,6 +1,12 @@
 import { lazy } from "react"
 import type { RouteObject } from "react-router"
-import { PlatformPackageRoutes, otherRoutes, RouteName, AiManageRoutes } from "@dtyq/magic-admin"
+import {
+	PlatformPackageRoutes,
+	otherRoutes,
+	RouteName,
+	AiManageRoutes,
+	withAccessibleIndexRedirect,
+} from "@dtyq/magic-admin"
 import { RoutePath } from "@/constants/routes"
 
 /**
@@ -16,7 +22,8 @@ export type Route = RouteObject & {
 	children?: Route[]
 	validate?: (permissions: string[], isSuperAdmin: boolean) => boolean
 }
-const routes: Route[] = [
+// 子路由的 index 跳转按权限落到第一个可访问页面。
+const routes: Route[] = withAccessibleIndexRedirect<Route>([
 	{
 		name: RouteName.Admin,
 		path: RoutePath.Admin,
@@ -32,6 +39,6 @@ const routes: Route[] = [
 			...otherRoutes,
 		],
 	},
-]
+])
 
 export default routes

@@ -59,10 +59,12 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResp
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\SandboxAgentInterface;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallRecoveryException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
@@ -667,6 +669,40 @@ class AgentDomainService
     }
 
     /**
+     * 列出网关里真实存在的沙箱（可按状态过滤）。
+     *
+     * 与 getBatchSandboxStatus 不同：这里不依赖业务表里的 sandbox_id，直接以网关
+     * 的 pod 清单为准，供运维脚本判断“当前哪些沙箱真的在跑”。
+     *
+     * @param string[] $statuses 只返回这些状态（如 ['Running']）；空数组表示不过滤
+     */
+    public function listSandboxes(array $statuses = []): SandboxListResult
+    {
+        $this->logger->info('[Sandbox][Domain] Listing sandboxes from gateway', [
+            'statuses' => $statuses,
+        ]);
+
+        $result = $this->gateway->listSandboxes($statuses);
+
+        if (! $result->isSuccess()) {
+            $this->logger->error('[Sandbox][Domain] Failed to list sandboxes', [
+                'statuses' => $statuses,
+                'error' => $result->getMessage(),
+                'code' => $result->getCode(),
+            ]);
+            throw new SandboxOperationException('List sandboxes', $result->getMessage(), $result->getCode());
+        }
+
+        $this->logger->info('[Sandbox][Domain] Sandbox list retrieved', [
+            'statuses' => $statuses,
+            'total' => $result->getTotal(),
+            'status_counts' => $result->getStatusCounts(),
+        ]);
+
+        return $result;
+    }
+
+    /**
      * 发送消息给 agent.
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
@@ -753,7 +789,7 @@ class AgentDomainService
         $mentionsJsonStruct = $this->buildMentionsJsonStruct(
             $taskContext->getTask()->getMentions(),
             $taskContext->getTask()->getProjectId(),
-            (string) config('super-magic.agent.referenced_project_mount_base_path', '/mnt/agfs/magicfs/referenced-projects')
+            (string) config('super-magic.agent.referenced_project_mount_base_path', '/mnt/agfs-vol/agfs/magicfs/referenced-projects')
         );
 
         // Get original prompt
@@ -903,6 +939,10 @@ class AgentDomainService
             // 抛专用异常让上层转换为温和提醒而不是任务错误。
             if (ResponseCode::isUserToolCallNotFound($result->getCode())) {
                 throw new UserToolCallNotFoundException($result->getMessage(), $result->getCode());
+            }
+            if ($name === 'ask_user' && $result->getCode() === ResponseCode::USER_TOOL_CALL_ENVIRONMENT_CLOSING) {
+                // 旧环境未消费回答；沿用恢复失败提示与幂等锁释放，不能改成任务 ERROR。
+                throw new UserToolCallRecoveryException('The execution environment is closing; the question is still pending.');
             }
             throw new SandboxOperationException('Send user_tool_call feedback', $result->getMessage(), $result->getCode());
         }

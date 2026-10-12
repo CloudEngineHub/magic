@@ -85,4 +85,27 @@ describe("useSelectedElement", () => {
 			}),
 		)
 	})
+
+	it("does not restore the old selection after an asynchronous link update", async () => {
+		let finish: (() => void) | undefined
+		const updateElementAttributes = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve
+				}),
+		)
+		const { result } = renderHook(() =>
+			useSelectedElement({ current: { updateElementAttributes } } as never),
+		)
+		await act(async () => {
+			const pending = result.current.updateAttributes({ dataMagicHref: "slide-2.html" })
+			mockStore.selectedElement = { ...mockStore.selectedElement, selector: "img.other" }
+			finish?.()
+			await pending
+		})
+		expect(updateElementAttributes).toHaveBeenCalledWith("img.hero", {
+			dataMagicHref: "slide-2.html",
+		})
+		expect(mockStore.selectElement).not.toHaveBeenCalled()
+	})
 })

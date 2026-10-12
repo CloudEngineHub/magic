@@ -10,12 +10,13 @@ type TimePickerProps = {
 	disabled?: boolean
 	/** 输入控件的无障碍标签。 */
 	label: string
-	/** 选择时间后返回 HH:mm 或 HH:mm:ss 格式的文本。 */
+	/** 选择时间后返回 HH:00、HH:mm 或 HH:mm:ss 格式的文本。 */
 	onChange: (value: string) => void
 	/** 时间选择精度；day 由上层日期控件处理。 */
 	precision: Exclude<TimePrecision, "day">
 	/** 当前时间文本，格式必须与 precision 对应。 */
 	value: string
+	testId?: string
 }
 
 const hourOptions = createOptions(24)
@@ -27,6 +28,7 @@ export function TimePicker({
 	label,
 	onChange,
 	precision,
+	testId,
 	value,
 }: TimePickerProps) {
 	const { t } = useTranslation()
@@ -41,7 +43,9 @@ export function TimePicker({
 		onChange(
 			precision === "second"
 				? `${nextParts.hours}:${nextParts.minutes}:${nextParts.seconds}`
-				: `${nextParts.hours}:${nextParts.minutes}`,
+				: precision === "hour"
+					? `${nextParts.hours}:00`
+					: `${nextParts.hours}:${nextParts.minutes}`,
 		)
 	}
 
@@ -55,7 +59,7 @@ export function TimePicker({
 					disabled && "cursor-not-allowed opacity-50 hover:bg-card",
 				)}
 				disabled={disabled}
-			>
+			 data-testid={testId}>
 				<span className="flex min-w-0 items-center gap-2">
 					<Clock3
 						className="size-3.5 shrink-0 text-muted-foreground"
@@ -74,13 +78,15 @@ export function TimePicker({
 			<PopoverContent
 				align="start"
 				className="w-[min(18rem,calc(100vw-2rem))] overflow-hidden p-1.5"
-			>
+			 data-testid={testId ? `${testId}-content` : undefined}>
 				<div
 					className={cn(
 						"grid items-start gap-1",
 						precision === "second"
 							? "grid-cols-[1fr_auto_1fr_auto_1fr]"
-							: "grid-cols-[1fr_auto_1fr]",
+							: precision === "hour"
+								? "grid-cols-1"
+								: "grid-cols-[1fr_auto_1fr]",
 					)}
 				>
 					<TimeColumn
@@ -89,13 +95,17 @@ export function TimePicker({
 						options={hourOptions}
 						value={hours}
 					/>
-					<TimeSeparator />
-					<TimeColumn
-						label={t("timeFilter.unit.minute")}
-						onChange={(nextValue) => updatePart("minutes", nextValue)}
-						options={minuteOptions}
-						value={minutes}
-					/>
+					{precision !== "hour" ? (
+						<>
+							<TimeSeparator />
+							<TimeColumn
+								label={t("timeFilter.unit.minute")}
+								onChange={(nextValue) => updatePart("minutes", nextValue)}
+								options={minuteOptions}
+								value={minutes}
+							/>
+						</>
+					) : null}
 					{precision === "second" ? <TimeSeparator /> : null}
 					{precision === "second" ? (
 						<TimeColumn
@@ -148,7 +158,7 @@ function TimeColumn({
 							onClick={() => onChange(option)}
 							role="option"
 							type="button"
-						>
+						 data-testid="time-picker-action-button">
 							<span>{option}</span>
 							{selected ? <Check className="sr-only" aria-hidden="true" /> : null}
 						</button>

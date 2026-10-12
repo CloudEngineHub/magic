@@ -1,3 +1,4 @@
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import type { FileSidebarControl } from "../../../components/Detail/components/FilesViewer/types"
 import { lazy, memo, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
@@ -27,7 +28,7 @@ import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFl
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import projectFilesStore from "@/stores/projectFiles"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import ChatProjectMessageLayout from "@/pages/superMagic/pages/ChatProjectPage/components/ChatProjectMessageLayout"
 import { resolveComposerMinInputHeight } from "@/pages/superMagic/components/ConversationInputResize/constants"
@@ -169,9 +170,11 @@ function TopicMessagePanel({
 }: TopicMessagePanelProps) {
 	const scopedTopicStore = topicStoreProp ?? topicStore
 	const scopedProjectFilesStore = projectFilesStoreProp ?? projectFilesStore
-	// Chat detail route hides branch-topic actions via FileActionVisibilityProvider.
-	const { hideCreateNewTopic } = useFileActionVisibility()
-	const allowTopicBranchActions = !hideCreateNewTopic
+	// Chat detail route hides branch-topic actions via FileAccessProvider.
+	const {
+		options: { createNewTopic },
+	} = useFileAccess()
+	const allowTopicBranchActions = createNewTopic
 
 	/**
 	 * 聊天页的话题模式，用于已有话题的模式展示或新话题的模式切换
@@ -276,6 +279,9 @@ function TopicMessagePanel({
 			onTopicSwitch: setSelectedTopic,
 			onRetryOptimisticMessage: handleRetryOptimisticMessage,
 			projectFilesStore: scopedProjectFilesStore,
+			onOpenProjectFiles: fileSidebarControl?.isCollapsed
+				? fileSidebarControl.onToggle
+				: undefined,
 			renderAssistantAvatar: topicModeConfig?.mode
 				? ({ className } = {}) => (
 						<ModeAvatar
@@ -292,6 +298,7 @@ function TopicMessagePanel({
 		setSelectedTopic,
 		handleRetryOptimisticMessage,
 		scopedProjectFilesStore,
+		fileSidebarControl,
 	])
 
 	const currentTopicId = selectedTopic?.chat_topic_id
@@ -327,6 +334,7 @@ function TopicMessagePanel({
 	const messageListNode = (
 		<MessageListProvider value={value}>
 			<MessageList
+				enableSimpleMode={!isChatDetail && !isReadOnlyProject(selectedProject?.user_role)}
 				className="[--message-list-surface:rgb(var(--sidebar-rgb))]"
 				classNames={{ content: "pl-2 pt-[10px]" }}
 				data={messagesWithOptimisticMeta as SuperMagicMessageItem[]}
@@ -412,6 +420,7 @@ function TopicMessagePanel({
 			)}
 		>
 			<MessageHeader
+				enableSimpleMode={!isChatDetail && !isReadOnlyProject(selectedProject?.user_role)}
 				historyTriggerRef={historyTriggerRef}
 				fileSidebarControl={fileSidebarControl}
 				alignWithContent={

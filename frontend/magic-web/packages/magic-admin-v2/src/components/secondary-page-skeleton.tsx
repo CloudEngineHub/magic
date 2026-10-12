@@ -13,6 +13,7 @@ export function SecondaryPageSkeleton() {
       aria-busy="true"
       aria-label="Loading"
       className="-m-4 min-h-[calc(100vh-4rem)] px-4 py-6 lg:px-6"
+      data-testid="secondary-page-loading"
     >
       <SecondaryPageHeaderSkeleton />
 

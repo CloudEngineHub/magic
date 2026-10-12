@@ -99,6 +99,88 @@ describe("generateSuperMagicApi", () => {
 		})
 	})
 
+	it("uses temporary share access for the template categories", async () => {
+		const get = vi.fn().mockResolvedValue({})
+		const api = generateSuperMagicApi({ get } as unknown as ServiceHttpClient)
+
+		await api.getSlidesTemplateCategories(
+			{ page: 1, page_size: 20 },
+			{ temporaryToken: "temporary-share-token" },
+		)
+
+		expect(get).toHaveBeenCalledWith("/api/v1/slides-template-categories", {
+			params: {
+				page: 1,
+				page_size: 20,
+				token: "temporary-share-token",
+			},
+			enableAuthorization: false,
+			enableAuthorizationVerification: false,
+		})
+	})
+
+	it("uses temporary share access for the template list", async () => {
+		const get = vi.fn().mockResolvedValue({})
+		const api = generateSuperMagicApi({ get } as unknown as ServiceHttpClient)
+
+		await api.getSlidesTemplates(
+			{ page: 1, page_size: 20 },
+			{ temporaryToken: "temporary-share-token" },
+		)
+
+		expect(get).toHaveBeenCalledWith("/api/v1/slides-templates", {
+			params: {
+				scope: "official",
+				page: 1,
+				page_size: 20,
+				token: "temporary-share-token",
+			},
+			headers: {},
+			enableAuthorization: false,
+			enableAuthorizationVerification: false,
+		})
+	})
+
+	it("uses temporary share access for the template count", async () => {
+		const get = vi.fn().mockResolvedValue({})
+		const api = generateSuperMagicApi({ get } as unknown as ServiceHttpClient)
+
+		await api.getSlidesTemplateCount(
+			{ page: 1, page_size: 20 },
+			{ temporaryToken: "temporary-share-token" },
+		)
+
+		expect(get).toHaveBeenCalledWith("/api/v1/slides-templates/count", {
+			params: {
+				scope: "official",
+				page: 1,
+				page_size: 20,
+				token: "temporary-share-token",
+			},
+			enableAuthorization: false,
+			enableAuthorizationVerification: false,
+		})
+	})
+
+	it("uses temporary share access for the template tag groups", async () => {
+		const get = vi.fn().mockResolvedValue({})
+		const api = generateSuperMagicApi({ get } as unknown as ServiceHttpClient)
+
+		await api.getSlidesTemplateTagGroups(
+			{ category_code: "PPT-CATE-business-report" },
+			{ temporaryToken: "temporary-share-token" },
+		)
+
+		expect(get).toHaveBeenCalledWith("/api/v1/slides-template/tags/groups", {
+			params: {
+				category_code: "PPT-CATE-business-report",
+				token: "temporary-share-token",
+			},
+			enableAuthorization: false,
+			enableAuthorizationVerification: false,
+		})
+	})
+
 	it("uses the generic AI ability availability endpoint for convert high configuration", async () => {
 		const get = vi.fn().mockResolvedValue({
 			abilities: {

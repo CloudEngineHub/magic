@@ -67,16 +67,11 @@ export default function ChatProjectMessageLayout({
 			data-testid="chat-project-message-layout"
 		>
 			{/* Keep the Ant bar hidden because the shared handle owns the visible resize interaction. */}
-			<MagicSplitter
-				layout="vertical"
-				className="h-full min-h-0 w-full"
-				onResizeStart={inputHeight.onSplitterResizeStart}
-				onResize={inputHeight.onSplitterResize}
-				onResizeEnd={inputHeight.onSplitterResizeEnd}
-			>
+			<MagicSplitter layout="vertical" className="h-full min-h-0 w-full">
+				{/* 外层只承载受控尺寸；禁用透明拖动区，避免绕过队列和输入框各自的把手。 */}
 				<MagicSplitter.Panel
 					className={isConversationPanelCollapsed ? "invisible" : "min-h-0"}
-					resizable={!isConversationPanelCollapsed}
+					resizable={false}
 				>
 					{/* Keep the message fallback stretched so its flex centering uses the full panel height. */}
 					<div className="flex h-full min-h-0 w-full flex-col">{messageList}</div>
@@ -86,7 +81,7 @@ export default function ChatProjectMessageLayout({
 					size={inputHeight.effectiveHeight}
 					max={inputHeight.maxHeight}
 					className={isConversationPanelCollapsed ? "invisible" : "min-h-0"}
-					resizable={!isConversationPanelCollapsed}
+					resizable={false}
 				>
 					<div
 						ref={inputRef}

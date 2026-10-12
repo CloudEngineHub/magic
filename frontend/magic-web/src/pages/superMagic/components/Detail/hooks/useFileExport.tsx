@@ -1,3 +1,4 @@
+import { useFileAccess as useFilePermissions } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useState, useRef } from "react"
 import { TFunction } from "i18next"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
@@ -34,6 +35,7 @@ import {
 	publishPptxExportIssues,
 } from "@/pages/superMagic/utils/pptxExportIssues"
 import type { ExportIssue } from "@magic/html2pptx"
+import { ensureFileSavesSynced } from "../services/fileSaveQueue"
 import { pptxExternalLogger, reportPptxExportError } from "@/pages/superMagic/utils/pptxLogger"
 import {
 	createPptxSlideConfig,
@@ -126,6 +128,7 @@ function useFileExport({
 	const [exportProgress, setExportProgress] = useState(0)
 	const toastIdRef = useRef<string | number | null>(null)
 	const fileAccess = useFileAccess()
+	const { permissions: access } = useFilePermissions()
 	// Bind the ambient share/session identity for the direct download-url call; the
 	// export services below still receive the legacy `access` override.
 	const fileApi = useFileApi()
@@ -215,7 +218,9 @@ function useFileExport({
 	}
 
 	const exportFile = async (fileIds: string[], fileVersion?: { [key: string]: number }) => {
+		if (!access.download) return
 		if (!fileIds || fileIds.length === 0) return
+		if (!(await ensureFileSavesSynced(fileIds))) return
 
 		// 检查是否为文件夹
 		const fileId = fileIds[0]
@@ -255,7 +260,9 @@ function useFileExport({
 	}
 
 	const exportPdf = async (fileIds: string[]) => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
+		if (!(await ensureFileSavesSynced(fileIds))) return
 
 		const documentExporter = documentExportService.get()
 		if (!documentExporter) {
@@ -323,7 +330,9 @@ function useFileExport({
 	}
 
 	const exportPptx = async (fileIds: string[]) => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
+		if (!(await ensureFileSavesSynced(fileIds))) return
 
 		const fileId = fileIds[0]
 		const file = attachments?.find((item) => item.file_id === fileId)
@@ -443,7 +452,9 @@ function useFileExport({
 	}
 
 	const exportImage = async (fileIds: string[], format: ImageExportFormat = "png") => {
+		if (!access.export) return
 		if (!fileIds || fileIds.length === 0) return
+		if (!(await ensureFileSavesSynced(fileIds))) return
 
 		const fileId = fileIds[0]
 		const file = attachments?.find((item) => item.file_id === fileId)

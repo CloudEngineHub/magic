@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import MagicDropdown from "@/components/base/MagicDropdown"
 import { IconFile, IconFileTypePdf, IconFileTypePpt, IconPhoto } from "@tabler/icons-react"
 import { MenuProps } from "antd"
@@ -45,78 +46,82 @@ export function useExportMenuItems({
 }) {
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
+	const { permissions: access } = useFileAccess()
 	const exportMenuItems: MenuProps["items"] = useMemo(
-		() => [
-			{
-				key: "source",
-				label: t("topicFiles.exportSource"),
-				icon: <IconFile size={16} stroke={1.5} />,
-				onClick: handleExportSource,
-			},
-			...(showExportPdf
-				? [
-						{
-							key: "pdf",
-							label: t("topicFiles.exportPdf"),
-							icon: <IconFileTypePdf size={16} stroke={1.5} />,
-							onClick: () => handleExportPDF(),
-						},
-					]
-				: []),
-			...(showExportRasterPdf && handleExportRasterPdf
-				? [
-						{
-							key: "pdf-raster",
-							label: t("topicFiles.exportPdfRaster"),
-							icon: <IconFileTypePdf size={16} stroke={1.5} />,
-							children: [
-								{
-									key: "pdf-raster-fit",
-									label: t("topicFiles.exportPdfFullPage"),
-									onClick: () => handleExportRasterPdf("fit"),
-								},
-								{
-									key: "pdf-raster-paginate",
-									label: t("topicFiles.exportPdfPaginated"),
-									onClick: () => handleExportRasterPdf("paginate"),
-								},
-							],
-						},
-					]
-				: []),
-			...(showExportImage && handleExportImage
-				? [
-						{
-							key: "image",
-							label: t("topicFiles.exportImage"),
-							icon: <IconPhoto size={16} stroke={1.5} />,
-							children: [
-								{
-									key: "image-png",
-									label: t("topicFiles.exportImagePng"),
-									onClick: () => handleExportImage("png"),
-								},
-								{
-									key: "image-jpeg",
-									label: t("topicFiles.exportImageJpeg"),
-									onClick: () => handleExportImage("jpeg"),
-								},
-							],
-						},
-					]
-				: []),
-			...(showExportPptx && handleExportPptx
-				? [
-						{
-							key: "pptx",
-							label: t("topicFiles.exportPptx"),
-							icon: <IconFileTypePpt size={16} stroke={1.5} />,
-							onClick: handleExportPptx,
-						},
-					]
-				: []),
-		],
+		() =>
+			[
+				{
+					key: "source",
+					label: t("topicFiles.exportSource"),
+					icon: <IconFile size={16} stroke={1.5} />,
+					onClick: handleExportSource,
+				},
+				...(showExportPdf
+					? [
+							{
+								key: "pdf",
+								label: t("topicFiles.exportPdf"),
+								icon: <IconFileTypePdf size={16} stroke={1.5} />,
+								onClick: () => handleExportPDF(),
+							},
+						]
+					: []),
+				...(showExportRasterPdf && handleExportRasterPdf
+					? [
+							{
+								key: "pdf-raster",
+								label: t("topicFiles.exportPdfRaster"),
+								icon: <IconFileTypePdf size={16} stroke={1.5} />,
+								children: [
+									{
+										key: "pdf-raster-fit",
+										label: t("topicFiles.exportPdfFullPage"),
+										onClick: () => handleExportRasterPdf("fit"),
+									},
+									{
+										key: "pdf-raster-paginate",
+										label: t("topicFiles.exportPdfPaginated"),
+										onClick: () => handleExportRasterPdf("paginate"),
+									},
+								],
+							},
+						]
+					: []),
+				...(showExportImage && handleExportImage
+					? [
+							{
+								key: "image",
+								label: t("topicFiles.exportImage"),
+								icon: <IconPhoto size={16} stroke={1.5} />,
+								children: [
+									{
+										key: "image-png",
+										label: t("topicFiles.exportImagePng"),
+										onClick: () => handleExportImage("png"),
+									},
+									{
+										key: "image-jpeg",
+										label: t("topicFiles.exportImageJpeg"),
+										onClick: () => handleExportImage("jpeg"),
+									},
+								],
+							},
+						]
+					: []),
+				...(showExportPptx && handleExportPptx
+					? [
+							{
+								key: "pptx",
+								label: t("topicFiles.exportPptx"),
+								icon: <IconFileTypePpt size={16} stroke={1.5} />,
+								onClick: handleExportPptx,
+							},
+						]
+					: []),
+			].filter((item) => (item.key === "source" ? access.download : access.export)),
 		[
+			access.download,
+			access.export,
 			handleExportPDF,
 			handleExportPptx,
 			handleExportImage,
@@ -130,7 +135,7 @@ export function useExportMenuItems({
 		],
 	)
 
-	const ExportDropdownButton = (
+	const ExportDropdownButton = exportMenuItems?.length ? (
 		<MagicDropdown
 			menu={{ items: exportMenuItems }}
 			placement="bottomRight"
@@ -155,7 +160,7 @@ export function useExportMenuItems({
 				/>
 			</span>
 		</MagicDropdown>
-	)
+	) : null
 
 	return { ExportDropdownButton, exportMenuItems }
 }

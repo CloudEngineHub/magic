@@ -1,6 +1,7 @@
 import { lazy } from "react"
 import type { RouteObject } from "react-router-dom"
 import { Navigate } from "react-router-dom"
+import { withAccessibleIndexRedirect } from "@admin/routes/FirstAccessibleRedirect"
 import { RouteName, RoutePath } from "@admin/const/routes"
 
 import AiManageRoutes from "../pages/AiManage/routes"
@@ -23,6 +24,12 @@ export type Route = RouteObject & {
 	hiddenMenu?: boolean
 	children?: Route[]
 	validate?: (permissions: string[], isSuperAdmin: boolean) => boolean
+	validateOrganization?: (
+		context: import("@admin/utils/routeMeta").OrganizationAccessContext,
+	) => boolean
+	validateEnvironment?: (
+		env: import("@admin/utils/routeMeta").EnvironmentAccessContext,
+	) => boolean
 	meta?: MetaData
 }
 
@@ -33,7 +40,7 @@ export const otherRoutes: Route[] = [
 	},
 ]
 
-export const routes: Route[] = [
+export const routes: Route[] = withAccessibleIndexRedirect<Route>([
 	{
 		name: RouteName.Admin,
 		path: RoutePath.Admin,
@@ -52,4 +59,4 @@ export const routes: Route[] = [
 		path: "*",
 		element: <Navigate to="/admin" replace />,
 	},
-]
+])

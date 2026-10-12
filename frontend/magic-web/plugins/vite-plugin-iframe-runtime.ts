@@ -5,6 +5,7 @@ const moduleId = "virtual:magic-iframe-runtime"
 const resolvedId = `\0${moduleId}`
 const runtimeDirectory = "src/pages/superMagic/components/Detail/contents/HTML/iframe-runtime"
 const entries = [
+	"touch-pinch",
 	"telemetry",
 	"content-metrics",
 	"service-worker",

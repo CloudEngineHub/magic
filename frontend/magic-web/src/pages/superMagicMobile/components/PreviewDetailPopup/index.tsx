@@ -10,6 +10,7 @@ import {
 	useEffect,
 	useImperativeHandle,
 	useMemo,
+	useRef,
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
@@ -23,6 +24,7 @@ import { useMemoizedFn } from "ahooks"
 import { X } from "lucide-react"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { retainMobilePresentationLayout } from "@/stores/layout/mobilePresentationLayout"
 import MagicModal from "@/components/base/MagicModal"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { useOverlayZIndex } from "@/hooks/useOverlayZIndex"
@@ -99,6 +101,12 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 	// New state for ActionButtons functionality
 	const [viewMode, setViewMode] = useState<"code" | "desktop" | "phone">("desktop")
 	const [favoriteFiles, setFavoriteFiles] = useState<Set<string>>(new Set())
+	const releaseMobileLayoutRef = useRef<(() => void) | null>(null)
+	const releaseMobileLayout = useMemoizedFn(() => {
+		releaseMobileLayoutRef.current?.()
+		releaseMobileLayoutRef.current = null
+	})
+	useEffect(() => () => releaseMobileLayout(), [releaseMobileLayout])
 
 	const open = useCallback(
 		(
@@ -106,13 +114,18 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 			attachmentTree: AttachmentItem[],
 			attachmentList: AttachmentItem[],
 		) => {
+			// Exiting PPT fullscreen may leave the viewport in landscape. Keep the route and
+			// sheet mounted until this preview closes, so its file, slide and draft state survive.
+			if (isMobile && !isFileShare) {
+				releaseMobileLayoutRef.current ??= retainMobilePresentationLayout()
+			}
 			setPreviewDetail(options)
 			setAttachments(attachmentTree || [])
 			setAttachmentList(attachmentList || [])
 			setUserDetail(options)
 			setVisible(true)
 		},
-		[],
+		[isMobile, isFileShare],
 	)
 
 	/** Keeps an open preview aligned with project attachment data loaded after first render. */
@@ -223,7 +236,8 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		setIsFullscreen(false)
 		onClose?.()
 		setVisible(false)
-	}, [onClose, setIsFullscreen])
+		releaseMobileLayout()
+	}, [onClose, releaseMobileLayout, setIsFullscreen])
 
 	/** Release after exit animation so the closing layer keeps its stack slot. */
 	const handleOverlayExited = useCallback(() => {

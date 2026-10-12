@@ -217,7 +217,7 @@ export async function runStreamingExport(input: StreamingExportTaskInput): Promi
 		fileName: input.fileName,
 		pageCount: input.pageCount,
 		mediaPolicyMode,
-		zipMode: "zip64",
+		zipMode: "classic",
 	}
 	try {
 		const preflight = preflightPptxExport({
@@ -1356,7 +1356,8 @@ function createCapacityOnlyPlan(pageCount?: number): StreamingPresentationPlan {
 	return {
 		// The direct path starts packaging before pages and media are observed. An
 		// empty map here means "not scanned yet", rather than "this export has no
-		// media", so capacity telemetry must remain conservative.
+		// media". Unknown media stays on classic ZIP for PowerPoint compatibility;
+		// the PptxGenJS writer aborts before a real ZIP32 overflow.
 		capacityPlan: createCapacityPlan(pageCount ?? 0, new Map(), { mediaScanComplete: false }),
 	}
 }
@@ -1390,18 +1391,32 @@ function createCapacityPlan(
 		}
 	}
 	const estimatedEntryCount = BigInt(Math.max(24, slideCount * 6 + media.size + 24))
+	// Browser HTML exports commonly discover media lengths only while the
+	// Packaging Worker opens each resource. Selecting ZIP64 merely because a
+	// length is unknown makes otherwise small presentations unreadable by some
+	// PowerPoint versions. Opt unknown sources into classic ZIP; PptxGenJS still
+	// enforces the ZIP32 byte/entry limits and aborts before emitting overflow.
+	const unknownLengthSourceMayReachZip32Limit = false
+	const maxEntryBytesMayReachZip32Limit =
+		(maxKnownEntryBytes !== undefined && maxKnownEntryBytes >= ZIP32_SIZE_SENTINEL)
+	const archiveBytesMayReachZip32Limit = knownInputBytes >= ZIP32_SIZE_SENTINEL
+	const entryCountMayReachZip32Limit = estimatedEntryCount >= ZIP32_ENTRY_COUNT_SENTINEL
 	return {
 		confidence: hasUnknownLengthSource ? "streaming-unknown" : "upper-bound",
-		zipMode: "zip64",
+		zipMode:
+			maxEntryBytesMayReachZip32Limit ||
+			archiveBytesMayReachZip32Limit ||
+			entryCountMayReachZip32Limit
+				? "zip64"
+				: "classic",
 		hasUnknownLengthSource,
-		maxEntryBytesMayReachZip32Limit:
-			hasUnknownLengthSource ||
-			(maxKnownEntryBytes !== undefined && maxKnownEntryBytes >= ZIP32_SIZE_SENTINEL),
+		unknownLengthSourceMayReachZip32Limit,
+		maxEntryBytesMayReachZip32Limit,
 		// Unknown lengths are represented by hasUnknownLengthSource. Keep this
 		// field tied to the known aggregate/explicit archive estimate so the
 		// snapshot matches PptxGenJS's CapacityPlan contract.
-		archiveBytesMayReachZip32Limit: knownInputBytes >= ZIP32_SIZE_SENTINEL,
-		entryCountMayReachZip32Limit: estimatedEntryCount >= ZIP32_ENTRY_COUNT_SENTINEL,
+		archiveBytesMayReachZip32Limit,
+		entryCountMayReachZip32Limit,
 		knownInputBytes,
 		maxKnownEntryBytes,
 		estimatedEntryCount,

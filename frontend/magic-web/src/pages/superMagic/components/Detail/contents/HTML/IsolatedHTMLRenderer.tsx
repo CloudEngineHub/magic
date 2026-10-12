@@ -54,6 +54,7 @@ import type {
 	ImageUploadResultPayload,
 } from "./iframe-bridge/types/messages"
 import { useHTMLEditorV2 } from "./hooks/useHTMLEditorV2"
+import { preserveSlideNotesFromSource } from "../../components/PPTRender/utils/slideNotes"
 import { useImageDrop } from "./hooks/useImageDrop"
 import { SelectionOverlay } from "./components/SelectionOverlay"
 import { DropOverlay } from "./components/DropOverlay"
@@ -120,6 +121,8 @@ export interface IsolatedHTMLRendererRef {
 	/** Close the element context panel without leaving HTML edit mode. */
 	closeElementContextPanel?: () => boolean
 	resetContent: () => void
+	/** Recreate the iframe document so page scripts and animations run from the start. */
+	restartDocument?: () => void
 	updateContent: (
 		newContent: string,
 		options?: {
@@ -220,6 +223,8 @@ interface IsolatedHTMLRendererProps {
 	sandboxType?: "iframe" | "shadow-dom"
 	className?: string
 	isPptRender?: boolean
+	/** A visible PPT transition layer must paint without resuming its media yet. */
+	isPlaybackPaused?: boolean
 	isFullscreen?: boolean
 	/** Expands a pure-share iframe into the page instead of a viewport-scrolling shell. */
 	documentFlowFullscreen?: boolean
@@ -462,6 +467,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			sandboxType = "iframe",
 			className,
 			isPptRender,
+			isPlaybackPaused = false,
 			isFullscreen,
 			documentFlowFullscreen = false,
 			documentFlowContentHeight = 0,
@@ -905,9 +911,19 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			setDomTreeRevision((current) => current + 1)
 		})
 
+		const prepareVisualSaveContent = useMemoizedFn((nextContent: string) => {
+			// Notes can be saved while this iframe retains a body draft. Keep the latest
+			// host metadata without rewriting the document or resetting that draft.
+			const contentWithNotes =
+				isPptRender && typeof rawSourceCode === "string"
+					? preserveSlideNotesFromSource(nextContent, rawSourceCode)
+					: nextContent
+			return preserveOriginalTrailingNewline(contentWithNotes, rawSourceCode)
+		})
+
 		// V2 编辑机制相关
-		// Preserve the API source's EOF newline for both current and legacy visual save paths.
-		const saveEditContentWithOriginalTrailingNewline = useMemoizedFn(
+		// The legacy iframe save message also needs the host's current metadata.
+		const savePreparedEditContent = useMemoizedFn(
 			async (
 				nextContent: string,
 				nextFileId?: string,
@@ -917,7 +933,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			) => {
 				if (!saveEditContent) return
 				return saveEditContent(
-					preserveOriginalTrailingNewline(nextContent, rawSourceCode),
+					prepareVisualSaveContent(nextContent),
 					nextFileId,
 					enableShadow,
 					fetchFileVersions,
@@ -933,7 +949,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			contentInjected,
 			targetOrigin: iframeTargetOrigin,
 			scaleRatio: effectiveScaleRatio,
-			saveEditContent: saveEditContentWithOriginalTrailingNewline,
+			saveEditContent,
+			prepareSaveContent: prepareVisualSaveContent,
 			fileId,
 			filePathMapping,
 			editorRef,
@@ -1620,6 +1637,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				reportContentMetrics: documentFlowFullscreen,
 				contentMetricsTargetOrigin,
 				disableParentClickBridge: disableIframeDocumentClickBridge,
+				enableTouchPinchZoom: isPptRender,
 				enableInlineInspectorFallback,
 				postMessageTargetStrategy,
 				virtualStorage: virtualStorageContext,
@@ -1703,6 +1721,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				closeElementContextPanel,
 				requestInspectorExit,
 				consumeInspectorEscape,
+				restartDocument: restartPreviewDocument,
 				resetContent: () => {
 					// Clear edit history
 					if (editorRef.current) {
@@ -1758,6 +1777,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						reportContentMetrics: documentFlowFullscreen,
 						contentMetricsTargetOrigin,
 						disableParentClickBridge: disableIframeDocumentClickBridge,
+						enableTouchPinchZoom: isPptRender,
 						enableInlineInspectorFallback,
 						postMessageTargetStrategy,
 						virtualStorage: virtualStorageContext,
@@ -1851,6 +1871,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				injectMediaScript,
 				isEditMode,
 				isMediaScenario,
+				isPptRender,
 				htmlNavigation?.hash,
 				htmlNavigation?.search,
 				refreshIframeContent,
@@ -2090,6 +2111,33 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				return
 			}
 
+			// 回收站 HTML 只展示保留内容，不授予嵌入页面操作宿主项目或会话的能力。
+			if (
+				fileAccess?.kind === "recycle-bin" &&
+				([
+					"MAGIC_FS_",
+					"MAGIC_DB_",
+					"MAGIC_LLM_",
+					"MAGIC_CREATE_TOPIC_",
+					"MAGIC_SEND_MESSAGE_",
+					"MAGIC_UPLOAD_FILES_",
+					"MAGIC_ADD_FILES_TO_MESSAGE_",
+					"MAGIC_DOWNLOAD_FILES_",
+				].some((prefix) => messageType.startsWith(prefix)) ||
+					messageType === "MAGIC_SET_INPUT_MESSAGE")
+			) {
+				if (messageType.endsWith("_REQUEST"))
+					iframeRef.current?.contentWindow?.postMessage(
+						{
+							type: messageType.replace(/_REQUEST$/, "_RESPONSE"),
+							requestId: event.data.requestId,
+							success: false,
+							error: "Recycle bin content is read-only",
+						},
+						iframeTargetOrigin,
+					)
+				return
+			}
 			const requestBoundMessageTypes = [
 				"contentLoaded",
 				"domReady",
@@ -2364,7 +2412,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					console.log("收到旧版保存消息 (V1)", event.data)
 					if (saveEditContent && typeof saveEditContent === "function") {
 						const newContent = filterInjectedTags(event.data.content, filePathMapping)
-						saveEditContentWithOriginalTrailingNewline(newContent, String(fileId))
+						savePreparedEditContent(newContent, String(fileId))
 					}
 				} else if (event.data && event.data.type === MEDIA_MESSAGE_TYPES.SPEAKER_EDITED) {
 					// 处理媒体说话人编辑事件
@@ -2521,11 +2569,18 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			iframeRef.current.contentWindow.postMessage(
 				{
 					type: "setAnimationState",
-					paused: !isVisible,
+					paused: !isVisible || isPlaybackPaused,
 				},
 				iframeTargetOrigin,
 			)
-		}, [contentInjected, iframeTargetOrigin, isPptRender, isVisible, sandboxType])
+		}, [
+			contentInjected,
+			iframeTargetOrigin,
+			isPptRender,
+			isVisible,
+			isPlaybackPaused,
+			sandboxType,
+		])
 
 		useLayoutEffect(() => {
 			window.addEventListener("message", handleMessage, true)
@@ -2544,15 +2599,10 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				// 使用新的编辑机制 V2 保存
 				try {
 					const saveResult = await editorRef.current.save()
-					// Keep the returned baseline identical to the content sent through the save callback.
-					const savedCleanContent = preserveOriginalTrailingNewline(
-						saveResult.cleanContent,
-						rawSourceCode,
-					)
 					console.log("[IsolatedHTMLRenderer] 保存结果:", {
 						success: saveResult.success,
 						fileId: saveResult.fileId,
-						contentLength: savedCleanContent.length,
+						contentLength: saveResult.cleanContent.length,
 					})
 
 					if (!saveResult.success) {
@@ -2560,10 +2610,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					}
 
 					// Return the exact saved content so conflict detection uses the correct baseline.
-					return {
-						...saveResult,
-						cleanContent: savedCleanContent,
-					}
+					return saveResult
 				} catch (error) {
 					console.error("保存内容时出错:", error)
 					throw error

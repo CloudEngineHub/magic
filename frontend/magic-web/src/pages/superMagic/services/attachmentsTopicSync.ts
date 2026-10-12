@@ -41,13 +41,15 @@ function removeEntry(entry: WaitEntry) {
 
 function enqueueAttachmentsRefreshWait(
 	projectId: string,
-	options: { timeoutMs: number; publishRefresh: boolean },
+	options: { timeoutMs: number; publishRefresh: boolean; signal?: AbortSignal },
 ): Promise<boolean> {
-	const { timeoutMs, publishRefresh } = options
+	const { timeoutMs, publishRefresh, signal } = options
+	if (signal?.aborted) return Promise.reject(new DOMException("Cancelled", "AbortError"))
 
 	return new Promise<boolean>((resolve, reject) => {
 		const timeoutId = setTimeout(() => {
 			removeEntry(entry)
+			signal?.removeEventListener("abort", onAbort)
 			reject(
 				new Error(
 					`[attachmentsTopicSync] wait timeout after ${timeoutMs}ms for project ${projectId}`,
@@ -59,10 +61,19 @@ function enqueueAttachmentsRefreshWait(
 			projectId,
 			resolve: (didLoad) => {
 				clearTimeout(timeoutId)
+				signal?.removeEventListener("abort", onAbort)
 				resolve(didLoad)
 			},
 			timeoutId,
 		}
+		// 用户切换范围或关闭浮窗时，只取消本次等待，不取消已提交上传或共享刷新。
+		const onAbort = () => {
+			removeEntry(entry)
+			clearTimeout(timeoutId)
+			signal?.removeEventListener("abort", onAbort)
+			reject(new DOMException("Cancelled", "AbortError"))
+		}
+		signal?.addEventListener("abort", onAbort, { once: true })
 		waitQueue.push(entry)
 		if (publishRefresh) {
 			requestProjectAttachmentsFullRefresh({
@@ -75,11 +86,15 @@ function enqueueAttachmentsRefreshWait(
 
 export function waitForNextFullAttachmentsRefreshForProject(
 	projectId: string | undefined,
-	options?: { timeoutMs?: number },
+	options?: { timeoutMs?: number; signal?: AbortSignal },
 ): Promise<boolean> {
 	if (!projectId) return Promise.resolve(false)
 	const timeoutMs = options?.timeoutMs ?? 15_000
-	return enqueueAttachmentsRefreshWait(projectId, { timeoutMs, publishRefresh: true })
+	return enqueueAttachmentsRefreshWait(projectId, {
+		timeoutMs,
+		publishRefresh: true,
+		signal: options?.signal,
+	})
 }
 
 /**
@@ -88,7 +103,7 @@ export function waitForNextFullAttachmentsRefreshForProject(
  */
 export function waitForNextAttachmentsRefreshForProject(
 	projectId: string | undefined,
-	options?: { timeoutMs?: number },
+	options?: { timeoutMs?: number; signal?: AbortSignal },
 ): Promise<boolean> {
 	return waitForNextFullAttachmentsRefreshForProject(projectId, options)
 }
@@ -99,11 +114,15 @@ export function waitForNextAttachmentsRefreshForProject(
  */
 export function registerWaitForNextAttachmentsRefreshForProject(
 	projectId: string | undefined,
-	options?: { timeoutMs?: number },
+	options?: { timeoutMs?: number; signal?: AbortSignal },
 ): Promise<boolean> {
 	if (!projectId) return Promise.resolve(false)
 	const timeoutMs = options?.timeoutMs ?? 15_000
-	return enqueueAttachmentsRefreshWait(projectId, { timeoutMs, publishRefresh: false })
+	return enqueueAttachmentsRefreshWait(projectId, {
+		timeoutMs,
+		publishRefresh: false,
+		signal: options?.signal,
+	})
 }
 
 /** 在对应 project 的 getAttachments 进入 finally 后调用（成功或失败均应调用） */

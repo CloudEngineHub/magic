@@ -36,8 +36,24 @@ use RuntimeException;
 /** @internal */
 final class SkillMarketVectorSearchSortTest extends TestCase
 {
+    /**
+     * 被替换掉的原始容器，tearDown 时还回去。
+     *
+     * 这个测试替换的是**进程级**的 ApplicationContext，而不是它自己的某个依赖。
+     * 不还原的话，同一进程里后续每个测试看到的 ConfigInterface 都会变成下面这个桩，
+     * 于是它们的 config('error_message') 不再返回数组 —— 任何走
+     * ExceptionBuilder::throw 的测试都会以
+     * "array_merge(): Argument #2 must be of type array, string given" 崩掉。
+     * 这不是理论风险：本测试排在前面时，套件里确实有测试就这么挂了。
+     */
+    private static ?ContainerInterface $originalContainer = null;
+
     public static function setUpBeforeClass(): void
     {
+        self::$originalContainer = ApplicationContext::hasContainer()
+            ? ApplicationContext::getContainer()
+            : null;
+
         ApplicationContext::setContainer(new class implements ContainerInterface {
             public function get(string $id): mixed
             {
@@ -64,6 +80,16 @@ final class SkillMarketVectorSearchSortTest extends TestCase
                 return $id === PhpSerializerPacker::class || $id === ConfigInterface::class || interface_exists($id);
             }
         });
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        if (self::$originalContainer !== null) {
+            ApplicationContext::setContainer(self::$originalContainer);
+            self::$originalContainer = null;
+        }
+
+        parent::tearDownAfterClass();
     }
 
     protected function tearDown(): void

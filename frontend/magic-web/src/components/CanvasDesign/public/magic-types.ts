@@ -47,7 +47,7 @@ export const ImageModelStatus = {
 /**
  * 图片/视频生成状态枚举
  */
-export type GenerationStatus = "pending" | "processing" | "completed" | "failed"
+export type GenerationStatus = "pending" | "processing" | "completed" | "failed" | "terminated"
 
 /**
  * 图片/视频生成状态枚举值
@@ -61,6 +61,8 @@ export const GenerationStatus = {
 	Completed: "completed",
 	/** 失败 */
 	Failed: "failed",
+	/** 已终止（用户终止任务 / 任务转向，节点保留） */
+	Terminated: "terminated",
 } as const
 
 /**
@@ -177,18 +179,11 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	| "standard"
-	| "image_reference"
-	| "omni_reference"
-	| "video_edit"
-	| "keyframe_guided"
+	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	| "reference_images"
-	| "reference_videos"
-	| "reference_audios"
-	| "frames"
+	"reference_images" | "reference_videos" | "reference_audios" | "frames"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -513,6 +508,8 @@ export interface DefaultGenerateVideoConfig {
  * 发起图片生成请求参数
  */
 export interface GenerateImageRequest {
+	/** 该版本的生成名称；最终文件名仍由生成结果确定。 */
+	name?: string
 	/** 项目 id */
 	project_id?: string
 	/** 图片 id */
@@ -525,6 +522,10 @@ export interface GenerateImageRequest {
 	size?: string
 	/** 分辨率（对应 scale 值） */
 	resolution?: string
+	/** 任务发起时间；建单后更新为后端返回的真实起点。 */
+	start_time?: string
+	/** 预期完成时间，后端写入的 ISO 8601 日期时间（如 2026-09-28T20:44:16+08:00），用于估算进度 */
+	expected_finished_at?: string
 	/** 文件目录，一定是本项目存在的目录 */
 	file_dir?: string
 	/** 参考图；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
@@ -569,6 +570,10 @@ export interface GenerateImageResponse {
 	file_url: string | null
 	/** ID */
 	id: string
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度；聊天工具卡用的是同一个值 */
+	expected_finished_at?: string
 }
 
 export interface GeneratedImageResultItem {
@@ -614,6 +619,10 @@ export interface GenerateImagesResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度 */
+	expected_finished_at?: string
 }
 
 /**
@@ -1011,6 +1020,10 @@ export interface ImageGenerationResultResponse {
 	file_url: string
 	/** ID */
 	id: string
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），用于估算进度 */
+	expected_finished_at?: string
 }
 
 /**
@@ -1049,6 +1062,10 @@ export interface ImageGenerationResultsResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），用于估算进度 */
+	expected_finished_at?: string
 }
 
 /**
@@ -1325,8 +1342,7 @@ export interface IdentifyImageMarkAreaResponse extends IdentifyImageMarkResponse
  * 识别图片标记响应类型
  */
 export type IdentifyImageMarkResponse =
-	| IdentifyImageMarkPointResponse
-	| IdentifyImageMarkAreaResponse
+	IdentifyImageMarkPointResponse | IdentifyImageMarkAreaResponse
 
 /**
  * Storage 数据结构
@@ -1335,6 +1351,8 @@ export interface CanvasDesignStorageData {
 	viewport?: ViewportState
 	/** 当前设计项目的小地图面板是否展开 */
 	minimapOpen?: boolean
+	/** 当前设计项目是否常驻显示图片和视频的标题、分辨率标签 */
+	mediaLabelsAlwaysVisible?: boolean
 	expandedElementIds?: string[]
 	layersCollapsed?: boolean
 	layersWidth?: number
@@ -1456,8 +1474,38 @@ export interface CanvasDesignConfirmModalOptions {
 	cancelText?: string
 	okButtonProps?: Record<string, unknown>
 	cancelButtonProps?: Record<string, unknown>
+	variant?: "default" | "destructive"
+	showIcon?: boolean
 	onOk?: () => void | Promise<void>
 	onCancel?: () => void
+}
+
+export interface CanvasImageRenameFile {
+	fileId: string
+	fileName: string
+	sourcePath: string
+	parentPath: string
+}
+
+export interface CanvasImageFileRename {
+	elementId: string
+	contentId: string
+	fileId: string
+	expectedName: string
+	targetName: string
+}
+
+export interface CanvasImageRenameMethods {
+	resolveImageRenameFile: (path: string) => CanvasImageRenameFile | undefined
+	validateImageFileRenames: (changes: readonly CanvasImageFileRename[]) => Record<string, string>
+	renameImageFile: (change: CanvasImageFileRename) => Promise<CanvasImageRenameFile>
+}
+
+export interface CanvasDesignConfirmModalHandle {
+	/** 范围切换只更新确认按钮，不重建弹窗或触发删除。 */
+	update: (
+		options: Pick<CanvasDesignConfirmModalOptions, "content" | "okText" | "okButtonProps">,
+	) => void
 }
 
 /**
@@ -1466,6 +1514,8 @@ export interface CanvasDesignConfirmModalOptions {
  * 注意：此接口完全独立，不依赖外部类型
  */
 export interface CanvasDesignMethods {
+	/** 手动图片命名由宿主处理实际文件；自动标题更新不触发文件改名。 */
+	imageRename?: CanvasImageRenameMethods
 	/**
 	 * 获取生图模型列表
 	 * @param mode 模式标识，如果不传则使用当前模式
@@ -1587,6 +1637,10 @@ export interface CanvasDesignMethods {
 		fileName?: string
 		locateInTree?: boolean
 	}) => Promise<void> | void
+	/** 将项目文件移入回收站，并返回服务端确认已处理的文件 ID。 */
+	deleteProjectFiles?: (params: {
+		fileIds: readonly string[]
+	}) => Promise<{ deletedFileIds: string[] }>
 	/**
 	 * 上传文件
 	 * @param uploadFiles 待上传文件数组
@@ -1704,7 +1758,7 @@ export interface CanvasDesignMethods {
 	 * 确认弹窗（可选）
 	 * 注入后 CanvasDesign 可复用宿主弹窗样式；未注入时由内部组件自行降级实现
 	 */
-	confirmModal?: (options: CanvasDesignConfirmModalOptions) => void
+	confirmModal?: (options: CanvasDesignConfirmModalOptions) => CanvasDesignConfirmModalHandle
 	/**
 	 * 剪贴板读写方法（可选）
 	 * 注入后 CanvasDesign 使用注入实现，否则降级到 navigator.clipboard

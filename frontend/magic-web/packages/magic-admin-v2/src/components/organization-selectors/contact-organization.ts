@@ -162,18 +162,25 @@ export async function fetchAllContactTokenPages<TItem>(
 	const items: TItem[] = [];
 	const visitedTokens = new Set<string>();
 	let pageToken: string | undefined;
+	let shouldContinue = true;
 
-	while (true) {
+	while (shouldContinue) {
 		const page = normalizeContactTokenPage(await fetchPage(pageToken));
 		items.push(...page.items);
 
-		if (!page.hasMore || !page.pageToken || visitedTokens.has(page.pageToken)) {
+		shouldContinue =
+			page.hasMore &&
+			Boolean(page.pageToken) &&
+			!visitedTokens.has(page.pageToken ?? "");
+		if (!shouldContinue) {
 			return items;
 		}
 
-		visitedTokens.add(page.pageToken);
+		visitedTokens.add(page.pageToken!);
 		pageToken = page.pageToken;
 	}
+
+	return items;
 }
 
 export function contactDepartmentToCompatibleNode(

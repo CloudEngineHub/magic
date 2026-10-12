@@ -309,9 +309,10 @@ class RollbackExecutor:
     def _resolve_restore_path(self, file_path: str) -> Path:
         """将流水记录的 file_path 解析为恢复目标绝对路径。
 
-        新格式条目的 file_path 是 agent 可见绝对路径（如
-        /mnt/agfs/magicfs/project/a.txt），直接使用。旧沙箱镜像产生的
-        相对路径条目没有可靠的根信息，无法安全恢复——交由调用方跳过。
+        新格式条目的 file_path 是 agent 可见绝对路径（形如
+        <AGFS FUSE 挂载根>/magicfs/project/a.txt，挂载根由网关决定），
+        直接使用。旧沙箱镜像产生的相对路径条目没有可靠的根信息，无法
+        安全恢复——交由调用方跳过。
         """
         p = Path(file_path)
         if p.is_absolute():

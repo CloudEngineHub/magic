@@ -507,6 +507,7 @@
 	align-items: center;
 	height: 100%;
 	overflow: hidden;
+	gap: 6px;
 }
 
 .layer-node-input {
@@ -520,6 +521,7 @@
 }
 
 .layer-node-label-text {
+	min-width: 0;
 	height: 100%;
 	overflow: hidden;
 	color: var(--base-sidebar-foreground, #0a0a0a);
@@ -527,6 +529,17 @@
 	line-height: 32px;
 	white-space: nowrap;
 	text-overflow: ellipsis;
+}
+
+.layer-node-discarded {
+	/* 状态不随长标题收缩，隐藏后仍能从图层面板识别废稿。 */
+	flex: none;
+	padding: 1px 5px;
+	color: var(--base-muted-foreground, #737373);
+	font-size: 11px;
+	line-height: 16px;
+	background: var(--base-muted, #f5f5f5);
+	border-radius: 4px;
 }
 
 .layer-node-actions {

@@ -49,6 +49,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 		viewport = {},
 		getDevice,
 		t,
+		nameLabelIconResolver,
 		shareHostBottomChrome = false,
 	} = props
 
@@ -152,6 +153,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 			accessMode: resolvedAccessMode,
 			capabilities,
 			plugins: props.plugins,
+			nameLabelIconResolver,
 			magic: {
 				methods: methods,
 				permissions: permissions,

@@ -1,3 +1,4 @@
+import { serializeWechatChatContent } from "../extensions/wechat-chat-history/transform"
 import { useMemoizedFn } from "ahooks"
 import type { MutableRefObject, RefObject } from "react"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
@@ -27,6 +28,7 @@ interface UseMessageSendHandlerParams {
 	/** Blank home creation may fail before dispatch; keep its draft until success is confirmed. */
 	awaitSendSuccess?: boolean
 	isMountedRef: MutableRefObject<boolean>
+	isSendSuspended?: () => boolean
 }
 
 export default function useMessageSendHandler({
@@ -44,8 +46,10 @@ export default function useMessageSendHandler({
 	onSendStart,
 	awaitSendSuccess = false,
 	isMountedRef,
+	isSendSuspended,
 }: UseMessageSendHandlerParams) {
 	return useMemoizedFn(async () => {
+		if (isSendSuspended?.()) return
 		if (store.draftStore.isDraftSwitching) return
 		if (voiceInputRef.current?.isRecording) voiceInputRef.current.stopRecording()
 		// Sending is also an explicit confirmation path when the editor never received focus.
@@ -78,9 +82,12 @@ export default function useMessageSendHandler({
 			content = store.editorStore.value
 				? serializeInspectorContent(
 						transformMarkerImagePathsToWorkspaceAbsolute(
-							replaceSuperPlaceholderToString(store.editorStore.value, {
-								validate: true,
-							}),
+							replaceSuperPlaceholderToString(
+								serializeWechatChatContent(store.editorStore.value),
+								{
+									validate: true,
+								},
+							),
 							projectFilesStore.workspaceFilesList,
 						),
 					)

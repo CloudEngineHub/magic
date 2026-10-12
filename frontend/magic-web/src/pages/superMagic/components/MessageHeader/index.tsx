@@ -1,3 +1,5 @@
+import { SimpleModeGuide } from "./components/SimpleModeGuide"
+import { SimpleModeSetting } from "./components/SimpleModeSetting"
 import type { FileSidebarControl } from "../Detail/components/FilesViewer/types"
 import {
 	useState,
@@ -27,6 +29,7 @@ import {
 	PanelRightOpen,
 	Ellipsis,
 	PenLine,
+	RefreshCw,
 	WandSparkles,
 	Trash2,
 } from "lucide-react"
@@ -51,18 +54,20 @@ import {
 	shouldSyncChatConversationName,
 	syncChatProjectNameOnly,
 } from "../../services/chatConversationNameSync"
-import { useFileActionVisibility } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import {
 	resolveMessageHeaderEditableTitle,
 	resolveMessageHeaderTitle,
 } from "@/pages/superMagic/utils/resolve-chat-conversation-display-name"
 import { isTopicShareAllowed } from "@/pages/superMagic/utils/is-topic-share-allowed"
 import { isMagicApp } from "@/utils/devices"
+import { classifyRestartSandboxError } from "./restartSandboxError"
 interface TopicMutationSuccessOptions {
 	onSuccess?: () => Promise<void> | void
 }
 
 interface MessageHeaderProps {
+	enableSimpleMode?: boolean
 	/** 普通项目无预览时，标题与操作跟随正文居中；其它页面由原布局控制。 */
 	alignWithContent?: boolean
 	isConversationPanelCollapsed?: boolean
@@ -98,6 +103,7 @@ export interface MessageHeaderTopicActions {
 	unpinTopic: (topicId: string) => Promise<void> | void
 	archiveTopic: (topicId: string) => Promise<void> | void
 	unarchiveTopic: (topicId: string) => Promise<void> | void
+	restartSandbox?: (topicId: string) => Promise<void> | void
 }
 
 interface MessageHeaderTopicHistoryPanelProps {
@@ -127,8 +133,10 @@ function useTopicHistoryPanelController({
 	onExpandConversationPanel,
 }: MessageHeaderTopicHistoryPanelProps) {
 	const { t } = useTranslation("super")
-	const { hideCreateNewTopic } = useFileActionVisibility()
-	const shouldHideTopicEntry = hideCreateNewTopic
+	const {
+		options: { createNewTopic },
+	} = useFileAccess()
+	const shouldHideTopicEntry = !createNewTopic
 	const topics = topicStore.topics
 	const selectedTopic = topicStore.selectedTopic
 	const messages = useMemo(
@@ -364,9 +372,12 @@ function MessageHeader({
 	onToggleHistoryPanel,
 	showTopicHistory = true,
 	trailingActions,
+	enableSimpleMode = false,
 }: MessageHeaderProps) {
 	const { t } = useTranslation("super")
-	const { hideShareTopic } = useFileActionVisibility()
+	const {
+		options: { shareTopic },
+	} = useFileAccess()
 	const {
 		messages,
 		topics,
@@ -415,8 +426,10 @@ function MessageHeader({
 	const [renamingValue, setRenamingValue] = useState("")
 	const [sharePopoverVisible, setSharePopoverVisible] = useState(false)
 	const [topicMenuOpen, setTopicMenuOpen] = useState(false)
+	const [isRestartingSandbox, setIsRestartingSandbox] = useState(false)
 	const [topicHistoryOpen, setTopicHistoryOpen] = useState(false)
 	const inputRef = useRef<HTMLInputElement>(null)
+	const simpleModeAnchorRef = useRef<HTMLSpanElement>(null)
 	const isLayoutHistoryTrigger = historyTriggerMode === "layout"
 	const isHistoryButtonActive = isLayoutHistoryTrigger ? isHistoryPanelOpen : topicHistoryOpen
 
@@ -455,6 +468,43 @@ function MessageHeader({
 		} catch (err: unknown) {
 			console.error("Failed to rename topic:", err)
 			setIsRenaming(false)
+		}
+	})
+
+	const handleRestartSandbox = useMemoizedFn(async () => {
+		if (!selectedTopic || !topicActions.restartSandbox || isRestartingSandbox) return
+
+		setIsRestartingSandbox(true)
+		const loadingToast = magicToast.loading({
+			content: t("messageHeader.restartSandboxLoading"),
+			duration: 0,
+		})
+		try {
+			await topicActions.restartSandbox(selectedTopic.id)
+			magicToast.destroy(loadingToast)
+			magicToast.success(t("messageHeader.restartSandboxSuccess"))
+		} catch (error) {
+			magicToast.destroy(loadingToast)
+			console.error("Failed to restart sandbox:", error)
+			const errorType = classifyRestartSandboxError(error)
+			switch (errorType) {
+				case "notFound":
+					magicToast.error(t("messageHeader.restartSandboxNotFound"))
+					break
+				case "permissionDenied":
+					magicToast.error(t("messageHeader.restartSandboxPermissionDenied"))
+					break
+				case "busy":
+					magicToast.error(t("messageHeader.restartSandboxBusy"))
+					break
+				case "network":
+					magicToast.error(t("messageHeader.restartSandboxNetworkError"))
+					break
+				default:
+					magicToast.error(t("messageHeader.restartSandboxFailed"))
+			}
+		} finally {
+			setIsRestartingSandbox(false)
 		}
 	})
 
@@ -756,7 +806,7 @@ function MessageHeader({
 									</div>
 								) : null}
 
-								{!hideShareTopic ? (
+								{shareTopic ? (
 									<TopicSharePopover
 										open={sharePopoverVisible}
 										onOpenChange={(open) => {
@@ -782,57 +832,100 @@ function MessageHeader({
 
 								{/* Chat single-topic view hides the entire topic overflow menu (rename / AI rename / delete). */}
 								{!shouldHideTopicEntry ? (
-									<DropdownMenu onOpenChange={setTopicMenuOpen}>
-										<DropdownMenuTrigger asChild>
-											<span>
-												<MagicTooltip title={t("messageHeader.topicMenu")}>
-													<span>
-														<Button
-															variant="ghost"
-															size="icon-sm"
-															data-testid="message-header-menu-button"
+									<>
+										<DropdownMenu onOpenChange={setTopicMenuOpen}>
+											<DropdownMenuTrigger asChild>
+												<span>
+													<MagicTooltip
+														title={t("messageHeader.topicMenu")}
+													>
+														<span>
+															<Button
+																variant="ghost"
+																size="icon-sm"
+																data-testid="message-header-menu-button"
+																className={cn(
+																	headerIconButtonClassName,
+																	topicMenuOpen && "bg-accent",
+																)}
+															>
+																<span
+																	ref={simpleModeAnchorRef}
+																	className="inline-flex size-4"
+																>
+																	<Ellipsis
+																		size={16}
+																		className="shrink-0 text-foreground"
+																	/>
+																</span>
+															</Button>
+														</span>
+													</MagicTooltip>
+												</span>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent align="end" className="w-60">
+												{enableSimpleMode && (
+													<>
+														<SimpleModeSetting inMenu />
+														<DropdownMenuSeparator />
+													</>
+												)}
+												<DropdownMenuItem onClick={handleRename}>
+													<PenLine
+														size={16}
+														className="text-muted-foreground"
+													/>
+													{t("messageHeader.rename")}
+												</DropdownMenuItem>
+												<DropdownMenuItem onClick={() => handleAiRename()}>
+													<WandSparkles
+														size={16}
+														className="text-muted-foreground"
+													/>
+													{t("messageHeader.aiRename")}
+												</DropdownMenuItem>
+												{topicActions.restartSandbox ? (
+													<DropdownMenuItem
+														disabled={isRestartingSandbox}
+														onClick={() => void handleRestartSandbox()}
+													>
+														<RefreshCw
+															size={16}
 															className={cn(
-																headerIconButtonClassName,
-																topicMenuOpen && "bg-accent",
+																"text-muted-foreground",
+																isRestartingSandbox &&
+																	"animate-spin",
 															)}
-														>
-															<Ellipsis
-																size={16}
-																className="shrink-0 text-foreground"
-															/>
-														</Button>
-													</span>
-												</MagicTooltip>
-											</span>
-										</DropdownMenuTrigger>
-										<DropdownMenuContent align="end" className="w-60">
-											<DropdownMenuItem onClick={handleRename}>
-												<PenLine
-													size={16}
-													className="text-muted-foreground"
-												/>
-												{t("messageHeader.rename")}
-											</DropdownMenuItem>
-											<DropdownMenuItem onClick={() => handleAiRename()}>
-												<WandSparkles
-													size={16}
-													className="text-muted-foreground"
-												/>
-												{t("messageHeader.aiRename")}
-											</DropdownMenuItem>
-											<DropdownMenuSeparator />
-											<DropdownMenuItem
-												variant="destructive"
-												onClick={() =>
-													selectedTopic &&
-													handleDeleteTopic(selectedTopic.id, headerTitle)
-												}
-											>
-												<Trash2 size={16} />
-												{t("messageHeader.deleteTopic")}
-											</DropdownMenuItem>
-										</DropdownMenuContent>
-									</DropdownMenu>
+														/>
+														{t("messageHeader.restartSandbox")}
+													</DropdownMenuItem>
+												) : null}
+												<DropdownMenuSeparator />
+												<DropdownMenuItem
+													variant="destructive"
+													onClick={() =>
+														selectedTopic &&
+														handleDeleteTopic(
+															selectedTopic.id,
+															headerTitle,
+														)
+													}
+												>
+													<Trash2 size={16} />
+													{t("messageHeader.deleteTopic")}
+												</DropdownMenuItem>
+											</DropdownMenuContent>
+										</DropdownMenu>
+										<SimpleModeGuide
+											anchorRef={simpleModeAnchorRef}
+											available={
+												enableSimpleMode &&
+												Boolean(selectedTopic) &&
+												!isConversationPanelCollapsed
+											}
+											menuOpen={topicMenuOpen}
+										/>
+									</>
 								) : null}
 								{trailingActions ? (
 									<div data-testid="message-header-trailing-actions">

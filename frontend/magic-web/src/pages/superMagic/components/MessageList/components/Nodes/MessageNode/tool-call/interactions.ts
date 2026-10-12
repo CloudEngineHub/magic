@@ -28,14 +28,15 @@ export function handleToolCallInteraction({
 	}
 
 	const target = getToolCardInteractionTarget(toolData.name, toolData.detail)
-	if (target.type === "disabled") return
+	if (target.type === "disabled" || target.type === "inline") return
 
-	if (target.type === "design") {
+	if (target.type === "canvas") {
 		const { designProjectId, designProject, elements } = getToolDesignProjectInfo(
 			toolData,
 			filesStore,
 		)
 		const canvasDesignId = String(designProjectId || "")
+		if (!canvasDesignId) return
 		pubsub.publish(PubSubEvents.Open_File_Tab, {
 			...designProject,
 			fileId: canvasDesignId,

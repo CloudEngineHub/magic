@@ -55,9 +55,13 @@ use App\Domain\Agent\Repository\Persistence\AgentVersionRepository;
 use App\Domain\Agent\Repository\Persistence\MagicBotThirdPlatformChatRepository;
 use App\Domain\AppMenu\Repository\Facade\AppMenuRepositoryInterface;
 use App\Domain\AppMenu\Repository\Persistence\AppMenuRepository;
+use App\Domain\Archive\Repository\Facade\ArchiveTaskRecordRepositoryInterface;
+use App\Domain\Archive\Repository\Persistence\ArchiveTaskRecordRepository;
 use App\Domain\Audit\Contract\PermissionLabelProviderInterface;
 use App\Domain\Audit\Contract\PermissionLabelServiceInterface;
+use App\Domain\Audit\ModelCall\Repository\Facade\AuditHourlyRecordRepositoryInterface;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditLogRepositoryInterface;
+use App\Domain\Audit\ModelCall\Repository\Persistence\AuditHourlyRecordRepository;
 use App\Domain\Audit\ModelCall\Repository\Persistence\AuditLogRepository;
 use App\Domain\Audit\Repository\Facade\AdminOperationLogRepositoryInterface;
 use App\Domain\Audit\ResourceAccess\Repository\Facade\ResourceAccessLogRepositoryInterface;
@@ -505,6 +509,8 @@ $dependencies = [
     // audit (操作日志)
     AdminOperationLogRepositoryInterface::class => AdminOperationLogRepository::class,
     AuditLogRepositoryInterface::class => AuditLogRepository::class,
+    AuditHourlyRecordRepositoryInterface::class => AuditHourlyRecordRepository::class,
+    ArchiveTaskRecordRepositoryInterface::class => ArchiveTaskRecordRepository::class,
     ResourceAccessLogRepositoryInterface::class => ResourceAccessLogRepository::class,
     PermissionLabelProviderInterface::class => PermissionLabelProvider::class,
     PermissionLabelServiceInterface::class => PermissionLabelService::class,

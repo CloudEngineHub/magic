@@ -89,6 +89,7 @@ export function createEditorValues(records: ProviderModelRecord[]): ModelEditorV
     vector_size: stringifyNumber(config.vector_size),
     temperature_mode: temperatureMode,
     temperature: stringifyNumber(temperature),
+    chat_api: config.chat_api ?? "chat_completions",
     support_function: Boolean(config.support_function),
     support_multi_modal: Boolean(config.support_multi_modal),
     support_deep_think: Boolean(config.support_deep_think),
@@ -108,7 +109,48 @@ export function createEditorValues(records: ProviderModelRecord[]): ModelEditorV
       load_balancing_weight: stringifyNumber(record.load_balancing_weight),
       extra_header: record.extra?.extra_header ?? "",
       extra_body: record.extra?.extra_body ?? "",
+      visible_organizations: record.visible_organizations,
+      visible_applications: record.visible_applications,
+      visible_packages: record.visible_packages,
     })),
+  };
+}
+
+/**
+ * Build a new editor draft from an existing model configuration.
+ * Imported provider records must be created as new records, rather than treated
+ * as updates to the source configuration.
+ */
+export function createImportedEditorValues(record: ProviderModelRecord): ModelEditorValues {
+  const values = createEditorValues([record]);
+
+  return {
+    ...values,
+    providers: values.providers.map((binding) => ({
+      ...binding,
+      client_key: createBindingValues().client_key,
+      record_id: undefined,
+    })),
+  };
+}
+
+export type ModelLanguageValues = Pick<
+  ModelEditorValues,
+  "name" | "name_en" | "description" | "description_en"
+>;
+
+export function getUnpairedLanguageChanges(
+  initial: ModelLanguageValues,
+  current: ModelLanguageValues,
+) {
+  const nameChanged = initial.name.trim() !== current.name.trim();
+  const nameEnChanged = initial.name_en.trim() !== current.name_en.trim();
+  const descriptionChanged = initial.description.trim() !== current.description.trim();
+  const descriptionEnChanged = initial.description_en.trim() !== current.description_en.trim();
+
+  return {
+    name: nameChanged !== nameEnChanged,
+    description: descriptionChanged !== descriptionEnChanged,
   };
 }
 
@@ -125,11 +167,12 @@ export function createEmptyValues(
     description_en: "",
     category: initialCategory,
     model_type: initialModelType,
-    max_tokens: "",
-    max_output_tokens: "",
-    vector_size: "",
+    max_tokens: "128000",
+    max_output_tokens: "64000",
+    vector_size: "0",
     temperature_mode: "recommended",
     temperature: "0.7",
+    chat_api: "chat_completions",
     support_function: true,
     support_multi_modal: true,
     support_deep_think: false,
@@ -201,11 +244,44 @@ export function getErrorMessage(message: unknown) {
 export function toSaveInputs(
   values: ModelEditorValues,
   supportsLoadBalancing: boolean,
+  isOfficialOrganization: boolean,
   canonicalPricingTiers: Record<string, ProviderModelBillingTier[] | null> = {},
+  officialSyncedRecords: Record<string, ProviderModelRecord> = {},
 ): ProviderModelSaveInput[] {
   return values.providers.map((binding) => {
+    const officialSyncedRecord = binding.record_id
+      ? officialSyncedRecords[binding.record_id]
+      : undefined;
+    if (officialSyncedRecord) {
+      const loadBalancingWeight = supportsLoadBalancing
+        ? toOptionalNumber(binding.load_balancing_weight)
+        : undefined;
+
+      const officialPayload = Object.fromEntries(
+        Object.entries(officialSyncedRecord).filter(
+          ([key]) => !["id", "status", "provider_code", "created_at", "updated_at"].includes(key),
+        ),
+      ) as CreateProviderModelPayload;
+
+      return {
+        bindingKey: binding.client_key,
+        existingRecordId: officialSyncedRecord.id,
+        desiredStatus: officialSyncedRecord.status,
+        payload: {
+          ...officialPayload,
+          load_balancing_weight: loadBalancingWeight ?? officialSyncedRecord.load_balancing_weight,
+        },
+      };
+    }
+
     const isEmbedding = isEmbeddingModelType(values.model_type);
-    const runtimeVisibility = getCommonRuntimeFieldVisibility(values.model_type);
+    const runtimeVisibility = getCommonRuntimeFieldVisibility(
+      values.model_type,
+      isOfficialOrganization,
+    );
+    const supportsExtraRequest =
+      values.category === providerModelCategory.llm || isEmbeddingModelType(values.model_type);
+    const supportsChatApi = values.model_type === providerModelType.largeLanguageModel;
     const persistedCategory = isEmbedding ? providerModelCategory.llm : values.category;
     const hasCanonicalPricing = Object.prototype.hasOwnProperty.call(
       canonicalPricingTiers,
@@ -231,11 +307,16 @@ export function toSaveInputs(
       ...(runtimeVisibility.maxOutputTokens && maxOutputTokens !== undefined
         ? { max_output_tokens: maxOutputTokens }
         : {}),
-      ...(values.category === providerModelCategory.llm || isEmbedding
+      ...(runtimeVisibility.capabilities
         ? {
-            support_function: !isEmbedding && values.support_function,
-            support_multi_modal: !isEmbedding && values.support_multi_modal,
-            support_deep_think: !isEmbedding && values.support_deep_think,
+            support_function: values.support_function,
+            support_multi_modal: values.support_multi_modal,
+            support_deep_think: values.support_deep_think,
+          }
+        : {}),
+      ...(supportsChatApi ? { chat_api: values.chat_api } : {}),
+      ...(runtimeVisibility.temperature
+        ? {
             creativity: values.temperature_mode === "recommended" ? (temperature ?? null) : null,
             temperature: values.temperature_mode === "fixed" ? (temperature ?? null) : null,
           }
@@ -251,12 +332,15 @@ export function toSaveInputs(
         name: values.name.trim(),
         ...(values.icon.trim() ? { icon: values.icon.trim() } : {}),
         ...(values.description.trim() ? { description: values.description.trim() } : {}),
+        ...(binding.visible_organizations ? { visible_organizations: binding.visible_organizations } : {}),
+        ...(binding.visible_applications ? { visible_applications: binding.visible_applications } : {}),
+        ...(binding.visible_packages ? { visible_packages: binding.visible_packages } : {}),
         category: persistedCategory,
         model_type: values.model_type,
         service_provider_config_id: binding.service_provider_config_id,
         model_version: binding.model_version.trim(),
         config,
-        ...(binding.extra_header.trim() || binding.extra_body.trim()
+        ...(supportsExtraRequest && (binding.extra_header.trim() || binding.extra_body.trim())
           ? {
               extra: {
                 ...(binding.extra_header.trim()

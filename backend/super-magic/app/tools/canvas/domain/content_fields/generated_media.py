@@ -9,7 +9,7 @@ from typing import Literal
 from app.tools.canvas.domain.content_fields.base import CanvasContentFields
 from app.tools.canvas.domain.types import JsonObject
 
-GenerationStatus = Literal["pending", "processing", "completed", "failed"]
+GenerationStatus = Literal["pending", "processing", "completed", "failed", "terminated"]
 
 
 @dataclass

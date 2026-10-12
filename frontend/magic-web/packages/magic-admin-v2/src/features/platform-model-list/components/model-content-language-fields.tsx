@@ -46,7 +46,7 @@ export function ModelContentLanguageFields({
         </span>
         <TabsList className="h-11 shrink-0">
             {([Language.ZhCN, Language.EnUS] as const).map((locale) => (
-              <TabsTrigger className="h-11 gap-2" key={locale} value={locale}>
+              <TabsTrigger className="h-11 gap-2" key={locale} value={locale} data-testid="platform-model-list-tab-trigger">
                 <span>{locale === Language.ZhCN ? t("language.zhCN") : t("language.enUS")}</span>
                 <Badge className="h-5 px-1.5 text-[11px] leading-none shadow-none" variant="secondary">
                   {completion[locale]
@@ -64,7 +64,7 @@ export function ModelContentLanguageFields({
               id="name"
               placeholder={t("modelList.editor.placeholder.name")}
               {...form.register("name")}
-            />
+            data-testid="platform-model-list-name-input" />
             <FieldError
               className="text-sm"
               message={getErrorMessage(form.formState.errors.name?.message)}
@@ -77,7 +77,7 @@ export function ModelContentLanguageFields({
               placeholder={t("modelList.editor.placeholder.description")}
               rows={3}
               {...form.register("description")}
-            />
+            data-testid="platform-model-list-description-input" />
           </DialogFormField>
       </TabsContent>
       <TabsContent className="!mt-4 grid gap-4 data-[state=inactive]:hidden" value={Language.EnUS}>
@@ -87,7 +87,7 @@ export function ModelContentLanguageFields({
               id="name_en"
               placeholder={t("modelList.editor.placeholder.nameEn")}
               {...form.register("name_en")}
-            />
+            data-testid="platform-model-list-name-en-input" />
             <FieldError
               className="text-sm"
               message={getErrorMessage(form.formState.errors.name_en?.message)}
@@ -100,7 +100,7 @@ export function ModelContentLanguageFields({
               placeholder={t("modelList.editor.placeholder.descriptionEn")}
               rows={3}
               {...form.register("description_en")}
-            />
+            data-testid="platform-model-list-description-en-input" />
           </DialogFormField>
       </TabsContent>
     </Tabs>

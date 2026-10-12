@@ -6,7 +6,7 @@ from app.service.mention.builder import MentionContextBuilder
 from app.service.mention.handlers.project_directory_handler import ProjectDirectoryHandler
 from app.service.mention.handlers.project_handler import ProjectHandler
 
-PROJECT_PATH = "/mnt/agfs/magicfs/referenced-projects/904730666716749825"
+PROJECT_PATH = "/mnt/agfs-vol/agfs/magicfs/referenced-projects/904730666716749825"
 PROJECT_NAME = "更换模型"
 
 

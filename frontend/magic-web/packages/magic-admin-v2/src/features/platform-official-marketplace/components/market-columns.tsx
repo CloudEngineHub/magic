@@ -49,7 +49,7 @@ export function createSharedMarketColumns<TRecord extends MarketRecord>({
 						disabled={!tableState.canEdit}
 						loading={saving}
 						onCheckedChange={(checked) => tableState.saveFeatured(record, checked)}
-					/>
+					 data-testid="platform-official-marketplace-switch"/>
 				)
 			},
 		},
@@ -67,7 +67,7 @@ export function createSharedMarketColumns<TRecord extends MarketRecord>({
 						disabled={!tableState.canEdit}
 						loading={saving}
 						onCheckedChange={(checked) => tableState.saveHidden(record, checked)}
-					/>
+					 data-testid="platform-official-marketplace-switch"/>
 				)
 			},
 		},

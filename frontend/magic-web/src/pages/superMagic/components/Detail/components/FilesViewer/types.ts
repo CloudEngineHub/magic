@@ -1,7 +1,10 @@
 import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import type { ReactNode, CSSProperties, RefObject } from "react"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
-import type { FileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
+import type {
+	FileManagerLocationSnapshot,
+	FileManagerSnapshot,
+} from "@/models/config/repositories/SuperProjectStateTypes"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	DownloadImageMode,
@@ -70,7 +73,17 @@ export type FileManagerContext =
 			projectName?: string
 			topicId?: string
 	  }
-	| { spaceType: "project"; projectId: string; directoryId?: string }
+	| {
+			spaceType: "project"
+			projectId: string
+			directoryId?: string
+			area?: FileManagerLocationSnapshot["area"]
+	  }
+
+export interface FileManagerAreaRequest {
+	requestId: number
+	area: FileManagerLocationSnapshot["area"]
+}
 
 export interface FileManagerOpenRequest {
 	file_manager: FileManagerContext
@@ -87,6 +100,7 @@ export type ActiveDetailTabType = FileViewerTabType | null
 
 // File item interface
 export interface FileItem {
+	recycleBin?: { id: string; identityKey: string; projectId?: string }
 	/** 文件引用身份独立于 previewPolicy.fileScope 的编辑策略。 */
 	file_reference?: FileReference
 	space_type?: FileReference["space_type"]
@@ -133,6 +147,8 @@ export interface TabFileContext {
 export interface TabItem {
 	userIdentityKey?: string | null
 	fileManager?: FileManagerContext
+	/** 本次显式打开的区域；请求不进入持久化，恢复仍使用浏览快照。 */
+	fileManagerAreaRequest?: FileManagerAreaRequest
 	fileManagerState?: FileManagerSnapshot
 	returnTabId?: string
 	id: string
@@ -224,6 +240,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 	canLocateFile?: boolean
 	/** Controls whether project-level preview tabs are restored and persisted across mounts. */
 	persistFileTabs?: boolean
+	onTabsEmpty?: () => void
 
 	// Render component props
 	allowEdit?: boolean
@@ -265,7 +282,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 
 // FilesViewer ref interface
 export interface FilesViewerRef {
-	openFileTab: (fileItem: any, autoEdit?: boolean) => void
+	openFileTab: (fileItem: any, autoEdit?: boolean, activate?: boolean) => void
 	closeFileTab: (fileId: string) => void
 	switchToTab: (fileId: string) => void
 	clearAllTabs: () => void

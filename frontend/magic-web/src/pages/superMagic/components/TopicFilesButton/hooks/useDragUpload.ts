@@ -20,7 +20,7 @@ interface UseDragUploadOptions {
 	debug?: boolean
 	attachments?: AttachmentItem[]
 	duplicateFileHandler?: ReturnType<typeof useDuplicateFileHandler>
-	onUpdateAttachments?: () => void
+	onUpdateAttachments?: (sourceProjectId?: string) => void
 }
 
 interface UseDragUploadReturn {
@@ -62,7 +62,7 @@ export function useDragUpload({
 				uploadType: "file",
 				projectFiles: attachments,
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 
 			let firstError: unknown
@@ -153,7 +153,7 @@ export function useDragUpload({
 				uploadType: "folder",
 				projectFiles: attachments,
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 
 			if (debug) {

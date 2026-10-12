@@ -7,6 +7,12 @@ import type {
 } from "@/types/chat/intermediate_message"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import projectFilesStoreDefault, { ProjectFilesStore } from "@/stores/projectFiles"
+import { useFileAccess } from "../fileAccess/FileAccessProvider"
+import { isSharePageLocation } from "../fileAccess/fileAccessContext"
+import {
+	getSharedMediaResourceScope,
+	useSharedMediaResourceScope,
+} from "../services/sharedMediaResourceScope"
 import { resolveAttachmentsRefreshWaitersForProject } from "../services/attachmentsTopicSync"
 import { projectAttachmentsChangeLog } from "../utils/projectAttachments/changeLogReporter"
 import { markProjectAttachmentsLastUpdated } from "../utils/projectAttachments/lastUpdatedCache"
@@ -44,6 +50,11 @@ export function useProjectAttachmentsChangeRealtime({
 	onAttachmentsChange,
 	onFallbackError,
 }: UseProjectAttachmentsChangeRealtimeOptions) {
+	const fileAccess = useFileAccess()
+	const accessScope = useSharedMediaResourceScope()
+	// 分享预览不能借恢复入口改成宿主的全项目读取；显式 session 的运行态仍沿用原权限。
+	const canRecover =
+		fileAccess?.kind !== "share" && (!isSharePageLocation() || fileAccess?.kind === "session")
 	// Merge seqs within the debounce window, then apply once to reduce MobX commits.
 	const pendingChangesRef = useRef<SuperMagicFileChangeItem[]>([])
 	const pendingSeqKeysRef = useRef<string[]>([])
@@ -52,15 +63,15 @@ export function useProjectAttachmentsChangeRealtime({
 	const pendingLastUpdatedAtRef = useRef<string>("")
 	const parentMissingRetryCountRef = useRef(0)
 	const currentProjectIdRef = useRef(projectId)
+	const subscriptionVersionRef = useRef(0)
+	const pendingResumeRef = useRef(false)
 	// Pause WS incremental apply while parent_missing waits for a full-refresh fallback.
 	const fallbackRefreshInFlightRef = useRef(false)
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const onAttachmentsChangeRef = useRef(onAttachmentsChange)
 	const onFallbackErrorRef = useRef(onFallbackError)
 
-	useEffect(() => {
-		currentProjectIdRef.current = projectId
-	}, [projectId])
+	currentProjectIdRef.current = projectId
 
 	useEffect(() => {
 		onAttachmentsChangeRef.current = onAttachmentsChange
@@ -89,6 +100,7 @@ export function useProjectAttachmentsChangeRealtime({
 			seqKeys: string[]
 			lastUpdatedAt: string
 			changes: SuperMagicFileChangeItem[]
+			isResume?: boolean
 		}) => {
 			const fallbackProjectId = projectId
 			if (!fallbackProjectId) {
@@ -96,13 +108,19 @@ export function useProjectAttachmentsChangeRealtime({
 				return
 			}
 			const { reason, traceId, lastUpdatedAt } = context
+			const subscriptionVersion = subscriptionVersionRef.current
+			const refreshScope = accessScope
+			const isCurrentRefresh = () =>
+				currentProjectIdRef.current === fallbackProjectId &&
+				subscriptionVersionRef.current === subscriptionVersion &&
+				getSharedMediaResourceScope() === refreshScope
 			fallbackRefreshInFlightRef.current = true
 			projectAttachmentsChangeLog.fallbackStart(fallbackProjectId, context)
 
 			try {
 				// Fallback realigns the frontend tree with a full attachment load.
 				const res = await loadProjectAttachmentsSingleflight(fallbackProjectId)
-				if (currentProjectIdRef.current !== fallbackProjectId) {
+				if (!isCurrentRefresh()) {
 					projectAttachmentsChangeLog.fallbackSkippedStaleProject(
 						fallbackProjectId,
 						currentProjectIdRef.current,
@@ -130,23 +148,36 @@ export function useProjectAttachmentsChangeRealtime({
 					source: "fallback",
 					fallbackReason: reason,
 				})
+				if (context.isResume && isCurrentRefresh()) {
+					// 请求 settled 不等于成功提交；只在 store 和页面回调完成后通知画布。
+					pubsub.publish(PubSubEvents.Super_Magic_Project_Attachments_Reconciled, {
+						projectId: fallbackProjectId,
+						accessScope: refreshScope,
+						store,
+						snapshot: res,
+					})
+				}
 			} catch (error) {
-				if (currentProjectIdRef.current !== fallbackProjectId) return
+				if (!isCurrentRefresh()) return
 				projectAttachmentsChangeLog.fallbackError(fallbackProjectId, context, error)
 				onFallbackErrorRef.current?.(error, fallbackProjectId)
 			} finally {
-				fallbackRefreshInFlightRef.current = false
-				if (pendingTraceIdRef.current === traceId) {
-					pendingTraceIdRef.current = ""
-				}
-				if (pendingLastUpdatedAtRef.current === lastUpdatedAt) {
-					pendingLastUpdatedAtRef.current = ""
-				}
-				if (
-					currentProjectIdRef.current === fallbackProjectId &&
-					(pendingChangesRef.current.length || pendingRefreshParentIdsRef.current.length)
-				) {
-					scheduleFlush()
+				// 旧项目／旧身份的 finally 不能清除新一轮的请求和事件状态。
+				if (isCurrentRefresh()) {
+					fallbackRefreshInFlightRef.current = false
+					if (pendingTraceIdRef.current === traceId) {
+						pendingTraceIdRef.current = ""
+					}
+					if (pendingLastUpdatedAtRef.current === lastUpdatedAt) {
+						pendingLastUpdatedAtRef.current = ""
+					}
+					if (
+						pendingChangesRef.current.length ||
+						pendingRefreshParentIdsRef.current.length ||
+						pendingResumeRef.current
+					) {
+						scheduleFlush()
+					}
 				}
 			}
 		},
@@ -168,12 +199,30 @@ export function useProjectAttachmentsChangeRealtime({
 		const refreshParentIds = pendingRefreshParentIdsRef.current
 		const traceId = pendingTraceIdRef.current
 		const lastUpdatedAt = pendingLastUpdatedAtRef.current
+		const isResume =
+			pendingResumeRef.current && canRecover && !document.hidden && navigator.onLine
 		pendingChangesRef.current = []
 		pendingSeqKeysRef.current = []
 		pendingRefreshParentIdsRef.current = []
 		// Clear pending before apply/fallback; events during apply enter the next trace.
 		pendingTraceIdRef.current = ""
 		pendingLastUpdatedAtRef.current = ""
+		if (isResume) {
+			pendingResumeRef.current = false
+			// 复用原回退队列：休眠期间可能漏通知，不能凭数量／更新时间相同跳过快照。
+			clearRefreshParentWindow()
+			clearRefreshParentChildrenWindow()
+			abortRefreshParentRequests()
+			void runFallbackRefresh({
+				reason: "page_resume",
+				traceId,
+				seqKeys,
+				lastUpdatedAt,
+				changes,
+				isResume: true,
+			})
+			return
+		}
 		if (changes.length === 0 && refreshParentIds.length === 0) {
 			projectAttachmentsChangeLog.flushSkippedEmptyBatch(projectId, traceId)
 			return
@@ -350,6 +399,27 @@ export function useProjectAttachmentsChangeRealtime({
 		}
 
 		projectAttachmentsChangeLog.subscriptionStarted(projectId, enabled)
+		let wasHidden = document.hidden
+		const requestResume = () => {
+			if (!canRecover || document.hidden || !navigator.onLine) return
+			pendingResumeRef.current = true
+			scheduleFlush()
+		}
+		const handleVisibilityChange = () => {
+			if (document.hidden) {
+				wasHidden = true
+				return
+			}
+			if (!wasHidden) return
+			wasHidden = false
+			requestResume()
+		}
+		const handlePageShow = (event: PageTransitionEvent) => {
+			if (event.persisted) requestResume()
+		}
+		document.addEventListener("visibilitychange", handleVisibilityChange)
+		window.addEventListener("pageshow", handlePageShow)
+		window.addEventListener("online", requestResume)
 
 		pubsub.subscribe(
 			PubSubEvents.Super_Magic_File_Change_Intermediate,
@@ -357,6 +427,11 @@ export function useProjectAttachmentsChangeRealtime({
 		)
 
 		return () => {
+			subscriptionVersionRef.current += 1
+			pendingResumeRef.current = false
+			document.removeEventListener("visibilitychange", handleVisibilityChange)
+			window.removeEventListener("pageshow", handlePageShow)
+			window.removeEventListener("online", requestResume)
 			projectAttachmentsChangeLog.subscriptionStopped(projectId)
 			pubsub.unsubscribe(
 				PubSubEvents.Super_Magic_File_Change_Intermediate,
@@ -376,5 +451,14 @@ export function useProjectAttachmentsChangeRealtime({
 			parentMissingRetryCountRef.current = 0
 			fallbackRefreshInFlightRef.current = false
 		}
-	}, [enabled, handleFileChangeIntermediate, projectId])
+	}, [
+		abortRefreshParentRequests,
+		accessScope,
+		canRecover,
+		enabled,
+		handleFileChangeIntermediate,
+		projectId,
+		scheduleFlush,
+		store,
+	])
 }

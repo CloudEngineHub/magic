@@ -11,8 +11,8 @@ tools:
   - write_file
   - edit_file
   - edit_file_range
+  - find_file_range
   - multi_edit_file
-  - multi_edit_file_range
   - delete_files
   - shell_exec
   - shell_await
@@ -32,6 +32,8 @@ skills:
     - name: user-info
     - name: skill-creator
     - name: use-magicbase
+    - name: vibe-coding
+    - name: startup-manager
   workspace_skills: "*"
 ---
 

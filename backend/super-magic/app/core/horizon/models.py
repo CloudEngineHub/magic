@@ -336,8 +336,10 @@ class HorizonState:
     process_started_at_ns: int = 0  # 上次注入给 LLM 的 Python 进程启动时间（纳秒）
     super_magic_product_context: Optional[SuperMagicProductContextState] = None
     user_preferred_language: str = ""
-    workspace_files: str = ""      # 上次注入给 LLM 的工作区树形字符串
-    workspace_entries: list = field(default_factory=list)  # 上次注入给 LLM 的结构化工作区条目
+    # 上次注入给 LLM 的工作区树形字符串。变更检测已经不由它推导（变更只有一个来源：
+    # 变更账本），它保留下来是因为整份列表会在首包和压缩后重新注入，需要一个可持久化
+    # 的兜底值——进程重启后、本轮目录刷新之前，模型仍然要能看到工作区。
+    workspace_files: str = ""
     memory_directory: MemoryDirectorySnapshot | None = None  # 当前项目记忆的目录条目，展示可折叠
     client_context: str = ""          # 上次注入给 LLM 的客户端页面上下文
     cli_status: str = ""              # 上次注入给 LLM 的本地已登录 CLI 状态片段

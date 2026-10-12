@@ -53,7 +53,9 @@ export function requiresNativeLoadWait(html: string): boolean {
 		/<(?:canvas|video|audio|iframe|object|embed)\b/i.test(html) ||
 		/<(?:svg:)?(?:image|use)\b[^>]*(?:\bhref|\bxlink:href)\s*=/i.test(html) ||
 		/\bon[a-z][\w:-]*\s*=/i.test(html) ||
-		/\bdata-render-ready\s*=|@(?:font-face|import)\b|\burl\s*\(/i.test(html)
+		/\bdata-(?:render-ready|magic-export-ready)\s*=|@(?:font-face|import)\b|\burl\s*\(/i.test(
+			html,
+		)
 	)
 }
 
@@ -140,12 +142,16 @@ function decodeInlineScriptEntities(rawHtml: string): string {
  * Inject export patches:
  * 1. Mock IntersectionObserver by firing callbacks immediately with isIntersecting: true,
  *    so scroll-triggered fade-in animations do not stay inactive forever inside the offscreen iframe.
- * 2. Disable CSS animation / transition to keep elements in their final static styles,
- *    preventing opacity:0 inside @keyframes from making elements appear invisible.
+ * 2. Freeze CSS animations at their final frame instead of disabling them. A plain
+ *    `animation: none` leaves animation-driven elements at their initial styles (often
+ *    `opacity: 0`), which makes text disappear and makes image transparency resolve to 100%.
  */
 const EXPORT_PATCHES = `<script>
 (function(){
 var O=window.IntersectionObserver;
+var root=document.documentElement;
+if(root) root.setAttribute("data-magic-export-mode","pptx");
+window.__MAGIC_EXPORT_MODE__="pptx";
 window.IntersectionObserver=function(cb,opts){
 this._cb=cb;this._els=[];
 };
@@ -161,9 +167,17 @@ rootBounds:null,time:performance.now()}],self);
 };
 window.IntersectionObserver.prototype.unobserve=function(){};
 window.IntersectionObserver.prototype.disconnect=function(){};
+setTimeout(function(){window.dispatchEvent(new Event("magic:export-start"));},0);
 })();
 <\/script>
-<style>*,*::before,*::after{animation:none!important;transition:none!important;}</style>`
+<style>*,*::before,*::after{
+animation-play-state:paused!important;
+animation-delay:-999999s!important;
+animation-duration:1s!important;
+animation-iteration-count:1!important;
+animation-fill-mode:both!important;
+transition:none!important;
+}</style>`
 
 function injectExportPatches(html: string): string {
 	const headMatch = html.match(/<head\b[^>]*>/i)

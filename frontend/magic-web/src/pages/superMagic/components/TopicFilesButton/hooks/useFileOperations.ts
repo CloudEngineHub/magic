@@ -1,3 +1,4 @@
+import { useFileAccess as useFilePermissions } from "@/pages/superMagic/providers/FileAccessProvider"
 import { createElement, useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { AttachmentItem } from "./types"
@@ -269,7 +270,7 @@ export interface UseFileOperationsOptions {
 	onFileDelete?: (fileId: string) => Promise<void>
 	// 新增：文件创建成功回调
 	onFileCreated?: (fileItem: any) => void
-	onUpdateAttachments?: () => void
+	onUpdateAttachments?: (sourceProjectId?: string) => void
 	// 添加直接更新attachments的回调
 	onAttachmentsChange?: (attachments: AttachmentItem[]) => void
 	selectedProject?: ProjectListItem
@@ -304,6 +305,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		downloadProgress,
 	} = options
 	const { t } = useTranslation("super")
+	const { permissions: access } = useFilePermissions()
 	const fileAccess = useFileAccess()
 	// Bind the ambient share/session identity for the download-url leaves; the
 	// export services below still receive the legacy `access` override.
@@ -379,7 +381,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				uploadType: "file",
 				projectFiles: attachments || [],
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 			const currentProjectFileCount = refreshCoordinator.currentProjectFileCount
 			// 获取父文件夹路径
@@ -499,7 +501,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				uploadType: "folder",
 				projectFiles: attachments || [],
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 			const currentProjectFileCount = refreshCoordinator.currentProjectFileCount
 			// 获取父文件夹ID
@@ -912,6 +914,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	// 分享操作
 	const handleShareItem = useCallback(
 		(item: AttachmentItem) => {
+			if (!access.share) return
 			if (!selectedItems || !filteredFiles) {
 				// 如果没有选中项或文件列表，只分享当前文件
 				const clickedItemId = item.file_id || ""
@@ -936,7 +939,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[selectedItems, filteredFiles, getItemId, selectedProject?.project_name],
+		[access.share, selectedItems, filteredFiles, getItemId, selectedProject?.project_name],
 	)
 
 	// 处理分享保存
@@ -1063,6 +1066,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 	// Registered dependency parsers make linked resources part of the default download.
 	const handleDownloadOriginal = async (item: AttachmentItem, mode?: DownloadImageMode) => {
+		if (!access.download) return
 		if (fileScope !== "user" && supportsStaticDependencies(item)) {
 			await downloadDocumentWithDependencies(item)
 			return
@@ -1083,6 +1087,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 	// 下载PDF格式（Markdown 走 markdown 导出；HTML 走 exportPDF；仅 display_config.type === "slide" 时传 pptMode）
 	const handleDownloadPdf = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const documentExporter = documentExportService.get()
@@ -1289,12 +1294,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments, fileApi, fileAccess],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 导出 PPTX（前端 html2pptx streaming-only）
 	const handleDownloadPptx = useCallback(
 		async (item: AttachmentItem, folderChildren?: AttachmentItem[]) => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const toastId = createRandomUuidV4()
@@ -1485,12 +1491,13 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments, fileApi, fileAccess],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 导出 HTML / 文本类文件 为图片（PNG / JPEG）
 	const handleDownloadImage = useCallback(
 		async (item: AttachmentItem, format: "png" | "jpeg" = "png") => {
+			if (!access.export) return
 			if (!item.file_id) return
 
 			const toastId = createRandomUuidV4()
@@ -1624,7 +1631,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 				})
 			}
 		},
-		[t, attachments, fileApi, fileAccess],
+		[access.export, t, attachments, fileApi, fileAccess],
 	)
 
 	// 文件下载功能 - 支持单个文件或多个文件
@@ -1636,6 +1643,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			isFolder?: boolean,
 			downloadName?: string,
 		) => {
+			if (!access.download) return
 			const fileIds = Array.isArray(file_id) ? file_id : [file_id]
 			const folderDownloadToastId = isFolder ? createRandomUuidV4() : undefined
 
@@ -1992,7 +2000,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		handleOpenFile,
 		handleMoveFile,
 		// 分享相关
-		shareModalVisible,
+		shareModalVisible: shareModalVisible && access.share,
 		setShareModalVisible,
 		shareFileInfo,
 		setShareFileInfo,

@@ -144,7 +144,7 @@ export interface CanvasEventMap {
 	"element:rename-start": { elementId: string }
 	/** 提交或取消画布重命名，供 React overlay 关闭输入框 */
 	"element:rename-end": { elementId: string }
-	"element:image:infoButtonClick": { elementId: string }
+	"element:image:infoButtonClick": { elementId: string; contentId?: string }
 	"element:video:infoButtonClick": { elementId: string }
 	/** 失败态点击重新生成，交给 UI 打开编辑器并恢复草稿 */
 	"element:image:retryClick": { elementId: string }
@@ -225,6 +225,8 @@ export interface CanvasEventMap {
 		phase?: "uploading" | "applying"
 	}
 	"element:image:resultUpdated": { elementId: string }
+	/** 等待期限到达只刷新展示，不表示后端生成失败。 */
+	"element:image:displayStateChanged": { elementId: string; contentId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件
 	"element:image:ossSrcReady": { elementId: string } // ossSrc 获取成功事件
 	"text:editing-state-change": { active: boolean; elementId: string | null }
@@ -409,6 +411,7 @@ export interface CanvasEventMap {
 	"keyboard:undo": void
 	"keyboard:redo": void
 	"keyboard:copy": void
+	"keyboard:duplicate": void
 	"keyboard:copy-png": void
 	"keyboard:paste": ClipboardEvent // 传递 ClipboardEvent 以便访问剪贴板数据
 	"keyboard:frame:create": void

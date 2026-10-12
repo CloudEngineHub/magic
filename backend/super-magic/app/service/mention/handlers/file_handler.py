@@ -2,11 +2,12 @@
 import os
 import re
 from pathlib import Path
-from urllib.parse import quote
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from urllib.parse import quote
 
 from app.path_manager import PathManager
 from app.service.mention.base import BaseMentionHandler, logger
+from app.utils.agfs_mount_path import get_referenced_project_mount_base
 
 if TYPE_CHECKING:
     from app.core.context.agent_context import AgentContext
@@ -14,8 +15,6 @@ from app.service.mention.utils.canvas_project_detector import find_parent_canvas
 
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".avif", ".tif", ".tiff"}
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".webm", ".mkv", ".flv", ".wmv"}
-_DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH = "/mnt/agfs/magicfs/referenced-projects"
-
 _TEMPORARY_FILE_NOTIFICATION = (
     "These files are stored in `.tmp` and will be removed automatically by the expiration policy. "
     "If any file or derived result must persist, move or copy it to a workspace path outside `.tmp` before "
@@ -103,14 +102,9 @@ def _referenced_project_absolute_path(file_path: str) -> Optional[str]:
     if ".." in Path(normalized_input).parts:
         return None
 
-    mount_base_path = (
-        os.getenv(
-            "AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH",
-            _DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH,
-        ).strip()
-        or _DEFAULT_REFERENCED_PROJECT_MOUNT_BASE_PATH
-    )
-    normalized_mount_base = Path(os.path.normpath(mount_base_path))
+    # 跨项目挂载根随 AGFS FUSE 挂载根变化，统一由 agfs_mount_path 解析，
+    # 避免这里再维护一份会漂移的默认值。
+    normalized_mount_base = Path(os.path.normpath(str(get_referenced_project_mount_base())))
     normalized_path = Path(os.path.normpath(normalized_input))
     if not normalized_mount_base.is_absolute() or not normalized_path.is_absolute():
         return None

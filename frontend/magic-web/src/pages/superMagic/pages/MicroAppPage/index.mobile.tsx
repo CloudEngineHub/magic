@@ -11,7 +11,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { useFileOpen } from "@/pages/superMagic/components/TopicFilesButton/hooks/useFileOpen"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
 import { useMobileMicroAppPreview } from "@/pages/superMagic/hooks/useMobileMicroAppPreview"
-import { FileActionVisibilityProvider } from "@/pages/superMagic/providers/file-action-visibility-provider"
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { SharePermissionResourceProvider } from "@/pages/superMagic/components/Share/SharePermissionResourceContext"
 import PreviewDetailPopup, {
@@ -260,7 +260,7 @@ function MicroAppPageMobileInner({
 			requestPreviewMode={requestPreviewMode}
 		>
 			<MicroAppPermissionsProvider projectId={projectId} attachmentList={attachmentList}>
-				<FileActionVisibilityProvider>
+				<FileAccessProvider>
 					<div
 						className="absolute inset-0 flex h-full min-h-0 w-full flex-col overflow-hidden bg-mobile-background"
 						data-testid="micro-app-page-mobile"
@@ -457,7 +457,7 @@ function MicroAppPageMobileInner({
 						zIndex={1100}
 					/>
 					<MicroAppPreviewPopup state={microAppPreviewState} />
-				</FileActionVisibilityProvider>
+				</FileAccessProvider>
 			</MicroAppPermissionsProvider>
 		</HostConversationProvider>
 	)
@@ -505,8 +505,10 @@ function MicroAppPageMobile() {
 
 export default function FileAccessPage() {
 	return (
-		<SharePermissionResourceProvider value="microApp">
-			<MicroAppPageMobile />
-		</SharePermissionResourceProvider>
+		<FileAccessProvider>
+			<SharePermissionResourceProvider value="microApp">
+				<MicroAppPageMobile />
+			</SharePermissionResourceProvider>
+		</FileAccessProvider>
 	)
 }

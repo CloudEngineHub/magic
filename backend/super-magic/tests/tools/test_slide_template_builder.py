@@ -801,7 +801,7 @@ async def test_finalize_project_generates_previews_beside_source(tmp_path):
 
 
 def test_display_template_name_strips_sandbox_path():
-    assert display_template_name("/mnt/agfs/magicfs/project/SLIDE-奥运体育赛事") == "SLIDE-奥运体育赛事"
+    assert display_template_name("/mnt/agfs-vol/agfs/magicfs/project/SLIDE-奥运体育赛事") == "SLIDE-奥运体育赛事"
     assert display_template_name("SLIDE-奥运体育赛事/") == "SLIDE-奥运体育赛事"
     assert display_template_name("SLIDE-奥运体育赛事") == "SLIDE-奥运体育赛事"
     assert display_template_name("") == "-"

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { observer } from "mobx-react-lite"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
@@ -10,7 +11,7 @@ import { resolveMoreStylesTab } from "./utils/moreStylesTab"
 import BoxModelSection from "./sections/BoxModelSection"
 import FlexGridSection from "./sections/FlexGridSection"
 import ImageSection from "./sections/ImageSection"
-import { AnchorSection } from "./sections/AnchorSection"
+import { ClickLinkSection } from "./sections/ClickLinkSection"
 import BackgroundSection from "./sections/BackgroundSection"
 import BorderSection from "./sections/BorderSection"
 import ShadowSection from "./sections/ShadowSection"
@@ -34,7 +35,7 @@ export interface MoreStylesTabsProps {
 	onUpdateAttributes: (attributes: Record<string, string | null>) => Promise<void>
 }
 
-export function MoreStylesTabs({
+export const MoreStylesTabs = observer(function MoreStylesTabs({
 	selectedElement,
 	editorRef,
 	disabled,
@@ -71,6 +72,7 @@ export function MoreStylesTabs({
 		...(showBorder ? [{ value: "border", label: t("stylePanel.border") }] : []),
 		...(showShadow ? [{ value: "shadow", label: t("stylePanel.shadow") }] : []),
 		...(showImage ? [{ value: "image", label: t("stylePanel.imageSettings") }] : []),
+		{ value: "link", label: t("stylePanel.clickLink") },
 		{ value: "layout", label: t("stylePanel.layout") },
 		{ value: "advanced", label: t("stylePanel.customCSS.title") },
 	]
@@ -128,8 +130,15 @@ export function MoreStylesTabs({
 					>
 						{fontFamilySelector}
 						{textContentField}
-						{isLink && selectedElement ? (
-							<AnchorSection
+					</TabsContent>
+					<TabsContent
+						value="link"
+						className="mt-0 space-y-2"
+						data-testid="style-panel-more-link"
+					>
+						{selectedElement ? (
+							<ClickLinkSection
+								key={selectedElement.selector}
 								selectedElement={selectedElement}
 								disabled={disabled}
 								onUpdate={onUpdateAttributes}
@@ -213,4 +222,4 @@ export function MoreStylesTabs({
 			</div>
 		</Tabs>
 	)
-}
+})

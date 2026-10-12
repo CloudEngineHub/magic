@@ -21,6 +21,8 @@ import type { FileManagerProps } from "../TopicFilesButton/components/FileManage
 import { useUserFileManagerDirectory } from "./hooks/useUserFileManagerDirectory"
 
 export interface UserSpaceFilesViewProps {
+	onPreviewFile?: FileManagerProps["onPreviewFile"]
+	onPreviewRemoved?: FileManagerProps["onPreviewRemoved"]
 	initialState?: FileManagerProps["initialState"]
 	onStateChange?: FileManagerProps["onStateChange"]
 	hidePlaces?: boolean
@@ -56,6 +58,8 @@ export default observer(function UserSpaceFilesView({
 	directoryId,
 	onDirectoryChange,
 	onFileClick,
+	onPreviewFile,
+	onPreviewRemoved,
 	activeFileId,
 	topicId,
 	compact = true,
@@ -257,6 +261,8 @@ export default observer(function UserSpaceFilesView({
 		)
 	const content = (
 		<FileManager
+			onPreviewFile={onPreviewFile}
+			onPreviewRemoved={onPreviewRemoved}
 			initialState={initialState}
 			onStateChange={onStateChange}
 			dataReady={

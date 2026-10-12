@@ -8,6 +8,10 @@ import {
 } from "../../utils/audio-recording-actions"
 import type { AudioProjectListItem } from "@/types/audioProject"
 
+vi.mock("@/pages/superMagic/hooks/useDownloadProgress", () => ({
+	useDownloadProgress: () => ({ startDownload: vi.fn() }),
+}))
+
 vi.mock("sonner", () => ({
 	toast: {
 		success: vi.fn(),

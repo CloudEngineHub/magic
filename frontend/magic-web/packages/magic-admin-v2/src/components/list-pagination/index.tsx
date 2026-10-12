@@ -52,6 +52,13 @@ export type ListPaginationProps = {
 	total?: number
 	/** 仅覆盖界面展示的总数，不参与总页数和翻页边界计算。 */
 	totalLabelCount?: number
+	/** Stable selectors for pagination controls. */
+	testId?: string
+	previousButtonTestId?: string
+	nextButtonTestId?: string
+	pageSizeTriggerTestId?: string
+	pageSizeOptionTestId?: string
+	jumpInputTestId?: string
 }
 
 /** 受控列表分页，统一页码、总数、每页数量和请求中禁用行为，支持游标分页和页码分页。 */
@@ -72,8 +79,14 @@ export function ListPagination({
 	showPageIndicator = true,
 	showQuickJumper = false,
 	showTotal,
+	testId,
 	total,
 	totalLabelCount,
+	previousButtonTestId,
+	nextButtonTestId,
+	pageSizeTriggerTestId,
+	pageSizeOptionTestId,
+	jumpInputTestId,
 }: ListPaginationProps) {
 	const { t } = useTranslation()
 	const meta = getPaginationMeta({ hasNextPage, page, pageCount, pageSize, total })
@@ -112,6 +125,7 @@ export function ListPagination({
 				"flex flex-col gap-3 border-t border-border/60 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between",
 				className,
 			)}
+			data-testid={testId}
 		>
 			{shouldShowTotal ? (
 				<span>{t("common.paginationTotal", { count: totalLabelCount ?? total ?? 0 })}</span>
@@ -121,6 +135,7 @@ export function ListPagination({
 			<div className="flex flex-wrap items-center justify-end gap-2 self-end sm:self-auto">
 				<Button
 					aria-label={t("common.previous")}
+					data-testid={previousButtonTestId}
 					disabled={!previousEnabled || loading}
 					onClick={() => {
 						if (onPrevious) onPrevious()
@@ -141,6 +156,7 @@ export function ListPagination({
 				) : null}
 				<Button
 					aria-label={t("common.next")}
+					data-testid={nextButtonTestId}
 					disabled={!nextEnabled || loading}
 					onClick={() => {
 						if (onNext) onNext()
@@ -163,12 +179,13 @@ export function ListPagination({
 						<SelectTrigger
 							aria-label={t("common.paginationPageSizeLabel")}
 							className="h-8 w-26"
+							data-testid={pageSizeTriggerTestId}
 						>
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
 							{pageSizeOptions.map((value) => (
-								<SelectItem key={value} value={String(value)}>
+								<SelectItem data-testid={pageSizeOptionTestId} key={value} value={String(value)}>
 									{t("common.paginationPageSize", { count: value })}
 								</SelectItem>
 							))}
@@ -181,6 +198,7 @@ export function ListPagination({
 						<Input
 							aria-label={t("common.paginationJumpToPageLabel")}
 							className="h-8 w-14 px-2 text-center"
+							data-testid={jumpInputTestId}
 							disabled={loading}
 							inputMode="numeric"
 							max={meta.pageCount}

@@ -18,6 +18,7 @@ return [
     'prompt_check_failed' => 'Prompt 校验失败',
     'polling_failed' => '轮询任务结果失败',
     'task_timeout' => '任务执行超时',
+    'task_failed_retry' => '生图异常，请稍后重试',
     'invalid_request_type' => '无效的请求类型',
     'missing_job_id' => '缺少任务ID',
     'task_failed' => '任务执行失败',

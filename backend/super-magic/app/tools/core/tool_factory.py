@@ -29,6 +29,7 @@ from app.tools.core import BaseTool
 from app.tools.core.tool_decorator import AutoMount
 from app.tools.core.tool_definition import tool_definition_manager, ToolDefinition
 from app.tools.remote.remote_tool_manager import remote_tool_manager
+from app.utils.context_usage import estimate_tool_schema, ToolSchemaEstimate
 
 logger = get_logger(__name__)
 
@@ -53,6 +54,8 @@ class ToolInfo:
     definition: Optional['ToolDefinition'] = None
     # 是否为延迟加载模式
     lazy_load: bool = False
+    # 与预构建定义一起更新；仅用于请求级文本构成展示。
+    parameter_token_estimate: int = 0
     # 是否仅允许 Code Mode 调用
     code_mode_only: bool = False
     # 运行时自动挂载条件；None 表示仅按 Agent 显式配置挂载
@@ -324,6 +327,7 @@ class ToolFactory:
 
                     # 保存额外的元数据用于按需加载
                     tool_info.definition = definition  # 保存完整定义
+                    tool_info.parameter_token_estimate = estimate_tool_schema(definition.parameters_schema or {})
                     tool_info.lazy_load = True  # 标记为延迟加载
 
                     self._tools[tool_name] = tool_info
@@ -532,6 +536,13 @@ class ToolFactory:
         logger.debug(f"从预构建定义获取工具参数: {tool_name}")
         return tool_param
 
+    def get_context_usage_schema_estimate(self, tool_name: str) -> ToolSchemaEstimate | None:
+        """数值与当前加载的定义一同替换；只用于实际挂载的 schema。"""
+        info = self._tools.get(tool_name)
+        if info is None or info.definition is None or not info.definition.parameters_schema:
+            return None
+        return ToolSchemaEstimate(info.definition.parameters_schema, info.parameter_token_estimate)
+
     def get_llm_direct_tool_param_from_definition(self, tool_name: str) -> Optional[Dict]:
         """获取 LLM 直接挂载 Schema，并对 Code Mode Only 工具执行致命校验。"""
         if self.is_code_mode_only_tool(tool_name):
@@ -652,6 +663,7 @@ class ToolFactory:
             for tool_name, definition in definitions.items():
                 if tool_name in self._tools:
                     self._tools[tool_name].definition = definition
+                    self._tools[tool_name].parameter_token_estimate = estimate_tool_schema(definition.parameters_schema or {})
 
             logger.debug(f"重新加载了 {len(definitions)} 个工具定义")
         except Exception as e:

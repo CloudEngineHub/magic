@@ -142,6 +142,7 @@ function assignForwardedRef<T>(ref: ForwardedRef<T>, value: T | null) {
 }
 
 interface ImageEditorControlsProps {
+	readOnly?: boolean
 	config: ImageEditorConfig
 	hoveredMentionPath?: string | null
 	onSelectSource: (source: ReferenceResourceSourceType) => void
@@ -163,6 +164,7 @@ interface ImageEditorControlsProps {
 export default function ImageEditorControls(props: ImageEditorControlsProps) {
 	const {
 		config,
+		readOnly = false,
 		hoveredMentionPath,
 		onSelectSource,
 		onProjectSelect,
@@ -252,10 +254,11 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 	)
 
 	const canAddReferenceFile =
-		maxReferenceFiles === undefined || effectiveReferenceFileCount < maxReferenceFiles
+		!readOnly &&
+		(maxReferenceFiles === undefined || effectiveReferenceFileCount < maxReferenceFiles)
 
 	const referenceSourceListOptions = useMemo<SourceListOption[]>(() => {
-		if (!maxReferenceFiles || maxReferenceFiles <= 0) {
+		if (!readOnly && (!maxReferenceFiles || maxReferenceFiles <= 0)) {
 			return visibleLinkedMediaItems.map((item, index) =>
 				createLinkedMediaSourceListOption({
 					item,
@@ -275,10 +278,15 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				slotIndex: index,
 				resourcePath: info.path,
 				resourceFileName: info.fileName,
+				readOnly,
 				removeResourceAriaLabel: t("imageEditor.removeReferenceResource", "移除该参考资源"),
-				onRemoveResource: () => {
-					;(onReferenceFileRemove ?? handlers.handleReferenceFileRemove)(info.path)
-				},
+				onRemoveResource: readOnly
+					? undefined
+					: () => {
+							;(onReferenceFileRemove ?? handlers.handleReferenceFileRemove)(
+								info.path,
+							)
+						},
 			}
 		})
 
@@ -323,6 +331,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		canAddReferenceFile,
 		currentReferenceFiles.length,
 		effectiveReferenceFileCount,
+		readOnly,
 	])
 
 	const resolveReferencePopoverState = useCallback(
@@ -445,13 +454,20 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 				{sourceListContainer === undefined ? sourceList : null}
 				<div className={styles.bottom}>
 					<div className={styles.left}>
-						<EditorModelSelect
-							selectedModelId={selectedModelId}
-							modelOptions={modelOptions}
-							modelOptionGroups={modelOptionGroups}
-							selectedModelOption={selectedModelOption}
-							onModelChange={handlers.handleModelChange}
-						/>
+						{readOnly && config.hasGenerationRequest && !selectedModelOption ? (
+							<span className={styles.selectTrigger}>
+								{t("imageEditor.modelUnavailable", "模型信息暂不可用")}
+							</span>
+						) : (
+							<EditorModelSelect
+								disabled={readOnly}
+								selectedModelId={selectedModelId}
+								modelOptions={modelOptions}
+								modelOptionGroups={modelOptionGroups}
+								selectedModelOption={selectedModelOption}
+								onModelChange={handlers.handleModelChange}
+							/>
+						)}
 					</div>
 					<div className={styles.right}>
 						{renderRestoreDefaultConfigButton && renderRestoreDefaultConfigButton()}
@@ -471,6 +487,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 
 							return (
 								<Select
+									disabled={readOnly}
 									key={setting.key}
 									value={selectedValue}
 									onValueChange={(value) =>
@@ -508,60 +525,77 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 							)
 						})}
 						{/* 分辨率选择 */}
-						<ResolutionSelect
-							options={supportedResolutionOptions}
-							value={config.selectedResolution}
-							onValueChange={handlers.handleResolutionChange}
-						/>
+						{readOnly &&
+						config.selectedResolution &&
+						!supportedResolutionOptions.some(
+							(option) => option.value === config.selectedResolution,
+						) ? (
+							<span className={styles.selectTrigger}>
+								{config.selectedResolution}
+							</span>
+						) : (
+							<ResolutionSelect
+								disabled={readOnly}
+								options={supportedResolutionOptions}
+								value={config.selectedResolution}
+								onValueChange={handlers.handleResolutionChange}
+							/>
+						)}
 						{/* 比例选择 */}
-						{supportedAspectRatioOptions.length > 0 && (
-							<Select
-								value={currentSelectValue || ""}
-								onValueChange={handlers.handleRatioChange}
-							>
-								<SelectTrigger className={styles.selectTrigger}>
-									<span className={styles.selectTriggerText}>
-										{ratioOption?.label || t("imageEditor.custom", "自定义")}
-									</span>
-									<ChevronsUpDown size={16} />
-								</SelectTrigger>
-								<SelectContent
-									className={styles.selectContent}
-									style={{ minWidth: 200 }}
+						{readOnly && config.selectedSize && !ratioOption ? (
+							<span className={styles.selectTrigger}>{config.selectedSize}</span>
+						) : (
+							supportedAspectRatioOptions.length > 0 && (
+								<Select
+									disabled={readOnly}
+									value={currentSelectValue || ""}
+									onValueChange={handlers.handleRatioChange}
 								>
-									<div className={styles.selectContentName}>
-										{t("imageEditor.size", "尺寸")}
-									</div>
-									{supportedAspectRatioOptions.map((option) => {
-										if (!option || !option.value) return null
-										return (
-											<SelectItem
-												key={option.value}
-												value={option.value}
-												className={styles.selectOptionItem}
-											>
-												<div className={styles.ratioOptionItemContent}>
-													<SizeIconPreview
-														iconWidth={option.iconWidth}
-														iconHeight={option.iconHeight}
-														wrapperClassName={styles.icon}
-														iconClassName={styles.iconContent}
-													/>
-													<div
-														className={styles.label}
-														style={{ width: 60 }}
-													>
-														{option.label}
+									<SelectTrigger className={styles.selectTrigger}>
+										<span className={styles.selectTriggerText}>
+											{ratioOption?.label ||
+												t("imageEditor.custom", "自定义")}
+										</span>
+										<ChevronsUpDown size={16} />
+									</SelectTrigger>
+									<SelectContent
+										className={styles.selectContent}
+										style={{ minWidth: 200 }}
+									>
+										<div className={styles.selectContentName}>
+											{t("imageEditor.size", "尺寸")}
+										</div>
+										{supportedAspectRatioOptions.map((option) => {
+											if (!option || !option.value) return null
+											return (
+												<SelectItem
+													key={option.value}
+													value={option.value}
+													className={styles.selectOptionItem}
+												>
+													<div className={styles.ratioOptionItemContent}>
+														<SizeIconPreview
+															iconWidth={option.iconWidth}
+															iconHeight={option.iconHeight}
+															wrapperClassName={styles.icon}
+															iconClassName={styles.iconContent}
+														/>
+														<div
+															className={styles.label}
+															style={{ width: 60 }}
+														>
+															{option.label}
+														</div>
+														<div className={styles.size}>
+															{option.width}x{option.height}
+														</div>
 													</div>
-													<div className={styles.size}>
-														{option.width}x{option.height}
-													</div>
-												</div>
-											</SelectItem>
-										)
-									})}
-								</SelectContent>
-							</Select>
+												</SelectItem>
+											)
+										})}
+									</SelectContent>
+								</Select>
+							)
 						)}
 						{renderPromptOptimizationButton && renderPromptOptimizationButton()}
 						{renderSendButton && renderSendButton()}

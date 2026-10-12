@@ -15,6 +15,7 @@ import {
 	LayoutTemplate,
 	EyeOff,
 	Eye,
+	GalleryHorizontalEnd,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -42,8 +43,11 @@ import SmartTooltip from "@/components/other/SmartTooltip"
 import { useScreenshotRetry } from "./hooks/useScreenshotRetry"
 import { handlePPTSlideDragStart } from "../../../../MessageEditor/utils/drag"
 import { resolvePptScaleContentDimensions } from "../../../contents/HTML/utils/slide-dimensions"
+import { FILE_SAVE_STATUS } from "../../../services/fileSaveQueue"
+import { useFileSaveStatus } from "../../../hooks/useFileSaveStatus"
 
 function SortableSlideItem({
+	onOpenTransitions,
 	item,
 	isActive,
 	onClick,
@@ -76,6 +80,8 @@ function SortableSlideItem({
 	...props
 }: SortableSlideItemProps) {
 	const { t } = useTranslation("super")
+	const saveStatus = useFileSaveStatus(slideFileId)
+	const isUnsynced = saveStatus !== FILE_SAVE_STATUS.Idle
 	const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false)
 	const [renameValue, setRenameValue] = useState("")
 	const [pendingAction, setPendingAction] = useState<string | null>(null)
@@ -153,8 +159,15 @@ function SortableSlideItem({
 	const renderThumbnail = () => {
 		const hasError = resolvedScreenshot.error || imageLoadError
 
+		// Keep the previous thumbnail visible while a new one regenerates.
+		const isRefreshingExistingThumbnail =
+			resolvedScreenshot.isLoading && !!resolvedScreenshot.thumbnailUrl && !hasError
+
 		// Show loading state when: 1) actively loading, or 2) has error but still retrying
-		if (resolvedScreenshot.isLoading || (hasError && canRetry)) {
+		if (
+			!isRefreshingExistingThumbnail &&
+			(resolvedScreenshot.isLoading || (hasError && canRetry))
+		) {
 			return (
 				<div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
 					<Loader2 className="size-4 animate-spin" />
@@ -336,6 +349,18 @@ function SortableSlideItem({
 				style={{ aspectRatio: `${slideDimensions.width} / ${slideDimensions.height}` }}
 			>
 				{renderThumbnail()}
+				{isUnsynced ? (
+					<span
+						data-testid={`ppt-sidebar-slide-unsynced-${item.id}`}
+						className={cn(
+							"absolute right-1 top-1 h-2 w-2 rounded-full",
+							saveStatus === FILE_SAVE_STATUS.Failed
+								? "bg-destructive"
+								: "bg-amber-500",
+						)}
+						aria-label={t("detail.fileSave.unsynced")}
+					/>
+				) : null}
 				{pendingAction && (
 					<div
 						role="status"
@@ -414,6 +439,15 @@ function SortableSlideItem({
 						<FileSearch className="mr-2 size-4" />
 						{t("fileViewer.locateFile")}
 					</ContextMenuItem>
+					{onOpenTransitions && (
+						<ContextMenuItem
+							disabled={Boolean(pendingAction)}
+							onSelect={onOpenTransitions}
+						>
+							<GalleryHorizontalEnd className="mr-2 size-4" />
+							{t("ppt.transitions.title")}
+						</ContextMenuItem>
+					)}
 					{onOpenFile && (
 						<ContextMenuItem
 							disabled={

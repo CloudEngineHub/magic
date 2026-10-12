@@ -226,7 +226,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 					size: 110,
 					enableSorting: false,
 					cell: ({ row }) => (
-						<button
+						<button data-testid="platform-slides-template-library-action-button"
 							aria-label={t("slidesTemplate.preview")}
 							className="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							onClick={() => setCoverPreviewing(row.original)}
@@ -345,7 +345,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 							disabled={!canEdit}
 							loading={statusPendingIds.has(row.original.id)}
 							onCheckedChange={(checked) => void updateStatus(row.original, checked)}
-						/>
+						 data-testid="platform-slides-template-switch"/>
 					),
 				},
 				{
@@ -366,7 +366,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 								if (event.key === "Enter") event.currentTarget.blur()
 							}}
 							type="number"
-						/>
+						 data-testid="platform-slides-template-input"/>
 					),
 				},
 				{
@@ -388,24 +388,24 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 					cell: ({ row }) => (
 						<div className="flex justify-end">
 							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
+								<DropdownMenuTrigger asChild data-testid="platform-slides-template-menu-trigger">
 									<Button
 										aria-label={t("slidesTemplate.actions")}
 										size="icon"
 										variant="ghost"
-									>
+									 data-testid="platform-slides-template-edit-button">
 										<MoreHorizontal className="size-4" aria-hidden="true" />
 									</Button>
 								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end">
-									<DropdownMenuItem onSelect={() => setPreviewing(row.original)}>
+								<DropdownMenuContent align="end" data-testid="platform-slides-template-action-button">
+									<DropdownMenuItem onSelect={() => setPreviewing(row.original)} data-testid="platform-slides-template-menu-item">
 										<Eye className="mr-2 size-4" />
 										{t("slidesTemplate.preview")}
 									</DropdownMenuItem>
 									<DropdownMenuItem
 										disabled={!canEdit || isSystemSlidesTemplate(row.original)}
 										onSelect={() => onEdit(row.original)}
-									>
+									 data-testid="platform-slides-template-menu-item">
 										<Pencil className="mr-2 size-4" />
 										{t("common.edit")}
 									</DropdownMenuItem>
@@ -413,7 +413,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 										className="text-destructive"
 										disabled={!canEdit || isSystemSlidesTemplate(row.original)}
 										onSelect={() => onDelete(row.original)}
-									>
+									 data-testid="platform-slides-template-menu-item">
 										<Trash2 className="mr-2 size-4" />
 										{t("slidesTemplate.delete")}
 									</DropdownMenuItem>
@@ -438,17 +438,19 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 
 		return (
 			<div className="space-y-4">
-				<div className="flex min-w-0 flex-wrap items-end gap-2">
+				<div className="sticky top-0 z-40 -mx-4 flex min-w-0 flex-wrap items-end gap-2 bg-background px-4 py-2 lg:-mx-6 lg:px-6">
 					<FilterControlField
 						className="min-w-0 flex-1 md:w-[340px] md:flex-none xl:w-[420px]"
 						label={t("slidesTemplate.keyword")}
 					>
 						<FilterSearchInput
 							clearLabel={t("common.clear")}
-							onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
+							clearButtonTestId="platform-slides-template-clear-button"
+							onValueChange={(keyword) =>
+			setDebouncedField("keyword", keyword)}
 							placeholder={t("slidesTemplate.keyword")}
 							value={filters.keyword}
-						/>
+						 inputTestId="platform-slides-template-search-input"/>
 					</FilterControlField>
 					<FilterControlField className="w-fit" label={t("slidesTemplate.status")}>
 						<Select
@@ -457,15 +459,15 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 								setFilterDraft((state) => ({ ...state, status }))
 							}}
 						>
-							<SelectTrigger className="w-fit max-w-full">
+							<SelectTrigger className="w-fit max-w-full" data-testid="platform-slides-template-select-trigger">
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
+							<SelectContent data-testid="platform-slides-template-select-content">
+								<SelectItem value={emptyStatus} data-testid="platform-slides-template-option">
 									{t("slidesTemplate.all")}
 								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
+								<SelectItem value="1" data-testid="platform-slides-template-option">{t("slidesTemplate.enabled")}</SelectItem>
+								<SelectItem value="0" data-testid="platform-slides-template-option">{t("slidesTemplate.disabled")}</SelectItem>
 							</SelectContent>
 						</Select>
 					</FilterControlField>
@@ -475,12 +477,13 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 						onClick={() => handleFilterSheetOpenChange(true)}
 						type="button"
 						variant="outline"
-					>
+					 data-testid="platform-slides-template-reset-button">
 						<Filter className="size-4" aria-hidden="true" />
 						<span className="hidden md:inline">{t("slidesTemplate.filterTitle")}</span>
 					</Button>
 				</div>
-				<FilterSheet
+				<FilterSheet contentTestId="platform-slides-template-filter-sheet" bodyTestId="platform-slides-template-filter-body" resetButtonTestId="platform-slides-template-reset-button" applyButtonTestId="platform-slides-template-apply-button"
+					closeButtonTestId="platform-slides-template-filter-close-button"
 					applyLabel={t("slidesTemplate.applyFilters")}
 					description={t("slidesTemplate.filterDescription")}
 					onApply={applyAdvancedFilters}
@@ -499,7 +502,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 							}
 							placeholder={t("slidesTemplate.keyword")}
 							value={advancedFilterDraft.keyword}
-						/>
+						 inputTestId="platform-slides-template-advanced-search-input" clearButtonTestId="platform-slides-template-advanced-search-clear-button"/>
 					</FilterControlField>
 					<FilterControlField className="w-full" label={t("slidesTemplate.templateCode")}>
 						<FilterSearchInput
@@ -509,10 +512,18 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 							}
 							placeholder={t("slidesTemplate.templateCode")}
 							value={advancedFilterDraft.code}
-						/>
+						 inputTestId="platform-slides-template-advanced-search-input" clearButtonTestId="platform-slides-template-advanced-search-clear-button"/>
 					</FilterControlField>
 					<FilterControlField className="w-full" label={t("slidesTemplate.category")}>
 						<SearchableCategorySelect
+							clearButtonTestId="platform-slides-template-advanced-category-clear-button"
+							clearSearchButtonTestId="platform-slides-template-advanced-category-search-clear-button"
+							contentTestId="platform-slides-template-advanced-category-content"
+							emptyTestId="platform-slides-template-advanced-category-empty"
+							inputTestId="platform-slides-template-advanced-category-search-input"
+							loadingTestId="platform-slides-template-advanced-category-loading"
+							optionTestId="platform-slides-template-advanced-category-option"
+							triggerTestId="platform-slides-template-advanced-category-trigger"
 							ariaLabel={t("slidesTemplate.category")}
 							emptyLabel={t("slidesTemplate.all")}
 							isLoading={categories.isLoading}
@@ -537,7 +548,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 							onOpenChange={(open) => open && setTagOptionsOpen(true)}
 							options={tagOptions}
 							value={advancedFilterDraft.tagCodes}
-						/>
+						 triggerTestId="platform-slides-template-advanced-tag-select-trigger" contentTestId="platform-slides-template-advanced-tag-select-content" searchInputTestId="platform-slides-template-advanced-tag-select-search-input" searchClearButtonTestId="platform-slides-template-advanced-tag-select-search-clear-button" optionTestId="platform-slides-template-advanced-tag-select-option" loadingTestId="platform-slides-template-advanced-tag-select-loading" emptyTestId="platform-slides-template-advanced-tag-select-empty" clearButtonTestId="platform-slides-template-advanced-tag-select-clear-button"/>
 					</FilterControlField>
 					<FilterControlField className="w-full" label={t("slidesTemplate.status")}>
 						<Select
@@ -546,15 +557,15 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 								setAdvancedFilterDraft((value) => ({ ...value, status }))
 							}
 						>
-							<SelectTrigger className="w-full">
+							<SelectTrigger className="w-full" data-testid="platform-slides-template-select-trigger">
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
+							<SelectContent data-testid="platform-slides-template-select-content">
+								<SelectItem value={emptyStatus} data-testid="platform-slides-template-option">
 									{t("slidesTemplate.all")}
 								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
+								<SelectItem value="1" data-testid="platform-slides-template-option">{t("slidesTemplate.enabled")}</SelectItem>
+								<SelectItem value="0" data-testid="platform-slides-template-option">{t("slidesTemplate.disabled")}</SelectItem>
 							</SelectContent>
 						</Select>
 					</FilterControlField>
@@ -565,12 +576,12 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 								setAdvancedFilterDraft((value) => ({ ...value, tagMatch }))
 							}
 						>
-							<SelectTrigger className="w-full">
+							<SelectTrigger className="w-full" data-testid="platform-slides-template-select-trigger">
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="any">{t("slidesTemplate.any")}</SelectItem>
-								<SelectItem value="all">{t("slidesTemplate.all")}</SelectItem>
+							<SelectContent data-testid="platform-slides-template-select-content">
+								<SelectItem value="any" data-testid="platform-slides-template-option">{t("slidesTemplate.any")}</SelectItem>
+								<SelectItem value="all" data-testid="platform-slides-template-option">{t("slidesTemplate.all")}</SelectItem>
 							</SelectContent>
 						</Select>
 					</FilterControlField>
@@ -585,13 +596,13 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 									icon={FileImage}
 									title={t("slidesTemplate.empty")}
 									description={t("slidesTemplate.emptyDescription")}
-								/>
+								 testId="platform-slides-template-empty"/>
 							}
 							getRowId={(row) => row.id}
 							isLoading={query.isLoading}
 							minWidth={1600}
 							stickyRightColumnId="actions"
-						/>
+						 containerTestId="platform-slides-template-list" loadingTestId="platform-slides-template-loading" rowTestId="platform-slides-template-row"/>
 					</div>
 					<div className="space-y-3 md:hidden">
 						{query.isLoading ? (
@@ -616,10 +627,16 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 								icon={FileImage}
 								title={t("slidesTemplate.empty")}
 								description={t("slidesTemplate.emptyDescription")}
-							/>
+							 testId="platform-slides-template-empty"/>
 						)}
 					</div>
 					<ListPagination
+						previousButtonTestId="slides-template-library-previous-button"
+						nextButtonTestId="slides-template-library-next-button"
+						pageSizeTriggerTestId="slides-template-library-page-size-trigger"
+						pageSizeOptionTestId="slides-template-library-page-size-option"
+						jumpInputTestId="slides-template-library-jump-input"
+				testId="slides-template-library-pagination"
 						showQuickJumper
 						loading={query.isFetching}
 						onPageChange={setPage}

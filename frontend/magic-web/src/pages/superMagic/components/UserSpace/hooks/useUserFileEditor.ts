@@ -5,6 +5,10 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import userFilesStore from "@/stores/userFiles"
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
+import {
+	SAVED_HOLD_MS,
+	type SaveConfirmationStage,
+} from "../../Detail/contents/HTML/hooks/useSaveConfirmation"
 import { mergeMemoryContent } from "../../LongTremMemory/services/memoryThreeWayMerge"
 import {
 	userSpaceFileService,
@@ -22,6 +26,7 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 	const [loading, setLoading] = useState(true)
 	const [loadError, setLoadError] = useState(false)
 	const [saving, setSaving] = useState(false)
+	const [saveStage, setSaveStage] = useState<SaveConfirmationStage>("idle")
 	const requestRef = useRef<AbortController | null>(null)
 	const savingRef = useRef(false)
 	const mounted = useRef(true)
@@ -67,6 +72,12 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 	}, [fileId, identityKey, isEditMode, load])
 
 	useEffect(() => {
+		if (saveStage !== "saved") return
+		const timer = setTimeout(() => setSaveStage("idle"), SAVED_HOLD_MS)
+		return () => clearTimeout(timer)
+	}, [saveStage])
+
+	useEffect(() => {
 		userFilesStore.setFileEditing(fileId, isEditMode)
 		return () => userFilesStore.setFileEditing(fileId, false)
 	}, [fileId, isEditMode])
@@ -79,6 +90,7 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 		const requestIdentity = identityKey
 		savingRef.current = true
 		setSaving(true)
+		setSaveStage("saving")
 		try {
 			const result = await userSpaceFileService.saveFileContent(fileId, savedDraft, revision)
 			if (!isCurrent() || requestIdentity !== getFileReferenceIdentityKey())
@@ -93,8 +105,10 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 				void userFilesStore
 					.loadDirectory(snapshot.file.parent_id, true)
 					.catch(() => undefined)
-			magicToast.success(t("common.saveSuccess"))
+			setSaveStage("saved")
 		} catch (error) {
+			// Failures keep their error toast; never leave a saving/saved chip behind.
+			setSaveStage("idle")
 			if (isCurrent() && requestIdentity === getFileReferenceIdentityKey()) {
 				if (error instanceof UserFileConcurrentModificationError) {
 					try {
@@ -146,6 +160,7 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 		loading,
 		loadError,
 		saving,
+		saveStage,
 		load,
 		save,
 		merge,

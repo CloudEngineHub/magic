@@ -1194,6 +1194,62 @@ describe("StyleManager", () => {
 	})
 
 	describe("updateElementAttributes", () => {
+		it("refreshes the selected link configuration after undo and redo", async () => {
+			const bridge = new EditorBridge()
+			const sendEvent = vi.spyOn(bridge, "sendEvent")
+			const elementSelector = new ElementSelector(bridge)
+			styleManager.setElementSelector(elementSelector)
+			container.innerHTML = "<div id='test' data-magic-href='old.html'>Go</div>"
+			elementSelector.selectElement(container.querySelector("#test") as HTMLElement)
+			await styleManager.updateElementAttributes("div#test", { dataMagicHref: "new.html" })
+			await styleManager.undo()
+			expect(sendEvent).toHaveBeenLastCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					attributes: expect.objectContaining({ dataMagicHref: "old.html" }),
+				}),
+			)
+			await styleManager.redo()
+			expect(sendEvent).toHaveBeenLastCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					attributes: expect.objectContaining({ dataMagicHref: "new.html" }),
+				}),
+			)
+			elementSelector.destroy()
+			bridge.destroy()
+		})
+		it("supports click links on arbitrary elements through undo, redo and removal", async () => {
+			container.innerHTML = "<div id='test'>Go</div>"
+			const element = container.querySelector("#test") as HTMLElement
+			await styleManager.updateElementAttributes("div#test", {
+				dataMagicHref: "../slide-2.html",
+			})
+			expect(element.getAttribute("data-magic-href")).toBe("../slide-2.html")
+			await styleManager.undo()
+			expect(element.hasAttribute("data-magic-href")).toBe(false)
+			await styleManager.redo()
+			expect(element.getAttribute("data-magic-href")).toBe("../slide-2.html")
+			await styleManager.updateElementAttributes("div#test", { dataMagicHref: null })
+			expect(element.hasAttribute("data-magic-href")).toBe(false)
+			await styleManager.undo()
+			expect(element.getAttribute("data-magic-href")).toBe("../slide-2.html")
+		})
+
+		it.each(["javascript:alert(1)", "data:text/html,hi", "file:///secret"])(
+			"rejects unsafe custom links %s atomically",
+			async (href) => {
+				container.innerHTML = "<div id='test' title='Old'>Go</div>"
+				await expect(
+					styleManager.updateElementAttributes("div#test", {
+						title: "New",
+						dataMagicHref: href,
+					}),
+				).rejects.toThrow("Unsafe href URL protocol")
+				expect(container.querySelector("#test")?.getAttribute("title")).toBe("Old")
+				expect(commandHistory.getUndoStackSize()).toBe(0)
+			},
+		)
 		it("should update common anchor attributes", async () => {
 			container.innerHTML = "<a id='test' href='/old' target='_self' rel='nofollow'>Link</a>"
 			const element = container.querySelector("#test") as HTMLAnchorElement

@@ -27,6 +27,8 @@
 		"defaultUser": "User",
 		"feedback": "Feedback",
 		"freeAccount": "Free",
+		"globalRecycleBin": "Global recycle bin",
+		"globalRecycleBinHint": "View deleted spaces, projects, topics, files and micro apps you can access",
 		"helpCenter": "Help Center",
 		"inbox": "Inbox",
 		"recycleBin": "Recycle Bin",
@@ -102,6 +104,7 @@
 		"upgrade": "Upgrade"
 	},
 	"skillsLibrary": {
+		"clawTitle": "Skills",
 		"title": "Crew · Skills · Connectors"
 	},
 	"slidesTemplates": {

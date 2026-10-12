@@ -84,12 +84,7 @@ export interface PlatformConfig {
 
 /** Fields that can be rendered in an organization watermark. */
 export type PlatformWatermarkField =
-	| "real_name"
-	| "employee_no"
-	| "visit_time"
-	| "department"
-	| "phone"
-	| "email"
+	"real_name" | "employee_no" | "visit_time" | "department" | "phone" | "email"
 
 /** Platform watermark configuration. The id is optional on public bootstrap responses. */
 export interface PlatformWatermarkConfig {

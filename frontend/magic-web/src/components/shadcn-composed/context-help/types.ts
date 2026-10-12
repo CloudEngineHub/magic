@@ -38,10 +38,12 @@ export interface HelpDialogContentProps {
 }
 
 export interface HelpDialogProps extends HelpDialogContentProps {
+	header?: { title: string; description?: string }
 	onCloseAutoFocus: (event: Event) => void
 }
 
 export interface ContextHelpProps {
+	header?: HelpDialogProps["header"]
 	help: HelpDefinition
 	mode: "preview" | "dialog"
 	children: ReactElement

@@ -55,11 +55,13 @@ import {
 	defaultProviderIcon,
 	getProviderLogoSrc,
 } from "@magic-admin-v2/features/platform-provider-list/utils/provider-icons"
+import { isEmbeddingModelType } from "@magic-admin-v2/features/platform-model-list/utils/model-runtime-config"
 import { cn } from "@magic-admin-v2/utils/cn"
 
 export function ProviderBindingCard({
 	canRemove,
 	category,
+	officialSyncedRecordIds,
 	control,
 	disabled,
 	error,
@@ -72,6 +74,7 @@ export function ProviderBindingCard({
 }: {
 	canRemove: boolean
 	category: ProviderModelCategory
+	officialSyncedRecordIds: ReadonlySet<string>
 	control: Control<ModelEditorValues>
 	disabled: boolean
 	error: ProviderBindingErrors | undefined
@@ -91,12 +94,17 @@ export function ProviderBindingCard({
 	const fieldName = <T extends keyof ProviderBindingValues>(name: T) =>
 		`providers.${index}.${name}` as const
 	const providerId = useWatch({ control, name: fieldName("service_provider_config_id") })
+	const recordId = useWatch({ control, name: fieldName("record_id") })
 	const modelVersion = useWatch({ control, name: fieldName("model_version") })
 	const selectedProvider = (providerQuery.data ?? []).find(
 		(provider) => provider.id === providerId,
 	)
+	const isOfficialSynced = Boolean(recordId && officialSyncedRecordIds.has(recordId))
 	const canTestConnectivity =
-		selectedProvider && selectedProvider.provider_type !== providerType.official
+		selectedProvider && selectedProvider.provider_type !== providerType.official && !isOfficialSynced
+	const fieldDisabled = disabled || isOfficialSynced
+	const supportsExtraRequest =
+		category === providerModelCategory.llm || isEmbeddingModelType(modelType)
 	const [expanded, setExpanded] = useState(false)
 	const [optionalOpen, setOptionalOpen] = useState(false)
 	const [pricingOpen, setPricingOpen] = useState(false)
@@ -137,7 +145,7 @@ export function ProviderBindingCard({
 						render={({ field }) => {
 							return (
 								<Select
-									disabled={disabled || providerQuery.isLoading}
+									disabled={fieldDisabled || providerQuery.isLoading}
 									onValueChange={(value) => {
 										field.onChange(value)
 										const nextProvider = providerQuery.data?.find(
@@ -183,7 +191,7 @@ export function ProviderBindingCard({
 										data-model-editor-field={fieldName(
 											"service_provider_config_id",
 										)}
-									>
+									 data-testid="platform-model-list-select-trigger">
 										<SelectValue
 											placeholder={t("modelList.editor.placeholder.provider")}
 										>
@@ -193,13 +201,13 @@ export function ProviderBindingCard({
 											/>
 										</SelectValue>
 									</SelectTrigger>
-									<SelectContent className="min-w-72">
+									<SelectContent className="min-w-72" data-testid="platform-model-list-select-content">
 										{(providerQuery.data ?? []).map((provider) => (
 											<SelectItem
 												key={provider.id}
 												textValue={getProviderOptionLabel(provider)}
 												value={provider.id}
-											>
+											 data-testid="platform-model-list-option">
 												<ProviderOption provider={provider} />
 											</SelectItem>
 										))}
@@ -226,7 +234,7 @@ export function ProviderBindingCard({
 						<ModelConnectivityTest
 							className="flex-nowrap gap-1.5"
 							compact
-							disabled={disabled || !modelVersion.trim()}
+							disabled={fieldDisabled || !modelVersion.trim()}
 							key={`${providerId}:${modelVersion}:${category}:${modelType}`}
 							request={{
 								kind: "config",
@@ -255,20 +263,20 @@ export function ProviderBindingCard({
 									</span>
 									<Switch
 										checked={field.value}
-										disabled={disabled}
+										disabled={fieldDisabled}
 										onCheckedChange={field.onChange}
-									/>
+									 data-testid="platform-model-list-switch"/>
 								</>
 							)}
 						/>
 						<Button
 							aria-label={t("modelList.editor.action.removeProvider")}
-							disabled={!canRemove || disabled}
+							disabled={!canRemove || fieldDisabled}
 							onClick={onRemove}
 							size="icon"
 							type="button"
 							variant="ghost"
-						>
+						 data-testid="platform-model-list-delete-button">
 							<Trash2 className="size-4" aria-hidden="true" />
 						</Button>
 						<Button
@@ -281,7 +289,7 @@ export function ProviderBindingCard({
 							size="icon"
 							type="button"
 							variant="ghost"
-						>
+						 data-testid="platform-model-list-edit-button">
 							<ChevronDown
 								className={cn(
 									"size-4 transition-transform",
@@ -329,14 +337,14 @@ export function ProviderBindingCard({
 									name={fieldName("model_version")}
 									render={({ field }) => (
 										<Input
-											disabled={disabled}
+											disabled={fieldDisabled}
 											id={fieldName("model_version")}
 											onChange={field.onChange}
 											placeholder={t(
 												"modelList.editor.placeholder.modelVersion",
 											)}
 											value={field.value}
-										/>
+										 data-testid="platform-model-list-input"/>
 									)}
 								/>
 								<FieldError
@@ -378,6 +386,8 @@ export function ProviderBindingCard({
 										placeholder={t("modelList.editor.placeholder.loadWeight")}
 									/>
 								) : null}
+								{supportsExtraRequest && !isOfficialSynced ? (
+									<>
 								<DialogFormField
 									description={t("modelList.editor.fieldDesc.extraHeader")}
 									descriptionMode="text"
@@ -397,7 +407,7 @@ export function ProviderBindingCard({
 												)}
 												rows={3}
 												value={field.value}
-											/>
+											 data-testid="platform-model-list-textarea-input"/>
 										)}
 									/>
 								</DialogFormField>
@@ -420,14 +430,16 @@ export function ProviderBindingCard({
 												)}
 												rows={3}
 												value={field.value}
-											/>
+											 data-testid="platform-model-list-textarea-input"/>
 										)}
 									/>
 								</DialogFormField>
+									</>
+								) : null}
 							</div>
 						</details>
 
-						{dataSource.endpoints.modelPricingTemplates ? (
+						{dataSource.endpoints.modelPricingTemplates && !isOfficialSynced ? (
 							<details
 								className="group rounded-md border"
 								data-model-editor-field={
@@ -569,7 +581,7 @@ function BindingNumberField({
 						step={step}
 						type="number"
 						value={field.value}
-					/>
+					 data-testid="platform-model-list-input"/>
 				)}
 			/>
 			<FieldError className="text-sm" message={error} />

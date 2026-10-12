@@ -66,6 +66,22 @@ enum ProjectMode: string
     }
 
     /**
+     * 最近项目列表允许展示、且能定位到具体资源入口的特殊模式。
+     * 音频和对话项目没有对应的资源工作区，继续沿用普通列表过滤规则。
+     *
+     * @return string[]
+     */
+    public static function getRecentListSpecialModes(): array
+    {
+        return [
+            self::AGENT_CREATOR->value,
+            self::SKILL_CREATOR->value,
+            self::MAGICLAW->value,
+            self::MICRO_APP->value,
+        ];
+    }
+
+    /**
      * Get project mode description.
      */
     public function getDescription(): string

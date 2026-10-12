@@ -21,6 +21,21 @@ function getStyleContents(doc: Document): string[] {
 
 describe("google cdn rewrite", () => {
 	describe("serialized HTML output", () => {
+		it("preserves entity text, attributes and raw script/style contents on repeated rewrites", () => {
+			const script =
+				'window.example = "<Button> &lt;"; if (1 < 2 && 3 > 2) window.ready = true;'
+			const css = '.parent > .child::before { content: "< & >"; }'
+			const html = `<!doctype html><html><head><style>${css}</style><script>${script}</script></head>
+				<body><p title="&quot;quoted&quot; &amp;">&lt;LoginForm &amp; &#169;</p></body></html>`
+			const rewritten = rewriteHtmlWithMagicCdn(rewriteHtmlWithMagicCdn(html))
+			const doc = new DOMParser().parseFromString(rewritten, "text/html")
+			expect(doc.querySelector("p")?.textContent).toBe("<LoginForm & ©")
+			expect(doc.querySelector("p")?.getAttribute("title")).toBe('"quoted" &')
+			expect(doc.querySelector("script")?.textContent).toBe(script)
+			expect(doc.querySelector("style")?.textContent).toBe(css)
+			expect(doc.doctype?.name).toBe("html")
+		})
+
 		it("should not add the XHTML namespace to the root html element", () => {
 			const html = `<!DOCTYPE html><html lang="zh"><head></head><body><p>sample</p></body></html>`
 

@@ -60,7 +60,7 @@ export const TemplateEditorUploadField = forwardRef<
 
 	return (
 		<>
-			<button
+			<button data-testid="platform-slides-template-upload-button"
 				ref={ref}
 				{...buttonProps}
 				className={cn(
@@ -139,7 +139,7 @@ export const TemplateEditorUploadField = forwardRef<
 					</span>
 				)}
 			</button>
-			<input
+			<input data-testid="platform-slides-template-upload-input"
 				accept={accept}
 				className="hidden"
 				onChange={(event) => {

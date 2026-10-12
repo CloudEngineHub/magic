@@ -537,6 +537,8 @@ class WorkspaceAppService extends AbstractAppService
     /**
      * 获取话题的消息列表.
      *
+     * @deprecated Use TopicAppService::getMessagesByTopicId() instead. Kept for existing callers.
+     *
      * @param int $topicId 话题ID
      * @param int $page 页码
      * @param int $pageSize 每页大小

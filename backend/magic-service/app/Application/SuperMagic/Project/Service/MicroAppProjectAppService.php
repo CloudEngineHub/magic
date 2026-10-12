@@ -327,19 +327,6 @@ class MicroAppProjectAppService extends AbstractAppService
         ];
     }
 
-    /**
-     * Runtime projects are user-owned special projects, but the role remains
-     * part of the response so every client can fail closed before rendering
-     * file write actions.
-     */
-    private function formatRuntimeProject(ProjectEntity $project, MagicUserAuthorization $authorization): array
-    {
-        $formatted = $this->responseFormatter->formatProject($project);
-        $formatted['user_role'] = $this->resolveUserRole($project, $authorization);
-
-        return $formatted;
-    }
-
     public function showByProject(RequestContext $requestContext, int $projectId): array
     {
         $authorization = $requestContext->getUserAuthorization();
@@ -530,6 +517,19 @@ class MicroAppProjectAppService extends AbstractAppService
         $this->microAppVisitRepository->recordVisit($record->getId(), $authorization->getId(), $authorization->getOrganizationCode());
 
         return ['recorded' => true];
+    }
+
+    /**
+     * Runtime projects are user-owned special projects, but the role remains
+     * part of the response so every client can fail closed before rendering
+     * file write actions.
+     */
+    private function formatRuntimeProject(ProjectEntity $project, MagicUserAuthorization $authorization): array
+    {
+        $formatted = $this->responseFormatter->formatProject($project);
+        $formatted['user_role'] = $this->resolveUserRole($project, $authorization);
+
+        return $formatted;
     }
 
     /**

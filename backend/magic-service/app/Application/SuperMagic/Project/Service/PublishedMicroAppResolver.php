@@ -29,7 +29,8 @@ class PublishedMicroAppResolver
         private readonly ResourceShareDomainService $resourceShareDomainService,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
         private readonly FileDomainService $fileDomainService,
-    ) {}
+    ) {
+    }
 
     /**
      * @return null|array{0: MicroAppEntity, 1: ResourceShareEntity}

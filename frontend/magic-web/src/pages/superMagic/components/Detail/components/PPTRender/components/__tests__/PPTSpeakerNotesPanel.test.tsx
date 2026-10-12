@@ -4,14 +4,51 @@ import PPTSpeakerNotesPanel from "../PPTSpeakerNotesPanel"
 import { pptNotesPreferenceStore } from "@/stores/layout/PPTNotesPreferenceStore"
 import { unshadow } from "@/utils/shadow"
 
+vi.mock("@/components/shadcn-ui/popover", async () => {
+	const { createContext, useContext } = await import("react")
+	const OpenContext = createContext(false)
+	return {
+		Popover: ({ open = false, children }: { open?: boolean; children: React.ReactNode }) => (
+			<OpenContext.Provider value={open}>{children}</OpenContext.Provider>
+		),
+		PopoverTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+		PopoverAnchor: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+		PopoverContent: ({
+			children,
+			...props
+		}: {
+			children: React.ReactNode
+			"data-testid"?: string
+		}) =>
+			useContext(OpenContext) ? (
+				<div data-testid={props["data-testid"]}>{children}</div>
+			) : null,
+	}
+})
+
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
 }))
 
+vi.mock("@/services/superMagic/SuperMagicModeService", () => ({
+	default: {
+		getModelListByMode: () => [{ model_id: "m1", model_name: "Model 1" }],
+		fetchDefaultModeModelList: vi.fn(),
+	},
+}))
+
+const patchMock = vi.hoisted(() => ({ propose: vi.fn(() => true) }))
+beforeEach(() => patchMock.propose.mockClear())
+vi.mock("@/components/tiptap-node/ai-patch", () => ({
+	AiPatch: {},
+	getAiPatchState: () => undefined,
+	proposeAiPatchMarkdown: patchMock.propose,
+}))
+
 vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
-	const { forwardRef, useEffect, useRef } = await import("react")
+	const { forwardRef, useEffect, useRef, useImperativeHandle, useState } = await import("react")
 	return {
 		SimpleEditor: forwardRef(
 			(
@@ -26,24 +63,50 @@ vi.mock("@/components/tiptap-templates/simple/simple-editor", async () => {
 				},
 				ref,
 			) => {
+				const [localContent, setLocalContent] = useState(content)
+				const latest = useRef(localContent)
+				latest.current = localContent
+				const fakeEditor = useRef({
+					getJSON: () => ({
+						type: "doc",
+						content: [
+							{
+								type: "paragraph",
+								content: [{ type: "text", text: latest.current || " " }],
+							},
+						],
+					}),
+					isDestroyed: false,
+					state: {},
+					on: vi.fn(),
+					off: vi.fn(),
+					commands: {
+						setContent: (value: string) => setLocalContent(value),
+						clearAiPatches: vi.fn(),
+					},
+					storage: { markdown: { getMarkdown: () => latest.current } },
+				})
+				useImperativeHandle(ref, () => ({ editor: fakeEditor.current }), [])
 				const previousEditable = useRef(isEditable)
 				useEffect(() => {
 					// Tiptap setEditable emits update even when Markdown has not changed.
 					if (previousEditable.current === isEditable) return
 					previousEditable.current = isEditable
-					onContentChange(content)
-				}, [isEditable, content, onContentChange])
+					onContentChange(localContent)
+				}, [isEditable, localContent, onContentChange])
 				return (
 					<>
 						{isEditable ? (
 							<textarea
-								ref={ref as React.Ref<HTMLTextAreaElement>}
 								data-testid="ppt-speaker-notes-editor"
-								value={content}
-								onChange={(event) => onContentChange(event.target.value)}
+								value={localContent}
+								onChange={(event) => {
+									setLocalContent(event.target.value)
+									onContentChange(event.target.value)
+								}}
 							/>
 						) : (
-							<div>{content}</div>
+							<div>{localContent}</div>
 						)}
 					</>
 				)
@@ -56,6 +119,66 @@ describe("PPTSpeakerNotesPanel", () => {
 	beforeEach(() => {
 		localStorage.clear()
 		pptNotesPreferenceStore.setHeight(144)
+		pptNotesPreferenceStore.setFontSize(13)
+		pptNotesPreferenceStore.setAutoApply(true)
+		pptNotesPreferenceStore.modelHintDismissed = true
+		patchMock.propose.mockClear()
+	})
+
+	it("shows a dismissible model hint once and remembers the dismissal", async () => {
+		const props = {
+			slideIndex: 0,
+			fileId: "first",
+			rawContent: "",
+			allowEdit: true,
+			onSaved: vi.fn(),
+			onGenerate: vi.fn(),
+		}
+		pptNotesPreferenceStore.modelHintDismissed = false
+		const { unmount } = render(<PPTSpeakerNotesPanel {...props} />)
+		expect(await screen.findByTestId("ppt-notes-model-hint")).toBeInTheDocument()
+		fireEvent.click(screen.getByTestId("ppt-notes-model-hint-dismiss"))
+		await waitFor(() => expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull())
+		expect(localStorage.getItem("supermagic-ppt-notes-model-hint-dismissed")).toBe("true")
+		unmount()
+		render(<PPTSpeakerNotesPanel {...props} />)
+		await screen.findByTestId("ppt-notes-settings-trigger")
+		expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull()
+	})
+
+	it("keeps the model hint hidden while the notes panel is collapsed", async () => {
+		pptNotesPreferenceStore.modelHintDismissed = false
+		const props = {
+			slideIndex: 0,
+			fileId: "first",
+			rawContent: "",
+			allowEdit: true,
+			onSaved: vi.fn(),
+			onGenerate: vi.fn(),
+		}
+		const { rerender } = render(<PPTSpeakerNotesPanel {...props} visible={false} />)
+		await screen.findByTestId("ppt-notes-settings-trigger")
+		expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull()
+		rerender(<PPTSpeakerNotesPanel {...props} visible />)
+		expect(await screen.findByTestId("ppt-notes-model-hint")).toBeInTheDocument()
+	})
+
+	it("dismisses the model hint when the settings are opened", async () => {
+		pptNotesPreferenceStore.modelHintDismissed = false
+		render(
+			<PPTSpeakerNotesPanel
+				slideIndex={0}
+				fileId="first"
+				rawContent=""
+				allowEdit
+				onSaved={vi.fn()}
+				onGenerate={vi.fn()}
+			/>,
+		)
+		await screen.findByTestId("ppt-notes-model-hint")
+		fireEvent.click(screen.getByTestId("ppt-notes-settings-trigger"))
+		await waitFor(() => expect(screen.queryByTestId("ppt-notes-model-hint")).toBeNull())
+		expect(pptNotesPreferenceStore.modelHintDismissed).toBe(true)
 	})
 
 	it("keeps inactive drafts pending and clears protection when the user restores original notes", async () => {
@@ -87,32 +210,32 @@ describe("PPTSpeakerNotesPanel", () => {
 		await waitFor(() => expect(onPendingChangesChange).toHaveBeenLastCalledWith(false))
 	})
 
-	it("does not apply an AI action to another slide after a pending save", async () => {
-		let finishSave!: (value: boolean) => void
-		const onGenerate = vi.fn()
-		const props = {
+	it("discards an AI result after navigating to another slide", async () => {
+		let finish!: (value: string) => void
+		const onGenerate = vi.fn(
+			() =>
+				new Promise<string>((resolve) => {
+					finish = resolve
+				}),
+		)
+		const input = {
 			slideIndex: 0,
 			fileId: "first",
 			rawContent: "",
 			allowEdit: true,
 			onGenerate,
-			onSaved: vi.fn().mockResolvedValue(undefined),
-			saveEditContent: vi.fn(
-				() =>
-					new Promise<boolean>((resolve) => {
-						finishSave = resolve
-					}),
-			),
+			onSaved: vi.fn(),
 		}
-		const { rerender } = render(<PPTSpeakerNotesPanel {...props} />)
+		const { rerender } = render(<PPTSpeakerNotesPanel {...input} />)
 		fireEvent.change(await screen.findByTestId("ppt-speaker-notes-editor"), {
-			target: { value: "First page draft" },
+			target: { value: "First draft" },
 		})
 		fireEvent.click(screen.getByText("ppt.speakerNotes.polish"))
-		rerender(<PPTSpeakerNotesPanel {...props} fileId="second" slideIndex={1} />)
-		await act(async () => finishSave(true))
-		expect(props.onSaved).not.toHaveBeenCalled()
-		expect(onGenerate).not.toHaveBeenCalled()
+		expect(onGenerate).toHaveBeenCalledTimes(1)
+		rerender(<PPTSpeakerNotesPanel {...input} fileId="second" slideIndex={1} />)
+		await act(async () => finish("Late AI result"))
+		expect(patchMock.propose).not.toHaveBeenCalled()
+		expect(onGenerate.mock.calls[0][3].aborted).toBe(true)
 	})
 
 	it.each(["reorder", "replace", "unmount"])(
@@ -180,9 +303,9 @@ describe("PPTSpeakerNotesPanel", () => {
 	})
 
 	it.each(["generate", "polish", "shorten"] as const)(
-		"saves the current draft before %s",
+		"sends the current unsaved draft directly to %s",
 		async (action) => {
-			const onGenerate = vi.fn()
+			const onGenerate = vi.fn().mockResolvedValue("AI notes")
 			const onSaved = vi.fn().mockResolvedValue(undefined)
 			render(
 				<PPTSpeakerNotesPanel
@@ -201,15 +324,21 @@ describe("PPTSpeakerNotesPanel", () => {
 			fireEvent.blur(editor, { relatedTarget: button })
 			expect(onSaved).not.toHaveBeenCalled()
 			fireEvent.click(button)
-			await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(action, "draft"))
-			expect(onSaved.mock.invocationCallOrder[0]).toBeLessThan(
-				onGenerate.mock.invocationCallOrder[0],
+			await waitFor(() =>
+				expect(onGenerate).toHaveBeenCalledWith(
+					action,
+					"draft",
+					"**Current draft**",
+					expect.any(AbortSignal),
+				),
 			)
+			expect(onSaved).not.toHaveBeenCalled()
+			expect(patchMock.propose).toHaveBeenCalled()
 		},
 	)
 
-	it("does not request AI changes when saving the draft fails", async () => {
-		const onGenerate = vi.fn()
+	it("preserves the current draft when AI generation fails", async () => {
+		const onGenerate = vi.fn().mockRejectedValue(new Error("offline"))
 		render(
 			<PPTSpeakerNotesPanel
 				slideIndex={0}
@@ -225,8 +354,8 @@ describe("PPTSpeakerNotesPanel", () => {
 			target: { value: "Do not lose this" },
 		})
 		fireEvent.click(screen.getByText("ppt.speakerNotes.polish"))
-		await screen.findByText("ppt.speakerNotes.saveFailed")
-		expect(onGenerate).not.toHaveBeenCalled()
+		await screen.findByText("ppt.speakerNotes.generationFailed")
+		expect(onGenerate).toHaveBeenCalledTimes(1)
 		expect(screen.getByTestId("ppt-speaker-notes-editor")).toHaveValue("Do not lose this")
 	})
 
@@ -652,7 +781,7 @@ describe("all-slide notes", () => {
 		)
 	})
 
-	it("reports silent save progress in the fixed header and keeps success after content sync", async () => {
+	it("reports silent save progress beside the editor toolbar and keeps success after content sync", async () => {
 		const input = props()
 		let finish!: (value: boolean) => void
 		input.saveEditContent.mockImplementation(
@@ -665,9 +794,7 @@ describe("all-slide notes", () => {
 		fireEvent.change(screen.getByTestId("ppt-speaker-notes-editor"), {
 			target: { value: "New notes" },
 		})
-		expect(screen.getByTestId("ppt-notes-save-status")).toHaveTextContent(
-			"ppt.speakerNotes.unsaved",
-		)
+		expect(screen.queryByTestId("ppt-notes-save-status")).toBeNull()
 		fireEvent.click(screen.getByRole("button", { name: "ppt.speakerNotes.save" }))
 		expect(screen.getByTestId("ppt-notes-save-status")).toHaveTextContent(
 			"ppt.speakerNotes.saving",
@@ -687,40 +814,27 @@ describe("all-slide notes", () => {
 		)
 		expect(
 			screen.getByTestId("ppt-notes-save-status").closest("[data-notes-editor]"),
-		).toBeNull()
+		).not.toBeNull()
 	})
 
-	it("saves and applies overview AI actions to the hovered file rather than the active canvas", async () => {
+	it("sends overview AI actions to the hovered file rather than the canvas", async () => {
 		const input = props()
-		const onGenerate = vi.fn()
-		let finish!: (value: boolean) => void
-		input.saveEditContent.mockImplementation(
-			() =>
-				new Promise((resolve) => {
-					finish = resolve
-				}),
-		)
-		const { rerender } = render(<PPTSpeakerNotesPanel {...input} onGenerate={onGenerate} />)
+		const onGenerate = vi.fn().mockResolvedValue("New script")
+		render(<PPTSpeakerNotesPanel {...input} onGenerate={onGenerate} />)
 		openAll()
 		fireEvent.change(screen.getAllByTestId("ppt-speaker-notes-editor")[1], {
 			target: { value: "Second page script" },
 		})
 		fireEvent.click(screen.getAllByRole("button", { name: "ppt.speakerNotes.polish" })[1])
-		expect(onGenerate).not.toHaveBeenCalled()
-		rerender(
-			<PPTSpeakerNotesPanel
-				{...input}
-				fileId="second"
-				slideIndex={1}
-				onGenerate={onGenerate}
-			/>,
+		await waitFor(() =>
+			expect(onGenerate).toHaveBeenCalledWith(
+				"polish",
+				"second",
+				"Second page script",
+				expect.any(AbortSignal),
+			),
 		)
-		await act(async () => finish(true))
-		expect(input.onSaved).toHaveBeenCalledWith(
-			expect.stringContaining("Second page script"),
-			"second",
-		)
-		expect(onGenerate).toHaveBeenCalledWith("polish", "second")
+		expect(input.saveEditContent).not.toHaveBeenCalled()
 	})
 
 	it("does not expose overview AI actions in read-only mode", () => {
@@ -840,13 +954,12 @@ describe("all-slide notes", () => {
 		).not.toBeInTheDocument()
 	})
 
-	it("does not retarget AI actions when a hidden overview editor stays mounted", async () => {
+	it("discards pending AI when an overview editor becomes hidden", async () => {
 		const input = props()
-		const onGenerate = vi.fn()
-		let finish!: (value: boolean) => void
-		input.saveEditContent.mockImplementation(
+		let finish!: (value: string) => void
+		const onGenerate = vi.fn(
 			() =>
-				new Promise((resolve) => {
+				new Promise<string>((resolve) => {
 					finish = resolve
 				}),
 		)
@@ -866,7 +979,7 @@ describe("all-slide notes", () => {
 				onGenerate={onGenerate}
 			/>,
 		)
-		await act(async () => finish(true))
-		expect(onGenerate).not.toHaveBeenCalled()
+		await act(async () => finish("Late result"))
+		expect(patchMock.propose).not.toHaveBeenCalled()
 	})
 })

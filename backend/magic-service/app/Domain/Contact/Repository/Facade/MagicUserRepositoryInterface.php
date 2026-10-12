@@ -11,6 +11,7 @@ use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Entity\ValueObject\UserIdType;
 use App\Domain\Contact\Entity\ValueObject\UserOption;
+use App\Domain\Contact\Entity\ValueObject\UserSearchField;
 use App\Infrastructure\Core\ValueObject\Page;
 
 interface MagicUserRepositoryInterface
@@ -118,4 +119,16 @@ interface MagicUserRepositoryInterface
      * @return array{total: int, list: array<int, array<string, mixed>>}
      */
     public function queriesPlatformUsers(Page $page, ?array $filters = null): array;
+
+    /**
+     * 按指定字段搜索用户。
+     * @param null|string $organizationCodeFilter 组织编码过滤条件；null 表示不限制组织
+     * @return array{total: int, list: array<int, array<string, mixed>>}
+     */
+    public function searchUsers(
+        Page $page,
+        UserSearchField $searchField,
+        string $keyword,
+        ?string $organizationCodeFilter = null
+    ): array;
 }

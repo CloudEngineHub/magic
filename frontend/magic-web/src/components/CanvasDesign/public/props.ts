@@ -13,6 +13,7 @@ import type {
 	Marker,
 	PaddingInsetConfig,
 } from "../runtime/document/types"
+import type { NameLabelIconResolver } from "../runtime/interaction/labels/nameLabelTypes"
 import type { ElementDetailsProvenance } from "../runtime/document/elementDetailsProvenance"
 import type { CanvasElementNameChange } from "../runtime/core/EventEmitter"
 import type { TFunction } from "./i18n-types"
@@ -35,6 +36,11 @@ export type {
 	CanvasDeviceInfo,
 	CanvasDeviceLayout,
 } from "../runtime/document/types"
+export type {
+	NameLabelIconContext,
+	NameLabelIconDescriptor,
+	NameLabelIconResolver,
+} from "../runtime/interaction/labels/nameLabelTypes"
 
 /**
  * Mention 面板语言入参（与宿主 MentionPanel LocaleInput 约定一致，避免依赖业务包）
@@ -371,6 +377,8 @@ export interface CanvasDesignRef {
 		data: CanvasDocument,
 		options?: {
 			mode?: "smart" | "replace"
+			/** 文件操作已在服务端发生，不生成只能撤销画布引用的历史步骤。 */
+			historyPolicy?: "include" | "exclude"
 			/** sidecar 解析出的运行时来源；不会写入画布 DSL */
 			elementDetailsProvenance?: ElementDetailsProvenance
 		},
@@ -458,6 +466,8 @@ export interface CanvasDesignProps {
 	magic?: MagicConfig
 	/** 插件配置，由宿主注入系统内置插件，并可声明用户插件资源目录 */
 	plugins?: CanvasDesignPluginModuleConfig
+	/** 可选的名称标签图标 resolver；不传时名称标签保持纯文本 */
+	nameLabelIconResolver?: NameLabelIconResolver
 	/** 数据 配置 */
 	data?: {
 		/** 默认画布数据，用于初始化画布 */

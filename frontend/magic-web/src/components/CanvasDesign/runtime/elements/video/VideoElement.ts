@@ -23,7 +23,7 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
-import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
+import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { TransformContext } from "../core/BaseElement"
 import {
@@ -74,7 +74,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private pollingManager: VideoPollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
-	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
+	private mainVersionTagDecorator?: MediaVersionTagDecorator
 	private legacyIsGenerating = false
 
 	public get isGenerating(): boolean {
@@ -1176,7 +1176,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
-		this.mainVersionTagDecorator = new MediaMainVersionTagDecorator(group, {
+		this.mainVersionTagDecorator = new MediaVersionTagDecorator(group, {
 			canvas: this.canvas,
 			width,
 			height,
@@ -1413,6 +1413,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			const height = this.data.height || 0
 			this.renderer.updatePlaceholderContentLayout(group, width, height)
 			this.renderer.updatePlayerViewportScaleLayout(group)
+			this.borderDecorator?.updateViewportScaleLayout()
 		}
 		const updateContentLayout = () => {
 			const width = this.data.width || 0

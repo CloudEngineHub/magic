@@ -18,6 +18,7 @@ use App\Interfaces\SuperMagic\Message\Facade\OpenApi\OpenMessageScheduleApi;
 use App\Interfaces\SuperMagic\Project\Facade\OpenApi\OpenMicroAppApi;
 use App\Interfaces\SuperMagic\Project\Facade\OpenApi\OpenProjectApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\AiAbilityApi;
+use App\Interfaces\SuperMagic\Task\Facade\InternalApi\FollowUpSuggestionApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\SandboxApi as InternalSandboxApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\TaskApi as InternalTaskApi;
 use App\Interfaces\SuperMagic\Task\Facade\OpenApi\OAuth2CallbackRelayApi;
@@ -58,6 +59,7 @@ Router::addGroup(
         Router::put('/upgrade', [InternalSandboxApi::class, 'upgradeSandbox']);
         // 检查沙箱镜像版本（当前版本 vs 最新版本）
         Router::get('/version-check', [InternalSandboxApi::class, 'checkSandboxVersion']);
+        Router::post('/follow-up-suggestions', [FollowUpSuggestionApi::class, 'report']);
 
         // 文件管理相关
         Router::addGroup('/file', static function () {

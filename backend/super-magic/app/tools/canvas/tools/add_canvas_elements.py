@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from functools import partial
 from typing import Any, Literal, cast
 
 from pydantic import ConfigDict, Field, model_validator
@@ -649,7 +650,11 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
                     CanvasGenerationFeedback.action_key(generation_summary, pending=True),
                     category="tool.actions",
                 ),
-                "remark": CanvasGenerationFeedback.remark(generation_summary, pending=True),
+                "remark": CanvasGenerationFeedback.remark(
+                    generation_summary,
+                    pending=True,
+                    names=CanvasGenerationFeedback.item_names(args),
+                ),
                 "tool_name": tool_name,
             }
         items = args.get("items") or []
@@ -692,14 +697,17 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
                         CanvasGenerationFeedback.action_key(generation_summary),
                         category="tool.actions",
                     ),
-                    "remark": CanvasGenerationFeedback.failure_remark(generation_summary),
+                    "remark": CanvasGenerationFeedback.failure_remark(
+                        generation_summary,
+                        CanvasGenerationFeedback.item_names(arguments),
+                    ),
                 }
             return {
                 "action": i18n.translate(
                     CanvasGenerationFeedback.action_key(generation_summary),
                     category="tool.actions",
                 ),
-                "remark": CanvasGenerationFeedback.remark(generation_summary),
+                "remark": CanvasGenerationFeedback.remark_for_result(result, arguments),
             }
         else:
             if not values and not result.ok:
@@ -730,6 +738,10 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
         is_generation_batch = (
             CanvasGenerationFeedback.is_pure_generated_batch(arguments) and generation_summary.is_supported
         )
+        if is_generation_batch:
+            operation_detail = CanvasGenerationFeedback.operation_result_detail(result, arguments)
+            if operation_detail is not None:
+                return operation_detail
         title_key = (
             CanvasGenerationFeedback.detail_title_key(generation_summary)
             if is_generation_batch
@@ -773,6 +785,9 @@ class AddCanvasElements(BaseTool[BaseToolParams]):
                 params.project_path,
                 commands,
                 tool_context=tool_context,
+                on_placeholders_created=partial(
+                    CanvasGenerationFeedback.report_placeholders, self, tool_context, params.model_dump(),
+                ),
             )
             return batch_tool_result(
                 content=items_content(

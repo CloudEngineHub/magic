@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -344,4 +345,10 @@ const MobileHomePage = observer(function MobileHomePage() {
 	)
 })
 
-export default MobileHomePage
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<MobileHomePage />
+		</FileAccessProvider>
+	)
+}

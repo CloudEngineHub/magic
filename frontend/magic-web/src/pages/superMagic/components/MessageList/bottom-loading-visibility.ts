@@ -1,6 +1,10 @@
 import type { SuperMagicMessageItem } from "./type"
 import type { StreamState } from "../../stores/types"
 import { trimIncompleteCitationTag } from "../../utils/citations"
+import {
+	isToolCallLoading,
+	type ToolCallItem,
+} from "./components/Nodes/MessageNode/tool-call/types"
 
 interface ProjectedMessageNode {
 	reasoning_content?: unknown
@@ -26,11 +30,15 @@ export interface ResolveBottomLoadingVisibilityParams {
 	isTopicTaskRunning: boolean
 	activeStreamSuperMessageIds: readonly string[]
 	visibleMessages: readonly SuperMagicMessageItem[]
+	currentTurnMessages: readonly SuperMagicMessageItem[]
 	resolveMessageNode: (superMessageId: string) => ProjectedMessageNode | undefined
 	resolveStreamState: (superMessageId: string) => BottomLoadingStreamSnapshot | undefined
+	resolveToolResponse: (toolCallId: string) => { status?: string } | undefined
 }
 
 export interface BottomLoadingVisibility {
+	/** 可见工具仍在执行；底部提示与工具卡片并行显示，但使用执行中文案。 */
+	isToolExecuting: boolean
 	/** 冷启动兜底:任务已启动但活跃流尚未形成任何可见输出,立即显示,无需防抖。 */
 	showImmediately: boolean
 	/**
@@ -45,7 +53,7 @@ function hasVisibleText(value: unknown): value is string {
 	return typeof value === "string" && !/^\s*$/.test(value)
 }
 
-function isRenderableToolCall(toolCall: unknown): boolean {
+function isRenderableToolCall(toolCall: unknown): toolCall is ToolCallItem {
 	if (!toolCall || typeof toolCall !== "object") return false
 	const candidate = toolCall as {
 		id?: unknown
@@ -89,8 +97,8 @@ function hasVisibleStreamProgress(
 /**
  * 一条活跃流是否仍在给用户产生"看得见的推进":
  * - 投影节点(messageMap)落后于接收缓冲(StreamState)时,打字机还有内容可播;
- * - 接收缓冲已出现可渲染 tool_call 且 Final 未到时,工具卡片自带运行状态,
- *   由它承接进度指示,底部兜底 Loading 不应叠加。
+ * - 接收缓冲已出现可渲染 tool_call 且 Final 未到时，工具卡片与底部会话提示
+ *   同时显示；前者说明具体工具，后者说明 Agent 这一轮仍未结束。
  * 两者都不成立(收到的都画完了、又没有工具卡片在场)即为 stalled 候选,
  * 对应"content 流式完成、等待下一个 chunk"的静止阶段。
  */
@@ -114,8 +122,10 @@ export function resolveBottomLoadingVisibility({
 	isTopicTaskRunning,
 	activeStreamSuperMessageIds,
 	visibleMessages,
+	currentTurnMessages,
 	resolveMessageNode,
 	resolveStreamState,
+	resolveToolResponse,
 }: ResolveBottomLoadingVisibilityParams): BottomLoadingVisibility {
 	const activeStreamIds = activeStreamSuperMessageIds.filter(
 		(superMessageId) => typeof superMessageId === "string" && superMessageId.trim().length > 0,
@@ -137,8 +147,17 @@ export function resolveBottomLoadingVisibility({
 				resolveStreamState(superMessageId)?.stage,
 			),
 	)
+	const hasVisibleToolProgress = currentTurnHasExecutingTool(
+		visibleMessageIds,
+		currentTurnMessages,
+		resolveMessageNode,
+		resolveToolResponse,
+	)
 
-	const showImmediately = (showLoading || hasActiveStream) && !hasVisibleActiveStreamProgress
+	const showImmediately =
+		(showLoading || hasActiveStream) &&
+		!hasVisibleActiveStreamProgress &&
+		!hasVisibleToolProgress
 
 	const isTopicGenerating = showLoading || hasActiveStream || isTopicTaskRunning
 	const hasAdvancingVisibleStream = activeStreamIds.some((superMessageId) =>
@@ -149,7 +168,38 @@ export function resolveBottomLoadingVisibility({
 	)
 	// showImmediately 已覆盖"完全无可见输出"的场景,stalled 只负责
 	// "已经有可见输出、但推进停住了"的空档,两个分支保持互斥。
-	const isGenerationStalled = isTopicGenerating && !showImmediately && !hasAdvancingVisibleStream
+	const isGenerationStalled =
+		isTopicGenerating &&
+		!showImmediately &&
+		!hasAdvancingVisibleStream &&
+		!hasVisibleToolProgress
 
-	return { showImmediately, isGenerationStalled }
+	return {
+		isToolExecuting: hasVisibleToolProgress,
+		showImmediately,
+		isGenerationStalled,
+	}
+}
+
+function currentTurnHasExecutingTool(
+	visibleMessageIds: Set<string>,
+	currentTurnMessages: readonly SuperMagicMessageItem[],
+	resolveMessageNode: (superMessageId: string) => ProjectedMessageNode | undefined,
+	resolveToolResponse: ResolveBottomLoadingVisibilityParams["resolveToolResponse"],
+): boolean {
+	// 新用户消息开始新一轮；历史工具即使残留 running，也不能改变本轮等待模型的文案。
+	return currentTurnMessages.some((message) => {
+		const superMessageId = message?.super_message_id
+		if (typeof superMessageId !== "string" || !visibleMessageIds.has(superMessageId))
+			return false
+		const node = resolveMessageNode(superMessageId)
+		if (!Array.isArray(node?.tool_calls)) return false
+		return node.tool_calls.some((toolCall: unknown) => {
+			if (!isRenderableToolCall(toolCall)) return false
+			// 例：初始化调用仍保存 running，独立响应已是 finished。实际响应优先；
+			// 尚无明确状态的调用参数不代表工具已经执行，不改卡片自身的缺失响应保护。
+			const response = resolveToolResponse(toolCall.id) ?? toolCall.tool
+			return Boolean(response?.status) && isToolCallLoading({ tool: response })
+		})
+	})
 }

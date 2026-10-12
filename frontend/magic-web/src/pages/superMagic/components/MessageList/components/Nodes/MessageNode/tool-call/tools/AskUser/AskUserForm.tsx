@@ -66,6 +66,8 @@ interface AskUserFormProps {
 	draftCacheKey?: string
 	onSubmit?: (answers: AskUserAnswers, remark: string) => void
 	onSkip?: (answers: AskUserAnswers) => void
+	onLocalExpire?: () => void
+	onExpiredInteraction?: () => void
 	onProgressChange?: (count: number) => void
 	className?: string
 }
@@ -167,26 +169,38 @@ function useCountdown(expiresAt: number | undefined, onExpire?: () => void) {
 		return Math.max(0, Math.ceil(expiresAt - Date.now() / 1000))
 	})
 	const onExpireRef = useRef(onExpire)
+	const expiredRef = useRef(false)
 	onExpireRef.current = onExpire
 
 	useEffect(() => {
-		if (!expiresAt) {
+		if (!expiresAt || expiresAt <= 0) {
 			setRemaining(-1)
 			return
 		}
 		const calc = () => Math.max(0, Math.ceil(expiresAt - Date.now() / 1000))
-		setRemaining(calc())
+		const notifyIfExpired = (next: number) => {
+			if (next > 0 || expiredRef.current) return
+			expiredRef.current = true
+			onExpireRef.current?.()
+		}
+		const initial = calc()
+		setRemaining(initial)
+		notifyIfExpired(initial)
+		if (initial <= 0) return
 
 		const timer = setInterval(() => {
 			const next = calc()
 			setRemaining(next)
+			notifyIfExpired(next)
 			if (next <= 0) {
 				clearInterval(timer)
-				onExpireRef.current?.()
 			}
 		}, 1000)
 
-		return () => clearInterval(timer)
+		return () => {
+			expiredRef.current = false
+			clearInterval(timer)
+		}
 	}, [expiresAt])
 
 	return remaining
@@ -230,6 +244,8 @@ function AskUserFormImpl({
 	draftCacheKey,
 	onSubmit,
 	onSkip,
+	onLocalExpire,
+	onExpiredInteraction,
 	onProgressChange,
 	className,
 }: AskUserFormProps) {
@@ -237,6 +253,7 @@ function AskUserFormImpl({
 	const answersRef = useRef<Record<string, AnswerValue>>({})
 	const [draftAnswers, setDraftAnswers] = useState<Readonly<Record<string, AnswerValue>>>()
 	const [remark, setRemark] = useState("")
+	const [isLocallyExpired, setIsLocallyExpired] = useState(false)
 
 	const hasPending = useMemo(() => questions.some((q) => !q.isComplete), [questions])
 	const isTimeout = status === "timeout"
@@ -262,6 +279,7 @@ function AskUserFormImpl({
 	const actionsDisabled =
 		Boolean(streaming) ||
 		Boolean(disabled) ||
+		isLocallyExpired ||
 		hasPending ||
 		questions.length === 0 ||
 		isTerminal
@@ -271,6 +289,10 @@ function AskUserFormImpl({
 
 	const handleSubmit = useCallback(
 		(answers?: AskUserAnswers) => {
+			if (typeof expiresAt === "number" && expiresAt > 0 && Date.now() / 1000 >= expiresAt) {
+				onExpiredInteraction?.()
+				return
+			}
 			const sourceAnswers = answers || answersRef.current
 			const nextAnswers = Object.fromEntries(
 				questions.map((question) => [
@@ -280,29 +302,39 @@ function AskUserFormImpl({
 			) as Record<string, AnswerValue>
 			onSubmit?.(nextAnswers as AskUserAnswers, remark.trim())
 		},
-		[onSubmit, questions, remark],
+		[expiresAt, onExpiredInteraction, onSubmit, questions, remark],
 	)
 
 	const handleSkip = useCallback(() => {
-		onSkip?.({ ...answersRef.current } as AskUserAnswers)
-	}, [onSkip])
-
-	const expiredRef = useRef(false)
-	const onCountdownExpire = useCallback(() => {
-		if (expiredRef.current) return
-		expiredRef.current = true
-		if (defaultAnswers.isComplete) {
-			handleSubmit(defaultAnswers.answers)
+		if (typeof expiresAt === "number" && expiresAt > 0 && Date.now() / 1000 >= expiresAt) {
+			onExpiredInteraction?.()
 			return
 		}
 		onSkip?.({ ...answersRef.current } as AskUserAnswers)
-	}, [defaultAnswers.answers, defaultAnswers.isComplete, handleSubmit, onSkip])
+	}, [expiresAt, onExpiredInteraction, onSkip])
+
+	const onCountdownExpire = useCallback(() => {
+		setIsLocallyExpired(true)
+		onLocalExpire?.()
+	}, [onLocalExpire])
+
+	useEffect(() => {
+		setIsLocallyExpired(false)
+	}, [expiresAt])
 
 	const remaining = useCountdown(
-		!disabled && !streaming && !isTerminal ? expiresAt : undefined,
+		!disabled && !streaming && !isTerminal && expiresAt && expiresAt > 0
+			? expiresAt
+			: undefined,
 		onCountdownExpire,
 	)
-	const showCountdown = typeof expiresAt === "number" && remaining > 0 && !disabled && !isTerminal
+	const showCountdown =
+		typeof expiresAt === "number" &&
+		expiresAt > 0 &&
+		remaining > 0 &&
+		!isLocallyExpired &&
+		!disabled &&
+		!isTerminal
 	const shouldShowActions = !submittedAnswers && !isTerminal
 
 	useEffect(() => {
@@ -364,7 +396,9 @@ function AskUserFormImpl({
 								total={questions.length}
 								question={question}
 								disabled={
-									Boolean(disabled) || (!!streaming && !question.isComplete)
+									Boolean(disabled) ||
+									isLocallyExpired ||
+									(!!streaming && !question.isComplete)
 								}
 								submittedAnswer={displayAnswers?.[question.id]}
 								draftAnswer={draftAnswers?.[question.id]}
@@ -378,7 +412,10 @@ function AskUserFormImpl({
 								value={displayRemark}
 								onChange={setRemark}
 								disabled={
-									Boolean(disabled) || Boolean(submittedAnswers) || isTerminal
+									Boolean(disabled) ||
+									isLocallyExpired ||
+									Boolean(submittedAnswers) ||
+									isTerminal
 								}
 								readOnly={Boolean(submittedAnswers) || isTerminal}
 							/>

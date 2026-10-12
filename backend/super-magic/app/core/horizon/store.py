@@ -250,7 +250,6 @@ def _encode_state(state: HorizonState) -> dict:
         ),
         "user_preferred_language": state.user_preferred_language,
         "workspace_files": state.workspace_files,
-        "workspace_entries": state.workspace_entries,
         # 目录快照跟其它 Horizon 字段一起保存；显示折叠从不写回这个结构。
         "memory_directory": asdict(state.memory_directory) if state.memory_directory is not None else None,
         "client_context": state.client_context,
@@ -293,7 +292,6 @@ def _decode_state(data: dict) -> HorizonState:
         "super_magic_product_context",
         "user_preferred_language",
         "workspace_files",
-        "workspace_entries",
         "memory_directory",
         "client_context",
         "cli_status",
@@ -354,7 +352,6 @@ def _decode_state(data: dict) -> HorizonState:
     )
     state.user_preferred_language = data.get("user_preferred_language", "")
     state.workspace_files = data.get("workspace_files", "")
-    state.workspace_entries = data.get("workspace_entries", [])
     state.memory_directory = _memory_directory_from_dict(data.get("memory_directory"))
     state.client_context = data.get("client_context", "")
     state.cli_status = data.get("cli_status", "")

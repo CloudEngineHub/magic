@@ -243,12 +243,17 @@ vi.mock("@/stores/recordingSummary", () => ({
 	},
 }))
 
-vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
-	useFileActionVisibility: () => ({
-		hideCreateNewTopic: false,
-		hideShareTopic: true,
-	}),
-}))
+vi.mock("@/pages/superMagic/providers/FileAccessProvider", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("@/pages/superMagic/providers/FileAccessProvider")>()
+	return {
+		...actual,
+		useFileAccess: () => ({
+			permissions: actual.DEFAULT_FILE_ACCESS,
+			options: { ...actual.DEFAULT_FILE_ACTION_OPTIONS, shareTopic: false },
+		}),
+	}
+})
 
 const chatWorkspaceId = "chat-workspace-mock-1"
 

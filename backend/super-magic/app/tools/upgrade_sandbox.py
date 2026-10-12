@@ -18,8 +18,8 @@ from app.infrastructure.magic_service.sandbox_types import (
 )
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.tools.core.sandbox_rebuild_scheduler import (
-    SANDBOX_REBUILD_DELAY_SECONDS,
-    schedule_sandbox_rebuild,
+    SANDBOX_UPGRADE_DELAY_SECONDS,
+    schedule_sandbox_upgrade,
 )
 from app.tools.core.sandbox_tool_context import SandboxToolContext, get_sandbox_tool_context
 
@@ -73,13 +73,12 @@ class UpgradeSandbox(BaseTool[UpgradeSandboxParams]):
             }
             content = "The current sandbox is already using the latest sandbox images. No restart was performed."
         else:
-            delay_seconds = SANDBOX_REBUILD_DELAY_SECONDS
+            delay_seconds = SANDBOX_UPGRADE_DELAY_SECONDS
             try:
-                schedule_sandbox_rebuild(
+                schedule_sandbox_upgrade(
                     agent_context=sandbox_context.agent_context,
                     config=sandbox_context.config,
                     sandbox_id=sandbox_context.sandbox_id,
-                    operation="upgrade",
                     delay_seconds=delay_seconds,
                     logger=logger,
                 )
@@ -161,7 +160,7 @@ class UpgradeSandbox(BaseTool[UpgradeSandboxParams]):
             else:
                 remark = _translate(
                     "upgrade_sandbox.scheduled",
-                    delay_seconds=info.get("delay_seconds", SANDBOX_REBUILD_DELAY_SECONDS),
+                    delay_seconds=info.get("delay_seconds", SANDBOX_UPGRADE_DELAY_SECONDS),
                 )
         return {"tool_name": tool_name, "action": _action(tool_name), "remark": remark}
 

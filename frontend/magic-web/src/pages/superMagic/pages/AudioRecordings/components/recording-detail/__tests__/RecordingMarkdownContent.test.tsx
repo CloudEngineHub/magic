@@ -67,7 +67,7 @@ describe("RecordingMarkdownContent", () => {
 		expect(screen.getByAltText("mock image")).toBeInTheDocument()
 	})
 
-	it("renders time links as light mono chips instead of solid pills", () => {
+	it("renders time links as clickable chips instead of solid pills", () => {
 		render(
 			<RecordingMarkdownContent
 				content="Jump to 01:23 for context."

@@ -389,10 +389,12 @@ class ProjectMemberDomainService
         int $page = 1,
         int $pageSize = 10,
         ?array $organizationCodes = null,
-        string $sortField = 'last_active_at',
+        ?string $sortField = null,
         string $sortDirection = 'desc',
         bool $showHidden = false,
         ?ProjectSortMode $sortMode = null,
+        bool $includeSpecialModes = false,
+        string $projectType = 'all',
     ): array {
         // 判断是否限制工作区（null 或 0 均表示不限制）
         $limitWorkspace = $workspaceId !== null && $workspaceId > 0;
@@ -408,7 +410,9 @@ class ProjectMemberDomainService
             $sortDirection,
             $organizationCodes,
             $showHidden,
-            $sortMode
+            $sortMode,
+            $includeSpecialModes,
+            $projectType
         );
     }
 

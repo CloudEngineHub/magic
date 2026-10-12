@@ -43,6 +43,8 @@ const CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> = {
 	[ElementTypeEnum.Frame]: [],
 	[ElementTypeEnum.Group]: [],
 	[ElementTypeEnum.Image]: [
+		"discarded",
+		"generationTiming",
 		"visualUnderstanding",
 		"src",
 		"status",
@@ -182,7 +184,11 @@ export function getContentState(content: ElementContentBase | undefined): Conten
 	}
 	if (candidate.status === GenerationStatus.Pending) return "pending"
 	if (candidate.status === GenerationStatus.Processing) return "processing"
-	if (candidate.status === GenerationStatus.Failed) return "failed"
+	if (
+		candidate.status === GenerationStatus.Failed ||
+		candidate.status === GenerationStatus.Terminated
+	)
+		return "failed"
 	if (candidate.status === GenerationStatus.Completed || candidate.src) return "completed"
 	return isContentGenerationPending(content) ? "pending" : "empty"
 }
@@ -234,7 +240,8 @@ export function isContentGenerationPending(content: ElementContentBase): boolean
 	if (
 		candidate.src ||
 		candidate.status === GenerationStatus.Completed ||
-		candidate.status === GenerationStatus.Failed
+		candidate.status === GenerationStatus.Failed ||
+		candidate.status === GenerationStatus.Terminated
 	) {
 		return false
 	}

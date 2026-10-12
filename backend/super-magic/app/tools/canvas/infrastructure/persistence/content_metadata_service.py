@@ -24,6 +24,30 @@ class ContentMetadataService:
     """负责 Content 详情读取、写入和生成尝试演进。"""
 
     @staticmethod
+    def remove(metadata: dict, element_id: str, content_ids: list[str] | None = None) -> None:
+        """移除已确认删除目标的详情；None 表示整元素，不影响其它版本或未知旧记录。"""
+        documents = [metadata]
+        runtime = metadata.get(RUNTIME_METADATA_KEY)
+        if isinstance(runtime, dict):
+            documents.append(runtime)
+        for document in documents:
+            elements = document.get("elements")
+            if isinstance(elements, dict):
+                if content_ids is None:
+                    elements.pop(element_id, None)
+                else:
+                    element = elements.get(element_id)
+                    details = element.get("contentDetails") if isinstance(element, dict) else None
+                    if isinstance(details, dict):
+                        for content_id in content_ids:
+                            details.pop(content_id, None)
+            legacy = document.get("contentDetails")
+            if isinstance(legacy, dict):
+                for content_id, detail in list(legacy.items()):
+                    if isinstance(detail, dict) and detail.get("elementId") == element_id and (content_ids is None or content_id in content_ids):
+                        legacy.pop(content_id, None)
+
+    @staticmethod
     def get(metadata: dict, element_id: str, content_id: str) -> dict[str, Any]:
         """读取公共与运行态合并后的 Content 详情，并兼容旧 sidecar。"""
         elements = metadata.get("elements") if isinstance(metadata, dict) else None
@@ -169,7 +193,7 @@ class ContentMetadataService:
         """归档上一终态并创建携带新公共请求的新尝试。"""
         updated = dict(detail)
         history = list(updated.get("attemptHistory") or [])
-        if updated.get("generationStatus") in {"completed", "failed"}:
+        if updated.get("generationStatus") in {"completed", "failed", "terminated"}:
             history.append({
                 "generationTaskId": updated.get("generationTaskId"),
                 "generationStatus": updated.get("generationStatus"),
@@ -179,7 +203,7 @@ class ContentMetadataService:
         for key in ("providerTaskId", "generationTaskId", "outputUri", "outputFilename", "errorMessage"):
             updated.pop(key, None)
         cleaned_parameters = _clean_generation_parameters(parameters)
-        for key in ("start_time", "end_time", "duration_ms"):
+        for key in ("start_time", "expected_finished_at", "end_time", "duration_ms"):
             cleaned_parameters.pop(key, None)
         cleaned_parameters = _with_generation_start_metadata(cleaned_parameters, element_type or "")
         updated.update({
@@ -230,7 +254,7 @@ class ContentMetadataService:
             if isinstance(value, dict):
                 current[key] = {**(current.get(key) if isinstance(current.get(key), dict) else {}), **value}
         runtime = dict(current.get("runtime") or {})
-        if status in {"completed", "failed"}:
+        if status in {"completed", "failed", "terminated"}:
             runtime.setdefault("finished_at", finished_at or _now_text())
             started_at = runtime.get("started_at")
             if runtime.get("elapsed_seconds") is None:
@@ -245,7 +269,7 @@ class ContentMetadataService:
     def complete_image_generation_request(request: dict[str, Any], status: str) -> dict[str, Any]:
         """在图片生成终态补齐完成时间和毫秒耗时。"""
         completed = dict(request)
-        if status not in {"completed", "failed"}:
+        if status not in {"completed", "failed", "terminated"}:
             return completed
         completed.setdefault("end_time", _now_text())
         if completed.get("duration_ms") is None:
@@ -267,7 +291,7 @@ class ContentMetadataService:
         因此更换 item_ref 仍然必须经过统一的重试上限校验。
         """
         stable_parameters = dict(parameters or {})
-        for key in ("start_time", "end_time", "duration_ms", "mode"):
+        for key in ("start_time", "expected_finished_at", "end_time", "duration_ms", "mode"):
             stable_parameters.pop(key, None)
         payload = {
             "item_ref": item_ref,
@@ -333,7 +357,17 @@ class ContentMetadataService:
             "prompt": str(parameters.get("prompt") or ""),
         }
         generic_keys = (
-            ("size", "image_id", "mode", "start_time", "end_time", "duration_ms", "model_id")
+            (
+                "name",
+                "size",
+                "image_id",
+                "mode",
+                "start_time",
+                "expected_finished_at",
+                "end_time",
+                "duration_ms",
+                "model_id",
+            )
             if element_type == "image"
             else ("model_id",)
         )

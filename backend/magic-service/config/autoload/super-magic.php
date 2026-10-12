@@ -34,7 +34,6 @@ return [
     ],
     'message' => [
         'process_mode' => \Hyperf\Support\env('SUPER_MAGIC_MESSAGE_PROCESS_MODE', 'direct'), // direct OR queue
-        'enable_compensate' => \Hyperf\Support\env('SUPER_MAGIC_MESSAGE_ENABLE_COMPENSATE', false),
     ],
     'topic' => [
         'config_fixed' => (bool) \Hyperf\Support\env('SUPER_MAGIC_TOPIC_CONFIG_FIXED', true),
@@ -60,9 +59,11 @@ return [
         // Base path inside the agent sandbox where cross-project mounts live.
         // Used to translate relative file_path/directory_path in cross-project
         // mentions into absolute paths the agent can read.
+        // Must match the FUSE mount root the sandbox gateway mounts at
+        // (AGFS_FUSE_VOLUME_PATH + /agfs, e.g. /mnt/agfs-vol/agfs).
         'referenced_project_mount_base_path' => \Hyperf\Support\env(
             'AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH',
-            '/mnt/agfs/magicfs/referenced-projects'
+            '/mnt/agfs-vol/agfs/magicfs/referenced-projects'
         ),
     ],
     'publish_async' => [

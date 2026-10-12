@@ -10,8 +10,10 @@ import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-inpu
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { EntityAvatarRender } from "@magic-admin-v2/components/entity-avatar-render"
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
 import { Button } from "@magic-admin-v2/components/ui/button"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import {
 	Select,
 	SelectContent,
@@ -55,7 +57,6 @@ import {
 	type ModelCategoryTab,
 	type ModelListFilterDraft,
 	modelTypesByCategory,
-	pageSize,
 	resolveModelCategoryTab,
 	restrictQueryParamsToAccess,
 	toQueryParams,
@@ -64,11 +65,13 @@ import { useTranslation } from "react-i18next"
 import type { ApiError } from "@magic-admin-v2/api/types"
 import { useRuntime } from "@magic-admin-v2/runtime/context"
 import { cn } from "@magic-admin-v2/utils/cn"
-import { useIsMobile } from "@magic-admin-v2/hooks/use-is-mobile"
 import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 
-export default function PlatformModelListPage() {
-	const isMobile = useIsMobile()
+export default function PlatformModelListPage({
+	pageTestId = "model-list-page",
+}: {
+	pageTestId?: string
+}) {
 	const { t } = useTranslation()
 	const { access } = useRuntime()
 	const dataSource = useProviderModelDataSource()
@@ -101,7 +104,15 @@ export default function PlatformModelListPage() {
 			),
 		[accessibleCategories, resolvedActiveCategory, serviceProviderConfigId],
 	)
-	const { filterDraft, pageSize: currentPageSize, params, setDebouncedField, setFilterDraft, setPage, setPageSize } = useListQueryParams({
+	const {
+		filterDraft,
+		pageSize: currentPageSize,
+		params,
+		setDebouncedField,
+		setFilterDraft,
+		setPage,
+		setPageSize,
+	} = useListQueryParams({
 		debounceFields: ["keyword"],
 		extraResetKey: `${resolvedActiveCategory}:${serviceProviderConfigId}`,
 		initialDraft: createDefaultFilterDraft,
@@ -228,26 +239,32 @@ export default function PlatformModelListPage() {
 						<div className="flex justify-end">
 							<div className="flex items-center gap-2">
 								<Button
-									className="whitespace-nowrap"
+									className="whitespace-nowrap md:w-auto md:gap-1.5 md:px-2.5"
+									data-testid="model-list-view-button"
 									onClick={() => setDetailTarget(row.original)}
-									size="sm"
+									size="icon-sm"
 									variant="outline"
 								>
 									<Eye className="size-4" aria-hidden="true" />
-									{!isMobile && t("modelList.action.viewDetails")}
+									<span className="hidden md:inline">
+										{t("modelList.action.viewDetails")}
+									</span>
 								</Button>
 								{rowCanEdit ? (
 									<Button
-										className="whitespace-nowrap"
+										className="whitespace-nowrap md:w-auto md:gap-1.5 md:px-2.5"
+										data-testid="model-list-edit-button"
 										onClick={() => {
 											setEditorTarget(row.original)
 											setIsEditorOpen(true)
 										}}
-										size="sm"
+										size="icon-sm"
 										variant="outline"
 									>
 										<Pencil className="size-4" aria-hidden="true" />
-										{!isMobile && t("modelList.action.edit")}
+										<span className="hidden md:inline">
+											{t("modelList.action.edit")}
+										</span>
 									</Button>
 								) : null}
 							</div>
@@ -256,7 +273,7 @@ export default function PlatformModelListPage() {
 				},
 			},
 		],
-		[categoryAccess, t, isMobile],
+		[categoryAccess, t],
 	)
 
 	useEffect(() => {
@@ -340,7 +357,8 @@ export default function PlatformModelListPage() {
 			<ListShell
 				actions={
 					<div className="flex items-center gap-2">
-						<Button
+						<PageHeaderActionButton
+							data-testid="model-list-refresh-button"
 							disabled={!hasViewAccess || listQuery.isFetching}
 							onClick={() => listQuery.refetch()}
 							variant="outline"
@@ -350,9 +368,10 @@ export default function PlatformModelListPage() {
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
-						</Button>
+						</PageHeaderActionButton>
 						{canCreateModel ? (
-							<Button
+							<PageHeaderActionButton
+								data-testid="model-list-create-button"
 								onClick={() => {
 									setEditorTarget(null)
 									setIsEditorOpen(true)
@@ -360,22 +379,25 @@ export default function PlatformModelListPage() {
 							>
 								<Plus className="size-4" aria-hidden="true" />
 								{t("modelList.action.create")}
-							</Button>
+							</PageHeaderActionButton>
 						) : null}
 					</div>
 				}
 				description={t("nav.desc.modelList")}
-				showSeparator={false}
+				testId={pageTestId}
 				title={t("nav.item.modelList")}
 			>
-				<ModelCategoryTabs
-					activeCategory={resolvedActiveCategory}
-					categories={accessibleCategories}
-					onChange={handleCategoryChange}
-				/>
-
-				<div className="mt-5">
-					<div className="flex min-w-0 items-end gap-2 md:hidden">
+				{/* Keep the sticky filters in the same container as the list they overlay; otherwise the short filter wrapper bounds their sticky range. */}
+				<div className="flex flex-col gap-4">
+					<ModelCategoryTabs
+						activeCategory={resolvedActiveCategory}
+						categories={accessibleCategories}
+						onChange={handleCategoryChange}
+					/>
+					<div
+						className="sticky top-0 z-40 -mx-4 flex min-w-0 items-end gap-2 bg-background px-4 py-2 md:hidden lg:-mx-6 lg:px-6"
+						data-testid="model-list-mobile-filters"
+					>
 						<FilterControlField
 							className="min-w-0 flex-1"
 							label={t("modelList.filter.search")}
@@ -384,6 +406,8 @@ export default function PlatformModelListPage() {
 								aria-label={t("modelList.placeholder.search")}
 								clearLabel={t("common.clear")}
 								containerClassName="min-w-0"
+								clearButtonTestId="model-list-search-clear-button"
+								inputTestId="model-list-search-input"
 								onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
 								placeholder={t("modelList.placeholder.search")}
 								value={filterDraft.keyword}
@@ -391,6 +415,7 @@ export default function PlatformModelListPage() {
 						</FilterControlField>
 						<Button
 							aria-label={t("modelList.filter.title")}
+							data-testid="model-list-advanced-trigger"
 							onClick={() => handleMobileFilterOpenChange(true)}
 							size="icon"
 							variant="outline"
@@ -398,7 +423,25 @@ export default function PlatformModelListPage() {
 							<Filter className="size-4" aria-hidden="true" />
 						</Button>
 					</div>
-					<div className="hidden flex-wrap items-end gap-2 md:flex">
+					<div
+						className="sticky top-0 z-40 -mx-4 hidden flex-wrap items-end gap-2 bg-background px-4 py-2 md:flex lg:-mx-6 lg:px-6"
+						data-testid="model-list-filters"
+					>
+						<FilterControlField
+							className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
+							label={t("modelList.filter.search")}
+						>
+							<FilterSearchInput
+								aria-label={t("modelList.placeholder.search")}
+								clearLabel={t("common.clear")}
+								containerClassName="min-w-0"
+								clearButtonTestId="model-list-search-clear-button"
+								inputTestId="model-list-search-input"
+								onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
+								placeholder={t("modelList.placeholder.search")}
+								value={filterDraft.keyword}
+							/>
+						</FilterControlField>
 						<FilterControlField
 							className="w-fit"
 							label={t("modelList.filter.statuses")}
@@ -422,33 +465,28 @@ export default function PlatformModelListPage() {
 								<SelectTrigger
 									aria-label={t("modelList.filter.statuses")}
 									className="w-32"
+									data-testid="model-list-status-trigger"
 								>
 									<SelectValue />
 								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value={allStatusFilterValue}>
+								<SelectContent data-testid="platform-model-list-model-list-status-content">
+									<SelectItem
+										value={allStatusFilterValue}
+										data-testid="platform-model-list-option"
+									>
 										{t("modelList.filter.allStatuses")}
 									</SelectItem>
 									{statusOptions.map((option) => (
-										<SelectItem key={option.value} value={String(option.value)}>
+										<SelectItem
+											key={option.value}
+											value={String(option.value)}
+											data-testid="platform-model-list-option"
+										>
 											{option.label}
 										</SelectItem>
 									))}
 								</SelectContent>
 							</Select>
-						</FilterControlField>
-						<FilterControlField
-							className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
-							label={t("modelList.filter.search")}
-						>
-							<FilterSearchInput
-								aria-label={t("modelList.placeholder.search")}
-								clearLabel={t("common.clear")}
-								containerClassName="min-w-0"
-								onValueChange={(keyword) => setDebouncedField("keyword", keyword)}
-								placeholder={t("modelList.placeholder.search")}
-								value={filterDraft.keyword}
-							/>
 						</FilterControlField>
 						{shouldShowModelTypeFilter ? (
 							<FilterControlField
@@ -456,6 +494,10 @@ export default function PlatformModelListPage() {
 								label={t("modelList.filter.modelTypes")}
 							>
 								<MultiSelectFilter
+									clearButtonTestId="model-list-model-type-clear-button"
+									contentTestId="model-list-model-type-content"
+									optionTestId="model-list-model-type-option"
+									triggerTestId="model-list-model-type-trigger"
 									allLabel={t("modelList.filter.allModelTypes")}
 									ariaLabel={t("modelList.filter.modelTypes")}
 									options={modelTypeOptions}
@@ -469,11 +511,16 @@ export default function PlatformModelListPage() {
 					</div>
 					<FilterSheet
 						applyLabel={t("modelList.action.applyFilters")}
+						applyButtonTestId="model-list-advanced-apply-button"
+						bodyTestId="model-list-advanced-body"
+						closeButtonTestId="model-list-advanced-close-button"
+						contentTestId="model-list-advanced-content"
 						onApply={applyMobileFilters}
 						onOpenChange={handleMobileFilterOpenChange}
 						onReset={resetMobileFilters}
 						open={mobileFilterOpen}
 						presentation="mobile-only"
+						resetButtonTestId="model-list-advanced-reset-button"
 						resetLabel={t("modelList.action.reset")}
 						title={t("modelList.filter.title")}
 					>
@@ -482,6 +529,8 @@ export default function PlatformModelListPage() {
 								aria-label={t("modelList.placeholder.search")}
 								clearLabel={t("common.clear")}
 								containerClassName="min-w-0"
+								clearButtonTestId="model-list-advanced-search-clear-button"
+								inputTestId="model-list-advanced-search-input"
 								onValueChange={(keyword) =>
 									setMobileFilterDraft((previous) => ({ ...previous, keyword }))
 								}
@@ -509,15 +558,25 @@ export default function PlatformModelListPage() {
 										: String(mobileFilterDraft.status)
 								}
 							>
-								<SelectTrigger className="w-full">
+								<SelectTrigger
+									className="w-full"
+									data-testid="model-list-advanced-status-trigger"
+								>
 									<SelectValue />
 								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value={allStatusFilterValue}>
+								<SelectContent data-testid="platform-model-list-model-list-advanced-status-content">
+									<SelectItem
+										value={allStatusFilterValue}
+										data-testid="platform-model-list-option"
+									>
 										{t("modelList.filter.allStatuses")}
 									</SelectItem>
 									{statusOptions.map((option) => (
-										<SelectItem key={option.value} value={String(option.value)}>
+										<SelectItem
+											key={option.value}
+											value={String(option.value)}
+											data-testid="platform-model-list-option"
+										>
 											{option.label}
 										</SelectItem>
 									))}
@@ -530,6 +589,10 @@ export default function PlatformModelListPage() {
 								label={t("modelList.filter.modelTypes")}
 							>
 								<MultiSelectFilter
+									clearButtonTestId="model-list-advanced-model-type-clear-button"
+									contentTestId="model-list-advanced-model-type-content"
+									optionTestId="model-list-advanced-model-type-option"
+									triggerTestId="model-list-advanced-model-type-trigger"
 									allLabel={t("modelList.filter.allModelTypes")}
 									ariaLabel={t("modelList.filter.modelTypes")}
 									options={modelTypeOptions}
@@ -544,47 +607,57 @@ export default function PlatformModelListPage() {
 							</FilterControlField>
 						) : null}
 					</FilterSheet>
+
+					{queryError && !listQuery.data ? (
+						<div className="rounded-lg border border-border/50 p-4">
+							<EmptyState
+								icon={AlertCircle}
+								testId="model-list-error"
+								title={t("modelList.error.loadTitle")}
+								description={queryError.message}
+							/>
+						</div>
+					) : (
+						<>
+							<DataTable
+								columns={columns}
+								containerTestId="model-list-table"
+								data={items}
+								emptyState={
+									<EmptyState
+										icon={BrainCircuit}
+										testId="model-list-empty"
+										title={t("modelList.empty.title")}
+										description={t("modelList.empty.description")}
+									/>
+								}
+								getRowId={(item) => item.model_id}
+								isLoading={listQuery.isLoading}
+								loadingTestId="model-list-loading"
+								minWidth={940}
+								rowTestId="model-list-row"
+								stickyRightColumnId="actions"
+							/>
+
+							<ListPagination
+								pageSizeOptionTestId="model-list-page-size-option"
+								showQuickJumper
+								className="mt-4 px-1"
+								loading={listQuery.isFetching}
+								jumpInputTestId="model-list-jump-input"
+								nextButtonTestId="model-list-next-button"
+								onPageChange={setPage}
+								page={currentPage}
+								pageSize={currentPageSize}
+								onPageSizeChange={setPageSize}
+								pageSizeTriggerTestId="model-list-page-size-trigger"
+								previousButtonTestId="model-list-previous-button"
+								testId="model-list-pagination"
+								total={total}
+							/>
+						</>
+					)}
 				</div>
-
-				{queryError && !listQuery.data ? (
-					<div className="mt-5 rounded-lg border border-border/50 p-4">
-						<EmptyState
-							icon={AlertCircle}
-							title={t("modelList.error.loadTitle")}
-							description={queryError.message}
-						/>
-					</div>
-				) : (
-					<>
-						<DataTable
-							columns={columns}
-							containerClassName="mt-5"
-							data={items}
-							emptyState={
-								<EmptyState
-									icon={BrainCircuit}
-									title={t("modelList.empty.title")}
-									description={t("modelList.empty.description")}
-								/>
-							}
-							getRowId={(item) => item.model_id}
-							isLoading={listQuery.isLoading}
-							minWidth={940}
-							stickyRightColumnId="actions"
-						/>
-
-						<ListPagination
-							showQuickJumper
-							className="mt-4 px-1"
-							loading={listQuery.isFetching}
-							onPageChange={setPage}
-							page={currentPage}
-							pageSize={currentPageSize}
-						onPageSizeChange={setPageSize}
-							total={total}
-						/>
-					</>
-				)}
 			</ListShell>
 
 			<ModelDetailDialog
@@ -620,12 +693,22 @@ function ModelCategoryTabs({
 	const { t } = useTranslation()
 
 	return (
-		<Tabs value={activeCategory} onValueChange={(value) => onChange(value as ModelCategoryTab)}>
+		<Tabs
+			data-testid="model-list-category-tabs"
+			value={activeCategory}
+			onValueChange={(value) => onChange(value as ModelCategoryTab)}
+		>
 			<div className="overflow-x-auto">
 				<TabsList className="min-w-max">
-					<TabsTrigger value={allCategoriesTab}>{t("modelList.tab.all")}</TabsTrigger>
+					<TabsTrigger data-testid="model-list-category-trigger" value={allCategoriesTab}>
+						{t("modelList.tab.all")}
+					</TabsTrigger>
 					{categories.map((category) => (
-						<TabsTrigger key={category} value={category}>
+						<TabsTrigger
+							data-testid="model-list-category-trigger"
+							key={category}
+							value={category}
+						>
 							{t(`modelList.category.${category}`)}
 						</TabsTrigger>
 					))}
@@ -649,9 +732,12 @@ function ModelCell({ item }: { item: ProviderModelGroup }) {
 				name={displayName}
 				src={item.icon}
 			/>
-			<div className="min-w-0">
-				<div className="truncate font-medium text-foreground">{displayName}</div>
-				<div className="truncate text-xs text-muted-foreground">{item.model_id}</div>
+			<div className="min-w-0 flex flex-col gap-1">
+				<CopyableValue
+					className="font-sans text-sm font-medium text-foreground"
+					value={displayName}
+				/>
+				<CopyableValue className="max-w-full" value={item.model_id} label="ModelID" />
 			</div>
 		</div>
 	)

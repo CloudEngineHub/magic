@@ -3,6 +3,10 @@ import type { ReactNode } from "react"
 import SmartTooltip from "@/components/other/SmartTooltip"
 import { MediaPreviewTrigger, type MediaPreviewSource } from "@/components/base/MediaPreview"
 import {
+	getFileMediaMetadata,
+	useFileMediaSource,
+} from "@/pages/superMagic/services/useFileMediaSource"
+import {
 	type ProjectFileImagePreviewSource,
 	useProjectFileImagePreviewContext,
 	useProjectFileImagePreviewState,
@@ -13,6 +17,7 @@ interface ProjectFileImageSmartTooltipProps {
 	children: ReactNode
 	className?: string
 	sideOffset?: number
+	allowDownload?: boolean
 }
 
 /** Uses the shared media preview tooltip while retaining a name-only fallback without a provider. */
@@ -21,10 +26,15 @@ export function ProjectFileImageSmartTooltip({
 	children,
 	className,
 	sideOffset = 0,
+	allowDownload,
 }: ProjectFileImageSmartTooltipProps) {
 	const { t } = useTranslation("super")
 	const manager = useProjectFileImagePreviewContext()
 	const previewState = useProjectFileImagePreviewState(source)
+	const metadata = getFileMediaMetadata(source.item)
+	const fileMedia = useFileMediaSource(metadata ? { ...metadata, allowDownload } : null, {
+		loadThumbnail: false,
+	})
 
 	// Keep the name-only fallback for lightweight contexts that do not mount the
 	// project-file preview provider.
@@ -44,6 +54,8 @@ export function ProjectFileImageSmartTooltip({
 
 	const mediaSource: MediaPreviewSource = {
 		mediaType: "image",
+		resourceKey: fileMedia?.resourceKey,
+		imageActions: fileMedia?.imageActions,
 		thumbnailUrl: previewState.url,
 		previewUrl: previewState.url,
 		isLoading: previewState.status === "loading",

@@ -14,12 +14,19 @@ export function MediaPreviewThumbnail(props: MediaPreviewThumbnailProps) {
 		className = "",
 		style,
 		objectFit = "cover",
+		onError,
 	} = props
 	const resolvedSrc = thumbnailUrl ?? src
 	const resolvedPoster = posterUrl ?? poster
 	const [hasLoadError, setHasLoadError] = useState(false)
 
 	useEffect(() => setHasLoadError(false), [mediaType, resolvedSrc, resolvedPoster])
+	const handleLoadError = () => {
+		setHasLoadError(true)
+		const recovery = onError?.()
+		// 地址服务可能返回同一 URL；只有获取层确实启动了一次恢复，才重新挂载媒体。
+		if (recovery) void recovery.then(() => setHasLoadError(false))
+	}
 
 	if (hasLoadError || (!resolvedSrc && !resolvedPoster)) {
 		return (
@@ -43,7 +50,7 @@ export function MediaPreviewThumbnail(props: MediaPreviewThumbnailProps) {
 				draggable={false}
 				className={className}
 				style={{ objectFit, ...style }}
-				onError={() => setHasLoadError(true)}
+				onError={handleLoadError}
 			/>
 		)
 	}
@@ -59,7 +66,7 @@ export function MediaPreviewThumbnail(props: MediaPreviewThumbnailProps) {
 				aria-label={alt}
 				className={className}
 				style={{ objectFit, ...style }}
-				onError={() => setHasLoadError(true)}
+				onError={handleLoadError}
 			/>
 		)
 	}

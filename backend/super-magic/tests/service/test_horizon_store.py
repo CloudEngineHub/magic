@@ -55,7 +55,6 @@ def _full_horizon_state(agent_id: str = "agent-1") -> HorizonState:
         process_started_at_ns=123,
         user_preferred_language="zh-CN",
         workspace_files="workspace tree",
-        workspace_entries=[{"path": "example.txt"}],
         client_context="client context",
         cli_status="cli status",
         context_usage_baseline_used=100,
@@ -143,6 +142,25 @@ async def test_horizon_store_does_not_partially_load_corrupted_nested_data(tmp_p
 def test_horizon_codec_coverage_fails_when_a_field_is_missing():
     with pytest.raises(RuntimeError, match="missing=.*agent_id"):
         _assert_codec_covers_horizon_state("test", set())
+
+
+@pytest.mark.asyncio
+async def test_a_legacy_document_with_retired_workspace_fields_still_loads(tmp_path):
+    """升级前写下的状态文件带着已经退役的字段，不能因此拒绝加载。
+
+    工作区条目基线随"集合差不再是变更来源"一起删掉了；旧文件里多出来的键必须被忽略，
+    否则一次升级就会让所有进行中的会话失去 Horizon 状态。
+    """
+    store = HorizonStore(str(tmp_path), "test-agent", "agent-1")
+    document = horizon_store_module._encode_state(_full_horizon_state())
+    document["workspace_entries"] = [{"path": "example.txt"}]
+    document["workspace_entries_complete"] = True
+    await async_write_json(store.path, document)
+
+    state = await store.load()
+
+    assert state is not None
+    assert state.workspace_files == "workspace tree"
 
 
 @pytest.mark.asyncio

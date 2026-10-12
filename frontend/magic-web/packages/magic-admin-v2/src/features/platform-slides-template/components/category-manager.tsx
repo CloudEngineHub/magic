@@ -1,4 +1,4 @@
-import { Filter, Pencil, Tags, Trash2 } from "lucide-react"
+import { Filter, MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -10,6 +10,13 @@ import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-inpu
 import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { Button } from "@magic-admin-v2/components/ui/button"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@magic-admin-v2/components/ui/dropdown-menu"
 import { Input } from "@magic-admin-v2/components/ui/input"
 import {
 	Select,
@@ -84,17 +91,25 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 				toCategoryListParams(draft, page, pageSize),
 			[pageSize],
 		)
-		const { filterDraft: filters, page, params, setDebouncedField, setFilterDraft, setPage } =
-			useListQueryParams({
-				debounceFields: ["keyword", "code"],
-				extraResetKey: pageSize,
-				initialDraft: createDefaultCategoryFilterDraft,
-				toParams,
-			})
+		const {
+			filterDraft: filters,
+			page,
+			params,
+			setDebouncedField,
+			setFilterDraft,
+			setPage,
+		} = useListQueryParams({
+			debounceFields: ["keyword", "code"],
+			extraResetKey: pageSize,
+			initialDraft: createDefaultCategoryFilterDraft,
+			toParams,
+		})
 		const [dialogOpen, setDialogOpen] = useState(false)
 		const [editing, setEditing] = useState<SlidesTemplateCategory | null>(null)
 		const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-		const [advancedFilterDraft, setAdvancedFilterDraft] = useState(createDefaultCategoryFilterDraft)
+		const [advancedFilterDraft, setAdvancedFilterDraft] = useState(
+			createDefaultCategoryFilterDraft,
+		)
 		const query = useSlidesTemplateCategoriesQuery(params)
 		const mutations = useSlidesTemplateCategoryMutations()
 		const { pendingIds: statusPendingIds, run: runStatusPending } = useRowPendingIds()
@@ -142,6 +157,7 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 									)
 								}
 							}}
+							data-testid="platform-slides-template-switch"
 						/>
 					),
 				},
@@ -175,6 +191,7 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 								if (event.key === "Enter") event.currentTarget.blur()
 							}}
 							type="number"
+							data-testid="platform-slides-template-input"
 						/>
 					),
 				},
@@ -191,33 +208,46 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 					id: "actions",
 					header: t("slidesTemplate.actions"),
 					enableSorting: false,
+					meta: {
+						fitContent: true,
+					},
 					cell: ({ row }) => (
-						<div className="flex gap-1">
-							<Button
-								aria-label={t("slidesTemplate.aria.editCategory", {
-									name: resolveSlidesTemplateCategoryName(row.original),
-								})}
-								disabled={!canEdit}
-								onClick={() => {
-									setEditing(row.original)
-									setDialogOpen(true)
-								}}
-								size="sm"
-								variant="ghost"
-							>
-								<Pencil className="size-4" />
-							</Button>
-							<Button
-								aria-label={t("slidesTemplate.aria.deleteCategory", {
-									name: resolveSlidesTemplateCategoryName(row.original),
-								})}
-								disabled={!canEdit}
-								onClick={() => onDelete(row.original)}
-								size="sm"
-								variant="ghost"
-							>
-								<Trash2 className="size-4 text-destructive" />
-							</Button>
+						<div className="flex justify-end">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										aria-label={t("slidesTemplate.actions")}
+										size="icon"
+										variant="ghost"
+										data-testid="platform-slides-template-category-menu-trigger"
+									>
+										<MoreHorizontal className="size-4" aria-hidden="true" />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									<DropdownMenuItem
+										disabled={!canEdit}
+										onSelect={() => {
+											setEditing(row.original)
+											setDialogOpen(true)
+										}}
+										data-testid="platform-slides-template-category-edit-item"
+									>
+										<Pencil className="mr-2 size-4" />
+										{t("common.edit")}
+									</DropdownMenuItem>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem
+										className="text-destructive focus:text-destructive"
+										disabled={!canEdit}
+										onSelect={() => onDelete(row.original)}
+										data-testid="platform-slides-template-category-delete-item"
+									>
+										<Trash2 className="mr-2 size-4" />
+										{t("common.delete")}
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
 						</div>
 					),
 				},
@@ -255,16 +285,18 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 
 		return (
 			<div className="space-y-4">
-				<div className="flex min-w-0 items-end gap-2 md:hidden">
+				<div className="sticky top-0 z-40 -mx-4 flex min-w-0 items-end gap-2 bg-background px-4 py-2 md:hidden lg:-mx-6 lg:px-6">
 					<FilterControlField
 						className="min-w-0 flex-1"
 						label={t("slidesTemplate.keyword")}
 					>
 						<FilterSearchInput
 							clearLabel={t("common.clear")}
+							clearButtonTestId="platform-slides-template-advanced-clear-button"
 							onValueChange={(value) => setDebouncedField("keyword", value)}
 							placeholder={t("slidesTemplate.keyword")}
 							value={filters.keyword}
+							inputTestId="platform-slides-template-advanced-search-input"
 						/>
 					</FilterControlField>
 					<Button
@@ -272,39 +304,23 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 						onClick={() => handleFilterSheetOpenChange(true)}
 						size="icon"
 						variant="outline"
+						data-testid="platform-slides-template-filter-button"
 					>
 						<Filter className="size-4" aria-hidden="true" />
 					</Button>
 				</div>
-				<div className="hidden flex-wrap items-end gap-2 md:flex">
-					<FilterControlField className="w-fit" label={t("slidesTemplate.status")}>
-						<Select
-							value={filters.status}
-							onValueChange={(status) => {
-								setFilterDraft((state) => ({ ...state, status }))
-							}}
-						>
-							<SelectTrigger className="w-fit max-w-full">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
-									{t("slidesTemplate.all")}
-								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
+				<div className="sticky top-0 z-40 -mx-4 hidden flex-wrap items-end gap-2 bg-background px-4 py-2 md:flex lg:-mx-6 lg:px-6">
 					<FilterControlField
 						className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
 						label={t("slidesTemplate.keyword")}
 					>
 						<FilterSearchInput
 							clearLabel={t("common.clear")}
+							clearButtonTestId="platform-slides-template-secondary-clear-button"
 							onValueChange={(value) => setDebouncedField("keyword", value)}
 							placeholder={t("slidesTemplate.keyword")}
 							value={filters.keyword}
+							inputTestId="platform-slides-template-secondary-search-input"
 						/>
 					</FilterControlField>
 					<FilterControlField
@@ -313,13 +329,49 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 					>
 						<FilterSearchInput
 							clearLabel={t("common.clear")}
+							clearButtonTestId="platform-slides-template-tertiary-clear-button"
 							onValueChange={(value) => setDebouncedField("code", value)}
 							placeholder={t("slidesTemplate.categoryCode")}
 							value={filters.code}
+							inputTestId="platform-slides-template-tertiary-search-input"
 						/>
+					</FilterControlField>
+					<FilterControlField className="w-fit" label={t("slidesTemplate.status")}>
+						<Select
+							value={filters.status}
+							onValueChange={(status) => {
+								setFilterDraft((state) => ({ ...state, status }))
+							}}
+						>
+							<SelectTrigger
+								className="w-fit max-w-full"
+								data-testid="platform-slides-template-select-trigger"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent data-testid="platform-slides-template-select-content">
+								<SelectItem
+									value={emptyStatus}
+									data-testid="platform-slides-template-option"
+								>
+									{t("slidesTemplate.all")}
+								</SelectItem>
+								<SelectItem value="1" data-testid="platform-slides-template-option">
+									{t("slidesTemplate.enabled")}
+								</SelectItem>
+								<SelectItem value="0" data-testid="platform-slides-template-option">
+									{t("slidesTemplate.disabled")}
+								</SelectItem>
+							</SelectContent>
+						</Select>
 					</FilterControlField>
 				</div>
 				<FilterSheet
+					contentTestId="platform-slides-template-filter-sheet"
+					bodyTestId="platform-slides-template-filter-body"
+					resetButtonTestId="platform-slides-template-reset-button"
+					applyButtonTestId="platform-slides-template-apply-button"
+					closeButtonTestId="platform-slides-template-category-filter-close-button"
 					applyLabel={t("slidesTemplate.applyFilters")}
 					description={t("slidesTemplate.categoryFilterDescription")}
 					onApply={applyAdvancedFilters}
@@ -338,6 +390,8 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 							}
 							placeholder={t("slidesTemplate.keyword")}
 							value={advancedFilterDraft.keyword}
+							inputTestId="platform-slides-template-advanced-search-input"
+							clearButtonTestId="platform-slides-template-advanced-search-clear-button"
 						/>
 					</FilterControlField>
 					<FilterControlField className="w-full" label={t("slidesTemplate.categoryCode")}>
@@ -348,6 +402,8 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 							}
 							placeholder={t("slidesTemplate.categoryCode")}
 							value={advancedFilterDraft.code}
+							inputTestId="platform-slides-template-advanced-search-input"
+							clearButtonTestId="platform-slides-template-advanced-search-clear-button"
 						/>
 					</FilterControlField>
 					<FilterControlField className="w-full" label={t("slidesTemplate.status")}>
@@ -357,15 +413,25 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 								setAdvancedFilterDraft((previous) => ({ ...previous, status }))
 							}
 						>
-							<SelectTrigger className="w-full">
+							<SelectTrigger
+								className="w-full"
+								data-testid="platform-slides-template-select-trigger"
+							>
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={emptyStatus}>
+							<SelectContent data-testid="platform-slides-template-select-content">
+								<SelectItem
+									value={emptyStatus}
+									data-testid="platform-slides-template-option"
+								>
 									{t("slidesTemplate.all")}
 								</SelectItem>
-								<SelectItem value="1">{t("slidesTemplate.enabled")}</SelectItem>
-								<SelectItem value="0">{t("slidesTemplate.disabled")}</SelectItem>
+								<SelectItem value="1" data-testid="platform-slides-template-option">
+									{t("slidesTemplate.enabled")}
+								</SelectItem>
+								<SelectItem value="0" data-testid="platform-slides-template-option">
+									{t("slidesTemplate.disabled")}
+								</SelectItem>
 							</SelectContent>
 						</Select>
 					</FilterControlField>
@@ -375,14 +441,27 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 						columns={columns}
 						data={query.data?.list ?? []}
 						emptyState={
-							<EmptyState icon={Tags} title={t("slidesTemplate.emptyCategories")} />
+							<EmptyState
+								icon={Tags}
+								title={t("slidesTemplate.emptyCategories")}
+								testId="platform-slides-template-empty"
+							/>
 						}
 						getRowId={(row) => row.id}
 						isLoading={query.isLoading}
 						minWidth={900}
 						stickyRightColumnId="actions"
+						containerTestId="platform-slides-template-list"
+						loadingTestId="platform-slides-template-loading"
+						rowTestId="platform-slides-template-row"
 					/>
 					<ListPagination
+						previousButtonTestId="slides-template-category-previous-button"
+						nextButtonTestId="slides-template-category-next-button"
+						pageSizeTriggerTestId="slides-template-category-page-size-trigger"
+						pageSizeOptionTestId="slides-template-category-page-size-option"
+						jumpInputTestId="slides-template-category-jump-input"
+						testId="slides-template-category-pagination"
 						showQuickJumper
 						loading={query.isFetching}
 						onPageChange={setPage}

@@ -20,6 +20,8 @@ class AddElementResultItem(CanvasResultItem):
     error: str | None = None
     persistence_warning: str | None = None
     persistence_error: str | None = None
+    started_at: str | None = None
+    expected_finished_at: str | None = None
 
     def to_dict(self) -> JsonObject:
         """转换为新增 Element 结果项。"""
@@ -34,6 +36,8 @@ class AddElementResultItem(CanvasResultItem):
             "error": self.error,
             "persistence_warning": self.persistence_warning,
             "persistence_error": self.persistence_error,
+            "started_at": self.started_at,
+            "expected_finished_at": self.expected_finished_at,
         }
         return {key: value for key, value in values.items() if value is not None}
 

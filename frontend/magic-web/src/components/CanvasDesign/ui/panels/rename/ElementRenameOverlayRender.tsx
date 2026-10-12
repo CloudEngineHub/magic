@@ -7,6 +7,8 @@ import useRenameLabelPositionEffect from "../../../app/hooks/layout/useRenameLab
 import { cn } from "../../../runtime/shared/lib/utils"
 import { Input } from "../../primitives/shadcn/input"
 import styles from "./index.module.css"
+import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { Loader2 } from "lucide-react"
 
 export interface ElementRenameOverlayRenderProps {
 	elementId: string
@@ -19,21 +21,46 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 	const inputRef = useRef<HTMLInputElement | null>(null)
 	const [value, setValue] = useState("")
 	const [isComposing, setIsComposing] = useState(false)
+	const { t } = useCanvasDesignI18n()
+	const [saving, setSaving] = useState(false)
+	const savingRef = useRef(false)
+	const [error, setError] = useState("")
 
 	const closeRename = useCallback(() => {
+		if (savingRef.current) return
 		canvas?.elementRenameManager.cancelRename()
 		setCanvasRenamingElementId(null)
 	}, [canvas, setCanvasRenamingElementId])
 
-	const commitRename = useCallback(() => {
+	const commitRename = useCallback(async () => {
+		if (savingRef.current) return
+		if (canvas?.elementRenameManager.getRenamingElementId() !== elementId) return
 		if (!elementId || !canvas) {
 			closeRename()
 			return
 		}
 
-		canvas.elementRenameManager.commitRename(value)
-		setCanvasRenamingElementId(null)
-	}, [canvas, elementId, closeRename, setCanvasRenamingElementId, value])
+		if (!value.trim()) {
+			closeRename()
+			return
+		}
+		savingRef.current = true
+		setSaving(true)
+		setError("")
+		try {
+			await canvas.elementRenameManager.commitRename(value)
+			setCanvasRenamingElementId(null)
+		} catch (failure) {
+			setError(failure instanceof Error ? failure.message : t("rename.failed", "重命名失败"))
+		} finally {
+			savingRef.current = false
+			setSaving(false)
+		}
+	}, [canvas, elementId, closeRename, setCanvasRenamingElementId, value, t])
+
+	useEffect(() => {
+		if (error && !saving) inputRef.current?.focus()
+	}, [error, saving])
 
 	const { containerRef: positionRef } = useRenameLabelPositionEffect({
 		elementId,
@@ -61,8 +88,11 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 			return
 		}
 
+		const currentElement = canvas?.elementManager.getElementData(elementId)
 		const labelText =
-			canvas?.elementManager.getElementInstance(elementId)?.getNameLabelText() || ""
+			currentElement?.name ||
+			canvas?.elementManager.getElementInstance(elementId)?.getRenderName() ||
+			""
 		setValue(labelText)
 		setIsComposing(false)
 	}, [canvas, elementId])
@@ -95,12 +125,16 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 				ref={inputRef}
 				className={cn(
 					"box-border min-h-0 w-auto min-w-[72px] px-1.5 py-0 leading-[1.2]",
-					"rounded border border-blue-500 bg-background shadow-[0_0_0_1px_rgb(59_130_246/0.08)]",
-					"text-base focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:ring-offset-0 md:text-base",
+					"rounded border border-input bg-background shadow-none",
+					"text-base focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 md:text-base",
 				)}
 				value={value}
+				disabled={saving}
+				aria-label={t("rename.elementName", "元素名称")}
+				aria-invalid={Boolean(error)}
 				onChange={(e) => {
 					setValue(e.target.value)
+					setError("")
 				}}
 				onBlur={commitRename}
 				onKeyDown={(e) => {
@@ -129,6 +163,21 @@ export default function ElementRenameOverlayRender({ elementId }: ElementRenameO
 					setIsComposing(false)
 				}}
 			/>
+			<div
+				className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"
+				role="status"
+			>
+				{saving ? (
+					<>
+						<Loader2 size={16} className="animate-spin" />
+						{t("rename.saving", "正在保存")}
+					</>
+				) : error ? (
+					<span className="text-destructive">{error}</span>
+				) : (
+					t("rename.titleOnly", "仅修改元素名称")
+				)}
+			</div>
 		</div>
 	)
 }

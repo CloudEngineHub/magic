@@ -16,6 +16,8 @@ import { VirtualMessageList } from "@/pages/superMagic/components/MessageList/co
 import { MessageViewStateProvider } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import type { MessageListScrollAdapter } from "@/pages/superMagic/components/MessageList/message-list-scroll-adapter"
 
+import { useFileBundleDownload } from "@/pages/superMagic/hooks/useFileBundleDownload"
+
 function MessageList({
 	topicId,
 	messageList,
@@ -23,6 +25,7 @@ function MessageList({
 	currentTopicStatus,
 	stickyMessageClassName,
 	projectFilesStore,
+	allowDownload = false,
 	scrollContainerRef,
 	virtualizerRef,
 	onVirtualizerChange,
@@ -38,6 +41,7 @@ function MessageList({
 	 */
 	stickyMessageClassName?: string
 	projectFilesStore: ProjectFilesStore
+	allowDownload?: boolean
 	/** Scroll owner supplied by the share shell; virtualization does not create a nested viewport. */
 	scrollContainerRef: RefObject<HTMLDivElement | null>
 	/**
@@ -55,6 +59,8 @@ function MessageList({
 }) {
 	const { styles } = useStyles()
 	const { t } = useTranslation("super")
+
+	const fileBundleDownload = useFileBundleDownload(topicId, projectFilesStore, allowDownload)
 
 	const messages = messageList
 
@@ -74,8 +80,9 @@ function MessageList({
 		return {
 			allowRevoke: false,
 			projectFilesStore,
+			fileBundleDownload,
 		}
-	}, [projectFilesStore])
+	}, [projectFilesStore, fileBundleDownload])
 	const getScrollElement = useCallback(() => scrollContainerRef.current, [scrollContainerRef])
 	// Stable identity so the memoized list is not rebuilt on every shell render.
 	const handleVirtualizerChange = useMemoizedFn((virtualizer: MessageListScrollAdapter) =>
@@ -85,6 +92,7 @@ function MessageList({
 	return (
 		<MessageListProvider value={value}>
 			<MessageViewStateProvider topicKey={topicId}>
+				{fileBundleDownload.agreementModal}
 				<div className="relative flex flex-col gap-2">
 					<VirtualMessageList
 						items={virtualProjection.items}

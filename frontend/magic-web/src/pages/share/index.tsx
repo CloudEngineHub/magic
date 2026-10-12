@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { IconFolder, IconGitFork, IconMaximize } from "@tabler/icons-react"
 import { useMemoizedFn, useDebounceEffect, useDeepCompareEffect, useUpdateEffect } from "ahooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -424,8 +425,12 @@ function Share() {
 
 	// Sync loading and error from active hook
 	useEffect(() => {
+		// New resource shares render the page shell independently of attachment tree assembly.
+		// Their hook loading state covers cursor pagination and local tree processing, so syncing it
+		// here would keep the whole share page behind the global loading mask.
+		if (!routeInfo.isLegacy) return
 		setLoading(activeDataHook.loading)
-	}, [activeDataHook.loading])
+	}, [activeDataHook.loading, routeInfo.isLegacy])
 
 	useEffect(() => {
 		if (activeDataHook.error) {
@@ -1129,4 +1134,10 @@ function Share() {
 	)
 }
 
-export default Share
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<Share />
+		</FileAccessProvider>
+	)
+}

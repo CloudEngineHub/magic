@@ -31,6 +31,7 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
             'category_code' => 'nullable|string|max:64',
             'tag_codes' => 'nullable',
             'tag_match' => 'nullable|string|in:any,all',
+            'token' => 'nullable|string',
         ];
     }
 
@@ -53,6 +54,11 @@ class PublicQuerySlidesTemplateRequest extends FormRequest
     public function getScope(): string
     {
         return (string) $this->input('scope', 'official');
+    }
+
+    public function getToken(): string
+    {
+        return trim((string) $this->input('token', ''));
     }
 
     public function getPage(): int

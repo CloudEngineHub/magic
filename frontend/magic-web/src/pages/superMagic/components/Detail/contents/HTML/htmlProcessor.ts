@@ -4,7 +4,6 @@ import {
 	extractSlidesFromScript,
 	flattenAttachments,
 	handleHtCdnUrl,
-	removeRootHtmlXhtmlNamespace,
 	SLIDE_BRIDGE_PLACEHOLDER_COMMENT,
 } from "./utils"
 import { injectAtPolyfillScript } from "./utils/polyfill"
@@ -21,6 +20,7 @@ import {
 	type ExternalCssResource,
 } from "./utils/htmlResourceCollector"
 import { replaceHtmlResourceUrls } from "./utils/htmlResourceReplacement"
+import { serializeHtmlDocument } from "./utils/serializeHtmlDocument"
 
 export type { HtmlPreviewBundledTemplateKind }
 
@@ -76,23 +76,6 @@ function replaceLocationReload(htmlContent: string): string {
 			// 保存原始代码到注释中，以便保存时恢复
 			return `${prefix}/*__ORIGINAL_RELOAD__:${originalReload}__*/window.Magic.reload()`
 		},
-	)
-}
-
-function restoreSerializedEntities(html: string): string {
-	/** 匹配 HTML 实体（命名或数字），用 DOM 解码，不维护映射表且支持 &#123; / &#x7B; */
-	const ENTITY_PATTERN = /&(?:[a-z0-9]+|#\d+|#x[0-9a-f]+);/gi
-	const el = document.createElement("div")
-	return html.replace(ENTITY_PATTERN, (entity) => {
-		el.innerHTML = entity
-		return el.textContent ?? entity
-	})
-}
-
-/** 将 Document 序列化为 HTML 字符串并还原实体，保证输出格式与 DOM 语义一致 */
-function serializeDocToHtml(doc: Document): string {
-	return removeRootHtmlXhtmlNamespace(
-		restoreSerializedEntities(new XMLSerializer().serializeToString(doc)),
 	)
 }
 
@@ -289,8 +272,8 @@ export async function processHtmlContent(
 
 	const htmlDoc = handleHtCdnUrl(contentWithMarker)
 
-	// 将 Document 转成字符串（并还原序列化产生的实体），供后续 URL 替换、脚本注入等使用。
-	const modifiedHtmlContent = serializeDocToHtml(htmlDoc)
+	// 保留文本／属性实体及 script/style 原始内容，供后续 URL 替换、脚本注入等使用。
+	const modifiedHtmlContent = serializeHtmlDocument(htmlDoc)
 
 	// 创建新的解析器和文档对象，使用修改后的内容继续处理
 	const newParser = new DOMParser()

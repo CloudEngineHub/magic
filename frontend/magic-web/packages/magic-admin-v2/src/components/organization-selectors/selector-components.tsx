@@ -64,6 +64,10 @@ export function SelectorRow({
 	onToggle,
 	selectable,
 	selected,
+	rowTestId,
+	nodeButtonTestId,
+	checkboxTestId,
+	enterButtonTestId,
 }: SelectorRowProps) {
 	const { t } = useTranslation()
 	const canNavigate = node.type === "department"
@@ -76,6 +80,7 @@ export function SelectorRow({
 				selected ? "bg-sky-50" : "bg-background",
 				node.disabled ? "opacity-50" : null,
 			)}
+			data-testid={rowTestId}
 		>
 			{selectable ? (
 				<input
@@ -87,6 +92,7 @@ export function SelectorRow({
 						name: node.name,
 					})}
 					className="size-4 rounded border-border accent-primary"
+					data-testid={checkboxTestId}
 				/>
 			) : (
 				<span className="size-4" />
@@ -95,6 +101,7 @@ export function SelectorRow({
 			<button
 				type="button"
 				className="flex min-w-0 items-center gap-3 text-left disabled:cursor-not-allowed"
+				data-testid={nodeButtonTestId}
 				disabled={node.disabled}
 				onClick={() => (selectable ? onToggle(node) : onEnterDepartment(node))}
 			>
@@ -127,6 +134,7 @@ export function SelectorRow({
 					aria-label={formatSelectorMessage(t("organizationSelector.action.enterNode"), {
 						name: node.name,
 					})}
+					data-testid={enterButtonTestId}
 				>
 					<ChevronRight className="size-4" aria-hidden="true" />
 				</Button>
@@ -159,9 +167,12 @@ export function NodeAvatar({ node, small = false }: NodeAvatarProps) {
 	)
 }
 
-export function SelectorState({ icon, label }: SelectorStateProps) {
+export function SelectorState({ icon, label, testId }: SelectorStateProps & { testId?: string }) {
 	return (
-		<div className="flex h-full min-h-40 items-center justify-center text-sm text-muted-foreground">
+		<div
+			className="flex h-full min-h-40 items-center justify-center text-sm text-muted-foreground"
+			data-testid={testId}
+		>
 			<div className="flex items-center gap-2">
 				{icon}
 				<span>{label}</span>

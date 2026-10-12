@@ -35,8 +35,9 @@ USER_SPACE = "user"
 # 尽力而为重放，不进入用户可见的文件变更列表与文件版本链路。
 TOPIC_SPACE = "topic"
 
-# localfs 分区布局中的聊天历史空间标识。运行期 .chat_history 即
-# /mnt/agfs/localfs/chat_history（localfs 插件挂载，无元数据/S3 依赖），
+# localfs 分区布局中的聊天历史空间标识。运行期 .chat_history 是指向
+# <AGFS FUSE 挂载根>/localfs/chat_history 的 symlink（localfs 插件挂载，
+# 无元数据/S3 依赖；挂载根由网关决定，见 app/utils/agfs_mount_path.py），
 # 每次变更由 localfs 的 checkpoint hook 以 per-file 帧形式记入
 # <checkpoint_id>/chat_history/ 分区；回滚执行器按该空间重放。
 CHAT_HISTORY_SPACE = "chat_history"

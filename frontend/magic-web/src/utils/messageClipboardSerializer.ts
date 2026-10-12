@@ -1,3 +1,5 @@
+import { serializeWechatChatContent } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/transform"
+import { WECHAT_CHAT_HISTORY } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/types"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { DOMSerializer } from "prosemirror-model"
 import type { EditorView } from "prosemirror-view"
@@ -183,17 +185,20 @@ export function createMessageClipboardPayloadFromContent(
 	const applyEnrichment = (attrs: TiptapMentionAttributes): TiptapMentionAttributes =>
 		enrichMentionAttrs ? enrichMentionAttrs(attrs) : attrs
 
-	const sourceNodes = content.type === "doc" ? (content.content ?? []) : [content]
+	const projected = serializeWechatChatContent(
+		content.type === "doc" ? content : { type: "doc", content: [content] },
+	)
+	const sourceNodes = projected.content ?? []
 	const richTextContent: JSONContent[] = []
 	sourceNodes.forEach((node) => {
 		const enriched = enrichRichTextMentions(node, applyEnrichment)
 		const normalized = normalizeRichTextNode(enriched)
 		if (normalized) richTextContent.push(normalized)
 	})
-	const richTextJson: JSONContent = {
+	const richTextJson: JSONContent = serializeWechatChatContent({
 		type: "doc",
 		content: richTextContent,
-	}
+	})
 	const mentions: TiptapMentionAttributes[] = []
 	collectMentionAttrs(richTextJson, mentions)
 
@@ -245,10 +250,10 @@ export function serializeMessageClipboard(
 		const normalized = normalizeRichTextNode(enriched)
 		if (normalized) richTextContent.push(normalized)
 	})
-	const richTextJson: JSONContent = {
+	const richTextJson: JSONContent = serializeWechatChatContent({
 		type: "doc",
 		content: richTextContent,
-	}
+	})
 	collectMentionAttrs(richTextJson, mentions)
 
 	// Require structured file/folder mention identity, not portable markdown hrefs.
@@ -256,8 +261,11 @@ export function serializeMessageClipboard(
 	// round-trip through metadata even when external plain-text links are unavailable.
 	// 独立元素标签和非文件 Mention 也有结构语义，不能回退为浏览器纯文本。
 	const containsInspector = (node: JSONContent): boolean =>
-		node.type === INSPECTOR_DETAIL_TYPE || Boolean(node.content?.some(containsInspector))
-	if (mentions.length === 0 && !containsInspector(richTextJson)) return null
+		node.type === INSPECTOR_DETAIL_TYPE ||
+		node.type === WECHAT_CHAT_HISTORY ||
+		Boolean(node.content?.some(containsInspector))
+	if (mentions.length === 0 && !containsInspector({ type: "doc", content: richTextContent }))
+		return null
 
 	const metadata: MessageClipboardMetadata = {
 		richText: JSON.stringify(richTextJson),

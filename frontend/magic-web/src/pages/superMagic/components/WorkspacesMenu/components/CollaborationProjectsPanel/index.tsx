@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useMemo, useState } from "react"
+import { type ChangeEventHandler, memo, useLayoutEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	CollaborationProjectCreator,
@@ -21,12 +21,15 @@ import routeManageService from "@/pages/superMagic/services/routeManageService"
 import { userStore } from "@/models/user"
 import magicToast from "@/components/base/MagicToaster/utils"
 
+import { ProjectsPanelToolbar } from "../ProjectsPanelToolbar"
 import { ProjectsPanelList } from "../ProjectsPanel"
 import { Button } from "@/components/shadcn-ui/button"
 import { useCollaborationProjects } from "./useCollaborationProjects"
 
 interface CollaborationProjectsContentProps {
 	open: boolean
+	location: string
+	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
 	searchValue: string
 	onClose?: () => void
 	onCollaborationProjectClick: (project: CollaborationProjectListItem) => void
@@ -37,6 +40,9 @@ interface CollaborationProjectsContentProps {
 }
 
 interface ProjectListProps {
+	location: string
+	searchValue: string
+	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
 	query: ReturnType<typeof useCollaborationProjects>
 	tabType: CollaborationProjectType
 	currentTab: CollaborationProjectType
@@ -56,6 +62,9 @@ interface ProjectListProps {
 }
 
 function SharedProjectList({
+	location,
+	searchValue,
+	onSearchValueChange,
 	query,
 	tabType,
 	currentTab,
@@ -102,15 +111,20 @@ function SharedProjectList({
 			tabType={tabType}
 			viewMode={viewMode}
 			toolbar={
-				<>
+				<ProjectsPanelToolbar
+					location={location}
+					total={query.total}
+					searchValue={searchValue}
+					onSearchValueChange={onSearchValueChange}
+					viewToggle={<ViewToggle value={viewMode} onChange={onViewModeChange} />}
+				>
 					{tabType === CollaborationProjectType.Received &&
 						currentTab === CollaborationProjectType.Received &&
 						joinType === CollaborationJoinMethod.Internal && (
 							<CreatorFilter value={creatorFilter} onChange={onCreatorFilterChange} />
 						)}
-					<SortSelector value={sortType} onChange={onSortTypeChange} />
-					<ViewToggle value={viewMode} onChange={onViewModeChange} />
-				</>
+					<SortSelector value={sortType} onChange={onSortTypeChange} compact />
+				</ProjectsPanelToolbar>
 			}
 			itemProps={{
 				...actions,
@@ -290,6 +304,9 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 	// Shared props for both ProjectList instances
 	const sharedListProps = useMemo(
 		() => ({
+			location: props.location,
+			searchValue: props.searchValue,
+			onSearchValueChange: props.onSearchValueChange,
 			currentTab,
 			joinType,
 			creatorFilter,
@@ -307,7 +324,16 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 		}),
 		// Only re-compute when stable identities change — all handlers are memoized
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[currentTab, joinType, creatorFilter, sortType, viewMode],
+		[
+			currentTab,
+			joinType,
+			creatorFilter,
+			sortType,
+			viewMode,
+			props.location,
+			props.searchValue,
+			props.onSearchValueChange,
+		],
 	)
 
 	return (

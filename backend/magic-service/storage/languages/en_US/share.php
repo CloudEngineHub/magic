@@ -54,4 +54,5 @@ return [
     'share_method_password' => 'Password protected',
     'share_method_not_allowed' => 'The current sharing method ":shareType" has been disabled by the administrator',
     'share_owner_permission_revoked' => 'This share link is no longer available because the owner no longer has permission to use this share method.',
+    'scope_version_expired' => 'The shared scope has changed. Please reload.',
 ];

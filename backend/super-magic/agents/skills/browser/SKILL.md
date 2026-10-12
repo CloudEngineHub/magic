@@ -143,7 +143,7 @@ For a quick post-action check, use `browser_list_elements(scope="changes")`. Aft
 
 `browser_find` never picks for you. If it returns several matches, choose one by ref. Never write a selector you have not seen in `browser_read_html` output.
 
-`browser_visual_query` captures and analyzes in one call and writes no file. Never take a screenshot and analyze it separately. Run at most one visual-model call at a time, and give a snippet at least 120 seconds when it follows other Browser work. Use `browser_find_visual` only when a control cannot be identified from text or structure. Use `browser_screenshot` only when the user asks to see or save an image.
+`browser_visual_query` captures the page once, publishes one topic-scoped screenshot artifact, and attaches the screenshot as native visual input for the next main model request. Never take a screenshot and analyze it separately, and do not send a Browser screenshot to `visual_understanding` as a second step. When the current model cannot accept native visual input, the tool reports and uses its explicit visual-analysis fallback. Run at most one visual-model call at a time, and give a snippet at least 120 seconds when it follows other Browser work. Use `browser_find_visual` only when a control cannot be identified from text or structure. Use `browser_screenshot` only when the user asks to see or save an image.
 
 Exact visual calls:
 

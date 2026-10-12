@@ -1,7 +1,7 @@
 ---
 name: html-app-architect
 description: |
-  Use FIRST for building or modifying an interactive HTML app in an ordinary project context, including pages, tools, forms, dashboards, CRUD interfaces, data visualizations, and window.Magic API integrations. Use this skill for architecture, file persistence, Agent dispatch, and UI decisions. Do not use it for the built-in published micro-app development flow; use micro-app-architect for that scenario. Skip read-only documents, pure CLI/backend work, slides, canvas/media generation, and calendar projects handled by magic-calendar.
+  Use FIRST for building or modifying an interactive HTML app in an ordinary project context, including pages, tools, forms, dashboards, CRUD interfaces, data visualizations, and window.Magic API integrations. Use this skill for architecture, file persistence, Agent dispatch, and UI decisions. Do not use it for the built-in published micro-app development flow; use micro-app-architect for that scenario. Skip read-only documents, pure CLI/backend work, slides, canvas/media generation, and calendar projects handled by magic-calendar. For projects that need a package manager, a build toolchain, or a backend service, use vibe-coding.
 ---
 
 # HTML App Architect

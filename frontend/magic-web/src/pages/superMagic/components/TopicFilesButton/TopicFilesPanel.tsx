@@ -1,3 +1,16 @@
+import { useLocation, useNavigate } from "react-router"
+import { reaction } from "mobx"
+import projectFilesStore from "@/stores/projectFiles"
+import { getFileReferenceIdentityKey } from "../../services/userFileReferenceResolver"
+import {
+	isUploadedFileNavigationTarget,
+	type SuperMagicLocateFileContext,
+} from "../../events/files"
+import {
+	registerWaitForNextAttachmentsRefreshForProject,
+	waitForNextFullAttachmentsRefreshForProject,
+	requestProjectAttachmentsFullRefresh,
+} from "../../services/attachmentsTopicSync"
 import type { FileHelpContext } from "./utils/magic-system-folder"
 import {
 	memo,
@@ -9,8 +22,7 @@ import {
 	useImperativeHandle,
 	type ReactNode,
 } from "react"
-import { PanelsTopLeft, ArrowUpRight } from "lucide-react"
-import { Button } from "@/components/shadcn-ui/button"
+import { FileManagerFooter } from "./components/FileManager/FileManagerFooter"
 import { useTranslation } from "react-i18next"
 import TopicFilesCore, {
 	type TopicFilesCoreRef,
@@ -36,7 +48,6 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { type PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
 import { useMemoizedFn, useUpdateEffect } from "ahooks"
-import { requestProjectAttachmentsFullRefresh } from "../../services/attachmentsTopicSync"
 import { useDebouncedSearchValue } from "./hooks/useDebouncedSearchValue"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import MobileProjectDetailFilesView from "./components/MobileProjectDetailFilesView"
@@ -104,6 +115,7 @@ interface TopicFilesPanelProps {
 	onConvertToSlidesTemplate?: (item: AttachmentItem) => void
 	headerTrailingAction?: ReactNode
 	onOpenFileManager?: () => void
+	onOpenRecycleBin?: () => void
 	section?: SidebarSectionOptions
 	contentBefore?: ReactNode
 	/** 宿主已有空状态或错误说明时，隐藏默认空文件提示，仍保留文件树与工具栏。 */
@@ -175,6 +187,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			onConvertToSlidesTemplate,
 			headerTrailingAction,
 			onOpenFileManager,
+			onOpenRecycleBin,
 			section,
 			headerLayout = "inline",
 			contentBefore,
@@ -226,6 +239,122 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			resetSearchValue,
 		} = useDebouncedSearchValue({ source: "TopicFilesPanel" })
 
+		const location = useLocation()
+		const navigate = useNavigate()
+		const consumedUploadLocationRef = useRef<string>()
+		const navigationActionRef = useRef<AbortController>()
+		useEffect(() => {
+			const dispose = reaction(getFileReferenceIdentityKey, () =>
+				navigationActionRef.current?.abort(),
+			)
+			return () => {
+				dispose()
+				navigationActionRef.current?.abort()
+			}
+		}, [projectId, helpOwner])
+		useEffect(() => {
+			const revealTarget = (_fileId: string, context?: SuperMagicLocateFileContext) => {
+				if (helpOwner !== "project" || context?.projectId !== projectId) return
+				setIsSearchMode(false)
+				resetSearchValue()
+			}
+			pubsub.subscribe(PubSubEvents.Locate_File_In_Tree, revealTarget)
+			return () => pubsub.unsubscribe(PubSubEvents.Locate_File_In_Tree, revealTarget)
+		}, [helpOwner, projectId, resetSearchValue])
+
+		useEffect(() => {
+			const state: Record<string, unknown> = location.state || {}
+			const target = state.uploadedFileTarget
+			if (
+				helpOwner !== "project" ||
+				!isUploadedFileNavigationTarget(target) ||
+				target.projectId !== projectId ||
+				consumedUploadLocationRef.current === location.key
+			)
+				return
+			consumedUploadLocationRef.current = location.key
+			const controller = new AbortController()
+			navigationActionRef.current?.abort()
+			navigationActionRef.current = controller
+			const clearNavigationTarget = () => {
+				const remainingState = { ...state }
+				delete remainingState.uploadedFileTarget
+				navigate(location.pathname + location.search + location.hash, {
+					replace: true,
+					state: remainingState,
+				})
+			}
+			// 接收时即消费导航字段，离开或回退不会重放本次定位。
+			clearNavigationTarget()
+			void (async () => {
+				try {
+					if (target.identityKey !== getFileReferenceIdentityKey()) return
+					let item = projectFilesStore.filePresentationIndex.attachments.getItemById(
+						target.fileId,
+					)
+					if (!item) {
+						if (projectFilesStore.attachmentLoadState?.status === "loading") {
+							await registerWaitForNextAttachmentsRefreshForProject(projectId, {
+								signal: controller.signal,
+							})
+						} else {
+							await waitForNextFullAttachmentsRefreshForProject(projectId, {
+								signal: controller.signal,
+							})
+						}
+						if (projectFilesStore.attachmentLoadState?.status !== "ready")
+							throw new Error("Attachment load failed")
+						item = projectFilesStore.filePresentationIndex.attachments.getItemById(
+							target.fileId,
+						)
+					}
+					if (
+						controller.signal.aborted ||
+						target.identityKey !== getFileReferenceIdentityKey() ||
+						projectFilesStore.currentSelectedProject?.id !== target.projectId
+					)
+						return
+					if (!item) throw new Error("Target unavailable")
+					await new Promise<void>((resolve, reject) => {
+						const onAbort = () => finish("cancelled")
+						const finish = (status: "located" | "unavailable" | "cancelled") => {
+							clearTimeout(timeoutId)
+							controller.signal.removeEventListener("abort", onAbort)
+							if (status === "unavailable") reject(new Error("Target unavailable"))
+							else resolve()
+						}
+						const timeoutId = setTimeout(() => {
+							finish("unavailable")
+							controller.abort()
+						}, 15_000)
+						controller.signal.addEventListener("abort", onAbort, { once: true })
+						pubsub.publish(PubSubEvents.Locate_File_In_Tree, target.fileId, {
+							projectId: target.projectId,
+							exact: true,
+							signal: controller.signal,
+							onResult: finish,
+						})
+					})
+				} catch (error) {
+					if (!(error instanceof DOMException && error.name === "AbortError"))
+						magicToast.error(t("folderUpload.actions.targetUnavailable"))
+				} finally {
+					if (navigationActionRef.current === controller)
+						navigationActionRef.current = undefined
+				}
+			})()
+		}, [
+			location.key,
+			location.state,
+			location.pathname,
+			location.search,
+			location.hash,
+			projectId,
+			helpOwner,
+			navigate,
+			t,
+		])
+
 		// 监听 projectId 变化，只在首次加载或切换项目时设置 loading 状态
 		// 避免在任务执行过程中频繁进入 loading 状态
 		useUpdateEffect(() => {
@@ -257,7 +386,9 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 		})
 
 		/** 特殊文件空间不依赖项目附件事件，文件变更后主动重新加载。 */
-		const handleCoreAttachmentsUpdate = useMemoizedFn(() => {
+		const handleCoreAttachmentsUpdate = useMemoizedFn((sourceProjectId?: string) => {
+			// 上传在切换项目后完成时，不刷新当前无关项目。
+			if (!spaceConfig?.scope && sourceProjectId && sourceProjectId !== projectId) return
 			requestAttachmentsRefresh("topic-files-core-operation-success")
 		})
 
@@ -277,7 +408,8 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			selectedTopic,
 			attachments,
 			duplicateFileHandler: sharedDuplicateHandler,
-			onUpdateAttachments: () => {
+			onUpdateAttachments: (sourceProjectId) => {
+				if (!spaceConfig?.scope && sourceProjectId && sourceProjectId !== projectId) return
 				requestAttachmentsRefresh("topic-files-panel-upload-success")
 			},
 		})
@@ -728,7 +860,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 					setTotalCount(totalCount)
 				}}
 				allowEdit={allowEdit}
-				onUpdateAttachments={spaceConfig?.scope ? handleCoreAttachmentsUpdate : undefined}
+				onUpdateAttachments={handleCoreAttachmentsUpdate}
 				onAttachmentsChange={onAttachmentsChange}
 				onSelectModeChange={setIsSelectMode}
 				selectedProject={selectedProject}
@@ -845,17 +977,10 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 						</>
 					)}
 					{!isMobile && onOpenFileManager && (
-						<div className="shrink-0 border-t border-border/60 p-2">
-							<Button
-								variant="ghost"
-								className="h-9 w-full justify-start gap-2 rounded-lg px-3 text-xs text-muted-foreground hover:text-foreground"
-								onClick={onOpenFileManager}
-							>
-								<PanelsTopLeft size={16} />
-								{t("userSpace.openManager")}
-								<ArrowUpRight size={14} className="ml-auto" />
-							</Button>
-						</div>
+						<FileManagerFooter
+							onOpenFileManager={onOpenFileManager}
+							onOpenRecycleBin={onOpenRecycleBin}
+						/>
 					)}
 				</div>
 				{projectDetailFilesController.deleteConfirmNode}

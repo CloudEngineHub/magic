@@ -27,6 +27,8 @@ import { userStore } from "@/models/user"
 import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import useQueueDraft from "./useQueueDraft"
 import { serializeMessageContent } from "@/pages/superMagic/services/messageQueueSerialization"
+import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import type { SuperMagicMessageQueueMessage } from "@/types/chat/intermediate_message"
 
 // Local queue only stores items that cannot be submitted to the server while offline; the server queue remains the source of truth after reconnect.
 const CLIENT_MESSAGE_QUEUE_STORAGE_ROOT = "super_magic/message_queue/client"
@@ -172,6 +174,7 @@ function useMessageQueue({
 	const internalEditorRef = useRef<MessageEditorRef | null>(null)
 	const editorRef = providedEditorRef ?? internalEditorRef
 	const queueVersionRef = useRef(0)
+	const queueFetchRequestRef = useRef(0)
 	const currentScopeRef = useRef("")
 	currentScopeRef.current = `${getClientQueueStorageKey()}/${projectId}/${topicId}`
 	const deleteConfirmationRef = useRef<{ destroy: () => void } | null>(null)
@@ -276,14 +279,16 @@ function useMessageQueue({
 	}, [])
 
 	// 状态映射函数：后端数字状态转前端字符串状态
-	const mapStatus = (backendStatus: number): "pending" | "processing" | "failed" => {
+	const mapStatus = (backendStatus: number): "pending" | "processing" | "failed" | null => {
 		switch (backendStatus) {
 			case 0:
 				return "pending"
 			case 1:
-				return "processing"
+				return null
 			case 2:
+				return "failed"
 			case 3:
+				return "processing"
 			default:
 				return "failed"
 		}
@@ -416,6 +421,7 @@ function useMessageQueue({
 
 			const requestScope = currentScopeRef.current
 			const requestVersion = queueVersionRef.current
+			const requestId = ++queueFetchRequestRef.current
 
 			const response = await SuperMagicApi.getMessageQueueList({
 				project_id: projectId,
@@ -423,6 +429,7 @@ function useMessageQueue({
 			})
 
 			if (
+				requestId !== queueFetchRequestRef.current ||
 				requestScope !== currentScopeRef.current ||
 				requestVersion !== queueVersionRef.current
 			)
@@ -473,10 +480,16 @@ function useMessageQueue({
 						}
 					},
 				) || []
+			const activeQueueData = queueData.filter(
+				(item: { status: QueuedMessage["status"] | null }): item is QueuedMessage =>
+					item.status !== null,
+			)
 
 			const persistedClientQueue = getCurrentTopicClientQueue(currentTopicContext)
 			const serverClientSyncIds = new Set(
-				queueData.map((item: QueuedMessage) => item.clientSyncId).filter(Boolean),
+				queueData
+					.map((item: { clientSyncId?: string }) => item.clientSyncId)
+					.filter(Boolean),
 			)
 			if (shouldUpdateState) {
 				await updateTopicClientQueue(currentTopicContext, (queueItems) =>
@@ -486,11 +499,17 @@ function useMessageQueue({
 					),
 				)
 			}
+			if (
+				requestId !== queueFetchRequestRef.current ||
+				requestScope !== currentScopeRef.current ||
+				requestVersion !== queueVersionRef.current
+			)
+				return []
 			const remainingClientQueue = persistedClientQueue.filter(
 				(item) => !(item.clientSyncId && serverClientSyncIds.has(item.clientSyncId)),
 			)
 			// 只在最终合并后 setQueue，避免先展示服务端顺序再修正导致用户看到短暂错序。
-			const mergedQueueData = mergeQueueItems(queueData, remainingClientQueue)
+			const mergedQueueData = mergeQueueItems(activeQueueData, remainingClientQueue)
 			if (shouldUpdateState) {
 				queueRef.current = mergedQueueData
 				setQueue(mergedQueueData)
@@ -1227,7 +1246,7 @@ function useMessageQueue({
 		if (projectId && topicId) {
 			// Restore local offline queue first, then fetch server queue, to prevent offline-appended messages from briefly disappearing after refresh.
 			setQueue(getCurrentTopicClientQueue(currentTopicContext))
-			fetchQueueList().then((_queueData) => {
+			fetchQueueList().then(() => {
 				// // 数据获取完成后检查是否需要主动处理队列
 				// const hasPendingMessages =
 				// 	queueData && queueData.some((msg: QueuedMessage) => msg.status === "pending")
@@ -1244,17 +1263,18 @@ function useMessageQueue({
 			// 只有在没有有效话题时才清空
 			setQueue([])
 		}
-	}, [topicId, projectId, currentTopicContext, getCurrentTopicClientQueue])
+	}, [topicId, projectId, currentTopicContext, getCurrentTopicClientQueue, fetchQueueList])
 
 	useEffect(() => {
-		const handler = () => {
+		const handler = (message?: SuperMagicMessageQueueMessage) => {
+			if (!message || message.project_id !== projectId || message.topic_id !== topicId) return
 			// External enqueue/consume updates supersede any list request already in flight.
 			queueVersionRef.current += 1
-			fetchQueueList?.()
+			void fetchQueueList()
 		}
 		pubsub.subscribe(PubSubEvents.SuperMagicMessageQueueConsumed, handler)
 		return () => pubsub.unsubscribe(PubSubEvents.SuperMagicMessageQueueConsumed, handler)
-	}, [])
+	}, [projectId, topicId, fetchQueueList])
 
 	// 任务完成时（isTaskRunning 从 true → false），检查队列并兜底消费。
 	useUpdateEffect(() => {

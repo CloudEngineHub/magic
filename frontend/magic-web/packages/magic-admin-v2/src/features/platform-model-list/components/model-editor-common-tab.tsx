@@ -14,6 +14,7 @@ import {
 import { DefaultModelIcon } from "@magic-admin-v2/features/platform-model-list/components/default-model-icon"
 import { ModelContentLanguageFields } from "@magic-admin-v2/features/platform-model-list/components/model-content-language-fields"
 import { ModelIconUploadField } from "@magic-admin-v2/features/platform-model-list/components/model-icon-upload-field"
+import { ModelImportConfig } from "@magic-admin-v2/features/platform-model-list/components/model-import-config"
 import { ModelIdentifierPicker } from "@magic-admin-v2/features/platform-model-list/components/model-identifier-picker"
 import {
 	type ProviderModelCategory,
@@ -25,6 +26,7 @@ import {
 } from "@magic-admin-v2/features/platform-model-list/utils/model-editor"
 import type { ModelEditorValues } from "@magic-admin-v2/features/platform-model-list/utils/model-editor-schema"
 import type { Language } from "@magic-admin-v2/i18n/resources"
+import type { ProviderModelRecord } from "@magic-admin-v2/features/platform-model-list/types"
 
 export function ModelEditorCommonTab({
 	category,
@@ -34,8 +36,10 @@ export function ModelEditorCommonTab({
 	modelType,
 	modelTypeOptions,
 	onCategoryChange,
+	onApplyImportedConfig,
 	onIconUploadingChange,
 	onLocaleChange,
+	showImportConfig,
 	selectableCategories,
 }: {
 	category: ProviderModelCategory
@@ -45,8 +49,10 @@ export function ModelEditorCommonTab({
 	modelType: ProviderModelType
 	modelTypeOptions: Array<{ label: string; value: ProviderModelType }>
 	onCategoryChange: (category: ProviderModelCategory) => void
+	onApplyImportedConfig: (record: ProviderModelRecord) => void
 	onIconUploadingChange?: (uploading: boolean) => void
 	onLocaleChange: (locale: Language) => void
+	showImportConfig: boolean
 	selectableCategories: ProviderModelCategory[]
 }) {
 	const { t } = useTranslation()
@@ -106,6 +112,19 @@ export function ModelEditorCommonTab({
 						className="text-sm"
 						message={getErrorMessage(form.formState.errors.model_id?.message)}
 					/>
+					{showImportConfig ? (
+						<ModelImportConfig
+							category={category}
+							disabled={disabled}
+							excludeRecordIds={new Set(
+								(form.getValues("providers") ?? [])
+									.map((binding) => binding.record_id)
+									.filter((id): id is string => Boolean(id)),
+							)}
+							modelId={form.watch("model_id")}
+							onApply={onApplyImportedConfig}
+						/>
+					) : null}
 				</DialogFormField>
 				<DialogFormField
 					description={t("modelList.editor.fieldDesc.icon")}
@@ -142,12 +161,12 @@ export function ModelEditorCommonTab({
 							data-model-editor-field="category"
 							disabled={disabled || selectableCategories.length <= 1}
 							id="category"
-						>
+						 data-testid="platform-model-list-category-trigger">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent data-testid="platform-model-list-category-content">
 							{selectableCategories.map((value) => (
-								<SelectItem key={value} value={value}>
+								<SelectItem key={value} value={value} data-testid="platform-model-list-option">
 									{getCategoryLabel(value, t)}
 								</SelectItem>
 							))}
@@ -176,12 +195,12 @@ export function ModelEditorCommonTab({
 							data-model-editor-field="model_type"
 							disabled={disabled}
 							id="model_type"
-						>
+						 data-testid="platform-model-list-model-type-trigger">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent data-testid="platform-model-list-model-type-content">
 							{modelTypeOptions.map((option) => (
-								<SelectItem key={option.value} value={String(option.value)}>
+								<SelectItem key={option.value} value={String(option.value)} data-testid="platform-model-list-option">
 									{option.label}
 								</SelectItem>
 							))}

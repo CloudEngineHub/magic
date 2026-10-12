@@ -59,11 +59,29 @@ function ActionButtons({ collapsed }: ActionButtonsProps) {
 					return (
 						<MagicTooltip
 							key={item.id}
-							title={collapsed ? t(item.label) : undefined}
+							title={
+								item.id === "recycle-bin" ? (
+									collapsed ? (
+										<>
+											{t("footer.globalRecycleBin")}
+											<br />
+											{t("footer.globalRecycleBinHint")}
+										</>
+									) : (
+										t("footer.globalRecycleBinHint")
+									)
+								) : collapsed ? (
+									t(item.label)
+								) : undefined
+							}
 							placement="right"
 						>
 							<Button
-								aria-label={t(item.label)}
+								aria-label={
+									item.id === "recycle-bin"
+										? t("footer.globalRecycleBin")
+										: t(item.label)
+								}
 								variant="ghost"
 								size={collapsed ? "icon" : "sm"}
 								data-testid={`sidebar-action-${item.id}`}
@@ -78,7 +96,9 @@ function ActionButtons({ collapsed }: ActionButtonsProps) {
 								<Icon className="h-4 w-4 text-sidebar-foreground" />
 								{!collapsed && (
 									<span className="text-[13px] text-sidebar-foreground">
-										{t(item.label)}
+										{item.id === "recycle-bin"
+											? t("footer.globalRecycleBin")
+											: t(item.label)}
 									</span>
 								)}
 							</Button>

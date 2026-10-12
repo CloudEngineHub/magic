@@ -518,17 +518,35 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 				var isMiddle = event.type === "auxclick" && event.button === 1;
 				if (!isMiddle && (event.type !== "click" || event.button !== 0)) return;
 				var element = event.target && (event.target.nodeType === 3 ? event.target.parentElement : event.target);
-				var link = element && typeof element.closest === "function" ? element.closest("a[href]") : null;
+				var link = element && typeof element.closest === "function" ? element.closest("a[href], [data-magic-href]") : null;
 				if (!link || link.hasAttribute("download")) return;
-				var raw = link.getAttribute("href");
+				var customLink = link.tagName.toLowerCase() !== "a" && link.hasAttribute("data-magic-href");
+				var raw = link.getAttribute(customLink ? "data-magic-href" : "href");
 				var base = document.querySelector("base[target]");
 				var target = link.getAttribute("target") || (base && base.getAttribute("target")) || "_self";
 				var newTab = isMiddle || event.ctrlKey || event.metaKey || event.shiftKey;
 				if (newTab) target = "_blank";
+				// Custom element links share the editor URL policy and never execute author schemes.
+				if (customLink) {
+					if (!raw) return;
+					raw = raw.trim().replace(/[\\u0000-\\u001f\\u007f-\\u009f]/g, "");
+					if (/^[a-z][a-z\\d+.-]*:/i.test(raw) && !/^(https?:|mailto:|tel:)/i.test(raw)) return;
+					event.preventDefault();
+					if (window.slideSelector && window.slideSelector.isEditMode) return;
+				}
 				var href = navigationRuntime.getInternalNavigationHref(raw);
 				if (!href) {
-					// Native external navigation remains inside the sandbox for _self.
-					// Explicit new contexts retain opener isolation without changing target.
+					// External web links must never replace the preview or its parent page.
+					if (/^(https?:)?\\/\\//i.test((raw || "").trim())) {
+						event.preventDefault();
+						if (window.slideSelector && window.slideSelector.isEditMode) return;
+						window.open(raw, "_blank", "noopener,noreferrer");
+						return;
+					}
+					if (customLink) {
+						window.open(raw, "_blank", "noopener,noreferrer");
+						return;
+					}
 					if (target.toLowerCase() === "_blank") {
 						link.relList.add("noopener", "noreferrer");
 					}
@@ -541,7 +559,7 @@ export const getLinkHandlingScript = (navigationBasePath = "") => {
 					return;
 				}
 				navigationRuntime.postHtmlNavigation(
-					href, link.href, target, link.getAttribute("data-auto-edit") === "true",
+					href, customLink ? raw : link.href, target, link.getAttribute("data-auto-edit") === "true",
 					link.textContent || "", !!(isMiddle || event.ctrlKey || event.metaKey) && !event.shiftKey, "push"
 				);
 			};
@@ -1303,6 +1321,15 @@ const getBaseStylesScript = () => {
 		body {
 			translate: no !important;
 		}
+		/* Linked containers include their text and image children in the click target. */
+		:where(a[href]:not([href=""]), [data-magic-href]:not([data-magic-href=""])),
+		:where(a[href]:not([href=""]), [data-magic-href]:not([data-magic-href=""])) * {
+			cursor: pointer !important;
+		}
+		/* Keep the insertion cursor while editing linked text. */
+		[data-text-editing="true"], [data-text-editing="true"] * {
+			cursor: text !important;
+		}
 	`
 }
 //注入HTML预览组件基础样式
@@ -1735,6 +1762,14 @@ export const getFullContent = (
 		}
 	`
 	injectedHeadFragment.appendChild(scriptElement)
+	if (options.enableTouchPinchZoom) {
+		const pinchScript = doc.createElement("script")
+		pinchScript.setAttribute("data-injected", "true")
+		pinchScript.textContent = createIframeRuntimeScript("touch-pinch", {
+			parentOrigin: window.location.origin,
+		})
+		injectedHeadFragment.appendChild(pinchScript)
+	}
 
 	// 创建基础样式
 	const styleElement = doc.createElement("style")
@@ -1806,6 +1841,7 @@ interface DynamicResourceInterceptorOptions {
 }
 
 interface GetFullContentOptions {
+	enableTouchPinchZoom?: boolean
 	serviceWorkerMockMode?: ServiceWorkerMockMode
 	dynamicInterception?: DynamicResourceInterceptorOptions
 	containOverscroll?: boolean

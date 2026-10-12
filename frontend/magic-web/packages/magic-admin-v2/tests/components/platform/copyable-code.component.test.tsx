@@ -1,9 +1,19 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { CopyableCode } from "../../../src/features/platform-slides-template/components/copyable-code"
+import { CopyableCode } from "@magic-admin-v2/features/platform-slides-template/components/copyable-code"
+
+const { clipboardWriteText, toastError, toastSuccess } = vi.hoisted(() => ({
+	clipboardWriteText: vi.fn(),
+	toastError: vi.fn(),
+	toastSuccess: vi.fn(),
+}))
 
 vi.mock("@magic-admin-v2/utils/clipboard-helpers", () => ({
-	clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+	clipboard: { writeText: clipboardWriteText },
+}))
+
+vi.mock("sonner", () => ({
+	toast: { error: toastError, success: toastSuccess },
 }))
 
 vi.mock("react-i18next", () => ({
@@ -11,44 +21,34 @@ vi.mock("react-i18next", () => ({
 }))
 
 afterEach(() => {
-	vi.useRealTimers()
+	vi.clearAllMocks()
 })
 
 describe("copyable code", () => {
-	it("restarts the copied-state timer after repeated clicks", async () => {
-		vi.useFakeTimers()
-		const { container } = render(<CopyableCode value="template-code" />)
-		const button = screen.getByRole("button", { name: "slidesTemplate.aria.copyCode" })
+	it("copies the code through the shared copy contract and reports success", async () => {
+		clipboardWriteText.mockResolvedValue(undefined)
+		render(<CopyableCode value="template-code" />)
 
-		await act(async () => {
-			fireEvent.click(button)
-			await Promise.resolve()
-		})
-		act(() => vi.advanceTimersByTime(600))
-		await act(async () => {
-			fireEvent.click(button)
-			await Promise.resolve()
-		})
-		act(() => vi.advanceTimersByTime(600))
+		fireEvent.click(screen.getByRole("button", { name: "common.action.copy" }))
 
-		expect(container.querySelector(".lucide-check")).toBeInTheDocument()
-
-		act(() => vi.advanceTimersByTime(600))
-		expect(container.querySelector(".lucide-check")).not.toBeInTheDocument()
+		await waitFor(() => expect(clipboardWriteText).toHaveBeenCalledWith("template-code"))
+		expect(toastSuccess).toHaveBeenCalledWith("common.message.copySuccess")
 	})
 
-	it("clears the copied-state timer when unmounted", async () => {
-		vi.useFakeTimers()
-		const clearTimeoutSpy = vi.spyOn(window, "clearTimeout")
-		const { unmount } = render(<CopyableCode value="template-code" />)
+	it("reports clipboard failures without changing the rendered value", async () => {
+		clipboardWriteText.mockRejectedValue(new Error("clipboard unavailable"))
+		render(<CopyableCode value="template-code" />)
 
-		await act(async () => {
-			fireEvent.click(screen.getByRole("button", { name: "slidesTemplate.aria.copyCode" }))
-			await Promise.resolve()
-		})
-		unmount()
+		fireEvent.click(screen.getByRole("button", { name: "common.action.copy" }))
 
-		expect(clearTimeoutSpy).toHaveBeenCalled()
-		clearTimeoutSpy.mockRestore()
+		await waitFor(() => expect(toastError).toHaveBeenCalledWith("common.message.copyFailed"))
+		expect(screen.getByText("template-code")).toBeInTheDocument()
+	})
+
+	it("renders the shared empty value state without a copy button", () => {
+		render(<CopyableCode value="" />)
+
+		expect(screen.queryByRole("button", { name: "common.action.copy" })).not.toBeInTheDocument()
+		expect(screen.getByText("common.emptyValue")).toBeInTheDocument()
 	})
 })

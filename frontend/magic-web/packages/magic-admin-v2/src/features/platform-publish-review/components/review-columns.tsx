@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table"
 import { Check, Loader2, XCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import {
 	canReviewRecord,
@@ -15,7 +16,6 @@ import type { PublishReviewAction } from "@magic-admin-v2/features/platform-publ
 import {
 	PublishTargetCell,
 	StatusBadge,
-	TableText,
 } from "@magic-admin-v2/features/platform-publish-review/components/review-cells"
 
 export function createReviewVersionColumn<TRecord extends ReviewRecordBase>({
@@ -27,7 +27,13 @@ export function createReviewVersionColumn<TRecord extends ReviewRecordBase>({
 		id: "version",
 		size: 120,
 		header: t("publishReview.column.version"),
-		cell: ({ row }) => <TableText value={row.original.version} />,
+		cell: ({ row }) => (
+			<CopyableValue
+				className="text-sm text-foreground"
+				displayValue={row.original.version || "-"}
+				value={row.original.version}
+			/>
+		),
 	}
 }
 
@@ -119,8 +125,10 @@ export function createReviewActionColumn<TRecord extends ReviewRecordBase>({
 					<Button
 						disabled={!canReview || rowPending}
 						onClick={() => onReview(row.original, "APPROVED")}
-						size="sm"
+						size="icon-sm"
+						className="md:w-auto md:gap-1.5 md:px-2.5"
 						variant="outline"
+						data-testid="platform-publish-review-view-button"
 					>
 						{rowPending ? (
 							<Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -132,11 +140,12 @@ export function createReviewActionColumn<TRecord extends ReviewRecordBase>({
 						</span>
 					</Button>
 					<Button
-						className="text-destructive hover:text-destructive"
+						className="text-destructive hover:text-destructive md:w-auto md:gap-1.5 md:px-2.5"
 						disabled={!canReview || rowPending}
 						onClick={() => onReview(row.original, "REJECTED")}
-						size="sm"
+						size="icon-sm"
 						variant="outline"
+						data-testid="platform-publish-review-view-button"
 					>
 						<XCircle className="size-4" aria-hidden="true" />
 						<span className="hidden md:inline">{t("publishReview.action.reject")}</span>

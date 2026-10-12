@@ -1,6 +1,7 @@
 import projectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { DisabledDetailToolTypes } from "@/pages/superMagic/components/Detail/constants"
+import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
 import { reaction } from "mobx"
 import magicToast from "@/components/base/MagicToaster/utils"
 import i18n from "i18next"
@@ -30,19 +31,21 @@ type ToolDetail = Record<string, unknown> & {
 
 export type ToolCardInteractionTarget =
 	| { type: "disabled" }
+	| { type: "inline" }
 	| { type: "playback" }
 	| { type: "file"; fileId: string }
 	| { type: "file-reference"; fileId?: string; filePath?: string }
-	| { type: "design" }
+	| { type: "canvas" }
 
-const DESIGN_TOOL_NAMES = new Set([
+// 旧消息可能没有 DisplayType.DESIGN，保留稳定的 Canvas 导航工具名作为兼容兜底。
+// 工具属于 Design 领域不等于卡片点击必须打开 Canvas；query_canvas_overview 只打开详情。
+const LEGACY_CANVAS_NAVIGATION_TOOL_NAMES = new Set([
 	"create_design_project",
 	"create_canvas_element",
 	"update_canvas_element",
 	"batch_create_canvas_elements",
 	"batch_update_canvas_elements",
 	"reorder_canvas_elements",
-	"query_canvas_overview",
 	"query_canvas_element",
 	"generate_images_to_canvas",
 	"search_images_to_canvas",
@@ -97,13 +100,22 @@ export function getToolCardInteractionTarget(
 	if (toolName && DisabledDetailToolTypes.includes(toolName)) {
 		return { type: "disabled" }
 	}
-	if (toolName && DESIGN_TOOL_NAMES.has(toolName)) {
-		return { type: "design" }
-	}
+	if (isInlineToolDetail(detail)) return { type: "inline" }
 
 	const detailRecord = detail as Record<string, unknown>
+	// 明确的 DisplayType.DESIGN 详情表示卡片点击需要进入 Canvas。
+	if (detailRecord.type === "design") {
+		return { type: "canvas" }
+	}
+	if (toolName && LEGACY_CANVAS_NAVIGATION_TOOL_NAMES.has(toolName)) {
+		return { type: "canvas" }
+	}
 	if (detailRecord.type === "browser") {
 		return { type: "playback" }
+	}
+	// 生成进度详情只承载预期完成时间，没有可预览的内容，不能因为卡片在生成中就变成可点。
+	if (detailRecord.type === "generation_progress") {
+		return { type: "disabled" }
 	}
 	const data = detailRecord.data
 	if (data && typeof data === "object" && !Array.isArray(data)) {
@@ -286,6 +298,7 @@ export function selectSourceFileFromTool({
 }
 
 export function selectToolDetail({ detail, onSelectDetail }: SelectToolDetailOptions) {
+	if (isInlineToolDetail(detail)) return
 	pubsub.publish(PubSubEvents.Open_Playback_Tab, detail)
 	onSelectDetail?.(markSelectionTarget(detail, "detail"))
 }
