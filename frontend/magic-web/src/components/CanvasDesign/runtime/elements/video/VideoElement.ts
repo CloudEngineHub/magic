@@ -1579,8 +1579,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 					? { primaryText: baseName }
 					: withSuffix(this.getText("video.nameSuffix.failed", "(失败)"))
 			default:
-				return resolveMediaComplianceStatus(this.canvas, this.getVideoContent()) ===
-					"PROCESSING"
+				return this.canvas.isSeedanceComplianceEnabled() &&
+					resolveMediaComplianceStatus(this.canvas, this.getVideoContent()) ===
+						"PROCESSING"
 					? withSuffix(this.getText("video.nameSuffix.complianceProcessing", "(校验中)"))
 					: { primaryText: baseName }
 		}

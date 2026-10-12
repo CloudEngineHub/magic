@@ -26,6 +26,7 @@ function createTaskManager(options?: {
 		],
 	} as ImageElement
 	const canvas = {
+		isSeedanceComplianceEnabled: () => true,
 		magicConfigManager: {
 			config: {
 				methods: { getAssetComplianceStatus },
@@ -55,6 +56,7 @@ function createTaskManager(options?: {
 		assetResourceManager: canvas.assetResourceManager as never,
 		elementManager: canvas.elementManager as never,
 		permissionManager: canvas.permissionManager as never,
+		isSeedanceComplianceEnabled: canvas.isSeedanceComplianceEnabled,
 	})
 
 	return { taskManager, getAssetComplianceStatus, canvas }

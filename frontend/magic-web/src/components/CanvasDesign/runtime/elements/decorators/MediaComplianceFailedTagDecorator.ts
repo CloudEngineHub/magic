@@ -204,6 +204,7 @@ export class MediaComplianceFailedTagDecorator {
 	}
 
 	private shouldDisplay(): boolean {
+		if (!this.config.canvas.isSeedanceComplianceEnabled()) return false
 		return this.resolveComplianceStatus() === "FAILED"
 	}
 

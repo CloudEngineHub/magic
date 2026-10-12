@@ -21,6 +21,7 @@ function createCanvas(
 ) {
 	const startLibraryAssetCompliance = vi.fn().mockResolvedValue("asset-1")
 	const canvas = {
+		isSeedanceComplianceEnabled: () => true,
 		magicConfigManager: { config: { methods } },
 		assetComplianceTaskManager: {
 			startLibraryAssetCompliance,

@@ -14,6 +14,7 @@ import {
 interface AssetLibraryUploadCardProps {
 	allowedMediaTypes: readonly AssetMediaType[]
 	t: TFunction
+	seedanceComplianceAvailable?: boolean
 	ensureAssetAgreementSigned?: (options?: { onSigned?: () => void }) => Promise<boolean>
 	onAgreementActivityChange?: (active: boolean) => void
 	onFileSelected: (file: File, mode: AssetLibraryUploadMode) => void
@@ -22,6 +23,7 @@ interface AssetLibraryUploadCardProps {
 export function AssetLibraryUploadCard({
 	allowedMediaTypes,
 	t,
+	seedanceComplianceAvailable = false,
 	ensureAssetAgreementSigned,
 	onAgreementActivityChange,
 	onFileSelected,
@@ -131,19 +133,21 @@ export function AssetLibraryUploadCard({
 			<div className="mt-4 flex w-full max-w-[220px] flex-col gap-2">
 				<Button
 					type="button"
-					variant="outline"
+					variant={seedanceComplianceAvailable ? "outline" : "default"}
 					disabled={preparingVerify}
 					onClick={() => handlePick("save")}
 				>
 					{t("assets.upload", "上传素材")}
 				</Button>
-				<Button
-					type="button"
-					disabled={preparingVerify}
-					onClick={() => handlePick("verify")}
-				>
-					{t("assets.uploadAndVerify", "上传素材并认证")}
-				</Button>
+				{seedanceComplianceAvailable ? (
+					<Button
+						type="button"
+						disabled={preparingVerify}
+						onClick={() => handlePick("verify")}
+					>
+						{t("assets.uploadAndVerify", "上传素材并认证")}
+					</Button>
+				) : null}
 			</div>
 			<div className="mt-4 space-y-1 text-xs leading-5 text-muted-foreground">
 				{showImageFormats ? (

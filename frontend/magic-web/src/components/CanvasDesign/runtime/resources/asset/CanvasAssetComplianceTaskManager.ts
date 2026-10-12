@@ -34,6 +34,7 @@ export interface CanvasAssetComplianceTaskHost {
 	assetResourceManager: CanvasAssetResourceManager
 	elementManager: Canvas["elementManager"]
 	permissionManager?: Canvas["permissionManager"]
+	isSeedanceComplianceEnabled?: () => boolean
 	refreshMediaComplianceFailedTags?: () => void
 	refreshNameLabelIcons?: (elementIds?: readonly string[]) => void
 }
@@ -74,7 +75,17 @@ export class CanvasAssetComplianceTaskManager {
 
 	constructor(private readonly host: CanvasAssetComplianceTaskHost) {}
 
+	private isSeedanceComplianceEnabled(): boolean {
+		return this.host.isSeedanceComplianceEnabled?.() ?? false
+	}
+
+	public stopAllComplianceWatching(): void {
+		this.activeLibraryWatchIds.clear()
+		this.host.assetCompliancePollingManager.stopAll()
+	}
+
 	public watchCheck(checkId: string, options: ComplianceWatchOptions = {}): () => void {
+		if (!this.isSeedanceComplianceEnabled()) return () => undefined
 		const normalizedId = checkId.trim()
 		if (!normalizedId) return () => undefined
 
@@ -111,6 +122,7 @@ export class CanvasAssetComplianceTaskManager {
 		params: StartWorkspaceFileComplianceParams,
 		watchOptions: Omit<ComplianceWatchOptions, "persistTargets"> = {},
 	): Promise<string | null> {
+		if (!this.isSeedanceComplianceEnabled()) return null
 		const created = await params.startWorkspaceMediaCompliance({
 			path: params.path,
 			name: params.name,
@@ -145,6 +157,7 @@ export class CanvasAssetComplianceTaskManager {
 		params: StartLibraryAssetComplianceParams,
 		onSettled?: (state: CanvasAssetComplianceState) => void,
 	): Promise<string | null> {
+		if (!this.isSeedanceComplianceEnabled()) return null
 		const sourceAssetId = params.assetId.trim()
 		if (!sourceAssetId) return null
 
@@ -179,6 +192,7 @@ export class CanvasAssetComplianceTaskManager {
 	}
 
 	public resumeDocumentCompliancePolling(): void {
+		if (!this.isSeedanceComplianceEnabled()) return
 		for (const group of collectDocumentComplianceResumeTargets(this.host)) {
 			this.watchCheck(group.checkId, {
 				persistTargets: group.targets,

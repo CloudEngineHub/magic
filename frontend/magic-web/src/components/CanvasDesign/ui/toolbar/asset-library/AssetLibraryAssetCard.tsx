@@ -40,6 +40,7 @@ interface AssetLibraryAssetCardProps {
 	onMenuOpenChange?: (open: boolean) => void
 	onComplianceCheck?: (asset: AssetItem) => void
 	complianceActionPending?: boolean
+	seedanceComplianceAvailable?: boolean
 }
 
 function getAssetSourceLabel(asset: AssetItem, t: TFunction): string {
@@ -90,6 +91,7 @@ export function AssetLibraryAssetCard({
 	onMenuOpenChange,
 	onComplianceCheck,
 	complianceActionPending = false,
+	seedanceComplianceAvailable = false,
 }: AssetLibraryAssetCardProps) {
 	const [displayAsset, setDisplayAsset] = useState(asset)
 	const [durationLabel, setDurationLabel] = useState("")
@@ -228,14 +230,16 @@ export function AssetLibraryAssetCard({
 					</span>
 				) : null}
 				<div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
-					<span className={complianceBadgeClassName}>
-						<span className="inline-flex size-6 shrink-0 items-center justify-center">
-							{complianceBadgeIcon}
+					{seedanceComplianceAvailable ? (
+						<span className={complianceBadgeClassName}>
+							<span className="inline-flex size-6 shrink-0 items-center justify-center">
+								{complianceBadgeIcon}
+							</span>
+							<span className="min-w-0 max-w-0 overflow-hidden whitespace-nowrap text-xs leading-4 transition-[max-width,padding] duration-200 ease-out group-hover/badge:max-w-52 group-hover/badge:pr-2 motion-reduce:transition-none">
+								{complianceLabel}
+							</span>
 						</span>
-						<span className="min-w-0 max-w-0 overflow-hidden whitespace-nowrap text-xs leading-4 transition-[max-width,padding] duration-200 ease-out group-hover/badge:max-w-52 group-hover/badge:pr-2 motion-reduce:transition-none">
-							{complianceLabel}
-						</span>
-					</span>
+					) : null}
 					{showActionsMenu ? (
 						<DropdownMenu modal={false} onOpenChange={onMenuOpenChange}>
 							<DropdownMenuTrigger asChild>
@@ -290,7 +294,8 @@ export function AssetLibraryAssetCard({
 						{durationLabel || null}
 					</span>
 				) : null}
-				{displayAsset.compliance_status === "FAILED" &&
+				{seedanceComplianceAvailable &&
+				displayAsset.compliance_status === "FAILED" &&
 				displayAsset.compliance_failed_reason ? (
 					<span className="absolute inset-x-2.5 bottom-10 line-clamp-2 rounded-md bg-black/65 px-2 py-1 text-xs leading-4 text-white">
 						{displayAsset.compliance_failed_reason}

@@ -8,7 +8,7 @@ function resolve(options: {
 }) {
 	return complianceNameLabelIconResolver({
 		elementId: "image-1",
-		element: {} as never,
+		element: { canvas: { isSeedanceComplianceEnabled: () => true } } as never,
 		data: {} as never,
 		selected: false,
 		hovered: false,

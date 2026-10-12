@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { useOptionalCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
+import { useSeedanceComplianceAvailable } from "../../seedanceComplianceAvailability"
 import type { CanvasAssetComplianceState } from "../../../public/magic-types"
 import { assetDetailStore } from "../../../runtime/resources/asset/AssetDetailStore"
 import { resolveAssetComplianceTaskManager } from "../../../runtime/resources/asset/assetCompliancePollingHost"
@@ -32,6 +33,7 @@ export function useAssetLibraryComplianceAction(options: {
 }) {
 	const canvas = useOptionalCanvas()
 	const { methods } = useMagic()
+	const seedanceComplianceAvailable = useSeedanceComplianceAvailable()
 	const { t } = useCanvasDesignI18n()
 	const startingAssetIdsRef = useRef(new Set<string>())
 	const complianceTaskManager = useMemo(() => resolveAssetComplianceTaskManager(canvas), [canvas])
@@ -62,7 +64,7 @@ export function useAssetLibraryComplianceAction(options: {
 
 	const startCompliance = useCallback(
 		async (asset: AssetItem) => {
-			if (!canStartAssetLibraryCompliance(asset)) return
+			if (!seedanceComplianceAvailable || !canStartAssetLibraryCompliance(asset)) return
 
 			const listAssetId = asset.asset_id.trim()
 			if (!listAssetId) {
@@ -131,11 +133,19 @@ export function useAssetLibraryComplianceAction(options: {
 				startingAssetIdsRef.current.delete(listAssetId)
 			}
 		},
-		[complianceTaskManager, handleComplianceSettled, methods, options, t],
+		[
+			complianceTaskManager,
+			handleComplianceSettled,
+			methods,
+			options,
+			seedanceComplianceAvailable,
+			t,
+		],
 	)
 
 	return {
 		startCompliance,
 		canStartAssetLibraryCompliance,
+		seedanceComplianceAvailable,
 	}
 }

@@ -2143,8 +2143,9 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			case "terminated":
 				return withStatus(this.getText("image.status.terminated", "已终止"))
 			default:
-				return resolveMediaComplianceStatus(this.canvas, this.getActiveContentData()) ===
-					"PROCESSING"
+				return this.canvas.isSeedanceComplianceEnabled() &&
+					resolveMediaComplianceStatus(this.canvas, this.getActiveContentData()) ===
+						"PROCESSING"
 					? {
 							primaryText: baseName,
 							suffix: {

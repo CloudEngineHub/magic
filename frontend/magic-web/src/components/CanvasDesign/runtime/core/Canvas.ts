@@ -236,6 +236,8 @@ export class Canvas {
 	public videoCompositionManager: VideoCompositionManager
 	/** 当前图片和视频标签是否常驻显示；默认按 hover/选中状态显示。 */
 	private mediaLabelsAlwaysVisible = false
+	/** Seedance 合规能力关闭时，画布不展示合规 UI，也不恢复合规轮询。 */
+	private seedanceComplianceEnabled = false
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
@@ -1229,6 +1231,22 @@ export class Canvas {
 				{ refreshComplianceFailedTag?: () => void } | undefined
 			instance?.refreshComplianceFailedTag?.()
 		}
+	}
+
+	public isSeedanceComplianceEnabled(): boolean {
+		return this.seedanceComplianceEnabled
+	}
+
+	public setSeedanceComplianceEnabled(enabled: boolean): void {
+		if (this.seedanceComplianceEnabled === enabled) return
+		this.seedanceComplianceEnabled = enabled
+		if (!enabled) {
+			this.assetComplianceTaskManager.stopAllComplianceWatching()
+		} else {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+		}
+		this.refreshNameLabelIcons()
+		this.refreshMediaComplianceFailedTags()
 	}
 
 	/** Refreshes label icon/text state after runtime asset compliance changes. */

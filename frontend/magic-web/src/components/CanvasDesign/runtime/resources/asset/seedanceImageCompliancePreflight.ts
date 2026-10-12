@@ -405,6 +405,7 @@ export async function runSeedanceImageCompliancePreflight(
 	options: SeedanceImageCompliancePreflightOptions,
 ): Promise<SeedanceImageCompliancePreflightResult> {
 	const { canvas, request, sourceVideoElementId, modelName } = options
+	if (!canvas.isSeedanceComplianceEnabled()) return { proceed: true }
 	if (!isSeedanceModelName(modelName)) return { proceed: true }
 
 	const uris = collectSeedanceImageUris(request)

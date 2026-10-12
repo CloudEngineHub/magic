@@ -7,6 +7,7 @@ import {
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
+import { useSeedanceComplianceAvailable } from "../../seedanceComplianceAvailability"
 import type {
 	CanvasAssetComplianceState,
 	CanvasAssetComplianceStatus,
@@ -151,6 +152,7 @@ function toPersistTarget(target: SeedanceComplianceTarget) {
 export function useSeedanceComplianceAction() {
 	const { canvas } = useCanvas()
 	const { methods } = useMagic()
+	const seedanceComplianceAvailable = useSeedanceComplianceAvailable()
 	const { t } = useCanvasDesignI18n()
 	const startingRef = useRef(false)
 	const pendingAssetDetailsRef = useRef(new Set<string>())
@@ -213,6 +215,7 @@ export function useSeedanceComplianceAction() {
 	const canCheckCompliance = useCallback(
 		(elementId: string) => {
 			void assetDetailEpoch
+			if (!seedanceComplianceAvailable) return false
 			const target = resolveTarget(elementId)
 			if (!target || !canvas) return false
 			if (target.assetId) {
@@ -244,7 +247,14 @@ export function useSeedanceComplianceAction() {
 				methods.getAssetComplianceStatus,
 			)
 		},
-		[assetDetailEpoch, canvas, ensureAssetDetail, methods, resolveTarget],
+		[
+			assetDetailEpoch,
+			canvas,
+			ensureAssetDetail,
+			methods,
+			resolveTarget,
+			seedanceComplianceAvailable,
+		],
 	)
 
 	const checkCompliance = useCallback(
@@ -258,6 +268,10 @@ export function useSeedanceComplianceAction() {
 			}
 
 			try {
+				if (!seedanceComplianceAvailable) {
+					unavailable()
+					return
+				}
 				const target = resolveTarget(elementId)
 				if (!target || !canvas) {
 					unavailable()
@@ -390,7 +404,15 @@ export function useSeedanceComplianceAction() {
 				)
 			}
 		},
-		[canvas, methods, resolveTarget, t, toastFailureState, toastState],
+		[
+			canvas,
+			methods,
+			resolveTarget,
+			seedanceComplianceAvailable,
+			t,
+			toastFailureState,
+			toastState,
+		],
 	)
 
 	return { canCheckCompliance, checkCompliance }

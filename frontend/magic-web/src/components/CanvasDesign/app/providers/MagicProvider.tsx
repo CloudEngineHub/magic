@@ -26,6 +26,7 @@ import type {
 } from "../../public/props"
 import { useOptionalCanvas } from "./CanvasProvider"
 import { VideoPointsEstimateCache } from "./video-points-estimate.cache"
+import { isSeedanceComplianceAvailable } from "../../ui/seedanceComplianceAvailability"
 
 /**
  * Magic Context - 用于与外部通信
@@ -213,16 +214,9 @@ export function MagicProvider({
 		}
 	}, [canGenerate, getImageModelList, getVideoModelList, hostUiLocale])
 
-	// AI 能力可用性只在能力变更时拉取，避免宿主页面普通重渲染导致重复请求
+	// AI 能力可用性只在能力变更时拉取，避免宿主页面普通重渲染导致重复请求。
+	// Seedance 合规菜单在只读画布上也会出现，因此不能只在具备生成权限时请求。
 	useEffect(() => {
-		if (!canGenerate) {
-			setAiAbilityAvailability(null)
-			setConvertHightConfig(null)
-			setIsLoadingConvertHightConfig(false)
-			setIsAiAbilityAvailabilityReady(false)
-			return
-		}
-
 		let cancelled = false
 
 		const fetchConvertHightConfig = async () => {
@@ -265,11 +259,26 @@ export function MagicProvider({
 		return () => {
 			cancelled = true
 		}
-	}, [canGenerate, getAiAbilityAvailability, getConvertHightConfig])
+	}, [getAiAbilityAvailability, getConvertHightConfig])
 
 	useEffect(() => {
 		videoPointsEstimateCacheRef.current.clear()
 	}, [videoPointsEstimateCacheScope])
+
+	// Konva 节点与名称标签读不到 React hook，能力结果确定后同步到 Canvas。
+	useEffect(() => {
+		if (!canvas) return
+		const enabled =
+			hasAiAbilityAvailabilityProvider &&
+			isAiAbilityAvailabilityReady &&
+			isSeedanceComplianceAvailable(aiAbilityAvailability)
+		canvas.setSeedanceComplianceEnabled(enabled)
+	}, [
+		aiAbilityAvailability,
+		canvas,
+		hasAiAbilityAvailabilityProvider,
+		isAiAbilityAvailabilityReady,
+	])
 
 	const getCachedVideoPointsEstimate = useCallback((signature: string) => {
 		return videoPointsEstimateCacheRef.current.get(signature)

@@ -25,6 +25,7 @@ import { toast } from "sonner"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useOptionalCanvas } from "../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../app/providers/I18nProvider"
+import { useSeedanceComplianceAvailable } from "../seedanceComplianceAvailability"
 import type {
 	CanvasAssetComplianceState,
 	CanvasAssetResourceInfo,
@@ -166,6 +167,7 @@ export default function AssetsModal({
 }: AssetsModalProps) {
 	const { t } = useCanvasDesignI18n()
 	const canvas = useOptionalCanvas()
+	const seedanceComplianceAvailable = useSeedanceComplianceAvailable()
 	const { userInfo } = useUserInfo()
 	const currentUserId = userInfo?.user_id?.trim() || ""
 	const [hostDialogOpen, setHostDialogOpen] = useState(false)
@@ -198,7 +200,13 @@ export default function AssetsModal({
 	const showSelectionCount = Number.isFinite(selectionLimit) && selectionLimit > 1
 	const showMediaFilter = canFilterAssetLibraryMedia(requestedMediaTypes)
 	const canUpload = canUploadAssetLibraryMedia(requestedMediaTypes)
-	const complianceRequired = requiresCompliance || verifiedOnly
+	const complianceRequired = requiresCompliance || (seedanceComplianceAvailable && verifiedOnly)
+
+	useEffect(() => {
+		if (!seedanceComplianceAvailable && verifiedOnly) {
+			setVerifiedOnly(false)
+		}
+	}, [seedanceComplianceAvailable, verifiedOnly])
 	const assetQuery = useMemo<AssetLibraryQuery>(
 		() => ({
 			mediaTypes: resolveAssetLibraryQueryMediaTypes(
@@ -245,7 +253,7 @@ export default function AssetsModal({
 		assetLibrarySessionStore.invalidateCurrentScope()
 	}, [])
 
-	const { startCompliance } = useAssetLibraryComplianceAction({
+	const { startCompliance, seedanceComplianceAvailable } = useAssetLibraryComplianceAction({
 		onComplianceStarted: (assetId) => {
 			setOptimisticProcessingIds((current) => new Set(current).add(assetId))
 		},
@@ -607,15 +615,17 @@ export default function AssetsModal({
 									</Select>
 								</div>
 
-								<label className="inline-flex shrink-0 items-center gap-2 text-sm text-foreground">
-									<Switch
-										checked={complianceRequired}
-										disabled={requiresCompliance}
-										aria-label={t("assets.verifiedOnly", "仅看已认证")}
-										onCheckedChange={setVerifiedOnly}
-									/>
-									<span>{t("assets.verifiedOnly", "仅看已认证")}</span>
-								</label>
+								{seedanceComplianceAvailable ? (
+									<label className="inline-flex shrink-0 items-center gap-2 text-sm text-foreground">
+										<Switch
+											checked={complianceRequired}
+											disabled={requiresCompliance}
+											aria-label={t("assets.verifiedOnly", "仅看已认证")}
+											onCheckedChange={setVerifiedOnly}
+										/>
+										<span>{t("assets.verifiedOnly", "仅看已认证")}</span>
+									</label>
+								) : null}
 								<Button
 									type="button"
 									variant="ghost"
@@ -752,6 +762,9 @@ export default function AssetsModal({
 											<AssetLibraryUploadCard
 												allowedMediaTypes={requestedMediaTypes}
 												t={t}
+												seedanceComplianceAvailable={
+													seedanceComplianceAvailable
+												}
 												ensureAssetAgreementSigned={
 													canvas?.magicConfigManager.config?.methods
 														?.ensureAssetAgreementSigned
@@ -781,7 +794,14 @@ export default function AssetsModal({
 													complianceActionPending={pendingComplianceIds.has(
 														asset.asset_id,
 													)}
-													onComplianceCheck={handleComplianceCheck}
+													seedanceComplianceAvailable={
+														seedanceComplianceAvailable
+													}
+													onComplianceCheck={
+														seedanceComplianceAvailable
+															? handleComplianceCheck
+															: undefined
+													}
 													onMenuOpenChange={setCardMenuOpen}
 													onEdit={handleEditAsset}
 													onTransferOwner={setTransferAsset}

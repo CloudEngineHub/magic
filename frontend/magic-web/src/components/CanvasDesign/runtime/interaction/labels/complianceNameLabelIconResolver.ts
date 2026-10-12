@@ -47,6 +47,18 @@ function createIcon(paths: string[], color = LABEL_ICON_COLOR): Konva.Group {
 
 /** Default CanvasDesign resolver for the shared asset/compliance indicators. */
 export const complianceNameLabelIconResolver: NameLabelIconResolver = (context) => {
+	if (!context.element.canvas.isSeedanceComplianceEnabled()) {
+		if (context.isAssetLibrary) {
+			return {
+				key: "asset-library",
+				width: LABEL_ICON_SIZE,
+				height: LABEL_ICON_SIZE,
+				create: () => createIcon(USERS_ROUND_PATHS),
+			}
+		}
+		return null
+	}
+
 	if (context.complianceStatus === "PROCESSING") {
 		return {
 			key: "compliance-processing",

@@ -97,6 +97,7 @@ describe("AssetLibraryAssetCard compliance menu", () => {
 				onToggle={onToggle}
 				onPreview={vi.fn()}
 				onComplianceCheck={onComplianceCheck}
+				seedanceComplianceAvailable
 			/>,
 		)
 
@@ -117,6 +118,7 @@ describe("AssetLibraryAssetCard compliance menu", () => {
 				onToggle={vi.fn()}
 				onPreview={vi.fn()}
 				onComplianceCheck={vi.fn()}
+				seedanceComplianceAvailable
 			/>,
 		)
 

@@ -965,6 +965,10 @@ export interface GetConvertHightConfigResponse {
 /** 获取 AI 能力可用性响应数据 */
 export interface AiAbilityAvailability {
 	abilities: {
+		/** 是否支持 Seedance 合规校验。关闭时元素菜单和素材库操作菜单都不提供该操作。 */
+		volcengine_ark_assets?: {
+			enabled?: boolean
+		}
 		image_convert_high: GetConvertHightConfigResponse
 		image_remove_background: {
 			enabled: boolean
