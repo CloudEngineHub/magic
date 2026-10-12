@@ -177,6 +177,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const {
 		attachments,
 		attachmentList,
+		attachmentLoadState,
 		setUserSelectDetail,
 		userSelectDetail,
 		onDownload,
@@ -276,9 +277,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const saveQueue = useRef(Promise.resolve())
 	const saveBeforeProjectChange = useRef<() => Promise<void>>()
 	const scheduleCacheSaveRef = useRef<(deferred?: boolean) => void>(() => undefined)
-	const [isAwaitingProjectAttachments, setIsAwaitingProjectAttachments] = useState(
-		Boolean(viewerProjectId),
-	)
 
 	/** Keeps the active preview inside one fullscreen shell without re-entering during tab switches. */
 	const activatePreviewFullscreen = useMemoizedFn((tabId: string, allowAutomaticEntry = true) => {
@@ -657,6 +655,20 @@ export function useFilesViewer(props: FilesViewerProps) {
 	const hasCurrentProjectAttachmentSnapshot =
 		fileList.length === 0 ||
 		fileList.every((file) => !file.project_id || file.project_id === viewerProjectId)
+	// 空清单、部分结果和请求失败均不能证明文件已删除；只接受当前项目的完整成功结果。
+	const isAwaitingProjectAttachments =
+		Boolean(viewerProjectId) &&
+		!isShareRoute &&
+		!(
+			attachmentLoadState?.projectId === viewerProjectId &&
+			attachmentLoadState.status === "ready" &&
+			hasCurrentProjectAttachmentSnapshot
+		)
+	const getAttachmentContext = useMemoizedFn(() => ({
+		fileList,
+		attachments,
+		isAwaitingProjectAttachments,
+	}))
 
 	const notifyActiveFileOpen = useMemoizedFn((fileId: unknown) => {
 		const normalizedFileId = normalizeFileId(fileId)
@@ -1306,22 +1318,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
-	useEffect(() => {
-		const handleAttachmentsLoading = (loading: boolean) => {
-			if (!loading) {
-				setIsAwaitingProjectAttachments(false)
-			}
-		}
-
-		pubsub.subscribe(PubSubEvents.Update_Attachments_Loading, handleAttachmentsLoading)
-		return () => {
-			pubsub.unsubscribe(
-				PubSubEvents.Update_Attachments_Loading,
-				handleAttachmentsLoading as unknown as (...args: unknown[]) => void,
-			)
-		}
-	}, [])
-
 	// Clear tabs when selectedProject changes
 	// 加载缓存状态
 	useEffect(() => {
@@ -1365,6 +1361,12 @@ export function useFilesViewer(props: FilesViewerProps) {
 					restoreProjectId !== lastProjectIdRef.current
 				)
 					return
+				// 本地缓存读取期间清单可能已更新；恢复时使用最新的一次附件上下文。
+				const {
+					fileList: restoredFileList,
+					attachments: restoredAttachments,
+					isAwaitingProjectAttachments: awaitingRestoredAttachments,
+				} = getAttachmentContext()
 
 				const savedManager = cachedState?.fileState?.fileManagerState
 				if (
@@ -1410,21 +1412,25 @@ export function useFilesViewer(props: FilesViewerProps) {
 								let file: FileItem | undefined
 
 								// 先在文件列表中查找（只包含文件）
-								file = fileList.find((f) => f.file_id === tab.id)
+								file = restoredFileList.find((f) => f.file_id === tab.id)
 
 								// 如果没找到，可能是文件夹，在 attachments 树中递归查找
-								if (!file && attachments) {
-									file = findItemInAttachments(attachments, tab.id)
+								if (!file && restoredAttachments) {
+									file = findItemInAttachments(restoredAttachments, tab.id)
 								}
 								const isLoading =
-									isAwaitingProjectAttachments &&
+									awaitingRestoredAttachments &&
 									!file &&
 									shouldSyncWithAttachments(tab.fileData)
 								const isCachedWebsiteTab = isWebsiteTab({
 									id: tab.id,
 									type: tab.type,
 								})
-								const isDeleted = !file && !isLoading && !isCachedWebsiteTab
+								const isDeleted =
+									!file &&
+									!isLoading &&
+									!isCachedWebsiteTab &&
+									shouldSyncWithAttachments(tab.fileData)
 
 								let displayConfig
 								// 这里需要兼容一下缓存的tab，用的是旧的 metadata 字段
@@ -1478,7 +1484,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						.filter((tab): tab is TabItem => tab !== null)
 					const restoredTabs = dedupeTabsById(
 						processedTabs
-							.map((tab) => normalizeProjectTabItem(tab, attachments))
+							.map((tab) => normalizeProjectTabItem(tab, restoredAttachments))
 							.filter((tab) => canRestoreTab(projectRestoreState.current, tab.id)),
 					)
 					const cachedActiveTabId = cachedState.fileState?.activeTabId
@@ -1486,7 +1492,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 						? processedTabs.find((tab) => tab.id === cachedActiveTabId)
 						: undefined
 					const restoredActiveTabId = activeSourceTab
-						? normalizeProjectTabItem(activeSourceTab, attachments).id
+						? normalizeProjectTabItem(activeSourceTab, restoredAttachments).id
 						: cachedActiveTabId
 
 					const restoreActive =
@@ -1590,7 +1596,6 @@ export function useFilesViewer(props: FilesViewerProps) {
 			projectManagerState.current = undefined
 			cacheReadSucceeded.current = false
 			isRestoringCacheRef.current = false
-			setIsAwaitingProjectAttachments(Boolean(viewerProjectId))
 			manuallyClosedLastTabRef.current = false // Reset manual close flag on project change
 			lastFileListRef.current = []
 			lastFileListSignatureRef.current = ""
@@ -1691,6 +1696,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		const syncStartedAt = manualPerfLogger.now()
 		const currentFileList = fileList
 		const hasLoadingTabs = tabs.some((tab) => tab.isLoading)
+		const syncSignature = `${isAwaitingProjectAttachments ? "pending" : "ready"}:${fileListSignature}`
 
 		// Skip empty tabs without recording the signature, so restored cache can still sync once.
 		if (tabs.length === 0) {
@@ -1703,7 +1709,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 
 		// Skip unchanged lists unless a loading tab needs sync.
-		if (fileListSignature === lastFileListSignatureRef.current && !hasLoadingTabs) {
+		if (syncSignature === lastFileListSignatureRef.current && !hasLoadingTabs) {
 			manualPerfLogger.recordDuration("files_viewer_tab_sync_ms", syncStartedAt, {
 				file_count: currentFileList.length,
 				tab_count: tabs.length,
@@ -1713,7 +1719,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		}
 
 		lastFileListRef.current = currentFileList
-		lastFileListSignatureRef.current = fileListSignature
+		lastFileListSignatureRef.current = syncSignature
 
 		let hasUpdates = false
 		let updatedTabs = tabs
@@ -1769,6 +1775,10 @@ export function useFilesViewer(props: FilesViewerProps) {
 					}
 
 					if (isAwaitingProjectAttachments) {
+						if (tab.isDeleted) {
+							hasUpdates = true
+							return { ...tab, isDeleted: false, isLoading: true }
+						}
 						return tab
 					}
 
