@@ -2332,7 +2332,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			)
 			const resolvedSelection = resolveVideoGenerationSelection(
 				fallbackModel,
-				isQuickEdit ? undefined : config?.generation,
+				config?.generation,
 				mergeVideoGenerationConstraints(
 					restoredModeConfig?.generation_constraints,
 					restoredVariantConfig?.generation_constraints,
