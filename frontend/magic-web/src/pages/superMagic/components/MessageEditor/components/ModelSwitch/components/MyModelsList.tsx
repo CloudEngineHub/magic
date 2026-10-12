@@ -18,7 +18,7 @@ import {
 	MODEL_TYPE_VIDEO,
 } from "@/apis/modules/org-ai-model-provider"
 import { useOptionalAddModelStore } from "./AddModel/context"
-import type { ModelItem } from "../types"
+import type { ModelItem, ModelSelectionState } from "../types"
 import MyModelsIcon from "../assets/my-models-icon.svg"
 import { MyModelRow } from "./my-models-list/MyModelRow"
 import { buildMyModelGroups } from "./my-models-list/utils"
@@ -37,6 +37,7 @@ interface MyModelsListProps {
 	onModelClick?: (model: ModelItem) => void
 	selectedItemRef?: React.RefObject<HTMLDivElement>
 	onModelsLoaded?: () => Promise<void> | void
+	getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 }
 
 function MyModelsListInner({
@@ -45,6 +46,7 @@ function MyModelsListInner({
 	onModelClick,
 	selectedItemRef,
 	onModelsLoaded,
+	getModelState,
 	allowModelManagement = true,
 }: MyModelsListProps) {
 	const { t } = useTranslation("super")
@@ -105,6 +107,7 @@ function MyModelsListInner({
 								selectedModel?.model_id === group.representativeModel.model_id
 							}
 							onSelect={onModelClick}
+							getModelState={getModelState}
 							selectedItemRef={selectedItemRef}
 							onEdit={store.openEditModel}
 							onDelete={store.openDeleteModel}

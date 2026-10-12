@@ -97,8 +97,9 @@ export const ModelSwitch = observer(function ModelSwitch({
 		getModelDescription,
 	} = useModelSwitchLogic({
 		onModelClick: (model) => {
-			if (needsConfirmation) {
-				if (!confirmation.submitting) confirmation.setPendingModel(model)
+			if (selection?.mode === "confirm") {
+				if (!confirmation.submitting && !selection.getModelState?.(model)?.disabled)
+					confirmation.setPendingModel(model)
 				return
 			}
 			if (activeTab === "image") {
@@ -380,6 +381,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 			onModelClick={baseHandleModelClick}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
+			getModelState={selection?.mode === "confirm" ? selection.getModelState : undefined}
 			modelKey={currentModelKey}
 			onModelsLoaded={onBeforeOpen}
 			allowModelManagement={!needsConfirmation}
@@ -399,11 +401,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 				</Button>
 				<Button
 					size="sm"
-					disabled={
-						confirmation.submitting ||
-						!confirmation.pendingModel ||
-						!selection.canConfirm(confirmation.pendingModel)
-					}
+					disabled={confirmation.submitting || !confirmation.canConfirm}
 					onClick={() => void confirmation.confirm(handleClose)}
 				>
 					{confirmation.submitting

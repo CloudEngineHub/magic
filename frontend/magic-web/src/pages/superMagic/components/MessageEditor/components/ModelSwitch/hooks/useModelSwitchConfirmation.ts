@@ -14,12 +14,19 @@ export function useModelSwitchConfirmation(selection: ModelSwitchProps["selectio
 			mountedRef.current = false
 		}
 	}, [])
+	// 初始模型也可能受当前场景限制，确认不能绕过列表的不可选状态。
+	const canConfirmModel = useMemoizedFn(
+		(model: ModelItem) =>
+			selection?.mode === "confirm" &&
+			!selection.getModelState?.(model)?.disabled &&
+			selection.canConfirm(model),
+	)
 	const confirm = useMemoizedFn(async (onClose: () => void) => {
 		if (
 			selection?.mode !== "confirm" ||
 			!pendingModel ||
 			submittingRef.current ||
-			!selection.canConfirm(pendingModel)
+			!canConfirmModel(pendingModel)
 		)
 			return
 		submittingRef.current = true
@@ -32,5 +39,11 @@ export function useModelSwitchConfirmation(selection: ModelSwitchProps["selectio
 			if (mountedRef.current) setSubmitting(false)
 		}
 	})
-	return { pendingModel, setPendingModel, submitting, confirm }
+	return {
+		pendingModel,
+		setPendingModel,
+		submitting,
+		canConfirm: pendingModel !== null && canConfirmModel(pendingModel),
+		confirm,
+	}
 }

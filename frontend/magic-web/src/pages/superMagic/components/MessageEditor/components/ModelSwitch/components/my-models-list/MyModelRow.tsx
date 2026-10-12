@@ -5,10 +5,11 @@ import { useTranslation } from "react-i18next"
 import { MagicDropdown } from "@/components/base"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { cn } from "@/utils/cn"
 import { serviceProviderModelToModelItem } from "@/services/superMagic/SuperMagicCustomModelService"
 import { Ellipsis, Pencil, Trash2 } from "lucide-react"
-import type { ModelItem } from "../../types"
+import type { ModelItem, ModelSelectionState } from "../../types"
 import { ProviderTypeIcon } from "../ProviderTypeIcon"
 import type { MyModelGroup, MyModelProviderEntry } from "./utils"
 import { userStore } from "@/models/user"
@@ -18,6 +19,7 @@ interface MyModelRowProps {
 	group: MyModelGroup
 	isSelected?: boolean
 	onSelect?: (model: ModelItem) => void
+	getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 	selectedItemRef?: React.RefObject<HTMLDivElement>
 	onEdit: (model: MyModelProviderEntry["model"]) => void
 	onDelete: (modelId: string) => void
@@ -27,6 +29,7 @@ export function MyModelRow({
 	group,
 	isSelected = false,
 	onSelect,
+	getModelState,
 	selectedItemRef,
 	onEdit,
 	onDelete,
@@ -36,6 +39,9 @@ export function MyModelRow({
 	const isActionMenuOpenRef = useRef(false)
 	const shouldSkipNextSelectRef = useRef(false)
 	const { representativeModel, providerEntries } = group
+	const modelState = getModelState?.(serviceProviderModelToModelItem(representativeModel))
+	const isSelectionDisabled = modelState?.disabled ?? false
+	const isCandidateSelected = isSelected && !isSelectionDisabled
 	const hasMultipleProviders = providerEntries.length > 1
 	const primaryProviderEntry = providerEntries[0]
 	const primaryProviderName = primaryProviderEntry
@@ -48,7 +54,9 @@ export function MyModelRow({
 	const { isPersonalOrganization } = userStore.user
 	const canManageModels = isPersonalOrganization && allowModelManagement
 
-	const handleSelect = () => onSelect?.(serviceProviderModelToModelItem(representativeModel))
+	const handleSelect = () => {
+		if (!isSelectionDisabled) onSelect?.(serviceProviderModelToModelItem(representativeModel))
+	}
 
 	const handleItemClick = (event: React.MouseEvent<HTMLDivElement>) => {
 		const target = event.target as HTMLElement | null
@@ -102,25 +110,34 @@ export function MyModelRow({
 			className={cn(
 				"group flex cursor-pointer items-center gap-2.5 rounded px-3 py-2",
 				"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent",
+				isSelectionDisabled && "cursor-not-allowed bg-muted/50",
 			)}
 			data-testid={`my-model-item-${representativeModel.id}`}
 			data-model-id={representativeModel.model_id}
-			data-selected={isSelected}
+			data-selected={isCandidateSelected}
+			aria-disabled={isSelectionDisabled || undefined}
 			data-provider-count={providerEntries.length}
 			onClick={handleItemClick}
 		>
 			<div className="min-w-0 flex-1">
 				<div>
-					<p className="text-sm font-medium leading-5 text-foreground">
-						{representativeModel.name}
-					</p>
+					<div className="flex min-w-0 items-center gap-2">
+						<p className="min-w-0 text-sm font-medium leading-5 text-foreground">
+							{representativeModel.name}
+						</p>
+						{modelState && (
+							<Badge variant="secondary" className="font-normal">
+								{modelState.label}
+							</Badge>
+						)}
+					</div>
 					<p
 						className={cn(
 							"line-clamp-2 text-xs leading-4 text-muted-foreground",
 							"empty:hidden",
 						)}
 					>
-						{representativeModel.description}
+						{modelState?.reason ?? representativeModel.description}
 					</p>
 				</div>
 				{canManageModels && (
@@ -211,18 +228,20 @@ export function MyModelRow({
 					</div>
 				)}
 			</div>
-			<Checkbox
-				checked={isSelected}
-				onCheckedChange={handleSelect}
-				onClick={(event) => event.stopPropagation()}
-				className={cn(
-					"shrink-0",
-					"invisible opacity-0 transition-opacity",
-					"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
-					"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
-					isSelected && "visible opacity-100",
-				)}
-			/>
+			{!isSelectionDisabled && (
+				<Checkbox
+					checked={isCandidateSelected}
+					onCheckedChange={handleSelect}
+					onClick={(event) => event.stopPropagation()}
+					className={cn(
+						"shrink-0",
+						"invisible opacity-0 transition-opacity",
+						"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
+						"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+						isCandidateSelected && "visible opacity-100",
+					)}
+				/>
+			)}
 		</div>
 	)
 }

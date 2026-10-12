@@ -58,6 +58,13 @@ export interface ModelItem {
 	video_generation_config?: VideoGenerationConfig
 }
 
+/** 仅表示本次选择场景的限制，不改变模型自身的 model_status。 */
+export interface ModelSelectionState {
+	disabled: boolean
+	label: string
+	reason: string
+}
+
 export interface ModelSwitchProps {
 	/** 确认式选择只暂存候选，确认后由调用方保存偏好并提交。 */
 	selection?:
@@ -67,6 +74,7 @@ export interface ModelSwitchProps {
 				onConfirm: (model: ModelItem) => Promise<boolean>
 				confirmText: string
 				canConfirm: (model: ModelItem) => boolean
+				getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 				description?: ReactNode
 		  }
 	trigger?: ReactElement

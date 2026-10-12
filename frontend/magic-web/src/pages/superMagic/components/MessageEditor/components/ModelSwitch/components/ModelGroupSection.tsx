@@ -3,9 +3,10 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import FlexBox from "@/components/base/FlexBox"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
+import { Badge } from "@/components/shadcn-ui/badge"
 import { cn } from "@/utils/cn"
 import type React from "react"
-import type { ModelItem, ModelListGroup, MessageEditorSize } from "../types"
+import type { ModelItem, ModelListGroup, MessageEditorSize, ModelSelectionState } from "../types"
 import { isModelDisabled } from "../utils"
 import { CollapsibleDescription } from "./CollapsibleDescription"
 import ModelIcon from "./ModelIcon"
@@ -24,6 +25,7 @@ interface ModelGroupSectionProps {
 	onModelClick: (model: ModelItem) => void
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
+	getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 }
 
 export function ModelGroupSection({
@@ -33,6 +35,7 @@ export function ModelGroupSection({
 	onModelClick,
 	selectedItemRef,
 	getModelDescription,
+	getModelState,
 }: ModelGroupSectionProps) {
 	const { t } = useTranslation("super")
 	const isMobile = size === "mobile"
@@ -52,35 +55,48 @@ export function ModelGroupSection({
 			<ProviderName item={item.group} />
 			<div className="flex flex-col gap-1">
 				{item.displayModels.map((model) => {
-					const isSelected = selectedModel?.model_id === model.model_id
+					const modelState = getModelState?.(model)
+					const isSelectionDisabled = modelState?.disabled ?? false
+					// 场景受限的原模型仍用作滚动定位，但不再显示可切换候选的勾选。
+					const isCurrentModel = selectedModel?.model_id === model.model_id
+					const isSelected = isCurrentModel && !isSelectionDisabled
 					const isDisabled = isModelDisabled(model)
-					const description = getModelDescription(model)
-					const ariaLabel = description
-						? `${model.model_name || model.model_id}，${description}`
-						: model.model_name || model.model_id
+					const isUnavailable = isDisabled || isSelectionDisabled
+					const description = modelState?.reason ?? getModelDescription(model)
+					const ariaLabel = [
+						model.model_name || model.model_id,
+						modelState?.label,
+						description,
+					]
+						.filter(Boolean)
+						.join("，")
 
 					if (!isMobile) {
 						return (
 							<div
 								key={model.model_id}
-								ref={isSelected ? selectedItemRef : null}
+								ref={isCurrentModel ? selectedItemRef : null}
 								className={cn(
 									"flex items-center rounded px-3 py-2",
 									"relative cursor-pointer gap-2.5 transition-all duration-200",
 									"group",
 									"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent",
 									isDisabled && "cursor-not-allowed opacity-50",
+									isSelectionDisabled && "cursor-not-allowed bg-muted/50",
 								)}
-								onClick={() => onModelClick(model)}
+								onClick={() => {
+									if (!isSelectionDisabled) onModelClick(model)
+								}}
 								role="button"
-								tabIndex={isDisabled ? -1 : 0}
+								tabIndex={isUnavailable ? -1 : 0}
 								onKeyDown={(event) => {
-									if (isDisabled) return
+									if (isUnavailable) return
 									if (event.key !== "Enter" && event.key !== " ") return
 									event.preventDefault()
 									onModelClick(model)
 								}}
 								aria-label={ariaLabel}
+								aria-disabled={isUnavailable || undefined}
 								title={description || model.model_name || model.model_id}
 								data-testid="model-switch-item"
 								data-model-id={model.model_id}
@@ -98,28 +114,41 @@ export function ModelGroupSection({
 											)}
 										/>
 										<ModelTags model={model} />
+										{modelState && (
+											<Badge variant="secondary" className="font-normal">
+												{modelState.label}
+											</Badge>
+										)}
 									</FlexBox>
 									<CollapsibleDescription
 										description={description}
 										isDisabled={isDisabled}
 										isExpanded={!!expandedDescriptions[model.model_id]}
-										expandLabel={t("messageEditor.modelSwitch.expandDescription")}
-										collapseLabel={t("messageEditor.modelSwitch.collapseDescription")}
-										onToggle={(event) => toggleDescription(model.model_id, event)}
+										expandLabel={t(
+											"messageEditor.modelSwitch.expandDescription",
+										)}
+										collapseLabel={t(
+											"messageEditor.modelSwitch.collapseDescription",
+										)}
+										onToggle={(event) =>
+											toggleDescription(model.model_id, event)
+										}
 									/>
 								</FlexBox>
-								<Checkbox
-									checked={isSelected}
-									onCheckedChange={() => onModelClick(model)}
-									onClick={(event) => event.stopPropagation()}
-									className={cn(
-										"flex-shrink-0",
-										"invisible opacity-0 transition-opacity",
-										"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
-										"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
-										isSelected && "visible opacity-100",
-									)}
-								/>
+								{!isSelectionDisabled && (
+									<Checkbox
+										checked={isSelected}
+										onCheckedChange={() => onModelClick(model)}
+										onClick={(event) => event.stopPropagation()}
+										className={cn(
+											"flex-shrink-0",
+											"invisible opacity-0 transition-opacity",
+											"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
+											"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+											isSelected && "visible opacity-100",
+										)}
+									/>
+								)}
 							</div>
 						)
 					}
@@ -127,7 +156,7 @@ export function ModelGroupSection({
 					return (
 						<div
 							key={model.model_id}
-							ref={isSelected ? selectedItemRef : null}
+							ref={isCurrentModel ? selectedItemRef : null}
 							className={cn(
 								"flex h-12 items-center gap-3 rounded-full px-[7px] pr-4",
 								"relative cursor-pointer text-left transition-all duration-200",
@@ -136,17 +165,22 @@ export function ModelGroupSection({
 								!isSelected &&
 									"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent/60",
 								isDisabled && "cursor-not-allowed opacity-50",
+								isSelectionDisabled && "cursor-not-allowed bg-muted/50",
+								modelState && "h-auto min-h-12 py-2",
 							)}
-							onClick={() => onModelClick(model)}
+							onClick={() => {
+								if (!isSelectionDisabled) onModelClick(model)
+							}}
 							role="button"
-							tabIndex={isDisabled ? -1 : 0}
+							tabIndex={isUnavailable ? -1 : 0}
 							onKeyDown={(event) => {
-								if (isDisabled) return
+								if (isUnavailable) return
 								if (event.key !== "Enter" && event.key !== " ") return
 								event.preventDefault()
 								onModelClick(model)
 							}}
 							aria-label={ariaLabel}
+							aria-disabled={isUnavailable || undefined}
 							title={description || model.model_name || model.model_id}
 							data-testid="model-switch-item"
 							data-model-id={model.model_id}
@@ -171,7 +205,17 @@ export function ModelGroupSection({
 										)}
 									/>
 									<ModelTags model={model} />
+									{modelState && (
+										<Badge variant="secondary" className="font-normal">
+											{modelState.label}
+										</Badge>
+									)}
 								</FlexBox>
+								{modelState && (
+									<p className="text-xs leading-4 text-muted-foreground">
+										{modelState.reason}
+									</p>
+								)}
 							</FlexBox>
 							{isSelected ? (
 								<Check

@@ -3,7 +3,13 @@ import { observer } from "mobx-react-lite"
 import { cn } from "@/utils/cn"
 import { SearchX, Sparkles } from "lucide-react"
 import { MyModelsList } from "./MyModelsList"
-import type { ModelItem, ModelListGroup, MessageEditorSize, ModelListKey } from "../types"
+import type {
+	ModelItem,
+	ModelListGroup,
+	MessageEditorSize,
+	ModelListKey,
+	ModelSelectionState,
+} from "../types"
 import type React from "react"
 import { useTranslation } from "react-i18next"
 import { isModelDisabled } from "../utils"
@@ -19,6 +25,7 @@ interface ModelListContentProps {
 	onModelClick: (model: ModelItem) => void
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
+	getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 	modelKey?: ModelListKey
 	onModelsLoaded?: () => Promise<void> | void
 }
@@ -31,6 +38,7 @@ export const ModelListContent = observer(function ModelListContent({
 	onModelClick,
 	selectedItemRef,
 	getModelDescription,
+	getModelState,
 	modelKey = "models",
 	onModelsLoaded,
 	allowModelManagement,
@@ -44,7 +52,7 @@ export const ModelListContent = observer(function ModelListContent({
 		: t("messageEditor.modelSwitch.noModels")
 
 	const handleModelClick = useMemoizedFn((model: ModelItem) => {
-		if (!isModelDisabled(model)) {
+		if (!getModelState?.(model)?.disabled && !isModelDisabled(model)) {
 			onModelClick(model)
 		}
 	})
@@ -57,6 +65,7 @@ export const ModelListContent = observer(function ModelListContent({
 				onModelClick={onModelClick}
 				selectedItemRef={selectedItemRef}
 				onModelsLoaded={onModelsLoaded}
+				getModelState={getModelState}
 				allowModelManagement={allowModelManagement}
 			/>
 			{visibleGroups.length === 0 && (
@@ -81,6 +90,7 @@ export const ModelListContent = observer(function ModelListContent({
 					onModelClick={handleModelClick}
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
+					getModelState={getModelState}
 				/>
 			))}
 		</>
