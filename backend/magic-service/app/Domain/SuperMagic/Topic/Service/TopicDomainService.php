@@ -1155,6 +1155,51 @@ class TopicDomainService
     }
 
     /**
+     * Resolve the client-provided cutoff identifier into the primary key id of
+     * the cutoff message inside the source topic.
+     *
+     * The client sends the business `message_id`, while the copy pipeline
+     * filters messages by primary key (`id <= cutoff`) and resolves IM
+     * sequences by `app_message_id` (which stores the primary key string).
+     * For topics created by duplication the two id spaces diverge: copied
+     * rows keep the original `message_id` but receive fresh primary keys, so
+     * the raw input must be mapped back to a source-topic primary key before
+     * any copying starts.
+     *
+     * @param TopicEntity $sourceTopicEntity Source topic being duplicated
+     * @param string $targetMessageId Cutoff identifier from the request (message_id or primary key)
+     * @return int Primary key id of the cutoff message in the source topic
+     */
+    public function resolveDuplicateCutoffMessageId(TopicEntity $sourceTopicEntity, string $targetMessageId): int
+    {
+        $sourceTopicId = $sourceTopicEntity->getId();
+        $targetMessageId = trim($targetMessageId);
+
+        if ($targetMessageId !== '') {
+            // Business message_id space: preserved as-is when a topic is duplicated.
+            $message = $this->taskMessageRepository->findByTopicIdAndMessageId($sourceTopicId, $targetMessageId);
+            if ($message !== null) {
+                return $message->getId();
+            }
+
+            // Primary key space: for originally created messages message_id equals
+            // the primary key string, but callers may also pass the primary key directly.
+            if (ctype_digit($targetMessageId)) {
+                $message = $this->taskMessageRepository->getById((int) $targetMessageId);
+                if ($message !== null && (int) $message->getTopicId() === $sourceTopicId) {
+                    return $message->getId();
+                }
+            }
+        }
+
+        $this->logger->warning('Duplicate cutoff message not found in source topic', [
+            'source_topic_id' => $sourceTopicId,
+            'target_message_id' => $targetMessageId,
+        ]);
+        ExceptionBuilder::throw(SuperAgentErrorCode::DUPLICATE_TARGET_MESSAGE_NOT_FOUND, 'topic.target_message_not_found');
+    }
+
+    /**
      * Copy topic messages from source topic to target topic.
      * This method handles the copying of messages, IM messages, and chat history files.
      *
@@ -1185,8 +1230,16 @@ class TopicDomainService
         // Get agent's seq id
         $progressCallback && $progressCallback('running', 40, 'Getting sequence IDs');
         $seqList = $this->getSeqIdByMessageId((string) $messageId);
-        $userSeqId = (int) $seqList['user_seq_id'];
-        $aiSeqId = (int) $seqList['ai_seq_id'];
+        if ($seqList === []) {
+            $this->logger->error('IM sequence not found for duplicate cutoff message', [
+                'source_topic_id' => $sourceTopicEntity->getId(),
+                'target_topic_id' => $targetTopicEntity->getId(),
+                'message_id' => $messageId,
+            ]);
+            ExceptionBuilder::throw(GenericErrorCode::SystemError, 'system.system_error');
+        }
+        $userSeqId = (int) ($seqList['user_seq_id'] ?? 0);
+        $aiSeqId = (int) ($seqList['ai_seq_id'] ?? 0);
 
         // Copy IM messages
         $progressCallback && $progressCallback('running', 60, 'Copying IM messages');
@@ -1647,11 +1700,13 @@ class TopicDomainService
         );
 
         if (empty($messagesToCopy)) {
-            $this->logger->info('No messages found to copy', [
+            // Fail loudly instead of silently producing an empty duplicated topic.
+            $this->logger->warning('No messages found to copy', [
                 'source_topic_id' => $sourceTopicEntity->getId(),
+                'target_topic_id' => $targetTopicEntity->getId(),
                 'message_id' => $messageId,
             ]);
-            return [];
+            ExceptionBuilder::throw(SuperAgentErrorCode::DUPLICATE_NO_MESSAGES_TO_COPY, 'topic.no_messages_to_copy');
         }
 
         $this->logger->info('Found messages to copy', [

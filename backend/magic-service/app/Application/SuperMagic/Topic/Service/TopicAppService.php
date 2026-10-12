@@ -894,6 +894,14 @@ class TopicAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.access_denied');
         }
 
+        // Resolve the cutoff identifier (message_id or primary key) to the real
+        // primary key inside the source topic before any write happens, so an
+        // invalid cutoff never leaves an empty duplicated topic behind.
+        $cutoffMessageId = $this->topicDomainService->resolveDuplicateCutoffMessageId(
+            $sourceTopicEntity,
+            $requestDTO->getTargetMessageId()
+        );
+
         // Create data isolation
         $dataIsolation = $this->createDataIsolation($userAuthorization);
 
@@ -936,7 +944,7 @@ class TopicAppService extends AbstractAppService
                 $this->topicDomainService->copyTopicMessageFromOthers(
                     $sourceTopicEntity,
                     $newTopicEntity,
-                    (int) $requestDTO->getTargetMessageId(),
+                    $cutoffMessageId,
                     $imConversationResult
                 );
                 Db::commit();
@@ -1004,6 +1012,14 @@ class TopicAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_ACCESS_DENIED, 'topic.access_denied');
         }
 
+        // Resolve the cutoff identifier (message_id or primary key) to the real
+        // primary key inside the source topic before any write happens, so an
+        // invalid cutoff never leaves an empty duplicated topic behind.
+        $cutoffMessageId = $this->topicDomainService->resolveDuplicateCutoffMessageId(
+            $sourceTopicEntity,
+            $requestDTO->getTargetMessageId()
+        );
+
         // === 同步部分：创建话题骨架 ===
         $dataIsolation = $this->createDataIsolation($userAuthorization);
 
@@ -1050,6 +1066,7 @@ class TopicAppService extends AbstractAppService
         $taskData = [
             'source_topic_id' => $sourceTopicId,
             'target_message_id' => $requestDTO->getTargetMessageId(),
+            'resolved_cutoff_message_id' => $cutoffMessageId,
             'new_topic_name' => $requestDTO->getNewTopicName(),
             'user_id' => $userAuthorization->getId(),
             'new_topic_id' => $newTopicEntity->getId(), // 保存新话题ID
@@ -1062,7 +1079,7 @@ class TopicAppService extends AbstractAppService
         $requestId = CoContext::getRequestId() ?: (string) IdGenerator::getSnowId();
 
         // === 异步部分：复制消息 ===
-        go(function () use ($sourceTopicEntity, $newTopicEntity, $requestDTO, $imConversationResult, $taskKey, $requestId, $dataIsolation) {
+        go(function () use ($sourceTopicEntity, $newTopicEntity, $cutoffMessageId, $imConversationResult, $taskKey, $requestId, $dataIsolation) {
             // 复制请求上下文
             CoContext::setRequestId($requestId);
 
@@ -1077,7 +1094,7 @@ class TopicAppService extends AbstractAppService
                     $messageIdMapping = $this->topicDomainService->copyTopicMessageFromOthers(
                         $sourceTopicEntity,
                         $newTopicEntity,
-                        (int) $requestDTO->getTargetMessageId(),
+                        $cutoffMessageId,
                         $imConversationResult,
                         // 进度回调函数
                         function (string $status, int $progress, string $message) use ($taskKey) {
