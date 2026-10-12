@@ -373,6 +373,16 @@ readonly class RoleDomainService
             return array_values(array_unique($permissions));
         }
 
+        // 创建人身份以 magic_organizations.creator_id 为准。管理员镜像尚未补齐时，
+        // 也必须能够获得组织管理员权限，避免 isOrganizationAdmin() 与 RBAC 结果不一致。
+        if ($organization?->isOwnedBy($userId)) {
+            $fallbackPermission = $this->resolveOrganizationAdminPermissionKey($organizationCode);
+            if (! in_array($fallbackPermission, $permissions, true)) {
+                $permissions[] = $fallbackPermission;
+            }
+            return array_values(array_unique($permissions));
+        }
+
         if (! (bool) config('permission.enable_organization_admin_permission_fallback', false)) {
             return $permissions;
         }
