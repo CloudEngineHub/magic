@@ -1036,7 +1036,13 @@ export class SlideScreenshotService {
 				`
 
 					// 将脚本注入到 <head> 标签的最前面
-					fullContent = fullContent.replace(/<head>/i, "<head>" + earlyPauseScript)
+					// head 可带属性，公共脚本也可能包含 "<head>" 字符串；只操作真实节点，避免截断脚本并泄漏源码。
+					const screenshotDoc = new DOMParser().parseFromString(fullContent, "text/html")
+					screenshotDoc.head.insertAdjacentHTML("afterbegin", earlyPauseScript)
+					const doctype = screenshotDoc.doctype
+						? new XMLSerializer().serializeToString(screenshotDoc.doctype)
+						: ""
+					fullContent = doctype + screenshotDoc.documentElement.outerHTML
 
 					iframe.contentDocument.open()
 					iframe.contentDocument.write(fullContent)

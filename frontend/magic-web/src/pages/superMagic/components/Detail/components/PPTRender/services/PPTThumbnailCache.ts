@@ -5,7 +5,7 @@ import {
 } from "@/services/superMagic/repositories/PPTThumbnailCacheRepository"
 
 /** 随截图算法、注入逻辑或 HTML 资源预处理变化更新，避免复用旧缩略图。 */
-const RENDERER_VERSION = 2
+const RENDERER_VERSION = 3
 
 export type PPTThumbnailCacheMode = "use" | "refresh"
 
