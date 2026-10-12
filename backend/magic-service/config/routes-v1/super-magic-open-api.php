@@ -183,6 +183,10 @@ Router::addGroup(
         // 数字员工相关
         Router::addGroup('/agents', static function () {
             Router::get('/featured/sort-list', [OpenSuperMagicAgentApi::class, 'sortListQueries']);
+            // Hire a digital employee from the market.
+            Router::post('/{code}/hire', [OpenSuperMagicAgentApi::class, 'hireAgent']);
+            // Fire a digital employee using the existing deletion rules.
+            Router::post('/{code}/fire', [OpenSuperMagicAgentApi::class, 'fireAgent']);
             Router::get('/{code}/models', [OpenSuperMagicAgentApi::class, 'getModels']);
             Router::get('/{code}/default-config', [OpenSuperMagicAgentApi::class, 'getDefaultConfig']);
         });
