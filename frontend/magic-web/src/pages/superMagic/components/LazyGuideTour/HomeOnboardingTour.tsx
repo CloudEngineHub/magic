@@ -160,6 +160,109 @@ function coverWindowExcept(viewWidth: number, viewHeight: number, holes: WindowB
 }
 
 /**
+ * The box a step is framed by: the anchor's own box, grown to hold the companions the step names
+ * alongside it — see `OnboardingStep.extraAnchors`.
+ *
+ * Companions that are not on the page are skipped rather than throwing the frame off, and a step
+ * whose companions are all missing is framed over its anchor alone, exactly as before the field
+ * existed. A companion that is mounted but has no box — a collapsed container, a hidden block — is
+ * skipped too, because counting it would drag the frame onto the origin.
+ */
+function frameWithCompanions(anchor: HTMLElement, companions: string): DOMRect {
+	const boxes = [anchor.getBoundingClientRect()]
+	for (const name of companions.split(",").filter(Boolean)) {
+		const node = document.querySelector<HTMLElement>(`[data-guide-anchor="${name}"]`)
+		if (!node) continue
+		const box = node.getBoundingClientRect()
+		if (box.width <= 0 && box.height <= 0) continue
+		boxes.push(box)
+	}
+	if (boxes.length === 1) return boxes[0]
+	const left = Math.min(...boxes.map((box) => box.left))
+	const top = Math.min(...boxes.map((box) => box.top))
+	const right = Math.max(...boxes.map((box) => box.right))
+	const bottom = Math.max(...boxes.map((box) => box.bottom))
+	return new DOMRect(left, top, right - left, bottom - top)
+}
+
+/**
+ * The vertical extent of the prompt inside the editor.
+ *
+ * The editor's viewport is stretched to the height the card gives it, so its own box says how tall
+ * the card is rather than where the prompt is: a prompt of one line sits at the top of a box that is
+ * mostly empty, because the room below it is there for the lines a longer prompt would take. Framing
+ * the viewport therefore draws a cut-out the height of the card, with the prompt in one corner of
+ * it.
+ *
+ * What the cut-out is for is the prompt, so it is the prompt that is measured: the blocks the
+ * editor's surface is actually made of, and all of them, because a prompt is as many paragraphs as
+ * it is. The surface's own box is the fallback for the one case that has no laid-out block to take
+ * — a document that is empty, or an editor that has not mounted its content yet.
+ */
+function promptExtent(editor: HTMLElement): { top: number; bottom: number } {
+	const box = editor.getBoundingClientRect()
+	const surface = editor.querySelector<HTMLElement>(".ProseMirror")
+	if (!surface) return { top: box.top, bottom: box.bottom }
+	const blocks = Array.from(surface.children)
+		.filter((child): child is HTMLElement => child instanceof HTMLElement)
+		.map((block) => block.getBoundingClientRect())
+		.filter((block) => block.height > 0)
+	if (blocks.length === 0) {
+		const surfaceBox = surface.getBoundingClientRect()
+		return { top: surfaceBox.top, bottom: surfaceBox.bottom }
+	}
+	return {
+		top: Math.min(...blocks.map((block) => block.top)),
+		bottom: Math.max(...blocks.map((block) => block.bottom)),
+	}
+}
+
+/**
+ * The composer's cut-out: the prompt, grown to hold the composer's own padding.
+ *
+ * The anchor this step measures wraps the editable area and nothing else: the padding that keeps the
+ * prompt off the card's edge belongs to the element around it. A cut-out drawn on the anchor alone
+ * therefore clips the text flush to its own edge — the first character of the prefilled prompt sits
+ * exactly where the highlight begins, which reads as the highlight having swallowed the margin the
+ * composer was drawn with.
+ *
+ * Growing the box by that padding puts the cut-out's edge where the card's edge is, and the text
+ * keeps the distance from it that it has on the page.
+ *
+ * The padding is read rather than written down, because it is not one number: the composer is drawn
+ * at three sizes and pads itself differently at each. A composer that is not on the page — or one
+ * that does not hold this editor, as a page swapping its composer out leaves behind — leaves the box
+ * exactly as the anchor measured it.
+ *
+ * The two axes are taken from different boxes on purpose. Left and right are the viewport's, which
+ * spans the card and so puts the cut-out's sides on the card's sides. Top and bottom are the
+ * prompt's, which is what the step is about: grown from the viewport instead, the cut-out is as tall
+ * as the card however short the prompt is, and its lower edge — the padding again — lands on the
+ * toolbar, on the very send button the user is being asked to press next.
+ *
+ * Both of those are bounded by the composer rather than free. The upper edge never rises above the
+ * card, so a prompt scrolled up out of view cannot drag the cut-out off it; the lower edge never
+ * falls past the bottom of the editor's viewport, so a prompt too long to fit cannot push the
+ * cut-out down onto the toolbar either.
+ */
+function composerHole(editor: HTMLElement): DOMRect {
+	const box = editor.getBoundingClientRect()
+	const composer = document.querySelector<HTMLElement>(
+		'[data-guide-anchor="message-editor-container"]',
+	)
+	if (!composer || !composer.contains(editor)) return box
+	const style = window.getComputedStyle(composer)
+	const top = Number.parseFloat(style.paddingTop) || 0
+	const right = Number.parseFloat(style.paddingRight) || 0
+	const bottom = Number.parseFloat(style.paddingBottom) || 0
+	const left = Number.parseFloat(style.paddingLeft) || 0
+	const prompt = promptExtent(editor)
+	const upper = Math.max(prompt.top - top, composer.getBoundingClientRect().top)
+	const lower = Math.min(prompt.bottom + bottom, box.bottom)
+	return new DOMRect(box.left - left, upper, box.width + left + right, Math.max(lower - upper, 0))
+}
+
+/**
  * Taking the mark off the attachment block this run was opened from.
  *
  * The entry that opens the tour of a delivered file is what puts the mark there, because only the
@@ -339,6 +442,19 @@ interface OnboardingStep {
 	 * on whether its anchor turned up.
 	 */
 	awaitsPage?: boolean
+	/**
+	 * Further anchors this step is framed together with.
+	 *
+	 * A step frames one box, but the region a step is about need not live in a single element. The
+	 * sidebar step is what added this field: it introduces the whole navigation, while the anchor it
+	 * measures is the capability list, which is published by a different component from the two
+	 * entries above it. Framing the anchor alone draws a box that stops short of what the copy has
+	 * just named, so a step may name companions and be framed over the bounding box of all of them.
+	 *
+	 * A companion that is not on the page is skipped and the frame falls back to the anchor alone —
+	 * the anchor is what the step is really about, and a missing companion is not a failed step.
+	 */
+	extraAnchors?: string[]
 }
 
 /**
@@ -369,6 +485,16 @@ interface GuidedFlowStep {
 	 * one for a flow too; it simply has no caller yet.
 	 */
 	optional?: boolean
+	/**
+	 * Further anchors this step is framed together with — see `OnboardingStep.extraAnchors`.
+	 *
+	 * Declared here for the same reason `optional` is: the tour reads both kinds of step through one
+	 * expression, so a field that only one of the two shapes carries is a field the tour cannot read
+	 * without a cast. No flow sets it today — and the two flows that reach this interface are also
+	 * the two the frame skips companions for, so it would be dead twice over. It stays because the
+	 * question it answers — whether a region needs more than one box — is one a flow can ask.
+	 */
+	extraAnchors?: string[]
 }
 
 interface HomeOnboardingTourProps {
@@ -392,6 +518,12 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			analyticsStepIndex: 1,
 			title: t("homeOnboarding.steps.sidebar.title"),
 			text: t("homeOnboarding.steps.sidebar.description"),
+			/*
+			 * The step calls the whole left navigation the way into every capability, and that
+			 * includes the two entries at the top of it — which the layout publishes, not the list
+			 * the anchor names. See `OnboardingStep.extraAnchors`.
+			 */
+			extraAnchors: [HomeOnboardingAnchor.SidebarHomeActions],
 		},
 		{
 			anchor: HomeOnboardingAnchor.WorkspaceList,
@@ -862,23 +994,15 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 			text: t("homeOnboarding.audioRecording.steps.share.description"),
 		},
 	]
-	/** The three things the introduction promises, in the order the task walks them. */
+	/**
+	 * The three things the introduction promises, in the order the task walks them. Titles only:
+	 * the one-line explanation each used to carry is gone — the three rows are read at a glance,
+	 * and the subtitle above them already says what the run is for.
+	 */
 	const welcomeGoals = [
-		{
-			id: "task",
-			title: t("homeOnboarding.welcome.goals.task.title"),
-			description: t("homeOnboarding.welcome.goals.task.description"),
-		},
-		{
-			id: "send",
-			title: t("homeOnboarding.welcome.goals.send.title"),
-			description: t("homeOnboarding.welcome.goals.send.description"),
-		},
-		{
-			id: "result",
-			title: t("homeOnboarding.welcome.goals.result.title"),
-			description: t("homeOnboarding.welcome.goals.result.description"),
-		},
+		{ id: "task", title: t("homeOnboarding.welcome.goals.task.title") },
+		{ id: "send", title: t("homeOnboarding.welcome.goals.send.title") },
+		{ id: "result", title: t("homeOnboarding.welcome.goals.result.title") },
 	]
 	/**
 	 * Where this run begins. An explicit entry ("开始体验" / "回看") already named a task, while the
@@ -998,6 +1122,13 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const [started, setStarted] = useState(() => !!initialFlow || entry.requested)
 	const [stepIndex, setStepIndex] = useState(() => getHomeOnboardingStepIndex())
 	const [rect, setRect] = useState<DOMRect | null>(null)
+	/**
+	 * The composer's cut-out for the prompt-ready step — the prompt's own box grown by the
+	 * composer's padding, so the prompt is read with the margin it was drawn with, and the frame
+	 * hugs the text instead of the card it sits in. See `composerHole`. It is the one box the step's
+	 * three readers share: the mask cuts it, the cover leaves it open and the card is placed clear
+	 * of it.
+	 */
 	const [editorRect, setEditorRect] = useState<DOMRect | null>(null)
 	const [dismissed, setDismissed] = useState(false)
 	const [waitingForTarget, setWaitingForTarget] = useState(false)
@@ -1413,20 +1544,37 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				: flow && flow !== "featured-case"
 					? activeProjectStep?.anchor
 					: primarySteps[stepIndex].anchor
+	/**
+	 * The companions this step is framed together with, as one comma-joined list — see
+	 * `OnboardingStep.extraAnchors`.
+	 *
+	 * Joined into a string rather than passed through as the step's own array, because `updateRect`
+	 * is a dependency of the effect that waits for the anchor and the step lists are rebuilt on
+	 * every render: an array here would give that callback a new identity on each pass and restart
+	 * the wait for good. A string compares by value, so the callback changes only with the step.
+	 * The two flows are named to mirror `activeAnchor` above — neither frames companions.
+	 */
+	const activeExtraAnchors =
+		flow === "featured-case" || flow === "prompt-ready"
+			? ""
+			: ((flow
+					? activeProjectStep?.extraAnchors
+					: primarySteps[stepIndex]?.extraAnchors
+				)?.join(",") ?? "")
 	const updateRect = useCallback(() => {
 		if (!activeAnchor) return
 		const element = document.querySelector<HTMLElement>(`[data-guide-anchor="${activeAnchor}"]`)
 		if (element) {
-			setRect(element.getBoundingClientRect())
+			setRect(frameWithCompanions(element, activeExtraAnchors))
 			setWaitingForTarget(false)
 		}
 		if (flow === "prompt-ready") {
 			const editorElement = document.querySelector<HTMLElement>(
 				'[data-guide-anchor="message-editor-content"]',
 			)
-			if (editorElement) setEditorRect(editorElement.getBoundingClientRect())
+			if (editorElement) setEditorRect(composerHole(editorElement))
 		}
-	}, [activeAnchor, flow])
+	}, [activeAnchor, activeExtraAnchors, flow])
 
 	useLayoutEffect(() => {
 		// A step that belongs to another page has no anchor here to wait for — asking for it would
@@ -1537,32 +1685,69 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 *
 	 * Every other step frames a page that holds still, and a resize or a scroll is the whole of what
 	 * can change its anchor — both are already listened for above. This one differs: the prefilled
-	 * prompt is an ordinary editable document, so the user may type into it before sending, and once
-	 * the text wraps the composer grows taller. That lifts the toolbar and with it the send button
-	 * the step is asking for, and a box measured before the typing is a mask that has left its hole
-	 * behind: the ring no longer frames the composer, and the cover dims the very button the copy
-	 * tells the user to press — which is the whole of what "the button cannot be clicked" is.
+	 * prompt is an ordinary editable document, so the user may type into it before sending, and
+	 * every keystroke moves what the step frames — the prompt as it wraps, and the composer once it
+	 * outgrows the room kept for it. That lifts the toolbar and with it the send button the step is
+	 * asking for, and a box measured before the typing is a mask that has left its hole behind: the
+	 * ring no longer frames the composer, and the cover dims the very button the copy tells the user
+	 * to press — which is the whole of what "the button cannot be clicked" is.
 	 *
 	 * Following the anchor frame by frame does not cover this either: that ends once the page first
 	 * holds still, and this change comes later, from the user's own typing. So the composer is
-	 * watched rather than measured, and re-measured on every change of its own size.
-	 *
-	 * The editor is what actually resizes, but both it and the container are observed: a composer
-	 * that grows past its own limit has a container that grows while the editor scrolls inside it,
-	 * and watching the pair costs one observer. `updateRect` re-reads the send button as well, so
-	 * the second cut-out follows the first without being watched itself.
+	 * watched rather than measured — for the size it takes, and for the document inside it, which
+	 * are two different questions and only the second one is about the prompt.
 	 */
 	useEffect(() => {
 		if (flow !== "prompt-ready" || !started || !stepOnThisPage) return
-		// Absent in SSR and in older browsers; the step then keeps the behaviour it had.
-		if (typeof ResizeObserver === "undefined") return
-		const watched = ["message-editor-content", "message-editor-container"]
-			.map((name) => document.querySelector<HTMLElement>(`[data-guide-anchor="${name}"]`))
-			.filter((element): element is HTMLElement => element !== null)
-		if (watched.length === 0) return
-		const observer = new ResizeObserver(() => updateRect())
-		watched.forEach((element) => observer.observe(element))
-		return () => observer.disconnect()
+		const byAnchor = (name: string) =>
+			document.querySelector<HTMLElement>(`[data-guide-anchor="${name}"]`)
+		const editor = byAnchor("message-editor-content")
+		if (!editor) return
+		const teardown: Array<() => void> = []
+
+		/*
+		 * The size watcher. The editor is what actually resizes, but both it and the container are
+		 * observed: a composer that grows past its own limit has a container that grows while the
+		 * editor scrolls inside it, and watching the pair costs one observer. `updateRect` re-reads
+		 * the send button as well, so the second cut-out follows the first without being watched
+		 * itself. Absent in SSR and in older browsers; the step then keeps the behaviour it had.
+		 */
+		if (typeof ResizeObserver !== "undefined") {
+			const watched = ["message-editor-content", "message-editor-container"]
+				.map(byAnchor)
+				.filter((element): element is HTMLElement => element !== null)
+			const observer = new ResizeObserver(() => updateRect())
+			watched.forEach((element) => observer.observe(element))
+			teardown.push(() => observer.disconnect())
+		}
+
+		/*
+		 * The content watcher, which is the one that does the work here.
+		 *
+		 * A prompt that is typed into wraps onto more lines, and those lines are the only thing on
+		 * the page that moves. The editor's viewport is given the room of the lines a prompt may
+		 * still grow into, so it and the card around it hold one height whether the prompt is one
+		 * line long or four: both boxes are exactly the size they were before the wrap, and a step
+		 * that only listens for size never looks again. It keeps the cut-out it took on arrival —
+		 * the height of one line — while the user watches their own text leave it, which is the
+		 * whole of what "the highlight does not follow" is. No listener for size can mend it,
+		 * because the size is the one thing that did not change.
+		 *
+		 * What does change is the document. A keystroke is a text node with a new value and the
+		 * wrap that follows is that same node laid out differently, so the mutation arrives in both
+		 * cases — and it arrives before the layout it causes, which is why the measurement is asked
+		 * for rather than read here: taking the box is itself what forces the reflow, so the box
+		 * taken inside this callback is the new one. Only the editor's own subtree is watched, and
+		 * that is also what keeps the watcher from feeding itself: the overlay a measurement
+		 * re-renders is not inside it, so no render can return as a mutation.
+		 */
+		if (typeof MutationObserver !== "undefined") {
+			const observer = new MutationObserver(() => updateRect())
+			observer.observe(editor, { characterData: true, childList: true, subtree: true })
+			teardown.push(() => observer.disconnect())
+		}
+
+		return () => teardown.forEach((stop) => stop())
 	}, [flow, started, stepOnThisPage, updateRect])
 
 	/**
@@ -1710,14 +1895,9 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 								<span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#111] text-xs font-extrabold text-white">
 									{String(index + 1).padStart(2, "0")}
 								</span>
-								<span>
-									<strong className="block text-[15px] font-bold leading-[1.35]">
-										{goal.title}
-									</strong>
-									<small className="mt-2 block text-xs leading-[1.45] text-muted-foreground">
-										{goal.description}
-									</small>
-								</span>
+								<strong className="text-[15px] font-bold leading-[1.35]">
+									{goal.title}
+								</strong>
 							</li>
 						))}
 					</ol>
@@ -1987,6 +2167,13 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	 */
 	const cardWidth = Math.min(flow === "prompt-ready" ? 390 : 400, window.innerWidth - 32)
 	const gap = 20
+	/**
+	 * What the card is placed against. The prompt-ready step stands beside the composer rather than
+	 * beside the button it names, so it uses the composer's cut-out — which is the padded box the
+	 * mask cuts, not the editable area inside it. That is deliberate and it is the only reading that
+	 * holds: the card must clear the highlight the user can see, and the highlight is the cut-out.
+	 * A card placed against the unpadded box would sit ten pixels inside the light.
+	 */
 	const positionRect = flow === "prompt-ready" && editorRect ? editorRect : rect
 	const available = {
 		top: positionRect.top - gap,
@@ -2199,14 +2386,9 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 					)}
 					style={{ left, top, width: cardWidth }}
 				>
-					<div className="flex items-start justify-between gap-3">
-						<h3 className="text-2xl font-semibold leading-tight">
-							{t("homeOnboarding.featured.send.title")}
-						</h3>
-						<span className="shrink-0 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground">
-							{t("homeOnboarding.featured.send.badge")}
-						</span>
-					</div>
+					<h3 className="text-2xl font-semibold leading-tight">
+						{t("homeOnboarding.featured.send.title")}
+					</h3>
 					<p className="mt-3 text-sm leading-6 text-muted-foreground">
 						{t("homeOnboarding.featured.send.description")}
 					</p>

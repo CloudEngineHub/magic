@@ -31,6 +31,12 @@ export const HomeOnboardingAnchor = {
 	WorkspaceList: "sidebar-workspace-list",
 	RoleSwitcher: "role-switcher",
 	MessageComposer: "message-composer",
+	/**
+	 * The two entries at the top of the navigation — the task entry and the chat entry. They are
+	 * rendered as one block, above the capability list and outside the area the list scrolls in,
+	 * which is why the sidebar step needs this anchor at all: see `OnboardingStep.extraAnchors`.
+	 */
+	SidebarHomeActions: "sidebar-home-actions",
 	/** The "了解超级龙虾如何使用" steps live on the MagiClaw page, which is a route of its own. */
 	MagiClawHero: "magi-claw-hero",
 	MagiClawCreatedSection: "magi-claw-created-section",

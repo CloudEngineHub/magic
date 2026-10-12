@@ -185,7 +185,6 @@
 			"footer": "The prompt will be filled into the input after you choose an example",
 			"kicker": "First task",
 			"send": {
-				"badge": "Prompt ready",
 				"button": "View send button",
 				"cue": "Click here",
 				"description": "The example prompt is ready. Review it, edit if needed, then click send.",
@@ -293,12 +292,12 @@
 		"stepLabel": "{{current}} / {{total}}",
 		"steps": {
 			"composer": {
-				"description": "Describe what you want to accomplish here. Next, choose an example and experience your first AI task.",
-				"title": "Request and tools area"
+				"description": "Describe the work you need done here — upload files, choose plugins, pick a model, or use voice input.",
+				"title": "Request input and tools"
 			},
 			"experts": {
-				"description": "Different experts are suited to different tasks. When unsure, start with the default Super Magic agent.",
-				"title": "AI expert area"
+				"description": "Different digital employees are good at different tasks. When unsure, start with the default Super Magic agent.",
+				"title": "AI digital employees"
 			},
 			"sidebar": {
 				"description": "This is where you access the main capabilities. Use it to explore other AI features.",
@@ -315,15 +314,12 @@
 			"close": "Close onboarding guide",
 			"goals": {
 				"result": {
-					"description": "See where the result is saved and keep editing or using it",
 					"title": "View your task result"
 				},
 				"send": {
-					"description": "Confirm the request and send it with one click; AI does the rest",
 					"title": "Send it and wait for the task"
 				},
 				"task": {
-					"description": "No writing needed — start your first task in a click",
 					"title": "Pick a featured example"
 				}
 			},
