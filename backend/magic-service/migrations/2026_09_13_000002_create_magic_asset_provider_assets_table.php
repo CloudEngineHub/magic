@@ -20,6 +20,7 @@ return new class extends Migration {
             $table->string('provider_asset_id', 128)->nullable()->comment('第三方资产 ID，组映射可为空');
             $table->string('provider_group_id', 128)->nullable()->comment('第三方资产组 ID');
             $table->string('provider_status', 32)->default('UNVERIFIED')->comment('第三方状态：UNVERIFIED未校验 PROCESSING处理中 PASS通过 FAILED失败');
+            $table->string('provider_review_mode', 32)->default('VOLCENGINE')->comment('结论来源：VOLCENGINE 火山审核 NO_PERSON 无人像未注册 REUSED 复用已有素材');
             $table->string('provider_failed_reason', 512)->nullable()->comment('第三方同步或合规失败原因');
             $table->json('metadata')->nullable()->comment('第三方扩展元数据');
             $table->dateTime('created_at');
@@ -27,6 +28,8 @@ return new class extends Migration {
             $table->dateTime('deleted_at')->nullable();
             $table->unique(['organization_code', 'asset_id', 'provider_code', 'project_name'], 'uniq_asset_provider_mapping');
             $table->index(['organization_code', 'provider_asset_id'], 'idx_asset_provider_external');
+            $table->index(['provider_code', 'provider_asset_id'], 'idx_asset_provider_usage_asset');
+            $table->index(['provider_code', 'provider_group_id'], 'idx_asset_provider_usage_group');
         });
     }
 
