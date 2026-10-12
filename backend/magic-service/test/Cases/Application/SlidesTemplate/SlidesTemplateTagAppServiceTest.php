@@ -35,7 +35,7 @@ class SlidesTemplateTagAppServiceTest extends TestCase
         self::$hadOriginalContainer = ApplicationContext::hasContainer();
         self::$originalContainer = self::$hadOriginalContainer ? ApplicationContext::getContainer() : null;
 
-        ApplicationContext::setContainer(new class implements ContainerInterface {
+        ApplicationContext::setContainer(new class () implements ContainerInterface {
             public function get(string $id): mixed
             {
                 if ($id === PhpSerializerPacker::class) {
@@ -83,7 +83,7 @@ class SlidesTemplateTagAppServiceTest extends TestCase
         $domainService = $this->createMock(SlidesTemplateTagDomainService::class);
         $domainService
             ->expects($this->once())
-            ->method('queriesVisibleGroupsWithTagsByCategory')
+            ->method('queriesCachedVisibleGroupsWithTagsByCategory')
             ->with(
                 $this->callback(static fn (SlidesTemplateDataIsolation $actual): bool => $actual->isContainOfficialOrganization()
                     && $actual->getOrganizationCodes() === ['CURRENT_ORG', 'OFFICIAL_ORG']),

@@ -20,17 +20,23 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use Hyperf\Database\Exception\QueryException;
 use Hyperf\Logger\LoggerFactory;
+use Psr\SimpleCache\CacheInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
 class SlidesTemplateTagDomainService
 {
+    private const VISIBLE_GROUPS_CACHE_PREFIX = 'slides_template:visible_tag_groups:v1:';
+
+    private const VISIBLE_GROUPS_CACHE_TTL = 60;
+
     private LoggerInterface $logger;
 
     public function __construct(
         private readonly SlidesTemplateTagRepositoryInterface $slidesTemplateTagRepository,
         private readonly SlidesTemplateTagRelationRepositoryInterface $slidesTemplateTagRelationRepository,
         LoggerFactory $loggerFactory,
+        private readonly CacheInterface $cache,
     ) {
         $this->logger = $loggerFactory->get('slides-template');
     }
@@ -58,6 +64,55 @@ class SlidesTemplateTagDomainService
     public function queriesVisibleGroupsWithTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): array
     {
         return $this->slidesTemplateTagRepository->queriesVisibleGroupsWithTagsByCategory($dataIsolation, $categoryCode);
+    }
+
+    /**
+     * @return SlidesTemplateTagEntity[]
+     */
+    public function queriesCachedVisibleGroupsWithTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): array
+    {
+        $cacheKey = $this->getVisibleGroupsCacheKey($dataIsolation, $categoryCode);
+        $cachedGroups = $this->cache->get($cacheKey);
+        if (is_array($cachedGroups) && $this->isValidCachedGroups($cachedGroups)) {
+            return $cachedGroups;
+        }
+
+        $groups = $this->queriesVisibleGroupsWithTagsByCategory($dataIsolation, $categoryCode);
+        if ($groups !== []) {
+            $this->cache->set($cacheKey, $groups, self::VISIBLE_GROUPS_CACHE_TTL);
+        }
+
+        return $groups;
+    }
+
+    private function getVisibleGroupsCacheKey(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): string
+    {
+        $organizationCodes = array_values(array_unique(array_filter($dataIsolation->getOrganizationCodes())));
+        sort($organizationCodes);
+
+        $officialOrganizationCodes = array_values(array_unique(array_filter($dataIsolation->getOfficialOrganizationCodes())));
+        sort($officialOrganizationCodes);
+
+        $payload = json_encode([
+            'organization_codes' => $organizationCodes,
+            'official_organization_codes' => $officialOrganizationCodes,
+            'isolation_enabled' => $dataIsolation->isEnable(),
+            'only_official_organization' => $dataIsolation->isOnlyOfficialOrganization(),
+            'category_code' => $categoryCode ?? '',
+        ], JSON_THROW_ON_ERROR);
+
+        return self::VISIBLE_GROUPS_CACHE_PREFIX . hash('sha256', $payload);
+    }
+
+    private function isValidCachedGroups(array $cachedGroups): bool
+    {
+        foreach ($cachedGroups as $group) {
+            if (! $group instanceof SlidesTemplateTagEntity) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

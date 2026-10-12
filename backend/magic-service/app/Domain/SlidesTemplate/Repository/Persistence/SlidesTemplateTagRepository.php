@@ -22,22 +22,12 @@ use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\Database\Model\Builder;
 use Hyperf\Database\Query\JoinClause;
-use Psr\SimpleCache\CacheInterface;
 
 class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTemplateTagRepositoryInterface
 {
-    private const VISIBLE_GROUPS_CACHE_PREFIX = 'slides_template:visible_tag_groups:v1:';
-
-    private const VISIBLE_GROUPS_CACHE_TTL = 60;
-
     protected bool $filterOrganizationCode = true;
 
     protected string $filterOrganizationCodeAlias = 'magic_slides_template_tags.organization_code';
-
-    public function __construct(
-        private readonly CacheInterface $cache,
-    ) {
-    }
 
     public function findById(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateTagEntity
     {
@@ -132,12 +122,6 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
 
     public function queriesVisibleGroupsWithTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): array
     {
-        $cacheKey = $this->getVisibleGroupsCacheKey($dataIsolation, $categoryCode);
-        $cachedGroups = $this->cache->get($cacheKey);
-        if (is_array($cachedGroups) && $this->isValidCachedGroups($cachedGroups)) {
-            return $cachedGroups;
-        }
-
         $tagModels = $this->queryVisibleTemplateTagsByCategory($dataIsolation, $categoryCode);
         $tags = $this->modelsToEntities($tagModels);
         if ($tags === []) {
@@ -178,8 +162,6 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
             $groups,
             static fn (SlidesTemplateTagEntity $group): bool => $group->getChildren() !== []
         ));
-
-        $this->cache->set($cacheKey, $groups, self::VISIBLE_GROUPS_CACHE_TTL);
 
         return $groups;
     }
@@ -381,36 +363,6 @@ class SlidesTemplateTagRepository extends AbstractRepository implements SlidesTe
             ->orderBy('magic_slides_template_tags.id', 'desc');
 
         return $builder->get();
-    }
-
-    private function getVisibleGroupsCacheKey(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): string
-    {
-        $organizationCodes = array_values(array_unique(array_filter($dataIsolation->getOrganizationCodes())));
-        sort($organizationCodes);
-
-        $officialOrganizationCodes = array_values(array_unique(array_filter($dataIsolation->getOfficialOrganizationCodes())));
-        sort($officialOrganizationCodes);
-
-        $payload = json_encode([
-            'organization_codes' => $organizationCodes,
-            'official_organization_codes' => $officialOrganizationCodes,
-            'isolation_enabled' => $dataIsolation->isEnable(),
-            'only_official_organization' => $dataIsolation->isOnlyOfficialOrganization(),
-            'category_code' => $categoryCode ?? '',
-        ], JSON_THROW_ON_ERROR);
-
-        return self::VISIBLE_GROUPS_CACHE_PREFIX . hash('sha256', $payload);
-    }
-
-    private function isValidCachedGroups(array $cachedGroups): bool
-    {
-        foreach ($cachedGroups as $group) {
-            if (! $group instanceof SlidesTemplateTagEntity) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private function applyTemplateQuery(Builder $builder, SlidesTemplateTagQuery $query): void
