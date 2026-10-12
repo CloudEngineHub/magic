@@ -64,6 +64,11 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
     public bool $forceInterrupt = false;
 
     /**
+     * Hire the resolved task employee from the market when not already usable.
+     */
+    public bool $autoHireAgent = false;
+
+    /**
      * Optional extra message subscription config (single item).
      * Will be appended to the system subscription list when initializing the sandbox.
      * Supported fields: method, url, auth_scheme, headers.
@@ -113,6 +118,17 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
     public function isForceInterrupt(): bool
     {
         return $this->forceInterrupt;
+    }
+
+    public function setAutoHireAgent(bool|int|string $autoHireAgent): void
+    {
+        // Normalize the boolean representations accepted by Hyperf validation.
+        $this->autoHireAgent = in_array($autoHireAgent, [true, 1, '1'], true);
+    }
+
+    public function isAutoHireAgent(): bool
+    {
+        return $this->autoHireAgent;
     }
 
     public function getMessageSubscriptionConfig(): ?array
@@ -173,6 +189,7 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
             'video_model_id' => 'nullable|string|max:100',
             'enable_web_search' => 'nullable|boolean',
             'force_interrupt' => 'nullable|boolean',
+            'auto_hire_agent' => 'sometimes|boolean',
             'message_subscription_config' => 'nullable|array',
             'message_subscription_config.method' => 'required_with:message_subscription_config|string',
             'message_subscription_config.url' => 'required_with:message_subscription_config|string',
@@ -204,6 +221,7 @@ class CreateOpenTaskRequestDTO extends AbstractRequestDTO
             'video_model_id.max' => 'Video model ID cannot exceed 100 characters',
             'enable_web_search.boolean' => 'Enable web search must be a boolean value',
             'force_interrupt.boolean' => 'Force interrupt must be a boolean value',
+            'auto_hire_agent.boolean' => 'Auto hire agent must be a boolean value',
             'message_subscription_config.array' => 'Message subscription config must be an array',
             'message_subscription_config.method.required_with' => 'Subscription config method is required',
             'message_subscription_config.method.string' => 'Subscription config method must be a string',

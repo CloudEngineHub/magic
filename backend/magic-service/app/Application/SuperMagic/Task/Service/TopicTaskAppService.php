@@ -28,7 +28,14 @@ use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
+use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentDomainService;
+use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentMarketDomainService;
+use App\Domain\SuperMagic\Agent\Service\UserAgentDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\AskUserStatus;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicExecutionSource;
@@ -41,6 +48,7 @@ use App\Domain\SuperMagic\Message\Event\TopicMessageProcessEvent;
 use App\Domain\SuperMagic\Message\Repository\Model\TaskMessageModel;
 use App\Domain\SuperMagic\Message\Service\MessageQueueDomainService;
 use App\Domain\SuperMagic\Message\Service\TaskMessageDomainService;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Constant\AgentConstant;
 use App\Domain\SuperMagic\Task\Constant\AgentEventEnum;
@@ -82,6 +90,7 @@ use Carbon\Carbon;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\Amqp\Producer;
 use Hyperf\Contract\TranslatorInterface;
+use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Odin\Message\Role;
 use Hyperf\Redis\Redis;
@@ -117,6 +126,10 @@ class TopicTaskAppService extends AbstractAppService
         protected Producer $producer,
         private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
         private readonly TopicAgentConfigResolver $topicAgentConfigResolver,
+        private readonly UserAgentDomainService $userAgentDomainService,
+        private readonly SuperMagicAgentMarketDomainService $superMagicAgentMarketDomainService,
+        private readonly SuperMagicAgentDomainService $superMagicAgentDomainService,
+        private readonly ResourceVisibilityDomainService $resourceVisibilityDomainService,
     ) {
         $this->logger = $this->loggerFactory->get(get_class($this));
     }
@@ -963,7 +976,8 @@ class TopicTaskAppService extends AbstractAppService
             $dataIsolation,
             $internalDTO,
             executionSource: $executionSource,
-            messageSubscriptionConfig: $requestDTO->getMessageSubscriptionConfig()
+            messageSubscriptionConfig: $requestDTO->getMessageSubscriptionConfig(),
+            autoHireAgent: $requestDTO->isAutoHireAgent()
         );
 
         return $this->buildCreateTaskResponse($result);
@@ -1233,6 +1247,55 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
+     * Ensure the task employee is hired through domain services before task side effects.
+     */
+    private function ensureAgentHired(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): void
+    {
+        if ($this->userAgentDomainService->findUserAgentOwnershipByCode($dataIsolation, $agentCode) !== null) {
+            return;
+        }
+
+        Db::beginTransaction();
+        try {
+            $permissionIsolation = new PermissionDataIsolation();
+            $permissionIsolation->extends($dataIsolation);
+            $marketEntity = $this->superMagicAgentMarketDomainService->getPublishedByAgentCodeForUpdate(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $agentCode
+            );
+            if ($marketEntity === null) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentCode]);
+            }
+
+            // The market lock serializes concurrent hires; recheck before installing.
+            if ($this->userAgentDomainService->findUserAgentOwnershipByCode($dataIsolation, $agentCode) !== null) {
+                Db::commit();
+                return;
+            }
+            if (! $this->superMagicAgentMarketDomainService->isMarketDiscoverableForUser(
+                $permissionIsolation,
+                $marketEntity,
+                $dataIsolation->getCurrentUserId()
+            )) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentCode]);
+            }
+
+            $employee = $this->superMagicAgentDomainService->hireAgent($dataIsolation, $agentCode);
+            $this->resourceVisibilityDomainService->addResourceVisibilityByPrincipalsIfMissing(
+                $permissionIsolation,
+                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT,
+                $employee->getCode(),
+                PrincipalType::USER,
+                [$dataIsolation->getCurrentUserId()]
+            );
+            Db::commit();
+        } catch (Throwable $exception) {
+            Db::rollBack();
+            throw $exception;
+        }
+    }
+
+    /**
      * Shared task creation flow for both first-party and third-party user messages.
      *
      * @return array{task_id: string, message_id: string, im_seq_id: ?string, deduplicated: bool}
@@ -1243,7 +1306,8 @@ class TopicTaskAppService extends AbstractAppService
         ?array $source = null,
         bool $deliverToAgent = true,
         ?SuperMagicExecutionSource $executionSource = null,
-        ?array $messageSubscriptionConfig = null
+        ?array $messageSubscriptionConfig = null,
+        bool $autoHireAgent = false
     ): array {
         $preparedRequestDTO = $this->createTaskRequestDTOWithSource($requestDTO, $source);
         if ($executionSource !== null) {
@@ -1279,14 +1343,35 @@ class TopicTaskAppService extends AbstractAppService
             );
             $topicPattern = $topicAgentConfig->topicMode;
             $agentCode = $topicAgentConfig->agentCode;
+            $agentDataIsolation = SuperMagicAgentDataIsolation::create(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId()
+            );
             [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
-                SuperMagicAgentDataIsolation::create(
-                    $dataIsolation->getCurrentOrganizationCode(),
-                    $dataIsolation->getCurrentUserId()
-                ),
+                $agentDataIsolation,
                 $topicPattern,
                 $agentCode
             );
+            if (! $allowed && $autoHireAgent && $topicPattern === ProjectMode::CUSTOM_AGENT->value && $agentCode !== '') {
+                try {
+                    $this->ensureAgentHired($agentDataIsolation, $agentCode);
+                } catch (Throwable $exception) {
+                    $this->logger->warning('Failed to automatically hire task employee', [
+                        'agent_code' => $agentCode,
+                        'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                        'user_id' => $dataIsolation->getCurrentUserId(),
+                        'error_code' => $exception->getCode(),
+                        'error' => $exception->getMessage(),
+                    ]);
+                    ExceptionBuilder::throw(SuperMagicErrorCode::AutoHireAgentFailed, throwable: $exception);
+                }
+
+                [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+                    $agentDataIsolation,
+                    $topicPattern,
+                    $agentCode
+                );
+            }
             if (! $allowed) {
                 ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
             }
