@@ -28,6 +28,7 @@ import { useReducedMotion } from "framer-motion"
 import TopicHistorySidebar from "./TopicHistorySidebar"
 import TopicResizeHandle from "./TopicResizeHandle"
 import { useTopicDesktopLayout } from "../hooks/useTopicDesktopLayout"
+import type { ProjectSiderPanelPersistence } from "../stores/TopicLayoutStore"
 import { useTopicDesktopPanelMotion } from "../hooks/useTopicDesktopPanelMotion"
 
 // Portal layers bypass BaseLayoutPc padding, so they must consume safe-area variables directly.
@@ -67,6 +68,12 @@ interface TopicDesktopPanelsProps {
 	autoExpandConversationWhenDetailVisible?: boolean
 	persistConversationPanelState?: boolean
 	initialConversationPanelCollapsed?: boolean
+	/**
+	 * Storage key and first-visit state for the file sidebar collapse preference.
+	 * Defaults to the project page's shared preference; the chat page passes its own so the
+	 * two never overwrite each other.
+	 */
+	projectSiderPanelPersistence?: ProjectSiderPanelPersistence
 	/** Embedding pages can reserve horizontal padding around the collapsed navigation. */
 	collapsedConversationPanelWidth?: number
 	/**
@@ -110,6 +117,7 @@ function TopicDesktopPanels({
 	autoExpandConversationWhenDetailVisible = true,
 	persistConversationPanelState = true,
 	initialConversationPanelCollapsed = false,
+	projectSiderPanelPersistence,
 	showCollapsedDetailEntry = true,
 	collapsedConversationPanelWidth,
 	conversationResizeHandleClassName,
@@ -174,6 +182,7 @@ function TopicDesktopPanels({
 		allowProjectSiderResize: showProjectSidebar && showProjectResizeHandle,
 		persistConversationPanelState,
 		initialConversationPanelCollapsed,
+		projectSiderPanelPersistence,
 		enableProjectCollapse,
 		allowConversationPanelResize:
 			!isReadOnly && (!enableProjectCollapse || shouldShowDetailPanel),

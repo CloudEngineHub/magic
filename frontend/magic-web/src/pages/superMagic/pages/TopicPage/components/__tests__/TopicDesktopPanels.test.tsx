@@ -157,6 +157,15 @@ describe("TopicDesktopPanels", () => {
 		)
 	})
 
+	it("forwards a page-specific sider persistence to the layout hook", () => {
+		const persistence = { storageKey: "chat-sider", defaultCollapsed: true }
+		renderComponent({ projectSiderPanelPersistence: persistence })
+
+		expect(mockUseTopicDesktopLayout).toHaveBeenLastCalledWith(
+			expect.objectContaining({ projectSiderPanelPersistence: persistence }),
+		)
+	})
+
 	it("uses an embedding page's collapsed width without changing the default", () => {
 		const view = renderComponent({ collapsedConversationPanelWidth: 48 })
 		expect(mockUseTopicDesktopPanelMotion).toHaveBeenLastCalledWith(
