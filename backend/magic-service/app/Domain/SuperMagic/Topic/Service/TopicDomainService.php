@@ -1155,41 +1155,18 @@ class TopicDomainService
     }
 
     /**
-     * Resolve the client-provided cutoff identifier into the primary key id of
-     * the cutoff message inside the source topic.
-     *
-     * The client sends the business `message_id`, while the copy pipeline
-     * filters messages by primary key (`id <= cutoff`) and resolves IM
-     * sequences by `app_message_id` (which stores the primary key string).
-     * For topics created by duplication the two id spaces diverge: copied
-     * rows keep the original `message_id` but receive fresh primary keys, so
-     * the raw input must be mapped back to a source-topic primary key before
-     * any copying starts.
-     *
-     * @param TopicEntity $sourceTopicEntity Source topic being duplicated
-     * @param string $targetMessageId Cutoff identifier from the request (message_id or primary key)
-     * @return int Primary key id of the cutoff message in the source topic
+     * Resolve the cutoff to a source-topic primary key before creating a copy.
+     * Copies preserve the business message_id, but regenerate the primary key
+     * used by both the message cutoff query and IM app_message_id.
      */
     public function resolveDuplicateCutoffMessageId(TopicEntity $sourceTopicEntity, string $targetMessageId): int
     {
         $sourceTopicId = $sourceTopicEntity->getId();
         $targetMessageId = trim($targetMessageId);
 
-        if ($targetMessageId !== '') {
-            // Business message_id space: preserved as-is when a topic is duplicated.
-            $message = $this->taskMessageRepository->findByTopicIdAndMessageId($sourceTopicId, $targetMessageId);
-            if ($message !== null) {
-                return $message->getId();
-            }
-
-            // Primary key space: for originally created messages message_id equals
-            // the primary key string, but callers may also pass the primary key directly.
-            if (ctype_digit($targetMessageId)) {
-                $message = $this->taskMessageRepository->getById((int) $targetMessageId);
-                if ($message !== null && (int) $message->getTopicId() === $sourceTopicId) {
-                    return $message->getId();
-                }
-            }
+        $message = $this->findDuplicateCutoffMessage($sourceTopicId, $targetMessageId);
+        if ($message !== null) {
+            return $message->getId();
         }
 
         $this->logger->warning('Duplicate cutoff message not found in source topic', [
@@ -2072,12 +2049,12 @@ class TopicDomainService
                 continue;
             }
 
-            // Get original content array
+            $appMessageId = $messageIdMapping[$originalMessage->getAppMessageId()] ?? '';
             $contentArray = $originalMessage->getContent()->toArray();
 
-            // For SuperAgentCard type, directly replace fields with fixed structure
-            if ($originalMessage->getMessageType() === ChatMessageType::SuperAgentCard) {
-                $contentArray['message_id'] = $messageIdMapping[$contentArray['message_id']] ?? '';
+            // Use the IM row's mapping: older copies may retain an ancestor ID in content.
+            if (in_array($originalMessage->getMessageType(), [ChatMessageType::SuperAgentCard, ChatMessageType::SuperMagicMessage], true)) {
+                $contentArray['message_id'] = $appMessageId;
                 $contentArray['topic_id'] = $newTopicId;
                 $contentArray['task_id'] = '';
             }
@@ -2092,7 +2069,7 @@ class TopicDomainService
                 'message_type' => $originalMessage->getMessageType(),
                 'content' => json_encode($contentArray, JSON_UNESCAPED_UNICODE),
                 'language' => $originalMessage->getLanguage(),
-                'app_message_id' => $messageIdMapping[$originalMessage->getAppMessageId()] ?? '',
+                'app_message_id' => $appMessageId,
                 'magic_message_id' => $newMagicMessageId,
                 'send_time' => $originalMessage->getSendTime(),
                 'current_version_id' => null,
@@ -2126,6 +2103,32 @@ class TopicDomainService
         $this->logger->info('IM消息复制完成', $result);
 
         return $result;
+    }
+
+    private function findDuplicateCutoffMessage(int $sourceTopicId, string $targetMessageId): ?TaskMessageEntity
+    {
+        if ($targetMessageId === '') {
+            return null;
+        }
+
+        $message = $this->taskMessageRepository->findByTopicIdAndMessageId($sourceTopicId, $targetMessageId);
+        if ($message !== null || ! ctype_digit($targetMessageId)) {
+            return $message;
+        }
+
+        $message = $this->taskMessageRepository->getById((int) $targetMessageId);
+        if ($message === null || (int) $message->getTopicId() === $sourceTopicId) {
+            return $message;
+        }
+
+        // Legacy copies still expose an ancestor primary key; locate its counterpart
+        // through the business message_id preserved in the source topic.
+        $businessMessageId = $message->getMessageId();
+        if ($businessMessageId === '') {
+            return null;
+        }
+
+        return $this->taskMessageRepository->findByTopicIdAndMessageId($sourceTopicId, $businessMessageId);
     }
 
     private function getSeqIdByMessageId(string $messageId): array
