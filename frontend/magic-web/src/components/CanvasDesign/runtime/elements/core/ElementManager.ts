@@ -430,7 +430,10 @@ export class ElementManager {
 			})
 		})
 		if (convertedElementIds.length > 0) {
-			this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+			this.canvas.eventEmitter.emit({
+				type: "element:batchupdated",
+				data: { elementIds: convertedElementIds },
+			})
 		}
 	}
 
@@ -563,7 +566,10 @@ export class ElementManager {
 			this.flush()
 			if (succeeded && options?.emitBatchUpdated !== false) {
 				// 只有全部更新成功后才触发批量完成，避免失败事务污染历史快照。
-				this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+				this.canvas.eventEmitter.emit({
+					type: "element:batchupdated",
+					data: { elementIds: [...stagedDataByElementId.keys()] },
+				})
 			}
 		}
 	}

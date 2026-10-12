@@ -159,12 +159,38 @@
 			"horizontalCenter": "水平居中",
 			"left": "左对齐",
 			"right": "右对齐",
+			"title": "对齐方式",
 			"top": "顶部对齐",
 			"verticalCenter": "垂直居中"
 		},
 		"elementDistribute": {
-			"autoLayout": "自动排列",
+			"alignmentResult": "已完成对齐 {{count}} 个节点",
+			"alignmentResultWithDetails": "已完成对齐 {{count}} 个节点（{{details}}）",
+			"arrangementCycles": "循环 {{count}}",
+			"arrangementIsolated": "孤立 {{count}}",
+			"arrangementLayers": "{{count}} 层",
+			"arrangementLocked": "跳过锁定 {{count}}",
+			"arrangementResult": "已排列 {{count}} 个节点",
+			"arrangementResultWithDetails": "已排列 {{count}} 个节点（{{details}}）",
+			"arrangementSeparator": "，",
+			"arrangementUnchanged": "选中节点已是整齐排列，无需调整",
+			"autoLayout": "智能排列",
+			"compactGrid": "紧凑网格排列",
+			"horizontalRow": "横向一行排列",
 			"horizontalSpacing": "水平间距",
+			"insufficientNodes": "至少需要两个可移动节点",
+			"insufficientSpacingNodes": "至少需要三个可移动节点",
+			"invalidSelection": "请选择同一父级下的普通节点",
+			"layered": "按连线分层排列",
+			"locked": "当前父级或容器已锁定",
+			"more": "排列",
+			"noMovableNodes": "没有可移动节点",
+			"smart": "智能排列",
+			"spacingResult": "已完成间距分布 {{count}} 个节点",
+			"spacingResultWithDetails": "已完成间距分布 {{count}} 个节点（{{details}}）",
+			"title": "排列方式",
+			"typeGroup": "按类型分组排列",
+			"verticalColumn": "纵向一列排列",
 			"verticalSpacing": "垂直间距"
 		},
 		"fillColor": {
@@ -623,8 +649,8 @@
 		},
 		"distribute": {
 			"autoLayout": {
-				"description": "自动排列选中元素",
-				"name": "自动排列"
+				"description": "根据连线或类型智能排列选中元素",
+				"name": "智能排列"
 			},
 			"horizontalSpacing": {
 				"description": "水平均匀分布选中元素",

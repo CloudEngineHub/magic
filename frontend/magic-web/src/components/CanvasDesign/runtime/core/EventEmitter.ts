@@ -99,7 +99,7 @@ export interface CanvasEventMap {
 	"element:rerendered": { elementId: string; data: LayerElement } // 元素节点重新渲染（不记录历史）
 	"element:deleted": { elementId: string; persistence?: "runtime-only" }
 	"element:change": CanvasElementChangePayload | undefined // 任何元素变化时触发，用于触发UI更新
-	"element:batchupdated": void // 批量更新完成事件
+	"element:batchupdated": { elementIds?: string[] } | undefined // 批量更新完成事件
 	"element:batchdeleted": { elementIds: string[] } // 批量删除完成事件
 	"referenceImages:changed": { elementId: string } // 图片元素参考图增删（触发未引用资源清理）
 	"connection:change": {

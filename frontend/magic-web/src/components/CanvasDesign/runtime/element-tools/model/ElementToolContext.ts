@@ -13,11 +13,25 @@ import type {
 	GenerationAttemptState,
 } from "./ElementToolTypes"
 
-function toElementSnapshot(element: LayerElement): ElementToolElementSnapshot {
+function toElementSnapshot(
+	element: LayerElement,
+	canvas?: Canvas | null,
+): ElementToolElementSnapshot {
+	const parentId =
+		typeof canvas?.elementManager?.findParentIdForElement === "function"
+			? (canvas.elementManager.findParentIdForElement(element.id) ?? null)
+			: null
+	const parent =
+		parentId && typeof canvas?.elementManager?.getElementData === "function"
+			? canvas.elementManager.getElementData(parentId)
+			: undefined
 	return {
 		id: element.id,
 		type: element.type,
 		locked: element.locked,
+		visible: element.visible,
+		parentId,
+		parentLocked: parent?.locked === true,
 		width: element.width,
 		height: element.height,
 	}
@@ -52,7 +66,13 @@ export function createElementToolContext(
 	const [element] = options.selectedElements
 	if (!element) return null
 
-	const selectedSnapshots = options.selectedElements.map(toElementSnapshot)
+	const selectedSnapshots = options.selectedElements.map((element) =>
+		toElementSnapshot(element, options.canvas),
+	)
+	const [activeSnapshot] = selectedSnapshots
+	if (!activeSnapshot) return null
+	const parentIds = selectedSnapshots.map((snapshot) => snapshot.parentId ?? null)
+	const firstParentId = parentIds[0] ?? null
 	const contentIndex = createContentIndex({
 		...(element as unknown as Parameters<typeof createContentIndex>[0]),
 		effectiveContentId:
@@ -108,10 +128,14 @@ export function createElementToolContext(
 
 	return {
 		commandBus: options.canvas?.elementToolCommandBus,
-		element: toElementSnapshot(element),
+		// Reuse the first selection snapshot so parent lookup and geometry metadata
+		// stay consistent without scanning the document tree twice for the active node.
+		element: activeSnapshot,
 		selection: {
 			elements: selectedSnapshots,
 			isSingleElement: selectedSnapshots.length === 1,
+			parentId: selectedSnapshots.length > 0 ? firstParentId : null,
+			hasMixedParents: parentIds.some((parentId) => parentId !== firstParentId),
 			isDragging: Boolean(options.isDragging),
 			isSelecting: Boolean(options.isSelecting),
 			activeToolSession: options.activeToolSession,

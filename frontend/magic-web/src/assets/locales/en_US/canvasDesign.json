@@ -163,12 +163,38 @@
 			"horizontalCenter": "Center",
 			"left": "Left",
 			"right": "Right",
+			"title": "Alignment",
 			"top": "Top",
 			"verticalCenter": "Middle"
 		},
 		"elementDistribute": {
-			"autoLayout": "Auto Layout",
+			"alignmentResult": "Aligned {{count}} nodes",
+			"alignmentResultWithDetails": "Aligned {{count}} nodes ({{details}})",
+			"arrangementCycles": "{{count}} cyclic",
+			"arrangementIsolated": "{{count}} isolated",
+			"arrangementLayers": "{{count}} layers",
+			"arrangementLocked": "{{count}} locked skipped",
+			"arrangementResult": "Arranged {{count}} nodes",
+			"arrangementResultWithDetails": "Arranged {{count}} nodes ({{details}})",
+			"arrangementSeparator": ", ",
+			"arrangementUnchanged": "The selected nodes are already arranged",
+			"autoLayout": "Smart Arrange",
+			"compactGrid": "Compact grid",
+			"horizontalRow": "Arrange in a row",
 			"horizontalSpacing": "Horizontal Spacing",
+			"insufficientNodes": "At least two movable nodes are required",
+			"insufficientSpacingNodes": "At least three movable nodes are required",
+			"invalidSelection": "Select ordinary nodes with the same parent",
+			"layered": "Arrange by connections",
+			"locked": "The current parent or container is locked",
+			"more": "Arrange",
+			"noMovableNodes": "There are no movable nodes",
+			"smart": "Smart Arrange",
+			"spacingResult": "Distributed spacing for {{count}} nodes",
+			"spacingResultWithDetails": "Distributed spacing for {{count}} nodes ({{details}})",
+			"title": "Arrangement",
+			"typeGroup": "Arrange by type",
+			"verticalColumn": "Arrange in a column",
 			"verticalSpacing": "Vertical Spacing"
 		},
 		"fillColor": {
@@ -654,8 +680,8 @@
 		},
 		"distribute": {
 			"autoLayout": {
-				"description": "Auto arrange selected elements",
-				"name": "Auto Layout"
+				"description": "Smartly arrange selected elements by connections or type",
+				"name": "Smart Arrange"
 			},
 			"horizontalSpacing": {
 				"description": "Distribute selected elements evenly horizontally",
