@@ -12,7 +12,7 @@ import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import { SkillMarketCategoryManagerDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/skill-market-category-manager-dialog"
 import { OfficialSkillImportDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/official-skill-import-dialog"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
+import { type ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import {
 	DescriptionCell,
 	MarketNameCell,
@@ -27,15 +27,16 @@ import {
 	useSkillMarketCategoryListQuery,
 	useSkillMarketListQuery,
 } from "@magic-admin-v2/features/platform-official-marketplace/queries"
-import type { SkillMarketItem } from "@magic-admin-v2/features/platform-official-marketplace/types"
+import type {
+	MarketFilterDraft,
+	SkillMarketItem,
+	SkillMarketListParams,
+} from "@magic-admin-v2/features/platform-official-marketplace/types"
 import {
-	createDefaultFilterDraft,
-	countActiveMarketFilters,
 	areSameCategoryIds,
 	getSkillMarketCategoryIds,
 	getSkillMarketCategoryLabels,
 	getLocalizedText,
-	toSkillMarketParams,
 	normalizeCategoryIds,
 	resolveSkillMarketCategoryName,
 	skillMarketCategoryStatus,
@@ -49,7 +50,7 @@ type SkillMarketPanelProps = {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
 	onInitialLoadingChange: (isLoading: boolean) => void
-	onFilterCountChange: (count: number) => void
+	queryState: ListQueryParamsState<MarketFilterDraft, SkillMarketListParams>
 	onMobileFilterOpenChange: (open: boolean) => void
 	mobileFilterOpen: boolean
 	onToolbarActionsChange: (actions: ReactNode) => void
@@ -62,7 +63,7 @@ export function SkillMarketPanel({
 	isActive,
 	onFetchingChange,
 	onInitialLoadingChange,
-	onFilterCountChange,
+	queryState,
 	onMobileFilterOpenChange,
 	mobileFilterOpen,
 	onToolbarActionsChange,
@@ -73,11 +74,7 @@ export function SkillMarketPanel({
 	const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
 	const [importOpen, setImportOpen] = useState(false)
 	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } =
-		useListQueryParams({
-			debounceFields: ["code", "name_i18n", "organization_code", "package_name"],
-			initialDraft: createDefaultFilterDraft,
-			toParams: toSkillMarketParams,
-		})
+		queryState
 	const query = useSkillMarketListQuery(params, isActive)
 	const categoryQuery = useSkillMarketCategoryListQuery({}, isActive)
 	const importCategoryQuery = useSkillMarketCategoryListQuery(
@@ -242,10 +239,6 @@ export function SkillMarketPanel({
 	useEffect(() => {
 		if (isActive) onInitialLoadingChange(isInitialLoading)
 	}, [isActive, isInitialLoading, onInitialLoadingChange])
-
-	useEffect(() => {
-		if (isActive) onFilterCountChange(countActiveMarketFilters(filterDraft))
-	}, [countActiveMarketFilters, filterDraft, isActive, onFilterCountChange])
 
 	useEffect(() => {
 		if (!isActive) return

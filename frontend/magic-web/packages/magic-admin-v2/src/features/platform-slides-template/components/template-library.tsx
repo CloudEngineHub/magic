@@ -1,5 +1,5 @@
 import { Eye, FileImage, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react"
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -29,8 +29,7 @@ import {
 import { Skeleton } from "@magic-admin-v2/components/ui/skeleton"
 import { Switch } from "@magic-admin-v2/components/ui/switch"
 import { useRuntime } from "@magic-admin-v2/runtime/context"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
-import { usePagination } from "@magic-admin-v2/hooks/use-pagination"
+import type { ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import {
 	useSlidesTemplateCategoriesQuery,
 	useSlidesTemplateListQuery,
@@ -64,51 +63,18 @@ import {
 	TemplatePreviewDialog,
 } from "@magic-admin-v2/features/platform-slides-template/components/template-preview-dialogs"
 
-const emptyStatus = "all"
-
-type TemplateLibraryFilterDraft = {
-	category: string
-	code: string
-	keyword: string
-	status: string
-	tagCodes: string[]
-	tagMatch: "any" | "all"
-}
-
-function createDefaultTemplateLibraryDraft(): TemplateLibraryFilterDraft {
-	return {
-		category: "",
-		code: "",
-		keyword: "",
-		status: emptyStatus,
-		tagCodes: [],
-		tagMatch: "any",
-	}
-}
-
-function toTemplateLibraryParams(
-	draft: TemplateLibraryFilterDraft,
-	page: number,
-	pageSize: number,
-): SlidesTemplateQueryParams {
-	return {
-		page,
-		page_size: pageSize,
-		keyword: draft.keyword || undefined,
-		code: draft.code || undefined,
-		category_code: draft.category || undefined,
-		tag_codes: draft.tagCodes.length ? draft.tagCodes : undefined,
-		tag_match: draft.tagCodes.length ? draft.tagMatch : undefined,
-		status: draft.status === emptyStatus ? null : (Number(draft.status) as 0 | 1),
-	}
-}
+import {
+	createDefaultTemplateLibraryDraft,
+	emptySlidesTemplateStatus,
+	type TemplateLibraryFilterDraft,
+} from "@magic-admin-v2/features/platform-slides-template/list-params"
 
 type TemplateLibraryProps = {
 	canEdit: boolean
 	mobileFilterOpen: boolean
 	onDelete: (record: SlidesTemplate) => void
 	onEdit: (record?: SlidesTemplate) => void
-	onFilterCountChange: (count: number) => void
+	queryState: ListQueryParamsState<TemplateLibraryFilterDraft, SlidesTemplateQueryParams>
 	onMobileFilterOpenChange: (open: boolean) => void
 }
 
@@ -123,32 +89,23 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 			mobileFilterOpen,
 			onDelete,
 			onEdit,
-			onFilterCountChange,
 			onMobileFilterOpenChange,
+			queryState,
 		},
 		ref,
 	) {
 		const { t } = useTranslation()
 		const { language } = useRuntime()
-		const { pageSize, setPageSize } = usePagination()
-		const toParams = useCallback(
-			(draft: TemplateLibraryFilterDraft, page: number) =>
-				toTemplateLibraryParams(draft, page, pageSize),
-			[pageSize],
-		)
 		const {
 			filterDraft: filters,
 			page,
+			pageSize,
 			params,
 			setDebouncedField,
 			setFilterDraft,
 			setPage,
-		} = useListQueryParams({
-			debounceFields: ["keyword", "code"],
-			extraResetKey: pageSize,
-			initialDraft: createDefaultTemplateLibraryDraft,
-			toParams,
-		})
+			setPageSize,
+		} = queryState
 		const [categoryOptionsOpen, setCategoryOptionsOpen] = useState(false)
 		const [tagOptionsOpen, setTagOptionsOpen] = useState(false)
 		const [previewing, setPreviewing] = useState<SlidesTemplate | null>(null)
@@ -170,18 +127,6 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 		const reset = useCallback(() => {
 			setFilterDraft(createDefaultTemplateLibraryDraft())
 		}, [setFilterDraft])
-
-		useEffect(() => {
-			onFilterCountChange(
-				[
-					filters.category,
-					filters.code,
-					filters.keyword,
-					filters.status !== emptyStatus ? filters.status : "",
-					filters.tagCodes.length > 0 ? "tags" : "",
-					].filter((value) => value.trim().length > 0).length,
-			)
-		}, [filters, onFilterCountChange])
 
 		useImperativeHandle(ref, () => ({ reset }), [reset])
 		const updateStatus = useCallback(
@@ -526,7 +471,7 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value={emptyStatus}>
+										<SelectItem value={emptySlidesTemplateStatus}>
 											{t("slidesTemplate.all")}
 										</SelectItem>
 										<SelectItem value="1">

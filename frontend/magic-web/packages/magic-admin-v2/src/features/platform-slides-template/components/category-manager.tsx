@@ -1,5 +1,5 @@
 import { MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react"
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -27,8 +27,7 @@ import {
 } from "@magic-admin-v2/components/ui/select"
 import { Switch } from "@magic-admin-v2/components/ui/switch"
 import { useRuntime } from "@magic-admin-v2/runtime/context"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
-import { usePagination } from "@magic-admin-v2/hooks/use-pagination"
+import type { ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import { useSlidesTemplateCategoryMutations } from "@magic-admin-v2/features/platform-slides-template/mutations"
 import { useSlidesTemplateCategoriesQuery } from "@magic-admin-v2/features/platform-slides-template/queries"
 import { useRowPendingIds } from "@magic-admin-v2/features/platform-slides-template/hooks"
@@ -45,37 +44,17 @@ import {
 import { CategoryDialog } from "@magic-admin-v2/features/platform-slides-template/components/category-dialog"
 import { CopyableCode } from "@magic-admin-v2/features/platform-slides-template/components/copyable-code"
 
-const emptyStatus = "all"
-
-type CategoryFilterDraft = {
-	code: string
-	keyword: string
-	status: string
-}
-
-function createDefaultCategoryFilterDraft(): CategoryFilterDraft {
-	return { code: "", keyword: "", status: emptyStatus }
-}
-
-function toCategoryListParams(
-	draft: CategoryFilterDraft,
-	page: number,
-	pageSize: number,
-): SlidesTemplateCategoryQueryParams {
-	return {
-		page,
-		page_size: pageSize,
-		code: draft.code || undefined,
-		keyword: draft.keyword || undefined,
-		status: draft.status === emptyStatus ? null : (Number(draft.status) as 0 | 1),
-	}
-}
+import {
+	createDefaultCategoryFilterDraft,
+	emptySlidesTemplateStatus,
+	type CategoryFilterDraft,
+} from "@magic-admin-v2/features/platform-slides-template/list-params"
 
 type CategoryManagerProps = {
 	canEdit: boolean
 	mobileFilterOpen: boolean
 	onDelete: (record: SlidesTemplateCategory) => void
-	onFilterCountChange: (count: number) => void
+	queryState: ListQueryParamsState<CategoryFilterDraft, SlidesTemplateCategoryQueryParams>
 	onMobileFilterOpenChange: (open: boolean) => void
 }
 
@@ -86,30 +65,21 @@ export type CategoryManagerHandle = {
 
 export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManagerProps>(
 	function CategoryManager(
-		{ canEdit, mobileFilterOpen, onDelete, onFilterCountChange, onMobileFilterOpenChange },
+		{ canEdit, mobileFilterOpen, onDelete, onMobileFilterOpenChange, queryState },
 		ref,
 	) {
 		const { t } = useTranslation()
 		const { language } = useRuntime()
-		const { pageSize, setPageSize } = usePagination()
-		const toParams = useCallback(
-			(draft: CategoryFilterDraft, page: number) =>
-				toCategoryListParams(draft, page, pageSize),
-			[pageSize],
-		)
 		const {
 			filterDraft: filters,
 			page,
+			pageSize,
 			params,
 			setDebouncedField,
 			setFilterDraft,
 			setPage,
-		} = useListQueryParams({
-			debounceFields: ["keyword", "code"],
-			extraResetKey: pageSize,
-			initialDraft: createDefaultCategoryFilterDraft,
-			toParams,
-		})
+			setPageSize,
+		} = queryState
 		const [dialogOpen, setDialogOpen] = useState(false)
 		const [editing, setEditing] = useState<SlidesTemplateCategory | null>(null)
 		const query = useSlidesTemplateCategoriesQuery(params)
@@ -270,13 +240,6 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 			setFilterDraft(createDefaultCategoryFilterDraft())
 		}, [setFilterDraft])
 
-		useEffect(() => {
-			onFilterCountChange(
-				[filters.code, filters.keyword, filters.status !== emptyStatus ? filters.status : ""]
-					.filter((value) => value.trim().length > 0).length,
-			)
-		}, [filters, onFilterCountChange])
-
 		useImperativeHandle(ref, () => ({ create, reset }), [create, reset])
 
 		return (
@@ -330,7 +293,7 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value={emptyStatus}>
+										<SelectItem value={emptySlidesTemplateStatus}>
 											{t("slidesTemplate.all")}
 										</SelectItem>
 										<SelectItem value="1">

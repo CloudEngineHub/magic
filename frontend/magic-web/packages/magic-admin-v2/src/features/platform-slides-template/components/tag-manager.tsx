@@ -29,8 +29,7 @@ import {
 } from "@magic-admin-v2/components/ui/select"
 import { Switch } from "@magic-admin-v2/components/ui/switch"
 import { useRuntime } from "@magic-admin-v2/runtime/context"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
-import { usePagination } from "@magic-admin-v2/hooks/use-pagination"
+import type { ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import { useSlidesTemplateTagMutations } from "@magic-admin-v2/features/platform-slides-template/mutations"
 import { useRowPendingIds } from "@magic-admin-v2/features/platform-slides-template/hooks"
 import {
@@ -54,41 +53,20 @@ import { MobileTagGroupSelector } from "@magic-admin-v2/features/platform-slides
 import { MobileTagList } from "@magic-admin-v2/features/platform-slides-template/components/mobile-tag-list"
 import { cn } from "@magic-admin-v2/utils/cn"
 
-const emptyStatus = "all"
-
-type TagFilterDraft = {
-	code: string
-	keyword: string
-	status: string
-}
-
-function createDefaultTagFilterDraft(): TagFilterDraft {
-	return { code: "", keyword: "", status: emptyStatus }
-}
-
-function toTagListParams(
-	draft: TagFilterDraft,
-	page: number,
-	pageSize: number,
-	selectedGroupId: string | null,
-): SlidesTemplateTagQueryParams {
-	return {
-		page,
-		page_size: pageSize,
-		node_type: "tag",
-		...(selectedGroupId ? { parent_id: selectedGroupId } : {}),
-		code: draft.code || undefined,
-		keyword: draft.keyword || undefined,
-		status: draft.status === emptyStatus ? null : (Number(draft.status) as 0 | 1),
-	}
-}
+import {
+	createDefaultTagFilterDraft,
+	emptySlidesTemplateStatus,
+	type TagFilterDraft,
+} from "@magic-admin-v2/features/platform-slides-template/list-params"
 
 type TagManagerProps = {
 	canEdit: boolean
 	mobileFilterOpen: boolean
 	onCreateAvailabilityChange: (available: boolean) => void
 	onDelete: (record: SlidesTemplateTag) => void
-	onFilterCountChange: (count: number) => void
+	queryState: ListQueryParamsState<TagFilterDraft, SlidesTemplateTagQueryParams>
+	selectedGroupId: string | null
+	onSelectedGroupIdChange: (groupId: string | null) => void
 	onMobileFilterOpenChange: (open: boolean) => void
 }
 
@@ -103,34 +81,26 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 		mobileFilterOpen,
 		onCreateAvailabilityChange,
 		onDelete,
-		onFilterCountChange,
 		onMobileFilterOpenChange,
+		onSelectedGroupIdChange,
+		queryState,
+		selectedGroupId,
 	},
 	ref,
 ) {
 	const { t } = useTranslation()
 	const { language } = useRuntime()
-	const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
 	const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
-	const { pageSize, setPageSize } = usePagination()
-	const toParams = useCallback(
-		(draft: TagFilterDraft, page: number) =>
-			toTagListParams(draft, page, pageSize, selectedGroupId),
-		[pageSize, selectedGroupId],
-	)
 	const {
 		filterDraft: filters,
 		page,
+		pageSize,
 		params,
 		setDebouncedField,
 		setFilterDraft,
 		setPage,
-	} = useListQueryParams({
-		debounceFields: ["keyword", "code"],
-		extraResetKey: `${selectedGroupId ?? ""}:${pageSize}`,
-		initialDraft: createDefaultTagFilterDraft,
-		toParams,
-	})
+		setPageSize,
+	} = queryState
 	const [groupDialogOpen, setGroupDialogOpen] = useState(false)
 	const [tagDialogOpen, setTagDialogOpen] = useState(false)
 	const [editing, setEditing] = useState<SlidesTemplateTag | null>(null)
@@ -149,10 +119,10 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 	useEffect(() => {
 		if (!selectedGroupId || tree.isFetching) return
 		if (!groups.some((group) => String(group.id) === selectedGroupId)) {
-			setSelectedGroupId(null)
+			onSelectedGroupIdChange(null)
 			setSelectedTagId(null)
 		}
-	}, [groups, selectedGroupId, tree.isFetching])
+	}, [groups, onSelectedGroupIdChange, selectedGroupId, tree.isFetching])
 
 	const query = useSlidesTemplateTagsQuery(params)
 	const mutations = useSlidesTemplateTagMutations()
@@ -181,16 +151,10 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 		setSelectedTagId(null)
 	}, [setFilterDraft])
 
-	useEffect(() => {
-		onFilterCountChange(
-			[filters.code, filters.keyword, filters.status !== emptyStatus ? filters.status : ""]
-				.filter((value) => value.trim().length > 0).length,
-		)
-	}, [filters, onFilterCountChange])
 	const selectGroup = useCallback((groupId: string | null) => {
-		setSelectedGroupId(groupId)
+		onSelectedGroupIdChange(groupId)
 		setSelectedTagId(null)
-	}, [])
+	}, [onSelectedGroupIdChange])
 	const updateRecordStatus = useCallback(
 		async (record: SlidesTemplateTag, enabled: boolean) => {
 			try {
@@ -403,7 +367,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 								: "hover:bg-muted",
 						)}
 						onClick={() => {
-							setSelectedGroupId(null)
+							onSelectedGroupIdChange(null)
 							setSelectedTagId(null)
 						}}
 						type="button"
@@ -425,7 +389,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 									data-testid="platform-slides-template-tag-action-button"
 									className="flex w-full items-center justify-between gap-2 text-left"
 									onClick={() => {
-										setSelectedGroupId(String(group.id))
+										onSelectedGroupIdChange(String(group.id))
 										setSelectedTagId(null)
 									}}
 									type="button"
@@ -595,7 +559,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value={emptyStatus}>
+										<SelectItem value={emptySlidesTemplateStatus}>
 											{t("slidesTemplate.all")}
 										</SelectItem>
 										<SelectItem value="1">
@@ -681,7 +645,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 				mode="group"
 				mutations={mutations}
 				onCreated={(group) => {
-					setSelectedGroupId(String(group.id))
+					onSelectedGroupIdChange(String(group.id))
 					setSelectedTagId(null)
 				}}
 				onOpenChange={setGroupDialogOpen}
@@ -694,7 +658,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 				mode="tag"
 				mutations={mutations}
 				onCreated={(tag) => {
-					setSelectedGroupId(String(tag.parent_id))
+					onSelectedGroupIdChange(String(tag.parent_id))
 					setSelectedTagId(String(tag.id))
 					setFilterDraft(createDefaultTagFilterDraft())
 				}}

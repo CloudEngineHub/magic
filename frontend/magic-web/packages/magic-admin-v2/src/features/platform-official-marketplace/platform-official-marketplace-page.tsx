@@ -1,6 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
+import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params";
 import { useTranslation } from "react-i18next";
 import { ListShell } from "@magic-admin-v2/components/list-shell";
 import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
@@ -8,10 +9,19 @@ import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs";
 import { EmployeeMarketPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/employee-market-panel";
 import { SkillMarketPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/skill-market-panel";
-import type { MarketKind } from "@magic-admin-v2/features/platform-official-marketplace/types";
+import type {
+  AgentMarketListParams,
+  MarketFilterDraft,
+  MarketKind,
+  SkillMarketListParams,
+} from "@magic-admin-v2/features/platform-official-marketplace/types";
 import {
+  countActiveMarketFilters,
+  createDefaultFilterDraft,
   getOfficialMarketplacePermissions,
   resolveOfficialMarketplaceTab,
+  toAgentMarketParams,
+  toSkillMarketParams,
 } from "@magic-admin-v2/features/platform-official-marketplace/utils";
 import { useRuntime } from "@magic-admin-v2/runtime/context";
 import { cn } from "@magic-admin-v2/utils/cn";
@@ -25,10 +35,6 @@ export default function PlatformOfficialMarketplacePage() {
   const [refreshToken, setRefreshToken] = useState(0);
   const [tabActions, setTabActions] = useState<ReactNode>(null);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
-  const [filterCounts, setFilterCounts] = useState<Record<MarketKind, number>>({
-    employee: 0,
-    skill: 0,
-  });
   const {
     availableTabs,
     canEditEmployee,
@@ -46,11 +52,16 @@ export default function PlatformOfficialMarketplacePage() {
     setTabActions(null);
     setSelectedTab(value as MarketKind);
   }, []);
-  const handleFilterCountChange = useCallback((kind: MarketKind, count: number) => {
-    setFilterCounts((previous) =>
-      previous[kind] === count ? previous : { ...previous, [kind]: count },
-    );
-  }, []);
+  const employeeQueryState = useListQueryParams<MarketFilterDraft, AgentMarketListParams>({
+    debounceFields: ["code", "name_i18n", "organization_code", "package_name"],
+    initialDraft: createDefaultFilterDraft,
+    toParams: toAgentMarketParams,
+  });
+  const skillQueryState = useListQueryParams<MarketFilterDraft, SkillMarketListParams>({
+    debounceFields: ["code", "name_i18n", "organization_code", "package_name"],
+    initialDraft: createDefaultFilterDraft,
+    toParams: toSkillMarketParams,
+  });
 
   return (
     <ListShell
@@ -58,7 +69,11 @@ export default function PlatformOfficialMarketplacePage() {
         <>
           {activeTab ? (
             <PageHeaderFilterButton
-              count={filterCounts[activeTab]}
+              count={
+                activeTab === "employee"
+                  ? countActiveMarketFilters(employeeQueryState.filterDraft)
+                  : countActiveMarketFilters(skillQueryState.filterDraft)
+              }
               label={t("officialMarketplace.filter.title")}
               onClick={() => setMobileFilterOpen(true)}
             />
@@ -96,13 +111,13 @@ export default function PlatformOfficialMarketplacePage() {
         </div>
 
         {canViewEmployee ? (
-          <TabsContent forceMount value="employee" className="mt-5 data-[state=inactive]:hidden">
+          <TabsContent value="employee" className="mt-5">
             <EmployeeMarketPanel
               canEdit={canEditEmployee}
               isActive={activeTab === "employee"}
               onFetchingChange={handleActiveFetchingChange}
               onInitialLoadingChange={handleInitialLoadingChange}
-              onFilterCountChange={(count) => handleFilterCountChange("employee", count)}
+              queryState={employeeQueryState}
               onMobileFilterOpenChange={setMobileFilterOpen}
               mobileFilterOpen={mobileFilterOpen}
               onToolbarActionsChange={setTabActions}
@@ -112,13 +127,13 @@ export default function PlatformOfficialMarketplacePage() {
         ) : null}
 
         {canViewSkill ? (
-          <TabsContent forceMount value="skill" className="mt-5 data-[state=inactive]:hidden">
+          <TabsContent value="skill" className="mt-5">
             <SkillMarketPanel
               canEdit={canEditSkill}
               isActive={activeTab === "skill"}
               onFetchingChange={handleActiveFetchingChange}
               onInitialLoadingChange={handleInitialLoadingChange}
-              onFilterCountChange={(count) => handleFilterCountChange("skill", count)}
+              queryState={skillQueryState}
               onMobileFilterOpenChange={setMobileFilterOpen}
               mobileFilterOpen={mobileFilterOpen}
               onToolbarActionsChange={setTabActions}

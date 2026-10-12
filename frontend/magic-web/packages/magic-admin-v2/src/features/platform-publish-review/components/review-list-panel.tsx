@@ -1,5 +1,4 @@
 import type { ColumnDef } from "@tanstack/react-table"
-import { useEffect } from "react"
 import { AlertCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { DataTable } from "@magic-admin-v2/components/data-table"
@@ -11,11 +10,7 @@ import {
 	type PublishReviewKind,
 	type PublishReviewVariant,
 } from "@magic-admin-v2/features/platform-publish-review/types"
-import {
-	countActiveReviewFilters,
-	createDefaultFilterDraft,
-	type ReviewDraftUpdater,
-} from "@magic-admin-v2/features/platform-publish-review/params"
+import { createDefaultFilterDraft, type ReviewDraftUpdater } from "@magic-admin-v2/features/platform-publish-review/params"
 import { AdvancedFilterControls } from "@magic-admin-v2/features/platform-publish-review/components/review-filters"
 import type { ApiError } from "@magic-admin-v2/api/types"
 
@@ -36,7 +31,6 @@ export function ReviewListPanel<TData>({
 	pageSize,
 	mobileFilterOpen,
 	onMobileFilterOpenChange,
-	onFilterCountChange,
 	queryError,
 	total,
 	variant,
@@ -57,16 +51,11 @@ export function ReviewListPanel<TData>({
 	pageSize: number
 	mobileFilterOpen: boolean
 	onMobileFilterOpenChange: (open: boolean) => void
-	onFilterCountChange: (count: number) => void
 	queryError: ApiError | null
 	total: number
 	variant: PublishReviewVariant
 }) {
 	const { t } = useTranslation()
-
-	useEffect(() => {
-		onFilterCountChange(countActiveReviewFilters(filterDraft, kind))
-	}, [filterDraft, kind, onFilterCountChange])
 
 	return (
 		<div className="space-y-4">

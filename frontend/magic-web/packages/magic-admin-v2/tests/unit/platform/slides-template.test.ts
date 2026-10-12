@@ -195,13 +195,19 @@ describe("slides template component regressions", () => {
 	})
 
 	it("debounces all keyword and code filters and lazily loads category and tag options separately", () => {
+		assert.match(pageSource, /useListQueryParams/)
+		assert.equal(
+			[componentSource.templateLibrary, componentSource.categoryManager, componentSource.tagManager].some(
+				(source) => source.includes("useListQueryParams"),
+			),
+			false,
+		)
+		assert.match(pageSource, /debounceFields: \["keyword", "code"\]/)
 		for (const source of [
 			componentSource.templateLibrary,
 			componentSource.categoryManager,
 			componentSource.tagManager,
 		]) {
-			assert.match(source, /useListQueryParams/)
-			assert.match(source, /debounceFields: \["keyword", "code"\]/)
 			assert.match(source, /<ListFilterPanel/)
 		}
 		assert.match(componentSource.templateLibrary, /categoryOptionsOpen/)
@@ -250,9 +256,9 @@ describe("slides template component regressions", () => {
 
 	it("selects newly created tag resources and preserves required and length constraints", () => {
 		assert.match(componentSource.tagManager, /onCreated=\{\(group\) =>/)
-		assert.match(componentSource.tagManager, /setSelectedGroupId\(String\(group\.id\)\)/)
+		assert.match(componentSource.tagManager, /onSelectedGroupIdChange\(String\(group\.id\)\)/)
 		assert.match(componentSource.tagManager, /onCreated=\{\(tag\) =>/)
-		assert.match(componentSource.tagManager, /setSelectedGroupId\(String\(tag\.parent_id\)\)/)
+		assert.match(componentSource.tagManager, /onSelectedGroupIdChange\(String\(tag\.parent_id\)\)/)
 		assert.match(componentSource.tagManager, /setSelectedTagId\(String\(tag\.id\)\)/)
 		assert.match(componentSource.tagManager, /selectedRowId=\{selectedTagId \?\? undefined\}/)
 		assert.match(dataTableSource, /selectedRowId\?: string/)

@@ -8,8 +8,10 @@ import type { ApiError } from "@magic-admin-v2/api/types"
 import { useReviewAgentVersionMutation } from "@magic-admin-v2/features/platform-publish-review/mutations"
 import { useAgentReviewListQuery } from "@magic-admin-v2/features/platform-publish-review/queries"
 import {
+	type AgentReviewListParams,
 	type AgentVersionReviewItem,
 	type PublishReviewAction,
+	type PublishReviewFilterDraft,
 	type PublishReviewPublisherType,
 	type PublishReviewVariant,
 } from "@magic-admin-v2/features/platform-publish-review/types"
@@ -21,11 +23,9 @@ import {
 	type ReviewDialogState,
 } from "@magic-admin-v2/features/platform-publish-review/formatters"
 import {
-	createDefaultFilterDraft,
 	createReviewPayload,
-	toAgentReviewParams,
 } from "@magic-admin-v2/features/platform-publish-review/params"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
+import type { ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import {
 	createReviewActionColumn,
 	createReviewVersionColumn,
@@ -44,7 +44,7 @@ import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 export function EmployeeReviewPanel({
 	isActive,
 	onFetchingChange,
-	onFilterCountChange,
+	queryState,
 	onMobileFilterOpenChange,
 	mobileFilterOpen,
 	refreshToken,
@@ -52,7 +52,7 @@ export function EmployeeReviewPanel({
 }: {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
-	onFilterCountChange: (count: number) => void
+	queryState: ListQueryParamsState<PublishReviewFilterDraft, AgentReviewListParams>
 	onMobileFilterOpenChange: (open: boolean) => void
 	mobileFilterOpen: boolean
 	refreshToken: number
@@ -63,19 +63,7 @@ export function EmployeeReviewPanel({
 	const hasPlatformEditRight = useRights(PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_REVIEW_EDIT)
 	const hasInternalEditRight = useRights(PERMISSION_KEY_MAP.AGENT_REVIEW_EDIT)
 	const hasEditRight = variant === "platform" ? hasPlatformEditRight : hasInternalEditRight
-	const {
-		filterDraft,
-		page,
-		pageSize,
-		params,
-		setFilterDraft,
-		setPage,
-		setPageSize,
-	} = useListQueryParams({
-		debounceFields: ["name_i18n", "organization_code", "version"],
-		initialDraft: () => createDefaultFilterDraft("employee", variant),
-		toParams: toAgentReviewParams,
-	})
+	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } = queryState
 	const [reviewDialog, setReviewDialog] =
 		useState<ReviewDialogState<AgentVersionReviewItem>>(null)
 	const query = useAgentReviewListQuery(params, isActive, variant)
@@ -188,7 +176,6 @@ export function EmployeeReviewPanel({
 				kind="employee"
 				minWidth={1960}
 				onDraftChange={setFilterDraft}
-				onFilterCountChange={onFilterCountChange}
 				onMobileFilterOpenChange={onMobileFilterOpenChange}
 				mobileFilterOpen={isActive && mobileFilterOpen}
 				onPageChange={setPage}

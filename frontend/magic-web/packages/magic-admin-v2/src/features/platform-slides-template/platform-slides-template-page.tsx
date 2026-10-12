@@ -1,5 +1,5 @@
-import { Plus, RefreshCw, RotateCcw } from "lucide-react"
-import { useRef, useState } from "react"
+import { Plus, RefreshCw } from "lucide-react"
+import { useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { useIsFetching, useQueryClient } from "@tanstack/react-query"
@@ -7,6 +7,7 @@ import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-d
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
+import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import {
@@ -31,7 +32,10 @@ import { platformSlidesTemplateKeys } from "@magic-admin-v2/features/platform-sl
 import type {
 	SlidesTemplate,
 	SlidesTemplateCategory,
+	SlidesTemplateCategoryQueryParams,
+	SlidesTemplateQueryParams,
 	SlidesTemplateTag,
+	SlidesTemplateTagQueryParams,
 } from "@magic-admin-v2/features/platform-slides-template/types"
 import {
 	isSystemSlidesTemplate,
@@ -42,6 +46,20 @@ import {
 import { allowMagic } from "@magic-admin-v2/routes/access"
 import { useRuntime } from "@magic-admin-v2/runtime/context"
 import { cn } from "@magic-admin-v2/utils/cn"
+import {
+	countActiveCategoryFilters,
+	countActiveTagFilters,
+	countActiveTemplateLibraryFilters,
+	createDefaultCategoryFilterDraft,
+	createDefaultTagFilterDraft,
+	createDefaultTemplateLibraryDraft,
+	toCategoryListParams,
+	toTagListParams,
+	toTemplateLibraryParams,
+	type CategoryFilterDraft,
+	type TagFilterDraft,
+	type TemplateLibraryFilterDraft,
+} from "@magic-admin-v2/features/platform-slides-template/list-params"
 
 type TabValue = "categories" | "library" | "tags"
 type DeleteTarget = {
@@ -60,12 +78,8 @@ export default function PlatformSlidesTemplatePage() {
 	const tagManagerRef = useRef<TagManagerHandle>(null)
 	const [tab, setTab] = useState<TabValue>("library")
 	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
-	const [filterCounts, setFilterCounts] = useState<Record<TabValue, number>>({
-		categories: 0,
-		library: 0,
-		tags: 0,
-	})
 	const [canCreateTag, setCanCreateTag] = useState(false)
+	const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
 	const [editorOpen, setEditorOpen] = useState(false)
 	const [selectedTemplate, setSelectedTemplate] = useState<SlidesTemplate | null>(null)
 	const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
@@ -73,6 +87,27 @@ export default function PlatformSlidesTemplatePage() {
 	const templateMutations = useSlidesTemplateMutations()
 	const categoryMutations = useSlidesTemplateCategoryMutations()
 	const tagMutations = useSlidesTemplateTagMutations()
+	const libraryQueryState = useListQueryParams<TemplateLibraryFilterDraft, SlidesTemplateQueryParams>({
+		debounceFields: ["keyword", "code"],
+		initialDraft: createDefaultTemplateLibraryDraft,
+		toParams: toTemplateLibraryParams,
+	})
+	const categoryQueryState = useListQueryParams<CategoryFilterDraft, SlidesTemplateCategoryQueryParams>({
+		debounceFields: ["keyword", "code"],
+		initialDraft: createDefaultCategoryFilterDraft,
+		toParams: toCategoryListParams,
+	})
+	const toTagParams = useCallback(
+		(draft: TagFilterDraft, page: number, pageSize: number) =>
+			toTagListParams(draft, page, pageSize, selectedGroupId),
+		[selectedGroupId],
+	)
+	const tagQueryState = useListQueryParams<TagFilterDraft, SlidesTemplateTagQueryParams>({
+		debounceFields: ["keyword", "code"],
+		extraResetKey: selectedGroupId,
+		initialDraft: createDefaultTagFilterDraft,
+		toParams: toTagParams,
+	})
 	const isDeletePending =
 		deleteTarget?.kind === "template"
 			? templateMutations.delete.isPending
@@ -152,11 +187,6 @@ export default function PlatformSlidesTemplatePage() {
 	const refresh = () => {
 		void queryClient.invalidateQueries({ queryKey: platformSlidesTemplateKeys.all })
 	}
-	const resetCurrentTab = () => {
-		if (tab === "library") templateLibraryRef.current?.reset()
-		else if (tab === "categories") categoryManagerRef.current?.reset()
-		else tagManagerRef.current?.reset()
-	}
 	const createCurrentTab = () => {
 		if (tab === "library") openEditor()
 		else if (tab === "categories") categoryManagerRef.current?.create()
@@ -173,11 +203,6 @@ export default function PlatformSlidesTemplatePage() {
 		setMobileFilterOpen(false)
 		setTab(value as TabValue)
 	}
-	const handleFilterCountChange = (kind: TabValue, count: number) => {
-		setFilterCounts((previous) =>
-			previous[kind] === count ? previous : { ...previous, [kind]: count },
-		)
-	}
 
 	return (
 		<>
@@ -186,7 +211,13 @@ export default function PlatformSlidesTemplatePage() {
 				actions={
 					<>
 						<PageHeaderFilterButton
-							count={filterCounts[tab]}
+							count={
+							tab === "library"
+								? countActiveTemplateLibraryFilters(libraryQueryState.filterDraft)
+								: tab === "categories"
+									? countActiveCategoryFilters(categoryQueryState.filterDraft)
+									: countActiveTagFilters(tagQueryState.filterDraft)
+							}
 							label={t("slidesTemplate.filterTitle")}
 							onClick={() => setMobileFilterOpen(true)}
 						/>
@@ -232,33 +263,35 @@ export default function PlatformSlidesTemplatePage() {
 							{t("slidesTemplate.tags")}
 						</TabsTrigger>
 					</TabsList>
-					<TabsContent className="mt-4 data-[state=inactive]:hidden" forceMount value="library">
+					<TabsContent className="mt-4" value="library">
 						<TemplateLibrary
 							canEdit={canEdit}
+							queryState={libraryQueryState}
 							mobileFilterOpen={tab === "library" && mobileFilterOpen}
-							onFilterCountChange={(count) => handleFilterCountChange("library", count)}
 							onMobileFilterOpenChange={setMobileFilterOpen}
 							onDelete={requestTemplateDelete}
 							onEdit={openEditor}
 							ref={templateLibraryRef}
 						/>
 					</TabsContent>
-					<TabsContent className="mt-4 data-[state=inactive]:hidden" forceMount value="categories">
+					<TabsContent className="mt-4" value="categories">
 						<CategoryManager
 							canEdit={canEdit}
+							queryState={categoryQueryState}
 							mobileFilterOpen={tab === "categories" && mobileFilterOpen}
-							onFilterCountChange={(count) => handleFilterCountChange("categories", count)}
 							onMobileFilterOpenChange={setMobileFilterOpen}
 							onDelete={requestCategoryDelete}
 							ref={categoryManagerRef}
 						/>
 					</TabsContent>
-					<TabsContent className="mt-4 data-[state=inactive]:hidden" forceMount value="tags">
+					<TabsContent className="mt-4" value="tags">
 						<TagManager
 							canEdit={canEdit}
+							queryState={tagQueryState}
+							selectedGroupId={selectedGroupId}
+							onSelectedGroupIdChange={setSelectedGroupId}
 							mobileFilterOpen={tab === "tags" && mobileFilterOpen}
 							onCreateAvailabilityChange={setCanCreateTag}
-							onFilterCountChange={(count) => handleFilterCountChange("tags", count)}
 							onMobileFilterOpenChange={setMobileFilterOpen}
 							onDelete={requestTagDelete}
 							ref={tagManagerRef}

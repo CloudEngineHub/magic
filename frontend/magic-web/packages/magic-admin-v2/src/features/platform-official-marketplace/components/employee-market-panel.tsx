@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type { ApiError } from "@magic-admin-v2/api/types"
 import { Button } from "@magic-admin-v2/components/ui/button"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
+import { type ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import { AgentMarketCategoryManagerDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/agent-market-category-manager-dialog"
 import { createSharedMarketColumns } from "@magic-admin-v2/features/platform-official-marketplace/components/market-columns"
 import { MarketListPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/market-list-panel"
@@ -28,19 +28,18 @@ import {
 import type {
 	AgentMarketCategoryItem,
 	AgentMarketItem,
+	AgentMarketListParams,
 	MarketCategoryOption,
+	MarketFilterDraft,
 } from "@magic-admin-v2/features/platform-official-marketplace/types"
 import {
 	areSameCategoryIds,
-	createDefaultFilterDraft,
-	countActiveMarketFilters,
 	getAgentMarketCategoryIds,
 	getAgentMarketCategoryLabels,
 	getApiErrorMessage,
 	getLocalizedRoles,
 	getLocalizedText,
 	normalizeCategoryIds,
-	toAgentMarketParams,
 } from "@magic-admin-v2/features/platform-official-marketplace/utils"
 import { useI18n } from "@magic-admin-v2/i18n/use-i18n"
 
@@ -52,7 +51,7 @@ type EmployeeMarketPanelProps = {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
 	onInitialLoadingChange: (isLoading: boolean) => void
-	onFilterCountChange: (count: number) => void
+	queryState: ListQueryParamsState<MarketFilterDraft, AgentMarketListParams>
 	onMobileFilterOpenChange: (open: boolean) => void
 	mobileFilterOpen: boolean
 	onToolbarActionsChange: (actions: ReactNode) => void
@@ -65,7 +64,7 @@ export function EmployeeMarketPanel({
 	isActive,
 	onFetchingChange,
 	onInitialLoadingChange,
-	onFilterCountChange,
+	queryState,
 	onMobileFilterOpenChange,
 	mobileFilterOpen,
 	onToolbarActionsChange,
@@ -75,11 +74,7 @@ export function EmployeeMarketPanel({
 	const { language } = useI18n()
 	const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
 	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } =
-		useListQueryParams({
-			debounceFields: ["code", "name_i18n", "organization_code", "package_name"],
-			initialDraft: createDefaultFilterDraft,
-			toParams: toAgentMarketParams,
-		})
+		queryState
 	const query = useAgentMarketListQuery(params, isActive)
 	const categoryQuery = useAgentMarketCategoryListQuery({}, isActive)
 	const items = query.data?.list ?? emptyAgentMarketItems
@@ -241,10 +236,6 @@ export function EmployeeMarketPanel({
 	useEffect(() => {
 		if (isActive) onInitialLoadingChange(isInitialLoading)
 	}, [isActive, isInitialLoading, onInitialLoadingChange])
-
-	useEffect(() => {
-		if (isActive) onFilterCountChange(countActiveMarketFilters(filterDraft))
-	}, [countActiveMarketFilters, filterDraft, isActive, onFilterCountChange])
 
 	useEffect(() => {
 		if (!isActive) return

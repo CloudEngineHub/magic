@@ -1,5 +1,6 @@
 import { RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
+import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 import { useTranslation } from "react-i18next"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
@@ -9,10 +10,19 @@ import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import { EmployeeReviewPanel } from "@magic-admin-v2/features/platform-publish-review/components/employee-review-panel"
 import { SkillReviewPanel } from "@magic-admin-v2/features/platform-publish-review/components/skill-review-panel"
 import type {
+	AgentReviewListParams,
+	PublishReviewFilterDraft,
 	PublishReviewKind,
 	PublishReviewVariant,
+	SkillReviewListParams,
 } from "@magic-admin-v2/features/platform-publish-review/types"
 import { useRights } from "@magic-admin-v2/hooks/use-rights"
+import {
+	countActiveReviewFilters,
+	createDefaultFilterDraft,
+	toAgentReviewParams,
+	toSkillReviewParams,
+} from "@magic-admin-v2/features/platform-publish-review/params"
 import { cn } from "@magic-admin-v2/utils/cn"
 
 export default function PlatformPublishReviewPage({
@@ -45,10 +55,6 @@ export default function PlatformPublishReviewPage({
 	const [activeTabFetching, setActiveTabFetching] = useState(false)
 	const [refreshToken, setRefreshToken] = useState(0)
 	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
-	const [filterCounts, setFilterCounts] = useState<Record<PublishReviewKind, number>>({
-		employee: 0,
-		skill: 0,
-	})
 	const handleActiveFetchingChange = useCallback((isFetching: boolean) => {
 		setActiveTabFetching(isFetching)
 	}, [])
@@ -56,11 +62,16 @@ export default function PlatformPublishReviewPage({
 		setMobileFilterOpen(false)
 		setActiveTab(value as PublishReviewKind)
 	}, [])
-	const handleFilterCountChange = useCallback((kind: PublishReviewKind, count: number) => {
-		setFilterCounts((previous) =>
-			previous[kind] === count ? previous : { ...previous, [kind]: count },
-		)
-	}, [])
+	const employeeQueryState = useListQueryParams<PublishReviewFilterDraft, AgentReviewListParams>({
+		debounceFields: ["name_i18n", "organization_code", "version"],
+		initialDraft: () => createDefaultFilterDraft("employee", variant),
+		toParams: toAgentReviewParams,
+	})
+	const skillQueryState = useListQueryParams<PublishReviewFilterDraft, SkillReviewListParams>({
+		debounceFields: ["package_name", "skill_name", "version"],
+		initialDraft: () => createDefaultFilterDraft("skill", variant),
+		toParams: toSkillReviewParams,
+	})
 
 	useEffect(() => {
 		if (activeTab === "employee" && !canViewEmployeeReview && canViewSkillReview) {
@@ -77,7 +88,11 @@ export default function PlatformPublishReviewPage({
 				<>
 					{canViewEmployeeReview || canViewSkillReview ? (
 						<PageHeaderFilterButton
-							count={filterCounts[activeTab]}
+							count={
+								activeTab === "employee"
+									? countActiveReviewFilters(employeeQueryState.filterDraft, "employee")
+									: countActiveReviewFilters(skillQueryState.filterDraft, "skill")
+							}
 							label={t("publishReview.filter.title")}
 							onClick={() => setMobileFilterOpen(true)}
 						/>
@@ -119,11 +134,11 @@ export default function PlatformPublishReviewPage({
 					) : null}
 				</TabsList>
 				{canViewEmployeeReview ? (
-					<TabsContent forceMount value="employee" className="mt-5 data-[state=inactive]:hidden">
+					<TabsContent value="employee" className="mt-5">
 						<EmployeeReviewPanel
 							isActive={activeTab === "employee"}
 							onFetchingChange={handleActiveFetchingChange}
-							onFilterCountChange={(count) => handleFilterCountChange("employee", count)}
+							queryState={employeeQueryState}
 							onMobileFilterOpenChange={setMobileFilterOpen}
 							mobileFilterOpen={mobileFilterOpen}
 							refreshToken={refreshToken}
@@ -132,11 +147,11 @@ export default function PlatformPublishReviewPage({
 					</TabsContent>
 				) : null}
 				{canViewSkillReview ? (
-					<TabsContent forceMount value="skill" className="mt-5 data-[state=inactive]:hidden">
+					<TabsContent value="skill" className="mt-5">
 						<SkillReviewPanel
 							isActive={activeTab === "skill"}
 							onFetchingChange={handleActiveFetchingChange}
-							onFilterCountChange={(count) => handleFilterCountChange("skill", count)}
+							queryState={skillQueryState}
 							onMobileFilterOpenChange={setMobileFilterOpen}
 							mobileFilterOpen={mobileFilterOpen}
 							refreshToken={refreshToken}

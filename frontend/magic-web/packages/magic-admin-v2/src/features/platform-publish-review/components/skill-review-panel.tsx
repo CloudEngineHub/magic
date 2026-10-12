@@ -8,6 +8,7 @@ import type { ApiError } from "@magic-admin-v2/api/types"
 import { useReviewSkillVersionMutation } from "@magic-admin-v2/features/platform-publish-review/mutations"
 import { useSkillReviewListQuery } from "@magic-admin-v2/features/platform-publish-review/queries"
 import {
+	type PublishReviewFilterDraft,
 	type PublishReviewAction,
 	type PublishReviewPublisherType,
 	type PublishReviewVariant,
@@ -19,12 +20,9 @@ import {
 	getLocalizedText,
 	type ReviewDialogState,
 } from "@magic-admin-v2/features/platform-publish-review/formatters"
-import {
-	createDefaultFilterDraft,
-	createReviewPayload,
-	toSkillReviewParams,
-} from "@magic-admin-v2/features/platform-publish-review/params"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
+import { createReviewPayload } from "@magic-admin-v2/features/platform-publish-review/params"
+import type { ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
+import type { SkillReviewListParams } from "@magic-admin-v2/features/platform-publish-review/types"
 import {
 	createReviewActionColumn,
 	createReviewVersionColumn,
@@ -42,7 +40,7 @@ import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 export function SkillReviewPanel({
 	isActive,
 	onFetchingChange,
-	onFilterCountChange,
+	queryState,
 	onMobileFilterOpenChange,
 	mobileFilterOpen,
 	refreshToken,
@@ -50,7 +48,7 @@ export function SkillReviewPanel({
 }: {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
-	onFilterCountChange: (count: number) => void
+	queryState: ListQueryParamsState<PublishReviewFilterDraft, SkillReviewListParams>
 	onMobileFilterOpenChange: (open: boolean) => void
 	mobileFilterOpen: boolean
 	refreshToken: number
@@ -61,19 +59,7 @@ export function SkillReviewPanel({
 	const hasPlatformEditRight = useRights(PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_EDIT)
 	const hasInternalEditRight = useRights(PERMISSION_KEY_MAP.SKILL_REVIEW_EDIT)
 	const hasEditRight = variant === "platform" ? hasPlatformEditRight : hasInternalEditRight
-	const {
-		filterDraft,
-		page,
-		pageSize,
-		params,
-		setFilterDraft,
-		setPage,
-		setPageSize,
-	} = useListQueryParams({
-		debounceFields: ["package_name", "skill_name", "version"],
-		initialDraft: () => createDefaultFilterDraft("skill", variant),
-		toParams: toSkillReviewParams,
-	})
+	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } = queryState
 	const [reviewDialog, setReviewDialog] =
 		useState<ReviewDialogState<SkillVersionReviewItem>>(null)
 	const query = useSkillReviewListQuery(params, isActive, variant)
@@ -166,7 +152,6 @@ export function SkillReviewPanel({
 				kind="skill"
 				minWidth={1640}
 				onDraftChange={setFilterDraft}
-				onFilterCountChange={onFilterCountChange}
 				onMobileFilterOpenChange={onMobileFilterOpenChange}
 				mobileFilterOpen={isActive && mobileFilterOpen}
 				onPageChange={setPage}
