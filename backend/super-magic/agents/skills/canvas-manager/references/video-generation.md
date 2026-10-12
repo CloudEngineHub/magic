@@ -69,13 +69,12 @@ print(result.content)
 
 ## Draft mode
 
-A model may support a cheap draft render before the expensive final video. The current `<media_model_info>` declares this with a `draft` capability. When that capability is absent, the model has no draft mode and `draft` must not be sent at all.
+Only when `<media_model_info>` declares a `draft` capability, and only when the user asks for a draft or preview; otherwise never send `draft`.
 
-- Use draft mode only when the user asks for a draft or a preview. Otherwise omit `draft`.
-- Draft request: set `content.draft=true`. The resolution collapses to the value declared on the `draft` capability in `<media_model_info>` (for example `resolution="480p"`); do not send any other resolution.
-- Draft and final are two separate billable renders. Estimate and confirm each one separately.
-- Once the draft completes, tell the user they can approve it and render the final video at full resolution from that draft video in the canvas. Do not submit the final render yourself or hand-build its request.
-- The final render inherits the draft's prompt, reference assets, and duration; only the resolution changes. Its input mode is declared as `draft_task` in `<media_model_info>`, and it must never carry reference assets or frames of its own.
+- `content.draft=true` forces the capability's declared resolution (e.g. `480p`) — send no other resolution.
+- Draft and final are separately billable; estimate and confirm each on its own.
+- After the draft completes, tell the user they can approve it and render the final at full resolution from the canvas; never submit that render yourself.
+- The final render (`input_mode="draft_task"`) inherits the draft's prompt, references, and duration — only the resolution changes, and it carries no references or frames of its own.
 
 ## Code Mode example: estimate
 
