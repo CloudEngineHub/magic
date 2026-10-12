@@ -134,6 +134,21 @@ def test_check_crew_verification_script(tmp_path):
     assert any("forbidden multilingual field" in err for err in res_bad["errors"])
 
 
+def test_init_crew_instruction_helpers():
+    import runpy
+
+    helpers = runpy.run_path(str(CREW_CREATOR_DIR / "scripts" / "init_crew.py"))
+    build_instructions = helpers["_build_crew_instructions"]
+    validate_instructions = helpers["_validate_crew_instructions"]
+
+    instructions = "1. Gather requirements\n2. Deliver the result"
+    assert build_instructions({"instructions": instructions}) == instructions + "\n"
+    assert build_instructions({}) is None
+    assert validate_instructions(instructions) == []
+    assert validate_instructions("   ") == ["content"]
+    assert validate_instructions("1. Gather requirements") == ["executable_steps"]
+
+
 def test_init_crew_preserves_existing_workspace_directories(tmp_path, monkeypatch):
     import subprocess
     import sys

@@ -41,6 +41,7 @@ tools:
 tools:
   - web_search
   - read_webpages_as_markdown
+  - generate_images
   - create_canvas
   - generate_canvas_images
   - image_search
@@ -127,7 +128,7 @@ skills:
 | `visual_understanding` | Analyze image content and answer questions |
 | `visual_understanding_webpage` | Screenshot and analyze a webpage visually |
 | `video_understanding` | Analyze video content and answer questions |
-| `generate_images` | Batch generate images from text prompts or reference images (internal/utility use only; for agent workflows use canvas tools instead) |
+| `generate_images` | Batch generate images from text prompts or reference images |
 | `image_search` | Search for images by keyword |
 
 ### Code Execution

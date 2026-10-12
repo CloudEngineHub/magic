@@ -10,7 +10,6 @@ return [
         'im-channels' => 'Connect IM Bot',
         'creating-slides' => 'Create Slides',
         'crew-creator' => 'Crew Creator',
-
         'deep-research' => 'Deep Research',
         'canvas-designer' => 'Canvas Designer',
         'skill-creator' => 'Skill Creator',

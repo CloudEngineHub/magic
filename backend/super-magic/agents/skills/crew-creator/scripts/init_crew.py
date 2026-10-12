@@ -104,7 +104,7 @@ def _build_identity(cfg: dict, workspace_dir: Path | None = None) -> str:
     return f"{header}\n{body}\n"
 
 
-def _build_agents(cfg: dict) -> str | None:
+def _build_crew_instructions(cfg: dict) -> str | None:
     body = cfg.get("instructions")
     if not body:
         return None
@@ -118,7 +118,7 @@ def _build_soul(cfg: dict) -> str | None:
     return f"{body}\n"
 
 
-def _validate_agents_content(content: str) -> list[str]:
+def _validate_crew_instructions(content: str) -> list[str]:
     if not content.strip():
         return ["content"]
 
@@ -191,12 +191,12 @@ def main() -> int:
         }, ensure_ascii=False))
         return 1
 
-    invalid_agents_sections = _validate_agents_content(str(cfg["instructions"]))
-    if invalid_agents_sections:
+    invalid_crew_instruction_sections = _validate_crew_instructions(str(cfg["instructions"]))
+    if invalid_crew_instruction_sections:
         print(json.dumps({
             "ok": False,
             "error": "AGENTS.md instructions must contain at least two executable ordered steps.",
-            "missing_sections": invalid_agents_sections,
+            "missing_sections": invalid_crew_instruction_sections,
         }, ensure_ascii=False))
         return 1
 
@@ -216,9 +216,9 @@ def main() -> int:
     identity_path.write_text(_build_identity(cfg, workspace_dir), encoding="utf-8")
     created.append("IDENTITY.md")
 
-    agents_content = _build_agents(cfg)
-    if agents_content:
-        (ws_dir / "AGENTS.md").write_text(agents_content, encoding="utf-8")
+    crew_instructions = _build_crew_instructions(cfg)
+    if crew_instructions:
+        (ws_dir / "AGENTS.md").write_text(crew_instructions, encoding="utf-8")
         created.append("AGENTS.md")
 
     soul_content = _build_soul(cfg)
