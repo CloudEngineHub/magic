@@ -44,6 +44,28 @@ export type HomeOnboardingPreludeDialog =
 	 * onboarding from taking the screen during that round trip and having the dialog open over it.
 	 */
 	| "daily-reward-claim"
+	/**
+	 * Another account is being signed in and the page is about to be rebuilt for it — the
+	 * "add account" flow, which reloads once the client has switched to the newly added account.
+	 *
+	 * The only one of these that is not a dialog, and the only one taken on a surface the
+	 * onboarding does not otherwise know about. It is here because the reload is the whole point:
+	 * the introduction dialog spends itself the moment it is painted, so a dialog opened in the
+	 * beat between the sign-in and the reload would be wiped by that reload without the account
+	 * ever having been able to act on it — shown once and lost for good, since the flag the
+	 * showing writes is the same flag that keeps it from coming back. Held instead, nothing is
+	 * spent while the handover is in flight and the reloaded page offers the dialog normally.
+	 *
+	 * The hold is taken *before* the sign-in, not at the reload. Every step in between can have
+	 * the account context ready to accept a run — the organization list is written down long
+	 * before the reload — and the reload itself is only reached once the login has finished, so a
+	 * hold taken there would arrive after the dialog it is meant to keep off the screen.
+	 *
+	 * Never released on the way out: a successful sign-in always reloads, and the reload takes
+	 * this module — holds and all — with it. The failure path is the one that gives it back, so a
+	 * login that does not end in a reload cannot leave the feature locked out for the session.
+	 */
+	| "account-context-switch"
 
 /** Announced on every change of the answer, so a mounted surface can follow it rather than poll. */
 export const HOME_ONBOARDING_PRELUDE_EVENT = "magic-home-onboarding-prelude"
