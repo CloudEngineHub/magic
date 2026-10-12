@@ -157,7 +157,7 @@ final class AssetAppServiceTest extends TestCase
                 return ['status' => 'ACTIVE'];
             }
 
-            public function getAssetStatus(string $providerAssetId): array
+            public function getAssetStatus(string $providerAssetId, ?string $projectName = null): array
             {
                 return [];
             }

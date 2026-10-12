@@ -1283,12 +1283,7 @@ final class AssetDomainServiceTest extends TestCase
                 private readonly AssetProviderInterface $stubProvider,
                 private readonly int $testPollsBeforeTimeout,
             ) {
-                parent::__construct($assets, $providerAssets, $agreements, $logger, $abilityDomainService, $searchTextBuilder);
-            }
-
-            protected function createAssetProvider(array $providerConfig): AssetProviderInterface
-            {
-                return $this->stubProvider;
+                parent::__construct($assets, $providerAssets, $agreements, $logger, $abilityDomainService, $searchTextBuilder, $this->stubProvider);
             }
 
             protected function isComplianceWaitExpired(float $deadline): bool

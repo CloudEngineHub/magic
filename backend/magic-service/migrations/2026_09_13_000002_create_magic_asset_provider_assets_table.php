@@ -28,10 +28,10 @@ return new class extends Migration {
             $table->dateTime('deleted_at')->nullable();
             $table->unique(['organization_code', 'asset_id', 'provider_code', 'project_name'], 'uniq_asset_provider_mapping');
             $table->index(['organization_code', 'provider_asset_id'], 'idx_asset_provider_external');
-            // 用量统计要对全量映射按第三方 ID 去重，原有索引以 organization_code 打头无法命中，
-            // 这里按 provider_code 打头，让 COUNT(DISTINCT provider_asset_id) 能走松散索引扫描。
-            $table->index(['provider_code', 'provider_asset_id'], 'idx_asset_provider_usage_asset');
-            $table->index(['provider_code', 'provider_group_id'], 'idx_asset_provider_usage_group');
+            // 用量统计先按 provider_code 过滤，再对素材 ID 与组 ID 分别去重，以 organization_code 打头的索引命中不了。
+            // 两个 COUNT(DISTINCT ...) 在同一条查询里，优化器只会挑一个索引，拆成两个索引时另一个仍要回表；
+            // 合成一条三列索引后两个聚合都能只读索引（index-only scan），也省掉一个索引的写入成本。
+            $table->index(['provider_code', 'provider_asset_id', 'provider_group_id'], 'idx_asset_provider_usage');
         });
     }
 

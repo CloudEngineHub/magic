@@ -24,8 +24,10 @@ interface AssetProviderInterface
 
     /**
      * 查询第三方资产状态，返回结构与 createAsset 一致。
+     *
+     * 素材归属第三方项目，定位时带上 project_name；实现可对它取默认值。
      */
-    public function getAssetStatus(string $providerAssetId): array;
+    public function getAssetStatus(string $providerAssetId, ?string $projectName = null): array;
 
     /**
      * 从厂商原始响应中提取合规失败原因，供领域层写入本地失败原因。

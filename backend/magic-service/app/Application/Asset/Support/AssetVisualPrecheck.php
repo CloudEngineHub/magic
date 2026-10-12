@@ -44,7 +44,7 @@ class AssetVisualPrecheck
 
     private const int VIDEO_DOWNLOAD_MAX_BYTES = 209715200;
 
-    /** 抽帧产物固定为 jpg（见 FfmpegVideoFrameExtractor 的输出参数），直接按 jpeg 编码。 */
+    /** 内联帧的兜底媒体类型：实际类型按帧文件内容判定，判定不出时才用它（见 frameDataUriPrefix）。 */
     private const string FRAME_DATA_URI_PREFIX = 'data:image/jpeg;base64,';
 
     /** 单帧编码后体积上限，超限的帧直接丢弃。 */
@@ -52,13 +52,18 @@ class AssetVisualPrecheck
 
     private readonly SafeRemoteFileDownloader $downloader;
 
+    /**
+     * @param null|SafeRemoteFileDownloader $downloader 仅供单测传入替身：抓取外部地址涉及重定向与体积限制，
+     *                                                  单测不必真的发请求。生产由容器装配，可选参数不会被注入，这里自建。
+     */
     public function __construct(
         private readonly AiAbilityDomainService $abilityDomainService,
         private readonly LLMAppService $llmAppService,
         private readonly VideoFrameExtractorInterface $frameExtractor,
         private readonly LoggerInterface $logger,
+        ?SafeRemoteFileDownloader $downloader = null,
     ) {
-        $this->downloader = new SafeRemoteFileDownloader(new RemoteDownloadSecurityConfig(
+        $this->downloader = $downloader ?? new SafeRemoteFileDownloader(new RemoteDownloadSecurityConfig(
             enabled: true,
             level: RemoteDownloadSecurityConfig::LEVEL_STANDARD,
             maxDownloadSize: self::VIDEO_DOWNLOAD_MAX_BYTES,
@@ -195,7 +200,23 @@ class AssetVisualPrecheck
             return null;
         }
 
-        return self::FRAME_DATA_URI_PREFIX . base64_encode($content);
+        return $this->frameDataUriPrefix($localPath) . base64_encode($content);
+    }
+
+    /**
+     * 帧以 data URI 内联，媒体类型必须与帧文件的实际内容一致。
+     *
+     * 接口只承诺「帧图片」，当前实现输出 JPEG；这里按内容判定、判定不出时退回 JPEG，
+     * 避免将来换成其它编码（如 PNG）的实现时，内容被静默按 JPEG 解码。
+     */
+    private function frameDataUriPrefix(string $localPath): string
+    {
+        $info = @getimagesize($localPath);
+        if (! is_array($info) || ! isset($info['mime'])) {
+            return self::FRAME_DATA_URI_PREFIX;
+        }
+
+        return 'data:' . $info['mime'] . ';base64,';
     }
 
     /** @param array<int, string> $paths */

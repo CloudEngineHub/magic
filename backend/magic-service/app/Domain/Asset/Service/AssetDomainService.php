@@ -62,6 +62,7 @@ class AssetDomainService
         private readonly LoggerInterface $logger,
         private readonly AiAbilityDomainService $abilityDomainService,
         private readonly AssetSearchTextBuilder $searchTextBuilder,
+        ?AssetProviderInterface $provider = null,
     ) {
     }
 

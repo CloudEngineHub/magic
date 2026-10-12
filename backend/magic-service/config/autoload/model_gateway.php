@@ -23,8 +23,9 @@ return [
         'poll_max_times' => (int) env('MODEL_GATEWAY_VIDEO_QUEUE_POLL_MAX_TIMES', 600),
     ],
     'video_media' => [
-        // 已废弃：ffmpeg / ffprobe 路径统一由 Infrastructure\Util\Video\FfmpegBinaryResolver 读取
-        // 环境变量 FFPROBE_BINARY / FFMPEG_BINARY（兼容 MODEL_GATEWAY_FFPROBE_BINARY），此键不再被读取。
+        // 已废弃：ffmpeg / ffprobe 路径统一由 Infrastructure\Util\Video\FfmpegBinaryResolver 读取环境变量
+        // FFPROBE_BINARY / FFMPEG_BINARY（并兼容 MODEL_GATEWAY_FFPROBE_BINARY）。此 config 键不再被任何人读取，
+        // 保留只为不改动存量部署的环境变量名；改路径请设上面三个环境变量之一。
         'ffprobe_binary' => env('MODEL_GATEWAY_FFPROBE_BINARY', 'ffprobe'),
     ],
     'video_file_cleanup' => [

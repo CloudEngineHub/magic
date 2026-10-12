@@ -7,6 +7,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Util\Video;
 
+use function Hyperf\Support\env;
+
 /**
  * 解析 ffmpeg / ffprobe 可执行文件路径，优先环境变量，全为空时退回 PATH 默认命令名。
  */
@@ -21,7 +23,7 @@ class FfmpegBinaryResolver
      */
     public function ffmpeg(?string $explicit = null): string
     {
-        return $this->firstNonEmpty($explicit, \Hyperf\Support\env('FFMPEG_BINARY')) ?? self::DEFAULT_FFMPEG;
+        return $this->firstNonEmpty($explicit, env('FFMPEG_BINARY')) ?? self::DEFAULT_FFMPEG;
     }
 
     /**
@@ -33,8 +35,8 @@ class FfmpegBinaryResolver
     {
         return $this->firstNonEmpty(
             $explicit,
-            \Hyperf\Support\env('FFPROBE_BINARY'),
-            \Hyperf\Support\env('MODEL_GATEWAY_FFPROBE_BINARY'),
+            env('FFPROBE_BINARY'),
+            env('MODEL_GATEWAY_FFPROBE_BINARY'),
         ) ?? self::DEFAULT_FFPROBE;
     }
 

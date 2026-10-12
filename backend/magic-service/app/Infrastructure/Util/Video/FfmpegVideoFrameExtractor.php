@@ -26,7 +26,7 @@ readonly class FfmpegVideoFrameExtractor implements VideoFrameExtractorInterface
 
     public function __construct(
         private LoggerInterface $logger,
-        private FfprobeRunner $fprobeRunner,
+        private FfprobeRunner $ffprobeRunner,
         private FfmpegBinaryResolver $binaryResolver,
     ) {
     }
@@ -38,7 +38,7 @@ readonly class FfmpegVideoFrameExtractor implements VideoFrameExtractorInterface
         }
 
         try {
-            $duration = $this->resolveDurationSeconds($this->fprobeRunner->run($videoPath));
+            $duration = $this->resolveDurationSeconds($this->ffprobeRunner->run($videoPath));
         } catch (Throwable $throwable) {
             $this->logger->warning('视频时长探测失败，放弃抽帧', [
                 'exception' => $throwable::class,
