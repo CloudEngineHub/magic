@@ -1,6 +1,5 @@
 import { useMemo } from "react"
 import { ChevronsUpDown } from "lucide-react"
-import { Switch } from "@/components/shadcn-ui/switch"
 import { Popover, PopoverContent, PopoverTrigger } from "../../../primitives/shadcn/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../primitives/shadcn/select"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
@@ -54,6 +53,16 @@ function getTriggerSettingLabel(
 	return label
 }
 
+function getAspectSizeLabel(option: {
+	width: number
+	height: number
+	originalValue?: string
+}): string {
+	if (option.originalValue) return option.originalValue
+	if (option.width > 0 && option.height > 0) return `${option.width}x${option.height}`
+	return ""
+}
+
 function buildTriggerSummaryLabel(segments: string[], fallback: string): string {
 	const nonEmptySegments = segments.filter(Boolean)
 	return nonEmptySegments.length > 0 ? nonEmptySegments.join(" · ") : fallback
@@ -69,7 +78,6 @@ function getSettingTestIdKey(key: string): string {
 // 模型配置里的画质是短选项（如 high / standard），和分辨率一样用按钮组点选。
 const QUALITY_REQUEST_KEY = "quality"
 const BACKGROUND_REQUEST_KEY = "background"
-const TRANSPARENT_BACKGROUND_VALUE = "transparent"
 
 function isQualitySetting(
 	setting: ImageEditorConfig["supportedImageSettingOptions"][number],
@@ -81,18 +89,6 @@ function isBackgroundSetting(
 	setting: ImageEditorConfig["supportedImageSettingOptions"][number],
 ): boolean {
 	return setting.requestKey === BACKGROUND_REQUEST_KEY
-}
-
-// 打开表示透明背景，关闭回到另一项（通常是不透明）。
-function getBackgroundSwitchValues(options: Array<{ value: string }>) {
-	const enabledOption =
-		options.find((option) => option.value === TRANSPARENT_BACKGROUND_VALUE) ??
-		options[options.length - 1]
-	const disabledOption = options.find((option) => option.value !== enabledOption?.value)
-	return {
-		enabledValue: enabledOption?.value ?? "",
-		disabledValue: disabledOption?.value ?? "",
-	}
 }
 
 // 按钮只保留程度词，分组标题已经表达「画质」。去掉后为空时保留原文，避免按钮没有文字。
@@ -225,35 +221,42 @@ export function ImageGenerationSettingsPopover(props: ImageGenerationSettingsPop
 							{t("imageEditor.aspectRatio", "比例")}
 						</div>
 						<div
-							className={styles.buttonGroup}
+							className={`${styles.buttonGroup} ${styles.aspectButtonGroup}`}
 							role="group"
 							aria-label={t("imageEditor.aspectRatio", "比例")}
 						>
 							{supportedAspectRatioOptions.map((option) => {
 								if (!option?.value) return null
 								const isActive = currentSelectValue === option.value
+								const sizeLabel = getAspectSizeLabel(option)
 								return (
 									<button
 										key={option.value}
 										type="button"
 										disabled={disabled}
-										className={`${styles.buttonGroupItem} ${
+										className={`${styles.buttonGroupItem} ${styles.aspectButton} ${
 											isActive ? styles.buttonGroupItemActive : ""
 										}`}
 										aria-pressed={isActive}
 										onClick={() => handlers.handleRatioChange(option.value)}
 									>
 										<span className={styles.aspectButtonInner}>
-											<span
-												className={styles.aspectIconBox}
-												style={{
-													width: `${option.iconWidth}px`,
-													height: `${option.iconHeight}px`,
-												}}
-												aria-hidden
-											/>
+											<span className={styles.aspectIconFrame} aria-hidden>
+												<span
+													className={styles.aspectIconBox}
+													style={{
+														width: `${option.iconWidth}px`,
+														height: `${option.iconHeight}px`,
+													}}
+												/>
+											</span>
 											<span>{option.label}</span>
 										</span>
+										{sizeLabel ? (
+											<span className={styles.aspectSize} aria-hidden>
+												{sizeLabel}
+											</span>
+										) : null}
 									</button>
 								)
 							})}
@@ -284,95 +287,72 @@ export function ImageGenerationSettingsPopover(props: ImageGenerationSettingsPop
 						)
 						const options = getAvailableSettingOptions(setting)
 						const testIdKey = getSettingTestIdKey(setting.requestKey)
-						const backgroundSwitch = isBackgroundSetting(setting)
-							? getBackgroundSwitchValues(options)
-							: null
+						const isBackground = isBackgroundSetting(setting)
+						const sectionTitle = isBackground
+							? t("imageEditor.transparentBackground", "透明背景")
+							: setting.label
+						const buttonOptions = isQualitySetting(setting)
+							? options.map((option) => ({
+									...option,
+									label: getQualityButtonLabel(option.label),
+								}))
+							: options
 
 						return (
 							<div className={styles.section} key={setting.key}>
-								{backgroundSwitch ? (
-									<label className={styles.switchRow}>
-										<span className={styles.sectionTitle}>
-											{t("imageEditor.transparentBackground", "透明背景")}
-										</span>
-										<Switch
-											checked={
-												selectedValue === backgroundSwitch.enabledValue
-											}
-											disabled={
-												disabled || backgroundSwitch.disabledValue === ""
-											}
-											onCheckedChange={(checked) =>
-												handlers.handleImageSettingChange(
-													setting.requestKey,
-													checked
-														? backgroundSwitch.enabledValue
-														: backgroundSwitch.disabledValue,
-												)
-											}
-										/>
-									</label>
+								<div className={styles.sectionTitle}>{sectionTitle}</div>
+								{isQualitySetting(setting) || isBackground ? (
+									<OptionButtonGroup
+										label={sectionTitle}
+										options={buttonOptions}
+										value={selectedValue}
+										disabled={disabled}
+										onChange={(value) =>
+											handlers.handleImageSettingChange(
+												setting.requestKey,
+												value,
+											)
+										}
+									/>
 								) : (
-									<>
-										<div className={styles.sectionTitle}>{setting.label}</div>
-										{isQualitySetting(setting) ? (
-											<OptionButtonGroup
-												label={setting.label}
-												options={options.map((option) => ({
-													...option,
-													label: getQualityButtonLabel(option.label),
-												}))}
-												value={selectedValue}
-												disabled={disabled}
-												onChange={(value) =>
-													handlers.handleImageSettingChange(
-														setting.requestKey,
-														value,
-													)
-												}
-											/>
-										) : (
-											<Select
-												disabled={disabled}
-												value={selectedValue}
-												onValueChange={(value) =>
-													handlers.handleImageSettingChange(
-														setting.requestKey,
-														value,
-													)
-												}
-											>
-												<SelectTrigger
-													className={styles.selectTrigger}
-													aria-label={setting.label}
-													data-testid={`image-editor-${testIdKey}-setting-trigger`}
+									<Select
+										disabled={disabled}
+										value={selectedValue}
+										onValueChange={(value) =>
+											handlers.handleImageSettingChange(
+												setting.requestKey,
+												value,
+											)
+										}
+									>
+										<SelectTrigger
+											className={styles.selectTrigger}
+											aria-label={setting.label}
+											data-testid={`image-editor-${testIdKey}-setting-trigger`}
+										>
+											<span className={styles.selectTriggerText}>
+												{options.find(
+													(option) => option.value === selectedValue,
+												)?.label || selectedValue}
+											</span>
+											<ChevronsUpDown size={16} aria-hidden />
+										</SelectTrigger>
+										<SelectContent
+											className={styles.selectContent}
+											style={{ minWidth: 160 }}
+										>
+											{options.map((option) => (
+												<SelectItem
+													key={option.value}
+													value={option.value}
+													className={styles.selectOptionItem}
+													data-testid={`image-editor-${testIdKey}-setting-option`}
 												>
-													<span className={styles.selectTriggerText}>
-														{options.find(
-															(option) =>
-																option.value === selectedValue,
-														)?.label || selectedValue}
-													</span>
-													<ChevronsUpDown size={16} aria-hidden />
-												</SelectTrigger>
-												<SelectContent
-													className={styles.selectContent}
-													style={{ minWidth: 160 }}
-												>
-													{options.map((option) => (
-														<SelectItem
-															key={option.value}
-															value={option.value}
-															className={styles.selectOptionItem}
-															data-testid={`image-editor-${testIdKey}-setting-option`}
-														>
-															<span>{option.label}</span>
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-										)}
-									</>
+													<span>{option.label}</span>
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
 								)}
 							</div>
 						)

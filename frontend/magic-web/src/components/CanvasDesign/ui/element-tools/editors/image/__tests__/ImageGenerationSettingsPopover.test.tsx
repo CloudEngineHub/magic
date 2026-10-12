@@ -150,11 +150,16 @@ describe("ImageGenerationSettingsPopover", () => {
 			"aria-pressed",
 			"true",
 		)
+		expect(within(content).getByText("1600x900")).toBeInTheDocument()
 		expect(within(content).getByRole("button", { name: "2K" })).toHaveAttribute(
 			"aria-pressed",
 			"true",
 		)
 		expect(within(content).getByRole("button", { name: "低" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
+		expect(within(content).getByRole("button", { name: "不透明" })).toHaveAttribute(
 			"aria-pressed",
 			"true",
 		)
@@ -210,7 +215,7 @@ describe("ImageGenerationSettingsPopover", () => {
 		expect(config.handlers.handleImageSettingChange).toHaveBeenCalledWith("quality", "standard")
 		expect(screen.getByRole("dialog")).toBeInTheDocument()
 
-		fireEvent.click(within(content).getByRole("switch", { name: "透明背景" }))
+		fireEvent.click(within(content).getByRole("button", { name: "透明" }))
 		expect(config.handlers.handleImageSettingChange).toHaveBeenCalledWith(
 			"background",
 			"transparent",
