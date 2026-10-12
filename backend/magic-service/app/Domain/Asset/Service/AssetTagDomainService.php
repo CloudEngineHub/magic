@@ -99,9 +99,6 @@ class AssetTagDomainService
         if ($entity === null || $entity->getOwnerUid() !== null) {
             ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
         }
-        if ($entity->getNodeType() !== $nodeType) {
-            ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
-        }
         $this->assertStructure($dataIsolation, $nodeType, $parentId, $id);
         $entity->setNameI18n(['default' => trim($name)])->setParentId($parentId)->setUpdatedUid($dataIsolation->getCurrentUserId());
         return $this->tags->save($dataIsolation, $entity);
@@ -113,7 +110,7 @@ class AssetTagDomainService
         if ($entity === null || $entity->getOwnerUid() !== null) {
             ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
         }
-        if ($entity->isGroup() && $this->tags->hasChildren($dataIsolation, $id)) {
+        if ($this->tags->hasChildren($dataIsolation, $id)) {
             ExceptionBuilder::throw(AssetErrorCode::GROUP_NOT_EMPTY);
         }
         $this->relations->deleteByTagId($dataIsolation, $id);
@@ -125,9 +122,6 @@ class AssetTagDomainService
     public function update(AssetDataIsolation $dataIsolation, int|string $id, string $name, AssetTagNodeType $nodeType, int $parentId): AssetTagEntity
     {
         $entity = $this->findOwned($dataIsolation, $id);
-        if ($entity->getNodeType() !== $nodeType) {
-            ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
-        }
         $this->assertStructure($dataIsolation, $nodeType, $parentId, $id);
         $entity->setNameI18n(['default' => trim($name)])->setParentId($parentId)->setUpdatedUid($dataIsolation->getCurrentUserId());
         $saved = $this->tags->save($dataIsolation, $entity);
@@ -138,7 +132,7 @@ class AssetTagDomainService
     public function delete(AssetDataIsolation $dataIsolation, int|string $id): void
     {
         $entity = $this->findOwned($dataIsolation, $id);
-        if ($entity->isGroup() && $this->tags->hasChildren($dataIsolation, $id)) {
+        if ($this->tags->hasChildren($dataIsolation, $id)) {
             ExceptionBuilder::throw(AssetErrorCode::GROUP_NOT_EMPTY);
         }
         $assetIds = $this->relations->findAssetIdsByTagId($dataIsolation, $id);
@@ -213,16 +207,28 @@ class AssetTagDomainService
         return $entity;
     }
 
+    /**
+     * 个人标签允许直接建在根级：根级节点既可以是标签组，也可以是暂时没有下级的普通标签。
+     * 树最多两级，二级节点只能挂在根级节点下，不能再被挂子级。
+     */
     private function assertStructure(AssetDataIsolation $dataIsolation, AssetTagNodeType $nodeType, int $parentId, null|int|string $ignoreId = null): void
     {
-        if ($nodeType === AssetTagNodeType::Group) {
-            if ($parentId !== 0) {
-                ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
-            }
+        if ($parentId === 0) {
             return;
         }
+        // 标签组只能作为根级节点。
+        if ($nodeType === AssetTagNodeType::Group) {
+            ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
+        }
         $parent = $this->tags->findById($dataIsolation, $parentId);
-        if ($parent === null || ! $parent->isGroup() || ($ignoreId !== null && (string) $parent->getId() === (string) $ignoreId)) {
+        if ($parent === null
+            || $parent->getParentId() !== 0
+            || ($ignoreId !== null && (string) $parent->getId() === (string) $ignoreId)
+        ) {
+            ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
+        }
+        // 自身已有下级的节点不能再下沉为二级节点，否则树会出现第三层。
+        if ($ignoreId !== null && $this->tags->hasChildren($dataIsolation, $ignoreId)) {
             ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
         }
         if ($parent->getOwnerUid() !== null && $parent->getOwnerUid() !== $dataIsolation->getCurrentUserId()) {
@@ -236,7 +242,11 @@ class AssetTagDomainService
         $result = [];
         foreach (array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0))) as $tagId) {
             $tag = $this->tags->findById($dataIsolation, $tagId);
-            if ($tag === null || ! $tag->isTag() || ($tag->getOwnerUid() !== null && $tag->getOwnerUid() !== $dataIsolation->getCurrentUserId())) {
+            // 有下级的节点是标签组，不能直接挂到素材上。
+            if ($tag === null
+                || $this->tags->hasChildren($dataIsolation, $tagId)
+                || ($tag->getOwnerUid() !== null && $tag->getOwnerUid() !== $dataIsolation->getCurrentUserId())
+            ) {
                 ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
             }
             $result[] = $tag;

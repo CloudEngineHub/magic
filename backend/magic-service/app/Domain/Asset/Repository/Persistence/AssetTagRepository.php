@@ -9,6 +9,7 @@ namespace App\Domain\Asset\Repository\Persistence;
 
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetTagEntity;
+use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Domain\Asset\Factory\AssetTagFactory;
 use App\Domain\Asset\Repository\Facade\AssetTagRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetTagModel;
@@ -31,22 +32,22 @@ class AssetTagRepository implements AssetTagRepositoryInterface
     public function queryVisibleTree(AssetDataIsolation $dataIsolation, ?string $ownerUid = null): array
     {
         $nodes = $this->queryVisible($dataIsolation, $ownerUid);
-        $groups = [];
-        $tags = [];
+        $children = [];
+        $roots = [];
         foreach ($nodes as $node) {
-            if ($node->isGroup()) {
-                $groups[(string) $node->getId()] = $node;
-            } elseif ($node->isTag()) {
-                $tags[] = $node;
+            if ($node->getParentId() === 0) {
+                $roots[] = $node;
+                continue;
             }
+            $children[(string) $node->getParentId()][] = $node;
         }
-        foreach ($tags as $tag) {
-            $group = $groups[(string) $tag->getParentId()] ?? null;
-            if ($group !== null) {
-                $group->setChildren([...$group->getChildren(), $tag]);
-            }
+        foreach ($nodes as $node) {
+            $nodeChildren = $children[(string) $node->getId()] ?? [];
+            $node->setChildren($nodeChildren);
+            // 节点类型由结构派生：有下级即标签组，没有下级即普通标签。
+            $node->setNodeType($nodeChildren === [] ? AssetTagNodeType::Tag : AssetTagNodeType::Group);
         }
-        return array_values($groups);
+        return $roots;
     }
 
     public function findById(AssetDataIsolation $dataIsolation, int|string $id): ?AssetTagEntity
