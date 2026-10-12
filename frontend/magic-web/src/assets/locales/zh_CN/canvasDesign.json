@@ -270,6 +270,8 @@
 		"editPlaceholder": "请输入您的编辑需求",
 		"generateAgain": "再次生成",
 		"generatingReadOnly": "正在生成，可查看和复制提示词",
+		"generationSettings": "生成设置",
+		"generationSettingsAria": "图片生成参数",
 		"maxReferenceImagesReached": "最多只能上传 {{maxReferenceImages}} 张参考图",
 		"modelUnavailable": "模型信息暂不可用",
 		"originalImage": "原图",
@@ -281,7 +283,8 @@
 		"reEnter": "重新输入",
 		"referenceImage": "参考图",
 		"resolution": "分辨率",
-		"size": "尺寸"
+		"size": "尺寸",
+		"transparentBackground": "透明背景"
 	},
 	"imagePromptExtraction": {
 		"createText": "创建文本",
