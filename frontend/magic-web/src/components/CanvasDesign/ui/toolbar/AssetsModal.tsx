@@ -253,7 +253,7 @@ export default function AssetsModal({
 		assetLibrarySessionStore.invalidateCurrentScope()
 	}, [])
 
-	const { startCompliance, seedanceComplianceAvailable } = useAssetLibraryComplianceAction({
+	const { startCompliance } = useAssetLibraryComplianceAction({
 		onComplianceStarted: (assetId) => {
 			setOptimisticProcessingIds((current) => new Set(current).add(assetId))
 		},
