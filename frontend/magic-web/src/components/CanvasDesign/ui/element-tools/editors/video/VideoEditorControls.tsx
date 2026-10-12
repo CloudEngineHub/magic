@@ -4,6 +4,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createPortal } from "react-dom"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
+import { Switch } from "@/components/shadcn-ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../primitives/shadcn/select"
 import EditorModelSelect from "./model-config/EditorModelSelect"
 import type {
@@ -285,6 +286,9 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		selectedModelId,
 		selectedInputMode,
 		availableInputModes,
+		selectedResolution,
+		selectedDraft,
+		canEnableDraft,
 		modelOptions,
 		modelOptionGroups,
 		selectedModelOption,
@@ -338,6 +342,12 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		},
 		[handlers, inputModesForSelect],
 	)
+	// draft 是服务端按模型能力声明的生成开关，不能用模型 ID 做前端推断。
+	// 样片协议固定使用 480p；其他分辨率下不展示该开关，避免用户误以为可提交样片。
+	const draftConfig = selectedModelOption?.model.video_generation_config?.generation?.draft
+	const hasDraft =
+		draftConfig !== undefined && selectedDraft !== undefined && selectedResolution === "480p"
+	const draftLabel = draftConfig?.name || t("videoEditor.draft", "样片模式")
 
 	const getPopoverLimitState = useCallback(
 		(paths: Array<string | undefined>, slotIndex: number, maxCount?: number) => {
@@ -1237,6 +1247,18 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 									))}
 								</SelectContent>
 							</Select>
+						)}
+						{hasDraft && (
+							<Switch
+								className={styles.draftModeSwitch}
+								checked={selectedDraft === true}
+								onCheckedChange={handlers.handleDraftChange}
+								disabled={!canEnableDraft}
+								title={draftConfig?.description}
+								data-testid="video-generate-editor-draft-mode"
+							>
+								<span className={styles.draftModeSwitchLabel}>{draftLabel}</span>
+							</Switch>
 						)}
 					</div>
 					<div className={styles.right}>

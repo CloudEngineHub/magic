@@ -37,6 +37,8 @@ export function useElementToolCommand(registration: ElementToolCommandRegistrati
 				registration.state?.data?.version?.isMain ?? "",
 				registration.state?.data?.videoGenerationEstimate?.resolution ?? "",
 				registration.state?.data?.videoGenerationEstimate?.points ?? "",
+				registration.state?.data?.videoDraftFinalHint?.deadlineText ?? "",
+				registration.state?.data?.videoDraftFinalHint?.expired ?? "",
 			].join("\u0000")
 		: null
 	useLayoutEffect(() => {

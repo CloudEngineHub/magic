@@ -12,8 +12,7 @@
 	max-width: calc(100vw - 24px);
 	height: 42px;
 	padding: var(--spacing-1, 4px);
-	overflow-x: auto;
-	overflow-y: hidden;
+	overflow: auto hidden;
 	white-space: nowrap;
 	background: var(--base-background, #fff);
 	border: 1px solid var(--base-border, #e5e5e5);
@@ -79,6 +78,19 @@
 .button:disabled {
 	cursor: not-allowed;
 	opacity: 0.5;
+}
+
+.tooltipTrigger,
+.disabledTooltipTrigger {
+	display: inline-flex;
+}
+
+.disabledTooltipTrigger {
+	cursor: not-allowed;
+}
+
+.disabledTooltipTrigger > .button {
+	pointer-events: none;
 }
 
 /* Keep generated-video estimates aligned with the compact points treatment on the submit button. */

@@ -49,7 +49,11 @@ function areRuntimeStatesEqual(
 		left.data?.version?.isMain === right.data?.version?.isMain &&
 		left.data?.videoGenerationEstimate?.resolution ===
 			right.data?.videoGenerationEstimate?.resolution &&
-		left.data?.videoGenerationEstimate?.points === right.data?.videoGenerationEstimate?.points
+		left.data?.videoGenerationEstimate?.points ===
+			right.data?.videoGenerationEstimate?.points &&
+		left.data?.videoDraftFinalHint?.deadlineText ===
+			right.data?.videoDraftFinalHint?.deadlineText &&
+		left.data?.videoDraftFinalHint?.expired === right.data?.videoDraftFinalHint?.expired
 	)
 }
 

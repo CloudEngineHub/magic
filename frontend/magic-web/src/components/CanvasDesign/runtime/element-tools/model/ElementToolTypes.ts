@@ -76,6 +76,11 @@ export interface ElementToolData {
 		resolution: string
 		points: number | null
 	}
+	/** 样片转正片的有效期说明。截止时间由完成时间加固定有效期得出。 */
+	videoDraftFinalHint?: {
+		deadlineText?: string
+		expired: boolean
+	}
 }
 
 export interface ElementToolRuntimeState {

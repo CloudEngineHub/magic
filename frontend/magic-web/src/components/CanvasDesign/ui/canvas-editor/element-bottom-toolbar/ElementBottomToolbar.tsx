@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react"
 import { useCallback, useMemo } from "react"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "../../../runtime/shared/lib/utils"
 import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
@@ -13,6 +14,8 @@ export interface ElementBottomToolbarItem {
 	group?: string
 	icon?: ReactNode
 	label: ReactNode
+	/** 按钮已有可见名称时的补充说明，例如正片有效期。 */
+	tooltip?: ReactNode
 	shortcut?: ReactNode
 	disabled?: boolean
 	loading?: boolean
@@ -132,21 +135,7 @@ export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 											<div className={styles.divider} aria-hidden />
 										) : null}
 										<div className={styles.item}>
-											<button
-												type="button"
-												className={styles.button}
-												disabled={item.disabled || item.loading}
-												aria-busy={item.loading || undefined}
-												onClick={item.onClick}
-											>
-												{item.icon}
-												<span>{item.label}</span>
-												{item.shortcut ? (
-													<span className={styles.shortcut}>
-														{item.shortcut}
-													</span>
-												) : null}
-											</button>
+											<BottomToolbarButton item={item} />
 										</div>
 									</Fragment>
 								)
@@ -156,5 +145,37 @@ export function ElementBottomToolbar(props: ElementBottomToolbarProps) {
 				})}
 			</div>
 		</FloatingSurfaceScope>
+	)
+}
+
+function BottomToolbarButton({ item }: { item: ElementBottomToolbarItem }) {
+	const disabled = Boolean(item.disabled || item.loading)
+	const button = (
+		<button
+			type="button"
+			className={styles.button}
+			disabled={disabled}
+			aria-busy={item.loading || undefined}
+			onClick={item.onClick}
+		>
+			{item.icon}
+			<span>{item.label}</span>
+			{item.shortcut ? <span className={styles.shortcut}>{item.shortcut}</span> : null}
+		</button>
+	)
+	if (!item.tooltip) return button
+	// 禁用按钮不接收 hover，外层承接指针事件，过期说明仍能出现。
+	// 有效期说明要马上读到，这条提示不走全局 700ms 等待。
+	return (
+		<MagicTooltip
+			title={item.tooltip}
+			placement="bottom"
+			contentClassName="whitespace-pre-line"
+			delayDuration={0}
+		>
+			<span className={disabled ? styles.disabledTooltipTrigger : styles.tooltipTrigger}>
+				{button}
+			</span>
+		</MagicTooltip>
 	)
 }

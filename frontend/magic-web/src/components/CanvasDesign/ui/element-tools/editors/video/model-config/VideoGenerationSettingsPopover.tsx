@@ -17,8 +17,6 @@ function buildTriggerSummaryLabel(input: {
 	durationSeconds?: number
 	resolution?: string
 	quality?: string
-	draftEnabled?: boolean
-	draftLabel?: string
 	fallback: string
 }): string {
 	const segments: string[] = []
@@ -28,7 +26,6 @@ function buildTriggerSummaryLabel(input: {
 	}
 	if (input.resolution) segments.push(input.resolution)
 	if (input.quality) segments.push(input.quality)
-	if (input.draftEnabled && input.draftLabel) segments.push(input.draftLabel)
 	if (segments.length === 0) return input.fallback
 	return segments.join(" · ")
 }
@@ -82,9 +79,6 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 		durationDraftSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,
-		selectedDraft,
-		canEnableDraft,
-		selectedModelOption,
 		selectedCompressionQuality,
 		currentSelectValue,
 		ratioOption,
@@ -97,14 +91,8 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 	const hasQuality = supportedCompressionQualityOptions.length > 0
 	const hasAudio = selectedGenerateAudio !== undefined
 	const hasWebSearch = selectedWebSearch !== undefined
-	// draft 是服务端按模型能力声明的生成开关，不能用模型 ID 做前端推断。
-	const draftConfig = selectedModelOption?.model.video_generation_config?.generation?.draft
-	// 样片协议固定使用 480p；其他分辨率下不展示该开关，避免用户误以为可提交样片。
-	const hasDraft =
-		draftConfig !== undefined && selectedDraft !== undefined && selectedResolution === "480p"
 
 	const fallbackTriggerLabel = t("videoEditor.generationSettings", "生成设置")
-	const draftLabel = draftConfig?.name || t("videoEditor.draft", "样片模式")
 
 	const aspectLabel = ratioOption?.label || currentSelectValue || undefined
 
@@ -115,8 +103,6 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 				durationSeconds: hasDuration ? selectedDurationSeconds : undefined,
 				resolution: hasResolution ? selectedResolution : undefined,
 				quality: hasQuality ? selectedCompressionQuality : undefined,
-				draftEnabled: hasDraft && selectedDraft === true,
-				draftLabel,
 				fallback: fallbackTriggerLabel,
 			}),
 		[
@@ -124,26 +110,15 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 			fallbackTriggerLabel,
 			hasAspect,
 			hasDuration,
-			hasDraft,
 			hasQuality,
 			hasResolution,
 			selectedCompressionQuality,
 			selectedDurationSeconds,
 			selectedResolution,
-			selectedDraft,
-			draftLabel,
 		],
 	)
 
-	if (
-		!hasAspect &&
-		!hasResolution &&
-		!hasDuration &&
-		!hasQuality &&
-		!hasAudio &&
-		!hasWebSearch &&
-		!hasDraft
-	)
+	if (!hasAspect && !hasResolution && !hasDuration && !hasQuality && !hasAudio && !hasWebSearch)
 		return null
 
 	return (
@@ -311,20 +286,6 @@ export function VideoGenerationSettingsPopover(props: VideoGenerationSettingsPop
 							<Switch
 								checked={selectedWebSearch}
 								onCheckedChange={handlers.handleWebSearchChange}
-							/>
-						</label>
-					</div>
-				)}
-
-				{hasDraft && (
-					<div className={styles.section}>
-						<label className={styles.switchRow} title={draftConfig?.description}>
-							<span className={styles.sectionTitle}>{draftLabel}</span>
-							<Switch
-								checked={selectedDraft === true}
-								onCheckedChange={handlers.handleDraftChange}
-								disabled={!canEnableDraft}
-								data-testid="video-generate-editor-draft-mode"
 							/>
 						</label>
 					</div>

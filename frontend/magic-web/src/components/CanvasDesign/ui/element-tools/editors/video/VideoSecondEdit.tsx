@@ -35,6 +35,7 @@ import {
 	isDraftVideoContent,
 	supportsVideoDraftFinal,
 } from "../../../../runtime/resources/video-draft-final/videoDraftFinalRequest"
+import { resolveVideoDraftFinalHint } from "../../../../runtime/resources/video-draft-final/videoDraftFinalHint"
 import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
 
 interface VideoSecondEditProps {
@@ -127,6 +128,13 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		isDraftVideoContent(videoContent) &&
 		supportsVideoDraftFinal(draftSourceModel, videoContent.generateVideoRequest?.model_id),
 	)
+	const draftFinalFinishedAt = videoContent?.videoGenerationResultMeta?.runtime?.finished_at
+	const draftFinalHint = useMemo(
+		() =>
+			hasDraftFinalCapability ? resolveVideoDraftFinalHint(draftFinalFinishedAt) : undefined,
+		[draftFinalFinishedAt, hasDraftFinalCapability],
+	)
+	const draftFinalExpired = draftFinalHint?.expired === true
 	const draftFinalRequest = useMemo(
 		() =>
 			videoContent && hasDraftFinalCapability
@@ -293,6 +301,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			!draftFinalRequest ||
 			!sessionContentId ||
 			!hasDraftFinalCapability ||
+			draftFinalExpired ||
 			isPreparingGenerateFinal ||
 			isSubmittingGenerateFinal
 		) {
@@ -330,6 +339,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		canvas,
 		confirmVideoGeneration,
 		draftFinalEstimatedPoints,
+		draftFinalExpired,
 		draftFinalRequest,
 		estimateVideoRequestPoints,
 		hasDraftFinalCapability,
@@ -448,13 +458,14 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 				toolId: ElementToolTypeEnum.GenerationGenerateFinal,
 				state: {
 					available: canGenerateFinal,
-					disabled: generateFinalBusy,
+					disabled: generateFinalBusy || draftFinalExpired,
 					loading: generateFinalBusy,
 					data: {
 						videoGenerationEstimate: {
 							resolution: VIDEO_DRAFT_FINAL_RESOLUTION.toUpperCase(),
 							points: draftFinalEstimatedPoints,
 						},
+						...(draftFinalHint ? { videoDraftFinalHint: draftFinalHint } : {}),
 					},
 				},
 				execute: handleGenerateFinal,
@@ -462,6 +473,8 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			[
 				canGenerateFinal,
 				draftFinalEstimatedPoints,
+				draftFinalExpired,
+				draftFinalHint,
 				generateFinalBusy,
 				handleGenerateFinal,
 				sessionContentId,
