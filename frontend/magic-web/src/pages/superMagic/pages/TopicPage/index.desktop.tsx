@@ -868,6 +868,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					/>
 				)}
 				isReadOnly={isReadOnly}
+				// Chat detail has no project-sidebar collapse; closing the preview should free its
+				// width entirely, matching the project page, rather than leave an empty strip.
+				showCollapsedDetailEntry={!isSingleTopicChat}
 				keepDetailMountedWhenHidden
 				historyLayout={
 					isSingleTopicChat

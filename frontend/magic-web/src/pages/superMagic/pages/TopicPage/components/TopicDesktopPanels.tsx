@@ -69,6 +69,12 @@ interface TopicDesktopPanelsProps {
 	initialConversationPanelCollapsed?: boolean
 	/** Embedding pages can reserve horizontal padding around the collapsed navigation. */
 	collapsedConversationPanelWidth?: number
+	/**
+	 * Keep the "expand preview" strip in place after the preview is collapsed.
+	 * Pages without project-sidebar collapse show it by default; the chat detail page turns it
+	 * off so a collapsed preview frees its width like the project page does.
+	 */
+	showCollapsedDetailEntry?: boolean
 	conversationResizeHandleClassName?: string
 	/** Keep overlays inside an embedding page instead of anchoring them to the viewport. */
 	historyOverlayScope?: "viewport" | "container"
@@ -104,6 +110,7 @@ function TopicDesktopPanels({
 	autoExpandConversationWhenDetailVisible = true,
 	persistConversationPanelState = true,
 	initialConversationPanelCollapsed = false,
+	showCollapsedDetailEntry = true,
 	collapsedConversationPanelWidth,
 	conversationResizeHandleClassName,
 	historyOverlayScope = "viewport",
@@ -122,10 +129,12 @@ function TopicDesktopPanels({
 	const [historyDragMode, setHistoryDragMode] = useState<"full-right" | "fixed" | "drawer">()
 	const historyResize = isReadOnly ? undefined : historyLayout?.resize
 	const detailPanelSlotRef = useRef<HTMLDivElement>(null)
+	const conversationPanelSlotRef = useRef<HTMLDivElement>(null)
 	const expandDetailButtonRef = useRef<HTMLButtonElement>(null)
 	const previousDetailCollapsedRef = useRef(false)
 	const lastDetailWidthRef = useRef(0)
 	const showCollapsedDetailPanel =
+		showCollapsedDetailEntry &&
 		!enableProjectCollapse &&
 		!isReadOnly &&
 		isDetailPanelCollapsed &&
@@ -282,6 +291,12 @@ function TopicDesktopPanels({
 					fileSidebarTriggerRef.current ||
 					projectContentRef.current?.querySelector<HTMLButtonElement>(
 						'[data-testid="project-card-collapse"]',
+					) ||
+					// Chat detail has neither the expand strip nor a project-sidebar trigger; the
+					// collapse button just became inert, so hand focus to the message input instead
+					// of dropping it onto <body>.
+					conversationPanelSlotRef.current?.querySelector<HTMLElement>(
+						'[contenteditable="true"], textarea',
 					)
 				)?.focus({ preventScroll: true })
 		} else if (wasDetailCollapsed && shouldShowDetailPanel) {
@@ -698,6 +713,7 @@ function TopicDesktopPanels({
 
 					{!isReadOnly && (
 						<div
+							ref={conversationPanelSlotRef}
 							data-testid="topic-conversation-panel-slot"
 							className="relative z-10 h-full min-w-0 shrink-0"
 							style={{

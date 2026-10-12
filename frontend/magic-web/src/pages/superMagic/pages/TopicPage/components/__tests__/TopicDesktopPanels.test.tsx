@@ -1,12 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ComponentProps, RefObject } from "react"
+import { MemoryRouter } from "react-router"
 import { describe, expect, it, beforeEach, vi } from "vitest"
 import TopicDesktopPanels from "../TopicDesktopPanels"
 
 const mockUseTopicDesktopLayout = vi.fn()
 const mockUseTopicDesktopPanelMotion = vi.fn()
 
-vi.mock("react-i18next", () => ({
+// Keep the real module exports: the panel's import chain initializes the i18n store, which needs
+// `initReactI18next`. Only `useTranslation` is replaced so assertions can match raw keys.
+vi.mock("react-i18next", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react-i18next")>()),
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
@@ -113,7 +117,10 @@ function renderComponent(overrides: Partial<ComponentProps<typeof TopicDesktopPa
 		),
 	}
 
-	return render(<TopicDesktopPanels {...defaultProps} {...overrides} />)
+	// TopicDesktopPanels reads the router location; the wrapper also applies to `rerender`.
+	return render(<TopicDesktopPanels {...defaultProps} {...overrides} />, {
+		wrapper: MemoryRouter,
+	})
 }
 
 function getPortalPanelHost(panelTestId: string) {
@@ -229,6 +236,44 @@ describe("TopicDesktopPanels", () => {
 		expect(mockUseTopicDesktopLayout).toHaveBeenCalledWith(
 			expect.objectContaining({ initialConversationPanelCollapsed: true }),
 		)
+	})
+
+	describe("collapsed preview entry", () => {
+		const collapsedProps = {
+			historyLayout: undefined,
+			shouldShowDetailPanel: false,
+			isDetailPanelCollapsed: true,
+			onExpandDetailPanel: vi.fn(),
+		} satisfies Partial<ComponentProps<typeof TopicDesktopPanels>>
+
+		it("shows the expand strip after the preview is collapsed by default", () => {
+			renderComponent(collapsedProps)
+
+			expect(screen.getByTestId("collapsed-detail-panel")).toBeInTheDocument()
+			expect(mockUseTopicDesktopPanelMotion).toHaveBeenLastCalledWith(
+				expect.objectContaining({ containerWidthPx: 1440 - 24 }),
+			)
+		})
+
+		it("frees the strip width and keeps the detail subtree mounted when the entry is off", () => {
+			renderComponent({ ...collapsedProps, showCollapsedDetailEntry: false })
+
+			expect(screen.queryByTestId("collapsed-detail-panel")).not.toBeInTheDocument()
+			expect(screen.getByTestId("topic-detail-content")).toBeInTheDocument()
+			expect(mockUseTopicDesktopPanelMotion).toHaveBeenLastCalledWith(
+				expect.objectContaining({ containerWidthPx: 1440 }),
+			)
+		})
+
+		it("moves focus to the message input instead of <body> when the entry is off", () => {
+			renderComponent({
+				...collapsedProps,
+				showCollapsedDetailEntry: false,
+				renderMessagePanel: () => <textarea data-testid="mock-message-input" />,
+			})
+
+			expect(screen.getByTestId("mock-message-input")).toHaveFocus()
+		})
 	})
 
 	it("在无预览区且打开历史话题时渲染 full-right 固定面板", () => {
