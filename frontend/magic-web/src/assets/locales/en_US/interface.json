@@ -1851,10 +1851,7 @@
 		"timedTasks": "Scheduled Tasks"
 	},
 	"globalServiceStatus": {
-		"networkConnecting": "Connecting to network",
-		"networkOffline": "Network connection lost, please check your network",
 		"newVersion": "New version available, tap to update",
-		"serviceMaintenance": "Service under maintenance",
 		"update": "Update"
 	},
 	"home": {

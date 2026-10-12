@@ -3,7 +3,6 @@ import { magic } from "@/enhance/magicElectron"
 import useDrag from "@/hooks/electron/useDrag"
 import { observer } from "mobx-react-lite"
 import HeaderActionSlot from "@/layouts/BaseLayout/components/Header/components/HeaderActionSlot"
-import GlobalServiceStatus from "./components/GlobalServiceStatus"
 import GlobalVersionStatus from "./components/GlobalVersionStatus"
 import { MacMenu, WindowMenu, useDesktopVersionCheck } from "./components/DesktopMenu"
 import { cn } from "@/utils/cn"
@@ -37,7 +36,6 @@ const Header = observer(function Header({ className }: { className?: string }) {
 		>
 			<MacMenu />
 			<Flex className="mr-auto w-auto items-center" gap={10} align="center">
-				<GlobalServiceStatus />
 				<GlobalVersionStatus />
 			</Flex>
 			<Flex align="center" gap={10} className="ml-auto w-auto">
