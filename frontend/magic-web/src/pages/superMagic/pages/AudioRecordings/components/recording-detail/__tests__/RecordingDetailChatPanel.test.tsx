@@ -310,6 +310,9 @@ describe("RecordingDetailChatPanel", () => {
 			width: `${RECORDING_CHAT_HISTORY_WIDTH}px`,
 		})
 		expect(screen.getByTestId("recording-detail-history-panel")).toBeInTheDocument()
+		expect(historyPanelMock).toHaveBeenLastCalledWith(
+			expect.objectContaining({ hideTopicTypeFilter: true }),
+		)
 	})
 
 	it("keeps task completion refresh safe when no topic is selected", () => {

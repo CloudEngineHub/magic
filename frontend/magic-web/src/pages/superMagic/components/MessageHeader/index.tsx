@@ -78,6 +78,7 @@ interface MessageHeaderProps {
 	topicActions: MessageHeaderTopicActions
 	/** Hide mode tag in topic history list rows */
 	hideTopicListModeIcon?: boolean
+	hideTopicTypeFilter?: boolean
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
@@ -110,6 +111,7 @@ interface MessageHeaderTopicHistoryPanelProps {
 	onExpandConversationPanel?: () => void
 	/** Hide mode tag in topic history list rows */
 	hideTopicListModeIcon?: boolean
+	hideTopicTypeFilter?: boolean
 	onClose?: () => void
 	closeButtonRef?: RefObject<HTMLButtonElement | null>
 }
@@ -284,6 +286,7 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 	isConversationPanelCollapsed = false,
 	onExpandConversationPanel,
 	hideTopicListModeIcon = false,
+	hideTopicTypeFilter = false,
 	onClose,
 	onCollapse,
 	isPanelVisible,
@@ -337,6 +340,7 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 			onArchiveTopic={topicActions.archiveTopic}
 			onUnarchiveTopic={topicActions.unarchiveTopic}
 			hideTopicListModeIcon={hideTopicListModeIcon}
+			hideTopicTypeFilter={hideTopicTypeFilter}
 			hideCreateTopicButton={shouldHideTopicEntry}
 			hideDeleteTopicButton={shouldHideTopicEntry}
 			onClose={onClose}
@@ -359,6 +363,7 @@ function MessageHeader({
 	topicStore,
 	topicActions,
 	hideTopicListModeIcon = false,
+	hideTopicTypeFilter = false,
 	historyTriggerMode = "dropdown",
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
@@ -538,6 +543,7 @@ function MessageHeader({
 					placement,
 					onDropdownOpenChange: handleTopicHistoryDropdownOpenChange,
 					hideTopicListModeIcon,
+					hideTopicTypeFilter,
 					hideCreateTopicButton: shouldHideTopicEntry,
 					hideDeleteTopicButton: shouldHideTopicEntry,
 				}}

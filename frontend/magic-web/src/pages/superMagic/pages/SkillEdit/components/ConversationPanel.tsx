@@ -241,6 +241,7 @@ function ConversationPanel({
 					topicStore={topicStore}
 					topicActions={topicActions}
 					hideTopicListModeIcon
+					hideTopicTypeFilter
 					historyTriggerMode={historyTriggerMode}
 					isHistoryPanelOpen={isHistoryPanelOpen}
 					onToggleHistoryPanel={onToggleHistoryPanel}

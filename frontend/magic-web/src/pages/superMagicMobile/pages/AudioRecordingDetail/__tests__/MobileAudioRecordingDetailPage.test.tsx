@@ -721,6 +721,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(screen.queryByTestId("mobile-recording-audio-player")).toBeNull()
 		expect(screen.queryByText("Topics")).toBeNull()
 		expect(screen.queryByText("New topic")).toBeNull()
+		expect(screen.queryByRole("button", { name: "topicTypeFilter.label" })).toBeNull()
 
 		const topicsContainer = screen.getByTestId("mobile-recording-detail-ai-topics")
 		expect(topicsContainer.className).toContain("px-3")

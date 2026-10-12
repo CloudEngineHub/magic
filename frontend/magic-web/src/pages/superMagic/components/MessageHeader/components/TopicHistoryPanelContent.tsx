@@ -86,6 +86,8 @@ export interface TopicHistoryPanelContentProps {
 	onUnarchiveTopic: (topicId: string) => Promise<void> | void
 	topicService?: TopicServiceClass
 	hideTopicListModeIcon?: boolean
+	/** Recording and editor histories do not offer topic-type filtering. */
+	hideTopicTypeFilter?: boolean
 	hideCreateTopicButton?: boolean
 	hideDeleteTopicButton?: boolean
 	panelClassName?: string
@@ -118,6 +120,7 @@ function TopicHistoryPanelContentInner({
 	onUnarchiveTopic,
 	topicService,
 	hideTopicListModeIcon = false,
+	hideTopicTypeFilter = false,
 	hideCreateTopicButton = false,
 	hideDeleteTopicButton = false,
 	panelClassName,
@@ -128,7 +131,9 @@ function TopicHistoryPanelContentInner({
 	searchInputRef,
 }: TopicHistoryPanelContentProps) {
 	const { t } = useTranslation("super")
-	const [topicType, setTopicType] = useTopicTypeFilter(projectId)
+	const [selectedTopicType, setTopicType] = useTopicTypeFilter(projectId)
+	// Hidden filters must not keep narrowing the list after a host switches context.
+	const topicType = hideTopicTypeFilter ? "all" : selectedTopicType
 	const listViewportRef = useRef<HTMLDivElement>(null)
 	useEffect(() => {
 		listViewportRef.current?.scrollTo?.({ top: 0 })
@@ -841,7 +846,9 @@ function TopicHistoryPanelContentInner({
 						count: topicsTotalFromServer,
 					})}
 				</div>
-				<TopicTypeFilter compact value={topicType} onChange={setTopicType} />
+				{!hideTopicTypeFilter && (
+					<TopicTypeFilter compact value={topicType} onChange={setTopicType} />
+				)}
 				{onClose ? (
 					<Button
 						type="button"
