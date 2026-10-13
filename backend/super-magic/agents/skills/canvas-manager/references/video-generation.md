@@ -33,7 +33,7 @@ Read only `result.content` from every Code Mode tool result. Reuse the exact IDs
 
 Fill the point-estimate request with the fields listed by the estimate tool. Do not add `audioPolicy` to the estimate request. For the actual generated video Content, set `content.audioPolicy` only when the requested audio behavior must be explicit; omit it when the user did not specify an audio requirement.
 
-For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, and the conditional `audioPolicy` field. Use `audioPolicy="mute"` for a silent result or `audioPolicy="generate"` when generated audio is explicitly requested. Use `audioPolicy="auto"` only when the model rules require an explicit default. Missing audio capability metadata means unknown, not unsupported; do not claim that narration or audio is impossible unless the model explicitly declares audio output unsupported. Distinguish generated voice from recording the user's real voice. This field belongs directly under `content`; it is not a prompt instruction and it is not an estimate parameter.
+For a generated video Content, the supported generation fields are `prompt`, `model_id`, `name`, `input_mode`, `task`, `reference_image_paths`, `reference_video_paths`, `reference_audio_paths`, `frame_start_path`, `frame_end_path`, `size`, `duration_seconds`, `aspect_ratio`, `resolution`, `fps`, `seed`, `watermark`, `draft`, and the conditional `audioPolicy` field. Use `audioPolicy="mute"` for a silent result or `audioPolicy="generate"` when generated audio is explicitly requested. Use `audioPolicy="auto"` only when the model rules require an explicit default. Missing audio capability metadata means unknown, not unsupported; do not claim that narration or audio is impossible unless the model explicitly declares audio output unsupported. Distinguish generated voice from recording the user's real voice. This field belongs directly under `content`; it is not a prompt instruction and it is not an estimate parameter.
 
 Before submitting a generated video, check the user request for voiceover, dubbing, narration, spoken lines, dialogue, sound effects, or ambient sound. If any of those are present, keep the complete text, speaker or voice, tone, and sound description in `prompt`, state that the video must include those sounds, and set `content.audioPolicy="generate"`. Do not let the visual description replace or drop those audio requirements, and do not use `mute` or omit the field. If the user asked for a silent result, set `mute`. If no audio behavior was requested, omit `audioPolicy`. Never pass `generate` on `task="compose"`; composition uses `output.audioPolicy` as `preserve` or `mute`.
 
@@ -70,6 +70,15 @@ print(result.content)
 - Do not put file paths in the prompt. Paths belong in their corresponding reference arrays.
 - Use `frame_start_path` and optional `frame_end_path` for a start/end-frame transition; do not duplicate those files in `reference_image_paths`.
 - Use `task="edit"` and `input_mode="video_edit"` only for an explicit video-to-video edit.
+
+## Draft mode
+
+Only when `<media_model_info>` declares a `draft` capability, and only when the user asks for a draft or preview; otherwise never send `draft`.
+
+- Send `content.draft=true` together with `content.resolution` set to the `draft` capability's declared resolution (e.g. `480p`) — never any other resolution.
+- Draft and final are separately billable; estimate and confirm each on its own.
+- After the draft completes, tell the user they can approve it and render the final at full resolution from the canvas; never submit that render yourself.
+- The final render (`input_mode="draft_task"`) inherits the draft's prompt, references, and duration — only the resolution changes, and it carries no references or frames of its own.
 
 ## Code Mode example: estimate
 

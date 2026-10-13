@@ -55,9 +55,12 @@ import {
 	buildVideoDurationOptions,
 	buildVideoResolutionOptions,
 	getVideoDurationConfig,
+	intersectVideoGenerationConstraints,
+	resolveDraftVideoGenerationConstraints,
 	resolveVideoDefaultDuration,
 	resolveVideoGenerationSelection,
 	resolveVideoGenerationSelectionPreserving,
+	resolveRestoredVideoResolution,
 } from "./generation/video-editor-config.generation"
 import {
 	buildFrameInputs,
@@ -256,6 +259,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	)
 
 	const [selectedResolution, setSelectedResolution] = useState<string | undefined>(undefined)
+	const resolutionBeforeDraftRef = useRef<string | undefined>(undefined)
 	const [selectedAspectRatio, setSelectedAspectRatio] = useState<string | undefined>(undefined)
 	const [selectedDurationSeconds, setSelectedDurationSeconds] = useState<number | undefined>(
 		undefined,
@@ -266,6 +270,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		undefined,
 	)
 	const [selectedWebSearch, setSelectedWebSearch] = useState<boolean | undefined>(undefined)
+	const [selectedDraft, setSelectedDraft] = useState<boolean | undefined>(undefined)
 	const [selectedCompressionQuality, setSelectedCompressionQuality] = useState<
 		string | undefined
 	>(undefined)
@@ -508,12 +513,30 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		return currentInputModeConfig?.variants?.find((variant) => variant.code === variantCode)
 	}, [currentInputModeConfig, referenceAssetLimits.variantCode])
 
-	const effectiveGenerationConstraints = useMemo(() => {
+	const baseGenerationConstraints = useMemo(() => {
 		return mergeVideoGenerationConstraints(
 			currentInputModeConfig?.generation_constraints,
 			currentInputModeVariant?.generation_constraints,
 		)
 	}, [currentInputModeConfig?.generation_constraints, currentInputModeVariant])
+	const draftGenerationConstraints = useMemo(() => {
+		const draftConfig = selectedModel?.video_generation_config?.generation?.draft
+		if (!draftConfig) return undefined
+		return intersectVideoGenerationConstraints(
+			baseGenerationConstraints,
+			resolveDraftVideoGenerationConstraints(draftConfig.constraints),
+		)
+	}, [baseGenerationConstraints, selectedModel])
+	const canEnableDraft = useMemo(() => {
+		if (!selectedModel?.video_generation_config?.generation?.draft) return false
+		return buildVideoResolutionOptions(selectedModel, draftGenerationConstraints).some(
+			(option) => option.value === "480p",
+		)
+	}, [draftGenerationConstraints, selectedModel])
+	const effectiveGenerationConstraints =
+		selectedDraft === true && canEnableDraft
+			? draftGenerationConstraints
+			: baseGenerationConstraints
 
 	const referenceAssetCounts = useMemo(
 		() =>
@@ -858,6 +881,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		return {
 			audio: generation?.generate_audio,
 			webSearch: generation?.web_search,
+			draft: generation?.draft,
 		}
 	}, [selectedModel])
 
@@ -889,6 +913,26 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		},
 		[canvas, syncElementSize, videoElement.id],
 	)
+	const restoreResolutionAfterDraft = useCallback(() => {
+		const baseOptions = buildVideoResolutionOptions(selectedModel, baseGenerationConstraints)
+		const restoredResolution = resolveRestoredVideoResolution(
+			selectedModel,
+			baseOptions,
+			resolutionBeforeDraftRef.current,
+		)
+		resolutionBeforeDraftRef.current = undefined
+		setSelectedResolution(restoredResolution)
+		const nextAspectOptions = buildVideoAspectRatioOptions(
+			selectedModel,
+			restoredResolution,
+			baseGenerationConstraints,
+		)
+		const nextAspectOption =
+			nextAspectOptions.find((option) => option.value === selectedAspectRatio) ??
+			nextAspectOptions[0]
+		setSelectedAspectRatio(nextAspectOption?.value)
+		updateVideoElementSize(nextAspectOption)
+	}, [baseGenerationConstraints, selectedAspectRatio, selectedModel, updateVideoElementSize])
 
 	useEffect(() => {
 		setDurationDraftSeconds(selectedDurationSeconds)
@@ -987,6 +1031,23 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			setSelectedWebSearch(generationSwitchConfig.webSearch.default)
 		}
 	}, [generationSwitchConfig.webSearch, selectedWebSearch])
+
+	useEffect(() => {
+		// 能力未声明时保持 undefined，让设置面板隐藏且请求不会携带 draft。
+		if (!generationSwitchConfig.draft) {
+			if (selectedDraft !== undefined) setSelectedDraft(undefined)
+			resolutionBeforeDraftRef.current = undefined
+			return
+		}
+		if (selectedDraft === undefined) {
+			setSelectedDraft(generationSwitchConfig.draft.default && canEnableDraft)
+			return
+		}
+		if (selectedDraft && !canEnableDraft) {
+			setSelectedDraft(false)
+			restoreResolutionAfterDraft()
+		}
+	}, [canEnableDraft, generationSwitchConfig.draft, selectedDraft, restoreResolutionAfterDraft])
 
 	const resetSelectedResourceSlot = useCallback((expectedSlot?: VideoInputSlotInfo) => {
 		const currentSlot = selectedResourceSlotRef.current
@@ -1477,7 +1538,12 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 	const handleModelChange = useCallback(
 		(modelId: string) => {
-			const prevResolution = selectedResolution
+			// 切换模型时以进入样片模式前的分辨率作为普通模式偏好，避免把协议固定的
+			// 480p 误当成用户选择带到下一个模型。
+			const prevResolution =
+				selectedDraft === true
+					? (resolutionBeforeDraftRef.current ?? selectedResolution)
+					: selectedResolution
 			const prevAspectRatio = selectedAspectRatio
 			const prevDurationSeconds = selectedDurationSeconds
 			const prevCompressionQuality = selectedCompressionQuality
@@ -1547,6 +1613,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				nextGen?.generate_audio ? nextGen.generate_audio.default : undefined,
 			)
 			setSelectedWebSearch(nextGen?.web_search ? nextGen.web_search.default : undefined)
+			resolutionBeforeDraftRef.current = nextGen?.draft?.default
+				? selection.resolution
+				: undefined
+			setSelectedDraft(nextGen?.draft ? nextGen.draft.default : undefined)
 			setSelectedCompressionQuality(
 				prevCompressionQuality && nextQualityOpts.includes(prevCompressionQuality)
 					? prevCompressionQuality
@@ -1600,6 +1670,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			resolveResourceReference,
 			updateVideoElementSize,
 			selectedResolution,
+			selectedDraft,
 			selectedAspectRatio,
 			selectedDurationSeconds,
 			selectedGenerateAudio,
@@ -1674,6 +1745,40 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 	const handleWebSearchChange = useCallback((value: boolean) => {
 		setSelectedWebSearch(value)
 	}, [])
+
+	const handleDraftChange = useCallback(
+		(value: boolean) => {
+			if (value) {
+				if (!canEnableDraft) return
+				resolutionBeforeDraftRef.current = selectedResolution
+				setSelectedDraft(true)
+				setSelectedResolution("480p")
+				const nextAspectOptions = buildVideoAspectRatioOptions(
+					selectedModel,
+					"480p",
+					draftGenerationConstraints,
+				)
+				const nextAspectOption =
+					nextAspectOptions.find((option) => option.value === selectedAspectRatio) ??
+					nextAspectOptions[0]
+				setSelectedAspectRatio(nextAspectOption?.value)
+				updateVideoElementSize(nextAspectOption)
+				return
+			}
+
+			setSelectedDraft(false)
+			restoreResolutionAfterDraft()
+		},
+		[
+			canEnableDraft,
+			draftGenerationConstraints,
+			restoreResolutionAfterDraft,
+			selectedAspectRatio,
+			selectedModel,
+			selectedResolution,
+			updateVideoElementSize,
+		],
+	)
 
 	const handleCompressionQualityChange = useCallback((value: string) => {
 		setSelectedCompressionQuality(value || undefined)
@@ -2074,12 +2179,21 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 
 	const buildRequestParams = useCallback((): Partial<GenerateVideoRequest> => {
 		const trimmedPrompt = prompt.trim() || undefined
+		const draftEnabled = selectedDraft === true && canEnableDraft
+		const selectedResolutionIsValid = supportedResolutionOptions.some(
+			(option) => option.value === selectedResolution,
+		)
+		const requestResolution = draftEnabled
+			? "480p"
+			: selectedResolutionIsValid
+				? selectedResolution
+				: supportedResolutionOptions[0]?.value
 		const generation = {
 			...(supportedAspectRatioOptions.length > 0 && selectedAspectRatio
 				? { aspect_ratio: selectedAspectRatio }
 				: {}),
-			...(supportedResolutionOptions.length > 0 && selectedResolution
-				? { resolution: selectedResolution }
+			...(supportedResolutionOptions.length > 0 && requestResolution
+				? { resolution: requestResolution }
 				: {}),
 			...(supportedDurationOptions.length > 0 &&
 			selectedDurationSeconds != null &&
@@ -2090,6 +2204,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				? { generate_audio: selectedGenerateAudio }
 				: {}),
 			...(selectedWebSearch !== undefined ? { web_search: selectedWebSearch } : {}),
+			// 方舟侧缺省即为 false；关闭时省略字段，只有用户明确开启才透传。
+			...(draftEnabled ? { draft: true } : {}),
 			...(selectedCompressionQuality
 				? { compression_quality: selectedCompressionQuality }
 				: {}),
@@ -2141,11 +2257,13 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		selectedModelId,
 		selectedResolution,
 		supportedAspectRatioOptions.length,
-		supportedResolutionOptions.length,
+		supportedResolutionOptions,
 		supportedDurationOptions.length,
 		selectedDurationSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,
+		selectedDraft,
+		canEnableDraft,
 		selectedCompressionQuality,
 		supportsReferenceAssets,
 		supportsEndFrame,
@@ -2352,6 +2470,10 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 				fallbackGen?.web_search
 					? (requestToRestore?.generation?.web_search ?? fallbackGen.web_search.default)
 					: undefined,
+			)
+			const draftFromRequest = isQuickEdit ? undefined : requestToRestore?.generation?.draft
+			setSelectedDraft(
+				fallbackGen?.draft ? (draftFromRequest ?? fallbackGen.draft.default) : undefined,
 			)
 
 			const qualityOpts =
@@ -2661,6 +2783,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleDurationPopoverOpenChange,
 			handleGenerateAudioChange,
 			handleWebSearchChange,
+			handleDraftChange,
 			handleCompressionQualityChange,
 			handleInputModeChange,
 			handleInputTabChange,
@@ -2698,6 +2821,7 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 			handleDurationChange,
 			handleGenerateAudioChange,
 			handleWebSearchChange,
+			handleDraftChange,
 			handleCompressionQualityChange,
 			handleInputModeChange,
 			handleInputTabChange,
@@ -2742,6 +2866,8 @@ export function useVideoEditorConfig(options: UseVideoEditorConfigOptions): Vide
 		durationDraftSeconds,
 		selectedGenerateAudio,
 		selectedWebSearch,
+		selectedDraft,
+		canEnableDraft,
 		selectedCompressionQuality,
 		currentFrameImages,
 		frameImageInfos,

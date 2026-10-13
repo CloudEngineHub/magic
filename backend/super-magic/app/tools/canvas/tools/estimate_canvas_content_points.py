@@ -48,6 +48,7 @@ class VideoPointEstimateItemInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
+    draft: bool | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -81,6 +82,7 @@ class VideoPointEstimateItemInput(BaseToolParams):
             fps=self.fps,
             seed=self.seed,
             watermark=self.watermark,
+            draft=self.draft,
         )
 
 

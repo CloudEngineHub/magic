@@ -43,7 +43,17 @@ function areRuntimeStatesEqual(
 		left.available === right.available &&
 		left.disabled === right.disabled &&
 		left.loading === right.loading &&
-		left.disabledReason === right.disabledReason
+		left.disabledReason === right.disabledReason &&
+		left.data?.version?.current === right.data?.version?.current &&
+		left.data?.version?.total === right.data?.version?.total &&
+		left.data?.version?.isMain === right.data?.version?.isMain &&
+		left.data?.videoGenerationEstimate?.resolution ===
+			right.data?.videoGenerationEstimate?.resolution &&
+		left.data?.videoGenerationEstimate?.points ===
+			right.data?.videoGenerationEstimate?.points &&
+		left.data?.videoDraftFinalHint?.deadlineText ===
+			right.data?.videoDraftFinalHint?.deadlineText &&
+		left.data?.videoDraftFinalHint?.expired === right.data?.videoDraftFinalHint?.expired
 	)
 }
 
@@ -583,8 +593,7 @@ export class CanvasElementToolCommandBus implements ElementToolCommandBusContrac
 			case ElementToolTypeEnum.VersionSetMain:
 				if (command.contentId) {
 					const target = getContentById(element as never, command.contentId) as
-						| (ElementContentBase & { src?: string })
-						| undefined
+						(ElementContentBase & { src?: string }) | undefined
 					if (target && !isContentGenerationPending(target) && target.src) {
 						instance.setMainContent(command.contentId)
 						return { executed: true }

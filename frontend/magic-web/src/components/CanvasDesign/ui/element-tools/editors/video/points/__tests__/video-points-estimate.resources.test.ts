@@ -74,6 +74,24 @@ describe("video-points-estimate.resources", () => {
 		).toEqual(["./videos/pending.mp4"])
 	})
 
+	it("collects only the uri fallback from a draft task", () => {
+		expect(
+			collectVideoGenerationRequestResourcePaths({
+				inputs: {
+					draft_task: {
+						video_id: "draft-video-id",
+						uri: "./videos/draft.mp4",
+					},
+				},
+			}),
+		).toEqual(["./videos/draft.mp4"])
+		expect(
+			collectVideoGenerationRequestResourcePaths({
+				inputs: { draft_task: { video_id: "draft-video-id" } },
+			}),
+		).toEqual([])
+	})
+
 	it("tolerates legacy API-shaped request fields", () => {
 		const request = {
 			reference_images: ["./images/legacy.jpg"],

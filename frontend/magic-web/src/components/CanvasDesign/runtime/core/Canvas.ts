@@ -48,6 +48,7 @@ import { SubmitImageWorkerManager } from "../resources/upload/SubmitImageWorkerM
 import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
 import { VideoResourceManager } from "../resources/video/VideoResourceManager"
 import { VideoCompositionManager } from "../resources/video-composition/VideoCompositionManager"
+import { VideoDraftFinalManager } from "../resources/video-draft-final/VideoDraftFinalManager"
 import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
 import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
 import { AudioWaveformManager } from "../resources/audio/AudioWaveformManager"
@@ -230,6 +231,7 @@ export class Canvas {
 	public videoCompositionManager: VideoCompositionManager
 	/** 当前图片和视频标签是否常驻显示；默认按 hover/选中状态显示。 */
 	private mediaLabelsAlwaysVisible = false
+	public videoDraftFinalManager: VideoDraftFinalManager
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
@@ -540,6 +542,9 @@ export class Canvas {
 		this.historyManager = new HistoryManager({
 			canvas: this,
 		})
+		// 正片转正需要同时提交临时元素与运行时连线，因此在元素、连线和历史管理器
+		// 都准备完成后再初始化该生命周期管理器。
+		this.videoDraftFinalManager = new VideoDraftFinalManager({ canvas: this })
 
 		// 初始化标记管理器（使用 Markers Layer）
 		this.markerManager = new MarkerManager({
@@ -1743,6 +1748,7 @@ export class Canvas {
 		this.eraserManager.destroy()
 		this.imageEditingCoordinator.destroy()
 		this.videoCompositionManager?.destroy()
+		this.videoDraftFinalManager?.destroy()
 		this.generationRuntimeManager.destroy()
 		this.elementDetailsRuntimeManager?.setOnChange(undefined)
 		this.mediaPlaybackCoordinator.destroy()

@@ -473,7 +473,10 @@
 		"size": "Size",
 		"syncing": "Generation details are syncing",
 		"title": "Generation History",
-		"unavailable": "No generation details recorded"
+		"unavailable": "No generation details recorded",
+		"videoInputModes": {
+			"draftTask": "Draft to final"
+		}
 	},
 	"rectangle": {
 		"defaultName": "Rectangle"
@@ -779,6 +782,7 @@
 		"defaultName": "Video Generator",
 		"empty": "Please send an instruction to generate a video",
 		"fileMissing": "Video file is missing",
+		"finalResultName": "Final video",
 		"generateFailed": "Video generation failed",
 		"generating": "Generating...",
 		"loadError": "Failed to load video",
@@ -794,6 +798,7 @@
 		"replaceFailed": "Failed to replace video. Please try again.",
 		"replaceUnsupported": "Unsupported video format",
 		"retryEditing": "Please edit your video generation request again",
+		"sampleTag": "Sample",
 		"uploading": "Uploading..."
 	},
 	"videoContinuation": {
@@ -827,11 +832,17 @@
 		"aspectRatio": "Aspect ratio",
 		"bottomToolbar": "Video element bottom toolbar",
 		"clearLinkedFrame": "Clear current slot association",
+		"draft": "Draft mode",
 		"duration": "Duration",
 		"firstFrame": "First frame",
 		"frames": "First & last frame",
 		"generateAgain": "Generate again",
 		"generateAudio": "Audio",
+		"generateFinal": "Generate final",
+		"generateFinalExpired": "This draft has expired. Generate the draft again.",
+		"generateFinalFailed": "Failed to generate the final video. Please try again.",
+		"generateFinalHint": "After the draft is generated, you can create a {{resolution}} final within {{days}} days.\nPlease do this before {{deadline}}. After that, generate the draft again.",
+		"generateFinalHintPending": "After the draft is generated, you can create a {{resolution}} final within {{days}} days.",
 		"generationSettings": "Generation settings",
 		"generationSettingsAria": "Video generation parameters",
 		"lastFrame": "Last frame",
