@@ -20,6 +20,12 @@ interface ChatProjectMessageLayoutProps {
 	inputMinHeight?: number
 }
 
+/**
+ * Panel sizes are driven by useConversationInputHeight and every drag handle lives outside the Splitter,
+ * so the Splitter never resizes itself. Ant Design still requires onResize when a panel has a controlled size.
+ */
+const NOOP_SPLITTER_RESIZE = () => undefined
+
 /** Arrange project conversation content while sharing the desktop input height state machine. */
 export default function ChatProjectMessageLayout({
 	messageList,
@@ -67,7 +73,11 @@ export default function ChatProjectMessageLayout({
 			data-testid="chat-project-message-layout"
 		>
 			{/* Keep the Ant bar hidden because the shared handle owns the visible resize interaction. */}
-			<MagicSplitter layout="vertical" className="h-full min-h-0 w-full">
+			<MagicSplitter
+				layout="vertical"
+				className="h-full min-h-0 w-full"
+				onResize={NOOP_SPLITTER_RESIZE}
+			>
 				{/* 外层只承载受控尺寸；禁用透明拖动区，避免绕过队列和输入框各自的把手。 */}
 				<MagicSplitter.Panel
 					className={isConversationPanelCollapsed ? "invisible" : "min-h-0"}

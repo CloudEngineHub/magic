@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useMount } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import HeadlessHorizontalScroll from "@/components/base/HeadlessHorizontalScroll"
@@ -14,8 +13,6 @@ import { useTranslation } from "react-i18next"
 import { CREW_OVERFLOW_THRESHOLD, RoleSwitcherOverflowMenu } from "./RoleSwitcherOverflowMenu"
 import { useCenteredHorizontalScroll } from "../hooks/useCenteredHorizontalScroll"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import PptModeSwitcherCard from "./PptModeSwitcherCard"
 import { isModeVisibleToCurrentUser } from "../../TopicMode/modeVisibility"
 import styles from "./RoleSwitcher.module.css"
@@ -118,10 +115,6 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 	const showOverflowMenu = modeCount >= CREW_OVERFLOW_THRESHOLD
 	const shouldShowLoading = isModeListLoading && modeCount <= 0
 
-	useMount(() => {
-		pubsub.publish(PubSubEvents.GuideTourElementReady, GuideTourElementId.RoleSwitcher)
-	})
-
 	const handleNavigateMyCrew = useCallback(() => {
 		navigate({
 			name: RouteName.MyCrew,
@@ -134,9 +127,9 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 
 	return (
 		<div
-			id={GuideTourElementId.RoleSwitcher}
 			className="flex h-11 w-auto min-w-0 max-w-full items-end gap-2"
 			data-testid="role-switcher"
+			data-guide-anchor="role-switcher"
 		>
 			<HeadlessHorizontalScroll
 				className="-mt-8 h-[76px] min-w-0 flex-1 rounded-none [&>div.absolute]:!top-auto [&>div.absolute]:bottom-0 [&>div.absolute]:z-20 [&>div.absolute]:h-10"
@@ -240,7 +233,6 @@ function RoleSwitcher({ role, onActionClick }: ModeSwitcherProps) {
 function RoleSwitcherSkeleton() {
 	return (
 		<div
-			id={GuideTourElementId.RoleSwitcher}
 			className="flex w-auto min-w-0 max-w-full items-center gap-2"
 			data-testid="role-switcher"
 		>

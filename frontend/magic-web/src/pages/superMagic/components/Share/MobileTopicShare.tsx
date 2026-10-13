@@ -7,6 +7,7 @@ import type { ShareExtraData } from "./types"
 import { ShareType, ResourceType } from "./types"
 import { SuperMagicApi } from "@/apis"
 import { generateSharePassword, generateTopicShareMessageText } from "./utils"
+import { analyticsService } from "@/services/analytics"
 import { useUpdateEffect } from "ahooks"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { generateShareUrl } from "@/pages/superMagic/components/ShareManagement/utils/shareTypeHelpers"
@@ -258,6 +259,9 @@ export default memo(function MobileTopicShare(props: MobileTopicShareProps) {
 
 				if (resourceId) {
 					try {
+						analyticsService.report("content_share_attempted", {
+							resourceType: ResourceType.Topic,
+						})
 						await SuperMagicApi.createOrUpdateShareResource({
 							resource_id: resourceId,
 							resource_type: ResourceType.Topic,

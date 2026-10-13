@@ -20,7 +20,6 @@ import {
 } from "./variants"
 import AiCompletionTip from "@/pages/chatNew/components/MessageEditor/components/AiCompletionTip"
 import { SummaryGuideDOMId } from "@/pages/superMagic/components/MessagePanel/components/TopicExamples/SummaryGuide"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
@@ -111,6 +110,7 @@ function MessageEditorView({
 					onPasteCapture={onPaste}
 					data-testid="super-message-editor-container"
 					data-queue-editor-surface
+					data-guide-anchor="message-editor-container"
 				>
 					<FlexBox
 						vertical
@@ -131,17 +131,39 @@ function MessageEditorView({
 								)}
 							</div>
 						)}
-						<div className={cn(messageEditorTextContainerVariants({ size }))}>
+						<div
+							className={cn(messageEditorTextContainerVariants({ size }))}
+							data-guide-anchor="message-editor-content"
+						>
 							<MentionContextMenu
 								editor={tiptapEditor}
 								getWorkspaceFilesList={getWorkspaceFilesList}
 								getCurrentProjectId={getCurrentProjectId}
 							>
-								{/* Radix 内容层默认为 table，无法承接视口高度；短内容铺满可点击区，长内容自然增长并滚动。 */}
+								{/*
+								 * The scroll box is built out of flex, not out of percentages, and that is the
+								 * whole point of the classes below.
+								 *
+								 * The viewport used to take `height: 100%` and the Radix content layer
+								 * `min-height: 100%`. A percentage only resolves when every box above it has a
+								 * definite height, and this composer does not have one: it grows with its
+								 * content up to a `max-h`, and the host that renders it may give it no height
+								 * at all (`absolute` with only `top` — the home page's centred state). Every
+								 * ancestor is then `auto`, the percentages fall back to `auto`, the viewport
+								 * grows to the height of the whole document instead of the box, and the text
+								 * that overflows is clipped by the composer's `overflow: hidden` — visible,
+								 * but impossible to scroll.
+								 *
+								 * Sized by flex instead, the viewport fills the box and is allowed to shrink
+								 * below its content, while the Radix content layer below it does the
+								 * opposite — it takes the content's height and never shrinks. Short content
+								 * still fills the click area (the viewport grows); long content overflows and
+								 * scrolls (the layer does not shrink).
+								 */}
 								<ScrollArea
-									className="min-h-0 flex-1"
+									className="flex min-h-0 flex-1 flex-col"
 									viewportRef={wechatScrollRef}
-									viewportClassName="h-full [&>div]:!flex [&>div]:min-h-full [&>div]:flex-col"
+									viewportClassName="flex min-h-0 shrink basis-auto grow flex-col !h-auto [&>div]:!flex [&>div]:shrink-0 [&>div]:basis-auto [&>div]:grow [&>div]:flex-col"
 								>
 									<EditorContent
 										ref={domRef}
@@ -165,10 +187,10 @@ function MessageEditorView({
 						<div
 							className={messageEditorToolbarVariants({ size })}
 							data-testid="super-message-editor-toolbar"
+							data-guide-anchor="message-editor-toolbar"
 						>
 							<div
 								className={messageEditorToolbarLeftVariants({ size })}
-								id={GuideTourElementId.ModelSelector}
 								data-testid="super-message-editor-toolbar-left"
 							>
 								{bottomLeftContent}

@@ -9,7 +9,6 @@ import CollaborationWorkspace from "./components/CollaborationWorkspace"
 import { isCollaborationWorkspace } from "../../constants"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import { getWorkspaceRouteUrl } from "../../utils/route"
 import { useWorkspaceEditing } from "../../hooks/useWorkspaceEditing"
 import { useWorkspaceActionMenu } from "../../hooks/useWorkspaceActionMenu"
@@ -373,7 +372,6 @@ function WorkspacesMenu() {
 				onOpenChange={setOpen}
 			>
 				<a
-					id={GuideTourElementId.WorkspaceBreadcrumb}
 					href={selectedWorkspace ? getWorkspaceRouteUrl(selectedWorkspace.id) : "#"}
 					className={cn(
 						"flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-foreground",

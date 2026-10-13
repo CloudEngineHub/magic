@@ -82,7 +82,7 @@ function ConversationPanel({
 		onTopicDetailLoaded: topicStore.updateTopic,
 	})
 
-	const { topicModelStore } = useTopicModel({
+	useTopicModel({
 		selectedTopic,
 		selectedProject,
 		topicMode: TopicMode.Default,
@@ -184,12 +184,14 @@ function ConversationPanel({
 			layoutConfig: DEFAULT_LAYOUT_CONFIG,
 			showLoading,
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
+				const resolvedProject = currentProject ?? selectedProject
+				const resolvedTopic = currentTopic ?? topicStore.selectedTopic
 				if (!success) return
 
 				applyOptimisticTopicRunningState({
 					topicStore,
-					topic: currentTopic ?? topicStore.selectedTopic,
-					project: currentProject ?? selectedProject,
+					topic: resolvedTopic,
+					project: resolvedProject,
 				})
 			},
 			mergeSendParams: ({ defaultParams }) => {

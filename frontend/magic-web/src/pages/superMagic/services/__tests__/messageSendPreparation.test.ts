@@ -12,8 +12,19 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 
+const { createProjectApiMock, analyticsTrackMock } = vi.hoisted(() => ({
+	createProjectApiMock: vi.fn(),
+	analyticsTrackMock: vi.fn(),
+}))
+
 vi.mock("@/apis", () => ({
-	SuperMagicApi: {},
+	SuperMagicApi: {
+		createProject: createProjectApiMock,
+	},
+}))
+
+vi.mock("@/services/analytics", () => ({
+	analyticsService: { report: analyticsTrackMock },
 }))
 
 vi.mock("@/components/Agent/MCP/service/MCPStorageService", () => ({
@@ -133,6 +144,8 @@ describe("messageSendPreparation", () => {
 		}
 	})
 	beforeEach(() => {
+		createProjectApiMock.mockReset()
+		analyticsTrackMock.mockReset()
 		modeServiceMock.defaultAgentCode = undefined
 		isModeValidMock.mockReset()
 		isModeValidMock.mockReturnValue(false)
@@ -140,6 +153,36 @@ describe("messageSendPreparation", () => {
 		isModeVisibleMock.mockReturnValue(true)
 		screenshotMocks.collectStorageIds.mockReset()
 		screenshotMocks.releaseStoredScreenshots.mockReset()
+	})
+
+	it("reports workspace creation when a workspace home uses an employee mode", async () => {
+		createProjectApiMock.mockResolvedValue({
+			project: {
+				id: "project-workspace",
+				workspace_id: "workspace-1",
+				project_mode: "SMA-agent",
+			},
+			topic: {
+				id: "topic-workspace",
+				project_id: "project-workspace",
+				workspace_id: "workspace-1",
+			},
+		})
+
+		const context = resolveMessageSendContext({
+			selectedWorkspace: { id: "workspace-1" } as never,
+			creationScene: "workspace",
+			setSelectedProject: vi.fn(),
+			setSelectedTopic: vi.fn(),
+		})
+
+		await context.createProject({ projectMode: "SMA-agent" as TopicMode })
+
+		expect(analyticsTrackMock).toHaveBeenCalledWith("project_create_attempted", {
+			workspaceId: "workspace-1",
+			sceneOverride: "workspace",
+			mode: "SMA-agent",
+		})
 	})
 
 	it("normalizes the configured non-SMA default employee for topic state and send params", async () => {
