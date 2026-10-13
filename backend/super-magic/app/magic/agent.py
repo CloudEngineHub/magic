@@ -903,13 +903,17 @@ class Agent(BaseAgent):
 
         return None
 
-    def _create_model_error(self, code: ModelErrorCode) -> ModelError:
+    def _create_model_error(self, code: ModelErrorCode, model_name: str | None = None) -> ModelError:
         model_context = self.agent_context.model_context
         can_switch = (
             self.agent_context.is_interactive_main_agent_context()
             and not model_context.has_active_compact_text_model()
         )
-        return ModelError(code, model_context.current_text_model_id if can_switch else None)
+        return ModelError(
+            code,
+            model_context.current_text_model_id if can_switch else None,
+            model_name if can_switch else None,
+        )
 
     def _resolve_model_error(self, exception: Exception) -> ModelError | None:
         failure = self._last_model_call_failure
@@ -3893,7 +3897,10 @@ Since your subsequent output will be merged with pre-interruption content and di
             # 在真实调用边界记住身份并原样抛出；不改变重试分类、时机或取消行为。
             code = self._classify_llm_exception_for_user(exception)
             if code is not None:
-                self._last_model_call_failure = ModelCallFailure(exception, self._create_model_error(code))
+                # 保存失败请求的名称；之后切换模型或恢复压缩模型不改变历史错误身份。
+                self._last_model_call_failure = ModelCallFailure(
+                    exception, self._create_model_error(code, text_model_state.model_name),
+                )
             raise
 
         # 检查 model_extra 中的响应状态码

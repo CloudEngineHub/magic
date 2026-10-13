@@ -195,7 +195,7 @@ export type KnownModelErrorCode =
 	| "llm_config_error"
 	| "llm_request_rejected"
 
-export type ModelErrorSubject = { type: "text_model"; model_id: string }
+export type ModelErrorSubject = { type: "text_model"; model_id: string; model_name?: string }
 export type ErrorRecoveryAction = { type: "switch_model_and_retry" } | { type: "retry" }
 
 export interface ModelError {

@@ -4406,8 +4406,10 @@
 		"selectMode": "Select Mode"
 	},
 	"modelRecovery": {
+		"chooseAnotherModel": "Choose another model to continue",
 		"confirm": "Switch and continue",
 		"failedModel": "Model used for this attempt: {{model}}",
+		"failedModelLabel": "Failed in this task",
 		"help": {
 			"availability": {
 				"automatic": "The system uses response limits, service protection, and retries where appropriate. The diagram explains how this works; it does not show the actual number of attempts or the cause of this request's failure.",
@@ -4454,6 +4456,7 @@
 				"title": "What is kept when I switch models?"
 			}
 		},
+		"modelLabel": "Model used",
 		"noAlternative": "If no other model is available, try again later or contact platform support.",
 		"notSent": "The continue request was not submitted. Check the message status and try again.",
 		"preference": "Confirming updates the model for this topic and the default for new topics in this project.",
@@ -4461,7 +4464,6 @@
 		"stale": "This topic has changed. Check the latest messages before continuing.",
 		"submitting": "Submitting…",
 		"switch": "Switch model and continue",
-		"usingModel": "Using {{model}}",
 		"why": "Why does this happen?"
 	},
 	"mySlidesTemplates": {

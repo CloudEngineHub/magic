@@ -14,7 +14,7 @@ export function resolveShowSelectedModelName({
 	return showSelectedModelName || (!showImageTab && !showVideoTab)
 }
 
-export function isMaxModel(model?: ModelItem): boolean {
+export function isMaxModel(model?: Pick<ModelItem, "model_id" | "model_name">): boolean {
 	if (!model) return false
 	return (model.model_name || model.model_id).toLocaleLowerCase() === "max"
 }

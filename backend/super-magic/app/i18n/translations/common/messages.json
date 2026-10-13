@@ -80,28 +80,28 @@
         "en_US": "Task execution failed. Please try again later."
     },
     "messages.llm_provider_timeout": {
-        "zh_CN": "当前模型暂时未能响应。\n\n已有进度会保留，可以换个模型继续。",
-        "en_US": "The current model could not respond.\n\nYour progress is saved. You can switch models to continue."
+        "zh_CN": "当前模型暂时未能响应。",
+        "en_US": "The current model could not respond."
     },
     "messages.llm_provider_connection_failed": {
-        "zh_CN": "当前模型暂时未能响应。\n\n已有进度会保留，可以换个模型继续。",
-        "en_US": "The current model could not respond.\n\nYour progress is saved. You can switch models to continue."
+        "zh_CN": "当前模型暂时未能响应。",
+        "en_US": "The current model could not respond."
     },
     "messages.llm_provider_rate_limited": {
-        "zh_CN": "当前模型暂时未能响应。\n\n已有进度会保留，可以换个模型继续。",
-        "en_US": "The current model could not respond.\n\nYour progress is saved. You can switch models to continue."
+        "zh_CN": "当前模型暂时未能响应。",
+        "en_US": "The current model could not respond."
     },
     "messages.llm_provider_error": {
-        "zh_CN": "当前模型暂时未能响应。\n\n已有进度会保留，可以换个模型继续。",
-        "en_US": "The current model could not respond.\n\nYour progress is saved. You can switch models to continue."
+        "zh_CN": "当前模型暂时未能响应。",
+        "en_US": "The current model could not respond."
     },
     "messages.llm_provider_config_error": {
-        "zh_CN": "当前模型暂时无法继续处理。\n\n已有进度会保留，可以换个模型继续。",
-        "en_US": "The current model cannot continue right now.\n\nYour progress is saved. You can switch models to continue."
+        "zh_CN": "当前模型暂时无法继续处理。",
+        "en_US": "The current model cannot continue right now."
     },
     "messages.llm_provider_request_rejected": {
-        "zh_CN": "当前模型暂时无法继续处理。\n\n已有进度会保留，可以换个模型继续。",
-        "en_US": "The current model cannot continue right now.\n\nYour progress is saved. You can switch models to continue."
+        "zh_CN": "当前模型暂时无法继续处理。",
+        "en_US": "The current model cannot continue right now."
     },
     "agent_profile.desc_with_role": {
         "zh_CN": "你叫{name}，是一名{role}。{description}",

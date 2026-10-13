@@ -45,7 +45,14 @@ export function getModelRecoveryMessage(node: unknown): ModelRecoveryMessage | u
 		taskId: typeof node.task_id === "string" ? node.task_id : "",
 		error: {
 			code: error.code,
-			subject: { type: "text_model", model_id: subject.model_id },
+			subject: {
+				type: "text_model",
+				model_id: subject.model_id,
+				model_name:
+					typeof subject.model_name === "string" && subject.model_name.trim()
+						? subject.model_name
+						: undefined,
+			},
 			actions,
 		},
 	}

@@ -4405,8 +4405,10 @@
 		"selectMode": "选择模式"
 	},
 	"modelRecovery": {
+		"chooseAnotherModel": "请选择其他模型继续",
 		"confirm": "切换并继续",
 		"failedModel": "本次使用：{{model}}",
+		"failedModelLabel": "本次出错",
 		"help": {
 			"availability": {
 				"automatic": "系统通过响应时限、服务保护和适用的自动重试处理请求。图解只说明工作原理，不代表这次请求的实际尝试次数或原因。",
@@ -4453,6 +4455,7 @@
 				"title": "切换后会保留什么？"
 			}
 		},
+		"modelLabel": "本次使用",
 		"noAlternative": "没有其他可用模型时，可以稍后再试，或联系平台支持获取帮助。",
 		"notSent": "未能提交继续请求，请查看消息状态后重试。",
 		"preference": "确认后将更新当前话题，以及本项目后续新话题的默认模型。",
@@ -4460,7 +4463,6 @@
 		"stale": "话题已有新进展，请查看最新消息后再操作。",
 		"submitting": "正在提交…",
 		"switch": "切换模型继续",
-		"usingModel": "使用 {{model}}",
 		"why": "为什么会这样？"
 	},
 	"mySlidesTemplates": {

@@ -68,10 +68,15 @@ export function ContentSection({
 
 	if (!hasContent) return null
 
+	// Markdown 原样保留内容；恢复提示统一为 12px，其他消息继续使用原阅读字号。
+	const recovery = getModelRecoveryMessage(node)
 	const content = (
 		<>
 			<MarkdownComponent
-				className={messageMarkdownBaseClassName}
+				className={cn(
+					messageMarkdownBaseClassName,
+					recovery && "!text-xs !leading-5 ![--font-size:12px]",
+				)}
 				isStreaming={isContentStreaming}
 				content={displayContent}
 				citations={citations}
@@ -108,7 +113,6 @@ export function ContentSection({
 			)}
 		</>
 	)
-	const recovery = getModelRecoveryMessage(node)
 	return recovery ? (
 		<ModelErrorRecovery message={recovery}>{content}</ModelErrorRecovery>
 	) : (

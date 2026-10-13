@@ -48,12 +48,16 @@ class ModelError:
 
     code: ModelErrorCode
     model_id: str | None = None
+    model_name: str | None = None
 
     def to_payload(self) -> dict[str, object]:
         # 例：专属压缩模型失败只有原因；主会话模型失败才提供切换、重试动作。
         payload: dict[str, object] = {"code": self.code.value, "actions": []}
         if self.model_id:
-            payload["subject"] = {"type": "text_model", "model_id": self.model_id}
+            subject: dict[str, str] = {"type": "text_model", "model_id": self.model_id}
+            if self.model_name:
+                subject["model_name"] = self.model_name
+            payload["subject"] = subject
             payload["actions"] = [
                 {"type": action.value} for action in MODEL_ERROR_DEFINITIONS[self.code].actions
             ]
