@@ -19,14 +19,16 @@ use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\AssetErrorCode;
+use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\VolcengineArk\Assets\VolcengineArkAssetProvider;
 use Hyperf\Coroutine\Coroutine;
 use Hyperf\DbConnection\Db;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 use Throwable;
+
+use function Hyperf\Translation\trans;
 
 /**
  * 资产领域服务：先落库取得主键，再同步第三方，确保凭证可追溯。
@@ -34,24 +36,16 @@ use Throwable;
  */
 class AssetDomainService
 {
-    private const string UNNAMED_GROUP_NAME = '未命名素材组';
-
     private const string DEFAULT_PROJECT_NAME = 'default';
 
     /** 第三方合规轮询的最长等待时间。 */
     private const int COMPLIANCE_TIMEOUT_SECONDS = 1800;
-
-    private const string COMPLIANCE_TIMEOUT_REASON = '同步失败，请重试';
 
     /** 第三方合规状态轮询间隔。 */
     private const float COMPLIANCE_POLL_INTERVAL_SECONDS = 1.0;
 
     /** 同步失败原因的最大存储长度。 */
     private const int FAILED_REASON_MAX_LENGTH = 512;
-
-    private readonly AssetProviderInterface $provider;
-
-    private readonly string $projectName;
 
     public function __construct(
         private readonly AssetRepositoryInterface $assets,
@@ -61,10 +55,6 @@ class AssetDomainService
         private readonly AiAbilityDomainService $abilityDomainService,
         private readonly AssetSearchTextBuilder $searchTextBuilder,
     ) {
-        $config = $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets);
-        $providerConfig = $this->resolveProviderConfig($config);
-        $this->projectName = trim((string) ($providerConfig['project_name'] ?? '')) ?: self::DEFAULT_PROJECT_NAME;
-        $this->provider = new VolcengineArkAssetProvider($this->logger, $providerConfig);
     }
 
     public function createPersonal(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
@@ -267,8 +257,8 @@ class AssetDomainService
         $mapping = $this->providerAssets->findMapping(
             $dataIsolation,
             $assetId,
-            $this->provider->getProviderCode(),
-            $this->projectName,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
         );
         if ($mapping === null) {
             return null;
@@ -309,8 +299,8 @@ class AssetDomainService
         }
         $mapping = $this->providerAssets->findReusableMappingByAssetIds(
             $this->assets->findIdsByContentHash($contentHash),
-            $this->provider->getProviderCode(),
-            $this->projectName,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
         );
         if ($mapping === null || ! $mapping->getProviderStatus()->isPassed()) {
             return null;
@@ -349,8 +339,8 @@ class AssetDomainService
         $mapping = $this->providerAssets->findMapping(
             $dataIsolation,
             $assetId,
-            $this->provider->getProviderCode(),
-            $this->projectName,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
         );
         if ($mapping !== null) {
             $providerAsset = new ProviderAssetEntity($mapping->toArray());
@@ -396,8 +386,8 @@ class AssetDomainService
         return $this->providerAssets->findMappings(
             $dataIsolation,
             $assetIds,
-            $this->provider->getProviderCode(),
-            $this->projectName,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
         );
     }
 
@@ -415,8 +405,8 @@ class AssetDomainService
         $mapping = $this->providerAssets->findMapping(
             $dataIsolation,
             $assetId,
-            $this->provider->getProviderCode(),
-            $this->projectName,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
         );
         if ($mapping === null) {
             return null;
@@ -427,7 +417,7 @@ class AssetDomainService
                 $dataIsolation,
                 $asset,
                 ProviderAssetStatus::FAILED,
-                self::COMPLIANCE_TIMEOUT_REASON,
+                trans('asset.compliance_timeout'),
             );
         }
         return $providerAsset;
@@ -480,8 +470,8 @@ class AssetDomainService
         $mappingModel = $this->providerAssets->findMapping(
             $dataIsolation,
             $asset->getId(),
-            $this->provider->getProviderCode(),
-            $this->projectName,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
         );
         // 未同步到第三方，直接删除本地记录。
         if ($mappingModel === null) {
@@ -507,8 +497,8 @@ class AssetDomainService
             $this->providerAssets->deleteMapping(
                 $dataIsolation,
                 $asset->getId(),
-                $this->provider->getProviderCode(),
-                $this->projectName,
+                VolcengineArkAssetProvider::PROVIDER_CODE,
+                $this->projectName(),
             );
         }
         return $deletedLocally;
@@ -527,8 +517,8 @@ class AssetDomainService
         if ($providerAssetId === '' && $providerGroupId === '') {
             return true;
         }
-        $reclaimedAsset = $providerAssetId === '' || $this->provider->deleteAsset($providerAssetId, $this->projectName);
-        $reclaimedGroup = $providerGroupId === '' || $this->provider->deleteAssetGroup($providerGroupId, $this->projectName);
+        $reclaimedAsset = $providerAssetId === '' || $this->provider()->deleteAsset($providerAssetId, $this->projectName());
+        $reclaimedGroup = $providerGroupId === '' || $this->provider()->deleteAssetGroup($providerGroupId, $this->projectName());
         if (! $reclaimedAsset || ! $reclaimedGroup) {
             $this->logger->warning('第三方资源回收未全部成功，映射行保留待补偿', [
                 'asset_id' => $mapping->getAssetId(),
@@ -619,14 +609,24 @@ class AssetDomainService
             $this->persistGroupMapping($dataIsolation, $asset, $providerGroupId);
             $providerAssetEntity = $this->createProviderAsset($dataIsolation, $asset, $providerGroupId);
             $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAssetEntity);
-        } catch (Throwable $throwable) {
+        } catch (BusinessException $exception) {
+            // 业务异常文案由错误码统一给出，本身即面向用户，可直接作为失败原因落库展示。
             $this->markProviderStatus(
                 $dataIsolation,
                 $asset,
                 ProviderAssetStatus::FAILED,
-                $throwable->getMessage(),
+                $exception->getMessage(),
             );
-            throw $throwable;
+            throw $exception;
+        } catch (Throwable $throwable) {
+            // 非业务异常原文可能带第三方地址、凭证或原始响应体，只随日志排查，不写进对用户可见的失败原因。
+            $this->markProviderStatus(
+                $dataIsolation,
+                $asset,
+                ProviderAssetStatus::FAILED,
+                trans('asset.provider_response_invalid'),
+            );
+            ExceptionBuilder::throw(AssetErrorCode::PROVIDER_RESPONSE_INVALID, '', [], null, $throwable);
         }
         return $providerAssetEntity;
     }
@@ -650,8 +650,8 @@ class AssetDomainService
         }
         return $this->providerAssets->findReusableMappingByAssetIds(
             $candidateIds,
-            $this->provider->getProviderCode(),
-            $this->projectName,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
         );
     }
 
@@ -666,8 +666,8 @@ class AssetDomainService
         $providerAssetEntity = new ProviderAssetEntity([
             'asset_id' => $asset->getId(),
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
-            'provider_code' => $this->provider->getProviderCode(),
-            'project_name' => $this->projectName,
+            'provider_code' => VolcengineArkAssetProvider::PROVIDER_CODE,
+            'project_name' => $this->projectName(),
             'provider_group_id' => $reusable->getProviderGroupId(),
             'provider_asset_id' => $reusable->getProviderAssetId(),
             'provider_status' => $reusable->getProviderStatus()->value,
@@ -687,14 +687,14 @@ class AssetDomainService
         $mapping = $this->providerAssets->findMapping(
             $dataIsolation,
             (int) $asset->getId(),
-            $this->provider->getProviderCode(),
-            $this->projectName,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
         );
         $providerAsset = $mapping === null
             ? new ProviderAssetEntity([
                 'asset_id' => $asset->getId(),
-                'provider_code' => $this->provider->getProviderCode(),
-                'project_name' => $this->projectName,
+                'provider_code' => VolcengineArkAssetProvider::PROVIDER_CODE,
+                'project_name' => $this->projectName(),
             ])
             : new ProviderAssetEntity($mapping->toArray());
         $providerAsset->setProviderStatus($status);
@@ -748,8 +748,8 @@ class AssetDomainService
         // 素材尚未创建，映射状态保持处理中。
         $providerAssetGroupEntity = new ProviderAssetEntity([
             'asset_id' => (int) $asset->getId(),
-            'provider_code' => $this->provider->getProviderCode(),
-            'project_name' => $this->projectName,
+            'provider_code' => VolcengineArkAssetProvider::PROVIDER_CODE,
+            'project_name' => $this->projectName(),
             'provider_group_id' => $providerGroupId,
             'provider_status' => ProviderAssetStatus::PROCESSING->value,
         ]);
@@ -765,9 +765,9 @@ class AssetDomainService
      */
     private function createProviderAssetGroup(string $groupName): string
     {
-        $response = $this->provider->createAssetGroup([
+        $response = $this->provider()->createAssetGroup([
             'name' => $groupName,
-            'project_name' => $this->projectName,
+            'project_name' => $this->projectName(),
         ]);
         $providerGroupId = trim((string) ($response['provider_group_id'] ?? ''));
         if ($providerGroupId === '') {
@@ -793,11 +793,11 @@ class AssetDomainService
             'provider_group_id' => $providerGroupId,
         ]);
 
-        $response = $this->provider->createAsset([
+        $response = $this->provider()->createAsset([
             ...$asset->toArray(),
             'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
             'group_id' => $providerGroupId,
-            'project_name' => $this->projectName,
+            'project_name' => $this->projectName(),
         ]);
         $providerAssetId = (string) ($response['provider_asset_id'] ?? $response['asset_id'] ?? $response['id'] ?? '');
         if ($providerAssetId === '') {
@@ -806,8 +806,8 @@ class AssetDomainService
         }
         $providerAssetEntity = new ProviderAssetEntity([
             'asset_id' => $asset->getId(),
-            'provider_code' => $this->provider->getProviderCode(),
-            'project_name' => $this->projectName,
+            'provider_code' => VolcengineArkAssetProvider::PROVIDER_CODE,
+            'project_name' => $this->projectName(),
             'provider_group_id' => $providerGroupId,
             'provider_asset_id' => $providerAssetId,
             'provider_status' => ProviderAssetStatus::fromValue(
@@ -849,7 +849,7 @@ class AssetDomainService
                     'provider_asset_id' => $providerAssetEntity->getProviderAssetId(),
                     'timeout_seconds' => self::COMPLIANCE_TIMEOUT_SECONDS,
                 ]);
-                throw new RuntimeException(self::COMPLIANCE_TIMEOUT_REASON);
+                ExceptionBuilder::throw(AssetErrorCode::COMPLIANCE_TIMEOUT);
             }
             $this->waitBeforeNextCompliancePoll();
             $status = $this->fetchProviderStatus($providerAssetEntity);
@@ -867,7 +867,7 @@ class AssetDomainService
     private function fetchProviderStatus(ProviderAssetEntity $providerAssetEntity): ProviderAssetStatus
     {
         try {
-            $state = $this->provider->getAssetStatus($providerAssetEntity->getProviderAssetId(), $this->projectName);
+            $state = $this->provider()->getAssetStatus($providerAssetEntity->getProviderAssetId(), $this->projectName());
         } catch (Throwable $throwable) {
             $this->logger->warning('第三方素材状态回查失败，继续等待', [
                 'provider_asset_id' => $providerAssetEntity->getProviderAssetId(),
@@ -919,7 +919,24 @@ class AssetDomainService
     private function resolveProviderGroupName(AssetEntity $asset): string
     {
         $name = trim($asset->getI18nName('default'));
-        return $name === '' ? self::UNNAMED_GROUP_NAME : $name;
+        return $name === '' ? trans('asset.unnamed_group') : $name;
+    }
+
+    private function provider(): AssetProviderInterface
+    {
+        return new VolcengineArkAssetProvider($this->logger, $this->providerConfig());
+    }
+
+    private function projectName(): string
+    {
+        return trim((string) ($this->providerConfig()['project_name'] ?? '')) ?: self::DEFAULT_PROJECT_NAME;
+    }
+
+    /** @return array<string, mixed> */
+    private function providerConfig(): array
+    {
+        $config = $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets);
+        return $this->resolveProviderConfig($config);
     }
 
     /** @param array<string, mixed> $config @return array<string, mixed> */

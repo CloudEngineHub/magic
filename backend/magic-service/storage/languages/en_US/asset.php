@@ -13,6 +13,7 @@ return [
     'provider_response_invalid' => 'The asset processing service returned an unexpected response. Please try again later',
     'compliance_processing' => 'The asset is being reviewed. Please try again later',
     'compliance_timeout' => 'The asset review timed out. Please try again later',
+    'unnamed_group' => 'Untitled asset group',
     'agreement_required' => 'Please read and accept the asset usage agreement first',
     'file_required' => 'Please upload an asset file first',
     'group_not_empty' => 'This asset group still contains assets. Remove or delete them before deleting the group',

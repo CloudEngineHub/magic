@@ -13,6 +13,7 @@ return [
     'provider_response_invalid' => '素材处理服务返回异常，请稍后重试',
     'compliance_processing' => '素材正在审核中，请稍后重试',
     'compliance_timeout' => '素材审核超时，请稍后重试',
+    'unnamed_group' => '未命名素材组',
     'agreement_required' => '请先阅读并同意素材使用协议',
     'file_required' => '请先上传素材文件',
     'group_not_empty' => '素材组内还有素材，请先移出或删除后再删除素材组',
