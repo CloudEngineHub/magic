@@ -3,8 +3,11 @@ import type { PointerEvent as ReactPointerEvent, RefObject } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
-import { ResizeGrip } from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
-import { ResizableCollapseFeedback, resizeGlowClassName } from "@/components/shadcn-ui/resizable"
+import {
+	ResizableCollapseFeedback,
+	ResizeGrip,
+	resizeGlowClassName,
+} from "@/components/shadcn-ui/resizable"
 import {
 	recordingTranscriptPanelDragStore,
 	type TranscriptPanelDragCommit,
@@ -57,11 +60,12 @@ export const RecordingDetailTranscriptResizeHandle = observer(
 			<div
 				data-slot="resizable-handle"
 				data-resizing={isDragging ? "true" : undefined}
+				data-dragging={isDragging ? "true" : undefined}
 				onPointerDown={handlePointerDown}
 				className={cn(
 					// The handle stays a narrow 8px grip centered in its 24px column; the hover/drag glow
 					// fills only this narrow element, while the wider hit area below keeps grabbing easy.
-					"group relative flex h-full w-2 cursor-col-resize touch-none items-center justify-center justify-self-center bg-transparent",
+					"group/resize relative flex h-full w-2 cursor-col-resize touch-none items-center justify-center justify-self-center bg-transparent",
 					resizeGlowClassName,
 				)}
 				data-testid="recording-detail-transcript-resize-handle"

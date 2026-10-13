@@ -3,8 +3,11 @@ import type { PointerEvent as ReactPointerEvent, RefObject } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
-import { ResizeGrip } from "@/pages/superMagic/components/ResizeGrip/ResizeGrip"
-import { ResizableCollapseFeedback, resizeGlowClassName } from "@/components/shadcn-ui/resizable"
+import {
+	ResizableCollapseFeedback,
+	ResizeGrip,
+	resizeGlowClassName,
+} from "@/components/shadcn-ui/resizable"
 import {
 	recordingConversationPanelDragStore,
 	type ConversationPanelDragCommit,
@@ -58,12 +61,13 @@ export const RecordingDetailConversationResizeHandle = observer(
 			<div
 				data-slot="resizable-handle"
 				data-resizing={isDragging ? "true" : undefined}
+				data-dragging={isDragging ? "true" : undefined}
 				data-testid="recording-detail-conversation-resize-handle"
 				onPointerDown={handlePointerDown}
 				className={cn(
 					// Sit in the 8px page gap, flush against the rail. The grip stays out of the
 					// message column and does not consume the 320–560 conversation width.
-					"group absolute inset-y-0 left-0 z-30 flex w-2 -translate-x-full cursor-col-resize touch-none items-center justify-center bg-transparent",
+					"group/resize absolute inset-y-0 left-0 z-30 flex w-2 -translate-x-full cursor-col-resize touch-none items-center justify-center bg-transparent",
 					resizeGlowClassName,
 				)}
 			>

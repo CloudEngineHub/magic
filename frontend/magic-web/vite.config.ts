@@ -44,7 +44,8 @@ function formatLucideComponentImportName(componentName: string): string {
 		.toLowerCase()}.js`
 }
 
-function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string): UserConfig {
+// Factory function for shared base Vite configuration
+export function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string): UserConfig {
 	// Env overlay resolution runs before this factory so every config decision
 	// observes the same winning physical files as import.meta.env and child tasks.
 	const allowedHosts = env.MAGIC_DEV_ALLOWED_HOSTS
@@ -65,6 +66,8 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 			enabled: isEnableDevtools,
 		},
 		build: {
+			// Enable chunk import maps in production to decouple chunk hash updates
+			chunkImportMap: !isDev,
 			outDir: resolve(__dirname, "dist"),
 			// Enterprise uses root `enterprise/`; outDir is repo `dist/` (outside root).
 			emptyOutDir: true,
