@@ -1,4 +1,4 @@
-import { getEditableTextContent, setElementTextContent } from "@dtyq/html-sandbox/utils/textContent"
+import { getEditableTextContent, setElementTextContent } from "@dtyq/html-sandbox"
 
 /**
  * 命令接口

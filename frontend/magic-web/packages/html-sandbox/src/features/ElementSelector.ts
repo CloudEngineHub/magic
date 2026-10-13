@@ -5,6 +5,7 @@
 
 import type { EditorBridge } from "../core/EditorBridge"
 import { getElementSelector, isInjectedElement } from "../utils/dom"
+import { isSourceNode } from "../utils/sourceNodes"
 import { normalizeColor, normalizeTextAlign } from "../utils/css"
 import { getEditableTextContent } from "../utils/textContent"
 
@@ -812,7 +813,7 @@ export class ElementSelector {
 		}
 
 		// Ignore injected elements
-		if (isInjectedElement(element)) {
+		if (isInjectedElement(element) || !isSourceNode(element)) {
 			return
 		}
 
@@ -867,7 +868,7 @@ export class ElementSelector {
 	 */
 	hoverElement(element: HTMLElement): void {
 		if (!element || this.isDocumentRoot(element)) return
-		if (isInjectedElement(element)) return
+		if (isInjectedElement(element) || !isSourceNode(element)) return
 
 		this.hoveredElement = element
 		if (this.isSelected(element)) return
@@ -976,7 +977,7 @@ export class ElementSelector {
 			}
 
 			// Ignore injected elements
-			if (isInjectedElement(target)) return
+			if (isInjectedElement(target) || !isSourceNode(target)) return
 
 			// Find the actual selectable element (might be a container like ECharts)
 			const selectableElement = this.findSelectableElement(target)
@@ -1021,6 +1022,13 @@ export class ElementSelector {
 
 				// Ignore injected elements
 				if (isInjectedElement(target)) return
+				if (!isSourceNode(target)) {
+					e.preventDefault()
+					e.stopPropagation()
+					this.clearSelection()
+					this.bridge.sendEvent("DYNAMIC_ELEMENT_CLICKED", {})
+					return
+				}
 
 				// Check if there's a text selection - if so, don't trigger element selection
 				// This prevents accidentally selecting other elements when releasing mouse after text selection

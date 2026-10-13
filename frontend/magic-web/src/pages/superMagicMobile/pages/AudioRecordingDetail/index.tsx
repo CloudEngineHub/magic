@@ -1030,6 +1030,7 @@ export default function MobileAudioRecordingDetailPage() {
 							<ProjectTopicListView
 								className="min-h-0 flex-1"
 								projectId={projectId}
+								key={projectId}
 								topics={topics}
 								loading={showTopicsSkeleton}
 								onRefresh={refreshRecordingTopics}

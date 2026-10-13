@@ -530,6 +530,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					draftKey={draftKey}
 					topicMode={effectiveTopicMode}
 					modelTopicMode={editorContext?.modelTopicMode}
+					agentCode={editorContext?.agentCode}
 					size={editorContext?.size ?? "default"}
 					modules={editorContext?.modules}
 					isSending={isSending}

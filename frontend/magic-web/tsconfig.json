@@ -17,18 +17,6 @@
 			"@admin-enterprise/*": ["./packages/magic-admin/enterprise/src/*"],
 			"@admin/*": ["./packages/magic-admin/src/*"],
 			"@customer/*": ["./customer/src/*"],
-			"@dtyq/html-sandbox": ["./packages/html-sandbox/src/index.ts"],
-			"@dtyq/html-sandbox/*": ["./packages/html-sandbox/src/*"],
-			"@dtyq/html-sandbox/index.html": ["./packages/html-sandbox/index.html"],
-			"@dtyq/html-sandbox/runtime": ["./packages/html-sandbox/src/runtime/index.ts"],
-			"@dtyq/html-sandbox/runtime/RuntimeLogger": [
-				"./packages/html-sandbox/src/runtime/RuntimeLogger.ts"
-			],
-			"@dtyq/html-sandbox/runtime/RuntimePlugin": [
-				"./packages/html-sandbox/src/runtime/RuntimePlugin.ts"
-			],
-			"@dtyq/html-sandbox/runtime/api": ["./packages/html-sandbox/src/runtime/api/index.ts"],
-			"@dtyq/html-sandbox/telemetry": ["./packages/html-sandbox/src/telemetry/index.ts"],
 			"@dtyq/magic-admin": ["./packages/magic-admin/src/index.ts"],
 			"@dtyq/magic-admin-v2": ["./packages/magic-admin-v2/src/index.ts"],
 			"@dtyq/magic-admin/ServiceIcon": [

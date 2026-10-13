@@ -206,6 +206,7 @@ export default function SiderTask({
 						<SiderTaskItem
 							key={item.id}
 							data={item}
+							onEdit={() => onTaskEdit(item)}
 							onSwitchChange={(enabled) => onStatusChange(item, enabled)}
 							{...delegateProps}
 						/>

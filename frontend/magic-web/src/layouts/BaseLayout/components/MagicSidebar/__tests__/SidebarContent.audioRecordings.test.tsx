@@ -22,10 +22,12 @@ const animatedNumberTextMock = vi.hoisted(() => vi.fn())
 
 afterEach(() => {
 	vi.unstubAllGlobals()
+	vi.unstubAllEnvs()
 })
 
 beforeEach(() => {
 	envMock.isPrivateDeployment = false
+	vi.stubEnv("MAGIC_MICRO_APP_ENABLED", undefined)
 })
 
 vi.mock("react-i18next", () => ({
@@ -311,6 +313,19 @@ describe("SidebarContent micro apps entry", () => {
 		renderSidebarContent()
 
 		expect(screen.queryByTestId("sidebar-content-micro-apps-button")).toBeNull()
+	})
+
+	it("hides the entry when explicitly disabled outside private deployment", () => {
+		vi.stubEnv("MAGIC_MICRO_APP_ENABLED", "false")
+		renderSidebarContent()
+		expect(screen.queryByTestId("sidebar-content-micro-apps-button")).toBeNull()
+	})
+
+	it("shows the entry when explicitly enabled in private deployment", () => {
+		envMock.isPrivateDeployment = true
+		vi.stubEnv("MAGIC_MICRO_APP_ENABLED", "true")
+		renderSidebarContent()
+		expect(screen.getByTestId("sidebar-content-micro-apps-button")).toBeVisible()
 	})
 })
 
