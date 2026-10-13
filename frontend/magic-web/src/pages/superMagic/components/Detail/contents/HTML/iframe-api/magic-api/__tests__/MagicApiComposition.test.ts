@@ -78,7 +78,7 @@ describe("Magic API plugin composition", () => {
 			vi.resetModules()
 			const { magicApiPlugins: plugins } = await import("../index")
 			const { registerRuntimePlugins, installRegisteredRuntimePlugins } =
-				await import("@dtyq/html-sandbox/runtime")
+				await import("@dtyq/html-sandbox")
 			const ordered = order === "declared" ? plugins : [...plugins].reverse()
 			registerRuntimePlugins(ordered)
 			installRegisteredRuntimePlugins()

@@ -970,7 +970,8 @@ class ProjectAppService extends AbstractAppService
             $dataIsolation->getCurrentUserId(),
             $requestDTO->getQ(),
             $requestDTO->getPage(),
-            $requestDTO->getPageSize()
+            $requestDTO->getPageSize(),
+            $requestDTO->getTopicTypes()
         );
 
         return SidebarTopicListResponseDTO::fromResult($result)->toArray();

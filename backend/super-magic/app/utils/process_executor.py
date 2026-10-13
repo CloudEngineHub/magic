@@ -314,8 +314,8 @@ class ProcessExecutor:
                 content = "No output"
             return content, True
         else:
-            # 失败情况 - 提供清晰的错误信息
-            content = f"Execution failed (exit code: {exit_code})"
+            # 非零退出码只说明整条 shell 命令的返回值；调用方需结合输出判断目标是否失败。
+            content = f"Command exited with nonzero status (exit code: {exit_code})"
             if stderr_str:
                 content += f"\n\nError details:\n{stderr_str}"
             if stdout_str:

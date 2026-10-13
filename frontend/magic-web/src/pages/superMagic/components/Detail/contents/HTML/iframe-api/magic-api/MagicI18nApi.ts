@@ -6,9 +6,8 @@
  * 之前注入）。后续语言变更通过 MAGIC_I18N_LANG_SUBSCRIBE 消息推送。
  */
 
-import { BaseRuntimeBridgeApiPlugin } from "@dtyq/html-sandbox/runtime"
+import { BaseRuntimeBridgeApiPlugin, getParentOrigin } from "@dtyq/html-sandbox"
 import { getPreludeVersion, isStaleDocument } from "./prelude-runtime-context"
-import { getParentOrigin } from "@dtyq/html-sandbox/utils/parentOrigin"
 
 export class MagicI18nApi extends BaseRuntimeBridgeApiPlugin {
 	constructor() {

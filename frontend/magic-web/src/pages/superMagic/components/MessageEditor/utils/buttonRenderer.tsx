@@ -76,6 +76,7 @@ export interface ButtonRendererContext {
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
 	topicMode?: TopicMode
+	agentCode?: string | null
 	mentionPanelStore: MentionPanelStore
 	mcpButtonConfig: MCPButtonRenderConfig
 
@@ -155,6 +156,7 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 				selectedTopic={ctx.selectedTopic}
 				selectedProject={ctx.selectedProject}
 				topicMode={ctx.topicMode}
+				agentCode={ctx.agentCode}
 				showName
 				showBorder={false}
 				placement="top"

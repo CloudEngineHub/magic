@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ElementInspectorHandler } from "../features/ElementInspectorHandler"
-import "../index"
+import { startIframeRuntime } from "../index"
+
+startIframeRuntime()
 
 describe("iframe runtime message boundary", () => {
 	afterEach(() => {

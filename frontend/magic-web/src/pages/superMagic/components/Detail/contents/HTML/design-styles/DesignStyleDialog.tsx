@@ -1,15 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useLayoutEffect, useState } from "react"
 import { AlertCircle, LoaderCircle, RefreshCw, Search, X } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
-import {
-	Dialog,
-	DialogContent,
-	DialogClose,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/shadcn-ui/dialog"
+import MagicModal from "@/components/base/MagicModal"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import {
 	DialogRestoreSizeButton,
 	DialogWindowDecorations,
@@ -52,6 +45,7 @@ export default function DesignStyleDialog({
 	canApply,
 }: DesignStyleDialogProps) {
 	const { t } = useTranslation("super")
+	const isMobile = useIsMobile()
 	const frame = useDesignStyleWindow(open)
 	const { windowOptions } = frame
 	const [query, setQuery] = useState("")
@@ -114,31 +108,29 @@ export default function DesignStyleDialog({
 	}, [loadCatalog])
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent
-				showCloseButton={false}
-				windowOptions={windowOptions}
+		<MagicModal
+			open={open}
+			onCancel={() => (selectedStyle ? returnToGallery() : onOpenChange(false))}
+			footer={null}
+			closable={false}
+			classNames={{ body: "!p-0", content: "!p-0" }}
+			width="min(1080px, calc(100vw - 2rem))"
+		>
+			<div
 				className={cn(
-					"flex flex-col gap-0 rounded-xl p-0",
+					"flex h-[min(820px,85dvh)] w-full flex-col gap-0 rounded-xl p-0",
 					windowOptions
 						? "overflow-visible data-[state=open]:zoom-in-95 motion-reduce:data-[state=open]:animate-none"
 						: "overflow-hidden",
 					!windowOptions &&
 						"h-[min(820px,calc(100vh-2rem))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:max-w-[1080px]",
 				)}
-				onInteractOutside={(event) => event.preventDefault()}
-				onEscapeKeyDown={(event) => {
-					if (selectedStyle) {
-						event.preventDefault()
-						returnToGallery()
-					}
-				}}
 				data-testid="design-style-dialog"
 			>
-				<DialogHeader
+				<div
 					data-dialog-drag-handle
 					className={cn(
-						"flex-row items-center justify-between gap-4 space-y-0 rounded-t-xl border-b border-border/70 px-6 py-2.5 text-left",
+						"flex flex-row items-center justify-between gap-4 space-y-0 rounded-t-xl border-b border-border/70 px-6 py-2.5 text-left",
 						windowOptions?.draggable &&
 							"cursor-grab touch-none select-none active:cursor-grabbing",
 					)}
@@ -158,33 +150,34 @@ export default function DesignStyleDialog({
 							/>
 						) : (
 							<>
-								<DialogTitle className="flex items-center gap-2 text-xl">
+								<h2 className="flex items-center gap-2 text-xl">
 									{t("htmlEditor.designStyle.title")}
-								</DialogTitle>
-								<DialogDescription className="mt-1 max-w-[70ch] text-xs leading-5">
+								</h2>
+								<p className="mt-1 max-w-[70ch] text-xs leading-5">
 									{t("htmlEditor.designStyle.description")}
-								</DialogDescription>
+								</p>
 							</>
 						)}
 					</div>
 					<div className="flex shrink-0 items-center gap-2">
-						<DialogRestoreSizeButton
-							frame={frame}
-							testId="design-style-restore-size-button"
-						/>
-						<DialogClose asChild>
-							<Button
+						{!isMobile && (
+							<DialogRestoreSizeButton
+								frame={frame}
+								testId="design-style-restore-size-button"
+							/>
+						)}
+						<Button
 								variant="ghost"
 								size="icon"
 								className="size-8 shrink-0 text-muted-foreground"
+								onClick={() => onOpenChange(false)}
 								aria-label={t("common.close")}
 								data-testid="design-style-dialog-close-button"
 							>
 								<X className="size-4" aria-hidden="true" />
-							</Button>
-						</DialogClose>
+						</Button>
 					</div>
-				</DialogHeader>
+				</div>
 
 				{isLoading ? (
 					<div
@@ -358,7 +351,7 @@ export default function DesignStyleDialog({
 				)}
 
 				{selectedStyle && (
-					<DialogFooter className="shrink-0 rounded-b-xl border-t border-border/70 bg-background px-6 py-2.5">
+					<div className="shrink-0 rounded-b-xl border-t border-border/70 bg-background px-6 py-2.5">
 						<p className="mr-auto self-center text-xs text-muted-foreground">
 							{t("htmlEditor.designStyle.gallery.applyHint")}
 						</p>
@@ -375,15 +368,17 @@ export default function DesignStyleDialog({
 						>
 							{t("htmlEditor.designStyle.apply")}
 						</Button>
-					</DialogFooter>
+					</div>
 				)}
 
-				<DialogWindowDecorations
-					frame={frame}
-					guideProps={{ testId: "design-style-resize-guide" }}
-					gripProps={{ testId: "design-style-resize-grip" }}
-				/>
-			</DialogContent>
-		</Dialog>
+				{!isMobile && (
+					<DialogWindowDecorations
+						frame={frame}
+						guideProps={{ testId: "design-style-resize-guide" }}
+						gripProps={{ testId: "design-style-resize-grip" }}
+					/>
+				)}
+			</div>
+		</MagicModal>
 	)
 }
