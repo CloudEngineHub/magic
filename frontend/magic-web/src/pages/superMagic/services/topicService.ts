@@ -9,6 +9,7 @@ import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import { interfaceStore } from "@/stores/interface"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { analyticsService } from "@/services/analytics"
 
 export interface FetchTopicsParams {
 	projectId: string
@@ -28,8 +29,11 @@ export interface UpdateTopicStatusParams {
 export interface CreateTopicParams {
 	projectId: string
 	topicName: string
+	/** Parent project context is known before the topic request and is required by analytics. */
+	workspaceId?: string | null
+	mode?: Topic["topic_mode"] | null
 	/** Topic whose frontend employee selection should be inherited after creation */
-	sourceTopic?: Pick<Topic, "project_id" | "topic_mode" | "agent_code"> | null
+	sourceTopic?: Pick<Topic, "project_id" | "workspace_id" | "topic_mode" | "agent_code"> | null
 }
 
 export interface MarkTopicReadProgressParams {
@@ -247,9 +251,16 @@ class TopicService {
 	async createTopic({
 		projectId,
 		topicName,
+		workspaceId,
+		mode,
 		sourceTopic,
 	}: CreateTopicParams): Promise<Topic | null> {
 		try {
+			analyticsService.report("topic_create_attempted", {
+				projectId,
+				workspaceId: workspaceId ?? sourceTopic?.workspace_id,
+				mode: mode ?? sourceTopic?.topic_mode,
+			})
 			const newTopic = await SuperMagicApi.createTopic({
 				topic_name: topicName,
 				project_id: projectId,
@@ -278,7 +289,6 @@ class TopicService {
 					this.topicStore.setSelectedTopic(selectedTopic)
 				}
 			})
-
 			return selectedTopic
 		} catch (error) {
 			console.error("创建话题失败:", error)

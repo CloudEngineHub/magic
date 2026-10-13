@@ -13,6 +13,7 @@ import { isCollaborationWorkspace, SHARE_WORKSPACE_ID } from "../constants"
 import { useNoPermissionCollaborationProject } from "./useNoPermissionCollaborationProject"
 import magicToast from "@/components/base/MagicToaster/utils"
 import SuperMagicService from "@/pages/superMagic/services"
+import { analyticsService } from "@/services/analytics"
 
 export const enum COLLABORATION_TAB_KEY {
 	FROM_OTHER = "received",
@@ -322,6 +323,10 @@ export function useProjects({ selectedWorkspace, onWorkspaceStateChange }: UsePr
 			if (!selectedWorkspace) return null
 			try {
 				const defaultProjectName = ""
+				analyticsService.report("project_create_attempted", {
+					workspaceId: selectedWorkspace.id,
+					mode: projectMode,
+				})
 				const res = await SuperMagicApi.createProject({
 					workspace_id: selectedWorkspace.id,
 					project_name: defaultProjectName,

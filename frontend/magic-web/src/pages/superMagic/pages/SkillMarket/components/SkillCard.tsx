@@ -9,6 +9,7 @@ import SmartTooltip from "@/components/other/SmartTooltip"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
 import { cn } from "@/utils/cn"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 import { SkillThumbnail } from "@/pages/superMagic/components/SkillThumbnail"
 import { normalizeLocale } from "@/utils/locale"
 import { formatSkillInstallCount } from "./skill-card-formatters"
@@ -89,6 +90,7 @@ function SkillCard({
 	return (
 		<article
 			className="group relative flex h-full min-h-[148px] overflow-hidden rounded-2xl border border-border/70 bg-background shadow-[0_8px_26px_rgba(24,25,29,0.035)] transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[0_12px_30px_rgba(24,25,29,0.07)]"
+			data-guide-anchor={HomeOnboardingAnchor.SkillMarketCard}
 			data-testid="skill-card"
 		>
 			<div
@@ -201,6 +203,12 @@ function SkillCard({
 					onClick={() => {
 						if (!isAdded && !isAdding) onAdd?.(skill.id)
 					}}
+					/*
+					 * The onboarding tour points at this control for "add to my skills". The design
+					 * calls it a full-width footer button; the card ships it as this corner icon,
+					 * which is the same action, so the step highlights it here.
+					 */
+					data-guide-anchor={HomeOnboardingAnchor.SkillMarketCardAdd}
 					data-testid={isAdded ? "skill-card-added-button" : "skill-card-add-button"}
 				>
 					{isAdding ? (

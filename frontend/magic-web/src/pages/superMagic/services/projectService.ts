@@ -22,6 +22,7 @@ import { topicStore, workspaceStore } from "../stores/core"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
+import { analyticsService } from "@/services/analytics"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -370,21 +371,32 @@ class ProjectService {
 		projectMode,
 		workdir,
 		projectName,
+		creationScene,
 	}: {
 		workspaceId: string
 		projectMode: TopicMode
 		workdir?: string
 		projectName?: string
+		/** The product entry that initiated creation; independent from the selected agent mode. */
+		creationScene?: string
 	}): Promise<CreatedProject | null> => {
 		const requestKey = this.getRequestKey("createProject", {
 			workspaceId,
 			projectMode,
 			workdir,
 			projectName,
+			creationScene,
 		})
 
 		return this.getOrCreateRequest(requestKey, async () => {
 			try {
+				// Report after local de-duplication accepts the action but before the request,
+				// so failed requests still count as creation attempts.
+				analyticsService.report("project_create_attempted", {
+					workspaceId,
+					sceneOverride: creationScene,
+					mode: projectMode,
+				})
 				const res = await SuperMagicApi.createProject({
 					workspace_id: workspaceId,
 					project_name: projectName || "",

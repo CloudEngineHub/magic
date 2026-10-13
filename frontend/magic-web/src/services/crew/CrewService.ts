@@ -40,6 +40,7 @@ import {
 	type PlaybookConfig,
 	normalizeCrewI18nArrayValue,
 } from "@/apis/modules/crew"
+import { analyticsService } from "@/services/analytics"
 
 // ======================== View Models ========================
 
@@ -293,11 +294,11 @@ export class CrewService {
 		})
 	}
 
-	/**
-	 * Create an agent and resolve its generated code.
-	 * The create API only returns an id, so we fetch the agent list to get the code.
-	 */
 	async createAgent(params: CreateAgentParams): Promise<{ id: string; code: string }> {
+		analyticsService.report("agent_create_attempted")
+		// A Crew creation also requests its backing project and default topic. Their
+		// server-generated ids do not exist yet, so only the attempt itself is reported.
+		analyticsService.report("project_create_attempted", { sceneOverride: "crew" })
 		const data = await CrewApi.createAgent(params)
 		return { id: data.id, code: data.code }
 	}

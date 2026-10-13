@@ -11,6 +11,7 @@ export function MagiClawHero() {
 		<section
 			className="relative isolate flex min-h-[280px] flex-col items-center justify-center gap-8 overflow-hidden rounded-[24px] bg-gradient-to-b from-rose-50/80 via-rose-50/35 to-transparent px-4 py-10 text-center dark:from-red-950/20 dark:via-red-950/10 dark:to-transparent"
 			data-testid="magi-claw-hero"
+			data-guide-anchor="magi-claw-hero"
 		>
 			{/* Corner dot fields echo the brand mark and fade toward the center of the Hero. */}
 			<div

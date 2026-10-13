@@ -13,10 +13,8 @@ import {
 import { useTranslation } from "react-i18next"
 import { type Topic, TaskStatus, ProjectListItem } from "../../pages/Workspace/types"
 import TopicSharePopover from "../TopicSharePopover"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { useMemoizedFn, useMount } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import MagicModal from "@/components/base/MagicModal"
-import { GuideTourElementId } from "../../components/LazyGuideTour"
 import { observer } from "mobx-react-lite"
 import { superMagicStore } from "../../stores"
 import { computed } from "mobx"
@@ -547,13 +545,6 @@ function MessageHeader({
 		}
 	})
 
-	useMount(() => {
-		pubsub.publish(
-			PubSubEvents.GuideTourElementReady,
-			GuideTourElementId.MessageHeaderTopicGroup,
-		)
-	})
-
 	function renderHistoryTrigger(placement: "bottomRight" | "leftBottom") {
 		return (
 			<MessageHeaderHistoryControl
@@ -776,8 +767,8 @@ function MessageHeader({
 								{!shouldHideTopicEntry ? (
 									<div
 										className="flex items-center gap-1"
-										id={GuideTourElementId.MessageHeaderTopicGroup}
 										data-testid="message-header-topic-group"
+										data-guide-anchor="message-header-topic-group"
 									>
 										<MagicTooltip title={t("messageHeader.newTopic")}>
 											<span>
