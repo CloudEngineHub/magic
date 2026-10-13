@@ -153,7 +153,8 @@ interface TopicRepositoryInterface
         string $keyword = '',
         int $page = 1,
         int $pageSize = 20,
-        int $maxTotal = 999
+        int $maxTotal = 999,
+        array $topicTypes = []
     ): array;
 
     /**

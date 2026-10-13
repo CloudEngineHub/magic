@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { ChevronRight, Ellipsis, Pin, PinOff, Trash2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -21,6 +21,8 @@ type TopicWithPinnedState = Topic & {
 }
 
 export interface ProjectTopicListViewProps {
+	emptyContent?: ReactNode
+	footer?: ReactNode
 	className?: string
 	/** Keeps page-specific horizontal spacing on the scroll port without narrowing edge fades. */
 	scrollClassName?: string
@@ -155,6 +157,8 @@ const TopicItem = observer(function TopicItem({
 export const ProjectTopicListView = observer(function ProjectTopicListView({
 	className,
 	scrollClassName,
+	emptyContent,
+	footer,
 	projectId,
 	topics,
 	loading,
@@ -206,7 +210,7 @@ export const ProjectTopicListView = observer(function ProjectTopicListView({
 						className="flex h-full min-h-0 w-full flex-1 flex-col items-center justify-center px-3 text-center"
 						data-testid="project-topics-empty"
 					>
-						<ProjectTopicsEmptyState />
+						{emptyContent ?? <ProjectTopicsEmptyState />}
 					</div>
 				) : (
 					<div
@@ -229,6 +233,7 @@ export const ProjectTopicListView = observer(function ProjectTopicListView({
 						))}
 					</div>
 				)}
+				{!loading && footer}
 			</MagicPullToRefresh>
 		</ScrollEdgeFadeContainer>
 	)

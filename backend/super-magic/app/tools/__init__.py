@@ -7,6 +7,7 @@
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
 from app.tools.micro_app_plan import MicroAppPlanTool
+from app.tools.update_html_app_memory import UpdateHtmlAppMemory
 from app.tools.web_search import WebSearch
 from app.tools.find_agents import FindAgentsTool
 from app.tools.call_subagent import CallSubagent
@@ -335,6 +336,7 @@ __all__ = [
     "DummyTool",
     "AskUserTool",
     "MicroAppPlanTool",
+    "UpdateHtmlAppMemory",
 
     # 核心组件
     "BaseTool",
