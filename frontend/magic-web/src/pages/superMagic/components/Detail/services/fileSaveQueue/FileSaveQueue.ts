@@ -1,3 +1,4 @@
+import { unshadow } from "@/utils/shadow"
 import {
 	DEFAULT_FILE_SAVE_DRAFT_LIMITS,
 	estimateSaveRecordBytes,
@@ -182,7 +183,18 @@ export class FileSaveQueue {
 	}
 
 	peekUnsyncedDraft(fileId: string): unknown | undefined {
-		return this.getSnapshot(fileId)?.pendingContent
+		const entry = this.entries.get(fileId)
+		const pending = entry?.queued ?? entry?.inflight
+		// Preview and recovery consumers need editor text, while persistence keeps
+		// the original encoded payload and flag for the save API.
+		if (
+			pending?.enableShadow &&
+			typeof pending.content === "string" &&
+			pending.content.startsWith("SHADOWED_")
+		) {
+			return unshadow(pending.content)
+		}
+		return pending?.content
 	}
 
 	registerRestoreHandler(fileId: string, handler: () => void | Promise<void>): () => void {

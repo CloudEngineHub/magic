@@ -5883,6 +5883,14 @@
 			"pause": "暂停",
 			"resume": "继续"
 		},
+		"projectDeletion": {
+			"active": "此项目的录音尚未结束，请先完成或取消录音，再删除项目。",
+			"confirm": "知道了",
+			"otherTab": "其它标签页的录音尚未结束，暂时无法确认所属项目。请返回录音标签页结束录音后再删除。",
+			"projectMissing": "项目已不存在，录音已停止。本地音频可在录音历史中导出。",
+			"projectMissingSaveFailed": "项目已不存在，录音已停止。本地录音保存失败，请检查浏览器存储。",
+			"title": "请先结束录音"
+		},
 		"projectSelector": {
 			"change": "更改",
 			"createProject": "新建项目",

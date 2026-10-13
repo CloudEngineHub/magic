@@ -22,7 +22,7 @@ interface StatusReportParams {
 }
 
 interface RecordingStatusReporterConfig {
-	onReportError?: (error: Error) => void
+	onReportError?: (error: Error, sessionId: string) => void | Promise<void>
 	/** Resolves the latest generated audio shard count for periodic reports. */
 	getFileShardCount?: () => number | undefined
 }
@@ -35,7 +35,7 @@ class RecordingStatusReporter {
 	private periodicReportTimer: NodeJS.Timeout | null = null
 	private lastReportedStatus: string | null = null
 	private currentSessionId: string | null = null
-	private onReportError?: (error: Error) => void
+	private onReportError?: (error: Error, sessionId: string) => void | Promise<void>
 	private getFileShardCount?: () => number | undefined
 	private isReporting = false
 
@@ -83,7 +83,7 @@ class RecordingStatusReporter {
 				error: error,
 				message: `Failed to report status: ${params.status}`,
 			})
-			this.onReportError?.(error as Error)
+			await this.onReportError?.(error as Error, params.task_key)
 		} finally {
 			this.isReporting = false
 		}
@@ -131,7 +131,8 @@ class RecordingStatusReporter {
 	 * Perform periodic status report
 	 */
 	private async performPeriodicReport(): Promise<void> {
-		if (!this.currentSessionId) {
+		const sessionId = this.currentSessionId
+		if (!sessionId) {
 			logger.warn("No active session for periodic report")
 			return
 		}
@@ -161,7 +162,7 @@ class RecordingStatusReporter {
 				error: error,
 				message: "Periodic report failed",
 			})
-			this.onReportError?.(error as Error)
+			await this.onReportError?.(error as Error, sessionId)
 		}
 	}
 

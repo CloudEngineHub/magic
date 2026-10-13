@@ -1,3 +1,4 @@
+import { handleRecordingCompletionFailure } from "./recordingCompletionFailure"
 import recordSummaryStore from "@/stores/recordingSummary"
 import { VoiceToTextService } from "@/services/voiceToText"
 import type { VoiceResultParams } from "@/services/voiceToText"
@@ -52,7 +53,6 @@ import { DEFAULT_RECORDING_CONFIG } from "./utils/config"
 import { RECORD_SUMMARY_EVENT_CALLBACK, RECORD_SUMMARY_EVENTS } from "./const/events"
 import { TypedEventEmitter } from "./utils/TypedEventEmitter"
 import {
-	ERROR_CODE_TASK_ENDED,
 	ERROR_CODES,
 	getBusinessErrorCode,
 	isOverrideSummaryAlreadySettled,
@@ -455,7 +455,7 @@ class RecordSummaryService {
 	}
 
 	private eventEmitter = new TypedEventEmitter<RECORD_SUMMARY_EVENT_CALLBACK>()
-	private handlingTaskEndSessions = new Set<string>()
+	private handlingTaskEndSessions = new Map<string, Promise<void>>()
 
 	/**
 	 * 监听事件
@@ -2248,11 +2248,21 @@ class RecordSummaryService {
 			recordSummaryStore.showWaitingSummarize()
 		}
 
-		const handleError = (error: Error) => {
-			recordSummaryStore.hideWaitingSummarize()
-			this.pauseRecording()
-			onError(error)
-		}
+		const handleError = (error: Error) =>
+			handleRecordingCompletionFailure({
+				error,
+				isCurrentSession: () =>
+					Boolean(currentSession) &&
+					this.sessionManager.getCurrentSession()?.id === currentSession?.id,
+				clearSummaryMessage: () => this.summaryMessageService.destroy(),
+				terminateSession: () =>
+					this.handleTaskEnd(currentSession?.id || "", ERROR_CODES.PROJECT_NOT_FOUND),
+				pauseSession: async () => {
+					recordSummaryStore.hideWaitingSummarize()
+					await this.pauseRecording()
+				},
+				onError,
+			})
 
 		// 停止录音服务
 		this.summaryMessageService.showStageMessage(SummaryStage.StoppingRecording)
@@ -2284,7 +2294,7 @@ class RecordSummaryService {
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.missingRequiredParams", { ns: "super" }),
 			)
-			handleError(err as Error)
+			await handleError(err as Error)
 			return
 		}
 
@@ -2293,7 +2303,7 @@ class RecordSummaryService {
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.missingRequiredParams", { ns: "super" }),
 			)
-			handleError(error)
+			await handleError(error)
 			return
 		}
 
@@ -2326,7 +2336,7 @@ class RecordSummaryService {
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.uploadChunksPreparingError", { ns: "super" }),
 			)
-			handleError(err as Error)
+			await handleError(err as Error)
 			return
 		}
 
@@ -2397,7 +2407,7 @@ class RecordSummaryService {
 				this.summaryMessageService.showError(
 					i18n.t("recordingSummary.message.summaryGenerationFailed", { ns: "super" }),
 				)
-				handleError(err as Error)
+				await handleError(err as Error)
 				return
 			}
 
@@ -2506,7 +2516,7 @@ class RecordSummaryService {
 			this.summaryMessageService.showError(
 				i18n.t("recordingSummary.message.summaryGenerationFailed", { ns: "super" }),
 			)
-			handleError(err as Error)
+			await handleError(err as Error)
 			return
 		}
 
@@ -3299,7 +3309,7 @@ class RecordSummaryService {
 	 * 处理状态上报错误
 	 * 状态上报错误不应该影响录制流程，仅记录日志
 	 */
-	private handleStatusReportError = async (error: Error) => {
+	private handleStatusReportError = async (error: Error, sessionId: string) => {
 		logger.error({
 			eventKey: "status_report_failed",
 			errorKind: "unknown",
@@ -3309,9 +3319,7 @@ class RecordSummaryService {
 		// Silent failure - does not affect recording functionality
 		// Check if error is task end error
 		if (isTaskEndError(error)) {
-			const session = this.sessionManager.getCurrentSession()
-			const sessionId = session?.id ?? error.sessionId
-			if (sessionId) await this.handleTaskEnd(sessionId, error.code)
+			if (sessionId) await this.handleTaskEnd(sessionId, getBusinessErrorCode(error))
 		}
 	}
 
@@ -4105,98 +4113,110 @@ class RecordSummaryService {
 	 * 处理服务端结束任务事件。
 	 * 服务端状态已经结束，只需要强制停止本地的录制相关实例
 	 */
-	private handleTaskEnd = async (sessionId: string, errorCode?: number | string) => {
-		logger.warn(
-			`检测到任务结束（错误码 ${errorCode ?? ERROR_CODE_TASK_ENDED}），停止本地录制会话 ${sessionId}`,
-		)
-		if (this.handlingTaskEndSessions.has(sessionId)) {
-			logger.log("任务结束处理已在进行中，忽略重复事件", { sessionId })
-			return
-		}
-		this.handlingTaskEndSessions.add(sessionId)
-
-		try {
-			const currentSession = this.sessionManager.getCurrentSession()
-			// Never stop a different recording session because of a stale event.
-			if (currentSession && currentSession.id !== sessionId) {
-				logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
-				return
-			}
-
-			const numericErrorCode =
-				typeof errorCode === "string" && errorCode.trim() === ""
-					? undefined
-					: Number(errorCode)
-			const normalizedErrorCode = Number.isFinite(numericErrorCode)
-				? numericErrorCode
-				: undefined
-			const terminationSource =
-				normalizedErrorCode === ERROR_CODES.TASK_IS_SUMMARIZING
-					? "server_auto_summary"
-					: "server_task_ended"
-
-			await runTaskEndCleanup({
-				stopRecordingServices: () => this.stopRecordingServices("task_end"),
-				stopSessionUploads: () =>
-					this.chunkUploader.stopSessionUploads(sessionId, "task_end"),
-				stopStatusReporter: () => {
-					this.stopChunkProductionWatchdog()
-					this.stopUploadQueueWatchdog()
-					this.statusReporter.stopPeriodicReport()
-					this.batchSaveReporter.clearSession(sessionId)
-				},
-				stopRecordStatusChecker: () => this.recordStatusChecker.stop(),
-				releaseWakeLock: () => this.wakeLockManager.releaseWakeLock(),
-				removeVisibilityChangeListener: () =>
-					this.wakeLockManager.removeVisibilityChangeListener(),
-				removeBeforeUnloadListener: () => this.removeBeforeUnloadListener(),
-				releaseRecordingLock: () =>
-					this.tabCoordinator.releaseLock({
-						type: "finish",
-						data: {
-							message: [],
-							duration: "00:00:00",
-							isRecording: false,
-							sessionId,
-						},
-					}),
-				preserveSession: async () => {
-					const cancelledSession = this.sessionManager.markServerCancelledSession(
-						normalizedErrorCode,
-						terminationSource,
-					)
-					if (!cancelledSession) return
-
-					this.recordingPersistence.saveSession(cancelledSession)
-					const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
-					logger.report("服务端自动总结后保留本地录音数据", {
-						sessionId,
-						errorCode: normalizedErrorCode,
-						status: cancelledSession.status,
-						queueStatus,
-						chunkIndex: cancelledSession.currentChunkIndex,
-					})
-				},
-				resetStore: () => {
-					recordSummaryStore.reset()
-				},
-				reportError: (stage, error) => {
-					logger.error({
-						eventKey: "task_end_cleanup_failed",
-						errorKind: "unknown",
-						error,
-						message: `任务结束清理阶段失败：${stage}`,
-						context: { sessionId, errorCode: normalizedErrorCode },
-					})
-				},
-			})
-
-			logger.log(`任务结束，本地录制实例已停止，会话 ${sessionId}，已保留本地数据`)
-		} finally {
-			this.handlingTaskEndSessions.delete(sessionId)
-		}
+	private handleTaskEnd = (sessionId: string, errorCode?: number | string): Promise<void> => {
+		const pending = this.handlingTaskEndSessions.get(sessionId)
+		if (pending) return pending
+		// Token, batch-save, and status errors can arrive together. Every caller awaits one cleanup.
+		const cleanup = Promise.resolve()
+			.then(() => this.cleanupEndedSession(sessionId, errorCode))
+			.finally(() => this.handlingTaskEndSessions.delete(sessionId))
+		this.handlingTaskEndSessions.set(sessionId, cleanup)
+		return cleanup
 	}
 
+	private cleanupEndedSession = async (sessionId: string, errorCode?: number | string) => {
+		const currentSession = this.sessionManager.getCurrentSession()
+		// Never stop a different recording session because of a stale event.
+		if (!currentSession || currentSession.id !== sessionId) {
+			logger.log(`任务结束事件针对的会话 ${sessionId} 不是当前活跃会话，忽略`)
+			return
+		}
+
+		const numericErrorCode =
+			typeof errorCode === "string" && errorCode.trim() === "" ? undefined : Number(errorCode)
+		const normalizedErrorCode = Number.isFinite(numericErrorCode) ? numericErrorCode : undefined
+		const terminationSource =
+			normalizedErrorCode === ERROR_CODES.TASK_IS_SUMMARIZING
+				? "server_auto_summary"
+				: "server_task_ended"
+
+		let sessionPreserved = false
+		await runTaskEndCleanup({
+			stopRecordingServices: () => this.stopRecordingServices("task_end"),
+			stopSessionUploads: () => this.chunkUploader.stopSessionUploads(sessionId, "task_end"),
+			stopStatusReporter: () => {
+				this.stopChunkProductionWatchdog()
+				this.stopUploadQueueWatchdog()
+				this.statusReporter.stopPeriodicReport()
+				this.batchSaveReporter.clearSession(sessionId)
+			},
+			stopRecordStatusChecker: () => this.recordStatusChecker.stop(),
+			releaseWakeLock: () => this.wakeLockManager.releaseWakeLock(),
+			removeVisibilityChangeListener: () =>
+				this.wakeLockManager.removeVisibilityChangeListener(),
+			removeBeforeUnloadListener: () => this.removeBeforeUnloadListener(),
+			releaseRecordingLock: () =>
+				this.tabCoordinator.releaseLock({
+					type: "finish",
+					data: {
+						message: [],
+						duration: "00:00:00",
+						isRecording: false,
+						sessionId,
+					},
+				}),
+			preserveSession: async () => {
+				if (this.sessionManager.getCurrentSession()?.id !== sessionId) return
+				const cancelledSession = this.sessionManager.markServerCancelledSession(
+					normalizedErrorCode,
+					terminationSource,
+				)
+				if (!cancelledSession) return
+
+				try {
+					this.recordingPersistence.saveSession(cancelledSession)
+					sessionPreserved = true
+				} catch (error) {
+					// Keep IndexedDB history/chunks, but never restore stale active metadata.
+					this.recordingPersistence.deleteSession(sessionId)
+					throw error
+				}
+				const queueStatus = await this.chunkUploader.getQueueStatus(sessionId)
+				logger.report("服务端自动总结后保留本地录音数据", {
+					sessionId,
+					errorCode: normalizedErrorCode,
+					status: cancelledSession.status,
+					queueStatus,
+					chunkIndex: cancelledSession.currentChunkIndex,
+				})
+			},
+			resetStore: () => {
+				const activeSession = this.sessionManager.getCurrentSession()
+				if (!activeSession || activeSession.id === sessionId) recordSummaryStore.reset()
+			},
+			reportError: (stage, error) => {
+				logger.error({
+					eventKey: "task_end_cleanup_failed",
+					errorKind: "unknown",
+					error,
+					message: `任务结束清理阶段失败：${stage}`,
+					context: { sessionId, errorCode: normalizedErrorCode },
+				})
+			},
+		})
+
+		if (normalizedErrorCode === ERROR_CODES.PROJECT_NOT_FOUND) {
+			magicToast.warning({
+				key: `recording-project-missing-${sessionId}`,
+				content: sessionPreserved
+					? i18n.t("recordingSummary.projectDeletion.projectMissing", { ns: "super" })
+					: i18n.t("recordingSummary.projectDeletion.projectMissingSaveFailed", {
+							ns: "super",
+						}),
+			})
+		}
+		logger.log("任务结束，本地录制实例已停止", { sessionId, sessionPreserved })
+	}
 	// ==== Wake Lock 相关处理方法 ====
 
 	/**
@@ -4510,6 +4530,8 @@ class RecordSummaryService {
 			})
 			if (options.throwOnMediaRecorderError) throw error
 		} finally {
+			// Terminal cleanup must release capture resources even when stop fails.
+			if (source === "task_end") this.mediaRecorderService.reset()
 			// Keep duration even when the media recorder fails to stop.
 			this.durationTracker.pause()
 			this.stopDurationUpdateTimer()

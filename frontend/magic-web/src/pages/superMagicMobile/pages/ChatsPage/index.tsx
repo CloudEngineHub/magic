@@ -1,3 +1,7 @@
+import {
+	canDeleteRecordingProjects,
+	handleRecordingProjectDeletionError,
+} from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { observer } from "mobx-react-lite"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useBoolean, useMemoizedFn } from "ahooks"
@@ -72,13 +76,15 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 
 	/** Execute the destructive operation only after the shared confirmation popup accepts it. */
 	const handleDeleteConversation = useMemoizedFn(async (project: ProjectListItem) => {
+		if (!canDeleteRecordingProjects([project.id])) return
 		try {
 			optimisticRemove(project.id)
 			await SuperMagicService.deleteProject(project, {
 				selectedProjectBehavior: "navigate-home",
 			})
 			await reload({ silent: true })
-		} catch {
+		} catch (error) {
+			if (handleRecordingProjectDeletionError(error)) return
 			await reload({ silent: true })
 			magicToast.error(t("super:chat.deleteChatDescription"))
 		}
