@@ -10,6 +10,7 @@ namespace HyperfTest\Cases\Unit;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
+use App\Domain\Asset\Entity\ValueObject\AssetVisibilityType;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
 use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
@@ -190,6 +191,8 @@ final class AssetRepositoryTest extends TestCase
     /**
      * 四种查询范围的条件拼装。
      *
+     * 个人范围按「归属人 + 可见类型」双条件判定，两者缺一不可。
+     *
      * 这里刻意传入 Model\Builder 的 mock：仓储的过滤器形参必须是它（模型查询返回的实例），
      * 写成 Query\Builder 会在运行时抛 TypeError——本用例就是这条约定的回归护栏。
      * 过滤器只读隔离对象的当前用户，用 mock 隔离对象即可，不必构造真实实例（会依赖容器）。
@@ -200,31 +203,39 @@ final class AssetRepositoryTest extends TestCase
 
         $personal = [];
         $this->recordScopeFilter(AssetScope::PERSONAL, [], $isolation, $personal);
-        self::assertSame([['where', ['user_id', 'user-1']]], $personal);
+        self::assertSame([
+            ['where', ['owner_uid', 'user-1']],
+            ['where', ['visibility_type', AssetVisibilityType::PERSONAL->value]],
+        ], $personal);
 
+        // 官方资产的判定仍然是 user_id IS NULL，不受归属人字段改名影响。
         $public = [];
         $this->recordScopeFilter(AssetScope::PUBLIC, [], $isolation, $public);
         self::assertSame([['whereNull', ['user_id']]], $public);
 
-        // 团队分享：别人创建 + 命中授权主键；空授权集时 whereIn([]) 自然产出恒假条件（空结果）。
+        // 团队分享：闭包内是「我创建的 OR 授权给我的」，闭包外再限定可见类型为团队分享。
         $team = [];
         $nested = $this->recordScopeFilter(AssetScope::TEAM, ['7', '9'], $isolation, $team);
+        self::assertCount(2, $team);
+        self::assertSame('where', $team[0][0]);
+        self::assertInstanceOf(Closure::class, $team[0][1][0]);
         self::assertSame([
-            ['where', ['user_id', '!=', 'user-1']],
-            ['whereIn', ['id', ['7', '9']]],
-        ], $team);
-        self::assertSame([], $nested);
+            ['where', ['visibility_type', AssetVisibilityType::TEAM->value]],
+        ], array_slice($team, 1));
+        self::assertSame([
+            ['where', ['owner_uid', 'user-1']],
+            ['orWhereIn', ['id', ['7', '9']]],
+        ], $nested);
 
+        // 空授权集时不产生空的 orWhereIn：闭包里只剩「我创建的」这一条。
         $teamEmpty = [];
-        $this->recordScopeFilter(AssetScope::TEAM, [], $isolation, $teamEmpty);
-        self::assertSame([
-            ['where', ['user_id', '!=', 'user-1']],
-            ['whereIn', ['id', []]],
-        ], $teamEmpty);
+        $nestedEmpty = $this->recordScopeFilter(AssetScope::TEAM, [], $isolation, $teamEmpty);
+        self::assertSame([['where', ['owner_uid', 'user-1']]], $nestedEmpty);
     }
 
     /**
-     * 全部范围 = 个人 ∪ 团队分享：外层套一个分组闭包，闭包内是「我创建的 OR 授权给我的」。
+     * 全部范围 = 个人 ∪ 团队分享：外层套一个分组闭包，闭包内是「我创建的 OR 授权给我的」，
+     * 闭包外再限定可见类型属于这两种范围之一。
      */
     public function testApplyScopeFilterWrapsPersonalAndSharedInNestedGroup(): void
     {
@@ -232,18 +243,22 @@ final class AssetRepositoryTest extends TestCase
 
         $outer = [];
         $inner = $this->recordScopeFilter(AssetScope::ALL, ['7'], $isolation, $outer);
-        self::assertCount(1, $outer);
+        self::assertCount(2, $outer);
         self::assertSame('where', $outer[0][0]);
         self::assertInstanceOf(Closure::class, $outer[0][1][0]);
+        self::assertSame([[
+            'whereIn',
+            ['visibility_type', [AssetVisibilityType::PERSONAL->value, AssetVisibilityType::TEAM->value]],
+        ]], array_slice($outer, 1));
         self::assertSame([
-            ['where', ['user_id', 'user-1']],
+            ['where', ['owner_uid', 'user-1']],
             ['orWhereIn', ['id', ['7']]],
         ], $inner);
 
         // 没有授权资产时不产生空的 orWhereIn。
         $outerEmpty = [];
         $innerEmpty = $this->recordScopeFilter(AssetScope::ALL, [], $isolation, $outerEmpty);
-        self::assertSame([['where', ['user_id', 'user-1']]], $innerEmpty);
+        self::assertSame([['where', ['owner_uid', 'user-1']]], $innerEmpty);
     }
 
     /**

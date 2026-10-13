@@ -202,6 +202,8 @@ Router::addGroup('/api/v1/admin', static function () {
     Router::addGroup('/assets', static function (): void {
         Router::post('', [AdminAssetApi::class, 'create']);
         Router::post('/queries', [AdminAssetApi::class, 'queries']);
+        // 第三方素材 / 素材组占用数量（配额核对）。
+        Router::get('/provider-resource-usage', [AdminAssetApi::class, 'providerResourceUsage']);
         Router::get('/tags', [AdminAssetApi::class, 'tags']);
         Router::post('/tags', [AdminAssetApi::class, 'createTag']);
         Router::put('/tags/{tagId:\d+}', [AdminAssetApi::class, 'updateTag']);

@@ -350,6 +350,8 @@ use App\Infrastructure\Util\Locker\RedisLocker;
 use App\Infrastructure\Util\OrganizationEnvironment\Repository\OrganizationRepository;
 use App\Infrastructure\Util\Permission\Repository\OrganizationAdminRepository;
 use App\Infrastructure\Util\Permission\Repository\RoleRepository;
+use App\Infrastructure\Util\Video\FfmpegVideoFrameExtractor;
+use App\Infrastructure\Util\Video\VideoFrameExtractorInterface;
 use App\Interfaces\MCP\Facade\HttpTransportHandler\ApiKeyProviderAuthenticator;
 use Dtyq\PhpMcp\Shared\Auth\AuthenticatorInterface;
 use Dtyq\PhpMcp\Shared\Kernel\Packer\PackerInterface;
@@ -516,6 +518,7 @@ $dependencies = [
     AssetTagRelationRepositoryInterface::class => AssetTagRelationRepository::class,
     AssetProviderAssetRepositoryInterface::class => AssetProviderAssetRepository::class,
     AssetAgreementRepositoryInterface::class => AssetAgreementRepository::class,
+    VideoFrameExtractorInterface::class => FfmpegVideoFrameExtractor::class,
 
     // audit (操作日志)
     AdminOperationLogRepositoryInterface::class => AdminOperationLogRepository::class,

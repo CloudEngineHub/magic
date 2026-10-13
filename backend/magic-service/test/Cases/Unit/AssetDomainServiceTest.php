@@ -12,7 +12,8 @@ use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
-use App\Domain\Asset\Entity\ValueObject\AssetSyncStatus;
+use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
+use App\Domain\Asset\Entity\ValueObject\ProviderReviewMode;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Repository\Facade\AssetAgreementRepositoryInterface;
 use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
@@ -20,6 +21,8 @@ use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
 use App\Domain\Asset\Repository\Persistence\Model\AssetProviderAssetModel;
 use App\Domain\Asset\Service\AssetDomainService;
+use App\Domain\Asset\Service\AssetSearchTextBuilder;
+use App\Domain\Asset\Service\AssetTagDomainService;
 use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\ResourceVisibilityRepositoryInterface;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
@@ -30,6 +33,7 @@ use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\Asset\Assembler\AssetAssembler;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use Hyperf\Context\ApplicationContext;
+use Hyperf\Context\Context;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Contract\TranslatorInterface;
 use PHPUnit\Framework\TestCase;
@@ -52,6 +56,8 @@ final class AssetDomainServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // 裸 PHPUnit 跑在 Swow 主协程里，Context 是进程级共享，需清掉上一个用例残留的缓存。
+        Context::destroy(AssetDomainService::PROVIDER_CONTEXT_KEY);
         if (ApplicationContext::hasContainer()) {
             $this->containerBeforeTest = ApplicationContext::getContainer();
         }
@@ -171,8 +177,8 @@ final class AssetDomainServiceTest extends TestCase
             $method->getParameters(),
         );
 
-        // 落库阶段不再接收第三方映射：映射改由同步阶段在拿到凭证后各自写入。
-        self::assertSame(['dataIsolation', 'asset', 'syncStatus'], $names);
+        // 落库阶段不接收第三方映射：映射在同步阶段拿到凭证后各自写入，资产主表不感知第三方生命周期。
+        self::assertSame(['dataIsolation', 'asset'], $names);
     }
 
     public function testOfficialAssetDetailIsReadableWithoutUserOwnerFilter(): void
@@ -198,16 +204,13 @@ final class AssetDomainServiceTest extends TestCase
         self::assertSame('official', $result->getOrganizationCode());
     }
 
-    public function testUnsyncedAssetDetailIsReadableForOwner(): void
+    public function testAssetWithFailedComplianceIsStillReadableForOwner(): void
     {
-        $model = $this->assetModel([
-            'id' => 5,
-            'sync_status' => AssetSyncStatus::FAILED->value,
-        ]);
+        $model = $this->assetModel(['id' => 5]);
         $repository = $this->createMock(AssetRepositoryInterface::class);
         $repository->method('findById')->willReturn(new AssetEntity($model->toArray()));
 
-        // 列表不再过滤未同步记录，详情同步放开，否则列表可见但点不开；
+        // 列表不再按第三方状态过滤，详情同步放开，否则列表可见但点不开；
         // 校验状态与失败原因由响应层的 compliance_status / compliance_failed_reason 表达。
         $asset = $this->domainService($repository)->find(
             $this->dataIsolation('org-a', 'user-a', ['org-a', 'official']),
@@ -215,7 +218,6 @@ final class AssetDomainServiceTest extends TestCase
         );
         self::assertNotNull($asset);
         self::assertSame(5, $asset->getId());
-        self::assertSame(AssetSyncStatus::FAILED, $asset->getSyncStatus());
     }
 
     public function testOtherUsersPersonalAssetIsNotReadable(): void
@@ -290,14 +292,8 @@ final class AssetDomainServiceTest extends TestCase
                 self::callback(static fn (AssetEntity $asset): bool => $asset->getId() === 3),
             )
             ->willReturn(true);
-        $service = new AssetDomainService(
-            $repository,
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $this->acceptedAgreement(),
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
+        // 官方组织下的公开资产没有第三方映射，删除只走本地。
+        $service = $this->domainService($repository);
 
         self::assertTrue($service->deletePublic(
             $this->dataIsolation('official', 'admin-a', ['official']),
@@ -317,14 +313,7 @@ final class AssetDomainServiceTest extends TestCase
             'user_id' => 'user-a',
         ])->toArray()));
         $repository->expects(self::never())->method('update');
-        $service = new AssetDomainService(
-            $repository,
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $this->acceptedAgreement(),
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
+        $service = $this->domainService($repository);
 
         self::assertNull($service->updatePublic(
             $this->dataIsolation('official', 'admin-a', ['official']),
@@ -340,6 +329,7 @@ final class AssetDomainServiceTest extends TestCase
         $service = new AdminAssetAppService(
             $domainService,
             $this->visibilityDomainService(),
+            $this->createMock(AssetTagDomainService::class),
         );
 
         $this->expectException(BusinessException::class);
@@ -349,14 +339,14 @@ final class AssetDomainServiceTest extends TestCase
         );
     }
 
-    public function testComplianceTimeoutMarksAssetFailedWithoutRecycling(): void
+    public function testComplianceTimeoutMarksProviderMappingFailedWithoutRecycling(): void
     {
         $logger = $this->collectingLogger();
         $provider = $this->createMock(AssetProviderInterface::class);
         $provider->method('getProviderCode')->willReturn('ark');
         $provider->expects(self::once())
             ->method('createAssetGroup')
-            ->willReturn(['provider_group_id' => 'group-default']);
+            ->willReturn(['provider_group_id' => 'group-timeout']);
         $provider->expects(self::once())
             ->method('createAsset')
             ->willReturn(['provider_asset_id' => 'asset-timeout', 'provider_status' => 'PROCESSING']);
@@ -369,37 +359,30 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::never())->method('deleteAsset');
         $provider->expects(self::never())->method('deleteAssetGroup');
 
+        $statuses = [];
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        $providerAssets->method('saveMapping')->willReturn($this->createMock(AssetProviderAssetModel::class));
-
-        $syncStatuses = [];
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->expects(self::once())->method('save')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset): AssetEntity {
-                self::assertSame(AssetSyncStatus::PENDING, $asset->getSyncStatus());
-                $asset->setId(51);
-                return $asset;
-            }
-        );
-        $assets->method('update')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset) use (&$syncStatuses): AssetEntity {
-                $syncStatuses[] = $asset->getSyncStatus();
-                return $asset;
+        $providerAssets->method('findMapping')->willReturn(null);
+        $providerAssets->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$statuses): AssetProviderAssetModel {
+                $statuses[] = $mapping->getProviderStatus();
+                return $this->createMock(AssetProviderAssetModel::class);
             }
         );
 
         try {
-            $this->serviceWithFakedPolling($assets, $provider, $providerAssets, $logger, 1)->createPersonal(
-                $this->dataIsolation('org-a', 'user-a', ['org-a']),
+            $this->serviceWithFakedPolling($this->savingAssets(51), $provider, $providerAssets, $logger, 1)->createPublic(
+                $this->dataIsolation('official', 'user-a', ['official']),
                 new AssetEntity(['file_key' => 'asset.png']),
             );
-            self::fail('合规回查超时必须抛出 COMPLIANCE_TIMEOUT');
+            self::fail('合规回查超时必须向上抛出');
         } catch (BusinessException $exception) {
+            // 超时是独立的业务错误码：调用方要能把它和「第三方给了否定结论」区分开。
             self::assertSame(AssetErrorCode::COMPLIANCE_TIMEOUT->value, $exception->getCode());
         }
 
-        // 先落库、再同步、失败只回写状态：资产不被回滚删除，远程资源也不回收。
-        self::assertSame([AssetSyncStatus::SYNCING, AssetSyncStatus::FAILED], $syncStatuses);
+        // 先落库、再同步、失败只回写映射状态：本地资产不被回滚删除，远程资源也不回收。
+        self::assertSame(ProviderAssetStatus::PROCESSING, $statuses[0]);
+        self::assertSame(ProviderAssetStatus::FAILED, end($statuses));
         self::assertNotNull($this->findLogRecord($logger, '第三方素材合规回查超时'));
     }
 
@@ -409,14 +392,14 @@ final class AssetDomainServiceTest extends TestCase
         $agreement->expects(self::once())->method('hasAccepted')->willReturn(false);
         $provider = $this->createMock(AssetProviderInterface::class);
         $provider->expects(self::never())->method('createAsset');
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->expects(self::never())->method('saveMapping');
 
-        $service = new AssetDomainService(
+        $service = $this->domainService(
             $this->createMock(AssetRepositoryInterface::class),
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $agreement,
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
+            $providerAssets,
             $provider,
+            $agreement,
         );
 
         $this->expectException(BusinessException::class);
@@ -427,7 +410,7 @@ final class AssetDomainServiceTest extends TestCase
         );
     }
 
-    public function testSaveToLibraryPersistsAsSyncedWithoutProviderSync(): void
+    public function testSaveToLibrarySkipsProviderEntirely(): void
     {
         $persisted = null;
         $assets = $this->createMock(AssetRepositoryInterface::class);
@@ -437,32 +420,23 @@ final class AssetDomainServiceTest extends TestCase
                 return $asset;
             }
         );
-        // 保存到素材库不碰第三方：不建组、不建素材、也不要求先签素材协议，并保持待校验状态。
+        // 保存到素材库不碰第三方：不建组、不建素材、不写映射，也不要求先签素材协议。
         $provider = $this->createMock(AssetProviderInterface::class);
         $provider->expects(self::never())->method('createAsset');
         $provider->expects(self::never())->method('createAssetGroup');
         $agreement = $this->createMock(AssetAgreementRepositoryInterface::class);
         $agreement->expects(self::never())->method('hasAccepted');
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->expects(self::never())->method('saveMapping');
 
-        $service = new AssetDomainService(
-            $assets,
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $agreement,
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $provider,
-        );
-
-        $result = $service->saveToLibrary(
+        $result = $this->domainService($assets, $providerAssets, $provider, $agreement)->saveToLibrary(
             $this->dataIsolation('org-a', 'user-a', ['org-a']),
             new AssetEntity(['file_key' => 'a.png']),
         );
 
-        self::assertSame(AssetSyncStatus::PENDING, $result->getSyncStatus());
         self::assertSame('user-a', $result->getUserId());
         self::assertSame('org-a', $result->getOrganizationCode());
         self::assertNotNull($persisted);
-        self::assertSame(AssetSyncStatus::PENDING, $persisted->getSyncStatus());
     }
 
     public function testSigningAlreadyAcceptedAgreementIsIdempotent(): void
@@ -471,14 +445,7 @@ final class AssetDomainServiceTest extends TestCase
         $agreement->expects(self::once())->method('hasAccepted')->willReturn(true);
         $agreement->expects(self::never())->method('markAccepted');
 
-        $service = new AssetDomainService(
-            $this->createMock(AssetRepositoryInterface::class),
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $agreement,
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
+        $service = $this->domainService($this->createMock(AssetRepositoryInterface::class), null, null, $agreement);
 
         $service->signAgreement($this->dataIsolation('org-a', 'user-a', ['org-a']));
     }
@@ -491,12 +458,6 @@ final class AssetDomainServiceTest extends TestCase
             static function (AssetDataIsolation $isolation, AssetEntity $asset) use (&$calls): AssetEntity {
                 $calls[] = 'save';
                 $asset->setId(61);
-                return $asset;
-            }
-        );
-        $assets->method('update')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset) use (&$calls): AssetEntity {
-                $calls[] = 'update';
                 return $asset;
             }
         );
@@ -514,14 +475,15 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::once())->method('createAsset')->willReturnCallback(
             function () use (&$calls): array {
                 $calls[] = 'createAsset';
-                return ['provider_asset_id' => 'asset-61', 'provider_status' => 'ACTIVE'];
+                return ['provider_asset_id' => 'asset-61', 'provider_status' => 'PASS'];
             }
         );
 
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn(null);
         $providerAssets->method('saveMapping')->willReturn($this->createMock(AssetProviderAssetModel::class));
 
-        $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
+        $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPublic(
             $this->dataIsolation('org-a', 'user-a', ['org-a']),
             new AssetEntity(['file_key' => 'a.png']),
         );
@@ -539,58 +501,65 @@ final class AssetDomainServiceTest extends TestCase
 
     public function testProviderGroupCredentialIsPersistedBeforeAssetCreation(): void
     {
-        $sequence = [];
+        $providerCalls = [];
         $provider = $this->createMock(AssetProviderInterface::class);
         $provider->method('getProviderCode')->willReturn('ark');
         $provider->expects(self::once())
             ->method('createAssetGroup')
-            ->willReturnCallback(function () use (&$sequence): array {
-                $sequence[] = 'createAssetGroup';
+            ->willReturnCallback(function () use (&$providerCalls): array {
+                $providerCalls[] = 'createAssetGroup';
                 return ['provider_group_id' => 'group-71'];
             });
         $provider->expects(self::once())
             ->method('createAsset')
-            ->willReturnCallback(function () use (&$sequence): array {
-                $sequence[] = 'createAsset';
-                return ['provider_asset_id' => 'asset-71', 'provider_status' => 'ACTIVE'];
+            ->willReturnCallback(function () use (&$providerCalls): array {
+                $providerCalls[] = 'createAsset';
+                return ['provider_asset_id' => 'asset-71', 'provider_status' => 'PASS'];
             });
 
+        $writes = [];
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        // 两次写同一行：先只带组凭证，再由素材凭证 upsert 补齐。
-        $persistedAssetIds = [];
-        $providerAssets->expects(self::exactly(2))->method('saveMapping')->willReturnCallback(
-            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$sequence, &$persistedAssetIds): AssetProviderAssetModel {
-                $sequence[] = $mapping->getProviderAssetId() === '' ? 'persistGroup' : 'persistAsset';
-                $persistedAssetIds[] = $mapping->getAssetId();
+        $providerAssets->method('findMapping')->willReturn(null);
+        // 三行都落在素材自己的 asset_id 上：先立起处理中的映射，再补组凭证，最后由素材凭证补齐。
+        $providerAssets->expects(self::exactly(3))->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$writes): AssetProviderAssetModel {
+                $writes[] = [
+                    $mapping->getAssetId(),
+                    $mapping->getProviderAssetId(),
+                    $mapping->getProviderGroupId(),
+                    $mapping->getProviderStatus()->value,
+                ];
                 return $this->createMock(AssetProviderAssetModel::class);
             }
         );
 
-        $this->serviceWithFakedPolling($this->savingAssets(71), $provider, $providerAssets)->createPersonal(
+        $this->serviceWithFakedPolling($this->savingAssets(71), $provider, $providerAssets)->createPublic(
             $this->dataIsolation('org-a', 'user-a', ['org-a']),
             new AssetEntity(['file_key' => 'a.png']),
         );
 
+        self::assertSame(['createAssetGroup', 'createAsset'], $providerCalls);
         // 组凭证必须在素材创建之前落库，否则中途失败就再也追不回这个组。
-        self::assertSame(['createAssetGroup', 'persistGroup', 'createAsset', 'persistAsset'], $sequence);
-        // 专属素材组不再单独占一行：组与素材的凭证都挂在素材自己的映射行上。
-        self::assertSame([71, 71], $persistedAssetIds);
+        self::assertSame([
+            [71, '', null, 'PROCESSING'],
+            [71, '', 'group-71', 'PROCESSING'],
+            [71, 'asset-71', 'group-71', 'PASS'],
+        ], $writes);
     }
 
-    public function testAssetGroupCredentialPersistFailureMarksAssetFailed(): void
+    public function testAssetGroupCredentialPersistFailureMarksProviderMappingFailed(): void
     {
-        $syncStatuses = [];
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->expects(self::once())->method('save')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset): AssetEntity {
-                $asset->setId(81);
-                return $asset;
-            }
-        );
-        $assets->method('update')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset) use (&$syncStatuses): AssetEntity {
-                $syncStatuses[] = $asset->getSyncStatus();
-                return $asset;
+        $statuses = [];
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn(null);
+        $providerAssets->expects(self::exactly(3))->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$statuses): AssetProviderAssetModel {
+                $statuses[] = $mapping->getProviderStatus();
+                if (count($statuses) === 2) {
+                    // 第二次写入是素材组凭证：这一行没落库，远程建好的组就失去了本地依据。
+                    throw new RuntimeException('映射表不可用');
+                }
+                return $this->createMock(AssetProviderAssetModel::class);
             }
         );
 
@@ -605,39 +574,29 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::never())->method('deleteAsset');
         $provider->expects(self::never())->method('deleteAssetGroup');
 
-        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        $providerAssets->expects(self::once())
-            ->method('saveMapping')
-            ->willThrowException(new RuntimeException('映射表不可用'));
-
         try {
-            $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
+            $this->serviceWithFakedPolling($this->savingAssets(81), $provider, $providerAssets)->createPublic(
                 $this->dataIsolation('org-a', 'user-a', ['org-a']),
                 new AssetEntity(['file_key' => 'a.png']),
             );
-            self::fail('专属素材组凭证写入失败必须向上抛出');
+            self::fail('素材组凭证写入失败必须向上抛出');
         } catch (RuntimeException $exception) {
             self::assertSame('映射表不可用', $exception->getMessage());
         }
 
-        // 资产留在库里并标记失败：列表按同步状态过滤，用户看不到，但失败原因可查。
-        self::assertSame([AssetSyncStatus::SYNCING, AssetSyncStatus::FAILED], $syncStatuses);
+        // 本地资产保留并标记失败：状态写在映射表上，用户看不到通过，失败原因可查。
+        self::assertSame(ProviderAssetStatus::FAILED, end($statuses));
     }
 
-    public function testProviderAssetResponseWithoutIdMarksAssetFailed(): void
+    public function testProviderAssetResponseWithoutIdMarksProviderMappingFailed(): void
     {
-        $syncStatuses = [];
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->expects(self::once())->method('save')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset): AssetEntity {
-                $asset->setId(82);
-                return $asset;
-            }
-        );
-        $assets->method('update')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset) use (&$syncStatuses): AssetEntity {
-                $syncStatuses[] = $asset->getSyncStatus();
-                return $asset;
+        $statuses = [];
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn(null);
+        $providerAssets->expects(self::exactly(3))->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$statuses): AssetProviderAssetModel {
+                $statuses[] = $mapping->getProviderStatus();
+                return $this->createMock(AssetProviderAssetModel::class);
             }
         );
 
@@ -649,16 +608,10 @@ final class AssetDomainServiceTest extends TestCase
         // 响应里没有素材 ID，无从登记映射。
         $provider->expects(self::once())
             ->method('createAsset')
-            ->willReturn(['provider_status' => 'ACTIVE']);
-
-        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        // 只写了专属素材组那一行：拿不到素材 ID 就抛错，不会再补写素材凭证。
-        $providerAssets->expects(self::once())
-            ->method('saveMapping')
-            ->willReturn($this->createMock(AssetProviderAssetModel::class));
+            ->willReturn(['provider_status' => 'PASS']);
 
         try {
-            $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
+            $this->serviceWithFakedPolling($this->savingAssets(82), $provider, $providerAssets)->createPublic(
                 $this->dataIsolation('org-a', 'user-a', ['org-a']),
                 new AssetEntity(['file_key' => 'a.png']),
             );
@@ -667,7 +620,7 @@ final class AssetDomainServiceTest extends TestCase
             self::assertSame(AssetErrorCode::PROVIDER_RESPONSE_INVALID->value, $exception->getCode());
         }
 
-        self::assertSame([AssetSyncStatus::SYNCING, AssetSyncStatus::FAILED], $syncStatuses);
+        self::assertSame(ProviderAssetStatus::FAILED, end($statuses));
     }
 
     public function testUnverifiableProviderStatusKeepsPollingUntilTimeout(): void
@@ -687,14 +640,15 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::never())->method('deleteAssetGroup');
 
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn(null);
         $providerAssets->method('saveMapping')->willReturn($this->createMock(AssetProviderAssetModel::class));
 
         try {
-            $this->serviceWithFakedPolling($this->savingAssets(91), $provider, $providerAssets, $logger, 3)->createPersonal(
+            $this->serviceWithFakedPolling($this->savingAssets(91), $provider, $providerAssets, $logger, 3)->createPublic(
                 $this->dataIsolation('org-a', 'user-a', ['org-a']),
                 new AssetEntity(['file_key' => 'a.png']),
             );
-            self::fail('回查始终没有结论时必须抛出 COMPLIANCE_TIMEOUT');
+            self::fail('回查始终没有结论时必须抛出同步失败');
         } catch (BusinessException $exception) {
             self::assertSame(AssetErrorCode::COMPLIANCE_TIMEOUT->value, $exception->getCode());
         }
@@ -703,22 +657,11 @@ final class AssetDomainServiceTest extends TestCase
         self::assertNotNull($this->findLogRecord($logger, '第三方素材合规回查超时'));
     }
 
-    public function testFailedComplianceMarksAssetFailed(): void
+    public function testFailedComplianceMarksProviderMappingFailed(): void
     {
-        $syncStatuses = [];
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->expects(self::once())->method('save')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset): AssetEntity {
-                $asset->setId(83);
-                return $asset;
-            }
-        );
-        $assets->method('update')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset) use (&$syncStatuses): AssetEntity {
-                $syncStatuses[] = $asset->getSyncStatus();
-                return $asset;
-            }
-        );
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn(null);
+        $providerAssets->method('saveMapping')->willReturn($this->createMock(AssetProviderAssetModel::class));
 
         $provider = $this->createMock(AssetProviderInterface::class);
         $provider->method('getProviderCode')->willReturn('ark');
@@ -733,11 +676,8 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::never())->method('deleteAsset');
         $provider->expects(self::never())->method('deleteAssetGroup');
 
-        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        $providerAssets->method('saveMapping')->willReturn($this->createMock(AssetProviderAssetModel::class));
-
         try {
-            $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
+            $this->serviceWithFakedPolling($this->savingAssets(83), $provider, $providerAssets)->createPublic(
                 $this->dataIsolation('org-a', 'user-a', ['org-a']),
                 new AssetEntity(['file_key' => 'a.png']),
             );
@@ -745,22 +685,18 @@ final class AssetDomainServiceTest extends TestCase
         } catch (BusinessException $exception) {
             self::assertSame(AssetErrorCode::COMPLIANCE_FAILED->value, $exception->getCode());
         }
-
-        self::assertSame([AssetSyncStatus::SYNCING, AssetSyncStatus::FAILED], $syncStatuses);
     }
 
     public function testGroupAssetSkipsProviderEntirely(): void
     {
-        $saveStatuses = [];
         $assets = $this->createMock(AssetRepositoryInterface::class);
         $assets->expects(self::once())->method('save')->willReturnCallback(
-            static function (AssetDataIsolation $isolation, AssetEntity $asset) use (&$saveStatuses): AssetEntity {
-                $saveStatuses[] = $asset->getSyncStatus();
+            static function (AssetDataIsolation $isolation, AssetEntity $asset): AssetEntity {
                 $asset->setId(21);
                 return $asset;
             }
         );
-        // 素材组落库即终态，不该再有同步状态回写。
+        // 素材组只有本地层级：既没有第三方资源，也没有映射行。
         $assets->expects(self::never())->method('update');
 
         $provider = $this->createMock(AssetProviderInterface::class);
@@ -770,12 +706,11 @@ final class AssetDomainServiceTest extends TestCase
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
         $providerAssets->expects(self::never())->method('saveMapping');
 
-        $result = $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
+        $result = $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPublic(
             $this->dataIsolation('org-a', 'user-a', ['org-a']),
             new AssetEntity(['asset_kind' => 'GROUP', 'name_i18n' => ['default' => '小灯']]),
         );
 
-        self::assertSame([AssetSyncStatus::SYNCED], $saveStatuses);
         self::assertSame(21, $result->getId());
     }
 
@@ -789,13 +724,13 @@ final class AssetDomainServiceTest extends TestCase
             'name_i18n' => ['default' => '父组'],
         ]));
 
-        $persisted = [];
+        $writes = [];
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
         // 首次同步：本素材还没有第三方凭证，查不到可续用的映射。
         $providerAssets->expects(self::once())->method('findMapping')->willReturn(null);
-        $providerAssets->expects(self::exactly(2))->method('saveMapping')->willReturnCallback(
-            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$persisted): AssetProviderAssetModel {
-                $persisted[] = [$mapping->getAssetId(), $mapping->getProviderGroupId()];
+        $providerAssets->expects(self::exactly(3))->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$writes): AssetProviderAssetModel {
+                $writes[] = [$mapping->getAssetId(), $mapping->getProviderGroupId()];
                 return $this->createMock(AssetProviderAssetModel::class);
             }
         );
@@ -810,16 +745,16 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::once())
             ->method('createAsset')
             ->with(self::callback(static fn (array $payload): bool => $payload['group_id'] === 'group-31'))
-            ->willReturn(['provider_asset_id' => 'asset-31', 'provider_status' => 'ACTIVE']);
+            ->willReturn(['provider_asset_id' => 'asset-31', 'provider_status' => 'PASS']);
         $provider->expects(self::never())->method('getAssetStatus');
 
-        $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
+        $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPublic(
             $this->dataIsolation('org-a', 'user-a', ['org-a']),
             new AssetEntity(['file_key' => 'a.png', 'parent_id' => 11, 'name_i18n' => ['default' => '头像.png']]),
         );
 
-        // 组凭证先写、素材凭证后写，但两行都落在素材自己的 asset_id 上。
-        self::assertSame([[31, 'group-31'], [31, 'group-31']], $persisted);
+        // 三行都落在素材自己的 asset_id 上：处理中 → 组凭证 → 素材凭证。
+        self::assertSame([[31, null], [31, 'group-31'], [31, 'group-31']], $writes);
     }
 
     public function testProviderMetadataKeepsRawResponseInsteadOfMappedWrapper(): void
@@ -830,7 +765,8 @@ final class AssetDomainServiceTest extends TestCase
         ];
         $metadata = [];
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        $providerAssets->expects(self::exactly(2))->method('saveMapping')->willReturnCallback(
+        $providerAssets->method('findMapping')->willReturn(null);
+        $providerAssets->expects(self::exactly(3))->method('saveMapping')->willReturnCallback(
             function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$metadata): AssetProviderAssetModel {
                 $metadata[] = $mapping->getMetadata();
                 return $this->createMock(AssetProviderAssetModel::class);
@@ -843,30 +779,30 @@ final class AssetDomainServiceTest extends TestCase
             ->willReturn(['provider_group_id' => 'group-51']);
         $provider->expects(self::once())->method('createAsset')->willReturn([
             'provider_asset_id' => 'asset-51',
-            'provider_status' => 'ACTIVE',
+            'provider_status' => 'PASS',
             'metadata' => $rawResponse,
         ]);
 
-        $this->serviceWithFakedPolling($this->savingAssets(51), $provider, $providerAssets)->createPersonal(
+        $this->serviceWithFakedPolling($this->savingAssets(51), $provider, $providerAssets)->createPublic(
             $this->dataIsolation('org-a', 'user-a', ['org-a']),
             new AssetEntity(['file_key' => 'a.png']),
         );
 
-        // 组凭证那行还没有素材，metadata 为空；素材凭证那行只留第三方原始响应，
+        // 前两行还没有素材，metadata 为空；素材凭证那行只留第三方原始响应，
         // 不把 provider_asset_id / provider_status 在 metadata 列里再抄一遍。
-        self::assertSame([null, $rawResponse], $metadata);
+        self::assertSame([null, null, $rawResponse], $metadata);
     }
 
     public function testAssetWithoutParentAlsoCreatesItsOwnProviderGroup(): void
     {
+        $writes = [];
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
         // 不再有组织默认素材组：没有父组的素材同样自带一个专属组。
         // 首次同步：本素材还没有第三方凭证，查不到可续用的映射。
         $providerAssets->expects(self::once())->method('findMapping')->willReturn(null);
-        $providerAssets->expects(self::exactly(2))->method('saveMapping')->willReturnCallback(
-            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping): AssetProviderAssetModel {
-                self::assertSame(41, $mapping->getAssetId());
-                self::assertSame('group-41', $mapping->getProviderGroupId());
+        $providerAssets->expects(self::exactly(3))->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$writes): AssetProviderAssetModel {
+                $writes[] = [$mapping->getAssetId(), $mapping->getProviderGroupId()];
                 return $this->createMock(AssetProviderAssetModel::class);
             }
         );
@@ -879,12 +815,14 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::once())
             ->method('createAsset')
             ->with(self::callback(static fn (array $payload): bool => $payload['group_id'] === 'group-41'))
-            ->willReturn(['provider_asset_id' => 'asset-41', 'provider_status' => 'ACTIVE']);
+            ->willReturn(['provider_asset_id' => 'asset-41', 'provider_status' => 'PASS']);
 
-        $this->serviceWithFakedPolling($this->savingAssets(41), $provider, $providerAssets)->createPersonal(
+        $this->serviceWithFakedPolling($this->savingAssets(41), $provider, $providerAssets)->createPublic(
             $this->dataIsolation('org-a', 'user-a', ['org-a']),
             new AssetEntity(['file_key' => 'a.png', 'name_i18n' => ['default' => '风格.png']]),
         );
+
+        self::assertSame([[41, null], [41, 'group-41'], [41, 'group-41']], $writes);
     }
 
     public function testUnnamedAssetStillGetsANamedProviderGroup(): void
@@ -898,11 +836,12 @@ final class AssetDomainServiceTest extends TestCase
             ->willReturn(['provider_group_id' => 'group-51']);
         $provider->expects(self::once())
             ->method('createAsset')
-            ->willReturn(['provider_asset_id' => 'asset-51', 'provider_status' => 'ACTIVE']);
+            ->willReturn(['provider_asset_id' => 'asset-51', 'provider_status' => 'PASS']);
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn(null);
         $providerAssets->method('saveMapping')->willReturn($this->createMock(AssetProviderAssetModel::class));
 
-        $this->serviceWithFakedPolling($this->savingAssets(51), $provider, $providerAssets)->createPersonal(
+        $this->serviceWithFakedPolling($this->savingAssets(51), $provider, $providerAssets)->createPublic(
             $this->dataIsolation('org-a', 'user-a', ['org-a']),
             new AssetEntity(['file_key' => 'a.png']),
         );
@@ -923,7 +862,7 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::never())->method('createAsset');
 
         try {
-            $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
+            $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPublic(
                 $this->dataIsolation('org-a', 'user-a', ['org-a']),
                 new AssetEntity(['file_key' => 'a.png', 'parent_id' => 99]),
             );
@@ -950,7 +889,7 @@ final class AssetDomainServiceTest extends TestCase
                 $assets,
                 $provider,
                 $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            )->createPersonal(
+            )->createPublic(
                 $this->dataIsolation('org-a', 'user-a', ['org-a']),
                 new AssetEntity(['file_key' => 'a.png', 'parent_id' => 12]),
             );
@@ -960,18 +899,18 @@ final class AssetDomainServiceTest extends TestCase
         }
     }
 
-    public function testSyncStatusToleratesLegacyNumbersAndAnyCase(): void
+    public function testProviderStatusToleratesAnyCaseAndUnknownReviewMode(): void
     {
-        self::assertSame(AssetSyncStatus::SYNCED, AssetSyncStatus::fromValue('synced'));
-        self::assertSame(AssetSyncStatus::FAILED, AssetSyncStatus::fromValue('Failed'));
-        // 改造前这一列是 tinyint，历史行读出来是 '0'..'3'。
-        self::assertSame(AssetSyncStatus::PENDING, AssetSyncStatus::fromValue(0));
-        self::assertSame(AssetSyncStatus::SYNCED, AssetSyncStatus::fromValue('2'));
-        // 无法识别的取值一律按待同步处理：不对外展示，也不会把列表查询打断。
-        self::assertSame(AssetSyncStatus::PENDING, AssetSyncStatus::fromValue(''));
-        self::assertSame(AssetSyncStatus::PENDING, AssetSyncStatus::fromValue('whatever'));
+        self::assertSame(ProviderAssetStatus::PASS, ProviderAssetStatus::fromValue('pass'));
+        self::assertSame(ProviderAssetStatus::FAILED, ProviderAssetStatus::fromValue('Failed'));
+        self::assertSame(ProviderAssetStatus::PROCESSING, ProviderAssetStatus::fromValue(' processing '));
+        self::assertSame(ProviderAssetStatus::PASS, (new ProviderAssetEntity(['provider_status' => 'PASS']))->getProviderStatus());
 
-        self::assertSame(AssetSyncStatus::FAILED, (new AssetEntity(['sync_status' => '3']))->getSyncStatus());
+        // 未知的结论来源一律退回火山：新增枚举值不能让老数据读取直接抛错。
+        self::assertSame(ProviderReviewMode::NO_PERSON, ProviderReviewMode::fromValue('no_person'));
+        self::assertSame(ProviderReviewMode::REUSED, ProviderReviewMode::fromValue('Reused'));
+        self::assertSame(ProviderReviewMode::VOLCENGINE, ProviderReviewMode::fromValue('whatever'));
+        self::assertSame(ProviderReviewMode::VOLCENGINE, ProviderReviewMode::fromValue(null));
     }
 
     public function testDuplicateContentReusesProviderAssetInsteadOfReuploading(): void
@@ -986,150 +925,171 @@ final class AssetDomainServiceTest extends TestCase
             'project_name' => 'default',
             'provider_group_id' => 'group-50',
             'provider_asset_id' => 'asset-50',
-            'provider_status' => 'ACTIVE',
+            'provider_status' => 'PASS',
         ]);
 
+        $writes = [];
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn(null);
         $providerAssets->method('findReusableMappingByAssetIds')
             ->with([50], 'ark', 'default')
             ->willReturn($reusable);
-        // 复用只写一行映射（绑定到已审核通过的第三方素材），不触发任何第三方创建。
-        $providerAssets->expects(self::once())->method('saveMapping')->willReturn($this->createMock(AssetProviderAssetModel::class));
-
-        $provider = $this->createMock(AssetProviderInterface::class);
-        $provider->method('getProviderCode')->willReturn('ark');
-        $provider->expects(self::never())->method('createAssetGroup');
-        $provider->expects(self::never())->method('createAsset');
-        $provider->expects(self::never())->method('getAssetStatus');
-
-        $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
-            $this->dataIsolation('org-a', 'user-a', ['org-a']),
-            new AssetEntity(['file_key' => 'a.png', 'content_hash' => 'sha256:abc']),
-        );
-    }
-
-    public function testCreatingPersonalAssetWithSameSyncedContentReusesExistingRecord(): void
-    {
-        $existing = new AssetEntity([
-            'id' => 99,
-            'organization_code' => 'org-a',
-            'user_id' => 'user-a',
-            'file_key' => 'a.png',
-            'content_hash' => 'sha256:abc',
-            'sync_status' => AssetSyncStatus::SYNCED->value,
-        ]);
-
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->method('findPersonalAssetByContentHash')->willReturn($existing);
-        // 已有同内容记录：既不新增一行，也不再回写状态。
-        $assets->expects(self::never())->method('save');
-        $assets->expects(self::never())->method('update');
-
-        $provider = $this->createMock(AssetProviderInterface::class);
-        $provider->method('getProviderCode')->willReturn('ark');
-        $provider->expects(self::never())->method('createAssetGroup');
-        $provider->expects(self::never())->method('createAsset');
-        $provider->expects(self::never())->method('getAssetStatus');
-
-        $asset = $this->serviceWithFakedPolling(
-            $assets,
-            $provider,
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-        )->createPersonal(
-            $this->dataIsolation('org-a', 'user-a', ['org-a']),
-            new AssetEntity(['file_key' => 'a.png', 'content_hash' => 'sha256:abc']),
-        );
-
-        self::assertSame(99, $asset->getId());
-        self::assertSame(AssetSyncStatus::SYNCED, $asset->getSyncStatus());
-    }
-
-    public function testCreatingPersonalAssetWithSameUnverifiedContentTopsUpCompliance(): void
-    {
-        $existing = new AssetEntity([
-            'id' => 99,
-            'organization_code' => 'org-a',
-            'user_id' => 'user-a',
-            'file_key' => 'a.png',
-            'content_hash' => 'sha256:abc',
-            // 上次校验没通过：不新增记录，就地把这条补做一次校验。
-            'sync_status' => AssetSyncStatus::FAILED->value,
-            'sync_failed_reason' => 'previous failure',
-        ]);
-
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->method('findPersonalAssetByContentHash')->willReturn($existing);
-        $assets->expects(self::never())->method('save');
-        $assets->method('update')->willReturnCallback(
-            static fn (AssetDataIsolation $isolation, AssetEntity $asset): AssetEntity => $asset,
-        );
-
-        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        // 没有可续用/可复用的凭证，只能重新提交一次。
-        $providerAssets->method('findMapping')->willReturn(null);
-        $providerAssets->expects(self::exactly(2))->method('saveMapping')
-            ->willReturn($this->createMock(AssetProviderAssetModel::class));
-
-        $provider = $this->createMock(AssetProviderInterface::class);
-        $provider->method('getProviderCode')->willReturn('ark');
-        $provider->expects(self::once())->method('createAssetGroup')->willReturn(['provider_group_id' => 'group-99']);
-        $provider->expects(self::once())->method('createAsset')
-            ->willReturn(['provider_asset_id' => 'asset-99', 'provider_status' => 'ACTIVE']);
-
-        $asset = $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPersonal(
-            $this->dataIsolation('org-a', 'user-a', ['org-a']),
-            new AssetEntity(['file_key' => 'a.png', 'content_hash' => 'sha256:abc']),
-        );
-
-        self::assertSame(99, $asset->getId());
-        self::assertSame(AssetSyncStatus::SYNCED, $asset->getSyncStatus());
-        self::assertNull($asset->getSyncFailedReason());
-    }
-
-    public function testPersonalProviderAssetIdTopsUpUnverifiedCompliance(): void
-    {
-        $existing = new AssetEntity([
-            'id' => 99,
-            'organization_code' => 'org-a',
-            'user_id' => 'user-a',
-            'file_key' => 'a.png',
-            'content_hash' => 'sha256:abc',
-            'sync_status' => AssetSyncStatus::FAILED->value,
-        ]);
-
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->method('findPersonalAssetByContentHash')->willReturn($existing);
-        $assets->expects(self::never())->method('save');
-        $assets->method('update')->willReturnCallback(
-            static fn (AssetDataIsolation $isolation, AssetEntity $asset): AssetEntity => $asset,
-        );
-
-        // 第一次查（找可续用凭证）返回空，说明只能重新提交；之后查映射要能取到第三方素材 ID。
-        $mappingCalls = 0;
-        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        $providerAssets->method('findMapping')->willReturnCallback(function () use (&$mappingCalls) {
-            ++$mappingCalls;
-            if ($mappingCalls === 1) {
-                return null;
+        // 复用写两行：先是处理中的占位，再绑定到已审核通过的第三方素材。
+        $providerAssets->expects(self::exactly(2))->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$writes): AssetProviderAssetModel {
+                $writes[] = [
+                    $mapping->getProviderAssetId(),
+                    $mapping->getProviderStatus()->value,
+                    $mapping->getProviderReviewMode()->value,
+                ];
+                return $this->createMock(AssetProviderAssetModel::class);
             }
-            $model = $this->createMock(AssetProviderAssetModel::class);
-            $model->method('toArray')->willReturn(['provider_asset_id' => 'asset-99']);
-            return $model;
-        });
-        $providerAssets->method('saveMapping')->willReturn($this->createMock(AssetProviderAssetModel::class));
+        );
 
         $provider = $this->createMock(AssetProviderInterface::class);
         $provider->method('getProviderCode')->willReturn('ark');
-        $provider->expects(self::once())->method('createAssetGroup')->willReturn(['provider_group_id' => 'group-99']);
-        $provider->expects(self::once())->method('createAsset')
-            ->willReturn(['provider_asset_id' => 'asset-99', 'provider_status' => 'ACTIVE']);
+        $provider->expects(self::never())->method('createAssetGroup');
+        $provider->expects(self::never())->method('createAsset');
+        $provider->expects(self::never())->method('getAssetStatus');
 
-        // 材质化入口复用同内容素材时也要补校验，最终拿回第三方素材 ID。
-        $providerAssetId = $this->serviceWithFakedPolling($assets, $provider, $providerAssets)
+        $this->serviceWithFakedPolling($assets, $provider, $providerAssets)->createPublic(
+            $this->dataIsolation('org-a', 'user-a', ['org-a']),
+            new AssetEntity(['file_key' => 'a.png', 'content_hash' => 'sha256:abc']),
+        );
+
+        // 复用不新建远程资源，结论来源必须是 REUSED：它没有占用第三方素材，用量统计据此排除。
+        self::assertSame([
+            ['', 'PROCESSING', 'VOLCENGINE'],
+            ['asset-50', 'PASS', 'REUSED'],
+        ], $writes);
+    }
+
+    public function testNoPersonReviewModeSkipsProviderRegistration(): void
+    {
+        $assets = $this->createMock(AssetRepositoryInterface::class);
+        $assets->method('findById')->willReturn(new AssetEntity([
+            'id' => 31,
+            'organization_code' => 'org-a',
+            'user_id' => 'user-a',
+            'file_key' => 'a.png',
+        ]));
+
+        $writes = [];
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn(null);
+        $providerAssets->expects(self::exactly(2))->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$writes): AssetProviderAssetModel {
+                $writes[] = [
+                    $mapping->getProviderStatus()->value,
+                    $mapping->getProviderReviewMode()->value,
+                ];
+                return $this->createMock(AssetProviderAssetModel::class);
+            }
+        );
+
+        $provider = $this->createMock(AssetProviderInterface::class);
+        $provider->method('getProviderCode')->willReturn('ark');
+        // 视觉预检已确认无人像：不建素材组、不建素材，直接判通过。
+        $provider->expects(self::never())->method('createAssetGroup');
+        $provider->expects(self::never())->method('createAsset');
+
+        $mapping = $this->domainService($assets, $providerAssets, $provider)->syncPersonalAsset(
+            $this->dataIsolation('org-a', 'user-a', ['org-a']),
+            31,
+            'https://example.test/a.png',
+            ProviderReviewMode::NO_PERSON,
+        );
+
+        self::assertSame(ProviderAssetStatus::PASS, $mapping->getProviderStatus());
+        self::assertSame(ProviderReviewMode::NO_PERSON, $mapping->getProviderReviewMode());
+        self::assertSame([
+            ['PROCESSING', 'VOLCENGINE'],
+            ['PASS', 'NO_PERSON'],
+        ], $writes);
+    }
+
+    public function testSyncPersonalAssetRegistersNoPersonAssetOnDemandAndResetsSource(): void
+    {
+        $assets = $this->createMock(AssetRepositoryInterface::class);
+        $assets->method('findById')->willReturn(new AssetEntity([
+            'id' => 31,
+            'organization_code' => 'org-a',
+            'user_id' => 'user-a',
+            'file_key' => 'a.png',
+        ]));
+
+        // 无人像素材当初只落了本地记录：状态通过但 provider_asset_id 为空。
+        $existing = $this->createMock(AssetProviderAssetModel::class);
+        $existing->method('toArray')->willReturn([
+            'asset_id' => 31,
+            'provider_code' => 'ark',
+            'project_name' => 'default',
+            'provider_asset_id' => '',
+            'provider_group_id' => null,
+            'provider_status' => 'PASS',
+            'provider_review_mode' => 'NO_PERSON',
+        ]);
+
+        $writes = [];
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMapping')->willReturn($existing);
+        $providerAssets->expects(self::exactly(3))->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $mapping) use (&$writes): AssetProviderAssetModel {
+                $writes[] = [
+                    $mapping->getProviderAssetId(),
+                    $mapping->getProviderReviewMode()->value,
+                ];
+                return $this->createMock(AssetProviderAssetModel::class);
+            }
+        );
+
+        $provider = $this->createMock(AssetProviderInterface::class);
+        $provider->method('getProviderCode')->willReturn('ark');
+        $provider->expects(self::once())->method('createAssetGroup')->willReturn(['provider_group_id' => 'group-31']);
+        $provider->expects(self::once())
+            ->method('createAsset')
+            ->willReturn(['provider_asset_id' => 'asset-31', 'provider_status' => 'PASS']);
+
+        $mapping = $this->domainService($assets, $providerAssets, $provider)->syncPersonalAsset(
+            $this->dataIsolation('org-a', 'user-a', ['org-a']),
+            31,
+            'https://example.test/a.png',
+        );
+
+        self::assertSame(ProviderAssetStatus::PASS, $mapping->getProviderStatus());
+        // 按需注册之后结论来源翻回火山：用量统计不能再把它算成「未占用」。
+        self::assertSame(ProviderReviewMode::VOLCENGINE, $mapping->getProviderReviewMode());
+        self::assertSame(['asset-31', 'VOLCENGINE'], end($writes));
+    }
+
+    public function testPersonalProviderAssetIdUsesReusablePassedMapping(): void
+    {
+        $assets = $this->createMock(AssetRepositoryInterface::class);
+        $assets->method('findPersonalAssetByContentHash')
+            ->willReturn(new AssetEntity(['id' => 99, 'user_id' => 'user-a']));
+        $assets->method('findIdsByContentHash')->willReturn([99, 50]);
+
+        $reusable = new ProviderAssetEntity([
+            'asset_id' => 50,
+            'provider_code' => 'ark',
+            'project_name' => 'default',
+            'provider_asset_id' => 'asset-50',
+            'provider_status' => 'PASS',
+        ]);
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->expects(self::once())->method('findReusableMappingByAssetIds')
+            ->with([99, 50], 'ark', 'default')
+            ->willReturn($reusable);
+
+        $provider = $this->createMock(AssetProviderInterface::class);
+        $provider->method('getProviderCode')->willReturn('ark');
+        $provider->expects(self::never())->method('createAsset');
+
+        // 材质化入口需要的是第三方素材 ID：只认已审核通过的复用映射。
+        $providerAssetId = $this->domainService($assets, $providerAssets, $provider)
             ->findPersonalProviderAssetId($this->dataIsolation('org-a', 'user-a', ['org-a']), 'user-a', 'sha256:abc');
 
-        self::assertSame('asset-99', $providerAssetId);
-        self::assertSame(AssetSyncStatus::SYNCED, $existing->getSyncStatus());
+        self::assertSame('asset-50', $providerAssetId);
     }
 
     public function testDeletingOthersSharedAssetIsRejected(): void
@@ -1142,14 +1102,7 @@ final class AssetDomainServiceTest extends TestCase
         ]));
         $repository->expects(self::never())->method('delete');
 
-        $service = new AssetDomainService(
-            $repository,
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $this->acceptedAgreement(),
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
+        $service = $this->domainService($repository);
 
         // 团队分享的素材归创建者，删除接口只放行本人创建的资产。
         $this->expectException(BusinessException::class);
@@ -1163,14 +1116,7 @@ final class AssetDomainServiceTest extends TestCase
         $repository->method('findById')->willReturn(null);
         $repository->expects(self::never())->method('delete');
 
-        $service = new AssetDomainService(
-            $repository,
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $this->acceptedAgreement(),
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
+        $service = $this->domainService($repository);
 
         // 不可见的资产按不存在返回，避免通过删除接口探测别人资产是否存在。
         $this->expectException(BusinessException::class);
@@ -1190,14 +1136,7 @@ final class AssetDomainServiceTest extends TestCase
         $repository->method('hasChildren')->willReturn(true);
         $repository->expects(self::never())->method('delete');
 
-        $service = new AssetDomainService(
-            $repository,
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $this->acceptedAgreement(),
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
+        $service = $this->domainService($repository);
 
         $this->expectException(BusinessException::class);
         $this->expectExceptionCode(AssetErrorCode::GROUP_NOT_EMPTY->value);
@@ -1219,14 +1158,7 @@ final class AssetDomainServiceTest extends TestCase
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
         $providerAssets->expects(self::never())->method('findMapping');
 
-        $service = new AssetDomainService(
-            $repository,
-            $providerAssets,
-            $this->acceptedAgreement(),
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
+        $service = $this->domainService($repository, $providerAssets);
 
         self::assertTrue($service->deletePersonal($this->dataIsolation('org-a', 'user-a', ['org-a']), 9));
     }
@@ -1246,14 +1178,7 @@ final class AssetDomainServiceTest extends TestCase
         $providerAssets->method('findMapping')->willReturn(null);
         $providerAssets->expects(self::never())->method('deleteMapping');
 
-        $service = new AssetDomainService(
-            $repository,
-            $providerAssets,
-            $this->acceptedAgreement(),
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
+        $service = $this->domainService($repository, $providerAssets);
 
         self::assertTrue($service->deletePersonal($this->dataIsolation('org-a', 'user-a', ['org-a']), 6));
     }
@@ -1276,7 +1201,7 @@ final class AssetDomainServiceTest extends TestCase
             'project_name' => 'default',
             'provider_asset_id' => 'asset-7',
             'provider_group_id' => 'group-7',
-            'provider_status' => 'ACTIVE',
+            'provider_status' => 'PASS',
             'metadata' => null,
         ]);
 
@@ -1290,7 +1215,7 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::once())->method('deleteAsset')->with('asset-7', 'default')->willReturn(true);
         $provider->expects(self::once())->method('deleteAssetGroup')->with('group-7', 'default')->willReturn(true);
 
-        $service = new AssetDomainService($repository, $providerAssets, $this->acceptedAgreement(), new NullLogger(), $this->createMock(AiAbilityDomainService::class), $provider);
+        $service = $this->domainService($repository, $providerAssets, $provider);
 
         self::assertTrue($service->deletePersonal($this->dataIsolation('org-a', 'user-a', ['org-a']), 7));
     }
@@ -1313,7 +1238,7 @@ final class AssetDomainServiceTest extends TestCase
             'project_name' => 'default',
             'provider_asset_id' => 'asset-8',
             'provider_group_id' => 'group-8',
-            'provider_status' => 'ACTIVE',
+            'provider_status' => 'PASS',
             'metadata' => null,
         ]);
 
@@ -1327,37 +1252,43 @@ final class AssetDomainServiceTest extends TestCase
         $provider->expects(self::never())->method('deleteAsset');
         $provider->expects(self::never())->method('deleteAssetGroup');
 
-        $service = new AssetDomainService($repository, $providerAssets, $this->acceptedAgreement(), new NullLogger(), $this->createMock(AiAbilityDomainService::class), $provider);
+        $service = $this->domainService($repository, $providerAssets, $provider);
 
         self::assertTrue($service->deletePersonal($this->dataIsolation('org-a', 'user-a', ['org-a']), 8));
     }
 
     /**
-     * 用匿名子类把合规轮询的等待与上限都收短，专注验证同步编排与状态流转。
+     * 组装领域服务，用匿名子类替换第三方适配器并收短合规轮询上限。
      *
      * @param int $pollsBeforeTimeout 允许的回查次数，超过即判超时；传 1 表示回查一次后超时
      */
-    private function serviceWithFakedPolling(
-        AssetRepositoryInterface $assets,
-        AssetProviderInterface $provider,
-        AssetProviderAssetRepositoryInterface $providerAssets,
+    private function domainService(
+        AssetRepositoryInterface $repository,
+        ?AssetProviderAssetRepositoryInterface $providerAssets = null,
+        ?AssetProviderInterface $provider = null,
+        ?AssetAgreementRepositoryInterface $agreements = null,
         ?LoggerInterface $logger = null,
         int $pollsBeforeTimeout = PHP_INT_MAX,
     ): AssetDomainService {
-        $abilityDomainService = $this->createMock(AiAbilityDomainService::class);
-        return new class($assets, $providerAssets, $this->acceptedAgreement(), $provider, $logger ?? new NullLogger(), $abilityDomainService, $pollsBeforeTimeout) extends AssetDomainService {
+        return new class($repository, $providerAssets ?? $this->createMock(AssetProviderAssetRepositoryInterface::class), $agreements ?? $this->acceptedAgreement(), $logger ?? new NullLogger(), $this->createMock(AiAbilityDomainService::class), new AssetSearchTextBuilder(), $provider ?? $this->createMock(AssetProviderInterface::class), $pollsBeforeTimeout) extends AssetDomainService {
             private int $pollCount = 0;
 
             public function __construct(
                 AssetRepositoryInterface $assets,
                 AssetProviderAssetRepositoryInterface $providerAssets,
                 AssetAgreementRepositoryInterface $agreements,
-                ?AssetProviderInterface $provider,
-                ?LoggerInterface $logger,
+                LoggerInterface $logger,
                 AiAbilityDomainService $abilityDomainService,
+                AssetSearchTextBuilder $searchTextBuilder,
+                private readonly AssetProviderInterface $stubProvider,
                 private readonly int $testPollsBeforeTimeout,
             ) {
-                parent::__construct($assets, $providerAssets, $agreements, $logger, $abilityDomainService, $provider);
+                parent::__construct($assets, $providerAssets, $agreements, $logger, $abilityDomainService, $searchTextBuilder);
+            }
+
+            protected function createAssetProvider(array $providerConfig): AssetProviderInterface
+            {
+                return $this->stubProvider;
             }
 
             protected function isComplianceWaitExpired(float $deadline): bool
@@ -1369,6 +1300,17 @@ final class AssetDomainServiceTest extends TestCase
             {
             }
         };
+    }
+
+    /** 同步编排相关的用例都从这条路进：语义等价于 domainService()，只是参数顺序按替身排列。 */
+    private function serviceWithFakedPolling(
+        AssetRepositoryInterface $assets,
+        AssetProviderInterface $provider,
+        AssetProviderAssetRepositoryInterface $providerAssets,
+        ?LoggerInterface $logger = null,
+        int $pollsBeforeTimeout = PHP_INT_MAX,
+    ): AssetDomainService {
+        return $this->domainService($assets, $providerAssets, $provider, null, $logger, $pollsBeforeTimeout);
     }
 
     private function collectingLogger(): AbstractLogger
@@ -1428,25 +1370,11 @@ final class AssetDomainServiceTest extends TestCase
             'description_i18n' => null,
             'file_key' => 'asset.png',
             'status' => 1,
-            // 列表与详情只返回已完成第三方同步的资产，夹具默认按已同步构造。
-            'sync_status' => AssetSyncStatus::SYNCED->value,
         ], $attributes);
         $model = $this->createMock(AssetModel::class);
         $model->method('toArray')->willReturn($attributes);
         $model->method('getKey')->willReturn($attributes['id']);
         return $model;
-    }
-
-    private function domainService(AssetRepositoryInterface $repository): AssetDomainService
-    {
-        return new AssetDomainService(
-            $repository,
-            $this->createMock(AssetProviderAssetRepositoryInterface::class),
-            $this->acceptedAgreement(),
-            new NullLogger(),
-            $this->createMock(AiAbilityDomainService::class),
-            $this->createMock(AssetProviderInterface::class),
-        );
     }
 
     private function acceptedAgreement(): AssetAgreementRepositoryInterface

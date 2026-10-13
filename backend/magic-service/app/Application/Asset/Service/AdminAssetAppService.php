@@ -59,6 +59,16 @@ class AdminAssetAppService extends AbstractAssetAppService
         $this->assetTagDomainService->deleteOfficial($this->officialDataIsolation($authorization), $id);
     }
 
+    /**
+     * 第三方素材与素材组的占用数量，用于核对火山方舟侧的配额消耗。
+     *
+     * @return array{assets: int, groups: int}
+     */
+    public function providerResourceUsage(): array
+    {
+        return $this->assetDomainService->countProviderResourceUsage();
+    }
+
     public function createPublicAsset(
         Authenticatable|BaseDataIsolation $authorization,
         CreateAssetRequestDTO $requestDTO,

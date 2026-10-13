@@ -23,7 +23,8 @@ return [
         'poll_max_times' => (int) env('MODEL_GATEWAY_VIDEO_QUEUE_POLL_MAX_TIMES', 600),
     ],
     'video_media' => [
-        // ffprobe 用于读取参考视频真实时长和宽高；本地路径不在 PATH 时可配置绝对路径。
+        // 已废弃：ffmpeg / ffprobe 路径统一由 Infrastructure\Util\Video\FfmpegBinaryResolver 读取
+        // 环境变量 FFPROBE_BINARY / FFMPEG_BINARY（兼容 MODEL_GATEWAY_FFPROBE_BINARY），此键不再被读取。
         'ffprobe_binary' => env('MODEL_GATEWAY_FFPROBE_BINARY', 'ffprobe'),
     ],
     'video_file_cleanup' => [

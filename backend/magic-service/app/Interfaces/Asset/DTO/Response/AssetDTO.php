@@ -42,6 +42,9 @@ class AssetDTO extends AbstractDTO
     /** 合规校验未通过的原因；只有 FAILED 时有值。 */
     public ?string $complianceFailedReason = null;
 
+    /** 合规结论的来源：VOLCENGINE / NO_PERSON / REUSED。 */
+    public string $complianceReviewMode = 'VOLCENGINE';
+
     /** 当前素材归属人（历史数据回退到 user_id）。 */
     public array $owner = ['id' => null, 'name' => ''];
 
@@ -163,6 +166,16 @@ class AssetDTO extends AbstractDTO
     public function setComplianceFailedReason(?string $complianceFailedReason): void
     {
         $this->complianceFailedReason = $complianceFailedReason;
+    }
+
+    public function getComplianceReviewMode(): string
+    {
+        return $this->complianceReviewMode;
+    }
+
+    public function setComplianceReviewMode(string $complianceReviewMode): void
+    {
+        $this->complianceReviewMode = $complianceReviewMode;
     }
 
     public function setOwner(?string $id, string $name = ''): void

@@ -12,6 +12,7 @@ use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetProviderAssetModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use RuntimeException;
 
 class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterface
 {
@@ -29,12 +30,17 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
         $this->providerAssetModel::query()->upsert(
             [$values],
             ['organization_code', 'asset_id', 'provider_code', 'project_name'],
-            ['provider_asset_id', 'provider_group_id', 'provider_status', 'provider_failed_reason', 'metadata', 'updated_at', 'deleted_at']
+            ['provider_asset_id', 'provider_group_id', 'provider_status', 'provider_review_mode', 'provider_failed_reason', 'metadata', 'updated_at', 'deleted_at']
         );
-        /** @var AssetProviderAssetModel $model */
-        return $this->providerAssetModel::query()
+        $builder = $this->providerAssetModel::query()
             ->where('organization_code', $organizationCode)->where('asset_id', $providerAsset->getAssetId())
-            ->where('provider_code', $providerAsset->getProviderCode())->where('project_name', $providerAsset->getProjectName())->firstOrFail();
+            ->where('provider_code', $providerAsset->getProviderCode())->where('project_name', $providerAsset->getProjectName());
+        $model = $builder->first();
+        // upsert 与回读之间可能被并发软删；映射行就是这次写入的凭证，取不回来时宁可报错也不要返回空对象。
+        if ($model === null) {
+            throw new RuntimeException('第三方素材映射写入后无法读回');
+        }
+        return $model;
     }
 
     /**
@@ -52,6 +58,7 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
             'project_name' => $providerAsset->getProjectName(),
             'provider_group_id' => $providerAsset->getProviderGroupId(),
             'provider_status' => $providerAsset->getProviderStatus()->value,
+            'provider_review_mode' => $providerAsset->getProviderReviewMode()->value,
             'provider_failed_reason' => $providerAsset->getProviderFailedReason(),
             'metadata' => self::encodeMetadata($providerAsset->getMetadata()),
             'created_at' => $now,
@@ -160,6 +167,19 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
             return false;
         }
         return (bool) $model->delete();
+    }
+
+    public function countProviderResourceUsage(string $providerCode): array
+    {
+        $row = $this->providerAssetModel::query()
+            ->where('provider_code', $providerCode)
+            ->selectRaw("COUNT(DISTINCT NULLIF(provider_asset_id, '')) AS assets, COUNT(DISTINCT NULLIF(provider_group_id, '')) AS groups")
+            ->first();
+
+        return [
+            'assets' => (int) ($row?->getAttribute('assets') ?? 0),
+            'groups' => (int) ($row?->getAttribute('groups') ?? 0),
+        ];
     }
 
     /**

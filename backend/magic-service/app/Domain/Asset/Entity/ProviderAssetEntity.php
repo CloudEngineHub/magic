@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Domain\Asset\Entity;
 
 use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
+use App\Domain\Asset\Entity\ValueObject\ProviderReviewMode;
 use App\Infrastructure\Core\AbstractEntity;
 
 class ProviderAssetEntity extends AbstractEntity
@@ -27,6 +28,9 @@ class ProviderAssetEntity extends AbstractEntity
     protected ?string $providerGroupId = null;
 
     protected ProviderAssetStatus $providerStatus = ProviderAssetStatus::UNVERIFIED;
+
+    /** 本次结论的来源，决定前端文案与用量统计口径。 */
+    protected ProviderReviewMode $providerReviewMode = ProviderReviewMode::VOLCENGINE;
 
     protected ?string $providerFailedReason = null;
 
@@ -50,6 +54,16 @@ class ProviderAssetEntity extends AbstractEntity
     public function getProviderFailedReason(): ?string
     {
         return $this->providerFailedReason;
+    }
+
+    public function getProviderReviewMode(): ProviderReviewMode
+    {
+        return $this->providerReviewMode;
+    }
+
+    public function setProviderReviewMode(ProviderReviewMode|string $v): void
+    {
+        $this->providerReviewMode = is_string($v) ? ProviderReviewMode::fromValue($v) : $v;
     }
 
     public function setProviderFailedReason(?string $value): void

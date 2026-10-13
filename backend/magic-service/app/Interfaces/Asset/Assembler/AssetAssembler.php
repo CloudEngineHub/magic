@@ -11,6 +11,7 @@ use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\AssetTagEntity;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
+use App\Domain\Asset\Entity\ValueObject\ProviderReviewMode;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\CoContext;
@@ -69,8 +70,15 @@ class AssetAssembler
         $dto->setDescription($entity->getI18nDescription(self::language()));
         $dto->setFileUrl($fileLink?->getUrl() ?? $entity->getFileUrl());
         $dto->setFileKey($entity->getFileKey());
-        $dto->setComplianceStatus(($providerAsset?->getProviderStatus() ?? ProviderAssetStatus::UNVERIFIED)->value);
-        $dto->setComplianceFailedReason($providerAsset?->getProviderFailedReason());
+        $complianceStatus = $providerAsset?->getProviderStatus() ?? ProviderAssetStatus::UNVERIFIED;
+        $dto->setComplianceStatus($complianceStatus->value);
+        // 只有 FAILED 才带原因：状态被重新写成通过或审核中之后，上一轮的失败原因不能再透给前端。
+        $dto->setComplianceFailedReason(
+            $complianceStatus === ProviderAssetStatus::FAILED ? $providerAsset?->getProviderFailedReason() : null,
+        );
+        $dto->setComplianceReviewMode(
+            ($providerAsset?->getProviderReviewMode() ?? ProviderReviewMode::VOLCENGINE)->value,
+        );
         $ownerUid = $entity->getOwnerUid() ?: $entity->getUserId();
         $dto->setOwner($ownerUid, $entity->getOwnerName());
         $dto->setOwnerUid($ownerUid);
@@ -118,5 +126,4 @@ class AssetAssembler
     {
         return CoContext::getLanguage();
     }
-
 }

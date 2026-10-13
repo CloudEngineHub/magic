@@ -7,10 +7,12 @@ declare(strict_types=1);
 
 namespace App\Domain\Asset\Service;
 
+use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
+use App\Domain\Asset\Entity\ValueObject\ProviderReviewMode;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Repository\Facade\AssetAgreementRepositoryInterface;
 use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
@@ -36,19 +38,22 @@ use function Hyperf\Translation\trans;
  */
 class AssetDomainService
 {
+    /**
+     * 协程内缓存的第三方素材上下文：适配器实例 + 由同一份配置派生的项目名。
+     */
+    public const string PROVIDER_CONTEXT_KEY = 'asset_provider_context:volcengine_ark_assets';
+
     /** 第三方合规轮询的最长等待时间。 */
     private const int COMPLIANCE_TIMEOUT_SECONDS = 1800;
+
+    /** 第三方项目名缺省值。 */
+    private const string DEFAULT_PROJECT_NAME = 'default';
 
     /** 第三方合规状态轮询间隔。 */
     private const float COMPLIANCE_POLL_INTERVAL_SECONDS = 1.0;
 
     /** 同步失败原因的最大存储长度。 */
     private const int FAILED_REASON_MAX_LENGTH = 512;
-
-    /**
-     * 协程内缓存的第三方素材 Provider 实例。
-     */
-    private const string PROVIDER_INSTANCE_CONTEXT_KEY = 'asset_provider_instance:volcengine_ark_assets';
 
     public function __construct(
         private readonly AssetRepositoryInterface $assets,
@@ -296,8 +301,8 @@ class AssetDomainService
      */
     public function findPersonalProviderAssetId(AssetDataIsolation $dataIsolation, string $userId, string $contentHash): ?string
     {
-        $asset = $this->assets->findPersonalAssetByContentHash($userId, $contentHash);
-        if ($asset === null) {
+        $contentHash = trim($contentHash);
+        if ($contentHash === '') {
             return null;
         }
         $mapping = $this->providerAssets->findReusableMappingByAssetIds(
@@ -323,14 +328,13 @@ class AssetDomainService
     /**
      * 异步同步当前用户的个人素材到默认 Provider。
      *
-     * @param bool $hasPerson 素材是否含人像（含无法排除的情况）：true 走第三方素材注册与合规审核；
-     *                        false 表示调用方已确认无人像，跳过第三方注册，仅保留本地记录并直接标记通过
+     * @param ProviderReviewMode $reviewMode 调用方对素材的预检结论
      */
     public function syncPersonalAsset(
         AssetDataIsolation $dataIsolation,
         int|string $assetId,
         ?string $fileUrl,
-        bool $hasPerson = true,
+        ProviderReviewMode $reviewMode = ProviderReviewMode::VOLCENGINE,
     ): ProviderAssetEntity {
         $asset = $this->assets->findById($dataIsolation, $assetId);
         if ($asset === null || ! $asset->isOwnedBy(
@@ -352,12 +356,13 @@ class AssetDomainService
             //
             // 无人像素材在创建时刻不注册第三方，状态虽为 PASS 但 provider_asset_id 为空，
             // 这里必须继续往下走，等到真正被生成链路引用时才按需注册出可用凭证。
+            // 也正因为会重新走一遍注册流程，下面的结论来源会被重新写成 VOLCENGINE。
             if ($providerAsset->getProviderStatus()->isPassed() && $providerAsset->getProviderAssetId() !== '') {
                 return $providerAsset;
             }
         }
         $asset->setFileUrl($fileUrl);
-        return $this->syncToProvider($dataIsolation, $asset, $hasPerson);
+        return $this->syncToProvider($dataIsolation, $asset, $reviewMode);
     }
 
     /**
@@ -427,11 +432,27 @@ class AssetDomainService
     }
 
     /**
+     * 统计第三方侧实际占用的素材与素材组数量，用于核对配额消耗。
+     *
+     * @return array{assets: int, groups: int}
+     */
+    public function countProviderResourceUsage(): array
+    {
+        return $this->providerAssets->countProviderResourceUsage($this->provider()->getProviderCode());
+    }
+
+    /**
      * 返回合规轮询等待上限。
      */
     protected function complianceTimeoutSeconds(): int
     {
         return self::COMPLIANCE_TIMEOUT_SECONDS;
+    }
+
+    /** 构造第三方服务商实现；抽成可覆写方法供单测替换适配器。 */
+    protected function createAssetProvider(array $providerConfig): AssetProviderInterface
+    {
+        return new VolcengineArkAssetProvider($this->logger, $providerConfig);
     }
 
     /**
@@ -574,16 +595,16 @@ class AssetDomainService
      *
      * 失败只回写 Provider 映射状态，不回收远程资源：凭证可查、可重试、可人工处置。
      *
-     * @param bool $hasPerson 素材是否含人像（含无法排除的情况）：true 注册第三方素材并等待合规审核；
-     *                        false 表示调用方已确认无人像，不建素材组、不建素材，仅保留本地记录后直接标记通过，
-     *                        公开资产创建固定传 true
+     * @param ProviderReviewMode $reviewMode 调用方对素材的预检结论
      */
     private function syncToProvider(
         AssetDataIsolation $dataIsolation,
         AssetEntity $asset,
-        bool $hasPerson = true,
+        ProviderReviewMode $reviewMode = ProviderReviewMode::VOLCENGINE,
     ): ProviderAssetEntity {
-        $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PROCESSING);
+        // 走到这里说明本次真的要向第三方注册：把结论来源重置为火山，
+        // 这样「无人像素材后续被生成链路按需注册」时，用量统计不会继续把它算成未占用。
+        $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PROCESSING, null, ProviderReviewMode::VOLCENGINE);
         try {
             // 命中可复用凭证时跳过上传和合规轮询。
             $reusable = $this->findReusableProviderAsset($asset);
@@ -600,11 +621,17 @@ class AssetDomainService
             }
 
             // 调用方已确认无人像：无需第三方合规审核，不建素材组、不建素材，仅保留本地记录后直接标记通过。
-            if (! $hasPerson) {
+            if ($reviewMode === ProviderReviewMode::NO_PERSON) {
                 $this->logger->info('已确认无人像，跳过第三方素材注册', [
                     'asset_id' => $asset->getId(),
                 ]);
-                return $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PASS);
+                return $this->markProviderStatus(
+                    $dataIsolation,
+                    $asset,
+                    ProviderAssetStatus::PASS,
+                    null,
+                    ProviderReviewMode::NO_PERSON,
+                );
             }
 
             // 为素材创建专属第三方素材组，满足 GroupId 必填约束。
@@ -674,18 +701,24 @@ class AssetDomainService
             'provider_group_id' => $reusable->getProviderGroupId(),
             'provider_asset_id' => $reusable->getProviderAssetId(),
             'provider_status' => $reusable->getProviderStatus()->value,
+            'provider_review_mode' => ProviderReviewMode::REUSED->value,
             'metadata' => $reusable->getMetadata(),
         ]);
         $this->providerAssets->saveMapping($dataIsolation, $providerAssetEntity);
         return $providerAssetEntity;
     }
 
-    /** 更新当前默认 Provider 的状态与失败原因。 */
+    /**
+     * 更新当前默认 Provider 的状态与失败原因。
+     *
+     * @param null|ProviderReviewMode $reviewMode 显式给出时一并写入结论来源，为 null 表示不改动它
+     */
     private function markProviderStatus(
         AssetDataIsolation $dataIsolation,
         AssetEntity $asset,
         ProviderAssetStatus $status,
         ?string $failedReason = null,
+        ?ProviderReviewMode $reviewMode = null,
     ): ProviderAssetEntity {
         $mapping = $this->providerAssets->findMapping(
             $dataIsolation,
@@ -704,6 +737,9 @@ class AssetDomainService
         $providerAsset->setProviderFailedReason(
             $status === ProviderAssetStatus::FAILED ? $this->normalizeFailedReason($failedReason) : null,
         );
+        if ($reviewMode !== null) {
+            $providerAsset->setProviderReviewMode($reviewMode);
+        }
         $this->providerAssets->saveMapping($dataIsolation, $providerAsset);
         return $providerAsset;
     }
@@ -926,17 +962,32 @@ class AssetDomainService
         return $name === '' ? trans('asset.unnamed_group') : $name;
     }
 
-    private function provider(): VolcengineArkAssetProvider
+    /** @return array{provider: AssetProviderInterface, projectName: string} */
+    private function providerContext(): array
     {
         return Context::getOrSet(
-            self::PROVIDER_INSTANCE_CONTEXT_KEY,
-            fn (): VolcengineArkAssetProvider => new VolcengineArkAssetProvider($this->logger, $this->providerConfig()),
+            self::PROVIDER_CONTEXT_KEY,
+            function (): array {
+                $providerConfig = $this->providerConfig();
+                return [
+                    'provider' => $this->createAssetProvider($providerConfig),
+                    'projectName' => trim((string) ($providerConfig['project_name'] ?? '')) ?: self::DEFAULT_PROJECT_NAME,
+                ];
+            },
         );
     }
 
+    private function provider(): AssetProviderInterface
+    {
+        return $this->providerContext()['provider'];
+    }
+
+    /**
+     * 第三方项目名，与 provider 取自同一份协程缓存。
+     */
     private function projectName(): string
     {
-        return $this->provider()->projectName();
+        return $this->providerContext()['projectName'];
     }
 
     /** @return array<string, mixed> */

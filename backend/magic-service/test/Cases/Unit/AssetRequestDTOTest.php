@@ -146,7 +146,7 @@ final class AssetRequestDTOTest extends TestCase
         self::assertNoRequestParameters(AssetApi::class, 'create');
         self::assertNoRequestParameters(AssetApi::class, 'list');
         self::assertNoRequestParameters(AdminAssetApi::class, 'create');
-        self::assertNoRequestParameters(AdminAssetApi::class, 'list');
+        self::assertNoRequestParameters(AdminAssetApi::class, 'queries');
         self::assertNoRequestParameters(AdminAssetApi::class, 'update');
         self::assertParameterType(AssetAppService::class, 'createPersonalAsset', CreateAssetRequestDTO::class);
         self::assertParameterType(AssetAppService::class, 'list', QueryAssetRequestDTO::class);

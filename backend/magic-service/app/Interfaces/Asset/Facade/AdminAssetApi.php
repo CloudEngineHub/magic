@@ -145,6 +145,17 @@ class AdminAssetApi extends AbstractApi
         return ['id' => (string) $tagId, 'deleted' => true];
     }
 
+    /**
+     * 第三方素材与素材组占用数量，用于核对火山方舟侧的配额消耗。
+     */
+    #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::QUERY)]
+    public function providerResourceUsage(): array
+    {
+        $authorization = $this->getAuthorization();
+        $this->assertAdmin($authorization);
+        return $this->assetAppService->providerResourceUsage();
+    }
+
     private function assertAdmin(object $authorization): void
     {
         if (! PermissionChecker::isOrganizationAdminByUserId(
