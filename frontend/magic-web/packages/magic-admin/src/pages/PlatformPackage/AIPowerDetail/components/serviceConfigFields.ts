@@ -244,6 +244,19 @@ export const imageEditConfig: Record<string, FieldConfig[]> = {
 }
 
 /**
+ * 火山方舟素材服务的可选字段：这些字段在后端都有内置默认值（version/region/service/endpoint
+ * 由素材客户端兜底，project_name 由领域服务兜底），留空即按默认值生效，因此不做必填校验，
+ * 管理员只需要填 AK/SK。
+ */
+const VOLCENGINE_ARK_ASSETS_OPTIONAL_FIELDS: FieldConfig[] = [
+	createFieldConfig("version", "version", "input", { required: false }),
+	createFieldConfig("region", "region", "input", { required: false }),
+	createFieldConfig("service", "serviceName", "input", { required: false }),
+	createFieldConfig("endpoint", "endpoint", "input", { required: false }),
+	createFieldConfig("project_name", "projectName", "input", { required: false }),
+]
+
+/**
  * 服务类型配置映射
  */
 export const serviceTypeConfigs: Record<string, FieldConfig[]> = {
@@ -282,11 +295,7 @@ export const serviceTypeConfigs: Record<string, FieldConfig[]> = {
 		COMMON_FIELDS.provider,
 		COMMON_FIELDS.accessKey,
 		COMMON_FIELDS.secretKey,
-		COMMON_FIELDS.version,
-		COMMON_FIELDS.region,
-		COMMON_FIELDS.service,
-		COMMON_FIELDS.endpoint,
-		COMMON_FIELDS.projectName,
+		...VOLCENGINE_ARK_ASSETS_OPTIONAL_FIELDS,
 	],
 }
 

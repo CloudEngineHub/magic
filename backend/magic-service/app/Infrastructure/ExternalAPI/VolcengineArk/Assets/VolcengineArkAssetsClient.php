@@ -32,6 +32,17 @@ class VolcengineArkAssetsClient
     private const int REQUEST_TIMEOUT_SECONDS = 30;
 
     /**
+     * 接入坐标的默认值：管理端把这几个字段配置为可留空，留空时必须与「从未配置」等价。
+     */
+    private const string DEFAULT_ENDPOINT = 'https://open.volcengineapi.com';
+
+    private const string DEFAULT_VERSION = '2024-01-01';
+
+    private const string DEFAULT_REGION = 'cn-beijing';
+
+    private const string DEFAULT_SERVICE = 'ark';
+
+    /**
      * @param array<string, mixed> $config 素材服务配置（endpoint/region/version/service/access_key/secret_key），
      *                                     由 `AssetDomainService` 从 AI 能力「火山方舟素材服务」读取后传入
      */
@@ -73,7 +84,7 @@ class VolcengineArkAssetsClient
             throw new InvalidArgumentException('当前素材操作暂不支持，请联系管理员');
         }
         $config = $this->config;
-        $endpoint = rtrim((string) ($config['endpoint'] ?? 'https://open.volcengineapi.com'), '/');
+        $endpoint = rtrim($this->configValue('endpoint', self::DEFAULT_ENDPOINT), '/');
         $parts = parse_url($endpoint);
         $host = (string) ($parts['host'] ?? 'open.volcengineapi.com');
         if (isset($parts['port'])) {
@@ -82,13 +93,13 @@ class VolcengineArkAssetsClient
         // 与火山 SDK 的 BuildRequestInterceptor 保持一致，使用默认 JSON 编码参与签名。
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
         // 使用火山 SDK 官方 signv4 实现，确保 content-type 等官方要求的请求头参与签名。
-        $query = ['Action' => $action, 'Version' => (string) ($config['version'] ?? '2024-01-01')];
+        $query = ['Action' => $action, 'Version' => $this->configValue('version', self::DEFAULT_VERSION)];
         $queryString = http_build_query($query, '', '&', PHP_QUERY_RFC3986);
         $signedHeaders = Utils::signv4(
             (string) $config['access_key'],
             (string) $config['secret_key'],
-            (string) ($config['region'] ?? 'cn-beijing'),
-            (string) ($config['service'] ?? 'ark'),
+            $this->configValue('region', self::DEFAULT_REGION),
+            $this->configValue('service', self::DEFAULT_SERVICE),
             $body,
             $queryString,
             'POST',
@@ -215,6 +226,16 @@ class VolcengineArkAssetsClient
             ]);
             throw $exception;
         }
+    }
+
+    /**
+     * 读取接入坐标配置：管理端允许这几个字段留空，因此「空字符串」必须与「未配置」等价。
+     * 不能用 `??` 兜底——管理端保存空值后键是存在的，`??` 不会走默认分支，签名会带上空 region/service。
+     */
+    private function configValue(string $key, string $default): string
+    {
+        $value = trim((string) ($this->config[$key] ?? ''));
+        return $value === '' ? $default : $value;
     }
 
     private function validateConfig(): void

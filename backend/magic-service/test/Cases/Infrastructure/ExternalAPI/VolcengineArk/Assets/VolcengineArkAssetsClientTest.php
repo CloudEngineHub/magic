@@ -60,6 +60,27 @@ final class VolcengineArkAssetsClientTest extends TestCase
         self::assertStringNotContainsString('sk-test', $request->getHeaderLine('Authorization'));
     }
 
+    public function testBlankOptionalConfigFallsBackToDefaults(): void
+    {
+        // 管理端把 version/region/service/endpoint 设为可留空，留空保存后键存在但值为空字符串；
+        // 此时必须与「从未配置」等价，否则签名会带上空 region/service 而被火山拒绝。
+        $client = $this->createClient($this->factory(['Result' => ['Id' => 'group-1']]), [
+            'access_key' => 'ak-test',
+            'secret_key' => 'sk-test',
+            'version' => '',
+            'region' => '  ',
+            'service' => '',
+            'endpoint' => '',
+        ]);
+
+        $client->request('CreateAssetGroup', ['Name' => '联调组', 'GroupType' => 'AIGC']);
+
+        $request = $this->requests[0];
+        self::assertSame('open.volcengineapi.com', $request->getUri()->getHost());
+        self::assertSame('/?Action=CreateAssetGroup&Version=2024-01-01', (string) $request->getUri()->getPath() . '?' . $request->getUri()->getQuery());
+        self::assertStringStartsWith('HMAC-SHA256 Credential=ak-test/', $request->getHeaderLine('Authorization'));
+    }
+
     public function testSignatureDoesNotCarrySecurityToken(): void
     {
         $client = $this->createClient($this->factory(['Result' => ['Id' => 'group-1']]), $this->config());
