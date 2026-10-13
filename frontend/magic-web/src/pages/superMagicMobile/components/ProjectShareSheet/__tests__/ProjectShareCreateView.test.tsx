@@ -168,6 +168,58 @@ describe("ProjectShareCreateView", () => {
 		).toBeInTheDocument()
 	})
 
+	it("高级设置展示纯净模式，默认关闭，点击后保留其它设置并开启", () => {
+		const controller = createController({
+			formState: {
+				...createController().formState,
+				advancedSettings: { allowCopy: false, hideCreatorInfo: true },
+			},
+		})
+
+		render(<ProjectShareCreateView controller={controller} />)
+
+		const row = screen.getByTestId("project-share-sheet-pure-mode-row")
+		expect(row).toHaveTextContent("share.pureMode")
+		expect(row).toHaveTextContent("share.pureModeDescription")
+		expect(row.querySelector("[role='switch']")).toHaveAttribute("aria-checked", "false")
+
+		fireEvent.click(row)
+
+		expect(controller.setAdvancedSettings).toHaveBeenCalledWith({
+			allowCopy: false,
+			hideCreatorInfo: true,
+			pureMode: true,
+		})
+	})
+
+	it("纯净模式已开启时展示开启状态，点击后关闭", () => {
+		const controller = createController({
+			formState: {
+				...createController().formState,
+				advancedSettings: { pureMode: true },
+			},
+		})
+
+		render(<ProjectShareCreateView controller={controller} />)
+
+		const row = screen.getByTestId("project-share-sheet-pure-mode-row")
+		expect(row.querySelector("[role='switch']")).toHaveAttribute("aria-checked", "true")
+
+		fireEvent.click(row)
+
+		expect(controller.setAdvancedSettings).toHaveBeenCalledWith({ pureMode: false })
+	})
+
+	it("录音分享的内联文件选择模式同样展示纯净模式，与 Web 保持一致", () => {
+		render(
+			<ProjectShareCreateView
+				controller={createController({ enableInlineFileSelection: true })}
+			/>,
+		)
+
+		expect(screen.getByTestId("project-share-sheet-pure-mode-row")).toBeInTheDocument()
+	})
+
 	it("文件模式会展示固定文案的已选文件区块，并支持展开文件夹层级", () => {
 		render(
 			<ProjectShareCreateView
