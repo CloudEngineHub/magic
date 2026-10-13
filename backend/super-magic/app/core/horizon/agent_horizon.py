@@ -1,5 +1,10 @@
 """AgentHorizon：per-agent 上下文工程基础设施。
 
+设计精髓（长期保留）：
+1. 记录模型已经知道什么。
+2. 检查现在发生了什么变化。
+3. 在合适的时机把变化告诉模型，再更新记录。
+
 替换全局单例 FileTimestampManager，并统一编排注入给 LLM 的动态上下文：
 当前时间、文件变化 Diff、系统通知等，未来可扩展更多上下文类型。
 
@@ -1698,6 +1703,8 @@ class AgentHorizon:
     async def build_context_update(
         self,
         injection_point: HorizonInjectionPoint = HorizonInjectionPoint.UNKNOWN,
+        *,
+        include_time: bool = True,
     ) -> str:
         """
         编排动态上下文并返回字符串。Loop 结束只返回用户变化；无变化时返回空字符串。
@@ -1706,6 +1713,7 @@ class AgentHorizon:
           当前时间、运行环境、LLM 模型、图片模型、workspace_files、user_preferred_language
 
         后续注入按需包含：
+          时间项说明对应 include_time=True；补充检查可省略时间，首次初始化除外。
           <current_time>     — 始终输出
           <runtime_environment> — 首次建立运行环境 baseline 时输出
           <runtime_environment_changed> — Python 进程代次变化时输出
@@ -1720,6 +1728,8 @@ class AgentHorizon:
 
         超过安全上限时丢弃原始内容，返回轻量状态消息，并保留当前 baseline。
         """
+        # 常规更新提供时间；补充检查只提供新变化或必要提醒，无内容就不写消息。
+        # 首次初始化仍必须提供完整时间；补充检查不推进未提供给模型的时间基准。
         await self._ensure_loaded()
 
         user_snapshot = self._state.user_context
@@ -1850,7 +1860,7 @@ class AgentHorizon:
         injected_context_usage_total = 0
         injected_context_usage_used_pct = 0
 
-        parts = ["<system_injected_context>"]
+        parts: list[str] = []
         identity = build_agent_identity(self._agent_context) if self._agent_context else None
         if identity is not None and identity != self._state.agent_identity:
             parts.append(render_agent_identity(
@@ -1860,6 +1870,7 @@ class AgentHorizon:
         if user_block:
             parts.append(user_block)
         was_first_injection = self._is_first_injection
+        time_included = was_first_injection or include_time
         llm_model_change_injected = False
         media_model_change_injected = False
 
@@ -1926,7 +1937,8 @@ class AgentHorizon:
 
         else:
             # 常规增量注入：同一天只输出时间，跨天输出完整日期时间
-            parts.append(current_time_context)
+            if time_included:
+                parts.append(current_time_context)
 
             if self._state.process_started_at_ns == 0:
                 parts.append(_build_runtime_environment_context(process_started_at_ns))
@@ -2073,6 +2085,9 @@ class AgentHorizon:
         if magiclaw_ctx:
             parts.append(magiclaw_ctx)
 
+        if not parts:
+            return ""
+        parts.insert(0, "<system_injected_context>")
         parts.append("</system_injected_context>")
         context_update = "\n".join(parts)
 
@@ -2092,8 +2107,9 @@ class AgentHorizon:
             self._im_progress_interval = min(self._im_progress_interval * 2, maximum)
 
         # 只有确认本轮上下文会进入 ChatHistory，才推进运行时标志和持久化 baseline。
-        self._last_time_sample = time_sample
-        self._last_time_history_message = messages[-1] if messages else None
+        if time_included:
+            self._last_time_sample = time_sample
+            self._last_time_history_message = messages[-1] if messages else None
         if was_first_injection:
             self._is_first_injection = False
             self._llm_model_changed = False
@@ -2129,7 +2145,7 @@ class AgentHorizon:
             年月折叠不丢掉底层条目，也不额外记录某个目录名称是否已经被模型逐项读过。
             """
             persistence_changed = True
-        if self._state.last_injected_date != today_date:
+        if time_included and self._state.last_injected_date != today_date:
             self._state.last_injected_date = today_date
             persistence_changed = True
         if self._state.initial_context_injected is not True:

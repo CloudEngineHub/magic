@@ -3081,6 +3081,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             preload_context = await self._build_horizon_context_update_safely(
                 injection_point=HorizonInjectionPoint.BEFORE_LLM_PRELOADED_SKILLS,
                 log_context="AutoRead 前刷新文件版本",
+                include_time=False,
             )
             if preload_context:
                 await self.chat_history.append_user_message(preload_context, show_in_ui=False, source="horizon")
@@ -3116,6 +3117,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             native_visual_context = await self._build_horizon_context_update_safely(
                 injection_point=HorizonInjectionPoint.BEFORE_LLM_NATIVE_VISUAL,
                 log_context="原生视觉请求前注入",
+                include_time=False,
             )
             if native_visual_context:
                 await self.chat_history.append_user_message(
@@ -3339,11 +3341,15 @@ Since your subsequent output will be merged with pre-interruption content and di
         self,
         injection_point: HorizonInjectionPoint,
         log_context: str,
+        *,
+        include_time: bool = True,
     ) -> str | None:
         """构建 Horizon 注入内容，模型配置错误时静默跳过。"""
         try:
             if injection_point == HorizonInjectionPoint.AFTER_MAIN_AGENT_RUN:
-                return await self.agent_context.horizon.build_context_update(injection_point)
+                return await self.agent_context.horizon.build_context_update(
+                    injection_point, include_time=include_time,
+                )
             await self._ensure_preloaded_files_tracked()
             await self.agent_context.horizon.flush_pending_user_messages()
             self._sync_horizon_llm_model_info()
@@ -3352,7 +3358,9 @@ Since your subsequent output will be merged with pre-interruption content and di
             模型传输重试复用已准备的消息，不因为重试重新触发一轮目录扫描。
             """
             await self._refresh_directory_snapshots()
-            return await self.agent_context.horizon.build_context_update(injection_point)
+            return await self.agent_context.horizon.build_context_update(
+                injection_point, include_time=include_time,
+            )
         except Exception as horizon_err:
             if is_non_retryable_model_config_error(horizon_err):
                 logger.debug(f"[AgentHorizon] {log_context} 跳过：模型配置错误: {horizon_err}")
