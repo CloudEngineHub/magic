@@ -1,15 +1,15 @@
 """
-Update Agent Result
+Update Crew Result
 
-Result class for update agent API response.
+Result class for the Crew update API response.
 """
 
 from typing import Dict, Any
 from app.infrastructure.sdk.base import AbstractResult
 
 
-class UpdateAgentResult(AbstractResult):
-    """Result for update agent via open-api"""
+class UpdateCrewResult(AbstractResult):
+    """Result for updating a Crew via the open API."""
 
     def __init__(self, data: Dict[str, Any]):
         super().__init__(data)

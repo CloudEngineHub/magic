@@ -118,10 +118,10 @@ class TaskDomainService
         if (empty($topicEntity->getTopicMode())) {
             $topicEntity->setTopicMode($topicMode);
             $data['topic_mode'] = $topicMode;
-            if (! empty($agentCode)) {
-                $topicEntity->setAgentCode($agentCode);
-                $data['agent_code'] = $agentCode;
-            }
+        }
+        if (! empty($agentCode)) {
+            $topicEntity->setAgentCode($agentCode);
+            $data['agent_code'] = $agentCode;
         }
         $this->topicRepository->updateTopicByCondition($conditions, $data);
         return $taskEntity;

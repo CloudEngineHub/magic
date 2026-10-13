@@ -164,6 +164,13 @@ class SuperMagicAgentEntity extends AbstractEntity
 
     private ?array $visibilityConfig = null;
 
+    /**
+     * 部分更新请求中实际提交的字段。
+     *
+     * @var array<string, bool>|null
+     */
+    private ?array $providedFields = null;
+
     public function shouldCreate(): bool
     {
         return empty($this->code);
@@ -237,30 +244,37 @@ class SuperMagicAgentEntity extends AbstractEntity
         }
 
         // 将新值设置到原始实体上
-        $originalEntity->setName($this->name);
-        $originalEntity->setDescription($this->description);
-        $originalEntity->setTools($this->tools);
-        $originalEntity->setPrompt($this->prompt);
-        $originalEntity->setType($this->type);
+        $providedFields = $this->providedFields;
+        if ($providedFields === null || ($providedFields['name_i18n'] ?? false)) {
+            $originalEntity->setName($this->name);
+        }
+        if ($providedFields === null || ($providedFields['description_i18n'] ?? false)) {
+            $originalEntity->setDescription($this->description);
+        }
+        if ($providedFields === null || ($providedFields['prompt_shadow'] ?? false)) {
+            $originalEntity->setPrompt($this->prompt);
+        }
         $originalEntity->setModifier($this->creator);
-        $originalEntity->setIconType($this->iconType);
+        if ($providedFields === null || ($providedFields['icon_type'] ?? false)) {
+            $originalEntity->setIconType($this->iconType);
+        }
 
         if (isset($this->enabled)) {
             $originalEntity->setEnabled($this->enabled);
         }
 
-        if (! is_null($this->icon)) {
+        if ($providedFields === null || ($providedFields['icon'] ?? false)) {
             $originalEntity->setIcon($this->icon);
         }
 
         // 更新多语言字段
-        if (! is_null($this->nameI18n)) {
+        if ($providedFields === null || ($providedFields['name_i18n'] ?? false)) {
             $originalEntity->setNameI18n($this->nameI18n);
         }
-        if (! is_null($this->roleI18n)) {
+        if ($providedFields === null || ($providedFields['role_i18n'] ?? false)) {
             $originalEntity->setRoleI18n($this->roleI18n);
         }
-        if (! is_null($this->descriptionI18n)) {
+        if ($providedFields === null || ($providedFields['description_i18n'] ?? false)) {
             $originalEntity->setDescriptionI18n($this->descriptionI18n);
         }
 
@@ -269,11 +283,16 @@ class SuperMagicAgentEntity extends AbstractEntity
             $originalEntity->setProjectId($this->projectId);
         }
 
-        if ($this->fileKey !== null) {
+        if ($providedFields === null || ($providedFields['file_key'] ?? false)) {
             $originalEntity->setFileKey($this->fileKey);
         }
 
         $originalEntity->setUpdatedAt(date('Y-m-d H:i:s'));
+    }
+
+    public function setProvidedFields(?array $providedFields): void
+    {
+        $this->providedFields = $providedFields;
     }
 
     // Getters and Setters

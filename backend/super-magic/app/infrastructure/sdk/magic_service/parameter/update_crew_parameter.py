@@ -1,15 +1,15 @@
 """
-Update Agent Parameter
+Update Crew Parameter
 
-Parameter class for updating agent via open-api.
+Parameter class for updating a Crew via the Magic Service open API.
 """
 
 from typing import Dict, Any, Optional
 from ..kernel.magic_service_parameter import MagicServiceAbstractParameter
 
 
-class UpdateAgentParameter(MagicServiceAbstractParameter):
-    """Parameter for update agent via open-api"""
+class UpdateCrewParameter(MagicServiceAbstractParameter):
+    """Parameter for updating a Crew via the open API."""
 
     def __init__(
         self,
@@ -22,10 +22,10 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
         icon_type: Optional[int] = None,
     ):
         """
-        Initialize update agent parameter
+        Initialize update Crew parameter.
 
         Args:
-            code: Agent code
+            code: Crew code
             name_i18n: Multilingual name, e.g. {"zh_CN": "名称", "en_US": "Name"}
             description_i18n: Multilingual description
             role_i18n: Multilingual role definition
@@ -43,7 +43,7 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
         self.icon_type = icon_type
 
     def get_code(self) -> str:
-        """Get agent code"""
+        """Get Crew code."""
         return self.code
 
     def to_body(self) -> Dict[str, Any]:
@@ -81,4 +81,4 @@ class UpdateAgentParameter(MagicServiceAbstractParameter):
         """Validate parameter data"""
         super().validate()
         if not self.code:
-            raise ValueError("Agent code is required")
+            raise ValueError("Crew code is required")

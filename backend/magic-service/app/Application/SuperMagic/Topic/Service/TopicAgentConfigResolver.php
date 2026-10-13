@@ -23,7 +23,14 @@ final class TopicAgentConfigResolver
         $persistedAgentCode = trim($topicEntity->getAgentCode());
 
         if ($this->isFixed() && $persistedTopicMode !== '') {
-            return $this->normalize($persistedTopicMode, $persistedAgentCode);
+            $requestAgentCode = trim((string) ($extra?->getAgentCode() ?? ''));
+            $agentCode = $persistedTopicMode === 'crew-creator'
+                && $persistedAgentCode === ''
+                && $requestAgentCode !== ''
+                ? $requestAgentCode
+                : $persistedAgentCode;
+
+            return $this->normalize($persistedTopicMode, $agentCode);
         }
 
         $requestTopicPattern = trim((string) ($extra?->getTopicPattern() ?? ''));
