@@ -63,6 +63,8 @@ Router::addGroup(
 
         // 文件管理相关
         Router::addGroup('/file', static function () {
+            Router::post('/upload', [OpenFileApi::class, 'uploadProjectFile']);
+            Router::post('/project/batch-save', [OpenFileApi::class, 'batchSaveProjectFiles']);
             // 创建文件版本
             Router::post('/versions', [FileApi::class, 'createFileVersion']);
             // 获取文件最新版本

@@ -61,6 +61,11 @@
       -->
       <file>test/Cases/Application/SuperMagic/Agent/Command/RestartAllMagicClawSandboxCommandTest.php</file>
       <file>test/Cases/Interfaces/SuperMagic/Task/DTO/Request/CreateOpenTaskRequestDTOTest.php</file>
+      <file>test/Cases/Application/SuperMagic/Message/Assembler/UserMessageDTOAssemblerTest.php</file>
+      <file>test/Cases/Application/SuperMagic/Message/Service/HandleUserMessageDispatchTest.php</file>
+      <file>test/Cases/Interfaces/SuperMagic/Task/Assembler/OpenTaskMessageAssemblerTest.php</file>
+      <file>test/Cases/Application/SuperMagic/File/Service/OpenFileUploadTest.php</file>
+      <file>test/Cases/Application/SuperMagic/Task/Service/TopicTaskHttpMessageTest.php</file>
       <file>test/Cases/Application/SuperMagic/Task/Service/TopicTaskAppServiceHiringTest.php</file>
       <file>test/Cases/Application/SuperMagic/Task/Service/TopicTaskAppServiceAutoHireTest.php</file>
       <file>test/Cases/Infrastructure/SuperMagic/ExternalAPI/SandboxOS/SandboxListGatewayTest.php</file>

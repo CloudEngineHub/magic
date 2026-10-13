@@ -100,7 +100,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $hire->expects($this->once())->method('findUserAgentOwnershipByCode')->with($this->callback(static fn (SuperMagicAgentDataIsolation $isolation) => $isolation->getCurrentUserId() === 'user-1' && $isolation->getCurrentOrganizationCode() === 'org-1'), 'SMA-topic')->willReturn(new UserAgentEntity());
         $access->expects($this->exactly(2))->method('checkAgentAccess')->with($this->anything(), 'custom_agent', 'SMA-topic')->willReturnOnConsecutiveCalls([false, 'unavailable'], [true, '']);
         $queue->expects($this->once())->method('createMessage')->willReturn(new MessageQueueWriteResult((new MessageQueueEntity())->setId(123), true));
-        self::assertSame(['task_id' => '', 'queue_id' => '123'], $service->createTaskFromOpenApi($this->context(), $this->request(true)));
+        self::assertSame(['task_id' => '', 'queue_id' => '123'], $this->createOpenTask($service, $this->request(true)));
     }
 
     public function testDisabledAutoHirePreservesTheExistingAccessError(): void
@@ -110,7 +110,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $queue->expects($this->never())->method('createMessage');
         $access->method('checkAgentAccess')->willReturn([false, 'unavailable']);
         $this->expectExceptionCode(SuperMagicErrorCode::OperationFailed->value);
-        $service->createTaskFromOpenApi($this->context(), $this->request(false));
+        $this->createOpenTask($service, $this->request(false));
     }
 
     #[DataProvider('accessibleModes')]
@@ -120,7 +120,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $hire->expects($this->never())->method('findUserAgentOwnershipByCode');
         $access->expects($this->once())->method('checkAgentAccess')->willReturn([true, '']);
         $queue->method('createMessage')->willReturn(new MessageQueueWriteResult((new MessageQueueEntity())->setId(123), true));
-        self::assertSame('123', $service->createTaskFromOpenApi($this->context(), $this->request(true))['queue_id']);
+        self::assertSame('123', $this->createOpenTask($service, $this->request(true))['queue_id']);
     }
 
     public static function accessibleModes(): array
@@ -136,7 +136,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $access->expects($this->once())->method('checkAgentAccess')->willReturn([false, 'unavailable']);
         $queue->expects($this->never())->method('createMessage');
         try {
-            $service->createTaskFromOpenApi($this->context(), $this->request(true));
+            $this->createOpenTask($service, $this->request(true));
             self::fail('Expected auto hire failure');
         } catch (BusinessException $exception) {
             self::assertSame(60014, $exception->getCode());
@@ -160,7 +160,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $hire->expects($this->once())->method('findUserAgentOwnershipByCode')->with($this->anything(), 'SMA-request')->willReturn(new UserAgentEntity());
         $access->method('checkAgentAccess')->willReturnOnConsecutiveCalls([false, 'unavailable'], [true, '']);
         $queue->method('createMessage')->willReturn(new MessageQueueWriteResult((new MessageQueueEntity())->setId(123), true));
-        self::assertSame('123', $service->createTaskFromOpenApi($this->context(), $this->request(true))['queue_id']);
+        self::assertSame('123', $this->createOpenTask($service, $this->request(true))['queue_id']);
     }
 
     public function testFirstPartyTaskCreationNeverAutoHires(): void
@@ -199,7 +199,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $dto = $this->request(true);
         $dto->projectId = '99';
         $this->expectExceptionCode(SuperAgentErrorCode::VALIDATE_FAILED->value);
-        $service->createTaskFromOpenApi($this->context(), $dto);
+        $this->createOpenTask($service, $dto);
     }
 
     public function testTopicOwnershipFailureDoesNotHire(): void
@@ -209,7 +209,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $access->expects($this->never())->method('checkAgentAccess');
         $queue->expects($this->never())->method('createMessage');
         $this->expectExceptionCode(SuperAgentErrorCode::TOPIC_ACCESS_DENIED->value);
-        $service->createTaskFromOpenApi($this->context(), $this->request(true));
+        $this->createOpenTask($service, $this->request(true));
     }
 
     public function testMagicClawPermissionFailureIsNotConvertedToHiring(): void
@@ -219,7 +219,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $access->method('checkAgentAccess')->willReturn([false, 'unavailable']);
         $queue->expects($this->never())->method('createMessage');
         $this->expectExceptionCode(SuperMagicErrorCode::OperationFailed->value);
-        $service->createTaskFromOpenApi($this->context(), $this->request(true));
+        $this->createOpenTask($service, $this->request(true));
     }
 
     public function testAccessStillDeniedAfterHiringKeepsTheOriginalError(): void
@@ -229,7 +229,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $access->expects($this->exactly(2))->method('checkAgentAccess')->willReturn([false, 'unavailable']);
         $queue->expects($this->never())->method('createMessage');
         $this->expectExceptionCode(SuperMagicErrorCode::OperationFailed->value);
-        $service->createTaskFromOpenApi($this->context(), $this->request(true));
+        $this->createOpenTask($service, $this->request(true));
     }
 
     public function testLaterTaskFailureKeepsItsCauseAndDoesNotDismissTheEmployee(): void
@@ -241,7 +241,7 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
         $cause = new RuntimeException('Queue unavailable');
         $queue->method('createMessage')->willThrowException($cause);
         $this->expectExceptionObject($cause);
-        $service->createTaskFromOpenApi($this->context(), $this->request(true));
+        $this->createOpenTask($service, $this->request(true));
     }
 
     private function service(string $mode = 'SMA-topic', string $userId = 'user-1'): array
@@ -267,6 +267,11 @@ final class TopicTaskAppServiceAutoHireTest extends TestCase
             (new ReflectionProperty(TopicTaskAppService::class, $property))->setValue($service, $value);
         }
         return [$service, $hire, $access, $queue];
+    }
+
+    private function createOpenTask(TopicTaskAppService $service, CreateOpenTaskRequestDTO $request): array
+    {
+        return $service->createTaskFromOpenApi($this->context(), $request, $request->toCreateTaskRequestDTO());
     }
 
     private function request(bool $autoHire): CreateOpenTaskRequestDTO

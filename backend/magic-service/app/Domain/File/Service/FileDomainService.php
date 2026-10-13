@@ -67,6 +67,15 @@ readonly class FileDomainService
         $this->cloudFileRepository->uploadByCredential($organizationCode, $uploadFile, $storage, $autoDir, $contentType, ['internal_endpoint' => $internalEndpoint]);
     }
 
+    public function getHeadObjectByCredential(
+        string $organizationCode,
+        string $objectKey,
+        StorageBucketType $bucketType = StorageBucketType::Private,
+        array $options = [],
+    ): array {
+        return $this->cloudFileRepository->getHeadObjectByCredential($organizationCode, $objectKey, $bucketType, $options);
+    }
+
     public function upload(string $organizationCode, UploadFile $uploadFile, StorageBucketType $storage = StorageBucketType::Private): void
     {
         $this->cloudFileRepository->upload($organizationCode, $uploadFile, $storage);
