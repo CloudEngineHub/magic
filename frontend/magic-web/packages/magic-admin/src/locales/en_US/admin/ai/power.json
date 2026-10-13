@@ -38,5 +38,6 @@
 	"serviceConfig": "Provider Configuration",
 	"skPlaceholder": "Please enter your SK",
 	"userInputUrl": "API URL",
-	"userInputUrlPlaceholder": "Please enter the API URL"
+	"userInputUrlPlaceholder": "Please enter the API URL",
+	"useDefaultPlaceholder": "Defaults to {{value}}"
 }

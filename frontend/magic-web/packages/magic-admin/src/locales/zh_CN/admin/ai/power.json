@@ -38,5 +38,6 @@
 	"serviceConfig": "提供商配置",
 	"skPlaceholder": "请输入 SK",
 	"userInputUrl": "API 地址",
-	"userInputUrlPlaceholder": "请输入 API 地址"
+	"userInputUrlPlaceholder": "请输入 API 地址",
+	"useDefaultPlaceholder": "默认使用 {{value}}"
 }

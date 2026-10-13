@@ -10,7 +10,8 @@ export interface FieldConfig {
 	label: string // 显示标签
 	type: "input" | "password" | "textarea" | "select" // 输入类型
 	required?: boolean // 是否必填
-	placeholder?: string // 占位符
+	placeholder?: string // 占位符（i18n key）
+	placeholderParams?: Record<string, string> // 占位符插值参数，供文案里的 {{xxx}} 使用
 	description?: string // 字段描述
 }
 
@@ -247,13 +248,38 @@ export const imageEditConfig: Record<string, FieldConfig[]> = {
  * 火山方舟素材服务的可选字段：这些字段在后端都有内置默认值（version/region/service/endpoint
  * 由素材客户端兜底，project_name 由领域服务兜底），留空即按默认值生效，因此不做必填校验，
  * 管理员只需要填 AK/SK。
+ *
+ * 每个字段的占位符里显式写出「留空时实际生效的默认值」，否则用户看到空输入框无从判断不填会发生
+ * 什么。这里的默认值必须与后端兜底值保持一致：
+ * - version/region/service/endpoint → VolcengineArkAssetsClient 的 DEFAULT_* 常量
+ * - project_name → VolcengineArkAssetProvider / AssetDomainService 的 DEFAULT_PROJECT_NAME
  */
 const VOLCENGINE_ARK_ASSETS_OPTIONAL_FIELDS: FieldConfig[] = [
-	createFieldConfig("version", "version", "input", { required: false }),
-	createFieldConfig("region", "region", "input", { required: false }),
-	createFieldConfig("service", "serviceName", "input", { required: false }),
-	createFieldConfig("endpoint", "endpoint", "input", { required: false }),
-	createFieldConfig("project_name", "projectName", "input", { required: false }),
+	createFieldConfig("version", "version", "input", {
+		required: false,
+		placeholder: "useDefaultPlaceholder",
+		placeholderParams: { value: "2024-01-01" },
+	}),
+	createFieldConfig("region", "region", "input", {
+		required: false,
+		placeholder: "useDefaultPlaceholder",
+		placeholderParams: { value: "cn-beijing" },
+	}),
+	createFieldConfig("service", "serviceName", "input", {
+		required: false,
+		placeholder: "useDefaultPlaceholder",
+		placeholderParams: { value: "ark" },
+	}),
+	createFieldConfig("endpoint", "endpoint", "input", {
+		required: false,
+		placeholder: "useDefaultPlaceholder",
+		placeholderParams: { value: "https://open.volcengineapi.com" },
+	}),
+	createFieldConfig("project_name", "projectName", "input", {
+		required: false,
+		placeholder: "useDefaultPlaceholder",
+		placeholderParams: { value: "default" },
+	}),
 ]
 
 /**
