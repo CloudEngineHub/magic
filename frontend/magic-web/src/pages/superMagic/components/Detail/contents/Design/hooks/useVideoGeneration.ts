@@ -532,6 +532,25 @@ function normalizeGenerateVideoInputs(
 					},
 				}
 			: {}),
+		...(inputs.draft_task?.video_id || inputs.draft_task?.uri
+			? {
+					draft_task: {
+						...(inputs.draft_task.video_id
+							? { video_id: inputs.draft_task.video_id }
+							: {}),
+						...(inputs.draft_task.uri
+							? {
+									uri: ensureDesignResourceUri(
+										inputs.draft_task.uri,
+										designProjectBasePath,
+										flatAttachments,
+										pathUnresolvedMessage,
+									),
+								}
+							: {}),
+					},
+				}
+			: {}),
 		...(inputs.audio?.length
 			? {
 					audio: inputs.audio.map((item) => ({

@@ -36,7 +36,13 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoProviderOperationExecutor;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkSeedanceVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\Seedance20MiniFastVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\Seedance20VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\Seedance25VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\VolcengineArkVideoAdapterRouter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Capability\Seedance20GenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Capability\Seedance20MiniFastGenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Capability\Seedance25GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkVideoClient;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Response;
@@ -100,7 +106,7 @@ class VideoProviderOperationExecutorTest extends TestCase
             new VideoGenerateFactory(
                 $this->createCloudswayRouter($clientFactory),
                 $this->createKelingRouter($this->createMock(ClientFactory::class)),
-                new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class))),
+                $this->createVolcengineArkRouter($this->createMock(ClientFactory::class)),
                 $this->createDashScopeRouter(),
                 new MiniMaxH3VideoAdapter(
                     new MiniMaxH3GenerationCapabilityProvider(),
@@ -134,7 +140,7 @@ class VideoProviderOperationExecutorTest extends TestCase
             new VideoGenerateFactory(
                 $this->createCloudswayRouter($this->createMock(ClientFactory::class)),
                 $this->createKelingRouter($this->createMock(ClientFactory::class)),
-                new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class))),
+                $this->createVolcengineArkRouter($this->createMock(ClientFactory::class)),
                 $this->createDashScopeRouter(),
                 new MiniMaxH3VideoAdapter(
                     new MiniMaxH3GenerationCapabilityProvider(),
@@ -239,7 +245,7 @@ class VideoProviderOperationExecutorTest extends TestCase
             new VideoGenerateFactory(
                 $this->createCloudswayRouter($this->createMock(ClientFactory::class)),
                 $this->createKelingRouter($this->createMock(ClientFactory::class)),
-                new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($clientFactory)),
+                $this->createVolcengineArkRouter($clientFactory),
                 $this->createDashScopeRouter(),
                 new MiniMaxH3VideoAdapter(
                     new MiniMaxH3GenerationCapabilityProvider(),
@@ -297,7 +303,7 @@ class VideoProviderOperationExecutorTest extends TestCase
             new VideoGenerateFactory(
                 $this->createCloudswayRouter($this->createMock(ClientFactory::class)),
                 $this->createKelingRouter($this->createMock(ClientFactory::class)),
-                new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($clientFactory)),
+                $this->createVolcengineArkRouter($clientFactory),
                 $this->createDashScopeRouter(),
                 new MiniMaxH3VideoAdapter(
                     new MiniMaxH3GenerationCapabilityProvider(),
@@ -374,5 +380,23 @@ class VideoProviderOperationExecutorTest extends TestCase
             new Wan30GenerationCapabilityProvider(),
             $this->createMock(DashScopeTransportInterface::class),
         ));
+    }
+
+    private function createVolcengineArkRouter(ClientFactory $clientFactory): VolcengineArkVideoAdapterRouter
+    {
+        return new VolcengineArkVideoAdapterRouter(
+            new Seedance20MiniFastVideoAdapter(
+                new Seedance20MiniFastGenerationCapabilityProvider(),
+                new VolcengineArkVideoClient($clientFactory),
+            ),
+            new Seedance20VideoAdapter(
+                new Seedance20GenerationCapabilityProvider(),
+                new VolcengineArkVideoClient($clientFactory),
+            ),
+            new Seedance25VideoAdapter(
+                new Seedance25GenerationCapabilityProvider(),
+                new VolcengineArkVideoClient($clientFactory),
+            ),
+        );
     }
 }

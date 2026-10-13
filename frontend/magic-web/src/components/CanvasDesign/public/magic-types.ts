@@ -179,11 +179,16 @@ export interface VideoModelItem {
 
 /** 视频输入模式 */
 export type VideoInputMode =
-	"standard" | "image_reference" | "omni_reference" | "video_edit" | "keyframe_guided"
+	| "standard"
+	| "image_reference"
+	| "omni_reference"
+	| "video_edit"
+	| "keyframe_guided"
+	| "draft_task"
 
 /** 输入模式下允许提交的素材字段 */
 export type VideoInputModeSupportedField =
-	"reference_images" | "reference_videos" | "reference_audios" | "frames"
+	"reference_images" | "reference_videos" | "reference_audios" | "frames" | "draft_task"
 
 /**
  * 模式级/变体级生成参数限制。
@@ -305,6 +310,8 @@ export interface VideoGenerationSwitchConfig {
 	default: boolean
 	name: string
 	description?: string
+	/** 开关启用时进一步收窄当前模式可选的生成参数。 */
+	constraints?: VideoGenerationConstraints
 }
 /**
  * 视频模型元数据：能力、可选生成参数与约束
@@ -330,6 +337,8 @@ export interface VideoGenerationConfig {
 		generate_audio?: VideoGenerationSwitchConfig
 		/** 是否启用网络搜索 */
 		web_search?: VideoGenerationSwitchConfig
+		/** 样片模式开关（仅由服务端声明该能力的模型支持）：先出低分辨率样片，再出正片 */
+		draft?: VideoGenerationSwitchConfig
 		/** 可选分辨率列表，如 1080p */
 		resolutions?: string[]
 		/** 可选输出尺寸（与 aspect_ratios、resolutions 组合一一对应时可优先使用） */
@@ -418,6 +427,11 @@ export interface GenerateVideoInputs {
 		/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
 		uri: string
 	}
+	/** 样片成片输入；优先使用业务 video_id，旧数据可回退工作区 URI。 */
+	draft_task?: {
+		video_id?: string
+		uri?: string
+	}
 	/** 音频资源列表 */
 	audio?: Array<{
 		/** 资源 URI（PATH）；DSL 中存相对路径，发请求时会还原为工作区绝对路径 */
@@ -427,6 +441,8 @@ export interface GenerateVideoInputs {
 
 /** 单次视频生成的参数（与 inputs 并列） */
 export interface GenerateVideoGeneration {
+	/** 是否生成样片；样片视频在画布播放器中显示样片标识。 */
+	draft?: boolean
 	/** 宽高比，如 16:9 */
 	aspect_ratio?: string
 	/** 分辨率，如 1080p */
@@ -441,6 +457,8 @@ export interface GenerateVideoGeneration {
 	generate_audio?: boolean
 	/** 是否启用网络搜索 */
 	web_search?: boolean
+	/** 是否以样片模式生成；仅在模型能力声明 draft 时发送 */
+	draft?: boolean
 	/** 人物生成策略 */
 	person_generation?: string
 	/** 是否增强提示词 */

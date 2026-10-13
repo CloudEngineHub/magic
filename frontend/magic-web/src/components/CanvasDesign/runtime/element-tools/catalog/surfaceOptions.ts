@@ -9,7 +9,7 @@ export function topCustom(group: string, order: number): ElementToolSurfaceOptio
 }
 
 export function bottomAction(
-	icon: ElementToolIcon,
+	icon: ElementToolIcon | undefined,
 	labelKey: string,
 	labelFallback: string,
 	group: string,

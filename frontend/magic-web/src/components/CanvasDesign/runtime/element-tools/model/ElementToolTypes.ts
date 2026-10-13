@@ -8,10 +8,7 @@ export type { ContentState } from "../../document/elementContent"
 export type ElementToolSurface = "top" | "bottom"
 
 export type ElementToolRenderKind =
-	| "top-action"
-	| "top-custom"
-	| "bottom-action"
-	| "bottom-version-controls"
+	"top-action" | "top-custom" | "bottom-action" | "bottom-version-controls"
 
 export type ElementToolIcon =
 	| "pencil"
@@ -69,11 +66,29 @@ export interface GenerationAttemptState {
 	readonly phase?: string
 }
 
+export interface ElementToolData {
+	version?: {
+		current: number
+		total: number
+		isMain: boolean
+	}
+	videoGenerationEstimate?: {
+		resolution: string
+		points: number | null
+	}
+	/** 样片转正片的有效期说明。截止时间由完成时间加固定有效期得出。 */
+	videoDraftFinalHint?: {
+		deadlineText?: string
+		expired: boolean
+	}
+}
+
 export interface ElementToolRuntimeState {
 	readonly available: boolean
 	readonly loading?: boolean
 	readonly disabled?: boolean
 	readonly disabledReason?: string
+	readonly data?: ElementToolData
 }
 
 export interface ElementToolElementSnapshot {
@@ -197,13 +212,7 @@ export interface ElementToolResolution {
 	loading?: boolean
 	disabledReason?: string
 	presentation: ElementToolSurfaceOptions
-	data?: {
-		version?: {
-			current: number
-			total: number
-			isMain: boolean
-		}
-	}
+	data?: ElementToolData
 	target: ElementToolTarget
 	execute?: (payload?: unknown) => void | Promise<void>
 }

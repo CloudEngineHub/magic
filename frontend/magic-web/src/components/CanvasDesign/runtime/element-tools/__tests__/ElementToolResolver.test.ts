@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { ElementToolTypeEnum } from "../../../public/props"
 import { resolveCanvasAccessContext } from "../../core/CanvasAccessPolicy"
-import { ElementTypeEnum, type ImageElement } from "../../document/types"
+import { ElementTypeEnum, type ImageElement, type VideoElement } from "../../document/types"
 import { createElementToolContext } from "../model/ElementToolContext"
 import { resolveElementTools } from "../resolver/ElementToolResolver"
 
@@ -12,6 +12,17 @@ function createImage(overrides: Partial<ImageElement> = {}): ImageElement {
 		activeContentId: "content-a",
 		mainContentId: "content-a",
 		contents: [{ contentId: "content-a", src: "a.png", status: "completed" }],
+		...overrides,
+	}
+}
+
+function createVideo(overrides: Partial<VideoElement> = {}): VideoElement {
+	return {
+		id: "video-1",
+		type: ElementTypeEnum.Video,
+		activeContentId: "content-a",
+		mainContentId: "content-a",
+		contents: [{ contentId: "content-a", src: "a.mp4", status: "completed" }],
 		...overrides,
 	}
 }
@@ -33,6 +44,61 @@ function resolve(
 }
 
 describe("ElementToolResolver", () => {
+	it("shows generate-final only when the selected video registers the runtime capability", () => {
+		const video = createVideo()
+		const withoutRuntime = createElementToolContext({ selectedElements: [video] })
+		if (!withoutRuntime) throw new Error("expected a tool context")
+		expect(resolveElementTools(withoutRuntime, "bottom").map((tool) => tool.id)).not.toContain(
+			ElementToolTypeEnum.GenerationGenerateFinal,
+		)
+
+		const withRuntime = createElementToolContext({
+			selectedElements: [video],
+			toolRuntimeStates: new Map([
+				[
+					ElementToolTypeEnum.GenerationGenerateFinal,
+					{
+						available: true,
+						data: {
+							videoGenerationEstimate: { resolution: "1080P", points: 3190 },
+						},
+					},
+				],
+			]),
+		})
+		if (!withRuntime) throw new Error("expected a tool context")
+		const generateFinal = resolveElementTools(withRuntime, "bottom").find(
+			(tool) => tool.id === ElementToolTypeEnum.GenerationGenerateFinal,
+		)
+		expect(generateFinal?.data).toEqual({
+			videoGenerationEstimate: { resolution: "1080P", points: 3190 },
+		})
+	})
+
+	it("hides re-edit for a draft-task final even before runtime commands register", () => {
+		const video = createVideo({
+			contents: [
+				{
+					contentId: "content-a",
+					src: "final.mp4",
+					status: "completed",
+					generateVideoRequest: {
+						model_id: "video-model",
+						input_mode: "draft_task",
+						inputs: { draft_task: { video_id: "draft-task" } },
+					},
+				},
+			],
+		})
+		const context = createElementToolContext({ selectedElements: [video] })
+		if (!context) throw new Error("expected a tool context")
+		const toolIds = resolveElementTools(context, "bottom").map((tool) => tool.id)
+
+		expect(toolIds).not.toContain(ElementToolTypeEnum.GenerationReEdit)
+		expect(toolIds).toContain(ElementToolTypeEnum.GenerationQuickEdit)
+		expect(toolIds).toContain(ElementToolTypeEnum.GenerationGenerateAgain)
+	})
+
 	it("keeps the completed active Content operable while a sibling is processing", () => {
 		const { context, top, bottom } = resolve(
 			createImage({

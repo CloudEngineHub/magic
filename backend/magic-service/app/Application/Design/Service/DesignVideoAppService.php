@@ -11,6 +11,7 @@ use App\Application\Design\Event\Message\DesignVideoPollMessage;
 use App\Application\Design\Event\Message\DesignVideoSubmitMessage;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
 use App\Application\Design\Event\Publish\DesignVideoSubmitPublisher;
+use App\Application\Design\Support\DesignDraftTaskResolver;
 use App\Application\ModelGateway\Mapper\ModelEntry;
 use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Domain\Design\Entity\DesignDataIsolation;
@@ -49,6 +50,7 @@ class DesignVideoAppService extends DesignAppService
         private readonly ModelGatewayMapper $modelGatewayMapper,
         private readonly DesignGenerationTaskDomainService $designGenerationTaskDomainService,
         private readonly DesignVideoSubmissionDomainService $submissionDomainService,
+        private readonly DesignDraftTaskResolver $draftTaskResolver,
         private readonly Producer $producer,
     ) {
     }
@@ -75,6 +77,9 @@ class DesignVideoAppService extends DesignAppService
             );
             // 记录输出目录 ID，后续目录被改名或移动时仍可按 ID 找到真实目录。
             $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
+            // 样片成片：把样片引用解析成下游样片任务 ID，并继承样片时长与成片分辨率。
+            // 非样片成片请求在这里是空操作。
+            $this->draftTaskResolver->resolve($designDataIsolation, $entity);
         }
 
         $existingEntity = $this->designGenerationTaskDomainService->findVideoTask($designDataIsolation, $project->getId(), $entity->getGenerationId());

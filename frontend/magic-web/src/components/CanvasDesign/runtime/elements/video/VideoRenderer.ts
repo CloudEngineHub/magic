@@ -22,6 +22,7 @@ import { VideoPlaybackController } from "./VideoPlaybackController"
 
 interface CreatePlayerNodeOptions {
 	showLoadingOverlay?: boolean
+	showDraftTag?: boolean
 	onPlayButtonClick?: () => void
 	onContentDoubleClick?: () => void
 }
@@ -41,6 +42,9 @@ interface PlayerNodeRefs {
 	progressGroup: Konva.Group
 	progressBackground: Konva.Rect
 	progressText: Konva.Text
+	draftTagGroup?: Konva.Group
+	draftTagBackground?: Konva.Rect
+	draftTagText?: Konva.Text
 	isHovering: boolean
 	bufferingOverlay: Konva.Group
 	bufferingSpinnerRoot: Konva.Group
@@ -366,6 +370,34 @@ export class VideoRenderer {
 
 		controlsGroup.add(progressGroup)
 
+		const draftTagGroup = options?.showDraftTag
+			? new Konva.Group({
+					listening: false,
+					name: "video-player-draft-tag",
+				})
+			: undefined
+		const draftTagBackground = draftTagGroup
+			? new Konva.Rect({
+					fill: VIDEO_CONFIG.CONTROL_TEXT_BG,
+					cornerRadius: VIDEO_CONFIG.CORNER_RADIUS,
+					listening: false,
+				})
+			: undefined
+		const draftTagText = draftTagGroup
+			? new Konva.Text({
+					text: canvas.t?.("video.sampleTag", { defaultValue: "样片" }) ?? "样片",
+					fontSize: VIDEO_CONFIG.CONTROL_TEXT_FONT_SIZE,
+					fontFamily: VIDEO_CONFIG.CONTROL_TEXT_FONT_FAMILY,
+					fill: VIDEO_CONFIG.CONTROL_TEXT_COLOR,
+					listening: false,
+				})
+			: undefined
+		if (draftTagGroup && draftTagBackground && draftTagText) {
+			draftTagGroup.add(draftTagBackground)
+			draftTagGroup.add(draftTagText)
+			controlsGroup.add(draftTagGroup)
+		}
+
 		const showControls = () => {
 			if (!this.playerRefs || !canvas.permissionManager.canShowTransientElementAffordance()) {
 				return
@@ -495,6 +527,9 @@ export class VideoRenderer {
 			progressGroup,
 			progressBackground,
 			progressText,
+			draftTagGroup,
+			draftTagBackground,
+			draftTagText,
 			isHovering: false,
 			bufferingOverlay,
 			bufferingSpinnerRoot,
@@ -646,6 +681,7 @@ export class VideoRenderer {
 			x: paddingX,
 			y: height - progressHeight - paddingY,
 		})
+		this.updateDraftTagLayout()
 	}
 
 	/**
@@ -675,6 +711,7 @@ export class VideoRenderer {
 			x: paddingX,
 			y: height - progressHeight - paddingY,
 		})
+		this.updateDraftTagLayout()
 	}
 
 	private updatePlayerUi(snapshot: ReturnType<VideoMediaState["getSnapshot"]>): void {
@@ -701,11 +738,38 @@ export class VideoRenderer {
 		})
 		progressBackground.width(progressText.width() + VIDEO_CONFIG.CONTROL_TEXT_PADDING_X * 2)
 		progressBackground.height(progressText.height() + VIDEO_CONFIG.CONTROL_TEXT_PADDING_Y * 2)
+		if (this.playerRefs.draftTagBackground && this.playerRefs.draftTagText) {
+			const { draftTagBackground, draftTagText } = this.playerRefs
+			draftTagText.position({
+				x: VIDEO_CONFIG.CONTROL_TEXT_PADDING_X,
+				y: VIDEO_CONFIG.CONTROL_TEXT_PADDING_Y,
+			})
+			draftTagBackground.width(draftTagText.width() + VIDEO_CONFIG.CONTROL_TEXT_PADDING_X * 2)
+			draftTagBackground.height(
+				draftTagText.height() + VIDEO_CONFIG.CONTROL_TEXT_PADDING_Y * 2,
+			)
+		}
+		this.updateDraftTagLayout()
 
 		const parentGroup = group.getParent()
 		if (parentGroup instanceof Konva.Group) {
 			this.updatePlayerLayout(parentGroup, group.width(), group.height())
 		}
+	}
+
+	/** 将样片标签与时间标签保持同一缩放、底边和横向间距。 */
+	private updateDraftTagLayout(): void {
+		const refs = this.playerRefs
+		if (!refs?.draftTagGroup || !refs.draftTagBackground) return
+		const inverseScale = refs.progressGroup.scale()
+		refs.draftTagGroup.scale(inverseScale)
+		refs.draftTagGroup.position({
+			x:
+				refs.progressGroup.x() +
+				refs.progressBackground.width() * inverseScale.x +
+				VIDEO_CONFIG.CONTROL_GAP * inverseScale.x,
+			y: refs.progressGroup.y(),
+		})
 	}
 
 	private updateControlsVisibility(snapshot: ReturnType<VideoMediaState["getSnapshot"]>): void {

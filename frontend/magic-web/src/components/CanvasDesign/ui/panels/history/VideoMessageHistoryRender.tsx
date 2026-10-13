@@ -478,6 +478,7 @@ function resolveVideoInputModeLabel(
 		image_reference: t("messageHistory.videoInputModes.imageReference", "参考图"),
 		keyframe_guided: t("messageHistory.videoInputModes.keyframeGuided", "首尾帧"),
 		video_edit: t("messageHistory.videoInputModes.videoEdit", "视频编辑"),
+		draft_task: t("messageHistory.videoInputModes.draftTask", "样片成片"),
 	}
 	return labels[inputMode] || inputMode
 }

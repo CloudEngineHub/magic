@@ -103,6 +103,67 @@ describe("useVideoGeneration model grouping", () => {
 		})
 	})
 
+	it("keeps the draft flag nested under generation", async () => {
+		const { result } = renderHook(() =>
+			useVideoGeneration({
+				projectId: "project-1",
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await result.current.generateVideo({
+			model_id: "doubao-seedance-2-5-260xxx",
+			prompt: "make a draft video",
+			generation: { draft: true },
+		})
+
+		expect(generateVideo).toHaveBeenCalledWith(
+			expect.objectContaining({
+				project_id: "project-1",
+				generation: { draft: true },
+			}),
+		)
+	})
+
+	it("preserves a draft task id and normalizes only its uri fallback", async () => {
+		const { result } = renderHook(() =>
+			useVideoGeneration({
+				projectId: "project-1",
+				topicId: "topic-1",
+				designProjectBasePath: "新建画布",
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await result.current.generateVideo({
+			video_id: "final-video-id",
+			model_id: "seedance-model",
+			input_mode: "draft_task",
+			task: "generate",
+			inputs: {
+				draft_task: {
+					video_id: "draft-video-id",
+					uri: "./videos/draft.mp4",
+				},
+			},
+			generation: { resolution: "1080p" },
+		})
+
+		expect(generateVideo).toHaveBeenCalledWith(
+			expect.objectContaining({
+				video_id: "final-video-id",
+				input_mode: "draft_task",
+				inputs: {
+					draft_task: {
+						video_id: "draft-video-id",
+						uri: "/新建画布/videos/draft.mp4",
+					},
+				},
+				generation: { resolution: "1080p" },
+			}),
+		)
+	})
+
 	it("loads all supported models independently of the active topic", async () => {
 		vi.mocked(superMagicModeService.getAllVideoModelGroups).mockReturnValue([
 			createGroup("claude-video", "claude-video", "seedance-2-fast"),
