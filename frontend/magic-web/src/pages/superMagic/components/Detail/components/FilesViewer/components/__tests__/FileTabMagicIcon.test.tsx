@@ -1,6 +1,9 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { FileTabMagicIcon } from "../FileTabMagicIcon"
+import type { FileItem } from "../../types"
+import { toSlidesTemplatePreviewItem } from "@/pages/superMagic/components/TopicFilesButton/utils/slides-template-folder"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 
 vi.mock("@/components/base/MagicFileIcon", () => ({
 	default: ({ type }: { type?: string }) => <span data-testid="magic-file-icon">{type}</span>,
@@ -41,6 +44,35 @@ describe("FileTabMagicIcon", () => {
 		expect(screen.getByTestId("slides-template-folder-icon")).toHaveTextContent("16")
 		expect(screen.queryByTestId("magic-file-icon")).not.toBeInTheDocument()
 	})
+
+	it.each([undefined, null, {}])(
+		"keeps the template icon after merging an attachment with display_config %s",
+		(display_config) => {
+			const attachment: AttachmentItem = {
+				file_id: "template-root",
+				file_name: "PPT-example",
+				is_directory: true,
+				display_config,
+				children: [
+					{ file_name: "template.json", is_directory: false },
+					{ file_name: "visual-spec.md", is_directory: false },
+					{ file_name: "theme.css", is_directory: false },
+					{ file_name: "slides", is_directory: true },
+				],
+			}
+			render(
+				<FileTabMagicIcon
+					tab={{ fileData: toSlidesTemplatePreviewItem(attachment) } as never}
+					attachments={[attachment as unknown as FileItem]}
+					context={{ kind: "project", projectId: "example" }}
+					isPlayback={false}
+					size={16}
+				/>,
+			)
+			expect(screen.getByTestId("slides-template-folder-icon")).toBeInTheDocument()
+			expect(screen.queryByTestId("magic-file-icon")).not.toBeInTheDocument()
+		},
+	)
 
 	it("uses an app window icon for published micro-app tabs", () => {
 		render(
