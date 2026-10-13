@@ -1,3 +1,4 @@
+import { assertProjectDeletionAllowed } from "@/services/recordSummary/projectDeletionRecordingGuard"
 import { userStore } from "@/models/user"
 import recentProjectsStore from "../stores/core/recentProjects"
 import { SuperMagicApi } from "@/apis"
@@ -493,6 +494,7 @@ class ProjectService {
 	}
 
 	deleteProject = async (id: string, workspaceId: string): Promise<void> => {
+		assertProjectDeletionAllowed([id])
 		const operationId = `delete_${id}_${Date.now()}`
 		const requestKey = this.getRequestKey("deleteProject", { id, workspaceId })
 

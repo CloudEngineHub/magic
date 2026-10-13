@@ -1,3 +1,4 @@
+import { assertProjectDeletionAllowed } from "@/services/recordSummary/projectDeletionRecordingGuard"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicApi } from "@/apis"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
@@ -17,6 +18,7 @@ const { mockWorkspaces, mockProjectStore } = vi.hoisted(() => ({
 vi.mock("@/apis", () => ({
 	SuperMagicApi: {
 		moveProjectToNewWorkspace: vi.fn(),
+		deleteProject: vi.fn(),
 		getProjects: vi.fn(),
 		getProjectsWithCollaboration: vi.fn(),
 	},
@@ -59,7 +61,18 @@ vi.mock("@/pages/superMagic/utils/project", () => ({
 
 import ProjectService from "../projectService"
 
-describe("ProjectService.moveProject", () => {
+describe("ProjectService project operations", () => {
+	it("blocks recording deletion before optimistic removal and the server request", async () => {
+		const error = new Error("unfinished recording")
+		vi.mocked(assertProjectDeletionAllowed).mockImplementationOnce(() => {
+			throw error
+		})
+		await expect(projectService.deleteProject("project-1", "workspace-source")).rejects.toBe(
+			error,
+		)
+		expect(mockProjectStore.removeProject).not.toHaveBeenCalled()
+		expect(SuperMagicApi.deleteProject).not.toHaveBeenCalled()
+	})
 	let projectService: ProjectService
 
 	beforeEach(() => {
@@ -177,3 +190,7 @@ describe("ProjectService.moveProject", () => {
 		expect(workspaceStore.setSelectedWorkspace).not.toHaveBeenCalled()
 	})
 })
+
+vi.mock("@/services/recordSummary/projectDeletionRecordingGuard", () => ({
+	assertProjectDeletionAllowed: vi.fn(),
+}))

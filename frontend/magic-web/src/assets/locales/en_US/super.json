@@ -5881,6 +5881,14 @@
 			"pause": "Pause",
 			"resume": "Resume"
 		},
+		"projectDeletion": {
+			"active": "This project has an unfinished recording. Complete or cancel the recording before deleting the project.",
+			"confirm": "Got it",
+			"otherTab": "Another tab has an unfinished recording whose project could not be identified. Return to that tab and finish recording before deleting.",
+			"projectMissing": "The project no longer exists. Recording has stopped. Local audio can be exported from recording history.",
+			"projectMissingSaveFailed": "The project no longer exists. Recording has stopped, but the local recording could not be saved. Check your browser storage.",
+			"title": "Finish recording first"
+		},
 		"projectSelector": {
 			"change": "Change",
 			"createProject": "Create Project",
