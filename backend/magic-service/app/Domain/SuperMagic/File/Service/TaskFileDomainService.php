@@ -2570,29 +2570,6 @@ class TaskFileDomainService
                 foreach ($preparedFiles as $preparedFile) {
                     $url = $urls[$preparedFile['object_key']] ?? null;
                     if (! is_string($url) || $url === '') {
-                        // Older file-service deployments can issue a batch credential but
-                        // fail to sign one or more objects. Retry only missing items through
-                        // the established single-file signing path instead of dropping the
-                        // whole response.
-                        try {
-                            $url = $this->generateFileUrlForEntity(
-                                $projectOrganizationCode,
-                                $preparedFile['entity'],
-                                $downloadMode,
-                                $preparedFile['file_id'],
-                                $addWatermark,
-                                false,
-                                self::URL_EXPIRES
-                            )['url'] ?? null;
-                        } catch (Throwable $fallbackException) {
-                            $this->logger->warning(sprintf(
-                                '批量签名失败后单文件回退仍失败, file_id:%s, err：%s',
-                                $preparedFile['file_id'],
-                                $fallbackException->getMessage()
-                            ));
-                        }
-                    }
-                    if (! is_string($url) || $url === '') {
                         continue;
                     }
 
