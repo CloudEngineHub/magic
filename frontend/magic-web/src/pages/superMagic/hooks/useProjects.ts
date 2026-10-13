@@ -1,3 +1,4 @@
+import { canDeleteRecordingProjects } from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { useCallback, useEffect, useState } from "react"
 import type { CreatedProject, ProjectListItem } from "../pages/Workspace/types"
 import { SuperMagicApi } from "@/apis"
@@ -277,6 +278,7 @@ export function useProjects({ selectedWorkspace, onWorkspaceStateChange }: UsePr
 		async (id: string, isAutoSelect = true) => {
 			if (!selectedWorkspace) return
 			try {
+				if (!canDeleteRecordingProjects([id])) return
 				await SuperMagicApi.deleteProject({ id })
 				await fetchProjects({ workspaceId: selectedWorkspace.id, isAutoSelect })
 				magicToast.success(t("project.deleteProjectSuccess"))

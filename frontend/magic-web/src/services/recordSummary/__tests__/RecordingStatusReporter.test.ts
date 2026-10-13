@@ -30,6 +30,28 @@ vi.mock("@/infrastructure/logger", () => {
 })
 
 describe("RecordingStatusReporter", () => {
+	it("retains the failed request identity after another session starts", async () => {
+		let rejectReport!: (error: Error) => void
+		reportRecordingSummaryStatus.mockImplementationOnce(
+			() =>
+				new Promise((_, reject) => {
+					rejectReport = reject
+				}),
+		)
+		const onReportError = vi.fn()
+		const reporter = new RecordingStatusReporter({ onReportError })
+		const pending = reporter.reportStatus({
+			task_key: "old-session",
+			status: RecordingSummaryStatus.Recording,
+			model_id: "model-1",
+		})
+		reporter.startPeriodicReport("new-session")
+		const error = Object.assign(new Error("project missing"), { code: "51200" })
+		rejectReport(error)
+		await pending
+		expect(onReportError).toHaveBeenCalledExactlyOnceWith(error, "old-session")
+		reporter.stopPeriodicReport()
+	})
 	beforeEach(() => {
 		reportRecordingSummaryStatus.mockClear()
 	})

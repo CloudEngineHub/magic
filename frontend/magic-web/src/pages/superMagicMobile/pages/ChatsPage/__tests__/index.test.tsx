@@ -348,3 +348,8 @@ describe("ChatsPage", () => {
 		expect(screen.getByTestId("chat-list")).toBeInTheDocument()
 	})
 })
+
+vi.mock("@/services/recordSummary/projectDeletionRecordingNotice", () => ({
+	canDeleteRecordingProjects: vi.fn(() => true),
+	handleRecordingProjectDeletionError: vi.fn(() => false),
+}))

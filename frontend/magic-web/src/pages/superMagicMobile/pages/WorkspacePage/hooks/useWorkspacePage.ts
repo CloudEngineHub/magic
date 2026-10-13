@@ -1,3 +1,7 @@
+import {
+	canDeleteRecordingProjects,
+	handleRecordingProjectDeletionError,
+} from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDebounce, useMemoizedFn, useRequest } from "ahooks"
 import { runInAction } from "mobx"
@@ -384,6 +388,7 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 		mode: "default",
 		onProjectChanged: () => handleRefreshProjects({ silent: true }),
 		onDeleteProjectConfirmed: async (project) => {
+			if (!canDeleteRecordingProjects([project.id])) return
 			try {
 				setIsReplacingFirstProjectPage(true)
 				setPendingRemoveIds((prev) => new Set([...prev, project.id]))
@@ -392,7 +397,8 @@ export function useWorkspacePage(): UseWorkspacePageReturn {
 					lastUsedWorkspaceId: selectedWorkspace?.id,
 				})
 				await handleRefreshProjects({ silent: true })
-			} catch {
+			} catch (error) {
+				if (handleRecordingProjectDeletionError(error)) return
 				await handleRefreshProjects({ silent: true })
 				magicToast.error(t("project.deleteProjectFailed"))
 				throw new Error("delete project failed")

@@ -1,3 +1,4 @@
+import { canDeleteRecordingProjects } from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { runInAction } from "mobx"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -334,6 +335,23 @@ describe("useWorkspacePage", () => {
 		expect(result.current.projects[0]?.project_name).toBe("Project B1")
 	})
 
+	it("does not optimistically remove a project when its recording blocks deletion", async () => {
+		const project = createProject({
+			id: "project-1",
+			project_name: "Recording",
+			workspace_id: "workspace-a",
+		})
+		getProjectsMock.mockResolvedValueOnce({ list: [project], total: 1 })
+		const { result } = renderHook(() => useWorkspacePage())
+		await waitFor(() => expect(result.current.projects).toHaveLength(1))
+		vi.mocked(canDeleteRecordingProjects).mockReturnValueOnce(false)
+		await act(async () => {
+			await projectActionsMockState.options?.onDeleteProjectConfirmed?.(project)
+		})
+		expect(deleteProjectMock).not.toHaveBeenCalled()
+		expect(result.current.projects[0]?.id).toBe("project-1")
+	})
+
 	it("keeps pagination disabled while project delete refresh is replacing the first page", async () => {
 		const firstPageProjects = Array.from({ length: 100 }, (_, index) =>
 			createProject({
@@ -440,3 +458,8 @@ describe("useWorkspacePage", () => {
 		})
 	})
 })
+
+vi.mock("@/services/recordSummary/projectDeletionRecordingNotice", () => ({
+	canDeleteRecordingProjects: vi.fn(() => true),
+	handleRecordingProjectDeletionError: vi.fn(() => false),
+}))

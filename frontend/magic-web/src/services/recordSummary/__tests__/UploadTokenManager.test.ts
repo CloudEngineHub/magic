@@ -14,7 +14,8 @@ vi.mock("@/services/recordSummary/utils/RecordingLogger", () => {
 	return { recordingLogger: logger }
 })
 
-vi.mock("../RecordingErrorManager", () => ({
+vi.mock("../RecordingErrorManager", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../RecordingErrorManager")>()),
 	isTaskEndError: vi.fn(() => false),
 	createTaskEndError: vi.fn(),
 	defaultErrorManager: { handleTaskEnd: vi.fn().mockResolvedValue(undefined) },
@@ -75,6 +76,23 @@ function mockLeakyTaskEndError(originalMessage: string) {
 }
 
 describe("UploadTokenManager", () => {
+	it("forwards a nested project-not-found code and does not retry", async () => {
+		const original = { response: { data: { code: "51200" } } }
+		vi.mocked(isTaskEndError).mockImplementationOnce((_error): _error is TaskEndError => true)
+		vi.mocked(createTaskEndError).mockImplementationOnce(
+			(sessionId, code) =>
+				Object.assign(new Error("ended"), { sessionId, code }) as TaskEndError,
+		)
+		vi.mocked(SuperMagicApi.getRecordingSummaryUploadToken).mockRejectedValueOnce(original)
+		const onTaskEnd = vi.fn()
+		const manager = new UploadTokenManager({ maxRetries: 3, retryInterval: 0 }, onTaskEnd)
+		await expect(manager.getToken("session-1", "topic-1")).rejects.toMatchObject({
+			code: 51200,
+			sessionId: "session-1",
+		})
+		expect(onTaskEnd).toHaveBeenCalledExactlyOnceWith("session-1", 51200)
+		expect(SuperMagicApi.getRecordingSummaryUploadToken).toHaveBeenCalledOnce()
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
