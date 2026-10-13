@@ -19,7 +19,6 @@ use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Entity\ValueObject\UserType;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\CreationSource;
-use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Entity\TaskMessageEntity;
 use App\Domain\SuperMagic\Message\Repository\Facade\TaskMessageRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
@@ -38,7 +37,6 @@ use Exception;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
 use Throwable;
 
 use function Hyperf\Translation\trans;
@@ -56,7 +54,6 @@ class TopicDomainService
         protected TaskMessageRepositoryInterface $taskMessageRepository,
         protected CloudFileRepositoryInterface $cloudFileRepository,
         protected ProjectRepositoryInterface $projectRepository,
-        protected TaskFileDomainService $taskFileDomainService,
         LoggerFactory $loggerFactory,
     ) {
         $this->logger = $loggerFactory->get('topic');
@@ -1156,6 +1153,28 @@ class TopicDomainService
     }
 
     /**
+     * Resolve the cutoff to a source-topic primary key before creating a copy.
+     * Copies preserve the business message_id, but regenerate the primary key
+     * used by both the message cutoff query and IM app_message_id.
+     */
+    public function resolveDuplicateCutoffMessageId(TopicEntity $sourceTopicEntity, string $targetMessageId): int
+    {
+        $sourceTopicId = $sourceTopicEntity->getId();
+        $targetMessageId = trim($targetMessageId);
+
+        $message = $this->findDuplicateCutoffMessage($sourceTopicId, $targetMessageId);
+        if ($message !== null) {
+            return $message->getId();
+        }
+
+        $this->logger->warning('Duplicate cutoff message not found in source topic', [
+            'source_topic_id' => $sourceTopicId,
+            'target_message_id' => $targetMessageId,
+        ]);
+        ExceptionBuilder::throw(SuperAgentErrorCode::DUPLICATE_TARGET_MESSAGE_NOT_FOUND, 'topic.target_message_not_found');
+    }
+
+    /**
      * Copy topic messages from source topic to target topic.
      * This method handles the copying of messages, IM messages, and chat history files.
      *
@@ -1186,29 +1205,24 @@ class TopicDomainService
         // Get agent's seq id
         $progressCallback && $progressCallback('running', 40, 'Getting sequence IDs');
         $seqList = $this->getSeqIdByMessageId((string) $messageId);
-        $userSeqId = (int) $seqList['user_seq_id'];
-        $aiSeqId = (int) $seqList['ai_seq_id'];
+        if ($seqList === []) {
+            $this->logger->error('IM sequence not found for duplicate cutoff message', [
+                'source_topic_id' => $sourceTopicEntity->getId(),
+                'target_topic_id' => $targetTopicEntity->getId(),
+                'message_id' => $messageId,
+            ]);
+            ExceptionBuilder::throw(GenericErrorCode::SystemError, 'system.system_error');
+        }
+        $userSeqId = (int) ($seqList['user_seq_id'] ?? 0);
+        $aiSeqId = (int) ($seqList['ai_seq_id'] ?? 0);
 
         // Copy IM messages
         $progressCallback && $progressCallback('running', 60, 'Copying IM messages');
         $this->copyImMessages($imConversationResult, $messageIdMapping, $userSeqId, $aiSeqId, (string) $targetTopicEntity->getId());
 
         if ($copyChatHistory) {
-            // Copy sandbox chat history
-            $progressCallback && $progressCallback('running', 80, 'Copying chat history files');
-            $chatHistoryResult = $this->copyTopicChatHistory(
-                $sourceTopicEntity,
-                $targetTopicEntity,
-                DataIsolation::create($sourceTopicEntity->getUserOrganizationCode(), $sourceTopicEntity->getUserId()),
-                $progressCallback === null ? null : function (array $stats) use ($progressCallback) {
-                    $progressCallback('running', 80, sprintf('Copied %d chat history files', $stats['copied'] ?? 0));
-                }
-            );
-            $this->updateCopiedMessageFileReferences(
-                $messageIdMapping,
-                $chatHistoryResult['source_to_target'] ?? [],
-                $chatHistoryResult['source_to_target_file_keys'] ?? []
-            );
+            $progressCallback && $progressCallback('running', 80, 'Copying chat history archive');
+            $this->copyTopicChatHistory($sourceTopicEntity, $targetTopicEntity);
         }
 
         $progressCallback && $progressCallback('running', 100, 'Topic message copy completed');
@@ -1219,69 +1233,6 @@ class TopicDomainService
         ]);
 
         return $messageIdMapping;
-    }
-
-    /**
-     * Update file references in copied messages after TaskFile IDs/keys have
-     * been remapped to the target topic. References outside the copied topic
-     * file tree are intentionally left untouched.
-     *
-     * @param array<int|string, int|string> $messageIdMapping
-     * @param array<int|string, int|string> $sourceToTargetFileIds
-     * @param array<string, string> $sourceToTargetFileKeys
-     */
-    public function updateCopiedMessageFileReferences(
-        array $messageIdMapping,
-        array $sourceToTargetFileIds,
-        array $sourceToTargetFileKeys
-    ): void {
-        if ($messageIdMapping === [] || ($sourceToTargetFileIds === [] && $sourceToTargetFileKeys === [])) {
-            return;
-        }
-
-        $targetMessageIds = array_map(
-            static fn ($targetMessageId): int => (int) $targetMessageId,
-            array_values($messageIdMapping)
-        );
-        $messages = $this->taskMessageRepository->getByIds($targetMessageIds);
-        $messageMap = [];
-        foreach ($messages as $message) {
-            $messageMap[$message->getId()] = $message;
-        }
-
-        foreach ($targetMessageIds as $targetMessageId) {
-            $message = $messageMap[$targetMessageId] ?? null;
-            if ($message === null) {
-                $this->logger->error('Copied topic message not found while remapping file references', [
-                    'target_message_id' => $targetMessageId,
-                ]);
-                throw new RuntimeException('Copied topic message not found while remapping file references');
-            }
-
-            $changed = false;
-            $attachments = $this->remapFileReferences($message->getAttachments(), $sourceToTargetFileIds, $sourceToTargetFileKeys, $changed);
-            $tool = $this->remapFileReferences($message->getTool(), $sourceToTargetFileIds, $sourceToTargetFileKeys, $changed);
-            $steps = $this->remapFileReferences($message->getSteps(), $sourceToTargetFileIds, $sourceToTargetFileKeys, $changed);
-            $content = $this->remapJsonStringFileReferences($message->getContent(), $sourceToTargetFileIds, $sourceToTargetFileKeys, $changed);
-            $rawContent = $this->remapJsonStringFileReferences($message->getRawContent(), $sourceToTargetFileIds, $sourceToTargetFileKeys, $changed);
-
-            if (! $changed) {
-                continue;
-            }
-
-            $message->setAttachments($attachments);
-            $message->setTool($tool);
-            $message->setSteps($steps);
-            $message->setContent($content);
-            $message->setRawContent($rawContent);
-            $this->taskMessageRepository->updateExistingMessage($message);
-        }
-
-        $this->logger->info('Copied topic message file references remapped', [
-            'message_count' => count($messageIdMapping),
-            'file_id_mapping_count' => count($sourceToTargetFileIds),
-            'file_key_mapping_count' => count($sourceToTargetFileKeys),
-        ]);
     }
 
     public function findHiddenTopicByProjectAndUser(int $projectId, string $userId): ?TopicEntity
@@ -1361,102 +1312,15 @@ class TopicDomainService
         return $this->topicRepository->detachWorkspace($workspaceId, $dataIsolation->getCurrentUserId());
     }
 
-    public function copyTopicChatHistory(
-        TopicEntity $sourceTopicEntity,
-        TopicEntity $targetTopicEntity,
-        DataIsolation $dataIsolation,
-        ?callable $progressCallback = null
-    ): array {
-        $sourceRoot = $this->taskFileDomainService->getTopicRootDirectory(
-            $sourceTopicEntity->getProjectId(),
-            $sourceTopicEntity->getId(),
-            $sourceTopicEntity->getUserOrganizationCode()
-        );
-        $targetRoot = $this->taskFileDomainService->getTopicRootDirectory(
-            $targetTopicEntity->getProjectId(),
-            $targetTopicEntity->getId(),
-            $targetTopicEntity->getUserOrganizationCode()
-        );
-
-        if ($sourceRoot !== null && $targetRoot === null) {
-            throw new RuntimeException('Target topic root TaskFile not found');
-        }
-        $strategy = $sourceRoot !== null ? 'task_file_list' : 'zip';
-        $this->logger->info('Topic chat history copy strategy selected', [
-            'source_topic_id' => $sourceTopicEntity->getId(),
-            'target_topic_id' => $targetTopicEntity->getId(),
-            'source_root_file_id' => $sourceRoot?->getFileId(),
-            'target_root_file_id' => $targetRoot?->getFileId(),
-            'strategy' => $strategy,
-        ]);
-
-        if ($strategy === 'task_file_list') {
-            $this->logger->info('Starting topic chat history file-list copy', [
-                'source_topic_id' => $sourceTopicEntity->getId(),
-                'target_topic_id' => $targetTopicEntity->getId(),
-                'source_root_file_id' => $sourceRoot->getFileId(),
-                'target_root_file_id' => $targetRoot->getFileId(),
-            ]);
-            $cursor = null;
-            $aggregate = [
-                'total' => 0, 'directories' => 0, 'files' => 0, 'copied' => 0, 'skipped' => 0,
-                'failed' => 0, 'failed_file_keys' => [], 'source_to_target' => [],
-                'source_to_target_file_keys' => [],
-            ];
-            $sourceToTarget = [$sourceRoot->getFileId() => $targetRoot->getFileId()];
-            $pendingParentIds = [];
-            do {
-                $page = $this->taskFileDomainService->getFilesForCopy($sourceRoot, $cursor, 200);
-                $pageResult = $this->taskFileDomainService->copyFileList(
-                    $dataIsolation,
-                    $sourceRoot,
-                    $targetRoot,
-                    $page['list'],
-                    $sourceToTarget,
-                    $pendingParentIds,
-                    $progressCallback
-                );
-                foreach (['total', 'directories', 'files', 'copied', 'skipped', 'failed'] as $key) {
-                    $aggregate[$key] += $pageResult[$key];
-                }
-                $aggregate['failed_file_keys'] = array_merge($aggregate['failed_file_keys'], $pageResult['failed_file_keys']);
-                $aggregate['source_to_target'] = $sourceToTarget;
-                $aggregate['source_to_target_file_keys'] = array_merge(
-                    $aggregate['source_to_target_file_keys'],
-                    $pageResult['source_to_target_file_keys'] ?? []
-                );
-                $cursor = $page['next_cursor'];
-                $this->logger->info('Topic chat history file-list copy batch completed', [
-                    'source_topic_id' => $sourceTopicEntity->getId(),
-                    'target_topic_id' => $targetTopicEntity->getId(),
-                    'cursor' => $cursor,
-                    'batch_size' => count($page['list']),
-                    'copied' => $pageResult['copied'],
-                    'failed' => $pageResult['failed'],
-                ]);
-            } while ($cursor !== null);
-
-            $this->taskFileDomainService->fixCopiedParentIds(
-                $pendingParentIds,
-                $sourceToTarget,
-                $dataIsolation->getCurrentUserId()
-            );
-
-            if ($aggregate['failed'] > 0) {
-                $this->logger->error('Topic chat history file-list copy failed', $aggregate + [
-                    'source_topic_id' => $sourceTopicEntity->getId(),
-                    'target_topic_id' => $targetTopicEntity->getId(),
-                ]);
-                throw new RuntimeException('Topic chat history file-list copy failed');
-            }
-            $this->logger->info('Topic chat history file-list copy completed', $aggregate + [
-                'source_topic_id' => $sourceTopicEntity->getId(),
-                'target_topic_id' => $targetTopicEntity->getId(),
-            ]);
-            return ['strategy' => 'task_file_list'] + $aggregate;
-        }
-
-        $this->logger->info('Using legacy chat history zip copy', [
+    /**
+     * Copy the ZIP used to restore Agent context. A topic root can exist even
+     * after its chat_history directory has been cleared following ZIP upload.
+     *
+     * @return array{strategy: string, source_key: string, destination_key: string}
+     */
+    public function copyTopicChatHistory(TopicEntity $sourceTopicEntity, TopicEntity $targetTopicEntity): array
+    {
+        $this->logger->info('Starting chat history ZIP copy', [
             'source_topic_id' => $sourceTopicEntity->getId(),
             'target_topic_id' => $targetTopicEntity->getId(),
         ]);
@@ -1474,7 +1338,7 @@ class TopicDomainService
                 bucketType: StorageBucketType::SandBox
             );
         } catch (Throwable $e) {
-            $this->logger->error('Legacy chat history zip copy failed', [
+            $this->logger->error('Chat history ZIP copy failed', [
                 'source_topic_id' => $sourceTopicEntity->getId(),
                 'target_topic_id' => $targetTopicEntity->getId(),
                 'source_key' => $sourceKey,
@@ -1483,56 +1347,13 @@ class TopicDomainService
             ]);
             throw $e;
         }
-        $this->logger->info('Legacy chat history zip copy completed', [
+        $this->logger->info('Chat history ZIP copy completed', [
             'source_topic_id' => $sourceTopicEntity->getId(),
             'target_topic_id' => $targetTopicEntity->getId(),
             'source_key' => $sourceKey,
             'destination_key' => $destinationKey,
         ]);
         return ['strategy' => 'zip', 'source_key' => $sourceKey, 'destination_key' => $destinationKey];
-    }
-
-    private function remapFileReferences(mixed $value, array $sourceToTargetFileIds, array $sourceToTargetFileKeys, bool &$changed): mixed
-    {
-        if (! is_array($value)) {
-            return $value;
-        }
-
-        foreach ($value as $key => &$item) {
-            if (is_array($item)) {
-                $item = $this->remapFileReferences($item, $sourceToTargetFileIds, $sourceToTargetFileKeys, $changed);
-                continue;
-            }
-
-            if (($key === 'file_id' || $key === 'fileId') && isset($sourceToTargetFileIds[(string) $item])) {
-                $item = $sourceToTargetFileIds[(string) $item];
-                $changed = true;
-            } elseif (($key === 'file_key' || $key === 'fileKey') && isset($sourceToTargetFileKeys[(string) $item])) {
-                $item = $sourceToTargetFileKeys[(string) $item];
-                $changed = true;
-            }
-        }
-        unset($item);
-
-        return $value;
-    }
-
-    private function remapJsonStringFileReferences(?string $value, array $sourceToTargetFileIds, array $sourceToTargetFileKeys, bool &$changed): ?string
-    {
-        if ($value === null || trim($value) === '') {
-            return $value;
-        }
-        $decoded = json_decode($value, true);
-        if (! is_array($decoded)) {
-            return $value;
-        }
-        $fieldChanged = false;
-        $remapped = $this->remapFileReferences($decoded, $sourceToTargetFileIds, $sourceToTargetFileKeys, $fieldChanged);
-        if ($fieldChanged) {
-            $changed = true;
-            return json_encode($remapped, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        }
-        return $value;
     }
 
     private function toSidebarTopicArray(TopicEntity $topic, bool $hasUnread): array
@@ -1648,11 +1469,13 @@ class TopicDomainService
         );
 
         if (empty($messagesToCopy)) {
-            $this->logger->info('No messages found to copy', [
+            // Fail loudly instead of silently producing an empty duplicated topic.
+            $this->logger->warning('No messages found to copy', [
                 'source_topic_id' => $sourceTopicEntity->getId(),
+                'target_topic_id' => $targetTopicEntity->getId(),
                 'message_id' => $messageId,
             ]);
-            return [];
+            ExceptionBuilder::throw(SuperAgentErrorCode::DUPLICATE_NO_MESSAGES_TO_COPY, 'topic.no_messages_to_copy');
         }
 
         $this->logger->info('Found messages to copy', [
@@ -2018,12 +1841,12 @@ class TopicDomainService
                 continue;
             }
 
-            // Get original content array
+            $appMessageId = $messageIdMapping[$originalMessage->getAppMessageId()] ?? '';
             $contentArray = $originalMessage->getContent()->toArray();
 
-            // For SuperAgentCard type, directly replace fields with fixed structure
-            if ($originalMessage->getMessageType() === ChatMessageType::SuperAgentCard) {
-                $contentArray['message_id'] = $messageIdMapping[$contentArray['message_id']] ?? '';
+            // Use the IM row's mapping: older copies may retain an ancestor ID in content.
+            if (in_array($originalMessage->getMessageType(), [ChatMessageType::SuperAgentCard, ChatMessageType::SuperMagicMessage], true)) {
+                $contentArray['message_id'] = $appMessageId;
                 $contentArray['topic_id'] = $newTopicId;
                 $contentArray['task_id'] = '';
             }
@@ -2038,7 +1861,7 @@ class TopicDomainService
                 'message_type' => $originalMessage->getMessageType(),
                 'content' => json_encode($contentArray, JSON_UNESCAPED_UNICODE),
                 'language' => $originalMessage->getLanguage(),
-                'app_message_id' => $messageIdMapping[$originalMessage->getAppMessageId()] ?? '',
+                'app_message_id' => $appMessageId,
                 'magic_message_id' => $newMagicMessageId,
                 'send_time' => $originalMessage->getSendTime(),
                 'current_version_id' => null,
@@ -2072,6 +1895,32 @@ class TopicDomainService
         $this->logger->info('IM消息复制完成', $result);
 
         return $result;
+    }
+
+    private function findDuplicateCutoffMessage(int $sourceTopicId, string $targetMessageId): ?TaskMessageEntity
+    {
+        if ($targetMessageId === '') {
+            return null;
+        }
+
+        $message = $this->taskMessageRepository->findByTopicIdAndMessageId($sourceTopicId, $targetMessageId);
+        if ($message !== null || ! ctype_digit($targetMessageId)) {
+            return $message;
+        }
+
+        $message = $this->taskMessageRepository->getById((int) $targetMessageId);
+        if ($message === null || (int) $message->getTopicId() === $sourceTopicId) {
+            return $message;
+        }
+
+        // Legacy copies still expose an ancestor primary key; locate its counterpart
+        // through the business message_id preserved in the source topic.
+        $businessMessageId = $message->getMessageId();
+        if ($businessMessageId === '') {
+            return null;
+        }
+
+        return $this->taskMessageRepository->findByTopicIdAndMessageId($sourceTopicId, $businessMessageId);
     }
 
     private function getSeqIdByMessageId(string $messageId): array
