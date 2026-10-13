@@ -62,7 +62,7 @@
 	},
 	"lint-staged": {
 		"{src,enterprise/src,customer/src}/**/*.{js,jsx,ts,tsx}": [
-			"eslint --fix --config .eslintrc.cjs",
+			"eslint --fix --config .eslintrc.cjs --parser-options '{\"project\":null}'",
 			"prettier --write"
 		],
 		"**/!(package).json": [

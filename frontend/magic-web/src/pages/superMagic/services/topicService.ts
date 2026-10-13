@@ -1,3 +1,4 @@
+import type { TopicTypeFilterValue } from "../utils/topicTypeFilter"
 import { SuperMagicApi } from "@/apis"
 import { runInAction } from "mobx"
 import { userStore } from "@/models/user"
@@ -48,6 +49,7 @@ interface TopicsApiResponse {
 }
 
 interface GetSidebarTopicsByProjectIdParams {
+	topicType?: TopicTypeFilterValue
 	projectId: string
 	page: number
 	pageSize: number
@@ -145,6 +147,7 @@ class TopicService {
 	}
 
 	async getSidebarTopicsByProjectId({
+		topicType = "all",
 		projectId,
 		page,
 		pageSize,
@@ -156,12 +159,14 @@ class TopicService {
 			page,
 			pageSize,
 			searchKeyword?.trim() || "",
+			topicType,
 		)
 
 		const pendingRequest = this.pendingRequests.get(requestKey)
 		if (pendingRequest) return pendingRequest
 
 		const requestPromise = SuperMagicApi.getSidebarTopicsByProjectId({
+			...(topicType !== "all" ? { topicType } : {}),
 			id: projectId,
 			page,
 			page_size: pageSize,

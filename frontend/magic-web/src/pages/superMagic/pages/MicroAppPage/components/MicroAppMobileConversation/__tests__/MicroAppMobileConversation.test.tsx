@@ -181,6 +181,7 @@ describe("MicroApp mobile conversation controls", () => {
 
 		render(
 			<MicroAppTopicPicker
+				projectId="project-1"
 				open
 				topics={topics}
 				selectedTopicId="topic-1"
@@ -212,6 +213,7 @@ describe("MicroApp mobile conversation controls", () => {
 
 		render(
 			<MicroAppTopicPicker
+				projectId="project-1"
 				open
 				topics={topics}
 				selectedTopicId="topic-1"
@@ -501,4 +503,46 @@ describe("MicroApp mobile conversation controls", () => {
 			appName: "Todo App",
 		})
 	})
+})
+
+const filterRequests = vi.hoisted(() => ({ query: vi.fn() }))
+vi.mock("@/pages/superMagic/hooks/usePaginatedTopics", () => ({
+	default: (params: { storeTopics: unknown[]; topicType: string }) => {
+		filterRequests.query(params)
+		const topics = params.topicType === "all" ? params.storeTopics : []
+		return {
+			displayTopics: topics,
+			total: topics.length,
+			isLoading: false,
+			error: null,
+			hasMore: false,
+			reload: vi.fn(),
+		}
+	},
+}))
+
+it("filters the micro-app project without selecting a topic and resets for another project", () => {
+	const onSelect = vi.fn()
+	const props = {
+		open: true,
+		topics: [{ id: "ordinary", topic_name: "Ordinary" }] as never,
+		onSelect,
+		onClose: vi.fn(),
+	}
+	const { rerender } = render(<MicroAppTopicPicker {...props} projectId="micro-project" />)
+	fireEvent.click(screen.getByRole("button", { name: "topicTypeFilter.label" }))
+	fireEvent.click(screen.getByRole("checkbox", { name: "topicTypeFilter.topic" }))
+	expect(filterRequests.query).toHaveBeenLastCalledWith(
+		expect.objectContaining({
+			projectId: "micro-project",
+			topicType: "scheduled_task",
+			enabled: true,
+		}),
+	)
+	expect(screen.queryByText("Ordinary")).not.toBeInTheDocument()
+	expect(onSelect).not.toHaveBeenCalled()
+	rerender(<MicroAppTopicPicker {...props} projectId="runtime-project" />)
+	expect(filterRequests.query).toHaveBeenLastCalledWith(
+		expect.objectContaining({ projectId: "runtime-project", topicType: "all" }),
+	)
 })

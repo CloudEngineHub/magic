@@ -97,6 +97,37 @@ describe("useTopicModel", () => {
 	})
 
 	describe("context synchronization", () => {
+		it("uses the composer employee for every model catalog and updates it on switch", () => {
+			const { rerender } = renderHook(
+				({ agentCode }) =>
+					useTopicModel({
+						selectedTopic: { id: "topic-1", agent_code: "SMA-history" } as Topic,
+						selectedProject: project1,
+						topicMode: TopicMode.CustomAgent,
+						agentCode,
+						topicModelStore: mockTopicModelStore,
+					}),
+				{ initialProps: { agentCode: "SMA-default" } },
+			)
+
+			for (const agentCode of ["SMA-default", "SMA-next"]) {
+				if (agentCode === "SMA-next") rerender({ agentCode })
+				for (const getGroups of [
+					superMagicModeService.getModelGroupsByMode,
+					superMagicModeService.getImageModelGroupsByMode,
+					superMagicModeService.getVideoModelGroupsByMode,
+				]) {
+					expect(getGroups).toHaveBeenLastCalledWith(TopicMode.CustomAgent, agentCode)
+				}
+				expect(mockTopicModelStore.setCurrentContext).toHaveBeenLastCalledWith(
+					"topic-1",
+					"project-1",
+					TopicMode.CustomAgent,
+					agentCode,
+				)
+			}
+		})
+
 		it("uses the default custom agent catalog for a new chat", () => {
 			renderHook(() =>
 				useTopicModel({

@@ -1,3 +1,4 @@
+import type { TopicTypeFilterValue } from "@/pages/superMagic/utils/topicTypeFilter"
 import type { ServiceHttpClient, RequestConfig } from "@/infrastructure/network/http/clients"
 import type { SeqRecord } from "@/apis/modules/chat/types"
 import type { FileScope } from "./fileScope"
@@ -1687,6 +1688,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	getSidebarTopicsByProjectId({
+		topicType,
 		id,
 		page,
 		page_size,
@@ -1696,9 +1698,17 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		page: number
 		page_size: number
 		q?: string
+		topicType?: TopicTypeFilterValue
 	}) {
 		return fetch.get<WithPage<Topic>>(`/api/v1/super-agent/projects/${id}/sidebar-topics`, {
-			params: { page, page_size, q },
+			params: {
+				page,
+				page_size,
+				q,
+				...(topicType && topicType !== "all"
+					? { topic_types: topicType === "topic" ? 1 : 2 }
+					: {}),
+			},
 		})
 	},
 

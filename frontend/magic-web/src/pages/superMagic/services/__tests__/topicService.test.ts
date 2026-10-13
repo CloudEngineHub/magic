@@ -932,3 +932,27 @@ describe("TopicService scene topic-created analytics", () => {
 		expect(trackMock).toHaveBeenCalledTimes(1)
 	})
 })
+
+describe("topic type requests", () => {
+	it("deduplicates only the same type and forwards filters without writing the store", async () => {
+		const store = new TopicStore()
+		const service = new TopicService({ store })
+		const request = vi.mocked(SuperMagicApi.getSidebarTopicsByProjectId)
+		request.mockClear()
+		request.mockImplementation(
+			() =>
+				new Promise(() => {
+					/* Keep requests pending to verify request deduplication. */
+				}),
+		)
+		const params = { projectId: "project-1", page: 1, pageSize: 100 }
+		void service.getSidebarTopicsByProjectId({ ...params, topicType: "topic" })
+		void service.getSidebarTopicsByProjectId({ ...params, topicType: "topic" })
+		void service.getSidebarTopicsByProjectId({ ...params, topicType: "scheduled_task" })
+		expect(request).toHaveBeenCalledTimes(2)
+		expect(request).toHaveBeenLastCalledWith(
+			expect.objectContaining({ topicType: "scheduled_task" }),
+		)
+		expect(store.topics).toEqual([])
+	})
+})

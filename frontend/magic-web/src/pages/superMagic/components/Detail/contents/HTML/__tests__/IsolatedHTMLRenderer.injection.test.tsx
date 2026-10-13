@@ -212,6 +212,19 @@ describe("IsolatedHTMLRenderer iframe injection", () => {
 		expect(ensureConversation).not.toHaveBeenCalled()
 	})
 
+	it("denies comparison-preview permissions without opening authorization", async () => {
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} disableHtmlAppPermissions />)
+		await flushReactEffects()
+
+		await expect(
+			agentActionMocks.agentOptions?.authorizePermission?.("fs.project.read"),
+		).resolves.toBe(false)
+		await expect(
+			agentActionMocks.agentOptions?.authorizePermission?.("project.message.write"),
+		).resolves.toBe(false)
+		expect(agentActionMocks.authorizeHtmlPermission).not.toHaveBeenCalled()
+	})
+
 	it("does not read window.project_id when host props omit projectId", async () => {
 		;(window as Window & { project_id?: string }).project_id = "share-window-project"
 

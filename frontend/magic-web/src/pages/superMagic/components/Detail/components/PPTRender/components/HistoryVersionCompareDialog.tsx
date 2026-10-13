@@ -280,6 +280,7 @@ function HistoryVersionCompareDialog({
 					attachmentList={attachmentList}
 					isVisible={true}
 					hideVerticalScroll={isPptRender}
+					disableHtmlAppPermissions
 				/>
 				{isHistoryContentPending && (
 					<div
@@ -418,6 +419,7 @@ function HistoryVersionCompareDialog({
 									attachmentList={attachmentList}
 									isVisible={true}
 									hideVerticalScroll={isPptRender}
+									disableHtmlAppPermissions
 								/>
 							</div>
 						</div>

@@ -12,6 +12,7 @@ describe("package exports", () => {
 		) as PackageJson
 
 		expect(packageJson.exports?.["./utils/parentOrigin"]).toEqual({
+			"magic-web-source": "./src/utils/parentOrigin.ts",
 			types: "./src/utils/parentOrigin.ts",
 			import: "./dist/utils/parentOrigin.js",
 		})
@@ -23,6 +24,7 @@ describe("package exports", () => {
 		) as PackageJson
 
 		expect(packageJson.exports?.["./utils/textContent"]).toEqual({
+			"magic-web-source": "./src/utils/textContent.ts",
 			types: "./src/utils/textContent.ts",
 			import: "./dist/utils/textContent.js",
 		})
