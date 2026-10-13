@@ -422,8 +422,18 @@ function buildDefaultOpenFileScope({
 
 const DINGTALK_AVATAR_SIZE_SUFFIX_PATTERN = /@\d+w_\d+h$/
 
+/** Treat members-API `type` and selector `dataType` as the same person-vs-department signal. */
+function isShareMemberUser(node: Partial<TreeNode>): boolean {
+	return node.type === "User" || node.dataType === NodeType.User
+}
+
+/**
+ * Align a share member with selector nodes.
+ * The members API returns `type` and omits selector `dataType`; without that field the
+ * edit list renders a department icon and resubmits the user id as a department target.
+ */
 function normalizeDetailMemberNode(node: TreeNode): TreeNode {
-	const isUser = node.type === "User" || node.dataType === NodeType.User
+	const isUser = isShareMemberUser(node)
 	const normalizedId = isUser ? node.user_id || node.id : node.department_id || node.id
 	const normalizedAvatarUrl =
 		typeof node.avatar_url === "string" &&
@@ -434,6 +444,7 @@ function normalizeDetailMemberNode(node: TreeNode): TreeNode {
 	return {
 		...node,
 		id: normalizedId,
+		dataType: node.dataType || (isUser ? NodeType.User : NodeType.Department),
 		avatar_url: normalizedAvatarUrl,
 	}
 }
@@ -989,14 +1000,16 @@ export function useProjectShareSheet({
 	})
 
 	const confirmMemberSelector = useMemoizedFn((value: TreeNode[]) => {
-		setSelectedMemberNodes(value)
+		// Selector echoes can keep members-API `type` and drop `dataType`; classify before writing targets.
+		const normalizedMembers = value.map((item) => normalizeDetailMemberNode(item))
+		setSelectedMemberNodes(normalizedMembers)
 		setMemberSelectorOpen(false)
 		setFormState((prev) => ({
 			...prev,
 			// For mobile, selecting members implies sharing with a designated scope, preventing fallback to organization-wide visibility during submission.
-			shareRange: value.length > 0 ? "designated" : "all",
-			shareTargets: value.map((item) => ({
-				target_type: item.dataType === NodeType.User ? "User" : "Department",
+			shareRange: normalizedMembers.length > 0 ? "designated" : "all",
+			shareTargets: normalizedMembers.map((item) => ({
+				target_type: isShareMemberUser(item) ? "User" : "Department",
 				target_id: item.id,
 				name: item.name,
 				avatar_url: item.avatar_url,
@@ -1340,10 +1353,9 @@ export function useProjectShareSheet({
 				const targetIds = settings?.target_ids || []
 				const memberNodes = targetIds.map((target) => {
 					const matched = (membersResponse.members || []).find((member) => {
-						const memberId =
-							member.type === "User" || member.dataType === NodeType.User
-								? member.user_id || member.id
-								: member.department_id || member.id
+						const memberId = isShareMemberUser(member)
+							? member.user_id || member.id
+							: member.department_id || member.id
 						return memberId === target.target_id
 					})
 					if (matched) return normalizeDetailMemberNode(matched)

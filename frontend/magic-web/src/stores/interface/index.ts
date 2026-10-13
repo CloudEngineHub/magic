@@ -32,7 +32,6 @@ export class InterfaceStore {
 	readyState: WebSocket["readyState"] = WebSocketReadyState.CLOSED
 	isSwitchingOrganization: boolean = false
 	isConnecting: boolean = false
-	showReloadButton: boolean = false
 	chatPanelSizeKey = platformKey("chatPanel")
 
 	isMobile: boolean = false
@@ -118,10 +117,6 @@ export class InterfaceStore {
 
 	setIsConnecting(isConnecting: boolean) {
 		this.isConnecting = isConnecting
-	}
-
-	setShowReloadButton(showReloadButton: boolean) {
-		this.showReloadButton = showReloadButton
 	}
 
 	/**
