@@ -918,7 +918,13 @@ export function createMagicWidgetController(): MagicWidget.Controller {
 				await configuredHeaderActions.close?.(context)
 			},
 		}
-		bridge = new WidgetBridge(iframe, appOrigin, instanceId, headerActions)
+		bridge = new WidgetBridge(
+			iframe,
+			appOrigin,
+			instanceId,
+			headerActions,
+			nextOptions.customMentionSearch,
+		)
 		bridge.onAgentReady(notifyAgentReady)
 		bridge.onPreviewFullscreenChange(setPreviewFullscreen)
 		bridge.onRuntimeEvent(notifyRuntimeEvent)

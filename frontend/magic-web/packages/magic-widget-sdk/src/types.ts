@@ -198,7 +198,24 @@ export declare namespace MagicWidget {
 		 * `headerActionHandled` is an ownership ack; the iframe does not fall back when it is false.
 		 */
 		headerActions?: Partial<Record<HeaderActionName, HeaderActionHandler>>
+		/** Resolves host-owned custom Mention search results for the embedded editor. */
+		customMentionSearch?: CustomMentionSearchHandler
 	}
+
+	export interface CustomMentionSearchContext {
+		query: string
+		scope: { type: "global" } | { type: "group"; groupId: string }
+		signal: AbortSignal
+	}
+
+	export interface CustomMentionSearchResult {
+		groupId: string
+		items: CustomMentionItem[]
+	}
+
+	export type CustomMentionSearchHandler = (
+		context: CustomMentionSearchContext,
+	) => Promise<CustomMentionSearchResult[]> | CustomMentionSearchResult[]
 
 	export type CommandErrorCode =
 		| "NOT_MOUNTED"

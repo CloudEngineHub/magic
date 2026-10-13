@@ -15,6 +15,7 @@ import type {
 	MagicWidgetEmbedContext,
 } from "./types"
 import { MagicWidgetContextProvider } from "./context"
+import { requestMagicWidgetCustomMentionSearch } from "./mention-search"
 
 export { useMagicWidgetConfig } from "./context"
 
@@ -105,7 +106,12 @@ export function MagicWidgetProvider({ children }: PropsWithChildren) {
 	}, [embedContext])
 
 	const value = useMemo<MagicWidgetContextValue>(
-		() => ({ embedContext, config }),
+		() => ({
+			embedContext,
+			config,
+			requestCustomMentionSearch: (query, scope, signal) =>
+				requestMagicWidgetCustomMentionSearch(embedContext, query, scope, signal),
+		}),
 		[config, embedContext],
 	)
 	return <MagicWidgetContextProvider value={value}>{children}</MagicWidgetContextProvider>

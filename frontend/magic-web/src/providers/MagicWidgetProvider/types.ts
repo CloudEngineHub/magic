@@ -32,4 +32,9 @@ export interface MagicWidgetEmbedContext {
 export interface MagicWidgetContextValue {
 	embedContext: MagicWidgetEmbedContext | null
 	config: MagicWidgetConfig
+	requestCustomMentionSearch: (
+		query: string,
+		scope: MagicWidget.CustomMentionSearchContext["scope"],
+		signal: AbortSignal,
+	) => Promise<MagicWidget.CustomMentionSearchResult[]>
 }

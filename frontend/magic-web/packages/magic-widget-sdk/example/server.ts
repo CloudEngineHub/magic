@@ -1,0 +1,103 @@
+import { join } from "node:path";
+
+/** Connection config fields injected into the page; values come from WIDGET_EXAMPLE_* env vars. */
+interface ExampleEnv {
+	appUrl: string;
+	crewId: string;
+	deploymentCode: string;
+	organizationCode: string;
+	loginStrategy: string;
+}
+
+/** Reads a required env var and throws a clear error when it is missing or blank. */
+function readRequiredEnv(name: string): string {
+	const value = process.env[name]?.trim();
+	if (!value) {
+		throw new Error(
+			`Missing required environment variable: ${name}. ` +
+				`Copy .env.example to .env and fill it in.`,
+		);
+	}
+	return value;
+}
+
+/** Reads an optional env var, returning "" when unset so optional fields are omitted from the page. */
+function readOptionalEnv(name: string): string {
+	return process.env[name]?.trim() ?? "";
+}
+
+/** Loads and validates all connection configuration from the environment. */
+function loadEnv(): ExampleEnv {
+	return {
+		appUrl: readRequiredEnv("WIDGET_EXAMPLE_APP_URL"),
+		crewId: readRequiredEnv("WIDGET_EXAMPLE_CREW_ID"),
+		deploymentCode: readOptionalEnv("WIDGET_EXAMPLE_DEPLOYMENT_CODE"),
+		organizationCode: readOptionalEnv("WIDGET_EXAMPLE_ORGANIZATION_CODE"),
+		loginStrategy: readOptionalEnv("WIDGET_EXAMPLE_LOGIN_STRATEGY") || "private_deployment",
+	};
+}
+
+/**
+ * Builds the SDK script URL from the app URL, stripping any trailing slash so the
+ * path is always `${appUrl}/sdk/magic-widget.js`.
+ */
+function buildSdkUrl(appUrl: string): string {
+	return `${appUrl.replace(/\/+$/, "")}/sdk/magic-widget.js`;
+}
+
+/**
+ * Serializes the connection config for inline injection. The `<` character is escaped
+ * to `<` so a value can never terminate the surrounding `<script>` element.
+ */
+function serializeEnv(env: ExampleEnv): string {
+	const payload = {
+		crewId: env.crewId,
+		deploymentCode: env.deploymentCode,
+		organizationCode: env.organizationCode,
+		loginStrategy: env.loginStrategy,
+	};
+	return JSON.stringify(payload).replace(/</g, "\\u003c");
+}
+
+/** Replaces the page placeholders with server-computed values. */
+function renderHtml(template: string, sdkUrl: string, envJson: string): string {
+	return template
+		.replace("{{SDK_URL}}", sdkUrl)
+		.replace("{{EXAMPLE_ENV_JSON}}", envJson);
+}
+
+const env = loadEnv();
+const sdkUrl = buildSdkUrl(env.appUrl);
+const envJson = serializeEnv(env);
+const port = Number(process.env.WIDGET_EXAMPLE_PORT ?? 4318);
+const hostname = process.env.WIDGET_EXAMPLE_HOST ?? "127.0.0.1";
+
+// Read the template once at startup so every request is served from the same in-memory copy.
+const template = await Bun.file(join(import.meta.dir, "index.html")).text();
+const html = renderHtml(template, sdkUrl, envJson);
+
+/** Serves the rendered example page plus a health check endpoint. */
+Bun.serve({
+	port,
+	hostname,
+	fetch(request) {
+		const url = new URL(request.url);
+
+		if (url.pathname === "/healthz") {
+			return new Response("ok", {
+				headers: { "content-type": "text/plain; charset=utf-8" },
+			});
+		}
+
+		if (url.pathname === "/" || url.pathname === "/index.html") {
+			return new Response(html, {
+				headers: { "content-type": "text/html; charset=utf-8" },
+			});
+		}
+
+		return new Response("Not found", { status: 404 });
+	},
+});
+
+console.log(`Magic Widget SDK example listening on http://${hostname}:${port}`);
+console.log(`SDK script: ${sdkUrl}`);

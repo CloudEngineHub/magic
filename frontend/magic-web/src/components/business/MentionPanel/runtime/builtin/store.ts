@@ -60,6 +60,12 @@ export interface MentionPanelBuiltinVisibility {
 	canvasElements?: boolean
 }
 
+type CustomMentionSearchHandler = (
+	query: string,
+	scope: MagicWidget.CustomMentionSearchContext["scope"],
+	signal: AbortSignal,
+) => Promise<MagicWidget.CustomMentionSearchResult[]>
+
 /** Maps host icon tokens to the existing local icon set; URLs are intentionally ignored. */
 function normalizeCustomMentionIcon(icon: string | undefined): string {
 	if (!icon || /^(https?:|data:|blob:|\/\/)/i.test(icon)) return "ts-file-text"
@@ -94,6 +100,9 @@ export class MentionPanelStore {
 	pinnedRootItems: MentionItem[] = []
 	private builtinVisibility: MentionPanelBuiltinVisibility = {}
 	private customMentionGroups: MagicWidget.CustomMentionGroup[] = []
+	private customMentionSearch?: CustomMentionSearchHandler
+	private customMentionSearchController?: AbortController
+	private customMentionSearchGeneration = 0
 
 	constructor(projectFilesStore: ProjectFilesStore) {
 		this.projectFilesStore = projectFilesStore
@@ -202,6 +211,9 @@ export class MentionPanelStore {
 
 	/** Replaces host-provided named groups without mutating an existing editor draft. */
 	setCustomMentionGroups(groups: MagicWidget.CustomMentionGroup[] = []) {
+		this.customMentionSearchController?.abort()
+		this.customMentionSearchController = undefined
+		this.customMentionSearchGeneration += 1
 		this.customMentionGroups = groups.map((group) => ({
 			...group,
 			items: group.items.map((item) => ({
@@ -209,6 +221,14 @@ export class MentionPanelStore {
 				data: item.data ? { ...item.data } : undefined,
 			})),
 		}))
+	}
+
+	/** Installs the iframe bridge used only for non-empty custom Mention searches. */
+	setCustomMentionSearch(handler?: CustomMentionSearchHandler) {
+		this.customMentionSearchController?.abort()
+		this.customMentionSearchController = undefined
+		this.customMentionSearch = handler
+		this.customMentionSearchGeneration += 1
 	}
 
 	/** Exposes the current immutable group snapshot to stale-detail guards. */
@@ -287,8 +307,9 @@ export class MentionPanelStore {
 	private getCustomMentionItems(
 		group: MagicWidget.CustomMentionGroup,
 		query?: string,
+		items = group.items,
 	): MentionItem[] {
-		return group.items
+		return items
 			.filter(
 				(item) =>
 					!query ||
@@ -319,6 +340,50 @@ export class MentionPanelStore {
 					},
 				}
 			})
+	}
+
+	/** Queries the host and converts only results belonging to known static groups. */
+	private async getDynamicCustomMentionItems(
+		query: string,
+		scope: MagicWidget.CustomMentionSearchContext["scope"],
+	): Promise<MentionItem[]> {
+		if (!this.customMentionSearch) return []
+		this.customMentionSearchController?.abort()
+		const controller = new AbortController()
+		const generation = ++this.customMentionSearchGeneration
+		this.customMentionSearchController = controller
+		try {
+			const results = await this.customMentionSearch(query, scope, controller.signal)
+			if (controller.signal.aborted || generation !== this.customMentionSearchGeneration) {
+				throw new DOMException("Custom Mention search was superseded", "AbortError")
+			}
+			const groupsById = new Map(this.customMentionGroups.map((group) => [group.id, group]))
+			return results.flatMap((result) => {
+				if (scope.type === "group" && result.groupId !== scope.groupId) return []
+				const group = groupsById.get(result.groupId)
+				if (!group || !Array.isArray(result.items)) return []
+				return this.getCustomMentionItems(group, undefined, result.items)
+			})
+		} finally {
+			if (this.customMentionSearchController === controller) {
+				this.customMentionSearchController = undefined
+			}
+		}
+	}
+
+	/** Merges static and callback-owned items while letting the latest callback payload win by identity. */
+	private mergeCustomMentionItems(
+		staticItems: MentionItem[],
+		dynamicItems: MentionItem[],
+	): MentionItem[] {
+		const merged = new Map<string, MentionItem>()
+		for (const item of staticItems) {
+			merged.set(`${item.data?.groupId ?? ""}:${item.id}`, item)
+		}
+		for (const item of dynamicItems) {
+			merged.set(`${item.data?.groupId ?? ""}:${item.id}`, item)
+		}
+		return Array.from(merged.values())
 	}
 
 	/** Resolves a custom group before falling back to the built-in folder sources. */
@@ -516,7 +581,30 @@ export class MentionPanelStore {
 		scopeFolderId?: string,
 	): Promise<MentionItem[]> {
 		const customGroup = this.customMentionGroups.find((group) => group.id === scopeFolderId)
-		if (customGroup) return query.trim() ? this.getCustomMentionItems(customGroup, query) : []
+		if (customGroup) {
+			if (!query.trim()) return []
+			const staticItems = this.getCustomMentionItems(customGroup, query)
+			if (this.customMentionSearch) {
+				try {
+					const dynamicItems = await this.getDynamicCustomMentionItems(query, {
+						type: "group",
+						groupId: customGroup.id,
+					})
+					return this.mergeCustomMentionItems(staticItems, dynamicItems)
+				} catch (error) {
+					if (error instanceof DOMException && error.name === "AbortError") throw error
+					if (
+						error instanceof Error &&
+						error.message === "Custom Mention search is not configured"
+					) {
+						this.customMentionSearch = undefined
+					} else {
+						console.error("Magic widget custom Mention search failed", error)
+					}
+				}
+			}
+			return staticItems
+		}
 		if (isCanvasElementsMentionItemId(scopeFolderId)) {
 			return this.canvasElementsStore.searchItems(query, scopeFolderId, this.matchesQuery)
 		}
@@ -526,9 +614,27 @@ export class MentionPanelStore {
 			pluginHost: this.getPluginHost(),
 		})
 		if (scopeFolderId?.trim()) return builtinItems
-		const customItems = query.trim()
+		let customItems = query.trim()
 			? this.customMentionGroups.flatMap((group) => this.getCustomMentionItems(group, query))
 			: []
+		if (query.trim() && this.customMentionSearch) {
+			try {
+				const dynamicItems = await this.getDynamicCustomMentionItems(query, {
+					type: "global",
+				})
+				customItems = this.mergeCustomMentionItems(customItems, dynamicItems)
+			} catch (error) {
+				if (error instanceof DOMException && error.name === "AbortError") throw error
+				if (
+					error instanceof Error &&
+					error.message === "Custom Mention search is not configured"
+				) {
+					this.customMentionSearch = undefined
+				} else {
+					console.error("Magic widget custom Mention search failed", error)
+				}
+			}
+		}
 		return [
 			...this.canvasElementsStore.searchItems(query, undefined, this.matchesQuery),
 			...builtinItems,

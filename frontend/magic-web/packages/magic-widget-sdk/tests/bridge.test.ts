@@ -253,6 +253,105 @@ describe("WidgetBridge", () => {
 		bridge.destroy()
 	})
 
+	it("resolves host custom Mention search requests with the active scope", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		const search = vi.fn().mockResolvedValue([
+			{
+				groupId: "group-mock-search",
+				items: [{ id: "item-mock-search", type: "card", text: "Search result" }],
+			},
+		])
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID, {}, search)
+		const request = {
+			protocol: WIDGET_PROTOCOL,
+			version: WIDGET_PROTOCOL_VERSION,
+			instanceId: TEST_INSTANCE_ID,
+			requestId: "mention-search-mock",
+			type: "mention_search",
+			query: "result",
+			scope: { type: "global" },
+		} as const
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: request,
+			}),
+		)
+
+		await vi.waitFor(() =>
+			expect(search).toHaveBeenCalledWith(
+				expect.objectContaining({ query: "result", scope: { type: "global" } }),
+			),
+		)
+		expect(postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "response",
+				requestId: request.requestId,
+				ok: true,
+				result: {
+					customMentionSearch: [
+						expect.objectContaining({ groupId: "group-mock-search" }),
+					],
+				},
+			}),
+			TEST_ORIGIN,
+		)
+		bridge.destroy()
+	})
+
+	it("aborts an in-flight custom Mention callback when the iframe cancels it", async () => {
+		const { iframe, postMessage } = createTestIframe()
+		let resolveSearch: ((value: MagicWidget.CustomMentionSearchResult[]) => void) | undefined
+		let callbackSignal: AbortSignal | undefined
+		const search = vi.fn(({ signal }: MagicWidget.CustomMentionSearchContext) => {
+			callbackSignal = signal
+			return new Promise<MagicWidget.CustomMentionSearchResult[]>((resolve) => {
+				resolveSearch = resolve
+			})
+		})
+		const bridge = new WidgetBridge(iframe, TEST_ORIGIN, TEST_INSTANCE_ID, {}, search)
+		const requestId = "mention-search-cancel-mock"
+		const request = {
+			protocol: WIDGET_PROTOCOL,
+			version: WIDGET_PROTOCOL_VERSION,
+			instanceId: TEST_INSTANCE_ID,
+			requestId,
+			type: "mention_search",
+			query: "result",
+			scope: { type: "global" },
+		} as const
+
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: request,
+			}),
+		)
+		await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1))
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				origin: TEST_ORIGIN,
+				source: iframe.contentWindow,
+				data: {
+					...request,
+					type: "mention_search_cancel",
+				},
+			}),
+		)
+
+		expect(callbackSignal?.aborted).toBe(true)
+		resolveSearch?.([])
+		await Promise.resolve()
+		expect(postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ requestId, type: "response" }),
+			TEST_ORIGIN,
+		)
+		bridge.destroy()
+	})
+
 	it("reports a failed host header action to the iframe", async () => {
 		const { iframe, postMessage } = createTestIframe()
 		const handler = vi.fn().mockRejectedValue(new Error("Mock header action failed"))

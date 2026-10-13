@@ -97,6 +97,20 @@ const validOptions: MagicWidget.MountOptions = {
 			void topicName
 		},
 	},
+	customMentionSearch: async ({ query, scope, signal }) => {
+		const result: MagicWidget.CustomMentionSearchResult = {
+			groupId: scope.type === "group" ? scope.groupId : "group-typecheck",
+			items: [
+				{
+					id: "dynamic-typecheck",
+					type: "card",
+					text: `Result for ${query}`,
+				},
+			],
+		}
+		void signal
+		return [result]
+	},
 }
 
 void validOptions

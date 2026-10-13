@@ -323,6 +323,7 @@ test.describe("Magic Widget SDK contract", () => {
 
 		const chart = frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Chart A" })
 		await expect(chart).toBeVisible()
+		await expect(chart).toHaveCount(1)
 		await expect(
 			frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Unknown business" }),
 		).toHaveCount(0)
@@ -340,11 +341,58 @@ test.describe("Magic Widget SDK contract", () => {
 
 		const chart = frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Chart A" })
 		await expect(chart).toBeVisible()
+		await expect(chart).toHaveCount(1)
 		await expect(
 			frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Unknown business" }),
 		).toHaveCount(0)
 		await chart.click()
 		await expect(frame.getByTestId("super-message-editor-content")).toContainText("@Chart A")
+	})
+
+	test("uses the host callback for global dynamic Mention search and preserves group identity", async ({
+		page,
+	}) => {
+		const frame = widgetFrame(page)
+		await frame.getByTestId("super-message-editor-at-button").click()
+		const searchInput = frame
+			.getByRole("searchbox", { name: "Search input area" })
+			.locator("input")
+		await searchInput.fill("dynamic report")
+
+		const report = frame
+			.getByTestId("mention-panel-menu-item")
+			.filter({ hasText: "Dynamic Report" })
+		await expect(report).toBeVisible()
+		await expect(
+			frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Dynamic Chart" }),
+		).toHaveCount(0)
+		await report.click()
+		await expect(frame.getByTestId("super-message-editor-content")).toContainText(
+			"@Dynamic Report",
+		)
+	})
+
+	test("uses the host callback for dynamic search inside a custom Mention group", async ({
+		page,
+	}) => {
+		const frame = widgetFrame(page)
+		await openBusinessChartsGroup(page)
+		const searchInput = frame
+			.getByRole("searchbox", { name: "Search input area" })
+			.locator("input")
+		await searchInput.fill("dynamic chart")
+
+		const chart = frame
+			.getByTestId("mention-panel-menu-item")
+			.filter({ hasText: "Dynamic Chart" })
+		await expect(chart).toBeVisible()
+		await expect(
+			frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Dynamic Report" }),
+		).toHaveCount(0)
+		await chart.click()
+		await expect(frame.getByTestId("super-message-editor-content")).toContainText(
+			"@Dynamic Chart",
+		)
 	})
 
 	test("filters custom Mention overflow without interrupting iframe rendering", async ({

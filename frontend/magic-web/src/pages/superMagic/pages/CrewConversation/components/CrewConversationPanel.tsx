@@ -46,6 +46,7 @@ import { MOBILE_LAYOUT_CONFIG } from "@/pages/superMagic/components/MainInputCon
 import { cn } from "@/utils/cn"
 import { useCrewConversationStore } from "../context"
 import { useMagicWidgetBridge } from "../hooks/useMagicWidgetBridge"
+import { useMagicWidgetConfig } from "@/providers/MagicWidgetProvider"
 import CrewAvatar from "./CrewAvatar"
 import type { MagicWidgetConfig } from "@/providers/MagicWidgetProvider/types"
 import {
@@ -92,6 +93,7 @@ function CrewConversationPanel({
 }: CrewConversationPanelProps) {
 	const { t } = useTranslation(["crew/market", "super"])
 	const store = useCrewConversationStore()
+	const { embedContext, requestCustomMentionSearch } = useMagicWidgetConfig()
 	const selectedProject = store.selectedProject
 	const selectedTopic = store.selectedTopic
 	const agentCode = store.agentCode
@@ -132,6 +134,17 @@ function CrewConversationPanel({
 		widgetConfig.layout,
 		widgetContext,
 	])
+
+	useLayoutEffect(() => {
+		if (!widgetContext || !embedContext || isMobile || widgetContext.renderMode !== "inline") {
+			store.mentionPanelStore.setCustomMentionSearch(undefined)
+			return
+		}
+		store.mentionPanelStore.setCustomMentionSearch((query, scope, signal) =>
+			requestCustomMentionSearch(query, scope, signal),
+		)
+		return () => store.mentionPanelStore.setCustomMentionSearch(undefined)
+	}, [embedContext, isMobile, requestCustomMentionSearch, store.mentionPanelStore, widgetContext])
 
 	const scopedMessageSendService = useMemo(
 		() =>

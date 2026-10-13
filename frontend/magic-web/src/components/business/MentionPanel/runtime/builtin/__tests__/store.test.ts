@@ -506,6 +506,7 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 
 	describe("custom group search", () => {
 		beforeEach(() => {
+			mentionPanelStore.setCustomMentionSearch(undefined)
 			mentionPanelStore.setCustomMentionGroups([
 				{
 					id: "fixture-charts",
@@ -534,6 +535,92 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 					],
 				},
 			])
+		})
+
+		it("merges dynamic global results while preserving their group identity", async () => {
+			const search = vi.fn().mockResolvedValue([
+				{
+					groupId: "fixture-reports",
+					items: [
+						{
+							id: "dynamic-report",
+							type: "report",
+							title: "Dynamic Report",
+							text: "Dynamic report result",
+						},
+					],
+				},
+			])
+			mentionPanelStore.setCustomMentionSearch(search)
+
+			const results = await searchItems("dynamic")
+			expect(search).toHaveBeenCalledWith(
+				"dynamic",
+				{ type: "global" },
+				expect.any(AbortSignal),
+			)
+			expect(results.filter((item) => item.metadata?.customMention)).toMatchObject([
+				{
+					id: "dynamic-report",
+					data: { groupId: "fixture-reports", text: "Dynamic report result" },
+				},
+			])
+		})
+
+		it("merges only the active group's static and dynamic search results", async () => {
+			const search = vi.fn().mockResolvedValue([
+				{
+					groupId: "fixture-reports",
+					items: [{ id: "wrong-group", type: "report", text: "Wrong group" }],
+				},
+				{
+					groupId: "fixture-charts",
+					items: [{ id: "dynamic-chart", type: "chart", text: "Dynamic chart" }],
+				},
+			])
+			mentionPanelStore.setCustomMentionSearch(search)
+
+			const results = await searchItemsInGroup("dynamic", "fixture-charts")
+			expect(search).toHaveBeenCalledWith(
+				"dynamic",
+				{ type: "group", groupId: "fixture-charts" },
+				expect.any(AbortSignal),
+			)
+			expect(results.map((item) => item.id)).toEqual(["dynamic-chart"])
+		})
+
+		it("merges static and dynamic results and lets the callback replace duplicate identities", async () => {
+			const search = vi.fn().mockResolvedValue([
+				{
+					groupId: "fixture-charts",
+					items: [
+						{
+							id: "fixture-chart-a",
+							type: "chart",
+							title: "Chart A refreshed",
+							text: "Fresh chart result",
+						},
+						{
+							id: "dynamic-chart",
+							type: "chart",
+							text: "Additional dynamic chart",
+						},
+					],
+				},
+			])
+			mentionPanelStore.setCustomMentionSearch(search)
+
+			const results = await searchItems("mock revenue")
+			const customResults = results.filter((item) => item.metadata?.customMention)
+			expect(customResults.map((item) => item.id)).toEqual([
+				"fixture-chart-a",
+				"fixture-report-a",
+				"dynamic-chart",
+			])
+			expect(customResults.find((item) => item.id === "fixture-chart-a")).toMatchObject({
+				name: "Chart A refreshed",
+				data: { text: "Fresh chart result" },
+			})
 		})
 
 		it("finds custom items globally by title and semantic text", async () => {

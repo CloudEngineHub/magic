@@ -45,6 +45,7 @@ export interface WidgetResponseMessage {
 		content?: string
 		headerActionHandled?: boolean
 		configWarning?: MagicWidget.ConfigWarning
+		customMentionSearch?: MagicWidget.CustomMentionSearchResult[]
 	}
 	error?: { code: string; message: string }
 }
@@ -58,6 +59,26 @@ export interface WidgetHeaderActionMessage {
 	type: "header_action"
 	action: MagicWidget.HeaderActionName
 	context?: MagicWidget.HeaderActionContext
+}
+
+/** Requests host-owned custom Mention results for one active search scope. */
+export interface WidgetMentionSearchMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	requestId: string
+	type: "mention_search"
+	query: string
+	scope: MagicWidget.CustomMentionSearchContext["scope"]
+}
+
+/** Cancels an in-flight host-owned custom Mention search request. */
+export interface WidgetMentionSearchCancelMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	requestId: string
+	type: "mention_search_cancel"
 }
 
 export interface WidgetConfigMessage {
@@ -112,6 +133,8 @@ export type WidgetProtocolMessage =
 	| WidgetUiCommandMessage
 	| WidgetRuntimeEventMessage
 	| WidgetHeaderActionMessage
+	| WidgetMentionSearchMessage
+	| WidgetMentionSearchCancelMessage
 	| WidgetResponseMessage
 
 /** Checks that mention data has the object-shaped container required by the bridge. */
@@ -182,6 +205,15 @@ export function isWidgetProtocolMessage(value: unknown): value is WidgetProtocol
 			typeof message.requestId === "string" &&
 			typeof message.action === "string" &&
 			HEADER_ACTIONS.has(message.action as MagicWidget.HeaderActionName)) ||
+		(message.type === "mention_search" &&
+			typeof message.requestId === "string" &&
+			typeof message.query === "string" &&
+			Boolean(message.scope) &&
+			typeof message.scope === "object" &&
+			((message.scope as Record<string, unknown>).type === "global" ||
+				((message.scope as Record<string, unknown>).type === "group" &&
+					typeof (message.scope as Record<string, unknown>).groupId === "string"))) ||
+		(message.type === "mention_search_cancel" && typeof message.requestId === "string") ||
 		(message.type === "event" && isRuntimeEvent(message.event))
 	return (
 		message.protocol === WIDGET_PROTOCOL &&
