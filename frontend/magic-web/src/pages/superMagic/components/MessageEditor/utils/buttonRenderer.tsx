@@ -70,6 +70,7 @@ export interface ButtonRendererContext {
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
 	topicMode?: TopicMode
+	agentCode?: string | null
 	mentionPanelStore: MentionPanelStore
 	mcpButtonConfig: MCPButtonRenderConfig
 
@@ -97,8 +98,8 @@ type ButtonRenderer = (context: ButtonRendererContext) => React.ReactNode
 function getMessageTokenUsage(message: Record<string, unknown>): TokenUsage | undefined {
 	const node =
 		(superMagicStore.getMessageNode(message.super_message_id as string) as
-			| Record<string, unknown>
-			| undefined) || (message.debug as Record<string, unknown> | undefined)
+			Record<string, unknown> | undefined) ||
+		(message.debug as Record<string, unknown> | undefined)
 	const tokenUsage = node?.token_usage as TokenUsage | undefined
 
 	return tokenUsage && typeof tokenUsage.total_tokens === "number" ? tokenUsage : undefined
@@ -140,6 +141,7 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 				selectedTopic={ctx.selectedTopic}
 				selectedProject={ctx.selectedProject}
 				topicMode={ctx.topicMode}
+				agentCode={ctx.agentCode}
 				showName
 				showBorder={false}
 				placement="top"

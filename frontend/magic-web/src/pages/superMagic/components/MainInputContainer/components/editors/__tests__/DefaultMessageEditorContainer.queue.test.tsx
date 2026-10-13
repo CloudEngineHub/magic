@@ -111,6 +111,22 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils", () => ({
 import DefaultMessageEditorContainer from "../DefaultMessageEditorContainer"
 
 describe("DefaultMessageEditorContainer queue sending", () => {
+	it("passes the current composer employee to the historical chat model picker", () => {
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: { id: "project-1" } as never,
+					selectedTopic: { id: "topic-1", agent_code: "SMA-history" } as never,
+					topicMode: TopicMode.CustomAgent,
+					agentCode: "SMA-default",
+				}}
+			/>,
+		)
+
+		expect(mocks.editorProps.agentCode).toBe("SMA-default")
+		expect(mocks.editorProps.selectedTopic?.agent_code).toBe("SMA-history")
+	})
+
 	it("keeps long pasted text on temporary uploads until a blank chat is sent", async () => {
 		render(
 			<DefaultMessageEditorContainer

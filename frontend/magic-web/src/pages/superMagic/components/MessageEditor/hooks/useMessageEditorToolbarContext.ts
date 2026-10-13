@@ -34,6 +34,7 @@ interface UseMessageEditorToolbarContextParams {
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
 	topicMode?: TopicMode
+	agentCode?: string | null
 	mentionPanelStore: MentionPanelStore
 	mcpButtonConfig: ButtonRendererContext["mcpButtonConfig"]
 	handleSelectMentionItem: (item: TiptapMentionAttributes) => Promise<void>
@@ -71,6 +72,7 @@ function useMessageEditorToolbarContext({
 	selectedTopic,
 	selectedProject,
 	topicMode,
+	agentCode,
 	mentionPanelStore,
 	mcpButtonConfig,
 	handleSelectMentionItem,
@@ -108,6 +110,7 @@ function useMessageEditorToolbarContext({
 			selectedTopic,
 			selectedProject,
 			topicMode,
+			agentCode,
 			mentionPanelStore,
 			mcpButtonConfig,
 			handleSelectMentionItem,
@@ -144,6 +147,7 @@ function useMessageEditorToolbarContext({
 			selectedTopic,
 			selectedProject,
 			topicMode,
+			agentCode,
 			mentionPanelStore,
 			mcpButtonConfig,
 			handleSelectMentionItem,

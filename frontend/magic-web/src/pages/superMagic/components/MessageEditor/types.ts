@@ -163,6 +163,8 @@ export interface MessageEditorProps {
 	topicMode?: TopicMode
 	/** Model catalog mode. Defaults to topicMode when not specified. */
 	modelTopicMode?: TopicMode
+	/** Composer employee used for model selection; overrides the historical topic employee. */
+	agentCode?: string | null
 	/** Component size */
 	size?: MessageEditorSize
 	/** Module capability configuration */
