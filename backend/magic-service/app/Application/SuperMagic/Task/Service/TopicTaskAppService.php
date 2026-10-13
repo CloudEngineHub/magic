@@ -47,6 +47,7 @@ use App\Domain\SuperMagic\Task\Constant\AgentEventEnum;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
+use App\Domain\SuperMagic\Task\Event\FirstTaskCompletedEvent;
 use App\Domain\SuperMagic\Task\Event\RunTaskAfterEvent;
 use App\Domain\SuperMagic\Task\Event\RunTaskBeforeEvent;
 use App\Domain\SuperMagic\Task\Event\RunTaskCallbackEvent;
@@ -426,6 +427,25 @@ class TopicTaskAppService extends AbstractAppService
             }
 
             $this->projectDomainService->updateProjectStatus($task->getProjectId(), $task->getTopicId(), $status);
+
+            // 首次成功完成任务：派发事件供 OpenPanel 属性与事件同步（是否首次由幂等写入保证）
+            if ($status === TaskStatus::FINISHED) {
+                $this->logger->info('派发首次完成任务埋点事件', [
+                    'user_id' => $dataIsolation->getCurrentUserId(),
+                    'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                    'task_id' => $task->getId(),
+                ]);
+
+                AsyncEventUtil::dispatch(new FirstTaskCompletedEvent(
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    (int) $task->getId(),
+                    date('Y-m-d H:i:s'),
+                    (string) $task->getTaskMode(),
+                    $this->resolveTaskDurationSeconds($task)
+                ));
+            }
+
             // Log success
             $this->logger->debug('Task status update completed', [
                 'task_id' => $taskId,
@@ -444,6 +464,24 @@ class TopicTaskAppService extends AbstractAppService
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * 计算任务从开始到成功完成的耗时（秒）.
+     */
+    private function resolveTaskDurationSeconds(TaskEntity $task): int
+    {
+        $startedAt = $task->getStartedAt();
+        if (empty($startedAt)) {
+            return 0;
+        }
+
+        $startedTimestamp = strtotime($startedAt);
+        if ($startedTimestamp === false) {
+            return 0;
+        }
+
+        return max(0, time() - $startedTimestamp);
     }
 
     /**
