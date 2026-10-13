@@ -16,6 +16,7 @@ use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
 use App\Domain\Asset\Entity\ValueObject\AssetTagNodeType;
 use App\Domain\Asset\Entity\ValueObject\AssetVisibility;
+use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Asset\Service\AssetTagDomainService;
@@ -331,6 +332,21 @@ class AssetAppService extends AbstractAssetAppService
         );
     }
 
+    /** @param array<int, int|string> $assetIds @return array<int, array{asset_id: string, compliance_status: string, compliance_failed_reason: ?string}> */
+    public function batchCompliance(Authenticatable|BaseDataIsolation $authorization, array $assetIds): array
+    {
+        $items = [];
+        foreach ($assetIds as $assetId) {
+            $providerAsset = $this->compliance($authorization, $assetId);
+            $items[] = [
+                'asset_id' => (string) $assetId,
+                'compliance_status' => ($providerAsset?->getProviderStatus() ?? ProviderAssetStatus::UNVERIFIED)->value,
+                'compliance_failed_reason' => $providerAsset?->getProviderFailedReason(),
+            ];
+        }
+        return $items;
+    }
+
     public function deletePersonalAsset(
         Authenticatable|BaseDataIsolation $authorization,
         int|string $assetId,
@@ -342,6 +358,18 @@ class AssetAppService extends AbstractAssetAppService
             $this->revokeAssetVisibility($dataIsolation, $assetId, AssetVisibility::personal());
         }
         return $deleted;
+    }
+
+    /** @param array<int, int|string> $assetIds @return array<int, string> */
+    public function batchDeletePersonalAssets(Authenticatable|BaseDataIsolation $authorization, array $assetIds): array
+    {
+        $dataIsolation = $this->createAssetDataIsolation($authorization);
+        $deletedIds = $this->assetDomainService->deletePersonalBatch($dataIsolation, $assetIds);
+        foreach ($deletedIds as $assetId) {
+            // 资产行已删除，授权记录不能悬空。
+            $this->revokeAssetVisibility($dataIsolation, $assetId, AssetVisibility::personal());
+        }
+        return $deletedIds;
     }
 
     /** @return AssetTagEntity[] */

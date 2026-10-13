@@ -33,6 +33,8 @@ Router::addGroup('/api/v1', static function (): void {
         Router::get('/owners', [AssetApi::class, 'owners']);
         // 批量转移素材归属人。
         Router::post('/transfer-owner', [AssetApi::class, 'transferOwner']);
+        // 批量查询素材合规状态。
+        Router::post('/batch-compliance', [AssetApi::class, 'batchCompliance']);
         // 查询资产详情。
         // 查询第三方合规状态。
         Router::get('/{assetId:\d+}/compliance', [AssetApi::class, 'compliance']);
@@ -41,6 +43,8 @@ Router::addGroup('/api/v1', static function (): void {
         Router::get('/{assetId:\d+}', [AssetApi::class, 'detail']);
         // 删除个人资产。
         Router::delete('/{assetId:\d+}', [AssetApi::class, 'delete']);
+        // 批量删除个人素材。
+        Router::post('/batch-delete', [AssetApi::class, 'batchDelete']);
     });
 
     // 签署素材协议。

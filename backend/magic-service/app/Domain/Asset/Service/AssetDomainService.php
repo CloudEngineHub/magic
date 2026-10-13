@@ -128,6 +128,31 @@ class AssetDomainService
         return $this->deleteAssetWithProvider($dataIsolation, $existing);
     }
 
+    /** @param array<int, int|string> $assetIds @return array<int, string> */
+    public function deletePersonalBatch(AssetDataIsolation $dataIsolation, array $assetIds): array
+    {
+        $normalizedIds = array_values(array_unique(array_map('strval', $assetIds)));
+        $assets = [];
+        foreach ($normalizedIds as $assetId) {
+            $asset = $this->assets->findById($dataIsolation, $assetId);
+            if ($asset === null) {
+                ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+            }
+            if (! $asset->isOwnedBy($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId())) {
+                ExceptionBuilder::throw(AssetErrorCode::DELETE_DENIED);
+            }
+            $assets[] = $asset;
+        }
+
+        $deletedIds = [];
+        foreach ($assets as $asset) {
+            if ($this->deleteAssetWithProvider($dataIsolation, $asset)) {
+                $deletedIds[] = (string) $asset->getId();
+            }
+        }
+        return $deletedIds;
+    }
+
     /** @param array<int, int|string> $assetIds @return AssetEntity[] */
     public function transferOwner(AssetDataIsolation $dataIsolation, array $assetIds, string $ownerUid): array
     {

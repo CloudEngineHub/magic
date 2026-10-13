@@ -40,7 +40,7 @@ class TransferAssetOwnerRequestDTO extends AbstractRequestDTO
     protected static function getHyperfValidationRules(): array
     {
         return [
-            'asset_ids' => 'required|array|min:1',
+            'asset_ids' => 'required|array|min:1|max:100',
             'asset_ids.*' => 'required|string',
             'owner_uid' => 'required|string|max:64',
         ];
@@ -48,6 +48,6 @@ class TransferAssetOwnerRequestDTO extends AbstractRequestDTO
 
     protected static function getHyperfValidationMessage(): array
     {
-        return [];
+        return ['asset_ids.max' => '素材 ID 列表最多支持 100 个素材'];
     }
 }
