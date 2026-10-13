@@ -452,9 +452,10 @@ class TopicDomainService
         string $userId,
         string $keyword = '',
         int $page = 1,
-        int $pageSize = 20
+        int $pageSize = 20,
+        array $topicTypes = []
     ): array {
-        $result = $this->topicRepository->getSidebarTopicsByProjectId($projectId, $userId, $keyword, $page, $pageSize);
+        $result = $this->topicRepository->getSidebarTopicsByProjectId($projectId, $userId, $keyword, $page, $pageSize, topicTypes: $topicTypes);
         $hasUnreadMap = $this->taskMessageRepository->getHasUnreadMapByTopics($result['list']);
 
         $list = [];

@@ -57,6 +57,7 @@ function CrewConversationMobile({ widgetContext = null }: CrewConversationMobile
 						)}
 					>
 						<CrewTopicList
+							projectId={store.selectedProject.id}
 							topics={store.topicList}
 							selectedTopicId={store.selectedTopic?.id}
 							isCreatingTopic={store.isCreatingTopic}

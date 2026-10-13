@@ -10528,6 +10528,18 @@
 		"swipePin": "置顶",
 		"swipeUnpin": "取消置顶"
 	},
+	"topicTypeFilter": {
+		"all": "全部",
+		"empty": "没有符合筛选条件的话题",
+		"failed": "话题加载失败，请重试",
+		"label": "筛选话题类型",
+		"more": "加载更多",
+		"only": "仅此项",
+		"onlyLabel": "仅查看{{name}}",
+		"retry": "重试",
+		"scheduledTask": "定时任务",
+		"topic": "话题"
+	},
 	"transferModal": {
 		"actions": {
 			"cancel": "取消",
