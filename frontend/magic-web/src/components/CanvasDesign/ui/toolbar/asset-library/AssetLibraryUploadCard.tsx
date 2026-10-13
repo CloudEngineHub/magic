@@ -113,7 +113,7 @@ export function AssetLibraryUploadCard({
 	}
 
 	return (
-		<div className="flex h-[360px] flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed bg-muted/40 px-4 py-6 text-center">
+		<div className="flex h-[320px] flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed bg-muted/40 px-4 py-6 text-center">
 			<input
 				ref={inputRef}
 				className="hidden"

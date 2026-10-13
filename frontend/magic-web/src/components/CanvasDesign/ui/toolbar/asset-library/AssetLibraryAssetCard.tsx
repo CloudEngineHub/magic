@@ -161,7 +161,7 @@ export function AssetLibraryAssetCard({
 			tabIndex={selectionBlocked ? -1 : 0}
 			aria-pressed={selected}
 			className={cn(
-				"flex h-[360px] flex-col overflow-hidden rounded-xl border bg-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+				"flex h-[320px] flex-col overflow-hidden rounded-xl border bg-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 				selected && "border-primary ring-2 ring-primary/15",
 				!selected && "hover:border-primary/60",
 				selectionBlocked && "cursor-not-allowed opacity-60",
@@ -176,7 +176,7 @@ export function AssetLibraryAssetCard({
 				}
 			}}
 		>
-			<div className="group relative h-[260px] shrink-0 overflow-hidden bg-muted">
+			<div className="group relative h-[220px] shrink-0 overflow-hidden bg-muted">
 				{displayAsset.file_url && displayAsset.asset_media_type ? (
 					displayAsset.asset_media_type === "VIDEO" ? (
 						<video

@@ -546,7 +546,7 @@ export default function AssetsModal({
 				}}
 			>
 				<DialogContent
-					className="flex h-[min(760px,calc(100vh-64px))] max-h-[calc(100vh-64px)] w-[min(1120px,calc(100vw-32px))] !max-w-[1120px] flex-col gap-0 overflow-hidden p-0"
+					className="flex h-[min(940px,calc(100vh-64px))] max-h-[calc(100vh-64px)] w-[min(1120px,calc(100vw-32px))] !max-w-[1120px] flex-col gap-0 overflow-hidden p-0"
 					data-testid="assets-modal"
 					// Keep this picker below the global Toast layer so API errors remain visible;
 					// the adjustment is local to this modal and does not change shared overlays.
