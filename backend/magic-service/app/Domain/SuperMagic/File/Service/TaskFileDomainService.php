@@ -2543,7 +2543,6 @@ class TaskFileDomainService
                 $preparedFiles[] = [
                     'file_id' => (string) $fileEntity->getFileId(),
                     'object_key' => $fileEntity->getFileKey(),
-                    'entity' => $fileEntity,
                     'version' => $latestVersionMap[$fileEntity->getFileId()] ?? null,
                     'updated_at' => $fileEntity->getUpdatedAt(),
                     'specified_version' => $specifiedVersion,
