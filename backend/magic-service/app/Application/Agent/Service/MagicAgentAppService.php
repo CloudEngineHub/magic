@@ -736,7 +736,9 @@ class MagicAgentAppService extends AbstractAppService
 
     public function getDetailByUserId(string $userId, MagicUserAuthorization $authorization): ?MagicAgentVersionEntity
     {
-        $dataIsolation = new DataIsolation($authorization->getOrganizationCode(), $authorization->getId());
+        $dataIsolation = new DataIsolation();
+        $dataIsolation->setCurrentOrganizationCode($authorization->getOrganizationCode());
+        $dataIsolation->setCurrentUserId($authorization->getId());
         $magicUserEntity = $this->magicUserDomainService->getUserByIds([$userId], $dataIsolation)[0] ?? null;
         if ($magicUserEntity === null) {
             return null;
