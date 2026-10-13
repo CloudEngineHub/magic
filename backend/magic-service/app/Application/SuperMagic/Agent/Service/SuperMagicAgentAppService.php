@@ -1577,6 +1577,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         return array_values(array_unique(array_merge(
             $accessibleSkillCodes,
+            $this->skillMarketDomainService->getPublishedSkillCodes($skillCodes ?? []),
             array_values(array_intersect(
                 $this->skillMarketDomainService->getOfficialBuiltinSkillCodes(),
                 $skillCodes ?? []
