@@ -5,6 +5,9 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import userFilesStore from "@/stores/userFiles"
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { getFileReferenceIdentityKey } from "@/pages/superMagic/services/userFileReferenceResolver"
+import type { SeqResponse } from "@/types/request"
+import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { mergeMemoryContent } from "../../LongTremMemory/services/memoryThreeWayMerge"
 import {
 	userSpaceFileService,
@@ -55,6 +58,24 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 		}
 	})
 
+	const refreshQuietly = useMemoizedFn(async () => {
+		requestRef.current?.abort()
+		const controller = new AbortController()
+		requestRef.current = controller
+		try {
+			const next = await userSpaceFileService.readStableSnapshot(
+				fileId,
+				controller.signal,
+				fileAccess,
+			)
+			if (isCurrent() && !controller.signal.aborted) applySnapshot(next)
+		} catch {
+			// Keep the current body if a background refresh fails.
+		} finally {
+			if (isCurrent() && !controller.signal.aborted) setLoading(false)
+		}
+	})
+
 	useEffect(() => {
 		mounted.current = true
 		setSnapshot(null)
@@ -65,6 +86,21 @@ export function useUserFileEditor(fileId: string, isEditMode: boolean, identityK
 			requestRef.current?.abort()
 		}
 	}, [fileId, identityKey, isEditMode, load])
+
+	useEffect(() => {
+		// Reload the open preview only while it is not being edited.
+		const handle = (seq: SeqResponse<SuperMagicFileChangeMessage>) => {
+			const message = seq?.message
+			if (!message || message.space_type !== "user" || isEditMode || savingRef.current) return
+			const updated = (message.changes ?? []).some((change) => {
+				const id = String(change.file_id || change.file?.file_id || "")
+				return id === fileId && change.operation !== "delete"
+			})
+			if (updated) void refreshQuietly()
+		}
+		pubsub.subscribe(PubSubEvents.Super_Magic_File_Change_Intermediate, handle)
+		return () => pubsub.unsubscribe(PubSubEvents.Super_Magic_File_Change_Intermediate, handle)
+	}, [fileId, isEditMode, refreshQuietly])
 
 	useEffect(() => {
 		userFilesStore.setFileEditing(fileId, isEditMode)
