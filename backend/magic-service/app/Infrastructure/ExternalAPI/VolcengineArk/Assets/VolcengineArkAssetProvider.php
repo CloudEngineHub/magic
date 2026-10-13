@@ -132,6 +132,11 @@ final class VolcengineArkAssetProvider implements AssetProviderInterface
         return self::PROVIDER_CODE;
     }
 
+    public function projectName(): string
+    {
+        return trim((string) ($this->config['project_name'] ?? '')) ?: self::DEFAULT_PROJECT_NAME;
+    }
+
     public function getAsset(array $payload): array
     {
         return $this->mapAssetResponse($this->client->getAsset($payload));

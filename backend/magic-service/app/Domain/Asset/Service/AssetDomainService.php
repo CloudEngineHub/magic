@@ -7,7 +7,6 @@ declare(strict_types=1);
 
 namespace App\Domain\Asset\Service;
 
-use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
@@ -23,6 +22,7 @@ use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\VolcengineArk\Assets\VolcengineArkAssetProvider;
+use Hyperf\Context\Context;
 use Hyperf\Coroutine\Coroutine;
 use Hyperf\DbConnection\Db;
 use Psr\Log\LoggerInterface;
@@ -36,8 +36,6 @@ use function Hyperf\Translation\trans;
  */
 class AssetDomainService
 {
-    private const string DEFAULT_PROJECT_NAME = 'default';
-
     /** 第三方合规轮询的最长等待时间。 */
     private const int COMPLIANCE_TIMEOUT_SECONDS = 1800;
 
@@ -46,6 +44,11 @@ class AssetDomainService
 
     /** 同步失败原因的最大存储长度。 */
     private const int FAILED_REASON_MAX_LENGTH = 512;
+
+    /**
+     * 协程内缓存的第三方素材 Provider 实例。
+     */
+    private const string PROVIDER_INSTANCE_CONTEXT_KEY = 'asset_provider_instance:volcengine_ark_assets';
 
     public function __construct(
         private readonly AssetRepositoryInterface $assets,
@@ -412,7 +415,7 @@ class AssetDomainService
             return null;
         }
         $providerAsset = new ProviderAssetEntity($mapping->toArray());
-        if ($providerAsset->getProviderStatus()->isProcessing() && $this->isComplianceExpired($asset)) {
+        if ($providerAsset->getProviderStatus()->isProcessing() && $this->isComplianceExpired((string) $mapping->updated_at)) {
             return $this->markProviderStatus(
                 $dataIsolation,
                 $asset,
@@ -591,7 +594,7 @@ class AssetDomainService
                     'provider_asset_id' => $reusable->getProviderAssetId(),
                 ]);
                 if (! $providerAsset->getProviderStatus()->isPassed()) {
-                    $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAsset);
+                    $this->awaitProviderAssetPassed($dataIsolation, $providerAsset);
                 }
                 return $providerAsset;
             }
@@ -608,7 +611,7 @@ class AssetDomainService
             $providerGroupId = $this->createProviderAssetGroup($this->resolveProviderGroupName($asset));
             $this->persistGroupMapping($dataIsolation, $asset, $providerGroupId);
             $providerAssetEntity = $this->createProviderAsset($dataIsolation, $asset, $providerGroupId);
-            $this->awaitProviderAssetPassed($dataIsolation, $asset, $providerAssetEntity);
+            $this->awaitProviderAssetPassed($dataIsolation, $providerAssetEntity);
         } catch (BusinessException $exception) {
             // 业务异常文案由错误码统一给出，本身即面向用户，可直接作为失败原因落库展示。
             $this->markProviderStatus(
@@ -711,10 +714,13 @@ class AssetDomainService
         return $reason === '' ? null : mb_substr($reason, 0, self::FAILED_REASON_MAX_LENGTH);
     }
 
-    private function isComplianceExpired(AssetEntity $asset): bool
+    /**
+     * 判断「发起审核」后是否已超过合规等待上限。
+     */
+    private function isComplianceExpired(string $submittedAt): bool
     {
-        $createdAt = strtotime((string) $asset->getCreatedAt());
-        return $createdAt !== false && time() - $createdAt >= self::COMPLIANCE_TIMEOUT_SECONDS;
+        $submittedAtTimestamp = strtotime($submittedAt);
+        return $submittedAtTimestamp !== false && time() - $submittedAtTimestamp >= self::COMPLIANCE_TIMEOUT_SECONDS;
     }
 
     /**
@@ -828,11 +834,9 @@ class AssetDomainService
      */
     private function awaitProviderAssetPassed(
         AssetDataIsolation $dataIsolation,
-        AssetEntity $asset,
         ProviderAssetEntity $providerAssetEntity,
     ): void {
-        $createdAt = strtotime((string) $asset->getCreatedAt());
-        $deadline = (float) (($createdAt === false ? time() : $createdAt) + $this->complianceTimeoutSeconds());
+        $deadline = microtime(true) + $this->complianceTimeoutSeconds();
         $status = $providerAssetEntity->getProviderStatus();
 
         while (! $status->isPassed()) {
@@ -922,21 +926,25 @@ class AssetDomainService
         return $name === '' ? trans('asset.unnamed_group') : $name;
     }
 
-    private function provider(): AssetProviderInterface
+    private function provider(): VolcengineArkAssetProvider
     {
-        return new VolcengineArkAssetProvider($this->logger, $this->providerConfig());
+        return Context::getOrSet(
+            self::PROVIDER_INSTANCE_CONTEXT_KEY,
+            fn (): VolcengineArkAssetProvider => new VolcengineArkAssetProvider($this->logger, $this->providerConfig()),
+        );
     }
 
     private function projectName(): string
     {
-        return trim((string) ($this->providerConfig()['project_name'] ?? '')) ?: self::DEFAULT_PROJECT_NAME;
+        return $this->provider()->projectName();
     }
 
     /** @return array<string, mixed> */
     private function providerConfig(): array
     {
-        $config = $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets);
-        return $this->resolveProviderConfig($config);
+        return $this->resolveProviderConfig(
+            $this->abilityDomainService->getProviderConfig(AiAbilityCode::VolcengineArkAssets),
+        );
     }
 
     /** @param array<string, mixed> $config @return array<string, mixed> */
