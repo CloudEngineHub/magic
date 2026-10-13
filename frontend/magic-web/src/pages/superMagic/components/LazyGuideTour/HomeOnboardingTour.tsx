@@ -2155,40 +2155,89 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 	const finishLabel = isReplayRun
 		? t("homeOnboarding.actions.replayFinish")
 		: (finishLabelByTask[entry.task] ?? t("homeOnboarding.actions.standaloneFinish"))
-	const primaryActionLabel =
-		flow === "prompt-ready"
-			? t("homeOnboarding.featured.send.button")
-			: isProjectGuide
-				? isLastProjectStep
-					? /*
-						 * The last step closes the run, and the two guided flows close differently:
-						 * the in-project tour is part of a task and ends by naming that ("结束导览"),
-						 * while the tour of a delivered file belongs to no task and simply ends.
-						 */
-						t(
-							isDeliverableRun
-								? "homeOnboarding.deliverable.actions.finish"
-								: "homeOnboarding.project.actions.finish",
-						)
-					: t("homeOnboarding.project.actions.next")
-				: stepIndex === primarySteps.length - 1
-					? finishLabel
-					: (step.action ?? t("homeOnboarding.actions.next"))
 	/**
-	 * The arrow belongs to the plain advance action and to nothing else. A step that names its own
-	 * hand-over already says where it is going, so an arrow there would only repeat the label; and
-	 * the last step closes the run rather than moving on, which is why the state-named finish
-	 * labels never carry one. It is drawn as an icon instead of being part of the wording: the
-	 * label has to stay translatable, and the arrow needs spacing of its own.
+	 * The one action the footer ends a step with, resolved into its three readings at once: the word,
+	 * whether it carries the advance arrow, and which kind of move it makes.
 	 *
-	 * The tour of a delivered file is the one guided flow that carries it. Its two steps are read
-	 * as a pair — "here is the file, here is where it is kept" — so the first one says out loud that
-	 * it is moving on; the in-project tour instead walks a page the user is already looking at, and
-	 * its labels have always stood on their own.
+	 * One reading rather than three, because it is one action. The footer is the same footer wherever
+	 * the run is — the tasks' steps and the two in-project tours all end on these same three buttons
+	 * — so a step never varies the control, only what it means. The word was already a nested ternary
+	 * and the arrow a second derivation of the same conditions; a third one written beside them for
+	 * the test attribute would have been a third thing to keep in step by hand. It is the attribute
+	 * that a test can assert on: the word changes with the locale, and the difference between a first
+	 * pass and a re-watch shows in the word alone.
+	 *
+	 * The kinds are the moves worth telling apart. `next` advances, `finish` closes the run and
+	 * `replay-finish` closes a re-watch — the same button doing the other thing, promising no reward.
+	 * Those three are what this footer can be seen doing.
+	 *
+	 * `send` is the fourth, and the one no step of a run reaches from here: it is the hand-over the
+	 * AI-work run's last stage makes to the composer, and that stage is a card of its own — the prompt
+	 * is already filled into the composer by then, and the card points at the composer's own send
+	 * button instead of ending on these three buttons. The reading stays beside the copy it belongs to
+	 * (`homeOnboarding.featured.send.button`, which this branch is the only place to name), so that a
+	 * hand-over ever closing on this footer instead would find its label waiting here — and the
+	 * footer's specs would go red the moment that card grew one, which is where it would be noticed.
 	 */
-	const showsAdvanceArrow = isDeliverableRun
-		? !isLastProjectStep && !step.action
-		: !flow && stepIndex !== primarySteps.length - 1 && !step.action
+	const resolvePrimaryAction = (): {
+		key: "send" | "next" | "finish" | "replay-finish"
+		label: string
+		arrow: boolean
+	} => {
+		if (flow === "prompt-ready")
+			return { key: "send", label: t("homeOnboarding.featured.send.button"), arrow: false }
+
+		if (isProjectGuide) {
+			if (!isLastProjectStep) {
+				/*
+				 * The tour of a delivered file is the one guided flow that carries the arrow: its two
+				 * steps are read as a pair — "here is the file, here is where it is kept" — so the
+				 * first one says out loud that it is moving on. The in-project tour instead walks a
+				 * page the user is already looking at, and its labels have always stood on their own.
+				 */
+				return {
+					key: "next",
+					label: t("homeOnboarding.project.actions.next"),
+					arrow: isDeliverableRun && !step.action,
+				}
+			}
+			return {
+				/*
+				 * The last step closes the run, and the two guided flows close differently: the
+				 * in-project tour is part of a task and ends by naming that ("结束导览"), while the
+				 * tour of a delivered file belongs to no task and simply ends.
+				 */
+				key: "finish",
+				label: t(
+					isDeliverableRun
+						? "homeOnboarding.deliverable.actions.finish"
+						: "homeOnboarding.project.actions.finish",
+				),
+				arrow: false,
+			}
+		}
+
+		if (stepIndex === primarySteps.length - 1) {
+			return {
+				key: isReplayRun ? "replay-finish" : "finish",
+				label: finishLabel,
+				arrow: false,
+			}
+		}
+
+		return {
+			key: "next",
+			label: step.action ?? t("homeOnboarding.actions.next"),
+			/*
+			 * A step that names its own hand-over already says where it is going, so an arrow there
+			 * would only repeat the label. It is drawn as an icon rather than folded into the wording
+			 * because the label has to stay translatable and the arrow needs spacing of its own.
+			 */
+			arrow: !step.action,
+		}
+	}
+	const primaryAction = resolvePrimaryAction()
+
 	const progressLeft = (index: number) => {
 		let left = 0
 		for (let position = 0; position < index; position += 1) {
@@ -2563,11 +2612,19 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				 * window — the primary drops onto a line of its own (kept right-aligned by
 				 * `ml-auto`) instead of being squeezed. On a narrow window the row turns into a
 				 * column and every button stretches full width.
+				 *
+				 * The three carry fixed handles, because this footer is the one place every step of
+				 * every task is driven from. A test that reached the primary action as "the last
+				 * button", or by the wording behind it, would break on a translation or on an extra
+				 * button — neither of which is a change of behaviour. The primary action also states
+				 * which move it makes (see `resolvePrimaryAction`), that being the one reading of the
+				 * three the wording cannot carry across locales.
 				 */}
 				<div className="mt-[15px] flex flex-wrap items-center justify-between gap-2.5 border-t border-border pt-[17px] max-[760px]:flex-col-reverse max-[760px]:items-stretch">
 					<div className="flex items-center gap-1">
 						{showPrevious && (
 							<button
+								data-testid="guide-tour-previous"
 								className="min-h-[42px] whitespace-nowrap rounded-[10px] px-4 text-[13px] text-muted-foreground hover:bg-muted"
 								type="button"
 								onClick={() => {
@@ -2580,6 +2637,7 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 							</button>
 						)}
 						<button
+							data-testid="guide-tour-exit"
 							className="min-h-[42px] whitespace-nowrap rounded-[10px] px-4 text-[13px] text-muted-foreground hover:bg-muted"
 							type="button"
 							onClick={() => {
@@ -2591,6 +2649,8 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 						</button>
 					</div>
 					<button
+						data-testid="guide-tour-primary-action"
+						data-guide-action={primaryAction.key}
 						className="ml-auto inline-flex min-h-[42px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border border-foreground bg-foreground px-4 text-[13px] text-background hover:opacity-90"
 						type="button"
 						onClick={() => {
@@ -2616,10 +2676,10 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 							} else complete()
 						}}
 					>
-						{primaryActionLabel}
+						{primaryAction.label}
 						{/* Decorative: the label already says "next", so the arrow repeats nothing a
 						 * screen reader needs to hear twice. */}
-						{showsAdvanceArrow && (
+						{primaryAction.arrow && (
 							<IconArrowRight
 								className="shrink-0"
 								size={16}

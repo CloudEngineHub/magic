@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
@@ -95,10 +95,9 @@ function cardGeometry(card: HTMLElement) {
 	}
 }
 
-/** The primary action is the last button of the popover, as in the other tour specs. */
+/** The footer's primary action, by the handle the footer carries, as in the other tour specs. */
 function primaryAction() {
-	const buttons = within(screen.getByRole("dialog")).getAllByRole("button")
-	return buttons[buttons.length - 1]
+	return screen.getByTestId("guide-tour-primary-action")
 }
 
 describe("home onboarding: the step pointer names the anchor, not the card", () => {

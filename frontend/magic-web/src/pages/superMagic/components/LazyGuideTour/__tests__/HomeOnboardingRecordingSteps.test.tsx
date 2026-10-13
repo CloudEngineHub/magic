@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
@@ -92,12 +92,11 @@ function publishAnchor(anchorName: string) {
 }
 
 /**
- * The primary action is the last button of the popover: the footer keeps "上一步" and "退出引导" on
- * the left and the primary action on the right.
+ * The footer's primary action, by the handle the footer carries. Position is not a contract here:
+ * "上一步" comes and goes with the step, and the wording behind the button changes with the locale.
  */
 function primaryAction() {
-	const buttons = within(screen.getByRole("dialog")).getAllByRole("button")
-	return buttons[buttons.length - 1]
+	return screen.getByTestId("guide-tour-primary-action")
 }
 
 /**

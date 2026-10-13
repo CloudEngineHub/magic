@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 /**
@@ -105,10 +105,9 @@ async function loadTour() {
 	return { onboarding, tour }
 }
 
-/** The primary action is the last button of the popover, as the tour's footer lays it out. */
+/** The footer's primary action, by the handle the footer carries rather than by its position. */
 function primaryAction() {
-	const buttons = within(screen.getByRole("dialog")).getAllByRole("button")
-	return buttons[buttons.length - 1]
+	return screen.getByTestId("guide-tour-primary-action")
 }
 
 /** The content of every notice of one kind, oldest first. */
