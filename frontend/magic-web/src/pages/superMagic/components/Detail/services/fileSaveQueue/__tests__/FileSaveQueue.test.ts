@@ -1,4 +1,5 @@
 import { IDBFactory } from "fake-indexeddb"
+import { shadow } from "@/utils/shadow"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { enqueueOptimisticSave, FileSaveQueue, stringifySaveContent } from "../FileSaveQueue"
 import { createMemoryFileSavePersistence, IndexedDbFileSavePersistence } from "../persistence"
@@ -368,6 +369,103 @@ describe("FileSaveQueue", () => {
 		resolvePersist?.()
 		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Idle))
 		expect(remove).toHaveBeenCalledWith("beforeunload", expect.any(Function))
+	})
+
+	it("previews decoded code while persisting the original shadowed payload", async () => {
+		const queue = createQueue()
+		const first = shadow("const value = 1;")
+		const latest = shadow("const value = 2;")
+		let release: (() => void) | undefined
+		const persist = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					release = resolve
+				}),
+		)
+		queue.enqueue(createJob({ persist, content: first, enableShadow: true }))
+		expect(queue.peekUnsyncedDraft("file-1")).toBe("const value = 1;")
+		queue.enqueue(createJob({ persist, content: latest, enableShadow: true }))
+		expect(queue.peekUnsyncedDraft("file-1")).toBe("const value = 2;")
+		const handler = vi.fn()
+		const unregister = queue.registerDraftApplyHandler("file-1", handler)
+		expect(handler).toHaveBeenCalledWith("const value = 2;")
+		await vi.waitFor(async () =>
+			expect((await persistence.get("file-1"))?.content).toBe(latest),
+		)
+		expect(persist).toHaveBeenCalledWith(
+			expect.objectContaining({ content: first, enableShadow: true }),
+		)
+		release?.()
+		await vi.waitFor(() => expect(persist).toHaveBeenCalledTimes(2))
+		expect(persist).toHaveBeenLastCalledWith(
+			expect.objectContaining({ content: latest, enableShadow: true }),
+		)
+		release?.()
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Idle))
+		expect(queue.peekUnsyncedDraft("file-1")).toBeUndefined()
+		unregister()
+	})
+
+	it("keeps decoded code available during retry and after save failure", async () => {
+		const queue = createQueue()
+		queue.enqueue(
+			createJob({
+				content: shadow("const retry = true;"),
+				enableShadow: true,
+				persist: async () => {
+					throw new TypeError("Failed to fetch")
+				},
+			}),
+		)
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Retrying))
+		expect(queue.peekUnsyncedDraft("file-1")).toBe("const retry = true;")
+		for (let attempt = 1; attempt <= 3; attempt += 1) {
+			await vi.waitFor(() => expect(delayed).toHaveLength(attempt))
+			delayed[attempt - 1]()
+		}
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Failed))
+		expect(queue.peekUnsyncedDraft("file-1")).toBe("const retry = true;")
+		await queue.restoreRemote("file-1")
+	})
+
+	it.each([false, true])(
+		"decodes recovered shadowed drafts with late registration: %s",
+		async (late) => {
+			const content = shadow("const recovered = true;")
+			await persistence.put({ fileId: "file-1", content, enableShadow: true, updatedAt: 1 })
+			const queue = createQueue()
+			const handler = vi.fn()
+			let unregister: (() => void) | undefined
+			if (!late) unregister = queue.registerDraftApplyHandler("file-1", handler)
+			await queue.recover()
+			if (late) unregister = queue.registerDraftApplyHandler("file-1", handler)
+			expect(handler).toHaveBeenCalledWith("const recovered = true;")
+			expect(queue.peekUnsyncedDraft("file-1")).toBe("const recovered = true;")
+			expect(queue.getSnapshot("file-1")?.pendingContent).toBe(content)
+			unregister?.()
+			await queue.restoreRemote("file-1")
+		},
+	)
+
+	it.each([
+		{ content: "SHADOWED_literal text", enableShadow: false },
+		{ content: "plain text", enableShadow: true },
+		{ content: { text: "SHADOWED_literal text" }, enableShadow: true },
+	])("preserves unencoded drafts: $content", async ({ content, enableShadow }) => {
+		const queue = createQueue()
+		queue.enqueue(
+			createJob({
+				content,
+				enableShadow,
+				persist: async () => {
+					throw new FileSavePermanentError()
+				},
+			}),
+		)
+		expect(queue.peekUnsyncedDraft("file-1")).toBe(content)
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Failed))
+		expect(queue.peekUnsyncedDraft("file-1")).toBe(content)
+		await queue.restoreRemote("file-1")
 	})
 
 	it("applies recovered drafts through the registered handler", async () => {
