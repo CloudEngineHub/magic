@@ -5,6 +5,7 @@ import {
 	type AssetMediaType,
 	type AssetScope,
 	type AssetVisibilityConfig,
+	type AssetVisibilityType,
 } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/shadcn-ui/dialog"
@@ -22,7 +23,7 @@ import { useUserInfo } from "@/models/user/hooks"
 import { cn } from "@/utils/cn"
 import { LoaderCircle, RefreshCw, Search } from "lucide-react"
 import { toast } from "sonner"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useOptionalCanvas } from "../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../app/providers/I18nProvider"
 import { useSeedanceComplianceAvailable } from "../seedanceComplianceAvailability"
@@ -97,6 +98,7 @@ function getVisibilityTargetName(target: { id: string; nickname?: string; name?:
 function buildEditVisibility(
 	config: AssetVisibilityConfig | undefined,
 	currentUserId: string,
+	assetVisibilityType?: AssetVisibilityType,
 ): Pick<
 	CanvasEditAssetTarget,
 	"visibility" | "userIds" | "departmentIds" | "visibilityTargets" | "visibilityEditable"
@@ -131,8 +133,12 @@ function buildEditVisibility(
 		userIds.length <= 1 &&
 		(userIds.length === 0 || (currentUserId !== "" && userIds[0] === currentUserId))
 
+	const isTeamVisible =
+		assetVisibilityType === "TEAM" ||
+		(assetVisibilityType === undefined && (visibilityType === 1 || !onlyCurrentUser))
+
 	return {
-		visibility: visibilityType === 1 || !onlyCurrentUser ? "team" : "private",
+		visibility: isTeamVisible ? "team" : "private",
 		userIds,
 		departmentIds,
 		visibilityTargets,
@@ -188,6 +194,9 @@ export default function AssetsModal({
 	const [confirmError, setConfirmError] = useState(false)
 	const [previewResource, setPreviewResource] =
 		useState<MediaResourceFullscreenPreviewItem | null>(null)
+	// Touch dismiss is deferred to the document click. Closing the preview on that
+	// same click clears preview state before Radix checks outside interaction.
+	const suppressLibraryDismissRef = useRef(false)
 	const [optimisticProcessingIds, setOptimisticProcessingIds] = useState(() => new Set<string>())
 	const [pendingComplianceIds, setPendingComplianceIds] = useState(() => new Set<string>())
 	const complianceTaskManager = useMemo(() => resolveAssetComplianceTaskManager(canvas), [canvas])
@@ -415,13 +424,20 @@ export default function AssetsModal({
 		>
 		try {
 			const response = await AssetsApi.getAssetVisibilityConfig(asset.asset_id)
-			visibility = buildEditVisibility(response.visibility_config, currentUserId)
+			visibility = buildEditVisibility(
+				response.visibility_config,
+				currentUserId,
+				asset.visibility_type,
+			)
 		} catch {
 			// Older deployments may not expose the generic visibility endpoint. Keep
 			// the permission controls read-only and omit visibility from PUT instead
 			// of replacing an unknown authorization set with empty arrays.
 			visibility = {
-				visibility: asset.source === "TEAM" ? "team" : "private",
+				visibility:
+					asset.visibility_type === "TEAM" || asset.source === "TEAM"
+						? "team"
+						: "private",
 				userIds: [],
 				departmentIds: [],
 				visibilityTargets: [],
@@ -514,14 +530,19 @@ export default function AssetsModal({
 		}
 	}
 
-	const blockLibraryDismiss = hostDialogOpen || cardMenuOpen || Boolean(transferAsset)
+	// The fullscreen preview is portaled outside DialogContent. Keep the library
+	// dialog open while its backdrop handles the click and closes only the preview.
+	const blockLibraryDismiss =
+		hostDialogOpen || cardMenuOpen || Boolean(transferAsset) || Boolean(previewResource)
 
 	return (
 		<>
 			<Dialog
 				open={open}
 				onOpenChange={(nextOpen) => {
-					if (!nextOpen && !blockLibraryDismiss) onClose()
+					if (!nextOpen && !blockLibraryDismiss && !suppressLibraryDismissRef.current) {
+						onClose()
+					}
 				}}
 			>
 				<DialogContent
@@ -532,16 +553,24 @@ export default function AssetsModal({
 					style={{ zIndex: ASSET_LIBRARY_DIALOG_Z_INDEX }}
 					onOpenAutoFocus={(event) => event.preventDefault()}
 					onPointerDownOutside={(event) => {
-						if (blockLibraryDismiss) event.preventDefault()
+						if (blockLibraryDismiss || suppressLibraryDismissRef.current) {
+							event.preventDefault()
+						}
 					}}
 					onInteractOutside={(event) => {
-						if (blockLibraryDismiss) event.preventDefault()
+						if (blockLibraryDismiss || suppressLibraryDismissRef.current) {
+							event.preventDefault()
+						}
 					}}
 					onFocusOutside={(event) => {
-						if (blockLibraryDismiss) event.preventDefault()
+						if (blockLibraryDismiss || suppressLibraryDismissRef.current) {
+							event.preventDefault()
+						}
 					}}
 					onEscapeKeyDown={(event) => {
-						if (blockLibraryDismiss) event.preventDefault()
+						if (blockLibraryDismiss || suppressLibraryDismissRef.current) {
+							event.preventDefault()
+						}
 					}}
 				>
 					<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -864,7 +893,13 @@ export default function AssetsModal({
 			{previewResource ? (
 				<MediaResourceFullscreenPreview
 					resource={previewResource}
-					onClose={() => setPreviewResource(null)}
+					onClose={() => {
+						suppressLibraryDismissRef.current = true
+						window.setTimeout(() => {
+							suppressLibraryDismissRef.current = false
+						}, 0)
+						setPreviewResource(null)
+					}}
 				/>
 			) : null}
 		</>

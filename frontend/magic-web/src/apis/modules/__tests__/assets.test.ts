@@ -1,8 +1,21 @@
 import { describe, expect, it, vi } from "vitest"
 import type { ServiceHttpClient } from "@/infrastructure/network/http/clients"
-import { generateAssetsApi, normalizeAssetItem } from "../assets"
+import { buildAssetVisibility, generateAssetsApi, normalizeAssetItem } from "../assets"
 
 describe("generateAssetsApi", () => {
+	it("encodes personal and team visibility explicitly", () => {
+		expect(buildAssetVisibility()).toEqual({
+			visibility_type: "PERSONAL",
+			user_ids: [],
+			department_ids: [],
+		})
+		expect(buildAssetVisibility(["user-1"], [])).toEqual({
+			visibility_type: "TEAM",
+			user_ids: ["user-1"],
+			department_ids: [],
+		})
+	})
+
 	it("normalizes unknown media types instead of treating them as images", () => {
 		const normalized = normalizeAssetItem({
 			asset_id: "asset-1",
@@ -57,6 +70,11 @@ describe("generateAssetsApi", () => {
 		await api.saveAssetToLibrary({
 			name: "项目参考视频",
 			file_key: "org/user/asset/reference.mp4",
+			visibility: {
+				visibility_type: "PERSONAL",
+				user_ids: [],
+				department_ids: [],
+			},
 		})
 		await api.queryAssets({ scope: "ALL", compliance_status: "PASS" })
 		await api.getAsset("asset-1")
@@ -65,6 +83,7 @@ describe("generateAssetsApi", () => {
 			name: "更新后的素材",
 			description: "",
 			visibility: {
+				visibility_type: "TEAM",
 				user_ids: [],
 				department_ids: ["department-1"],
 			},
@@ -97,6 +116,11 @@ describe("generateAssetsApi", () => {
 		expect(post).toHaveBeenNthCalledWith(5, "/api/v1/assets/library", {
 			name: "项目参考视频",
 			file_key: "org/user/asset/reference.mp4",
+			visibility: {
+				visibility_type: "PERSONAL",
+				user_ids: [],
+				department_ids: [],
+			},
 		})
 		expect(post).toHaveBeenNthCalledWith(6, "/api/v1/assets/queries", {
 			scope: "ALL",
@@ -120,6 +144,7 @@ describe("generateAssetsApi", () => {
 			name: "更新后的素材",
 			description: "",
 			visibility: {
+				visibility_type: "TEAM",
 				user_ids: [],
 				department_ids: ["department-1"],
 			},

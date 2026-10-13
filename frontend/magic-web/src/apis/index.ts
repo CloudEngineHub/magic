@@ -27,7 +27,7 @@ import { generateFunctionPermissionApi } from "./modules/function-permission"
 import { generateMagicFSApi } from "./modules/magicFS"
 import { generateMagicBaseApi } from "./modules/magicBase"
 import { generateSlidesTemplateUploadApi } from "./modules/slidesTemplateUpload"
-import { generateAssetsApi } from "./modules/assets"
+import { buildAssetVisibility, generateAssetsApi } from "./modules/assets"
 
 /** 重置服务 */
 export const UserApi = generateUserApi(magicClient)
@@ -121,6 +121,7 @@ export type {
 	AssetQueryResponse,
 	AssetScope,
 	AssetSource,
+	AssetVisibilityType,
 	AssetTag,
 	AssetTagGroupItem,
 	AssetTagItem,
@@ -155,3 +156,4 @@ export type {
 	MagicBaseSortRule,
 	MagicBaseTable,
 } from "./modules/magicBase"
+export { buildAssetVisibility }

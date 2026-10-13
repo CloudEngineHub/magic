@@ -6,6 +6,7 @@ export type AssetMediaType = "IMAGE" | "VIDEO" | "AUDIO"
 export type AssetComplianceStatus = "UNVERIFIED" | "PROCESSING" | "PASS" | "FAILED"
 export type AssetScope = "PERSONAL" | "TEAM" | "ALL" | "PUBLIC"
 export type AssetSource = "PERSONAL" | "TEAM" | "PUBLIC"
+export type AssetVisibilityType = "PERSONAL" | "TEAM"
 export type AssetTagNodeType = "group" | "tag"
 export type AssetTagMatch = "any" | "all"
 
@@ -74,6 +75,8 @@ export interface AssetItem {
 	owner: AssetOwner
 	owner_uid: string | null
 	source: AssetSource
+	/** Explicit visibility contract returned by the asset service. */
+	visibility_type?: AssetVisibilityType
 	tags: AssetTag[]
 }
 
@@ -100,14 +103,33 @@ export type AssetFileSourceParams =
 	  }
 
 export interface SaveAssetVisibility {
+	visibility_type: AssetVisibilityType
 	user_ids?: string[]
 	department_ids?: string[]
+}
+
+/** Encode the two UI visibility states into the asset API contract. */
+export function buildAssetVisibility(
+	userIds?: string[],
+	departmentIds?: string[],
+): SaveAssetVisibility {
+	const normalizedUserIds = userIds ?? []
+	const normalizedDepartmentIds = departmentIds ?? []
+	return {
+		visibility_type:
+			normalizedUserIds.length > 0 || normalizedDepartmentIds.length > 0
+				? "TEAM"
+				: "PERSONAL",
+		user_ids: normalizedUserIds,
+		department_ids: normalizedDepartmentIds,
+	}
 }
 
 export interface UpdateAssetParams {
 	name: string
 	description: string
 	visibility?: {
+		visibility_type: AssetVisibilityType
 		user_ids: string[]
 		department_ids: string[]
 	}

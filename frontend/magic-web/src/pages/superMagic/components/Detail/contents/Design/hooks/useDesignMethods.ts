@@ -30,6 +30,7 @@ import type { FileItem } from "@/pages/superMagic/components/Detail/components/F
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { AssetsApi, SuperMagicApi } from "@/apis"
 import {
+	buildAssetVisibility,
 	normalizeAssetComplianceStatus,
 	type AssetComplianceResponse,
 	type AssetItem,
@@ -398,13 +399,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 				description: params.description,
 				project_id: projectId,
 				project_file_path: resolution.workspacePath,
-				visibility:
-					params.userIds?.length || params.departmentIds?.length
-						? {
-								user_ids: params.userIds,
-								department_ids: params.departmentIds,
-							}
-						: undefined,
+				visibility: buildAssetVisibility(params.userIds, params.departmentIds),
 				tag_ids: params.tagIds,
 			})
 			assetLibrarySessionStore.upsertAsset(asset)
@@ -520,13 +515,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 					throw new Error(t("assetLibrarySave.sourceUnavailable"))
 				}
 
-				const visibility =
-					params.userIds?.length || params.departmentIds?.length
-						? {
-								user_ids: params.userIds,
-								department_ids: params.departmentIds,
-							}
-						: undefined
+				const visibility = buildAssetVisibility(params.userIds, params.departmentIds)
 				const asset =
 					params.mode === "verify"
 						? await AssetsApi.startAssetCompliance({

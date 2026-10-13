@@ -43,9 +43,13 @@ interface AssetLibraryAssetCardProps {
 	seedanceComplianceAvailable?: boolean
 }
 
-function getAssetSourceLabel(asset: AssetItem, t: TFunction): string {
-	if (asset.source === "TEAM") return t("assets.teamVisible", "团队可见")
+function getAssetVisibilityLabel(asset: AssetItem, t: TFunction): string {
+	// visibility_type only encodes PERSONAL and TEAM. Official assets stay on source.
 	if (asset.source === "PUBLIC") return t("assets.publicVisible", "官方公开")
+	if (asset.visibility_type === "TEAM") return t("assets.teamVisible", "团队可见")
+	if (asset.visibility_type === "PERSONAL") return t("assets.personalVisible", "仅自己可见")
+	// Older list payloads omit visibility_type.
+	if (asset.source === "TEAM") return t("assets.teamVisible", "团队可见")
 	return t("assets.personalVisible", "仅自己可见")
 }
 
@@ -125,7 +129,7 @@ export function AssetLibraryAssetCard({
 				: displayAsset.asset_media_type === "IMAGE"
 					? t("assets.mediaImage", "图片")
 					: t("assets.mediaUnknown", "未知类型")
-	const sourceLabel = getAssetSourceLabel(displayAsset, t)
+	const visibilityLabel = getAssetVisibilityLabel(displayAsset, t)
 	const complianceLabel = getAssetComplianceLabel(displayAsset, t)
 	const complianceBadgeClassName = cn(
 		// Stay icon-sized until hover. The label width animates open inside this pill;
@@ -325,7 +329,7 @@ export function AssetLibraryAssetCard({
 					{displayAsset.name}
 				</div>
 				<div className="mt-1 truncate text-[13px] leading-5 text-muted-foreground">
-					{mediaLabel} · {sourceLabel}
+					{mediaLabel} · {visibilityLabel}
 				</div>
 				<div className="mt-2 flex min-h-0 flex-1 flex-wrap content-start gap-1.5 overflow-hidden">
 					{displayAsset.tags.map((tag) => (

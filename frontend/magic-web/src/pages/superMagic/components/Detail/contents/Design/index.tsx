@@ -63,7 +63,7 @@ import { useNetwork } from "ahooks"
 import { AlertTriangle, CloudOff } from "lucide-react"
 import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
-import { AssetsApi } from "@/apis"
+import { AssetsApi, buildAssetVisibility } from "@/apis"
 import { assetLibrarySessionStore } from "@/components/CanvasDesign/runtime/resources/asset/AssetLibrarySessionStore"
 import { AssetAgreementModal } from "@/pages/superMagic/components/AssetAgreementModal"
 import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/runtime/document"
@@ -2018,10 +2018,7 @@ function DesignViewer(props: DesignViewerProps) {
 							description: params.description,
 							visibility:
 								params.userIds !== undefined || params.departmentIds !== undefined
-									? {
-											user_ids: params.userIds ?? [],
-											department_ids: params.departmentIds ?? [],
-										}
+									? buildAssetVisibility(params.userIds, params.departmentIds)
 									: undefined,
 							tag_ids: params.tagIds,
 						})

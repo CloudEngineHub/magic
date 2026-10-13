@@ -1,3 +1,5 @@
+import { useState } from "react"
+import { createPortal } from "react-dom"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { AssetItem } from "@/apis"
@@ -22,6 +24,14 @@ vi.mock("@/apis", () => ({
 		getAssetOwners: mocks.getAssetOwners,
 		queryAssets: mocks.queryAssets,
 	},
+}))
+
+vi.mock("../../fullscreen/media-resource/index", () => ({
+	default: ({ onClose }: { onClose: () => void }) =>
+		createPortal(
+			<div data-testid="fullscreen-preview-backdrop" onClick={onClose} role="presentation" />,
+			document.body,
+		),
 }))
 
 vi.mock("../asset-library/useAssetLibraryComplianceAction", () => ({
@@ -103,6 +113,28 @@ describe("AssetsModal", () => {
 		render(<AssetsModal open onClose={vi.fn()} />)
 
 		expect(await screen.findByTestId("assets-modal")).toHaveStyle({ zIndex: "999" })
+	})
+
+	it("closes only the fullscreen preview when its backdrop is clicked", async () => {
+		mocks.queryAssets.mockResolvedValueOnce(response(asset))
+
+		function Harness() {
+			const [open, setOpen] = useState(true)
+			return <AssetsModal open={open} onClose={() => setOpen(false)} />
+		}
+
+		render(<Harness />)
+		await screen.findByText(asset.name)
+
+		fireEvent.click(screen.getByRole("button", { name: "放大预览" }))
+		const previewBackdrop = await screen.findByTestId("fullscreen-preview-backdrop")
+		fireEvent.pointerDown(previewBackdrop)
+		fireEvent.click(previewBackdrop)
+
+		await waitFor(() =>
+			expect(screen.queryByTestId("fullscreen-preview-backdrop")).not.toBeInTheDocument(),
+		)
+		expect(screen.getByTestId("assets-modal")).toBeInTheDocument()
 	})
 
 	it("returns the selected asset without downloading or uploading it", async () => {
