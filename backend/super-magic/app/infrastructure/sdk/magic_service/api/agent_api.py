@@ -19,7 +19,7 @@ from ..parameter.available_agents_parameter import AvailableAgentsParameter
 from ..parameter.list_agents_parameter import ListAgentsParameter
 from ..parameter.search_knowledge_parameter import SearchKnowledgeParameter
 from ..parameter.tool_execute_parameter import ToolExecuteParameter
-from ..parameter.update_agent_parameter import UpdateAgentParameter
+from ..parameter.update_crew_parameter import UpdateCrewParameter
 from ..result.available_agents_result import AvailableAgentsResult
 from ..result.agent_details_result import AgentDetailsResult
 from ..result.agent_execute_result import AgentExecuteResult
@@ -30,7 +30,7 @@ from ..result.list_agents_result import ListAgentsResult
 from ..result.search_knowledge_result import SearchKnowledgeResult
 from ..result.skill_file_urls_result import SkillFileUrlsResult
 from ..result.tool_execute_result import ToolExecuteResult
-from ..result.update_agent_result import UpdateAgentResult
+from ..result.update_crew_result import UpdateCrewResult
 
 
 class AgentApi(MagicServiceAbstractApi):
@@ -242,22 +242,22 @@ class AgentApi(MagicServiceAbstractApi):
         data = await self.request_by_parameter_async(parameter, 'GET', endpoint_path)
         return AgentOpenApiResult(data)
 
-    async def update_agent_async(
+    async def update_crew_async(
         self,
-        parameter: UpdateAgentParameter
-    ) -> UpdateAgentResult:
+        parameter: UpdateCrewParameter
+    ) -> UpdateCrewResult:
         """
-        Update agent by code via open-api (async)
+        Update Crew by code via open-api (async)
 
         Args:
-            parameter: UpdateAgentParameter instance
+            parameter: UpdateCrewParameter instance
 
         Returns:
-            UpdateAgentResult containing updated agent info
+            UpdateCrewResult containing updated Crew info
         """
         endpoint_path = f"/api/v1/open-api/sandbox/agents/{parameter.get_code()}"
         data = await self.request_by_parameter_async(parameter, 'PUT', endpoint_path)
-        return UpdateAgentResult(data)
+        return UpdateCrewResult(data)
 
     async def get_skill_file_urls_async(
         self,
