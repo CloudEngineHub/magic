@@ -470,6 +470,8 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 					onSelect={handleProjectSelect}
 					onClose={handleProjectSelectClose}
 					dataService={projectSelectRuntime.dataService}
+					selectionScopeId={projectSelectRuntime.selectionScopeId}
+					selectionSummary={projectSelectRuntime.selectionSummary}
 					initialLoadOptions={projectSelectRuntime.initialLoadOptions}
 					initialNavigationStack={projectSelectRuntime.initialNavigationStack}
 					catalogBehavior={projectSelectRuntime.catalogBehavior}

@@ -1,4 +1,12 @@
-import { createElement, useEffect, useMemo, useState, type ReactNode } from "react"
+import {
+	createElement,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react"
 import { NodeViewWrapper } from "@/infrastructure/editors/tiptap/react"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import { MediaPreviewTrigger } from "@/components/base/MediaPreview"
@@ -24,7 +32,10 @@ import {
 } from "./reference-assets/referenceResourceSelection"
 import { useCanvasReferenceMentionRuntime } from "./reference-assets/useCanvasReferenceMentionRuntime"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./reference-assets/canvasReferenceMention.constants"
-import { MentionPanelViewMode } from "@/components/business/MentionPanel/types"
+import {
+	MentionPanelViewMode,
+	type MentionPanelSelectionSummary,
+} from "@/components/business/MentionPanel/types"
 import {
 	getCanvasResourceAvailability,
 	getCanvasResourceReferenceIdentity,
@@ -273,6 +284,36 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		assetLimits,
 		currentAssetCounts,
 	})
+	const mentionPanelSelectionSummary = useMemo<MentionPanelSelectionSummary | undefined>(() => {
+		const summary = referenceMentionRuntime.selectionSummary
+		if (!summary) return undefined
+
+		return {
+			currentCounts: summary.currentCounts,
+			limits: summary.limits,
+			getItemAssetType: (item) => {
+				if (item.type !== CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile) return undefined
+				return summary.getItemAssetType?.({ type: item.type, data: item.data })
+			},
+			isItemAlreadySelected: (item) => {
+				if (item.type !== CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile) return false
+				return (
+					summary.isItemAlreadySelected?.({ type: item.type, data: item.data }) === true
+				)
+			},
+		}
+	}, [referenceMentionRuntime.selectionSummary])
+	// MessageEditor treats the MentionExtension identity as its lifecycle boundary.
+	// Keep live selection counts behind a stable getter so prompt edits do not rebuild
+	// Tiptap and steal focus from the user.
+	const mentionPanelSelectionSummaryRef = useRef<MentionPanelSelectionSummary | undefined>(
+		undefined,
+	)
+	mentionPanelSelectionSummaryRef.current = mentionPanelSelectionSummary
+	const getMentionPanelSelectionSummary = useCallback(
+		() => mentionPanelSelectionSummaryRef.current,
+		[],
+	)
 	const {
 		dataService: mentionDataService,
 		getInitialLoadOptions,
@@ -374,6 +415,13 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 			catalogBehavior,
 			viewMode: MentionPanelViewMode.GALLERY,
 			galleryOptions: { enablePreviewModal: true },
+			enableMultiSelect: true,
+			// Canvas mentions can reference files, but a folder is only a navigation
+			// container and must never enter the pending multi-select batch.
+			canToggleMultiSelectItem: canSelectItem,
+			multiSelectNavigationPolicy: "preserve",
+			selectionScopeId: referenceMentionRuntime.selectionScopeId,
+			getSelectionSummary: getMentionPanelSelectionSummary,
 			trailingTextAfterInsert: MENTION_CARET_GUARD_TEXT,
 			canSelectItem,
 			nodeViewRenderers: mentionNodeViewRenderers,
@@ -386,6 +434,8 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		catalogBehavior,
 		canSelectItem,
 		mentionNodeViewRenderers,
+		referenceMentionRuntime.selectionScopeId,
+		getMentionPanelSelectionSummary,
 	])
 
 	const mentionEnabledByModel = !isLoadingImageModelList && imageModelList.length > 0

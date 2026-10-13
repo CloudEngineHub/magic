@@ -114,6 +114,21 @@ export interface ReferenceResourcePanelItem {
 	data: ReferenceResourcePanelFileData
 }
 
+export type ReferenceResourcePanelAssetType = "image" | "video" | "audio"
+
+/**
+ * 画布参考资源面板的多选数量摘要；保持在 renderer 边界内，避免宿主直接依赖
+ * MentionPanel 的业务数据结构。
+ */
+export interface ReferenceResourcePanelSelectionSummary {
+	currentCounts: Record<ReferenceResourcePanelAssetType, number>
+	limits: Partial<Record<ReferenceResourcePanelAssetType, number>>
+	getItemAssetType?: (
+		item: ReferenceResourcePanelItem,
+	) => ReferenceResourcePanelAssetType | undefined
+	isItemAlreadySelected?: (item: ReferenceResourcePanelItem) => boolean
+}
+
 export interface ReferenceResourcePanelListItem extends ReferenceResourcePanelItem {
 	id: string
 	name: string
@@ -234,6 +249,10 @@ export interface ReferenceResourcePanelRendererProps {
 	language?: string
 	/** 是否允许面板多选。默认 true；单槽替换场景传 false。 */
 	enableMultiSelect?: boolean
+	/** 连续选择会话的资源作用域；作用域变化时面板自动丢弃暂存项。 */
+	selectionScopeId?: string
+	/** 多选时显示在路径面包屑右侧的资源数量摘要。 */
+	selectionSummary?: ReferenceResourcePanelSelectionSummary
 	dataService?: MentionDataServicePort
 	initialLoadOptions?: ReferenceResourcePanelInitialLoadOptions
 	initialNavigationStack?: ReferenceResourcePanelNavigationItem[]
