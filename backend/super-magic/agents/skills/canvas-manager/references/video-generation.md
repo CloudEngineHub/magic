@@ -71,7 +71,7 @@ print(result.content)
 
 Only when `<media_model_info>` declares a `draft` capability, and only when the user asks for a draft or preview; otherwise never send `draft`.
 
-- `content.draft=true` forces the capability's declared resolution (e.g. `480p`) — send no other resolution.
+- Send `content.draft=true` together with `content.resolution` set to the `draft` capability's declared resolution (e.g. `480p`) — never any other resolution. Omitting `resolution` bills the model's default resolution instead of the draft one.
 - Draft and final are separately billable; estimate and confirm each on its own.
 - After the draft completes, tell the user they can approve it and render the final at full resolution from the canvas; never submit that render yourself.
 - The final render (`input_mode="draft_task"`) inherits the draft's prompt, references, and duration — only the resolution changes, and it carries no references or frames of its own.
