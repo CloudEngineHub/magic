@@ -1530,4 +1530,93 @@ describe("useProjectShareSheet", () => {
 		await waitFor(() => expect(result.current.editLoading).toBe(false))
 		expect(result.current.selectedFileIds).toEqual(["file-mobile-a"])
 	})
+
+	it("编辑指定成员后再确认选择器时仍按用户提交 target_type", async () => {
+		mocks.projectShareData = [
+			{
+				resource_id: "org-share-edit",
+				title: "组织分享",
+				project_id: "project-1",
+				project_name: "Demo Project",
+				share_type: ShareType.Organization,
+				created_at: "2026-05-05",
+				has_password: false,
+				extend: { file_count: 1 },
+			},
+		]
+		mocks.getShareInfoByCode.mockResolvedValue({
+			resource_name: "组织分享",
+			share_type: ShareType.Organization,
+			share_range: "designated",
+			target_ids: [{ target_type: "User", target_id: "user-existing" }],
+			file_ids: ["file-1"],
+			extra: {},
+		})
+		mocks.getShareResourceMembers.mockResolvedValue({
+			members: [
+				{
+					id: "member-row-1",
+					user_id: "user-existing",
+					name: "Existing Member",
+					type: "User",
+				},
+			],
+		})
+
+		const { result } = renderHook(() =>
+			useProjectShareSheet({
+				open: true,
+				projectId: "project-1",
+				projectName: "Demo Project",
+				attachments: [],
+				mode: "project",
+				onClose: vi.fn(),
+			}),
+		)
+
+		act(() => result.current.goToLinkDetail("org-share-edit"))
+		await waitFor(() => expect(result.current.view).toBe("linkDetail"))
+
+		act(() => result.current.openEditSelectedShare())
+		await waitFor(() => {
+			expect(result.current.view).toBe("edit")
+			expect(result.current.editLoading).toBe(false)
+			expect(result.current.selectedMemberNodes).toEqual([
+				expect.objectContaining({
+					id: "user-existing",
+					dataType: NodeType.User,
+				}),
+			])
+		})
+
+		act(() => {
+			result.current.confirmMemberSelector([
+				{
+					id: "user-existing",
+					user_id: "user-existing",
+					name: "Existing Member",
+					type: "User",
+				},
+				{
+					id: "user-added",
+					name: "Added Member",
+					dataType: NodeType.User,
+				},
+			] as never)
+		})
+
+		await act(async () => {
+			await result.current.submitCreateShare()
+		})
+
+		expect(mocks.createOrUpdateShareResource).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				share_range: "designated",
+				target_ids: [
+					{ target_type: "User", target_id: "user-existing" },
+					{ target_type: "User", target_id: "user-added" },
+				],
+			}),
+		)
+	})
 })
