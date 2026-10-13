@@ -486,6 +486,8 @@ readonly class VideoQueueDomainService
         $maskInput = $this->normalizeMediaInput($requestData['inputs']['mask'] ?? null, 'inputs.mask');
         $referenceVideoInputs = $this->normalizeMediaInputs($requestData['inputs']['reference_videos'] ?? null, 'inputs.reference_videos');
         $referenceAudioInputs = $this->normalizeMediaInputs($requestData['inputs']['reference_audios'] ?? null, 'inputs.reference_audios');
+        // 样片成片的引用由上游（Design）解析成样片任务 ID 后下发，这里只做结构归一化。
+        $draftTaskInput = $this->normalizeDraftTaskInput($requestData['inputs']['draft_task'] ?? null);
 
         $generation = array_filter([
             'size' => $this->normalizeGenerationSize($requestData['generation']['size'] ?? null),
@@ -508,6 +510,7 @@ readonly class VideoQueueDomainService
             'camera_fixed' => $this->normalizeOptionalBool($requestData['generation']['camera_fixed'] ?? null),
             'return_last_frame' => $this->normalizeOptionalBool($requestData['generation']['return_last_frame'] ?? null),
             'web_search' => $this->normalizeOptionalBool($requestData['generation']['web_search'] ?? null),
+            'draft' => $this->normalizeOptionalBool($requestData['generation']['draft'] ?? null),
         ], static fn (mixed $value): bool => $value !== null && $value !== '');
         $generation = $this->normalizeProviderSpecificGeneration(
             $generation,
@@ -546,6 +549,7 @@ readonly class VideoQueueDomainService
                 $referenceImages,
                 $referenceVideoInputs,
                 $referenceAudioInputs,
+                $draftTaskInput,
                 $videoGenerationConfig,
             );
         }
@@ -565,6 +569,7 @@ readonly class VideoQueueDomainService
                 'reference_videos' => $referenceVideoInputs,
                 'reference_audios' => $referenceAudioInputs,
                 'mask' => $maskInput,
+                'draft_task' => $draftTaskInput,
             ], static fn (mixed $value): bool => $value !== []),
             'generation' => $generation,
             'callbacks' => $callbacks,
@@ -687,6 +692,11 @@ readonly class VideoQueueDomainService
         if ($webSearchConfig === null) {
             unset($generation['web_search']);
         }
+        // 样片模式只有声明了 draft 开关的能力才接受，其余模型一律裁剪掉。
+        $draftConfig = is_array($configGeneration['draft'] ?? null) ? $configGeneration['draft'] : null;
+        if ($draftConfig === null) {
+            unset($generation['draft']);
+        }
         if (! ($configGeneration['supports_enhance_prompt'] ?? false)) {
             unset($generation['enhance_prompt']);
         }
@@ -742,6 +752,7 @@ readonly class VideoQueueDomainService
      * @param list<array{uri: string, type?: string}> $referenceImages
      * @param list<array{uri: string}> $referenceVideoInputs
      * @param list<array{uri: string}> $referenceAudioInputs
+     * @param array{id: string}|array{} $draftTaskInput
      */
     private function assertRequestCompatibility(
         string $task,
@@ -750,6 +761,7 @@ readonly class VideoQueueDomainService
         array $referenceImages,
         array $referenceVideoInputs,
         array $referenceAudioInputs,
+        array $draftTaskInput,
         VideoGenerationConfig $videoGenerationConfig
     ): void {
         $taskType = VideoTaskType::from($task);
@@ -793,6 +805,14 @@ readonly class VideoQueueDomainService
         switch ($compositionMode) {
             case VideoInputMode::Standard->value:
             case VideoInputMode::VideoEdit->value:
+                return;
+            case VideoInputMode::DraftTask->value:
+                if ($draftTaskInput === []) {
+                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task is required');
+                }
+                if ($frames !== [] || $referenceImages !== [] || $referenceVideoInputs !== [] || $referenceAudioInputs !== []) {
+                    ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'input_mode is invalid');
+                }
                 return;
             case VideoInputMode::ImageReference->value:
                 if ($referenceImages === []) {
@@ -1046,6 +1066,25 @@ readonly class VideoQueueDomainService
         $normalized = is_string($value) ? trim($value) : '';
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    /**
+     * 归一化样片成片引用。
+     *
+     * 只接受上游解析后的样片任务 ID：调用方拿到的是业务 video_id 或工作区路径，
+     * 由 Design 层翻译成方舟样片任务 ID 后再下发，模型网关不再重复解析。
+     *
+     * @return array{id: string}|array{}
+     */
+    private function normalizeDraftTaskInput(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $draftTaskId = $this->normalizeOptionalString($value['id'] ?? null);
+
+        return $draftTaskId === null ? [] : ['id' => $draftTaskId];
     }
 
     private function normalizeGenerationSize(mixed $value): ?string

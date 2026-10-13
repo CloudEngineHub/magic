@@ -17,6 +17,7 @@ import type { MediaResourceFullscreenPreviewItem } from "../../../fullscreen/med
 import {
 	getActiveContent,
 	getContentGenerationState,
+	getContentState,
 } from "../../../../runtime/document/elementContent"
 import { useIsMediaReplacing } from "../../../../app/hooks/canvas"
 import { useGenerationRuntime } from "../../../../app/hooks/canvas/useGenerationRuntime"
@@ -27,6 +28,15 @@ import type { VideoEditSessionSnapshot } from "./video-editor-config.types"
 import { buildMediaEditSourceFingerprint } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 import { useElementToolCommand } from "../../model/useElementToolCommand"
 import type { GenerationToolCommandRequest } from "../../../../runtime/element-tools"
+import {
+	VIDEO_DRAFT_FINAL_RESOLUTION,
+	buildVideoDraftFinalRequest,
+	isDraftTaskVideoRequest,
+	isDraftVideoContent,
+	supportsVideoDraftFinal,
+} from "../../../../runtime/resources/video-draft-final/videoDraftFinalRequest"
+import { resolveVideoDraftFinalHint } from "../../../../runtime/resources/video-draft-final/videoDraftFinalHint"
+import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
@@ -82,6 +92,9 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const [editingMode, setEditingMode] = useState<"quick-edit" | "re-edit" | null>(null)
 	const [isGeneratingAgain, setIsGeneratingAgain] = useState(false)
 	const [isPreparingGenerateAgain, setIsPreparingGenerateAgain] = useState(false)
+	const [isPreparingGenerateFinal, setIsPreparingGenerateFinal] = useState(false)
+	const [isSubmittingGenerateFinal, setIsSubmittingGenerateFinal] = useState(false)
+	const [draftFinalRequestId, setDraftFinalRequestId] = useState(() => generateUUID())
 	const isReplacing = useIsMediaReplacing(videoElement.id)
 	const isMediaResourcePreviewOpen = props.isMediaResourcePreviewOpen ?? false
 	const videoContent = getActiveContent(videoElement)
@@ -103,12 +116,48 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		savedGenerateVideoRequest?.model_id,
 	)
 	const canQuickEdit = Boolean(videoContent?.src && quickEditModel)
+	const isDraftTaskResult = isDraftTaskVideoRequest(savedGenerateVideoRequest)
+	const draftSourceModel = useMemo(
+		() =>
+			videoModelList.find((model) => model.model_id === savedGenerateVideoRequest?.model_id),
+		[videoModelList, savedGenerateVideoRequest?.model_id],
+	)
+	const hasDraftFinalCapability = Boolean(
+		videoContent &&
+		getContentState(videoContent) === "completed" &&
+		isDraftVideoContent(videoContent) &&
+		supportsVideoDraftFinal(draftSourceModel, videoContent.generateVideoRequest?.model_id),
+	)
+	const draftFinalFinishedAt = videoContent?.videoGenerationResultMeta?.runtime?.finished_at
+	const draftFinalHint = useMemo(
+		() =>
+			hasDraftFinalCapability ? resolveVideoDraftFinalHint(draftFinalFinishedAt) : undefined,
+		[draftFinalFinishedAt, hasDraftFinalCapability],
+	)
+	const draftFinalExpired = draftFinalHint?.expired === true
+	const draftFinalRequest = useMemo(
+		() =>
+			videoContent && hasDraftFinalCapability
+				? buildVideoDraftFinalRequest(videoContent, draftFinalRequestId)
+				: null,
+		[draftFinalRequestId, hasDraftFinalCapability, videoContent],
+	)
+	const draftFinalEstimateSignature = useMemo(
+		() => (draftFinalRequest ? buildVideoPointsEstimateSignature(draftFinalRequest) : null),
+		[draftFinalRequest],
+	)
+	const { points: draftFinalEstimatedPoints, isLoading: isDraftFinalEstimateLoading } =
+		useVideoPointsEstimate({
+			request: draftFinalRequest,
+			signature: draftFinalEstimateSignature,
+			enabled: hasDraftFinalCapability,
+		})
 
 	const handleStartRegenerate = useCallback(() => {
-		if (!canvas || !savedGenerateVideoRequest) return
+		if (!canvas || !savedGenerateVideoRequest || isDraftTaskResult) return
 		if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
 		setEditingMode("re-edit")
-	}, [canvas, savedGenerateVideoRequest, videoElement.id])
+	}, [canvas, isDraftTaskResult, savedGenerateVideoRequest, videoElement.id])
 
 	const handleStartQuickEdit = useCallback(() => {
 		if (!canvas || !canQuickEdit) return
@@ -120,6 +169,54 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const isEditingRef = useLatest(editingMode !== null)
 	const selectedElementsRef = useLatest(selectedElements)
 	const handleStartQuickEditRef = useLatest(handleStartQuickEdit)
+
+	const estimateVideoRequestPoints = useCallback(
+		async (request: GenerateVideoRequest): Promise<number | null> => {
+			if (!canvas) return null
+			const estimateSignature = buildVideoPointsEstimateSignature(request)
+			const hasPendingResourceDeferrals =
+				collectPendingVideoGenerationRequestResourcePaths(request, (path) =>
+					canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path),
+				).length > 0
+			const estimateGate = resolveVideoPointsEstimateGate({
+				enabled: true,
+				request,
+				signature: estimateSignature,
+				hasEstimateVideoPoints: Boolean(methods?.estimateVideoPoints),
+				hasPendingResourceDeferrals,
+			})
+			if (estimateGate.blockedReason === "pending_resource_deferrals") {
+				await waitForPendingVideoGenerationResources(canvas, request)
+			}
+			const canEstimate =
+				estimateGate.blockedReason === "pending_resource_deferrals"
+					? resolveVideoPointsEstimateGate({
+							enabled: true,
+							request,
+							signature: estimateSignature,
+							hasEstimateVideoPoints: Boolean(methods?.estimateVideoPoints),
+							hasPendingResourceDeferrals: false,
+						}).canEstimate
+					: estimateGate.canEstimate
+			if (!canEstimate) return null
+
+			try {
+				const cachedEstimate = getCachedVideoPointsEstimate(estimateSignature)
+				const estimate =
+					cachedEstimate ??
+					(await getVideoPointsEstimate({ signature: estimateSignature, request }))
+				return typeof estimate.points === "number" ? estimate.points : null
+			} catch {
+				return null
+			}
+		},
+		[
+			canvas,
+			getCachedVideoPointsEstimate,
+			getVideoPointsEstimate,
+			methods?.estimateVideoPoints,
+		],
+	)
 
 	useEventListener(
 		"keydown",
@@ -149,53 +246,19 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	)
 
 	const handleGenerateAgain = useCallback(async () => {
-		const generateVideoRequest = savedGenerateVideoRequest
-		if (!canvas || !generateVideoRequest || isGeneratingAgain || isPreparingGenerateAgain)
+		if (!canvas || !savedGenerateVideoRequest || isGeneratingAgain || isPreparingGenerateAgain)
 			return
 		if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
+		// 预估与提交共用同一任务对象，确认弹窗期间不重新生成 task id。
+		const generateVideoRequest: GenerateVideoRequest = {
+			...savedGenerateVideoRequest,
+			video_id: generateUUID(),
+		}
 
 		setIsPreparingGenerateAgain(true)
-		let estimatedPoints: number | null = null
+		let estimatedPoints: number | null
 		try {
-			const estimateSignature = buildVideoPointsEstimateSignature(generateVideoRequest)
-			const hasPendingResourceDeferrals =
-				collectPendingVideoGenerationRequestResourcePaths(generateVideoRequest, (path) =>
-					canvas.canvasFileUploadManager.shouldDeferRemoteResourceLoad(path),
-				).length > 0
-			const estimateGate = resolveVideoPointsEstimateGate({
-				enabled: true,
-				request: generateVideoRequest,
-				signature: estimateSignature,
-				hasEstimateVideoPoints: Boolean(methods?.estimateVideoPoints),
-				hasPendingResourceDeferrals,
-			})
-			if (estimateGate.blockedReason === "pending_resource_deferrals") {
-				await waitForPendingVideoGenerationResources(canvas, generateVideoRequest)
-			}
-			const canEstimateAfterResourceWait =
-				estimateGate.blockedReason === "pending_resource_deferrals"
-					? resolveVideoPointsEstimateGate({
-							enabled: true,
-							request: generateVideoRequest,
-							signature: estimateSignature,
-							hasEstimateVideoPoints: Boolean(methods?.estimateVideoPoints),
-							hasPendingResourceDeferrals: false,
-						}).canEstimate
-					: estimateGate.canEstimate
-			if (canEstimateAfterResourceWait) {
-				try {
-					const cachedEstimate = getCachedVideoPointsEstimate(estimateSignature)
-					const estimate =
-						cachedEstimate ??
-						(await getVideoPointsEstimate({
-							signature: estimateSignature,
-							request: generateVideoRequest,
-						}))
-					estimatedPoints = typeof estimate.points === "number" ? estimate.points : null
-				} catch {
-					estimatedPoints = null
-				}
-			}
+			estimatedPoints = await estimateVideoRequestPoints(generateVideoRequest)
 		} finally {
 			setIsPreparingGenerateAgain(false)
 		}
@@ -210,10 +273,10 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 						videoElement.id,
 					)
 					if (!(elementInstance instanceof VideoElementClass)) return
-					const submitted = await elementInstance.submitContentGeneration({
-						...generateVideoRequest,
-						video_id: generateUUID(),
-					})
+					const submitted = await elementInstance.submitContentGeneration(
+						generateVideoRequest,
+						{ preserveVideoId: true },
+					)
 					if (submitted) sessionStore?.clearContent(videoElement.id, sessionContentId)
 				} finally {
 					setIsGeneratingAgain(false)
@@ -223,15 +286,67 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	}, [
 		canvas,
 		confirmVideoGeneration,
-		getCachedVideoPointsEstimate,
-		getVideoPointsEstimate,
+		estimateVideoRequestPoints,
 		isGeneratingAgain,
 		isPreparingGenerateAgain,
-		methods?.estimateVideoPoints,
 		savedGenerateVideoRequest,
 		sessionContentId,
 		sessionStore,
 		videoElement,
+	])
+
+	const handleGenerateFinal = useCallback(async () => {
+		if (
+			!canvas ||
+			!draftFinalRequest ||
+			!sessionContentId ||
+			!hasDraftFinalCapability ||
+			draftFinalExpired ||
+			isPreparingGenerateFinal ||
+			isSubmittingGenerateFinal
+		) {
+			return
+		}
+
+		setIsPreparingGenerateFinal(true)
+		let estimatedPoints = draftFinalEstimatedPoints
+		try {
+			if (estimatedPoints == null) {
+				estimatedPoints = await estimateVideoRequestPoints(draftFinalRequest)
+			}
+		} finally {
+			setIsPreparingGenerateFinal(false)
+		}
+
+		await confirmVideoGeneration({
+			points: estimatedPoints,
+			onConfirm: async () => {
+				setIsSubmittingGenerateFinal(true)
+				try {
+					await canvas.videoDraftFinalManager?.start({
+						sourceElementId: videoElement.id,
+						sourceContentId: sessionContentId,
+						request: draftFinalRequest,
+					})
+				} finally {
+					// 每次实际确认都是独立任务；下一次点击必须使用全新的 video_id。
+					setDraftFinalRequestId(generateUUID())
+					setIsSubmittingGenerateFinal(false)
+				}
+			},
+		})
+	}, [
+		canvas,
+		confirmVideoGeneration,
+		draftFinalEstimatedPoints,
+		draftFinalExpired,
+		draftFinalRequest,
+		estimateVideoRequestPoints,
+		hasDraftFinalCapability,
+		isPreparingGenerateFinal,
+		isSubmittingGenerateFinal,
+		sessionContentId,
+		videoElement.id,
 	])
 
 	useEffect(() => {
@@ -258,10 +373,14 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			case ElementToolTypeEnum.GenerationGenerateAgain:
 				void handleGenerateAgain()
 				return
+			case ElementToolTypeEnum.GenerationGenerateFinal:
+				void handleGenerateFinal()
+				return
 		}
 	}, [
 		activeContentIsGenerating,
 		handleGenerateAgain,
+		handleGenerateFinal,
 		handleStartQuickEdit,
 		handleStartRegenerate,
 		isMediaResourcePreviewOpen,
@@ -272,7 +391,12 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	])
 
 	const canRestore = Boolean(savedGenerateVideoRequest?.model_id)
+	const canReEdit = canRestore && !isDraftTaskResult
 	const generateAgainBusy = isGeneratingAgain || isPreparingGenerateAgain
+	const generateFinalBusy =
+		isDraftFinalEstimateLoading || isPreparingGenerateFinal || isSubmittingGenerateFinal
+	const canGenerateFinal =
+		hasDraftFinalCapability && !editingMode && !isReplacing && !isMediaResourcePreviewOpen
 
 	useEffect(() => {
 		if (!isReplacing) return
@@ -311,16 +435,48 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 				toolId: ElementToolTypeEnum.GenerationReEdit,
 				state: {
 					available:
-						canRestore && !editingMode && !isReplacing && !isMediaResourcePreviewOpen,
+						canReEdit && !editingMode && !isReplacing && !isMediaResourcePreviewOpen,
 				},
 				execute: handleStartRegenerate,
 			}),
 			[
-				canRestore,
+				canReEdit,
 				editingMode,
 				handleStartRegenerate,
 				isMediaResourcePreviewOpen,
 				isReplacing,
+				sessionContentId,
+				videoElement.id,
+			],
+		),
+	)
+	useElementToolCommand(
+		useMemo(
+			() => ({
+				elementId: videoElement.id,
+				contentId: sessionContentId,
+				toolId: ElementToolTypeEnum.GenerationGenerateFinal,
+				state: {
+					available: canGenerateFinal,
+					disabled: generateFinalBusy || draftFinalExpired,
+					loading: generateFinalBusy,
+					data: {
+						videoGenerationEstimate: {
+							resolution: VIDEO_DRAFT_FINAL_RESOLUTION.toUpperCase(),
+							points: draftFinalEstimatedPoints,
+						},
+						...(draftFinalHint ? { videoDraftFinalHint: draftFinalHint } : {}),
+					},
+				},
+				execute: handleGenerateFinal,
+			}),
+			[
+				canGenerateFinal,
+				draftFinalEstimatedPoints,
+				draftFinalExpired,
+				draftFinalHint,
+				generateFinalBusy,
+				handleGenerateFinal,
 				sessionContentId,
 				videoElement.id,
 			],

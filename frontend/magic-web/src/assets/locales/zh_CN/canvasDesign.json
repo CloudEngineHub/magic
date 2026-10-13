@@ -473,7 +473,10 @@
 		"size": "尺寸",
 		"syncing": "生成信息正在同步",
 		"title": "生成记录",
-		"unavailable": "未记录生成信息"
+		"unavailable": "未记录生成信息",
+		"videoInputModes": {
+			"draftTask": "样片成片"
+		}
 	},
 	"rectangle": {
 		"defaultName": "矩形"
@@ -780,6 +783,7 @@
 		"defaultName": "视频生成器",
 		"empty": "请发送生成视频的指令",
 		"fileMissing": "视频文件不存在",
+		"finalResultName": "正片视频",
 		"generateFailed": "视频生成失败",
 		"generating": "正在生成中...",
 		"loadError": "视频加载失败",
@@ -795,6 +799,7 @@
 		"replaceFailed": "视频替换失败，请重试",
 		"replaceUnsupported": "不支持的视频格式",
 		"retryEditing": "请重新编辑视频生成需求",
+		"sampleTag": "样片",
 		"uploading": "正在上传中..."
 	},
 	"videoContinuation": {
@@ -828,11 +833,17 @@
 		"aspectRatio": "比例",
 		"bottomToolbar": "视频元素底部工具栏",
 		"clearLinkedFrame": "清除当前槽位关联",
+		"draft": "样片模式",
 		"duration": "时长",
 		"firstFrame": "首帧",
 		"frames": "首尾帧",
 		"generateAgain": "再次生成",
 		"generateAudio": "音频",
+		"generateFinal": "生成正片",
+		"generateFinalExpired": "样片已过期，需重新生成样片。",
+		"generateFinalFailed": "正片生成失败，请重试",
+		"generateFinalHint": "样片生成后，在{{days}}天内可生成{{resolution}} 正片。\n请在 {{deadline}} 前操作，逾期需重新生成样片。",
+		"generateFinalHintPending": "样片生成后，在{{days}}天内可生成{{resolution}} 正片。",
 		"generationSettings": "生成设置",
 		"generationSettingsAria": "视频生成参数",
 		"lastFrame": "尾帧",

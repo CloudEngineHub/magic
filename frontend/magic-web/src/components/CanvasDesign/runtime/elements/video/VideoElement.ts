@@ -370,7 +370,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	 */
 	public async submitContentGeneration(
 		request: GenerateVideoRequest,
-		options?: { recoveryIntent?: MediaEditIntent },
+		options?: { recoveryIntent?: MediaEditIntent; preserveVideoId?: boolean },
 	): Promise<boolean> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
 		if (
@@ -389,9 +389,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const recoveryContent = this.getVideoContent()
 		const requestWithId: GenerateVideoRequest = {
 			...request,
-			prompt: request.prompt?.trim(),
-			// 追加 Content 必须对应全新的服务端任务，不能复用旧版本的 video_id。
-			video_id: generateUUID(),
+			...(request.prompt !== undefined ? { prompt: request.prompt.trim() || undefined } : {}),
+			// 默认仍强制生成新任务；正片“再次生成”会在积分预估前创建新 ID，
+			// 并显式要求提交同一份已经确认过的 payload。
+			video_id:
+				options?.preserveVideoId && request.video_id ? request.video_id : generateUUID(),
 		}
 		this.isGenerating = true
 		this.isGenerationErrorState = false
@@ -1076,6 +1078,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private renderPreview(group: Konva.Group, width: number, height: number): void {
 		const playerGroup = this.renderer.createPlayerNode(width, height, this.canvas, {
 			showLoadingOverlay: this.isInlinePlaybackPending || this.isInlinePlaybackRefreshing,
+			showDraftTag: this.getVideoContent()?.generateVideoRequest?.generation?.draft === true,
 			onPlayButtonClick: () => {
 				this.canvas.videoPlaybackInteractionManager.toggleElementPlayback(
 					this.data.id,
