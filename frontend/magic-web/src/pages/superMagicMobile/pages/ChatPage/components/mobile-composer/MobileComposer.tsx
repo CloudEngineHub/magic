@@ -240,9 +240,10 @@ function MobileComposerComponent({
 		enableReEditMessageFromPubSub,
 	})
 	const wechatScrollRef = useRef<HTMLDivElement>(null)
+	// Homepage defers project creation, but the recording expert still needs its text/recording switch.
 	const isRecordSummaryMode =
 		editorContext.topicMode === TopicMode.RecordSummary &&
-		!editorContext.deferProjectCreationUntilSend
+		(!editorContext.deferProjectCreationUntilSend || editorContext.editorModeSwitch != null)
 	const effectiveScenes =
 		scenes ??
 		superMagicModeService.getModeConfigWithLegacy(

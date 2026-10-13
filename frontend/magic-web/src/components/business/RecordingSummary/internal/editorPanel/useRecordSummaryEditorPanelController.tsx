@@ -23,7 +23,6 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import SuperMagicService from "@/pages/superMagic/services"
 import type { AudioSourceType } from "@/services/recordSummary/MediaRecorderService/types/RecorderTypes"
 import { type Workspace } from "@/pages/superMagic/pages/Workspace/types"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { getFallbackTopicModeIdentifier } from "@/services/superMagic/DefaultAgentSelectionService"
 import { getEditorPanelMode } from "./getEditorPanelMode"
 import { useRecordingEditorRuntime } from "../editorRuntime"
@@ -36,6 +35,7 @@ import { userStore } from "@/models/user"
 import { runForceRecordingOverride } from "@/components/business/RecordingSummary/utils/force-recording-override"
 import {
 	getHomepageRecordingStartBlocker,
+	resolveEnsuredRecordingTopicMode,
 	resolveRecordingStartContext,
 	resolveSelectedProjectStartContext,
 	type HomepageRecordingStartBlocker,
@@ -54,6 +54,9 @@ export function useRecordSummaryEditorPanelController({
 	editorModeSwitch,
 	modelSwitch,
 	attachments,
+	beforeRecordingStart,
+	recordingNewProjectTopicMode,
+	allowSelectRecordingProject,
 }: RecordSummaryEditorPanelProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -240,9 +243,11 @@ export function useRecordSummaryEditorPanelController({
 							project,
 						},
 						{
-							topicMode: nextProject
-								? TopicMode.RecordSummary
-								: getFallbackTopicModeIdentifier(),
+							topicMode: resolveEnsuredRecordingTopicMode({
+								hasProject: Boolean(nextProject),
+								recordingNewProjectTopicMode,
+								fallbackTopicMode: getFallbackTopicModeIdentifier(),
+							}),
 						},
 					)
 
@@ -296,7 +301,14 @@ export function useRecordSummaryEditorPanelController({
 	const handleStartRecording = useMemoizedFn(async (mode: "new" | "current" = "new") => {
 		if (startRecordingInFlightRef.current) return
 		startRecordingInFlightRef.current = true
+		// Show the preparing state before the async gate so a repeated tap reads as
+		// ignored instead of being silently dropped by the in-flight ref.
+		setIsPreparingRecordingStart(true)
 		try {
+			// Homepage send validates the workspace before creating anything. Do the same
+			// before replacing an in-progress recording or creating a project.
+			if (beforeRecordingStart && !(await beforeRecordingStart())) return
+
 			// Resolve the destination before override so a missing workspace or
 			// model cannot finish the current recording and then fail to start.
 			let selectedStartContext: RecordingStartContext | undefined
@@ -322,7 +334,6 @@ export function useRecordSummaryEditorPanelController({
 				selectedStartContext = homepageStartContext
 			}
 
-			setIsPreparingRecordingStart(true)
 			const overrideContext = await recordSummaryService.getRecordingOverrideContext()
 			if (overrideContext) {
 				const prepared = await runForceRecordingOverride(
@@ -450,6 +461,7 @@ export function useRecordSummaryEditorPanelController({
 		panelMode,
 		saveSuperMagicTopicModel,
 		selectedProjectId: selectedProject?.id,
+		allowSelectRecordingProject,
 		size,
 		uploading,
 		uploadProgress,
