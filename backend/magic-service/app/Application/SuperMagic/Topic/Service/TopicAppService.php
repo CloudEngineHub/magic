@@ -1079,7 +1079,7 @@ class TopicAppService extends AbstractAppService
         $requestId = CoContext::getRequestId() ?: (string) IdGenerator::getSnowId();
 
         // === 异步部分：复制消息 ===
-        go(function () use ($sourceTopicEntity, $newTopicEntity, $cutoffMessageId, $imConversationResult, $taskKey, $requestId, $dataIsolation) {
+        go(function () use ($sourceTopicEntity, $newTopicEntity, $cutoffMessageId, $imConversationResult, $taskKey, $requestId) {
             // 复制请求上下文
             CoContext::setRequestId($requestId);
 
@@ -1091,7 +1091,7 @@ class TopicAppService extends AbstractAppService
                 Db::beginTransaction();
                 try {
                     // 执行消息复制逻辑
-                    $messageIdMapping = $this->topicDomainService->copyTopicMessageFromOthers(
+                    $this->topicDomainService->copyTopicMessageFromOthers(
                         $sourceTopicEntity,
                         $newTopicEntity,
                         $cutoffMessageId,
@@ -1112,28 +1112,8 @@ class TopicAppService extends AbstractAppService
                 }
 
                 // Chat history storage is not part of the database transaction.
-                $this->topicDuplicateStatusManager->setTaskProgress($taskKey, 80, 'Copying chat history files');
-                $chatHistoryResult = $this->topicDomainService->copyTopicChatHistory(
-                    $sourceTopicEntity,
-                    $newTopicEntity,
-                    $dataIsolation,
-                    function (array $stats) use ($taskKey) {
-                        $this->topicDuplicateStatusManager->setTaskProgress(
-                            $taskKey,
-                            95,
-                            sprintf('Copied %d chat history files', $stats['copied'] ?? 0)
-                        );
-                    }
-                );
-
-                // TaskFile copy generates new IDs/keys. Update the already
-                // committed target messages so attachments point at the
-                // copied Topic files instead of the source Topic files.
-                $this->topicDomainService->updateCopiedMessageFileReferences(
-                    $messageIdMapping,
-                    $chatHistoryResult['source_to_target'] ?? [],
-                    $chatHistoryResult['source_to_target_file_keys'] ?? []
-                );
+                $this->topicDuplicateStatusManager->setTaskProgress($taskKey, 80, 'Copying chat history archive');
+                $chatHistoryResult = $this->topicDomainService->copyTopicChatHistory($sourceTopicEntity, $newTopicEntity);
 
                 $this->topicDuplicateStatusManager->setTaskProgress($taskKey, 100, 'Topic duplication completed');
 
