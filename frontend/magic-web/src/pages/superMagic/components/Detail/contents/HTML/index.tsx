@@ -164,7 +164,7 @@ interface HTMLProps {
 	displayConfig?: any
 	openFileTab?: (fileItem: any, autoEdit?: boolean) => void
 	exportFile?: (fileId: string, fileVersion?: number) => void
-	exportPdf?: (fileId: string) => void
+	exportPdf?: (fileId: string, previewElement?: HTMLElement) => void
 	exportRasterPdf?: (fileId: string, pageMode: "fit" | "paginate") => void
 	exportPptx?: (fileId: string) => void
 	exportImage?: (fileId: string, format?: ImageExportFormat) => void
@@ -1394,7 +1394,7 @@ export default memo(function HTML(props: HTMLProps) {
 	})
 
 	const handleExportPDF = useMemoizedFn(() => {
-		exportPdf?.(displayData?.file_id)
+		exportPdf?.(displayData?.file_id, htmlRendererRef.current?.getIframeElement() ?? undefined)
 	})
 
 	const handleExportRasterPdf = useMemoizedFn((pageMode: "fit" | "paginate") => {
