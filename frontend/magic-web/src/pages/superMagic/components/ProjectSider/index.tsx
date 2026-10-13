@@ -6,7 +6,7 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { cn } from "@/utils/cn"
 
 export default memo(function ProjectSider(props: ProjectSiderProps) {
-	const { items, width, className, value, onValueChange } = props
+	const { items, width, className, value, onValueChange, headerTrailingAction } = props
 
 	// 过滤掉不可见的 items
 	const visibleItems = useMemo(() => items?.filter((item) => item.visible ?? true) || [], [items])
@@ -73,16 +73,19 @@ export default memo(function ProjectSider(props: ProjectSiderProps) {
 		>
 			<div className="flex h-full flex-col gap-1">
 				{/* Header - 横向 Tabs */}
-				<div className="m-2 mb-0 flex-shrink-0">
-					<SmoothTabs
-						tabs={tabs}
-						value={currentValue}
-						onChange={handleChange}
-						variant="background"
-						className="h-auto w-full bg-muted p-[3px]"
-						buttonClassName="py-0 h-[28px]"
-						indicatorClassName="h-[28px] inset-y-[3px]"
-					/>
+				<div className="m-2 mb-0 flex flex-shrink-0 items-center gap-1">
+					<div className="min-w-0 flex-1">
+						<SmoothTabs
+							tabs={tabs}
+							value={currentValue}
+							onChange={handleChange}
+							variant="background"
+							className="h-auto w-full bg-muted p-[3px]"
+							buttonClassName="py-0 h-[28px]"
+							indicatorClassName="h-[28px] inset-y-[3px]"
+						/>
+					</div>
+					{headerTrailingAction}
 				</div>
 
 				{/* Content */}

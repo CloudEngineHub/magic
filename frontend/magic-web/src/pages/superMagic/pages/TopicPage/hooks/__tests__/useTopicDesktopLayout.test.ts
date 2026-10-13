@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useTopicDesktopLayout } from "../useTopicDesktopLayout"
 import {
+	CHAT_PROJECT_SIDER_PANEL_STORAGE_KEY,
 	DEFAULT_WIDTH,
 	MESSAGE_PANEL_WIDTH_STORAGE_KEY,
+	PROJECT_SIDER_PANEL_STORAGE_KEY,
 	PROJECT_SIDER_WIDTH_STORAGE_KEY,
 } from "../../../../constants/resizablePanel"
 
@@ -233,5 +235,96 @@ describe("useTopicDesktopLayout", () => {
 		rerender()
 
 		expect(result.current.isConversationPanelCollapsed).toBe(false)
+	})
+
+	describe("project sider collapse preference", () => {
+		const chatPersistence = {
+			storageKey: CHAT_PROJECT_SIDER_PANEL_STORAGE_KEY,
+			defaultCollapsed: true,
+		}
+
+		it("keeps the project page preference under its shared key and expanded by default", () => {
+			const { result, rerender } = renderHook(() =>
+				useTopicDesktopLayout({ isReadOnly: false, enableProjectCollapse: true }),
+			)
+			expect(result.current.isProjectSiderCollapsed).toBe(false)
+
+			act(() => result.current.collapseProjectSider())
+			rerender()
+
+			expect(result.current.isProjectSiderCollapsed).toBe(true)
+			expect(
+				JSON.parse(localStorage.getItem(PROJECT_SIDER_PANEL_STORAGE_KEY) ?? "{}"),
+			).toEqual(expect.objectContaining({ collapsed: true }))
+			expect(localStorage.getItem(CHAT_PROJECT_SIDER_PANEL_STORAGE_KEY)).toBeNull()
+		})
+
+		it("starts collapsed on first visit when the page opts in", () => {
+			const { result } = renderHook(() =>
+				useTopicDesktopLayout({
+					isReadOnly: false,
+					enableProjectCollapse: true,
+					projectSiderPanelPersistence: chatPersistence,
+				}),
+			)
+
+			expect(result.current.isProjectSiderCollapsed).toBe(true)
+			// Reading the default must not write anything: only a user choice is a preference.
+			expect(localStorage.getItem(CHAT_PROJECT_SIDER_PANEL_STORAGE_KEY)).toBeNull()
+		})
+
+		it("ignores the project page preference and does not overwrite it", () => {
+			localStorage.setItem(
+				PROJECT_SIDER_PANEL_STORAGE_KEY,
+				JSON.stringify({ collapsed: false, lastExpandedSize: 320 }),
+			)
+			const { result, rerender } = renderHook(() =>
+				useTopicDesktopLayout({
+					isReadOnly: false,
+					enableProjectCollapse: true,
+					projectSiderPanelPersistence: chatPersistence,
+				}),
+			)
+			expect(result.current.isProjectSiderCollapsed).toBe(true)
+
+			act(() => result.current.expandProjectSider())
+			rerender()
+
+			expect(result.current.isProjectSiderCollapsed).toBe(false)
+			expect(
+				JSON.parse(localStorage.getItem(PROJECT_SIDER_PANEL_STORAGE_KEY) ?? "{}"),
+			).toEqual({ collapsed: false, lastExpandedSize: 320 })
+			expect(
+				JSON.parse(localStorage.getItem(CHAT_PROJECT_SIDER_PANEL_STORAGE_KEY) ?? "{}"),
+			).toEqual(expect.objectContaining({ collapsed: false }))
+		})
+
+		it("restores the saved choice instead of the default on the next visit", () => {
+			localStorage.setItem(
+				CHAT_PROJECT_SIDER_PANEL_STORAGE_KEY,
+				JSON.stringify({ collapsed: false, lastExpandedSize: 320 }),
+			)
+			const { result } = renderHook(() =>
+				useTopicDesktopLayout({
+					isReadOnly: false,
+					enableProjectCollapse: true,
+					projectSiderPanelPersistence: chatPersistence,
+				}),
+			)
+
+			expect(result.current.isProjectSiderCollapsed).toBe(false)
+		})
+
+		it("never reports collapsed when collapse is not enabled (e.g. read-only)", () => {
+			const { result } = renderHook(() =>
+				useTopicDesktopLayout({
+					isReadOnly: true,
+					enableProjectCollapse: false,
+					projectSiderPanelPersistence: chatPersistence,
+				}),
+			)
+
+			expect(result.current.isProjectSiderCollapsed).toBe(false)
+		})
 	})
 })

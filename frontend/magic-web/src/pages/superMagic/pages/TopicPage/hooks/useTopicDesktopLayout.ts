@@ -1,7 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { TopicLayoutStore, type HistoryDragResult } from "../stores/TopicLayoutStore"
+import {
+	TopicLayoutStore,
+	type HistoryDragResult,
+	type ProjectSiderPanelPersistence,
+} from "../stores/TopicLayoutStore"
 
 interface UseTopicDesktopLayoutOptions {
 	isReadOnly: boolean
@@ -13,6 +17,8 @@ interface UseTopicDesktopLayoutOptions {
 	persistConversationPanelState?: boolean
 	/** Initial state used when a page owns a temporary conversation layout. */
 	initialConversationPanelCollapsed?: boolean
+	/** Pages with their own sider preference (e.g. chat) pass a separate key and default. */
+	projectSiderPanelPersistence?: ProjectSiderPanelPersistence
 }
 
 interface UseTopicDesktopLayoutReturn {
@@ -51,6 +57,7 @@ export function useTopicDesktopLayout({
 	allowProjectSiderResize = !isReadOnly,
 	persistConversationPanelState = true,
 	initialConversationPanelCollapsed = false,
+	projectSiderPanelPersistence,
 	enableProjectCollapse = false,
 	onHistoryDragEnd,
 	allowConversationPanelResize = !isReadOnly,
@@ -60,6 +67,7 @@ export function useTopicDesktopLayout({
 
 	if (!storeRef.current) {
 		storeRef.current = new TopicLayoutStore({
+			projectSiderPanelPersistence,
 			persistConversationPanelState,
 			initialConversationPanelCollapsed,
 			bufferedMessageCollapse: enableProjectCollapse,
