@@ -5,11 +5,11 @@ import { useTranslation } from "react-i18next"
 import { MagicDropdown } from "@/components/base"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { Badge } from "@/components/shadcn-ui/badge"
 import { cn } from "@/utils/cn"
 import { serviceProviderModelToModelItem } from "@/services/superMagic/SuperMagicCustomModelService"
-import { Ellipsis, Pencil, Trash2 } from "lucide-react"
+import { Ellipsis, Pencil, Trash2, TriangleAlert } from "lucide-react"
 import type { ModelItem, ModelSelectionState } from "../../types"
+import ModelName from "../ModelName"
 import { ProviderTypeIcon } from "../ProviderTypeIcon"
 import type { MyModelGroup, MyModelProviderEntry } from "./utils"
 import { userStore } from "@/models/user"
@@ -39,7 +39,8 @@ export function MyModelRow({
 	const isActionMenuOpenRef = useRef(false)
 	const shouldSkipNextSelectRef = useRef(false)
 	const { representativeModel, providerEntries } = group
-	const modelState = getModelState?.(serviceProviderModelToModelItem(representativeModel))
+	const model = serviceProviderModelToModelItem(representativeModel)
+	const modelState = getModelState?.(model)
 	const isSelectionDisabled = modelState?.disabled ?? false
 	const isCandidateSelected = isSelected && !isSelectionDisabled
 	const hasMultipleProviders = providerEntries.length > 1
@@ -110,7 +111,7 @@ export function MyModelRow({
 			className={cn(
 				"group flex cursor-pointer items-center gap-2.5 rounded px-3 py-2",
 				"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent",
-				isSelectionDisabled && "cursor-not-allowed bg-muted/50",
+				isSelectionDisabled && "cursor-not-allowed",
 			)}
 			data-testid={`my-model-item-${representativeModel.id}`}
 			data-model-id={representativeModel.model_id}
@@ -120,15 +121,24 @@ export function MyModelRow({
 			onClick={handleItemClick}
 		>
 			<div className="min-w-0 flex-1">
-				<div>
+				<div className={cn(getModelState && "flex flex-col gap-1")}>
 					<div className="flex min-w-0 items-center gap-2">
-						<p className="min-w-0 text-sm font-medium leading-5 text-foreground">
-							{representativeModel.name}
-						</p>
+						{getModelState ? (
+							<ModelName
+								model={model}
+								isSelected={false}
+								className="w-fit max-w-full"
+							/>
+						) : (
+							<p className="min-w-0 text-sm font-medium leading-5 text-foreground">
+								{representativeModel.name}
+							</p>
+						)}
 						{modelState && (
-							<Badge variant="secondary" className="font-normal">
+							<span className="inline-flex shrink-0 items-center gap-1 text-xs font-normal leading-4 text-amber-600 dark:text-amber-400">
+								<TriangleAlert className="size-4 shrink-0" aria-hidden />
 								{modelState.label}
-							</Badge>
+							</span>
 						)}
 					</div>
 					<p

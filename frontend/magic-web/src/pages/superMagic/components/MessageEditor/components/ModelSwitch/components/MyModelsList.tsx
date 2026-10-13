@@ -22,6 +22,7 @@ import type { ModelItem, ModelSelectionState } from "../types"
 import MyModelsIcon from "../assets/my-models-icon.svg"
 import { MyModelRow } from "./my-models-list/MyModelRow"
 import { buildMyModelGroups } from "./my-models-list/utils"
+import { cn } from "@/utils/cn"
 import { userStore } from "@/models/user"
 
 const MODEL_TYPE_BY_KEY: Record<"models" | "image_models" | "video_models", number> = {
@@ -91,7 +92,13 @@ function MyModelsListInner({
 						className="size-4"
 						data-testid="my-models-list-image"
 					/>
-					<span className="text-xs text-foreground">
+					<span
+						className={cn(
+							"text-xs text-foreground",
+							getModelState &&
+								"font-bold leading-4 text-muted-foreground [font-family:Inter,sans-serif]",
+						)}
+					>
 						{isPersonalOrganization
 							? t("messageEditor.addModel.myModels")
 							: t("messageEditor.addModel.teamModels")}

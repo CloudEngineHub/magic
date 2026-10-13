@@ -1,9 +1,8 @@
-import { Check } from "lucide-react"
+import { Check, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import FlexBox from "@/components/base/FlexBox"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { Badge } from "@/components/shadcn-ui/badge"
 import { cn } from "@/utils/cn"
 import type React from "react"
 import type { ModelItem, ModelListGroup, MessageEditorSize, ModelSelectionState } from "../types"
@@ -82,7 +81,7 @@ export function ModelGroupSection({
 									"group",
 									"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent",
 									isDisabled && "cursor-not-allowed opacity-50",
-									isSelectionDisabled && "cursor-not-allowed bg-muted/50",
+									isSelectionDisabled && "cursor-not-allowed",
 								)}
 								onClick={() => {
 									if (!isSelectionDisabled) onModelClick(model)
@@ -115,9 +114,13 @@ export function ModelGroupSection({
 										/>
 										<ModelTags model={model} />
 										{modelState && (
-											<Badge variant="secondary" className="font-normal">
+											<span className="inline-flex shrink-0 items-center gap-1 text-xs font-normal leading-4 text-amber-600 dark:text-amber-400">
+												<TriangleAlert
+													className="size-4 shrink-0"
+													aria-hidden
+												/>
 												{modelState.label}
-											</Badge>
+											</span>
 										)}
 									</FlexBox>
 									<CollapsibleDescription
@@ -165,7 +168,7 @@ export function ModelGroupSection({
 								!isSelected &&
 									"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent/60",
 								isDisabled && "cursor-not-allowed opacity-50",
-								isSelectionDisabled && "cursor-not-allowed bg-muted/50",
+								isSelectionDisabled && "cursor-not-allowed",
 								modelState && "h-auto min-h-12 py-2",
 							)}
 							onClick={() => {
@@ -206,9 +209,13 @@ export function ModelGroupSection({
 									/>
 									<ModelTags model={model} />
 									{modelState && (
-										<Badge variant="secondary" className="font-normal">
+										<span className="inline-flex shrink-0 items-center gap-1 text-xs font-normal leading-4 text-amber-600 dark:text-amber-400">
+											<TriangleAlert
+												className="size-4 shrink-0"
+												aria-hidden
+											/>
 											{modelState.label}
-										</Badge>
+										</span>
 									)}
 								</FlexBox>
 								{modelState && (
