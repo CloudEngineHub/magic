@@ -53,6 +53,8 @@ it("collapses mobile fields and applies the draft only after confirmation", () =
 	expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
 	fireEvent.click(screen.getByRole("button", { name: "search" }))
 	const panel = screen.getByRole("dialog")
+	expect(panel).toHaveClass("bottom-0", "h-[85vh]", "max-h-[85vh]", "rounded-t-xl")
+	expect(panel).not.toHaveClass("right-0")
 	fireEvent.change(within(panel).getByRole("textbox", { name: "name" }), {
 		target: { value: "magic" },
 	})

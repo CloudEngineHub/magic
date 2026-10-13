@@ -413,14 +413,14 @@ export function OrganizationSelectorDialog({
           </div>
         </section>
 
-        <DialogFooter className="items-center gap-3 pt-0 sm:flex-row sm:justify-between">
+        <DialogFooter className="flex-row items-center justify-between gap-3 pt-0 sm:justify-between">
           <SelectionSummary
             convertDepartmentsToMembers={convertDepartmentsToMembers}
             selectedDepartments={selectedDepartments}
             selectedMembers={selectedMembers}
             total={selected.length}
           />
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="flex flex-row gap-2 sm:justify-end">
             <Button
               data-testid={cancelButtonTestId}
               variant="outline"

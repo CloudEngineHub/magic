@@ -17,7 +17,7 @@ import { cn } from "@magic-admin-v2/utils/cn"
  * Layout the field renderer is currently used in.
  *
  * - `grid`: desktop search area, fields are applied as the user edits them.
- * - `sheet`: mobile side panel, fields edit a draft that is applied on confirmation.
+ * - `sheet`: mobile bottom sheet, fields edit a draft that is applied on confirmation.
  */
 export type ListFilterPanelLayout = "grid" | "sheet"
 
@@ -75,7 +75,7 @@ export type ListFilterPanelProps<T extends object> = {
  *
  * Desktop renders every field in a responsive grid (up to four per row) with a
  * trailing reset button. Mobile collapses all fields behind a single Filter icon
- * button that opens a right-side panel editing a draft with reset/apply actions.
+ * button that opens a bottom sheet editing a draft with reset/apply actions.
  * The caller keeps ownership of the applied state and of API parameter mapping.
  */
 export function ListFilterPanel<T extends object>({
@@ -175,8 +175,8 @@ export function ListFilterPanel<T extends object>({
 			) : null}
 			<SheetContent
 				data-testid={mobileContentTestId}
-				side="right"
-				className="w-[calc(100%-2rem)] max-w-sm gap-0 p-0"
+				side="bottom"
+				className="h-[85vh] max-h-[85vh] rounded-t-xl gap-0 p-0"
 				aria-describedby={undefined}
 			>
 				<SheetHeader className="shrink-0 border-b pr-12">
@@ -193,7 +193,7 @@ export function ListFilterPanel<T extends object>({
 						})}
 					</div>
 				</ScrollArea>
-				<SheetFooter className="grid shrink-0 grid-cols-2 border-t pb-[max(1rem,env(safe-area-inset-bottom))]">
+				<SheetFooter className="grid shrink-0 grid-cols-2 gap-2 border-t bg-background px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
 					<Button
 						data-testid={mobileResetTestId}
 						onClick={() => setDraft(createDefaultValue())}
