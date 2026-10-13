@@ -520,6 +520,20 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 										showDivider
 										testId="project-share-sheet-show-original-row"
 									/>
+									{/* 与 Web 的 ShareAdvancedSettings 对齐：纯净模式 -> 后端 extra.pure_mode，由共享 hook 负责保存和编辑回填。 */}
+									<AdvancedSwitchRow
+										label={t("share.pureMode")}
+										description={t("share.pureModeDescription")}
+										checked={formState.advancedSettings.pureMode ?? false}
+										onCheckedChange={(value) =>
+											controller.setAdvancedSettings({
+												...formState.advancedSettings,
+												pureMode: value,
+											})
+										}
+										showDivider
+										testId="project-share-sheet-pure-mode-row"
+									/>
 									<AdvancedSwitchRow
 										label={t("share.hideCreatorInfo")}
 										description={t("share.hideCreatorInfoDescription")}
