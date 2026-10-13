@@ -1,7 +1,7 @@
 import { Boxes } from "lucide-react"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { PageHeader } from "@magic-admin-v2/components/page-header"
-import { Button } from "@magic-admin-v2/components/ui/button"
 import { Separator } from "@magic-admin-v2/components/ui/separator"
 import { useTranslation } from "react-i18next"
 
@@ -22,10 +22,10 @@ export default function ModulePlaceholderPage({
 				title={t(titleKey)}
 				description={t(descriptionKey)}
 				actions={
-					<Button data-testid="module-placeholder-pending-button" disabled>
+					<PageHeaderActionButton data-testid="module-placeholder-pending-button" disabled>
 						<Boxes className="size-4" aria-hidden="true" />
 						{t("common.modulePending")}
-					</Button>
+					</PageHeaderActionButton>
 				}
 			/>
 

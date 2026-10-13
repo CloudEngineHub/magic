@@ -129,6 +129,16 @@ describe("time filter maximum date", () => {
 		)
 	})
 
+	it("closes the inline panel without applying when cancel is clicked", () => {
+		const onChange = renderRestrictedPanel()
+
+		activateTab("timeFilter.absolute")
+		fireEvent.click(screen.getByRole("button", { name: "timeFilter.cancel" }))
+
+		expect(onChange).not.toHaveBeenCalled()
+		expect(screen.queryByRole("tab", { name: "timeFilter.absolute" })).not.toBeInTheDocument()
+	})
+
 	it("clips a stored history range so it cannot output a date after yesterday", () => {
 		window.localStorage.setItem(
 			timeFilterHistoryStorageKey,

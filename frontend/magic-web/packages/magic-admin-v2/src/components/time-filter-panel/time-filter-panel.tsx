@@ -78,6 +78,11 @@ export type TimeFilterPanelProps = {
 	className?: string
 	/** 是否显示触发器中的清空操作；默认开启。 */
 	clearable?: boolean
+	/** 触发器、面板及清空按钮的测试标识。 */
+	clearButtonTestId?: string
+	contentTestId?: string
+	testIdPrefix?: string
+	triggerTestId?: string
 	/** 非受控模式首次初始化时使用的相对时间预设。 */
 	defaultPresetKey?: TimePresetKey
 	/** 可用的最大自然日；同时作为近 X 天等快捷范围的计算基准和最终输出上限。 */
@@ -99,12 +104,16 @@ export type TimeFilterPanelProps = {
 export function TimeFilterPanel({
 	className,
 	clearable = true,
+	clearButtonTestId,
+	contentTestId,
 	defaultPresetKey,
 	maxDate,
 	onChange,
 	presentation = "popover",
 	prefix,
 	supportedRelativeUnits = defaultSupportedRelativeUnits,
+	testIdPrefix,
+	triggerTestId,
 	timePrecision = "second",
 	value,
 }: TimeFilterPanelProps) {
@@ -114,6 +123,12 @@ export function TimeFilterPanel({
 	const hasInitializedRef = useRef(false)
 	const isControlled = value !== undefined
 	const isInline = presentation === "inline"
+	const panelTestIdPrefix = testIdPrefix ?? triggerTestId?.replace(/-trigger$/, "")
+	const testId = (suffix: string) =>
+		panelTestIdPrefix ? `${panelTestIdPrefix}-${suffix}` : undefined
+	const resolvedTriggerTestId = triggerTestId ?? testId("trigger")
+	const resolvedContentTestId = contentTestId ?? testId("content")
+	const resolvedClearButtonTestId = clearButtonTestId ?? testId("clear-button")
 	const normalizedSupportedUnits = useMemo(
 		() => normalizeSupportedRelativeUnits(supportedRelativeUnits),
 		[supportedRelativeUnits],
@@ -148,9 +163,7 @@ export function TimeFilterPanel({
 		() => (maxDateTime === undefined ? undefined : new Date(maxDateTime)),
 		[maxDateTime],
 	)
-	const [visibleMonth, setVisibleMonth] = useState(() =>
-		startOf(calendarReferenceDate, "month"),
-	)
+	const [visibleMonth, setVisibleMonth] = useState(() => startOf(calendarReferenceDate, "month"))
 	const [history, setHistory] = useState<TimeFilterHistoryItem[]>([])
 
 	const monthKeys = useMemo(
@@ -335,9 +348,7 @@ export function TimeFilterPanel({
 		hasInitializedRef.current = true
 		const relativePreset = getRelativePresetOption(defaultPresetKey)
 		const presetReferenceDate =
-			configuredMaxDate &&
-			isRelativeDayOnly &&
-			relativePreset?.unit === relativeUnit.day
+			configuredMaxDate && isRelativeDayOnly && relativePreset?.unit === relativeUnit.day
 				? configuredMaxDate
 				: new Date()
 		const [start, end] = getRangeByPreset(
@@ -371,9 +382,7 @@ export function TimeFilterPanel({
 		)
 		const relativePreset = getRelativePresetOption(presetKey)
 		const presetReferenceDate =
-			configuredMaxDate &&
-			isRelativeDayOnly &&
-			relativePreset?.unit === relativeUnit.day
+			configuredMaxDate && isRelativeDayOnly && relativePreset?.unit === relativeUnit.day
 				? configuredMaxDate
 				: new Date()
 		const [start, end] = getRangeByPreset(
@@ -498,9 +507,7 @@ export function TimeFilterPanel({
 		)
 		const relativePreset = getRelativePresetOption(timeRangeValue.presetKey)
 		const presetReferenceDate =
-			configuredMaxDate &&
-			isRelativeDayOnly &&
-			relativePreset?.unit === relativeUnit.day
+			configuredMaxDate && isRelativeDayOnly && relativePreset?.unit === relativeUnit.day
 				? configuredMaxDate
 				: new Date()
 		const [start, end] = getRangeByPreset(
@@ -599,6 +606,7 @@ export function TimeFilterPanel({
 					supportedUnits={normalizedSupportedUnits}
 					timeRangeValue={timeRangeValue}
 					onAlignToUnitChange={handleAlignToUnitChange}
+					onCancel={() => setOpen(false)}
 					onCustomRelativeApply={handleCustomRelativeApply}
 					onCustomUnitChange={setCustomUnit}
 					onCustomUnitMenuOpenChange={setCustomUnitMenuOpen}
@@ -621,6 +629,7 @@ export function TimeFilterPanel({
 					maxDate={maxDate}
 					visibleMonth={visibleMonth}
 					onAbsoluteApply={handleAbsoluteApply}
+					onCancel={() => setOpen(false)}
 					onAbsoluteDateSelect={handleAbsoluteDateSelect}
 					onAbsolutePresetSelect={handleAbsolutePresetSelect}
 					onAbsoluteTimeChange={handleAbsoluteTimeChange}
@@ -652,6 +661,7 @@ export function TimeFilterPanel({
 					<span
 						aria-label={t("timeFilter.clear")}
 						className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+						data-testid={resolvedClearButtonTestId}
 						onClick={handleClear}
 						role="button"
 					>
@@ -679,13 +689,17 @@ export function TimeFilterPanel({
 						"flex h-9 w-full min-w-0 max-w-full items-center justify-between gap-3 rounded-md border border-input bg-card px-3 text-sm shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 						!timeRangeValue && "text-muted-foreground",
 					)}
+					data-testid={resolvedTriggerTestId}
 					onClick={() => setOpen((nextOpen) => !nextOpen)}
 					type="button"
 				>
 					{trigger}
 				</button>
 				{open ? (
-					<div className="mt-2 min-w-0 overflow-hidden rounded-lg border bg-card">
+					<div
+						className="mt-2 min-w-0 overflow-hidden rounded-lg border bg-card"
+						data-testid={resolvedContentTestId}
+					>
 						{panelContent}
 					</div>
 				) : null}
@@ -700,12 +714,14 @@ export function TimeFilterPanel({
 					"flex h-9 w-full min-w-0 max-w-full items-center justify-between gap-3 rounded-md border border-input bg-card px-3 text-sm shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-w-64",
 					!timeRangeValue && "text-muted-foreground",
 				)}
+				data-testid={resolvedTriggerTestId}
 			>
 				{trigger}
 			</PopoverTrigger>
 			<PopoverContent
 				align="start"
 				className="w-[min(700px,calc(100vw-1rem))] p-0 sm:w-[min(700px,calc(100vw-2rem))]"
+				data-testid={resolvedContentTestId}
 			>
 				{panelContent}
 			</PopoverContent>

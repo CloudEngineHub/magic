@@ -21,6 +21,7 @@ import {
 import type { ComponentType, FormEvent, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field";
 import { FilterSheet } from "@magic-admin-v2/components/filter-sheet";
 import { ListPagination } from "@magic-admin-v2/components/list-pagination";
@@ -214,10 +215,10 @@ export function ExampleDashboardPage() {
   return (
     <ExamplePageShell
       actions={
-        <Button>
+        <PageHeaderActionButton>
           <Plus className="size-4" />
           New agent
-        </Button>
+        </PageHeaderActionButton>
       }
       descriptionKey="nav.desc.exampleDashboard"
       titleKey="nav.item.exampleDashboard"
@@ -369,10 +370,10 @@ export function ExampleListPage() {
   return (
     <ExamplePageShell
       actions={
-        <Button>
+        <PageHeaderActionButton>
           <Plus className="size-4" />
           Create
-        </Button>
+        </PageHeaderActionButton>
       }
       descriptionKey="nav.desc.exampleList"
       titleKey="nav.item.exampleList"
@@ -669,10 +670,10 @@ export function ExampleCardGridPage() {
   return (
     <ExamplePageShell
       actions={
-        <Button>
+        <PageHeaderActionButton>
           <Plus className="size-4" />
           Create
-        </Button>
+        </PageHeaderActionButton>
       }
       descriptionKey="nav.desc.exampleCards"
       titleKey="nav.item.exampleCards"
@@ -1109,14 +1110,14 @@ export function ExampleDetailPage() {
     <ExamplePageShell
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline">
+          <PageHeaderActionButton variant="outline">
             <Download className="size-4" />
             Export
-          </Button>
-          <Button>
+          </PageHeaderActionButton>
+          <PageHeaderActionButton>
             <ArrowUpRight className="size-4" />
             Open run
-          </Button>
+          </PageHeaderActionButton>
         </div>
       }
       descriptionKey="nav.desc.exampleDetail"
@@ -1212,13 +1213,14 @@ export function ExampleDetailEditPage() {
     <ExamplePageShell
       actions={
         <div className="flex items-center gap-2">
-          <Button onClick={() => setEditing(false)} variant="outline">
+          <PageHeaderActionButton onClick={() => setEditing(false)} variant="outline">
+            <X className="size-4" aria-hidden="true" />
             Cancel
-          </Button>
-          <Button onClick={() => toast.success("Changes saved")}>
+          </PageHeaderActionButton>
+          <PageHeaderActionButton onClick={() => toast.success("Changes saved")}>
             <CheckCircle2 className="size-4" />
             Save changes
-          </Button>
+          </PageHeaderActionButton>
         </div>
       }
       descriptionKey="nav.desc.exampleDetailEdit"
@@ -1323,10 +1325,10 @@ export function ExampleEmptyStatePage() {
   return (
     <ExamplePageShell
       actions={
-        <Button>
+        <PageHeaderActionButton>
           <Plus className="size-4" />
           Create resource
-        </Button>
+        </PageHeaderActionButton>
       }
       descriptionKey="nav.desc.exampleEmpty"
       titleKey="nav.item.exampleEmpty"
@@ -1481,10 +1483,10 @@ export function ExampleDialogFormPage() {
   return (
     <ExamplePageShell
       actions={
-        <Button onClick={() => setOpen(true)}>
+        <PageHeaderActionButton onClick={() => setOpen(true)}>
           <Plus className="size-4" />
           Open dialog
-        </Button>
+        </PageHeaderActionButton>
       }
       descriptionKey="nav.desc.exampleDialogForm"
       titleKey="nav.item.exampleDialogForm"
@@ -1555,9 +1557,10 @@ export function ExampleSheetDetailPage() {
   return (
     <ExamplePageShell
       actions={
-        <Button onClick={() => setOpen(true)} variant="outline">
+        <PageHeaderActionButton onClick={() => setOpen(true)} variant="outline">
+          <ArrowUpRight className="size-4" aria-hidden="true" />
           Open detail
-        </Button>
+        </PageHeaderActionButton>
       }
       descriptionKey="nav.desc.exampleSheetDetail"
       titleKey="nav.item.exampleSheetDetail"

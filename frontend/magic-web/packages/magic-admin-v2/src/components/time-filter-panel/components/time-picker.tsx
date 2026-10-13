@@ -10,7 +10,7 @@ type TimePickerProps = {
 	disabled?: boolean
 	/** 输入控件的无障碍标签。 */
 	label: string
-	/** 选择时间后返回 HH:mm 或 HH:mm:ss 格式的文本。 */
+	/** 选择时间后返回 HH:00、HH:mm 或 HH:mm:ss 格式的文本。 */
 	onChange: (value: string) => void
 	/** 时间选择精度；day 由上层日期控件处理。 */
 	precision: Exclude<TimePrecision, "day">
@@ -43,7 +43,9 @@ export function TimePicker({
 		onChange(
 			precision === "second"
 				? `${nextParts.hours}:${nextParts.minutes}:${nextParts.seconds}`
-				: `${nextParts.hours}:${nextParts.minutes}`,
+				: precision === "hour"
+					? `${nextParts.hours}:00`
+					: `${nextParts.hours}:${nextParts.minutes}`,
 		)
 	}
 
@@ -84,7 +86,9 @@ export function TimePicker({
 						"grid items-start gap-1",
 						precision === "second"
 							? "grid-cols-[1fr_auto_1fr_auto_1fr]"
-							: "grid-cols-[1fr_auto_1fr]",
+							: precision === "hour"
+								? "grid-cols-1"
+								: "grid-cols-[1fr_auto_1fr]",
 					)}
 				>
 					<TimeColumn
@@ -93,13 +97,17 @@ export function TimePicker({
 						options={hourOptions}
 						value={hours}
 					/>
-					<TimeSeparator />
-					<TimeColumn
-						label={t("timeFilter.unit.minute")}
-						onChange={(nextValue) => updatePart("minutes", nextValue)}
-						options={minuteOptions}
-						value={minutes}
-					/>
+					{precision !== "hour" ? (
+						<>
+							<TimeSeparator />
+							<TimeColumn
+								label={t("timeFilter.unit.minute")}
+								onChange={(nextValue) => updatePart("minutes", nextValue)}
+								options={minuteOptions}
+								value={minutes}
+							/>
+						</>
+					) : null}
 					{precision === "second" ? <TimeSeparator /> : null}
 					{precision === "second" ? (
 						<TimeColumn

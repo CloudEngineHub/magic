@@ -62,6 +62,8 @@ export type RelativeTimeTabProps = {
 	onAlignToUnitChange: (value: boolean) => void
 	/** 提交当前自定义相对范围。 */
 	onCustomRelativeApply: () => void
+	/** 关闭 inline 面板且不提交当前编辑。 */
+	onCancel: () => void
 	/** 更新自定义相对范围的时间单位。 */
 	onCustomUnitChange: (unit: RelativeUnit) => void
 	/** 控制自定义时间单位菜单的展开状态。 */
@@ -91,6 +93,7 @@ export function RelativeTimeTab({
 	timeRangeValue,
 	onAlignToUnitChange,
 	onCustomRelativeApply,
+	onCancel,
 	onCustomUnitChange,
 	onCustomUnitMenuOpenChange,
 	onCustomValueChange,
@@ -300,9 +303,16 @@ export function RelativeTimeTab({
 							) : null}
 						</div>
 					</div>
-					<Button className="w-fit" onClick={onCustomRelativeApply} size="sm">
-						{t("timeFilter.confirm")}
-					</Button>
+					<div className="flex items-center gap-2">
+						{isInline ? (
+							<Button onClick={onCancel} size="sm" variant="outline">
+								{t("timeFilter.cancel")}
+							</Button>
+						) : null}
+						<Button className="w-fit" onClick={onCustomRelativeApply} size="sm">
+							{t("timeFilter.confirm")}
+						</Button>
+					</div>
 				</div>
 			</section>
 		</div>

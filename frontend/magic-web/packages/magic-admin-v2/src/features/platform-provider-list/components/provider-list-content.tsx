@@ -286,7 +286,7 @@ function ProviderFilterFields({
 					aria-label={t("providerList.filter.name")}
 					clearLabel={t("providerList.action.clearSearch")}
 					onValueChange={(name) => onChange({ name })}
-					placeholder={t("providerList.filter.name")}
+					placeholder={t("providerList.placeholder.searchName")}
 					value={value.name}
 				/>
 			</FilterControlField>
@@ -295,7 +295,7 @@ function ProviderFilterFields({
 					aria-label={t("providerList.filter.alias")}
 					clearLabel={t("providerList.action.clearSearch")}
 					onValueChange={(alias) => onChange({ alias })}
-					placeholder={t("providerList.filter.alias")}
+					placeholder={t("providerList.placeholder.searchAlias")}
 					value={value.alias}
 				/>
 			</FilterControlField>
@@ -304,7 +304,7 @@ function ProviderFilterFields({
 					aria-label={t("providerList.filter.providerId")}
 					clearLabel={t("providerList.action.clearSearch")}
 					onValueChange={(id) => onChange({ id })}
-					placeholder={t("providerList.filter.providerId")}
+					placeholder={t("providerList.placeholder.searchProviderId")}
 					value={value.id}
 				/>
 			</FilterControlField>

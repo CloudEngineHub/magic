@@ -40,6 +40,8 @@ type AbsoluteTimeTabProps = {
 	visibleMonth: Date
 	/** 提交当前绝对时间范围。 */
 	onAbsoluteApply: () => void
+	/** 关闭 inline 面板且不提交当前编辑。 */
+	onCancel: () => void
 	/** 选择日历中的日期，并由父组件决定如何组成范围。 */
 	onAbsoluteDateSelect: (date: Date) => void
 	/** 选择标准绝对时间预设并更新日历选中范围。 */
@@ -62,6 +64,7 @@ export function AbsoluteTimeTab({
 	maxDate,
 	visibleMonth,
 	onAbsoluteApply,
+	onCancel,
 	onAbsoluteDateSelect,
 	onAbsolutePresetSelect,
 	onAbsoluteTimeChange,
@@ -177,13 +180,20 @@ export function AbsoluteTimeTab({
 					<div className="min-w-0 break-all font-mono text-xs text-muted-foreground">
 						{absoluteRangeText}
 					</div>
-					<Button
-						className="w-fit shrink-0"
-						disabled={!absoluteStartDate || !absoluteEndDate || absoluteRangeInvalid}
-						onClick={onAbsoluteApply}
-					>
-						{t("timeFilter.confirm")}
-					</Button>
+					<div className="flex items-center gap-2">
+						{isInline ? (
+							<Button onClick={onCancel} size="sm" variant="outline">
+								{t("timeFilter.cancel")}
+							</Button>
+						) : null}
+						<Button
+							className="w-fit shrink-0"
+							disabled={!absoluteStartDate || !absoluteEndDate || absoluteRangeInvalid}
+							onClick={onAbsoluteApply}
+						>
+							{t("timeFilter.confirm")}
+						</Button>
+					</div>
 				</div>
 				{absoluteRangeInvalid ? (
 					<div className="text-xs text-destructive">{t("timeFilter.invalidRange")}</div>

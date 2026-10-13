@@ -1,4 +1,5 @@
 import { Activity, AlertCircle, Bot, Database, Plus, RefreshCcw } from "lucide-react"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { PageHeader } from "@magic-admin-v2/components/page-header"
 import { StatusCard } from "@magic-admin-v2/components/status-card"
@@ -16,14 +17,14 @@ export default function DashboardPage() {
 				description={t("dashboard.description")}
 				actions={
 					<>
-						<Button variant="outline" data-testid="dashboard-refresh-button">
+						<PageHeaderActionButton variant="outline" data-testid="dashboard-refresh-button">
 							<RefreshCcw className="size-4" aria-hidden="true" />
 							{t("common.refresh")}
-						</Button>
-						<Button data-testid="dashboard-create-button">
+						</PageHeaderActionButton>
+						<PageHeaderActionButton data-testid="dashboard-create-button">
 							<Plus className="size-4" aria-hidden="true" />
 							{t("common.createAgent")}
-						</Button>
+						</PageHeaderActionButton>
 					</>
 				}
 			/>

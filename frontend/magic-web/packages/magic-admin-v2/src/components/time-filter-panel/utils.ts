@@ -192,6 +192,11 @@ export function normalizeAbsoluteDate(
     return boundary === "start" ? startOf(next, "day") : endOf(next, "day");
   }
 
+  if (precision === "hour") {
+    next.setMinutes(boundary === "end" ? 59 : 0, boundary === "end" ? 59 : 0, 0);
+    return next;
+  }
+
   if (precision === "minute") {
     next.setSeconds(boundary === "end" ? 59 : 0, 0);
     return next;
@@ -208,6 +213,10 @@ export function formatTimeRangeByPrecision(
 ) {
   if (precision === "day") {
     return formatTimeRangeText(startDate, endDate, true);
+  }
+
+  if (precision === "hour") {
+    return `${startDate.slice(0, 13)}:00 ~ ${endDate.slice(0, 13)}:59`;
   }
 
   if (precision === "minute") {
@@ -584,7 +593,9 @@ export function getAbsoluteTimeInputValue(date: Date | null, precision: TimePrec
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
-  return precision === "second" ? `${hours}:${minutes}:${seconds}` : `${hours}:${minutes}`;
+  if (precision === "second") return `${hours}:${minutes}:${seconds}`;
+  if (precision === "hour") return `${hours}:00`;
+  return `${hours}:${minutes}`;
 }
 
 export function getQuickPresetGroupLabel(groupKey: string, t: (key: string) => string) {
