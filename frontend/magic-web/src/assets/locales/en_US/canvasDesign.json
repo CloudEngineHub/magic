@@ -270,6 +270,8 @@
 		"editPlaceholder": "Please enter your edit requirements",
 		"generateAgain": "Generate again",
 		"generatingReadOnly": "Generating. You can view and copy the prompt.",
+		"generationSettings": "Generation settings",
+		"generationSettingsAria": "Image generation parameters",
 		"maxReferenceImagesReached": "Maximum {{maxReferenceImages}} reference images allowed",
 		"modelUnavailable": "Model information unavailable",
 		"originalImage": "Original Image",
@@ -281,7 +283,8 @@
 		"reEnter": "Re-enter",
 		"referenceImage": "Image",
 		"resolution": "Resolution",
-		"size": "Size"
+		"size": "Size",
+		"transparentBackground": "Transparent background"
 	},
 	"imagePromptExtraction": {
 		"createText": "Create Text",

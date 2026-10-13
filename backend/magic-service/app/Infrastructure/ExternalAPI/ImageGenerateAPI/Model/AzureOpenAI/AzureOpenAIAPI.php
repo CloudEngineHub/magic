@@ -84,8 +84,13 @@ class AzureOpenAIAPI
 
     /**
      * Image edit API call with OSS URL support - supports multiple images.
+     *
+     * @param array<int, string> $imageUrls 参考图（URL 或 base64 data URI）
+     * @param array<string, mixed> $fields 官方 images/edits 字段，键即线上字段名：prompt / size / n /
+     *                                     quality / background / output_format / mask / extra
+     *                                     （extra 为网关自定义透传，非官方字段）；值为 null 或 '' 的项不发送
      */
-    public function editImage(string $model, array $imageUrls, ?string $maskUrl, string $prompt, string $size = '1024x1024', int $n = 1, ?string $quality = null, array $extra = []): array
+    public function editImage(string $model, array $imageUrls, array $fields): array
     {
         $url = $this->buildUrl($model, 'images/edits');
 
@@ -102,32 +107,27 @@ class AzureOpenAIAPI
                 $multipartData[] = $this->createImageMultipartPart($imageKey, $imageUrl, $index);
             }
 
-            if ($maskUrl !== null) {
-                $multipartData[] = $this->createImageMultipartPart('mask', $maskUrl, 0, 'mask');
+            if (! empty($fields['mask'])) {
+                $multipartData[] = $this->createImageMultipartPart('mask', (string) $fields['mask'], 0, 'mask');
             }
 
             $multipartData[] = ['name' => 'model', 'contents' => $model];
-            $multipartData[] = ['name' => 'prompt', 'contents' => $prompt];
-            $multipartData[] = ['name' => 'size', 'contents' => $size];
-            $multipartData[] = ['name' => 'n', 'contents' => (string) $n];
-            if ($quality !== null) {
-                $multipartData[] = ['name' => 'quality', 'contents' => $quality];
-            }
 
-            if (! empty($extra)) {
-                $multipartData[] = ['name' => 'extra', 'contents' => Json::encode($extra)];
+            foreach ($fields as $name => $value) {
+                if ($name === 'mask' || $value === null || $value === '') {
+                    continue;
+                }
+                $multipartData[] = [
+                    'name' => $name,
+                    'contents' => $name === 'extra' ? Json::encode($value) : (string) $value,
+                ];
             }
 
             $this->logger->info('Azure OpenAI API 请求', [
                 'url' => $url,
                 'payload' => $this->sanitizePayloadForLog([
                     'imageUrls' => $imageUrls,
-                    'maskUrl' => $maskUrl,
-                    'prompt' => $prompt,
-                    'size' => $size,
-                    'n' => $n,
-                    'quality' => $quality,
-                    'extra' => $extra,
+                    'fields' => $fields,
                 ]),
             ]);
 

@@ -9,21 +9,18 @@ import {
 	type ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
-import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../primitives/shadcn/select"
 import styles from "./index.module.css"
-import { ChevronsUpDown } from "lucide-react"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
-import ResolutionSelect from "../../../primitives/custom/ResolutionSelect/index"
 import EditorModelSelect from "../video/model-config/EditorModelSelect"
 import type { ImageEditorConfig } from "./useImageEditorConfig"
+import ImageGenerationSettingsPopover from "./ImageGenerationSettingsPopover"
 import ReferenceResourceSlotPopover from "../../../editors/message/reference-assets/ReferenceResourceSlotPopover"
 import type { ReferenceResourceSourceType } from "../../../editors/message/reference-assets/reference-resource.types"
 import type {
 	ReferenceResourcePanelItem,
 	ReferenceResourcePanelSelectContext,
 } from "../../../../public/props"
-import SizeIconPreview from "../../../primitives/custom/SizeIconPreview/index"
 import SourceList, {
 	isSourceListSlotOption,
 	type SourceListOption,
@@ -197,12 +194,6 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 		maxReferenceFiles,
 		currentReferenceFiles,
 		referenceFileInfos,
-		supportedResolutionOptions,
-		supportedImageSettingOptions,
-		supportedAspectRatioOptions,
-		selectedImageGenerationConfig,
-		currentSelectValue,
-		ratioOption,
 		isPopoverOpen,
 		referenceResourceType,
 		handlers,
@@ -471,132 +462,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 					</div>
 					<div className={styles.right}>
 						{renderRestoreDefaultConfigButton && renderRestoreDefaultConfigButton()}
-						{supportedImageSettingOptions.map((setting) => {
-							const defaultOption = setting.options.find(
-								(option) => option.value === setting.default,
-							)
-							const selectedValue =
-								selectedImageGenerationConfig[setting.requestKey] ||
-								defaultOption?.value ||
-								setting.options[0]?.value ||
-								""
-							const selectedOption = setting.options.find(
-								(option) => option.value === selectedValue,
-							)
-							const testIdKey = getSettingTestIdKey(setting.requestKey)
-
-							return (
-								<Select
-									disabled={readOnly}
-									key={setting.key}
-									value={selectedValue}
-									onValueChange={(value) =>
-										handlers.handleImageSettingChange(setting.requestKey, value)
-									}
-								>
-									<SelectTrigger
-										className={styles.selectTrigger}
-										data-testid={`image-editor-${testIdKey}-setting-trigger`}
-									>
-										<span className={styles.selectTriggerText}>
-											{selectedOption?.label || selectedValue}
-										</span>
-										<ChevronsUpDown size={16} />
-									</SelectTrigger>
-									<SelectContent
-										className={styles.selectContent}
-										style={{ minWidth: 160 }}
-									>
-										<div className={styles.selectContentName}>
-											{setting.label}
-										</div>
-										{setting.options.map((option) => (
-											<SelectItem
-												key={option.value}
-												value={option.value}
-												className={styles.selectOptionItem}
-												data-testid={`image-editor-${testIdKey}-setting-option`}
-											>
-												<span>{option.label}</span>
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							)
-						})}
-						{/* 分辨率选择 */}
-						{readOnly &&
-						config.selectedResolution &&
-						!supportedResolutionOptions.some(
-							(option) => option.value === config.selectedResolution,
-						) ? (
-							<span className={styles.selectTrigger}>
-								{config.selectedResolution}
-							</span>
-						) : (
-							<ResolutionSelect
-								disabled={readOnly}
-								options={supportedResolutionOptions}
-								value={config.selectedResolution}
-								onValueChange={handlers.handleResolutionChange}
-							/>
-						)}
-						{/* 比例选择 */}
-						{readOnly && config.selectedSize && !ratioOption ? (
-							<span className={styles.selectTrigger}>{config.selectedSize}</span>
-						) : (
-							supportedAspectRatioOptions.length > 0 && (
-								<Select
-									disabled={readOnly}
-									value={currentSelectValue || ""}
-									onValueChange={handlers.handleRatioChange}
-								>
-									<SelectTrigger className={styles.selectTrigger}>
-										<span className={styles.selectTriggerText}>
-											{ratioOption?.label ||
-												t("imageEditor.custom", "自定义")}
-										</span>
-										<ChevronsUpDown size={16} />
-									</SelectTrigger>
-									<SelectContent
-										className={styles.selectContent}
-										style={{ minWidth: 200 }}
-									>
-										<div className={styles.selectContentName}>
-											{t("imageEditor.size", "尺寸")}
-										</div>
-										{supportedAspectRatioOptions.map((option) => {
-											if (!option || !option.value) return null
-											return (
-												<SelectItem
-													key={option.value}
-													value={option.value}
-													className={styles.selectOptionItem}
-												>
-													<div className={styles.ratioOptionItemContent}>
-														<SizeIconPreview
-															iconWidth={option.iconWidth}
-															iconHeight={option.iconHeight}
-															wrapperClassName={styles.icon}
-															iconClassName={styles.iconContent}
-														/>
-														<div
-															className={styles.label}
-															style={{ width: 60 }}
-														>
-															{option.label}
-														</div>
-														<div className={styles.size}>
-															{option.width}x{option.height}
-														</div>
-													</div>
-												</SelectItem>
-											)
-										})}
-									</SelectContent>
-								</Select>
-							)
-						)}
+						<ImageGenerationSettingsPopover config={config} disabled={readOnly} />
 						{renderPromptOptimizationButton && renderPromptOptimizationButton()}
 						{renderSendButton && renderSendButton()}
 					</div>
@@ -604,11 +470,4 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			</div>
 		</>
 	)
-}
-
-function getSettingTestIdKey(key: string): string {
-	return key
-		.replace(/[^a-z0-9]+/gi, "-")
-		.replace(/^-|-$/g, "")
-		.toLowerCase()
 }

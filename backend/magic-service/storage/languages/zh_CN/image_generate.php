@@ -93,13 +93,24 @@ return [
     'remove_background_image_too_large' => '图片大小不能超过 20MB',
     'image_model_settings' => [
         'quality' => [
-            'label' => '质量',
-            'description' => '控制生成图片的质量档位',
+            'label' => '画质',
+            'description' => '控制生成图片的画质档位',
             'options' => [
                 'auto' => '自动',
-                'high' => '高',
-                'medium' => '中',
-                'low' => '低',
+                'low' => '低画质',
+                'medium' => '标准画质',
+                'high' => '高画质',
+                'xhigh' => '超高画质',
+                'max' => '极致画质',
+            ],
+        ],
+        'background' => [
+            'label' => '背景',
+            'description' => '控制生成图片的背景：自动由模型按提示词决定，保留背景保持不透明，透明背景输出透明图',
+            'options' => [
+                'auto' => '自动',
+                'opaque' => '保留背景',
+                'transparent' => '透明背景',
             ],
         ],
     ],

@@ -12,6 +12,7 @@ use App\Application\ModelGateway\Event\ModelUsageEvent;
 use App\Application\ModelGateway\Event\WebSearchUsageEvent;
 use App\Application\ModelGateway\Mapper\ModelEntry;
 use App\Application\ModelGateway\Mapper\OdinModel;
+use App\Application\ModelGateway\Support\ImageGenerationConfigResolver;
 use App\Application\ModelGateway\Support\InvocationDetailInfo;
 use App\Domain\Chat\DTO\ImageConvertHigh\Request\MagicChatImageConvertHighReqDTO;
 use App\Domain\Chat\Entity\ValueObject\AIImage\AIImageGenerateParamsVO;
@@ -1539,12 +1540,16 @@ class LLMAppService extends AbstractLLMAppService
         $imageGenerateType = ImageGenerateModelType::fromProviderCode($imageModel->getProviderCode(), $modelVersion);
         $this->logger->info('match image type', ['model_version' => $modelVersion, 'provider_code' => $imageModel->getProviderCode(), 'image_type' => $imageGenerateType]);
 
+        // 解析生成参数所用的 modelId（供配置匹配与提取器使用）
+        $modelId = $imageModel->getModelId() ?: $proxyModelRequest->getModel();
+
         // 构建图片生成参数
         $imageGenerateParamsVO = new AIImageGenerateParamsVO();
         $imageGenerateParamsVO->setModel($modelVersion);
         $imageGenerateParamsVO->setUserPrompt($proxyModelRequest->getPrompt());
         $imageGenerateParamsVO->setGenerateNum($proxyModelRequest->getN());
         $imageGenerateParamsVO->setImageGenerationConfig($proxyModelRequest->getImageGenerationConfig());
+        $imageGenerateParamsVO->setImageGenerationConfig($this->resoleImageGenerationConfig($modelVersion, $modelId, $proxyModelRequest, $modelGatewayDataIsolation));
         $imageGenerateParamsVO->setReferenceImages($proxyModelRequest->getImages());
         $imageGenerateParamsVO->setOutputFormat($proxyModelRequest->getOutputFormat());
         $imageGenerateParamsVO->setExtra($proxyModelRequest->getExtra());
@@ -1557,7 +1562,6 @@ class LLMAppService extends AbstractLLMAppService
         $data['user_id'] = (string) $creator;
 
         // 图片水印处理
-        $modelId = $imageModel->getModelId() ?: $proxyModelRequest->getModel();
         $imageGenerateRequest = ImageGenerateFactory::createRequestType($imageGenerateType, $modelVersion, $modelId, $data);
         $resolvedWatermark = di(WatermarkPolicyInterface::class)
             ->apply($modelGatewayDataIsolation->getAccessToken(), $proxyModelRequest->getWatermark());
@@ -2345,5 +2349,29 @@ class LLMAppService extends AbstractLLMAppService
         }
 
         return array_replace_recursive($modelExtra ?? [], $requestExtra ?? []);
+    }
+
+    private function resoleImageGenerationConfig(
+        string $modelVersion,
+        ?string $modelId,
+        TextGenerateImageDTO $textGenerateImageDTO,
+        ModelGatewayDataIsolation $modelGatewayDataIsolation
+    ): array {
+        // 合集：用户显式传入的参数优先，未传入的项由提示词提取结果补齐
+        $configResolver = di(ImageGenerationConfigResolver::class);
+        $extractedImageGenerationConfig = $configResolver->resolve(
+            $modelVersion,
+            $modelId,
+            $textGenerateImageDTO->getPrompt(),
+            $modelGatewayDataIsolation
+        );
+
+        // 值为 auto 等同「用户没动过」（前端会按声明默认值播种），剔除后让提示词提取结果生效
+        $userImageGenerationConfig = array_filter(
+            $textGenerateImageDTO->getImageGenerationConfig(),
+            static fn ($value): bool => $value !== 'auto'
+        );
+
+        return array_merge($extractedImageGenerationConfig, $userImageGenerationConfig);
     }
 }
