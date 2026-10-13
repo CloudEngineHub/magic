@@ -43,7 +43,7 @@ import {
 import {
 	HTML_SANDBOX_TELEMETRY_MESSAGE,
 	normalizeHtmlSandboxTelemetryMessage,
-} from "@dtyq/html-sandbox/telemetry"
+} from "@dtyq/html-sandbox"
 import { useMediaScenario } from "./media/useMediaScenario"
 import { handleMediaImageUrlRequest, MEDIA_MESSAGE_TYPES } from "./media/utils"
 import { cn } from "@/utils/cn"
@@ -300,6 +300,8 @@ interface IsolatedHTMLRendererProps {
 	enableInlineInspectorFallback?: boolean
 	/** Parent-owned controller used by the HTML detail toolbar and runtime. */
 	permissionController?: HtmlAppPermissionController
+	/** Comparison previews render HTML but must not request or use app permissions. */
+	disableHtmlAppPermissions?: boolean
 }
 
 function isProjectScopedPermission(scope: HtmlPermissionScope): boolean {
@@ -512,6 +514,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			onInspectorActiveChange,
 			enableInlineInspectorFallback = false,
 			permissionController,
+			disableHtmlAppPermissions = false,
 		} = props
 		// host：用户当前所在项目；发布页通过 Provider 按需创建运行项目。
 		const {
@@ -1297,13 +1300,18 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			relativeFilePath: htmlEntryFilePath,
 			projectId: runtimeProjectId,
 			fileList: flatFileList,
-			enabled: !permissionController,
+			enabled: !permissionController && !disableHtmlAppPermissions,
 		})
 		const { htmlAppConfig, authorizeHtmlPermission, authorizeHtmlPermissions } =
 			permissionController || fallbackPermissionController
+		const authorizeRuntimePermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+			if (disableHtmlAppPermissions) return false
+			return authorizeHtmlPermission(scope)
+		})
 		const projectContextUnavailableError = t("htmlEditor.projectContextUnavailable")
 		const previewModeCancelledError = t("microAppPage.conversation.switchToPreviewCancelled")
 		const authorizeProjectPermission = useMemoizedFn(async (scope: HtmlPermissionScope) => {
+			if (disableHtmlAppPermissions) return false
 			// Login confirmation precedes app permissions and never creates a runtime project.
 			if (scope === "project.message.write") await requireAuthentication?.()
 			if (scope === "project.message.write" && requestPreviewMode) {
@@ -1314,7 +1322,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			if (!runtimeProjectId && isProjectScopedPermission(scope)) {
 				throw new Error(projectContextUnavailableError)
 			}
-			return authorizeHtmlPermission(scope)
+			return authorizeRuntimePermission(scope)
 		})
 
 		const { handleFSMessage } = useIframeFS({
@@ -1405,7 +1413,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			baseUrl: (env("MAGIC_SERVICE_BASE_URL") as string) || "",
 			getAuthorization: () => userStore.user.authorization?.trim() || "",
 			getOrganizationCode: () => userStore.user.organizationCode?.trim() || "",
-			authorizePermission: authorizeHtmlPermission,
+			authorizePermission: authorizeRuntimePermission,
 		})
 
 		const { handleDatabaseMessage } = useIframeDatabase({
@@ -1461,10 +1469,12 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				}
 			}),
 			authorizeUserInfo: useMemoizedFn(({ scopes, reason }) =>
-				authorizeHtmlPermissions(scopes, {
-					reason,
-					presentation: "userInfo",
-				}),
+				disableHtmlAppPermissions
+					? Promise.resolve(false)
+					: authorizeHtmlPermissions(scopes, {
+							reason,
+							presentation: "userInfo",
+						}),
 			),
 		})
 

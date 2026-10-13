@@ -1,4 +1,4 @@
-import { INSPECTABLE_TEXT_CONTENT_SCRIPT } from "@dtyq/html-sandbox/utils/inspectableTextContent"
+import { INSPECTABLE_TEXT_CONTENT_SCRIPT } from "@dtyq/html-sandbox"
 
 /**
  * Minimal ElementInspectorHandler script for injection into CardFrame iframes.

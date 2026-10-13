@@ -18,7 +18,44 @@ vi.mock("@/models/config", () => ({
 	},
 }))
 
+describe("decodeHTMLEntities", () => {
+	it("does not decode an HTML document because a textarea contains escaped HTML", async () => {
+		const { decodeHTMLEntities } = await import("../full-content")
+		const script = `function escapeHtml(value) {
+			return String(value).replace(/'/g, () => '&#39;');
+		}`
+		const html = `<!DOCTYPE html><html><head><script>${script}</script></head><body>
+			<textarea>&lt;!DOCTYPE html&gt;\n&lt;html&gt;&lt;body&gt;Scene&lt;/body&gt;&lt;/html&gt;</textarea>
+		</body></html>`
+
+		expect(decodeHTMLEntities(html)).toBe(html)
+	})
+
+	it("still decodes a document whose first token is escaped HTML", async () => {
+		const { decodeHTMLEntities } = await import("../full-content")
+		expect(decodeHTMLEntities("&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;/html&gt;")).toBe(
+			"<!DOCTYPE html><html></html>",
+		)
+	})
+})
+
 describe("getFullContent", () => {
+	it("marks authored elements before user scripts can create runtime nodes", async () => {
+		const { getFullContent } = await import("../full-content")
+		const html = getFullContent(
+			'<html><body><section id="static"><p>Fixed</p><div id="dynamic"></div></section><script>document.querySelector("#dynamic").innerHTML = "<p>Dynamic</p>"</script></body></html>',
+		)
+		const doc = new DOMParser().parseFromString(html, "text/html")
+
+		expect(doc.documentElement.hasAttribute("data-magic-source-node")).toBe(true)
+		expect(doc.querySelector("#static p")?.hasAttribute("data-magic-source-node")).toBe(true)
+		expect(
+			doc
+				.querySelector('script[data-injected="true"]')
+				?.hasAttribute("data-magic-source-node"),
+		).toBe(false)
+	})
+
 	it("installs PPT touch zoom only when requested through compiled runtime preparation", async () => {
 		const { getFullContent } = await import("../full-content")
 		const html = "<!DOCTYPE html><html><body><h1>Slide</h1></body></html>"

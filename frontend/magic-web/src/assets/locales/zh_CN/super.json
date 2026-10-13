@@ -3287,6 +3287,7 @@
 		"dropOverlay": {
 			"hint": "释放以插入图片"
 		},
+		"dynamicElementNotEditable": "该节点由 JavaScript 动态生成，无法直接编辑。请退出编辑，使用「选取」功能交给 AI 修改。",
 		"permissionAuthorizationConfirm": {
 			"allow": "允许",
 			"appConfigUnavailableContent": "该 HTML 微应用的 app.json 暂不可用，正在按旧版短期授权规则请求使用：{{scope}}。",
