@@ -487,6 +487,55 @@ describe("home onboarding step announcements", () => {
 	})
 })
 
+describe("home onboarding anchor announcements", () => {
+	it("announces the region a run frames, so a page that can collapse it opens it", async () => {
+		const onboarding = await loadOnboarding()
+		const onAnchorChange = vi.fn()
+		window.addEventListener(onboarding.HOME_ONBOARDING_ANCHOR_EVENT, onAnchorChange)
+
+		onboarding.setHomeOnboardingAnchor(onboarding.HomeOnboardingAnchor.ProjectSider)
+
+		expect(onboarding.getHomeOnboardingAnchor()).toBe(
+			onboarding.HomeOnboardingAnchor.ProjectSider,
+		)
+		expect(onAnchorChange).toHaveBeenCalledTimes(1)
+		expect((onAnchorChange.mock.calls[0][0] as CustomEvent<string | null>).detail).toBe(
+			onboarding.HomeOnboardingAnchor.ProjectSider,
+		)
+		window.removeEventListener(onboarding.HOME_ONBOARDING_ANCHOR_EVENT, onAnchorChange)
+	})
+
+	it("stays silent while the run stays on the same region", async () => {
+		const onboarding = await loadOnboarding()
+		onboarding.setHomeOnboardingAnchor(onboarding.HomeOnboardingAnchor.ProjectSider)
+		const onAnchorChange = vi.fn()
+		window.addEventListener(onboarding.HOME_ONBOARDING_ANCHOR_EVENT, onAnchorChange)
+
+		/*
+		 * The page acts on the announcement rather than on the region it names — it opens the panel
+		 * — so a repeat would put back what the user had just closed, once per render.
+		 */
+		onboarding.setHomeOnboardingAnchor(onboarding.HomeOnboardingAnchor.ProjectSider)
+
+		expect(onAnchorChange).not.toHaveBeenCalled()
+		window.removeEventListener(onboarding.HOME_ONBOARDING_ANCHOR_EVENT, onAnchorChange)
+	})
+
+	it("announces the withdrawal, so a page mounting later has nothing to open for", async () => {
+		const onboarding = await loadOnboarding()
+		onboarding.setHomeOnboardingAnchor(onboarding.HomeOnboardingAnchor.ProjectSider)
+		const onAnchorChange = vi.fn()
+		window.addEventListener(onboarding.HOME_ONBOARDING_ANCHOR_EVENT, onAnchorChange)
+
+		onboarding.setHomeOnboardingAnchor(null)
+
+		expect(onboarding.getHomeOnboardingAnchor()).toBeNull()
+		expect(onAnchorChange).toHaveBeenCalledTimes(1)
+		expect((onAnchorChange.mock.calls[0][0] as CustomEvent<string | null>).detail).toBeNull()
+		window.removeEventListener(onboarding.HOME_ONBOARDING_ANCHOR_EVENT, onAnchorChange)
+	})
+})
+
 describe("home onboarding step verdicts", () => {
 	it("carries the hosting page's verdict on a step so the tour stops waiting on a timer", async () => {
 		const onboarding = await loadOnboarding()

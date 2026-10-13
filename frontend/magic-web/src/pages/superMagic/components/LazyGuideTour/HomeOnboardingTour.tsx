@@ -36,6 +36,7 @@ import {
 	markHomeOnboardingAborted,
 	refreshHomeOnboardingRewardList,
 	resetHomeOnboardingStepIndex,
+	setHomeOnboardingAnchor,
 	setHomeOnboardingFlow,
 	setHomeOnboardingRunActive,
 	setHomeOnboardingSidebarTopMode,
@@ -1835,6 +1836,43 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 		setHomeOnboardingRunActive(runActive)
 		return () => setHomeOnboardingRunActive(false)
 	}, [runActive])
+
+	/**
+	 * Telling the page which region the run is framing, so that a step pointing at a region the page
+	 * is allowed to have closed can be framed at all.
+	 *
+	 * The project files panel is collapsible and its collapsed state is the user's own — it is
+	 * remembered across loads — while both steps that point at it frame the panel itself: the
+	 * in-project tour's first and the second of the tour a delivered file opens. Collapsed, the
+	 * anchor they measure is a zero-width box at the left edge, so the highlight lands on a sliver
+	 * and the copy beside it describes a file tree that is not on screen. The panel is the page's to
+	 * open — see `HOME_ONBOARDING_ANCHOR_EVENT` — so the region is published here the moment the step
+	 * arrives. A layout effect, so the page is told inside the commit the step's own measurement runs
+	 * in: it opens the panel there, and the ring that goes on to follow the anchor is the one the
+	 * panel opens into rather than the sliver either of them started from.
+	 *
+	 * `null` for every state that frames nothing: the introduction dialog, the processing dialog, a
+	 * step that belongs to another page, and the run once it is dismissed. A page mounting into any
+	 * of those must not find a region and open a panel for a step nobody is on.
+	 *
+	 * The withdrawal on unmount is its own effect, with no dependencies: a run whose steps span pages
+	 * is left by unmounting rather than by closing, and the page has to be told — but a cleanup on
+	 * the effect below would also run between two regions of one run, where it would announce that
+	 * nothing is framed for a frame the run is framing the next region in.
+	 */
+	const framedAnchor =
+		runActive && started && stepOnThisPage && flow !== "task-processing"
+			? (activeAnchor ?? null)
+			: null
+	useLayoutEffect(() => {
+		setHomeOnboardingAnchor(framedAnchor)
+	}, [framedAnchor])
+	useLayoutEffect(
+		() => () => {
+			setHomeOnboardingAnchor(null)
+		},
+		[],
+	)
 
 	/**
 	 * The dialog is offered once per account, and it is spent *here* — the moment it is on screen —

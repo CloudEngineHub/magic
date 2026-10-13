@@ -1,10 +1,15 @@
 import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import {
+	HomeOnboardingAnchor,
+	setHomeOnboardingAnchor,
+} from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 import { useTopicDesktopLayout } from "../useTopicDesktopLayout"
 import {
 	DEFAULT_WIDTH,
 	MESSAGE_PANEL_WIDTH_STORAGE_KEY,
+	PROJECT_SIDER_PANEL_STORAGE_KEY,
 	PROJECT_SIDER_WIDTH_STORAGE_KEY,
 } from "../../../../constants/resizablePanel"
 
@@ -233,5 +238,100 @@ describe("useTopicDesktopLayout", () => {
 		rerender()
 
 		expect(result.current.isConversationPanelCollapsed).toBe(false)
+	})
+
+	/**
+	 * The new-user guide's steps that frame the project files area.
+	 *
+	 * A collapsed panel is the one state that breaks those steps: the anchor is still published, but
+	 * as a zero-width box at the left edge, so the highlight lands on a sliver while the copy beside
+	 * it describes a file tree that is not on screen. The panel is the layout's to open, and the
+	 * guide announces the region it is about to frame — see `HOME_ONBOARDING_ANCHOR_EVENT`.
+	 *
+	 * The three cases below are the reaction and its two limits: it opens the panel for the region
+	 * the guide is really on, it leaves the panel alone for a region it is not, and it never writes
+	 * to the stored preference from a layout whose panel cannot be collapsed in the first place.
+	 */
+	describe("when the new-user guide frames the project panel", () => {
+		beforeEach(() => {
+			// The region the run is on lives in the guide's module memory, which jsdom keeps for the
+			// whole file.
+			setHomeOnboardingAnchor(null)
+		})
+
+		afterEach(() => {
+			setHomeOnboardingAnchor(null)
+		})
+
+		it("opens a panel the user had collapsed", () => {
+			const { result, rerender } = renderHook(() =>
+				useTopicDesktopLayout({ isReadOnly: false, enableProjectCollapse: true }),
+			)
+
+			act(() => result.current.collapseProjectSider())
+			rerender()
+			expect(result.current.isProjectSiderCollapsed).toBe(true)
+
+			act(() => setHomeOnboardingAnchor(HomeOnboardingAnchor.ProjectSider))
+			rerender()
+
+			expect(result.current.isProjectSiderCollapsed).toBe(false)
+		})
+
+		it.each([HomeOnboardingAnchor.DeliverableAttachment, "message-header-topic-group"])(
+			"leaves the panel alone for a step that frames %s",
+			(anchor) => {
+				const { result, rerender } = renderHook(() =>
+					useTopicDesktopLayout({ isReadOnly: false, enableProjectCollapse: true }),
+				)
+
+				act(() => result.current.collapseProjectSider())
+				rerender()
+
+				act(() => setHomeOnboardingAnchor(anchor))
+				rerender()
+
+				expect(result.current.isProjectSiderCollapsed).toBe(true)
+			},
+		)
+
+		it("opens it for a panel that mounts while the run is already on the step", () => {
+			/*
+			 * The entry navigates to the page, so the order is not fixed: this is the shape of a
+			 * user who closed the panel on an earlier visit — the choice is in storage — and meets
+			 * the guide with the run already on the files step.
+			 */
+			localStorage.setItem(
+				PROJECT_SIDER_PANEL_STORAGE_KEY,
+				JSON.stringify({ collapsed: true, lastExpandedSize: 320 }),
+			)
+			setHomeOnboardingAnchor(HomeOnboardingAnchor.ProjectSider)
+
+			const { result, rerender } = renderHook(() =>
+				useTopicDesktopLayout({ isReadOnly: false, enableProjectCollapse: true }),
+			)
+
+			/*
+			 * The rerender is only how this file reads the store back — `result.current` is the last
+			 * render's output, not a live view. What opened the panel is the mount itself: nothing
+			 * announces the region after it, so a layout that waited for an event would still be
+			 * collapsed here.
+			 */
+			rerender()
+
+			expect(result.current.isProjectSiderCollapsed).toBe(false)
+		})
+
+		it("never writes to the preference from a layout that cannot collapse the panel", () => {
+			setHomeOnboardingAnchor(HomeOnboardingAnchor.ProjectSider)
+			vi.mocked(localStorage.setItem).mockClear()
+
+			renderHook(() => useTopicDesktopLayout({ isReadOnly: false }))
+
+			expect(localStorage.setItem).not.toHaveBeenCalledWith(
+				PROJECT_SIDER_PANEL_STORAGE_KEY,
+				expect.any(String),
+			)
+		})
 	})
 })

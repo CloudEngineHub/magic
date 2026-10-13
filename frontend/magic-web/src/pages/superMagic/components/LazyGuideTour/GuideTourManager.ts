@@ -162,6 +162,28 @@ export const HOME_ONBOARDING_STATE_EVENT = "magic-home-onboarding-state"
 export const HOME_ONBOARDING_STEP_EVENT = "magic-home-onboarding-step"
 
 /**
+ * Announced every time the run moves on to a step that frames a different region, carrying the
+ * anchor it now frames — or `null` while it is framing nothing on this page.
+ *
+ * A page cannot work out from the step list what a step needs of it — the list lives in the tour —
+ * and one kind of step does need the page: the project files area is a panel the user may collapse,
+ * and collapsed it answers with a zero-width box at the left edge. Both steps that point at it (the
+ * in-project tour's first and the second of the tour a delivered file opens) would then draw their
+ * highlight around a sliver instead of the file tree, and the copy beside it would be talking about
+ * something the user cannot see. The tour cannot open the panel itself: the collapse state belongs
+ * to the page's layout, which keeps one instance per mount, so the step announces the region it is
+ * about to frame and the page opens it.
+ *
+ * The anchor rather than the step's position, because those two steps live in different flows and a
+ * flow numbers its steps from its own start; what the page has to act on is which region is being
+ * framed, and no page but the one that renders it reads this. Deliberately separate from the step
+ * event above: that one carries a position in the home steps for the surfaces that stage them,
+ * while this one names a region. Read on mount as well as followed — the page and the tour mount in
+ * whichever order the entry's navigation happens to take.
+ */
+export const HOME_ONBOARDING_ANCHOR_EVENT = "magic-home-onboarding-anchor"
+
+/**
  * Announced by the page hosting a run once it is finished preparing the step it was asked for,
  * carrying that step's index. Some steps do not point at something that is simply there: the AI-PPT
  * steps frame a template card, and the card cannot be framed until the page has the library, has
@@ -353,6 +375,12 @@ let onboardingSidebarTopMode = false
  */
 let onboardingStepIndex = 0
 /**
+ * The region the run is framing, kept beside the position it is framing it from and for the same
+ * reason: the page that has to act on it may mount after the run has already moved. Memory-only
+ * like the rest — a reload starts the task from its first step, where nothing has been framed yet.
+ */
+let onboardingAnchor: string | null = null
+/**
  * Which step the hosting page has finished preparing, if any. Kept beside the position it answers
  * for the same reason: the page and the tour are two components that may mount in either order, and
  * which step is ready has to outlive the one that answered.
@@ -511,6 +539,31 @@ export function setHomeOnboardingStepIndex(index: number) {
 export function resetHomeOnboardingStepIndex() {
 	onboardingStepIndex = 0
 	onboardingPreparedStepIndex = null
+}
+
+/**
+ * The region the run is framing right now, if any. Read on mount as well as followed through the
+ * event above, because the page that renders it and the tour that frames it are two components
+ * that may mount in either order.
+ */
+export function getHomeOnboardingAnchor() {
+	return onboardingAnchor
+}
+
+/**
+ * Moving the run's frame to another region, and telling the page that renders it. Only the tour
+ * ever writes this — it is the only thing that knows which step is up — and the guard below is
+ * what keeps a region the run is staying on from being announced again on every render: the page
+ * acts on the announcement, so a repeat would reopen a panel the user had just closed.
+ */
+export function setHomeOnboardingAnchor(anchor: string | null) {
+	if (anchor === onboardingAnchor) return
+	onboardingAnchor = anchor
+	if (typeof window !== "undefined") {
+		window.dispatchEvent(
+			new CustomEvent<string | null>(HOME_ONBOARDING_ANCHOR_EVENT, { detail: anchor }),
+		)
+	}
 }
 
 /**
