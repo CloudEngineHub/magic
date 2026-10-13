@@ -193,12 +193,14 @@ function CrewTopicPanel({
 			showLoading,
 			size: detailPanelVisible ? "small" : "default",
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
+				const resolvedProject = currentProject ?? selectedProject
+				const resolvedTopic = currentTopic ?? topicStore.selectedTopic
 				if (!success) return
 
 				applyOptimisticTopicRunningState({
 					topicStore,
-					topic: currentTopic ?? topicStore.selectedTopic,
-					project: currentProject ?? selectedProject,
+					topic: resolvedTopic,
+					project: resolvedProject,
 				})
 			},
 			mergeSendParams: ({ defaultParams }) => {

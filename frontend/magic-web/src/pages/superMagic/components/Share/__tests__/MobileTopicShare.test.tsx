@@ -8,13 +8,27 @@ import {
 } from "@/pages/superMagic/components/Share/utils/nativeShare"
 import { clipboard } from "@/utils/clipboard-helpers"
 import MobileTopicShare from "../MobileTopicShare"
-import { ShareType } from "../types"
+import { ResourceType, ShareType } from "../types"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: functionPermissionMocks.t,
 	}),
 }))
+
+vi.mock("ahooks", async () => {
+	const React = await vi.importActual<typeof import("react")>("react")
+	return {
+		useUpdateEffect: (effect: React.EffectCallback, deps?: React.DependencyList) => {
+			const mounted = React.useRef(false)
+			React.useEffect(() => {
+				if (mounted.current) return effect()
+				mounted.current = true
+				return undefined
+			}, deps)
+		},
+	}
+})
 
 vi.mock("@/utils/clipboard-helpers", () => ({
 	clipboard: {
@@ -43,6 +57,12 @@ vi.mock("@/components/base/MagicToaster/utils", () => ({
 vi.mock("@/pages/superMagic/components/Share/utils/nativeShare", () => ({
 	canUseNativeShare: vi.fn(() => false),
 	shareToNativeTarget: vi.fn(),
+}))
+
+const trackMock = vi.hoisted(() => vi.fn())
+
+vi.mock("@/services/analytics", () => ({
+	analyticsService: { report: trackMock },
 }))
 
 vi.mock("@/apis", () => ({
@@ -446,8 +466,6 @@ describe("MobileTopicShare", () => {
 		expect(screen.getByTestId("mobile-topic-share-no-method-hint")).toHaveTextContent(
 			"share.noAvailableShareMethods",
 		)
-
-		// 全部分享方式被关闭后，除主开关外的内容都不再有意义，不再渲染。
 		expect(screen.queryByTestId("mobile-topic-share-link-card")).not.toBeInTheDocument()
 		expect(
 			screen.queryByTestId("mobile-topic-share-password-toggle-row"),
@@ -514,7 +532,6 @@ describe("MobileTopicShare", () => {
 	})
 
 	it("话题权限组关闭密码保护时以公开方式创建分享", async () => {
-		// 页面所属权限组仍放开密码保护，但话题分享由话题权限组决定。
 		functionPermissionMocks.permissions = {
 			"project.share_password": true,
 			"project.share_public": true,
@@ -542,5 +559,99 @@ describe("MobileTopicShare", () => {
 				share_type: ShareType.Public,
 			},
 		)
+	})
+
+	it("首次开启话题分享时上报 content_share_attempted", async () => {
+		vi.mocked(SuperMagicApi.createOrUpdateShareResource).mockResolvedValue({} as never)
+
+		render(
+			<MobileTopicShare
+				type={ShareType.None}
+				shareContext={{ resource_id: "topic-new" }}
+				extraData={{ passwordEnabled: true, password: "abc123" }}
+				setExtraData={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-topic-share-toggle-row"))
+
+		await waitFor(() => {
+			expect(trackMock).toHaveBeenCalledTimes(1)
+		})
+		expect(trackMock).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.Topic,
+		})
+	})
+
+	it("更新密码保护时不上报 content_share_attempted", async () => {
+		vi.mocked(SuperMagicApi.createOrUpdateShareResource).mockResolvedValue({} as never)
+
+		render(
+			<MobileTopicShare
+				type={ShareType.Public}
+				shareContext={{ resource_id: "topic-1" }}
+				extraData={{ passwordEnabled: false, password: "abc123" }}
+				setExtraData={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-topic-share-password-toggle-row"))
+
+		await waitFor(() => {
+			expect(SuperMagicApi.createOrUpdateShareResource).toHaveBeenCalled()
+		})
+		expect(trackMock).not.toHaveBeenCalled()
+	})
+
+	it("开启话题分享失败时仍上报 content_share_attempted", async () => {
+		vi.mocked(SuperMagicApi.createOrUpdateShareResource).mockRejectedValue(new Error("fail"))
+
+		render(
+			<MobileTopicShare
+				type={ShareType.None}
+				shareContext={{ resource_id: "topic-fail" }}
+				extraData={{ passwordEnabled: true, password: "abc123" }}
+				setExtraData={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-topic-share-toggle-row"))
+
+		await waitFor(() => {
+			expect(magicToast.error).toHaveBeenCalledWith("share.createFailed")
+		})
+		expect(trackMock).toHaveBeenCalledWith("content_share_attempted", {
+			resourceType: ResourceType.Topic,
+		})
+	})
+
+	it("关闭后重新开启分享会再次上报 content_share_attempted", async () => {
+		vi.mocked(SuperMagicApi.createOrUpdateShareResource).mockResolvedValue({} as never)
+		vi.mocked(SuperMagicApi.cancelShareResource).mockResolvedValue(undefined as never)
+
+		render(
+			<MobileTopicShare
+				type={ShareType.None}
+				shareContext={{ resource_id: "topic-once" }}
+				extraData={{ passwordEnabled: true, password: "abc123" }}
+				setExtraData={vi.fn()}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("mobile-topic-share-toggle-row"))
+		await waitFor(() => {
+			expect(trackMock).toHaveBeenCalledTimes(1)
+		})
+
+		fireEvent.click(screen.getByTestId("mobile-topic-share-toggle-row"))
+		await waitFor(() => {
+			expect(SuperMagicApi.cancelShareResource).toHaveBeenCalledTimes(1)
+		})
+
+		fireEvent.click(screen.getByTestId("mobile-topic-share-toggle-row"))
+		await waitFor(() => {
+			expect(SuperMagicApi.createOrUpdateShareResource).toHaveBeenCalledTimes(2)
+			expect(trackMock).toHaveBeenCalledTimes(2)
+		})
 	})
 })

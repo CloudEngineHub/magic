@@ -122,7 +122,11 @@ export function MagiClawCreatedSection({
 	return (
 		<>
 			{dialog}
-			<section className="flex flex-col gap-3 px-2.5" data-testid="magi-claw-created-section">
+			<section
+				className="flex flex-col gap-3 px-2.5"
+				data-testid="magi-claw-created-section"
+				data-guide-anchor="magi-claw-created-section"
+			>
 				{showEmptyGetStarted ? null : (
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						<h2 className="text-base font-medium leading-6 text-foreground">

@@ -84,6 +84,8 @@ function EditorLayout({
 			selectedTopic,
 			selectedProject,
 			selectedWorkspace,
+			// This home screen creates entities inside the workspace selected in the header.
+			creationScene: "workspace",
 			setSelectedTopic: topicStore.setSelectedTopic,
 			setSelectedProject: projectStore.setSelectedProject,
 			topicMode: resolvedMode,
@@ -181,7 +183,10 @@ function EditorLayout({
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.HomePage}>
 			<div className={cn("flex size-full flex-col items-center")}>
 				{/* Main Input Container */}
-				<div className="w-full max-w-4xl rounded-2xl border border-border bg-sidebar p-2">
+				<div
+					className="w-full max-w-4xl rounded-2xl border border-border bg-sidebar p-2"
+					data-guide-anchor="message-composer"
+				>
 					{/* skill editor input container with min height to prevent layout shift */}
 					<div
 						ref={editorContainerRef}

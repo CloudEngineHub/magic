@@ -266,6 +266,7 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 					data-disabled={ctx.sendButtonDisabled}
 					data-loading={ctx.showLoading || ctx.sendButtonLoading}
 					data-queue-editing={ctx.isEditingQueueItem}
+					data-guide-anchor="message-editor-send-button"
 				>
 					{ctx.sendButtonLoading ? (
 						<Spinner className="animate-spin" size={16} />

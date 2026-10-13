@@ -29,6 +29,7 @@ import {
 	canUseNativeShare,
 	shareToNativeTarget,
 } from "@/pages/superMagic/components/Share/utils/nativeShare"
+import { analyticsService } from "@/services/analytics"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type {
 	MobileShareItem,
@@ -1155,7 +1156,12 @@ export function useProjectShareSheet({
 							projectName: projectName || t("common.untitledProject"),
 						})
 			const resourceName = formState.shareName.trim() || fallbackShareName
-
+			if (!isEditing) {
+				analyticsService.report("content_share_attempted", {
+					resourceType: ResourceType.FileCollection,
+					shareProject: !isAudioRecordingScene && activeMode === "project",
+				})
+			}
 			await SuperMagicApi.createOrUpdateShareResource({
 				resource_id: resourceId,
 				resource_type: ResourceType.FileCollection,

@@ -2,6 +2,11 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from "react"
 import { useMemoizedFn } from "ahooks"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
+	getHomeOnboardingAnchor,
+	HomeOnboardingAnchor,
+	HOME_ONBOARDING_ANCHOR_EVENT,
+} from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
+import {
 	TopicLayoutStore,
 	type HistoryDragResult,
 	type ProjectSiderPanelPersistence,
@@ -126,6 +131,34 @@ export function useTopicDesktopLayout({
 			)
 		}
 	}, [collapseConversationPanel, expandConversationPanel])
+
+	/**
+	 * The project panel can be asked to open from outside this layout, as the conversation panel can
+	 * above. The one caller today is the new-user guide: both of its steps that frame the project
+	 * files area frame the panel itself, and a panel the user has collapsed answers with a
+	 * zero-width box at the left edge — so the step would draw its highlight on a sliver while the
+	 * copy beside it describes a file tree that is not on screen.
+	 *
+	 * The panel cannot be opened from the guide's side, because the collapse state belongs to this
+	 * layout, which keeps one instance per mount — see `HOME_ONBOARDING_ANCHOR_EVENT`. So the step
+	 * announces the region it is about to frame and the panel is opened here.
+	 *
+	 * Read once as well as followed, because the entry navigates to the page and the two may mount in
+	 * either order. Only a layout that can collapse the panel answers: on the others it is always
+	 * open, and expanding it would be a write to the user's stored preference by a layout that has
+	 * no control over it.
+	 */
+	useEffect(() => {
+		if (!enableProjectCollapse) return
+		const openProjectSiderForGuide = () => {
+			if (getHomeOnboardingAnchor() !== HomeOnboardingAnchor.ProjectSider) return
+			store.expandProjectSider()
+		}
+		openProjectSiderForGuide()
+		window.addEventListener(HOME_ONBOARDING_ANCHOR_EVENT, openProjectSiderForGuide)
+		return () =>
+			window.removeEventListener(HOME_ONBOARDING_ANCHOR_EVENT, openProjectSiderForGuide)
+	}, [store, enableProjectCollapse])
 
 	useEffect(() => {
 		const container = containerRef.current

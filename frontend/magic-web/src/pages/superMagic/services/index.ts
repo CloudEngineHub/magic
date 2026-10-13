@@ -869,6 +869,8 @@ class SuperMagicService {
 					.createTopic({
 						projectId: project.id,
 						topicName: "",
+						workspaceId: project.workspace_id,
+						mode: project.project_mode,
 					})
 					.catch(() => null)
 				if (newTopic) {
@@ -1355,6 +1357,8 @@ class SuperMagicService {
 			const newTopic = await this.topic.createTopic({
 				projectId: project.id,
 				topicName: topicName || "",
+				workspaceId: project.workspace_id,
+				mode: project.project_mode,
 				sourceTopic,
 			})
 

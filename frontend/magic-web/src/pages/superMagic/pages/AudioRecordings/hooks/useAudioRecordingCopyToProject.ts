@@ -15,6 +15,7 @@ import type { AudioProjectListItem } from "@/types/audioProject"
 import { resolveRecordingDisplayName } from "../utils/audio-recordings-utils"
 import { canCopyAudioProject } from "../utils/copy-availability"
 import { resolveAudioCopyRootFileIds } from "../utils/resolve-audio-copy-files"
+import { analyticsService } from "@/services/analytics"
 
 const BATCH_OPERATION_POLL_INTERVAL_MS = 2000
 const PROGRESS_RESET_DELAY_MS = 500
@@ -120,6 +121,10 @@ export function useAudioRecordingCopyToProject(
 	/** Creates a normal target project when users save directly from a workspace. */
 	const createNormalTargetProject = useCallback(
 		async (workspaceId: string) => {
+			analyticsService.report("project_create_attempted", {
+				workspaceId,
+				sceneOverride: "ai_recording",
+			})
 			const response = await SuperMagicApi.createProject({
 				workspace_id: workspaceId,
 				project_name:
