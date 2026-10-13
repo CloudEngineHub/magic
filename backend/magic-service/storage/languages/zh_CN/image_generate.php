@@ -6,6 +6,7 @@ declare(strict_types=1);
  */
 return [
     'general_error' => '文生图服务异常',
+    'image_operation_failed' => '图片处理失败，请稍后重试',
     'response_format_error' => '文生图响应格式错误',
     'missing_image_data' => '生成图片数据异常',
     'no_valid_image_generated' => '未生成有效图片',
