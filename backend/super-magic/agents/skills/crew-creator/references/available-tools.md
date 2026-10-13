@@ -42,9 +42,23 @@ tools:
   - web_search
   - read_webpages_as_markdown
   - generate_images
+  - create_canvas
+  - generate_canvas_images
   - image_search
   - visual_understanding
   - video_understanding
+```
+
+### Design & Visual Creation Employee
+
+```yaml
+tools:
+  - web_search
+  - visual_understanding
+  - video_understanding
+  - generate_canvas_images
+  - search_canvas_images
+  - create_canvas
 ```
 
 ### Development & Programming Employee
@@ -206,10 +220,10 @@ instructions call these tools through `run_sdk_snippet` with `sdk.tool.call(...)
 
 | Tool | Description |
 |------|-------------|
-| `create_canvas` | Create a canvas project |
-| `generate_canvas_images` | Generate images directly to canvas |
+| `create_canvas` | Create a canvas project (required before generating canvas images/videos) |
+| `generate_canvas_images` | Generate AI images and add them to canvas — preferred tool for all user-facing image generation |
 | `generate_canvas_videos` | Generate videos directly to canvas |
-| `search_images_to_canvas` | Search and add images to canvas |
+| `search_canvas_images` | Search and add images to canvas |
 
 ### Data Dashboard
 

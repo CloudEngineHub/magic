@@ -39,6 +39,7 @@ import {
 	type PlaybookItem,
 	type PlaybookConfig,
 	normalizeCrewI18nArrayValue,
+	resolveCrewIconUrl,
 } from "@/apis/modules/crew"
 import { analyticsService } from "@/services/analytics"
 
@@ -420,8 +421,7 @@ export class CrewService {
 	}
 
 	private resolveIconUrl(icon: CrewIconObject | null | undefined): string | null {
-		if (!icon) return null
-		return icon.url ?? icon.value ?? null
+		return resolveCrewIconUrl(icon) || null
 	}
 
 	private mapStoreAgent(item: StoreAgentItem): StoreAgentView {

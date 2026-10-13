@@ -30,6 +30,7 @@ use App\Infrastructure\Util\ShadowCode\ShadowCode;
 use App\Interfaces\Kernel\Assembler\OperatorAssembler;
 use App\Interfaces\Kernel\DTO\PageDTO;
 use App\Interfaces\SuperMagic\Agent\DTO\Request\CreateAgentRequestDTO;
+use App\Interfaces\SuperMagic\Agent\DTO\Request\UpdateAgentInfoRequestDTO;
 use App\Interfaces\SuperMagic\Agent\DTO\Response\AgentListItemDTO;
 use App\Interfaces\SuperMagic\Agent\DTO\Response\AgentVersionListItemDTO;
 use App\Interfaces\SuperMagic\Agent\DTO\Response\CategoryInfoDTO;
@@ -176,6 +177,18 @@ class SuperMagicAgentAssembler
         $entity->setEnabled(true);
         $entity->setVisibilityConfig($requestDTO->getVisibilityConfig());
         $entity->setFileKey($requestDTO->getFileKey());
+
+        if ($requestDTO instanceof UpdateAgentInfoRequestDTO) {
+            $entity->setProvidedFields([
+                'name_i18n' => $requestDTO->hasField('name_i18n'),
+                'role_i18n' => $requestDTO->hasField('role_i18n'),
+                'description_i18n' => $requestDTO->hasField('description_i18n'),
+                'icon' => $requestDTO->hasField('icon'),
+                'icon_type' => $requestDTO->hasField('icon_type'),
+                'prompt_shadow' => $requestDTO->hasField('prompt_shadow'),
+                'file_key' => $requestDTO->hasField('file_key'),
+            ]);
+        }
 
         return $entity;
     }
