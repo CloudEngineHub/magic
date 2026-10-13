@@ -23,6 +23,7 @@ use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
 use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetModel;
 use App\Domain\Asset\Service\AssetDomainService;
+use App\Domain\Asset\Service\AssetSearchTextBuilder;
 use App\Domain\Asset\Service\AssetTagDomainService;
 use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
 use App\Domain\Contact\Service\MagicUserDomainService;
@@ -196,7 +197,7 @@ final class AssetAppServiceTest extends TestCase
             $agreement,
             new NullLogger(),
             $this->createMock(AiAbilityDomainService::class),
-            $provider,
+            new AssetSearchTextBuilder(),
         );
         $authorization = $this->createMock(AssetDataIsolation::class);
         $authorization->method('getCurrentOrganizationCode')->willReturn('org-a');
