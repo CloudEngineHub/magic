@@ -50,11 +50,6 @@ final class DesignVideoReferenceAssetResolver
     private readonly SafeRemoteFileDownloader $remoteFileDownloader;
 
     /**
-     * 缓存本次请求内的 URI 解析结果，避免同一文件被重复下载、计算指纹或上传。
-     */
-    private array $resolvedCache = [];
-
-    /**
      * 初始化任务文件、文件存储和资产服务，并配置安全的远程文件下载器。
      * 下载器允许测试注入替身实现，以避免单元测试访问真实网络资源。
      */
@@ -80,7 +75,7 @@ final class DesignVideoReferenceAssetResolver
      */
     public function resolve(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): void
     {
-        $this->resolvedCache = [];
+        $resolvedCache = [];
 
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $userId = $dataIsolation->getCurrentUserId();
@@ -91,10 +86,10 @@ final class DesignVideoReferenceAssetResolver
 
         foreach (self::MATERIALIZED_KEYS as $key) {
             if (array_key_exists($key, $inputs)) {
-                $inputs[$key] = $this->materializeList($dataIsolation, $projectId, $organizationCode, $userId, $inputs[$key]);
+                $inputs[$key] = $this->materializeList($dataIsolation, $projectId, $organizationCode, $userId, $inputs[$key], $resolvedCache);
             }
             if (array_key_exists($key, $requestInputs)) {
-                $requestInputs[$key] = $this->materializeList($dataIsolation, $projectId, $organizationCode, $userId, $requestInputs[$key]);
+                $requestInputs[$key] = $this->materializeList($dataIsolation, $projectId, $organizationCode, $userId, $requestInputs[$key], $resolvedCache);
             }
         }
 
@@ -115,6 +110,7 @@ final class DesignVideoReferenceAssetResolver
         string $organizationCode,
         string $userId,
         array $items,
+        array &$resolvedCache,
     ): array {
         foreach ($items as &$item) {
             if (! is_array($item)) {
@@ -126,6 +122,7 @@ final class DesignVideoReferenceAssetResolver
                 $organizationCode,
                 $userId,
                 (string) ($item['uri'] ?? ''),
+                $resolvedCache,
             );
         }
         unset($item);
@@ -142,12 +139,13 @@ final class DesignVideoReferenceAssetResolver
         string $organizationCode,
         string $userId,
         string $uri,
+        array &$resolvedCache,
     ): string {
-        if (isset($this->resolvedCache[$uri])) {
-            return $this->resolvedCache[$uri];
+        if (isset($resolvedCache[$uri])) {
+            return $resolvedCache[$uri];
         }
         $resolved = $this->doResolveUri($dataIsolation, $projectId, $organizationCode, $userId, $uri);
-        $this->resolvedCache[$uri] = $resolved;
+        $resolvedCache[$uri] = $resolved;
         return $resolved;
     }
 
