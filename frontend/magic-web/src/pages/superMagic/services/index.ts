@@ -887,7 +887,8 @@ class SuperMagicService {
 				.fetchTopics(
 					{
 						projectId: project.id,
-						isAutoSelect: true,
+						// 初始化由调用方一起提交项目与话题；普通项目切换仍立即选中。
+						isAutoSelect: !scope,
 						isSelectLast: true,
 						page: 1,
 					},

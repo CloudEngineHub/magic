@@ -254,10 +254,6 @@ export class ProjectStateInitialization {
 
 		// 如果项目不存在，则直接返回
 		if (!project) return
-		if (!chatReady) {
-			services.project.recordProjectVisit(project)
-			projectStore.setSelectedProject(project)
-		}
 		// 校验工作区
 		const _isOwner = isOwner(project.user_role)
 		if (!_isOwner) {
@@ -274,21 +270,26 @@ export class ProjectStateInitialization {
 			if (workspaceDetail) workspaceStore.setSelectedWorkspace(workspaceDetail)
 		}
 
-		// 只有选中了某个项目，才需要加载这个项目下的话题
-		if (!canReadTopic) return
 		if (!chatReady) {
 			// PC端，如果没有传话题ID，也进行话题初始化
-			const selectedTopic =
-				explicitTopic && isTopicBoundToProject(explicitTopic, project.id)
-					? explicitTopic
-					: await services.getTopicDataByProject(
-							project,
-							topicPromise ? undefined : topicId,
-							scope,
-						)
+			const selectedTopic = canReadTopic
+				? await services.getTopicDataByProject(
+						project,
+						topicPromise ? undefined : topicId,
+						scope,
+					)
+				: null
 			if (!scope.isCurrent()) return
-			if (selectedTopic) services.topicStore.setSelectedTopic(selectedTopic)
+			// 项目入口必须一起发布项目和话题；只发布项目会让页面凭 current_topic_id
+			// 提前跳转，取消尚未完成的初始化。只读或无有效话题时仅保留项目视图。
+			runInAction(() => {
+				projectStore.setSelectedProject(project)
+				if (selectedTopic) services.topicStore.setSelectedTopic(selectedTopic)
+			})
+			services.project.recordProjectVisit(project)
 		}
+		// 只有选中了某个项目，才需要加载这个项目下的话题
+		if (!canReadTopic) return
 		// 加载话题列表
 		void services.topic.fetchTopics(
 			{ projectId: project.id, isAutoSelect: false, page: 1 },

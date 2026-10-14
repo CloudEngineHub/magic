@@ -281,7 +281,8 @@ class TopicService {
 
 			runInAction(() => {
 				this.topicStore.setTopics(topicsWithFrontendMode)
-				if (selectedTopic) {
+				// 初始化创建的话题先返回，由初始化一起选中项目和话题，避免提前导航。
+				if (selectedTopic && !scope) {
 					this.topicStore.setSelectedTopic(selectedTopic)
 				}
 			})
