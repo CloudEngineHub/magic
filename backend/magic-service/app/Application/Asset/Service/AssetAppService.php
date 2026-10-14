@@ -78,6 +78,7 @@ class AssetAppService extends AbstractAssetAppService
                 $this->resolveAssetFileUrls([$existing]);
                 $providerAsset = $this->assetDomainService->findProviderAssets($dataIsolation, [(int) $existing->getId()])[(string) $existing->getId()] ?? null;
                 if ($providerAsset === null || ! $providerAsset->getProviderStatus()->isPassed()) {
+                    $this->assetDomainService->assertPersonalAssetQuota($dataIsolation);
                     $existingFileUrl = $existing->getFileUrl();
                     if ($synchronous) {
                         $this->assetDomainService->syncPersonalAsset(
@@ -92,6 +93,10 @@ class AssetAppService extends AbstractAssetAppService
                 }
                 return $existing;
             }
+        }
+
+        if (! $asset->getAssetKind()->isGroup()) {
+            $this->assetDomainService->assertPersonalAssetQuota($dataIsolation);
         }
 
         $fileUrl = $asset->getFileUrl();

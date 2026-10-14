@@ -21,6 +21,7 @@ return [
     'tag_not_found' => 'Asset tag not found',
     'tag_structure_invalid' => 'Invalid asset tag hierarchy',
     'tag_not_allowed' => 'You are not allowed to operate on this asset tag',
+    'personal_asset_quota_exceeded' => 'The Volcengine Ark asset quota has been reached (maximum :limit assets). You can still save this file to your personal asset library, but compliance review is unavailable',
     'validation' => [
         'scope_in' => 'Invalid query scope. Please choose personal, team shared, official public, or all',
         'asset_kind_in' => 'Asset type must be asset or asset group',

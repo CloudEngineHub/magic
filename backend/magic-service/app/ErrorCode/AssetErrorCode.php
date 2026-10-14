@@ -56,4 +56,7 @@ enum AssetErrorCode: int
 
     #[ErrorMessage('asset.tag_not_allowed')]
     case TAG_NOT_ALLOWED = 48015;
+
+    #[ErrorMessage('asset.personal_asset_quota_exceeded')]
+    case PERSONAL_ASSET_QUOTA_EXCEEDED = 48016;
 }

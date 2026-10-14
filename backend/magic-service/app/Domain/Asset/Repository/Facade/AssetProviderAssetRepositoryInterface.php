@@ -50,6 +50,11 @@ interface AssetProviderAssetRepositoryInterface
     public function countProviderResourceUsage(string $providerCode): array;
 
     /**
+     * 统计指定用户已通过审核的个人素材数量。
+     */
+    public function countPassedAssetsByUser(string $userId, string $providerCode): int;
+
+    /**
      * 软删除一条映射；第三方资源确认回收后调用，保留行便于审计。
      */
     public function deleteMapping(

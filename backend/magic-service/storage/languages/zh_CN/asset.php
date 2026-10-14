@@ -21,6 +21,7 @@ return [
     'tag_not_found' => '标签不存在',
     'tag_structure_invalid' => '标签层级结构不合法',
     'tag_not_allowed' => '无权操作该标签',
+    'personal_asset_quota_exceeded' => '火山方舟素材额度已达到上限（最多 :limit 个），当前素材仍可保存到个人素材库，但无法进行合规审查',
     'validation' => [
         'scope_in' => '查询范围不正确，请选择个人、团队分享、官方公开或全部',
         'asset_kind_in' => '素材类型只能选择素材或素材组',

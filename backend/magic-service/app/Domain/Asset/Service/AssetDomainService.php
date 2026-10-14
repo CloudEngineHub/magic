@@ -350,6 +350,26 @@ class AssetDomainService
         return $this->assets->queries($dataIsolation, $query, $page);
     }
 
+    public function assertPersonalAssetQuota(AssetDataIsolation $dataIsolation): void
+    {
+        $limit = $dataIsolation->getSubscriptionManager()->getPersonalArkAssetIdLimit();
+        if ($limit === null) {
+            return;
+        }
+
+        $used = $this->providerAssets->countPassedAssetsByUser(
+            $dataIsolation->getCurrentUserId(),
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+        );
+        if ($used >= $limit) {
+            ExceptionBuilder::throw(
+                AssetErrorCode::PERSONAL_ASSET_QUOTA_EXCEEDED,
+                '',
+                ['limit' => $limit],
+            );
+        }
+    }
+
     /**
      * 异步同步当前用户的个人素材到默认 Provider。
      *
@@ -385,6 +405,18 @@ class AssetDomainService
             if ($providerAsset->getProviderStatus()->isPassed() && $providerAsset->getProviderAssetId() !== '') {
                 return $providerAsset;
             }
+        }
+        try {
+            $this->assertPersonalAssetQuota($dataIsolation);
+        } catch (BusinessException $exception) {
+            // 异步任务可能在落库后才触达配额上限，不能让预先写入的 PROCESSING 状态一直悬挂。
+            $this->markProviderStatus(
+                $dataIsolation,
+                $asset,
+                ProviderAssetStatus::FAILED,
+                $exception->getMessage(),
+            );
+            throw $exception;
         }
         $asset->setFileUrl($fileUrl);
         return $this->syncToProvider($dataIsolation, $asset, $reviewMode);

@@ -182,6 +182,19 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
         ];
     }
 
+    public function countPassedAssetsByUser(string $userId, string $providerCode): int
+    {
+        return (int) ($this->providerAssetModel::query()
+            ->join('magic_assets', 'magic_assets.id', '=', 'magic_asset_provider_assets.asset_id')
+            ->where('magic_assets.user_id', $userId)
+            ->whereNull('magic_assets.deleted_at')
+            ->where('magic_asset_provider_assets.provider_code', $providerCode)
+            ->where('magic_asset_provider_assets.provider_status', 'PASS')
+            ->whereNull('magic_asset_provider_assets.deleted_at')
+            ->selectRaw('COUNT(DISTINCT magic_asset_provider_assets.asset_id) AS total')
+            ->value('total') ?? 0);
+    }
+
     /**
      * 将 metadata 编码为 JSON，供查询构造器写入。
      */
