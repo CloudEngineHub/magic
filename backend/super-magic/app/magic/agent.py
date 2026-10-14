@@ -4250,6 +4250,7 @@ Since your subsequent output will be merged with pre-interruption content and di
                 processor_config=processor_config,
                 enable_llm_response_events=True,
                 llm_config=text_model_state.config,
+                extra_body=self.agent_context.get_reasoning_extra_body(),
             )
         except ResourceLimitExceededException:
             raise

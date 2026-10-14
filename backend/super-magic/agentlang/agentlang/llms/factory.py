@@ -240,9 +240,15 @@ class LLMFactory:
         if llm_config.query_params:
             request_params["extra_query"] = llm_config.query_params
 
-        # 添加调用方传入的 extra_body（如禁用思考模式）
+        # 浅合并本次请求覆盖，保留模型配置的其他原生参数且不改写共享配置。
         if extra_body is not None:
-            request_params["extra_body"] = extra_body
+            merged_extra_body = {**(request_params.get("extra_body") or {}), **extra_body}
+            # 调用方显式使用旧 thinking 时，清除模型配置继承的新强度，避免关闭思考被默认强度覆盖。
+            # 调用方同时传入两者时保持原样，由网关按非空 reasoning_effort 优先的规则处理。
+            if "thinking" in extra_body and "reasoning_effort" not in extra_body:
+                merged_extra_body.pop("reasoning_effort", None)
+                request_params.pop("reasoning_effort", None)
+            request_params["extra_body"] = merged_extra_body
 
         extra_headers = MetadataUtil.get_llm_request_headers()
         if llm_config.headers:

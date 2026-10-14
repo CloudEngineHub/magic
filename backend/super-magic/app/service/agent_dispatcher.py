@@ -837,6 +837,7 @@ class AgentDispatcher(Base):
             session_video_model=self._session_video_model(current_session_config, last_session_config),
         ))
         agent.agent_context.model_context.apply_selection(selection)
+        agent.agent_context.set_reasoning_effort((message.dynamic_config or {}).get("reasoning_effort"))
         logger.info(
             "[AgentDispatcher] 已应用模型选择: "
             f"text={selection.text_model_id}, "
