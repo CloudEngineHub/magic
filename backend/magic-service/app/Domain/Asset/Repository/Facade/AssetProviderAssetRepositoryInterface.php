@@ -18,7 +18,7 @@ interface AssetProviderAssetRepositoryInterface
      */
     public function saveMapping(AssetDataIsolation $dataIsolation, ProviderAssetEntity $providerAsset): AssetProviderAssetModel;
 
-    public function findMapping(AssetDataIsolation $dataIsolation, int|string $assetId, string $providerCode, string $projectName = ''): ?AssetProviderAssetModel;
+    public function findMapping(AssetDataIsolation $dataIsolation, int|string $assetId, string $providerCode): ?AssetProviderAssetModel;
 
     /**
      * @param array<int, int|string> $assetIds
@@ -32,11 +32,26 @@ interface AssetProviderAssetRepositoryInterface
     ): array;
 
     /**
-     * 在这些本地素材的映射里找一条可复用的第三方凭证（同一份内容要不要重复上传的判据）。
+     * 批量取映射行（模型自带 updated_at），供批量合规查询判定审核超时。
      *
-     * @param int[] $assetIds 内容指纹相同的本地素材主键
+     * @param array<int, int|string> $assetIds
+     * @return array<string, AssetProviderAssetModel> 素材主键 => 映射行
      */
-    public function findReusableMappingByAssetIds(array $assetIds, string $providerCode, string $projectName): ?ProviderAssetEntity;
+    public function findMappingModels(
+        AssetDataIsolation $dataIsolation,
+        array $assetIds,
+        string $providerCode,
+    ): array;
+
+    /**
+     * 按内容指纹直接取一条已通过审核的凭证（单条 JOIN 查询）。
+     */
+    public function findPassedMappingByContentHash(
+        string $contentHash,
+        string $providerCode,
+        string $organizationCode = '',
+        string $userId = '',
+    ): ?ProviderAssetEntity;
 
     /**
      * 统计同一第三方素材/素材组还被多少条其他映射引用。

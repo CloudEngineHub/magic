@@ -10,6 +10,8 @@ namespace HyperfTest\Cases\Unit;
 use App\Application\Asset\Service\AssetAppService;
 use App\Application\Design\Support\DesignVideoReferenceAssetResolver;
 use App\Domain\Asset\Entity\AssetEntity;
+use App\Domain\Asset\Entity\ProviderAssetEntity;
+use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 use App\Domain\Asset\Service\AssetDomainService;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
@@ -73,7 +75,7 @@ final class DesignVideoReferenceAssetResolverTest extends TestCase
 
         // asset:// 不应触发任何工作区/资产查询。
         $this->taskFileDomainService->expects($this->never())->method('findEntityByRelativePath');
-        $this->assetDomainService->expects($this->never())->method('findPersonalProviderAssetId');
+        $this->assetDomainService->expects($this->never())->method('findPassedProviderAssetByContentHash');
 
         $this->resolver->resolve($this->dataIsolation(), $entity);
 
@@ -91,7 +93,7 @@ final class DesignVideoReferenceAssetResolverTest extends TestCase
         $this->taskFileDomainService
             ->method('findEntityByRelativePath')
             ->willReturn(null);
-        $this->assetDomainService->expects($this->never())->method('findPersonalProviderAssetId');
+        $this->assetDomainService->expects($this->never())->method('findPassedProviderAssetByContentHash');
 
         $this->resolver->resolve($this->dataIsolation(), $entity);
 
@@ -113,7 +115,7 @@ final class DesignVideoReferenceAssetResolverTest extends TestCase
         $this->taskFileDomainService->method('findEntityByRelativePath')->willReturn($fileEntity);
         // 拿不到可访问链接时退回原 uri，不下载、不建资产。
         $this->cloudFileRepository->method('getLinks')->willReturn([]);
-        $this->assetDomainService->expects($this->never())->method('findPersonalProviderAssetId');
+        $this->assetDomainService->expects($this->never())->method('findPassedProviderAssetByContentHash');
 
         $this->resolver->resolve($this->dataIsolation(), $entity);
 
@@ -207,8 +209,9 @@ final class DesignVideoReferenceAssetResolverTest extends TestCase
             return new DownloadedRemoteFile($tmp, 'name', 'application/octet-stream', (int) filesize($tmp));
         });
 
-        // 命中本人已有素材：所有引用内容被复用为同一资产（path => asset://1001），不触发上传/新建。
-        $this->assetDomainService->method('findPersonalProviderAssetId')->willReturn('1001');
+        // 命中已审核通过的同内容凭证：所有引用内容被复用为同一资产（path => asset://1001），不触发上传/新建。
+        $this->assetDomainService->method('findPassedProviderAssetByContentHash')
+            ->willReturn($this->passedProviderAsset('1001'));
         $this->assetAppService->expects($this->never())->method('createPersonalAsset');
 
         $this->resolver->resolve($this->dataIsolation(), $entity);
@@ -249,11 +252,12 @@ final class DesignVideoReferenceAssetResolverTest extends TestCase
             file_put_contents($tmp, 'binary-content');
             return new DownloadedRemoteFile($tmp, 'name', 'application/octet-stream', (int) filesize($tmp));
         });
-        $this->assetDomainService->method('findPersonalProviderAssetId')->willReturn('1001');
+        $this->assetDomainService->method('findPassedProviderAssetByContentHash')
+            ->willReturn($this->passedProviderAsset('1001'));
 
         // 三个不同 uri 各解析一次；inputPayload 与 requestPayload 的重复引用命中缓存，不再触发下载/查重。
         $this->remoteFileDownloader->expects($this->exactly(3))->method('download');
-        $this->assetDomainService->expects($this->exactly(3))->method('findPersonalProviderAssetId');
+        $this->assetDomainService->expects($this->exactly(3))->method('findPassedProviderAssetByContentHash');
 
         $this->resolver->resolve($this->dataIsolation(), $entity);
 
@@ -289,9 +293,10 @@ final class DesignVideoReferenceAssetResolverTest extends TestCase
         });
 
         // 未命中已有素材、取不到第三方 ID 时走上传 + 新建分支。
-        $this->assetDomainService->method('findPersonalProviderAssetId')->willReturn(null);
+        $this->assetDomainService->method('findPassedProviderAssetByContentHash')->willReturn(null);
         $this->assetAppService->method('createPersonalAsset')->willReturn(new AssetEntity(['id' => 2002]));
-        $this->assetDomainService->method('findProviderAssetId')->willReturn('prov-2002');
+        $this->assetDomainService->method('findProviderAsset')
+            ->willReturn($this->passedProviderAsset('prov-2002'));
 
         $uploadedName = null;
         $this->cloudFileRepository->expects($this->once())->method('uploadByCredential')->willReturnCallback(
@@ -305,6 +310,20 @@ final class DesignVideoReferenceAssetResolverTest extends TestCase
 
         self::assertSame('mp4', pathinfo((string) $uploadedName, PATHINFO_EXTENSION));
         self::assertSame('asset://prov-2002', $entity->getInputPayload()['reference_videos'][0]['uri']);
+    }
+
+    /**
+     * 构造一条已通过审核的第三方映射，作为复用命中的返回值。
+     */
+    private function passedProviderAsset(string $providerAssetId): ProviderAssetEntity
+    {
+        return new ProviderAssetEntity([
+            'asset_id' => 1001,
+            'provider_code' => 'VolcengineArk',
+            'project_name' => 'project',
+            'provider_asset_id' => $providerAssetId,
+            'provider_status' => ProviderAssetStatus::PASS->value,
+        ]);
     }
 
     private function buildEntity(array $inputPayload, array $requestInputs): DesignGenerationTaskEntity

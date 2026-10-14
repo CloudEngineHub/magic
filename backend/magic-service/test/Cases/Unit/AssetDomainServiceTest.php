@@ -340,6 +340,140 @@ final class AssetDomainServiceTest extends TestCase
         );
     }
 
+    /**
+     * 批量合规查询一次取回素材和映射，查询次数不随 ID 增长；无映射的素材返回 null（UNVERIFIED）。
+     */
+    public function testBatchComplianceStatusesLoadsAssetsAndMappingsOnce(): void
+    {
+        $this->primeProviderContext();
+
+        $repository = $this->createMock(AssetRepositoryInterface::class);
+        $repository->expects(self::once())->method('findByIds')->with(
+            self::isInstanceOf(AssetDataIsolation::class),
+            ['9', '10'],
+        )->willReturn([
+            new AssetEntity($this->assetModel(['id' => 9])->toArray()),
+            new AssetEntity($this->assetModel(['id' => 10])->toArray()),
+        ]);
+        // 逐个查询的老路径不能再被调用，否则批量接口又退化成 N+1。
+        $repository->expects(self::never())->method('findById');
+
+        $mapping = $this->createMock(AssetProviderAssetModel::class);
+        $mapping->method('toArray')->willReturn([
+            'asset_id' => 9,
+            'provider_code' => 'VolcengineArk',
+            'project_name' => 'default',
+            'provider_status' => 'PASS',
+            'provider_failed_reason' => null,
+        ]);
+
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->expects(self::once())->method('findMappingModels')->with(
+            self::isInstanceOf(AssetDataIsolation::class),
+            ['9', '10'],
+            'VolcengineArk',
+        )->willReturn(['9' => $mapping]);
+        $providerAssets->expects(self::never())->method('findMapping');
+
+        $statuses = $this->domainService($repository, $providerAssets)->getComplianceStatuses(
+            $this->dataIsolation('org-a', 'user-a', ['org-a']),
+            [9, 10],
+        );
+
+        self::assertSame(ProviderAssetStatus::PASS, $statuses['9']->getProviderStatus());
+        self::assertNull($statuses['10']);
+    }
+
+    /**
+     * 批量同样逐个校验归属：混入别人的素材必须抛 NOT_FOUND，不能因为批量而放宽。
+     */
+    public function testBatchComplianceStatusesRejectsAssetOwnedByAnotherUser(): void
+    {
+        $this->primeProviderContext();
+
+        $repository = $this->createMock(AssetRepositoryInterface::class);
+        $repository->method('findByIds')->willReturn([
+            new AssetEntity($this->assetModel(['id' => 11, 'user_id' => 'user-b'])->toArray()),
+        ]);
+
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->expects(self::never())->method('findMappingModels');
+
+        $this->expectException(BusinessException::class);
+        $this->expectExceptionCode(AssetErrorCode::NOT_FOUND->value);
+        $this->domainService($repository, $providerAssets)->getComplianceStatuses(
+            $this->dataIsolation('org-a', 'user-a', ['org-a']),
+            [11],
+        );
+    }
+
+    /**
+     * 超时判定用批量查回来的映射行，回写时不再按 ID 重查一次映射。
+     */
+    public function testBatchComplianceTimeoutMarksFailedWithLoadedMapping(): void
+    {
+        $this->primeProviderContext();
+
+        $repository = $this->createMock(AssetRepositoryInterface::class);
+        $repository->method('findByIds')->willReturn([
+            new AssetEntity($this->assetModel(['id' => 12])->toArray()),
+        ]);
+
+        $mapping = $this->createMock(AssetProviderAssetModel::class);
+        $mapping->method('toArray')->willReturn([
+            'asset_id' => 12,
+            'provider_code' => 'VolcengineArk',
+            'project_name' => 'default',
+            'provider_status' => 'PROCESSING',
+            'provider_failed_reason' => null,
+        ]);
+        // 映射行的 updated_at 远期，触发合规超时。
+        $mapping->method('__get')->willReturnCallback(
+            static fn (string $key): ?string => $key === 'updated_at' ? '2020-01-01 00:00:00' : null,
+        );
+
+        $saved = [];
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMappingModels')->willReturn(['12' => $mapping]);
+        $providerAssets->expects(self::never())->method('findMapping');
+        $providerAssets->expects(self::once())->method('saveMapping')->willReturnCallback(
+            function (AssetDataIsolation $isolation, ProviderAssetEntity $entity) use (&$saved): AssetProviderAssetModel {
+                $saved[] = $entity->getProviderStatus();
+                return $this->createMock(AssetProviderAssetModel::class);
+            }
+        );
+
+        $statuses = $this->domainService($repository, $providerAssets)->getComplianceStatuses(
+            $this->dataIsolation('org-a', 'user-a', ['org-a']),
+            [12],
+        );
+
+        self::assertSame([ProviderAssetStatus::FAILED], $saved);
+        self::assertSame(ProviderAssetStatus::FAILED, $statuses['12']->getProviderStatus());
+    }
+
+    /**
+     * 单条与批量共用同一实现，避免两套逻辑漂移。
+     */
+    public function testSingleComplianceStatusDelegatesToBatch(): void
+    {
+        $this->primeProviderContext();
+
+        $repository = $this->createMock(AssetRepositoryInterface::class);
+        $repository->expects(self::once())->method('findByIds')->willReturn([
+            new AssetEntity($this->assetModel(['id' => 13])->toArray()),
+        ]);
+        $repository->expects(self::never())->method('findById');
+
+        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
+        $providerAssets->method('findMappingModels')->willReturn([]);
+
+        self::assertNull($this->domainService($repository, $providerAssets)->getComplianceStatus(
+            $this->dataIsolation('org-a', 'user-a', ['org-a']),
+            13,
+        ));
+    }
+
     public function testComplianceTimeoutMarksProviderMappingFailedWithoutRecycling(): void
     {
         $logger = $this->collectingLogger();
@@ -917,8 +1051,6 @@ final class AssetDomainServiceTest extends TestCase
     public function testDuplicateContentReusesProviderAssetInsteadOfReuploading(): void
     {
         $assets = $this->savingAssets(71);
-        // 同一内容（content_hash 相同）已存在可复用凭证：不再建组、不再建素材、不轮询合规。
-        $assets->method('findIdsByContentHash')->willReturn([50]);
 
         $reusable = new ProviderAssetEntity([
             'asset_id' => 50,
@@ -932,8 +1064,9 @@ final class AssetDomainServiceTest extends TestCase
         $writes = [];
         $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
         $providerAssets->method('findMapping')->willReturn(null);
-        $providerAssets->method('findReusableMappingByAssetIds')
-            ->with([50], 'ark', 'default')
+        // 同一内容（content_hash 相同）已存在可复用凭证：不再建组、不再建素材、不轮询合规。
+        $providerAssets->method('findPassedMappingByContentHash')
+            ->with('sha256:abc', 'VolcengineArk', '', '')
             ->willReturn($reusable);
         // 复用写两行：先是处理中的占位，再绑定到已审核通过的第三方素材。
         $providerAssets->expects(self::exactly(2))->method('saveMapping')->willReturnCallback(
@@ -1061,36 +1194,6 @@ final class AssetDomainServiceTest extends TestCase
         // 按需注册之后结论来源翻回火山：用量统计不能再把它算成「未占用」。
         self::assertSame(ProviderReviewMode::VOLCENGINE, $mapping->getProviderReviewMode());
         self::assertSame(['asset-31', 'VOLCENGINE'], end($writes));
-    }
-
-    public function testPersonalProviderAssetIdUsesReusablePassedMapping(): void
-    {
-        $assets = $this->createMock(AssetRepositoryInterface::class);
-        $assets->method('findPersonalAssetByContentHash')
-            ->willReturn(new AssetEntity(['id' => 99, 'user_id' => 'user-a']));
-        $assets->method('findIdsByContentHash')->willReturn([99, 50]);
-
-        $reusable = new ProviderAssetEntity([
-            'asset_id' => 50,
-            'provider_code' => 'ark',
-            'project_name' => 'default',
-            'provider_asset_id' => 'asset-50',
-            'provider_status' => 'PASS',
-        ]);
-        $providerAssets = $this->createMock(AssetProviderAssetRepositoryInterface::class);
-        $providerAssets->expects(self::once())->method('findReusableMappingByAssetIds')
-            ->with([99, 50], 'ark', 'default')
-            ->willReturn($reusable);
-
-        $provider = $this->createMock(AssetProviderInterface::class);
-        $provider->method('getProviderCode')->willReturn('ark');
-        $provider->expects(self::never())->method('createAsset');
-
-        // 材质化入口需要的是第三方素材 ID：只认已审核通过的复用映射。
-        $providerAssetId = $this->domainService($assets, $providerAssets, $provider)
-            ->findPersonalProviderAssetId($this->dataIsolation('org-a', 'user-a', ['org-a']), 'user-a', 'sha256:abc');
-
-        self::assertSame('asset-50', $providerAssetId);
     }
 
     public function testDeletingOthersSharedAssetIsRejected(): void
@@ -1288,6 +1391,17 @@ final class AssetDomainServiceTest extends TestCase
         self::assertStringContainsString('新名字', (string) $saved->getSearchText());
         self::assertStringContainsString('新描述', (string) $saved->getSearchText());
         self::assertStringContainsString('风景', (string) $saved->getSearchText());
+    }
+
+    /**
+     * 合规查询只用到项目名，这里预置协程上下文，避免单测里真的去构造火山适配器。
+     */
+    private function primeProviderContext(): void
+    {
+        Context::set(AssetDomainService::PROVIDER_CONTEXT_KEY, [
+            'provider' => $this->createMock(AssetProviderInterface::class),
+            'projectName' => 'default',
+        ]);
     }
 
     /**

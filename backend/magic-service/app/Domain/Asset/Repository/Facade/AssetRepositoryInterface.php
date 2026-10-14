@@ -51,17 +51,7 @@ interface AssetRepositoryInterface
     public function batchUpdateOwner(AssetDataIsolation $dataIsolation, array $assetIds, string $ownerUid): int;
 
     /**
-     * 按内容指纹查询未删除的资产主键，用于跨组织复用已经通过审核的第三方素材凭证。
-     * 该查询刻意不按组织编码过滤，但只返回本地主键，调用方仍需校验对应映射是否满足复用条件。
-     *
-     * @return int[] 最多返回指定数量的资产主键列表
-     */
-    public function findIdsByContentHash(string $contentHash, int $limit = 20): array;
-
-    /**
      * 按用户标识和内容指纹查询未删除的个人资产，用于判断相同内容是否已经上传。
-     * 用户标识在组织下唯一（magic_contact_user 上 user_id 为唯一索引），因此按用户过滤已等价于组织隔离，无需再过滤 organization_code。
-     * 默认只返回同步完成的最早记录；允许任意同步状态时返回最新记录，便于继续未完成的合规校验。
      */
     public function findPersonalAssetByContentHash(string $userId, string $contentHash, bool $anySyncStatus = false): ?AssetEntity;
 

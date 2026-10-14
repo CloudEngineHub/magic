@@ -185,30 +185,6 @@ class AssetRepository implements AssetRepositoryInterface
             ]);
     }
 
-    /**
-     * 按内容指纹查存活素材主键，用于复用第三方素材。
-     *
-     * 第三方素材是全局资源：同一份内容各组织各建一条本地记录、共用同一个 provider_asset_id，
-     * 因此这里刻意不按 organization_code 过滤——这正是「同一张图片只上传一次」能生效的前提。
-     * 返回的可能是别的组织/Bucket 的记录，调用方据此复用它们已经过审的第三方凭证即可。
-     *
-     * @return int[]
-     */
-    public function findIdsByContentHash(string $contentHash, int $limit = 20): array
-    {
-        if ($contentHash === '') {
-            return [];
-        }
-        return $this->assetModel::query()
-            ->where('content_hash', $contentHash)
-            ->whereNull('deleted_at')
-            ->orderBy('id')
-            ->limit($limit)
-            ->pluck('id')
-            ->map(static fn ($id): int => (int) $id)
-            ->all();
-    }
-
     public function findPersonalAssetByContentHash(string $userId, string $contentHash, bool $anySyncStatus = false): ?AssetEntity
     {
         if ($userId === '' || $contentHash === '') {

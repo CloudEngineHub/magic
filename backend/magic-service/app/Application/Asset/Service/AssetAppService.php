@@ -340,9 +340,13 @@ class AssetAppService extends AbstractAssetAppService
     /** @param array<int, int|string> $assetIds @return array<int, array{asset_id: string, compliance_status: string, compliance_failed_reason: ?string}> */
     public function batchCompliance(Authenticatable|BaseDataIsolation $authorization, array $assetIds): array
     {
+        $dataIsolation = $this->createAssetDataIsolation($authorization);
+        // 素材与第三方映射各查一次，结果按素材主键索引后再按入参顺序组装，避免按 ID 逐个查询。
+        $statuses = $this->assetDomainService->getComplianceStatuses($dataIsolation, $assetIds);
+
         $items = [];
         foreach ($assetIds as $assetId) {
-            $providerAsset = $this->compliance($authorization, $assetId);
+            $providerAsset = $statuses[(string) $assetId] ?? null;
             $items[] = [
                 'asset_id' => (string) $assetId,
                 'compliance_status' => ($providerAsset?->getProviderStatus() ?? ProviderAssetStatus::UNVERIFIED)->value,

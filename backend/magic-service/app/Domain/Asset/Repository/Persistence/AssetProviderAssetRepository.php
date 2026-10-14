@@ -9,6 +9,7 @@ namespace App\Domain\Asset\Repository\Persistence;
 
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
+use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
 use App\Domain\Asset\Repository\Persistence\Model\AssetProviderAssetModel;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -67,12 +68,12 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
         ];
     }
 
-    public function findMapping(AssetDataIsolation $dataIsolation, int|string $assetId, string $providerCode, string $projectName = ''): ?AssetProviderAssetModel
+    public function findMapping(AssetDataIsolation $dataIsolation, int|string $assetId, string $providerCode): ?AssetProviderAssetModel
     {
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         return $this->providerAssetModel::query()
             ->where('organization_code', $organizationCode)->where('asset_id', $assetId)
-            ->where('provider_code', $providerCode)->where('project_name', $projectName)->first();
+            ->where('provider_code', $providerCode)->first();
     }
 
     public function findMappings(
@@ -81,6 +82,18 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
         string $providerCode,
         string $projectName = '',
     ): array {
+        $result = [];
+        foreach ($this->findMappingModels($dataIsolation, $assetIds, $providerCode) as $assetId => $model) {
+            $result[$assetId] = new ProviderAssetEntity($model->toArray());
+        }
+        return $result;
+    }
+
+    public function findMappingModels(
+        AssetDataIsolation $dataIsolation,
+        array $assetIds,
+        string $providerCode,
+    ): array {
         if ($assetIds === []) {
             return [];
         }
@@ -88,45 +101,46 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
             ->whereIn('organization_code', $dataIsolation->getOrganizationCodes())
             ->whereIn('asset_id', $assetIds)
             ->where('provider_code', $providerCode)
-            ->where('project_name', $projectName)
             ->get();
         $result = [];
         foreach ($models as $model) {
-            $entity = new ProviderAssetEntity($model->toArray());
-            $result[(string) $entity->getAssetId()] = $entity;
+            $result[(string) $model->asset_id] = $model;
         }
         return $result;
     }
 
     /**
-     * 按状态优先级选择可复用的第三方凭证。
+     * 按内容指纹直接取一条已通过审核的凭证。
      */
-    public function findReusableMappingByAssetIds(array $assetIds, string $providerCode, string $projectName): ?ProviderAssetEntity
-    {
-        $assetIds = array_values(array_unique(array_filter($assetIds, static fn (mixed $id): bool => (int) $id > 0)));
-        if ($assetIds === []) {
+    public function findPassedMappingByContentHash(
+        string $contentHash,
+        string $providerCode,
+        string $organizationCode = '',
+        string $userId = '',
+    ): ?ProviderAssetEntity {
+        if ($contentHash === '') {
             return null;
         }
-        $models = $this->providerAssetModel::query()
-            ->whereIn('asset_id', $assetIds)
-            ->where('provider_code', $providerCode)
-            ->where('project_name', $projectName)
-            ->where('provider_asset_id', '<>', '')
-            ->orderBy('id')
-            ->get();
-
-        $pending = null;
-        foreach ($models as $model) {
-            $mapping = new ProviderAssetEntity($model->toArray());
-            if ($mapping->getProviderStatus()->isPassed()) {
-                return $mapping;
-            }
-            if (! $mapping->getProviderStatus()->isProcessing() || $pending !== null) {
-                continue;
-            }
-            $pending = $mapping;
+        $query = $this->providerAssetModel::query()
+            ->join('magic_assets', 'magic_assets.id', '=', 'magic_asset_provider_assets.asset_id')
+            ->where('magic_assets.content_hash', $contentHash)
+            ->whereNull('magic_assets.deleted_at')
+            ->where('magic_asset_provider_assets.provider_code', $providerCode)
+            ->where('magic_asset_provider_assets.provider_status', ProviderAssetStatus::PASS->value)
+            ->whereNull('magic_asset_provider_assets.deleted_at');
+        if ($organizationCode !== '') {
+            $query->where('magic_asset_provider_assets.organization_code', $organizationCode);
         }
-        return $pending;
+        if ($userId !== '') {
+            $query->where('magic_assets.user_id', $userId);
+        }
+        // 优先取最近落库的一条，保证复用结果稳定可预期。
+        $model = $query
+            ->orderByDesc('magic_asset_provider_assets.updated_at')
+            ->orderByDesc('magic_asset_provider_assets.id')
+            ->select('magic_asset_provider_assets.*')
+            ->first();
+        return $model === null ? null : new ProviderAssetEntity($model->toArray());
     }
 
     public function countOtherReferences(ProviderAssetEntity $mapping): int
@@ -138,7 +152,6 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
         }
         $query = $this->providerAssetModel::query()
             ->where('provider_code', $mapping->getProviderCode())
-            ->where('project_name', $mapping->getProjectName())
             ->where('asset_id', '<>', (int) $mapping->getAssetId());
         $query->where(static function ($builder) use ($providerAssetId, $providerGroupId): void {
             if ($providerAssetId !== '') {
@@ -161,7 +174,6 @@ class AssetProviderAssetRepository implements AssetProviderAssetRepositoryInterf
             ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
             ->where('asset_id', $assetId)
             ->where('provider_code', $providerCode)
-            ->where('project_name', $projectName)
             ->first();
         if ($model === null) {
             return false;

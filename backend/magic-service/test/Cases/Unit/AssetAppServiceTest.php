@@ -687,6 +687,51 @@ final class AssetAppServiceTest extends TestCase
     }
 
     /**
+     * 批量合规查询只走一次领域批量方法，按入参顺序（含重复）组装，不再逐个 ID 查询。
+     */
+    public function testBatchComplianceQueriesOnceAndKeepsInputOrder(): void
+    {
+        $authorization = $this->realAssetDataIsolation('org-a', 'user-1');
+        $domainService = $this->createMock(AssetDomainService::class);
+        $domainService->expects(self::once())->method('getComplianceStatuses')->with(
+            self::isInstanceOf(AssetDataIsolation::class),
+            [9, 10, 9],
+        )->willReturn([
+            '9' => new ProviderAssetEntity(['asset_id' => 9, 'provider_status' => 'PASS']),
+            '10' => new ProviderAssetEntity([
+                'asset_id' => 10,
+                'provider_status' => 'FAILED',
+                'provider_failed_reason' => '人像不清晰',
+            ]),
+        ]);
+        // 逐个查询的老路径不能再被调用，否则 N+1 会悄悄回来。
+        $domainService->expects(self::never())->method('getComplianceStatus');
+
+        $items = $this->assetService($domainService)->batchCompliance($authorization, [9, 10, 9]);
+
+        self::assertSame([
+            ['asset_id' => '9', 'compliance_status' => 'PASS', 'compliance_failed_reason' => null],
+            ['asset_id' => '10', 'compliance_status' => 'FAILED', 'compliance_failed_reason' => '人像不清晰'],
+            ['asset_id' => '9', 'compliance_status' => 'PASS', 'compliance_failed_reason' => null],
+        ], $items);
+    }
+
+    /**
+     * 素材没有第三方映射时按 UNVERIFIED 返回，与其他接口口径一致。
+     */
+    public function testBatchComplianceMarksAssetWithoutMappingUnverified(): void
+    {
+        $authorization = $this->realAssetDataIsolation('org-a', 'user-1');
+        $domainService = $this->createMock(AssetDomainService::class);
+        $domainService->method('getComplianceStatuses')->willReturn(['9' => null]);
+
+        self::assertSame(
+            [['asset_id' => '9', 'compliance_status' => 'UNVERIFIED', 'compliance_failed_reason' => null]],
+            $this->assetService($domainService)->batchCompliance($authorization, [9]),
+        );
+    }
+
+    /**
      * 素材可能已分享给其他用户/部门，删除时必须按资源清空全部主体记录，不能只撤当前用户那一条。
      */
     public function testPersonalAssetDeletionClearsAllVisibilityOfResource(): void

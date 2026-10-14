@@ -146,15 +146,15 @@ final class AssetRepositoryTest extends TestCase
 
     public function testRepositoryContractsExposeContentHashAndHierarchyQueries(): void
     {
-        self::assertTrue(method_exists(AssetRepositoryInterface::class, 'findIdsByContentHash'));
         self::assertTrue(method_exists(AssetRepositoryInterface::class, 'hasChildren'));
+        self::assertTrue(method_exists(AssetProviderAssetRepositoryInterface::class, 'findPassedMappingByContentHash'));
 
-        $hashReflection = new ReflectionMethod(AssetRepositoryInterface::class, 'findIdsByContentHash');
+        $hashReflection = new ReflectionMethod(AssetProviderAssetRepositoryInterface::class, 'findPassedMappingByContentHash');
         $hashParams = array_map(
             static fn (ReflectionParameter $parameter): string => $parameter->getName(),
             $hashReflection->getParameters(),
         );
-        self::assertSame(['contentHash', 'limit'], $hashParams);
+        self::assertSame(['contentHash', 'providerCode', 'organizationCode', 'userId'], $hashParams);
 
         $childrenReflection = new ReflectionMethod(AssetRepositoryInterface::class, 'hasChildren');
         $childrenParams = array_map(

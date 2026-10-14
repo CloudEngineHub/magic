@@ -17,6 +17,7 @@ use App\Domain\Asset\Entity\ValueObject\Query\AssetQuery;
 use App\Domain\Asset\Repository\Facade\AssetAgreementRepositoryInterface;
 use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
 use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
+use App\Domain\Asset\Repository\Persistence\Model\AssetProviderAssetModel;
 use App\Domain\Provider\Entity\ValueObject\AiAbilityCode;
 use App\Domain\Provider\Service\AiAbilityDomainService;
 use App\ErrorCode\AssetErrorCode;
@@ -291,7 +292,6 @@ class AssetDomainService
             $dataIsolation,
             $assetId,
             VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
         );
         if ($mapping === null) {
             return null;
@@ -311,7 +311,6 @@ class AssetDomainService
             $dataIsolation,
             $assetId,
             VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
         );
         if ($mapping === null) {
             return null;
@@ -336,37 +335,18 @@ class AssetDomainService
     }
 
     /**
-     * 命中本人已同步个人资产时，直接返回其在第三方服务商侧的素材 ID（provider_asset_id），
-     * 供视频生成材质化拼成 asset:// 透传给服务商；未命中或取不到第三方 ID 时返回 null。
+     * 按内容指纹取一条已通过审核的凭证，供生成链路拼 asset:// 复用。
      */
-    public function findPersonalProviderAssetId(AssetDataIsolation $dataIsolation, string $userId, string $contentHash): ?string
-    {
-        $contentHash = trim($contentHash);
-        if ($contentHash === '') {
-            return null;
-        }
-        $mapping = $this->providerAssets->findReusableMappingByAssetIds(
-            $this->assets->findIdsByContentHash($contentHash),
+    public function findPassedProviderAssetByContentHash(
+        string $contentHash,
+        string $organizationCode = '',
+        string $userId = '',
+    ): ?ProviderAssetEntity {
+        return $this->providerAssets->findPassedMappingByContentHash(
+            $contentHash,
             VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
-        );
-        if ($mapping === null || ! $mapping->getProviderStatus()->isPassed()) {
-            return null;
-        }
-        $providerAssetId = trim($mapping->getProviderAssetId());
-        return $providerAssetId === '' ? null : $providerAssetId;
-    }
-
-    public function findPersonalProviderAsset(AssetDataIsolation $dataIsolation, string $userId, string $contentHash): ?ProviderAssetEntity
-    {
-        $contentHash = trim($contentHash);
-        if ($contentHash === '') {
-            return null;
-        }
-        return $this->providerAssets->findReusableMappingByAssetIds(
-            $this->assets->findIdsByContentHash($contentHash),
-            VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
+            $organizationCode,
+            $userId,
         );
     }
 
@@ -420,16 +400,9 @@ class AssetDomainService
             $dataIsolation,
             $assetId,
             VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
         );
         if ($mapping !== null) {
             $providerAsset = new ProviderAssetEntity($mapping->toArray());
-            // PASS 且已拿到第三方素材 ID 才可以直接复用；FAILED 仍需继续走全局 SHA-256 查找，
-            // 避免当前记录的失败状态遮蔽其他用户或组织已经通过审核的同内容 Provider 素材。
-            //
-            // 无人像素材在创建时刻不注册第三方，状态虽为 PASS 但 provider_asset_id 为空，
-            // 这里必须继续往下走，等到真正被生成链路引用时才按需注册出可用凭证。
-            // 也正因为会重新走一遍注册流程，下面的结论来源会被重新写成 VOLCENGINE。
             if ($providerAsset->getProviderStatus()->isPassed() && $providerAsset->getProviderAssetId() !== '') {
                 return $providerAsset;
             }
@@ -488,32 +461,68 @@ class AssetDomainService
         AssetDataIsolation $dataIsolation,
         int|string $assetId,
     ): ?ProviderAssetEntity {
-        $asset = $this->assets->findById($dataIsolation, $assetId);
-        if ($asset === null || ! $asset->isOwnedBy(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId(),
-        )) {
-            ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+        return $this->getComplianceStatuses($dataIsolation, [$assetId])[(string) $assetId] ?? null;
+    }
+
+    /**
+     * 批量查询合规状态：素材和第三方映射各查一次，供批量接口使用。
+     *
+     * @param array<int, int|string> $assetIds
+     * @return array<string, ?ProviderAssetEntity>
+     */
+    public function getComplianceStatuses(AssetDataIsolation $dataIsolation, array $assetIds): array
+    {
+        $assetIds = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $assetId): string => (string) $assetId, $assetIds),
+            static fn (string $assetId): bool => $assetId !== '',
+        )));
+        if ($assetIds === []) {
+            return [];
         }
-        $mapping = $this->providerAssets->findMapping(
+
+        $assets = [];
+        foreach ($this->assets->findByIds($dataIsolation, $assetIds) as $asset) {
+            $assets[(string) $asset->getId()] = $asset;
+        }
+        // 先整体校验归属再查映射：入参里有不属于当前用户的素材时，不白查一次映射表。
+        foreach ($assetIds as $assetId) {
+            $asset = $assets[$assetId] ?? null;
+            if ($asset === null || ! $asset->isOwnedBy(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId(),
+            )) {
+                ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
+            }
+        }
+
+        $mappings = $this->providerAssets->findMappingModels(
             $dataIsolation,
-            $assetId,
+            $assetIds,
             VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
         );
-        if ($mapping === null) {
-            return null;
+
+        $statuses = [];
+        foreach ($assetIds as $assetId) {
+            $mapping = $mappings[$assetId] ?? null;
+            if ($mapping === null) {
+                $statuses[$assetId] = null;
+                continue;
+            }
+            $providerAsset = new ProviderAssetEntity($mapping->toArray());
+            if ($providerAsset->getProviderStatus()->isProcessing() && $this->isComplianceExpired((string) $mapping->updated_at)) {
+                $statuses[$assetId] = $this->markProviderStatus(
+                    $dataIsolation,
+                    $assets[$assetId],
+                    ProviderAssetStatus::FAILED,
+                    trans('asset.compliance_timeout'),
+                    null,
+                    $mapping,
+                );
+                continue;
+            }
+            $statuses[$assetId] = $providerAsset;
         }
-        $providerAsset = new ProviderAssetEntity($mapping->toArray());
-        if ($providerAsset->getProviderStatus()->isProcessing() && $this->isComplianceExpired((string) $mapping->updated_at)) {
-            return $this->markProviderStatus(
-                $dataIsolation,
-                $asset,
-                ProviderAssetStatus::FAILED,
-                trans('asset.compliance_timeout'),
-            );
-        }
-        return $providerAsset;
+        return $statuses;
     }
 
     /**
@@ -580,7 +589,6 @@ class AssetDomainService
             $dataIsolation,
             $asset->getId(),
             VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
         );
         // 未同步到第三方，直接删除本地记录。
         if ($mappingModel === null) {
@@ -692,7 +700,7 @@ class AssetDomainService
         $this->markProviderStatus($dataIsolation, $asset, ProviderAssetStatus::PROCESSING, null, ProviderReviewMode::VOLCENGINE);
         try {
             // 命中可复用凭证时跳过上传和合规轮询。
-            $reusable = $this->findReusableProviderAsset($asset);
+            $reusable = $asset->getContentHash() ? $this->findPassedProviderAssetByContentHash($asset->getContentHash()) : null;
             if ($reusable !== null) {
                 $providerAsset = $this->persistReusedMapping($dataIsolation, $asset, $reusable);
                 $this->logger->info('复用已存在的第三方素材，跳过上传', [
@@ -747,30 +755,6 @@ class AssetDomainService
     }
 
     /**
-     * 按内容指纹查找可跨组织复用的第三方凭证。
-     */
-    private function findReusableProviderAsset(AssetEntity $asset): ?ProviderAssetEntity
-    {
-        $contentHash = $asset->getContentHash();
-        if ($contentHash === null || $contentHash === '') {
-            return null;
-        }
-        $candidateIds = $this->assets->findIdsByContentHash($contentHash);
-        $candidateIds = array_values(array_filter(
-            $candidateIds,
-            static fn ($id): bool => (string) $id !== (string) $asset->getId(),
-        ));
-        if ($candidateIds === []) {
-            return null;
-        }
-        return $this->providerAssets->findReusableMappingByAssetIds(
-            $candidateIds,
-            VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
-        );
-    }
-
-    /**
      * 将复用的第三方凭证写入当前素材映射。
      */
     private function persistReusedMapping(
@@ -804,12 +788,13 @@ class AssetDomainService
         ProviderAssetStatus $status,
         ?string $failedReason = null,
         ?ProviderReviewMode $reviewMode = null,
+        ?AssetProviderAssetModel $mapping = null,
     ): ProviderAssetEntity {
-        $mapping = $this->providerAssets->findMapping(
+        // 批量场景已经把映射查回来了，直接复用，避免为了回写再按 ID 查一次。
+        $mapping ??= $this->providerAssets->findMapping(
             $dataIsolation,
             (int) $asset->getId(),
             VolcengineArkAssetProvider::PROVIDER_CODE,
-            $this->projectName(),
         );
         $providerAsset = $mapping === null
             ? new ProviderAssetEntity([

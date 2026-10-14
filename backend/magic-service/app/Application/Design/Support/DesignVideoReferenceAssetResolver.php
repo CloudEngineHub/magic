@@ -213,17 +213,13 @@ final class DesignVideoReferenceAssetResolver
             return $uri;
         }
         try {
-            $providerAssetEntity = $this->assetDomainService->findPersonalProviderAsset(
-                AssetDataIsolation::createByBaseDataIsolation($dataIsolation),
-                $userId,
-                $hash,
-            );
+            // 组织与用户都不收敛：第三方审核结果属于公共资源，同一份内容命中谁已 PASS 的凭证都可用。
+            $providerAssetEntity = $this->assetDomainService->findPassedProviderAssetByContentHash($hash);
             if ($providerAssetEntity && $providerAssetEntity->getProviderStatus()->isPassed()) {
                 return $providerAssetEntity->getProviderAssetId() ? 'asset://' . $providerAssetEntity->getProviderAssetId() : $uri;
             }
 
             // 必须带上带扩展名的文件名：临时文件路径无后缀，会让私有桶 key 丢后缀，
-            // 进而使 asset_media_type 推断失败、火山把视频/音频当图片处理（FormatUnsupported）。
             $uploadFile = new UploadFile(
                 $downloaded->getRealPath(),
                 FileUploadBusinessCode::ASSET->getDir(),
