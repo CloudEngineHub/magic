@@ -205,7 +205,7 @@ class SuperMagicModeService {
 					this._isModeAvailabilityResolved = false
 				})
 				if (!organizationCode || !userId) {
-					this.resetModeList()
+					this.resetCrewModeList()
 					return
 				}
 
@@ -308,7 +308,7 @@ class SuperMagicModeService {
 		}
 
 		if (!storageKey) {
-			this.resetModeList()
+			this.resetCrewModeList()
 			return
 		}
 
@@ -359,7 +359,7 @@ class SuperMagicModeService {
 		try {
 			const raw = window.localStorage.getItem(storageKey)
 			if (!raw) {
-				this.resetModeList()
+				this.resetCrewModeList()
 				return
 			}
 			const parsed = JSON.parse(raw)
@@ -368,7 +368,7 @@ class SuperMagicModeService {
 				logger.log("Loaded mode list from localStorage fallback")
 			} else {
 				logger.warn("Invalid mode list data in localStorage fallback")
-				this.resetModeList()
+				this.resetCrewModeList()
 			}
 		} catch (error) {
 			logger.error({
@@ -377,7 +377,7 @@ class SuperMagicModeService {
 				error: error,
 				message: "Failed to load mode list from localStorage fallback",
 			})
-			this.resetModeList()
+			this.resetCrewModeList()
 		}
 	}
 
@@ -597,7 +597,8 @@ class SuperMagicModeService {
 		})
 	}
 
-	private resetModeList() {
+	/** Reset crew availability; Default models follow their independent context lifecycle. */
+	private resetCrewModeList() {
 		runInAction(() => {
 			this._modeList = []
 			this.replaceModeMap([])
@@ -1021,7 +1022,7 @@ class SuperMagicModeService {
 
 		const requestContext = this.resolveCurrentModeListContext()
 		if (!requestContext) {
-			this.resetModeList()
+			this.resetCrewModeList()
 			runInAction(() => {
 				this._isModeListLoading = false
 			})
