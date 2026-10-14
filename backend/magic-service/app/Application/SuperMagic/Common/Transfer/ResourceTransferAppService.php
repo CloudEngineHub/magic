@@ -31,6 +31,7 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\TransferOptions;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\TransferStatus;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\TransferType;
 use App\Domain\SuperMagic\Project\Event\ProjectTransferredEvent;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Project\Service\TransferDomainService;
 use App\Domain\SuperMagic\Project\Service\TransferLogDomainService;
@@ -59,6 +60,7 @@ class ResourceTransferAppService extends AbstractKernelAppService
         private readonly SkillResourceAdapter $skills,
         private readonly TransferDomainService $projects,
         private readonly ProjectMemberDomainService $members,
+        private readonly ProjectDomainService $projectDomain,
         private readonly UserAgentDomainService $ownerships,
         private readonly ResourceTransferDependencyGuard $dependencies,
         private readonly TransferLogDomainService $logs,
@@ -125,6 +127,11 @@ class ResourceTransferAppService extends AbstractKernelAppService
                 );
                 $this->members->batchHandleOriginalOwnerMembership([$projectId], $sender, $org, $request->shareToMe, $role);
                 $this->members->syncOwnerProjectWorkspaceBindings($request->receiverId, [$projectId], $result->getProject()->getWorkspaceId(), $org);
+                // The original owner and existing collaborators still need editing-project access.
+                $collaborativeProjects = $this->members->getProjectIdsWithEffectiveCollaborators([$projectId]);
+                if ($collaborativeProjects !== []) {
+                    $this->projectDomain->batchEnableCollaboration($collaborativeProjects);
+                }
             }
             $this->permissions->transferOwner($isolation, $type, $code, $request->receiverId, $request->shareToMe);
             if ($request->shareToMe) {
@@ -154,7 +161,8 @@ class ResourceTransferAppService extends AbstractKernelAppService
                 ->setExtra(['code' => $code, 'project_id' => $projectId]);
             // Persist audit atomically: a logging failure rolls back the entire transfer.
             $this->logs->saveLog($log);
-            return ['code' => $code, 'owner_id' => $request->receiverId, 'user_role' => $role ?: null];
+            $operations = $this->permissions->getResourceOperationByUserIds($isolation, $type, [$sender], [$code]);
+            return ['code' => $code, 'owner_id' => $request->receiverId, 'user_role' => ($operations[$sender][$code] ?? null)?->toAlias()];
         });
         try {
             $this->events->dispatch(new ResourceTransferredEvent($code, $isAgent ? 'agent' : 'skill', $org, $sender, $request->receiverId));

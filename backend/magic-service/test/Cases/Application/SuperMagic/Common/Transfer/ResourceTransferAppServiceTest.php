@@ -18,6 +18,7 @@ use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationRepositoryI
 use App\Domain\OrganizationEnvironment\Service\OrganizationDomainService;
 use App\Domain\Permission\Entity\OperationPermissionEntity;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
+use App\Domain\Permission\Entity\ValueObject\OperationPermission\TargetType;
 use App\Domain\Permission\Repository\Facade\OperationPermissionRepositoryInterface;
 use App\Domain\Permission\Service\OperationPermissionDomainService;
 use App\Domain\Permission\Service\OrganizationAdminDomainService;
@@ -26,6 +27,7 @@ use App\Domain\SuperMagic\Agent\Entity\UserAgentEntity;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\TransferResult;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
+use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
@@ -59,6 +61,8 @@ class ResourceTransferAppServiceTest extends TestCase
 
     private array $savedPermissions = [];
 
+    private array $inheritedPermissions = [];
+
     private ?ContainerInterface $previousContainer;
 
     protected function setUp(): void
@@ -79,10 +83,27 @@ class ResourceTransferAppServiceTest extends TestCase
                     $this->savedPermissions[] = [$entity->getTargetId(), $entity->getOperation()];
                     return $entity;
                 });
+                $this->permissionRepository->method('listByTargetIds')->willReturnCallback(function () {
+                    $grants = $this->inheritedPermissions;
+                    $direct = [];
+                    foreach ($this->savedPermissions as [$id, $operation]) {
+                        $grant = new OperationPermissionEntity();
+                        $grant->setTargetId($id);
+                        $grant->setTargetType(TargetType::UserId);
+                        $grant->setResourceId('skill');
+                        $grant->setOperation($operation);
+                        $direct[$id] = $grant;
+                    }
+                    return array_merge($grants, array_values($direct));
+                });
+                $groups = $this->createMock(MagicGroupRepositoryInterface::class);
+                $groups->method('getGroupIdsByUserIds')->willReturn(['sender' => ['group']]);
+                $departments = $this->createMock(MagicDepartmentUserRepositoryInterface::class);
+                $departments->method('getDepartmentIdsByUserIds')->willReturn(['sender' => ['department']]);
                 $this->dependencies['permissions'] = new OperationPermissionDomainService(
                     $this->permissionRepository,
-                    $this->createMock(MagicGroupRepositoryInterface::class),
-                    $this->createMock(MagicDepartmentUserRepositoryInterface::class),
+                    $groups,
+                    $departments,
                 );
             } else {
                 $this->dependencies[$parameter->getName()] = $this->createMock($parameter->getType()->getName());
@@ -95,14 +116,16 @@ class ResourceTransferAppServiceTest extends TestCase
         $resolver = $this->createMock(ConnectionResolverInterface::class);
         $resolver->method('connection')->willReturn($connection);
         $config = new Config(['app_env' => 'testing', 'error_message' => require BASE_PATH . '/config/autoload/error_message.php']);
-        ApplicationContext::setContainer(new class($config, $translator, $resolver) implements ContainerInterface {
-            public function __construct(private $config, private $translator, private $resolver)
+        $agentDomain = $this->createMock(AgentDomainService::class);
+        ApplicationContext::setContainer(new class($config, $translator, $resolver, $agentDomain) implements ContainerInterface {
+            public function __construct(private $config, private $translator, private $resolver, private $agentDomain)
             {
             }
 
             public function get(string $id): mixed
             {
                 return match ($id) {
+                    AgentDomainService::class => $this->agentDomain,
                     ConfigInterface::class => $this->config,
                     TranslatorInterface::class => $this->translator,
                     ConnectionResolverInterface::class => $this->resolver,
@@ -169,6 +192,27 @@ class ResourceTransferAppServiceTest extends TestCase
         self::assertSame('receiver', $result['owner_id']);
     }
 
+    public function testDisablingSharingPreservesInheritedDepartmentAndGroupGrants(): void
+    {
+        $this->prepareResource();
+        foreach ([TargetType::DepartmentId, TargetType::GroupId] as $targetType) {
+            $grant = new OperationPermissionEntity();
+            $grant->setTargetType($targetType);
+            $grant->setTargetId($targetType === TargetType::DepartmentId ? 'department' : 'group');
+            $grant->setResourceId('skill');
+            $grant->setOperation(Operation::Edit);
+            $this->inheritedPermissions[] = $grant;
+        }
+        $this->permissionRepository->expects($this->once())->method('beachDelete')->with(
+            $this->anything(),
+            $this->callback(static fn ($grants) => count($grants) === 1 && $grants[0]->getTargetId() === 'sender')
+        );
+        self::assertSame('editor', $this->transfer(false, 'viewer')['user_role']);
+        foreach ($this->inheritedPermissions as $grant) {
+            self::assertSame(Operation::Edit, $grant->getOperation());
+        }
+    }
+
     public function testSharingKeepsTheChosenRole(): void
     {
         $this->prepareResource();
@@ -185,6 +229,8 @@ class ResourceTransferAppServiceTest extends TestCase
         $project->setWorkspaceId(84);
         $this->dependencies['projects']->method('transferProject')->willReturn(TransferResult::successProject($project, 0));
         $this->dependencies['members']->method('batchGetMembersByProjectsAndUser')->willReturn([]);
+        $this->dependencies['members']->method('getProjectIdsWithEffectiveCollaborators')->willReturn([42]);
+        $this->dependencies['projectDomain']->expects($this->once())->method('batchEnableCollaboration')->with([42]);
         $this->dependencies['members']->expects($this->once())->method('batchHandleReceiverMembership')->with([42], 'receiver', 'sender', 'org', []);
         $this->dependencies['members']->expects($this->once())->method('batchHandleOriginalOwnerMembership')->with([42], 'sender', 'org', true, 'editor');
         self::assertSame('editor', $this->transfer(true, 'editor')['user_role']);
