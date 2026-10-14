@@ -1703,8 +1703,6 @@ class AgentHorizon:
     async def build_context_update(
         self,
         injection_point: HorizonInjectionPoint = HorizonInjectionPoint.UNKNOWN,
-        *,
-        include_time: bool = True,
     ) -> str:
         """
         编排动态上下文并返回字符串。Loop 结束只返回用户变化；无变化时返回空字符串。
@@ -1713,7 +1711,7 @@ class AgentHorizon:
           当前时间、运行环境、LLM 模型、图片模型、workspace_files、user_preferred_language
 
         后续注入按需包含：
-          时间项说明对应 include_time=True；补充检查可省略时间，首次初始化除外。
+          时间项说明对应常规更新；补充检查省略时间，首次初始化除外。
           <current_time>     — 始终输出
           <runtime_environment> — 首次建立运行环境 baseline 时输出
           <runtime_environment_changed> — Python 进程代次变化时输出
@@ -1870,7 +1868,10 @@ class AgentHorizon:
         if user_block:
             parts.append(user_block)
         was_first_injection = self._is_first_injection
-        time_included = was_first_injection or include_time
+        time_included = was_first_injection or injection_point not in (
+            HorizonInjectionPoint.BEFORE_LLM_PRELOADED_SKILLS,
+            HorizonInjectionPoint.BEFORE_LLM_NATIVE_VISUAL,
+        )
         llm_model_change_injected = False
         media_model_change_injected = False
 
