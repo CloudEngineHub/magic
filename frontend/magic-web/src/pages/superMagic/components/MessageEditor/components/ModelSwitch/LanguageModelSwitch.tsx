@@ -18,6 +18,7 @@ import { AddModelStore } from "./components/AddModel/store"
 import { AddModelDialogLazy } from "./components/AddModel/add-model-dialog-lazy"
 import { ChevronsUpDownIcon, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 	size = "default",
@@ -169,12 +170,13 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 									{t("messageEditor.modelSwitch.selectModel")}
 								</div>
 							</div>
-							<div
-								ref={mobileScrollContainerRef}
-								className="scrollbar-y-thin flex max-h-[60vh] flex-col overflow-y-auto rounded-lg p-3"
+							<ScrollArea
+								viewportRef={mobileScrollContainerRef}
+								className="rounded-lg"
+								viewportClassName="max-h-[60vh] p-3 [&>div]:!flex [&>div]:flex-col"
 							>
 								{mainContent}
-							</div>
+							</ScrollArea>
 						</div>
 					</MagicPopup>
 				</>
@@ -206,12 +208,12 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 						sideOffset={4}
 					>
 						<div className="flex flex-col">
-							<div
-								ref={desktopScrollContainerRef}
-								className="scrollbar-y-thin flex max-h-[340px] flex-col overflow-y-auto"
+							<ScrollArea
+								viewportRef={desktopScrollContainerRef}
+								viewportClassName="max-h-[340px] [&>div]:!flex [&>div]:flex-col"
 							>
 								{mainContent}
-							</div>
+							</ScrollArea>
 						</div>
 					</DropdownMenuContent>
 				</DropdownMenu>
