@@ -103,6 +103,9 @@ use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Throwable;
 
+/**
+ * 模型网关应用服务，协调模型调用、鉴权及请求生命周期。
+ */
 class LLMAppService extends AbstractLLMAppService
 {
     /**
@@ -1874,7 +1877,7 @@ class LLMAppService extends AbstractLLMAppService
     }
 
     /**
-     * Call model using Odin.
+     * 使用 Odin 调用模型，统一思考强度优先于旧配置，均为空时沿用模型默认值。
      */
     private function callWithOdinChat(ModelInterface $odinModel, CompletionDTO $sendMsgDTO): ChatCompletionResponse|ChatCompletionStreamResponse|TextCompletionResponse
     {
@@ -1907,7 +1910,11 @@ class LLMAppService extends AbstractLLMAppService
         $chatRequest->setFrequencyPenalty($sendMsgDTO->getFrequencyPenalty());
         $chatRequest->setPresencePenalty($sendMsgDTO->getPresencePenalty());
         $chatRequest->setBusinessParams($sendMsgDTO->getBusinessParams());
-        $chatRequest->setThinking($sendMsgDTO->getThinking());
+        if ($sendMsgDTO->getReasoningEffort() !== null) {
+            $chatRequest->setReasoningEffort($sendMsgDTO->getReasoningEffort());
+        } else {
+            $chatRequest->setThinking($sendMsgDTO->getThinking());
+        }
         $chatRequest->setExtra($sendMsgDTO->getExtra() ?? []);
 
         return match ($sendMsgDTO->getCallMethod()) {
