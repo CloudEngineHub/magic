@@ -307,6 +307,7 @@ use App\Infrastructure\Design\Contract\VideoGatewayClientInterface;
 use App\Infrastructure\Design\ModelGatewayVideoGatewayClient;
 use App\Infrastructure\Design\VideoGatewayPayloadBuilder;
 use App\Infrastructure\ExternalAPI\Proxy\EmptyProxyConfigResolverInterface;
+use App\Infrastructure\ExternalAPI\Proxy\LocalProxyConfigResolver;
 use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
 use App\Infrastructure\ExternalAPI\Sms\SmsInterface;
 use App\Infrastructure\ExternalAPI\Sms\TemplateInterface;
@@ -703,5 +704,10 @@ foreach ($dependenciesPriority as $interface => $definition) {
 // regardless of the fallback bindings declared above or other provider order.
 $dependencies[AgentExecuteInterface::class] = SuperAgentMessageSubscriberV2::class;
 $dependencies[SuperAgentMessageInterface::class] = SuperAgentMessage::class;
+
+// 在服务商优先级配置合并后覆盖，仅供本地调试，避免读取数据库代理地址。
+if (\Hyperf\Support\env('APP_ENV', '') === 'local' && \Hyperf\Support\env('MODEL_GATEWAY_LOCAL_PROXY_ENABLED', false)) {
+    $dependencies[ProxyConfigResolverInterface::class] = LocalProxyConfigResolver::class;
+}
 
 return $dependencies;
