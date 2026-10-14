@@ -22,15 +22,10 @@ import { DragHandle } from "@/infrastructure/editors/tiptap/extension-drag-handl
 // --- UI Primitives ---
 import { Toolbar } from "@/components/tiptap-ui-primitive/toolbar"
 
-// --- Tiptap Node Styles ---
-import "@/components/tiptap-node/blockquote-node/blockquote-node.scss"
-import "@/components/tiptap-node/code-block-node/code-block-node.scss"
-import "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node.scss"
-import "@/components/tiptap-node/list-node/list-node.scss"
-import "@/components/tiptap-node/image-node/image-node.scss"
-import "@/components/tiptap-node/heading-node/heading-node.scss"
-import "@/components/tiptap-node/paragraph-node/paragraph-node.scss"
-import "@/components/tiptap-node/table-node/table-node.scss"
+// --- Styles ---
+// Shared with LargeMarkdownPreview; see simple-editor-styles.ts for why the markup owner
+// does not import the stylesheets directly.
+import "./simple-editor-styles"
 
 // --- Tiptap Node Extensions ---
 import { HorizontalRule } from "@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension"
@@ -62,8 +57,6 @@ import { SearchAndReplace } from "./components/SearchAndReplace"
 import type { SimpleEditorProps, SimpleEditorRef } from "./types"
 import type { EditorEvents } from "@/infrastructure/editors/tiptap/react"
 
-// --- Styles ---
-import "@/components/tiptap-templates/simple/simple-editor.scss"
 import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import { useTheme } from "@/models/config/hooks"
 
