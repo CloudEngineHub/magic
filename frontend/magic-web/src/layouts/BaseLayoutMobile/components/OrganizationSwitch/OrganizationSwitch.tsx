@@ -3,7 +3,7 @@ import { Flex } from "antd"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 
-import MagicScrollBar from "@/components/base/MagicScrollBar"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import AccountCard from "@/components/business/AccountCard"
 import { useAccount } from "@/models/user/hooks"
 import { useClusterConfig } from "@/models/config/hooks"
@@ -48,7 +48,10 @@ function OrganizationSwitchComponent(props: OrganizationSwitchProps) {
 
 	return (
 		<div className={cx(styles.container, className)} style={style}>
-			<MagicScrollBar className={styles.scrollContainer} autoHide>
+			<ScrollArea
+				className={styles.scrollContainer}
+				viewportClassName={styles.scrollViewport}
+			>
 				<Flex vertical gap={10}>
 					{accounts.map((account, accountIndex) => {
 						const platformName = getPlatformName(
@@ -70,7 +73,7 @@ function OrganizationSwitchComponent(props: OrganizationSwitchProps) {
 						)
 					})}
 				</Flex>
-			</MagicScrollBar>
+			</ScrollArea>
 		</div>
 	)
 }

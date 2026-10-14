@@ -3,9 +3,9 @@ import { createStyles } from "antd-style"
 export const useOrganizationSwitchStyles = createStyles(({ token, css, isDarkMode }) => {
 	// Base styles
 	const baseContainer = css`
-		background: ${isDarkMode
-			? token.magicColorScales?.grey?.[9]
-			: token.magicColorScales?.grey?.[0]};
+		background: ${
+			isDarkMode ? token.magicColorScales?.grey?.[9] : token.magicColorScales?.grey?.[0]
+		};
 	`
 	return {
 		// Main container
@@ -19,8 +19,14 @@ export const useOrganizationSwitchStyles = createStyles(({ token, css, isDarkMod
 		// Scroll container
 		scrollContainer: css`
 			height: 100%;
+		`,
+		scrollViewport: css`
 			padding: 10px;
-			overflow-y: auto;
+
+			/* Keep account cards within the viewport instead of Radix's intrinsic table width. */
+			& > div {
+				display: block !important;
+			}
 		`,
 	}
 })
