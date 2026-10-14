@@ -22,10 +22,10 @@ class RunTaskCallbackEvent extends AbstractEvent
         private int $taskId,
         private TopicTaskMessageDTO $taskMessage,
         private string $language,
-        private string $projectId = '',
-        private string $projectName = '',
-        private string $workspaceId = '',
-        private string $workspaceName = ''
+        private ?string $projectId = null,
+        private ?string $projectName = null,
+        private ?string $workspaceId = null,
+        private ?string $workspaceName = null
     ) {
         // Call parent constructor to generate snowflake ID
         parent::__construct();
@@ -79,22 +79,22 @@ class RunTaskCallbackEvent extends AbstractEvent
 
     public function getProjectId(): string
     {
-        return $this->projectId;
+        return $this->projectId ?? '';
     }
 
     public function getProjectName(): string
     {
-        return $this->projectName;
+        return $this->projectName ?? '';
     }
 
     public function getWorkspaceId(): string
     {
-        return $this->workspaceId;
+        return $this->workspaceId ?? '';
     }
 
     public function getWorkspaceName(): string
     {
-        return $this->workspaceName;
+        return $this->workspaceName ?? '';
     }
 
     /**
@@ -111,10 +111,10 @@ class RunTaskCallbackEvent extends AbstractEvent
             'taskMessage' => $this->taskMessage->toArray() ?? $this->taskMessage,
             'departmentIds' => $this->departmentIds,
             'language' => $this->language,
-            'projectId' => $this->projectId,
-            'projectName' => $this->projectName,
-            'workspaceId' => $this->workspaceId,
-            'workspaceName' => $this->workspaceName,
+            'projectId' => $this->getProjectId(),
+            'projectName' => $this->getProjectName(),
+            'workspaceId' => $this->getWorkspaceId(),
+            'workspaceName' => $this->getWorkspaceName(),
         ];
     }
 

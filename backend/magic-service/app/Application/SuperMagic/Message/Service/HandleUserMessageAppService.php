@@ -20,6 +20,7 @@ use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMountPlanner;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMountService;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
+use App\Application\SuperMagic\Task\Service\TaskNotificationLabelResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Application\SuperMagic\Topic\Service\TopicAgentConfigResolver;
 use App\Domain\Chat\DTO\Message\ChatMessage\UserToolCallMessage;
@@ -50,7 +51,6 @@ use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
-use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\ErrorCode\EventErrorCode;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\ErrorCode\SuperMagicErrorCode;
@@ -798,34 +798,11 @@ class HandleUserMessageAppService extends AbstractAppService
                 ],
             ]);
 
-            $projectIdValue = $taskEntity->getProjectId();
-            if ($projectIdValue <= 0) {
-                $projectIdValue = $projectEntity->getId();
-            }
-            $projectId = (string) $projectIdValue;
-            $projectName = trim($projectEntity->getProjectName());
-            $workspaceIdValue = $topicEntity->getWorkspaceId() ?? 0;
-            if ($workspaceIdValue <= 0) {
-                $workspaceIdValue = $taskEntity->getWorkspaceId();
-            }
-            $workspaceId = (string) $workspaceIdValue;
-            if ((int) $workspaceId <= 0 && ($projectEntity->getWorkspaceId() ?? 0) > 0) {
-                $workspaceId = (string) $projectEntity->getWorkspaceId();
-            }
-            $workspaceName = '';
-            if ((int) $workspaceId > 0) {
-                try {
-                    $workspaceName = trim(
-                        di(WorkspaceDomainService::class)->getWorkspaceDetail((int) $workspaceId)?->getName() ?? ''
-                    );
-                } catch (Throwable $labelError) {
-                    $this->logger->warning('Resolve failed chat task notification workspace label failed', [
-                        'task_id' => $taskEntity->getId(),
-                        'workspace_id' => $workspaceId,
-                        'error' => $labelError->getMessage(),
-                    ]);
-                }
-            }
+            $labels = di(TaskNotificationLabelResolver::class)->resolve(
+                task: $taskEntity,
+                topic: $topicEntity,
+                project: $projectEntity,
+            );
 
             AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
                 $dataIsolation->getCurrentOrganizationCode(),
@@ -835,10 +812,10 @@ class HandleUserMessageAppService extends AbstractAppService
                 $taskEntity->getId(),
                 $messageDTO,
                 $dataIsolation->getLanguage() ?? '',
-                $projectId,
-                $projectName,
-                $workspaceId,
-                $workspaceName
+                $labels['project_id'],
+                $labels['project_name'],
+                $labels['workspace_id'],
+                $labels['workspace_name']
             ));
         } catch (Throwable $dispatchError) {
             $this->logger->error('Failed to dispatch error callback event for failed chat task', [

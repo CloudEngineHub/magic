@@ -9,6 +9,7 @@ use App\Application\Notification\Contract\NotificationEventPublisherInterface;
 use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Application\SuperMagic\Task\Event\Subscribe\TaskNotificationSubscriber;
+use App\Application\SuperMagic\Task\Service\TaskNotificationLabelResolver;
 use App\Domain\Notification\Service\NotificationEventTypeRegistry;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\MessagePayload;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageMetadata;
@@ -286,15 +287,23 @@ final class TaskNotificationSubscriberTest extends TestCase
             $workspace->method('getName')->willReturn('Workspace');
             $workspaceService = $this->createMock(WorkspaceDomainService::class);
             $workspaceService->method('getWorkspaceDetail')->willReturn($workspace);
+            $labelResolver = new TaskNotificationLabelResolver(
+                $topicService,
+                $projectService,
+                $workspaceService,
+                $loggerFactory
+            );
 
             $container->method('get')->willReturnCallback(static function (string $id) use (
                 $publisher,
+                $labelResolver,
                 $topicService,
                 $projectService,
                 $workspaceService,
             ): object {
                 return match ($id) {
                     NotificationEventPublisherInterface::class => $publisher,
+                    TaskNotificationLabelResolver::class => $labelResolver,
                     TopicDomainService::class => $topicService,
                     ProjectDomainService::class => $projectService,
                     WorkspaceDomainService::class => $workspaceService,
