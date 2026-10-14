@@ -13,6 +13,7 @@ import { getMCPAccess, loadMCPWithInstalledConnectorReconciliation } from "../st
 import { mcpEnabledStore } from "../store/mcp-enabled-store"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { IconMCP } from "@/enhance/tabler/icons-react"
 import { MobileShellIconButton } from "@/pages/superMagicMobile/components/MobileShell"
 import { SmoothTabs, type Tab } from "@/components/shadcn-ui/smooth-tabs"
@@ -317,8 +318,7 @@ function MobileMCPPluginsSheet({
 					<button
 						type="button"
 						onClick={onClose}
-						className="absolute left-2.5 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-card"
-						style={{ boxShadow: "0px 8px 25px 0px rgba(0,0,0,0.10)" }}
+						className="absolute left-2.5 top-1/2 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-card shadow-[0px_8px_25px_0px_rgba(0,0,0,0.10)]"
 						aria-label={t("common.auth.cancel")}
 						data-testid="mobile-mcp-plugins-sheet-close-button"
 					>
@@ -363,7 +363,10 @@ function MobileMCPPluginsSheet({
 							<IconLoader2 className="size-5 animate-spin text-muted-foreground" />
 						</div>
 					) : activeTab === CONNECTOR_MARKET_GROUPS.added ? (
-						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 pt-3">
+						<ScrollArea
+							className="min-h-0 flex-1"
+							viewportClassName="pl-1.5 pr-3 py-3 [&>div]:!block [&>div]:min-h-full"
+						>
 							{displayMCPList.length > 0 ? (
 								<div className="flex flex-col gap-2">
 									{displayMCPList.map((item) => (
@@ -413,7 +416,7 @@ function MobileMCPPluginsSheet({
 									</Button>
 								</div>
 							)}
-						</div>
+						</ScrollArea>
 					) : marketLoading && marketList.length === 0 ? (
 						<div
 							className="flex min-h-0 flex-1 items-center justify-center"
@@ -431,7 +434,10 @@ function MobileMCPPluginsSheet({
 							</Button>
 						</div>
 					) : (
-						<div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 pt-3">
+						<ScrollArea
+							className="min-h-0 flex-1"
+							viewportClassName="pl-1.5 pr-3 py-3 [&>div]:!block [&>div]:min-h-full"
+						>
 							{marketList.length > 0 ? (
 								<>
 									<div className="flex flex-col gap-2">
@@ -472,7 +478,7 @@ function MobileMCPPluginsSheet({
 									{tMarket("connectors.empty")}
 								</div>
 							)}
-						</div>
+						</ScrollArea>
 					)}
 				</div>
 			</div>
