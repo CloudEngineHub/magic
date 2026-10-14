@@ -202,14 +202,30 @@ instructions call these tools through `run_sdk_snippet` with `sdk.tool.call(...)
 | `connect_wecom_bot` | Connect to a WeCom bot |
 | `get_im_channel_status` | Get IM channel connection status |
 
-### Design Canvas
+### Canvas (Code Mode Only)
+
+For content creation and design employees, configure `SKILLS.md` as follows and keep code execution enabled:
+
+```yaml
+skills:
+  system_skills:
+    - name: canvas-manager
+```
+
+Load `canvas-manager` before using Canvas. Call these tools through the automatically provided `run_sdk_snippet`; do not add their names or `run_sdk_snippet` to `TOOLS.md`. Follow the skill for generation parameters and waiting.
 
 | Tool | Description |
 |------|-------------|
-| `create_canvas` | Create a canvas project |
-| `generate_canvas_images` | Generate images directly to canvas |
-| `generate_canvas_videos` | Generate videos directly to canvas |
-| `search_images_to_canvas` | Search and add images to canvas |
+| `initialize_canvas` | Create or reuse a Canvas project |
+| `add_canvas_elements` | Import assets or create elements with generated content |
+| `add_canvas_contents` | Add content candidates to existing elements |
+| `wait_canvas_generation` | Wait for generation results |
+| `query_canvas_overview` | Inspect current Canvas elements |
+| `query_canvas_element_details` | Inspect exact element content and state |
+| `search_canvas_image_candidates` | Search and import reference images |
+| `search_canvas_image_prompts` | Search the shared prompt library |
+
+Keep ordinary `generate_images` for internal image tasks that do not require Canvas.
 
 ### Data Dashboard
 

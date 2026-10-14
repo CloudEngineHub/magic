@@ -177,6 +177,8 @@ Contains YAML header (tool whitelist) and optional body (tool usage preferences)
 - Recommend tool combinations based on employee function
 - Special tool usage preferences go in the body section
 
+For employees creating images, videos, or Canvas content, configure the `canvas-manager` system skill in `SKILLS.md` and keep code execution enabled. Load that skill, then use `initialize_canvas` and the generation workflow through `run_sdk_snippet`. Canvas tools are Code Mode only; do not put them in `TOOLS.md`. The runtime provides `run_sdk_snippet` automatically. See `references/available-tools.md` for the skill configuration.
+
 ## Tool Management Workflow
 
 When users want to add or remove tools:

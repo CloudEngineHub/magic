@@ -1,6 +1,6 @@
 """通用模式视频生成工具。
 
-画布视频由 ``generate_canvas_videos`` 负责；本工具只负责创建普通视频任务。
+画布视频按 ``canvas-manager`` Skill 的正式流程生成；本工具只负责创建普通视频任务。
 """
 
 from __future__ import annotations
