@@ -148,7 +148,8 @@ class AdminAssetAppService extends AbstractAssetAppService
         $deleted = $this->assetDomainService->deletePublic($dataIsolation, $assetId);
         if ($deleted) {
             // 资产行已删除，授权记录不能悬空，否则权限台会显示一条指向不存在资产的授权。
-            $this->revokeAssetVisibility($dataIsolation, $assetId, $this->publicVisibility($dataIsolation));
+            // 按资源整体清理，避免公开素材曾追加的其他主体记录残留。
+            $this->clearAssetVisibility($dataIsolation, $assetId);
         }
         return $deleted;
     }

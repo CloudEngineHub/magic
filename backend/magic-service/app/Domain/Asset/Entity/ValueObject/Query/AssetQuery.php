@@ -50,7 +50,6 @@ class AssetQuery
      */
     private array $sharedAssetIds = [];
 
-
     public function getKeyword(): ?string
     {
         return $this->keyword;
@@ -179,5 +178,4 @@ class AssetQuery
     {
         $this->sharedAssetIds = array_values($sharedAssetIds);
     }
-
 }

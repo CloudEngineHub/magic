@@ -360,7 +360,8 @@ class AssetAppService extends AbstractAssetAppService
         $deleted = $this->assetDomainService->deletePersonal($dataIsolation, $assetId);
         if ($deleted) {
             // 资产行已删除，授权记录不能悬空，否则权限台会显示一条指向不存在资产的授权。
-            $this->revokeAssetVisibility($dataIsolation, $assetId, AssetVisibility::personal());
+            // 素材可能已分享给其他用户/部门，按主体撤销会漏掉别人，这里按资源整体清理。
+            $this->clearAssetVisibility($dataIsolation, $assetId);
         }
         return $deleted;
     }
@@ -371,8 +372,8 @@ class AssetAppService extends AbstractAssetAppService
         $dataIsolation = $this->createAssetDataIsolation($authorization);
         $deletedIds = $this->assetDomainService->deletePersonalBatch($dataIsolation, $assetIds);
         foreach ($deletedIds as $assetId) {
-            // 资产行已删除，授权记录不能悬空。
-            $this->revokeAssetVisibility($dataIsolation, $assetId, AssetVisibility::personal());
+            // 资产行已删除，授权记录不能悬空：按资源整体清理，避免其他用户/部门的分享记录残留。
+            $this->clearAssetVisibility($dataIsolation, $assetId);
         }
         return $deletedIds;
     }

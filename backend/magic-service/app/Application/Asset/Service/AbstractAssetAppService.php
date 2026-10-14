@@ -62,7 +62,27 @@ abstract class AbstractAssetAppService extends AbstractKernelAppService
     }
 
     /**
-     * 撤销资产可见性（资产删除、官方公开资产下架时调用），写入目标与授权时一一对应。
+     * 清理资产的全部可见性记录（资产删除时调用）。
+     *
+     * 删除是资源行的终点，此时不能按主体撤销：团队分享给其他用户或部门的记录不归当前用户所有，
+     * 按当前用户/官方组织撤销会漏掉它们，在 magic_resource_visibility 里留下指向已删除资产的悬空授权。
+     * 所以这里按资源一次性清空，主体类型和主体 ID 都不参与条件。
+     */
+    protected function clearAssetVisibility(AssetDataIsolation $dataIsolation, null|AssetEntity|int|string $asset): void
+    {
+        $assetCode = $this->assetResourceCode($asset);
+        if ($assetCode === '') {
+            return;
+        }
+        $this->resourceVisibilityDomainService->deleteResourceVisibility(
+            $this->permissionDataIsolation($dataIsolation),
+            ResourceType::ASSET,
+            $assetCode,
+        );
+    }
+
+    /**
+     * 撤销资产可见性（官方公开资产下架时调用），写入目标与授权时一一对应。
      */
     protected function revokeAssetVisibility(
         AssetDataIsolation $dataIsolation,

@@ -686,22 +686,45 @@ final class AssetAppServiceTest extends TestCase
         }
     }
 
-    public function testPersonalAssetDeletionRevokesOwnerVisibility(): void
+    /**
+     * 素材可能已分享给其他用户/部门，删除时必须按资源清空全部主体记录，不能只撤当前用户那一条。
+     */
+    public function testPersonalAssetDeletionClearsAllVisibilityOfResource(): void
     {
         $authorization = $this->realAssetDataIsolation('org-a', 'user-1');
         $domainService = $this->createMock(AssetDomainService::class);
         $domainService->method('deletePersonal')->willReturn(true);
 
         $repository = $this->createMock(ResourceVisibilityRepositoryInterface::class);
-        $repository->expects(self::once())->method('deleteByResourceAndPrincipals')->with(
+        $repository->expects(self::never())->method('deleteByResourceAndPrincipals');
+        $repository->expects(self::once())->method('deleteByResourceCode')->with(
             self::isInstanceOf(PermissionDataIsolation::class),
             ResourceType::ASSET,
             '9',
-            PrincipalType::USER,
-            ['user-1'],
-        )->willReturn(1);
+        )->willReturn(true);
 
         self::assertTrue($this->assetService($domainService, $repository)->deletePersonalAsset($authorization, 9));
+    }
+
+    public function testBatchPersonalAssetDeletionClearsAllVisibilityOfEachResource(): void
+    {
+        $authorization = $this->realAssetDataIsolation('org-a', 'user-1');
+        $domainService = $this->createMock(AssetDomainService::class);
+        $domainService->method('deletePersonalBatch')->willReturn(['9', '10']);
+
+        $cleared = [];
+        $repository = $this->createMock(ResourceVisibilityRepositoryInterface::class);
+        $repository->expects(self::exactly(2))->method('deleteByResourceCode')
+            ->willReturnCallback(static function (...$arguments) use (&$cleared): bool {
+                $cleared[] = $arguments[2];
+                return true;
+            });
+
+        self::assertSame(
+            ['9', '10'],
+            $this->assetService($domainService, $repository)->batchDeletePersonalAssets($authorization, [9, 10]),
+        );
+        self::assertSame(['9', '10'], $cleared);
     }
 
     public function testFailedPersonalAssetDeletionKeepsVisibility(): void
@@ -712,7 +735,7 @@ final class AssetAppServiceTest extends TestCase
 
         // 资产没删掉（不是本人资产或不存在），授权记录必须原样保留。
         $repository = $this->createMock(ResourceVisibilityRepositoryInterface::class);
-        $repository->expects(self::never())->method('deleteByResourceAndPrincipals');
+        $repository->expects(self::never())->method('deleteByResourceCode');
 
         self::assertFalse($this->assetService($domainService, $repository)->deletePersonalAsset($authorization, 9));
     }
@@ -741,20 +764,19 @@ final class AssetAppServiceTest extends TestCase
         ));
     }
 
-    public function testPublicAssetDeletionRevokesOfficialOrganizationVisibility(): void
+    public function testPublicAssetDeletionClearsAllVisibilityOfResource(): void
     {
         $authorization = $this->realAssetDataIsolation('official-org', 'admin-1', true);
         $domainService = $this->createMock(AssetDomainService::class);
         $domainService->method('deletePublic')->willReturn(true);
 
         $repository = $this->createMock(ResourceVisibilityRepositoryInterface::class);
-        $repository->expects(self::once())->method('deleteByResourceAndPrincipals')->with(
+        $repository->expects(self::never())->method('deleteByResourceAndPrincipals');
+        $repository->expects(self::once())->method('deleteByResourceCode')->with(
             self::isInstanceOf(PermissionDataIsolation::class),
             ResourceType::ASSET,
             '21',
-            PrincipalType::ORGANIZATION,
-            ['official-org'],
-        )->willReturn(1);
+        )->willReturn(true);
 
         self::assertTrue($this->adminAssetService($domainService, $repository)->deletePublicAsset($authorization, 21));
     }

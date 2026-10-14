@@ -244,5 +244,4 @@ class ResourceVisibilityRepository extends MagicAbstractRepository implements Re
 
         return $list;
     }
-
 }

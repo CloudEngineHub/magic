@@ -100,5 +100,4 @@ interface ResourceVisibilityRepositoryInterface
      * @return array<ResourceVisibilityEntity>
      */
     public function listByResources(PermissionDataIsolation $dataIsolation, ResourceType $resourceType, array $resourceCodes): array;
-
 }
