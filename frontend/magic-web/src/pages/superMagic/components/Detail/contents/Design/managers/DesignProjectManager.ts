@@ -1900,6 +1900,11 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			} catch {
 				// 读取失败时保留原基准，重试仍需通过当前正文检查。
 			}
+			if (
+				saveResult.fileId !== this.stateBag.getMagicProjectJsFileId() ||
+				saveResult.accessIdentity !== getDesignRequestIdentity(this.options)
+			)
+				return
 			const fileId = this.stateBag.getMagicProjectJsFileId()
 			if (!fileId) return
 			const currentPending = this.stateBag.getPendingDesignUpgrade?.()
