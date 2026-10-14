@@ -3,6 +3,7 @@ import { forwardRef, type ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import EditorBody from "."
 import { formatLongCurlDataRawForPreview } from "./components/CodeSourceEditor/preview-content"
+import { LARGE_MARKDOWN_THRESHOLD_BYTES } from "./largeMarkdown"
 
 const codeSourceEditorProps = vi.hoisted(() => vi.fn())
 const simpleEditorProps = vi.hoisted(() => vi.fn())
@@ -135,12 +136,12 @@ describe("EditorBody code source content", () => {
 		await waitFor(() => expect(screen.getByTestId("simple-editor")).toBeInTheDocument())
 	})
 
-	it("uses the virtual preview for read-only markdown larger than 3 MB", () => {
+	it("uses the virtual preview for read-only markdown at or above the large threshold", () => {
 		render(
 			<EditorBody
 				isLoading={false}
 				viewMode="desktop"
-				content={"a".repeat(3 * 1024 * 1024 + 1)}
+				content={"a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES)}
 			/>,
 		)
 
@@ -148,8 +149,20 @@ describe("EditorBody code source content", () => {
 		expect(screen.queryByTestId("simple-editor")).not.toBeInTheDocument()
 	})
 
+	it("keeps the rich editor for markdown just below the large threshold", async () => {
+		render(
+			<EditorBody
+				isLoading={false}
+				viewMode="desktop"
+				content={"a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES - 1)}
+			/>,
+		)
+
+		await waitFor(() => expect(screen.getByTestId("simple-editor")).toBeInTheDocument())
+	})
+
 	it("forces large markdown editing through the source editor", () => {
-		const content = "a".repeat(3 * 1024 * 1024 + 1)
+		const content = "a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES)
 		render(
 			<EditorBody
 				isLoading={false}

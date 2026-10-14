@@ -1,6 +1,12 @@
 import { slugify } from "@/utils/slug"
 
-export const LARGE_MARKDOWN_THRESHOLD_BYTES = 3 * 1024 * 1024
+export const LARGE_MARKDOWN_THRESHOLD_BYTES = 1 * 1024 * 1024
+
+// The threshold is inclusive: a document whose UTF-8 size is exactly
+// LARGE_MARKDOWN_THRESHOLD_BYTES already counts as large. Every comparison below is
+// expressed against the exclusive limit so the O(1) fast paths stay valid and the
+// boundary only has to be changed in one place.
+const LARGE_MARKDOWN_EXCLUSIVE_LIMIT_BYTES = LARGE_MARKDOWN_THRESHOLD_BYTES - 1
 
 const TARGET_CHUNK_SIZE = 48 * 1024
 const MAX_CHUNK_SIZE = 96 * 1024
@@ -49,9 +55,9 @@ export function exceedsUtf8ByteLimit(content: string, limit: number): boolean {
 export function isLargeMarkdownContent(content: string): boolean {
 	// ASCII-heavy generated documents can be classified in O(1). Only the ambiguous
 	// multi-byte range needs the exact UTF-8 scan.
-	if (content.length > LARGE_MARKDOWN_THRESHOLD_BYTES) return true
-	if (content.length * 3 <= LARGE_MARKDOWN_THRESHOLD_BYTES) return false
-	return exceedsUtf8ByteLimit(content, LARGE_MARKDOWN_THRESHOLD_BYTES)
+	if (content.length > LARGE_MARKDOWN_EXCLUSIVE_LIMIT_BYTES) return true
+	if (content.length * 3 <= LARGE_MARKDOWN_EXCLUSIVE_LIMIT_BYTES) return false
+	return exceedsUtf8ByteLimit(content, LARGE_MARKDOWN_EXCLUSIVE_LIMIT_BYTES)
 }
 
 function normalizeHeadingText(value: string): string {
