@@ -8,6 +8,7 @@ import {
 	type CSSProperties,
 	type MutableRefObject,
 } from "react"
+import type { AssetItem } from "@/apis"
 import { ArrowUp, LoaderCircle } from "lucide-react"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasModeUI } from "../../../../app/providers/CanvasUIProvider"
@@ -15,9 +16,10 @@ import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useHostUiLocale } from "../../../../app/providers/HostUiLocaleProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
 import type { ImageElement } from "../../../../runtime/document/types"
-import type {
-	ReferenceResourceFileInfo,
-	ReferenceResourceSourceType,
+import {
+	REFERENCE_RESOURCE_SOURCE_TYPES,
+	type ReferenceResourceFileInfo,
+	type ReferenceResourceSourceType,
 } from "../../../editors/message/reference-assets/reference-resource.types"
 import type {
 	ReferenceResourcePanelItem,
@@ -55,7 +57,8 @@ import { Button } from "../../../primitives/shadcn/button"
 import { FloatingSurfaceScope } from "../../../primitives/shadcn/popover"
 import { useBottomFloatingSurface } from "../../../../app/providers/BottomFloatingStackProvider"
 import ImageEditorControls from "./ImageEditorControls"
-import type { ImageEditorConfig } from "./useImageEditorConfig"
+import type { ImageEditorConfig, ImageReferenceSlotInfo } from "./useImageEditorConfig"
+import { applyImportedAssetsToImageSlots } from "./assetsSelection"
 import styles from "./index.module.css"
 import type { MediaResourceFullscreenPreviewItem } from "../../../fullscreen/media-resource/index"
 import LinkedEditorInputsBar from "../../../editors/connection/LinkedEditorInputsBar"
@@ -94,6 +97,7 @@ import {
 	type CanvasClipboardAsset,
 } from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
 import { collectImageEditorExistingClipboardResourceKeys } from "../../../../runtime/resources/clipboard/collectMediaEditorExistingClipboardResourceKeys"
+import AssetsModal from "../../../toolbar/AssetsModal"
 
 import {
 	createPromptPlaceholderTokenFactory,
@@ -120,6 +124,13 @@ interface ImageEditorSurfaceProps {
 	style?: CSSProperties
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	isMediaResourcePreviewOpen?: boolean
+}
+
+interface ImageAssetSelectionSession {
+	elementId: string
+	contentId: string | null
+	selectionPersistenceKey: string
+	slot: ImageReferenceSlotInfo
 }
 
 /** 只有权威 resolver 确认删除的引用阻塞提交；上传 pending 窗口内保持可恢复。 */
@@ -213,6 +224,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const [hasScrollbar, setHasScrollbar] = useState(false)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
 	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
+	const [assetsModalOpen, setAssetsModalOpen] = useState(false)
+	const [assetSelectionSlot, setAssetSelectionSlot] = useState<ImageReferenceSlotInfo | null>(
+		null,
+	)
+	const assetSelectionSessionRef = useRef<ImageAssetSelectionSession | null>(null)
 	const [, forceResourceStateRefresh] = useState(0)
 	const {
 		prompt,
@@ -357,21 +373,133 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleSelectSource = useCallback(
 		(source: ReferenceResourceSourceType) => {
-			if (source !== "local-upload") return
-			handlers.setPopoverOpen(false)
-			if (
-				!config.selectedReferenceSlot?.path &&
-				(config.isReferenceFileLimitReached || effectiveIsReferenceFileLimitReached)
-			) {
+			if (source === "local-upload") {
+				handlers.setPopoverOpen(false)
+				if (
+					!config.selectedReferenceSlot?.path &&
+					(config.isReferenceFileLimitReached || effectiveIsReferenceFileLimitReached)
+				) {
+					return
+				}
+				handlers.triggerFileSelect()
 				return
 			}
-			handlers.triggerFileSelect()
+			if (source !== REFERENCE_RESOURCE_SOURCE_TYPES.assets || readOnly || !canvas) return
+			const selectedSlot = config.selectedReferenceSlot
+			if (!selectedSlot || maxReferenceFiles === undefined || maxReferenceFiles <= 0) return
+
+			// Capture the slot and content session before closing the popover. The
+			// library confirmation is asynchronous and must not target a new edit.
+			const capturedSlot = { ...selectedSlot }
+			setAssetSelectionSlot(capturedSlot)
+			assetSelectionSessionRef.current = {
+				elementId: imageElement.id,
+				contentId: imageElement.activeContentId ?? null,
+				selectionPersistenceKey,
+				slot: capturedSlot,
+			}
+			handlers.setPopoverOpen(false)
+			setAssetsModalOpen(true)
 		},
 		[
+			canvas,
 			config.isReferenceFileLimitReached,
-			config.selectedReferenceSlot?.path,
+			config.selectedReferenceSlot,
 			effectiveIsReferenceFileLimitReached,
 			handlers,
+			imageElement.activeContentId,
+			imageElement.id,
+			maxReferenceFiles,
+			readOnly,
+			selectionPersistenceKey,
+		],
+	)
+
+	const assetSelectionMaxCount = useMemo(() => {
+		if (!assetSelectionSlot || maxReferenceFiles === undefined) return 0
+		return Math.max(
+			0,
+			maxReferenceFiles -
+				effectiveCurrentReferenceFiles.length +
+				(assetSelectionSlot.path ? 1 : 0),
+		)
+	}, [assetSelectionSlot, effectiveCurrentReferenceFiles.length, maxReferenceFiles])
+
+	const isAssetSelectionCurrent = useCallback(() => {
+		const session = assetSelectionSessionRef.current
+		if (!session || !isMountedRef.current || !canvas || canvas.isDestroyed) return false
+		if (
+			session.elementId !== imageElement.id ||
+			session.selectionPersistenceKey !== selectionPersistenceKey
+		)
+			return false
+
+		const currentElement = canvas.elementManager.getElementData(imageElement.id)
+		if (
+			currentElement?.type !== imageElement.type ||
+			(currentElement?.activeContentId ?? null) !== session.contentId
+		)
+			return false
+
+		const currentSlot = config.selectedReferenceSlot
+		return (
+			currentSlot !== null &&
+			currentSlot.slotIndex === session.slot.slotIndex &&
+			currentSlot.slotKey === session.slot.slotKey &&
+			currentSlot.path === session.slot.path
+		)
+	}, [
+		canvas,
+		config.selectedReferenceSlot,
+		imageElement.id,
+		imageElement.type,
+		selectionPersistenceKey,
+	])
+
+	const handleAssetsModalClose = useCallback(() => {
+		setAssetsModalOpen(false)
+		setAssetSelectionSlot(null)
+		assetSelectionSessionRef.current = null
+	}, [])
+
+	useEffect(() => {
+		if (!assetsModalOpen || assetSelectionMaxCount > 0) return
+		// A model/content change can remove the capacity captured when the dialog
+		// opened; clear the stale session instead of leaving a hidden modal armed.
+		handleAssetsModalClose()
+	}, [assetSelectionMaxCount, assetsModalOpen, handleAssetsModalClose])
+
+	const handleAssetsConfirm = useCallback(
+		async (assets: AssetItem[]) => {
+			if (!canvas || !assetSelectionSlot || assets.length === 0) {
+				throw new Error("Asset selection context is unavailable")
+			}
+			if (!isAssetSelectionCurrent()) throw new Error("Asset selection session is stale")
+
+			const imported = await canvas.assetImportManager.importAndConnectMany({
+				assetIds: assets.map((asset) => asset.asset_id),
+				targetElementId: imageElement.id,
+				targetKind: "image-generator",
+				slot: { kind: "reference" },
+				allowedMediaTypes: ["image"],
+				isCurrent: isAssetSelectionCurrent,
+			})
+			if (!isAssetSelectionCurrent()) throw new Error("Asset selection session is stale")
+
+			applyImportedAssetsToImageSlots({
+				slot: assetSelectionSlot,
+				imported,
+				currentReferenceFileCount: currentReferenceFiles.length,
+				handlers,
+			})
+		},
+		[
+			assetSelectionSlot,
+			canvas,
+			currentReferenceFiles.length,
+			handlers,
+			imageElement.id,
+			isAssetSelectionCurrent,
 		],
 	)
 
@@ -867,6 +995,16 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					sourceListContainer={sourceListContainer}
 				/>
 			</ReferenceResourceDropSurface>
+			{assetSelectionSlot && assetSelectionMaxCount > 0 ? (
+				<AssetsModal
+					open={assetsModalOpen}
+					onClose={handleAssetsModalClose}
+					onConfirmMultiple={handleAssetsConfirm}
+					mediaTypes={["IMAGE"]}
+					multiple
+					maxCount={assetSelectionMaxCount}
+				/>
+			) : null}
 		</FloatingSurfaceScope>
 	)
 }

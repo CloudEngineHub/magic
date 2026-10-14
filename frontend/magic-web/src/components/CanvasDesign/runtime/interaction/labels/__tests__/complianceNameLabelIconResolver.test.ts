@@ -5,6 +5,7 @@ import { complianceNameLabelIconResolver } from "../complianceNameLabelIconResol
 function resolve(options: {
 	status?: "UNVERIFIED" | "PROCESSING" | "PASS" | "FAILED"
 	isAssetLibrary?: boolean
+	failedReason?: string
 }) {
 	return complianceNameLabelIconResolver({
 		elementId: "image-1",
@@ -14,6 +15,7 @@ function resolve(options: {
 		hovered: false,
 		isAssetLibrary: options.isAssetLibrary ?? false,
 		complianceStatus: options.status,
+		complianceFailedReason: options.failedReason,
 	})
 }
 
@@ -39,18 +41,22 @@ describe("complianceNameLabelIconResolver", () => {
 		})
 	})
 
-	it("falls back to the asset-library icon for unchecked or failed assets", () => {
+	it("uses a failure shield for failed assets before the asset-library fallback", () => {
 		expect(resolve({ status: "UNVERIFIED", isAssetLibrary: true })).toMatchObject({
 			key: "asset-library",
 		})
-		expect(resolve({ status: "FAILED", isAssetLibrary: true })).toMatchObject({
-			key: "asset-library",
+		expect(
+			resolve({ status: "FAILED", isAssetLibrary: true, failedReason: "blocked" }),
+		).toMatchObject({
+			key: "compliance-failed",
 		})
 	})
 
-	it("does not show an icon for unbound media without compliance", () => {
+	it("does not show an icon for unverified media", () => {
 		expect(resolve({ status: "UNVERIFIED" })).toBeNull()
-		expect(resolve({ status: "FAILED" })).toBeNull()
+		expect(resolve({ status: "FAILED", failedReason: "blocked" })).toMatchObject({
+			key: "compliance-failed",
+		})
 	})
 
 	it("creates non-hit-tested Konva icon nodes", () => {

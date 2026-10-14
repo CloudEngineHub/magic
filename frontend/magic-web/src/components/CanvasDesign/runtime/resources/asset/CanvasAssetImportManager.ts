@@ -40,12 +40,25 @@ import {
 export { getAssetUploadSubDir } from "./assetMediaBinding"
 
 export type CanvasAssetImportSlot = { kind: "frame" } | { kind: "reference" }
+export type CanvasAssetImportTargetKind = "image-generator" | "video-generator"
 
-export interface CanvasAssetImportRequest {
-	assetId: string
+interface CanvasAssetImportCommonRequest {
 	targetElementId: string
+	targetKind: CanvasAssetImportTargetKind
 	slot: CanvasAssetImportSlot
 	allowedMediaTypes: readonly CanvasAssetMediaType[]
+}
+
+export interface CanvasAssetImportRequest extends CanvasAssetImportCommonRequest {
+	assetId: string
+	/** 可选的会话守卫；资源准备期间编辑器退出时，避免提交过期结果。 */
+	isCurrent?: () => boolean
+}
+
+export interface CanvasAssetImportManyRequest extends CanvasAssetImportCommonRequest {
+	assetIds: readonly string[]
+	/** 可选的会话守卫；资源准备期间编辑器退出时，避免提交过期结果。 */
+	isCurrent?: () => boolean
 }
 
 export interface CanvasAssetImportResult {
@@ -210,10 +223,43 @@ function getElementName(fileName: string, mediaType: CanvasAssetMediaType): stri
 	return fileName.replace(/\.[^/.]+$/, "") || mediaType
 }
 
+function normalizeAssetIds(assetIds: readonly string[]): string[] {
+	return Array.from(new Set(assetIds.map((assetId) => assetId.trim()).filter(Boolean)))
+}
+
+function validateImportRequest(request: CanvasAssetImportCommonRequest): void {
+	if (request.allowedMediaTypes.length === 0) {
+		throw new Error("No asset media type is allowed for this slot")
+	}
+
+	if (
+		request.targetKind === "image-generator" &&
+		(request.slot.kind !== "reference" ||
+			request.allowedMediaTypes.some((mediaType) => mediaType !== "image"))
+	) {
+		throw new Error("Image generator asset imports only support image references")
+	}
+}
+
+function assertImportTarget(
+	canvas: Canvas,
+	targetElementId: string,
+	targetKind: CanvasAssetImportTargetKind,
+): void {
+	const target = canvas.elementManager.getElementData(targetElementId)
+	const expectedType =
+		targetKind === "image-generator" ? ElementTypeEnum.Image : ElementTypeEnum.Video
+	if (target?.type === expectedType) return
+
+	const targetLabel = targetKind === "image-generator" ? "image" : "video"
+	throw new Error(`Asset import target ${targetLabel} is unavailable`)
+}
+
 /** 将素材服务中的逻辑资源导入当前 Canvas，并创建可参与编辑器关联的媒体元素。 */
 export class CanvasAssetImportManager {
 	private readonly importPromises = new Map<string, Promise<PreparedAssetMedia>>()
 	private readonly connectionPromises = new Map<string, Promise<CanvasAssetImportResult>>()
+	private readonly batchConnectionPromises = new Map<string, Promise<CanvasAssetImportResult[]>>()
 	private destroyed = false
 
 	constructor(private readonly canvas: Canvas) {}
@@ -222,7 +268,7 @@ export class CanvasAssetImportManager {
 		request: CanvasAssetImportRequest,
 	): Promise<CanvasAssetImportResult> {
 		const assetId = request.assetId.trim()
-		const connectionKey = `${request.targetElementId}\u0000${assetId}`
+		const connectionKey = `${request.targetElementId}\u0000${request.targetKind}\u0000${assetId}`
 		const existingConnectionPromise = this.connectionPromises.get(connectionKey)
 		if (existingConnectionPromise) {
 			const result = await existingConnectionPromise
@@ -265,22 +311,51 @@ export class CanvasAssetImportManager {
 		}
 	}
 
+	/**
+	 * 批量导入素材并建立连接。
+	 *
+	 * 素材准备可能跨越异步下载和上传，因此只把画布节点与连接放进事务；
+	 * 任一节点或连接失败都会回滚本批新建的画布对象，不污染参考图状态。
+	 */
+	public async importAndConnectMany(
+		request: CanvasAssetImportManyRequest,
+	): Promise<CanvasAssetImportResult[]> {
+		const assetIds = normalizeAssetIds(request.assetIds)
+		if (assetIds.length === 0) throw new Error("At least one asset id is required")
+
+		const connectionKey = [request.targetElementId, request.targetKind, ...assetIds].join(
+			"\u0000",
+		)
+		const existingConnectionPromise = this.batchConnectionPromises.get(connectionKey)
+		if (existingConnectionPromise) {
+			const results = await existingConnectionPromise
+			return results.map((result) => ({ ...result, source: "existing-connection" }))
+		}
+
+		const connectionPromise = this.importAndConnectManyInternal({ ...request, assetIds })
+		this.batchConnectionPromises.set(connectionKey, connectionPromise)
+		try {
+			return await connectionPromise
+		} finally {
+			if (this.batchConnectionPromises.get(connectionKey) === connectionPromise) {
+				this.batchConnectionPromises.delete(connectionKey)
+			}
+		}
+	}
+
 	private async importAndConnectInternal(
 		request: CanvasAssetImportRequest,
 	): Promise<CanvasAssetImportResult> {
 		if (this.destroyed) throw new Error("Canvas asset import manager destroyed")
 		const assetId = request.assetId.trim()
 		if (!assetId) throw new Error("Asset id is required")
-		if (request.allowedMediaTypes.length === 0) {
-			throw new Error("No asset media type is allowed for this slot")
-		}
+		validateImportRequest(request)
+		assertImportTarget(this.canvas, request.targetElementId, request.targetKind)
 
 		const prepared = await this.prepareAssetMedia(assetId, request.allowedMediaTypes)
 		if (this.destroyed) throw new Error("Canvas asset import manager destroyed")
-		const target = this.canvas.elementManager.getElementData(request.targetElementId)
-		if (!target || target.type !== ElementTypeEnum.Video) {
-			throw new Error("Asset import target video is unavailable")
-		}
+		if (request.isCurrent?.() === false) throw new Error("Asset import session is stale")
+		assertImportTarget(this.canvas, request.targetElementId, request.targetKind)
 
 		const connected = findConnectedCanvasAssetMediaBinding(this.canvas, {
 			assetId,
@@ -312,7 +387,7 @@ export class CanvasAssetImportManager {
 				if (request.slot.kind !== "reference") return
 				this.canvas.connectionAssociationSeedManager.register({
 					targetElementId: request.targetElementId,
-					targetKind: "video-generator",
+					targetKind: request.targetKind,
 					rootElementIds: [result.createdElementId],
 					orderedSources: [
 						{ elementId: result.createdElementId, kind: prepared.mediaType },
@@ -338,10 +413,157 @@ export class CanvasAssetImportManager {
 		}
 	}
 
+	private async importAndConnectManyInternal(
+		request: CanvasAssetImportManyRequest & { assetIds: string[] },
+	): Promise<CanvasAssetImportResult[]> {
+		if (this.destroyed) throw new Error("Canvas asset import manager destroyed")
+		validateImportRequest(request)
+		assertImportTarget(this.canvas, request.targetElementId, request.targetKind)
+
+		const preparedAssets = await Promise.all(
+			request.assetIds.map((assetId) =>
+				this.prepareAssetMedia(assetId, request.allowedMediaTypes),
+			),
+		)
+		if (this.destroyed) throw new Error("Canvas asset import manager destroyed")
+		if (request.isCurrent?.() === false) throw new Error("Asset import session is stale")
+		assertImportTarget(this.canvas, request.targetElementId, request.targetKind)
+
+		const resultsByAssetId = new Map<string, CanvasAssetImportResult>()
+		const pendingConnections: PreparedAssetMedia[] = []
+		for (const prepared of preparedAssets) {
+			const connected = findConnectedCanvasAssetMediaBinding(this.canvas, {
+				assetId: prepared.assetId,
+				targetElementId: request.targetElementId,
+				allowedMediaTypes: request.allowedMediaTypes,
+			})
+			if (connected) {
+				resultsByAssetId.set(prepared.assetId, {
+					elementId: connected.elementId,
+					connectionId: connected.connectionId,
+					workspacePath: connected.workspacePath,
+					fileName: connected.fileName,
+					mediaType: connected.mediaType,
+					source: "existing-connection",
+				})
+				continue
+			}
+			pendingConnections.push(prepared)
+		}
+		if (pendingConnections.length === 0) {
+			const existingResults = request.assetIds.map((assetId) => {
+				const result = resultsByAssetId.get(assetId)
+				if (!result) throw new Error("Failed to resolve imported asset media connections")
+				return result
+			})
+			this.registerReferenceSeed(request, existingResults)
+			return existingResults
+		}
+
+		const createdElements: string[] = []
+		let createdConnectionIds: string[] = []
+		const connectionResult = this.canvas.historyManager.runTransaction(
+			() => {
+				const rollback = () => {
+					if (createdConnectionIds.length > 0) {
+						this.canvas.connectionManager.removeConnections(createdConnectionIds, {
+							emitChange: false,
+						})
+					}
+					createdElements.forEach((elementId) => {
+						if (this.canvas.elementManager.getElementData(elementId)) {
+							this.canvas.elementManager.delete(elementId)
+						}
+					})
+				}
+
+				try {
+					for (const prepared of pendingConnections) {
+						const elementId = this.createMediaElement(prepared, request.targetElementId)
+						if (!elementId) {
+							rollback()
+							return null
+						}
+						createdElements.push(elementId)
+					}
+
+					const connection = this.canvas.connectionManager.connectElementsBatch({
+						edges: createdElements.map((elementId) => ({
+							sourceElementId: elementId,
+							targetElementId: request.targetElementId,
+						})),
+					})
+					if (
+						connection.status !== "created" ||
+						connection.connectionIds.length !== createdElements.length
+					) {
+						rollback()
+						return null
+					}
+					createdConnectionIds = connection.connectionIds
+					return connection
+				} catch {
+					rollback()
+					return null
+				}
+			},
+			(result) => result !== null,
+		)
+
+		if (!connectionResult) {
+			throw new Error("Failed to create asset media connections")
+		}
+
+		pendingConnections.forEach((prepared, index) => {
+			const elementId = createdElements[index]
+			const connectionId = createdConnectionIds[index]
+			if (!elementId || !connectionId) return
+			resultsByAssetId.set(prepared.assetId, {
+				elementId,
+				connectionId,
+				workspacePath: prepared.workspacePath,
+				fileName: prepared.fileName,
+				mediaType: prepared.mediaType,
+				source: prepared.source,
+			})
+		})
+
+		const results = request.assetIds.map((assetId) => resultsByAssetId.get(assetId))
+		if (results.some((result) => !result)) {
+			throw new Error("Failed to resolve imported asset media connections")
+		}
+		const resolvedResults = results as CanvasAssetImportResult[]
+
+		this.registerReferenceSeed(request, resolvedResults)
+
+		return resolvedResults
+	}
+
+	private registerReferenceSeed(
+		request: CanvasAssetImportCommonRequest,
+		results: CanvasAssetImportResult[],
+	): void {
+		if (request.slot.kind !== "reference" || results.length === 0) return
+
+		this.canvas.connectionAssociationSeedManager.register({
+			targetElementId: request.targetElementId,
+			targetKind: request.targetKind,
+			rootElementIds: results.map((result) => result.elementId),
+			orderedSources: results.map((result) => ({
+				elementId: result.elementId,
+				kind: result.mediaType,
+			})),
+			originRevision: createSelectionRevision(results.map((result) => result.elementId)),
+			createdBy: "assets",
+			mediaRole: "reference",
+		})
+	}
+
 	public destroy(): void {
 		this.destroyed = true
 		this.importPromises.clear()
 		this.connectionPromises.clear()
+		this.batchConnectionPromises.clear()
 	}
 
 	private async prepareAssetMedia(

@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react"
-import { createRef, type ReactNode } from "react"
+import { createRef, type ForwardedRef, type ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ImageEditorConfig } from "../useImageEditorConfig"
 import type { MessageEditorRef } from "../../../../editors/message/MessageEditor"
@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
 	resolveResourceReference: vi.fn(),
 	setEditingElementId: vi.fn(),
 }))
+
+// The focused surface suite never exercises the asset dialog's API calls.
+vi.mock("@/apis", () => ({ AssetsApi: {} }))
 
 const getResolution = (path: string) => {
 	switch (mocks.availabilityByPath.get(path)) {
@@ -128,7 +131,7 @@ vi.mock("../../../../editors/message/reference-assets/ReferenceResourceDropSurfa
 	return {
 		ReferenceResourceDropSurface: forwardRef(function ReferenceResourceDropSurfaceMock(
 			{ children }: { children: ReactNode },
-			ref,
+			ref: ForwardedRef<HTMLDivElement>,
 		) {
 			return <div ref={ref}>{children}</div>
 		}),
@@ -158,6 +161,15 @@ vi.mock("../../../../editors/connection/useLinkedMediaAssociationController", ()
 
 vi.mock("../ImageEditorControls", () => ({
 	default: ({ renderSendButton }: { renderSendButton?: () => ReactNode }) => renderSendButton?.(),
+}))
+
+// The real library dialog pulls the enterprise admin alias into this focused
+// surface test; keep the test scoped to deleted-reference submit behavior.
+vi.mock("../../../../toolbar/AssetsModal", () => ({
+	default: () => null,
+}))
+vi.mock("@/components/CanvasDesign/ui/toolbar/AssetsModal", () => ({
+	default: () => null,
 }))
 
 const imageElement = {

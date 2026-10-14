@@ -58,7 +58,7 @@ export function purgeWorkspaceMediaComplianceFields(content: {
 	delete content.complianceCheckId
 }
 
-/** 替换完成后停止旧 workspace 合规轮询并刷新画布失败标签。 */
+/** 替换完成后停止旧 workspace 合规轮询并刷新画布合规状态。 */
 export function finalizeMediaSourceReplacement(
 	canvas: Pick<Canvas, "assetCompliancePollingManager" | "refreshMediaComplianceFailedTags">,
 	options: {

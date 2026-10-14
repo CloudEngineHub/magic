@@ -44,6 +44,9 @@ describe("generateAssetsApi", () => {
 				return Promise.resolve({ page: 1, page_size: 10, total: 0, list: [] })
 			}
 			if (path === "/api/v1/assets/batch-get") return Promise.resolve([])
+			if (path === "/api/v1/assets/batch-delete") {
+				return Promise.resolve({ deleted_num: 2, asset_ids: ["asset-1", "asset-2"] })
+			}
 			return Promise.resolve({})
 		})
 		const put = vi.fn().mockResolvedValue({})
@@ -90,6 +93,7 @@ describe("generateAssetsApi", () => {
 			tag_ids: [],
 		})
 		await api.batchGetAssets({ asset_ids: ["asset-1", "asset-2"] })
+		await api.batchDeleteAssets({ asset_ids: ["asset-1", "asset-2"] })
 		await api.getAssetCompliance("asset-1")
 		await api.getAssetTags()
 		await api.createAssetTag({ name: "人物", node_type: "group", parent_id: "0" })
@@ -127,6 +131,9 @@ describe("generateAssetsApi", () => {
 			compliance_status: "PASS",
 		})
 		expect(post).toHaveBeenNthCalledWith(7, "/api/v1/assets/batch-get", {
+			asset_ids: ["asset-1", "asset-2"],
+		})
+		expect(post).toHaveBeenNthCalledWith(8, "/api/v1/assets/batch-delete", {
 			asset_ids: ["asset-1", "asset-2"],
 		})
 		expect(get).toHaveBeenNthCalledWith(1, "/api/v1/asset-agreements")

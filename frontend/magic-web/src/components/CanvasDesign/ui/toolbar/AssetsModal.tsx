@@ -9,6 +9,12 @@ import {
 } from "@/apis"
 import { Button } from "@/components/shadcn-ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/shadcn-ui/dialog"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
@@ -21,7 +27,7 @@ import {
 import { Switch } from "@/components/shadcn-ui/switch"
 import { useUserInfo } from "@/models/user/hooks"
 import { cn } from "@/utils/cn"
-import { LoaderCircle, RefreshCw, Search } from "lucide-react"
+import { ChevronDown, LoaderCircle, RefreshCw, Search, Trash2, UserRound } from "lucide-react"
 import { toast } from "sonner"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useOptionalCanvas } from "../../app/providers/CanvasProvider"
@@ -87,6 +93,7 @@ const DEFAULT_QUERY: AssetQueryState = {
 }
 
 const DEFAULT_MEDIA_TYPES: readonly AssetMediaType[] = ["IMAGE"]
+const ASSET_BATCH_MUTATION_LIMIT = 100
 
 // Keep this picker below the shared Toast layer without changing other dialogs.
 const ASSET_LIBRARY_DIALOG_Z_INDEX = 999
@@ -178,7 +185,8 @@ export default function AssetsModal({
 	const currentUserId = userInfo?.user_id?.trim() || ""
 	const [hostDialogOpen, setHostDialogOpen] = useState(false)
 	const [cardMenuOpen, setCardMenuOpen] = useState(false)
-	const [transferAsset, setTransferAsset] = useState<AssetItem | null>(null)
+	const [batchMenuOpen, setBatchMenuOpen] = useState(false)
+	const [transferAssets, setTransferAssets] = useState<AssetItem[]>([])
 	const mediaTypesKey = mediaTypes.join("|")
 	const requestedMediaTypes = useMemo(() => {
 		const normalized = Array.from(new Set(mediaTypes))
@@ -191,6 +199,7 @@ export default function AssetsModal({
 	const [verifiedOnly, setVerifiedOnly] = useState(false)
 	const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([])
 	const [confirming, setConfirming] = useState(false)
+	const [batchActionPending, setBatchActionPending] = useState(false)
 	const [confirmError, setConfirmError] = useState(false)
 	const [previewResource, setPreviewResource] =
 		useState<MediaResourceFullscreenPreviewItem | null>(null)
@@ -251,6 +260,7 @@ export default function AssetsModal({
 		() => displayAssets.filter((asset) => selectedAssetIds.includes(asset.asset_id)),
 		[displayAssets, selectedAssetIds],
 	)
+	const showBatchActions = multiple && selectedAssets.length > 0
 
 	const refreshLibraryAfterCompliance = useCallback((assetId: string) => {
 		setOptimisticProcessingIds((current) => {
@@ -292,6 +302,8 @@ export default function AssetsModal({
 			setPreviewResource(null)
 			setOptimisticProcessingIds(new Set())
 			setPendingComplianceIds(new Set())
+			setTransferAssets([])
+			setBatchMenuOpen(false)
 			return
 		}
 		setSelectedAssetIds([])
@@ -313,14 +325,25 @@ export default function AssetsModal({
 	)
 
 	const processingAssetIds = useMemo(() => {
+		// Team-visible assets can appear in this list, but the compliance endpoints
+		// only authorize the asset owner. Resume polling only for assets owned by the
+		// current user so shared cards never create unauthorized background requests.
+		const ownedAssetIds = new Set(
+			assets
+				.filter((asset) => currentUserId !== "" && asset.owner_uid === currentUserId)
+				.map((asset) => asset.asset_id),
+		)
 		const ids = assets
-			.filter((asset) => asset.compliance_status === "PROCESSING")
+			.filter(
+				(asset) =>
+					asset.compliance_status === "PROCESSING" && ownedAssetIds.has(asset.asset_id),
+			)
 			.map((asset) => asset.asset_id)
 		for (const assetId of optimisticProcessingIds) {
-			if (!ids.includes(assetId)) ids.push(assetId)
+			if (ownedAssetIds.has(assetId) && !ids.includes(assetId)) ids.push(assetId)
 		}
 		return ids
-	}, [assets, optimisticProcessingIds])
+	}, [assets, currentUserId, optimisticProcessingIds])
 	const processingAssetIdsKey = processingAssetIds.join("|")
 
 	useEffect(() => {
@@ -475,6 +498,70 @@ export default function AssetsModal({
 		}
 	}
 
+	const resolveBatchAssetIds = (): string[] | null => {
+		if (selectedAssets.length === 0) return null
+		if (selectedAssets.length > ASSET_BATCH_MUTATION_LIMIT) {
+			toast.error(
+				t("assets.batchLimitExceeded", {
+					defaultValue: "一次最多操作 {{count}} 个素材",
+					count: ASSET_BATCH_MUTATION_LIMIT,
+				}),
+			)
+			return null
+		}
+		if (
+			!currentUserId ||
+			selectedAssets.some((asset) => asset.owner_uid?.trim() !== currentUserId)
+		) {
+			toast.error(t("assets.batchOwnerOnly", "批量删除和转交仅支持选择自己拥有的素材"))
+			return null
+		}
+		return selectedAssets.map((asset) => asset.asset_id)
+	}
+
+	const handleBatchDelete = async () => {
+		if (batchActionPending) return
+		const assetIds = resolveBatchAssetIds()
+		if (!assetIds) return
+
+		setBatchActionPending(true)
+		try {
+			const response = await AssetsApi.batchDeleteAssets({ asset_ids: assetIds })
+			const deletedIds =
+				Array.isArray(response.asset_ids) && response.asset_ids.length > 0
+					? response.asset_ids
+					: assetIds
+			const deletedIdSet = new Set(deletedIds)
+			for (const assetId of deletedIds) {
+				if (canvas) reconcileDeletedAssetOnCanvas(canvas, assetId)
+				assetLibrarySessionStore.removeAsset(assetId)
+			}
+			setSelectedAssetIds((currentIds) =>
+				currentIds.filter((assetId) => !deletedIdSet.has(assetId)),
+			)
+			refreshLibrary()
+			toast.success(
+				t("assets.batchDeleteSuccess", {
+					defaultValue: "已删除 {{count}} 个素材",
+					count: deletedIds.length,
+				}),
+			)
+		} catch (error) {
+			toast.error(
+				error instanceof Error
+					? error.message
+					: t("assets.batchDeleteFailed", "批量删除素材失败，请重试"),
+			)
+		} finally {
+			setBatchActionPending(false)
+		}
+	}
+
+	const handleBatchTransfer = () => {
+		if (batchActionPending || !resolveBatchAssetIds()) return
+		setTransferAssets(selectedAssets)
+	}
+
 	const handleLocalFileSelected = (file: File, mode: AssetLibraryUploadMode) => {
 		const openSaveLocalAssetDialog =
 			canvas?.magicConfigManager.config?.methods?.openSaveLocalAssetDialog
@@ -533,7 +620,11 @@ export default function AssetsModal({
 	// The fullscreen preview is portaled outside DialogContent. Keep the library
 	// dialog open while its backdrop handles the click and closes only the preview.
 	const blockLibraryDismiss =
-		hostDialogOpen || cardMenuOpen || Boolean(transferAsset) || Boolean(previewResource)
+		hostDialogOpen ||
+		cardMenuOpen ||
+		batchMenuOpen ||
+		transferAssets.length > 0 ||
+		Boolean(previewResource)
 
 	return (
 		<>
@@ -691,56 +782,110 @@ export default function AssetsModal({
 								</label>
 							</div>
 
-							{showMediaFilter ? (
+							{showMediaFilter || showBatchActions ? (
 								<div className="flex shrink-0 items-center gap-3 border-b py-3">
-									<span className="text-sm text-muted-foreground">
-										{t("assets.mediaType", "素材类型")}
-									</span>
-									<div
-										className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5"
-										role="tablist"
-										aria-label={t("assets.mediaType", "素材类型")}
-									>
-										<button
-											type="button"
-											role="tab"
-											aria-selected={mediaFilter === "ALL"}
-											className={cn(
-												"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-												mediaFilter === "ALL" &&
-													"bg-background text-primary shadow-sm",
-											)}
-											onClick={() => setMediaFilter("ALL")}
-										>
-											{t("assets.mediaTypeAll", "全部")}
-										</button>
-										<button
-											type="button"
-											role="tab"
-											aria-selected={mediaFilter === "IMAGE"}
-											className={cn(
-												"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-												mediaFilter === "IMAGE" &&
-													"bg-background text-primary shadow-sm",
-											)}
-											onClick={() => setMediaFilter("IMAGE")}
-										>
-											{t("assets.mediaTypeImage", "图片")}
-										</button>
-										<button
-											type="button"
-											role="tab"
-											aria-selected={mediaFilter === "VIDEO"}
-											className={cn(
-												"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-												mediaFilter === "VIDEO" &&
-													"bg-background text-primary shadow-sm",
-											)}
-											onClick={() => setMediaFilter("VIDEO")}
-										>
-											{t("assets.mediaTypeVideo", "视频")}
-										</button>
-									</div>
+									{showMediaFilter ? (
+										<>
+											<span className="text-sm text-muted-foreground">
+												{t("assets.mediaType", "素材类型")}
+											</span>
+											<div
+												className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5"
+												role="tablist"
+												aria-label={t("assets.mediaType", "素材类型")}
+											>
+												<button
+													type="button"
+													role="tab"
+													aria-selected={mediaFilter === "ALL"}
+													className={cn(
+														"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+														mediaFilter === "ALL" &&
+															"bg-background text-primary shadow-sm",
+													)}
+													onClick={() => setMediaFilter("ALL")}
+												>
+													{t("assets.mediaTypeAll", "全部")}
+												</button>
+												<button
+													type="button"
+													role="tab"
+													aria-selected={mediaFilter === "IMAGE"}
+													className={cn(
+														"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+														mediaFilter === "IMAGE" &&
+															"bg-background text-primary shadow-sm",
+													)}
+													onClick={() => setMediaFilter("IMAGE")}
+												>
+													{t("assets.mediaTypeImage", "图片")}
+												</button>
+												<button
+													type="button"
+													role="tab"
+													aria-selected={mediaFilter === "VIDEO"}
+													className={cn(
+														"rounded-md px-3 py-1 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+														mediaFilter === "VIDEO" &&
+															"bg-background text-primary shadow-sm",
+													)}
+													onClick={() => setMediaFilter("VIDEO")}
+												>
+													{t("assets.mediaTypeVideo", "视频")}
+												</button>
+											</div>
+										</>
+									) : null}
+									{showBatchActions ? (
+										<div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">
+											<span>
+												{t("assets.selectedCountShort", {
+													defaultValue: "已选 {{count}}",
+													count: selectedAssets.length,
+												})}
+											</span>
+											<DropdownMenu
+												modal={false}
+												onOpenChange={setBatchMenuOpen}
+											>
+												<DropdownMenuTrigger asChild>
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														disabled={batchActionPending}
+														aria-label={t(
+															"assets.batchActions",
+															"批量操作",
+														)}
+													>
+														{t("assets.batchActions", "批量操作")}
+														<ChevronDown
+															className="ml-1 size-4"
+															aria-hidden="true"
+														/>
+													</Button>
+												</DropdownMenuTrigger>
+												<DropdownMenuContent align="end">
+													<DropdownMenuItem
+														variant="destructive"
+														disabled={batchActionPending}
+														onSelect={() => void handleBatchDelete()}
+													>
+														<Trash2 aria-hidden="true" />
+														{t("assets.batchDelete", "批量删除")}
+													</DropdownMenuItem>
+													<DropdownMenuItem
+														disabled={batchActionPending}
+														onSelect={handleBatchTransfer}
+													>
+														<UserRound aria-hidden="true" />
+														{t("assets.batchTransferOwner", "批量转交")}
+													</DropdownMenuItem>
+												</DropdownMenuContent>
+											</DropdownMenu>
+										</div>
+									) : null}
 								</div>
 							) : null}
 
@@ -786,7 +931,8 @@ export default function AssetsModal({
 										<span>{t("assets.empty", "暂无素材")}</span>
 									</div>
 								) : (
-									<div className="grid grid-cols-2 gap-4 py-5 sm:grid-cols-3 lg:grid-cols-4">
+									/* Overlay scrollbar covers the right edge. Matching left padding keeps the card grid symmetric. */
+									<div className="grid grid-cols-2 gap-4 px-4 py-5 sm:grid-cols-3 lg:grid-cols-4">
 										{canUpload ? (
 											<AssetLibraryUploadCard
 												allowedMediaTypes={requestedMediaTypes}
@@ -806,6 +952,9 @@ export default function AssetsModal({
 											const selected = selectedAssetIds.includes(
 												asset.asset_id,
 											)
+											const manageable = Boolean(
+												currentUserId && asset.owner_uid === currentUserId,
+											)
 											return (
 												<AssetLibraryAssetCard
 													key={asset.asset_id}
@@ -816,10 +965,7 @@ export default function AssetsModal({
 														selectedAssetIds.length >= selectionLimit
 													}
 													t={t}
-													manageable={Boolean(
-														currentUserId &&
-														asset.owner_uid === currentUserId,
-													)}
+													manageable={manageable}
 													complianceActionPending={pendingComplianceIds.has(
 														asset.asset_id,
 													)}
@@ -827,13 +973,15 @@ export default function AssetsModal({
 														seedanceComplianceAvailable
 													}
 													onComplianceCheck={
-														seedanceComplianceAvailable
+														manageable && seedanceComplianceAvailable
 															? handleComplianceCheck
 															: undefined
 													}
 													onMenuOpenChange={setCardMenuOpen}
 													onEdit={handleEditAsset}
-													onTransferOwner={setTransferAsset}
+													onTransferOwner={(asset) =>
+														setTransferAssets([asset])
+													}
 													onDelete={(item) =>
 														void handleDeleteAsset(item)
 													}
@@ -853,31 +1001,38 @@ export default function AssetsModal({
 							</ScrollArea>
 
 							<div className="flex shrink-0 items-center justify-between gap-4 border-t py-3 text-sm text-muted-foreground">
-								{confirmError || showSelectionCount ? (
-									<span
-										className={cn(confirmError && "text-destructive")}
-										role={confirmError ? "alert" : undefined}
-									>
-										{confirmError
-											? t("assets.confirmFailed", "素材选择失败，请重试")
-											: t("assets.selectedCount", {
-													defaultValue: "已选择 {{count}} / {{max}} 项",
-													count: selectedAssets.length,
-													max: selectionLimit,
-												})}
-									</span>
-								) : (
-									<span />
-								)}
+								<div className="flex min-w-0 items-center gap-3">
+									{confirmError || (showSelectionCount && !showBatchActions) ? (
+										<span
+											className={cn(confirmError && "text-destructive")}
+											role={confirmError ? "alert" : undefined}
+										>
+											{confirmError
+												? t("assets.confirmFailed", "素材选择失败，请重试")
+												: t("assets.selectedCount", {
+														defaultValue:
+															"已选择 {{count}} / {{max}} 项",
+														count: selectedAssets.length,
+														max: selectionLimit,
+													})}
+										</span>
+									) : (
+										<span />
+									)}
+								</div>
 								<Button
 									type="button"
 									className="min-w-28"
-									disabled={selectedAssets.length === 0 || confirming}
+									disabled={
+										selectedAssets.length === 0 ||
+										confirming ||
+										batchActionPending
+									}
 									onClick={() => void handleConfirm()}
 								>
 									{confirming
-										? t("assets.confirming", "确认中...")
-										: t("common.confirm", "确认")}
+										? t("assets.applying", "应用中...")
+										: t("assets.apply", "应用至画布")}
 								</Button>
 							</div>
 						</div>
@@ -885,10 +1040,16 @@ export default function AssetsModal({
 				</DialogContent>
 			</Dialog>
 			<AssetLibraryTransferOwnerDialog
-				asset={transferAsset}
+				assets={transferAssets}
 				t={t}
-				onClose={() => setTransferAsset(null)}
-				onTransferred={(assetId) => refreshLibrary(assetId)}
+				onClose={() => setTransferAssets([])}
+				onTransferred={(assetIds) => {
+					const transferredIdSet = new Set(assetIds)
+					setSelectedAssetIds((currentIds) =>
+						currentIds.filter((assetId) => !transferredIdSet.has(assetId)),
+					)
+					refreshLibrary()
+				}}
 			/>
 			{previewResource ? (
 				<MediaResourceFullscreenPreview

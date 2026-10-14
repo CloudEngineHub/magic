@@ -180,7 +180,12 @@ export interface ImageEditorConfig {
 		replaceReferenceFileAt: (
 			slotIndex: number,
 			fileInfo: UploadFileResponse,
-			options?: { retainReferenceSlot?: boolean },
+			options?: {
+				retainReferenceSlot?: boolean
+				/** 用户显式选择已有素材时，确保编辑器存在对应的 @mention。 */
+				ensurePromptMention?: boolean
+				mentionPlacement?: "cursor" | "documentEnd"
+			},
 		) => void
 		triggerFileSelect: () => void
 		uploadFiles: (
@@ -620,7 +625,11 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		(
 			slotIndex: number,
 			fileInfo: UploadFileResponse,
-			options?: { retainReferenceSlot?: boolean },
+			options?: {
+				retainReferenceSlot?: boolean
+				ensurePromptMention?: boolean
+				mentionPlacement?: "cursor" | "documentEnd"
+			},
 		) => {
 			if (!canvas) return
 			const elementInstance = canvas.elementManager.getElementInstance(imageElement.id)
@@ -629,6 +638,36 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			const currentInfos =
 				elementInstance.getReferenceImageInfos() as ReferenceResourceFileInfo[]
 			const previousInfo = currentInfos[slotIndex]
+
+			const mentionItem = createReferenceResourcePanelItemFromPath(
+				fileInfo.path,
+				fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
+				{
+					fileId: fileInfo.file_id,
+					sourceFileId: fileInfo.source_file_id,
+					sourceProjectId: fileInfo.source_project_id,
+					projectId: fileInfo.project_id,
+					mediaType: "image",
+				},
+			)
+			const ensurePromptMention = () => {
+				if (!options?.ensurePromptMention) return
+				const editor = editorFocusRef?.current
+				if (!editor) return
+				const alreadyMentioned = editor
+					.getMentionBindings()
+					.some((binding) =>
+						areCanvasResourceReferencesSame(
+							binding.path,
+							fileInfo.path,
+							resolveResourceReference,
+						),
+					)
+				if (alreadyMentioned) return
+				editor.insertMentionItems([mentionItem], {
+					placement: options.mentionPlacement ?? "cursor",
+				})
+			}
 
 			if (
 				Boolean(
@@ -649,6 +688,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 						),
 				)
 			) {
+				ensurePromptMention()
 				if (!options?.retainReferenceSlot) {
 					resetSelectedReferenceSlot()
 				}
@@ -668,6 +708,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			elementInstance.setReferenceImageInfos(compactNextInfos)
 			syncFromElement()
 
+			let replacedMention = false
 			if (previousInfo?.path) {
 				const nextProtectedReferencePaths = protectedReferencePaths.map((path) =>
 					areCanvasResourceReferencesSame(
@@ -685,21 +726,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 						resolveResourceReference,
 					),
 				)
-				editorFocusRef?.current?.replaceMentionItems(
-					createCanvasMentionPathMatcher(previousInfo.path, resolveResourceReference),
-					createReferenceResourcePanelItemFromPath(
-						normalizedInfo.path,
-						normalizedInfo.fileName,
-						{
-							fileId: normalizedInfo.file_id,
-							sourceFileId: normalizedInfo.source_file_id,
-							sourceProjectId: normalizedInfo.source_project_id,
-							projectId: normalizedInfo.project_id,
-							mediaType: "image",
-						},
-					),
-				)
+				replacedMention =
+					editorFocusRef?.current?.replaceMentionItems(
+						createCanvasMentionPathMatcher(previousInfo.path, resolveResourceReference),
+						mentionItem,
+					) ?? false
 			}
+			if (options?.ensurePromptMention && !replacedMention) ensurePromptMention()
 
 			if (!options?.retainReferenceSlot) {
 				resetSelectedReferenceSlot()

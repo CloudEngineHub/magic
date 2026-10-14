@@ -10,15 +10,19 @@ export interface CanvasAssetComplianceStatusSource {
 		getState: (assetId: string) => CanvasAssetComplianceState | undefined
 	}
 	assetResourceManager?: {
-		getCachedResource: (
-			assetId: string,
-		) => { complianceStatus?: CanvasAssetComplianceStatus | null } | undefined
+		getCachedResource: (assetId: string) =>
+			| {
+					complianceStatus?: CanvasAssetComplianceStatus | null
+					complianceFailedReason?: string | null
+			  }
+			| undefined
 	}
 }
 
 export interface MediaComplianceContentLike {
 	assetId?: string
 	complianceStatus?: CanvasAssetComplianceStatus | null
+	complianceFailedReason?: string | null
 }
 
 export function getMediaAssetId(
@@ -51,6 +55,40 @@ export function resolveMediaComplianceStatus(
 	}
 
 	return content?.complianceStatus ?? undefined
+}
+
+function normalizeComplianceFailedReason(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined
+	const reason = value.trim()
+	return reason || undefined
+}
+
+/**
+ * Resolve the latest failure message using the same source precedence as the
+ * status resolver. The caller still gates this value on `FAILED`, so a stale
+ * reason cannot be shown while a newer PROCESSING/PASS state is active.
+ */
+export function resolveMediaComplianceFailedReason(
+	canvas: CanvasAssetComplianceStatusSource,
+	content: MediaComplianceContentLike | undefined,
+): string | undefined {
+	const assetId = getMediaAssetId(content)
+	if (!assetId) return normalizeComplianceFailedReason(content?.complianceFailedReason)
+
+	const pollingReason = canvas.assetCompliancePollingManager?.getState(assetId)?.failedReason
+	const normalizedPollingReason = normalizeComplianceFailedReason(pollingReason)
+	if (normalizedPollingReason) return normalizedPollingReason
+
+	const cachedReason =
+		canvas.assetResourceManager?.getCachedResource(assetId)?.complianceFailedReason
+	const normalizedCachedReason = normalizeComplianceFailedReason(cachedReason)
+	if (normalizedCachedReason) return normalizedCachedReason
+
+	const detailReason = assetDetailStore.getCached(assetId)?.compliance_failed_reason
+	const normalizedDetailReason = normalizeComplianceFailedReason(detailReason)
+	if (normalizedDetailReason) return normalizedDetailReason
+
+	return normalizeComplianceFailedReason(content?.complianceFailedReason)
 }
 
 export function normalizeAssetComplianceStatus(value: unknown): CanvasAssetComplianceStatus {

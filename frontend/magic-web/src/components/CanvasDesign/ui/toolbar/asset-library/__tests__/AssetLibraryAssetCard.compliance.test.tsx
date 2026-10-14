@@ -62,7 +62,8 @@ const baseAsset: AssetItem = {
 	compliance_failed_reason: "reason",
 	owner: { id: "owner-1", name: "Alice" },
 	owner_uid: "owner-1",
-	source: "PERSONAL",
+	source: "TEAM",
+	visibility_type: "TEAM",
 	tags: [],
 }
 
@@ -84,7 +85,7 @@ describe("AssetLibraryAssetCard compliance menu", () => {
 		expect(screen.queryByRole("button", { name: "素材操作" })).not.toBeInTheDocument()
 	})
 
-	it("shows compliance in the actions menu for non-owners", () => {
+	it("hides compliance in the actions menu for non-owners", () => {
 		const onToggle = vi.fn()
 		const onComplianceCheck = vi.fn()
 		render(
@@ -93,6 +94,27 @@ describe("AssetLibraryAssetCard compliance menu", () => {
 				selected={false}
 				selectionBlocked={false}
 				manageable={false}
+				t={t}
+				onToggle={onToggle}
+				onPreview={vi.fn()}
+				onComplianceCheck={onComplianceCheck}
+				seedanceComplianceAvailable
+			/>,
+		)
+
+		expect(screen.queryByRole("button", { name: "素材操作" })).not.toBeInTheDocument()
+		expect(onComplianceCheck).not.toHaveBeenCalled()
+	})
+
+	it("shows compliance in the actions menu for the owner", () => {
+		const onToggle = vi.fn()
+		const onComplianceCheck = vi.fn()
+		render(
+			<AssetLibraryAssetCard
+				asset={baseAsset}
+				selected={false}
+				selectionBlocked={false}
+				manageable
 				t={t}
 				onToggle={onToggle}
 				onPreview={vi.fn()}
@@ -113,7 +135,7 @@ describe("AssetLibraryAssetCard compliance menu", () => {
 				asset={{ ...baseAsset, file_key: undefined }}
 				selected={false}
 				selectionBlocked={false}
-				manageable={false}
+				manageable
 				t={t}
 				onToggle={vi.fn()}
 				onPreview={vi.fn()}

@@ -7,6 +7,14 @@
 		"apply": "Apply to Canvas",
 		"applying": "Applying...",
 		"assetId": "Asset ID",
+		"batchActions": "Batch actions",
+		"batchDelete": "Batch delete",
+		"batchDeleteFailed": "Failed to batch delete assets. Please try again.",
+		"batchDeleteSuccess": "Deleted {{count}} assets",
+		"batchLimitExceeded": "You can process up to {{count}} assets at a time",
+		"batchOwnerOnly": "Batch delete and transfer are only available for assets you own",
+		"batchTransferOwner": "Batch transfer owner",
+		"batchTransferSuccess": "Transferred ownership of {{count}} assets",
 		"closePreview": "Close preview",
 		"complianceFailed": "Compliance check failed",
 		"compliancePassed": "Compliance verified",
@@ -42,6 +50,7 @@
 		"selectAssets": "Select assets",
 		"selectedAsset": "Selected: {{name}}",
 		"selectedCount": "Selected {{count}} / {{max}}",
+		"selectedCountShort": "{{count}} selected",
 		"teamAssets": "Visible to team",
 		"teamVisible": "Visible to team",
 		"transferAction": "Transfer",
@@ -52,6 +61,7 @@
 		"transferOwner": "Transfer owner",
 		"transferSelectMember": "Select a member",
 		"transferSelectedAsset": "Selected asset",
+		"transferSelectedAssets": "{{count}} assets selected",
 		"transferSuccess": "Asset owner transferred",
 		"transferTarget": "New owner",
 		"transferTitle": "Transfer asset owner",
@@ -147,11 +157,6 @@
 		"title": "Choose a version to keep",
 		"useLocal": "Keep mine",
 		"useRemote": "Use new"
-	},
-	"elementMediaCompliance": {
-		"failedHint": "Please replace the image and re-verify",
-		"failedHintVideo": "Please replace the video and re-verify",
-		"failedTag": "Compliance check failed"
 	},
 	"elementTools": {
 		"audioReplace": {

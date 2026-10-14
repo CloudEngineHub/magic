@@ -133,6 +133,8 @@ export type {
 	AssetVisibilityConfig,
 	AssetVisibilityConfigResponse,
 	AssetVisibilityMember,
+	BatchDeleteAssetsParams,
+	BatchDeleteAssetsResponse,
 	BatchGetAssetsParams,
 	CreateAssetParams,
 	CreateAssetTagParams,

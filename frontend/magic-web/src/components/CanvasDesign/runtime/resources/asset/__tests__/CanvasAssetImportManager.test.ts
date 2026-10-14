@@ -4,6 +4,10 @@ import { ElementTypeEnum, type LayerElement } from "../../../document/types"
 import { CanvasAssetImportManager, getAssetUploadSubDir } from "../CanvasAssetImportManager"
 import { UploadSubDir, type CanvasAssetResourceInfo } from "../../../../public/magic-types"
 
+// This manager suite supplies its own Canvas/resource harness; avoid loading the
+// unrelated admin API barrel while resolving runtime Canvas dependencies.
+vi.mock("@/apis", () => ({ AssetsApi: {} }))
+
 vi.mock("../../../shared/placement/placementEngine", () => ({
 	resolveConnectedPlacement: vi.fn(() => ({ x: 10, y: 20 })),
 	resolveNearestFreeMediaPlacement: vi.fn(() => ({ x: 30, y: 40 })),
@@ -12,7 +16,9 @@ vi.mock("../../../shared/placement/placementEngine", () => ({
 interface CanvasHarnessOptions {
 	elements?: LayerElement[]
 	asset?: CanvasAssetResourceInfo
+	assets?: Record<string, CanvasAssetResourceInfo>
 	connect?: ReturnType<typeof vi.fn>
+	connectBatch?: ReturnType<typeof vi.fn>
 	attachmentPathsByFileId?: Record<string, string>
 	upstreamConnections?: Array<{
 		id: string
@@ -62,6 +68,29 @@ function createHarness(options: CanvasHarnessOptions = {}) {
 				return { status: "created" as const, connectionId }
 			},
 		)
+	const connectElementsBatch =
+		options.connectBatch ??
+		vi.fn(
+			({ edges }: { edges: Array<{ sourceElementId: string; targetElementId: string }> }) => {
+				const connectionIds = edges.map(({ sourceElementId, targetElementId }) => {
+					const connectionId = `batch-connection-${sourceElementId}`
+					upstreamConnections.push({
+						id: connectionId,
+						sourceElementId,
+						targetElementId,
+					})
+					return connectionId
+				})
+				return { status: "created" as const, connectionIds }
+			},
+		)
+	const removeConnections = vi.fn((connectionIds: string[]) => {
+		const ids = new Set(connectionIds)
+		for (let index = upstreamConnections.length - 1; index >= 0; index -= 1) {
+			if (ids.has(upstreamConnections[index]?.id ?? "")) upstreamConnections.splice(index, 1)
+		}
+		return connectionIds
+	})
 	const register = vi.fn(() => "seed-1")
 	const canvas = {
 		elementManager: {
@@ -92,14 +121,15 @@ function createHarness(options: CanvasHarnessOptions = {}) {
 			},
 		},
 		assetResourceManager: {
-			getResource: vi.fn(async () =>
+			getResource: vi.fn(async (assetId: string) =>
 				Promise.resolve(
-					options.asset ?? {
-						assetId: "asset-audio",
-						mediaType: "audio",
-						fileUrl: "https://example.test/source.mp3",
-						fileName: "source",
-					},
+					options.assets?.[assetId] ??
+						options.asset ?? {
+							assetId,
+							mediaType: "audio",
+							fileUrl: "https://example.test/source.mp3",
+							fileName: "source",
+						},
 				),
 			),
 		},
@@ -108,6 +138,8 @@ function createHarness(options: CanvasHarnessOptions = {}) {
 		},
 		connectionManager: {
 			connectElements: connect,
+			connectElementsBatch,
+			removeConnections,
 			getUpstreamConnections: () => upstreamConnections,
 		},
 		connectionAssociationSeedManager: { register },
@@ -154,6 +186,7 @@ describe("CanvasAssetImportManager", () => {
 		const result = await manager.importAndConnect({
 			assetId: "asset-image",
 			targetElementId: "video-target",
+			targetKind: "video-generator",
 			slot: { kind: "reference" },
 			allowedMediaTypes: ["image"],
 		})
@@ -254,6 +287,7 @@ describe("CanvasAssetImportManager", () => {
 		const result = await manager.importAndConnect({
 			assetId: "asset-image",
 			targetElementId: "video-target",
+			targetKind: "video-generator",
 			slot: { kind: "reference" },
 			allowedMediaTypes: ["image"],
 		})
@@ -286,6 +320,7 @@ describe("CanvasAssetImportManager", () => {
 		const result = await manager.importAndConnect({
 			assetId: "asset-image",
 			targetElementId: "video-target",
+			targetKind: "video-generator",
 			slot: { kind: "reference" },
 			allowedMediaTypes: ["image"],
 		})
@@ -323,6 +358,7 @@ describe("CanvasAssetImportManager", () => {
 		const result = await manager.importAndConnect({
 			assetId: "asset-image",
 			targetElementId: "video-target",
+			targetKind: "video-generator",
 			slot: { kind: "reference" },
 			allowedMediaTypes: ["image"],
 		})
@@ -345,6 +381,7 @@ describe("CanvasAssetImportManager", () => {
 		const request = {
 			assetId: "asset-audio",
 			targetElementId: "video-target",
+			targetKind: "video-generator" as const,
 			slot: { kind: "reference" } as const,
 			allowedMediaTypes: ["audio"] as const,
 		}
@@ -385,6 +422,7 @@ describe("CanvasAssetImportManager", () => {
 			manager.importAndConnect({
 				assetId: "asset-video",
 				targetElementId: "video-target",
+				targetKind: "video-generator",
 				slot: { kind: "frame" },
 				allowedMediaTypes: ["image"],
 			}),
@@ -413,6 +451,7 @@ describe("CanvasAssetImportManager", () => {
 			manager.importAndConnect({
 				assetId: "asset-audio",
 				targetElementId: "video-target",
+				targetKind: "video-generator",
 				slot: { kind: "reference" },
 				allowedMediaTypes: ["audio"],
 			}),
@@ -443,6 +482,7 @@ describe("CanvasAssetImportManager", () => {
 		const importPromise = manager.importAndConnect({
 			assetId: "asset-audio",
 			targetElementId: "video-target",
+			targetKind: "video-generator",
 			slot: { kind: "reference" },
 			allowedMediaTypes: ["audio"],
 		})
@@ -478,6 +518,7 @@ describe("CanvasAssetImportManager", () => {
 			manager.importAndConnect({
 				assetId: "asset-image",
 				targetElementId: "video-target",
+				targetKind: "video-generator",
 				slot: { kind: "frame" },
 				allowedMediaTypes: ["image"],
 			}),
@@ -487,6 +528,204 @@ describe("CanvasAssetImportManager", () => {
 		expect([...harness.elements.values()].filter((item) => item.id !== "video-target")).toEqual(
 			[existingImage],
 		)
+		expect(harness.register).not.toHaveBeenCalled()
+	})
+
+	it("imports image references in selection order and registers one image seed", async () => {
+		const imageTarget: LayerElement = {
+			id: "image-target",
+			type: ElementTypeEnum.Image,
+			x: 500,
+			y: 100,
+			width: 1024,
+			height: 1024,
+			activeContentId: "image-target-content",
+			mainContentId: "image-target-content",
+			contents: [{ contentId: "image-target-content" }],
+		}
+		const sourceA: LayerElement = {
+			id: "source-a",
+			type: ElementTypeEnum.Image,
+			width: 100,
+			height: 100,
+			activeContentId: "source-a-content",
+			mainContentId: "source-a-content",
+			contents: [
+				{
+					contentId: "source-a-content",
+					src: "./images/a.png",
+					assetId: "asset-a",
+				},
+			],
+		}
+		const sourceB: LayerElement = {
+			...sourceA,
+			id: "source-b",
+			activeContentId: "source-b-content",
+			mainContentId: "source-b-content",
+			contents: [
+				{
+					contentId: "source-b-content",
+					src: "./images/b.png",
+					assetId: "asset-b",
+				},
+			],
+		}
+		const harness = createHarness({
+			elements: [imageTarget, sourceA, sourceB],
+			attachmentPathsByFileId: {
+				a: "./images/a.png",
+				b: "./images/b.png",
+			},
+		})
+		const manager = new CanvasAssetImportManager(harness.canvas as never)
+
+		const results = await manager.importAndConnectMany({
+			assetIds: ["asset-b", "asset-a", "asset-b"],
+			targetElementId: "image-target",
+			targetKind: "image-generator",
+			slot: { kind: "reference" },
+			allowedMediaTypes: ["image"],
+		})
+
+		expect(results.map((result) => result.workspacePath)).toEqual([
+			"./images/b.png",
+			"./images/a.png",
+		])
+		expect(harness.canvas.connectionManager.connectElementsBatch).toHaveBeenCalledWith({
+			edges: [
+				expect.objectContaining({ targetElementId: "image-target" }),
+				expect.objectContaining({ targetElementId: "image-target" }),
+			],
+		})
+		expect(harness.register).toHaveBeenCalledTimes(1)
+		expect(harness.register).toHaveBeenCalledWith(
+			expect.objectContaining({
+				targetElementId: "image-target",
+				targetKind: "image-generator",
+				orderedSources: results.map((result) => ({
+					elementId: result.elementId,
+					kind: "image",
+				})),
+			}),
+		)
+	})
+
+	it("rejects video assets for an image-generator target before creating a node", async () => {
+		const imageTarget: LayerElement = {
+			id: "image-target",
+			type: ElementTypeEnum.Image,
+			activeContentId: "image-content",
+			mainContentId: "image-content",
+			contents: [{ contentId: "image-content" }],
+		}
+		const harness = createHarness({
+			elements: [imageTarget],
+			asset: {
+				assetId: "asset-video",
+				mediaType: "video",
+				fileUrl: "https://example.test/source.mp4",
+			},
+		})
+		const manager = new CanvasAssetImportManager(harness.canvas as never)
+
+		await expect(
+			manager.importAndConnectMany({
+				assetIds: ["asset-video"],
+				targetElementId: "image-target",
+				targetKind: "image-generator",
+				slot: { kind: "reference" },
+				allowedMediaTypes: ["image"],
+			}),
+		).rejects.toThrow("not allowed")
+		expect(harness.canvas.elementManager.create).not.toHaveBeenCalled()
+		expect(harness.register).not.toHaveBeenCalled()
+	})
+
+	it("rolls back every newly created image node when a batch connection fails", async () => {
+		const imageTarget: LayerElement = {
+			id: "image-target",
+			type: ElementTypeEnum.Image,
+			activeContentId: "image-content",
+			mainContentId: "image-content",
+			contents: [{ contentId: "image-content" }],
+		}
+		const sourceA: LayerElement = {
+			id: "source-a",
+			type: ElementTypeEnum.Image,
+			activeContentId: "source-a-content",
+			mainContentId: "source-a-content",
+			contents: [
+				{ contentId: "source-a-content", src: "./images/a.png", assetId: "asset-a" },
+			],
+		}
+		const sourceB: LayerElement = {
+			...sourceA,
+			id: "source-b",
+			activeContentId: "source-b-content",
+			mainContentId: "source-b-content",
+			contents: [
+				{ contentId: "source-b-content", src: "./images/b.png", assetId: "asset-b" },
+			],
+		}
+		const harness = createHarness({
+			elements: [imageTarget, sourceA, sourceB],
+			attachmentPathsByFileId: { a: "./images/a.png", b: "./images/b.png" },
+			connectBatch: vi.fn(() => ({
+				status: "invalid" as const,
+				reason: "missing-element" as const,
+			})),
+		})
+		const manager = new CanvasAssetImportManager(harness.canvas as never)
+
+		await expect(
+			manager.importAndConnectMany({
+				assetIds: ["asset-a", "asset-b"],
+				targetElementId: "image-target",
+				targetKind: "image-generator",
+				slot: { kind: "reference" },
+				allowedMediaTypes: ["image"],
+			}),
+		).rejects.toThrow("Failed to create")
+
+		expect(harness.canvas.elementManager.delete).toHaveBeenCalledTimes(2)
+		expect([...harness.elements.keys()].sort()).toEqual(
+			["image-target", "source-a", "source-b", "video-target"].sort(),
+		)
+		expect(harness.register).not.toHaveBeenCalled()
+	})
+
+	it("stops a batch before creating nodes when the image edit session is stale", async () => {
+		const imageTarget: LayerElement = {
+			id: "image-target",
+			type: ElementTypeEnum.Image,
+			activeContentId: "image-content",
+			mainContentId: "image-content",
+			contents: [{ contentId: "image-content" }],
+		}
+		const harness = createHarness({
+			elements: [imageTarget],
+			attachmentPathsByFileId: { stale: "./images/stale.png" },
+			asset: {
+				assetId: "asset-image",
+				mediaType: "image",
+				fileUrl: null,
+				fileName: "stale.png",
+			},
+		})
+		const manager = new CanvasAssetImportManager(harness.canvas as never)
+
+		await expect(
+			manager.importAndConnectMany({
+				assetIds: ["asset-image"],
+				targetElementId: "image-target",
+				targetKind: "image-generator",
+				slot: { kind: "reference" },
+				allowedMediaTypes: ["image"],
+				isCurrent: () => false,
+			}),
+		).rejects.toThrow("stale")
+		expect(harness.canvas.elementManager.create).not.toHaveBeenCalled()
 		expect(harness.register).not.toHaveBeenCalled()
 	})
 })

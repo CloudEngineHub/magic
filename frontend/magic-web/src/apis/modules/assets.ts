@@ -210,6 +210,15 @@ export interface BatchGetAssetsParams {
 	asset_ids: string[]
 }
 
+export interface BatchDeleteAssetsParams {
+	asset_ids: string[]
+}
+
+export interface BatchDeleteAssetsResponse {
+	deleted_num: number
+	asset_ids: string[]
+}
+
 export interface AssetComplianceResponse {
 	asset_id: string
 	compliance_status: AssetComplianceStatus
@@ -380,6 +389,11 @@ export const generateAssetsApi = (fetch: ServiceHttpClient) => ({
 		return fetch
 			.post<AssetItem[]>("/api/v1/assets/batch-get", params)
 			.then((assets) => assets.map(normalizeAssetItem))
+	},
+
+	/** 批量删除当前用户归属的个人资产。 */
+	batchDeleteAssets(params: BatchDeleteAssetsParams) {
+		return fetch.post<BatchDeleteAssetsResponse>("/api/v1/assets/batch-delete", params)
 	},
 
 	/** 查询单个资产的异步合规状态。 */

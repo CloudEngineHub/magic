@@ -69,7 +69,6 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
-import { MediaComplianceFailedTagDecorator } from "../decorators/MediaComplianceFailedTagDecorator"
 import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator"
 import { DiscardedImageDecorator } from "../decorators/DiscardedImageDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
@@ -118,7 +117,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
 	private mainVersionTagDecorator?: MediaVersionTagDecorator
-	private complianceFailedTagDecorator?: MediaComplianceFailedTagDecorator
 	private discardedImageDecorator?: DiscardedImageDecorator
 
 	// 生成相关：Runtime manager 是并发状态的唯一事实来源；legacy 标记只兼容
@@ -502,8 +500,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.cornerActionsDecorator = undefined
 		this.mainVersionTagDecorator?.destroy()
 		this.mainVersionTagDecorator = undefined
-		this.complianceFailedTagDecorator?.destroy()
-		this.complianceFailedTagDecorator = undefined
 		this.discardedImageDecorator?.destroy()
 		this.discardedImageDecorator = undefined
 
@@ -541,7 +537,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.borderDecorator?.destroy()
 		this.cornerActionsDecorator?.destroy()
 		this.mainVersionTagDecorator?.destroy()
-		this.complianceFailedTagDecorator?.destroy()
 		this.removeContentUpdateListener()
 		this.discardedImageDecorator?.destroy()
 		this.stopGenerationProgress()
@@ -740,7 +735,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	override onMounted(): void {
 		super.onMounted()
 		this.mainVersionTagDecorator?.refreshLayout()
-		this.complianceFailedTagDecorator?.refreshLayout()
 		const src = this.getActiveContentData().src
 		if (src) {
 			this.canvas.visibilityManager.registerImageElement(this.data.id, src)
@@ -2389,13 +2383,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			return true
 		}
 
-		if (
-			currentContent.complianceStatus !== nextContent.complianceStatus &&
-			this.node instanceof Konva.Group
-		) {
-			this.complianceFailedTagDecorator?.updateConfig({ data: this.data })
-		}
-
 		// 更新基础属性
 		if (this.node instanceof Konva.Group) {
 			this.updateBaseProps(this.node, newData)
@@ -2969,7 +2956,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	private createMediaStatusTags(group: Konva.Group, width: number, height: number): void {
 		this.createMainVersionTag(group, width, height)
-		this.createComplianceFailedTag(group, width, height)
+		// Compliance failures are shown by the name-label shield and its tooltip;
+		// keep the media surface free of the redundant red status card.
 	}
 
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
@@ -2980,16 +2968,6 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			data: this.data,
 		})
 		this.mainVersionTagDecorator.create()
-	}
-
-	private createComplianceFailedTag(group: Konva.Group, width: number, height: number): void {
-		this.complianceFailedTagDecorator = new MediaComplianceFailedTagDecorator(group, {
-			canvas: this.canvas,
-			width,
-			height,
-			data: this.data,
-		})
-		this.complianceFailedTagDecorator.create()
 	}
 
 	private shouldShowFullscreenButton(): boolean {
@@ -3036,17 +3014,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.borderDecorator?.updateSize(width, height)
 		this.cornerActionsDecorator?.updateConfig({ width, height })
 		this.mainVersionTagDecorator?.updateConfig({ width, height, data: this.data })
-		this.complianceFailedTagDecorator?.updateConfig({ width, height, data: this.data })
 		this.updateClipRegion(width, height)
 		this.node.getLayer()?.batchDraw()
-	}
-
-	public refreshComplianceFailedTag(): void {
-		this.complianceFailedTagDecorator?.updateConfig({
-			width: this.data.width,
-			height: this.data.height,
-			data: this.data,
-		})
 	}
 
 	/**

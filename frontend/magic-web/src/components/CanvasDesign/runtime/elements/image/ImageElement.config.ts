@@ -50,16 +50,6 @@ export const COLORS = {
 	BUTTON_BG: "rgba(0, 0, 0, 0.70)",
 	/** Info 按钮 hover 状态背景颜色 */
 	BUTTON_BG_HOVER: "rgba(0, 0, 0, 0.85)",
-	/** 合规失败标签半透明背景 */
-	COMPLIANCE_FAILED_TAG_BG: "rgba(255, 241, 240, 0.82)",
-	/** 合规失败标签描边 */
-	COMPLIANCE_FAILED_TAG_BORDER: "rgba(255, 204, 199, 0.95)",
-	/** 合规失败标签标题/正文文字 */
-	COMPLIANCE_FAILED_TAG_TEXT: "#A84040",
-	/** 合规失败标签左侧警示图标 */
-	COMPLIANCE_FAILED_TAG_ICON: "#FF4D4F",
-	/** 合规失败标签图标内感叹号 */
-	COMPLIANCE_FAILED_TAG_ICON_MARK: "#FFFFFF",
 	/** 废稿是人工取舍，使用独立角标，不覆盖原主版本或生成状态。 */
 	DISCARDED_TAG_BG: "#DC2626",
 	/** 保持不同底图上的标签边界和图标对比度。 */

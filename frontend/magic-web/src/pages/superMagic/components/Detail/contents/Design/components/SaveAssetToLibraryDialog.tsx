@@ -353,7 +353,7 @@ export default function SaveAssetToLibraryDialog({
 			}}
 		>
 			<DialogContent
-				className="w-[min(780px,calc(100vw-32px))] max-w-[780px] gap-0 overflow-hidden p-0 sm:max-w-[780px]"
+				className="flex max-h-[calc(100vh-40px)] w-[min(780px,calc(100vw-32px))] max-w-[780px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[780px]"
 				onOpenAutoFocus={(event) => event.preventDefault()}
 				onPointerDownOutside={(event) => {
 					// Nested pickers portal outside this dialog. Ignore those events so
@@ -379,7 +379,7 @@ export default function SaveAssetToLibraryDialog({
 				}}
 				data-testid="save-asset-to-library-dialog"
 			>
-				<DialogHeader className="border-b px-5 py-4 pr-12 text-left">
+				<DialogHeader className="shrink-0 border-b px-5 py-4 pr-12 text-left">
 					<DialogTitle>
 						{editSource ? t("assetLibrarySave.editTitle") : t("assetLibrarySave.title")}
 					</DialogTitle>
@@ -390,10 +390,14 @@ export default function SaveAssetToLibraryDialog({
 					</DialogDescription>
 				</DialogHeader>
 
-				<ScrollArea className="max-h-[calc(100vh-180px)] min-h-0">
+				{/* Avoid a percentage-height cycle between this auto-sized dialog and Radix's viewport. */}
+				<ScrollArea
+					className="max-h-[calc(100vh-180px)] min-h-0"
+					viewportClassName="!h-auto max-h-[calc(100vh-180px)]"
+				>
 					<div className="grid grid-cols-1 gap-6 px-5 py-5 sm:grid-cols-[180px_minmax(0,1fr)]">
 						<div className="w-full max-w-[180px] space-y-2">
-							<div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-muted">
+							<div className="relative flex aspect-square w-full max-w-[180px] items-center justify-center overflow-hidden rounded-lg bg-muted">
 								{loading ? (
 									<Loader2
 										className="size-5 animate-spin text-muted-foreground"
@@ -402,19 +406,19 @@ export default function SaveAssetToLibraryDialog({
 								) : previewUrl && previewIsVideo ? (
 									<video
 										src={previewUrl}
-										className="h-full w-full object-contain"
 										muted
 										playsInline
 										controls
+										className="absolute inset-0 h-full w-full object-contain"
 									/>
 								) : previewUrl ? (
 									<img
 										src={previewUrl}
 										alt={name || t("assetLibrarySave.preview")}
-										className="h-full w-full object-contain"
+										className="absolute inset-0 h-full w-full object-contain"
 									/>
 								) : (
-									<span className="px-4 text-center text-xs text-muted-foreground">
+									<span className="absolute inset-0 flex items-center justify-center px-4 text-center text-xs text-muted-foreground">
 										{t("assetLibrarySave.previewUnavailable")}
 									</span>
 								)}
@@ -540,7 +544,13 @@ export default function SaveAssetToLibraryDialog({
 											variant="outline"
 											size="sm"
 											className="gap-1.5"
-											onClick={() => setSelectorOpen(true)}
+											onClick={() => {
+												// The selector edits a draft. Rebuild it from the last confirmed
+												// targets whenever it opens so a cancelled edit cannot leak into
+												// the next session.
+												setPendingTargets(selectedTargets)
+												setSelectorOpen(true)
+											}}
 										>
 											<Plus className="size-4" aria-hidden="true" />
 											{t("assetLibrarySave.selectTargets")}
@@ -554,7 +564,7 @@ export default function SaveAssetToLibraryDialog({
 									{t("assetLibrarySave.tagsLabel")}
 								</span>
 								{loadingTags ? (
-									<div className="flex items-center text-xs text-muted-foreground">
+									<div className="flex min-h-10 items-center text-xs text-muted-foreground">
 										<Loader2
 											className="mr-1.5 size-3.5 animate-spin"
 											aria-hidden="true"
@@ -577,6 +587,7 @@ export default function SaveAssetToLibraryDialog({
 											manage: t("assetLibrarySave.manageTags"),
 											title: t("assetLibrarySave.manageTags"),
 											createTag: t("assetLibrarySave.createTag"),
+											customGroup: t("assetLibrarySave.customTags"),
 											tagPlaceholder: t("assetLibrarySave.tagPlaceholder"),
 											edit: t("assetLibrarySave.editTag"),
 											delete: t("assetLibrarySave.deleteTag"),
@@ -585,6 +596,10 @@ export default function SaveAssetToLibraryDialog({
 											cancelCreate: t("assetLibrarySave.cancelCreate"),
 											empty: t("assetLibrarySave.noCustomTags"),
 											selected: t("assetLibrarySave.tagSelected"),
+											selectedCount: t("assetLibrarySave.selectedCount", {
+												count: selectedTagIds.length,
+											}),
+											clear: t("assetLibrarySave.clearTags"),
 											duplicate: t("assetLibrarySave.tagDuplicate"),
 										}}
 										onManagerOpenChange={setTagManagerOpen}
@@ -608,7 +623,7 @@ export default function SaveAssetToLibraryDialog({
 					</div>
 				</ScrollArea>
 
-				<DialogFooter className="border-t px-5 py-3 sm:items-center">
+				<DialogFooter className="shrink-0 border-t px-5 py-3 sm:items-center">
 					<Button type="button" variant="outline" onClick={onClose} disabled={saving}>
 						{t("assetLibrarySave.cancel")}
 					</Button>
@@ -638,10 +653,10 @@ export default function SaveAssetToLibraryDialog({
 					setPendingTargets(confirmedTargets)
 					setSelectorOpen(false)
 				}}
-				onCancel={() => {
-					setPendingTargets(selectedTargets)
-					setSelectorOpen(false)
-				}}
+				// MemberDepartmentSelector invokes onCancel after onOk to clear its
+				// navigation state. Do not roll back the draft here; opening the
+				// selector above already rehydrates it from selectedTargets.
+				onCancel={() => setSelectorOpen(false)}
 				zIndex={1600}
 			/>
 		</Dialog>

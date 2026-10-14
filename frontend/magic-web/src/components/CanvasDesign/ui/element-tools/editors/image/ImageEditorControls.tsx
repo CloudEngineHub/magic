@@ -50,6 +50,7 @@ interface ImageEditorReferencePopoverState {
 }
 
 interface ImageEditorReferenceSlotPopoverProps {
+	readOnly: boolean
 	className: string
 	style: CSSProperties
 	content: ReactNode
@@ -79,6 +80,7 @@ const ImageEditorReferenceSlotPopover = forwardRef<
 >(function ImageEditorReferenceSlotPopover(props, forwardedRef) {
 	const {
 		className,
+		readOnly,
 		style,
 		content,
 		slotKey,
@@ -108,6 +110,7 @@ const ImageEditorReferenceSlotPopover = forwardRef<
 
 	return (
 		<ReferenceResourceSlotPopover
+			includeAssetsSource={!readOnly && Boolean(referencePopoverState.maxReferenceFiles)}
 			className={className}
 			style={style}
 			content={content}
@@ -381,6 +384,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			const referencePopoverState = resolveReferencePopoverState(option)
 			return (
 				<ImageEditorReferenceSlotPopover
+					readOnly={readOnly}
 					className={cn(
 						className,
 						Boolean(option.resourcePath && hoveredMentionPath) &&
@@ -415,6 +419,7 @@ export default function ImageEditorControls(props: ImageEditorControlsProps) {
 			)
 		},
 		[
+			readOnly,
 			resolveReferencePopoverState,
 			isPopoverOpen,
 			selectedReferenceSlotKey,

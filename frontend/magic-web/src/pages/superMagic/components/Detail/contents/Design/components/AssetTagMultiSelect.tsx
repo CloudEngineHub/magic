@@ -1,6 +1,4 @@
 import type {
-	AssetTagGroupItem,
-	AssetTagItem,
 	AssetTagMutationResponse,
 	AssetTagTreeNode,
 	CreateAssetTagParams,
@@ -8,7 +6,6 @@ import type {
 } from "@/apis"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Button } from "@/components/shadcn-ui/button"
-import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import {
 	Command,
 	CommandEmpty,
@@ -22,11 +19,13 @@ import { cn } from "@/utils/cn"
 import { ChevronsUpDown, Settings2, X } from "lucide-react"
 import { useMemo, useState } from "react"
 import AssetTagManager from "./AssetTagManager"
+import { partitionAssetTagOptions, type AssetTagOption } from "./assetTagTree"
 
 interface AssetTagMultiSelectLabels {
 	manage: string
 	title: string
 	createTag: string
+	customGroup: string
 	tagPlaceholder: string
 	edit: string
 	delete: string
@@ -35,6 +34,8 @@ interface AssetTagMultiSelectLabels {
 	cancelCreate: string
 	empty: string
 	selected: string
+	selectedCount: string
+	clear: string
 	duplicate: string
 }
 
@@ -73,31 +74,21 @@ export default function AssetTagMultiSelect({
 }: AssetTagMultiSelectProps) {
 	const [open, setOpen] = useState(false)
 	const [managerOpen, setManagerOpen] = useState(false)
-	const { selectedOptions, groupedOptions, looseOptions } = useMemo(() => {
-		const selected: Array<AssetTagItem & { groupName: string }> = []
-		const grouped: Array<{
-			group: AssetTagGroupItem
-			options: Array<AssetTagItem & { groupName: string }>
-		}> = []
-		const loose: Array<AssetTagItem & { groupName: string }> = []
-
-		for (const node of groups) {
-			// parentId null is not a group. Those nodes are selectable custom tags.
-			if (node.nodeType === "tag") {
-				const tag = { ...node, groupName: "" }
-				loose.push(tag)
-				if (value.includes(tag.id)) selected.push(tag)
-				continue
-			}
-			const options = node.tags.map((tag) => ({ ...tag, groupName: node.name }))
-			grouped.push({ group: node, options })
-			for (const option of options) {
-				if (value.includes(option.id)) selected.push(option)
-			}
+	const { groupedOptions, customOptions } = useMemo(
+		() => partitionAssetTagOptions(groups),
+		[groups],
+	)
+	const selectedOptions = useMemo(() => {
+		const optionById = new Map<string, AssetTagOption>()
+		for (const { options } of groupedOptions) {
+			for (const option of options) optionById.set(option.id, option)
 		}
-
-		return { selectedOptions: selected, groupedOptions: grouped, looseOptions: loose }
-	}, [groups, value])
+		for (const option of customOptions) optionById.set(option.id, option)
+		return value.flatMap((id) => {
+			const option = optionById.get(id)
+			return option ? [option] : []
+		})
+	}, [customOptions, groupedOptions, value])
 
 	const toggleOption = (optionId: string) => {
 		onChange(
@@ -186,50 +177,66 @@ export default function AssetTagMultiSelect({
 					onWheel={(event) => event.stopPropagation()}
 				>
 					<Command className="min-h-0">
-						<CommandInput placeholder={searchPlaceholder} />
+						<CommandInput
+							placeholder={searchPlaceholder}
+							suffix={
+								value.length > 0 ? (
+									<>
+										<span
+											className="whitespace-nowrap text-xs text-muted-foreground"
+											aria-live="polite"
+										>
+											{labels.selectedCount}
+										</span>
+										<Button
+											type="button"
+											variant="link"
+											className="h-auto p-0 text-xs font-normal no-underline hover:no-underline"
+											onClick={() => onChange([])}
+										>
+											{labels.clear}
+										</Button>
+									</>
+								) : null
+							}
+						/>
 						<CommandList
 							aria-multiselectable="true"
 							className="max-h-[min(300px,var(--radix-popover-content-available-height))]"
 						>
 							<CommandEmpty>{emptyText}</CommandEmpty>
-							{looseOptions.length > 0 ? (
-								<CommandGroup>
-									{looseOptions.map((option) => {
-										const checked = value.includes(option.id)
-										return (
-											<CommandItem
-												key={option.id}
-												value={option.name}
-												onSelect={() => toggleOption(option.id)}
-											>
-												<Checkbox checked={checked} tabIndex={-1} />
-												<span className="min-w-0 truncate">
-													{option.name}
-												</span>
-											</CommandItem>
-										)
-									})}
-								</CommandGroup>
-							) : null}
 							{groupedOptions.map(({ group, options }) => (
-								<CommandGroup key={group.id} heading={group.name}>
-									{options.map((option) => {
-										const checked = value.includes(option.id)
-										return (
-											<CommandItem
-												key={option.id}
-												value={`${option.name} ${option.groupName}`}
-												onSelect={() => toggleOption(option.id)}
-											>
-												<Checkbox checked={checked} tabIndex={-1} />
-												<span className="min-w-0 truncate">
-													{option.name}
-												</span>
-											</CommandItem>
-										)
-									})}
+								<CommandGroup
+									key={group.id}
+									heading={group.name}
+									className={tagOptionGroupClassName}
+								>
+									{options.map((option) => (
+										<TagOption
+											key={option.id}
+											option={option}
+											checked={value.includes(option.id)}
+											onToggle={toggleOption}
+										/>
+									))}
 								</CommandGroup>
 							))}
+							{customOptions.length > 0 ? (
+								<CommandGroup
+									heading={labels.customGroup}
+									className={tagOptionGroupClassName}
+									data-testid="asset-tag-custom-group"
+								>
+									{customOptions.map((option) => (
+										<TagOption
+											key={option.id}
+											option={option}
+											checked={value.includes(option.id)}
+											onToggle={toggleOption}
+										/>
+									))}
+								</CommandGroup>
+							) : null}
 						</CommandList>
 					</Command>
 					<div className="border-t p-2">
@@ -261,5 +268,37 @@ export default function AssetTagMultiSelect({
 				labels={labels}
 			/>
 		</>
+	)
+}
+
+// Heading text is inset by px-2. The chip row uses the same inset so button edges line up with the group name.
+const tagOptionGroupClassName =
+	"[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-items]]:flex [&_[cmdk-group-items]]:flex-wrap [&_[cmdk-group-items]]:gap-1 [&_[cmdk-group-items]]:px-2"
+
+function TagOption({
+	option,
+	checked,
+	onToggle,
+}: {
+	option: AssetTagOption
+	checked: boolean
+	onToggle: (optionId: string) => void
+}) {
+	return (
+		<CommandItem
+			value={option.groupName ? `${option.name} ${option.groupName}` : option.name}
+			aria-pressed={checked}
+			data-testid="asset-tag-option"
+			onSelect={() => onToggle(option.id)}
+			className={cn(
+				"h-6 w-auto max-w-full shrink-0 grow-0 cursor-pointer justify-center rounded-md border px-2 py-0 text-xs font-normal leading-4 shadow-none",
+				// Color-only active state. A heavier font changes the chip width and shifts the rest of the row.
+				checked
+					? "border-primary bg-primary/10 text-primary aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary data-[selected=true]:aria-pressed:border-primary data-[selected=true]:aria-pressed:bg-primary/10 data-[selected=true]:aria-pressed:text-primary"
+					: "border-border bg-background text-foreground",
+			)}
+		>
+			<span className="truncate">{option.name}</span>
+		</CommandItem>
 	)
 }

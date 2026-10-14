@@ -1225,12 +1225,12 @@ export class Canvas {
 		reconcileUnverifiedComplianceInDocument(this)
 	}
 
+	/**
+	 * Keeps the compliance refresh entry point used by asset workflows while the
+	 * failure state is represented by the name-label shield instead of an in-element card.
+	 */
 	public refreshMediaComplianceFailedTags(): void {
-		for (const element of this.elementManager.getAllElements()) {
-			const instance = this.elementManager.getElementInstance(element.id) as
-				{ refreshComplianceFailedTag?: () => void } | undefined
-			instance?.refreshComplianceFailedTag?.()
-		}
+		this.refreshNameLabelIcons()
 	}
 
 	public isSeedanceComplianceEnabled(): boolean {

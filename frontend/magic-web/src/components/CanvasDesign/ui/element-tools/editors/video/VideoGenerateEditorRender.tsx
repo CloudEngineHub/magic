@@ -756,6 +756,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				const imported = await canvas.assetImportManager.importAndConnect({
 					assetId: asset.asset_id,
 					targetElementId: videoElement.id,
+					targetKind: "video-generator",
 					slot: { kind: assetSelectionSlot.inputTab },
 					allowedMediaTypes: assetSelectionMediaTypes.canvasMediaTypes,
 				})
@@ -1711,23 +1712,22 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 							: undefined
 					}
 					renderSendButton={() => (
-						<Button
-							className={styles.sendButton}
-							onClick={handleSend}
-							disabled={
-								sendButtonBusy ||
-								config.isUploading ||
-								editorRef.current?.hasPendingUploadMentions?.() === true ||
-								!hasSubmitIntent ||
-								!config.selectedModelId
-							}
-							aria-busy={sendButtonBusy}
-							data-testid="video-generate-editor-send-button"
-						>
-							{sendButtonBusy ? (
-								<LoaderCircle size={16} className="animate-spin" />
-							) : (
-								<>
+						<div className={styles.sendButtonSlot}>
+							<Button
+								className={styles.sendButton}
+								onClick={handleSend}
+								disabled={
+									sendButtonBusy ||
+									config.isUploading ||
+									editorRef.current?.hasPendingUploadMentions?.() === true ||
+									!hasSubmitIntent ||
+									!config.selectedModelId
+								}
+								aria-busy={sendButtonBusy}
+								data-testid="video-generate-editor-send-button"
+							>
+								{/* Keep the button footprint stable while loading; the spinner is an overlay. */}
+								<span className={styles.sendButtonContent}>
 									{estimatedPoints != null ? (
 										<>
 											<ZapIcon size={16} fill="currentColor" />
@@ -1741,9 +1741,14 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 									) : (
 										<ArrowUp size={16} />
 									)}
-								</>
-							)}
-						</Button>
+								</span>
+								{sendButtonBusy ? (
+									<span className={styles.sendButtonLoading} aria-hidden="true">
+										<LoaderCircle size={16} className="animate-spin" />
+									</span>
+								) : null}
+							</Button>
+						</div>
 					)}
 					sourceListContainer={sourceListContainer}
 				/>

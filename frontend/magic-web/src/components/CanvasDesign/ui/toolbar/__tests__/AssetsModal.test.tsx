@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { createPortal } from "react-dom"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -7,22 +7,37 @@ import AssetsModal from "../AssetsModal"
 import { assetLibrarySessionStore } from "../../../runtime/resources/asset/AssetLibrarySessionStore"
 
 const mocks = vi.hoisted(() => ({
+	batchDeleteAssets: vi.fn(),
 	getAssetOwners: vi.fn().mockResolvedValue([]),
 	queryAssets: vi.fn(),
+	transferAssetOwner: vi.fn(),
 }))
 
 vi.mock("@/models/user/hooks", () => ({
-	useUserInfo: () => ({ userInfo: null }),
+	useUserInfo: () => ({ userInfo: { user_id: "owner-1" } }),
 }))
 
 vi.mock("@/components/business/MemberDepartmentSelector", () => ({
 	default: () => null,
 }))
 
+vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
+	DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+	DropdownMenuItem: ({ children, onSelect }: { children: ReactNode; onSelect?: () => void }) => (
+		<button type="button" role="menuitem" onClick={onSelect}>
+			{children}
+		</button>
+	),
+	DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+}))
+
 vi.mock("@/apis", () => ({
 	AssetsApi: {
+		batchDeleteAssets: mocks.batchDeleteAssets,
 		getAssetOwners: mocks.getAssetOwners,
 		queryAssets: mocks.queryAssets,
+		transferAssetOwner: mocks.transferAssetOwner,
 	},
 }))
 
@@ -39,6 +54,10 @@ vi.mock("../asset-library/useAssetLibraryComplianceAction", () => ({
 	useAssetLibraryComplianceAction: () => ({
 		startCompliance: vi.fn(),
 	}),
+}))
+
+vi.mock("../../seedanceComplianceAvailability", () => ({
+	useSeedanceComplianceAvailable: () => false,
 }))
 
 vi.mock("../../../app/providers/I18nProvider", () => ({
@@ -82,6 +101,8 @@ describe("AssetsModal", () => {
 		assetLibrarySessionStore.clearAll()
 		mocks.queryAssets.mockReset()
 		mocks.getAssetOwners.mockReset().mockResolvedValue([])
+		mocks.batchDeleteAssets.mockReset()
+		mocks.transferAssetOwner.mockReset()
 	})
 
 	it("queries all allowed image and video assets in one request", async () => {
@@ -156,7 +177,7 @@ describe("AssetsModal", () => {
 		if (!assetCard) throw new Error("Asset card was not rendered")
 
 		fireEvent.click(assetCard)
-		fireEvent.click(screen.getByRole("button", { name: "确认" }))
+		fireEvent.click(screen.getByRole("button", { name: "应用至画布" }))
 
 		await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(asset))
 		expect(onClose).toHaveBeenCalledTimes(1)
@@ -191,10 +212,36 @@ describe("AssetsModal", () => {
 		fireEvent.click(secondCard)
 		fireEvent.click(thirdCard)
 
-		expect(screen.getByText("已选择 2 / 2 项")).toBeInTheDocument()
-		fireEvent.click(screen.getByRole("button", { name: "确认" }))
+		expect(screen.getByText("已选 2")).toBeInTheDocument()
+		fireEvent.click(screen.getByRole("button", { name: "应用至画布" }))
 
 		await waitFor(() => expect(onConfirmMultiple).toHaveBeenCalledWith([asset, secondAsset]))
+	})
+
+	it("batch deletes selected owned assets from the library", async () => {
+		const secondAsset = { ...asset, asset_id: "asset-2", name: "Portrait 2" }
+		mocks.queryAssets.mockResolvedValue(response(asset, secondAsset))
+		mocks.batchDeleteAssets.mockResolvedValue({
+			deleted_num: 2,
+			asset_ids: [asset.asset_id, secondAsset.asset_id],
+		})
+
+		render(<AssetsModal open onClose={vi.fn()} multiple />)
+		const firstCard = (await screen.findByText(asset.name)).closest('[role="button"]')
+		const secondCard = screen.getByText(secondAsset.name).closest('[role="button"]')
+		if (!firstCard || !secondCard) throw new Error("Asset cards were not rendered")
+		fireEvent.click(firstCard)
+		fireEvent.click(secondCard)
+		fireEvent.pointerDown(screen.getByRole("button", { name: "批量操作" }), {
+			button: 0,
+		})
+		fireEvent.click(await screen.findByRole("menuitem", { name: "批量删除" }))
+
+		await waitFor(() =>
+			expect(mocks.batchDeleteAssets).toHaveBeenCalledWith({
+				asset_ids: [asset.asset_id, secondAsset.asset_id],
+			}),
+		)
 	})
 
 	it("reuses the page-session cache after reopening and clears the previous selection", async () => {
@@ -204,13 +251,13 @@ describe("AssetsModal", () => {
 		const assetCard = (await screen.findByText(asset.name)).closest('[role="button"]')
 		if (!assetCard) throw new Error("Asset card was not rendered")
 		fireEvent.click(assetCard)
-		expect(screen.getByRole("button", { name: "确认" })).not.toBeDisabled()
+		expect(screen.getByRole("button", { name: "应用至画布" })).not.toBeDisabled()
 
 		rerender(<AssetsModal open={false} onClose={vi.fn()} />)
 		rerender(<AssetsModal open onClose={vi.fn()} />)
 		await screen.findByText(asset.name)
 
-		expect(screen.getByRole("button", { name: "确认" })).toBeDisabled()
+		expect(screen.getByRole("button", { name: "应用至画布" })).toBeDisabled()
 		expect(mocks.queryAssets).toHaveBeenCalledTimes(1)
 		// The small portrait library keeps the owner list warm with the modal session.
 		expect(mocks.getAssetOwners).toHaveBeenCalledTimes(1)
@@ -285,9 +332,9 @@ describe("AssetsModal", () => {
 		const assetCard = (await screen.findByText(asset.name)).closest('[role="button"]')
 		if (!assetCard) throw new Error("Asset card was not rendered")
 		fireEvent.click(assetCard)
-		fireEvent.click(screen.getByRole("button", { name: "确认" }))
+		fireEvent.click(screen.getByRole("button", { name: "应用至画布" }))
 
-		expect(await screen.findByRole("button", { name: "确认中..." })).toBeDisabled()
+		expect(await screen.findByRole("button", { name: "应用中..." })).toBeDisabled()
 		await act(async () => rejectConfirm?.(new Error("import failed")))
 
 		expect(await screen.findByRole("alert")).toHaveTextContent("素材选择失败，请重试")

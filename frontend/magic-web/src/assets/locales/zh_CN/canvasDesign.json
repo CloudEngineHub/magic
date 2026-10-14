@@ -7,6 +7,14 @@
 		"apply": "应用至画布",
 		"applying": "应用中...",
 		"assetId": "Asset ID",
+		"batchActions": "批量操作",
+		"batchDelete": "批量删除",
+		"batchDeleteFailed": "批量删除素材失败，请重试",
+		"batchDeleteSuccess": "已删除 {{count}} 个素材",
+		"batchLimitExceeded": "一次最多操作 {{count}} 个素材",
+		"batchOwnerOnly": "批量删除和转交仅支持选择自己拥有的素材",
+		"batchTransferOwner": "批量转交",
+		"batchTransferSuccess": "已转移 {{count}} 个素材的归属人",
 		"closePreview": "关闭预览",
 		"complianceFailed": "合规校验失败",
 		"compliancePassed": "已通过合规检查",
@@ -42,6 +50,7 @@
 		"selectAssets": "请选择素材",
 		"selectedAsset": "已选择：{{name}}",
 		"selectedCount": "已选择 {{count}} / {{max}} 项",
+		"selectedCountShort": "已选 {{count}}",
 		"teamAssets": "团队可见",
 		"teamVisible": "团队可见",
 		"transferAction": "转移",
@@ -52,6 +61,7 @@
 		"transferOwner": "转移归属人",
 		"transferSelectMember": "选择成员",
 		"transferSelectedAsset": "已选择素材",
+		"transferSelectedAssets": "已选择 {{count}} 个素材",
 		"transferSuccess": "素材归属人已转移",
 		"transferTarget": "目标归属人",
 		"transferTitle": "转移素材归属人",
@@ -147,11 +157,6 @@
 		"title": "请选择保留的版本",
 		"useLocal": "保留我的",
 		"useRemote": "使用新的"
-	},
-	"elementMediaCompliance": {
-		"failedHint": "请更换图片后重新认证",
-		"failedHintVideo": "请更换视频后重新认证",
-		"failedTag": "合规校验未通过"
 	},
 	"elementTools": {
 		"audioReplace": {

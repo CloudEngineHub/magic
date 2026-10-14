@@ -1,4 +1,5 @@
 import type { AssetTagItem, AssetTagMutationResponse, AssetTagTreeNode } from "@/apis"
+import { isAssetTagGroup, isExplicitlyUngroupedParent } from "./assetTagTree"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	Dialog,
@@ -55,13 +56,14 @@ function normalizeName(value: string): string {
 }
 
 function isUngrouped(parentId: string | null | undefined): boolean {
-	return parentId == null || parentId === ""
+	// undefined, null, "", and "0" are all stored forms of a tag that has no group.
+	return parentId == null || isExplicitlyUngroupedParent(parentId)
 }
 
 function getCustomTags(groups: AssetTagTreeNode[]): CustomTagRow[] {
 	return groups.flatMap((node) => {
-		// A tag with no parent is a custom tag, including ones returned beside groups.
-		if (node.nodeType === "tag") {
+		// A tag with no group is a custom tag, including ones returned beside groups.
+		if (!isAssetTagGroup(node)) {
 			return [{ tag: node, parentId: isUngrouped(node.parentId) ? null : node.parentId }]
 		}
 		return node.tags

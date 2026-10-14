@@ -1,4 +1,5 @@
 import type { AssetItem } from "@/apis"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -19,7 +20,7 @@ import {
 	ShieldQuestion,
 	Video,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { TFunction } from "../../../public/i18n-types"
 import { assetDetailStore } from "../../../runtime/resources/asset/AssetDetailStore"
 import { rememberAssetMediaDimensions } from "../../../runtime/resources/asset/assetMediaDimensionCache"
@@ -99,6 +100,11 @@ export function AssetLibraryAssetCard({
 }: AssetLibraryAssetCardProps) {
 	const [displayAsset, setDisplayAsset] = useState(asset)
 	const [durationLabel, setDurationLabel] = useState("")
+	const [mediaInView, setMediaInView] = useState(false)
+	const mediaContainerRef = useRef<HTMLDivElement>(null)
+	const videoRef = useRef<HTMLVideoElement>(null)
+	const previewFrameLoadRequestedRef = useRef(false)
+	const previewFrameSeekRequestedRef = useRef(false)
 
 	useEffect(() => {
 		setDisplayAsset(asset)
@@ -119,6 +125,85 @@ export function AssetLibraryAssetCard({
 			active = false
 		}
 	}, [asset])
+
+	const requestPreviewFrame = useCallback(() => {
+		if (
+			displayAsset.asset_media_type !== "VIDEO" ||
+			Boolean(displayAsset.thumbnail_url) ||
+			!mediaInView ||
+			previewFrameSeekRequestedRef.current
+		) {
+			return
+		}
+
+		const video = videoRef.current
+		if (!video) return
+
+		// `preload="metadata"` is enough for the duration label, but Safari may
+		// stop at HAVE_METADATA and leave a poster-less paused video blank. Only
+		// visible cards opt into the extra data request.
+		video.preload = "auto"
+		if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+			if (!previewFrameLoadRequestedRef.current) {
+				previewFrameLoadRequestedRef.current = true
+				try {
+					video.load()
+				} catch {
+					previewFrameLoadRequestedRef.current = false
+				}
+				return
+			}
+			if (video.readyState < HTMLMediaElement.HAVE_METADATA) return
+		}
+
+		const targetTime =
+			Number.isFinite(video.duration) && video.duration > 0
+				? Math.min(0.001, Math.max(0, video.duration - 0.001))
+				: 0.001
+		previewFrameSeekRequestedRef.current = true
+		try {
+			// Requesting a near-zero frame only for visible cards advances it to a
+			// drawable state without starting playback for every asset in the library.
+			video.currentTime = targetTime
+		} catch {
+			previewFrameSeekRequestedRef.current = false
+		}
+	}, [displayAsset.asset_media_type, displayAsset.thumbnail_url, mediaInView])
+
+	useEffect(() => {
+		previewFrameLoadRequestedRef.current = false
+		previewFrameSeekRequestedRef.current = false
+		setMediaInView(false)
+		if (displayAsset.asset_media_type !== "VIDEO" || Boolean(displayAsset.thumbnail_url)) {
+			return
+		}
+
+		const container = mediaContainerRef.current
+		if (!container || typeof IntersectionObserver === "undefined") {
+			setMediaInView(true)
+			return
+		}
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries.some((entry) => entry.isIntersecting)) return
+				setMediaInView(true)
+				observer.disconnect()
+			},
+			{ rootMargin: "120px" },
+		)
+		observer.observe(container)
+		return () => observer.disconnect()
+	}, [
+		displayAsset.asset_id,
+		displayAsset.asset_media_type,
+		displayAsset.file_url,
+		displayAsset.thumbnail_url,
+	])
+
+	useEffect(() => {
+		requestPreviewFrame()
+	}, [requestPreviewFrame])
 
 	const previewUrl = displayAsset.thumbnail_url || displayAsset.file_url || undefined
 	const mediaLabel =
@@ -151,9 +236,27 @@ export function AssetLibraryAssetCard({
 			<ShieldQuestion className="size-3.5" aria-hidden="true" />
 		)
 	const showComplianceAction =
-		Boolean(onComplianceCheck) && canStartAssetLibraryCompliance(displayAsset)
+		manageable && Boolean(onComplianceCheck) && canStartAssetLibraryCompliance(displayAsset)
 	const showActionsMenu = manageable || showComplianceAction
 	const seedanceComplianceLabel = t("contextMenu.seedanceCompliance", "Seedance 2.0 合规校验")
+	const complianceFailedReason =
+		displayAsset.compliance_status === "FAILED"
+			? (displayAsset.compliance_failed_reason?.trim() ?? "")
+			: ""
+	const complianceBadge = (
+		<span
+			className={complianceBadgeClassName}
+			role={complianceFailedReason ? "img" : undefined}
+			aria-label={complianceFailedReason || undefined}
+		>
+			<span className="inline-flex size-6 shrink-0 items-center justify-center">
+				{complianceBadgeIcon}
+			</span>
+			<span className="min-w-0 max-w-0 overflow-hidden whitespace-nowrap text-xs leading-4 transition-[max-width,padding] duration-200 ease-out group-hover/badge:max-w-52 group-hover/badge:pr-2 motion-reduce:transition-none">
+				{complianceLabel}
+			</span>
+		</span>
+	)
 
 	return (
 		<div
@@ -176,17 +279,23 @@ export function AssetLibraryAssetCard({
 				}
 			}}
 		>
-			<div className="group relative h-[220px] shrink-0 overflow-hidden bg-muted">
+			<div
+				ref={mediaContainerRef}
+				className="group relative h-[220px] shrink-0 overflow-hidden bg-muted"
+			>
 				{displayAsset.file_url && displayAsset.asset_media_type ? (
 					displayAsset.asset_media_type === "VIDEO" ? (
 						<video
+							ref={videoRef}
 							className="block size-full object-contain"
 							src={displayAsset.file_url}
 							poster={displayAsset.thumbnail_url ?? undefined}
 							aria-label={displayAsset.name}
 							muted
 							playsInline
-							preload="metadata"
+							preload={
+								displayAsset.thumbnail_url || !mediaInView ? "metadata" : "auto"
+							}
 							onLoadedMetadata={(event) => {
 								const video = event.currentTarget
 								rememberAssetMediaDimensions(displayAsset.asset_id, {
@@ -195,7 +304,9 @@ export function AssetLibraryAssetCard({
 								})
 								const label = formatAssetDuration(video.duration)
 								if (label) setDurationLabel(label)
+								requestPreviewFrame()
 							}}
+							onLoadedData={() => requestPreviewFrame()}
 						/>
 					) : displayAsset.asset_media_type === "AUDIO" ? (
 						<div className="flex size-full items-center justify-center">
@@ -235,14 +346,18 @@ export function AssetLibraryAssetCard({
 				) : null}
 				<div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
 					{seedanceComplianceAvailable ? (
-						<span className={complianceBadgeClassName}>
-							<span className="inline-flex size-6 shrink-0 items-center justify-center">
-								{complianceBadgeIcon}
-							</span>
-							<span className="min-w-0 max-w-0 overflow-hidden whitespace-nowrap text-xs leading-4 transition-[max-width,padding] duration-200 ease-out group-hover/badge:max-w-52 group-hover/badge:pr-2 motion-reduce:transition-none">
-								{complianceLabel}
-							</span>
-						</span>
+						complianceFailedReason ? (
+							// The reason used to sit on the preview and cover the media.
+							<MagicTooltip
+								title={complianceFailedReason}
+								placement="top"
+								delayDuration={0}
+							>
+								{complianceBadge}
+							</MagicTooltip>
+						) : (
+							complianceBadge
+						)
 					) : null}
 					{showActionsMenu ? (
 						<DropdownMenu modal={false} onOpenChange={onMenuOpenChange}>
@@ -296,13 +411,6 @@ export function AssetLibraryAssetCard({
 					<span className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-xs leading-4 text-white">
 						<Play className="size-3 fill-white" aria-hidden="true" />
 						{durationLabel || null}
-					</span>
-				) : null}
-				{seedanceComplianceAvailable &&
-				displayAsset.compliance_status === "FAILED" &&
-				displayAsset.compliance_failed_reason ? (
-					<span className="absolute inset-x-2.5 bottom-10 line-clamp-2 rounded-md bg-black/65 px-2 py-1 text-xs leading-4 text-white">
-						{displayAsset.compliance_failed_reason}
 					</span>
 				) : null}
 				{displayAsset.file_url &&

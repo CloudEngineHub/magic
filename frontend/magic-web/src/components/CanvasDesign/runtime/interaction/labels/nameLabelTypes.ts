@@ -17,6 +17,8 @@ export interface NameLabelIconContext {
 	isAssetLibrary: boolean
 	/** Runtime compliance state; asset-backed media is resolved outside the DSL. */
 	complianceStatus?: CanvasAssetComplianceStatus
+	/** Backend-provided reason shown when the resolved status is FAILED. */
+	complianceFailedReason?: string
 }
 
 /**

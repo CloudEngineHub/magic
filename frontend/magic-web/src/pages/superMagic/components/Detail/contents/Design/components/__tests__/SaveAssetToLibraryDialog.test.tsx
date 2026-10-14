@@ -18,17 +18,22 @@ vi.mock("@/apis", () => ({
 vi.mock("@/components/business/MemberDepartmentSelector", () => ({
 	default: ({
 		open,
+		selectedValues,
 		onSelectChange,
 		onOk,
 		onCancel,
 	}: {
 		open: boolean
+		selectedValues?: Array<Record<string, unknown>>
 		onSelectChange?: (values: Array<Record<string, unknown>>) => void
 		onOk?: (values: Array<Record<string, unknown>>) => void
 		onCancel?: () => void
 	}) =>
 		open ? (
 			<div>
+				<div data-testid="selector-selected-values">
+					{selectedValues?.map((value) => String(value.id)).join(",")}
+				</div>
 				<button
 					type="button"
 					onClick={() =>
@@ -46,7 +51,7 @@ vi.mock("@/components/business/MemberDepartmentSelector", () => ({
 				</button>
 				<button
 					type="button"
-					onClick={() =>
+					onClick={() => {
 						onOk?.([
 							{
 								id: "selector-record-1",
@@ -55,7 +60,8 @@ vi.mock("@/components/business/MemberDepartmentSelector", () => ({
 								dataType: "department",
 							},
 						])
-					}
+						onCancel?.()
+					}}
 				>
 					confirm-target
 				</button>
@@ -113,11 +119,15 @@ describe("SaveAssetToLibraryDialog", () => {
 		)
 
 		expect(screen.getByTestId("save-asset-to-library-dialog")).toHaveClass(
+			"max-h-[calc(100vh-40px)]",
 			"max-w-[780px]",
+			"flex-col",
 			"sm:max-w-[780px]",
 		)
 		await waitFor(() => expect(mocks.getAssetTags).toHaveBeenCalledTimes(1))
-		await waitFor(() => expect(screen.getByRole("img")).toHaveClass("object-contain"))
+		await waitFor(() =>
+			expect(screen.getByRole("img")).toHaveClass("absolute", "inset-0", "object-contain"),
+		)
 		expect(onSave).not.toHaveBeenCalled()
 
 		fireEvent.click(
@@ -259,6 +269,47 @@ describe("SaveAssetToLibraryDialog", () => {
 				departmentIds: ["department-1"],
 				tagIds: undefined,
 			}),
+		)
+	})
+
+	it("keeps confirmed visibility targets when the selector closes after confirming", async () => {
+		render(
+			<SaveAssetToLibraryDialog
+				open
+				source={{
+					elementId: "image-reopen",
+					contentId: "content-reopen",
+					path: "./images/reopen.png",
+					name: "reopen",
+				}}
+				onClose={vi.fn()}
+				getPreviewUrl={vi.fn().mockResolvedValue(undefined)}
+				onSave={vi.fn().mockResolvedValue({
+					assetId: "asset-reopen",
+					mediaType: "image",
+					fileUrl: null,
+				})}
+				onBindSavedAsset={vi.fn().mockReturnValue("bound")}
+			/>,
+		)
+
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "assetLibrarySave.teamVisibility" }))
+		})
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "assetLibrarySave.selectTargets" }))
+		})
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "confirm-target", hidden: true }))
+		})
+
+		expect(screen.getByText("Design")).toBeVisible()
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "assetLibrarySave.selectTargets" }))
+		})
+
+		expect(screen.getByTestId("selector-selected-values")).toHaveTextContent(
+			"selector-record-1",
 		)
 	})
 

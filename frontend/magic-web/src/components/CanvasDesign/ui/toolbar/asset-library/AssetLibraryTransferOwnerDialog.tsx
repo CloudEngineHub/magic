@@ -15,10 +15,10 @@ import { toast } from "sonner"
 import type { TFunction } from "../../../public/i18n-types"
 
 interface AssetLibraryTransferOwnerDialogProps {
-	asset: AssetItem | null
+	assets: AssetItem[]
 	t: TFunction
 	onClose: () => void
-	onTransferred: (assetId: string) => void
+	onTransferred: (assetIds: string[]) => void
 }
 
 function keepSingleMember(values: TreeNode[]): TreeNode[] {
@@ -29,7 +29,7 @@ function keepSingleMember(values: TreeNode[]): TreeNode[] {
 }
 
 export function AssetLibraryTransferOwnerDialog({
-	asset,
+	assets,
 	t,
 	onClose,
 	onTransferred,
@@ -37,6 +37,7 @@ export function AssetLibraryTransferOwnerDialog({
 	const [selectorOpen, setSelectorOpen] = useState(false)
 	const [selectedMember, setSelectedMember] = useState<TreeNode | null>(null)
 	const [transferring, setTransferring] = useState(false)
+	const asset = assets[0]
 	const currentOwnerId = asset?.owner_uid?.trim() || asset?.owner.id || ""
 	const disabledValues: TreeNode[] = currentOwnerId
 		? [
@@ -56,7 +57,7 @@ export function AssetLibraryTransferOwnerDialog({
 	}
 
 	const handleTransfer = async () => {
-		if (!asset || transferring) return
+		if (assets.length === 0 || transferring) return
 		const ownerUid =
 			(selectedMember as (TreeNode & { user_id?: string }) | null)?.user_id ||
 			selectedMember?.id
@@ -67,12 +68,19 @@ export function AssetLibraryTransferOwnerDialog({
 		setTransferring(true)
 		try {
 			await AssetsApi.transferAssetOwner({
-				asset_ids: [asset.asset_id],
+				asset_ids: assets.map((item) => item.asset_id),
 				owner_uid: ownerUid,
 			})
-			toast.success(t("assets.transferSuccess", "素材归属人已转移"))
+			toast.success(
+				assets.length === 1
+					? t("assets.transferSuccess", "素材归属人已转移")
+					: t("assets.batchTransferSuccess", {
+							defaultValue: "已转移 {{count}} 个素材的归属人",
+							count: assets.length,
+						}),
+			)
 			setSelectedMember(null)
-			onTransferred(asset.asset_id)
+			onTransferred(assets.map((item) => item.asset_id))
 			onClose()
 		} catch (error) {
 			toast.error(
@@ -88,7 +96,7 @@ export function AssetLibraryTransferOwnerDialog({
 	return (
 		<>
 			<Dialog
-				open={Boolean(asset)}
+				open={assets.length > 0}
 				onOpenChange={(nextOpen) => {
 					if (!nextOpen) handleClose()
 				}}
@@ -112,17 +120,24 @@ export function AssetLibraryTransferOwnerDialog({
 						<DialogTitle>{t("assets.transferTitle", "转移素材归属人")}</DialogTitle>
 					</DialogHeader>
 					<div className="space-y-4 px-5 py-5 text-sm">
-						<p>
-							<span className="text-muted-foreground">
-								{t("assets.transferCurrentOwner", "当前归属人")}：
-							</span>
-							{asset?.owner.name || t("assets.unknownOwner", "未知归属人")}
-						</p>
+						{assets.length === 1 ? (
+							<p>
+								<span className="text-muted-foreground">
+									{t("assets.transferCurrentOwner", "当前归属人")}：
+								</span>
+								{asset?.owner.name || t("assets.unknownOwner", "未知归属人")}
+							</p>
+						) : null}
 						<p>
 							<span className="text-muted-foreground">
 								{t("assets.transferSelectedAsset", "已选择素材")}：
 							</span>
-							{asset?.name}
+							{assets.length === 1
+								? asset?.name
+								: t("assets.transferSelectedAssets", {
+										defaultValue: "已选择 {{count}} 个素材",
+										count: assets.length,
+									})}
 						</p>
 						<div className="space-y-2">
 							<div className="font-medium">

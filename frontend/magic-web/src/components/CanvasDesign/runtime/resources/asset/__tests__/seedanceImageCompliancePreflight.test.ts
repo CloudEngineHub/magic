@@ -20,11 +20,13 @@ function createCanvas(
 	},
 ) {
 	const startLibraryAssetCompliance = vi.fn().mockResolvedValue("asset-1")
+	const startWorkspaceFileCompliance = vi.fn().mockResolvedValue("asset-workspace")
 	const canvas = {
 		isSeedanceComplianceEnabled: () => true,
 		magicConfigManager: { config: { methods } },
 		assetComplianceTaskManager: {
 			startLibraryAssetCompliance,
+			startWorkspaceFileCompliance,
 			watchLibraryComplianceChecks: vi.fn(),
 		},
 		assetCompliancePollingManager: {
@@ -44,12 +46,15 @@ function createCanvas(
 				(elementId: string) => options?.upstreamConnections?.[elementId] ?? [],
 			),
 		},
+		permissionManager: {
+			can: vi.fn(() => true),
+		},
 		elementManager: {
 			getElementData: vi.fn((elementId: string) => options?.elementData?.get(elementId)),
 		},
 	} as unknown as Canvas
 
-	return { canvas, startLibraryAssetCompliance }
+	return { canvas, startLibraryAssetCompliance, startWorkspaceFileCompliance }
 }
 
 function request(inputs: GenerateVideoRequest["inputs"]): GenerateVideoRequest {
@@ -157,8 +162,121 @@ describe("Seedance image compliance preflight", () => {
 			{
 				uri: "./images/portrait.png",
 				assetId: "asset-nested",
+				elementId: "nested-image",
+				contentId: "nested-image-content",
+				sourcePath: "./images/portrait.png",
+				name: "portrait",
 			},
 		])
+	})
+
+	it("retains the Canvas target for a connected image without an assetId", () => {
+		const image = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			activeContentId: "image-content",
+			mainContentId: "image-content",
+			contents: [{ contentId: "image-content", src: "./images/portrait.png" }],
+		} as unknown as LayerElement
+		const video = {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			activeContentId: "video-content",
+			mainContentId: "video-content",
+			contents: [{ contentId: "video-content", src: "./videos/source.mp4" }],
+		} as unknown as LayerElement
+		const { canvas } = createCanvas(
+			{},
+			{
+				elementData: new Map([
+					["video-1", video],
+					["image-1", image],
+				]),
+				upstreamConnections: {
+					"video-1": [{ id: "connection-1", sourceElementId: "image-1" }],
+				},
+			},
+		)
+
+		expect(
+			resolveSeedanceImageAssetReferences(canvas, "video-1", ["./images/portrait.png"]),
+		).toEqual([
+			{
+				uri: "./images/portrait.png",
+				elementId: "image-1",
+				contentId: "image-content",
+				sourcePath: "./images/portrait.png",
+				name: "portrait",
+			},
+		])
+	})
+
+	it("starts workspace compliance and binds an unbound connected image before submit", async () => {
+		const image = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			activeContentId: "image-content",
+			mainContentId: "image-content",
+			contents: [{ contentId: "image-content", src: "./images/portrait.png" }],
+		} as unknown as LayerElement
+		const video = {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			activeContentId: "video-content",
+			mainContentId: "video-content",
+			contents: [{ contentId: "video-content", src: "./videos/source.mp4" }],
+		} as unknown as LayerElement
+		const startWorkspaceMediaCompliance = vi.fn()
+		const { canvas, startWorkspaceFileCompliance } = createCanvas(
+			{
+				ensureAssetAgreementSigned: vi.fn().mockResolvedValue(true),
+				startWorkspaceMediaCompliance,
+			},
+			{
+				elementData: new Map([
+					["video-1", video],
+					["image-1", image],
+				]),
+				upstreamConnections: {
+					"video-1": [{ id: "connection-1", sourceElementId: "image-1" }],
+				},
+			},
+		)
+		startWorkspaceFileCompliance.mockImplementation(
+			async (params: {
+				path: string
+				name: string
+				persistTarget: { elementId: string; contentId: string; sourcePath: string }
+				startWorkspaceMediaCompliance: (input: {
+					path: string
+					name: string
+				}) => Promise<unknown>
+			}) => {
+				await params.startWorkspaceMediaCompliance({ path: params.path, name: params.name })
+				;(image.contents[0] as { assetId?: string }).assetId = "asset-workspace"
+				expect(params.persistTarget).toEqual({
+					elementId: "image-1",
+					contentId: "image-content",
+					sourcePath: "./images/portrait.png",
+				})
+				return "asset-workspace"
+			},
+		)
+
+		await expect(
+			runSeedanceImageCompliancePreflight({
+				canvas,
+				sourceVideoElementId: "video-1",
+				request: request({ reference_images: [{ uri: "./images/portrait.png" }] }),
+				modelName: "Seedance",
+			}),
+		).resolves.toEqual({ proceed: true })
+		expect(startWorkspaceMediaCompliance).toHaveBeenCalledWith({
+			path: "./images/portrait.png",
+			name: "portrait",
+		})
+		expect(startWorkspaceFileCompliance).toHaveBeenCalledTimes(1)
+		expect((image.contents[0] as { assetId?: string }).assetId).toBe("asset-workspace")
 	})
 
 	it("does not start compliance when the asset is already PASS", async () => {
