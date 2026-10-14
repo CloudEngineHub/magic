@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\Skill\Facade;
 
+use App\Application\SuperMagic\Common\Transfer\ResourceTransferAppService;
 use App\Application\SuperMagic\Project\DTO\Request\CreateAgentProjectRequestDTO;
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
 use App\Application\SuperMagic\Skill\Service\SkillAppService;
@@ -16,6 +17,7 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Interfaces\SuperMagic\Common\DTO\Request\TransferResourceRequestDTO;
 use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
 use App\Interfaces\SuperMagic\Skill\Assembler\SkillAssembler;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\AddSkillFromStoreRequestDTO;
@@ -30,6 +32,7 @@ use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillDetailResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\FormRequest\SkillQueryFormRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use RuntimeException;
 
@@ -38,12 +41,25 @@ use function Hyperf\Support\retry;
 #[ApiResponse('low_code')]
 class SkillApi extends AbstractApi
 {
+    #[Inject]
+    protected ResourceTransferAppService $resourceTransferAppService;
+
     public function __construct(
         protected RequestInterface $request,
         protected SkillAppService $userSkillAppService,
         private readonly ProjectAppService $projectAppService,
     ) {
         parent::__construct($request);
+    }
+
+    public function transfer(string $code): array
+    {
+        return $this->resourceTransferAppService->transfer(
+            $this->getAuthorization(),
+            $code,
+            false,
+            TransferResourceRequestDTO::fromRequest($this->request)
+        );
     }
 
     /**

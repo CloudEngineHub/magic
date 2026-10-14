@@ -9,6 +9,7 @@ namespace App\Application\SuperMagic\Project\Service;
 
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\OrganizationEnvironment\Service\OrganizationDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Domain\SuperMagic\Message\Service\MessageScheduleDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectOperationLogEntity;
@@ -59,6 +60,7 @@ class TransferAppService extends AbstractAppService
         private readonly WorkspaceRepositoryInterface $workspaceRepository,
         private readonly PackageFilterInterface $packageFilterService,
         private readonly MessageScheduleDomainService $messageScheduleDomainService,
+        private readonly OrganizationDomainService $organizationDomainService,
     ) {
     }
 
@@ -79,7 +81,8 @@ class TransferAppService extends AbstractAppService
         $retainOriginalLocation = $shareToMe ? $requestDTO->getRetainOriginalLocation() : false;
         $fromUserName = $this->getUserDisplayName($fromUserId, $requestContext);
 
-        if (! $this->packageFilterService->canTransferProject($organizationCode)) {
+        if ($this->organizationDomainService->getByCode($organizationCode)?->isPersonal()
+            || ! $this->packageFilterService->canTransferProject($organizationCode)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::NO_PERMISSION_TO_TRANSFER);
         }
 
@@ -134,7 +137,8 @@ class TransferAppService extends AbstractAppService
         $retainOriginalLocation = $shareToMe ? $requestDTO->getRetainOriginalLocation() : false;
         $fromUserName = $this->getUserDisplayName($fromUserId, $requestContext);
 
-        if (! $this->packageFilterService->canTransferProject($organizationCode)) {
+        if ($this->organizationDomainService->getByCode($organizationCode)?->isPersonal()
+            || ! $this->packageFilterService->canTransferProject($organizationCode)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::NO_PERMISSION_TO_TRANSFER);
         }
 
