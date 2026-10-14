@@ -20,6 +20,10 @@ class ModeGroupModelDTO extends AbstractDTO
 
     protected string $modelId = '';
 
+    protected string $resolvedModelId = '';
+
+    protected array $reasoningEffortLevels = [];
+
     protected string $modelName = '';
 
     protected string $providerModelId = '';
@@ -37,6 +41,13 @@ class ModeGroupModelDTO extends AbstractDTO
     protected ?ImageSizeConfig $imageSizeConfig = null;
 
     protected ?VideoGenerationConfig $videoGenerationConfig = null;
+
+    /** 设置解析后的模型标识与能力，不改变用户选择的逻辑模型标识。 */
+    public function setReasoningCapability(string $resolvedModelId, array $levels): void
+    {
+        $this->resolvedModelId = $resolvedModelId;
+        $this->reasoningEffortLevels = $levels;
+    }
 
     public function getId(): string
     {

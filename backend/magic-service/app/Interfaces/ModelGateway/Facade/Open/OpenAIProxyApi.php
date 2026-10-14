@@ -32,8 +32,8 @@ class OpenAIProxyApi extends AbstractOpenApi
     protected LLMAppService $llmAppService;
 
     /**
-     * 处理聊天请求，支持 reasoning_effort 七档：none、minimal、low、medium、high、xhigh、max。
-     * 非空 reasoning_effort 优先于旧 thinking；省略或为 null 时回退旧配置或模型默认值。
+     * 处理聊天请求，reasoning_effort 原样交给 Odin 校验和映射。
+     * 非 null reasoning_effort 优先于旧 thinking；省略或为 null 时回退旧配置或模型默认值。
      */
     public function chatCompletions(RequestInterface $request)
     {

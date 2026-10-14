@@ -39,7 +39,8 @@ class ModeAssembler
         array $providerImageModels = [],
         array $providerVideoModels = [],
         array $featuredVideoGenerationConfigs = [],
-        bool $loadImageModelConfig = true
+        bool $loadImageModelConfig = true,
+        array $reasoningCapabilities = []
     ): ModeAggregateDTO {
         $dto = new ModeAggregateDTO();
         $dto->setMode(self::modeToDTO($aggregate->getMode()));
@@ -53,7 +54,8 @@ class ModeAssembler
                 $providerImageModels,
                 $providerVideoModels,
                 $featuredVideoGenerationConfigs,
-                $loadImageModelConfig
+                $loadImageModelConfig,
+                $reasoningCapabilities
             );
             // 只有当分组下有模型、图像模型或视频模型时才添加（前台过滤空分组）
             if (! empty($groupDTO->getModels()) || ! empty($groupDTO->getImageModels()) || ! empty($groupDTO->getVideoModels())) {
@@ -78,7 +80,8 @@ class ModeAssembler
         array $providerImageModels = [],
         array $providerVideoModels = [],
         array $featuredVideoGenerationConfigs = [],
-        bool $loadImageModelConfig = true
+        bool $loadImageModelConfig = true,
+        array $reasoningCapabilities = []
     ): ModeGroupAggregateDTO {
         $dto = new ModeGroupAggregateDTO();
         $dto->setGroup(self::groupEntityToDTO($groupAggregate->getGroup()));
@@ -94,6 +97,11 @@ class ModeAssembler
             if (isset($providerModels[$providerModelId])) {
                 $providerModel = $providerModels[$providerModelId];
                 self::fillModelDTO($modelDTO, $providerModel, $locale, $upgradeRequiredModelIds);
+                $capability = $reasoningCapabilities[$providerModel->getModelId()] ?? [
+                    'resolved_model_id' => '',
+                    'reasoning_effort_levels' => [],
+                ];
+                $modelDTO->setReasoningCapability($capability['resolved_model_id'], $capability['reasoning_effort_levels']);
                 $models[] = $modelDTO;
             }
         }

@@ -44,6 +44,8 @@ class ProviderModelConfigVersionEntity extends AbstractEntity
 
     protected bool $supportDeepThink = false;
 
+    protected ?array $reasoningEffortLevels = null;
+
     protected ?float $cacheWritePricing = null;
 
     protected bool $supportMultiModal = false;
@@ -71,6 +73,20 @@ class ProviderModelConfigVersionEntity extends AbstractEntity
     protected bool $isCurrentVersion = true;
 
     protected ?string $createdAt = null;
+
+    /** 读取版本中的原始档位，空值保留历史默认规则。 */
+    public function getReasoningEffortLevels(): ?array
+    {
+        return $this->reasoningEffortLevels;
+    }
+
+    /** 复用模型配置校验，保证版本恢复与编辑采用同一契约。 */
+    public function setReasoningEffortLevels(?array $levels): void
+    {
+        $config = new \App\Domain\Provider\DTO\Item\ModelConfigItem();
+        $config->setReasoningEffortLevels($levels);
+        $this->reasoningEffortLevels = $config->getReasoningEffortLevels();
+    }
 
     public function __construct(?array $data = null)
     {

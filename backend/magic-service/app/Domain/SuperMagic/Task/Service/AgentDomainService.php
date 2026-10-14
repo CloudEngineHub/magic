@@ -725,6 +725,8 @@ class AgentDomainService
         // 在发送聊天消息时桥接到 dynamic_config。这样沙箱内的工具只需要读取
         // dynamic_config.image_model / dynamic_config.video_model，就能和用户本轮选择保持一致。
         $extra = $taskContext->getExtra();
+        // 思考强度是每条消息的请求参数，不能被任务缓存或任意动态参数覆盖。
+        $taskDynamicConfig['reasoning_effort'] = $extra?->getReasoningEffort();
         if ($extra !== null) {
             $imageModelId = $extra->getImageModelId();
             if (! empty($imageModelId)) {

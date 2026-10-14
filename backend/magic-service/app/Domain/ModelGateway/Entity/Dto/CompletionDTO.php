@@ -7,10 +7,6 @@ declare(strict_types=1);
 
 namespace App\Domain\ModelGateway\Entity\Dto;
 
-use App\ErrorCode\MagicApiErrorCode;
-use App\Infrastructure\Core\Exception\ExceptionBuilder;
-use Hyperf\Odin\Api\Request\ReasoningEffort;
-
 /**
  * 聊天请求参数，保留旧思考配置并接收统一思考强度。
  */
@@ -41,7 +37,8 @@ class CompletionDTO extends AbstractRequestDTO
 
     protected ?array $thinking = null;
 
-    protected ?string $reasoningEffort = null;
+    /** 请求值原样交给 Odin，避免中间层绑定其档位与类型规则。 */
+    protected mixed $reasoningEffort = null;
 
     public function __construct(?array $data = null)
     {
@@ -156,19 +153,16 @@ class CompletionDTO extends AbstractRequestDTO
     /**
      * 获取统一思考强度，空值表示回退旧思考配置或模型默认值。
      */
-    public function getReasoningEffort(): ?string
+    public function getReasoningEffort(): mixed
     {
         return $this->reasoningEffort;
     }
 
     /**
-     * 校验 Odin 七档小写思考强度，非法类型或档位返回参数验证错误。
+     * 原样保存请求强度，档位、类型及供应商能力校验统一交给 Odin。
      */
     public function setReasoningEffort(mixed $reasoningEffort): void
     {
-        if ($reasoningEffort !== null && (! is_string($reasoningEffort) || ReasoningEffort::tryFrom($reasoningEffort) === null)) {
-            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'reasoning_effort must be one of: ' . implode(', ', ReasoningEffort::values()));
-        }
         $this->reasoningEffort = $reasoningEffort;
     }
 

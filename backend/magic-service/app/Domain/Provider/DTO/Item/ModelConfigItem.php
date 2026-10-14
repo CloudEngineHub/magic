@@ -12,6 +12,7 @@ use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\AbstractDTO;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\Odin\Constants\ChatApi;
+use Hyperf\Odin\Api\Request\ReasoningEffort;
 
 class ModelConfigItem extends AbstractDTO
 {
@@ -20,6 +21,9 @@ class ModelConfigItem extends AbstractDTO
     protected bool $supportFunction = true;
 
     protected bool $supportDeepThink = false;
+
+    /** 未配置与显式空数组分别表示历史三档和不开放手动选择。 */
+    protected ?array $reasoningEffortLevels = null;
 
     protected int $vectorSize = 2048;
 
@@ -82,6 +86,33 @@ class ModelConfigItem extends AbstractDTO
         parent::__construct($data);
 
         $this->setBillingTiers($billingTiers);
+    }
+
+    /** 获取原始配置，用于版本记录，保留历史空值语义。 */
+    public function getReasoningEffortLevels(): ?array
+    {
+        return $this->reasoningEffortLevels;
+    }
+
+    /** 校验七档并按统一顺序去重保存。 */
+    public function setReasoningEffortLevels(?array $levels): void
+    {
+        if ($levels === null) {
+            $this->reasoningEffortLevels = null;
+            return;
+        }
+        foreach ($levels as $level) {
+            if (! is_string($level) || ReasoningEffort::tryFrom($level) === null) {
+                ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'Invalid reasoning_effort_levels');
+            }
+        }
+        $this->reasoningEffortLevels = array_values(array_intersect(ReasoningEffort::values(), $levels));
+    }
+
+    /** 统一读取有效档位，关闭思考时不开放选择，历史配置默认三档。 */
+    public function getEffectiveReasoningEffortLevels(): array
+    {
+        return $this->supportDeepThink ? ($this->reasoningEffortLevels ?? ['low', 'medium', 'high']) : [];
     }
 
     public function getMaxTokens(): ?int
