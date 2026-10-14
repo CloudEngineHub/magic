@@ -3,6 +3,9 @@ import { useCountDown, useThrottleEffect } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { FlowApi } from "@/apis"
 import MagicLoading from "@/components/other/MagicLoading"
+import { logger as Logger } from "@/infrastructure/logger"
+
+const logger = Logger.createLogger("MCPAuthCallback")
 
 export default function Auth() {
 	const { t } = useTranslation("interface")
@@ -28,11 +31,18 @@ export default function Auth() {
 					if (!code || !state) {
 						throw new Error("params error")
 					}
-					const aa = await FlowApi.bindMCPOAuth(code || "", state || "")
+					await FlowApi.bindMCPOAuth(code, state)
 					setSuccess(true)
 					setTargetDate(Date.now() + 3000)
 				} catch (error) {
-					console.log("oauth 2.0 fail", error)
+					logger.error({
+						eventKey: "mcp_oauth_callback_failed",
+						errorKind: !code || !state ? "validation" : "request",
+						error,
+						message: "MCP OAuth callback failed",
+						// 仅记录参数是否存在，避免将 OAuth 授权码及 state 放入日志上下文。
+						context: { hasCode: Boolean(code), hasState: Boolean(state) },
+					})
 					setSuccess(false)
 				} finally {
 					setLoading(false)
