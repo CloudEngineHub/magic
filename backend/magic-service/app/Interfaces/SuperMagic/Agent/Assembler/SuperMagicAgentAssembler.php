@@ -342,6 +342,8 @@ class SuperMagicAgentAssembler
                     $officialAgentCodeMap,
                     $marketSourceMap
                 ),
+                // Created-list cards still need an explicit role; installation alone is not ownership.
+                userOperation: $agent->getCreator() === $currentUserId ? Operation::Owner : null,
                 scope: AgentListScope::CREATED->value,
                 organizationInfo: $organizationInfoMap[$agent->getOrganizationCode()] ?? null,
             );
