@@ -116,7 +116,7 @@ export type DesignSaveResult =
 
 export interface DesignSaveLifecycleHandlers {
 	onSaveStart?: () => number | null
-	onSaveCommitted?: (result: Extract<DesignSaveResult, { ok: true }>) => void
+	onSaveCommitted?: (result: Extract<DesignSaveResult, { ok: true }>) => Promise<void> | void
 	onSaveEnd?: (
 		saveToken: number | null | undefined,
 		didSave: boolean,
@@ -490,10 +490,6 @@ export class DesignSaveManager {
 					sidecarResult === "persisted" ||
 					sidecarResult === "unchanged" ||
 					sidecarResult === "skipped"
-				if (sidecarResult === "blocked-unsupported") {
-					this.stateBag.setters.setIsSaving(false)
-					return { ok: false, reason: "unsupported-sidecar" }
-				}
 			}
 			const requestIsCurrent = isCurrentRequest()
 			if (
@@ -517,7 +513,7 @@ export class DesignSaveManager {
 				savedDesignData: designDataToSave,
 				savedFingerprint: fp,
 			}
-			if (requestIsCurrent) this.saveLifecycleHandlers.onSaveCommitted?.(result)
+			if (requestIsCurrent) await this.saveLifecycleHandlers.onSaveCommitted?.(result)
 			this.lastSaveFullyPersisted =
 				didPersistDetails &&
 				isCurrentRequest() &&

@@ -1870,7 +1870,7 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 		this.writeConflictLocalDraftNow(nextConflict, localData)
 	}
 
-	private handleSuccessfulSaveResult(saveResult: DesignSaveResult): void {
+	private async handleSuccessfulSaveResult(saveResult: DesignSaveResult): Promise<void> {
 		if (
 			!saveResult.ok ||
 			saveResult.fileId !== this.stateBag.getMagicProjectJsFileId() ||
@@ -1882,6 +1882,24 @@ export class DesignProjectManager implements DesignProjectManagerAPI {
 			return
 		}
 		if (!saveResult.fullyPersisted) {
+			// 主文件已经成功；详情失败时以实际当前文件为基准，保留屏幕修改和草稿。
+			try {
+				const currentFile = await this.versionManager.loadLatest()
+				if (
+					currentFile.fileId !== saveResult.fileId ||
+					currentFile.accessIdentity !== saveResult.accessIdentity ||
+					saveResult.fileId !== this.stateBag.getMagicProjectJsFileId() ||
+					saveResult.accessIdentity !== getDesignRequestIdentity(this.options)
+				)
+					return
+				if (
+					currentFile.data &&
+					this.stateBag.getPrevDesignDataFingerprint() === saveResult.baseFingerprint
+				)
+					this.setSyncedRemoteBaseDesignData(currentFile.data)
+			} catch {
+				// 读取失败时保留原基准，重试仍需通过当前正文检查。
+			}
 			const fileId = this.stateBag.getMagicProjectJsFileId()
 			if (!fileId) return
 			const currentPending = this.stateBag.getPendingDesignUpgrade?.()
