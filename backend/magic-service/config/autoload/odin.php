@@ -244,9 +244,13 @@ return [
             'multi_modal' => false,
             'vector_size' => 0,
             'thinking_budget_levels' => [
-                'low' => 4096,
-                'medium' => 16384,
-                'high' => 32768,
+                'none' => 0, // 关闭思考
+                'minimal' => 1024, // 约 512～1024 token
+                'low' => 2048, // 约 1024～4096 token
+                'medium' => 8192, // 约 4096～8192 token
+                'high' => 16384, // 约 8192～16384 token
+                'xhigh' => 24576, // 约 16384～24576 token
+                'max' => 32768, // 约 24576～32768 token
             ],
         ],
         'general_api_options' => [
