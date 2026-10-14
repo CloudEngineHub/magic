@@ -67,6 +67,20 @@ def _get_context_remaining(tool_context: Optional["ToolContext"]) -> int:
         return 0
 
 
+def _truncate_to_token_budget(content: str, max_tokens: int) -> str:
+    """按同一估算器选择字符前缀，供源正文额度和展示额度分别使用。"""
+    left, right = 0, len(content)
+    best_end = 0
+    while left <= right:
+        mid = (left + right) // 2
+        if num_tokens_from_string(content[:mid]) <= max_tokens:
+            best_end = mid
+            left = mid + 1
+        else:
+            right = mid - 1
+    return content[:best_end]
+
+
 @dataclass
 class TruncationInfo:
     """文件截断信息，用于生成对大模型友好的提示。"""
@@ -340,6 +354,7 @@ Suggestions:
         allow_fuzzy_match: bool = True,
         use_context_budget: bool = True,
         record_read: bool = True,
+        source_max_tokens: int | None = None,
     ) -> ToolResult:
         """
         执行文件读取操作
@@ -359,6 +374,7 @@ Suggestions:
             max_tokens=max_tokens, allow_fuzzy_match=allow_fuzzy_match,
             use_context_budget=use_context_budget,
             record_read=record_read,
+            source_max_tokens=source_max_tokens,
         )
 
     async def execute_purely(
@@ -371,6 +387,7 @@ Suggestions:
         allow_fuzzy_match: bool = True,
         use_context_budget: bool = True,
         record_read: bool = True,
+        source_max_tokens: int | None = None,
     ) -> ToolResult:
         """
         执行文件读取操作，专注于读取可读文件
@@ -456,6 +473,8 @@ Suggestions:
             """
             if max_tokens is not None and max_tokens <= 0:
                 raise ValueError("max_tokens must be positive")
+            if source_max_tokens is not None and source_max_tokens <= 0:
+                raise ValueError("source_max_tokens must be positive")
             # Skill 按独立预算读取原文；自动规则文件和普通读取仍受上下文动态预算约束。
             dynamic_max_tokens = _compute_max_tokens(tool_context) if use_context_budget or max_tokens is None else max_tokens
             # 外部只可收紧这次读取额度，不能突破 ReadFile 依据上下文算出的原有上限。
@@ -469,30 +488,34 @@ Suggestions:
             total_chars = len(content)
             content_truncated = False
 
+            if source_max_tokens is not None:
+                source_text = text_result.source_content
+                if source_text is None:
+                    raise ValueError("source_max_tokens requires a full source-text read")
+                # 主文件容量按磁盘原文计算，不能让行号开销把合规主文件误判为超限。
+                # 例：源文 15,993、带行号 16,115、源额度 16K 时保留全文；展示仍受动态额度保护。
+                if num_tokens_from_string(source_text) > source_max_tokens:
+                    source_prefix = _truncate_to_token_budget(source_text, source_max_tokens)
+                    source_lines = source_prefix.splitlines()
+                    content = "".join(
+                        f"{line_number}\t{line}\n"
+                        for line_number, line in enumerate(source_lines, start=1)
+                    )
+                    # 源文的最后一行只交付了一部分时，不能因格式化补换行而宣称该行完整。
+                    if content and source_prefix.splitlines(keepends=True)[-1] == source_lines[-1]:
+                        content = content[:-1]
+                    content_tokens = num_tokens_from_string(content)
+                    content_truncated = True
+
             if content_tokens > max_tokens:
                 logger.info(f"文件 {read_path.name} (原始: {original_file_name}) 内容token数 ({content_tokens}) 超出限制 ({max_tokens})，进行截断")
                 content_truncated = True
 
-                # 使用二分查找确定最佳截断点
-                left, right = 0, len(content)
-                best_content = ""
-                best_tokens = 0
+                content = _truncate_to_token_budget(content, max_tokens)
+                content_tokens = num_tokens_from_string(content)
 
-                while left <= right:
-                    mid = (left + right) // 2
-                    truncated = content[:mid]
-                    tokens = num_tokens_from_string(truncated)
-
-                    if tokens <= max_tokens:
-                        best_content = truncated
-                        best_tokens = tokens
-                        left = mid + 1
-                    else:
-                        right = mid - 1
-
-                truncated_content = best_content
-                content_tokens = best_tokens
-
+            if content_truncated:
+                truncated_content = content
                 truncation_info = _parse_truncation_info(
                     original_content=original_content,
                     truncated_content=truncated_content,
@@ -501,6 +524,8 @@ Suggestions:
                     max_tokens=max_tokens,
                     context_remaining=context_remaining,
                 )
+                # 展示额度很小时可能连首行行号都不完整；续读位置仍从第 0 行开始。
+                truncation_info.next_offset = max(0, truncation_info.next_offset)
 
                 if not truncation_info.is_last_line_complete:
                     truncated_content += "..."
