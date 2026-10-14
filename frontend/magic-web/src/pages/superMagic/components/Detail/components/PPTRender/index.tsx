@@ -448,6 +448,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		presenterTargetRef: presentationStageRef,
 		presenterEnabled: false,
 		beforeEnter: () => {
+			if (isPresenterStarting) return false
+			if (hasPendingPresenterRequest()) {
+				magicToast.info(t("ppt.presenter.requestPending"))
+				return false
+			}
 			if (deckTools.busy) return false
 			if (notesPending) {
 				magicToast.warning(t("ppt.batch.saveNotesFirst"))
@@ -461,6 +466,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	})
 	const {
 		isOpen: isPresenterWindowOpen,
+		isStarting: isPresenterStarting,
+		hasPendingNativeRequest: hasPendingPresenterRequest,
 		isFallbackOnly: isPresenterFallbackOnly,
 		screens: presenterScreens,
 		selectedScreen: selectedPresenterScreen,
@@ -470,8 +477,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		moveToScreen: movePresenterToScreen,
 	} = usePPTPresenterWindow(presentationStageRef)
 	const togglePresenter = useMemoizedFn(async () => {
-		if (isPresenterWindowOpen) {
+		if (isPresenterWindowOpen || isPresenterStarting) {
 			closePresenterWindow()
+			return
+		}
+		if (hasPendingPresenterRequest()) {
+			magicToast.info(t("ppt.presenter.requestPending"))
 			return
 		}
 		if (deckTools.busy) return
@@ -486,6 +497,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		const slide = store.slides[index]
 		if (!isPresenterFallbackOnly && !isMobile && slide?.content) {
 			const result = await openPresenterWindow()
+			if (result === "blocked") magicToast.info(t("ppt.presenter.requestPending"))
 			if (result !== "fallback") return
 			// A denied prompt or an opened popup may consume/expire the gesture. The
 			// browser requires a fresh click; do not issue a native request guaranteed to fail.
@@ -788,7 +800,13 @@ const PPTRenderInner = observer(function PPTRenderInner({
 				return
 			}
 
-			if (transitionPanelOpen || isAnySlideEditing || isDeleteModalOpen || deckTools.busy)
+			if (
+				isPresenterStarting ||
+				transitionPanelOpen ||
+				isAnySlideEditing ||
+				isDeleteModalOpen ||
+				deckTools.busy
+			)
 				return
 
 			switch (event.key) {
@@ -823,6 +841,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		}
 	}, [
 		presenterConsoleContainer,
+		isPresenterStarting,
 		changeSlide,
 		isPresentationFullscreen,
 		isPresenterConsole,
@@ -838,6 +857,14 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		function handleMessage(event: MessageEvent) {
 			if (!event.data || event.data.type !== "keyboardEvent") return
 			if (
+				event.data.direction === "escape" &&
+				(isPresenterStarting || isPresenterWindowOpen)
+			) {
+				closePresenterWindow()
+				return
+			}
+			if (
+				isPresenterStarting ||
 				transitionPanelOpen ||
 				isAnySlideEditing ||
 				store.isTransitioning ||
@@ -867,6 +894,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	}, [
 		changeSlide,
 		goToFirstSlide,
+		isPresenterStarting,
+		isPresenterWindowOpen,
+		closePresenterWindow,
 		store.isTransitioning,
 		isAnySlideEditing,
 		isDeleteModalOpen,
@@ -1238,7 +1268,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 						size="icon"
 						data-testid="ppt-render-fullscreen-exit-button"
 						className="absolute right-3 top-3 z-50 h-9 w-9 bg-black/45 text-white hover:bg-black/65 hover:text-white"
-						onClick={() => void togglePresentationFullscreen()}
+						onClick={() => {
+							if (isPresenterStarting || isPresenterWindowOpen) closePresenterWindow()
+							else void togglePresentationFullscreen()
+						}}
 						aria-label={t("fileViewer.exitFullscreen")}
 					>
 						<Minimize className="h-4 w-4" />
@@ -1661,8 +1694,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											}
 											activeIndex={store.activeIndex}
 											totalSlides={store.slideUrls.length}
-											isTransitioning={store.isTransitioning}
+											isTransitioning={
+												store.isTransitioning || isPresenterStarting
+											}
 											isMobile={isMobile}
+											isStarting={isPresenterStarting}
 											isFullscreen={
 												isPresentationFullscreen || isPresenterWindowOpen
 											}
@@ -1739,9 +1775,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										}
 
 										controls={
-											store.isReady &&
-											hasSlides && (
+											(isPresenterStarting ||
+												(store.isReady && hasSlides)) && (
 												<PPTPresenterConsoleControls
+													isStarting={isPresenterStarting}
 													canGoPrevious={visibleSlideIndices.some(
 														(index) => index < store.activeIndex,
 													)}
@@ -1769,7 +1806,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												slides={store.slides}
 												indices={visibleSlideIndices}
 												activeIndex={store.activeIndex}
-												disabled={store.isTransitioning}
+												disabled={
+													store.isTransitioning || isPresenterStarting
+												}
 												onSelect={handleJumpToPage}
 												onLoad={(index) =>
 													void store.ensureSlideContent(index)

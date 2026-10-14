@@ -1,7 +1,23 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import magicToast from "@/components/base/MagicToaster/utils"
 
-export type PPTPresenterOpenResult = "opened" | "fallback" | "cancelled"
+export type PPTPresenterOpenResult = "opened" | "fallback" | "cancelled" | "blocked"
+
+type PresenterPhase = "idle" | "starting" | "presenting"
+
+interface PresenterSession {
+	id: number
+	cancel: () => void
+	cancelled: Promise<null>
+}
+
+interface NativeFullscreenRequest {
+	id: number
+	target: HTMLElement
+	promise: Promise<boolean>
+	exit?: Promise<void>
+}
 
 /** The Window Management API fields used by the presenter. */
 export interface PPTPresenterScreen {
@@ -56,25 +72,97 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 	const { t } = useTranslation("super")
 	const popupRef = useRef<Window | null>(null)
 	const generation = useRef(0)
-	const pending = useRef(false)
+	const sessionRef = useRef<PresenterSession | null>(null)
+	const nativeRequestRef = useRef<NativeFullscreenRequest | null>(null)
+	const phaseRef = useRef<PresenterPhase>("idle")
+	const [phase, setPhase] = useState<PresenterPhase>("idle")
 	const [consoleContainer, setConsoleContainer] = useState<HTMLElement | null>(null)
-	const [isOpen, setIsOpen] = useState(false)
 	const [isFallbackOnly, setFallbackOnly] = useState(false)
 	const [screens, setScreens] = useState<PPTPresenterScreen[]>([])
 	const [selectedScreen, setSelectedScreen] = useState<number | null>(null)
+	const changePhase = useCallback((next: PresenterPhase) => {
+		phaseRef.current = next
+		setPhase(next)
+	}, [])
+	const exitTargetFullscreen = useCallback(
+		async (target: HTMLElement | null) => {
+			if (!target || document.fullscreenElement !== target) return
+			try {
+				await document.exitFullscreen()
+			} catch {
+				magicToast.error(t("ppt.presenter.exitFailed"))
+			}
+		},
+		[t],
+	)
+	const hasPendingNativeRequest = useCallback(() => nativeRequestRef.current !== null, [])
+	const requestFullscreen = useCallback(
+		(target: PresentationTarget, screen: PPTPresenterScreen, id: number) => {
+			const fullscreen = target.requestFullscreen({ screen })
+			// 逻辑取消不能取消浏览器 API：保留原生占用，直到晚到结果及其退出处理都结束。
+			// 例：取消后 Promise 仍未完成 → 禁止第二次请求；晚到成功 → 只退出该舞台。
+			const request: NativeFullscreenRequest = {
+				id,
+				target,
+				promise: fullscreen
+					.then(
+						async () => {
+							if (id !== generation.current) {
+								// Undo a late fullscreen only if another session has not taken ownership.
+								await (request.exit ?? exitTargetFullscreen(target))
+								return false
+							}
+							return document.fullscreenElement === target
+						},
+						() => false,
+					)
+					.finally(async () => {
+						if (request.exit) await request.exit
+						if (nativeRequestRef.current === request) nativeRequestRef.current = null
+					}),
+			}
+			nativeRequestRef.current = request
+			return request.promise
+		},
+		[exitTargetFullscreen],
+	)
 	const close = useCallback(() => {
 		generation.current++
-		pending.current = false
+		sessionRef.current?.cancel()
+		sessionRef.current = null
 		popupRef.current?.close()
 		popupRef.current = null
 		setConsoleContainer(null)
-		setIsOpen(false)
-		if (document.fullscreenElement === targetRef.current)
-			void document.exitFullscreen().catch(() => undefined)
-	}, [targetRef])
+		changePhase("idle")
+		const target = targetRef.current
+		if (target && document.fullscreenElement === target) {
+			if (nativeRequestRef.current) {
+				nativeRequestRef.current.exit ??= exitTargetFullscreen(target)
+			} else {
+				// 退出也是原生操作；完成前不能让下一次启动与这次退出交叉。
+				const exiting = exitTargetFullscreen(target)
+				const request: NativeFullscreenRequest = {
+					id: generation.current,
+					target,
+					promise: exiting
+						.then(() => false)
+						.finally(() => {
+							if (nativeRequestRef.current === request)
+								nativeRequestRef.current = null
+						}),
+				}
+				nativeRequestRef.current = request
+			}
+		}
+	}, [targetRef, changePhase, exitTargetFullscreen])
 
 	const open = useCallback(async (): Promise<PPTPresenterOpenResult> => {
-		if (pending.current) return "cancelled"
+		if (phaseRef.current === "starting") {
+			close()
+			return "cancelled"
+		}
+		if (hasPendingNativeRequest()) return "blocked"
+		if (phaseRef.current === "presenting") return "opened"
 		const target = targetRef.current as PresentationTarget | null
 		const getScreenDetails = (window as WindowWithManagement).getScreenDetails
 		if (
@@ -83,13 +171,24 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 			(window.screen as Screen & { isExtended?: boolean }).isExtended !== true
 		)
 			return "fallback"
-		pending.current = true
 		const operation = ++generation.current
+		let cancel: () => void = () => undefined
+		const cancelled = new Promise<null>((resolve) => {
+			cancel = () => resolve(null)
+		})
+		const session: PresenterSession = {
+			id: operation,
+			cancel,
+			cancelled,
+		}
+		sessionRef.current = session
+		changePhase("starting")
 		let popup: Window | null = null
 		try {
 			// Permission must be requested before any activation-consuming browser API.
-			const details = await getScreenDetails.call(window)
+			const details = await Promise.race([getScreenDetails.call(window), session.cancelled])
 			if (operation !== generation.current) return "cancelled"
+			if (!details) return "cancelled"
 			const external = details.screens.findIndex(
 				(screen) =>
 					screen !== details.currentScreen &&
@@ -99,7 +198,7 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 			if (external < 0) return "fallback"
 			const home = bounds(details.currentScreen)
 			// Do not await fullscreen before window.open: both belong to the same click.
-			const fullscreen = target.requestFullscreen({ screen: details.screens[external] })
+			const fullscreen = requestFullscreen(target, details.screens[external], operation)
 			try {
 				popup = window.open(
 					"",
@@ -110,50 +209,57 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 			} catch {
 				// Fullscreen still succeeds when a companion window is unavailable.
 			}
-			await fullscreen
-			if (operation !== generation.current) {
-				popup?.close()
-				if (!pending.current && !popupRef.current && document.fullscreenElement === target)
-					await document.exitFullscreen()
-				return "cancelled"
-			}
-			if (document.fullscreenElement !== target) {
-				popup?.close()
-				popupRef.current = null
-				return "cancelled"
-			}
 			setScreens(details.screens)
 			setSelectedScreen(external)
-			if (popup) {
-				const doc = popup.document
-				doc.open()
-				doc.write(
-					'<!doctype html><html><head><meta charset="utf-8"></head><body><main id="ppt-presenter-console"></main>' +
-						CONSOLE_GESTURES +
-						"</body></html>",
-				)
-				doc.close()
-				doc.title = t("ppt.presenter.title")
-				// React portals share state, but the companion document needs its own styles and theme.
-				doc.documentElement.className = document.documentElement.className
-				doc.documentElement.style.cssText = document.documentElement.style.cssText
-				for (const style of document.querySelectorAll('style, link[rel="stylesheet"]'))
-					doc.head.appendChild(style.cloneNode(true))
-				const root = doc.getElementById("ppt-presenter-console")
-				if (!root) throw new Error("Presenter console container is missing")
-				Object.assign(doc.body.style, { margin: "0", overflow: "hidden" })
-				Object.assign(root.style, {
-					height: "100vh",
-					padding: "16px",
-					boxSizing: "border-box",
-					background: "#333",
-					display: "flex",
-					flexDirection: "column",
-				})
-				setConsoleContainer(root)
-				popup.focus()
+			try {
+				if (popup) {
+					const doc = popup.document
+					doc.open()
+					doc.write(
+						'<!doctype html><html><head><meta charset="utf-8"></head><body><main id="ppt-presenter-console"></main>' +
+							CONSOLE_GESTURES +
+							"</body></html>",
+					)
+					doc.close()
+					doc.title = t("ppt.presenter.title")
+					// React portals share state, but the companion document needs its own styles and theme.
+					doc.documentElement.className = document.documentElement.className
+					doc.documentElement.style.cssText = document.documentElement.style.cssText
+					for (const style of document.querySelectorAll('style, link[rel="stylesheet"]'))
+						doc.head.appendChild(style.cloneNode(true))
+					const root = doc.getElementById("ppt-presenter-console")
+					if (!root) throw new Error("Presenter console container is missing")
+					Object.assign(doc.body.style, { margin: "0", overflow: "hidden" })
+					Object.assign(root.style, {
+						height: "100vh",
+						padding: "16px",
+						boxSizing: "border-box",
+						background: "#333",
+						display: "flex",
+						flexDirection: "column",
+					})
+					setConsoleContainer(root)
+					popup.focus()
+				}
+			} catch {
+				popup?.close()
+				popupRef.current = null
+				setConsoleContainer(null)
 			}
-			setIsOpen(true)
+			if (!popupRef.current) magicToast.warning(t("ppt.presenter.consoleUnavailable"))
+			// 控制台先挂载。取消只结束本地等待，原生请求由 requestFullscreen 持续观察。
+			const entered = await Promise.race([fullscreen, session.cancelled])
+			if (operation !== generation.current) return "cancelled"
+			if (!entered) {
+				close()
+				setFallbackOnly(true)
+				return "fallback"
+			}
+			if (popupRef.current?.closed) {
+				close()
+				return "cancelled"
+			}
+			changePhase("presenting")
 			return "opened"
 		} catch {
 			// A rejected permission/fullscreen request can outlive a closed or replaced session.
@@ -163,35 +269,36 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 			}
 			popup?.close()
 			popupRef.current = null
+			setConsoleContainer(null)
 			// A companion setup failure must not undo a successful audience fullscreen.
 			if (document.fullscreenElement === target) {
-				setIsOpen(true)
+				changePhase("presenting")
 				return "opened"
 			}
 			setFallbackOnly(true)
 			return "fallback"
 		} finally {
-			if (operation === generation.current) pending.current = false
+			if (operation === generation.current && phaseRef.current === "starting") {
+				sessionRef.current = null
+				changePhase("idle")
+			}
 		}
-	}, [targetRef, t])
+	}, [targetRef, t, close, changePhase, requestFullscreen, hasPendingNativeRequest])
 
 	const moveToScreen = useCallback(
 		async (index: number) => {
 			const target = targetRef.current as PresentationTarget | null
-			if (!target || !screens[index] || !isOpen) return false
+			if (
+				!target ||
+				!screens[index] ||
+				phaseRef.current !== "presenting" ||
+				hasPendingNativeRequest()
+			)
+				return false
 			const operation = generation.current
 			try {
-				await target.requestFullscreen({ screen: screens[index] })
-				if (operation !== generation.current) {
-					// Undo a late fullscreen only if another session has not taken ownership.
-					if (
-						!pending.current &&
-						!popupRef.current &&
-						document.fullscreenElement === target
-					)
-						await document.exitFullscreen()
-					return false
-				}
+				const entered = await requestFullscreen(target, screens[index], operation)
+				if (!entered || operation !== generation.current) return false
 				setSelectedScreen(index)
 				const companionScreen = screens.find((_, candidate) => candidate !== index)
 				if (companionScreen && popupRef.current) {
@@ -204,12 +311,27 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 				return false
 			}
 		},
-		[targetRef, screens, isOpen],
+		[targetRef, screens, requestFullscreen, hasPendingNativeRequest],
 	)
 	useEffect(() => {
-		if (!isOpen) return
+		if (phase === "idle") return
 		const onFullscreenChange = () => {
-			if (document.fullscreenElement !== targetRef.current) close()
+			if (
+				phaseRef.current === "presenting" &&
+				document.fullscreenElement !== targetRef.current
+			)
+				close()
+		}
+		const onEscape = (event: KeyboardEvent) => {
+			if (event.key !== "Escape" || event.defaultPrevented) return
+			const element = event.target as Element | null
+			if (
+				element?.nodeType === 1 &&
+				element.closest("input, textarea, select, [contenteditable], [role=menuitem]")
+			)
+				return
+			event.preventDefault()
+			close()
 		}
 		const onScreenRequest = (event: MessageEvent) => {
 			if (
@@ -226,19 +348,26 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 			if (popupRef.current?.closed) close()
 		}, 500)
 		document.addEventListener("fullscreenchange", onFullscreenChange)
+		const companion = consoleContainer?.ownerDocument.defaultView
+		window.addEventListener("keydown", onEscape)
+		companion?.addEventListener("keydown", onEscape)
 		window.addEventListener("pagehide", close)
 		return () => {
 			window.clearInterval(timer)
 			window.removeEventListener("message", onScreenRequest)
 			document.removeEventListener("fullscreenchange", onFullscreenChange)
+			window.removeEventListener("keydown", onEscape)
+			companion?.removeEventListener("keydown", onEscape)
 			window.removeEventListener("pagehide", close)
 		}
-	}, [isOpen, close, targetRef, moveToScreen])
+	}, [phase, consoleContainer, close, targetRef, moveToScreen])
 	useEffect(() => () => close(), [close])
 
 	return {
 		moveToScreen,
-		isOpen,
+		isOpen: phase === "presenting",
+		isStarting: phase === "starting",
+		hasPendingNativeRequest,
 		isFallbackOnly,
 		screens,
 		selectedScreen,

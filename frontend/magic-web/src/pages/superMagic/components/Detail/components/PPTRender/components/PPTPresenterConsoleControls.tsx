@@ -22,6 +22,7 @@ interface PPTPresenterConsoleControlsProps {
 	canGoPrevious?: boolean
 	canGoNext?: boolean
 	isTransitioning: boolean
+	isStarting?: boolean
 	screens: ReadonlyArray<PresenterScreenOption>
 	selectedScreen: number | null
 	onPrevSlide: () => void
@@ -38,6 +39,7 @@ export default function PPTPresenterConsoleControls({
 	canGoPrevious = activeIndex > 0,
 	canGoNext = activeIndex < totalSlides - 1,
 	isTransitioning,
+	isStarting = false,
 	screens,
 	selectedScreen,
 	onPrevSlide,
@@ -47,6 +49,7 @@ export default function PPTPresenterConsoleControls({
 	onExit,
 }: PPTPresenterConsoleControlsProps) {
 	const { t } = useTranslation("super")
+	const exitLabel = isStarting ? t("ppt.presenter.cancelStart") : t("ppt.presenter.endSlideShow")
 	const controlsRef = useRef<HTMLDivElement>(null)
 	const screenTriggerRef = useRef<HTMLButtonElement>(null)
 	const [isScreenMenuOpen, setIsScreenMenuOpen] = useState(false)
@@ -101,13 +104,19 @@ export default function PPTPresenterConsoleControls({
 			data-testid="ppt-presenter-console-controls"
 			className="flex min-w-0 shrink-0 flex-wrap items-center justify-center gap-1 rounded-xl border border-white/15 bg-black/75 p-1.5 text-white"
 		>
-			<PPTPresenterTimer />
+			{isStarting ? (
+				<span role="status" className="px-2 text-sm">
+					{t("ppt.presenter.starting")}
+				</span>
+			) : (
+				<PPTPresenterTimer />
+			)}
 			<Button
 				variant="ghost"
 				size="icon"
 				data-testid="ppt-presenter-console-prev-button"
 				className="size-8 text-white hover:bg-white/15 hover:text-white"
-				disabled={!canGoPrevious || isTransitioning}
+				disabled={isStarting || !canGoPrevious || isTransitioning}
 				onClick={onPrevSlide}
 				aria-label={t("fileViewer.previousPage")}
 			>
@@ -138,6 +147,7 @@ export default function PPTPresenterConsoleControls({
 			) : (
 				<button
 					type="button"
+					disabled={isStarting}
 					data-testid="ppt-presenter-console-page-indicator"
 					className="h-8 min-w-16 rounded-md px-2 text-sm tabular-nums hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
 					onClick={() => setIsPageInputVisible(true)}
@@ -151,7 +161,7 @@ export default function PPTPresenterConsoleControls({
 				size="icon"
 				data-testid="ppt-presenter-console-next-button"
 				className="size-8 text-white hover:bg-white/15 hover:text-white"
-				disabled={!canGoNext || isTransitioning}
+				disabled={isStarting || !canGoNext || isTransitioning}
 				onClick={onNextSlide}
 				aria-label={t("fileViewer.nextPage")}
 			>
@@ -169,6 +179,7 @@ export default function PPTPresenterConsoleControls({
 							size="sm"
 							data-testid="ppt-presenter-console-screen-button"
 							ref={screenTriggerRef}
+							disabled={isStarting}
 							className="h-8 gap-1.5 text-white hover:bg-white/15 hover:text-white"
 							aria-label={t("ppt.presenter.selectScreen")}
 						>
@@ -204,10 +215,10 @@ export default function PPTPresenterConsoleControls({
 				data-testid="ppt-presenter-console-exit-button"
 				className="h-8 gap-1.5 text-white hover:bg-white/15 hover:text-white"
 				onClick={onExit}
-				aria-label={t("ppt.presenter.endSlideShow")}
+				aria-label={exitLabel}
 			>
 				<LogOut className="size-4" />
-				<span className="hidden sm:inline">{t("ppt.presenter.endSlideShow")}</span>
+				<span className={isStarting ? undefined : "hidden sm:inline"}>{exitLabel}</span>
 			</Button>
 		</div>
 	)
