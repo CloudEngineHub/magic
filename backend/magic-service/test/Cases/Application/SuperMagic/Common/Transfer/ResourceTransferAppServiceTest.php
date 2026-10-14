@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\SuperMagic\Common\Transfer;
 
+use App\Application\SuperMagic\Common\Collaboration\Policy\ResourceAccessPolicyService;
 use App\Application\SuperMagic\Common\Transfer\ResourceTransferAppService;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\UserStatus;
@@ -17,16 +18,23 @@ use App\Domain\OrganizationEnvironment\Entity\OrganizationEntity;
 use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationRepositoryInterface;
 use App\Domain\OrganizationEnvironment\Service\OrganizationDomainService;
 use App\Domain\Permission\Entity\OperationPermissionEntity;
+use App\Domain\Permission\Entity\ResourceVisibilityEntity;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\TargetType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
 use App\Domain\Permission\Repository\Facade\OperationPermissionRepositoryInterface;
+use App\Domain\Permission\Repository\Facade\ResourceVisibilityRepositoryInterface;
 use App\Domain\Permission\Service\OperationPermissionDomainService;
 use App\Domain\Permission\Service\OrganizationAdminDomainService;
+use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\SuperMagic\Agent\Entity\SuperMagicAgentEntity;
 use App\Domain\SuperMagic\Agent\Entity\UserAgentEntity;
+use App\Domain\SuperMagic\Agent\Event\AgentMarketUpdatedEvent;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\TransferResult;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
+use App\Domain\SuperMagic\Skill\Entity\UserSkillEntity;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
@@ -45,6 +53,8 @@ use Hyperf\Database\ConnectionInterface;
 use Hyperf\Database\ConnectionResolverInterface;
 use Hyperf\Database\Model\Model;
 use Hyperf\DbConnection\Db;
+use Hyperf\Snowflake\IdGeneratorInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use ReflectionClass;
@@ -62,6 +72,10 @@ class ResourceTransferAppServiceTest extends TestCase
     private array $savedPermissions = [];
 
     private array $inheritedPermissions = [];
+
+    private array $visibilityGrants = [];
+
+    private $visibilityRepository;
 
     private ?ContainerInterface $previousContainer;
 
@@ -109,6 +123,31 @@ class ResourceTransferAppServiceTest extends TestCase
                 $this->dependencies[$parameter->getName()] = $this->createMock($parameter->getType()->getName());
             }
         }
+        $this->visibilityGrants = ['sender' => PrincipalType::USER, 'other' => PrincipalType::USER];
+        $this->visibilityRepository = $this->createMock(ResourceVisibilityRepositoryInterface::class);
+        $this->visibilityRepository->method('deleteByResourceAndPrincipals')->willReturnCallback(function ($isolation, $type, $code, $principalType, $ids) {
+            foreach ($ids as $id) {
+                if (($this->visibilityGrants[$id] ?? null) === $principalType) {
+                    unset($this->visibilityGrants[$id]);
+                }
+            }
+            return count($ids);
+        });
+        $this->visibilityRepository->method('listByPrincipalIds')->willReturnCallback(function ($isolation, $principalIds) {
+            $entities = [];
+            foreach ($this->visibilityGrants as $id => $type) {
+                if (in_array($id, $principalIds, true)) {
+                    $entity = new ResourceVisibilityEntity();
+                    $entity->setResourceCode('skill');
+                    $entities[] = $entity;
+                }
+            }
+            return $entities;
+        });
+        $this->dependencies['policy'] = new ResourceAccessPolicyService(
+            $this->dependencies['permissions'],
+            new ResourceVisibilityDomainService($this->visibilityRepository, $departments)
+        );
         $translator = $this->createMock(TranslatorInterface::class);
         $translator->method('trans')->willReturnCallback(static fn ($key) => $key);
         $connection = $this->createMock(ConnectionInterface::class);
@@ -117,8 +156,10 @@ class ResourceTransferAppServiceTest extends TestCase
         $resolver->method('connection')->willReturn($connection);
         $config = new Config(['app_env' => 'testing', 'error_message' => require BASE_PATH . '/config/autoload/error_message.php']);
         $agentDomain = $this->createMock(AgentDomainService::class);
-        ApplicationContext::setContainer(new class($config, $translator, $resolver, $agentDomain) implements ContainerInterface {
-            public function __construct(private $config, private $translator, private $resolver, private $agentDomain)
+        $idGenerator = $this->createMock(IdGeneratorInterface::class);
+        $idGenerator->method('generate')->willReturn(123);
+        ApplicationContext::setContainer(new class($config, $translator, $resolver, $agentDomain, $idGenerator) implements ContainerInterface {
+            public function __construct(private $config, private $translator, private $resolver, private $agentDomain, private $idGenerator)
             {
             }
 
@@ -126,6 +167,7 @@ class ResourceTransferAppServiceTest extends TestCase
             {
                 return match ($id) {
                     AgentDomainService::class => $this->agentDomain,
+                    IdGeneratorInterface::class => $this->idGenerator,
                     ConfigInterface::class => $this->config,
                     TranslatorInterface::class => $this->translator,
                     ConnectionResolverInterface::class => $this->resolver,
@@ -197,6 +239,8 @@ class ResourceTransferAppServiceTest extends TestCase
         $this->permissionRepository->expects($this->once())->method('beachDelete');
         $result = $this->transfer(false, 'viewer');
         self::assertNull($result['user_role']);
+        self::assertArrayNotHasKey('sender', $this->visibilityGrants);
+        self::assertArrayHasKey('other', $this->visibilityGrants);
         self::assertSame('receiver', $result['owner_id']);
     }
 
@@ -221,11 +265,41 @@ class ResourceTransferAppServiceTest extends TestCase
         }
     }
 
-    public function testSharingKeepsTheChosenRole(): void
+    public function testDepartmentVisibilityStillGrantsReadAfterRemovingPersonalSharing(): void
     {
         $this->prepareResource();
-        self::assertSame('viewer', $this->transfer(true, 'viewer')['user_role']);
-        self::assertContains(['sender', Operation::Read], $this->savedPermissions);
+        $this->visibilityGrants['department'] = PrincipalType::DEPARTMENT;
+        self::assertSame('viewer', $this->transfer(false, 'manage')['user_role']);
+        self::assertSame(PrincipalType::DEPARTMENT, $this->visibilityGrants['department']);
+        self::assertArrayNotHasKey('sender', $this->visibilityGrants);
+    }
+
+    public function testSkillReceiverMarketInstallationBecomesLiveOwnership(): void
+    {
+        $this->prepareResource();
+        $ownership = new UserSkillEntity(['id' => 456, 'source_type' => 'MARKET', 'source_id' => 123, 'skill_version_id' => 789]);
+        $this->dependencies['skillOwnerships']->method('findUserSkillOwnershipByCode')->willReturn($ownership);
+        $this->dependencies['skillOwnerships']->expects($this->once())->method('saveUserSkillOwnership')->with(
+            $this->anything(),
+            $this->callback(static fn ($record) => $record->getId() === 456 && $record->getUserId() === 'receiver'
+                && $record->getSourceType() === SkillSourceType::LOCAL_UPLOAD
+                && $record->getSkillVersionId() === null && $record->getSourceId() === null)
+        )->willReturn($ownership);
+        $this->dependencies['skillOwnerships']->expects($this->once())->method('deleteUserSkillOwnership');
+        $this->transfer(false, 'manage');
+    }
+
+    #[DataProvider('sharingRoles')]
+    public function testSharingKeepsTheChosenRole(string $role, Operation $operation): void
+    {
+        $this->prepareResource();
+        self::assertSame($role, $this->transfer(true, $role)['user_role']);
+        self::assertContains(['sender', $operation], $this->savedPermissions);
+    }
+
+    public static function sharingRoles(): array
+    {
+        return [['manage', Operation::Admin], ['editor', Operation::Edit], ['viewer', Operation::Read]];
     }
 
     public function testBoundProjectAndMembershipTransferTogether(): void
@@ -262,6 +336,23 @@ class ResourceTransferAppServiceTest extends TestCase
         $this->dependencies['ownerships']->expects($this->never())->method('saveUserAgentOwnership');
         $this->expectExceptionMessage('Dependency inaccessible');
         $this->transfer(false, 'manage', true);
+    }
+
+    public function testAgentMarketResponsibilityAndIndexFollowNewOwner(): void
+    {
+        $this->prepareResource();
+        $this->dependencies['agents']->method('getResource')->willReturn($this->createMock(SuperMagicAgentEntity::class));
+        $this->dependencies['repository']->expects($this->once())->method('transferOrganizationMarketOwner')
+            ->with('org', 'skill', 'receiver')->willReturn([7]);
+        $events = [];
+        $this->dependencies['events']->expects($this->exactly(2))->method('dispatch')->willReturnCallback(function ($event) use (&$events) {
+            $events[] = $event;
+            return $event;
+        });
+        $this->transfer(false, 'manage', true);
+        self::assertInstanceOf(AgentMarketUpdatedEvent::class, $events[1]);
+        self::assertSame('7', $events[1]->agentMarketId);
+        self::assertArrayNotHasKey('sender', $this->visibilityGrants);
     }
 
     public function testAgentReceiverOwnershipIsMergedInsteadOfDuplicated(): void

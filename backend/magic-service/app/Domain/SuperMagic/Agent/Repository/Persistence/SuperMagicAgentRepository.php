@@ -19,9 +19,12 @@ use Hyperf\Database\Model\Builder;
 
 class SuperMagicAgentRepository extends SuperMagicAbstractRepository implements SuperMagicAgentRepositoryInterface
 {
-    public function getByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?SuperMagicAgentEntity
+    public function getByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code, bool $forUpdate = false): ?SuperMagicAgentEntity
     {
         $builder = $this->createBuilder($dataIsolation, SuperMagicAgentModel::query());
+        if ($forUpdate) {
+            $builder->lockForUpdate();
+        }
 
         /** @var null|SuperMagicAgentModel $model */
         $model = $builder->where('code', $code)->first();
