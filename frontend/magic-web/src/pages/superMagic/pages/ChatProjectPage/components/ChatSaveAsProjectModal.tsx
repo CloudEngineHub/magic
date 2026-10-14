@@ -11,6 +11,7 @@ import { cn } from "@/utils/cn"
 import SuperMagicService from "@/pages/superMagic/services"
 import { workspaceStore } from "@/pages/superMagic/stores/core"
 import IconWorkspace from "@/pages/superMagic/components/icons/IconWorkspace"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 interface ChatSaveAsProjectModalProps {
 	open: boolean
@@ -121,9 +122,10 @@ function ChatSaveAsProjectModal({
 					<span className="text-sm font-medium text-foreground">
 						{t("chat.workspaceLabel")}
 					</span>
-					<div
-						className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border p-1"
-						data-testid="chat-save-as-project-workspace-list"
+					<ScrollArea
+						className="min-h-0 flex-1 rounded-lg border border-border"
+						viewportClassName="p-1 [&>div]:!flex [&>div]:flex-col [&>div]:gap-0.5"
+						viewportProps={{ "data-testid": "chat-save-as-project-workspace-list" }}
 					>
 						{selectableWorkspaces.length === 0 ? (
 							<div className="px-3 py-6 text-center text-sm text-muted-foreground">
@@ -155,7 +157,7 @@ function ChatSaveAsProjectModal({
 								</div>
 							))
 						)}
-					</div>
+					</ScrollArea>
 				</div>
 			</div>
 
