@@ -130,14 +130,13 @@ class AssetAppService extends AbstractAssetAppService
         $asset = $this->createAssetEntity($requestDTO, false, $dataIsolation->getCurrentOrganizationCode());
         $asset->setVisibilityType($requestDTO->getVisibilityType());
         $asset->setVisibility($requestDTO->getVisibilityConfig());
-        if ($contentHash !== null) {
-            $asset->setContentHash($contentHash);
-        }
         // 保存前必须确认文件存在且当前组织可以访问。
         $this->resolveAssetFileUrls([$asset]);
         if ($asset->getFileUrl() === null || $asset->getFileUrl() === '') {
             ExceptionBuilder::throw(AssetErrorCode::FILE_REQUIRED);
         }
+        // 项目文件入口已带回指纹；只传 file_key 的入口在这里补齐，否则同一份内容无法命中已有审核结果。
+        $asset->setContentHash($contentHash ?? $this->resolveContentHash($asset));
         $asset = $this->assetDomainService->saveToLibrary(
             $dataIsolation,
             $asset,
