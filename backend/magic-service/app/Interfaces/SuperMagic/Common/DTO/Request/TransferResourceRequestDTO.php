@@ -17,6 +17,15 @@ class TransferResourceRequestDTO extends AbstractRequestDTO
 
     public string $shareRole = 'manage';
 
+    protected function initProperty(array $data): void
+    {
+        // Validation excludes this field, but the base DTO still hydrates raw input.
+        if (empty($data['share_to_me'])) {
+            unset($data['share_role']);
+        }
+        parent::initProperty($data);
+    }
+
     protected static function getHyperfValidationRules(): array
     {
         return [

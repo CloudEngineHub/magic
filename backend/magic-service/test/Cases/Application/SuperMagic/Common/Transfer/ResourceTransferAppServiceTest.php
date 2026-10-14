@@ -156,6 +156,14 @@ class ResourceTransferAppServiceTest extends TestCase
         }
     }
 
+    public function testRequestIgnoresRoleWhenSharingIsDisabled(): void
+    {
+        $request = new TransferResourceRequestDTO(['receiver_id' => 'receiver', 'share_to_me' => false, 'share_role' => ['ignored']]);
+        self::assertFalse($request->shareToMe);
+        self::assertSame('manage', $request->shareRole);
+        self::assertSame('manage', (new TransferResourceRequestDTO(['share_to_me' => true]))->shareRole);
+    }
+
     public function testPersonalOrganizationDoesNotReachAnyWrites(): void
     {
         $organization = $this->createMock(OrganizationEntity::class);
