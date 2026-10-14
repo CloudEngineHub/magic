@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { DesignVersionLoadResult } from "../DesignVersionManager"
 import { DesignLoadManager } from "../DesignLoadManager"
-import type { DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
+import type {
+	DesignCurrentFileLoadResult,
+	DesignProjectManagerOptions,
+	DesignProjectStateBag,
+} from "../types"
 import type { DesignData } from "../../types"
 import type { RectangleElement } from "@/components/CanvasDesign/runtime/document/types"
 import {
@@ -63,13 +66,12 @@ function createDesignData(name: string): DesignData {
 	}
 }
 
-function snapshot(name: string, fileId = "magic-a"): DesignVersionLoadResult {
+function snapshot(name: string, fileId = "magic-a"): DesignCurrentFileLoadResult {
 	const data = createDesignData(name)
 	return {
 		fileId,
 		accessIdentity: "test",
 		data,
-		version: null,
 		loadResult: {
 			data,
 			sourceVersion: "2.0.0",
@@ -81,7 +83,10 @@ function snapshot(name: string, fileId = "magic-a"): DesignVersionLoadResult {
 }
 const readCurrentSnapshot =
 	vi.fn<
-		(fileId: string, options: DesignProjectManagerOptions) => Promise<DesignVersionLoadResult>
+		(
+			fileId: string,
+			options: DesignProjectManagerOptions,
+		) => Promise<DesignCurrentFileLoadResult>
 	>()
 
 function createDeferred<T>() {
@@ -112,16 +117,11 @@ function createOptions(
 function createStateBag() {
 	let designData = createDesignData("initial")
 	let magicProjectJsFileId: string | null = null
-	let magicProjectJsVersion: number | null = null
 	let previousFingerprint = ""
 	const stateBag: DesignProjectStateBag = {
 		getDesignData: () => designData,
 		getConflictState: () => null,
 		getMagicProjectJsFileId: () => magicProjectJsFileId,
-		getMagicProjectJsVersion: () => magicProjectJsVersion,
-		setMagicProjectJsVersion: (version) => {
-			magicProjectJsVersion = version
-		},
 		getPrevDesignDataFingerprint: () => previousFingerprint,
 		setPrevDesignDataFingerprint: (fingerprint) => {
 			previousFingerprint = fingerprint
@@ -154,6 +154,9 @@ function createStateBag() {
 describe("DesignLoadManager request identity", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.spyOn(DesignLoadManager.prototype, "readCurrentFile").mockImplementation(
+			readCurrentSnapshot,
+		)
 		readCurrentSnapshot
 			.mockReset()
 			.mockImplementation(async (fileId) =>
@@ -186,7 +189,6 @@ describe("DesignLoadManager request identity", () => {
 		const loadManager = new DesignLoadManager(
 			stateBag,
 			createOptions("project-a", { id: "file-a", name: "A" }),
-			readCurrentSnapshot,
 		)
 
 		const firstLoad = loadManager.loadFromRemote()
@@ -212,7 +214,6 @@ describe("DesignLoadManager request identity", () => {
 		const loadManager = new DesignLoadManager(
 			stateBag,
 			createOptions("project-a", { id: "file-a", name: "A" }),
-			readCurrentSnapshot,
 		)
 
 		const firstLoad = loadManager.loadFromRemote()
@@ -238,7 +239,6 @@ describe("DesignLoadManager request identity", () => {
 		const loadManager = new DesignLoadManager(
 			stateBag,
 			createOptions(undefined, { id: "file-a", name: "A" }),
-			readCurrentSnapshot,
 		)
 
 		expect(await loadManager.loadFromRemote()).toBe(true)

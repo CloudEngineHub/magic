@@ -17,7 +17,11 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import type { SuperMagicFileChangeMessage } from "@/types/chat/intermediate_message"
 import type { SeqResponse } from "@/types/request"
 import type { DesignData } from "../types"
-import { resolveDesignAccessMode, type DesignProjectManagerOptions } from "./types"
+import {
+	resolveDesignAccessMode,
+	type DesignProjectManagerOptions,
+	type DesignCurrentFileLoadResult,
+} from "./types"
 import { isSameDesignProjectPath } from "../utils/toolDesignProjectInfo"
 import {
 	registerWaitForNextAttachmentsRefreshForProject,
@@ -26,8 +30,6 @@ import {
 import { resolveDesignProjectBasePathFromAttachments } from "../utils/utils"
 import { buildDesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import { resolveDesignCanvasResourceReference } from "../utils/designResourceReferenceResolver"
-import { SuperMagicApi } from "@/apis"
-import type { DesignVersionLoadResult } from "./DesignVersionManager"
 import type { LoadDesignDataToRuntimeResult } from "../utils/designDataLoader"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import type { SuperMagicProjectAttachmentsReconciledPayload } from "@/pages/superMagic/events/files"
@@ -177,23 +179,16 @@ export type LoadAndApplyRemoteFn = (
 ) => Promise<boolean>
 
 /** 仅拉取远端设计数据，不写状态、不触画布（与等待附件并行） */
-export type FetchRemoteDesignDataFn = () => Promise<DesignVersionLoadResult | null>
+export type FetchRemoteDesignDataFn = () => Promise<DesignCurrentFileLoadResult | null>
 
 /** 将已拉取的数据写入状态并通知画布更新；attachments 就绪后调用 */
 export type ApplyRemoteDesignDataFn = (
 	data: DesignData,
 	updateType: "message" | "revoke" | "restore",
 	options?: {
-		remoteVersion?: number | null
 		loadResult?: LoadDesignDataToRuntimeResult
 	},
 ) => boolean
-
-export type CheckRemoteUpdateFn = () => Promise<{
-	hasUpdate: boolean
-	currentVersion: number | null
-	isCheckReliable: boolean
-}>
 
 export interface DesignRemoteListenerOptions extends DesignProjectManagerOptions {
 	/** Current lifecycle mode resolved by the Design state owner. */
@@ -205,9 +200,6 @@ export interface DesignRemoteListenerOptions extends DesignProjectManagerOptions
 	loadAndApplyRemote: LoadAndApplyRemoteFn
 	fetchRemoteDesignData: FetchRemoteDesignDataFn
 	applyRemoteDesignData: ApplyRemoteDesignDataFn
-	checkRemoteUpdate: CheckRemoteUpdateFn
-	getLocalVersion: () => number | null
-	updateLocalVersion: (version: number) => void
 	updateListenerDebounceMs: number
 	setIsProcessingRevoke: (v: boolean) => void
 	setRevokeType: (v: "revoke" | "restore" | null) => void
@@ -224,12 +216,6 @@ export class DesignRemoteListener {
 	private latestLocalSaveToken = 0
 	private activeLocalSaveTokens = new Set<number>()
 	private hasPendingFileChangeDuringSave = false
-	private pendingFileChangeUpdatedAtMs: number | null = null
-	private pendingFileChangeVersion: number | null = null
-	private pendingDebouncedFileChangeUpdatedAtMs: number | null = null
-	private pendingDebouncedFileChangeVersion: number | null = null
-	private lastKnownMagicProjectJsUpdatedAtMs: number | null = null
-	private localSaveUpdatedAtMs: number | null = null
 	private projectKey: string
 	private latestRemoteApplyToken = 0
 	private pendingReconciliation: SuperMagicProjectAttachmentsReconciledPayload | null = null
@@ -239,7 +225,6 @@ export class DesignRemoteListener {
 	constructor(options: DesignRemoteListenerOptions) {
 		this.options = options
 		this.projectKey = this.getProjectKey(options)
-		this.initializeMagicProjectJsUpdatedAtFromOptions()
 	}
 
 	private getAccessMode(): CanvasAccessMode {
@@ -261,13 +246,6 @@ export class DesignRemoteListener {
 			this.latestRemoteApplyToken += 1
 			this.fileId = null
 			this.hasPendingFileChangeDuringSave = false
-			this.pendingFileChangeUpdatedAtMs = null
-			this.pendingFileChangeVersion = null
-			this.pendingDebouncedFileChangeUpdatedAtMs = null
-			this.pendingDebouncedFileChangeVersion = null
-			this.lastKnownMagicProjectJsUpdatedAtMs = null
-			this.localSaveUpdatedAtMs = null
-			this.initializeMagicProjectJsUpdatedAtFromOptions()
 		}
 		if (this.isMounted && prevMode !== this.getListenerMode()) {
 			this.unsubscribeRemoteUpdateEvents(prevMode)
@@ -278,7 +256,6 @@ export class DesignRemoteListener {
 
 	mount(): void {
 		this.isMounted = true
-		this.initializeMagicProjectJsUpdatedAtFromOptions()
 		this.subscribeRemoteUpdateEvents()
 		pubsub.subscribe(
 			PubSubEvents.Super_Magic_Project_Attachments_Reconciled,
@@ -301,11 +278,6 @@ export class DesignRemoteListener {
 		}
 		this.activeLocalSaveTokens.clear()
 		this.hasPendingFileChangeDuringSave = false
-		this.pendingFileChangeUpdatedAtMs = null
-		this.pendingFileChangeVersion = null
-		this.pendingDebouncedFileChangeUpdatedAtMs = null
-		this.pendingDebouncedFileChangeVersion = null
-		this.localSaveUpdatedAtMs = null
 		this.latestRemoteApplyToken += 1
 	}
 
@@ -316,43 +288,11 @@ export class DesignRemoteListener {
 		return saveToken
 	}
 
-	async endLocalSave(
-		saveToken: number | null | undefined,
-		didSave: boolean,
-		savedUpdatedAt?: string | null,
-	): Promise<void> {
-		if (saveToken === null || saveToken === undefined) return
-		if (!this.activeLocalSaveTokens.has(saveToken)) return
-
+	async endLocalSave(saveToken: number | null | undefined): Promise<void> {
+		if (saveToken == null || !this.activeLocalSaveTokens.has(saveToken)) return
 		this.activeLocalSaveTokens.delete(saveToken)
 		if (this.activeLocalSaveTokens.size > 0) return
-
-		if (didSave) {
-			const savedAtMs = parseUpdatedAt(savedUpdatedAt ?? undefined)
-			if (savedAtMs !== null) {
-				this.localSaveUpdatedAtMs = savedAtMs
-			}
-			this.markMagicProjectJsUpdatedAtApplied(savedAtMs ?? this.pendingFileChangeUpdatedAtMs)
-
-			// Check if pending file change is newer than our save (real remote change)
-			const hadPendingFileChange = this.hasPendingFileChangeDuringSave
-			const pendingMs = this.pendingFileChangeUpdatedAtMs
-			const pendingVersion = this.pendingFileChangeVersion
-			this.hasPendingFileChangeDuringSave = false
-			this.pendingFileChangeUpdatedAtMs = null
-			this.pendingFileChangeVersion = null
-
-			if (
-				hadPendingFileChange &&
-				((savedAtMs !== null && pendingMs !== null && pendingMs > savedAtMs) ||
-					this.isFileVersionNewer(pendingVersion) ||
-					pendingVersion === null)
-			) {
-				void this.handleConfirmedFileChange(pendingMs, pendingVersion)
-			}
-			return
-		}
-
+		// 保存期间的通知只表示当前文件需重读，不能用时间或历史号丢弃。
 		await this.flushPendingFileChange()
 	}
 
@@ -399,23 +339,7 @@ export class DesignRemoteListener {
 		this.pendingReconciliation = null
 		this.lastReconciledSnapshot = pending.snapshot
 		if (this.deferRemoteRefreshDuringSave()) return
-		const projectKey = this.projectKey
-		const applyToken = this.latestRemoteApplyToken
-		void this.options
-			.checkRemoteUpdate()
-			.then(({ hasUpdate, isCheckReliable, currentVersion }) => {
-				if (
-					!this.isMounted ||
-					projectKey !== this.projectKey ||
-					applyToken !== this.latestRemoteApplyToken ||
-					pending.accessScope !== getSharedMediaResourceScope()
-				)
-					return
-				if (!hasUpdate && isCheckReliable) return
-				// 保存延期、历史版本和本地草稿仍交给原远端更新流程处理。
-				this.debouncedLoadAndApply(undefined, currentVersion)
-			})
-			.catch(() => undefined)
+		this.debouncedLoadAndApply()
 	}
 
 	private subscribeRemoteUpdateEvents(): void {
@@ -467,16 +391,8 @@ export class DesignRemoteListener {
 		)
 		if (!designProjectFileChange) return
 
-		const fileUpdatedAtMs = parseUpdatedAt(designProjectFileChange.file?.updated_at)
-		const fileVersion = normalizeFileVersion(designProjectFileChange.file?.version)
-		if (this.shouldIgnoreLocalSaveEcho(fileUpdatedAtMs, fileVersion)) {
-			return
-		}
-		if (this.deferRemoteRefreshDuringSave(fileUpdatedAtMs, fileVersion)) {
-			return
-		}
-
-		void this.handleConfirmedFileChange(fileUpdatedAtMs, fileVersion)
+		if (this.deferRemoteRefreshDuringSave()) return
+		this.debouncedLoadAndApply()
 	}
 
 	private readonly handleNewMessage = (data: unknown): void => {
@@ -616,142 +532,23 @@ export class DesignRemoteListener {
 		)
 	}
 
-	private deferRemoteRefreshDuringSave(
-		fileUpdatedAtMs?: number | null,
-		fileVersion?: number | null,
-	): boolean {
+	private deferRemoteRefreshDuringSave(): boolean {
 		if (this.activeLocalSaveTokens.size === 0) return false
-
 		this.hasPendingFileChangeDuringSave = true
-		if (fileUpdatedAtMs !== null && fileUpdatedAtMs !== undefined) {
-			this.pendingFileChangeUpdatedAtMs = Math.max(
-				this.pendingFileChangeUpdatedAtMs ?? 0,
-				fileUpdatedAtMs,
-			)
-		}
-		if (fileVersion !== null && fileVersion !== undefined) {
-			this.pendingFileChangeVersion = Math.max(
-				this.pendingFileChangeVersion ?? 0,
-				fileVersion,
-			)
-		}
 		return true
 	}
 
 	private async flushPendingFileChange(): Promise<void> {
-		if (!this.isMounted) return
-		if (!this.hasPendingFileChangeDuringSave) return
-
-		const fileUpdatedAtMs = this.pendingFileChangeUpdatedAtMs
-		const fileVersion = this.pendingFileChangeVersion
+		if (!this.isMounted || !this.hasPendingFileChangeDuringSave) return
 		this.hasPendingFileChangeDuringSave = false
-		this.pendingFileChangeUpdatedAtMs = null
-		this.pendingFileChangeVersion = null
-		await this.handleConfirmedFileChange(fileUpdatedAtMs, fileVersion)
-	}
-
-	private async handleConfirmedFileChange(
-		fileUpdatedAtMs?: number | null,
-		fileVersion?: number | null,
-	): Promise<void> {
-		if (!this.isMounted) return
-
-		const updatedAtStatus = this.getFileUpdatedAtStatus(fileUpdatedAtMs)
-		if (updatedAtStatus === "newer") {
-			this.debouncedLoadAndApply(fileUpdatedAtMs, fileVersion)
-			return
-		}
-		if (updatedAtStatus === "stale") {
-			const resolvedFileVersion =
-				fileVersion ?? (await this.fetchLatestMagicProjectJsVersion())
-			if (!this.isMounted) return
-			if (this.isFileVersionNewer(resolvedFileVersion)) {
-				this.debouncedLoadAndApply(fileUpdatedAtMs, resolvedFileVersion)
-				return
-			}
-			if (resolvedFileVersion !== null) {
-				return
-			}
-		}
-
-		try {
-			const { hasUpdate, isCheckReliable, currentVersion } =
-				await this.options.checkRemoteUpdate()
-			if (!this.isMounted) return
-			if (!hasUpdate && isCheckReliable) return
-
-			this.debouncedLoadAndApply(undefined, currentVersion ?? fileVersion)
-		} catch {
-			// ignore
-		}
-	}
-
-	private getFileUpdatedAtStatus(fileUpdatedAtMs?: number | null): "newer" | "stale" | "unknown" {
-		if (fileUpdatedAtMs === null || fileUpdatedAtMs === undefined) return "unknown"
-
-		if (
-			this.lastKnownMagicProjectJsUpdatedAtMs !== null &&
-			fileUpdatedAtMs <= this.lastKnownMagicProjectJsUpdatedAtMs
-		)
-			return "stale"
-
-		return "newer"
-	}
-
-	private markMagicProjectJsUpdatedAtApplied(fileUpdatedAtMs?: number | null): void {
-		if (fileUpdatedAtMs === null || fileUpdatedAtMs === undefined) return
-
-		this.lastKnownMagicProjectJsUpdatedAtMs = Math.max(
-			this.lastKnownMagicProjectJsUpdatedAtMs ?? 0,
-			fileUpdatedAtMs,
-		)
-	}
-
-	private isFileVersionNewer(fileVersion?: number | null): boolean {
-		if (fileVersion === null || fileVersion === undefined) return false
-		const localVersion = this.options.getLocalVersion()
-		return localVersion !== null && fileVersion > localVersion
-	}
-
-	private shouldIgnoreLocalSaveEcho(
-		fileUpdatedAtMs?: number | null,
-		fileVersion?: number | null,
-	): boolean {
-		if (this.localSaveUpdatedAtMs === null) return false
-
-		if (fileUpdatedAtMs !== null && fileUpdatedAtMs !== undefined) {
-			if (fileUpdatedAtMs <= this.localSaveUpdatedAtMs) {
-				if (this.isFileVersionNewer(fileVersion)) {
-					this.localSaveUpdatedAtMs = null
-					return false
-				}
-				if (fileVersion === null || fileVersion === undefined) return false
-				this.markMagicProjectJsUpdatedAtApplied(fileUpdatedAtMs)
-				return true
-			}
-			// Newer than our save → real remote change, clear marker
-			this.localSaveUpdatedAtMs = null
-			return false
-		}
-
-		// No timestamp on incoming event → cannot determine, don't ignore
-		return false
-	}
-
-	private initializeMagicProjectJsUpdatedAtFromOptions(): void {
-		if (this.lastKnownMagicProjectJsUpdatedAtMs !== null) return
-
-		const fileUpdatedAtMs = this.getMagicProjectJsUpdatedAtFromOptions()
-		if (fileUpdatedAtMs === null) return
-
-		this.lastKnownMagicProjectJsUpdatedAtMs = fileUpdatedAtMs
+		this.debouncedLoadAndApply()
 	}
 
 	/**
 	 * file-change 链路：读远端 magic.project.js，媒体或生成配置未同步时等待附件刷新后重读；
 	 * 返回可直接 apply 的数据；返回 null 表示应由 fetchRemoteDesignData（loadLatest）兜底。
 	 */
-	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<DesignVersionLoadResult | null> {
+	private async maybePrepareRemoteDesignDataFromMagicProjectFile(): Promise<DesignCurrentFileLoadResult | null> {
 		const fid = this.options.getMagicProjectJsFileId()
 		if (!fid) return null
 		const dslBase = resolveDesignProjectBasePathFromAttachments(this.options)
@@ -781,27 +578,9 @@ export class DesignRemoteListener {
 		return this.options.fetchRemoteDesignData()
 	}
 
-	private getMagicProjectJsUpdatedAtFromOptions(): number | null {
-		const fileId = this.options.getMagicProjectJsFileId()
-		const files = [
-			...(this.options.flatAttachments ?? []),
-			...flattenFileItems(this.options.attachments ?? []),
-		]
-		const magicProjectJs = files.find((item) => {
-			if (fileId && item.file_id === fileId) return true
-
-			return (
-				String(item.parent_id ?? "") === String(this.options.designProjectId ?? "") &&
-				item.file_name === "magic.project.js"
-			)
-		})
-
-		return parseUpdatedAt(magicProjectJs?.updated_at)
-	}
-
 	private async handleRemoteRefresh(
 		updateType: "message" | "revoke" | "restore",
-		options?: { refreshVersionsAfterApply?: boolean; fileUpdatedAtMs?: number | null },
+		options?: { refreshVersionsAfterApply?: boolean },
 	): Promise<void> {
 		if (!this.isMounted) return
 		const applyToken = this.latestRemoteApplyToken + 1
@@ -820,12 +599,8 @@ export class DesignRemoteListener {
 			return
 		}
 
-		const didApplyRemote = await this.options.loadAndApplyRemote(updateType)
+		await this.options.loadAndApplyRemote(updateType)
 		if (!isLatestApply()) return
-		if (didApplyRemote) {
-			this.markMagicProjectJsUpdatedAtApplied(options?.fileUpdatedAtMs)
-			if (!isLatestApply()) return
-		}
 
 		if (!options?.refreshVersionsAfterApply || this.getAccessMode() === "share") return
 
@@ -836,127 +611,38 @@ export class DesignRemoteListener {
 		}
 	}
 
-	private async fetchLatestMagicProjectJsVersion(): Promise<number | null> {
-		if (this.getAccessMode() === "share") return null
-		const fid = this.options.getMagicProjectJsFileId()
-		if (!fid) return null
-
-		try {
-			const fileInfo = await SuperMagicApi.getFileInfo(
-				{ file_id: fid },
-				{ enableErrorMessagePrompt: false },
-			)
-			return normalizeFileVersion(fileInfo?.version)
-		} catch {
-			return null
-		}
-	}
-
-	private debouncedLoadAndApply(
-		fileUpdatedAtMs?: number | null,
-		fileVersion?: number | null,
-	): void {
+	private debouncedLoadAndApply(): void {
 		if (!this.isMounted) return
-
-		if (fileUpdatedAtMs !== null && fileUpdatedAtMs !== undefined) {
-			this.pendingDebouncedFileChangeUpdatedAtMs = Math.max(
-				this.pendingDebouncedFileChangeUpdatedAtMs ?? 0,
-				fileUpdatedAtMs,
-			)
-		}
-		if (fileVersion !== null && fileVersion !== undefined) {
-			this.pendingDebouncedFileChangeVersion = Math.max(
-				this.pendingDebouncedFileChangeVersion ?? 0,
-				fileVersion,
-			)
-		}
-
-		if (this.debounceTimer) {
-			clearTimeout(this.debounceTimer)
-		}
+		// 新通知到达就令在途应用失效；已有防抖负责合并后续读取。
+		this.latestRemoteApplyToken += 1
+		if (this.debounceTimer) clearTimeout(this.debounceTimer)
 		this.debounceTimer = setTimeout(() => {
-			const pendingFileUpdatedAtMs = this.pendingDebouncedFileChangeUpdatedAtMs
-			const pendingFileVersion = this.pendingDebouncedFileChangeVersion
-			this.pendingDebouncedFileChangeUpdatedAtMs = null
-			this.pendingDebouncedFileChangeVersion = null
-			if (!this.isMounted) {
-				this.debounceTimer = null
-				return
-			}
+			this.debounceTimer = null
+			if (!this.isMounted) return
 			if (this.options.getIsViewingHistory()) {
-				if (this.getAccessMode() !== "share") {
+				if (this.getAccessMode() !== "share")
 					void this.options.fetchAndSetVersions().catch(() => undefined)
-				}
-				this.debounceTimer = null
 				return
 			}
-			if (this.deferRemoteRefreshDuringSave(pendingFileUpdatedAtMs, pendingFileVersion)) {
-				this.debounceTimer = null
+			if (this.deferRemoteRefreshDuringSave()) return
+			if (this.getListenerMode() !== "file-change") {
+				void this.handleRemoteRefresh("message").catch(() => undefined)
 				return
 			}
-			if (this.getListenerMode() === "file-change") {
-				const pendingMs = pendingFileUpdatedAtMs
-				const applyToken = this.latestRemoteApplyToken + 1
-				this.latestRemoteApplyToken = applyToken
-
-				const isLatestApply = () =>
-					this.isMounted && this.latestRemoteApplyToken === applyToken
-
-				const run = (async () => {
-					let snapshot = await this.maybePrepareRemoteDesignDataFromMagicProjectFile()
-					if (!isLatestApply()) return
-					if (!snapshot?.data) snapshot = await this.options.fetchRemoteDesignData()
-					if (!isLatestApply() || !snapshot?.data) return
-					// 通知版本只提示重读；不能用 V11 通知给 V10 正文贴标签。
-					if (
-						pendingFileVersion != null &&
-						snapshot.version != null &&
-						snapshot.version < pendingFileVersion
-					) {
-						snapshot = await this.options.fetchRemoteDesignData()
-						if (
-							!isLatestApply() ||
-							!snapshot?.data ||
-							snapshot.version == null ||
-							snapshot.version < pendingFileVersion
-						)
-							return
-					}
-					const applied = this.options.applyRemoteDesignData(snapshot.data, "message", {
-						remoteVersion: snapshot.version,
-						loadResult: snapshot.loadResult,
-					})
-					if (applied) this.markMagicProjectJsUpdatedAtApplied(pendingMs ?? undefined)
-				})()
-
-				void run.catch(() => undefined)
-			} else {
-				void this.handleRemoteRefresh("message", {
-					fileUpdatedAtMs: pendingFileUpdatedAtMs,
+			const applyToken = this.latestRemoteApplyToken
+			const isLatestApply = () => this.isMounted && this.latestRemoteApplyToken === applyToken
+			const run = async () => {
+				let current = await this.maybePrepareRemoteDesignDataFromMagicProjectFile()
+				if (!isLatestApply()) return
+				if (!current?.data) current = await this.options.fetchRemoteDesignData()
+				if (!isLatestApply() || !current?.data) return
+				this.options.applyRemoteDesignData(current.data, "message", {
+					loadResult: current.loadResult,
 				})
 			}
-			this.debounceTimer = null
+			void run().catch(() => undefined)
 		}, this.options.updateListenerDebounceMs)
 	}
-}
-
-function parseUpdatedAt(updatedAt?: string): number | null {
-	if (!updatedAt) return null
-
-	const time = new Date(updatedAt).getTime()
-	if (Number.isNaN(time)) return null
-
-	return time
-}
-
-function normalizeFileVersion(version: unknown): number | null {
-	if (typeof version === "number") {
-		return Number.isFinite(version) ? version : null
-	}
-	if (typeof version !== "string") return null
-
-	const normalized = Number(version.trim())
-	return Number.isFinite(normalized) ? normalized : null
 }
 
 function flattenFileItems(files: FileItem[]): FileItem[] {

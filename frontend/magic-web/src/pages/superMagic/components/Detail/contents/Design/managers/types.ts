@@ -9,7 +9,11 @@ import type {
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
-import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
+import type {
+	DesignLoadIssue,
+	DesignSidecarStatus,
+	LoadDesignDataToRuntimeResult,
+} from "../utils/designDataLoader"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
@@ -25,7 +29,7 @@ export interface PendingDesignUpgrade {
 
 export type DesignConflictReason =
 	| "remote-update-with-local-dirty"
-	| "save-version-conflict"
+	| "save-content-conflict"
 	| "draft-remote-advanced"
 	| "element-level-conflict"
 	| "connection-level-conflict"
@@ -65,9 +69,6 @@ export interface DesignConnectionConflict {
 
 export interface DesignConflict {
 	reason: DesignConflictReason
-	baseVersion: number | null
-	localVersion: number | null
-	remoteVersion: number | null
 	baseFingerprint: string
 	localFingerprint: string
 	remoteFingerprint: string
@@ -78,6 +79,13 @@ export interface DesignConflict {
 	elementConflicts?: DesignElementConflict[]
 	connectionConflicts?: DesignConnectionConflict[]
 	mergedData?: DesignData
+}
+
+export interface DesignCurrentFileLoadResult {
+	fileId: string | null
+	accessIdentity: string
+	data: DesignData | null
+	loadResult?: LoadDesignDataToRuntimeResult
 }
 
 export interface DesignProjectManagerOptions {
@@ -177,8 +185,6 @@ export interface DesignProjectStateBag {
 	getSidecarStatus?: () => DesignSidecarStatus
 	getConflictState: () => DesignConflict | null
 	getMagicProjectJsFileId: () => string | null
-	getMagicProjectJsVersion: () => number | null
-	setMagicProjectJsVersion: (v: number | null) => void
 	/** 空字符串表示尚未建立基线（等价于旧逻辑的「空字符串」） */
 	getPrevDesignDataFingerprint: () => string
 	setPrevDesignDataFingerprint: (v: string) => void

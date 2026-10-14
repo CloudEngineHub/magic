@@ -1,4 +1,10 @@
-import { findMagicProjectJsFile, resolveActualDesignCurrentFile } from "../utils/utils"
+import {
+	findMagicProjectJsFile,
+	resolveActualDesignCurrentFile,
+	loadMagicProjectJsContent,
+	resolveDesignDirectoryNameFromAttachments,
+	resolveDesignProjectBasePathFromAttachments,
+} from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
 import {
 	resolveDesignAccessMode,
@@ -6,14 +12,16 @@ import {
 	type DesignProjectStateBag,
 	type DesignProjectManagerOptions,
 	type PendingDesignUpgrade,
+	type DesignCurrentFileLoadResult,
+	getDesignBaseAccessMode,
 } from "./types"
 import {
 	DesignLoadError,
+	loadDesignDataToRuntime,
 	type DesignLoadIssue,
 	type DesignSidecarStatus,
 } from "../utils/designDataLoader"
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
-import type { DesignVersionLoadResult } from "./DesignVersionManager"
 import { stringifyUnknownError } from "@/utils/error"
 
 export interface DesignLoadResult {
@@ -42,16 +50,55 @@ export class DesignLoadManager {
 	private currentProjectId: string | null = null
 	private lastLoadResult: DesignLoadResult | undefined
 
-	constructor(
-		stateBag: DesignProjectStateBag,
-		options: DesignProjectManagerOptions,
-		private readCurrentSnapshot: (
-			fileId: string,
-			options: DesignProjectManagerOptions,
-		) => Promise<DesignVersionLoadResult>,
-	) {
+	constructor(stateBag: DesignProjectStateBag, options: DesignProjectManagerOptions) {
 		this.stateBag = stateBag
 		this.options = options
+	}
+
+	async readCurrentFile(
+		fileId: string,
+		requestOptions: DesignProjectManagerOptions,
+	): Promise<DesignCurrentFileLoadResult> {
+		const accessIdentity = getDesignRequestIdentity(requestOptions)
+		if (getDesignBaseAccessMode(requestOptions) === "share" && !requestOptions.fileApi)
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: "Shared Canvas requires its bound file client",
+				fileId,
+			})
+		try {
+			const content = await loadMagicProjectJsContent(fileId, {
+				fileApi: requestOptions.fileApi,
+				forceRefresh: true,
+			})
+			const loaded = await loadDesignDataToRuntime({
+				content,
+				nameOverride: resolveDesignDirectoryNameFromAttachments(requestOptions),
+				elementDetailsContext: {
+					attachments: requestOptions.attachments,
+					flatAttachments: requestOptions.flatAttachments,
+					mainFileId: fileId,
+					projectId: requestOptions.projectId,
+					fileApi: requestOptions.fileApi,
+				},
+				pathContext: {
+					projectBasePath: resolveDesignProjectBasePathFromAttachments(requestOptions),
+					flatAttachments: requestOptions.flatAttachments,
+					attachmentIndex: requestOptions.attachmentIndex,
+				},
+				fileId,
+			})
+			return { fileId, accessIdentity, data: loaded.data, loadResult: loaded }
+		} catch (error) {
+			if (error instanceof DesignLoadError) throw error
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: stringifyUnknownError(error),
+				fileId,
+			})
+		}
 	}
 
 	updateOptions(options: DesignProjectManagerOptions) {
@@ -187,7 +234,7 @@ export class DesignLoadManager {
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			}
 
-			const snapshot = await this.readCurrentSnapshot(result.fileId, request.options)
+			const snapshot = await this.readCurrentFile(result.fileId, request.options)
 			const loaded = snapshot.loadResult
 			if (!snapshot.data || !loaded)
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
@@ -219,8 +266,6 @@ export class DesignLoadManager {
 			this.stateBag.setters.setAccessMode(
 				sidecarStatus === "unsupported" ? "readonly" : accessMode,
 			)
-
-			this.stateBag.setMagicProjectJsVersion(snapshot.version)
 
 			return { didLoad: true, pendingUpgrade, issue: loadIssue, sidecarStatus }
 		} catch (error) {

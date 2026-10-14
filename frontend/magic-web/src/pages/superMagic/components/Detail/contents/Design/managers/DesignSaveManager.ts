@@ -17,6 +17,7 @@ import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/type
 import {
 	type DesignProjectStateBag,
 	type DesignProjectManagerOptions,
+	type DesignCurrentFileLoadResult,
 	getDesignRequestIdentity,
 } from "./types"
 
@@ -35,7 +36,6 @@ interface DesignCommitSaveOptions {
 	allowReadOnlyRetry?: boolean
 	designData?: DesignData
 	updateCurrentDesignData?: boolean
-	skipRemoteUpdateCheck?: boolean
 	source?: DesignSaveSource
 	deletedElementIds?: string[]
 	beforeElementCount?: number
@@ -46,7 +46,8 @@ interface DesignCommitSaveOptions {
 
 export interface RemoteUpdateCheckResult {
 	hasUpdate: boolean
-	currentVersion: number | null
+	currentFingerprint: string | null
+	currentFile?: DesignCurrentFileLoadResult
 	isCheckReliable: boolean
 }
 
@@ -90,7 +91,6 @@ export interface DesignSaveContext {
 	beforeElementCount: number
 	nextElementCount: number
 	deletedElementIds: string[]
-	magicProjectJsVersion: number | null
 	isRemoteApplying: boolean
 	fromDraft: boolean
 }
@@ -100,7 +100,7 @@ export type DesignSaveResult =
 			ok: true
 			fileId: string
 			accessIdentity: string
-			savedVersion: number | null
+			baseFingerprint: string
 			savedUpdatedAt: string | null
 			fullyPersisted: boolean
 			savedDesignData: DesignData
@@ -109,7 +109,7 @@ export type DesignSaveResult =
 	| {
 			ok: false
 			reason: DesignSaveFailureReason
-			remoteVersion?: number | null
+			currentFile?: DesignCurrentFileLoadResult
 			isCheckReliable?: boolean
 			error?: string
 	  }
@@ -139,12 +139,15 @@ export class DesignSaveManager {
 	private lastSaveFullyPersisted = false
 	private saveQueue: Promise<void> = Promise.resolve()
 	private pendingSaveCount = 0
-	private lastCommittedVersion: number | null = null
 
 	constructor(
 		stateBag: DesignProjectStateBag,
 		options: DesignProjectManagerOptions,
 		fetchAndSetVersions: () => Promise<FileHistoryVersion[]>,
+		private readCurrentFile: (
+			fileId: string,
+			options: DesignProjectManagerOptions,
+		) => Promise<DesignCurrentFileLoadResult>,
 		saveLifecycleHandlers: DesignSaveLifecycleHandlers = {},
 	) {
 		this.stateBag = stateBag
@@ -154,8 +157,6 @@ export class DesignSaveManager {
 	}
 
 	updateOptions(options: DesignProjectManagerOptions) {
-		if (getDesignRequestIdentity(options) !== getDesignRequestIdentity(this.options))
-			this.lastCommittedVersion = null
 		this.options = options
 	}
 
@@ -269,7 +270,6 @@ export class DesignSaveManager {
 			const prevFp = this.stateBag.getPrevDesignDataFingerprint()
 
 			if (!prevFp) {
-				this.stateBag.setPrevDesignDataFingerprint(fp)
 				return
 			}
 			if (prevFp === fp) {
@@ -308,7 +308,6 @@ export class DesignSaveManager {
 			beforeElementCount,
 			nextElementCount,
 			deletedElementIds,
-			magicProjectJsVersion: this.stateBag.getMagicProjectJsVersion(),
 			isRemoteApplying: options?.isRemoteApplying ?? false,
 			fromDraft: options?.fromDraft ?? source === "draft-restore",
 		}
@@ -318,11 +317,9 @@ export class DesignSaveManager {
 		const requestOptions = this.options
 		const fileId = this.stateBag.getMagicProjectJsFileId()
 		const accessIdentity = getDesignRequestIdentity(requestOptions)
-		const version = this.stateBag.getMagicProjectJsVersion()
 		const requestAccessMode = this.stateBag.getAccessMode()
-		const data = cloneDeep(options?.designData ?? this.stateBag.getDesignData()) as DesignData
-		const capturedOptions = { ...options, designData: data }
-		// 自动、手动和关闭标签共用一个顺序；载荷和身份在等待前捕获。
+		const explicitData = options?.designData ? cloneDeep(options.designData) : undefined
+		const explicitBase = this.stateBag.getPrevDesignDataFingerprint()
 		this.pendingSaveCount += 1
 		const result = this.saveQueue.then(() => {
 			if (
@@ -331,15 +328,20 @@ export class DesignSaveManager {
 				requestAccessMode !== this.stateBag.getAccessMode()
 			)
 				return { ok: false, reason: "no-file" } as DesignSaveResult
-			const currentVersion = this.stateBag.getMagicProjectJsVersion()
-			// 同一队列前项成功可以推进版本；远端推进的版本必须先重新合并。
-			if (version !== currentVersion && currentVersion !== this.lastCommittedVersion)
-				return {
-					ok: false,
-					reason: "remote-updated",
-					remoteVersion: currentVersion,
-				} as DesignSaveResult
-			return this.commitSaveInternal(capturedOptions, requestOptions, requestAccessMode)
+			const baseFingerprint = this.stateBag.getPrevDesignDataFingerprint()
+			if (explicitData && explicitBase !== baseFingerprint)
+				return { ok: false, reason: "remote-updated" } as DesignSaveResult
+			// 排队时不冻结普通保存的旧正文；开始执行后载荷与基准保持不变。
+			const capturedOptions = {
+				...options,
+				designData: cloneDeep(explicitData ?? this.stateBag.getDesignData()),
+			}
+			return this.commitSaveInternal(
+				capturedOptions,
+				requestOptions,
+				requestAccessMode,
+				baseFingerprint,
+			)
 		})
 		const completed = result.finally(() => {
 			this.pendingSaveCount -= 1
@@ -360,6 +362,7 @@ export class DesignSaveManager {
 		options: DesignCommitSaveOptions,
 		requestOptions: DesignProjectManagerOptions,
 		requestAccessMode: ReturnType<DesignProjectStateBag["getAccessMode"]>,
+		baseFingerprint: string,
 	): Promise<DesignSaveResult> {
 		this.lastSaveFullyPersisted = false
 		if (this.stateBag.getAccessMode() !== "edit" && !options?.allowReadOnlyRetry) {
@@ -389,35 +392,24 @@ export class DesignSaveManager {
 		let saveToken: number | null | undefined
 		let didSave = false
 		let savedUpdatedAt: string | null = null
-		let savedVersion: number | null = null
 		try {
 			saveToken = this.saveLifecycleHandlers.onSaveStart?.()
-			if (!options?.skipRemoteUpdateCheck) {
-				const remoteUpdateCheck = await this.checkRemoteUpdate()
-				if (!isCurrentRequest()) return { ok: false, reason: "no-file" }
-				const { hasUpdate, isCheckReliable, currentVersion } = remoteUpdateCheck
-				if (hasUpdate) {
-					this.markRemoteConflict()
-					this.stateBag.setters.setIsSaving(false)
-					return {
-						ok: false,
-						reason: "remote-updated",
-						remoteVersion: currentVersion,
-						isCheckReliable,
-					}
-				}
-				if (!isCheckReliable) {
-					this.stateBag.setters.setIsSaving(false)
-					return {
-						ok: false,
-						reason: "remote-check-unreliable",
-						remoteVersion: currentVersion,
-						isCheckReliable,
-					}
+			const check = await this.checkRemoteUpdate(requestOptions, baseFingerprint)
+			if (!isCurrentRequest()) return { ok: false, reason: "no-file" }
+			if (!check.isCheckReliable)
+				return { ok: false, reason: "remote-check-unreliable", isCheckReliable: false }
+			if (
+				check.hasUpdate ||
+				this.stateBag.getPrevDesignDataFingerprint() !== baseFingerprint
+			) {
+				this.markRemoteConflict()
+				return {
+					ok: false,
+					reason: "remote-updated",
+					currentFile: check.currentFile,
+					isCheckReliable: true,
 				}
 			}
-
-			if (!isCurrentRequest()) return { ok: false, reason: "no-file" }
 
 			const currentDesignData = options?.designData ?? this.stateBag.getDesignData()
 			const designDataToSave = this.getDesignDataForSave(currentDesignData, requestOptions)
@@ -471,12 +463,6 @@ export class DesignSaveManager {
 				}
 			didSave = true
 			savedUpdatedAt = savedFile.data.updated_at ?? null
-			savedVersion =
-				typeof savedFile.data.version === "number" &&
-				Number.isInteger(savedFile.data.version) &&
-				savedFile.data.version > 0
-					? savedFile.data.version
-					: null
 
 			// v3：主文件保存成功后只写用户 sidecar，不触碰 element-details.json
 			let didPersistDetails = true
@@ -496,39 +482,33 @@ export class DesignSaveManager {
 				}
 			}
 			const requestIsCurrent = isCurrentRequest()
-			const currentVersion = this.stateBag.getMagicProjectJsVersion()
-			const canAccept =
+			if (
 				requestIsCurrent &&
-				savedVersion !== null &&
-				(currentVersion === null || savedVersion >= currentVersion)
-			this.lastSaveFullyPersisted = didPersistDetails && canAccept
-			if (canAccept) {
-				this.lastCommittedVersion = savedVersion
-				const shouldUpdateCurrentDesignData = options.updateCurrentDesignData ?? true
+				this.stateBag.getPrevDesignDataFingerprint() === baseFingerprint
+			) {
 				if (
-					shouldUpdateCurrentDesignData &&
-					designDataToSave !== currentDesignData &&
+					(options.updateCurrentDesignData ?? true) &&
 					hashDesignDataComparable(this.stateBag.getDesignData()) ===
 						hashDesignDataComparable(currentDesignData)
 				)
 					this.stateBag.setters.setDesignData(designDataToSave)
-				if (didPersistDetails) {
-					this.stateBag.setPrevDesignDataFingerprint(fp)
-					this.stateBag.setMagicProjectJsVersion(savedVersion)
-				}
-				this.clearRemoteConflict()
 			}
 			const result: Extract<DesignSaveResult, { ok: true }> = {
 				ok: true,
 				fileId: magicProjectJsFileId,
 				accessIdentity: getDesignRequestIdentity(requestOptions),
-				savedVersion,
+				baseFingerprint,
 				savedUpdatedAt,
 				fullyPersisted: didPersistDetails,
 				savedDesignData: designDataToSave,
 				savedFingerprint: fp,
 			}
 			if (requestIsCurrent) this.saveLifecycleHandlers.onSaveCommitted?.(result)
+			this.lastSaveFullyPersisted =
+				didPersistDetails &&
+				isCurrentRequest() &&
+				this.stateBag.getPrevDesignDataFingerprint() === fp
+			if (this.lastSaveFullyPersisted) this.clearRemoteConflict()
 			// 版本菜单刷新失败不改变已经确认的保存结果。
 			if (requestIsCurrent) await this.fetchAndSetVersions().catch(() => [])
 			return result
@@ -541,40 +521,31 @@ export class DesignSaveManager {
 		}
 	}
 
-	async checkRemoteUpdate(): Promise<RemoteUpdateCheckResult> {
-		if (this.stateBag.getAccessMode() === "share") {
-			return { hasUpdate: false, currentVersion: null, isCheckReliable: true }
-		}
-		const magicProjectJsFileId = this.stateBag.getMagicProjectJsFileId()
-		if (!magicProjectJsFileId) {
-			return { hasUpdate: false, currentVersion: null, isCheckReliable: true }
-		}
-
+	async checkRemoteUpdate(
+		requestOptions: DesignProjectManagerOptions = this.options,
+		baseFingerprint: string = this.stateBag.getPrevDesignDataFingerprint(),
+	): Promise<RemoteUpdateCheckResult> {
+		const fileId = this.stateBag.getMagicProjectJsFileId()
+		if (!fileId || !baseFingerprint || this.stateBag.getAccessMode() === "share")
+			return { hasUpdate: false, currentFingerprint: null, isCheckReliable: false }
 		try {
-			const fileInfo = await SuperMagicApi.getFileInfo({ file_id: magicProjectJsFileId })
-			if (fileInfo?.version === undefined) {
-				return { hasUpdate: false, currentVersion: null, isCheckReliable: false }
-			}
-
-			const currentVersion = fileInfo.version
-			const prevVersion = this.stateBag.getMagicProjectJsVersion()
-
-			if (prevVersion === null) {
-				return { hasUpdate: false, currentVersion, isCheckReliable: false }
-			}
-
+			const currentFile = await this.readCurrentFile(fileId, requestOptions)
+			if (
+				!currentFile.data ||
+				currentFile.fileId !== this.stateBag.getMagicProjectJsFileId() ||
+				currentFile.accessIdentity !== getDesignRequestIdentity(this.options)
+			)
+				return { hasUpdate: false, currentFingerprint: null, isCheckReliable: false }
+			const currentFingerprint = hashDesignDataComparable(currentFile.data)
 			return {
-				hasUpdate: currentVersion > prevVersion,
-				currentVersion,
+				hasUpdate: currentFingerprint !== baseFingerprint,
+				currentFingerprint,
+				currentFile,
 				isCheckReliable: true,
 			}
 		} catch {
-			return { hasUpdate: false, currentVersion: null, isCheckReliable: false }
+			return { hasUpdate: false, currentFingerprint: null, isCheckReliable: false }
 		}
-	}
-
-	updateLocalVersion(version: number): void {
-		this.stateBag.setMagicProjectJsVersion(version)
 	}
 
 	generateContent(data?: DesignData): string {
