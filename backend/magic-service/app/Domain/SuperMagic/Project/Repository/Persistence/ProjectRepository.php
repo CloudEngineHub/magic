@@ -598,6 +598,15 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         return $this->modelToEntityForRestore($model);
     }
 
+    /** @return ProjectEntity[] */
+    public function findByWorkspaceIdForDeletion(int $workspaceId): array
+    {
+        // Match the complete scope of deleteProjectsByWorkspaceId, including hidden projects.
+        return $this->projectModel::query()->where('workspace_id', $workspaceId)
+            ->lockForUpdate()->get()
+            ->map(fn (ProjectModel $model) => $this->toEntity($model->toArray()))->all();
+    }
+
     /**
      * 恢复单个项目.
      *

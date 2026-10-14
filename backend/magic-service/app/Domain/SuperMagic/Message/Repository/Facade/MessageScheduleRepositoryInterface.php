@@ -19,6 +19,15 @@ interface MessageScheduleRepositoryInterface
      */
     public function findById(int $id): ?MessageScheduleEntity;
 
+    /** @return MessageScheduleEntity[] */
+    public function getCleanupCandidates(int $afterId, int $limit, ?string $organizationCode = null, array $projectIds = []): array;
+
+    public function findByIdForCleanup(int $id): ?MessageScheduleEntity;
+
+    public function isProjectAvailableForCleanup(int $projectId): bool;
+
+    public function markDeletedForCleanup(int $id, string $updatedUid): void;
+
     /**
      * Save message schedule.
      */

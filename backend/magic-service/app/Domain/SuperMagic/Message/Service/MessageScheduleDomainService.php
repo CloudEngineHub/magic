@@ -42,6 +42,27 @@ class MessageScheduleDomainService
         return $this->messageScheduleRepository->findById($id);
     }
 
+    /** @return MessageScheduleEntity[] */
+    public function getCleanupCandidates(int $afterId, int $limit, ?string $organizationCode = null, array $projectIds = []): array
+    {
+        return $this->messageScheduleRepository->getCleanupCandidates($afterId, $limit, $organizationCode, $projectIds);
+    }
+
+    public function getMessageScheduleForCleanup(int $id): ?MessageScheduleEntity
+    {
+        return $this->messageScheduleRepository->findByIdForCleanup($id);
+    }
+
+    public function isProjectAvailableForCleanup(int $projectId): bool
+    {
+        return $this->messageScheduleRepository->isProjectAvailableForCleanup($projectId);
+    }
+
+    public function markDeletedForCleanup(int $id, string $updatedUid): void
+    {
+        $this->messageScheduleRepository->markDeletedForCleanup($id, $updatedUid);
+    }
+
     /**
      * Get message schedule by ID with user validation.
      */
