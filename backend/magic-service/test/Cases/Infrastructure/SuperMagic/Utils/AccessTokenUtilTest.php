@@ -153,6 +153,7 @@ class AccessTokenUtilTest extends TestCase
         $token = AccessTokenUtil::generateForShare($this->share);
         self::assertTrue(AccessTokenUtil::validate($token));
         match ($change) {
+            'owner' => $this->share->setCreatedUid('new-owner'),
             'password' => $this->share->setPassword('new-encrypted-password'),
             'type' => $this->share->setShareType(ShareAccessType::PasswordProtected->value),
             'disabled' => $this->share->setIsEnabled(false),
@@ -167,7 +168,7 @@ class AccessTokenUtilTest extends TestCase
 
     public static function securityChanges(): array
     {
-        return array_map(static fn ($change) => [$change], ['password', 'type', 'disabled', 'range', 'targets', 'extra', 'deleted']);
+        return array_map(static fn ($change) => [$change], ['owner', 'password', 'type', 'disabled', 'range', 'targets', 'extra', 'deleted']);
     }
 
     public function testNewTokenWorksAfterChangingAnExistingPassword(): void

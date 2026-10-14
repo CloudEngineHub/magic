@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Project\Service;
 
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
+use App\Domain\Contact\Entity\ValueObject\UserStatus;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\OrganizationEnvironment\Service\OrganizationDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
@@ -32,6 +33,7 @@ use App\Interfaces\SuperMagic\Project\DTO\Request\TransferProjectsRequestDTO;
 use App\Interfaces\SuperMagic\Workspace\DTO\Request\TransferWorkspacesRequestDTO;
 use DateTimeImmutable;
 use Hyperf\DbConnection\Db;
+use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
@@ -61,6 +63,7 @@ class TransferAppService extends AbstractAppService
         private readonly PackageFilterInterface $packageFilterService,
         private readonly MessageScheduleDomainService $messageScheduleDomainService,
         private readonly OrganizationDomainService $organizationDomainService,
+        private readonly LoggerFactory $loggerFactory,
     ) {
     }
 
@@ -323,16 +326,20 @@ class TransferAppService extends AbstractAppService
             );
 
             // Dispatch domain event for decoupled processing
-            $this->eventDispatcher->dispatch(new ProjectTransferredEvent(
-                projectId: $projectId,
-                projectName: $transferResult->getProject()->getProjectName(),
-                fromUserId: $fromUserId,
-                toUserId: $toUserId,
-                organizationCode: $organizationCode,
-                shareToOriginal: $shareToMe,
-                shareRole: $shareRole,
-                transferredAt: new DateTimeImmutable(),
-            ));
+            try {
+                $this->eventDispatcher->dispatch(new ProjectTransferredEvent(
+                    projectId: $projectId,
+                    projectName: $transferResult->getProject()->getProjectName(),
+                    fromUserId: $fromUserId,
+                    toUserId: $toUserId,
+                    organizationCode: $organizationCode,
+                    shareToOriginal: $shareToMe,
+                    shareRole: $shareRole,
+                    transferredAt: new DateTimeImmutable(),
+                ));
+            } catch (Throwable $eventError) {
+                $this->loggerFactory->get('transfer')->error('Project transfer event failed after commit', ['exception' => $eventError]);
+            }
 
             return $transferResult->toApiResponse($projectId);
         } catch (Throwable $e) {
@@ -689,7 +696,7 @@ class TransferAppService extends AbstractAppService
         }
 
         $receiver = $this->magicUserDomainService->getByUserId($receiverId);
-        if (! $receiver) {
+        if (! $receiver || $receiver->getStatus() !== UserStatus::Activated) {
             ExceptionBuilder::throw(SuperAgentErrorCode::RECEIVER_NOT_FOUND);
         }
 
