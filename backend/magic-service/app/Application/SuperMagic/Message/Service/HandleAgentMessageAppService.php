@@ -26,6 +26,7 @@ use App\Domain\SuperMagic\Message\Entity\ValueObject\MessagePayload;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageType;
 use App\Domain\SuperMagic\Message\Service\TaskMessageDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Constant\AgentEventEnum;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
@@ -35,6 +36,7 @@ use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
+use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\Infrastructure\Core\Exception\EventException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\SandboxStatus;
@@ -74,6 +76,8 @@ class HandleAgentMessageAppService extends AbstractAppService
         private readonly FileProcessAppService $fileProcessAppService,
         private readonly ClientMessageAppService $clientMessageAppService,
         private readonly AgentDomainService $agentDomainService,
+        private readonly ProjectDomainService $projectDomainService,
+        private readonly WorkspaceDomainService $workspaceDomainService,
         private readonly LockerInterface $locker,
         private readonly Redis $redis,
         LoggerFactory $loggerFactory
@@ -453,6 +457,7 @@ class HandleAgentMessageAppService extends AbstractAppService
         TaskContext $taskContext,
         TopicEntity $topicEntity
     ): void {
+        [$projectId, $projectName, $workspaceId, $workspaceName] = $this->resolveTaskNotificationLabels($taskContext, $topicEntity);
         AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
             $taskContext->getCurrentOrganizationCode(),
             $taskContext->getCurrentUserId(),
@@ -460,8 +465,64 @@ class HandleAgentMessageAppService extends AbstractAppService
             $topicEntity->getTopicName(),
             $taskContext->getTask()->getId(),
             $messageDTO,
-            $messageDTO->getMetadata()->getLanguage()
+            $messageDTO->getMetadata()->getLanguage(),
+            $projectId,
+            $projectName,
+            $workspaceId,
+            $workspaceName
         ));
+    }
+
+    /**
+     * Capture task notification labels before dispatching the callback event.
+     *
+     * @return array{0:string,1:string,2:string,3:string}
+     */
+    private function resolveTaskNotificationLabels(TaskContext $taskContext, TopicEntity $topicEntity): array
+    {
+        $projectIdValue = $taskContext->getTask()->getProjectId();
+        if ($projectIdValue <= 0) {
+            $projectIdValue = $topicEntity->getProjectId();
+        }
+        $projectId = (string) $projectIdValue;
+        $projectName = '';
+        $workspaceIdValue = $topicEntity->getWorkspaceId() ?? 0;
+        if ($workspaceIdValue <= 0) {
+            $workspaceIdValue = $taskContext->getTask()->getWorkspaceId();
+        }
+        $workspaceId = (string) $workspaceIdValue;
+        $workspaceName = '';
+
+        try {
+            $project = $this->projectDomainService->getProjectNotUserId((int) $projectId);
+            if ($project !== null) {
+                $projectName = trim($project->getProjectName());
+                if ((int) $workspaceId <= 0 && ($project->getWorkspaceId() ?? 0) > 0) {
+                    $workspaceId = (string) $project->getWorkspaceId();
+                }
+            }
+        } catch (Throwable $throwable) {
+            $this->logger->warning('Resolve task notification project label failed before dispatch', [
+                'task_id' => $taskContext->getTask()->getId(),
+                'project_id' => $projectId,
+                'error' => $throwable->getMessage(),
+            ]);
+        }
+
+        if ((int) $workspaceId > 0) {
+            try {
+                $workspace = $this->workspaceDomainService->getWorkspaceDetail((int) $workspaceId);
+                $workspaceName = trim($workspace?->getName() ?? '');
+            } catch (Throwable $throwable) {
+                $this->logger->warning('Resolve task notification workspace label failed before dispatch', [
+                    'task_id' => $taskContext->getTask()->getId(),
+                    'workspace_id' => $workspaceId,
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
+        }
+
+        return [$projectId, $projectName, $workspaceId, $workspaceName];
     }
 
     /**

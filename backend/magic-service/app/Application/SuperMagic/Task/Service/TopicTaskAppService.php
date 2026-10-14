@@ -66,6 +66,7 @@ use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\Domain\SuperMagic\Task\Service\UsageCalculator\UsageCalculatorInterface;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
+use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\ErrorCode\GenericErrorCode;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\ErrorCode\SuperMagicErrorCode;
@@ -110,6 +111,7 @@ class TopicTaskAppService extends AbstractAppService
         private readonly FileProcessAppService $fileProcessAppService,
         private readonly ClientMessageAppService $clientMessageAppService,
         private readonly ProjectDomainService $projectDomainService,
+        private readonly WorkspaceDomainService $workspaceDomainService,
         private readonly TopicDomainService $topicDomainService,
         private readonly TaskDomainService $taskDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
@@ -1777,6 +1779,7 @@ class TopicTaskAppService extends AbstractAppService
             'user_id' => $dataIsolation->getCurrentUserId(),
         ]);
         // 派发 RunTaskCallbackEvent
+        [$projectId, $projectName, $workspaceId, $workspaceName] = $this->resolveTaskNotificationLabels($taskEntity, $topicEntity);
         AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
             $dataIsolation->getCurrentOrganizationCode(),
             $dataIsolation->getCurrentUserId(),
@@ -1784,8 +1787,67 @@ class TopicTaskAppService extends AbstractAppService
             '', // 话题名称传空字符串
             $taskEntity->getId(),
             $messageDTO,
-            $messageDTO->getMetadata()->getLanguage()
+            $messageDTO->getMetadata()->getLanguage(),
+            $projectId,
+            $projectName,
+            $workspaceId,
+            $workspaceName
         ));
+    }
+
+    /**
+     * Resolve stable task notification labels before handing the callback to the
+     * asynchronous event pipeline. The consumer still has a database lookup
+     * fallback, but early task failures must not depend on rows being available
+     * when the listener eventually runs.
+     *
+     * @return array{0:string,1:string,2:string,3:string}
+     */
+    private function resolveTaskNotificationLabels(TaskEntity $taskEntity, TopicEntity $topicEntity): array
+    {
+        $projectIdValue = $taskEntity->getProjectId();
+        if ($projectIdValue <= 0) {
+            $projectIdValue = $topicEntity->getProjectId();
+        }
+        $projectId = (string) $projectIdValue;
+        $projectName = '';
+        $workspaceIdValue = $topicEntity->getWorkspaceId() ?? 0;
+        if ($workspaceIdValue <= 0) {
+            $workspaceIdValue = $taskEntity->getWorkspaceId();
+        }
+        $workspaceId = (string) $workspaceIdValue;
+        $workspaceName = '';
+
+        try {
+            $project = $this->projectDomainService->getProjectNotUserId((int) $projectId);
+            if ($project !== null) {
+                $projectName = trim($project->getProjectName());
+                if ((int) $workspaceId <= 0 && ($project->getWorkspaceId() ?? 0) > 0) {
+                    $workspaceId = (string) $project->getWorkspaceId();
+                }
+            }
+        } catch (Throwable $throwable) {
+            $this->logger->warning('Resolve task notification project label failed before dispatch', [
+                'task_id' => $taskEntity->getId(),
+                'project_id' => $projectId,
+                'error' => $throwable->getMessage(),
+            ]);
+        }
+
+        if ((int) $workspaceId > 0) {
+            try {
+                $workspace = $this->workspaceDomainService->getWorkspaceDetail((int) $workspaceId);
+                $workspaceName = trim($workspace?->getName() ?? '');
+            } catch (Throwable $throwable) {
+                $this->logger->warning('Resolve task notification workspace label failed before dispatch', [
+                    'task_id' => $taskEntity->getId(),
+                    'workspace_id' => $workspaceId,
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
+        }
+
+        return [$projectId, $projectName, $workspaceId, $workspaceName];
     }
 
     /**

@@ -50,6 +50,7 @@ use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
+use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\ErrorCode\EventErrorCode;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\ErrorCode\SuperMagicErrorCode;
@@ -377,7 +378,7 @@ class HandleUserMessageAppService extends AbstractAppService
             // RunTaskCallbackEvent flow never triggers. Settle the task here and emit
             // the terminal event so downstream state (e.g. recording summary phase)
             // never gets stuck.
-            $this->settleFailedChatTask($dataIsolation, $topicEntity, $taskEntity, $e);
+            $this->settleFailedChatTask($dataIsolation, $topicEntity, $taskEntity, $projectEntity, $e);
 
             // Business exceptions already carry a translated, client-safe message.
             if ($e instanceof BusinessException) {
@@ -772,6 +773,7 @@ class HandleUserMessageAppService extends AbstractAppService
         DataIsolation $dataIsolation,
         TopicEntity $topicEntity,
         TaskEntity $taskEntity,
+        ProjectEntity $projectEntity,
         Throwable $e
     ): void {
         try {
@@ -796,6 +798,35 @@ class HandleUserMessageAppService extends AbstractAppService
                 ],
             ]);
 
+            $projectIdValue = $taskEntity->getProjectId();
+            if ($projectIdValue <= 0) {
+                $projectIdValue = $projectEntity->getId();
+            }
+            $projectId = (string) $projectIdValue;
+            $projectName = trim($projectEntity->getProjectName());
+            $workspaceIdValue = $topicEntity->getWorkspaceId() ?? 0;
+            if ($workspaceIdValue <= 0) {
+                $workspaceIdValue = $taskEntity->getWorkspaceId();
+            }
+            $workspaceId = (string) $workspaceIdValue;
+            if ((int) $workspaceId <= 0 && ($projectEntity->getWorkspaceId() ?? 0) > 0) {
+                $workspaceId = (string) $projectEntity->getWorkspaceId();
+            }
+            $workspaceName = '';
+            if ((int) $workspaceId > 0) {
+                try {
+                    $workspaceName = trim(
+                        di(WorkspaceDomainService::class)->getWorkspaceDetail((int) $workspaceId)?->getName() ?? ''
+                    );
+                } catch (Throwable $labelError) {
+                    $this->logger->warning('Resolve failed chat task notification workspace label failed', [
+                        'task_id' => $taskEntity->getId(),
+                        'workspace_id' => $workspaceId,
+                        'error' => $labelError->getMessage(),
+                    ]);
+                }
+            }
+
             AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
                 $dataIsolation->getCurrentOrganizationCode(),
                 $dataIsolation->getCurrentUserId(),
@@ -803,7 +834,11 @@ class HandleUserMessageAppService extends AbstractAppService
                 $topicEntity->getTopicName(),
                 $taskEntity->getId(),
                 $messageDTO,
-                $dataIsolation->getLanguage() ?? ''
+                $dataIsolation->getLanguage() ?? '',
+                $projectId,
+                $projectName,
+                $workspaceId,
+                $workspaceName
             ));
         } catch (Throwable $dispatchError) {
             $this->logger->error('Failed to dispatch error callback event for failed chat task', [
