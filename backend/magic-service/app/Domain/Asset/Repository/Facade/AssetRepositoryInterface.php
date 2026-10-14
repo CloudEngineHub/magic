@@ -60,6 +60,7 @@ interface AssetRepositoryInterface
 
     /**
      * 按用户标识和内容指纹查询未删除的个人资产，用于判断相同内容是否已经上传。
+     * 用户标识在组织下唯一（magic_contact_user 上 user_id 为唯一索引），因此按用户过滤已等价于组织隔离，无需再过滤 organization_code。
      * 默认只返回同步完成的最早记录；允许任意同步状态时返回最新记录，便于继续未完成的合规校验。
      */
     public function findPersonalAssetByContentHash(string $userId, string $contentHash, bool $anySyncStatus = false): ?AssetEntity;
