@@ -213,14 +213,13 @@ final class DesignVideoReferenceAssetResolver
             return $uri;
         }
         try {
-            // asset:// 会被网关原样透传给火山，火山只认它自己颁发的素材 ID，故必须用 provider_asset_id。
-            $providerAssetId = $this->assetDomainService->findPersonalProviderAssetId(
+            $providerAssetEntity = $this->assetDomainService->findPersonalProviderAsset(
                 AssetDataIsolation::createByBaseDataIsolation($dataIsolation),
                 $userId,
                 $hash,
             );
-            if ($providerAssetId !== null && $providerAssetId !== '') {
-                return 'asset://' . $providerAssetId;
+            if ($providerAssetEntity && $providerAssetEntity->getProviderStatus()->isPassed()) {
+                return $providerAssetEntity->getProviderAssetId() ? 'asset://' . $providerAssetEntity->getProviderAssetId() : $uri;
             }
 
             // 必须带上带扩展名的文件名：临时文件路径无后缀，会让私有桶 key 丢后缀，
@@ -238,15 +237,18 @@ final class DesignVideoReferenceAssetResolver
                 $this->buildCreateDto($uploadFile->getKey(), $fileEntity->getFileName()),
                 true,
             );
+            if (! $asset->getId()) {
+                return $uri;
+            }
             // 新建素材同步完成后才能拿到第三方素材 ID；取不到则退回原始 uri，保障本次请求可用。
-            $providerAssetId = $this->assetDomainService->findProviderAssetId(
+            $providerAssetEntity = $this->assetDomainService->findProviderAsset(
                 AssetDataIsolation::createByBaseDataIsolation($dataIsolation),
                 $asset->getId(),
             );
-            if ($providerAssetId === null || $providerAssetId === '') {
-                return $uri;
+            if ($providerAssetEntity && $providerAssetEntity->getProviderStatus()->isPassed()) {
+                return $providerAssetEntity->getProviderAssetId() ? 'asset://' . $providerAssetEntity->getProviderAssetId() : $uri;
             }
-            return 'asset://' . $providerAssetId;
+            return $uri;
         } catch (Throwable $throwable) {
             di(LoggerInterface::class)->error(__METHOD__ . ':' . $throwable->getMessage());
             // 任何登记失败（如未签素材协议、上传异常）都退回原始 uri，不影响本次生成请求。

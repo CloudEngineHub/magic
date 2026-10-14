@@ -305,6 +305,21 @@ class AssetDomainService
         return $providerAssetId === '' ? null : $providerAssetId;
     }
 
+    public function findProviderAsset(AssetDataIsolation $dataIsolation, int|string $assetId): ?ProviderAssetEntity
+    {
+        $mapping = $this->providerAssets->findMapping(
+            $dataIsolation,
+            $assetId,
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
+        );
+        if ($mapping === null) {
+            return null;
+        }
+        // 只有 Provider 已通过审核时才允许生成链路使用。
+        return new ProviderAssetEntity($mapping->toArray());
+    }
+
     public function ensureProviderAssetId(AssetDataIsolation $dataIsolation, AssetEntity $asset): ?string
     {
         if ($asset->getAssetKind()->isGroup() || $asset->getId() === null) {
@@ -340,6 +355,19 @@ class AssetDomainService
         }
         $providerAssetId = trim($mapping->getProviderAssetId());
         return $providerAssetId === '' ? null : $providerAssetId;
+    }
+
+    public function findPersonalProviderAsset(AssetDataIsolation $dataIsolation, string $userId, string $contentHash): ?ProviderAssetEntity
+    {
+        $contentHash = trim($contentHash);
+        if ($contentHash === '') {
+            return null;
+        }
+        return $this->providerAssets->findReusableMappingByAssetIds(
+            $this->assets->findIdsByContentHash($contentHash),
+            VolcengineArkAssetProvider::PROVIDER_CODE,
+            $this->projectName(),
+        );
     }
 
     /**
@@ -1006,7 +1034,7 @@ class AssetDomainService
         if ($asset->getId() === null) {
             return null;
         }
-        $asset->setSearchText($this->searchTextBuilder->build($asset));
+        $asset->setSearchText($this->searchTextBuilder->build($asset, $asset->getTags()));
         return $this->assets->update($dataIsolation, $asset);
     }
 

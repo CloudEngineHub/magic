@@ -38,11 +38,6 @@ class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
         return $this->hasVisibilityPrincipals() ? 'TEAM' : 'PERSONAL';
     }
 
-    private function hasVisibilityPrincipals(): bool
-    {
-        return ($this->visibility['user_ids'] ?? []) !== [] || ($this->visibility['department_ids'] ?? []) !== [];
-    }
-
     /** @return array{user_ids: array<string>, department_ids: array<string>} */
     public function getVisibilityConfig(): array
     {
@@ -98,5 +93,10 @@ class SaveAssetToLibraryRequestDTO extends CreateAssetRequestDTO
             'visibility.user_ids.array' => __('asset.validation.user_ids_array'),
             'visibility.department_ids.array' => __('asset.validation.department_ids_array'),
         ];
+    }
+
+    private function hasVisibilityPrincipals(): bool
+    {
+        return ($this->visibility['user_ids'] ?? []) !== [] || ($this->visibility['department_ids'] ?? []) !== [];
     }
 }

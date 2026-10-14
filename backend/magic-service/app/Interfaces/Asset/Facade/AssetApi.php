@@ -14,8 +14,8 @@ use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Interfaces\Asset\Assembler\AssetAssembler;
-use App\Interfaces\Asset\DTO\Request\BatchGetAssetsRequestDTO;
 use App\Interfaces\Asset\DTO\Request\BatchAssetIdsRequestDTO;
+use App\Interfaces\Asset\DTO\Request\BatchGetAssetsRequestDTO;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetTagRequestDTO;
@@ -227,5 +227,4 @@ class AssetApi extends AbstractApi
         $request = TransferAssetOwnerRequestDTO::fromRequest($this->request);
         return $this->assetAppService->transferOwner($this->getAuthorization(), $request->getAssetIds(), $request->getOwnerUid());
     }
-
 }

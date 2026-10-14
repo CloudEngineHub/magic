@@ -36,7 +36,7 @@ class BatchAssetIdsRequestDTO extends AbstractRequestDTO
     {
         return [
             'asset_ids' => 'required|array|min:1|max:100',
-            'asset_ids.*' => 'required|string|max:64|regex:/^\\d+$/',
+            'asset_ids.*' => 'required|string|max:64|regex:/^\d+$/',
         ];
     }
 

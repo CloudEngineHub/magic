@@ -268,6 +268,7 @@ class AssetAppService extends AbstractAssetAppService
                 $asset->setVisibilityType($requestDTO->getVisibilityType());
                 $asset->setVisibility($requestDTO->getVisibilityConfig());
             }
+            $asset->setTags($this->assetTagDomainService->findAssetTags($dataIsolation, $assetId));
             $updated = $this->assetDomainService->update($dataIsolation, $asset);
             if ($updated === null) {
                 ExceptionBuilder::throw(AssetErrorCode::NOT_FOUND);
@@ -552,6 +553,8 @@ class AssetAppService extends AbstractAssetAppService
 
     private function enrichAssets(AssetDataIsolation $isolation, array $assets, string $scope): void
     {
+        // 标签名与标签树接口（AssetAssembler）同一口径：优先当前语言，缺失回退 default。
+        $language = $isolation->getLanguage();
         $ownerIds = [];
         foreach ($assets as $asset) {
             $ownerId = $asset->getOwnerUid() ?: $asset->getUserId();
@@ -561,9 +564,9 @@ class AssetAppService extends AbstractAssetAppService
             $asset->setSource($ownerId === $isolation->getCurrentUserId()
                 ? 'PERSONAL'
                 : ($asset->isOfficial($isolation->getOfficialOrganizationCodes()) ? 'PUBLIC' : 'TEAM'));
-            $asset->setTags(array_map(static fn ($tag): array => [
+            $asset->setTags(array_map(static fn (AssetTagEntity $tag): array => [
                 'id' => (string) $tag->getId(),
-                'name' => (string) ($tag->getNameI18n()['default'] ?? ''),
+                'name' => $tag->getI18nName($language),
             ], $this->assetTagDomainService->findAssetTags($isolation, (string) $asset->getId())));
         }
         $infos = [];

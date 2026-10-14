@@ -14,6 +14,7 @@ use App\Application\Asset\Support\ProjectFileMaterializer;
 use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
+use App\Domain\Asset\Entity\AssetTagEntity;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Entity\ValueObject\AssetKind;
 use App\Domain\Asset\Entity\ValueObject\AssetScope;
@@ -41,6 +42,7 @@ use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\QueryAssetRequestDTO;
 use App\Interfaces\Asset\DTO\Request\SaveAssetToLibraryRequestDTO;
 use App\Interfaces\Asset\DTO\Request\UpdateAssetRequestDTO;
+use App\Interfaces\Asset\DTO\Request\UpdatePersonalAssetRequestDTO;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
@@ -379,6 +381,85 @@ final class AssetAppServiceTest extends TestCase
 
         $service = new AssetAppService(...$this->assetAppServiceArgs($domainService));
         $service->signAgreement($authorization);
+    }
+
+    /**
+     * 编辑会重建搜索文本，而搜索文本由「名称 + 描述 + 标签」整体构成：
+     * 更新前必须把该素材现有标签加载回实体，否则只改名称就把标签关键词从搜索文本里抹掉了。
+     */
+    public function testUpdatePersonalAssetLoadsExistingTagsBeforeRebuildingSearchText(): void
+    {
+        $asset = new AssetEntity([
+            'id' => 41,
+            'organization_code' => 'org-a',
+            'user_id' => 'user-1',
+            'file_key' => 'org-a/private/image.png',
+            'name_i18n' => ['default' => '旧名字'],
+        ]);
+        $tag = (new AssetTagEntity())->setNameI18n(['default' => '风景']);
+
+        $tagDomainService = $this->createMock(AssetTagDomainService::class);
+        $tagDomainService->expects(self::once())->method('findAssetTags')
+            ->with(self::isInstanceOf(AssetDataIsolation::class), 41)
+            ->willReturn([$tag]);
+
+        $updated = null;
+        $domainService = $this->createMock(AssetDomainService::class);
+        $domainService->method('find')->willReturn($asset);
+        $domainService->expects(self::once())->method('update')->willReturnCallback(
+            static function (AssetDataIsolation $dataIsolation, AssetEntity $entity) use (&$updated): AssetEntity {
+                $updated = $entity;
+                return $entity;
+            }
+        );
+
+        $service = $this->assetService($domainService, null, $tagDomainService);
+        $service->updatePersonalAsset(
+            $this->realAssetDataIsolation('org-a', 'user-1'),
+            41,
+            new UpdatePersonalAssetRequestDTO(['name' => '新名字']),
+        );
+
+        self::assertSame('新名字', $updated?->getI18nName('default'));
+        self::assertSame([$tag], $updated?->getTags());
+    }
+
+    /**
+     * 列表/详情的标签名必须按请求语言解析、缺失时回退 default，与标签树接口（AssetAssembler）同一口径。
+     * 原先固定读 name_i18n['default']，非默认语言用户看到的始终是默认名。
+     */
+    public function testListResolvesTagNamesInCurrentLanguageWithDefaultFallback(): void
+    {
+        $asset = new AssetEntity([
+            'id' => 51,
+            'organization_code' => 'org-a',
+            'user_id' => 'user-1',
+            'file_key' => '',
+        ]);
+        $localized = (new AssetTagEntity())->setNameI18n(['default' => '风景', 'en_US' => 'Landscape']);
+        $defaultOnly = (new AssetTagEntity())->setNameI18n(['default' => '人物']);
+
+        $tagDomainService = $this->createMock(AssetTagDomainService::class);
+        $tagDomainService->method('findAssetTags')->willReturn([$localized, $defaultOnly]);
+
+        $domainService = $this->createMock(AssetDomainService::class);
+        $domainService->method('queries')->willReturn(['total' => 1, 'list' => [$asset]]);
+        $domainService->method('findProviderAssets')->willReturn([]);
+
+        // 请求语言是 en_US：有 en_US 的取 en_US，只有 default 的回落 default。
+        $isolation = $this->createMock(AssetDataIsolation::class);
+        $isolation->method('getLanguage')->willReturn('en_US');
+        $isolation->method('getCurrentUserId')->willReturn('user-1');
+        $isolation->method('getCurrentOrganizationCode')->willReturn('org-a');
+        $isolation->method('getOfficialOrganizationCodes')->willReturn([]);
+
+        $result = $this->assetService($domainService, null, $tagDomainService)
+            ->list($isolation, new QueryAssetRequestDTO(['scope' => 'PERSONAL']));
+
+        self::assertSame([
+            ['id' => '', 'name' => 'Landscape'],
+            ['id' => '', 'name' => '人物'],
+        ], $result['list'][0]->getTags());
     }
 
     public function testAdminAssetListResolvesPrivateFileUrls(): void
@@ -800,12 +881,13 @@ final class AssetAppServiceTest extends TestCase
     private function assetAppServiceArgs(
         AssetDomainService $domainService,
         ?ResourceVisibilityRepositoryInterface $repository = null,
+        ?AssetTagDomainService $tagDomainService = null,
     ): array {
         return [
             $domainService,
             $this->visibilityDomainService($repository),
             $this->projectFileMaterializer(),
-            $this->createMock(AssetTagDomainService::class),
+            $tagDomainService ?? $this->createMock(AssetTagDomainService::class),
             $this->createMock(MagicUserDomainService::class),
             new NullLogger(),
             $this->createMock(AssetVisualPrecheck::class),
@@ -834,8 +916,9 @@ final class AssetAppServiceTest extends TestCase
     private function assetService(
         AssetDomainService $domainService,
         ?ResourceVisibilityRepositoryInterface $repository = null,
+        ?AssetTagDomainService $tagDomainService = null,
     ): AssetAppService {
-        return new class(...$this->assetAppServiceArgs($domainService, $repository)) extends AssetAppService {
+        return new class(...$this->assetAppServiceArgs($domainService, $repository, $tagDomainService)) extends AssetAppService {
             public function getPrivateFileLinks(string $organizationCode, array $fileLinks): array
             {
                 return array_fill_keys($fileLinks, new FileLink('', 'https://example.test/asset', 3600));

@@ -11,6 +11,7 @@ use App\Application\Asset\Service\AdminAssetAppService;
 use App\Domain\Asset\Contract\AssetProviderInterface;
 use App\Domain\Asset\Entity\AssetDataIsolation;
 use App\Domain\Asset\Entity\AssetEntity;
+use App\Domain\Asset\Entity\AssetTagEntity;
 use App\Domain\Asset\Entity\ProviderAssetEntity;
 use App\Domain\Asset\Entity\ValueObject\ProviderAssetStatus;
 use App\Domain\Asset\Entity\ValueObject\ProviderReviewMode;
@@ -1255,6 +1256,38 @@ final class AssetDomainServiceTest extends TestCase
         $service = $this->domainService($repository, $providerAssets, $provider);
 
         self::assertTrue($service->deletePersonal($this->dataIsolation('org-a', 'user-a', ['org-a']), 8));
+    }
+
+    /**
+     * 编辑元数据会重建搜索文本；搜索文本由「名称 + 描述 + 标签」整体构成，
+     * 实体上已加载的标签必须一起参与重建，否则改个名称就把标签关键词抹掉了。
+     */
+    public function testUpdateKeepsLoadedTagsInSearchText(): void
+    {
+        $repository = $this->createMock(AssetRepositoryInterface::class);
+        $saved = null;
+        $repository->expects(self::once())->method('update')->willReturnCallback(
+            static function (AssetDataIsolation $dataIsolation, AssetEntity $asset) use (&$saved): AssetEntity {
+                $saved = $asset;
+                return $asset;
+            }
+        );
+
+        $asset = new AssetEntity([
+            'id' => 41,
+            'organization_code' => 'org-a',
+            'user_id' => 'user-a',
+            'name_i18n' => ['default' => '新名字'],
+            'description_i18n' => ['default' => '新描述'],
+        ]);
+        $asset->setTags([(new AssetTagEntity())->setNameI18n(['default' => '风景'])]);
+
+        $this->domainService($repository)->update($this->dataIsolation('org-a', 'user-a', ['org-a']), $asset);
+
+        self::assertInstanceOf(AssetEntity::class, $saved);
+        self::assertStringContainsString('新名字', (string) $saved->getSearchText());
+        self::assertStringContainsString('新描述', (string) $saved->getSearchText());
+        self::assertStringContainsString('风景', (string) $saved->getSearchText());
     }
 
     /**
