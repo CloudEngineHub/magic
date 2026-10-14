@@ -40,7 +40,7 @@ export default function Auth() {
 						errorKind: !code || !state ? "validation" : "request",
 						error,
 						message: "MCP OAuth callback failed",
-						// 仅记录参数是否存在，避免将 OAuth 授权码及 state 放入日志上下文。
+						// Record only parameter presence to keep OAuth authorization codes and state out of the log context.
 						context: { hasCode: Boolean(code), hasState: Boolean(state) },
 					})
 					setSuccess(false)
