@@ -133,6 +133,7 @@ export class DesignSaveManager {
 	private saveLifecycleHandlers: DesignSaveLifecycleHandlers
 
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null
+	private pendingAutoSaveBaseFingerprint: string | null = null
 	private pendingAutoSaveDesignData: DesignData | null = null
 	private pendingAutoSaveMetadata: DesignSaveMetadata | null = null
 	private hasRemoteConflictPending = false
@@ -191,6 +192,9 @@ export class DesignSaveManager {
 	}
 
 	scheduleAutoSave(designData?: DesignData, metadata?: DesignSaveMetadata): void {
+		this.pendingAutoSaveBaseFingerprint = designData
+			? this.stateBag.getPrevDesignDataFingerprint()
+			: null
 		this.pendingAutoSaveDesignData = designData ? (cloneDeep(designData) as DesignData) : null
 		this.pendingAutoSaveMetadata = this.normalizeSaveMetadata(metadata)
 		this.runDebouncedSave()
@@ -201,6 +205,7 @@ export class DesignSaveManager {
 			clearTimeout(this.debounceTimer)
 			this.debounceTimer = null
 		}
+		this.pendingAutoSaveBaseFingerprint = null
 		this.pendingAutoSaveDesignData = null
 		this.pendingAutoSaveMetadata = null
 		this.stateBag.setters.setIsSaving(false)
@@ -260,6 +265,8 @@ export class DesignSaveManager {
 
 		this.debounceTimer = setTimeout(() => {
 			this.debounceTimer = null
+			const explicitBase = this.pendingAutoSaveBaseFingerprint
+			this.pendingAutoSaveBaseFingerprint = null
 			const explicitSaveData = this.pendingAutoSaveDesignData
 			const metadata = this.pendingAutoSaveMetadata
 			this.pendingAutoSaveDesignData = null
@@ -269,6 +276,13 @@ export class DesignSaveManager {
 			const fp = hashDesignDataComparable(designDataToSave)
 			const prevFp = this.stateBag.getPrevDesignDataFingerprint()
 
+			if (explicitSaveData && explicitBase !== prevFp) {
+				void this.saveLifecycleHandlers.onAutoSaveResult?.({
+					ok: false,
+					reason: "remote-updated",
+				})
+				return
+			}
 			if (!prevFp) {
 				return
 			}
