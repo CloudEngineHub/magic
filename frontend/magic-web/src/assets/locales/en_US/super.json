@@ -3570,7 +3570,7 @@
 		"modelSwitch": {
 			"autoModelDescription": "Auto mode automatically selects the most efficient AI model for the current task, suitable for handling most regular tasks with moderate credit consumption.",
 			"billingMultiplier": "Usage multiplier",
-			"billingMultiplierHint": "Reference estimate for fixed usage. 0.00x may also mean no price is configured; actual charges depend on usage and entitlements.",
+			"billingMultiplierHint": "Multipliers are for reference only. Actual consumption depends on usage and billing rules.",
 			"billingMultiplierValue": "Usage multiplier: {{value}}x",
 			"collapseDescription": "Collapse model description",
 			"expandDescription": "Expand model description",
