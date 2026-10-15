@@ -65,8 +65,7 @@ function AppsSubMenu({ children, visible = true, onOpenChange }: AppsSubMenuProp
 
 	const renderPopup = () => (
 		<div
-			className="flex w-[240px] flex-col gap-1 rounded-md border border-border bg-popover p-1"
-			style={{ boxShadow: "0px 1px 2px 0px rgba(0, 0, 0, 0.05)" }}
+			className="flex w-[240px] flex-col gap-1 rounded-md border border-border bg-popover p-1 shadow-xs"
 			data-testid="sidebar-apps-submenu-popup"
 		>
 			{loading && (
