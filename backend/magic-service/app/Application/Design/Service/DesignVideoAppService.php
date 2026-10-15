@@ -12,6 +12,7 @@ use App\Application\Design\Event\Message\DesignVideoSubmitMessage;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
 use App\Application\Design\Event\Publish\DesignVideoSubmitPublisher;
 use App\Application\Design\Support\DesignDraftTaskResolver;
+use App\Application\Design\Support\DesignVideoReferenceAssetResolver;
 use App\Application\ModelGateway\Mapper\ModelEntry;
 use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
 use App\Domain\Design\Entity\DesignDataIsolation;
@@ -51,6 +52,7 @@ class DesignVideoAppService extends DesignAppService
         private readonly DesignGenerationTaskDomainService $designGenerationTaskDomainService,
         private readonly DesignVideoSubmissionDomainService $submissionDomainService,
         private readonly DesignDraftTaskResolver $draftTaskResolver,
+        private readonly DesignVideoReferenceAssetResolver $referenceAssetResolver,
         private readonly Producer $producer,
     ) {
     }
@@ -77,8 +79,12 @@ class DesignVideoAppService extends DesignAppService
             );
             // 记录输出目录 ID，后续目录被改名或移动时仍可按 ID 找到真实目录。
             $entity->setOutputDirectoryFileId($outputDirectory->getFileId());
+            // 火山方舟：先校验原始工作区路径，再把引用素材材质化为本人个人资产，
+            // 改写后的 asset:// uri 会随 inputPayload/requestPayload 一起进入后续提交链路。
+            if ($supportsProviderAssetUri) {
+                $this->referenceAssetResolver->resolve($designDataIsolation, $entity);
+            }
             // 样片成片：把样片引用解析成下游样片任务 ID，并继承样片时长与成片分辨率。
-            // 非样片成片请求在这里是空操作。
             $this->draftTaskResolver->resolve($designDataIsolation, $entity);
         }
 
