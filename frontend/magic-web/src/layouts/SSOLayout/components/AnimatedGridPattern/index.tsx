@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
-import { motion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/utils/cn"
 
 interface AnimatedGridPatternProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -44,6 +44,7 @@ export function AnimatedGridPattern({
 	...props
 }: AnimatedGridPatternProps) {
 	const id = useId()
+	const reduceMotion = useReducedMotion()
 	const containerRef = useRef<SVGSVGElement>(null)
 	const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
 
@@ -82,10 +83,10 @@ export function AnimatedGridPattern({
 
 	// Update squares to animate in
 	useEffect(() => {
-		if (dimensions.width && dimensions.height) {
+		if (!reduceMotion && dimensions.width && dimensions.height) {
 			setSquares(generateSquares(numSquares))
 		}
-	}, [dimensions, numSquares, generateSquares])
+	}, [dimensions, numSquares, generateSquares, reduceMotion])
 
 	// Resize observer to update container dimensions
 	useEffect(() => {
@@ -140,26 +141,28 @@ export function AnimatedGridPattern({
 				</defs>
 				<rect width="100%" height="100%" fill={`url(#${id})`} />
 				<svg x={x} y={y} className="overflow-visible">
-					{squares.map(({ pos: [posX, posY], id: squareId }, index) => (
-						<motion.rect
-							initial={{ opacity: 0 }}
-							animate={{ opacity: maxOpacity }}
-							transition={{
-								duration,
-								repeat: 1,
-								delay: index * 0.1,
-								repeatType: "reverse",
-							}}
-							onAnimationComplete={() => updateSquarePosition(squareId)}
-							key={`${posX}-${posY}-${squareId}`}
-							width={width}
-							height={height}
-							x={posX * width}
-							y={posY * height}
-							fill="currentColor"
-							strokeWidth="0"
-						/>
-					))}
+					{/* Reduced motion keeps the static grid and avoids the animation-completion loop. */}
+					{!reduceMotion &&
+						squares.map(({ pos: [posX, posY], id: squareId }, index) => (
+							<motion.rect
+								initial={{ opacity: 0 }}
+								animate={{ opacity: maxOpacity }}
+								transition={{
+									duration,
+									repeat: 1,
+									delay: index * 0.1,
+									repeatType: "reverse",
+								}}
+								onAnimationComplete={() => updateSquarePosition(squareId)}
+								key={`${posX}-${posY}-${squareId}`}
+								width={width}
+								height={height}
+								x={posX * width}
+								y={posY * height}
+								fill="currentColor"
+								strokeWidth="0"
+							/>
+						))}
 				</svg>
 			</svg>
 			<div className="size-full">{children}</div>
