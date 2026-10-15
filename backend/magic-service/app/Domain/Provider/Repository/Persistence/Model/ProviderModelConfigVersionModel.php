@@ -26,6 +26,7 @@ use Hyperf\Snowflake\Concern\Snowflake;
  * @property float $cache_hit_pricing
  * @property int $max_output_tokens
  * @property bool $support_embedding
+ * @property null|string $reasoning_effort_default
  * @property null|array $reasoning_effort_levels
  * @property bool $support_deep_think
  * @property float $cache_write_pricing
@@ -68,6 +69,7 @@ class ProviderModelConfigVersionModel extends AbstractModel
         'support_embedding',
         'support_deep_think',
         'reasoning_effort_levels',
+        'reasoning_effort_default',
         'cache_write_pricing',
         'support_multi_modal',
         'official_recommended',

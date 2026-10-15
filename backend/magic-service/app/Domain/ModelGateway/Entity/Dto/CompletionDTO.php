@@ -40,6 +40,9 @@ class CompletionDTO extends AbstractRequestDTO
     /** 请求值原样交给 Odin，避免中间层绑定其档位与类型规则。 */
     protected mixed $reasoningEffort = null;
 
+    /** 每次路由后的默认值与用户选择分开，避免重试沿用上一候选的默认。 */
+    private ?string $modelReasoningEffortDefault = null;
+
     public function __construct(?array $data = null)
     {
         parent::__construct($data);
@@ -148,6 +151,18 @@ class CompletionDTO extends AbstractRequestDTO
     public function setThinking(?array $thinking): void
     {
         $this->thinking = $thinking;
+    }
+
+    /** 更新当前实际模型默认值，不修改请求中的原始用户选择。 */
+    public function setModelReasoningEffortDefault(?string $level): void
+    {
+        $this->modelReasoningEffortDefault = $level;
+    }
+
+    /** 明确强度优先，旧 thinking 继续有效；省略两者才应用模型默认。 */
+    public function getEffectiveReasoningEffort(): mixed
+    {
+        return $this->reasoningEffort ?? ($this->thinking === null ? $this->modelReasoningEffortDefault : null);
     }
 
     /**

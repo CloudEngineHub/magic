@@ -1163,6 +1163,10 @@ class LLMAppService extends AbstractLLMAppService
         $modelGatewayDataIsolation = null;
         $modelAttributes = null;
         $accessContext = null;
+        // 每次处理都重新从实际模型取默认值，不接受外部注入或上一轮路由残留。
+        if ($proxyModelRequest instanceof CompletionDTO) {
+            $proxyModelRequest->setModelReasoningEffortDefault(null);
+        }
         $originalModelId = $proxyModelRequest->getModel();
         $requestExtra = $proxyModelRequest->getExtra();
         $invocationSuccessAudited = false;
@@ -1215,6 +1219,9 @@ class LLMAppService extends AbstractLLMAppService
                 };
                 if ($model instanceof ModelEntry) {
                     $proxyModelRequest->setExtra($this->mergeModelExtra($model->getExtra(), $requestExtra));
+                    if ($proxyModelRequest instanceof CompletionDTO) {
+                        $proxyModelRequest->setModelReasoningEffortDefault($model->getReasoningEffortDefault());
+                    }
                     $modelAttributes = $model->getAttributes();
                     $impl = $model->getModel();
                     $model = $impl instanceof OdinModel ? $impl->getModel() : $impl;
@@ -1229,6 +1236,9 @@ class LLMAppService extends AbstractLLMAppService
                     };
                     if ($model instanceof ModelEntry) {
                         $proxyModelRequest->setExtra($this->mergeModelExtra($model->getExtra(), $requestExtra));
+                        if ($proxyModelRequest instanceof CompletionDTO) {
+                            $proxyModelRequest->setModelReasoningEffortDefault($model->getReasoningEffortDefault());
+                        }
                         $modelAttributes = $model->getAttributes();
                         $impl = $model->getModel();
                         $model = $impl instanceof OdinModel ? $impl->getModel() : $impl;
@@ -1910,8 +1920,8 @@ class LLMAppService extends AbstractLLMAppService
         $chatRequest->setFrequencyPenalty($sendMsgDTO->getFrequencyPenalty());
         $chatRequest->setPresencePenalty($sendMsgDTO->getPresencePenalty());
         $chatRequest->setBusinessParams($sendMsgDTO->getBusinessParams());
-        if ($sendMsgDTO->getReasoningEffort() !== null) {
-            $chatRequest->setReasoningEffort($sendMsgDTO->getReasoningEffort());
+        if ($sendMsgDTO->getEffectiveReasoningEffort() !== null) {
+            $chatRequest->setReasoningEffort($sendMsgDTO->getEffectiveReasoningEffort());
         } else {
             $chatRequest->setThinking($sendMsgDTO->getThinking());
         }

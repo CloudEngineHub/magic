@@ -678,7 +678,7 @@ class ModelGatewayMapper extends ModelMapper
             ),
         };
 
-        return new ModelEntry(attributes: $dynamicAttributes, model: $model);
+        return new ModelEntry(attributes: $dynamicAttributes, model: $model, reasoningEffortDefault: $resolvedEntry->getReasoningEffortDefault());
     }
 
     /**
@@ -806,6 +806,7 @@ class ModelGatewayMapper extends ModelMapper
                 ]),
             ),
             extra: $providerModelEntity->getExtraArray(),
+            reasoningEffortDefault: $providerModelEntity->getConfig()?->getEffectiveReasoningEffortDefault(),
         );
     }
 

@@ -1,25 +1,31 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Domain\Provider\DTO\Item;
 
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\SuperAgentExtra;
-use App\Domain\Provider\DTO\Item\ModelConfigItem;
 use App\Domain\ModelGateway\Entity\Dto\CompletionDTO;
-use Hyperf\Odin\Api\Request\ChatCompletionRequest;
-use Hyperf\Odin\Exception\InvalidArgumentException;
+use App\Domain\Provider\DTO\Item\ModelConfigItem;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Contract\TranslatorInterface;
+use Hyperf\Odin\Api\Request\ChatCompletionRequest;
 use Hyperf\Odin\Api\Request\ReasoningEffort;
+use Hyperf\Odin\Exception\InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use ReflectionProperty;
 
-/** 使用 mock 异常与翻译依赖验证配置和消息边界，不启动应用。 */
+/**
+ * 使用 mock 异常与翻译依赖验证配置和消息边界，不启动应用。
+ * @internal
+ */
 class ReasoningEffortInputTest extends TestCase
 {
     private ?ContainerInterface $previousContainer = null;
@@ -67,6 +73,13 @@ class ReasoningEffortInputTest extends TestCase
                 $this->assertSame(ServiceProviderErrorCode::InvalidParameter->value, $exception->getCode());
             }
         }
+    }
+
+    /** 默认配置同样拒绝未知枚举，不收紧消息请求的透传规则。 */
+    public function testInvalidAdminDefaultIsRejected(): void
+    {
+        $this->expectException(BusinessException::class);
+        (new ModelConfigItem())->setReasoningEffortDefault('mock-unknown');
     }
 
     /** 消息与网关 DTO 原样透传未知档位及类型，不转换成默认或较低档位。 */

@@ -59,6 +59,7 @@ class ProviderModelAssembler extends AbstractProviderAssembler
             'support_embedding' => $config?->isSupportEmbedding() ?? false,
             'support_deep_think' => $config?->isSupportDeepThink() ?? false,
             'reasoning_effort_levels' => $config?->getReasoningEffortLevels(),
+            'reasoning_effort_default' => $config?->getReasoningEffortDefault(),
             'cache_write_pricing' => $configData['cache_write_pricing'] ?? $config?->getCacheWritePricing(),
             'support_multi_modal' => $config?->isSupportMultiModal() ?? false,
             'official_recommended' => $config?->isOfficialRecommended() ?? false,
