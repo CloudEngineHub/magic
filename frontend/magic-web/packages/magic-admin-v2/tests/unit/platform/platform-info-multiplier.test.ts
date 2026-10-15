@@ -8,12 +8,14 @@ import {
 } from "@magic-admin-v2/features/platform-info/api"
 import { createPlatformInfoSchema } from "@magic-admin-v2/features/platform-info/utils"
 
-/** 接口配置全部为模拟值，表单不参与任何价格或倍率计算。 */
+/** 接口配置全部为模拟值，预览不会改写原始提交金额。 */
 describe("模型参考倍率配置", () => {
 	it("直接回显后端金额，并且只提交已修改的配置组", () => {
 		const config = {
 			enabled: true,
 			base_price_cny: "0.123456789012",
+			input_price_cny: "2.000000000001",
+			output_price_cny: "3",
 			usd_to_cny_rate: "7.123456789012",
 		}
 		const values = toPlatformInfoFormState({
@@ -69,6 +71,34 @@ describe("模型参考倍率配置", () => {
 				},
 			}).success,
 			true,
+		)
+	})
+	it("新单价按原文提交，不要求前端生成后端参考金额", () => {
+		const schema = createPlatformInfoSchema((key) => key, "modelMultiplier")
+		const values = createEmptyPlatformInfoFormState()
+		values.model_billing_multiplier = {
+			enabled: true,
+			base_price_cny: null,
+			input_price_cny: "0",
+			output_price_cny: "3.000000000001",
+			usd_to_cny_rate: "5",
+		}
+		assert.equal(schema.safeParse(values).success, true)
+		assert.deepEqual(
+			toChangedPlatformInfoParams(values, {
+				model_billing_multiplier: { input_price_cny: true },
+			}),
+			{ model_billing_multiplier: values.model_billing_multiplier },
+		)
+		assert.equal(
+			schema.safeParse({
+				...values,
+				model_billing_multiplier: {
+					...values.model_billing_multiplier,
+					output_price_cny: "0",
+				},
+			}).success,
+			false,
 		)
 	})
 })

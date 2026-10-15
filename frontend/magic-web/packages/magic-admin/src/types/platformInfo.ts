@@ -13,10 +13,12 @@ export type PlatformWatermarkIntensity = "light" | "standard" | "strong"
 
 /** 平台信息 */
 export namespace PlatformInfo {
-	/** 展示专用配置，字符串金额不参与前端计算。 */
+	/** 配置仅用于价格比较，最终参考金额由后端提供。 */
 	export interface ModelBillingMultiplierSettings {
 		enabled: boolean
 		base_price_cny: string | null
+		input_price_cny?: string | null
+		output_price_cny?: string | null
 		usd_to_cny_rate: string | null
 	}
 

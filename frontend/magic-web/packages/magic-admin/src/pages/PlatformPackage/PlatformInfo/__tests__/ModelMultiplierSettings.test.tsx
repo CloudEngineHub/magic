@@ -52,18 +52,23 @@ function Harness({ onFinish }: { onFinish: (values: unknown) => void }) {
 it("显示管理员说明并以字符串提交完整配置", async () => {
 	const submit = vi.fn()
 	render(<Harness onFinish={submit} />)
-	expect(screen.getByText("multiplier.explanation")).toBeTruthy()
-	fireEvent.change(screen.getByLabelText("multiplier.basePrice"), {
-		target: { value: "0.123456789012" },
+	expect(screen.getByText("multiplier.rulesTitle")).toBeTruthy()
+	fireEvent.change(screen.getByLabelText("multiplier.inputPrice"), {
+		target: { value: "2.000000000001" },
 	})
-	fireEvent.change(screen.getByLabelText("multiplier.exchangeRate"), { target: { value: "7" } })
+	fireEvent.change(screen.getByLabelText("multiplier.outputPrice"), { target: { value: "3" } })
+	fireEvent.change(screen.getByLabelText("multiplier.exchangeRateLabel"), {
+		target: { value: "7" },
+	})
 	fireEvent.click(screen.getByRole("switch"))
 	fireEvent.click(screen.getByText("submit"))
 	await waitFor(() =>
 		expect(submit).toHaveBeenCalledWith({
 			model_billing_multiplier: {
 				enabled: true,
-				base_price_cny: "0.123456789012",
+				base_price_cny: null,
+				input_price_cny: "2.000000000001",
+				output_price_cny: "3",
 				usd_to_cny_rate: "7",
 			},
 		}),

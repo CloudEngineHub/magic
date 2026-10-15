@@ -34,10 +34,12 @@ export type PlatformInfoWatermark = {
   depth: PlatformWatermarkDepth;
 };
 
-/** 仅供展示的倍率配置，金额以十进制字符串传递，空值表示未填写。 */
+/** 价格原文透传；后端提供默认值与最终参考金额。 */
 export type ModelBillingMultiplierSettings = {
   enabled: boolean;
   base_price_cny: string | null;
+  input_price_cny?: string | null;
+  output_price_cny?: string | null;
   usd_to_cny_rate: string | null;
 };
 

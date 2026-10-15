@@ -1,3 +1,4 @@
+import { validateMultiplierSettings } from "../../../../model-billing-reference"
 import { z } from "zod"
 import type {
 	PlatformInfoFormState,
@@ -230,29 +231,27 @@ export function createPlatformInfoSchema(
 				}
 			}),
 	}
-	// 仅校验管理员输入，不在前端计算或补齐展示价格。
+	// 草稿只作预览和输入校验，金额计算与默认值仍以后端保存结果为准。
 	const modelMultiplierShape = {
 		model_billing_multiplier: z
 			.object({
 				enabled: z.boolean(),
 				base_price_cny: z.string().nullable(),
+				input_price_cny: z.string().nullable().optional(),
+				output_price_cny: z.string().nullable().optional(),
 				usd_to_cny_rate: z.string().nullable(),
 			})
 			.superRefine((value, context) => {
-				for (const field of ["base_price_cny", "usd_to_cny_rate"] as const) {
-					const amount = value[field]
-					if (amount === null && !value.enabled) continue
-					if (
-						amount === null ||
-						!/^\d{1,12}(?:\.\d{1,12})?$/.test(amount) ||
-						Number(amount) <= 0
-					) {
-						context.addIssue({
-							code: "custom",
-							path: [field],
-							message: t("platformInfo.multiplier.invalidAmount"),
-						})
-					}
+				for (const field of validateMultiplierSettings(value)) {
+					context.addIssue({
+						code: "custom",
+						path: [field],
+						message: t(
+							field === "usd_to_cny_rate"
+								? "platformInfo.multiplier.invalidAmount"
+								: "platformInfo.multiplier.invalidPrices",
+						),
+					})
 				}
 			}),
 	}
