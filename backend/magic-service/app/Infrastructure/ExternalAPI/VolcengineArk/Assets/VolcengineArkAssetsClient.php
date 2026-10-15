@@ -16,6 +16,8 @@ use RuntimeException;
 use Throwable;
 use Volcengine\Common\Utils;
 
+use function Hyperf\Translation\trans;
+
 /**
  * 火山方舟 Ark Assets 接口客户端：承载素材 / 素材组两个资源族的 10 个 OpenAPI Action。
  *
@@ -81,7 +83,7 @@ class VolcengineArkAssetsClient
     {
         $this->validateConfig();
         if (! in_array($action, self::SUPPORTED_ACTIONS, true)) {
-            throw new InvalidArgumentException('当前素材操作暂不支持，请联系管理员');
+            throw new InvalidArgumentException(trans('asset.provider_action_unsupported'));
         }
         $config = $this->config;
         $endpoint = rtrim($this->configValue('endpoint', self::DEFAULT_ENDPOINT), '/');
@@ -199,7 +201,7 @@ class VolcengineArkAssetsClient
             $rawBody = (string) $response->getBody();
             $decoded = json_decode($rawBody, true, 512, JSON_THROW_ON_ERROR);
             if (! is_array($decoded)) {
-                throw new RuntimeException('素材服务返回内容异常，请稍后重试');
+                throw new RuntimeException(trans('asset.provider_response_body_invalid'));
             }
             $this->logger->info('火山方舟 Assets 接口调用完成', [
                 'action' => $action,
@@ -207,7 +209,7 @@ class VolcengineArkAssetsClient
                 'response' => $rawBody,
             ]);
             if ($response->getStatusCode() >= 400 && $throwOnBusinessError) {
-                throw new RuntimeException('素材服务暂时不可用，请稍后重试');
+                throw new RuntimeException(trans('asset.provider_unavailable'));
             }
             return $decoded;
         } catch (Throwable $exception) {
@@ -242,10 +244,10 @@ class VolcengineArkAssetsClient
     {
         $config = $this->config;
         if (trim((string) ($config['access_key'] ?? '')) === '') {
-            throw new InvalidArgumentException('素材服务配置不完整，请联系管理员');
+            throw new InvalidArgumentException(trans('asset.provider_config_incomplete'));
         }
         if (trim((string) ($config['secret_key'] ?? '')) === '') {
-            throw new InvalidArgumentException('素材服务配置不完整，请联系管理员');
+            throw new InvalidArgumentException(trans('asset.provider_config_incomplete'));
         }
     }
 
