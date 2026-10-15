@@ -20,10 +20,14 @@ import {
 	isProjectPinGroupBoundaryInsertion,
 	getSuccessorId,
 	insertAtPosition,
-	INSERT_LINE_COLOR,
 	isNoOpInsertion,
 } from "./WorkspaceList/dndUtils"
 import type { ProjectPinBoundaryAction } from "./WorkspaceList/ProjectPinBoundaryConfirmDialog"
+
+import {
+	clearSidebarDragAppearance,
+	setSidebarDragAppearance,
+} from "./WorkspaceList/dragAppearance"
 
 const DRAG_DATA_TYPE = "application/x-magic-collapsed-sidebar-dnd"
 const OPEN_PROJECT_POPOVER_DELAY = 1000
@@ -152,21 +156,18 @@ export function useCollapsedWorkspaceDnd({
 			"[data-collapsed-sidebar-dnd-visual='true']",
 		)
 		for (const target of targets) {
-			target.style.backgroundColor = ""
-			target.style.boxShadow = ""
-			target.style.borderRadius = ""
-			target.style.opacity = ""
+			clearSidebarDragAppearance(target)
 			delete target.dataset.collapsedSidebarDndVisual
 		}
-		visualRef.current.workspaceButton?.style.removeProperty("background-color")
-		visualRef.current.workspaceDisabled?.style.removeProperty("opacity")
+		clearSidebarDragAppearance(visualRef.current.workspaceButton)
+		clearSidebarDragAppearance(visualRef.current.workspaceDisabled)
 		visualRef.current.workspaceTarget = null
 		visualRef.current.workspaceButton = null
 		visualRef.current.workspaceDisabled = null
 	}, [])
 
 	const hideIndicator = useCallback(() => {
-		if (indicatorRef.current) indicatorRef.current.style.display = "none"
+		indicatorRef.current?.classList.add("hidden")
 	}, [])
 
 	/** Clears transient hover visuals while keeping the native drag session alive. */
@@ -178,7 +179,7 @@ export function useCollapsedWorkspaceDnd({
 	}, [clearOpenPopoverTimer, clearWorkspaceHighlight, hideIndicator])
 
 	const clearVisuals = useCallback(() => {
-		if (visualRef.current.source) visualRef.current.source.style.opacity = ""
+		clearSidebarDragAppearance(visualRef.current.source)
 		visualRef.current.source = null
 		clearPreviewVisuals()
 	}, [clearPreviewVisuals])
@@ -207,8 +208,7 @@ export function useCollapsedWorkspaceDnd({
 		)
 		const width = Math.max(8, targetRect.width)
 
-		indicator.style.display = "block"
-		indicator.style.color = INSERT_LINE_COLOR
+		indicator.classList.remove("hidden")
 		indicator.style.left = `${targetRect.left}px`
 		indicator.style.top = `${lineY - 4}px`
 		indicator.style.width = `${width}px`
@@ -222,12 +222,10 @@ export function useCollapsedWorkspaceDnd({
 		(target: HTMLElement | null) => {
 			if (!target || visualRef.current.workspaceTarget === target) return
 			clearWorkspaceHighlight()
-			target.style.backgroundColor = "#eef3fd"
-			target.style.boxShadow = "inset 0 0 0 2px #81bfff"
-			target.style.borderRadius = "8px"
+			setSidebarDragAppearance(target, "collapsedWorkspace")
 			target.dataset.collapsedSidebarDndVisual = "true"
 			const button = target.querySelector<HTMLElement>("button")
-			button?.style.setProperty("background-color", "transparent", "important")
+			setSidebarDragAppearance(button, "transparent")
 			visualRef.current.workspaceTarget = target
 			visualRef.current.workspaceButton = button || null
 		},
@@ -239,7 +237,7 @@ export function useCollapsedWorkspaceDnd({
 		(target: HTMLElement | null) => {
 			if (!target) return
 			clearWorkspaceHighlight()
-			target.style.opacity = "0.45"
+			setSidebarDragAppearance(target, "disabled")
 			target.dataset.collapsedSidebarDndVisual = "true"
 			visualRef.current.workspaceTarget = target
 			visualRef.current.workspaceDisabled = target
@@ -611,7 +609,7 @@ export function useCollapsedWorkspaceDnd({
 				dragImageRef.current = dragImage
 				dragEvent.dataTransfer?.setDragImage(dragImage, 12, 14)
 			}
-			source.style.opacity = "0.4"
+			setSidebarDragAppearance(source, "source")
 			visualRef.current.source = source
 		}
 
