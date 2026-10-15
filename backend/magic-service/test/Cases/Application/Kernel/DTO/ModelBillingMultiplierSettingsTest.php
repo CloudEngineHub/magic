@@ -49,7 +49,7 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         $rules = $request->rules();
         $this->assertSame('sometimes|nullable|string|max:25', $rules['model_billing_multiplier.input_price_cny']);
         $this->assertSame('sometimes|nullable|string|max:25', $rules['model_billing_multiplier.output_price_cny']);
-        $this->assertSame('sometimes|nullable|string|max:28', $rules['model_billing_multiplier.base_price_cny']);
+        $this->assertSame('sometimes|nullable|string|max:52', $rules['model_billing_multiplier.base_price_cny']);
     }
 
     /** 一项可以为零；不因输入单价为零而错误回退到旧金额。 */
@@ -128,6 +128,61 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price_cny' => '2', 'output_price_cny' => '3']);
         $result = (new ModelBillingMultiplierCalculator())->calculate(['mock-model' => ['resolved_model_id' => 'mock-model']], ['mock-model' => [$model]], $settings);
         $this->assertSame(2.0, $result['mock-model']);
+    }
+
+    /** 美元源价按展示汇率归一到人民币，刷新与保存不会重复换汇。 */
+    public function testUsdPricesAndRateChangesRemainStable(): void
+    {
+        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'currency' => 'USD', 'input_price' => '2', 'output_price' => '3', 'usd_to_cny_rate' => '5']);
+        $this->assertSame('0.115', $settings->basePriceCny);
+        $this->assertSame('2', $settings->inputPrice);
+        $this->assertSame('USD', $settings->currency);
+        $this->assertNull($settings->inputPriceCny);
+        $this->assertSame($settings->toArray(), ModelBillingMultiplierSettings::fromArray($settings->toArray())->toArray());
+        $this->assertSame('0.138', $settings->withOverrides(['usd_to_cny_rate' => '6'])->basePriceCny);
+        $this->assertSame('0.023', $settings->withOverrides(['currency' => 'CNY'])->basePriceCny);
+        $this->assertSame('2', $settings->withOverrides(['currency' => 'CNY'])->inputPrice);
+        $this->assertSame('USD', $settings->withOverrides(['enabled' => false])->withOverrides(['enabled' => true])->currency);
+    }
+
+    /** 最小换汇金额也必须为正数，并贯通已有的服务商倍率计算。 */
+    public function testSmallUsdBaseDoesNotUnderflow(): void
+    {
+        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'currency' => 'USD', 'input_price' => '0', 'output_price' => '0.000000000001', 'usd_to_cny_rate' => '0.000000000001']);
+        $this->assertSame('0.000000000000000000000000001', $settings->basePriceCny);
+        $model = new ProviderModelEntity();
+        $model->setConfig(['billing_type' => 'TextTokens', 'billing_currency' => 'USD', 'input_pricing' => '0', 'output_pricing' => '0.000000000001']);
+        $result = (new ModelBillingMultiplierCalculator())->calculate(['mock' => ['resolved_model_id' => 'mock']], ['mock' => [$model]], $settings);
+        $this->assertSame(1.0, $result['mock']);
+    }
+
+    /** 旧字段可写入人民币价格，但不能把旧界面回传的空别名当作美元价格清空。 */
+    public function testLegacyPriceUpdateCompatibility(): void
+    {
+        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'currency' => 'USD', 'input_price' => '2', 'output_price' => '3']);
+        $unchanged = $settings->withOverrides(['input_price_cny' => null, 'output_price_cny' => null]);
+        $this->assertSame($settings->toArray(), $unchanged->toArray());
+        $legacy = $settings->withOverrides(['input_price_cny' => '4', 'output_price_cny' => '6']);
+        $this->assertSame('CNY', $legacy->currency);
+        $this->assertSame('0.046', $legacy->basePriceCny);
+        $legacyPayload = $legacy->toArray();
+        $legacyPayload['input_price_cny'] = '8';
+        $this->assertSame('0.086', $legacy->withOverrides($legacyPayload)->basePriceCny);
+    }
+
+    /** 币种使用严格枚举，历史缺失与空值在后端统一默认人民币。 */
+    public function testCurrencyValidationAndDefaults(): void
+    {
+        $this->assertSame('CNY', ModelBillingMultiplierSettings::fromArray([])->currency);
+        $this->assertSame('CNY', ModelBillingMultiplierSettings::fromArray(['currency' => null])->currency);
+        foreach (['EUR', 'usd', '', [], true] as $currency) {
+            try {
+                ModelBillingMultiplierSettings::fromArray(['currency' => $currency]);
+                $this->fail('Invalid currency must be rejected');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
     }
 
     /** 使用模拟存储验证管理接口接收新字段、返回派生金额及后续部分更新。 */

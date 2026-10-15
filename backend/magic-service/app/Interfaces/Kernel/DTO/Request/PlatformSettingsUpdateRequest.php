@@ -53,8 +53,11 @@ class PlatformSettingsUpdateRequest extends FormRequest
             'custom_service_provider_whitelist.*' => 'string|max:128',
             'model_billing_multiplier' => 'sometimes|array',
             'model_billing_multiplier.enabled' => 'sometimes|boolean',
-            // 参考金额由单价计算后最多有 15 位小数，允许管理端原样回传。
-            'model_billing_multiplier.base_price_cny' => 'sometimes|nullable|string|max:28',
+            'model_billing_multiplier.currency' => 'sometimes|string|in:CNY,USD',
+            'model_billing_multiplier.input_price' => 'sometimes|nullable|string|max:25',
+            'model_billing_multiplier.output_price' => 'sometimes|nullable|string|max:25',
+            // 参考金额含美元换汇后最多有 27 位小数，允许管理端原样回传。
+            'model_billing_multiplier.base_price_cny' => 'sometimes|nullable|string|max:52',
             'model_billing_multiplier.input_price_cny' => 'sometimes|nullable|string|max:25',
             'model_billing_multiplier.output_price_cny' => 'sometimes|nullable|string|max:25',
             'model_billing_multiplier.usd_to_cny_rate' => 'sometimes|nullable|string|max:25',
@@ -75,6 +78,7 @@ class PlatformSettingsUpdateRequest extends FormRequest
             'minimal_logo_url.regex' => 'platform_settings.invalid_url',
             'footer.filing.link.regex' => 'platform_settings.invalid_url',
             'default_language.in' => 'platform_settings.invalid_locale',
+            'model_billing_multiplier.currency.in' => 'platform_settings.invalid_model_billing_multiplier',
         ];
     }
 

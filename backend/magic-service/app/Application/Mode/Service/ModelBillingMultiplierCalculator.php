@@ -15,7 +15,8 @@ use App\Domain\Provider\Entity\ProviderModelEntity;
 /** 基于已过滤的服务商快照计算参考倍率，不查询数据库、不触发动态路由。 */
 class ModelBillingMultiplierCalculator
 {
-    private const int SCALE = 24;
+    // 十二位源单价与十二位汇率相乘后仍保留足够精度。
+    private const int SCALE = 36;
 
     /** 使用能力解析的同一真实模型标识，每个绑定等权，缺价绑定整体跳过。 */
     public function calculate(array $capabilities, array $availableGroups, ModelBillingMultiplierSettings $settings): array
