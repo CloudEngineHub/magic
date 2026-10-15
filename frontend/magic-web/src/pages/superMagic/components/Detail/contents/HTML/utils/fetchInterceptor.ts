@@ -28,6 +28,8 @@ export const FETCH_MESSAGE_TYPES = {
 export const injectedIsRelativePathFunctionSource = `
 			function isRelativePath(url) {
 				if (!url) return false;
+				// 仅动态资源拦截脚本会定义该函数；同源沙箱页的绝对 URL 也按工作区相对路径处理
+				if (typeof isSandboxAbsoluteResourceUrl === "function" && isSandboxAbsoluteResourceUrl(url)) return true;
 				return !/^(https?:\\/\\/|\\/\\/|data:|blob:|mailto:|tel:|javascript:|about:)/i.test(url);
 			}
 `
