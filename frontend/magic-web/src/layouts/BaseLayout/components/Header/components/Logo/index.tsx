@@ -1,5 +1,4 @@
 import { useResponsive } from "ahooks"
-import { createStyles } from "antd-style"
 import { useTranslation } from "react-i18next"
 import { SupportLocales } from "@/constants/locale"
 import { globalConfigStore } from "@/stores/globalConfig"
@@ -7,16 +6,7 @@ import { observer } from "mobx-react-lite"
 import { getAvatarUrl } from "@/utils/avatar"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 
-const useStyles = createStyles(({ css, token }) => {
-	return {
-		logo: css`
-			height: 100%;
-			width: auto;
-			max-width: unset;
-			color: ${token.magicColorUsages.text[3]};
-		`,
-	}
-})
+const logoClassName = "h-full w-auto max-w-none text-foreground/40"
 
 const DEFAULT_LOGO_HEIGHT = 80
 
@@ -32,7 +22,6 @@ function Logo({
 	const responsive = useResponsive()
 	const isSmallScreen = responsive.lg === false
 	const { i18n } = useTranslation()
-	const { styles } = useStyles()
 
 	const variant = _variant ?? (isSmallScreen ? "minimal" : undefined)
 
@@ -44,7 +33,7 @@ function Logo({
 		return (
 			<div className={className} onClick={onClick}>
 				<img
-					className={styles.logo}
+					className={logoClassName}
 					src={getAvatarUrl(globalConfig.minimal_logo, DEFAULT_LOGO_HEIGHT)}
 					alt={name}
 				/>
@@ -56,7 +45,7 @@ function Logo({
 		return (
 			<div className={className} onClick={onClick}>
 				<img
-					className={styles.logo}
+					className={logoClassName}
 					src={getAvatarUrl(
 						globalConfig.logo?.[SupportLocales.enUS],
 						DEFAULT_LOGO_HEIGHT,
@@ -71,7 +60,7 @@ function Logo({
 		return (
 			<div className={className} onClick={onClick}>
 				<img
-					className={styles.logo}
+					className={logoClassName}
 					src={getAvatarUrl(
 						globalConfig.logo?.[SupportLocales.zhCN],
 						DEFAULT_LOGO_HEIGHT,
