@@ -15,6 +15,9 @@ class PlatformSettings
 
     private const array WATERMARK_DEPTHS = ['light', 'standard', 'strong'];
 
+    /** 展示配置与实际计费配置相互独立。 */
+    private array $modelBillingMultiplier = [];
+
     private string $defaultLanguage = 'zh_CN';
 
     private string $faviconUrl = '';
@@ -81,6 +84,12 @@ class PlatformSettings
         'fields' => ['real_name'],
         'depth' => 'light',
     ];
+
+    /** 获取参考倍率配置，历史缺失数据统一在后端补齐。 */
+    public function getModelBillingMultiplier(): ModelBillingMultiplierSettings
+    {
+        return ModelBillingMultiplierSettings::fromArray($this->modelBillingMultiplier);
+    }
 
     public function getDefaultLanguage(): string
     {
@@ -296,6 +305,7 @@ class PlatformSettings
             'custom_service_provider_whitelist' => $this->customServiceProviderWhitelist,
             'footer' => $this->getFooter(),
             'watermark' => $this->watermark,
+            'model_billing_multiplier' => $this->getModelBillingMultiplier()->toArray(),
         ];
     }
 
@@ -320,6 +330,7 @@ class PlatformSettings
         ));
         $i->setFooter((array) ($data['footer'] ?? []));
         $i->watermark = self::normalizeWatermark((array) ($data['watermark'] ?? []));
+        $i->modelBillingMultiplier = ModelBillingMultiplierSettings::fromArray((array) ($data['model_billing_multiplier'] ?? []))->toArray();
         return $i;
     }
 

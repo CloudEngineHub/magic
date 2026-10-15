@@ -20,6 +20,9 @@ class ModeGroupModelDTO extends AbstractDTO
 
     protected string $modelId = '';
 
+    /** 空值隐藏倍率，零值包含缺价和明确零价。 */
+    protected ?float $billingMultiplier = null;
+
     protected string $resolvedModelId = '';
 
     protected array $reasoningEffortLevels = [];
@@ -47,6 +50,12 @@ class ModeGroupModelDTO extends AbstractDTO
     {
         $this->resolvedModelId = $resolvedModelId;
         $this->reasoningEffortLevels = $levels;
+    }
+
+    /** 仅装配服务层已计算的参考倍率，不暴露内部售价。 */
+    public function setBillingMultiplier(?float $value): void
+    {
+        $this->billingMultiplier = $value;
     }
 
     public function getId(): string

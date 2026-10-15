@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Interfaces\Kernel\Facade;
 
+use App\Application\Kernel\DTO\ModelBillingMultiplierSettings;
 use App\Application\Kernel\DTO\PlatformSettings;
 use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
@@ -17,6 +18,7 @@ use App\Infrastructure\Core\Traits\MagicUserAuthorizationTrait;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\Kernel\DTO\Request\PlatformSettingsUpdateRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use InvalidArgumentException;
 
 #[ApiResponse('low_code')]
 class PlatformSettingsApi
@@ -90,6 +92,17 @@ class PlatformSettingsApi
             $data['watermark'] = array_replace((array) ($data['watermark'] ?? []), $payload['watermark']);
         }
 
+        if (isset($payload['model_billing_multiplier'])) {
+            try {
+                $data['model_billing_multiplier'] = ModelBillingMultiplierSettings::fromArray(array_replace(
+                    $data['model_billing_multiplier'],
+                    $payload['model_billing_multiplier']
+                ))->toArray();
+            } catch (InvalidArgumentException) {
+                ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'platform_settings.invalid_model_billing_multiplier');
+            }
+        }
+
         $this->validateUrls($data);
         $this->validateFooter($data);
 
@@ -139,6 +152,7 @@ class PlatformSettingsApi
             $minimalLogo = (string) $settings['minimal_logo_url'];
         }
         $resp = [
+            'model_billing_multiplier' => PlatformSettings::fromArray($settings)->getModelBillingMultiplier()->toArray(),
             'logo' => $logo,
             'favicon' => $favicon,
             'minimal_logo' => $minimalLogo,

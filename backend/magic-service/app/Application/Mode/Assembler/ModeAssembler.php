@@ -102,6 +102,7 @@ class ModeAssembler
                     'reasoning_effort_levels' => [],
                 ];
                 $modelDTO->setReasoningCapability($capability['resolved_model_id'], $capability['reasoning_effort_levels']);
+                $modelDTO->setBillingMultiplier($capability['billing_multiplier'] ?? null);
                 $models[] = $modelDTO;
             }
         }

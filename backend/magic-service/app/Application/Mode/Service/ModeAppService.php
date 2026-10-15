@@ -13,6 +13,7 @@ use App\Application\Mode\DTO\ModeGroupAggregateDTO;
 use App\Application\Permission\Service\UserModelAccessAppService;
 use App\Application\SuperMagic\Agent\Service\Old\SuperMagicAgentOldAppService;
 use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
+use App\Domain\Kernel\Service\PlatformSettingsDomainService;
 use App\Domain\Mode\Entity\ModeAggregate;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
 use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
@@ -128,17 +129,6 @@ class ModeAppService extends AbstractModeAppService
             'total' => count($list),
             'list' => $list,
         ];
-    }
-
-    /**
-     * 同一个聚合 DTO 只做一次 toArray（内部为 json encode + decode，开销大）。
-     *
-     * @param array<int, array> $cache 以 spl_object_id 为键的 groups 缓存，生命周期限于单次调用
-     */
-    private function getGroupsArrayCached(ModeAggregateDTO $modeAggregateDTO, array &$cache): array
-    {
-        $key = spl_object_id($modeAggregateDTO);
-        return $cache[$key] ??= $modeAggregateDTO->toArray()['groups'] ?? [];
     }
 
     public function getFeaturedAgent(MagicUserAuthorization $authorization): array
@@ -274,6 +264,17 @@ class ModeAppService extends AbstractModeAppService
     }
 
     /**
+     * 同一个聚合 DTO 只做一次 toArray（内部为 json encode + decode，开销大）。
+     *
+     * @param array<int, array> $cache 以 spl_object_id 为键的 groups 缓存，生命周期限于单次调用
+     */
+    private function getGroupsArrayCached(ModeAggregateDTO $modeAggregateDTO, array &$cache): array
+    {
+        $key = spl_object_id($modeAggregateDTO);
+        return $cache[$key] ??= $modeAggregateDTO->toArray()['groups'] ?? [];
+    }
+
+    /**
      * @return array{type: int, category: string, is_visible: bool}
      */
     private function buildFeaturedAgentMetadata(SuperMagicAgentEntity $agent): array
@@ -314,7 +315,8 @@ class ModeAppService extends AbstractModeAppService
      */
     private function buildModeAggregateDTOs(MagicUserAuthorization $authorization, array $modeAggregates): array
     {
-        $allProviderModelsWithStatus = $this->getProviderModelsByModeAggregates($modeAggregates);
+        $availableProviderGroups = [];
+        $allProviderModelsWithStatus = $this->getProviderModelsByModeAggregates($modeAggregates, $availableProviderGroups);
 
         $allAggregateModels = [];
         $allAggregateImageModels = [];
@@ -359,6 +361,15 @@ class ModeAppService extends AbstractModeAppService
         );
 
         $reasoningCapabilities = $this->buildReasoningCapabilities($authorization, $providerModels, $allProviderModelsWithStatus);
+        $multipliers = di(ModelBillingMultiplierCalculator::class)->calculate(
+            $reasoningCapabilities,
+            $availableProviderGroups,
+            di(PlatformSettingsDomainService::class)->get()->getModelBillingMultiplier()
+        );
+        foreach ($reasoningCapabilities as $modelId => &$capability) {
+            $capability['billing_multiplier'] = $multipliers[$modelId];
+        }
+        unset($capability);
         $modeAggregateDTOs = [];
         foreach ($modeAggregates as $aggregate) {
             $modeAggregateDTOs[$aggregate->getMode()->getIdentifier()] = ModeAssembler::aggregateToDTO(
@@ -537,7 +548,7 @@ class ModeAppService extends AbstractModeAppService
      * @param array $allModelIds 所有需要查询的modelId
      * @return array<string, ProviderModelEntity> 已通过级联状态筛选的可用模型
      */
-    private function getModelsBatch(array $allModelIds): array
+    private function getModelsBatch(array $allModelIds, array &$availableGroups = []): array
     {
         if (empty($allModelIds)) {
             return [];
@@ -548,6 +559,7 @@ class ModeAppService extends AbstractModeAppService
         $allModels = $this->expandModelGroupsForDynamicSubModels($providerDataIsolation, $allModels);
         $providerStatuses = $this->getProviderStatuses($providerDataIsolation, $allModels);
 
+        $availableGroups = $this->filterAvailableModelGroups($allModels, $providerStatuses);
         return $this->filterAvailableModels($allModels, $providerStatuses);
     }
 
@@ -639,7 +651,7 @@ class ModeAppService extends AbstractModeAppService
     /**
      * @return array<string, ProviderModelEntity> 已通过级联状态筛选的可用模型
      */
-    private function getProviderModelsByModeAggregates(array $modeAggregates): array
+    private function getProviderModelsByModeAggregates(array $modeAggregates, array &$availableGroups = []): array
     {
         $allModelIds = [];
         foreach ($modeAggregates as $aggregate) {
@@ -650,6 +662,6 @@ class ModeAppService extends AbstractModeAppService
             }
         }
 
-        return $this->getModelsBatch(array_unique($allModelIds));
+        return $this->getModelsBatch(array_unique($allModelIds), $availableGroups);
     }
 }
