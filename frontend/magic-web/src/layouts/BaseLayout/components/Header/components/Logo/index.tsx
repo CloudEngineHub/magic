@@ -5,8 +5,10 @@ import { globalConfigStore } from "@/stores/globalConfig"
 import { observer } from "mobx-react-lite"
 import { getAvatarUrl } from "@/utils/avatar"
 import { Spinner } from "@/components/shadcn-ui/spinner"
+import { cn } from "@/utils/cn"
 
-const logoClassName = "h-full w-auto max-w-none text-foreground/40"
+// Tenant-provided logos keep their aspect ratio and stay inside the available header width.
+const logoClassName = "h-full w-auto max-w-full object-contain text-foreground/40"
 
 const DEFAULT_LOGO_HEIGHT = 80
 
@@ -31,7 +33,7 @@ function Logo({
 
 	if (variant === "minimal" && globalConfig?.minimal_logo) {
 		return (
-			<div className={className} onClick={onClick}>
+			<div className={cn("min-w-0", className)} onClick={onClick}>
 				<img
 					className={logoClassName}
 					src={getAvatarUrl(globalConfig.minimal_logo, DEFAULT_LOGO_HEIGHT)}
@@ -43,7 +45,7 @@ function Logo({
 
 	if (i18n.language === SupportLocales.enUS && globalConfig?.logo?.[SupportLocales.enUS]) {
 		return (
-			<div className={className} onClick={onClick}>
+			<div className={cn("min-w-0", className)} onClick={onClick}>
 				<img
 					className={logoClassName}
 					src={getAvatarUrl(
@@ -58,7 +60,7 @@ function Logo({
 
 	if (i18n.language === SupportLocales.zhCN && globalConfig?.logo?.[SupportLocales.zhCN]) {
 		return (
-			<div className={className} onClick={onClick}>
+			<div className={cn("min-w-0", className)} onClick={onClick}>
 				<img
 					className={logoClassName}
 					src={getAvatarUrl(
