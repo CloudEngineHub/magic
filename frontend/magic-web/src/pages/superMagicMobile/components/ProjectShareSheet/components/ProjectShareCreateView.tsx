@@ -10,7 +10,7 @@ import {
 	X,
 } from "lucide-react"
 import type { ReactNode } from "react"
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { NodeType, type TreeNode } from "@dtyq/user-selector"
 import MemberDepartmentSelector from "@/components/business/MemberDepartmentSelector"
@@ -180,6 +180,46 @@ function AdvancedSwitchRow({
 			</div>
 			{showDivider ? <div className="mx-3.5 h-px bg-border" /> : null}
 		</>
+	)
+}
+
+/**
+ * Staged member and department picker for mobile share forms.
+ * Maintains uncommitted selections while the modal is open, so dismissing or cancelling
+ * the picker does not overwrite the confirmed members chosen in previous saves.
+ */
+function ProjectShareMemberSelector({
+	open,
+	selectedMemberNodes,
+	onClose,
+	onConfirm,
+}: {
+	open: boolean
+	selectedMemberNodes: TreeNode[]
+	onClose: () => void
+	onConfirm: (selected: TreeNode[]) => void
+}) {
+	const { t } = useTranslation("super")
+	const [stagedMemberNodes, setStagedMemberNodes] = useState(selectedMemberNodes)
+
+	// Sync staged nodes with confirmed members whenever the selector becomes visible.
+	useEffect(() => {
+		if (open) {
+			setStagedMemberNodes(selectedMemberNodes)
+		}
+	}, [open, selectedMemberNodes])
+
+	return (
+		<MemberDepartmentSelector
+			open={open}
+			title={t("projectShare.selectMembers")}
+			selectedValues={stagedMemberNodes}
+			onSelectChange={setStagedMemberNodes}
+			onCancel={onClose}
+			onOk={(selected: TreeNode[]) => {
+				onConfirm(selected)
+			}}
+		/>
 	)
 }
 
@@ -419,9 +459,6 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 																	(member) =>
 																		member.id !== item.id,
 																)
-															controller.setSelectedMemberNodes(
-																nextNodes,
-															)
 															controller.confirmMemberSelector(
 																nextNodes,
 															)
@@ -561,15 +598,11 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 			/>
 
 			{controller.memberSelectorOpen && (
-				<MemberDepartmentSelector
+				<ProjectShareMemberSelector
 					open={controller.memberSelectorOpen}
-					title={t("projectShare.selectMembers")}
-					selectedValues={controller.selectedMemberNodes}
-					onSelectChange={controller.setSelectedMemberNodes}
-					onCancel={controller.closeMemberSelector}
-					onOk={(selected: TreeNode[]) => {
-						controller.confirmMemberSelector(selected)
-					}}
+					selectedMemberNodes={controller.selectedMemberNodes}
+					onClose={controller.closeMemberSelector}
+					onConfirm={controller.confirmMemberSelector}
 				/>
 			)}
 		</div>

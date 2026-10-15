@@ -13,6 +13,7 @@ import { useOrganization } from "@/models/user/hooks/useOrganization"
 import projectFilesStore from "@/stores/projectFiles"
 import type { SuperMagicLocateFileContext } from "@/pages/superMagic/events/files"
 import { ProjectStateRepository } from "@/models/config/repositories/SuperProjectStateRepository"
+import { revealLocatedFileRow } from "../utils/scrollFileRowIntoContainer"
 
 interface UseLocateFileOptions {
 	treeIndex: AttachmentIndex
@@ -136,10 +137,45 @@ export function useLocateFile(options: UseLocateFileOptions) {
 		if (context.projectId !== selectedProjectId || context.signal?.aborted) return
 		const parents = getPathKeysByLookupKey(treeIndex, fileId).slice(0, -1)
 		if (!parents.every((key) => expandedKeys.includes(key))) return
-		context.onResult?.("located")
-		setPendingLocate(null)
-		clearTimeout(highlightTimerRef.current)
-		highlightTimerRef.current = setTimeout(() => setLocatingFileId(null), 2000)
+
+		let cancelled = false
+		let frame = 0
+		// Report success as soon as the row is visible or clearly unreachable, then clear the
+		// highlight on a timer.
+		const finishLocated = () => {
+			if (cancelled) return
+			context.onResult?.("located")
+			setPendingLocate(null)
+			clearTimeout(highlightTimerRef.current)
+			highlightTimerRef.current = setTimeout(() => setLocatingFileId(null), 2000)
+		}
+
+		const outcome = revealLocatedFileRow(fileId)
+		// "visible" is the short-list path. "missing" means the virtualizer has not mounted the
+		// row yet, and its scrollToIndex runs in a passive effect after this one, so the long-list
+		// path reports here exactly as it did before this fix.
+		if (outcome === "visible" || outcome === "missing") {
+			finishLocated()
+			return
+		}
+
+		// The row is mounted but the list could not bring it into view. Retry for a few frames to
+		// ride out a transient layout, then report anyway: leaving onResult uncalled would make the
+		// caller wait for its 15s timeout and turn a successful locate into an error toast.
+		const MAX_REVEAL_FRAMES = 3
+		const recheck = (attempt: number) => {
+			if (cancelled) return
+			if (attempt >= MAX_REVEAL_FRAMES || revealLocatedFileRow(fileId) !== "outside") {
+				finishLocated()
+				return
+			}
+			frame = requestAnimationFrame(() => recheck(attempt + 1))
+		}
+		frame = requestAnimationFrame(() => recheck(1))
+		return () => {
+			cancelled = true
+			cancelAnimationFrame(frame)
+		}
 	}, [pendingLocate, locatingFileId, expandedKeys, treeIndex, selectedProjectId])
 
 	// 处理 PPT 文件定位

@@ -23,6 +23,8 @@ interface IdleStateViewProps {
 	isSmall: boolean
 	iconSize: number
 	selectedProjectId?: string
+	/** When false, the homepage only offers starting a new project recording. */
+	allowSelectRecordingProject?: boolean
 	isStartingRecord: boolean
 	isModelReady: boolean
 	isRecordingBlocked?: boolean
@@ -47,6 +49,7 @@ export function IdleStateView({
 	isSmall,
 	iconSize,
 	selectedProjectId,
+	allowSelectRecordingProject,
 	isStartingRecord,
 	isModelReady,
 	isRecordingBlocked = false,
@@ -153,7 +156,9 @@ export function IdleStateView({
 					<StartRecordingButton
 						isLoading={isStartingRecord}
 						disabled={isStartDisabled}
-						allowSelectProject={!selectedProjectId}
+						allowSelectProject={
+							allowSelectRecordingProject !== false && !selectedProjectId
+						}
 						onClick={handleStartRecording}
 					/>
 					<div
