@@ -36,7 +36,7 @@ function NavigatePopup() {
 					variant="ghost"
 					size="icon-sm"
 					className="rounded-sm text-foreground/80 active:bg-card"
-					aria-label={tInterface("common.close")}
+					aria-label={tInterface("button.close")}
 					onClick={handleClose}
 				>
 					<MagicIcon component={IconX} size={24} />

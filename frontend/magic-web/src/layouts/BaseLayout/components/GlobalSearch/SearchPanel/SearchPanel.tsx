@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next"
 import { debounce, isEmpty } from "lodash-es"
 import useSWR from "swr"
 
-import { useKeyPress } from "ahooks"
 import AppearanceProvider from "@/providers/AppearanceProvider"
 import { DriveApi } from "@/apis"
 import Panels from "./Panels"
@@ -120,23 +119,9 @@ function SearchPanel(props: SearchPanelProps) {
 		[maxHeight, t],
 	)
 
-	useKeyPress("tab", (event) => {
-		event?.stopPropagation()
-		event?.preventDefault()
-		if (items) {
-			const index = items.findIndex((i) => i.key === activeKey)
-			if (index < items.length) {
-				setActiveKey(
-					(index + 1 >= items.length
-						? items[0].key
-						: items[index + 1].key) as SearchPanelTypes,
-				)
-			}
-		}
-	})
-
 	return (
 		<AppearanceProvider>
+			{/* Keep native Tab traversal; AntD handles arrow-key navigation within the tab list. */}
 			<Tabs
 				destroyOnHidden
 				className="size-full bg-card ![--magic-tabs-item-active-color:var(--magic-color-primary-active)] ![--magic-tabs-item-hover-color:var(--magic-color-primary-hover)] ![--magic-tabs-item-selected-color:rgb(var(--primary-rgb))] [&_.magic-tabs-content]:size-full [&_.magic-tabs-nav]:m-0 [&_.magic-tabs-nav]:h-11 [&_.magic-tabs-nav]:pl-5 [&_.magic-tabs-tabpane]:h-full"

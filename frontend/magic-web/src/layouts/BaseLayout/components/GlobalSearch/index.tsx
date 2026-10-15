@@ -93,12 +93,14 @@ function GlobalSearch({ className }: ButtonProps) {
 						)}
 						placeholder={t("quickSearch.searchPlaceholder")}
 					/>
-					<MagicIcon
-						component={IconX}
-						size={24}
+					<Button
+						variant="ghost"
+						aria-label={t("button.close", { ns: "interface" })}
 						onClick={closePanel}
-						className="size-11 cursor-pointer border-l border-[var(--magic-color-border-secondary)] p-2.5"
-					/>
+						className="size-11 shrink-0 rounded-none border-l border-[var(--magic-color-border-secondary)] p-2.5"
+					>
+						<MagicIcon component={IconX} size={24} />
+					</Button>
 				</div>
 				<SearchPanel maxHeight={maxHeight} />
 			</MagicModal>
