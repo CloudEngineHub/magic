@@ -29,6 +29,7 @@ final readonly class UserInfoDTO
         public string $organizationCode,
         public string $organizationName,
         public UserAccountDTO $account,
+        public string $thirdPlatformId = '',
     ) {
     }
 
@@ -39,6 +40,7 @@ final readonly class UserInfoDTO
             'user' => [
                 'id' => $this->id,
                 'magic_id' => $this->magicId,
+                'third_platform_id' => $this->thirdPlatformId,
                 'nickname' => $this->nickname,
                 'real_name' => $this->realName,
                 'avatar_url' => $this->avatarUrl,

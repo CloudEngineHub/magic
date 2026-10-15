@@ -18,6 +18,7 @@ from app.core.horizon.store import (
     _assert_codec_covers_horizon_state,
 )
 from app.utils.async_file_utils import async_exists, async_read_json, async_write_json
+from app.core.entity.user_context import UserContextSnapshot
 
 
 def _full_horizon_state(agent_id: str = "agent-1") -> HorizonState:
@@ -78,6 +79,34 @@ async def test_horizon_store_round_trip_keeps_existing_schema(tmp_path):
         state_field.name for state_field in fields(HorizonState)
     }
     assert await store.load() == state
+
+
+@pytest.mark.asyncio
+async def test_user_identity_snapshot_round_trip_and_legacy_default(tmp_path):
+    """来源身份随快照保存，历史文件缺字段时仍可恢复。"""
+    snapshot = UserContextSnapshot.model_validate({
+        "user_id": "mock-user", "organization_code": "mock-org", "status": "available",
+        "attempted_at": "2026-10-15T00:00:00+00:00",
+        "context": {
+            "captured_at": "2026-10-15T00:00:00+00:00",
+            "user": {"id": "mock-user", "magic_id": "mock-account", "third_platform_id": "00123"},
+            "organization": {"code": "mock-org"},
+            "subscription": {"status": "unsupported"}, "points": {"status": "unsupported"},
+        },
+    })
+    store = HorizonStore(str(tmp_path), "mock-agent", "mock-agent-id")
+    state = HorizonState(agent_id="mock-agent-id", user_context=snapshot, user_context_baseline=snapshot)
+    await store.save(state)
+    restored = await store.load()
+    assert restored.user_context.context.user.third_platform_id == "00123"
+    assert restored.user_context_baseline.context.user.third_platform_id == "00123"
+    document = await async_read_json(store.path)
+    for key in ("user_context", "user_context_baseline"):
+        del document[key]["context"]["user"]["third_platform_id"]
+    await async_write_json(store.path, document)
+    restored = await store.load()
+    assert restored.user_context.context.user.third_platform_id == ""
+    assert restored.user_context_baseline.context.user.third_platform_id == ""
 
 
 @pytest.mark.asyncio

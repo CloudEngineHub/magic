@@ -7,6 +7,7 @@ The tool keeps profile fields at the top level. Its internal service response ne
 | Field | Type | Meaning |
 |---|---|---|
 | `id`, `magic_id` | string | Authenticated user ID in the organization and account's Magic ID |
+| `third_platform_id` | string | Original user ID in the current organization's connected source system; empty means not determined, including missing configuration, mapping ambiguity, or a lookup failure. Not a credential or a cross-platform ID. Older responses may omit it. |
 | `nickname`, `real_name`, `position`, `work_number` | string | Profile fields; empty means not provided |
 | `email`, `phone`, `avatar_url` | string | Contact and avatar fields; phone is masked unless explicitly authorized |
 | `departments` | array | Entries contain string `id`, `name`, and `path` |
