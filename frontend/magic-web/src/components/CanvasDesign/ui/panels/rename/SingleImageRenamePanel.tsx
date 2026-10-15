@@ -5,9 +5,11 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
+import { useCanvasEvent } from "../../../app/hooks/canvas"
 import type { ImageElement } from "../../../runtime/document/types"
 import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
-import useRenameLabelPositionEffect from "../../../app/hooks/layout/useRenameLabelPositionEffect"
+import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
+import styles from "./index.module.css"
 import RenameNameField from "./RenameNameField"
 import { useSingleImageRename } from "./useSingleImageRename"
 
@@ -16,13 +18,21 @@ export default function SingleImageRenamePanel({ element }: { element: ImageElem
 	const form = useSingleImageRename(element)
 	const { close } = form
 	const inputRef = useRef<HTMLInputElement>(null)
-	const { containerRef: floatingRef } = useFloatingComponent({ id: "element-rename-overlay" })
-	const { containerRef: positionRef } = useRenameLabelPositionEffect({
-		elementId: element.id,
-		inputRef,
-		value: `${form.title}\n${form.fileValue}`,
-		onTargetDeleted: close,
-		panel: true,
+	const { containerRef: positionRef } = useElementPositionEffect({
+		position: "right",
+		offset: 8,
+		verticalAlign: "top",
+		trackedElementId: element.id,
+		shouldShow: () => true,
+		stickyTopRight: {
+			gap: 8,
+			headerSelector: "[data-canvas-design-header-actions]",
+		},
+	})
+	const { containerRef: floatingRef } = useFloatingComponent({
+		id: "element-rename-overlay",
+		interactive: true,
+		enableWheelForwarding: true,
 	})
 	const setRefs = useCallback(
 		(node: HTMLDivElement | null) => {
@@ -30,6 +40,13 @@ export default function SingleImageRenamePanel({ element }: { element: ImageElem
 			positionRef.current = node
 		},
 		[floatingRef, positionRef],
+	)
+	useCanvasEvent(
+		"element:deleted",
+		({ data }) => {
+			if (data.elementId === element.id) close()
+		},
+		[element.id, close],
 	)
 	useLayoutEffect(() => {
 		const frame = requestAnimationFrame(() => {
@@ -39,7 +56,7 @@ export default function SingleImageRenamePanel({ element }: { element: ImageElem
 		return () => cancelAnimationFrame(frame)
 	}, [])
 	useEffect(() => {
-		// 点击内部控件不提交；外部点击仅取消尚未保存的草稿。
+		// Clicks inside the floating surface stay in the editor; outside clicks cancel the draft.
 		const dismiss = (event: PointerEvent) => {
 			if (event.target instanceof Node && !floatingRef.current?.contains(event.target))
 				close()
@@ -73,16 +90,16 @@ export default function SingleImageRenamePanel({ element }: { element: ImageElem
 			role="dialog"
 			aria-label={t("rename.title", "重命名图片")}
 			onKeyDown={handleKeyDown}
-			className="absolute left-0 top-0 z-20 grid grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg"
+			className={styles.renamePanel}
 		>
-			<div className="flex items-center gap-2 px-4 py-3">
-				<Pencil size={16} className="text-muted-foreground" />
-				<h2 className="m-0 text-base font-semibold">{t("rename.title", "重命名图片")}</h2>
+			<div className={styles.renameHeader}>
+				<Pencil size={16} className={styles.renameTitleIcon} />
+				<h2 className={styles.renameTitle}>{t("rename.title", "重命名图片")}</h2>
 				<Button
 					type="button"
 					size="icon"
 					variant="ghost"
-					className="ml-auto size-8"
+					className={styles.renameCloseButton}
 					disabled={form.saving}
 					aria-label={t("rename.close", "关闭")}
 					onClick={form.close}
@@ -90,72 +107,82 @@ export default function SingleImageRenamePanel({ element }: { element: ImageElem
 					<X size={16} />
 				</Button>
 			</div>
-			<ScrollArea className="min-h-0" viewportClassName="[&>div]:!block">
-				<div className="px-4 pb-4">
-					<div className="mb-1.5 flex items-baseline justify-between gap-2 text-sm">
-						<label htmlFor="single-image-title">{titleLabel}</label>
-						<span className="text-xs text-muted-foreground">
-							{t("rename.titleUsage", "画布中显示")}
-						</span>
-					</div>
-					<Input
-						ref={inputRef}
-						id="single-image-title"
-						value={form.title}
-						disabled={form.saving}
-						onChange={(event) => form.setTitle(event.target.value)}
-						className="h-11 text-sm"
-					/>
-					{form.file && (
-						<div className="my-2 flex min-h-8 items-center gap-2">
-							<Checkbox
-								id="single-image-name-sync"
-								checked={form.linked}
-								disabled={form.saving}
-								onCheckedChange={(value) => form.setLinked(value === true)}
-							/>
+			<ScrollArea
+				className={`${styles.renameScrollable} min-h-0`}
+				viewportClassName="[&>div]:!block"
+			>
+				<div className={styles.renameBody}>
+					<div className={styles.renameSection}>
+						<div className={styles.renameSectionHeader}>
 							<label
-								htmlFor="single-image-name-sync"
-								className="cursor-pointer text-xs text-muted-foreground"
+								htmlFor="single-image-title"
+								className={styles.renameSectionLabel}
 							>
-								{t("rename.syncFileName", "修改标题时同步修改文件名")}
+								{titleLabel}
 							</label>
+							<span className={styles.renameSectionHint}>
+								{t("rename.titleUsage", "画布中显示")}
+							</span>
 						</div>
-					)}
-					<div
-						className={`${form.file ? "" : "mt-4 "}mb-1.5 flex items-baseline justify-between gap-2 text-sm`}
-					>
-						<span>{fileLabel}</span>
-						<span className="text-xs text-muted-foreground">
-							{form.processing
-								? t("rename.pendingEditableLater", "生成后可修改")
-								: t("rename.fileUsage", "文件列表与下载")}
-						</span>
-					</div>
-					<div className="rounded-lg border bg-background px-3 py-3 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
-						<RenameNameField
-							value={form.fileValue}
-							onChange={form.setFileValue}
-							label={fileLabel}
-							extension={form.extension}
-							disabled={form.saving || !form.file}
-							invalid={Boolean(form.error)}
-							onKeyDown={handleKeyDown}
+						<Input
+							ref={inputRef}
+							id="single-image-title"
+							value={form.title}
+							disabled={form.saving}
+							onChange={(event) => form.setTitle(event.target.value)}
+							className="h-9 text-sm"
 						/>
+						{form.file && (
+							<div className="my-1 flex min-h-8 items-center gap-2">
+								<Checkbox
+									id="single-image-name-sync"
+									checked={form.linked}
+									disabled={form.saving}
+									onCheckedChange={(value) => form.setLinked(value === true)}
+								/>
+								<label
+									htmlFor="single-image-name-sync"
+									className="cursor-pointer text-xs text-muted-foreground"
+								>
+									{t("rename.syncFileName", "修改标题时同步修改文件名")}
+								</label>
+							</div>
+						)}
 					</div>
-					{!form.file && !form.processing && (
-						<p className="mb-0 mt-2 text-xs text-muted-foreground">
-							{t("rename.fileUnavailable", "当前文件不可重命名")}
-						</p>
-					)}
-					{form.error && (
-						<p role="alert" className="mb-0 mt-2 text-xs text-destructive">
-							{form.error}
-						</p>
-					)}
+					<div className={styles.renameSection}>
+						<div className={styles.renameSectionHeader}>
+							<span className={styles.renameSectionLabel}>{fileLabel}</span>
+							<span className={styles.renameSectionHint}>
+								{form.processing
+									? t("rename.pendingEditableLater", "生成后可修改")
+									: t("rename.fileUsage", "文件列表与下载")}
+							</span>
+						</div>
+						<div className={styles.renameField}>
+							<RenameNameField
+								value={form.fileValue}
+								onChange={form.setFileValue}
+								label={fileLabel}
+								extension={form.extension}
+								disabled={form.saving || !form.file}
+								invalid={Boolean(form.error)}
+								onKeyDown={handleKeyDown}
+							/>
+						</div>
+						{!form.file && !form.processing && (
+							<p className="m-0 text-xs text-muted-foreground">
+								{t("rename.fileUnavailable", "当前文件不可重命名")}
+							</p>
+						)}
+						{form.error && (
+							<p role="alert" className="m-0 text-xs text-destructive">
+								{form.error}
+							</p>
+						)}
+					</div>
 				</div>
 			</ScrollArea>
-			<div className="flex justify-end gap-2 border-t px-4 py-3">
+			<div className={`${styles.renameActions} border-t pt-2`}>
 				<Button
 					type="button"
 					variant="ghost"

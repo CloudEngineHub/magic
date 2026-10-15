@@ -31,9 +31,12 @@ function image(contents: ImageElementContent[]): ImageElement {
 }
 
 describe("elementContent", () => {
-	it("limits visual understanding to image and video Contents", () => {
+	it("registers asset bindings on all media Contents", () => {
 		expect(getElementContentFields("image")).toContain("visualUnderstanding")
+		expect(getElementContentFields("image")).toContain("assetId")
 		expect(getElementContentFields("video")).toContain("visualUnderstanding")
+		expect(getElementContentFields("video")).toContain("assetId")
+		expect(getElementContentFields("audio")).toContain("assetId")
 		expect(getElementContentFields("text")).not.toContain("visualUnderstanding")
 		expect(getElementContentFields("frame")).not.toContain("visualUnderstanding")
 	})
@@ -72,7 +75,10 @@ describe("elementContent", () => {
 
 	it("updates, appends, switches and sets main without mutating input", () => {
 		const original = image([{ contentId: "c1", src: "one.png", status: "completed" }])
-		const updated = updateContent(original, "c1", { crop: { x: 1, y: 2, width: 3, height: 4 } })
+		const updated = updateContent(original, "c1", {
+			assetId: "asset-1",
+			crop: { x: 1, y: 2, width: 3, height: 4 },
+		})
 		const appended = appendContent<ImageElement>(updated, {
 			contentId: "c2",
 			src: "two.png",
@@ -82,6 +88,8 @@ describe("elementContent", () => {
 		const main = setMainContent(active, "c2")
 
 		expect(original.contents[0]).not.toHaveProperty("crop")
+		expect(original.contents[0]).not.toHaveProperty("assetId")
+		expect(main.contents[0]?.assetId).toBe("asset-1")
 		expect(main.activeContentId).toBe("c2")
 		expect(main.mainContentId).toBe("c2")
 		expect(main.contents).toHaveLength(2)

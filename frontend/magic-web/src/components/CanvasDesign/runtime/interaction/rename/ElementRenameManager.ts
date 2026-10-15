@@ -59,9 +59,12 @@ export class ElementRenameManager {
 		if (!elementId || !name) return
 		const element = this.canvas.elementManager.getElementData(elementId)
 		if (!this.canvas.permissionManager.canRename(element)) return
+		const elementInstance = this.canvas.elementManager.getElementInstance(elementId)
 		const currentName =
+			elementInstance?.getNameLabelContent().primaryText ||
 			element?.name ||
-			this.canvas.elementManager.getElementInstance(elementId)?.getRenderName()
+			elementInstance?.getRenderName() ||
+			""
 		if (name === currentName && !options?.fileChange) {
 			this.cancelRename()
 			return

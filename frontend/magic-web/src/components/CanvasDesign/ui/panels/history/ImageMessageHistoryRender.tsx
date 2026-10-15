@@ -340,6 +340,7 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 												<ReferenceImageItem
 													key={index}
 													path={path}
+													mediaType="image"
 													sourceCrop={sourceCrop}
 													onPreviewMediaResource={onPreviewMediaResource}
 													resolveResourceReference={

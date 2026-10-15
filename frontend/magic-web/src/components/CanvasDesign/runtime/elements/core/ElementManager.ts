@@ -25,6 +25,7 @@ import { syncCropConfigOnResize } from "../../resources/image/imageCropUtils"
 import { normalizeFrameCreationSize, normalizeSize } from "../../shared/normalize/normalizeUtils"
 import { sanitizeCanvasDocument } from "../../document/temporaryElementUtils"
 import { CanvasDocumentIndex } from "./CanvasDocumentIndex"
+import { resumeDocumentAssetCompliancePolling } from "../../resources/asset/CanvasAssetComplianceTaskManager"
 import { resumeImageBatchPollingManagers } from "../../resources/polling/resumeImageBatchPolling"
 import {
 	getActiveImageContent,
@@ -429,7 +430,10 @@ export class ElementManager {
 			})
 		})
 		if (convertedElementIds.length > 0) {
-			this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+			this.canvas.eventEmitter.emit({
+				type: "element:batchupdated",
+				data: { elementIds: convertedElementIds },
+			})
 		}
 	}
 
@@ -562,7 +566,10 @@ export class ElementManager {
 			this.flush()
 			if (succeeded && options?.emitBatchUpdated !== false) {
 				// 只有全部更新成功后才触发批量完成，避免失败事务污染历史快照。
-				this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+				this.canvas.eventEmitter.emit({
+					type: "element:batchupdated",
+					data: { elementIds: [...stagedDataByElementId.keys()] },
+				})
 			}
 		}
 	}
@@ -2070,6 +2077,7 @@ export class ElementManager {
 		const docCopy = sanitizeCanvasDocument(JSON.parse(JSON.stringify(doc)) as CanvasDocument)
 		this.replaceAll(docCopy.elements || [])
 		resumeImageBatchPollingManagers(this.canvas)
+		resumeDocumentAssetCompliancePolling(this.canvas)
 	}
 
 	/**
@@ -2192,6 +2200,7 @@ export class ElementManager {
 			this.batchMode = false
 			this.flush()
 			resumeImageBatchPollingManagers(this.canvas)
+			resumeDocumentAssetCompliancePolling(this.canvas)
 		}
 
 		// 由 Canvas 在元素与连接都恢复完成后统一发出 document:restored。

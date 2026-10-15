@@ -89,6 +89,37 @@ describe("CanvasFileUploadManager upload sub directories", () => {
 })
 
 describe("CanvasFileUploadManager pending resource confirmation", () => {
+	it("uses an explicit upload directory when the caller supplies one", async () => {
+		const uploadFiles = vi.fn(async (files: UploadFile[]) => {
+			expect(files).toHaveLength(1)
+			return [
+				{
+					path: "./audios/asset.mp3",
+					src: "https://example.test/asset.mp3",
+					fileName: "asset.mp3",
+				},
+			]
+		})
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			pendingResourcePaths: new Set<string>(),
+			canvas: {
+				eventEmitter: { emit: vi.fn() },
+				magicConfigManager: { config: { methods: { uploadFiles } } },
+			},
+		})
+
+		await manager.uploadDirect(
+			[new File(["asset"], "asset.bin", { type: "application/octet-stream" })],
+			undefined,
+			undefined,
+			{ uploadSubDir: UploadSubDir.Audios },
+		)
+
+		expect(uploadFiles.mock.calls[0]?.[0]?.[0]?.uploadSubDir).toBe(UploadSubDir.Audios)
+		expect(manager.isPendingResourcePath("./audios/asset.mp3")).toBe(true)
+	})
+
 	it("keeps an uploaded resource pending until the resolver confirms its attachment", async () => {
 		let attachmentConfirmed = false
 		const resolveResourceReference = (
@@ -146,7 +177,7 @@ describe("CanvasFileUploadManager pending resource confirmation", () => {
 describe("CanvasFileUploadManager image replacement", () => {
 	function createImageInstance(status = GenerationStatus.Completed) {
 		const instance = Object.create(ImageElement.prototype) as ImageElement
-		const content = { contentId: "content-1", status }
+		const content = { contentId: "content-1", status, assetId: "asset-before-replacement" }
 		const data = {
 			id: "image-1",
 			type: ElementTypeEnum.Image,
@@ -205,6 +236,10 @@ describe("CanvasFileUploadManager image replacement", () => {
 			"content-1",
 			{
 				src: "./images/new.png",
+				assetId: undefined,
+				complianceStatus: undefined,
+				complianceFailedReason: undefined,
+				complianceCheckId: undefined,
 				status: GenerationStatus.Completed,
 				errorMessage: undefined,
 				crop: undefined,
@@ -292,7 +327,11 @@ describe("CanvasFileUploadManager image replacement", () => {
 		).toBe(true)
 		expect(image.updateContentData).toHaveBeenCalledWith(
 			"content-1",
-			expect.objectContaining({ src: "/images/project.webp", crop: undefined }),
+			expect.objectContaining({
+				src: "/images/project.webp",
+				assetId: undefined,
+				crop: undefined,
+			}),
 			{ silent: false },
 		)
 		expect(removeMarkersByImageContent).toHaveBeenCalledWith("image-1", "content-1")
@@ -369,6 +408,7 @@ describe("CanvasFileUploadManager video replacement", () => {
 				{
 					contentId: "video-content-1",
 					src: "./videos/old-1.mp4",
+					assetId: "asset-video",
 					status: GenerationStatus.Completed,
 				},
 				{
@@ -426,6 +466,10 @@ describe("CanvasFileUploadManager video replacement", () => {
 					{
 						contentId: "video-content-1",
 						src: "./videos/new.mp4",
+						assetId: undefined,
+						complianceStatus: undefined,
+						complianceFailedReason: undefined,
+						complianceCheckId: undefined,
 						status: GenerationStatus.Completed,
 						errorMessage: undefined,
 					},
@@ -450,6 +494,7 @@ describe("CanvasFileUploadManager video replacement", () => {
 				{
 					contentId: "video-content-1",
 					src: "./videos/old.mp4",
+					assetId: "asset-video",
 					status: GenerationStatus.Failed,
 					errorMessage: "failed",
 				},
@@ -485,6 +530,10 @@ describe("CanvasFileUploadManager video replacement", () => {
 					{
 						contentId: "video-content-1",
 						src: "/videos/project.webm",
+						assetId: undefined,
+						complianceStatus: undefined,
+						complianceFailedReason: undefined,
+						complianceCheckId: undefined,
 						status: GenerationStatus.Completed,
 						errorMessage: undefined,
 					},
@@ -704,7 +753,13 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 			width: 640,
 			height: 720,
 			name: "原名称",
-			contents: [{ contentId: "content-1", src: "./audios/old.mp3" }],
+			contents: [
+				{
+					contentId: "content-1",
+					src: "./audios/old.mp3",
+					assetId: "asset-audio",
+				},
+			],
 			activeContentId: "content-1",
 			mainContentId: "content-1",
 		}
@@ -739,7 +794,13 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		expect(update).toHaveBeenCalledWith(
 			"audio-1",
 			{
-				contents: [{ contentId: "content-1", src: "./audios/new.mp3" }],
+				contents: [
+					{
+						contentId: "content-1",
+						src: "./audios/new.mp3",
+						assetId: undefined,
+					},
+				],
 			},
 			{ silent: false },
 		)
@@ -796,7 +857,13 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		expect(update).toHaveBeenCalledWith(
 			"audio-empty",
 			{
-				contents: [{ contentId: "content-1", src: "./audios/voice.mp3" }],
+				contents: [
+					{
+						contentId: "content-1",
+						src: "./audios/voice.mp3",
+						assetId: undefined,
+					},
+				],
 			},
 			{ silent: false },
 		)
@@ -820,7 +887,13 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 					getElementData: vi.fn(() => ({
 						id: "audio-1",
 						type: ElementTypeEnum.Audio,
-						contents: [{ contentId: "content-1", src: "./audios/old.mp3" }],
+						contents: [
+							{
+								contentId: "content-1",
+								src: "./audios/old.mp3",
+								assetId: "asset-audio",
+							},
+						],
 						activeContentId: "content-1",
 						mainContentId: "content-1",
 					})),
@@ -885,7 +958,13 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		expect(update).toHaveBeenCalledWith(
 			"audio-1",
 			{
-				contents: [{ contentId: "content-1", src: "/audios/project.m4a" }],
+				contents: [
+					{
+						contentId: "content-1",
+						src: "/audios/project.m4a",
+						assetId: undefined,
+					},
+				],
 			},
 			{ silent: false },
 		)
@@ -934,7 +1013,13 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		expect(update).toHaveBeenCalledWith(
 			"audio-empty",
 			{
-				contents: [{ contentId: "content-1", src: "/audios/project.m4a" }],
+				contents: [
+					{
+						contentId: "content-1",
+						src: "/audios/project.m4a",
+						assetId: undefined,
+					},
+				],
 			},
 			{ silent: false },
 		)
@@ -949,7 +1034,11 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 			id: "audio-1",
 			type: ElementTypeEnum.Audio,
 			contents: [
-				{ contentId: "audio-content-1", src: "./audios/old-1.mp3" },
+				{
+					contentId: "audio-content-1",
+					src: "./audios/old-1.mp3",
+					assetId: "asset-audio",
+				},
 				{ contentId: "audio-content-2", src: "./audios/old-2.mp3" },
 			],
 			activeContentId: "audio-content-2",
@@ -986,7 +1075,11 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 			"audio-1",
 			{
 				contents: [
-					{ contentId: "audio-content-1", src: "/audios/project.mp3" },
+					{
+						contentId: "audio-content-1",
+						src: "/audios/project.mp3",
+						assetId: undefined,
+					},
 					{ contentId: "audio-content-2", src: "./audios/old-2.mp3" },
 				],
 			},

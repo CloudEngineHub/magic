@@ -27,6 +27,7 @@ import { SaveSlidesTemplateDialog, type SaveSlidesTemplateTarget } from "./compo
 import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
 import type { TopicFilesSpaceConfig } from "./file-space"
 import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -87,6 +88,7 @@ export interface TopicFilesButtonProps {
 	isItemSelectable?: (item: AttachmentItem) => boolean
 	/** 特殊文件空间允许操作的固定根目录。 */
 	operationRoot?: AttachmentItem
+	projectFilesStore?: ProjectFilesStore
 }
 
 export interface TopicFilesButtonRef {
@@ -137,6 +139,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
+			projectFilesStore,
 		},
 		ref,
 	) {
@@ -327,6 +330,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					spaceConfig={spaceConfig}
 					isItemSelectable={isItemSelectable}
 					operationRoot={operationRoot}
+					projectFilesStore={projectFilesStore}
 				/>
 				<SaveSlidesTemplateDialog
 					open={saveDialogOpen}

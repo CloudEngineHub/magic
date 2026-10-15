@@ -983,6 +983,10 @@ export interface GetConvertHightConfigResponse {
 /** 获取 AI 能力可用性响应数据 */
 export interface AiAbilityAvailability {
 	abilities: {
+		/** 是否支持 Seedance 合规校验。关闭时元素菜单和素材库操作菜单都不提供该操作。 */
+		volcengine_ark_assets?: {
+			enabled?: boolean
+		}
 		image_convert_high: GetConvertHightConfigResponse
 		image_remove_background: {
 			enabled: boolean
@@ -1175,6 +1179,130 @@ export interface GetFileInfoResponse {
 }
 
 export type FileUrlRequestPriority = "critical" | "visible" | "near" | "background"
+
+/** 资产库媒体类型。资产路径本身不携带媒体类型，类型必须来自资产元数据或显式引用。 */
+export type CanvasAssetMediaType = "image" | "video" | "audio"
+
+/** 资产库合规状态；仅在调用方明确要求合规的生成能力中参与前置校验。 */
+export type CanvasAssetComplianceStatus = "UNVERIFIED" | "PROCESSING" | "PASS" | "FAILED"
+
+/** 单素材异步合规轮询结果。 */
+export interface CanvasAssetComplianceState {
+	assetId: string
+	status: CanvasAssetComplianceStatus
+	failedReason: string | null
+}
+
+/** CanvasDesign 运行时使用的资产详情，不包含可持久化的 workspace 路径。 */
+export interface CanvasAssetResourceInfo {
+	/** 资产服务中的稳定 ID。 */
+	assetId: string
+	/** 由资产接口返回的媒体类型；null 表示接口暂未提供类型。 */
+	mediaType: CanvasAssetMediaType | null
+	/** 当前会话可用的签名资源地址；不得写入 Canvas 文档或离线缓存。 */
+	fileUrl: string | null
+	/** 后端可选返回的签名地址过期时间；旧后端缺失时保持 undefined。 */
+	expiresAt?: string
+	fileName?: string
+	complianceStatus?: CanvasAssetComplianceStatus | null
+	complianceFailedReason?: string | null
+}
+
+/** 请求宿主打开“保存到素材库”弹窗时携带的当前图片或视频信息。 */
+export interface CanvasOpenSaveAssetDialogParams {
+	/** 打开弹窗时捕获的媒体元素 ID。 */
+	elementId: string
+	/** 打开弹窗时捕获的媒体 Content ID。 */
+	contentId: string
+	/** Canvas 文档中保存的媒体路径，仅允许宿主可解析的工作区文件。 */
+	path: string
+	/** 用作弹窗默认值的素材名称。 */
+	name?: string
+}
+
+/** 对已有工作区图片或视频发起合规校验；后端会创建素材并返回其 assetId。 */
+export interface CanvasStartWorkspaceMediaComplianceParams {
+	/** Canvas 文档中保存的媒体路径。 */
+	path: string
+	/** 发起工作区文件合规时使用的素材名称。 */
+	name: string
+}
+
+/** 使用 file_key 对素材库已有 asset 发起合规，不写回画布 DSL。 */
+export interface CanvasStartExistingAssetComplianceParams {
+	assetId: string
+	/** 素材库或 Canvas 详情中的 file_key；已有素材合规只允许该来源。 */
+	fileKey?: string
+	name?: string
+}
+
+/** 保存工作区媒体到素材库时由弹窗提交的可编辑信息。 */
+export interface CanvasSaveAssetToLibraryParams extends CanvasOpenSaveAssetDialogParams {
+	name: string
+	description?: string | null
+	userIds?: string[]
+	departmentIds?: string[]
+	tagIds?: string[]
+}
+
+/** 已有素材的元数据更新参数；不携带文件路径或文件内容。 */
+export interface CanvasUpdateAssetParams {
+	name: string
+	description: string
+	userIds?: string[]
+	departmentIds?: string[]
+	tagIds: string[]
+}
+
+export type CanvasLocalAssetUploadMode = "save" | "verify"
+
+export interface CanvasAssetVisibilityTarget {
+	id: string
+	name: string
+	type: "user" | "department"
+}
+
+/** 编辑已有素材时复用保存弹窗；素材文件本身始终保持不变。 */
+export interface CanvasEditAssetTarget {
+	assetId: string
+	name: string
+	description: string
+	fileUrl: string | null
+	mediaType: CanvasAssetMediaType | null
+	visibility: "private" | "team"
+	userIds?: string[]
+	departmentIds?: string[]
+	visibilityTargets?: CanvasAssetVisibilityTarget[]
+	/** 未读取到授权明细时只允许编辑元数据和标签，避免误清权限。 */
+	visibilityEditable?: boolean
+	tagIds: string[]
+}
+
+/** 素材库卡片请求宿主打开编辑弹窗。提交仍由弹窗显式触发。 */
+export interface CanvasOpenEditAssetDialogParams {
+	asset: CanvasEditAssetTarget
+	onUpdated: () => void
+	onClosed: () => void
+}
+
+/** 素材库上传卡片选中本地文件后，请求宿主打开同一套保存弹窗。 */
+export interface CanvasOpenSaveLocalAssetDialogParams {
+	file: File
+	mode: CanvasLocalAssetUploadMode
+	onSaved: (asset: CanvasAssetResourceInfo) => void
+	onClosed: () => void
+}
+
+/** 本地文件保存到素材库：先落入当前画布目录，再提交素材信息。 */
+export interface CanvasSaveLocalAssetToLibraryParams {
+	file: File
+	mode: CanvasLocalAssetUploadMode
+	name: string
+	description?: string | null
+	userIds?: string[]
+	departmentIds?: string[]
+	tagIds?: string[]
+}
 
 export interface CanvasFileResourceMeta {
 	status: "exists" | "deleted" | "unknown"
@@ -1685,6 +1813,57 @@ export interface CanvasDesignMethods {
 			priority?: FileUrlRequestPriority
 		},
 	) => Promise<GetFileInfoResponse>
+	/**
+	 * 获取素材库资源详情。用于兼容解析 asset://<asset_id>，也用于按 assetId
+	 * 将素材导入当前 Canvas；普通 workspace 路径仍通过 getFileInfo 获取 URL。
+	 */
+	getAssetResourceInfo?: (
+		assetId: string,
+		options?: {
+			forceRefresh?: boolean
+			priority?: FileUrlRequestPriority
+		},
+	) => Promise<CanvasAssetResourceInfo>
+	/** 批量获取素材详情，用于 Canvas 加载和应用素材前刷新动态资源信息。 */
+	getAssetResourceInfos?: (
+		assetIds: string[],
+		options?: { forceRefresh?: boolean },
+	) => Promise<CanvasAssetResourceInfo[]>
+	/** 获取单个素材的异步合规状态，用于 Canvas 级轮询管理器。 */
+	getAssetComplianceStatus?: (assetId: string) => Promise<CanvasAssetComplianceState>
+	/** 请求宿主打开素材信息编辑弹窗；该入口本身不得直接发起保存。 */
+	openSaveAssetToLibraryDialog?: (params: CanvasOpenSaveAssetDialogParams) => void
+	/** 素材库本地上传：打开保存弹窗，不在选文件时直接入库。 */
+	openSaveLocalAssetDialog?: (params: CanvasOpenSaveLocalAssetDialogParams) => void
+	/** 素材库卡片编辑：复用保存弹窗编辑素材元数据和标签。 */
+	openEditAssetDialog?: (params: CanvasOpenEditAssetDialogParams) => void
+	/** 将本地文件上传到当前画布 images/videos 后保存到素材库。 */
+	saveLocalAssetToLibrary?: (
+		params: CanvasSaveLocalAssetToLibraryParams,
+	) => Promise<CanvasAssetResourceInfo>
+	/**
+	 * 认证上传前确认承诺书已签署。未签署时由宿主打开签署弹窗，
+	 * 用户同意并签署成功后 resolve true。
+	 */
+	ensureAssetAgreementSigned?: (options?: { onSigned?: () => void }) => Promise<boolean>
+	/** 将工作区媒体保存到素材库；宿主负责解析项目路径并注入 project_id。 */
+	saveAssetToLibrary?: (
+		params: CanvasSaveAssetToLibraryParams,
+	) => Promise<CanvasAssetResourceInfo>
+	/**
+	 * 对当前画布工作区文件发起合规校验。后端会在流程中创建素材；返回值里的
+	 * assetId 必须绑定回发起校验的 Content。
+	 */
+	startWorkspaceMediaCompliance?: (
+		params: CanvasStartWorkspaceMediaComplianceParams,
+	) => Promise<CanvasAssetResourceInfo>
+	/**
+	 * 对素材库已有 asset 使用 file_key 发起合规，不创建新的 Canvas 素材绑定。
+	 * 入参 assetId 是稳定素材 ID，调用方始终使用它轮询和刷新状态。
+	 */
+	startExistingAssetCompliance?: (
+		params: CanvasStartExistingAssetComplianceParams,
+	) => Promise<CanvasAssetResourceInfo>
 	/**
 	 * 获取资源轻量版本信息；用于 cache hit 后台校验，不应触发 OSS 换链或下载 body
 	 * @param path 文件路径

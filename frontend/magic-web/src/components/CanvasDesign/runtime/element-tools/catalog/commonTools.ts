@@ -1,8 +1,35 @@
 import { ElementToolTypeEnum } from "../../../public/props"
 import { ElementTypeEnum } from "../../document/types"
-import type { ElementToolDefinition } from "../model/ElementToolTypes"
+import type { ElementToolContext, ElementToolDefinition } from "../model/ElementToolTypes"
 import { mediaContentToolAllowed, mediaTool, hasResource, isMedia, resolveTool } from "./common"
 import { topAction, topCustom } from "./surfaceOptions"
+
+function isLayoutScope(context: ElementToolContext): boolean {
+	if (context.selection.isSingleElement) {
+		return (
+			(!context.element.locked &&
+				!context.element.parentLocked &&
+				context.element.type === ElementTypeEnum.Frame) ||
+			(!context.element.locked &&
+				!context.element.parentLocked &&
+				context.element.type === ElementTypeEnum.Group)
+		)
+	}
+	const parentIds = context.selection.elements.map((element) => element.parentId ?? null)
+	const hasMixedParents =
+		context.selection.hasMixedParents ??
+		parentIds.some((parentId) => parentId !== (parentIds[0] ?? null))
+	return (
+		context.selection.elements.length > 1 &&
+		!hasMixedParents &&
+		!context.selection.elements.some((element) => element.parentLocked) &&
+		context.selection.elements.some((element) => !element.locked) &&
+		context.selection.elements.every(
+			(element) =>
+				element.type !== ElementTypeEnum.Frame && element.type !== ElementTypeEnum.Group,
+		)
+	)
+}
 
 const top = (group: string, order: number) => topAction(group, order)
 
@@ -41,8 +68,7 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		commandRoute: "action",
 		fallbackActionId: "align.left",
 		surfaces: { top: top("layout", 30) },
-		isApplicable: (context) =>
-			context.selection.elements.length > 1 || context.element.type === ElementTypeEnum.Frame,
+		isApplicable: (context) => isLayoutScope(context),
 		resolve: (context) =>
 			resolveTool(context, ElementToolTypeEnum.ElementAlign, "top", top("layout", 30), {
 				bindContent: false,
@@ -55,10 +81,9 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		effect: "document",
 		requiredCapability: "document.write",
 		commandRoute: "action",
-		fallbackActionId: "distribute.horizontal",
+		fallbackActionId: "distribute.arrange",
 		surfaces: { top: top("layout", 31) },
-		isApplicable: (context) =>
-			context.selection.elements.length > 1 || context.element.type === ElementTypeEnum.Frame,
+		isApplicable: (context) => isLayoutScope(context),
 		resolve: (context) =>
 			resolveTool(context, ElementToolTypeEnum.ElementDistribute, "top", top("layout", 31), {
 				bindContent: false,
@@ -134,7 +159,16 @@ export const COMMON_ELEMENT_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		surfaces: { top: top("frame-create", 10) },
 		isApplicable: (context) =>
 			context.selection.elements.length > 1 &&
-			!context.selection.elements.some((element) => element.type === ElementTypeEnum.Frame),
+			// A Frame can only be created around root-level ordinary nodes.  The
+			// action guard rejects already-parented nodes as well; mirroring that
+			// rule here prevents the tool from being advertised and then silently
+			// rejected when the selected nodes already belong to a Frame/Group.
+			context.selection.elements.every((element) => !element.parentId) &&
+			!context.selection.elements.some(
+				(element) =>
+					element.type === ElementTypeEnum.Frame ||
+					element.type === ElementTypeEnum.Group,
+			),
 		resolve: (context) =>
 			resolveTool(context, ElementToolTypeEnum.FrameCreate, "top", top("frame-create", 10), {
 				bindContent: false,

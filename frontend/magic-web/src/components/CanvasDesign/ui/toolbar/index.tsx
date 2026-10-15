@@ -12,6 +12,7 @@ import {
 	Image as ImageIcon,
 	Mic,
 	Upload,
+	UsersRound,
 } from "lucide-react"
 import { ImageSparkles } from "../primitives/icons/index"
 import styles from "./index.module.css"
@@ -40,6 +41,8 @@ import {
 } from "../../runtime/shared/ids"
 import { AUDIO_CONFIG } from "../../runtime/elements/audio/AudioElement.config"
 import { resolveNearestFreeMediaPlacement } from "../../runtime/shared/placement/placementEngine"
+import AssetsModal from "./AssetsModal"
+import type { AssetItem } from "@/apis"
 
 /**
  * 将 BaseTool 转换为 ToolType
@@ -73,6 +76,7 @@ export default function Tools() {
 	const { imageModelList, permissions, videoModelList } = useMagic()
 	const portalContainer = usePortalContainer()
 	const [activeTool, setActiveToolState] = useState<ToolType | null>(null)
+	const [assetsVisible, setAssetsVisible] = useState(false)
 	const imageUploadInputRef = useRef<HTMLInputElement>(null)
 	const videoUploadInputRef = useRef<HTMLInputElement>(null)
 	const audioUploadInputRef = useRef<HTMLInputElement>(null)
@@ -126,6 +130,36 @@ export default function Tools() {
 			return {
 				x: targetPosition.x + width / 2,
 				y: targetPosition.y + height / 2,
+			}
+		},
+		[canvas],
+	)
+
+	const handleAssetsConfirm = useCallback(
+		async (assets: AssetItem[]) => {
+			if (!canvas || !canvas.permissionManager.can("document.write")) {
+				throw new Error("Canvas is not writable")
+			}
+
+			const createdElementIds: string[] = []
+			try {
+				for (const asset of assets) {
+					const imported = await canvas.assetImportManager.importAndCreateElement({
+						assetId: asset.asset_id,
+						allowedMediaTypes: ["image", "video"],
+					})
+					createdElementIds.push(imported.elementId)
+				}
+				if (createdElementIds.length > 0) {
+					canvas.selectionManager.selectMultiple(createdElementIds)
+				}
+			} catch (error) {
+				// A multi-asset import is one user action; remove elements already
+				// created in this action if a later asset cannot be imported.
+				if (createdElementIds.length > 0) {
+					canvas.elementManager.batchDelete(createdElementIds)
+				}
+				throw error
 			}
 		},
 		[canvas],
@@ -265,6 +299,11 @@ export default function Tools() {
 			icon: Mic,
 			value: ToolTypeEnum.AudioGenerator,
 		},
+		{
+			label: t("tools.assets", "素材库"),
+			icon: UsersRound,
+			onClick: () => setAssetsVisible(true),
+		},
 		Divider,
 		{
 			label: t("tools.marker", "标记"),
@@ -351,13 +390,14 @@ export default function Tools() {
 				if (!IconComponent) return null
 
 				return (
-					<Tooltip delayDuration={0} key={item.value}>
+					<Tooltip delayDuration={0} key={item.value ?? item.label}>
 						<TooltipTrigger>
 							<IconButton
 								className={styles.toolItem}
 								selected={item.value === activeTool}
 								onClick={() => {
 									if (item.value) setActiveTool(item.value)
+									item.onClick?.()
 								}}
 							>
 								<IconComponent size={16} />
@@ -392,6 +432,13 @@ export default function Tools() {
 					<PluginTool />
 				</>
 			)}
+			<AssetsModal
+				open={assetsVisible}
+				onClose={() => setAssetsVisible(false)}
+				onConfirmMultiple={handleAssetsConfirm}
+				mediaTypes={["IMAGE", "VIDEO"]}
+				multiple
+			/>
 		</div>
 	)
 }

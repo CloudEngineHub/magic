@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isAllowedFileType, isAudioFile, validateFile } from "../ids"
+import { isAllowedFileType, isAudioFile, validateCanvasFilePath, validateFile } from "../ids"
 
 describe("audio file validation", () => {
 	it.each([
@@ -26,4 +26,18 @@ describe("audio file validation", () => {
 		expect(isAllowedFileType(file)).toBe(false)
 		expect(validateFile(file)).toMatchObject({ valid: false })
 	})
+})
+
+describe("Canvas media path validation", () => {
+	it("accepts asset references without inferring their media type from the id", () => {
+		expect(validateCanvasFilePath("asset://opaque-id")).toEqual({ valid: true })
+		expect(validateCanvasFilePath("asset://reference.png")).toEqual({ valid: true })
+	})
+
+	it.each(["asset:/opaque-id", "asset://", "asset://opaque-id/child.png"])(
+		"rejects malformed asset reference %s before extension validation",
+		(path) => {
+			expect(validateCanvasFilePath(path)).toMatchObject({ valid: false })
+		},
+	)
 })

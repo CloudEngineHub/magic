@@ -122,6 +122,7 @@ export function useFileManagerOperations({
 		beforeUpload: confirmUpload,
 		attachments,
 		projectId,
+		projectFilesStore: props.projectFilesStore,
 		selectedProject: selectedProject ?? undefined,
 		selectedTopic,
 		fileScope: spaceConfig?.scope,

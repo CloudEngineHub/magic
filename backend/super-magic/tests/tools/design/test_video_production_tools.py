@@ -2141,22 +2141,22 @@ async def test_video_production_image_honors_reference_element_deletion_during_g
 
 
 @pytest.mark.asyncio
-async def test_video_production_video_tool_connects_first_frame_and_layouts_to_its_right(
+async def test_video_production_video_tool_connects_shot_reference_image_and_layouts_to_its_right(
     workspace: Path,
     monkeypatch,
 ):
-    """视频在 processing 阶段连接首帧，并稳定放在首帧右侧。"""
+    """视频在 processing 阶段连接镜头参考图，并稳定放在参考图右侧。"""
     project_name = "production-video-project"
     project_dir = workspace / project_name
     await async_mkdir(project_dir / "images", parents=True, exist_ok=True)
-    Image.new("RGB", (64, 36), color="green").save(project_dir / "images" / "first-frame.png")
-    first_frame = _content_element(
-        "first-frame",
+    Image.new("RGB", (64, 36), color="green").save(project_dir / "images" / "shot-reference.png")
+    shot_reference_image = _content_element(
+        "shot-reference-image",
         "image",
-        name="模拟首帧",
-        fields={"src": "./images/first-frame.png", "status": "completed"},
+        name="模拟镜头参考图",
+        fields={"src": "./images/shot-reference.png", "status": "completed"},
     )
-    first_frame.properties.update({"x": 1200, "y": 360, "width": 720, "height": 1280})
+    shot_reference_image.properties.update({"x": 1200, "y": 360, "width": 720, "height": 1280})
     storyboard = _content_element(
         "storyboard",
         "storyboard",
@@ -2167,18 +2167,18 @@ async def test_video_production_video_tool_connects_first_frame_and_layouts_to_i
                     "id": "S01",
                     "durationSeconds": 4,
                     "description": "模拟镜头",
-                    "outputImageElementId": first_frame.id,
+                    "outputImageElementId": shot_reference_image.id,
                 }
             ]
         },
     )
     storyboard.properties.update({"x": 0, "y": 360, "width": 640, "height": 960})
-    config = _v3_config(storyboard, first_frame)
+    config = _v3_config(storyboard, shot_reference_image)
     config.canvas.connections.append(
         CanvasConnection(
-            id="storyboard-first-frame",
+            id="storyboard-shot-reference-image",
             source_element_id=storyboard.id,
-            target_element_id=first_frame.id,
+            target_element_id=shot_reference_image.id,
             locked=True,
         )
     )
@@ -2196,7 +2196,7 @@ async def test_video_production_video_tool_connects_first_frame_and_layouts_to_i
         return await original_transaction(self, *args, **kwargs)
 
     async def inspect_processing_canvas(self, idx, task, placeholder, *args, **kwargs):
-        """在视频生成开始前检查首帧关系和预占布局。"""
+        """在视频生成开始前检查镜头参考图关系和预占布局。"""
         manager = await get_canvas_manager(str(project_dir))
         config = await manager.read_current_canvas()
         target = config.canvas.get_element(placeholder.id)
@@ -2205,7 +2205,7 @@ async def test_video_production_video_tool_connects_first_frame_and_layouts_to_i
                 "position": (target.x, target.y, target.zIndex),
                 "status": target.get_active_content().fields["status"],
                 "connected": any(
-                    connection.source_element_id == first_frame.id
+                    connection.source_element_id == shot_reference_image.id
                     and connection.target_element_id == target.id
                     and connection.locked
                     for connection in config.canvas.connections
@@ -2230,10 +2230,10 @@ async def test_video_production_video_tool_connects_first_frame_and_layouts_to_i
             project_path=project_name,
             tasks=[
                 VideoProductionVideoTask(
-                    prompt="首帧 [image1] 缓慢推进",
+                    prompt="镜头参考图 [image1] 缓慢推进",
                     name="镜头视频",
-                    reference_image_paths=["images/first-frame.png"],
-                    source_element_ids=[first_frame.id],
+                    reference_image_paths=["images/shot-reference.png"],
+                    source_element_ids=[shot_reference_image.id],
                 )
             ],
         ),
@@ -2246,7 +2246,7 @@ async def test_video_production_video_tool_connects_first_frame_and_layouts_to_i
     assert {
         (connection["source_element_id"], connection["target_element_id"])
         for connection in result.data["connections"]
-    } == {(first_frame.id, target_element_id)}
+    } == {(shot_reference_image.id, target_element_id)}
     created_content_id = result.data["created_elements"][0]["content_id"]
     assert f'element_id="{target_element_id}"' in result.content
     assert f'content_id="{created_content_id}"' in result.content
@@ -2257,8 +2257,8 @@ async def test_video_production_video_tool_connects_first_frame_and_layouts_to_i
     target = config.canvas.get_element(target_element_id)
     assert target is not None
     assert target.get_active_content().fields["status"] in {"completed", "processing"}
-    assert target.x > first_frame.x + first_frame.width
-    assert target.y == first_frame.y
+    assert target.x > shot_reference_image.x + shot_reference_image.width
+    assert target.y == shot_reference_image.y
     assert processing_snapshot == {
         "position": (target.x, target.y, target.zIndex),
         "status": "processing",
@@ -2268,12 +2268,14 @@ async def test_video_production_video_tool_connects_first_frame_and_layouts_to_i
         (connection.source_element_id, connection.target_element_id, connection.locked)
         for connection in config.canvas.connections
     } == {
-        (storyboard.id, first_frame.id, True),
-        (first_frame.id, target.id, True),
+        (storyboard.id, shot_reference_image.id, True),
+        (shot_reference_image.id, target.id, True),
     }
     generate_request = target.get_active_content().fields["generateVideoRequest"]
+    assert generate_request["input_mode"] == "omni_reference"
     assert generate_request["inputs"]["reference_images"] == [
         {
-            "uri": f"/{project_name}/images/first-frame.png",
+            "uri": f"/{project_name}/images/shot-reference.png",
         }
     ]
+    assert generate_request["inputs"]["frames"] == []

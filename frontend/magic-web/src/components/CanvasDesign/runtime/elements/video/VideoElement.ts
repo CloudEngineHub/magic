@@ -25,7 +25,7 @@ import {
 } from "../decorators/ElementCornerActionsDecorator"
 import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
-import type { TransformContext } from "../core/BaseElement"
+import type { NameLabelContent, TransformContext } from "../core/BaseElement"
 import {
 	appendReferenceImageInfos,
 	removeReferenceImageInfosByPath,
@@ -33,6 +33,7 @@ import {
 } from "../core/referenceImageInfos"
 import { VideoRenderer } from "./VideoRenderer"
 import { VideoPollingManager } from "../../resources/polling/VideoPollingManager"
+import { resolveMediaComplianceStatus } from "../../resources/asset/assetComplianceState"
 import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
 import {
 	buildFullscreenVideoPlaybackConsumerId,
@@ -1098,7 +1099,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		this.createBorder(group, width, height, false)
 		this.createCornerActions(group, width, height, { fullscreen: true })
-		this.createMainVersionTag(group, width, height)
+		this.createMediaStatusTags(group, width, height)
 		this.setupContentUpdateListener(group)
 	}
 
@@ -1157,7 +1158,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				}
 
 				this.createCornerActions(group, width, height)
-				this.createMainVersionTag(group, width, height)
+				this.createMediaStatusTags(group, width, height)
 			},
 		})
 		this.setupContentUpdateListener(group)
@@ -1176,6 +1177,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			canvas: this.canvas,
 		})
 		this.borderDecorator.create(backgroundNode)
+	}
+
+	private createMediaStatusTags(group: Konva.Group, width: number, height: number): void {
+		this.createMainVersionTag(group, width, height)
+		// Compliance failures are shown by the name-label shield and its tooltip;
+		// keep the media surface free of the redundant red status card.
 	}
 
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
@@ -1530,23 +1537,32 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		})
 	}
 
-	/** 获取图层与画布名称共用的状态后缀。 */
-	public override getNameLabelText(): string {
+	/** 获取图层与画布名称共用的结构化状态后缀。 */
+	public override getNameLabelContent(): NameLabelContent {
 		const baseName = this.data.name || this.getRenderName()
 		const state = this.getDisplayState()
+		const withSuffix = (text: string): NameLabelContent => ({
+			primaryText: baseName,
+			suffix: { text },
+		})
+
 		switch (state.status) {
 			case "uploading":
-				return `${baseName}${this.getText("video.nameSuffix.uploading", "(上传中)")}`
+				return withSuffix(this.getText("video.nameSuffix.uploading", "(上传中)"))
 			case "generating":
-				return `${baseName}${this.getText("video.nameSuffix.generating", "(生成中)")}`
+				return withSuffix(this.getText("video.nameSuffix.generating", "(生成中)"))
 			case "composing":
-				return `${baseName}${this.getText("video.nameSuffix.composing", "(合并中)")}`
+				return withSuffix(this.getText("video.nameSuffix.composing", "(合并中)"))
 			case "failed":
 				return state.failureSource === "resource"
-					? baseName
-					: `${baseName}${this.getText("video.nameSuffix.failed", "(失败)")}`
+					? { primaryText: baseName }
+					: withSuffix(this.getText("video.nameSuffix.failed", "(失败)"))
 			default:
-				return baseName
+				return this.canvas.isSeedanceComplianceEnabled() &&
+					resolveMediaComplianceStatus(this.canvas, this.getVideoContent()) ===
+						"PROCESSING"
+					? withSuffix(this.getText("video.nameSuffix.complianceProcessing", "(校验中)"))
+					: { primaryText: baseName }
 		}
 	}
 

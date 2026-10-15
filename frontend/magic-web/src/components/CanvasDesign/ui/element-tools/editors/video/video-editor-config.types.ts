@@ -270,6 +270,8 @@ export interface VideoEditorConfig {
 				retainResourceSlot?: boolean
 				mentionPlacement?: "cursor" | "documentEnd"
 				suppressPromptMention?: boolean
+				/** 用户显式选择已有资源时，确保编辑器追加一次对应的 @mention。 */
+				ensurePromptMention?: boolean
 			},
 		) => void
 		replaceSelectedResource: (

@@ -496,6 +496,15 @@ export class ConnectionManager {
 			this.hitTester.invalidateElements([event.data.elementId])
 			this.rerenderNow()
 		}
+		const rerenderAfterBatchElementUpdate = (event: { data?: { elementIds?: string[] } }) => {
+			// ElementManager coalesces a batch into one event. Invalidate only the
+			// affected endpoint geometry when the producer provides IDs; older callers
+			// may still emit undefined, which conservatively keeps the old full flush.
+			const elementIds = event.data?.elementIds ?? []
+			if (elementIds.length > 0) this.hitTester.invalidateElements(elementIds)
+			else this.hitTester.invalidateAll()
+			this.rerenderNow()
+		}
 		const clearHoverAndRerender = () => {
 			this.renderer.clearHover()
 			this.rerenderNow()
@@ -548,6 +557,7 @@ export class ConnectionManager {
 			),
 			this.canvas.eventEmitter.on("element:updated", rerenderAfterElementGeometryChange),
 			this.canvas.eventEmitter.on("element:rerendered", rerenderAfterElementGeometryChange),
+			this.canvas.eventEmitter.on("element:batchupdated", rerenderAfterBatchElementUpdate),
 			this.canvas.eventEmitter.on("elements:transform:dragmove", scheduleTransformRerender),
 			this.canvas.eventEmitter.on(
 				"elements:transform:anchorDragmove",

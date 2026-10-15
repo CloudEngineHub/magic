@@ -332,7 +332,7 @@ function decodeOptimizedPromptPlaceholders(
 		const references =
 			placeholderPaths?.[kind]
 				?.map((path) => {
-					const previewItem = buildPreviewMediaResourceItem(path)
+					const previewItem = buildPreviewMediaResourceItem(path, kind)
 					return previewItem
 						? {
 								path,

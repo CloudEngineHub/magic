@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
 				nameLabelManager: {
 					getCachedImageNameLabelLayout: ReturnType<typeof vi.fn>
 					getImageNameLabelLayout: ReturnType<typeof vi.fn>
+					subscribeIconRefresh?: (
+						listener: (elementIds?: readonly string[]) => void,
+					) => () => void
+					setRenameButtonElementId: ReturnType<typeof vi.fn>
 					setDOMLabelElementId: ReturnType<typeof vi.fn>
 				}
 				selectionManager: { getSelectedIds: ReturnType<typeof vi.fn> }
@@ -18,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 		| undefined,
 	containerRef: { current: null as HTMLDivElement | null },
 	handlers: {} as Record<string, (...events: Array<{ data: unknown } | undefined>) => void>,
+	iconRefreshListener: undefined as ((elementIds?: readonly string[]) => void) | undefined,
 }))
 
 vi.mock("../../../../app/providers/CanvasProvider", () => ({
@@ -26,7 +31,13 @@ vi.mock("../../../../app/providers/CanvasProvider", () => ({
 
 vi.mock("../../../../app/providers/I18nProvider", () => ({
 	useCanvasDesignI18n: () => ({
-		t: (_key: string, fallback?: string) => fallback ?? _key,
+		t: (_key: string, options?: string | Record<string, unknown>) => {
+			if (typeof options === "string") return options
+			if (options && typeof options.defaultValue === "string") {
+				return options.defaultValue.replace("{{reason}}", String(options.reason ?? ""))
+			}
+			return _key
+		},
 	}),
 }))
 
@@ -102,6 +113,7 @@ describe("NameLabelRenameButton motion layout", () => {
 					x: 10,
 					y: 20,
 					width: 80,
+					rowWidth: 80,
 					height: 12,
 					text: "Image name",
 					fontSize: 12,
@@ -109,11 +121,14 @@ describe("NameLabelRenameButton motion layout", () => {
 					color: "#737373",
 					canRename: true,
 					showRenameButton: true,
+					renameButtonGap: 4,
+					hitPadding: 2,
 				})),
 				getCachedImageNameLabelLayout: vi.fn(() => ({
 					x: 42,
 					y: 28,
 					width: 64,
+					rowWidth: 64,
 					height: 12,
 					text: "Image name",
 					fontSize: 12,
@@ -121,7 +136,16 @@ describe("NameLabelRenameButton motion layout", () => {
 					color: "#737373",
 					canRename: true,
 					showRenameButton: false,
+					renameButtonGap: 0,
+					hitPadding: 2,
 				})),
+				subscribeIconRefresh: vi.fn(
+					(listener: (elementIds?: readonly string[]) => void) => {
+						mocks.iconRefreshListener = listener
+						return vi.fn()
+					},
+				),
+				setRenameButtonElementId: vi.fn(),
 				setDOMLabelElementId: vi.fn(),
 			},
 			selectionManager: { getSelectedIds: vi.fn(() => ["image-1"]) },
@@ -141,7 +165,7 @@ describe("NameLabelRenameButton motion layout", () => {
 		const label = screen.getByText("Image name")
 		const root = label.closest<HTMLElement>("[data-canvas-ui-component]")
 		expect(root).not.toBeNull()
-		expect(root).toHaveStyle({ transform: "translate(10px, 14px)" })
+		expect(root).toHaveStyle({ transform: "translate(8px, 18px)" })
 		const fullLayoutCalls =
 			mocks.canvas?.nameLabelManager.getImageNameLabelLayout.mock.calls.length
 
@@ -160,8 +184,8 @@ describe("NameLabelRenameButton motion layout", () => {
 		expect(mocks.canvas?.nameLabelManager.getCachedImageNameLabelLayout).toHaveBeenCalledWith(
 			"image-1",
 		)
-		expect(root).toHaveStyle({ transform: "translate(42px, 22px)" })
-		expect(screen.getByRole("button", { hidden: true })).toHaveAttribute("hidden")
+		expect(root).toHaveStyle({ height: "16px", transform: "translate(40px, 26px)" })
+		expect(screen.getByRole("button", { hidden: true })).toHaveStyle({ display: "none" })
 	})
 
 	it("ignores updates for elements outside the active label", () => {
@@ -224,7 +248,7 @@ describe("NameLabelRenameButton motion layout", () => {
 			mocks.handlers["viewport:pan"]?.({ data: { x: 32, y: 8 } })
 			animationFrame.flush()
 		})
-		expect(root).toHaveAttribute("hidden")
+		expect(root).toHaveStyle({ display: "none" })
 
 		act(() => {
 			mocks.handlers["viewport:changed"]?.({
@@ -237,7 +261,83 @@ describe("NameLabelRenameButton motion layout", () => {
 			})
 		})
 
-		expect(root).not.toHaveAttribute("hidden")
-		expect(root).toHaveStyle({ transform: "translate(10px, 14px)" })
+		expect(root).toHaveStyle({ display: "flex", transform: "translate(8px, 18px)" })
+	})
+
+	it("renders a hoverable hit area for the failed-compliance icon", () => {
+		mocks.canvas?.nameLabelManager.getImageNameLabelLayout.mockReturnValueOnce({
+			x: 10,
+			y: 20,
+			width: 80,
+			height: 12,
+			text: "Image name",
+			fontSize: 12,
+			fontFamily: "Arial",
+			color: "#737373",
+			canRename: true,
+			showRenameButton: false,
+			renameButtonGap: 0,
+			hitPadding: 2,
+			complianceIcon: {
+				x: 0,
+				y: 20,
+				width: 16,
+				height: 16,
+				failedReason: "素材审核未通过",
+			},
+		})
+
+		render(<NameLabelRenameButton />)
+
+		const icon = screen.getByRole("img")
+		expect(icon).toHaveAttribute("aria-label", "合规校验未通过：素材审核未通过")
+		expect(icon).toHaveClass("cursor-pointer")
+		expect(icon).toHaveStyle({ left: "0px", top: "0px", width: "16px", height: "16px" })
+		const root = icon.closest<HTMLElement>("[data-canvas-ui-component]")
+		expect(root).toHaveStyle({ transform: "translate(-2px, 18px)" })
+	})
+
+	it("refreshes the compliance tooltip only for its active element", () => {
+		let failedReason = "旧的审核原因"
+		mocks.canvas?.nameLabelManager.getImageNameLabelLayout.mockImplementation(() => ({
+			x: 10,
+			y: 20,
+			width: 80,
+			height: 12,
+			text: "Image name",
+			fontSize: 12,
+			fontFamily: "Arial",
+			color: "#737373",
+			canRename: true,
+			showRenameButton: false,
+			renameButtonGap: 0,
+			hitPadding: 0,
+			complianceIcon: {
+				x: 0,
+				y: 20,
+				width: 16,
+				height: 16,
+				failedReason,
+			},
+		}))
+
+		render(<NameLabelRenameButton />)
+		expect(screen.getByRole("img")).toHaveAttribute(
+			"aria-label",
+			"合规校验未通过：旧的审核原因",
+		)
+
+		failedReason = "新的审核原因"
+		act(() => mocks.iconRefreshListener?.(["other-image"]))
+		expect(screen.getByRole("img")).toHaveAttribute(
+			"aria-label",
+			"合规校验未通过：旧的审核原因",
+		)
+
+		act(() => mocks.iconRefreshListener?.(["image-1"]))
+		expect(screen.getByRole("img")).toHaveAttribute(
+			"aria-label",
+			"合规校验未通过：新的审核原因",
+		)
 	})
 })

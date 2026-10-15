@@ -7,6 +7,7 @@ import type {
 	GenerateVideoRequest,
 	VideoGenerationResultMeta,
 	GenerationStatus,
+	CanvasAssetComplianceStatus,
 	StoredVideoEditorDraft,
 } from "../../public/magic-types"
 import type { TFunction } from "../../public/i18n-types"
@@ -353,6 +354,14 @@ export interface ImageElementContent extends ElementContentBase {
 	visualUnderstanding?: unknown
 	/** 图片源(用来换取 ossSrc 的临时 path) */
 	src?: string
+	/** 当前图片 Content 绑定的素材库资产 ID；不替代 src。 */
+	assetId?: string
+	/** 未绑定素材时，元素自己记录的合规状态。已绑定 assetId 后以素材服务为准。 */
+	complianceStatus?: CanvasAssetComplianceStatus
+	/** 未绑定素材时的合规失败原因。 */
+	complianceFailedReason?: string | null
+	/** 旧版 workspace 合规流程的检查字段；新流程创建素材后统一写入 assetId。 */
+	complianceCheckId?: string
 	/** 状态 */
 	status?: GenerationStatus
 	/** 错误信息 */
@@ -374,6 +383,14 @@ export interface VideoElementContent extends ElementContentBase {
 	visualUnderstanding?: unknown
 	/** 视频源(用来换取 ossSrc 的临时 path) */
 	src?: string
+	/** 当前视频 Content 绑定的素材库资产 ID；不替代 src。 */
+	assetId?: string
+	/** 未绑定素材时，元素自己记录的合规状态。已绑定 assetId 后以素材服务为准。 */
+	complianceStatus?: CanvasAssetComplianceStatus
+	/** 未绑定素材时的合规失败原因。 */
+	complianceFailedReason?: string | null
+	/** 旧版 workspace 合规流程的检查字段；新流程创建素材后统一写入 assetId。 */
+	complianceCheckId?: string
 	/** 视频状态 */
 	status?: GenerationStatus
 	/** 错误信息 */
@@ -396,6 +413,8 @@ export interface VideoElement extends ContentElementProps<VideoElementContent> {
 export interface AudioElementContent extends ElementContentBase {
 	/** 音频源（用来换取可播放 URL 的临时 path） */
 	src?: string
+	/** 当前音频 Content 绑定的素材库资产 ID；不替代 src。 */
+	assetId?: string
 }
 
 /** 音频元素（仅支持上传资源，不持久化播放或上传状态） */

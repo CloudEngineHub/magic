@@ -1,5 +1,6 @@
 import Konva from "konva"
 import { ElementTypeEnum } from "../../document/types"
+import { getActiveContent } from "../../document/elementContent"
 import { BaseLabelManager, type BaseLabelManagerConfig, type LabelSize } from "./BaseLabelManager"
 import {
 	NAME_LABEL_GROUP_PREFIX,
@@ -12,6 +13,12 @@ import type { Canvas } from "../../core/Canvas"
 import type { CanvasEventMap } from "../../core/EventEmitter"
 import type { NameLabelContent } from "../../elements/core/BaseElement"
 import type { NameLabelIconContext, NameLabelIconResolver } from "./nameLabelTypes"
+import {
+	getMediaAssetId,
+	resolveMediaComplianceFailedReason,
+	resolveMediaComplianceStatus,
+	type MediaComplianceContentLike,
+} from "../../resources/asset/assetComplianceState"
 import type { MediaLabelLayout } from "./mediaLabelLayout"
 
 /**
@@ -34,12 +41,12 @@ const NAME_LABEL_CONFIG = {
 	ICON_GAP: 2,
 	/** 文本宽度变化达到该粒度时才重新布局，避免缩放每帧触发文本重排 */
 	TEXT_WIDTH_BUCKET: 2,
-	/** 名称与右侧尺寸标签之间的最小间距（标签局部坐标） */
+	/** 名称标签与右侧尺寸标签之间的最小间距（标签局部坐标） */
 	LABEL_GAP: 4,
 	/** 让 size label 在边界附近保持稳定，避免缩放时反复切换可见性 */
 	SIZE_LABEL_PRIORITY_EPSILON: 2,
-	/** 状态标签与主名称分开显示，保留可辨识的间隙 */
-	SUFFIX_GAP: 6,
+	/** 状态后缀紧跟主名称，保持与原有拼接文案一致 */
+	SUFFIX_GAP: 0,
 	STATUS_FONT_RATIO: 5 / 6,
 	STATUS_PADDING_X: 4,
 	STATUS_PADDING_Y: 2,
@@ -58,6 +65,8 @@ interface NameLabelLayoutState {
 	textOffsetX: number
 	naturalTextWidth: number
 	textWidth: number
+	complianceFailed: boolean
+	complianceFailedReason: string | null
 	suffixText: string
 	suffixNaturalTextWidth: number
 	suffixHeight: number
@@ -83,7 +92,17 @@ export interface ImageNameLabelLayout extends NameLabelScreenLayout {
 	showRenameButton: boolean
 	renameButtonGap: number
 	hitPadding: number
+	/** Screen-space hit region for a failed-compliance icon, when one is visible. */
+	complianceIcon?: {
+		x: number
+		y: number
+		width: number
+		height: number
+		failedReason: string
+	}
 }
+
+export type NameLabelIconRefreshListener = (elementIds?: readonly string[]) => void
 
 /**
  * 名称标签管理器
@@ -100,6 +119,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private pointerHoverElementId: string | null = null
 	private iconHoverElementId: string | null = null
 	private readonly iconResolver?: NameLabelIconResolver
+	private readonly iconRefreshListeners = new Set<NameLabelIconRefreshListener>()
 	private readonly labelLayoutStates = new WeakMap<Konva.Group, NameLabelLayoutState>()
 	private domLabelElementId: string | null = null
 	private renameButtonElementId: string | null = null
@@ -188,6 +208,26 @@ export class NameLabelManager extends BaseLabelManager {
 			labelGroup.x() * viewportScale +
 			this.canvas.stage.position().x +
 			(labelSize?.width ?? 0) * labelGroup.scaleX() * viewportScale
+		const iconNode = this.getIconNode(labelGroup)
+		const iconScaleX = labelGroup.scaleX() * viewportScale
+		const iconScaleY = labelGroup.scaleY() * viewportScale
+		const stagePosition = this.canvas.stage.position()
+		const complianceIcon =
+			state.complianceFailed && state.iconVisible && iconNode?.visible()
+				? {
+						x:
+							labelGroup.x() * viewportScale +
+							stagePosition.x +
+							iconNode.x() * iconScaleX,
+						y:
+							labelGroup.y() * viewportScale +
+							stagePosition.y +
+							iconNode.y() * iconScaleY,
+						width: state.iconWidth * iconScaleX,
+						height: state.iconHeight * iconScaleY,
+						failedReason: state.complianceFailedReason ?? "",
+					}
+				: undefined
 		return {
 			...layout,
 			rowWidth: Math.max(layout.width, labelScreenRight - layout.x),
@@ -199,6 +239,7 @@ export class NameLabelManager extends BaseLabelManager {
 					? NAME_LABEL_CONFIG.ICON_GAP * labelGroup.scaleX() * viewportScale
 					: 0),
 			hitPadding: NAME_LABEL_CONFIG.HIT_PADDING * labelGroup.scaleX() * viewportScale,
+			...(complianceIcon ? { complianceIcon } : {}),
 		}
 	}
 
@@ -337,7 +378,10 @@ export class NameLabelManager extends BaseLabelManager {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) return { primaryText: "" }
 
-		return element.getNameLabelContent()
+		// The fallback keeps lightweight test doubles and older integrations
+		// compatible while real elements use the structured runtime content.
+		const content = element.getNameLabelContent?.()
+		return content ?? { primaryText: element.getNameLabelText?.() || "" }
 	}
 
 	protected override createOrUpdateLabel(
@@ -375,10 +419,10 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	protected override getLabelOperationScreenWidth(elementId: string): number {
-		return this.renameButtonElementId === elementId &&
-			this.canvas.elementManager.getElementData(elementId)?.type === ElementTypeEnum.Image &&
+		return this.canvas.elementManager.getElementData(elementId)?.type ===
+			ElementTypeEnum.Image &&
 			(this.canvas.elementRenameManager?.canRename(elementId) ?? false)
-			? NAME_LABEL_CONFIG.FONT_SIZE + NAME_LABEL_CONFIG.ICON_GAP
+			? 24
 			: 0
 	}
 
@@ -417,6 +461,8 @@ export class NameLabelManager extends BaseLabelManager {
 			textOffsetX: 0,
 			naturalTextWidth: 0,
 			textWidth: NAME_LABEL_CONFIG.MIN_TEXT_WIDTH,
+			complianceFailed: false,
+			complianceFailedReason: null,
 			suffixText: "",
 			suffixNaturalTextWidth: 0,
 			suffixHeight: 0,
@@ -522,16 +568,16 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	/**
-	 * 内容在元素状态变化时同步；移动和缩放只复用缓存节点与宽度。
+	 * Content is synchronized at event boundaries in createOrUpdateLabel and
+	 * refreshIcons. Geometry-only updates reuse the cached nodes and widths.
 	 */
 	protected override updateLabelContent(): boolean {
 		return false
 	}
 
 	/**
-	 * 名称与尺寸共用一行时优先保证完整名称；只有两者都能容纳时才显示尺寸。
-	 * 名称只收窄渲染宽度并启用省略号，文本本身不改写，重命名仍能读取完整名称。
-	 * 状态独立显示时仍计入名称预算，只省略主名称。
+	 * 名称与尺寸共用一行时优先保证名称（含状态后缀）；只有完整名称和尺寸都能容纳时
+	 * 才显示尺寸。这里只收窄主名称的渲染宽度，重命名仍读取完整名称。
 	 */
 	protected override updateLabelLayout(
 		elementId: string,
@@ -663,7 +709,7 @@ export class NameLabelManager extends BaseLabelManager {
 		if (suffixNode) {
 			// 胶囊整体与标题居中，内部文字独立居中；字号较小也不会沿标题底部排列。
 			const suffixY = (labelHeight - state.suffixHeight) / 2
-			const suffixTextX = suffixOffsetX + NAME_LABEL_CONFIG.STATUS_PADDING_X
+			const suffixTextX = suffixOffsetX
 			const suffixTextY = suffixY + NAME_LABEL_CONFIG.STATUS_PADDING_Y
 			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
 			if (
@@ -676,7 +722,7 @@ export class NameLabelManager extends BaseLabelManager {
 			) {
 				suffixNode.position({ x: suffixTextX, y: suffixTextY })
 				background?.setAttrs({
-					x: suffixOffsetX,
+					x: suffixOffsetX - NAME_LABEL_CONFIG.STATUS_PADDING_X,
 					y: suffixY,
 					width: state.suffixNaturalTextWidth,
 					height: state.suffixHeight,
@@ -718,7 +764,7 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 	}
 
-	/** 名称预算包含独立状态标签，避免分辨率挤占名称与状态的显示空间。 */
+	/** Media row budgeting includes the mandatory status suffix in the full name width. */
 	protected override getIntrinsicLabelSize(elementId: string): LabelSize {
 		const primarySize = super.getIntrinsicLabelSize(elementId)
 		const labelGroup = this.labelMap.get(elementId)
@@ -767,7 +813,11 @@ export class NameLabelManager extends BaseLabelManager {
 
 	/**
 	 * Reports whether the size label should yield space to this name label.
-	 * Independent eligibility lets a suppressed size label recover after resize.
+	 *
+	 * The decision deliberately uses the size label's independent eligibility
+	 * rather than its current `visible` flag. A size label hidden by this rule
+	 * must still be considered when the element grows again, otherwise it could
+	 * never recover without an unrelated visibility event.
 	 */
 	public shouldSuppressSizeLabel(elementId: string): boolean {
 		return this.getSizeLabelPriorityDecision(elementId).suppressed
@@ -781,6 +831,8 @@ export class NameLabelManager extends BaseLabelManager {
 		const state = labelGroup ? this.labelLayoutStates.get(labelGroup) : undefined
 		const sizeLabelManager = this.canvas.sizeLabelManager
 		const element = this.canvas.elementManager.getElementInstance(elementId)
+		// Keep lightweight integrations and test doubles compatible while the
+		// runtime uses the independent eligibility query above the fallback.
 		const sizeLabelIsEligible = sizeLabelManager
 			? (sizeLabelManager.isLabelEligibleForNamePriority?.(elementId) ??
 				sizeLabelManager.isLabelVisibleForElement?.(elementId) ??
@@ -845,13 +897,23 @@ export class NameLabelManager extends BaseLabelManager {
 	private getIconContext(elementId: string): NameLabelIconContext | null {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) return null
+		const data = element.getData()
+		const content = "contents" in data ? getActiveContent(data) : undefined
+		const complianceContent = content as MediaComplianceContentLike | undefined
+		const complianceStatus = resolveMediaComplianceStatus(this.canvas, complianceContent)
 
 		return {
 			elementId,
 			element,
-			data: element.getData(),
+			data,
 			selected: this.canvas.selectionManager.isSelected(elementId),
 			hovered: this.canvas.hoverManager.getHoveredElementId() === elementId,
+			isAssetLibrary: Boolean(getMediaAssetId(complianceContent)),
+			complianceStatus,
+			complianceFailedReason:
+				complianceStatus === "FAILED"
+					? resolveMediaComplianceFailedReason(this.canvas, complianceContent)
+					: undefined,
 		}
 	}
 
@@ -865,6 +927,18 @@ export class NameLabelManager extends BaseLabelManager {
 		const descriptor = context ? this.iconResolver(context) : null
 		const currentNode = this.getIconNode(labelGroup)
 		let changed = false
+		const complianceFailed = context?.complianceStatus === "FAILED"
+		const complianceFailedReason = complianceFailed
+			? (context?.complianceFailedReason ?? null)
+			: null
+		if (state.complianceFailed !== complianceFailed) {
+			state.complianceFailed = complianceFailed
+			changed = true
+		}
+		if (state.complianceFailedReason !== complianceFailedReason) {
+			state.complianceFailedReason = complianceFailedReason
+			changed = true
+		}
 
 		if (!descriptor) {
 			if (currentNode) {
@@ -938,7 +1012,7 @@ export class NameLabelManager extends BaseLabelManager {
 		return Number.isFinite(value) ? Math.max(0, value) : 0
 	}
 
-	/** Refresh cached icon state for selected/hovered/data-changed labels. */
+	/** Refreshes cached icon and runtime text state for discrete label changes. */
 	public refreshIcons(elementIds?: readonly string[]): void {
 		const ids = elementIds ? Array.from(new Set(elementIds)) : Array.from(this.labelMap.keys())
 		let requiresDraw = false
@@ -949,7 +1023,8 @@ export class NameLabelManager extends BaseLabelManager {
 			const contentChanged = this.syncLabelContent(elementId, labelGroup)
 			const iconChanged = this.syncIcon(elementId, labelGroup)
 			requiresDraw = contentChanged || iconChanged || requiresDraw
-			// 状态文字变化也需要重新布局，即使图标保持不变。
+			// Compliance text can change while the shield icon keeps the same shape;
+			// only changed content needs a layout pass.
 			if (contentChanged || iconChanged) {
 				requiresDraw = this.updateLabelPosition(elementId, true) || requiresDraw
 			}
@@ -961,6 +1036,19 @@ export class NameLabelManager extends BaseLabelManager {
 				reason: "name-label-icons",
 				priority: "input",
 			})
+
+		// React overlays cannot observe Konva's cached state directly. Notify them after
+		// the cache and geometry are reconciled so a visible compliance tooltip reads the
+		// same failure reason as the shield icon.
+		for (const listener of this.iconRefreshListeners) listener(elementIds)
+	}
+
+	/** Subscribe to discrete icon/compliance refreshes without adding another Canvas event. */
+	public subscribeIconRefresh(listener: NameLabelIconRefreshListener): () => void {
+		this.iconRefreshListeners.add(listener)
+		return () => {
+			this.iconRefreshListeners.delete(listener)
+		}
 	}
 
 	public override refreshAfterLocaleChange(): void {
@@ -983,6 +1071,7 @@ export class NameLabelManager extends BaseLabelManager {
 			unsubscribe()
 		}
 		this.interactionUnsubscribers = []
+		this.iconRefreshListeners.clear()
 		super.destroy()
 	}
 

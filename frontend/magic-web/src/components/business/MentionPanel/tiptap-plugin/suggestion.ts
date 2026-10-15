@@ -41,6 +41,12 @@ export function createMentionPanelSuggestion(
 		catalogBehavior,
 		viewMode,
 		galleryOptions,
+		enableMultiSelect,
+		canToggleMultiSelectItem,
+		multiSelectNavigationPolicy,
+		selectionScopeId,
+		selectionSummary,
+		getSelectionSummary,
 		trailingTextAfterInsert,
 		canSelectItem,
 	} = options
@@ -49,6 +55,10 @@ export function createMentionPanelSuggestion(
 		getInitialLoadOptions ? getInitialLoadOptions() : initialLoadOptions
 	const resolveInitialNavigationStack = () =>
 		getInitialNavigationStack ? getInitialNavigationStack() : initialNavigationStack
+	// Resolve volatile host state when the panel opens/updates; the extension itself
+	// must remain stable because MessageEditor recreates Tiptap when its identity changes.
+	const resolveSelectionSummary = () =>
+		getSelectionSummary ? getSelectionSummary() : selectionSummary
 
 	return {
 		// 触发建议面板的字符
@@ -66,31 +76,19 @@ export function createMentionPanelSuggestion(
 		// 只允许“本次输入 @”触发首次激活，避免光标落在历史 @ 后输入文本时自动弹出
 		allow: ({ editor, range, isActive }) => {
 			const enabled = editor.storage.mention?.enabled ?? true
-			if (!enabled) {
-				return false
-			}
-
 			const lastAtInputPos = editor.storage.mention?.lastAtInputPos ?? -1
+			const lastAtInputAt = editor.storage.mention?.lastAtInputAt ?? 0
+			const isInActivationWindow =
+				Date.now() - lastAtInputAt <= MENTION_INPUT_ACTIVATION_WINDOW_MS
 			// 激活过程中如果 range 漂移到其他 @，也要立即阻断
-			if (isActive) {
-				return range.from === lastAtInputPos
-			}
+			const result =
+				enabled &&
+				(isActive
+					? range.from === lastAtInputPos
+					: isInActivationWindow && range.from === lastAtInputPos)
 
-			if (!isActive) {
-				const lastAtInputAt = editor.storage.mention?.lastAtInputAt ?? 0
-				const isInActivationWindow =
-					Date.now() - lastAtInputAt <= MENTION_INPUT_ACTIVATION_WINDOW_MS
-
-				return isInActivationWindow && range.from === lastAtInputPos
-			}
-
-			return true
+			return result
 		},
-
-		// 开发环境下打开 suggestion debug 日志
-		...(process.env.NODE_ENV === "development" && {
-			debug: true,
-		}),
 
 		// Items function - required by Tiptap suggestion
 		items: () => [],
@@ -261,6 +259,11 @@ export function createMentionPanelSuggestion(
 							catalogBehavior,
 							viewMode,
 							galleryOptions,
+							enableMultiSelect,
+							canToggleMultiSelectItem,
+							multiSelectNavigationPolicy,
+							selectionScopeId,
+							selectionSummary: resolveSelectionSummary(),
 							onSelect: handleSelect,
 							onExit: handleExit,
 							disableKeyboardShortcuts,
@@ -325,6 +328,11 @@ export function createMentionPanelSuggestion(
 							catalogBehavior,
 							viewMode,
 							galleryOptions,
+							enableMultiSelect,
+							canToggleMultiSelectItem,
+							multiSelectNavigationPolicy,
+							selectionScopeId,
+							selectionSummary: resolveSelectionSummary(),
 							onSelect: handleSelect,
 							onExit: handleExit,
 							disableKeyboardShortcuts,

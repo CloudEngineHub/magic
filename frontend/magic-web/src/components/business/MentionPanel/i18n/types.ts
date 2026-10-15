@@ -66,6 +66,13 @@ export interface I18nTexts {
 	mobileSelectedItemsLabel: string
 	/** 已选列表全屏标题 */
 	mobileSelectedItemsTitle: string
+	/** 桌面端路径面包屑右侧的多选数量摘要 */
+	selectionSummary: {
+		selected: string
+		image: string
+		video: string
+		audio: string
+	}
 
 	// Default items
 	defaultItems: {

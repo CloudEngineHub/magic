@@ -16,7 +16,7 @@ export interface ConnectionAssociationSeed {
 	rootElementIds: string[]
 	orderedSources: ConnectionAssociationSource[]
 	originRevision: string
-	createdBy: "connection-menu"
+	createdBy: "connection-menu" | "assets"
 	mediaRole: "reference"
 }
 

@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 import { ElementToolTypeEnum } from "../../../public/props"
 import { resolveCanvasAccessContext } from "../../core/CanvasAccessPolicy"
-import { ElementTypeEnum, type ImageElement, type VideoElement } from "../../document/types"
+import {
+	ElementTypeEnum,
+	type ImageElement,
+	type LayerElement,
+	type VideoElement,
+} from "../../document/types"
 import { createElementToolContext } from "../model/ElementToolContext"
 import { resolveElementTools } from "../resolver/ElementToolResolver"
 
@@ -41,6 +46,25 @@ function resolve(
 		top: resolveElementTools(context, "top"),
 		bottom: resolveElementTools(context, "bottom"),
 	}
+}
+
+function resolveTopForSelection(
+	elements: LayerElement[],
+	parentIds: ReadonlyMap<string, string | null> = new Map(),
+	parents: readonly LayerElement[] = [],
+) {
+	const parentById = new Map(parents.map((parent) => [parent.id, parent]))
+	const context = createElementToolContext({
+		selectedElements: elements,
+		canvas: {
+			elementManager: {
+				findParentIdForElement: (id: string) => parentIds.get(id) ?? undefined,
+				getElementData: (id: string) => parentById.get(id),
+			},
+		} as never,
+	})
+	if (!context) throw new Error("expected a tool context")
+	return resolveElementTools(context, "top")
 }
 
 describe("ElementToolResolver", () => {
@@ -362,6 +386,80 @@ describe("ElementToolResolver", () => {
 			(item) => item.id === ElementToolTypeEnum.ElementResize,
 		)
 		expect(resize?.target).toEqual({ elementId: "frame-1" })
+	})
+
+	it("exposes layout tools for a single Group", () => {
+		const group = {
+			id: "group-1",
+			type: ElementTypeEnum.Group,
+			contents: [{ contentId: "group-content" }],
+			activeContentId: "group-content",
+			mainContentId: "group-content",
+			children: [],
+		} as LayerElement
+
+		const toolIds = resolveTopForSelection([group]).map((tool) => tool.id)
+
+		expect(toolIds).toEqual(
+			expect.arrayContaining([
+				ElementToolTypeEnum.ElementAlign,
+				ElementToolTypeEnum.ElementDistribute,
+			]),
+		)
+	})
+
+	it("exposes layout tools for ordinary nodes with the same parent", () => {
+		const first = createImage({ id: "image-1" })
+		const second = createImage({ id: "image-2" })
+		const parentIds = new Map([
+			[first.id, "frame-1"],
+			[second.id, "frame-1"],
+		])
+
+		const toolIds = resolveTopForSelection([first, second], parentIds).map((tool) => tool.id)
+
+		expect(toolIds).toEqual(
+			expect.arrayContaining([
+				ElementToolTypeEnum.ElementAlign,
+				ElementToolTypeEnum.ElementDistribute,
+			]),
+		)
+		expect(toolIds).not.toContain(ElementToolTypeEnum.FrameCreate)
+	})
+
+	it("hides layout tools for ordinary nodes from different parents", () => {
+		const first = createImage({ id: "image-1" })
+		const second = createImage({ id: "image-2" })
+		const parentIds = new Map([
+			[first.id, "frame-1"],
+			[second.id, "frame-2"],
+		])
+
+		const toolIds = resolveTopForSelection([first, second], parentIds).map((tool) => tool.id)
+
+		expect(toolIds).not.toContain(ElementToolTypeEnum.ElementAlign)
+		expect(toolIds).not.toContain(ElementToolTypeEnum.ElementDistribute)
+	})
+
+	it("hides layout tools when the shared parent is locked", () => {
+		const first = createImage({ id: "image-1" })
+		const second = createImage({ id: "image-2" })
+		const parent = {
+			id: "frame-1",
+			type: ElementTypeEnum.Frame,
+			locked: true,
+		} as LayerElement
+		const parentIds = new Map([
+			[first.id, parent.id],
+			[second.id, parent.id],
+		])
+
+		const toolIds = resolveTopForSelection([first, second], parentIds, [parent]).map(
+			(tool) => tool.id,
+		)
+
+		expect(toolIds).not.toContain(ElementToolTypeEnum.ElementAlign)
+		expect(toolIds).not.toContain(ElementToolTypeEnum.ElementDistribute)
 	})
 
 	it("does not expose unsafe tools while the element is being replaced", () => {

@@ -752,6 +752,7 @@ const FilesViewer = memo(
 								getFileManagerState={getFileManagerState}
 								onFileManagerStateChange={updateFileManagerState}
 								managerProps={{
+									projectFilesStore: props.projectFilesStore,
 									attachments: (props.attachments ?? []) as AttachmentItem[],
 									selectedProject: props.selectedProject,
 									selectedTopic: props.selectedTopic,

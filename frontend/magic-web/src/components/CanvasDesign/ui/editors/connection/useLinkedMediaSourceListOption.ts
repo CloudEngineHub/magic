@@ -46,6 +46,7 @@ export function useLinkedMediaSourceListOption() {
 				groupId: item.kind,
 				resourcePath: item.path,
 				resourceFileName: item.fileName,
+				resourceMediaType: item.kind,
 				sourceCrop: item.sourceCrop,
 				readOnly: true,
 				isLinked: true,

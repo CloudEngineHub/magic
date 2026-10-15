@@ -191,15 +191,19 @@ export abstract class BaseElement<T extends LayerElement = LayerElement> {
 	public abstract getRenderName(): string
 
 	/**
-	 * 获取名称标签文本（子类可重写以添加状态后缀）
-	 * 优先使用 data.name（用户自定义名称），如果没有则使用 getRenderName()
+	 * 获取名称标签的结构化内容（子类可重写以添加运行时状态后缀）。
+	 * 后缀只用于渲染和其他展示入口，不会写入 DSL 的 data.name。
 	 */
-	public getNameLabelText(): string {
-		return this.data.name || this.getRenderName()
+	public getNameLabelContent(): NameLabelContent {
+		return { primaryText: this.data.name || this.getRenderName() }
 	}
 
-	public getNameLabelContent(): NameLabelContent {
-		return { primaryText: this.getNameLabelText() }
+	/**
+	 * 获取扁平化名称文本，兼容图层树、全屏入口等不需要独立布局后缀的调用方。
+	 */
+	public getNameLabelText(): string {
+		const content = this.getNameLabelContent()
+		return `${content.primaryText}${content.suffix?.text ?? ""}`
 	}
 
 	/**

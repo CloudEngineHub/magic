@@ -11,10 +11,12 @@ import { cn } from "@/utils/cn"
 import { observer } from "mobx-react-lite"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import type { MagicWidget } from "@magic-web/widget-sdk"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 // Define the Detail component props interface
 interface DetailProps {
 	fileHelpContext?: FileHelpContext
+	projectFilesStore?: ProjectFilesStore
 	attachmentLoadState?: AttachmentLoadState
 	disPlayDetail: any
 	setUserSelectDetail?: (detail: any) => void
@@ -234,6 +236,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 			)}
 		>
 			<FilesViewer
+				projectFilesStore={props.projectFilesStore}
 				fileHelpContext={props.fileHelpContext}
 				attachmentLoadState={props.attachmentLoadState}
 				ref={filesViewerRef}

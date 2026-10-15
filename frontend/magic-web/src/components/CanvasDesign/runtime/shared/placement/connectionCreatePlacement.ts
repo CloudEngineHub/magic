@@ -67,7 +67,7 @@ export function resolveConnectionCreateCenterPoint(
 	gap: number,
 ): { x: number; y: number } {
 	const anchor = resolveConnectionCreateAnchorPoint(context, gap)
-	const direction = context.source === "drag-empty" && context.originSide === "left" ? -1 : 1
+	const direction = context.originSide === "left" ? -1 : 1
 	return {
 		x: anchor.x + (size.width / 2) * direction,
 		y: anchor.y,
@@ -81,10 +81,7 @@ export function resolveConnectionCreateTopLeftPoint(
 ): { x: number; y: number } {
 	const anchor = resolveConnectionCreateAnchorPoint(context, gap)
 	return {
-		x:
-			context.source === "drag-empty" && context.originSide === "left"
-				? anchor.x - size.width
-				: anchor.x,
+		x: context.originSide === "left" ? anchor.x - size.width : anchor.x,
 		y: anchor.y - size.height / 2,
 	}
 }

@@ -63,16 +63,30 @@ import { useNetwork } from "ahooks"
 import { AlertTriangle, CloudOff } from "lucide-react"
 import { CanvasUpgradeOverlay } from "./components/CanvasUpgradeBanner"
 import { toast } from "sonner"
+import { AssetsApi, buildAssetVisibility } from "@/apis"
+import { assetLibrarySessionStore } from "@/components/CanvasDesign/runtime/resources/asset/AssetLibrarySessionStore"
+import { AssetAgreementModal } from "@/pages/superMagic/components/AssetAgreementModal"
 import { applyCanvasDocumentPatch } from "@/components/CanvasDesign/runtime/document"
 import { prewarmCanvasDesignImageWorker } from "@/components/CanvasDesign/prewarm"
 import { designBuiltinPlugins } from "./plugins/options"
-import { UploadSubDir } from "@/components/CanvasDesign/public/magic-types"
+import {
+	UploadSubDir,
+	type CanvasAssetResourceInfo,
+	type CanvasLocalAssetUploadMode,
+	type CanvasEditAssetTarget,
+	type CanvasOpenSaveAssetDialogParams,
+} from "@/components/CanvasDesign/public/magic-types"
 import type { DesignDraftReason } from "./utils/designDraftStorage"
 import type { DesignSaveMetadata } from "./managers"
 import { canUseDesignPlugins } from "./utils/pluginAccess"
 import { userStore } from "@/models/user"
 import { getHydratedElementDetailsProvenance } from "./utils/elementDetailsIo"
 import { useCanvasSelectionMentionPublisher } from "./hooks/useCanvasSelectionMentionPublisher"
+import SaveAssetToLibraryDialog from "./components/SaveAssetToLibraryDialog"
+import {
+	bindMediaContentToAsset,
+	type ImageContentAssetBindingParams,
+} from "@/components/CanvasDesign/runtime/resources/asset/imageContentAssetBinding"
 import { useTerminateGeneratingImages } from "./hooks/useTerminateGeneratingImages"
 
 prewarmCanvasDesignImageWorker("super-magic-design-module")
@@ -811,6 +825,67 @@ function DesignViewer(props: DesignViewerProps) {
 	const [markersForCanvas, setMarkersForCanvas] = useState(() => {
 		return markerManager.getMarkers(designProjectId ?? "")
 	})
+	type SaveAssetDialogSession =
+		| { kind: "workspace"; params: CanvasOpenSaveAssetDialogParams }
+		| {
+				kind: "local-file"
+				file: File
+				mode: CanvasLocalAssetUploadMode
+				onSaved: (asset: CanvasAssetResourceInfo) => void
+				onClosed: () => void
+		  }
+		| {
+				kind: "edit"
+				asset: CanvasEditAssetTarget
+				onUpdated: () => void
+				onClosed: () => void
+		  }
+	const [saveAssetDialogSession, setSaveAssetDialogSession] =
+		useState<SaveAssetDialogSession | null>(null)
+	const saveAssetDialogSessionRef = useRef<SaveAssetDialogSession | null>(null)
+	saveAssetDialogSessionRef.current = saveAssetDialogSession
+	const [assetAgreementVisible, setAssetAgreementVisible] = useState(false)
+	const assetAgreementResolverRef = useRef<((signed: boolean) => void) | null>(null)
+	const assetAgreementSignedActionRef = useRef<(() => void) | null>(null)
+	const openSaveAssetToLibraryDialog = useCallback(
+		(params: CanvasOpenSaveAssetDialogParams) =>
+			setSaveAssetDialogSession({ kind: "workspace", params }),
+		[],
+	)
+	const openEditAssetDialog = useCallback(
+		(params: { asset: CanvasEditAssetTarget; onUpdated: () => void; onClosed: () => void }) =>
+			setSaveAssetDialogSession({ kind: "edit", ...params }),
+		[],
+	)
+	const openSaveLocalAssetDialog = useCallback(
+		(params: {
+			file: File
+			mode: CanvasLocalAssetUploadMode
+			onSaved: (asset: CanvasAssetResourceInfo) => void
+			onClosed: () => void
+		}) => setSaveAssetDialogSession({ kind: "local-file", ...params }),
+		[],
+	)
+	const closeSaveAssetDialog = useCallback(() => {
+		const current = saveAssetDialogSessionRef.current
+		if (current?.kind === "local-file" || current?.kind === "edit") current.onClosed()
+		setSaveAssetDialogSession(null)
+	}, [])
+	const ensureAssetAgreementSigned = useCallback(async (options?: { onSigned?: () => void }) => {
+		const signed = await assetLibrarySessionStore.getAssetAgreementSigned()
+		if (signed) return true
+		assetAgreementSignedActionRef.current = options?.onSigned ?? null
+		return await new Promise<boolean>((resolve) => {
+			assetAgreementResolverRef.current = resolve
+			setAssetAgreementVisible(true)
+		})
+	}, [])
+	const settleAssetAgreement = useCallback((signed: boolean) => {
+		const resolve = assetAgreementResolverRef.current
+		assetAgreementResolverRef.current = null
+		setAssetAgreementVisible(false)
+		resolve?.(signed)
+	}, [])
 
 	// 使用 hook 获取 methods 方法集合
 	const baseMethods = useDesignMethods({
@@ -827,7 +902,26 @@ function DesignViewer(props: DesignViewerProps) {
 		onExitFullscreen: handleExitFullscreen,
 		updateAttachments,
 		downloadPolicy,
+		openSaveAssetToLibraryDialog,
+		openSaveLocalAssetDialog,
+		openEditAssetDialog,
+		ensureAssetAgreementSigned,
 	})
+	const getBaseFileInfo = baseMethods.getFileInfo
+
+	const getSaveAssetPreviewUrl = useCallback(
+		async (path: string) => {
+			const isVideo = /\.(mp4|mov|webm)(?:$|[?#])/i.test(path)
+			const fileInfo = await getBaseFileInfo(path, { useImageProcess: !isVideo })
+			return fileInfo?.src
+		},
+		[getBaseFileInfo],
+	)
+	const bindSavedAssetToImageContent = useCallback((params: ImageContentAssetBindingParams) => {
+		const canvas = canvasDesignRef.current?.getCanvasInstance()
+		if (!canvas) return "target-missing" as const
+		return bindMediaContentToAsset(canvas, params)
+	}, [])
 
 	// 注入 Manager 依赖（getCanvasElements、methods、pubsub 等）
 	useEffect(() => {
@@ -842,6 +936,7 @@ function DesignViewer(props: DesignViewerProps) {
 				)
 			},
 			getFileInfo: baseMethods.getFileInfo,
+			getAssetResourceInfo: baseMethods.getAssetResourceInfo,
 			uploadPrivateFiles: baseMethods.uploadPrivateFiles,
 			identifyImageMark: baseMethods.identifyImageMark,
 			publishToMessageEditor: (event, payload) => pubsub.publish(event, payload),
@@ -855,6 +950,7 @@ function DesignViewer(props: DesignViewerProps) {
 		designProjectId,
 		designData.canvas?.elements,
 		baseMethods.getFileInfo,
+		baseMethods.getAssetResourceInfo,
 		baseMethods.uploadPrivateFiles,
 		baseMethods.identifyImageMark,
 		projectId,
@@ -1901,6 +1997,70 @@ function DesignViewer(props: DesignViewerProps) {
 			</div>
 			{/* 与项目文件列表复用同一套 AI 图片无水印协议。 */}
 			{downloadPolicy.agreementModal}
+			{methods.saveAssetToLibrary ? (
+				<SaveAssetToLibraryDialog
+					open={Boolean(saveAssetDialogSession)}
+					source={
+						saveAssetDialogSession?.kind === "workspace"
+							? saveAssetDialogSession.params
+							: saveAssetDialogSession?.kind === "local-file"
+								? saveAssetDialogSession
+								: saveAssetDialogSession?.kind === "edit"
+									? saveAssetDialogSession.asset
+									: null
+					}
+					onClose={closeSaveAssetDialog}
+					getPreviewUrl={getSaveAssetPreviewUrl}
+					onSave={methods.saveAssetToLibrary}
+					onUpdateAsset={async (assetId, params) => {
+						await AssetsApi.updateAsset(assetId, {
+							name: params.name,
+							description: params.description,
+							visibility:
+								params.userIds !== undefined || params.departmentIds !== undefined
+									? buildAssetVisibility(params.userIds, params.departmentIds)
+									: undefined,
+							tag_ids: params.tagIds,
+						})
+						const session = saveAssetDialogSessionRef.current
+						if (session?.kind === "edit") session.onUpdated()
+					}}
+					onSaveLocalFile={async (params) => {
+						if (!methods.saveLocalAssetToLibrary) {
+							throw new Error(t("assetLibrarySave.saveFailed"))
+						}
+						const asset = await methods.saveLocalAssetToLibrary(params)
+						const session = saveAssetDialogSessionRef.current
+						if (session?.kind === "local-file") session.onSaved(asset)
+						return asset
+					}}
+					onBindSavedAsset={bindSavedAssetToImageContent}
+				/>
+			) : null}
+			<AssetAgreementModal
+				visible={assetAgreementVisible}
+				onClose={() => {
+					assetAgreementSignedActionRef.current = null
+					settleAssetAgreement(false)
+				}}
+				onConfirm={async () => {
+					try {
+						await AssetsApi.signAssetAgreement()
+					} catch (error) {
+						toast.error(
+							error instanceof Error
+								? error.message
+								: t("assetLibrarySave.saveFailed"),
+						)
+						throw error
+					}
+					const continueAfterSign = assetAgreementSignedActionRef.current
+					assetAgreementSignedActionRef.current = null
+					assetLibrarySessionStore.markAssetAgreementSigned()
+					settleAssetAgreement(true)
+					continueAfterSign?.()
+				}}
+			/>
 		</>
 	)
 }
