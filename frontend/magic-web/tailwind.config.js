@@ -168,6 +168,10 @@ const config = {
 				8: "0.08",
 			},
 			keyframes: {
+				"sidebar-icon-stroke": {
+					from: { strokeDashoffset: "100" },
+					to: { strokeDashoffset: "0" },
+				},
 				"slide-in-from-left": {
 					from: { transform: "translateX(-100%)", opacity: "0" },
 					to: { transform: "translateX(0)", opacity: "1" },
@@ -272,6 +276,7 @@ const config = {
 				},
 			},
 			animation: {
+				"sidebar-icon-stroke": "sidebar-icon-stroke 1.5s forwards",
 				"slide-in-from-left": "slide-in-from-left 0.3s ease-out",
 				"slide-in-from-right": "slide-in-from-right 0.3s ease-out",
 				"drawer-slide-in-left": "drawer-slide-in-left 0.2s ease-out",
