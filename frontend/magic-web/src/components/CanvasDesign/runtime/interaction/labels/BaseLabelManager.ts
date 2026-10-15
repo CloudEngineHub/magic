@@ -463,6 +463,22 @@ export abstract class BaseLabelManager {
 		return this.updateLabelPosition(elementId, skipBatchDraw)
 	}
 
+	/**
+	 * Recompute a set of mounted labels after one atomic geometry transaction.
+	 * Batch updates do not emit one `element:updated` event per child, so callers
+	 * use this method to keep already-rendered labels attached to their elements
+	 * and schedule a single overlay draw for the whole transaction.
+	 */
+	public refreshLabelLayouts(elementIds: readonly string[]): void {
+		invalidateMediaLabelLayouts(this.canvas)
+		let requiresDraw = false
+		for (const elementId of new Set(elementIds)) {
+			requiresDraw = this.refreshLabelLayout(elementId, true) || requiresDraw
+		}
+		if (requiresDraw) this.requestOverlayDraw("batch-geometry")
+		this.scheduleVisibleLabelSync("element-window", "window")
+	}
+
 	/** 完整文本度量不依赖可见性、节点是否创建或上一次省略宽度。 */
 	protected getIntrinsicLabelSize(elementId: string): LabelSize {
 		const element = this.canvas.elementManager.getElementInstance(elementId)

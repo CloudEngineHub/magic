@@ -1016,6 +1016,36 @@ def test_generate_canvas_videos_request_infers_omni_reference_for_references():
     }
 
 
+def test_generate_canvas_videos_request_infers_keyframe_guided_for_explicit_frames():
+    tool = GenerateCanvasVideos()
+    task = VideoTaskSpec(
+        prompt="从起始画面过渡到结束画面。",
+        name="首尾帧过渡",
+        frame_start_path="shot/images/start.png",
+        frame_end_path="shot/images/end.png",
+    )
+
+    payload = tool._build_design_video_request(
+        task=task,
+        project_id="123",
+        video_id="video-test-keyframes",
+        model_id="mock-video-model",
+        file_dir="/shot/videos/",
+        relative_project_path="shot",
+    )
+
+    assert payload["input_mode"] == "keyframe_guided"
+    assert payload["inputs"] == {
+        "reference_images": [],
+        "reference_videos": [],
+        "reference_audios": [],
+        "frames": [
+            {"role": "start", "uri": "/shot/images/start.png"},
+            {"role": "end", "uri": "/shot/images/end.png"},
+        ],
+    }
+
+
 def test_generate_canvas_videos_preserves_provider_asset_uri():
     """供应商素材 URI 应保持原值，不应被拼接为项目文件路径。"""
     tool = GenerateCanvasVideos()

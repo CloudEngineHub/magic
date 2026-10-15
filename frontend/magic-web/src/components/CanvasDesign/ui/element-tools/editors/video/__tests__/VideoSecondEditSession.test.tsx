@@ -9,7 +9,10 @@ const mocks = vi.hoisted(() => ({
 	commands: {} as Record<string, { execute: (command?: unknown) => void; state?: unknown }>,
 	renderProps: null as null | Record<string, unknown>,
 	isReplacing: false,
-	canvas: null as null | { mediaEditRecoveryManager: MediaEditRecoveryManager },
+	canvas: null as null | {
+		mediaEditRecoveryManager: MediaEditRecoveryManager
+		isSeedanceComplianceEnabled: () => boolean
+	},
 	videoModelList: [{ model_id: "video-model" }] as Array<Record<string, unknown>>,
 	estimateVideoPoints: vi.fn(),
 	getCachedVideoPointsEstimate: vi.fn(() => ({ points: 3190 })),
@@ -110,6 +113,7 @@ describe("VideoSecondEdit session routing", () => {
 		mocks.confirmVideoGeneration.mockClear()
 		mocks.canvas = {
 			mediaEditRecoveryManager: new MediaEditRecoveryManager(),
+			isSeedanceComplianceEnabled: () => false,
 			mediaReplaceController: { isReplacing: () => mocks.isReplacing },
 			canvasFileUploadManager: { shouldDeferRemoteResourceLoad: () => false },
 			videoDraftFinalManager: {

@@ -65,6 +65,34 @@ describe("isValidElementData", () => {
 		expect(isValidElementData(contentElement(ElementTypeEnum.Audio, { src: 123 }))).toBe(false)
 	})
 
+	it("accepts only non-empty string asset IDs on media Contents", () => {
+		expect(
+			isValidElementData(
+				contentElement(ElementTypeEnum.Image, {
+					src: "./images/asset.png",
+					assetId: "960212772906762240",
+				}),
+			),
+		).toBe(true)
+		expect(isValidElementData(contentElement(ElementTypeEnum.Image, { assetId: "" }))).toBe(
+			false,
+		)
+		expect(isValidElementData(contentElement(ElementTypeEnum.Image, { assetId: "   " }))).toBe(
+			false,
+		)
+		expect(
+			isValidElementData(
+				contentElement(ElementTypeEnum.Image, { assetId: 960212772906762240n }),
+			),
+		).toBe(false)
+		expect(
+			isValidElementData(contentElement(ElementTypeEnum.Video, { assetId: "asset-video" })),
+		).toBe(true)
+		expect(
+			isValidElementData(contentElement(ElementTypeEnum.Audio, { assetId: "asset-audio" })),
+		).toBe(true)
+	})
+
 	it("accepts visual understanding only on image and video Contents", () => {
 		expect(
 			isValidElementData(

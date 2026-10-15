@@ -65,6 +65,7 @@ import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareS
 import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
 import { resolveTopicFilesCapabilities, type TopicFilesSpaceConfig } from "./file-space"
 import { SidebarExpandableItem, type SidebarSectionOptions } from "../SidebarSection"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 interface TopicFilesPanelProps {
 	/** 所属定义工作区；用户挂载文件仍以自己的空间身份为准。 */
@@ -128,6 +129,7 @@ interface TopicFilesPanelProps {
 	isItemSelectable?: (item: AttachmentItem) => boolean
 	/** 特殊文件空间允许操作的固定根目录。 */
 	operationRoot?: AttachmentItem
+	projectFilesStore?: ProjectFilesStore
 }
 
 export interface TopicFilesPanelRef {
@@ -196,6 +198,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
+			projectFilesStore,
 		},
 		ref,
 	) {
@@ -884,6 +887,7 @@ const TopicFilesPanel = forwardRef<TopicFilesPanelRef, TopicFilesPanelProps>(
 				spaceConfig={spaceConfig}
 				isItemSelectable={isItemSelectable}
 				operationRoot={operationRoot}
+				projectFilesStore={projectFilesStore}
 				fitContent={fitContent}
 				showEmptyState={showEmptyState}
 				scrollElementRef={scrollElementRef}

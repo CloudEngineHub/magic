@@ -23,16 +23,20 @@ export const frameActions: UserAction[] = [
 				.map((id) => canvas.elementManager.getElementData(id))
 				.filter((el) => el !== undefined)
 
-			// 不能包含 Frame
-			const hasFrame = selectedElements.some((el) => el.type === ElementTypeEnum.Frame)
-			if (hasFrame) return false
+			// Frame/Group 都是容器；当前画布不支持把容器嵌套进新的 Frame。
+			const hasContainer = selectedElements.some(
+				(el) => el.type === ElementTypeEnum.Frame || el.type === ElementTypeEnum.Group,
+			)
+			if (hasContainer) return false
 
 			// 不能已经在 Frame 内
 			const isParentFrame = selectedElements.some((el) => {
 				const parentId = canvas.elementManager.findParentIdForElement(el.id)
 				if (!parentId) return false
 				const parent = canvas.elementManager.getElementData(parentId)
-				return parent?.type === ElementTypeEnum.Frame
+				return (
+					parent?.type === ElementTypeEnum.Frame || parent?.type === ElementTypeEnum.Group
+				)
 			})
 
 			return !isParentFrame

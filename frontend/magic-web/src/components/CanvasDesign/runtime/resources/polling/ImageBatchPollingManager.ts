@@ -21,10 +21,12 @@ import {
 import { resolveCanvasGeneratedResourceStoragePath } from "../../shared/path/canvasResourcePath"
 import { isBatchImageGenerationTaskMeta } from "../image/imageGenerationTaskMeta"
 import {
+	getContentById,
 	getImageContents,
 	isImageElementContent,
 	updateImageContent,
 } from "../../document/elementContent"
+import { mergeMediaSourceReplacementFields } from "../../document/mediaSourceReplacement"
 
 interface BatchElementUpdate {
 	patch: ElementUpdatePatch
@@ -375,7 +377,11 @@ export class ImageBatchPollingManager {
 		const extra = options?.extra
 		const contentId = options?.contentId ?? element.activeContentId ?? undefined
 		if (!isImageElementContent(element) || !contentId) return extra ?? {}
-		const next = updateImageContent(element, contentId, patch)
+		const currentContent = getContentById(element, contentId)
+		const normalizedPatch = currentContent
+			? mergeMediaSourceReplacementFields(currentContent, patch)
+			: patch
+		const next = updateImageContent(element, contentId, normalizedPatch)
 		if (!isImageElementContent(next)) return extra ?? {}
 		return { ...extra, contents: next.contents }
 	}

@@ -40,7 +40,23 @@ function areTargetsEqual(
 		previous.canRename === next.canRename &&
 		previous.showRenameButton === next.showRenameButton &&
 		previous.renameButtonGap === next.renameButtonGap &&
-		previous.hitPadding === next.hitPadding
+		previous.hitPadding === next.hitPadding &&
+		areComplianceIconsEqual(previous.complianceIcon, next.complianceIcon)
+	)
+}
+
+function areComplianceIconsEqual(
+	previous: RenameButtonTarget["complianceIcon"],
+	next: RenameButtonTarget["complianceIcon"],
+): boolean {
+	if (previous === next) return true
+	if (!previous || !next) return false
+	return (
+		previous.x === next.x &&
+		previous.y === next.y &&
+		previous.width === next.width &&
+		previous.height === next.height &&
+		previous.failedReason === next.failedReason
 	)
 }
 
@@ -54,6 +70,8 @@ export default function NameLabelRenameButton() {
 	const targetRef = useRef<RenameButtonTarget | null>(null)
 	const heldTarget = useRef<string | null>(null)
 	const labelRef = useRef<HTMLSpanElement | null>(null)
+	const complianceIconRegionRef = useRef<HTMLSpanElement | null>(null)
+	const complianceIconRef = useRef<HTMLSpanElement | null>(null)
 	const renameButtonRef = useRef<HTMLButtonElement | null>(null)
 	const motionFrameRef = useRef<number | null>(null)
 	const { containerRef } = useFloatingComponent({
@@ -71,12 +89,35 @@ export default function NameLabelRenameButton() {
 			if (!layout) return
 			const showButton = layout.showRenameButton
 			const buttonWidth = showButton ? layout.renameButtonGap + layout.height : 0
+			const complianceIcon = layout.complianceIcon
+			const rowStart = complianceIcon ? Math.min(layout.x, complianceIcon.x) : layout.x
+			const iconRegionWidth = complianceIcon ? Math.max(0, layout.x - rowStart) : 0
 			// 按管理器分配的宽度布局，禁止 Flex 为按钮再次压缩文字。
 			// DOM 接管原透明命中内边距；铅笔与文字等高，悬浮不向图片扩张。
 			root.style.padding = `${layout.hitPadding}px`
-			root.style.width = `${(showButton ? layout.width + buttonWidth : layout.rowWidth) + layout.hitPadding * 2}px`
+			root.style.width = `${iconRegionWidth + (showButton ? layout.width + buttonWidth : layout.rowWidth) + layout.hitPadding * 2}px`
 			root.style.height = `${layout.height + layout.hitPadding * 2}px`
-			root.style.transform = `translate(${layout.x - layout.hitPadding}px, ${layout.y - layout.hitPadding}px)`
+			root.style.transform = `translate(${rowStart - layout.hitPadding}px, ${layout.y - layout.hitPadding}px)`
+			if (complianceIconRegionRef.current) {
+				complianceIconRegionRef.current.style.display = complianceIcon ? "block" : "none"
+				complianceIconRegionRef.current.style.width = `${iconRegionWidth}px`
+				complianceIconRegionRef.current.style.height = `${layout.height}px`
+			}
+			if (complianceIconRef.current) {
+				complianceIconRef.current.style.display = complianceIcon ? "block" : "none"
+				complianceIconRef.current.style.left = complianceIcon
+					? `${complianceIcon.x - rowStart}px`
+					: ""
+				complianceIconRef.current.style.top = complianceIcon
+					? `${complianceIcon.y - layout.y}px`
+					: ""
+				complianceIconRef.current.style.width = complianceIcon
+					? `${complianceIcon.width}px`
+					: ""
+				complianceIconRef.current.style.height = complianceIcon
+					? `${complianceIcon.height}px`
+					: ""
+			}
 			label.style.width = `${layout.width}px`
 			label.style.fontSize = `${layout.fontSize}px`
 			label.style.lineHeight = `${layout.height}px`
@@ -196,6 +237,15 @@ export default function NameLabelRenameButton() {
 		},
 		[getTargetElementId, refresh, refreshElement],
 	)
+	useLayoutEffect(() => {
+		if (!canvas) return
+		const unsubscribe = canvas.nameLabelManager.subscribeIconRefresh?.((elementIds) => {
+			const elementId = targetRef.current?.elementId
+			if (!elementId || (elementIds && !elementIds.includes(elementId))) return
+			refreshElement(elementId)
+		})
+		return unsubscribe
+	}, [canvas, refreshElement])
 	useCanvasEvents(
 		[
 			"canvas:resize",
@@ -269,6 +319,14 @@ export default function NameLabelRenameButton() {
 			: undefined
 	if (!target) return null
 	const tooltip = fileName || expectedName
+	const complianceTooltip = target.complianceIcon
+		? target.complianceIcon.failedReason
+			? t("seedanceCompliance.failedWithReason", {
+					defaultValue: "合规校验未通过：{{reason}}",
+					reason: target.complianceIcon.failedReason,
+				})
+			: t("seedanceCompliance.failed", "合规校验未通过")
+		: undefined
 	return (
 		// 标题与铅笔沿用画布内容层；工具面板和菜单应遮住相交区域。
 		<div
@@ -307,6 +365,25 @@ export default function NameLabelRenameButton() {
 			}}
 			onContextMenu={(event) => event.stopPropagation()}
 		>
+			{target.complianceIcon && (
+				<span ref={complianceIconRegionRef} className="relative block shrink-0">
+					<MagicTooltip
+						placement="topLeft"
+						getPopupContainer={() => portalContainer}
+						title={complianceTooltip}
+					>
+						<span
+							ref={complianceIconRef}
+							role="img"
+							tabIndex={0}
+							aria-label={complianceTooltip}
+							data-canvas-compliance-icon
+							className="absolute cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+							onKeyDown={(event) => event.stopPropagation()}
+						/>
+					</MagicTooltip>
+				</span>
+			)}
 			<MagicTooltip
 				placement="topLeft"
 				getPopupContainer={() => portalContainer}

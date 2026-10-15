@@ -15,6 +15,8 @@ import type {
 	PanelState,
 	MentionPanelGalleryOptions,
 	MentionPanelLoadStateOptions,
+	MentionPanelMultiSelectNavigationPolicy,
+	MentionPanelSelectionSummary,
 	MentionPanelViewMode,
 	NavigationItem,
 	UploadFileMentionData,
@@ -93,6 +95,12 @@ export interface MentionPanelRendererProps {
 	catalogBehavior?: MentionPanelCatalogBehavior
 	viewMode?: MentionPanelViewMode
 	galleryOptions?: MentionPanelGalleryOptions
+	enableMultiSelect?: boolean
+	/** Limits which rows can be staged when the host enables multi-select. */
+	canToggleMultiSelectItem?: (item: MentionItem) => boolean
+	multiSelectNavigationPolicy?: MentionPanelMultiSelectNavigationPolicy
+	selectionScopeId?: string
+	selectionSummary?: MentionPanelSelectionSummary
 	onSelect: (item: MentionItem, context?: MentionSelectContext) => void
 	onExit: () => void
 	disableKeyboardShortcuts?: boolean
@@ -126,6 +134,14 @@ export interface MentionPanelPluginOptions {
 	catalogBehavior?: MentionPanelCatalogBehavior
 	viewMode?: MentionPanelViewMode
 	galleryOptions?: MentionPanelGalleryOptions
+	enableMultiSelect?: boolean
+	/** Limits which rows can be staged when the host enables multi-select. */
+	canToggleMultiSelectItem?: (item: MentionItem) => boolean
+	multiSelectNavigationPolicy?: MentionPanelMultiSelectNavigationPolicy
+	selectionScopeId?: string
+	selectionSummary?: MentionPanelSelectionSummary
+	/** Resolve dynamic selection counts when the editor extension remains stable. */
+	getSelectionSummary?: () => MentionPanelSelectionSummary | undefined
 	onInsert?: (item: MentionItem) => void
 	onInsertItems?: (items: MentionItem[]) => void
 	onRemove?: (item: TiptapMentionAttributes, stillExists: boolean) => void

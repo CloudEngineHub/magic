@@ -32,6 +32,15 @@ export interface LinkedFrameBindingSyncResult {
 	frameUpdates: LinkedFrameImageUpdate[]
 }
 
+export function resolveLinkedFrameRoleForSlotIndex(
+	slotIndex: number,
+	supportsStartFrame: boolean,
+	supportsEndFrame: boolean,
+): "start" | "end" {
+	if (supportsStartFrame && slotIndex === 0) return "start"
+	return supportsEndFrame ? "end" : "start"
+}
+
 function areLinkedFrameBindingsEqual(
 	left: Array<LinkedFrameBinding | undefined>,
 	right: Array<LinkedFrameBinding | undefined>,

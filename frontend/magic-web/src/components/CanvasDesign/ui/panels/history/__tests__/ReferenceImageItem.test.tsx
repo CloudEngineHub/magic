@@ -33,26 +33,17 @@ describe("ReferenceImageItem", () => {
 		)
 	}
 
-	it("shows an opaque asset path tooltip with a copy button", async () => {
-		const writeText = vi.fn().mockResolvedValue(undefined)
-		Object.assign(navigator, { clipboard: { writeText } })
-
+	it("renders an opaque asset path without opening fullscreen preview", () => {
+		const onPreviewMediaResource = vi.fn()
 		renderItem({
 			path: "asset://virtual-human-asset-id",
-			onPreviewMediaResource: vi.fn(),
+			onPreviewMediaResource,
 		})
 
-		fireEvent.pointerMove(screen.getByRole("img", { name: "asset://virtual-human-asset-id" }), {
-			pointerType: "mouse",
-		})
-
-		const tooltip = await screen.findByRole("tooltip")
-		expect(tooltip).toHaveTextContent("asset://virtual-human-asset-id")
-
-		const copyButton = screen.getByRole("button", { name: "复制资源路径" })
-		expect(copyButton).toHaveClass("cursor-pointer")
-		fireEvent.click(copyButton)
-		expect(writeText).toHaveBeenCalledWith("asset://virtual-human-asset-id")
+		const trigger = screen.getByRole("img", { name: "asset://virtual-human-asset-id" })
+		expect(trigger).toHaveAttribute("data-state", "closed")
+		fireEvent.click(trigger)
+		expect(onPreviewMediaResource).not.toHaveBeenCalled()
 	})
 
 	it("does not open fullscreen preview for a deleted history resource", () => {

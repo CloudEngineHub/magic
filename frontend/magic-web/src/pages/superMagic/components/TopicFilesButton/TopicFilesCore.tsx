@@ -128,6 +128,7 @@ import {
 	DialogDescription,
 	DialogFooter,
 } from "@/components/shadcn-ui/dialog"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export interface TopicFilesExpansionState {
 	hasExpandableFolders: boolean
@@ -201,6 +202,7 @@ interface TopicFilesCoreProps {
 	isItemSelectable?: (item: AttachmentItem) => boolean
 	/** 特殊文件空间允许操作的固定根目录。 */
 	operationRoot?: AttachmentItem
+	projectFilesStore?: ProjectFilesStore
 }
 
 const DEFAULT_ITEM_SELECTABLE = () => true
@@ -274,6 +276,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		spaceConfig,
 		isItemSelectable = DEFAULT_ITEM_SELECTABLE,
 		operationRoot,
+		projectFilesStore,
 	},
 	ref,
 ) {
@@ -415,6 +418,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		attachments,
 		selectedTopic,
 		projectId,
+		projectFilesStore,
 		fileScope: spaceConfig?.scope,
 		// 添加文件创建成功回调
 		onFileCreated: (fileItem: any) => {
@@ -617,6 +621,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		expandedKeys,
 		onDesignProjectCreate: createDesignProject,
 		onAttachmentsChange,
+		isCurrent: operations?.isCurrent,
 	})
 
 	const {

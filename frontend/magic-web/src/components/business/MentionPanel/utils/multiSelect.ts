@@ -14,6 +14,11 @@ export function getMentionItemSelectionKey(item: MentionItem): string {
 	return `${item.type}:${item.id}`
 }
 
+/** A folder represents a navigation target, even when a host omits `isFolder`. */
+export function isMentionFolderItem(item: MentionItem): boolean {
+	return item.isFolder === true || item.type === MentionItemType.FOLDER
+}
+
 export function canTogglePendingItem(item: MentionItem): boolean {
 	if (item.type === MentionItemType.TITLE || item.type === MentionItemType.DIVIDER) return false
 	if (item.unSelectable) return false

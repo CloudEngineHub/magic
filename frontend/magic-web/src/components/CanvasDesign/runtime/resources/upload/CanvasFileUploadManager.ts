@@ -4,6 +4,7 @@ import {
 	UploadSubDir,
 	type UploadFileResponse,
 	type UploadFile,
+	type UploadSubDirType,
 } from "../../../public/magic-types"
 import {
 	ElementTypeEnum,
@@ -38,6 +39,10 @@ import {
 	updateContent,
 	updateImageContent,
 } from "../../document/elementContent"
+import {
+	buildMediaSourceReplacementPatch,
+	finalizeMediaSourceReplacement,
+} from "../../document/mediaSourceReplacement"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../elements/video/VideoElement"
 import { AudioElement as AudioElementClass } from "../../elements/audio/AudioElement"
@@ -644,7 +649,7 @@ export class CanvasFileUploadManager {
 			onUploadFailed?: (error: Error, index: number) => void
 			onUploadProgress?: (progress: number, index: number) => void
 		},
-		options?: { overwrite?: boolean },
+		options?: { overwrite?: boolean; uploadSubDir?: UploadSubDirType },
 	): Promise<UploadFileResponse[]> {
 		// 检查是否有 uploadFiles 方法
 		const uploadFilesMethod = this.canvas.magicConfigManager.config?.methods?.uploadFiles
@@ -655,7 +660,7 @@ export class CanvasFileUploadManager {
 		// 准备上传文件列表，为每个文件提供回调
 		const uploadFiles: UploadFile[] = files.map((file, index) => ({
 			file,
-			uploadSubDir: this.getUploadSubDir(file),
+			uploadSubDir: options?.uploadSubDir ?? this.getUploadSubDir(file),
 			overwrite: options?.overwrite ?? this.getUploadFileOverwrite(file, files),
 			onUploadStart: () => callbacks?.onUploadProgress?.(0, index),
 			onUploadProgress: (progress) => callbacks?.onUploadProgress?.(progress, index),
@@ -677,7 +682,12 @@ export class CanvasFileUploadManager {
 			throw new Error("Upload failed: no result returned")
 		}
 
-		return uploadResults.map((r) => normalizeCanvasUploadFileResponsePath(r))
+		return uploadResults.map((result) => {
+			const normalizedResult = normalizeCanvasUploadFileResponsePath(result)
+			// 宿主可以只返回结果而不触发单文件回调；两条成功路径都必须进入 pending 集合。
+			this.registerPendingResourcePath(normalizedResult.path)
+			return normalizedResult
+		})
 	}
 
 	/**
@@ -1079,22 +1089,29 @@ export class CanvasFileUploadManager {
 		const target = this.getReplaceableImageTarget(elementId, targetContentId)
 		if (!target) return false
 
+		const previousContent = target.element.getContentData(target.contentId)
 		const historyManager = this.canvas.historyManager
 		let updated = false
 		historyManager.disable()
 		try {
 			// 替换属于当前查看/编辑 Content；保留 Content 指针、其他 Content 和生成配置，只重置新资源不再适用的裁剪与错误态。
-			const patch = {
-				src: nextPath,
+			const patch = buildMediaSourceReplacementPatch(previousContent?.src, nextPath, {
 				status: GenerationStatus.Completed,
 				errorMessage: undefined,
 				crop: undefined,
-			}
+			})
 			updated = target.element.updateContentData(target.contentId, patch, { silent: false })
 		} finally {
 			historyManager.enable()
 		}
 		if (!updated) return false
+
+		finalizeMediaSourceReplacement(this.canvas, {
+			previousSrc: previousContent?.src,
+			nextSrc: nextPath,
+			previousComplianceCheckId: previousContent?.complianceCheckId,
+			previousAssetId: previousContent?.assetId,
+		})
 
 		// Marker 坐标绑定旧图片内容；仅在 src 成功写入后清理目标 Content，失败时保持原状。
 		this.canvas.markerManager.removeMarkersByImageContent(elementId, target.contentId)
@@ -1263,12 +1280,15 @@ export class CanvasFileUploadManager {
 			}
 		}
 
+		const previousContent = getContentById(target.data, target.contentId)
 		const historyManager = this.canvas.historyManager
 		historyManager.disable()
 		try {
-			const next = updateContent(target.data as never, target.contentId, {
-				src: nextPath,
-			} as never) as CanvasFileElement
+			const next = updateContent(
+				target.data as never,
+				target.contentId,
+				buildMediaSourceReplacementPatch(previousContent?.src, nextPath) as never,
+			) as CanvasFileElement
 			if (next === target.data) return false
 			// 直接提交完整 contents，确保异步替换仍写入点击时捕获的 Content。
 			this.canvas.elementManager.update(
@@ -1296,14 +1316,18 @@ export class CanvasFileUploadManager {
 		)
 		if (!target) return false
 
+		const previousContent = getContentById(target.data, target.contentId)
 		const historyManager = this.canvas.historyManager
 		historyManager.disable()
 		try {
-			const next = updateContent(target.data as never, target.contentId, {
-				src: nextPath,
-				status: GenerationStatus.Completed,
-				errorMessage: undefined,
-			} as never) as CanvasFileElement
+			const next = updateContent(
+				target.data as never,
+				target.contentId,
+				buildMediaSourceReplacementPatch(previousContent?.src, nextPath, {
+					status: GenerationStatus.Completed,
+					errorMessage: undefined,
+				}) as never,
+			) as CanvasFileElement
 			if (next === target.data) return false
 			this.canvas.elementManager.update(
 				elementId,
@@ -1313,6 +1337,16 @@ export class CanvasFileUploadManager {
 		} finally {
 			historyManager.enable()
 		}
+		finalizeMediaSourceReplacement(this.canvas, {
+			previousSrc: previousContent?.src,
+			nextSrc: nextPath,
+			previousComplianceCheckId:
+				typeof previousContent?.complianceCheckId === "string"
+					? previousContent.complianceCheckId
+					: undefined,
+			previousAssetId:
+				typeof previousContent?.assetId === "string" ? previousContent.assetId : undefined,
+		})
 		historyManager.recordHistoryImmediate()
 		return true
 	}
@@ -2260,7 +2294,7 @@ export class CanvasFileUploadManager {
 	 * 除直接上传外，跨画布服务端复制也会经历这一窗口。
 	 */
 	public registerPendingResourcePath(path: string): void {
-		if (!path) return
+		if (!path || this.pendingResourcePaths.has(path)) return
 		this.pendingResourcePaths.add(path)
 		this.canvas.eventEmitter.emit({
 			type: "upload:resource-pending-change",

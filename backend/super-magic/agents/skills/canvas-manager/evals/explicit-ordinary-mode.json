@@ -9,6 +9,6 @@
     "An explicit ordinary generation mode plus uploaded assets stays on basic video generation.",
     "Do not load professional-video-production.md.",
     "Use row_incremental layout.",
-    "Do not create professional-production Connections, a storyboard, initialization image, first-frame image, shot videos, staged approvals, or a video-edit."
+    "Do not create professional-production Connections, a storyboard, initialization image, shot reference image, shot videos, staged approvals, or a video-edit."
   ]
 }

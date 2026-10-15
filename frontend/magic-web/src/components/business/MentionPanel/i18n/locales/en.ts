@@ -66,6 +66,12 @@ export const en: I18nTexts = {
 	},
 	mobileSelectedItemsLabel: "Selected",
 	mobileSelectedItemsTitle: "Selected",
+	selectionSummary: {
+		selected: "Selected",
+		image: "Images",
+		video: "Videos",
+		audio: "Audio",
+	},
 
 	// Error messages
 	errorMessages: {

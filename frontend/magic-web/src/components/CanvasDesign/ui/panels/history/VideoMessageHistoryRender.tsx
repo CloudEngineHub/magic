@@ -225,6 +225,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 							<div className={styles.imageContent}>
 								<ReferenceImageItem
 									path={startFrame.uri}
+									mediaType="image"
 									onPreviewMediaResource={onPreviewMediaResource}
 									resolveResourceReference={methods?.resolveResourceReference}
 								/>
@@ -242,6 +243,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 							<div className={styles.imageContent}>
 								<ReferenceImageItem
 									path={endFrame.uri}
+									mediaType="image"
 									onPreviewMediaResource={onPreviewMediaResource}
 									resolveResourceReference={methods?.resolveResourceReference}
 								/>
@@ -261,6 +263,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 									<ReferenceImageItem
 										key={`${item.uri}-${index}`}
 										path={item.uri}
+										mediaType="image"
 										onPreviewMediaResource={onPreviewMediaResource}
 										resolveResourceReference={methods?.resolveResourceReference}
 									/>
@@ -281,6 +284,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 									<ReferenceImageItem
 										key={`${item.uri}-${index}`}
 										path={item.uri}
+										mediaType="video"
 										onPreviewMediaResource={onPreviewMediaResource}
 										resolveResourceReference={methods?.resolveResourceReference}
 									/>
@@ -301,6 +305,7 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 									<ReferenceImageItem
 										key={`${item.uri}-${index}`}
 										path={item.uri}
+										mediaType="audio"
 										onPreviewMediaResource={onPreviewMediaResource}
 										resolveResourceReference={methods?.resolveResourceReference}
 									/>

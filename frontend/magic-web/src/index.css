@@ -1057,6 +1057,8 @@ html.magic-pure-share-document-flow #root .magic-app {
 		*/
 		--z-index-detail-fullscreen: 999;
 		--z-index-popup: 1000;
+		/* Toasts stay above modal masks. Overlay stacks start at 1000; fullscreen overlays start at 9000. */
+		--z-index-toast: 10000;
 		--z-index-context-menu: var(--z-index-popup);
 		--z-index-dialog: var(--z-index-popup);
 		--z-index-dropdown: var(--z-index-popup);

@@ -3,24 +3,40 @@ import type { ResolveCanvasResourceReference } from "../../../../public/resource
 import { createTestResourceReferenceResolver } from "../../../../public/__tests__/testResourceReferenceResolver"
 import {
 	areCanvasResourceReferencesSame,
+	buildAssetResourcePath,
 	getCanvasResourceAvailability,
 	getCanvasResourceFileName,
 	getCanvasResourceReferenceIdentity,
+	isAssetResourcePath,
+	isAssetResourceScheme,
 	isOpaqueAssetReference,
 	normalizeCanvasUploadFileResponsePath,
+	parseAssetResourcePath,
 	resolveCanvasGeneratedResourceStoragePath,
 	resolveCanvasStorageResourceReference,
 } from "../canvasResourcePath"
 
 describe("canvasResourcePath", () => {
-	it("recognizes opaque asset references without changing their spelling", () => {
+	it("uses one canonical builder and parser for asset references", () => {
+		expect(buildAssetResourcePath(" 958528842662629376 ")).toBe("asset://958528842662629376")
+		expect(parseAssetResourcePath(" ASSET://reference.png ")).toBe("reference.png")
+		expect(isAssetResourcePath("asset://virtual-human-asset-id")).toBe(true)
+		expect(isAssetResourceScheme("asset://invalid/id")).toBe(true)
+		expect(isAssetResourcePath("asset://invalid/id")).toBe(false)
+		expect(isAssetResourcePath("asset://invalid\\id")).toBe(false)
+		expect(isAssetResourcePath("asset://asset-id?version=1")).toBe(false)
+		expect(() => buildAssetResourcePath("asset/id")).toThrow()
+
 		expect(isOpaqueAssetReference("asset://virtual-human-asset-id")).toBe(true)
 		expect(isOpaqueAssetReference("asset:/virtual-human-asset-id")).toBe(false)
 		expect(
 			normalizeCanvasUploadFileResponsePath({
-				path: "asset://virtual-human-asset-id",
+				path: " ASSET://virtual-human-asset-id ",
 			}),
 		).toEqual({ path: "asset://virtual-human-asset-id" })
+		expect(normalizeCanvasUploadFileResponsePath({ path: "asset://invalid/id" })).toEqual({
+			path: "asset://invalid/id",
+		})
 	})
 
 	it("keeps unresolved identities exact when no host resolver is available", () => {

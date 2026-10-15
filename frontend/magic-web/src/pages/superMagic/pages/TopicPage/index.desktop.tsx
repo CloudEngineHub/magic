@@ -170,7 +170,10 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const attachments = projectFilesStore.workspaceFileTree
 	const attachmentList = projectFilesStore.workspaceFilesList
 	const setAttachments = useMemoizedFn((nextAttachments: AttachmentItem[]) => {
-		projectFilesStore.setWorkspaceFileTree(nextAttachments)
+		projectFilesStore.setWorkspaceFileTree(nextAttachments, {
+			source: "TopicPage.local-mutation",
+			authoritative: false,
+		})
 	})
 
 	/** ======================== Hooks ======================== */
@@ -219,6 +222,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		setUserSelectDetail,
 		detailRef,
 		isReadOnly,
+		projectFilesStore,
 	})
 
 	const {
@@ -858,6 +862,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					<Detail
 						fileSidebarControl={fileSidebarControl}
 						attachmentLoadState={projectFilesStore.attachmentLoadState}
+						projectFilesStore={projectFilesStore}
 						ref={detailRef}
 						disPlayDetail={disPlayDetail}
 						userSelectDetail={userSelectDetail}

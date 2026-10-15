@@ -1,6 +1,7 @@
 import {
 	normalizePathSeparators,
 	resolveCanvasStorageResourceReference,
+	isAssetResourcePath,
 } from "../../shared/path/canvasResourcePath"
 import type { ResolveCanvasResourceReference } from "../../../public/resource-reference"
 import {
@@ -332,6 +333,7 @@ export class MediaResourceOfflineCacheManager {
 
 	private resolveStoredResourcePath(path: string): string | undefined {
 		const rawPath = normalizePathSeparators(coerceToPathString(path).trim())
+		if (isAssetResourcePath(rawPath)) return undefined
 		const resolveResourceReference = this.getResolveResourceReference?.()
 		if (!resolveResourceReference) return undefined
 
@@ -444,6 +446,7 @@ export class MediaResourceOfflineCacheManager {
 		params: RememberResourceParams,
 	): Promise<CachedMediaResource | null> {
 		try {
+			if (isAssetResourcePath(params.path)) return null
 			if (!this.isOfflineCacheFeatureOn() || this.shouldBypassVirtualResource()) return null
 			const registration = await this.ensureServiceWorker({ requireController: true })
 			if (!registration) return null
@@ -479,6 +482,9 @@ export class MediaResourceOfflineCacheManager {
 		params: RememberResourceParams,
 		options?: ResolveResourceUrlOptions,
 	): Promise<string> {
+		// Asset file_url values are signed and session-scoped; never register them in
+		// the workspace-oriented IndexedDB/Service Worker cache.
+		if (isAssetResourcePath(params.path)) return params.url
 		const featureOn = this.isOfflineCacheFeatureOn()
 		const bypass = this.shouldBypassVirtualResource()
 		if (options?.bypassVirtualResource || !featureOn || bypass) {
@@ -555,6 +561,7 @@ export class MediaResourceOfflineCacheManager {
 		path: string,
 		mediaType: MediaResourceOfflineCacheMediaType,
 	): Promise<CachedMediaResource | null> {
+		if (isAssetResourcePath(path)) return null
 		if (!this.canUseServiceWorkerCache()) return null
 		const entry = await this.getEntry(path, mediaType)
 		if (!entry) return null
@@ -588,6 +595,7 @@ export class MediaResourceOfflineCacheManager {
 	}
 
 	public removeCachedResource(params: RemoveCachedResourceParams): void {
+		if (isAssetResourcePath(params.path)) return
 		if (!isBrowserOfflineCacheSupported()) return
 
 		void this.deleteCachedResource(params).catch(() => undefined)
@@ -797,6 +805,7 @@ export class MediaResourceOfflineCacheManager {
 		path: string,
 		mediaType: MediaResourceOfflineCacheMediaType,
 	): Promise<CachedMediaResource | null> {
+		if (isAssetResourcePath(path)) return null
 		const namespace = this.getResourceNamespace()
 		const resourcePath = this.resolveStoredResourcePath(path)
 		if (!resourcePath) return null

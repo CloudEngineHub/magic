@@ -23,19 +23,48 @@ const UPLOAD_RESULT_JOIN_REPAIR_RULES: Array<{
 	{ root: "audios", fileNamePrefix: "audio_" },
 ]
 
+const ASSET_RESOURCE_PATH_PATTERN = /^asset:\/\/([^/\\\s?#]+)$/i
+const ASSET_RESOURCE_SCHEME_PATTERN = /^asset:/i
+
 export function normalizePathSeparators(path: string): string {
 	return path.replace(/\\/g, "/")
 }
 
+/**
+ * Build the canonical Canvas path for an asset service ID.
+ * Asset IDs are opaque single path segments and must never be assembled by callers.
+ */
+export function buildAssetResourcePath(assetId: string): string {
+	const normalizedAssetId = assetId.trim()
+	if (!normalizedAssetId || /[\\/\s?#]/.test(normalizedAssetId)) {
+		throw new Error("Invalid asset ID")
+	}
+	return `asset://${normalizedAssetId}`
+}
+
+/** Extract the opaque asset ID from a canonical or whitespace-padded asset path. */
+export function parseAssetResourcePath(path: string): string | undefined {
+	return ASSET_RESOURCE_PATH_PATTERN.exec(path.trim())?.[1]
+}
+
+export function isAssetResourcePath(path: string): boolean {
+	return parseAssetResourcePath(path) !== undefined
+}
+
+/** Distinguishes malformed asset references from ordinary workspace paths. */
+export function isAssetResourceScheme(path: string): boolean {
+	return ASSET_RESOURCE_SCHEME_PATTERN.test(path.trim())
+}
+
 /** Opaque asset references are supplied by an upstream asset service and must not be path-normalized. */
 export function isOpaqueAssetReference(path: string): boolean {
-	return /^asset:\/\/[^\s]+$/i.test(path.trim())
+	return isAssetResourcePath(path)
 }
 
 export function isRemoteOrSpecialPath(path: string): boolean {
 	const trimmed = path.trim()
 	if (!trimmed) return false
-	if (isOpaqueAssetReference(trimmed)) return true
+	if (isAssetResourceScheme(trimmed)) return true
 	if (/^https?:\/\//i.test(trimmed)) return true
 	if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return true
 	if (/^\/\/[^/]+/.test(trimmed)) return true
@@ -107,7 +136,11 @@ export function normalizeUploadResultPath(path: string): string {
 	if (!trimmed) {
 		return trimmed
 	}
-	if (isOpaqueAssetReference(trimmed)) {
+	const assetId = parseAssetResourcePath(trimmed)
+	if (assetId !== undefined) {
+		return buildAssetResourcePath(assetId)
+	}
+	if (isAssetResourceScheme(trimmed)) {
 		return trimmed
 	}
 	if (/^https?:\/\//i.test(trimmed)) {
