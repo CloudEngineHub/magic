@@ -7,7 +7,6 @@ declare(strict_types=1);
 
 namespace App\Interfaces\Kernel\Facade;
 
-use App\Application\Kernel\DTO\ModelBillingMultiplierSettings;
 use App\Application\Kernel\DTO\PlatformSettings;
 use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
@@ -37,6 +36,7 @@ class PlatformSettingsApi
         return self::platformSettingsToResponse($settings);
     }
 
+    /** 合并平台配置，参考金额由配置层统一生成后保存。 */
     #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_PLATFORM_INFO, MagicOperationEnum::EDIT)]
     public function update(PlatformSettingsUpdateRequest $request): array
     {
@@ -94,10 +94,7 @@ class PlatformSettingsApi
 
         if (isset($payload['model_billing_multiplier'])) {
             try {
-                $data['model_billing_multiplier'] = ModelBillingMultiplierSettings::fromArray(array_replace(
-                    $data['model_billing_multiplier'],
-                    $payload['model_billing_multiplier']
-                ))->toArray();
+                $data['model_billing_multiplier'] = $existing->getModelBillingMultiplier()->withOverrides($payload['model_billing_multiplier'])->toArray();
             } catch (InvalidArgumentException) {
                 ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'platform_settings.invalid_model_billing_multiplier');
             }

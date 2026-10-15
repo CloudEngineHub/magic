@@ -12,6 +12,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\Contract\ValidatorInterface;
 use Hyperf\Validation\Request\FormRequest;
 
+/** 平台设置更新契约，金额保留十进制原文，默认值由应用层补齐。 */
 class PlatformSettingsUpdateRequest extends FormRequest
 {
     public function authorize(): bool
@@ -19,6 +20,7 @@ class PlatformSettingsUpdateRequest extends FormRequest
         return true;
     }
 
+    /** 声明平台更新字段与长度，具体单价规则交由配置层校验。 */
     public function rules(): array
     {
         return [
@@ -51,7 +53,10 @@ class PlatformSettingsUpdateRequest extends FormRequest
             'custom_service_provider_whitelist.*' => 'string|max:128',
             'model_billing_multiplier' => 'sometimes|array',
             'model_billing_multiplier.enabled' => 'sometimes|boolean',
-            'model_billing_multiplier.base_price_cny' => 'sometimes|nullable|string|max:25',
+            // 参考金额由单价计算后最多有 15 位小数，允许管理端原样回传。
+            'model_billing_multiplier.base_price_cny' => 'sometimes|nullable|string|max:28',
+            'model_billing_multiplier.input_price_cny' => 'sometimes|nullable|string|max:25',
+            'model_billing_multiplier.output_price_cny' => 'sometimes|nullable|string|max:25',
             'model_billing_multiplier.usd_to_cny_rate' => 'sometimes|nullable|string|max:25',
             'watermark' => 'sometimes|array',
             'watermark.enabled' => 'sometimes|boolean',

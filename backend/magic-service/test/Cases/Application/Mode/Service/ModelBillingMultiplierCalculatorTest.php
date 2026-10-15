@@ -122,12 +122,12 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
     /** 配置往返不丢金额精度，历史关闭且保留已填内容。 */
     public function testSettingsRoundTripAndDefaults(): void
     {
-        $this->assertSame(['enabled' => false, 'base_price_cny' => null, 'usd_to_cny_rate' => '7'], (new PlatformSettings())->toArray()['model_billing_multiplier']);
+        $this->assertSame(['enabled' => false, 'base_price_cny' => null, 'usd_to_cny_rate' => '7', 'input_price_cny' => null, 'output_price_cny' => null], (new PlatformSettings())->toArray()['model_billing_multiplier']);
         foreach ([[], ['usd_to_cny_rate' => null], ['usd_to_cny_rate' => '']] as $unconfigured) {
             $this->assertSame('7', ModelBillingMultiplierSettings::fromArray($unconfigured)->toArray()['usd_to_cny_rate']);
         }
         $this->assertSame('7', ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'base_price_cny' => '0.1'])->toArray()['usd_to_cny_rate']);
-        $data = ['enabled' => true, 'base_price_cny' => '0.000123456789', 'usd_to_cny_rate' => '7.123456789012'];
+        $data = ['enabled' => true, 'base_price_cny' => '0.000123456789', 'usd_to_cny_rate' => '7.123456789012', 'input_price_cny' => null, 'output_price_cny' => null];
         $this->assertSame($data, PlatformSettings::fromArray(['model_billing_multiplier' => $data])->toArray()['model_billing_multiplier']);
         foreach ([null, '', '0', '-1', 'NaN', '1e3', [], '0.0000000000001'] as $invalid) {
             try {
@@ -171,7 +171,7 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
         try {
             $service = new PlatformSettingsDomainService($repository, $redis);
             $this->assertFalse($service->get()->getModelBillingMultiplier()->enabled);
-            $data = ['enabled' => true, 'base_price_cny' => '0.1', 'usd_to_cny_rate' => '7'];
+            $data = ['enabled' => true, 'base_price_cny' => '0.023', 'usd_to_cny_rate' => '7', 'input_price_cny' => '2', 'output_price_cny' => '3'];
             $service->save(PlatformSettings::fromArray(['model_billing_multiplier' => $data]));
             $this->assertContains('magic:platform_settings_cache', $deleted);
             $this->assertContains('globalConfig:all', $deleted);
