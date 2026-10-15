@@ -1,6 +1,6 @@
 ---
 name: dingtalk-cli
-description: "Use for DingTalk authentication, messages and chat history, contacts and people search, docs, drive files, AI tables, spreadsheets, wiki, mail, calendars, meeting minutes, tasks, approvals, attendance, reports, whiteboards, events, AI cards, or DingTalk application and OpenAPI operations."
+description: "Use when the user wants to log in to DingTalk or check authentication and permissions; read, query, search, send, reply to, forward, or recall messages and chat history; manage group chats or send DING alerts; find coworkers or query contacts, departments, and reporting relationships; read, search, create, or edit docs, drive files, spreadsheets, AI tables, wiki, mail, calendars, meeting rooms, AI meeting minutes, todos, reports, whiteboards, or AI cards; query attendance or live sessions, handle OA approvals, manage goals, contracts, digital employees, or applications; subscribe to real-time events; or look up developer documentation and use DingTalk OpenAPI."
 ---
 
 # DingTalk CLI Skill Index

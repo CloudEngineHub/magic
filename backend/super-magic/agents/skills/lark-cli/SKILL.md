@@ -1,6 +1,6 @@
 ---
 name: lark-cli
-description: "Use for Lark/Feishu authentication, messages and chat history, contacts, docs, drive files, Markdown, spreadsheets, Base tables, wiki, whiteboards, slides, applications, calendars, tasks, approvals, attendance, mail, meetings and minutes, OKRs, real-time events, OpenAPI, or reusable Lark workflows."
+description: "Use when the user wants to configure or log in to Lark/Feishu, check identity, or manage permissions; read, query, search, send, reply to, or forward IM messages and chat history, download chat files, or manage group chats; list, view, search, create, or edit cloud docs/files, Drive, Markdown, spreadsheets, Base tables, wiki, whiteboards, slides, apps, calendars/events/meeting rooms, contacts/org structure, tasks/todos, mail, or OKRs; query attendance, handle approvals, or retrieve meeting records, minutes, transcripts, summaries, and action items; subscribe to real-time events; call Lark OpenAPI; or build reusable CLI skills and workflows."
 ---
 
 # Lark/Feishu CLI Skill Index
