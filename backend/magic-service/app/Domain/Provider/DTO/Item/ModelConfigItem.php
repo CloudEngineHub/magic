@@ -14,6 +14,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\Odin\Api\Request\ReasoningEffort;
 use Hyperf\Odin\Constants\ChatApi;
 
+/** 模型运行配置统一处理历史思考参数，接口调用方无需推断默认值。 */
 class ModelConfigItem extends AbstractDTO
 {
     protected ?int $maxTokens = null;
@@ -90,6 +91,15 @@ class ModelConfigItem extends AbstractDTO
 
         $this->setBillingTiers($billingTiers);
         $this->normalizeReasoningEffortDefault();
+    }
+
+    /** 输出完整的编辑配置；关闭开关仅隐藏能力，不丢弃可恢复的档位。 */
+    public function jsonSerialize(): array
+    {
+        $data = parent::jsonSerialize();
+        $data['reasoning_effort_levels'] = $this->reasoningEffortLevels ?? ['low', 'medium', 'high'];
+        $data['reasoning_effort_default'] = $this->reasoningEffortDefault;
+        return $data;
     }
 
     /** 获取原始配置，用于版本记录，保留历史空值语义。 */

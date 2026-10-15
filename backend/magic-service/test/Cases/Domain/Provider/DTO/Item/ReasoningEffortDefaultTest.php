@@ -52,6 +52,29 @@ class ReasoningEffortDefaultTest extends TestCase
         }
     }
 
+    /** 历史缺失或空值由后端补齐，嵌套 JSON 与数组接口一致，版本仍保存原始空值。 */
+    public function testHistoricalConfigSerialization(): void
+    {
+        foreach ([[], ['reasoning_effort_levels' => null, 'reasoning_effort_default' => null]] as $legacy) {
+            foreach ([true, false] as $enabled) {
+                $model = new ProviderModelEntity();
+                $model->setId(123);
+                $model->setConfig(['support_deep_think' => $enabled, ...$legacy]);
+                $config = $model->getConfig();
+                $this->assertSame(['low', 'medium', 'high'], $config->toArray()['reasoning_effort_levels']);
+                $this->assertNull($config->toArray()['reasoning_effort_default']);
+                $this->assertSame($config->toArray(), $model->toArray()['config']);
+                $this->assertSame($enabled ? ['low', 'medium', 'high'] : [], $config->getEffectiveReasoningEffortLevels());
+                $version = ProviderModelAssembler::toConfigVersionEntity($model);
+                $this->assertNull($version->getReasoningEffortLevels());
+                $this->assertNull($version->getReasoningEffortDefault());
+            }
+        }
+        $config = new ModelConfigItem(['support_deep_think' => true, 'reasoning_effort_levels' => []]);
+        $this->assertSame([], $config->toArray()['reasoning_effort_levels']);
+        $this->assertNull($config->toArray()['reasoning_effort_default']);
+    }
+
     /** 关闭能力保留默认，重开恢复；移除默认档位与显式空数组都重置服务商默认。 */
     public function testDisabledAndRemovedDefaults(): void
     {
