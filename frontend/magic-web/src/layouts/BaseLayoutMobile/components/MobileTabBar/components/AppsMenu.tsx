@@ -91,8 +91,9 @@ export function AppsMenu({ open, title, items, emptyText, onClose, onItemClick }
 							<p className="text-lg font-medium leading-5 text-foreground">{title}</p>
 						</div>
 						<ScrollArea
-							className="min-h-0 flex-auto"
-							viewportClassName="[&>div]:!block"
+							// A flex viewport can shrink inside this max-height-only popup; 100% alone stays intrinsic.
+							className="flex min-h-0 flex-auto flex-col"
+							viewportClassName="min-h-0 flex-1 [&>div]:!block"
 						>
 							{items.length > 0 ? (
 								<div className="grid grid-cols-3 gap-3">
