@@ -372,7 +372,8 @@ class SkillAppService extends AbstractSkillAppService
      *     list: SkillEntity[],
      *     total: int,
      *     creator_user_map: array<string, mixed>,
-     *     latest_version_map: array<string, mixed>
+     *     latest_version_map: array<string, mixed>,
+     *     skill_operations: array<string, Operation>
      * }
      */
     public function queriesCreated(RequestContext $requestContext, SkillQuery $query, Page $page): array
@@ -394,6 +395,8 @@ class SkillAppService extends AbstractSkillAppService
             'total' => $result['total'],
             'creator_user_map' => $creatorUserMap,
             'latest_version_map' => $publishedVersionMap,
+            // The list is filtered by creator_id, so the current user owns every item.
+            'skill_operations' => array_fill_keys($skillCodes, Operation::Owner),
         ];
     }
 

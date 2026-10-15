@@ -205,7 +205,8 @@ class SkillApi extends AbstractApi
             pageSize: $page->getPageNum(),
             total: $result['total'],
             creatorUserMap: $result['creator_user_map'] ?? [],
-            latestVersionMap: $result['latest_version_map'] ?? []
+            latestVersionMap: $result['latest_version_map'] ?? [],
+            skillOperations: $result['skill_operations'] ?? []
         );
     }
 
