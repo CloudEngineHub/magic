@@ -11,6 +11,7 @@
  * - AI_OPTIMIZATION_ACTION, DashboardCardsChange
  */
 
+import { KEYBOARD_MESSAGE_TYPES } from "@dtyq/html-sandbox"
 import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
@@ -31,13 +32,9 @@ export const injectedIsRelativePathFunctionSource = `
 			}
 `
 
-// 键盘快捷键消息类型常量，使用 MAGIC_KEYBOARD_ 前缀
-export const KEYBOARD_MESSAGE_TYPES = {
-	SAVE: "MAGIC_KEYBOARD_SAVE",
-	SAVE_AND_EXIT: "MAGIC_KEYBOARD_SAVE_AND_EXIT",
-	CANCEL: "MAGIC_KEYBOARD_CANCEL",
-	SOURCE: "magic-html-iframe",
-} as const
+// 键盘快捷键消息类型常量（MAGIC_KEYBOARD_ 前缀）。定义在 html-sandbox，iframe 运行时发送、
+// 这里的宿主处理器识别，两端共用同一份，避免字面量各写一份而漂移。
+export { KEYBOARD_MESSAGE_TYPES }
 
 export const POST_MESSAGE_TARGET_STRATEGIES = {
 	SAME_ORIGIN_ANCESTOR: "same-origin-ancestor",

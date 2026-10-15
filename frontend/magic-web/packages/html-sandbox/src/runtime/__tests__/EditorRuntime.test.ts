@@ -249,8 +249,10 @@ describe("EditorRuntime", () => {
 
 		function press(key: string, init: KeyboardEventInit = {}) {
 			const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+			// A real keyboard reports an upper-case letter in `key` while Shift is held.
+			const realKey = init.shiftKey && key.length === 1 ? key.toUpperCase() : key
 			const event = new KeyboardEvent("keydown", {
-				key,
+				key: realKey,
 				metaKey: isMac && Boolean(init.ctrlKey ?? init.metaKey),
 				ctrlKey: !isMac && Boolean(init.ctrlKey ?? init.metaKey),
 				shiftKey: init.shiftKey,
@@ -283,6 +285,18 @@ describe("EditorRuntime", () => {
 				"MAGIC_KEYBOARD_CANCEL",
 			])
 			expect(document.documentElement.outerHTML).toBe(htmlBefore)
+		})
+
+		it("recognises the shortcut when key is reported in upper case (Shift or Caps Lock)", async () => {
+			await sendRuntimeRequest("ENTER_EDIT_MODE")
+			// Caps Lock without Shift: upper-case key, Shift not pressed.
+			press("S", { ctrlKey: true })
+			// Shift held: the helper reports "S" like a real keyboard.
+			press("s", { ctrlKey: true, shiftKey: true })
+			expect(shortcutMessages().map((data) => data.type)).toEqual([
+				"MAGIC_KEYBOARD_SAVE",
+				"MAGIC_KEYBOARD_SAVE_AND_EXIT",
+			])
 		})
 
 		it("stops forwarding after the runtime is destroyed", async () => {

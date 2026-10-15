@@ -19,17 +19,7 @@ import {
 	registerSelectionHandlers,
 } from "../handlers"
 import { EventType } from "../core/types"
-
-/**
- * Must stay in sync with KEYBOARD_MESSAGE_TYPES in the host app
- * (src/pages/superMagic/components/Detail/contents/HTML/utils/fetchInterceptor.ts).
- */
-const HOST_KEYBOARD_MESSAGE_TYPES = {
-	SAVE: "MAGIC_KEYBOARD_SAVE",
-	SAVE_AND_EXIT: "MAGIC_KEYBOARD_SAVE_AND_EXIT",
-	CANCEL: "MAGIC_KEYBOARD_CANCEL",
-	SOURCE: "magic-html-iframe",
-} as const
+import { KEYBOARD_MESSAGE_TYPES } from "../utils/hostKeyboardMessages"
 
 export class EditorRuntime {
 	private bridge: EditorBridge
@@ -274,15 +264,17 @@ export class EditorRuntime {
 			const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 			const ctrlOrCmd = isMac ? event.metaKey : event.ctrlKey
 
-			if (ctrlOrCmd && event.key === "s") {
+			// event.key is "S" while Shift is held (and with Caps Lock), so compare case-insensitively.
+			// Not event.code: it is the physical key and breaks Cmd+S on non-QWERTY layouts.
+			if (ctrlOrCmd && event.key.toLowerCase() === "s") {
 				event.preventDefault()
 				event.stopPropagation()
 				window.parent.postMessage(
 					{
 						type: event.shiftKey
-							? HOST_KEYBOARD_MESSAGE_TYPES.SAVE_AND_EXIT
-							: HOST_KEYBOARD_MESSAGE_TYPES.SAVE,
-						source: HOST_KEYBOARD_MESSAGE_TYPES.SOURCE,
+							? KEYBOARD_MESSAGE_TYPES.SAVE_AND_EXIT
+							: KEYBOARD_MESSAGE_TYPES.SAVE,
+						source: KEYBOARD_MESSAGE_TYPES.SOURCE,
 					},
 					getParentOrigin(),
 				)
@@ -295,8 +287,8 @@ export class EditorRuntime {
 				event.stopImmediatePropagation()
 				window.parent.postMessage(
 					{
-						type: HOST_KEYBOARD_MESSAGE_TYPES.CANCEL,
-						source: HOST_KEYBOARD_MESSAGE_TYPES.SOURCE,
+						type: KEYBOARD_MESSAGE_TYPES.CANCEL,
+						source: KEYBOARD_MESSAGE_TYPES.SOURCE,
 					},
 					getParentOrigin(),
 				)
