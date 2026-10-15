@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { useMemoizedFn, useMount } from "ahooks"
 import MemberCard from "@/components/business/MemberCard"
 import MemberCardStore from "@/stores/display/MemberCardStore"
@@ -39,13 +39,6 @@ const ElectronHeader = lazy(() => import("./components/ElectronHeader"))
 const ShareManagementContainer = lazy(
 	() => import("@/pages/superMagic/components/ShareManagement/ShareManagementContainer"),
 )
-
-const ROOT_SAFE_AREA_STYLE: CSSProperties = {
-	paddingTop: "var(--safe-area-inset-top)",
-	paddingRight: "var(--safe-area-inset-right)",
-	paddingBottom: "var(--safe-area-inset-bottom)",
-	paddingLeft: "var(--safe-area-inset-left)",
-}
 
 const BaseLayoutPc = observer(() => {
 	const { t } = useTranslation("super")
@@ -149,9 +142,8 @@ const BaseLayoutPc = observer(() => {
 
 	return (
 		<div
-			className="flex h-full w-full flex-col bg-sidebar"
+			className="flex h-full w-full flex-col bg-sidebar pb-safe-bottom pl-safe-left pr-safe-right pt-safe-top"
 			data-testid="base-layout-pc-root"
-			style={ROOT_SAFE_AREA_STYLE}
 			onClick={handleClick}
 		>
 			<MaintenanceNotice />
