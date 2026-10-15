@@ -8,7 +8,14 @@ import {
 } from "./largeMarkdown"
 
 describe("large markdown utilities", () => {
-	it("uses UTF-8 byte size and treats the 1 MB boundary as large", () => {
+	it("pins the boundary at 0.8 MiB", () => {
+		// Every other case below is expressed relative to the constant, so it would keep
+		// passing for any threshold. This one pins the product decision itself.
+		expect(LARGE_MARKDOWN_THRESHOLD_BYTES).toBe(838_861)
+		expect(LARGE_MARKDOWN_THRESHOLD_BYTES).toBe(Math.ceil(0.8 * 1024 * 1024))
+	})
+
+	it("uses UTF-8 byte size and treats the 0.8 MB boundary as large", () => {
 		expect(isLargeMarkdownContent("a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES - 1))).toBe(false)
 		expect(isLargeMarkdownContent("a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES))).toBe(true)
 		expect(isLargeMarkdownContent("a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES + 1))).toBe(true)
@@ -17,8 +24,9 @@ describe("large markdown utilities", () => {
 	})
 
 	it("measures multi-byte content in bytes instead of characters", () => {
-		// 1 MiB - 1 divides evenly by 3, so this is exactly one byte below the limit.
+		// The threshold minus one divides evenly by 3, so this is exactly one byte below it.
 		const charsBelowLimit = (LARGE_MARKDOWN_THRESHOLD_BYTES - 1) / 3
+		expect(charsBelowLimit * 3).toBe(LARGE_MARKDOWN_THRESHOLD_BYTES - 1)
 		expect(isLargeMarkdownContent("中".repeat(charsBelowLimit))).toBe(false)
 		expect(isLargeMarkdownContent("中".repeat(charsBelowLimit + 1))).toBe(true)
 
