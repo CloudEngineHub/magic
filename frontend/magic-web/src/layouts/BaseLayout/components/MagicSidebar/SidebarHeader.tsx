@@ -13,7 +13,7 @@ function SidebarHeader({ collapsed, onToggleCollapse }: SidebarHeaderProps) {
 		<div
 			data-testid="sidebar-header-root"
 			className={cn(
-				"h-13 w-full shrink-0",
+				"h-[52px] w-full shrink-0",
 				collapsed
 					? "flex items-center justify-center px-1.5 py-2"
 					: "flex items-center gap-2 p-2",
