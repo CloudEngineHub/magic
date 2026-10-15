@@ -1830,6 +1830,7 @@
 		"boundaryDesc": "Please Refresh The Page To Use The Latest Version.",
 		"boundaryTip": "It will automatically refresh in {{second}} seconds",
 		"boundaryTitle": "The System Update Is Complete,\nPlease Refresh The Page.",
+		"offlineDesc": "The page will refresh and load the latest content once the network is back. You can also refresh manually.",
 		"refresh": "Refresh"
 	},
 	"globalMenus": {

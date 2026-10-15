@@ -77,8 +77,26 @@ describe("GlobalErrorBoundary offline reload guard", () => {
 
 		expect(reload).not.toHaveBeenCalled()
 		expect(screen.getByText("networkTip.offline")).toBeTruthy()
+		expect(screen.getByText("global.offlineDesc")).toBeTruthy()
 		expect(screen.getByText("global.refresh")).toBeTruthy()
 		expect(screen.queryByText("global.boundaryTitle")).toBeNull()
+	})
+
+	it("reloads to fetch the latest resources once the network comes back", () => {
+		window.sessionStorage.setItem(OFFLINE_RELOAD_KEY, String(Date.now() - 2000))
+
+		render(
+			<GlobalErrorBoundary>
+				<ThrowingChild />
+			</GlobalErrorBoundary>,
+		)
+		expect(reload).not.toHaveBeenCalled()
+
+		act(() => {
+			window.dispatchEvent(new Event("online"))
+		})
+
+		expect(reload).toHaveBeenCalledTimes(1)
 	})
 
 	it("reloads again once the previous offline reload is old enough", () => {

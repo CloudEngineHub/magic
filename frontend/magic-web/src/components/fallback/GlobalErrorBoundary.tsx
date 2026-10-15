@@ -1,5 +1,5 @@
 import { ErrorBoundary } from "react-error-boundary"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { PropsWithChildren } from "react"
 import { Flex } from "antd"
 import { createStyles } from "antd-style"
@@ -115,6 +115,15 @@ function GlobalErrorBoundary({ children }: PropsWithChildren) {
 	// shows a manual refresh screen instead of the blank pre-reload state.
 	const [offlineReloadBlocked, setOfflineReloadBlocked] = useState(false)
 
+	// While the manual offline screen is shown, reload as soon as the browser reports
+	// the network is back so the page can fetch the latest resources (e.g. after a release).
+	useEffect(() => {
+		if (!offlineReloadBlocked) return
+		const handleOnline = () => window.location.reload()
+		window.addEventListener("online", handleOnline)
+		return () => window.removeEventListener("online", handleOnline)
+	}, [offlineReloadBlocked])
+
 	const [countdown] = useCountDown({
 		targetDate,
 		onEnd: () => {
@@ -132,7 +141,11 @@ function GlobalErrorBoundary({ children }: PropsWithChildren) {
 					errorKind: "render",
 					error: error,
 					message: "Global Error Boundary caught an error:",
-					context: { componentStack: errorInfo.componentStack },
+					// networkOffline separates offline resource failures from release-related ones in logs.
+					context: {
+						componentStack: errorInfo.componentStack,
+						networkOffline: isNetworkOffline(),
+					},
 				})
 
 				// If an error occurs while offline (e.g., dynamic chunk loading failure),
@@ -157,6 +170,7 @@ function GlobalErrorBoundary({ children }: PropsWithChildren) {
 							<div className={styles.wrapper}>
 								<Flex vertical align="center" gap={16}>
 									<span className={styles.title}>{t("networkTip.offline")}</span>
+									<span className={styles.desc}>{t("global.offlineDesc")}</span>
 									<Button
 										style={{ width: "fit-content" }}
 										onClick={() => window.location.reload()}
