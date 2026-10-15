@@ -204,7 +204,12 @@ class PlatformPermissionTreeTest extends HttpTestCase
             'admin.ai.application.menu',
             'query'
         );
+        $organizationIdentityWatermarkPermission = $this->permission->buildPermission(
+            'admin.setting.identity_watermark',
+            'edit'
+        );
         $this->assertFalse($this->containsPermissionKey($platformTree, $organizationAppMenuPermission));
+        $this->assertFalse($this->containsPermissionKey($platformTree, $organizationIdentityWatermarkPermission));
         $this->assertTrue($this->containsPermissionKey($workspaceTree, $organizationAppMenuPermission));
     }
 

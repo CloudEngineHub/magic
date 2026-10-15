@@ -383,6 +383,7 @@ return [
      */
     'official_organization_hidden_resource_keys' => [
         'admin.ai.application.menu',
+        'admin.setting.identity_watermark',
         'workspace.ai.model_management',
         'workspace.model.text',
         'workspace.model.image',

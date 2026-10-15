@@ -189,12 +189,8 @@ class MagicUserSettingRepository extends AbstractMagicContactRepository implemen
 
         if (! $model) {
             $model = new UserSettingModel();
-            $magicUserSettingEntity->prepareForCreation();
         } else {
             $magicUserSettingEntity->setId($model->id);
-            $magicUserSettingEntity->setCreatedAt($model->created_at);
-            $magicUserSettingEntity->setCreator((string) $model->creator);
-            $magicUserSettingEntity->setUpdatedAt(new DateTime());
         }
 
         $magicUserSettingEntity->setOrganizationCode($organizationCode);
@@ -209,7 +205,6 @@ class MagicUserSettingRepository extends AbstractMagicContactRepository implemen
 
     private function findOrganizationSetting(string $organizationCode, string $key): ?UserSettingModel
     {
-        /** @var null|UserSettingModel $model */
         return UserSettingModel::query()
             ->where('organization_code', $organizationCode)
             ->whereNull('user_id')

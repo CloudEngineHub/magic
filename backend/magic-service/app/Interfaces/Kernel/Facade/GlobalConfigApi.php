@@ -115,7 +115,6 @@ class GlobalConfigApi extends AbstractApi
         $cachedData = GlobalConfigCacheUtil::get(GlobalConfigCacheUtil::getGlobalConfigKey());
         if ($cachedData !== false) {
             $this->logger->info('Global config - cache hit');
-            $this->logger->info('watermark_debug settings/all cache=' . (isset($cachedData['platform_settings']['watermark']) ? 'hit_with_watermark' : 'hit_no_watermark'));
             return $this->appendOrganizationIdentityWatermark($cachedData);
         }
         $result = [];
@@ -148,8 +147,6 @@ class GlobalConfigApi extends AbstractApi
 
             $result = $parallel->wait();
             $result['global_config'] = $this->appendBootstrapState((array) ($result['global_config'] ?? []));
-
-            $this->logger->info('watermark_debug settings/all cache=miss has_watermark=' . (isset($result['platform_settings']['watermark']) ? '1' : '0'));
 
             // Cache the result for 5 minutes (300 seconds) - longer TTL since it's global
             GlobalConfigCacheUtil::setGlobalConfig($result);

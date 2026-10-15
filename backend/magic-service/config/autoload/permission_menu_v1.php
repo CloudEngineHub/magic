@@ -258,6 +258,7 @@ return [
         'workspace.model.image',
         'workspace.model.video',
         'admin.ai.application.menu',
+        'admin.setting.identity_watermark',
         'workspace.ai.model_audit_log',
         'workspace.ai.model_audit_statistics',
     ],

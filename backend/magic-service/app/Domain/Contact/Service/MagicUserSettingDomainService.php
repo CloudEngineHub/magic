@@ -116,6 +116,21 @@ readonly class MagicUserSettingDomainService
      */
     public function saveByOrganizationCode(string $organizationCode, MagicUserSettingEntity $savingEntity): MagicUserSettingEntity
     {
+        $existingEntity = $this->magicUserSettingRepository->getByOrganizationCode(
+            $organizationCode,
+            $savingEntity->getKey()
+        );
+
+        // Keep the modifier supplied by the application layer. The entity's
+        // generic modification helper preserves the original creator.
+        $modifier = $savingEntity->getModifier();
+        if ($existingEntity) {
+            $savingEntity->prepareForModification($existingEntity);
+            $savingEntity->setModifier($modifier);
+        } else {
+            $savingEntity->prepareForCreation();
+        }
+
         return $this->magicUserSettingRepository->saveByOrganizationCode($organizationCode, $savingEntity);
     }
 
