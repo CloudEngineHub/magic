@@ -1,4 +1,5 @@
-import { act, renderHook } from "@testing-library/react"
+import { act, render, renderHook } from "@testing-library/react"
+import { createElement, useRef } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { usePPTPresenterWindow } from "../usePPTPresenterWindow"
 
@@ -51,6 +52,62 @@ const setup = () => {
 }
 
 describe("fullscreen-first presenter", () => {
+	it("does not call a missing exit API when a DOM ref is cleared during unmount", () => {
+		Object.defineProperty(document, "exitFullscreen", { configurable: true, value: undefined })
+		function Preview() {
+			const ref = useRef<HTMLDivElement>(null)
+			usePPTPresenterWindow(ref)
+			return createElement("div", { ref })
+		}
+		const preview = render(createElement(Preview))
+		expect(() => preview.unmount()).not.toThrow()
+	})
+	it("does not exit fullscreen when both the fullscreen element and target are empty", () => {
+		const ref = { current: null }
+		const { result } = renderHook(() => usePPTPresenterWindow(ref))
+		act(() => result.current.close())
+		expect(document.exitFullscreen).not.toHaveBeenCalled()
+	})
+	it("falls back without opening a popup when the standard exit API is missing", async () => {
+		Object.defineProperty(document, "exitFullscreen", { configurable: true, value: undefined })
+		const { result } = setup()
+		await act(async () => {
+			expect(await result.current.open()).toBe("fallback")
+		})
+		expect(window.open).not.toHaveBeenCalled()
+		expect(requestFullscreen).not.toHaveBeenCalled()
+	})
+	it("does not exit fullscreen owned by another element", () => {
+		fullscreenElement = document.createElement("div")
+		const { result } = setup()
+		act(() => result.current.close())
+		expect(document.exitFullscreen).not.toHaveBeenCalled()
+	})
+	it.each(["missing", "throws", "rejects"])(
+		"cleans up safely when the exit API %s",
+		async (failure) => {
+			const { result } = setup()
+			await act(async () => {
+				await result.current.open()
+			})
+			Object.defineProperty(document, "exitFullscreen", {
+				configurable: true,
+				value:
+					failure === "missing"
+						? undefined
+						: vi.fn(() => {
+								if (failure === "throws") throw new Error("exit failed")
+								return Promise.reject(new Error("exit failed"))
+							}),
+			})
+			await act(async () => {
+				expect(() => result.current.close()).not.toThrow()
+			})
+			expect(popup.close).toHaveBeenCalled()
+			expect(result.current.isOpen).toBe(false)
+			expect(result.current.consoleContainer).toBeNull()
+		},
+	)
 	it("requests fullscreen before window.open consumes activation and renders only a console shell", async () => {
 		let activation = true
 		requestFullscreen.mockImplementation(async () => {
