@@ -16,7 +16,8 @@ use App\Domain\Provider\Repository\Persistence\Model\ModelIdentifierMappingModel
 use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
-use Hyperf\Database\Query\Builder;
+use Hyperf\Database\Model\Builder as ModelBuilder;
+use Hyperf\Database\Query\Builder as QueryBuilder;
 use Hyperf\DbConnection\Db;
 
 class ModelIdentifierMappingRepository extends AbstractRepository implements ModelIdentifierMappingRepositoryInterface
@@ -28,7 +29,7 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
     {
         $baseQuery = $this->createBuilder($dataIsolation, ModelIdentifierMappingModel::query())->whereNull('deleted_at');
         if ($query->getKeyword() !== '') {
-            $baseQuery->where(static function (Builder $builder) use ($query): void {
+            $baseQuery->where(static function (ModelBuilder $builder) use ($query): void {
                 $like = '%' . $query->getKeyword() . '%';
                 $builder->where('group_name', 'like', $like)
                     ->orWhere('source_model_id', 'like', $like)
@@ -173,7 +174,7 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
         $query = $this->buildModelOptionsQuery($dataIsolation, $keyword, $limit, null, null, 'model_id', true);
         $options = [];
         foreach ($query->get()->all() as $row) {
-            $modelId = (string) $row->model_id;
+            $modelId = (string) $this->getModelOptionValue($row, 'model_id');
             $options[$modelId] ??= $this->formatModelOption($row, true);
         }
         return array_values($options);
@@ -194,7 +195,7 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
         );
         $options = [];
         foreach ($query->get()->all() as $row) {
-            $options[(string) $row->model_id] = $this->formatModelOption($row);
+            $options[(string) $this->getModelOptionValue($row, 'model_id')] = $this->formatModelOption($row);
         }
         return array_values($options);
     }
@@ -210,7 +211,7 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
         ?string $excludedType,
         string $orderBy,
         bool $distinct = false,
-    ): Builder {
+    ): QueryBuilder {
         $query = Db::table('service_provider_models')
             ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
             ->whereNull('deleted_at')
@@ -227,7 +228,7 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
             $query->distinct();
         }
         if ($keyword !== '') {
-            $query->where(static function (Builder $builder) use ($keyword): void {
+            $query->where(static function (QueryBuilder $builder) use ($keyword): void {
                 $like = '%' . $keyword . '%';
                 $builder->where('model_id', 'like', $like)->orWhere('name', 'like', $like);
             });
@@ -238,16 +239,24 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
     /**
      * 将模型查询记录转换为候选项数据。
      */
-    private function formatModelOption(object $row, bool $fallbackNameToModelId = false): array
+    private function formatModelOption(object|array $row, bool $fallbackNameToModelId = false): array
     {
-        $modelId = (string) $row->model_id;
+        $modelId = (string) $this->getModelOptionValue($row, 'model_id');
         return [
             'model_id' => $modelId,
-            'name' => $fallbackNameToModelId ? (string) ($row->name ?? $modelId) : (string) ($row->name ?? ''),
-            'icon' => (string) ($row->icon ?? ''),
-            'status' => (int) ($row->status ?? 0),
-            'type' => (string) ($row->type ?? ''),
+            'name' => $fallbackNameToModelId ? (string) ($this->getModelOptionValue($row, 'name') ?: $modelId) : (string) $this->getModelOptionValue($row, 'name'),
+            'icon' => (string) $this->getModelOptionValue($row, 'icon'),
+            'status' => (int) $this->getModelOptionValue($row, 'status'),
+            'type' => (string) $this->getModelOptionValue($row, 'type'),
         ];
+    }
+
+    /**
+     * 读取模型候选项字段，兼容查询构造器返回的数组和对象。
+     */
+    private function getModelOptionValue(object|array $row, string $key): mixed
+    {
+        return is_array($row) ? ($row[$key] ?? null) : ($row->{$key} ?? null);
     }
 
     /**
