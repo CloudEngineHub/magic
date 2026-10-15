@@ -33,6 +33,7 @@ import {
 } from "@magic-admin-v2/features/platform-info/utils"
 import { PlatformInfoContentLanguageBar, PlatformInfoContentSection } from "./platform-info-shared"
 import { PlatformInfoFieldControl } from "./platform-info-fields"
+import { PlatformInfoModelMultiplier } from "./platform-info-model-multiplier"
 import { PlatformInfoWatermarkForm } from "./platform-info-watermark"
 
 type PlatformInfoFormController = UseFormReturn<PlatformInfoFormState>
@@ -73,7 +74,11 @@ export function PlatformInfoForm({
 						/>
 					) : null}
 
-					{activeSection === "basic" ? (
+					{activeSection === "modelMultiplier" ? (
+                        <PlatformInfoModelMultiplier value={value.model_billing_multiplier} form={form} />
+                    ) : null}
+
+                    {activeSection === "basic" ? (
 						<div className="space-y-8">
 							<div className="grid gap-4 sm:grid-cols-2">
 								<ImageUploadField

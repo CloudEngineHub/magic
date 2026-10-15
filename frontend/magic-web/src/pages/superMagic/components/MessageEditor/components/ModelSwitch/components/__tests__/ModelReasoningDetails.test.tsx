@@ -15,7 +15,11 @@ vi.mock("@/components/shadcn-ui/scroll-area", () => ({
 afterEach(cleanup)
 
 /** 只使用允许两档的 mock 模型，验证菜单不会开放其他强度。 */
-function setup(mobile = false, levels: ModelItem["reasoning_effort_levels"] = ["none", "high"]) {
+function setup(
+	mobile = false,
+	levels: ModelItem["reasoning_effort_levels"] = ["none", "high"],
+	multiplier?: number | null,
+) {
 	const model: ModelItem = {
 		id: "mock-model",
 		model_id: "mock-model",
@@ -27,6 +31,7 @@ function setup(mobile = false, levels: ModelItem["reasoning_effort_levels"] = ["
 		sort: 0,
 		model_status: ModelStatusEnum.Normal,
 		reasoning_effort_levels: levels,
+		billing_multiplier: multiplier,
 	}
 	const onSelect = vi.fn()
 	render(
@@ -43,6 +48,17 @@ function setup(mobile = false, levels: ModelItem["reasoning_effort_levels"] = ["
 }
 
 describe("模型详情思考强度", () => {
+	it.each([false, true])("桌面及移动详情展示后端倍率和参考说明 mobile=%s", (mobile) => {
+		setup(mobile, [], 0)
+		expect(screen.getByText("0.00x")).toBeTruthy()
+		expect(screen.getByText("messageEditor.modelSwitch.billingMultiplierHint")).toBeTruthy()
+	})
+	it("后端关闭倍率时隐藏数值和对应说明", () => {
+		setup(false, [], null)
+		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplierHint")).toBeNull()
+		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplier")).toBeNull()
+	})
+
 	it("Esc 关闭桌面详情并返回模型行，不因恢复焦点再次打开", async () => {
 		setup(false, [])
 		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })

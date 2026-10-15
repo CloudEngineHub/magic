@@ -315,9 +315,14 @@ export function ModelReasoningDetails({
 							</ScrollArea>
 						)}
 						{hasMultiplier && (
-							<div className="mt-3 flex items-center justify-between border-t px-2 py-3 text-sm">
-								<span>{t("messageEditor.modelSwitch.billingMultiplier")}</span>
-								<ModelBillingMultiplier value={model.billing_multiplier} />
+							<div className="mt-3 border-t px-2 py-3 text-sm">
+								<div className="flex items-center justify-between">
+									<span>{t("messageEditor.modelSwitch.billingMultiplier")}</span>
+									<ModelBillingMultiplier value={model.billing_multiplier} />
+								</div>
+								<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+									{t("messageEditor.modelSwitch.billingMultiplierHint")}
+								</p>
 							</div>
 						)}
 						{levels.length > 0 && (

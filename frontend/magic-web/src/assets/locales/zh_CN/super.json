@@ -3569,7 +3569,8 @@
 		"modelLoadFailed": "模型加载失败，请稍后重试",
 		"modelSwitch": {
 			"autoModelDescription": "Auto 模式自动选用当前任务执行效率最高的AI模型，适合处理大多数常规任务，积分消耗适中。",
-			"billingMultiplier": "消耗倍率",
+			"billingMultiplier": "消耗速度",
+			"billingMultiplierHint": "参考倍率按固定用量估算，0.00x 也可能表示未配置价格；实际扣费以真实用量和权益为准。",
 			"billingMultiplierValue": "消耗倍率 {{value}} 倍",
 			"collapseDescription": "收起模型描述",
 			"expandDescription": "展开模型描述",

@@ -34,7 +34,15 @@ export type PlatformInfoWatermark = {
   depth: PlatformWatermarkDepth;
 };
 
+/** 仅供展示的倍率配置，金额以十进制字符串传递，空值表示未填写。 */
+export type ModelBillingMultiplierSettings = {
+  enabled: boolean;
+  base_price_cny: string | null;
+  usd_to_cny_rate: string | null;
+};
+
 export type PlatformInfoDetails = {
+  model_billing_multiplier?: ModelBillingMultiplierSettings;
   logo: PlatformLocalizedText;
   favicon: string | null;
   minimal_logo: string | null;
@@ -52,6 +60,7 @@ export type PlatformInfoDetails = {
 };
 
 export type PlatformInfoFormState = {
+  model_billing_multiplier: ModelBillingMultiplierSettings;
   logo: Record<PlatformLocale, string>;
   favicon: string;
   minimal_logo: string;
@@ -71,6 +80,7 @@ export type PlatformInfoFormState = {
 };
 
 export type UpdatePlatformInfoParams = {
+  model_billing_multiplier: ModelBillingMultiplierSettings;
   logo_zh_url: string;
   logo_en_url: string;
   minimal_logo_url: string;

@@ -30,6 +30,15 @@
 		"fullSiteShutdown": "全站关闭",
 		"globalNotice": "全局提示"
 	},
+	"multiplier.basePlaceholder": "填写一份参考用量对应的人民币金额",
+	"multiplier.basePrice": "1 倍基准价（人民币/份参考用量）",
+	"multiplier.enabled": "启用展示",
+	"multiplier.exchangeRate": "美元展示汇率（人民币/美元）",
+	"multiplier.explanation": "倍率仅用于比较语言模型的基础售价，不改变实际扣费。系统按输入 10,000 token、输出 1,000 token 计算参考金额：阶梯单价逐档等权平均，各有效服务商的参考金额再等权平均，美元售价使用展示汇率换算成人民币，最终除以 1 倍基准价。缺少输入价、输出价或可换算币种的服务商不参与平均，明确零价正常参与；全部缺价显示 0.00x，因此 0.00x 不一定表示免费。动态模型按当前用户权限解析出的真实模型计算。倍率不包含套餐、促销、缓存或时段优惠，实际扣费以真实用量及计费规则为准。通常保留两位小数，正数不足 0.01 时显示 <0.01x。修改配置后，下次刷新模型列表展示新倍率。展示汇率不影响实际结算汇率。",
+	"multiplier.formula": "参考用量：输入 10,000 token + 输出 1,000 token，无缓存。参考倍率 = 服务商平均参考金额（人民币）÷ 1 倍基准价。",
+	"multiplier.invalidAmount": "请填写大于零的十进制数，整数和小数均最多 12 位。",
+	"multiplier.ratePlaceholder": "填写 1 美元对应的人民币金额",
+	"multiplier.title": "模型参考倍率",
 	"otherInfo": "其它信息",
 	"platformDefaultLanguage": "平台默认语言",
 	"platformDefaultLanguageOptions": {

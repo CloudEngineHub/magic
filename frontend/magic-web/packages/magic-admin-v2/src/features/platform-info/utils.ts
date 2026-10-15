@@ -60,6 +60,7 @@ export type PlatformInfoSectionId =
 	| "globalSystemPrompt"
 	| "footer"
 	| "watermark"
+	| "modelMultiplier"
 
 export const platformInfoSectionTitleKeys: Record<PlatformInfoSectionId, string> = {
 	basic: "platformInfo.section.basic",
@@ -68,6 +69,7 @@ export const platformInfoSectionTitleKeys: Record<PlatformInfoSectionId, string>
 	globalSystemPrompt: "platformInfo.section.globalSystemPrompt",
 	footer: "platformInfo.section.footer",
 	watermark: "platformInfo.section.watermark",
+	modelMultiplier: "platformInfo.section.modelMultiplier",
 }
 
 /** 只有按语言维护内容的 section 才展示内容语言切换条。 */
@@ -86,6 +88,7 @@ export const platformInfoSectionDescriptionKeys: Record<PlatformInfoSectionId, s
 	globalSystemPrompt: "platformInfo.sectionDesc.globalSystemPrompt",
 	footer: "platformInfo.contentLanguage.description",
 	watermark: "platformInfo.sectionDesc.watermark",
+	modelMultiplier: "platformInfo.sectionDesc.modelMultiplier",
 }
 
 export const sharedImageFields = [
@@ -227,6 +230,32 @@ export function createPlatformInfoSchema(
 				}
 			}),
 	}
+	// 仅校验管理员输入，不在前端计算或补齐展示价格。
+	const modelMultiplierShape = {
+		model_billing_multiplier: z
+			.object({
+				enabled: z.boolean(),
+				base_price_cny: z.string().nullable(),
+				usd_to_cny_rate: z.string().nullable(),
+			})
+			.superRefine((value, context) => {
+				for (const field of ["base_price_cny", "usd_to_cny_rate"] as const) {
+					const amount = value[field]
+					if (amount === null && !value.enabled) continue
+					if (
+						amount === null ||
+						!/^\d{1,12}(?:\.\d{1,12})?$/.test(amount) ||
+						Number(amount) <= 0
+					) {
+						context.addIssue({
+							code: "custom",
+							path: [field],
+							message: t("platformInfo.multiplier.invalidAmount"),
+						})
+					}
+				}
+			}),
+	}
 	const sectionSchemas = {
 		basic: z.object(basicShape),
 		seo: z.object(seoShape),
@@ -234,6 +263,7 @@ export function createPlatformInfoSchema(
 		globalSystemPrompt: z.object(globalSystemPromptShape),
 		footer: z.object(footerShape),
 		watermark: z.object(watermarkShape),
+		modelMultiplier: z.object(modelMultiplierShape),
 	}
 
 	if (section) {
@@ -250,6 +280,7 @@ export function createPlatformInfoSchema(
 		...globalSystemPromptShape,
 		...footerShape,
 		...watermarkShape,
+		...modelMultiplierShape,
 	})
 }
 

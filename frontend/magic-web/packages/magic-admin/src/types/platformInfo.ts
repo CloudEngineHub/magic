@@ -13,6 +13,13 @@ export type PlatformWatermarkIntensity = "light" | "standard" | "strong"
 
 /** 平台信息 */
 export namespace PlatformInfo {
+	/** 展示专用配置，字符串金额不参与前端计算。 */
+	export interface ModelBillingMultiplierSettings {
+		enabled: boolean
+		base_price_cny: string | null
+		usd_to_cny_rate: string | null
+	}
+
 	/** 组织水印配置 */
 	export interface WatermarkConfig {
 		id: string
@@ -39,6 +46,7 @@ export namespace PlatformInfo {
 
 	/** 平台信息详情 */
 	export interface Details {
+		model_billing_multiplier?: ModelBillingMultiplierSettings
 		name_i18n: Record<SupportLocales, string>
 		logo: Record<SupportLocales, string>
 		minimal_logo: string | null
@@ -56,6 +64,7 @@ export namespace PlatformInfo {
 	}
 	/** 修改平台信息 */
 	export interface UpdateParams {
+		model_billing_multiplier?: ModelBillingMultiplierSettings
 		name_i18n: Record<SupportLocales, string>
 		logo_zh_url: string
 		logo_en_url: string

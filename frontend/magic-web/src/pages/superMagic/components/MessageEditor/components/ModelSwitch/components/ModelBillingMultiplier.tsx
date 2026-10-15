@@ -4,12 +4,13 @@ import { useTranslation } from "react-i18next"
 export function ModelBillingMultiplier({ value }: { value?: number | null }) {
 	const { t } = useTranslation("super")
 	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null
+	const display = value > 0 && value < 0.01 ? "<0.01" : value.toFixed(2)
 	return (
 		<span
 			className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground"
-			aria-label={t("messageEditor.modelSwitch.billingMultiplierValue", { value })}
+			aria-label={t("messageEditor.modelSwitch.billingMultiplierValue", { value: display })}
 		>
-			{value}x
+			{display}x
 		</span>
 	)
 }

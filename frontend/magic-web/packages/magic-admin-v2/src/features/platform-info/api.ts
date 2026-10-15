@@ -82,6 +82,8 @@ export function toPlatformInfoFormState(data: PlatformInfoDetails): PlatformInfo
         link: data.footer?.filing?.link ?? "https://beian.miit.gov.cn/",
       },
     },
+    model_billing_multiplier:
+      data.model_billing_multiplier ?? createEmptyPlatformInfoFormState().model_billing_multiplier,
     watermark: normalizePlatformWatermark(data.watermark),
     name_i18n: normalizeLocalizedText(data.name_i18n),
     title_i18n: normalizeLocalizedText(data.title_i18n),
@@ -107,6 +109,7 @@ export function createEmptyPlatformInfoFormState(): PlatformInfoFormState {
         link: "https://beian.miit.gov.cn/",
       },
     },
+    model_billing_multiplier: { enabled: false, base_price_cny: null, usd_to_cny_rate: null },
     watermark: normalizePlatformWatermark(),
     name_i18n: { ...emptyLocalizedText },
     title_i18n: { ...emptyLocalizedText },
@@ -127,6 +130,7 @@ export function createDefaultPlatformInfoDetails(): PlatformInfoDetails {
     minimal_logo: null,
     default_language: defaults.default_language,
     footer: defaults.footer,
+    model_billing_multiplier: defaults.model_billing_multiplier,
     watermark: defaults.watermark,
     name_i18n: defaults.name_i18n,
     title_i18n: defaults.title_i18n,
@@ -148,6 +152,7 @@ export function toUpdatePlatformInfoParams(
     favicon_url: values.favicon,
     default_language: values.default_language,
     footer: values.footer,
+    model_billing_multiplier: values.model_billing_multiplier,
     watermark: values.watermark,
     name_i18n: values.name_i18n,
     title_i18n: values.title_i18n,
@@ -174,6 +179,9 @@ export function toChangedPlatformInfoParams(
   if (dirtyFields.favicon) params.favicon_url = values.favicon;
   if (dirtyFields.default_language) params.default_language = values.default_language;
   if (dirtyFields.footer) params.footer = values.footer;
+  // 开关、基准价及汇率相互依赖，任一变化都提交完整展示配置。
+  if (dirtyFields.model_billing_multiplier)
+    params.model_billing_multiplier = values.model_billing_multiplier;
   // 水印的 enabled、fields、depth 相互依赖（开启时必须有内容），
   // 因此任一子字段变化都提交完整水印对象，后端按 array_replace 合并。
   if (dirtyFields.watermark) params.watermark = values.watermark;

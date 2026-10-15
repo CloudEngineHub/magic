@@ -1,6 +1,7 @@
 import {
 	AlertCircle,
 	Bot,
+	Calculator,
 	Droplets,
 	Edit3,
 	FileText,
@@ -82,6 +83,7 @@ const platformInfoSections = [
 		titleKey: platformInfoSectionTitleKeys.watermark,
 		icon: Droplets,
 	},
+	{ id: "modelMultiplier", titleKey: platformInfoSectionTitleKeys.modelMultiplier, icon: Calculator },
 ] satisfies Array<SectionNavigationItem<PlatformInfoSectionId>>
 
 export default function PlatformInfoPage() {
