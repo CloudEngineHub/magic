@@ -523,8 +523,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							</div>
 							{showProjectListStatus && (
 								<div
-									className="flex w-full items-center justify-center gap-2 py-0.5 text-xs text-muted-foreground"
-									style={{ height: PROJECT_ROW_HEIGHT }}
+									className="flex h-9 w-full items-center justify-center gap-2 py-0.5 text-xs text-muted-foreground"
 									role="status"
 								>
 									{isProjectLoading ? (
