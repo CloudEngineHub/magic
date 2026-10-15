@@ -1069,11 +1069,32 @@ export function ensureHomeOnboardingRewardList(userMagicId?: string): Promise<vo
 	return request
 }
 
-/** Forget the cached answer and ask again — for the places that know the cache went stale. */
+/**
+ * Ask again for the account's list — for the places that know the cache went stale.
+ *
+ * The cached answer is **kept while the new one is on its way**, and that is the whole point of the
+ * shape below. `loadHomeOnboardingRewardList` carries the rows it finds in the cache into the
+ * `loading` write precisely so that the surfaces reading them keep something to render, so throwing
+ * the entry away first — which is what this used to do, to get past `ensureHomeOnboardingRewardList`
+ * answering `ready` with "nothing to do" — leaves the loader with no rows to carry. It then
+ * publishes an empty list, and the benefits card, which renders **nothing at all** without rows,
+ * takes the entry card *and* the task centre's dialog off the page until the answer lands and it
+ * remounts with them. Opening the task centre is the one place this is asked for on purpose, so the
+ * frame the user sees is the dialog they just opened blinking out and fading back in.
+ *
+ * Asking the loader directly is what lets the entry stay. The request is registered in the in-flight
+ * map, so a concurrent `ensureHomeOnboardingRewardList` shares this ask rather than making a second
+ * one — which is the only thing the old route through `ensure` was still buying.
+ */
 export function refreshHomeOnboardingRewardList(userMagicId?: string): Promise<void> {
 	if (!userMagicId) return Promise.resolve()
-	rewardListByUser.delete(getUserKey(userMagicId))
-	return ensureHomeOnboardingRewardList(userMagicId)
+	const key = getUserKey(userMagicId)
+	const inFlight = rewardListRequests.get(key)
+	if (inFlight) return inFlight
+
+	const request = loadHomeOnboardingRewardList(userMagicId, key)
+	rewardListRequests.set(key, request)
+	return request
 }
 
 async function loadHomeOnboardingRewardList(userMagicId: string, key: string) {
