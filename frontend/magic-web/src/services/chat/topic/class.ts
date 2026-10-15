@@ -277,7 +277,8 @@ class ChatTopicService {
 				// 如果当前话题ID不存在，或者当前话题ID不在话题列表中，则更新当前话题ID
 				const conversation = conversationStore.getConversation(conversationId)
 				if (
-					conversation.isAiConversation &&
+					// The conversation may be removed while its topic request is pending.
+					conversation?.isAiConversation &&
 					(!conversation?.current_topic_id ||
 						!topics.find((i) => i.id === conversation?.current_topic_id))
 				) {

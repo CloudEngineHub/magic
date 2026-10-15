@@ -33,6 +33,7 @@ import getPreviewContentKey from "./utils/getPreviewContentKey"
 import { useDownloadImageMenu } from "@/pages/superMagic/components/Detail/contents/Image/hooks/useDownloadImageMenu"
 import { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import { observer } from "mobx-react-lite"
+import PreviewThemeBoundary from "./PreviewThemeBoundary"
 
 const MAX_SCALE = 10
 const SCALE_STEP = 0.1
@@ -330,4 +331,12 @@ const MagicImagePreview = (props: Props) => {
 	)
 }
 
-export default observer(MagicImagePreview)
+const ObservedMagicImagePreview = observer(MagicImagePreview)
+
+export default function ImagePreview(props: Props) {
+	return (
+		<PreviewThemeBoundary>
+			<ObservedMagicImagePreview {...props} />
+		</PreviewThemeBoundary>
+	)
+}
