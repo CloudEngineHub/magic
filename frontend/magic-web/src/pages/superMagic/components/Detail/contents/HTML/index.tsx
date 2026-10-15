@@ -8,7 +8,6 @@ import IsolatedHTMLRenderer, {
 import {
 	createParentMessageHandler,
 	injectFetchInterceptorScript,
-	injectKeyboardInterceptorScript,
 	createKeyboardMessageHandler,
 	POST_MESSAGE_TARGET_STRATEGIES,
 	type FileItem,
@@ -1024,12 +1023,10 @@ export default memo(function HTML(props: HTMLProps) {
 					postMessageTargetStrategy,
 				})
 
-				// dashboard 通过 postMessage 驱动编辑态，不需要额外注入键盘拦截器；
-				// 否则会导致内容指纹变化并触发 iframe 二次重写。
-				if (isEditMode && !isDataAnalysis) {
-					finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
-				}
-
+				// Edit mode must not change the document: any content change is rewritten into the
+				// live iframe (document.open/write in the same Window), which flashes and breaks
+				// page scripts with top-level let/const/class. Save/Escape shortcuts are forwarded
+				// by the iframe EditorRuntime instead of an injected script.
 				const isStaleRequest = !isCurrentPreview(request)
 				if (isStaleRequest) return
 				const shouldRestart = forcePreviewRestartRef.current
