@@ -2,6 +2,9 @@
 export interface ModelBillingMultiplierSettings {
 	enabled: boolean
 	base_price_cny: string | null
+	currency?: "CNY" | "USD" | null
+	input_price?: string | null
+	output_price?: string | null
 	input_price_cny?: string | null
 	output_price_cny?: string | null
 	usd_to_cny_rate: string | null
@@ -37,25 +40,35 @@ function referenceUnits(input: string | null | undefined, output: string | null 
 
 /** 仅用于草稿预览；缺少任一单价时不反推历史金额或填充业务默认值。 */
 export function previewReferenceAmount(value: ModelBillingMultiplierSettings): string | null {
-	const amount = referenceUnits(value.input_price_cny, value.output_price_cny)
-	return amount !== null && amount > ZERO ? decimalText(amount, 15) : null
+	const amount = referenceUnits(value.input_price, value.output_price)
+	if (amount === null || amount <= ZERO) return null
+	if (value.currency === "CNY") return decimalText(amount, 15)
+	const rate = readDecimal(value.usd_to_cny_rate)
+	return value.currency === "USD" && rate !== null && rate > ZERO
+		? decimalText(amount * rate, 27)
+		: null
 }
 
 /** 读取后端参考金额或编辑中的完整单价，两个模式分别遵循各自的数据来源。 */
 export function getReferenceAmount(value: ModelBillingMultiplierSettings, editing: boolean) {
-	const hasPrices = value.input_price_cny != null || value.output_price_cny != null
+	const hasPrices = value.input_price != null || value.output_price != null
 	return editing && hasPrices ? previewReferenceAmount(value) : value.base_price_cny
 }
 
 /** 配置错误对应实际输入字段，历史仅存金额的配置允许继续保存。 */
 export function validateMultiplierSettings(value: ModelBillingMultiplierSettings) {
-	const fields: ("input_price_cny" | "output_price_cny" | "usd_to_cny_rate")[] = []
-	const hasPrices = value.input_price_cny != null || value.output_price_cny != null
-	if (hasPrices || (value.enabled && !((readDecimal(value.base_price_cny) ?? ZERO) > ZERO))) {
-		if (readDecimal(value.input_price_cny) === null) fields.push("input_price_cny")
-		if (readDecimal(value.output_price_cny) === null) fields.push("output_price_cny")
-		if (referenceUnits(value.input_price_cny, value.output_price_cny) === ZERO)
-			fields.push("output_price_cny")
+	const fields: ("input_price" | "output_price" | "usd_to_cny_rate" | "currency")[] = []
+	const hasPrices = value.input_price != null || value.output_price != null
+	if ((hasPrices || value.enabled) && value.currency !== "CNY" && value.currency !== "USD")
+		fields.push("currency")
+	if (
+		hasPrices ||
+		(value.enabled && !((readReferenceAmount(value.base_price_cny) ?? ZERO) > ZERO))
+	) {
+		if (readDecimal(value.input_price) === null) fields.push("input_price")
+		if (readDecimal(value.output_price) === null) fields.push("output_price")
+		if (referenceUnits(value.input_price, value.output_price) === ZERO)
+			fields.push("output_price")
 	}
 	const rate = readDecimal(value.usd_to_cny_rate)
 	if ((value.enabled || value.usd_to_cny_rate != null) && (rate === null || rate === ZERO))
@@ -117,6 +130,13 @@ export const referenceModelPrices: readonly ReferenceModelPrice[] = [
 	},
 ]
 
+/** 参考金额含固定用量和换汇精度，统一转为二十七位定点数。 */
+function readReferenceAmount(value: string | null): bigint | null {
+	if (typeof value !== "string" || !/^\d{1,24}(?:\.\d{1,27})?$/.test(value)) return null
+	const [integer, fraction = ""] = value.split(".")
+	return BigInt(integer + fraction.padEnd(27, "0"))
+}
+
 /** 美元快照按展示汇率换算人民币；缺少汇率或有效基准时隐藏对应结果。 */
 export function previewModelPrice(
 	model: ReferenceModelPrice,
@@ -128,9 +148,7 @@ export function previewModelPrice(
 	if (rateUnits === null || rateUnits === ZERO || usdUnits === null)
 		return { amount: null, multiplier: null }
 	const cnyUnits = usdUnits * rateUnits
-	const baseValid = typeof base === "string" && /^\d{1,15}(?:\.\d{1,27})?$/.test(base)
-	const [baseInteger, baseFraction = ""] = baseValid ? base.split(".") : ["0"]
-	const denominator = BigInt(baseInteger + baseFraction.padEnd(27, "0"))
+	const denominator = readReferenceAmount(base) ?? ZERO
 	let multiplier: string | null = null
 	if (denominator > ZERO) {
 		if (cnyUnits > ZERO && cnyUnits * HUNDRED < denominator) multiplier = "<0.01x"

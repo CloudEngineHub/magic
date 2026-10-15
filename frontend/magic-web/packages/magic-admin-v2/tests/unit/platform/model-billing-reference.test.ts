@@ -15,9 +15,10 @@ import type {
 describe("管理端参考倍率预览", () => {
 	const config: ModelBillingMultiplierSettings = {
 		enabled: true,
+		currency: "CNY" as const,
 		base_price_cny: "0.8",
-		input_price_cny: "2",
-		output_price_cny: "3",
+		input_price: "2",
+		output_price: "3",
 		usd_to_cny_rate: "5",
 	}
 	const model: ReferenceModelPrice = {
@@ -36,7 +37,7 @@ describe("管理端参考倍率预览", () => {
 		assert.equal(JSON.stringify(config), original)
 		assert.equal(
 			getReferenceAmount(
-				{ ...config, input_price_cny: undefined, output_price_cny: undefined },
+				{ ...config, input_price: undefined, output_price: undefined },
 				true,
 			),
 			"0.8",
@@ -46,19 +47,19 @@ describe("管理端参考倍率预览", () => {
 		assert.equal(
 			previewReferenceAmount({
 				...config,
-				input_price_cny: "0",
-				output_price_cny: "0.000000000001",
+				input_price: "0",
+				output_price: "0.000000000001",
 			}),
 			"0.000000000000001",
 		)
 		for (const input of [null, "", "-1", "1e3", "NaN", "Infinity", "0.0000000000001"]) {
-			assert.equal(previewReferenceAmount({ ...config, input_price_cny: input }), null)
+			assert.equal(previewReferenceAmount({ ...config, input_price: input }), null)
 		}
 		assert.equal(
-			previewReferenceAmount({ ...config, input_price_cny: "0", output_price_cny: "0" }),
+			previewReferenceAmount({ ...config, input_price: "0", output_price: "0" }),
 			null,
 		)
-		assert.equal(getReferenceAmount({ ...config, input_price_cny: null }, true), null)
+		assert.equal(getReferenceAmount({ ...config, input_price: null }, true), null)
 	})
 	it("倍率随基准和汇率变化，模型单价保持不变", () => {
 		assert.deepEqual(previewModelPrice(model, "5", "0.03"), {
@@ -84,16 +85,39 @@ describe("管理端参考倍率预览", () => {
 		)
 	})
 	it("允许一项零价，不允许两项同时为零或只有一项单价", () => {
-		assert.deepEqual(validateMultiplierSettings({ ...config, input_price_cny: "0" }), [])
+		assert.deepEqual(validateMultiplierSettings({ ...config, input_price: "0" }), [])
 		assert.deepEqual(
-			validateMultiplierSettings({ ...config, input_price_cny: "0", output_price_cny: "0" }),
-			["output_price_cny"],
+			validateMultiplierSettings({ ...config, input_price: "0", output_price: "0" }),
+			["output_price"],
 		)
-		assert.deepEqual(validateMultiplierSettings({ ...config, output_price_cny: null }), [
-			"output_price_cny",
+		assert.deepEqual(validateMultiplierSettings({ ...config, output_price: null }), [
+			"output_price",
 		])
 		assert.deepEqual(validateMultiplierSettings({ ...config, usd_to_cny_rate: "0" }), [
 			"usd_to_cny_rate",
 		])
+	})
+	it("美元基准按汇率精确换算，切换币种不改写单价", () => {
+		const usd = { ...config, currency: "USD" as const }
+		assert.equal(previewReferenceAmount(usd), "0.115")
+		assert.equal(usd.input_price, "2")
+		assert.equal(previewReferenceAmount({ ...usd, usd_to_cny_rate: null }), null)
+		assert.equal(
+			previewReferenceAmount({
+				...usd,
+				input_price: "0",
+				output_price: "0.000000000001",
+				usd_to_cny_rate: "0.000000000001",
+			}),
+			"0.000000000000000000000000001",
+		)
+		const same = { ...model, input: "2", output: "3" }
+		assert.equal(previewModelPrice(same, "5", previewReferenceAmount(usd)).multiplier, "1.00x")
+		assert.equal(
+			previewModelPrice(same, "7", previewReferenceAmount({ ...usd, usd_to_cny_rate: "7" }))
+				.multiplier,
+			"1.00x",
+		)
+		assert.deepEqual(validateMultiplierSettings({ ...config, currency: null }), ["currency"])
 	})
 })

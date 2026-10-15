@@ -237,7 +237,13 @@ export function createPlatformInfoSchema(
 			.object({
 				enabled: z.boolean(),
 				base_price_cny: z.string().nullable(),
+				input_price: z.string().nullable().optional(),
 				input_price_cny: z.string().nullable().optional(),
+				output_price: z.string().nullable().optional(),
+				currency: z
+					.enum(["CNY", "USD"], { error: t("platformInfo.multiplier.invalidCurrency") })
+					.nullable()
+					.optional(),
 				output_price_cny: z.string().nullable().optional(),
 				usd_to_cny_rate: z.string().nullable(),
 			})
@@ -247,9 +253,11 @@ export function createPlatformInfoSchema(
 						code: "custom",
 						path: [field],
 						message: t(
-							field === "usd_to_cny_rate"
-								? "platformInfo.multiplier.invalidAmount"
-								: "platformInfo.multiplier.invalidPrices",
+							field === "currency"
+								? "platformInfo.multiplier.invalidCurrency"
+								: field === "usd_to_cny_rate"
+									? "platformInfo.multiplier.invalidAmount"
+									: "platformInfo.multiplier.invalidPrices",
 						),
 					})
 				}

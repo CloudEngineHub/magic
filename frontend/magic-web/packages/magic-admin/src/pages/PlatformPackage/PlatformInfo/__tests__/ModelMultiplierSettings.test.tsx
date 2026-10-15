@@ -30,6 +30,22 @@ vi.mock("@admin-components", () => ({
 			{props.children}
 		</button>
 	),
+	MagicSelect: ({
+		options,
+		onChange,
+		...props
+	}: { options: { value: string; label: string }[]; onChange: (value: string) => void } & Omit<
+		import("react").SelectHTMLAttributes<HTMLSelectElement>,
+		"onChange"
+	>) => (
+		<select {...props} onChange={(event) => onChange(event.target.value)}>
+			{options.map((option) => (
+				<option key={option.value} value={option.value}>
+					{option.label}
+				</option>
+			))}
+		</select>
+	),
 	MagicInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 	MagicSwitch: ({
 		checked,
@@ -71,6 +87,7 @@ function Harness({
 			onFinish={onFinish}
 			initialValues={{
 				model_billing_multiplier: {
+					currency: "CNY",
 					enabled,
 					base_price_cny: null,
 					usd_to_cny_rate: null,
@@ -99,6 +116,10 @@ it("默认折叠，展开编辑后再次折叠仍以字符串提交完整配置"
 	fireEvent.change(screen.getByLabelText("multiplier.exchangeRateLabel"), {
 		target: { value: "7" },
 	})
+	fireEvent.change(screen.getByLabelText("multiplier.currency"), { target: { value: "USD" } })
+	expect(screen.getByTestId("legacy-multiplier-reference-amount").textContent).toBe(
+		"0.16100000000007 multiplier.cny",
+	)
 	fireEvent.click(screen.getByRole("switch"))
 	fireEvent.click(screen.getByRole("button", { name: "multiplier.collapse" }))
 	expect(content?.hidden).toBe(true)
@@ -107,9 +128,10 @@ it("默认折叠，展开编辑后再次折叠仍以字符串提交完整配置"
 		expect(submit).toHaveBeenCalledWith({
 			model_billing_multiplier: {
 				enabled: true,
+				currency: "USD" as const,
 				base_price_cny: null,
-				input_price_cny: "2.000000000001",
-				output_price_cny: "3",
+				input_price: "2.000000000001",
+				output_price: "3",
 				usd_to_cny_rate: "7",
 			},
 		}),

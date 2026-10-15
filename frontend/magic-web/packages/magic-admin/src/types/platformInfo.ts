@@ -17,6 +17,9 @@ export namespace PlatformInfo {
 	export interface ModelBillingMultiplierSettings {
 		enabled: boolean
 		base_price_cny: string | null
+		currency?: "CNY" | "USD" | null
+		input_price?: string | null
+		output_price?: string | null
 		input_price_cny?: string | null
 		output_price_cny?: string | null
 		usd_to_cny_rate: string | null

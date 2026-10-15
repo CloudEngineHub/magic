@@ -3,7 +3,7 @@ import type { FormInstance } from "antd"
 import { useId, useState, type ChangeEvent } from "react"
 import { ChevronDown, ChevronUp } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { MagicButton, MagicInput, MagicSwitch, SubHeader } from "@admin-components"
+import { MagicButton, MagicInput, MagicSelect, MagicSwitch, SubHeader } from "@admin-components"
 import {
 	getReferenceAmount,
 	previewModelPrice,
@@ -33,15 +33,25 @@ export default function ModelMultiplierSettings({
 	const reference = value ? getReferenceAmount(value, !disabled) : null
 	const fields = [
 		{
-			field: "input_price_cny",
+			field: "input_price",
 			label: t("multiplier.inputPrice"),
-			unit: t("multiplier.inputPriceUnit"),
+			unit:
+				value?.currency === "USD"
+					? t("multiplier.inputUsdUnit")
+					: value?.currency === "CNY"
+						? t("multiplier.inputPriceUnit")
+						: t("multiplier.inputGenericUnit"),
 			placeholder: t("multiplier.inputPlaceholder"),
 		},
 		{
-			field: "output_price_cny",
+			field: "output_price",
 			label: t("multiplier.outputPrice"),
-			unit: t("multiplier.outputPriceUnit"),
+			unit:
+				value?.currency === "USD"
+					? t("multiplier.outputUsdUnit")
+					: value?.currency === "CNY"
+						? t("multiplier.outputPriceUnit")
+						: t("multiplier.outputGenericUnit"),
 			placeholder: t("multiplier.outputPlaceholder"),
 		},
 		{
@@ -109,6 +119,57 @@ export default function ModelMultiplierSettings({
 					>
 						<MagicInput />
 					</Form.Item>
+					<div className={pageStyles.formItem}>
+						<label
+							className={pageStyles.formItemLabel}
+							htmlFor={`${contentId}-currency`}
+						>
+							{t("multiplier.currency")}
+						</label>
+						<div className={cx(pageStyles.formItemContent, styles.fieldContent)}>
+							<Form.Item
+								className={styles.formField}
+								name={["model_billing_multiplier", "currency"]}
+								dependencies={[
+									["model_billing_multiplier", "enabled"],
+									["model_billing_multiplier", "input_price"],
+									["model_billing_multiplier", "output_price"],
+								]}
+								rules={[
+									{
+										/** 保存时定位缺失币种，折叠状态也保留校验。 */
+										async validator() {
+											const config = form.getFieldValue([
+												"model_billing_multiplier",
+											]) as ModelBillingMultiplierSettings
+											if (
+												config &&
+												validateMultiplierSettings(config).includes(
+													"currency",
+												)
+											) {
+												setExpanded(true)
+												throw new Error(t("multiplier.invalidCurrency"))
+											}
+										},
+									},
+								]}
+							>
+								<MagicSelect
+									id={`${contentId}-currency`}
+									aria-label={t("multiplier.currency")}
+									disabled={disabled}
+									style={{ width: "100%" }}
+									placeholder={t("multiplier.currencyPlaceholder")}
+									options={[
+										{ value: "CNY", label: t("multiplier.currencyCny") },
+										{ value: "USD", label: t("multiplier.currencyUsd") },
+									]}
+								/>
+							</Form.Item>
+							<p className={styles.fieldHint}>{t("multiplier.currencyHint")}</p>
+						</div>
+					</div>
 					{fields.map(({ field, label, unit, placeholder }) => (
 						<div key={field} className={pageStyles.formItem}>
 							<label
@@ -124,8 +185,9 @@ export default function ModelMultiplierSettings({
 									extra={unit}
 									dependencies={[
 										["model_billing_multiplier", "enabled"],
-										["model_billing_multiplier", "input_price_cny"],
-										["model_billing_multiplier", "output_price_cny"],
+										["model_billing_multiplier", "currency"],
+										["model_billing_multiplier", "input_price"],
+										["model_billing_multiplier", "output_price"],
 									]}
 									rules={[
 										{
@@ -185,8 +247,8 @@ export default function ModelMultiplierSettings({
 							</p>
 							<p className={styles.fieldHint}>{t("multiplier.previewHint")}</p>
 							{value?.base_price_cny != null &&
-							value.input_price_cny == null &&
-							value.output_price_cny == null ? (
+							value.input_price == null &&
+							value.output_price == null ? (
 								<p className={styles.fieldHint}>{t("multiplier.legacyHint")}</p>
 							) : null}
 						</div>

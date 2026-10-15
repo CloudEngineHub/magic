@@ -13,9 +13,10 @@ describe("模型参考倍率配置", () => {
 	it("直接回显后端金额，并且只提交已修改的配置组", () => {
 		const config = {
 			enabled: true,
+			currency: "CNY" as const,
 			base_price_cny: "0.123456789012",
-			input_price_cny: "2.000000000001",
-			output_price_cny: "3",
+			input_price: "2.000000000001",
+			output_price: "3",
 			usd_to_cny_rate: "7.123456789012",
 		}
 		const values = toPlatformInfoFormState({
@@ -37,12 +38,22 @@ describe("模型参考倍率配置", () => {
 		const schema = createPlatformInfoSchema((key) => key, "modelMultiplier")
 		const values = createEmptyPlatformInfoFormState()
 		assert.equal(schema.safeParse(values).success, true)
-		for (const amount of [null, "", "0", "-1", "NaN", "Infinity", "1e3", "0.0000000000001"]) {
+		for (const amount of [
+			null,
+			"",
+			"0",
+			"-1",
+			"NaN",
+			"Infinity",
+			"1e3",
+			"0.0000000000000000000000000001",
+		]) {
 			assert.equal(
 				schema.safeParse({
 					...values,
 					model_billing_multiplier: {
 						enabled: true,
+						currency: "CNY" as const,
 						base_price_cny: amount,
 						usd_to_cny_rate: "7",
 					},
@@ -55,6 +66,7 @@ describe("模型参考倍率配置", () => {
 				...values,
 				model_billing_multiplier: {
 					enabled: true,
+					currency: "CNY" as const,
 					base_price_cny: "0.1",
 					usd_to_cny_rate: null,
 				},
@@ -66,6 +78,7 @@ describe("模型参考倍率配置", () => {
 				...values,
 				model_billing_multiplier: {
 					enabled: true,
+					currency: "CNY" as const,
 					base_price_cny: "0.1",
 					usd_to_cny_rate: "7",
 				},
@@ -78,15 +91,16 @@ describe("模型参考倍率配置", () => {
 		const values = createEmptyPlatformInfoFormState()
 		values.model_billing_multiplier = {
 			enabled: true,
+			currency: "CNY" as const,
 			base_price_cny: null,
-			input_price_cny: "0",
-			output_price_cny: "3.000000000001",
+			input_price: "0",
+			output_price: "3.000000000001",
 			usd_to_cny_rate: "5",
 		}
 		assert.equal(schema.safeParse(values).success, true)
 		assert.deepEqual(
 			toChangedPlatformInfoParams(values, {
-				model_billing_multiplier: { input_price_cny: true },
+				model_billing_multiplier: { input_price: true },
 			}),
 			{ model_billing_multiplier: values.model_billing_multiplier },
 		)
@@ -95,7 +109,7 @@ describe("模型参考倍率配置", () => {
 				...values,
 				model_billing_multiplier: {
 					...values.model_billing_multiplier,
-					output_price_cny: "0",
+					output_price: "0",
 				},
 			}).success,
 			false,
