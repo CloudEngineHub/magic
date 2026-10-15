@@ -75,12 +75,9 @@ export function AppsMenu({ open, title, items, emptyText, onClose, onItemClick }
 				aria-label={title}
 				data-testid="mobile-tab-bar-apps-menu"
 				className={cn(
-					"fixed left-1/2 z-[1001] w-[calc(100%-20px)] max-w-[355px] -translate-x-1/2 transition-all duration-200 ease-out will-change-transform",
+					"fixed bottom-[calc(max(var(--safe-area-inset-bottom),12px)+var(--mobile-tabbar-height,60px)+4px)] left-1/2 z-[1001] w-[calc(100%-20px)] max-w-[355px] -translate-x-1/2 transition-all duration-200 ease-out will-change-transform",
 					isVisible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
 				)}
-				style={{
-					bottom: "calc(max(var(--safe-area-inset-bottom), 12px) + var(--mobile-tabbar-height, 60px) + 4px)",
-				}}
 			>
 				<div
 					data-testid="mobile-tab-bar-apps-menu-content"
