@@ -51,7 +51,8 @@ export function Layout() {
 						<div
 							className={cn(
 								"z-[1] my-auto flex h-fit w-[600px] flex-col items-center rounded-[12px] border border-border bg-background p-10",
-								"[@media(max-width:700px)]:!mt-2.5 [@media(max-width:700px)]:w-full [@media(max-width:700px)]:min-w-[375px] [@media(max-width:700px)]:overflow-hidden [@media(max-width:700px)]:border-0 [@media(max-width:700px)]:bg-transparent [@media(max-width:700px)]:px-[30px] [@media(max-width:700px)]:py-5",
+								// Embedded login containers can be narrower than a phone's screen width.
+								"[@media(max-width:400px)]:px-5 [@media(max-width:700px)]:!mt-2.5 [@media(max-width:700px)]:w-full [@media(max-width:700px)]:min-w-0 [@media(max-width:700px)]:max-w-full [@media(max-width:700px)]:overflow-hidden [@media(max-width:700px)]:border-0 [@media(max-width:700px)]:bg-transparent [@media(max-width:700px)]:px-[30px] [@media(max-width:700px)]:py-5",
 								"[@media(min-height:1000px)]:mt-[150px]",
 								loginFormClassName,
 							)}
