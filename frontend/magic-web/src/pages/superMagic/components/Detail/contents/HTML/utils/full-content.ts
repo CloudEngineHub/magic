@@ -648,6 +648,46 @@ const getDynamicResourceInterceptorScript = (options: DynamicResourceInterceptor
 			window.__MAGIC_POST_MESSAGE_TARGET_STRATEGY__ = '${postMessageTargetStrategy}';
 			${MAGIC_FETCH_POST_MESSAGE_TARGET_HELPER}
 
+			// Render-site shell 以 document.write 承载内容，window.location 是沙箱站点的真实 http(s) 地址。
+			// 页面脚本（如 Playwright 报告的 new URL(path, location.href)）会把相对资源路径拼成沙箱同源绝对地址，
+			// 这类地址在沙箱站点上并不存在，需要还原为工作区相对路径后交给父页面解析；仅跨域沙箱模式启用。
+			var sandboxAbsoluteEnabled = ${postMessageTargetStrategy === POST_MESSAGE_TARGET_STRATEGIES.CROSS_ORIGIN_PARENT ? "true" : "false"};
+
+			function isSandboxAbsoluteResourceUrl(url) {
+				if (!sandboxAbsoluteEnabled || typeof url !== "string") return false;
+				if (!/^https?:/i.test(url)) return false;
+				try {
+					return new URL(url).origin === window.location.origin;
+				} catch (e) {
+					return false;
+				}
+			}
+
+			// 以沙箱页面所在目录为基准取相对路径，丢弃脚本从页面 location 复制过来的 query（可能含分享口令）。
+			function toWorkspaceRelativePath(url) {
+				if (!isSandboxAbsoluteResourceUrl(url)) return url;
+				try {
+					var parsed = new URL(url);
+					var baseDir = window.location.pathname.replace(/[^/]*$/, "");
+					var path = parsed.pathname.indexOf(baseDir) === 0
+						? parsed.pathname.slice(baseDir.length)
+						: parsed.pathname.replace(/^\\/+/, "");
+					try {
+						path = decodeURIComponent(path);
+					} catch (e) {}
+					var pageParams = new URLSearchParams(window.location.search);
+					var keptQuery = [];
+					parsed.searchParams.forEach(function(value, key) {
+						if (pageParams.get(key) !== value) {
+							keptQuery.push(encodeURIComponent(key) + "=" + encodeURIComponent(value));
+						}
+					});
+					return path + (keptQuery.length ? "?" + keptQuery.join("&") : "") + parsed.hash;
+				} catch (e) {
+					return url;
+				}
+			}
+
 			${injectedIsRelativePathFunctionSource}
 
 			function escapeRegExp(value) {
@@ -706,7 +746,7 @@ const getDynamicResourceInterceptorScript = (options: DynamicResourceInterceptor
 						{
 							type: "MAGIC_FETCH_URL_REQUEST",
 							requestId: requestId,
-							relativePath: relativePath,
+							relativePath: toWorkspaceRelativePath(relativePath),
 							fileId: window.__MAGIC_FILE_ID__ || "",
 						},
 						"*",
