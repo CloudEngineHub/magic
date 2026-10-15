@@ -1,3 +1,9 @@
+import type {
+	ModelItem,
+	ReasoningEffort,
+} from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
+import { reasoningEffortLevels } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
+import { reportCaughtStorageFailure } from "@/app/services/storage/storageFailure"
 import { IStorageAdapter, LocalStorageAdapter } from "./storage"
 import { logger as Logger } from "@/infrastructure/logger"
 import { platformKey } from "@/utils/storage"
@@ -63,6 +69,52 @@ class SuperMagicTopicModelCacheService {
 		const organizationCode = userStore.user.organizationCode
 		const userId = userStore.user.userInfo?.user_id
 		return platformKey(`super_magic/topic_model_cache/${organizationCode}/${userId}`)
+	}
+
+	/** 同步读取按模型保存的强度，使消息入队前能取得不可变快照。 */
+	getReasoningEffort(model: ModelItem): ReasoningEffort | undefined {
+		try {
+			const preferences: Record<string, unknown> = JSON.parse(
+				window.localStorage.getItem(`${this.genUserCacheKey()}/reasoning_efforts`) || "{}",
+			)
+			const value = preferences[model.model_id]
+			return reasoningEffortLevels.find(
+				(level) => level === value && model.reasoning_effort_levels?.includes(level),
+			)
+		} catch (error) {
+			reportCaughtStorageFailure({
+				eventKey: "read_reasoning_effort_failed",
+				error,
+				message: "Failed to read reasoning preference",
+			})
+			return undefined
+		}
+	}
+
+	/** 保存某个逻辑模型的偏好；默认选项删除覆盖，组织和用户沿用模型缓存隔离。 */
+	setReasoningEffort(model: ModelItem, effort?: ReasoningEffort): void {
+		try {
+			const key = `${this.genUserCacheKey()}/reasoning_efforts`
+			const preferences: Record<string, unknown> = JSON.parse(
+				window.localStorage.getItem(key) || "{}",
+			)
+			if (effort && model.reasoning_effort_levels?.includes(effort))
+				preferences[model.model_id] = effort
+			else delete preferences[model.model_id]
+			window.localStorage.setItem(key, JSON.stringify(preferences))
+		} catch (error) {
+			reportCaughtStorageFailure({
+				eventKey: "save_reasoning_effort_failed",
+				error,
+				message: "Failed to save reasoning preference",
+			})
+		}
+	}
+
+	/** 冻结语言模型与强度，显式默认不会在队列恢复时重新读取偏好。 */
+	snapshotLanguageModel(model: ModelItem): ModelItem {
+		if (Object.prototype.hasOwnProperty.call(model, "reasoning_effort")) return { ...model }
+		return { ...model, reasoning_effort: this.getReasoningEffort(model) ?? null }
 	}
 
 	/**
@@ -526,6 +578,7 @@ class SuperMagicTopicModelCacheService {
 				// Clear all cache for current user
 				const key = this.genUserCacheKey()
 				await this.storageAdapter.removeItem(key)
+				await this.storageAdapter.removeItem(`${key}/reasoning_efforts`)
 				logger.report("[Cache] Cleared all cache for user")
 				return
 			}

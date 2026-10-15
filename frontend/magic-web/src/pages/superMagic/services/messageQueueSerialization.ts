@@ -5,6 +5,8 @@ import type { TopicMode } from "../pages/Workspace/TopicMode"
 import { transformMentions } from "../components/MessageEditor/utils/mention"
 import { resolveAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
 
+import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
+
 // Share the server queue payload between the composer and programmatic iframe sends.
 export const serializeMessageContent = (
 	content: JSONContent,
@@ -18,11 +20,15 @@ export const serializeMessageContent = (
 	clientSyncId?: string,
 	dynamicParams?: Record<string, unknown>,
 ) => {
-	const modelObj = selectedModel
+	const modelSnapshot = selectedModel ? modelCache.snapshotLanguageModel(selectedModel) : null
+	const modelObj = modelSnapshot
 		? {
-				model_id: selectedModel.model_id,
-				model_name: selectedModel.model_name,
-				model_icon: selectedModel.model_icon,
+				model_id: modelSnapshot.model_id,
+				model_name: modelSnapshot.model_name,
+				model_icon: modelSnapshot.model_icon,
+				...(modelSnapshot.reasoning_effort && {
+					reasoning_effort: modelSnapshot.reasoning_effort,
+				}),
 			}
 		: { model_id: "auto" }
 

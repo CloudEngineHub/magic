@@ -3569,6 +3569,8 @@
 		"modelLoadFailed": "Failed to load models. Please try again.",
 		"modelSwitch": {
 			"autoModelDescription": "Auto mode automatically selects the most efficient AI model for the current task, suitable for handling most regular tasks with moderate credit consumption.",
+			"billingMultiplier": "Usage multiplier",
+			"billingMultiplierValue": "Usage multiplier: {{value}}x",
 			"collapseDescription": "Collapse model description",
 			"expandDescription": "Expand model description",
 			"headerTitle": "Model Selection",
@@ -3585,6 +3587,18 @@
 			"noModelsFound": "No matching models found",
 			"noVideoModels": "No video models available",
 			"noVideoModelsDesc": "No video models are available for the current mode",
+			"reasoning": {
+				"default": "Default",
+				"details": "Model details",
+				"high": "High",
+				"label": "Reasoning effort",
+				"low": "Low",
+				"max": "Maximum",
+				"medium": "Medium",
+				"minimal": "Minimal",
+				"none": "Off",
+				"xhigh": "Extra high"
+			},
 			"searchPlaceholder": "Search Model",
 			"selectModel": "Select Model",
 			"tooltipImageModel": "Image Model",

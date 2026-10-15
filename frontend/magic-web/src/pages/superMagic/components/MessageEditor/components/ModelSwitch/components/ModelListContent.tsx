@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next"
 import { isModelDisabled } from "../utils"
 import { ModelEmptyState } from "./ModelEmptyState"
 import { ModelGroupSection, type RenderableModelGroup } from "./ModelGroupSection"
+import { ModelDetailsHoverProvider } from "../hooks/useModelDetailsHover"
 
 interface ModelListContentProps {
 	modelList: ModelListGroup[]
@@ -48,7 +49,7 @@ export const ModelListContent = observer(function ModelListContent({
 	})
 
 	return (
-		<>
+		<ModelDetailsHoverProvider>
 			<MyModelsList
 				modelKey={modelKey}
 				selectedModel={selectedModel}
@@ -78,9 +79,10 @@ export const ModelListContent = observer(function ModelListContent({
 					onModelClick={handleModelClick}
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
+					isLanguageModel={modelKey === "models"}
 				/>
 			))}
-		</>
+		</ModelDetailsHoverProvider>
 	)
 })
 

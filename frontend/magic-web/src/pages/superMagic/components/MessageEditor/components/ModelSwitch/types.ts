@@ -5,6 +5,18 @@ import type { AddModelType } from "./components/AddModel/store"
 
 export type { MessageEditorSize }
 
+/** 与 Odin 对齐的七档思考强度。 */
+export const reasoningEffortLevels = [
+	"none",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+] as const
+export type ReasoningEffort = (typeof reasoningEffortLevels)[number]
+
 export type ModelTabType = "language" | "image" | "video"
 
 export interface ModelConfig {
@@ -48,7 +60,14 @@ export interface ModelItem {
 	model_id: string
 	model_name: string
 	provider_model_id: string
+	/** 后端按当前用户权限解析的实际模型，仅用于能力展示。 */
+	resolved_model_id?: string
+	reasoning_effort_levels?: ReasoningEffort[]
+	/** 仅发送快照使用；模型列表中的能力对象不写入此选择值。 */
+	reasoning_effort?: ReasoningEffort | null
 	model_description: string
+	/** 可选展示值；当前接口未下发时隐藏，不从价格或思考档位推算倍率。 */
+	billing_multiplier?: number | null
 	model_icon: string
 	model_status: ModelStatusEnum
 	sort: number

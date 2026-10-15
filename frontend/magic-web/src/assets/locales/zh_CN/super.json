@@ -3569,6 +3569,8 @@
 		"modelLoadFailed": "模型加载失败，请稍后重试",
 		"modelSwitch": {
 			"autoModelDescription": "Auto 模式自动选用当前任务执行效率最高的AI模型，适合处理大多数常规任务，积分消耗适中。",
+			"billingMultiplier": "消耗倍率",
+			"billingMultiplierValue": "消耗倍率 {{value}} 倍",
 			"collapseDescription": "收起模型描述",
 			"expandDescription": "展开模型描述",
 			"headerTitle": "模型选择",
@@ -3585,6 +3587,18 @@
 			"noModelsFound": "未找到匹配的模型",
 			"noVideoModels": "暂无视频模型",
 			"noVideoModelsDesc": "当前模式暂无可用的视频模型",
+			"reasoning": {
+				"default": "默认",
+				"details": "模型详情",
+				"high": "高",
+				"label": "思考强度",
+				"low": "低",
+				"max": "极致",
+				"medium": "中",
+				"minimal": "最低",
+				"none": "关闭",
+				"xhigh": "超高"
+			},
 			"searchPlaceholder": "搜索模型",
 			"selectModel": "选择模型",
 			"tooltipImageModel": "生图模型",

@@ -1,3 +1,4 @@
+import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import {
 	createElement,
 	useState,
@@ -355,7 +356,9 @@ function useMessageQueue({
 					return {
 						content: jsonContent,
 						mentionItems: mentions,
-						selectedModel: model,
+						selectedModel: model
+							? { ...model, reasoning_effort: model.reasoning_effort ?? null }
+							: undefined,
 						selectedImageModel: imageModel,
 						selectedVideoModel: videoModel,
 						topicMode: topicPattern,
@@ -769,7 +772,9 @@ function useMessageQueue({
 					id: localQueueId,
 					content: params.content,
 					mentionItems: params.mentionItems,
-					selectedModel: params.selectedModel ?? undefined,
+					selectedModel: params.selectedModel
+						? modelCache.snapshotLanguageModel(params.selectedModel)
+						: undefined,
 					selectedImageModel: params.selectedImageModel ?? undefined,
 					selectedVideoModel: params.selectedVideoModel ?? undefined,
 					topicMode: params.topicMode,

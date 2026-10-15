@@ -7,6 +7,7 @@ import {
 	type UseFormSetValue,
 } from "react-hook-form"
 import { useTranslation } from "react-i18next"
+import type { ReactNode } from "react"
 
 import { DialogFormField } from "@magic-admin-v2/components/form/dialog-form-field"
 import { FieldError } from "@magic-admin-v2/components/form/field-error"
@@ -18,6 +19,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@magic-admin-v2/components/ui/select"
+import { Checkbox } from "@magic-admin-v2/components/ui/checkbox"
+import { reasoningEffortLevels } from "@magic-admin-v2/features/platform-model-list/types"
 import { Switch } from "@magic-admin-v2/components/ui/switch"
 import { getCommonRuntimeFieldVisibility } from "@magic-admin-v2/features/platform-model-list/utils/model-runtime-config"
 import type { ProviderModelType } from "@magic-admin-v2/features/platform-model-list/types"
@@ -41,6 +44,18 @@ export function ModelEditorRuntimeFields({
 	setValue: UseFormSetValue<ModelEditorValues>
 }) {
 	const { t } = useTranslation()
+	const supportsThinking = useWatch({ control, name: "support_deep_think" })
+	const selectedEffortLevels = useWatch({ control, name: "reasoning_effort_levels" })
+	const selectedEffortDefault = useWatch({ control, name: "reasoning_effort_default" })
+	const effortLabels = {
+		none: t("modelList.editor.reasoning.none"),
+		minimal: t("modelList.editor.reasoning.minimal"),
+		low: t("modelList.editor.reasoning.low"),
+		medium: t("modelList.editor.reasoning.medium"),
+		high: t("modelList.editor.reasoning.high"),
+		xhigh: t("modelList.editor.reasoning.xhigh"),
+		max: t("modelList.editor.reasoning.max"),
+	}
 	const visibility = getCommonRuntimeFieldVisibility(modelType, isOfficialOrganization)
 
 	// 订阅表单值，使已有固定温度零在重新打开编辑器时也显示为关闭。
@@ -129,14 +144,24 @@ export function ModelEditorRuntimeFields({
 									onValueChange={field.onChange}
 									value={field.value}
 								>
-									<SelectTrigger className="w-full" id="chat-api" data-testid="platform-model-list-chat-api-trigger">
+									<SelectTrigger
+										className="w-full"
+										id="chat-api"
+										data-testid="platform-model-list-chat-api-trigger"
+									>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent data-testid="platform-model-list-chat-api-content">
-										<SelectItem value="chat_completions" data-testid="platform-model-list-option">
+										<SelectItem
+											value="chat_completions"
+											data-testid="platform-model-list-option"
+										>
 											{t("modelList.editor.chatApi.chatCompletions")}
 										</SelectItem>
-										<SelectItem value="responses" data-testid="platform-model-list-option">
+										<SelectItem
+											value="responses"
+											data-testid="platform-model-list-option"
+										>
 											{t("modelList.editor.chatApi.responses")}
 										</SelectItem>
 									</SelectContent>
@@ -162,14 +187,24 @@ export function ModelEditorRuntimeFields({
 										onValueChange={handleTemperatureModeChange}
 										value={isTemperatureDisabled ? "disabled" : field.value}
 									>
-										<SelectTrigger className="w-full" id="temperature-mode" data-testid="platform-model-list-temperature-mode-trigger">
+										<SelectTrigger
+											className="w-full"
+											id="temperature-mode"
+											data-testid="platform-model-list-temperature-mode-trigger"
+										>
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent data-testid="platform-model-list-temperature-mode-content">
-											<SelectItem value="recommended" data-testid="platform-model-list-option">
+											<SelectItem
+												value="recommended"
+												data-testid="platform-model-list-option"
+											>
 												{t("modelList.editor.temperature.recommended")}
 											</SelectItem>
-											<SelectItem value="fixed" data-testid="platform-model-list-option">
+											<SelectItem
+												value="fixed"
+												data-testid="platform-model-list-option"
+											>
 												{t("modelList.editor.temperature.fixed")}
 											</SelectItem>
 											<SelectItem value="disabled">
@@ -219,7 +254,126 @@ export function ModelEditorRuntimeFields({
 						disabled={disabled}
 						label={t("modelList.editor.field.supportThink")}
 						name="support_deep_think"
-					/>
+					>
+						{supportsThinking ? (
+							<>
+								<Controller
+									control={control}
+									name="reasoning_effort_levels"
+									render={({ field }) => (
+										<fieldset disabled={disabled} className="grid gap-3">
+											<legend className="mb-2 text-xs font-medium text-muted-foreground">
+												{t("modelList.editor.reasoning.label")}
+											</legend>
+											<div className="flex flex-wrap gap-4">
+												{reasoningEffortLevels.map((level) => (
+													<label
+														key={level}
+														className="flex items-center gap-2 text-sm"
+													>
+														<Checkbox
+															disabled={disabled}
+															checked={field.value.includes(level)}
+															onCheckedChange={(checked) => {
+																const selected =
+																	checked === true
+																		? [...field.value, level]
+																		: field.value.filter(
+																				(item) =>
+																					item !== level,
+																			)
+																field.onChange(
+																	reasoningEffortLevels.filter(
+																		(item) =>
+																			selected.includes(item),
+																	),
+																)
+																// 取消默认档位时回到服务商默认，不能留下不可选的默认值。
+																if (
+																	selectedEffortDefault ===
+																		level &&
+																	checked !== true
+																) {
+																	setValue(
+																		"reasoning_effort_default",
+																		null,
+																		{
+																			shouldDirty: true,
+																			shouldValidate: true,
+																		},
+																	)
+																}
+															}}
+														/>
+														{effortLabels[level]}
+													</label>
+												))}
+											</div>
+										</fieldset>
+									)}
+								/>
+								<div className="mt-4 grid gap-2 sm:grid-cols-[1fr_12rem] sm:items-center">
+									<label
+										htmlFor="reasoning-effort-default"
+										className="text-sm font-medium"
+									>
+										{t("modelList.editor.reasoning.defaultLabel")}
+									</label>
+									<Controller
+										control={control}
+										name="reasoning_effort_default"
+										render={({ field }) => (
+											<Select
+												disabled={disabled}
+												value={field.value ?? "provider_default"}
+												onValueChange={(value) => {
+													if (value === "provider_default")
+														field.onChange(null)
+													else if (
+														reasoningEffortLevels.some(
+															(level) => level === value,
+														)
+													)
+														field.onChange(value)
+												}}
+											>
+												<SelectTrigger
+													id="reasoning-effort-default"
+													className="w-full"
+												>
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="provider_default">
+														{t(
+															"modelList.editor.reasoning.providerDefault",
+														)}
+													</SelectItem>
+													{reasoningEffortLevels
+														.filter((level) =>
+															selectedEffortLevels.includes(level),
+														)
+														.map((level) => (
+															<SelectItem key={level} value={level}>
+																{effortLabels[level]}
+															</SelectItem>
+														))}
+												</SelectContent>
+											</Select>
+										)}
+									/>
+								</div>
+								<FieldError
+									className="mt-2 text-sm"
+									message={
+										errors.reasoning_effort_default
+											? t("modelList.editor.reasoning.invalidDefault")
+											: undefined
+									}
+								/>
+							</>
+						) : null}
+					</ToggleField>
 				</div>
 			) : null}
 		</div>
@@ -268,7 +422,8 @@ function NumberField({
 						step={step}
 						type="number"
 						value={field.value}
-					 data-testid="platform-model-list-input"/>
+						data-testid="platform-model-list-input"
+					/>
 				)}
 			/>
 			<FieldError className="text-sm" message={error} />
@@ -276,36 +431,43 @@ function NumberField({
 	)
 }
 
+/** 能力开关与依赖配置共用一个边框，子项展开后仍属于同一能力。 */
 function ToggleField({
 	control,
 	description,
 	disabled,
 	label,
 	name,
+	children,
 }: {
 	control: Control<ModelEditorValues>
 	description: string
 	disabled: boolean
 	label: string
 	name: "support_function" | "support_multi_modal" | "support_deep_think"
+	children?: ReactNode
 }) {
 	return (
-		<div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
-			<div>
-				<div className="text-sm font-medium">{label}</div>
-				<p className="mt-1 text-xs text-muted-foreground">{description}</p>
+		<div className="rounded-md border">
+			<div className="flex items-center justify-between gap-3 px-3 py-2.5">
+				<div>
+					<div className="text-sm font-medium">{label}</div>
+					<p className="mt-1 text-xs text-muted-foreground">{description}</p>
+				</div>
+				<Controller
+					control={control}
+					name={name}
+					render={({ field }) => (
+						<Switch
+							checked={field.value}
+							disabled={disabled}
+							onCheckedChange={field.onChange}
+							data-testid="platform-model-list-switch"
+						/>
+					)}
+				/>
 			</div>
-			<Controller
-				control={control}
-				name={name}
-				render={({ field }) => (
-					<Switch
-						checked={field.value}
-						disabled={disabled}
-						onCheckedChange={field.onChange}
-					 data-testid="platform-model-list-switch"/>
-				)}
-			/>
+			{children && <div className="border-t px-3 py-3">{children}</div>}
 		</div>
 	)
 }

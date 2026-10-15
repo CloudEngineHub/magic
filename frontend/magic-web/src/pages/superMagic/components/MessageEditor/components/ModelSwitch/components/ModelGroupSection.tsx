@@ -1,3 +1,4 @@
+import { ModelReasoningDetails } from "./ModelReasoningDetails"
 import { Check } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -12,6 +13,7 @@ import ModelIcon from "./ModelIcon"
 import ModelName from "./ModelName"
 import ModelTags from "./ModelTags"
 import ProviderName from "./ProviderName"
+import { ModelBillingMultiplier } from "./ModelBillingMultiplier"
 
 export interface RenderableModelGroup extends ModelListGroup {
 	displayModels: ModelItem[]
@@ -24,6 +26,7 @@ interface ModelGroupSectionProps {
 	onModelClick: (model: ModelItem) => void
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
+	isLanguageModel?: boolean
 }
 
 export function ModelGroupSection({
@@ -33,6 +36,7 @@ export function ModelGroupSection({
 	onModelClick,
 	selectedItemRef,
 	getModelDescription,
+	isLanguageModel = true,
 }: ModelGroupSectionProps) {
 	const { t } = useTranslation("super")
 	const isMobile = size === "mobile"
@@ -59,72 +63,91 @@ export function ModelGroupSection({
 						? `${model.model_name || model.model_id}，${description}`
 						: model.model_name || model.model_id
 
-					if (!isMobile) {
-						return (
-							<div
-								key={model.model_id}
-								ref={isSelected ? selectedItemRef : null}
-								className={cn(
-									"flex items-center rounded px-3 py-2",
-									"relative cursor-pointer gap-2.5 transition-all duration-200",
-									"group",
-									"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent",
-									isDisabled && "cursor-not-allowed opacity-50",
-								)}
-								onClick={() => onModelClick(model)}
-								role="button"
-								tabIndex={isDisabled ? -1 : 0}
-								onKeyDown={(event) => {
-									if (isDisabled) return
-									if (event.key !== "Enter" && event.key !== " ") return
-									event.preventDefault()
-									onModelClick(model)
-								}}
-								aria-label={ariaLabel}
-								title={description || model.model_name || model.model_id}
-								data-testid="model-switch-item"
-								data-model-id={model.model_id}
-								data-model-name={model.model_name}
-								data-selected={isSelected}
+					const row = !isMobile ? (
+						<div
+							key={model.model_id}
+							ref={isSelected ? selectedItemRef : null}
+							className={cn(
+								"flex items-center rounded px-3 py-2",
+								"relative min-h-11 cursor-pointer gap-2.5 transition-colors duration-100",
+								"group",
+								"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent",
+								isDisabled && "cursor-not-allowed opacity-50",
+							)}
+							onClick={() => onModelClick(model)}
+							role="button"
+							tabIndex={isDisabled ? -1 : 0}
+							onKeyDown={(event) => {
+								if (isDisabled) return
+								if (event.key !== "Enter" && event.key !== " ") return
+								event.preventDefault()
+								onModelClick(model)
+							}}
+							aria-label={ariaLabel}
+							data-testid="model-switch-item"
+							data-model-id={model.model_id}
+							data-model-name={model.model_name}
+							data-selected={isSelected}
+						>
+							{/* 固定图标列宽，完整展示模型原图，名称和倍率不会随图标比例错位。 */}
+							<span
+								className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+								aria-hidden="true"
 							>
-								<FlexBox vertical gap={1} flex={1} className="min-w-0">
-									<FlexBox gap={2} align="center">
-										<ModelName
-											model={model}
-											isSelected={false}
-											className={cn(
-												"w-fit max-w-full",
-												isDisabled && "opacity-50",
-											)}
-										/>
-										<ModelTags model={model} />
-									</FlexBox>
+								<ModelIcon
+									model={model}
+									size={16}
+									className="size-4 object-contain"
+									defaultColor="currentColor"
+								/>
+							</span>
+							<FlexBox vertical gap={1} flex={1} className="min-w-0">
+								<FlexBox gap={2} align="center" className="min-w-0">
+									<ModelName
+										model={model}
+										isSelected={false}
+										className={cn(
+											"w-fit max-w-full",
+											isLanguageModel && "min-w-0 flex-1",
+											isDisabled && "opacity-50",
+										)}
+									/>
+									<ModelTags model={model} />
+								</FlexBox>
+								{!isLanguageModel && (
 									<CollapsibleDescription
 										description={description}
 										isDisabled={isDisabled}
 										isExpanded={!!expandedDescriptions[model.model_id]}
-										expandLabel={t("messageEditor.modelSwitch.expandDescription")}
-										collapseLabel={t("messageEditor.modelSwitch.collapseDescription")}
-										onToggle={(event) => toggleDescription(model.model_id, event)}
+										expandLabel={t(
+											"messageEditor.modelSwitch.expandDescription",
+										)}
+										collapseLabel={t(
+											"messageEditor.modelSwitch.collapseDescription",
+										)}
+										onToggle={(event) =>
+											toggleDescription(model.model_id, event)
+										}
 									/>
-								</FlexBox>
-								<Checkbox
-									checked={isSelected}
-									onCheckedChange={() => onModelClick(model)}
-									onClick={(event) => event.stopPropagation()}
-									className={cn(
-										"flex-shrink-0",
-										"invisible opacity-0 transition-opacity",
-										"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
-										"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
-										isSelected && "visible opacity-100",
-									)}
-								/>
-							</div>
-						)
-					}
-
-					return (
+								)}
+							</FlexBox>
+							{isLanguageModel && (
+								<ModelBillingMultiplier value={model.billing_multiplier} />
+							)}
+							<Checkbox
+								checked={isSelected}
+								onCheckedChange={() => onModelClick(model)}
+								onClick={(event) => event.stopPropagation()}
+								className={cn(
+									"flex-shrink-0",
+									"invisible opacity-0 transition-opacity",
+									"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
+									"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+									isSelected && "visible opacity-100",
+								)}
+							/>
+						</div>
+					) : (
 						<div
 							key={model.model_id}
 							ref={isSelected ? selectedItemRef : null}
@@ -181,6 +204,20 @@ export function ModelGroupSection({
 								/>
 							) : null}
 						</div>
+					)
+					return isLanguageModel ? (
+						<ModelReasoningDetails
+							key={model.model_id}
+							model={model}
+							description={description}
+							mobile={isMobile}
+							disabled={isDisabled}
+							onSelect={onModelClick}
+						>
+							{row}
+						</ModelReasoningDetails>
+					) : (
+						row
 					)
 				})}
 			</div>
