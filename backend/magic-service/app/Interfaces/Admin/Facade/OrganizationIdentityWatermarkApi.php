@@ -31,7 +31,7 @@ class OrganizationIdentityWatermarkApi extends AbstractApi
     {
         $authorization = $this->getAuthorization();
         return $this->toResponse(
-            $this->identityWatermarkAppService->getEffective($authorization->getOrganizationCode())
+            $this->identityWatermarkAppService->getWatermark($authorization->getOrganizationCode())
         );
     }
 
@@ -46,24 +46,17 @@ class OrganizationIdentityWatermarkApi extends AbstractApi
             $authorization->getId(),
         );
 
-        return $this->toResponse($this->identityWatermarkAppService->getEffective($organizationCode));
+        return $this->toResponse($this->identityWatermarkAppService->getWatermark($organizationCode));
     }
 
     /**
-     * @param array{
-     *     organization: array{configured: bool, watermark: array<string, mixed>},
-     *     platform_watermark: array<string, mixed>,
-     *     effective_watermark: array<string, mixed>
-     * } $result
-     * @return array<string, mixed>
+     * @param array{enabled: bool, fields: string[], depth: string} $watermark
+     * @return array{watermark: array{enabled: bool, fields: string[], depth: string}}
      */
-    private function toResponse(array $result): array
+    private function toResponse(array $watermark): array
     {
         return [
-            'configured' => $result['organization']['configured'],
-            'watermark' => $result['organization']['watermark'],
-            'platform_watermark' => $result['platform_watermark'],
-            'effective_watermark' => $result['effective_watermark'],
+            'watermark' => $watermark,
         ];
     }
 }

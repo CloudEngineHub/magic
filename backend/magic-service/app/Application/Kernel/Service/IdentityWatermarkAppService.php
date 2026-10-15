@@ -32,6 +32,18 @@ class IdentityWatermarkAppService
     }
 
     /**
+     * Get the watermark configured by an organization.
+     *
+     * Returns the normalized default value when the organization never saved one.
+     *
+     * @return array{enabled: bool, fields: string[], depth: string}
+     */
+    public function getWatermark(string $organizationCode): array
+    {
+        return $this->getOrganization($organizationCode)['watermark'];
+    }
+
+    /**
      * Resolve the effective watermark of an organization.
      *
      * An organization watermark only takes effect when it is explicitly
