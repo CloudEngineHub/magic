@@ -15,7 +15,7 @@ use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
 
 /**
- * 第三方联系人映射查询及唯一用户 ID 解析。
+ * 第三方联系人映射查询及用户 ID 解析。
  */
 readonly class MagicThirdPlatformDomainService
 {
@@ -45,7 +45,7 @@ readonly class MagicThirdPlatformDomainService
     }
 
     /**
-     * 在调用方确定的来源范围内解析唯一用户 ID；空字符串表示无法确定。
+     * 在调用方确定的来源范围内返回首个非空用户 ID，多候选时记录告警。
      */
     public function resolveUserId(
         MagicEnvironmentEntity $environment,
@@ -61,7 +61,6 @@ readonly class MagicThirdPlatformDomainService
         ), SORT_STRING));
         if (count($originIds) > 1) {
             $this->logger->warning('第三方用户映射存在歧义', ['reason' => 'mapping_ambiguous', 'candidate_count' => count($originIds)]);
-            return '';
         }
         return $originIds[0] ?? '';
     }

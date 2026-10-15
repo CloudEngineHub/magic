@@ -68,7 +68,8 @@ final class ThirdPlatformUserIdAppServiceTest extends TestCase
             '无映射' => [[], 'feishu', ''],
             '空原始值' => [[''], 'feishu', ''],
             '重复同值' => [['mock-origin', 'mock-origin', ''], 'feishu', 'mock-origin'],
-            '多个不同值' => [['mock-first', 'mock-second'], 'feishu', ''],
+            '多个不同值记录告警并返回首个' => [['mock-first', 'mock-second'], 'feishu', 'mock-first'],
+            '跳过空值再取首个' => [['', 'mock-first', 'mock-second'], 'feishu', 'mock-first'],
         ];
     }
 
