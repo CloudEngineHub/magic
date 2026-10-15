@@ -74,7 +74,7 @@ export default function CollapsedWorkspaceChatItem({
 				align="center"
 				sideOffset={8}
 				collisionPadding={{ top: 12, right: 12, bottom: 32, left: 12 }}
-				className="flex max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] w-[240px] flex-col p-1 shadow-xs"
+				className="flex max-h-[min(70vh,640px,var(--radix-popover-content-available-height))] w-[240px] flex-col p-1 shadow-xs supports-[height:100dvh]:max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] supports-[height:100dvh]:[--sidebar-popup-height:70dvh]"
 				data-testid="sidebar-collapsed-my-chats-popover"
 				onEscapeKeyDown={(event) => {
 					if (isComposingRef.current) {
@@ -150,7 +150,7 @@ export default function CollapsedWorkspaceChatItem({
 					workspace
 					active={open}
 					searchKeyword={searchKeyword}
-					viewportMaxHeight="min(calc(70dvh - 128px), 512px, calc(var(--radix-popover-content-available-height) - 128px))"
+					viewportMaxHeight="min(calc(var(--sidebar-popup-height, 70vh) - 128px), 512px, calc(var(--radix-popover-content-available-height) - 128px))"
 					onBusyChange={setBusy}
 					onSelect={onSelect}
 				/>

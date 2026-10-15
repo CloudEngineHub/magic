@@ -390,7 +390,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 						side="right"
 						align="center"
 						collisionPadding={{ top: 12, right: 12, bottom: 32, left: 12 }}
-						className="flex max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] w-[240px] flex-col p-1 shadow-xs [&>:not([data-project-scroll-container])]:shrink-0"
+						className="flex max-h-[min(70vh,640px,var(--radix-popover-content-available-height))] w-[240px] flex-col p-1 shadow-xs supports-[height:100dvh]:max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] [&>:not([data-project-scroll-container])]:shrink-0"
 						sideOffset={8}
 						data-testid={projectPopoverTestId}
 						onEscapeKeyDown={(e) => {

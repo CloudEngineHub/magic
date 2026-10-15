@@ -420,10 +420,16 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 							: "[&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:pr-2",
 						!workspace && DESKTOP_CHATS_SUBMENU_LIST_CLASS_NAME,
 					)}
-					viewportClassName="overscroll-x-contain overscroll-y-auto [&>div]:!block"
+					viewportClassName={cn(
+						"overscroll-y-auto overscroll-x-contain [&>div]:!block",
+						// Chrome 100 uses vh; newer browsers can follow the dynamic viewport.
+						workspace &&
+							!viewportMaxHeight &&
+							"max-h-[min(40vh,400px)] supports-[height:100dvh]:max-h-[min(40dvh,400px)]",
+					)}
 					viewportStyle={
-						workspace
-							? { maxHeight: viewportMaxHeight ?? "min(40dvh, 400px)" }
+						workspace && viewportMaxHeight
+							? { maxHeight: viewportMaxHeight }
 							: undefined
 					}
 				>
