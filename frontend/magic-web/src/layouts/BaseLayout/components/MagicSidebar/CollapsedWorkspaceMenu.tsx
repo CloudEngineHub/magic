@@ -294,7 +294,7 @@ const CollapsedWorkspaceMenu = observer(function CollapsedWorkspaceMenu({
 						<ScrollArea
 							ref={workspaceScrollRef}
 							className="min-h-0 w-full [&_[data-slot='scroll-area-viewport']>div]:!block"
-							viewportStyle={{ maxHeight: "min(60vh, 500px)" }}
+							viewportClassName="max-h-[min(60vh,500px)]"
 						>
 							<div
 								ref={dndRootRef}

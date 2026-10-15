@@ -713,8 +713,7 @@ function WorkspaceList({
 			<svg
 				ref={dropIndicatorRef}
 				aria-hidden="true"
-				className="pointer-events-none absolute left-0 top-0 z-50 hidden overflow-visible text-[#b9dcff]"
-				style={{ height: 8 }}
+				className="pointer-events-none absolute left-0 top-0 z-50 hidden h-2 overflow-visible text-[#b9dcff]"
 			>
 				<line x1="4" y1="4" x2="100%" y2="4" stroke="currentColor" strokeWidth="2" />
 				<circle cx="4" cy="4" r="4" fill="currentColor" />

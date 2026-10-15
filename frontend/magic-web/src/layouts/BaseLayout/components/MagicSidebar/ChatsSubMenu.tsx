@@ -30,8 +30,8 @@ import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/utils/cn"
 import {
-	DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX,
-	DESKTOP_CHATS_SUBMENU_POPUP_WIDTH_PX,
+	DESKTOP_CHATS_SUBMENU_LIST_CLASS_NAME,
+	DESKTOP_CHATS_SUBMENU_POPUP_CLASS_NAME,
 } from "./chats-submenu-config"
 import ChatConversationSubMenuRow from "./ChatConversationSubMenuRow"
 import ProjectNavigationToolbar from "./ProjectNavigationToolbar"
@@ -328,8 +328,8 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 				standalone
 					? "w-full bg-transparent p-0"
 					: "rounded-md border border-border bg-popover p-1 shadow-xs",
+				!standalone && DESKTOP_CHATS_SUBMENU_POPUP_CLASS_NAME,
 			)}
-			style={standalone ? undefined : { width: DESKTOP_CHATS_SUBMENU_POPUP_WIDTH_PX }}
 			data-testid={standalone ? "sidebar-chats-panel" : "sidebar-chats-submenu-popup"}
 		>
 			{workspace ? null : standalone ? (
@@ -418,20 +418,13 @@ const ChatsSubMenu = forwardRef<ChatsSubMenuHandle, ChatsSubMenuProps>(function 
 						workspace
 							? "[&>[data-slot=scroll-area-scrollbar]]:w-[2px] [&>[data-slot=scroll-area-scrollbar]]:border-0 [&>[data-slot=scroll-area-scrollbar]]:p-0"
 							: "[&_[data-slot='scroll-area-scrollbar']]:-mr-1 [&_[data-slot='scroll-area-viewport']>div]:pr-2",
+						!workspace && DESKTOP_CHATS_SUBMENU_LIST_CLASS_NAME,
 					)}
 					viewportClassName="overscroll-x-contain overscroll-y-auto [&>div]:!block"
 					viewportStyle={
 						workspace
 							? { maxHeight: viewportMaxHeight ?? "min(40dvh, 400px)" }
 							: undefined
-					}
-					style={
-						workspace
-							? undefined
-							: {
-									height: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
-									maxHeight: `min(${DESKTOP_CHATS_SUBMENU_LIST_MAX_HEIGHT_PX}px, calc(100vh - 140px))`,
-								}
 					}
 				>
 					{renderListContent()}
