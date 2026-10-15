@@ -18,7 +18,7 @@ class ModelBillingMultiplierCalculator
     // 十二位源单价与十二位汇率相乘后仍保留足够精度。
     private const int SCALE = 36;
 
-    /** 使用能力解析的同一真实模型标识，每个绑定等权，缺价绑定整体跳过。 */
+    /** 使用能力解析的同一真实模型标识，每个绑定等权，仅跳过无效绑定。 */
     public function calculate(array $capabilities, array $availableGroups, ModelBillingMultiplierSettings $settings): array
     {
         $result = [];
@@ -73,7 +73,7 @@ class ModelBillingMultiplierCalculator
         return $currency === 'USD' ? bcmul($amount, $settings->usdToCnyRate, self::SCALE) : $amount;
     }
 
-    /** 兼容现有价格对象的浮点及科学计数法输出，非法历史价格按缺价处理。 */
+    /** 兼容现有价格对象的浮点及科学计数法输出，非法历史价格不参与计算。 */
     private function decimalPrice(?string $price): ?string
     {
         if ($price === null || ! is_numeric($price) || ! is_finite((float) $price) || (float) $price < 0) {
@@ -82,14 +82,20 @@ class ModelBillingMultiplierCalculator
         return preg_match('/^\d+(?:\.\d+)?$/D', $price) ? $price : sprintf('%.24F', (float) $price);
     }
 
-    /** 阶梯逐档等权，不按区间宽度取权重，也不混入成本和旧版兜底价格。 */
+    /** 缺失计费项按零计算，阶梯逐档等权，不混入成本和旧版兜底价格。 */
     private function averageUnitPrice(ModelConfigItem $config, string $object): ?string
     {
         $tiers = $config->getBillingTiers();
         if ($tiers === null) {
-            return $this->decimalPrice($object === BillingObject::INPUT_TOKEN ? $config->getInputPricing() : $config->getOutputPricing());
+            $price = $object === BillingObject::INPUT_TOKEN ? $config->getInputPricing() : $config->getOutputPricing();
+            return $price === null ? '0' : $this->decimalPrice($price);
         }
-        $rules = $tiers->getBillingTier($object)?->getPricingRules() ?? [];
+        $tier = $tiers->getBillingTier($object);
+        if ($tier === null) {
+            return '0';
+        }
+        // 缺失计费项与已存在但规则无效不同，后者仍跳过整个绑定。
+        $rules = $tier->getPricingRules();
         if ($rules === []) {
             return null;
         }

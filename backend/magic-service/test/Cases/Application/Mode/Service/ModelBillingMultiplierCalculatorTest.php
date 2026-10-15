@@ -14,6 +14,10 @@ use App\Application\Mode\Service\ModeAppService;
 use App\Application\Mode\Service\ModelBillingMultiplierCalculator;
 use App\Domain\Contact\Repository\Facade\MagicUserSettingRepositoryInterface;
 use App\Domain\Kernel\Service\PlatformSettingsDomainService;
+use App\Domain\Provider\DTO\Item\ModelConfigItem;
+use App\Domain\Provider\DTO\Item\TokenPricing\BillingTierItem;
+use App\Domain\Provider\DTO\Item\TokenPricing\BillingTierPriceRule;
+use App\Domain\Provider\DTO\Item\TokenPricing\BillingTiers;
 use App\Domain\Provider\Entity\ProviderModelEntity;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
@@ -52,19 +56,24 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $result['mock-model'], 0.00000001);
     }
 
-    /** 缺价绑定整体跳过，明确零价参与；全部缺价返回零而非隐藏。 */
+    /** 缺失单项按零计价，保留另一项费用；零费用绑定同样参与平均。 */
     public function testMissingAndZeroPrices(): void
     {
         $priced = $this->model(['input_pricing' => '2', 'output_pricing' => '8']);
-        $missing = $this->model(['input_pricing' => '99']);
+        $missingOutput = $this->model(['input_pricing' => '2']);
+        $missingInput = $this->model(['output_pricing' => '3']);
+        $missingBoth = $this->model([]);
         $zero = $this->model(['input_pricing' => '0', 'output_pricing' => '0']);
-        $this->assertEqualsWithDelta(0.28, $this->calculate([$priced, $missing])['mock-model'], 0.00000001);
+        $this->assertEqualsWithDelta(0.2, $this->calculate([$missingOutput])['mock-model'], 0.00000001);
+        $this->assertEqualsWithDelta(0.03, $this->calculate([$missingInput])['mock-model'], 0.00000001);
+        $this->assertEqualsWithDelta(0.24, $this->calculate([$priced, $missingOutput])['mock-model'], 0.00000001);
         $this->assertEqualsWithDelta(0.14, $this->calculate([$priced, $zero])['mock-model'], 0.00000001);
-        $this->assertSame(0.0, $this->calculate([$missing])['mock-model']);
+        $this->assertEqualsWithDelta(0.14, $this->calculate([$priced, $missingBoth])['mock-model'], 0.00000001);
+        $this->assertSame(0.0, $this->calculate([$missingBoth])['mock-model']);
         $this->assertSame(0.0, $this->calculate([])['mock-model']);
     }
 
-    /** 阶梯不使用旧价补齐缺失对象；非文本计费或未知币种不能组成参考金额。 */
+    /** 缺失阶梯项按零计价，不使用旧价补齐；非法绑定继续跳过。 */
     public function testIncompletePricingIsNotFilledFromLegacyFields(): void
     {
         $partial = $this->model(['input_pricing' => '10', 'output_pricing' => '10', 'billing_tiers' => [
@@ -72,7 +81,33 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
         ]]);
         $nonText = $this->model(['billing_type' => 'Times', 'input_pricing' => '10', 'output_pricing' => '10']);
         $unknownCurrency = $this->model(['billing_currency' => null, 'input_pricing' => '10', 'output_pricing' => '10']);
-        $this->assertSame(0.0, $this->calculate([$partial, $nonText, $unknownCurrency])['mock-model']);
+        $this->assertEqualsWithDelta(0.5, $this->calculate([$partial, $nonText, $unknownCurrency])['mock-model'], 0.00000001);
+        $outputOnly = $this->model(['billing_currency' => 'USD', 'billing_tiers' => [
+            ['billing_object' => 'output_token', 'follow_object' => 'input_token', 'pricing_mode' => 'fixed', 'pricing_rules' => [['price' => 3]]],
+        ]]);
+        $this->assertEqualsWithDelta(0.21, $this->calculate([$outputOnly])['mock-model'], 0.00000001);
+        $this->assertSame(0.0, $this->calculate([$this->model(['billing_tiers' => []])])['mock-model']);
+    }
+
+    /** 使用模拟历史阶梯验证空规则和非法价格仍被剔除，不作为零价拉低均值。 */
+    public function testInvalidExistingTierIsNotTreatedAsMissing(): void
+    {
+        $invalidRule = $this->createMock(BillingTierPriceRule::class);
+        $invalidRule->method('getPrice')->willReturn(-1.0);
+        foreach ([[], [$invalidRule]] as $rules) {
+            $tier = $this->createMock(BillingTierItem::class);
+            $tier->method('getPricingRules')->willReturn($rules);
+            $tiers = $this->createMock(BillingTiers::class);
+            $tiers->method('getBillingTier')->willReturn($tier);
+            $config = $this->model([])->getConfig();
+            $this->assertInstanceOf(ModelConfigItem::class, $config);
+            $config->setBillingTiers($tiers);
+            $invalid = $this->createMock(ProviderModelEntity::class);
+            $invalid->method('getConfig')->willReturn($config);
+            $invalid->method('isDynamicModel')->willReturn(false);
+            $priced = $this->model(['input_pricing' => '2', 'output_pricing' => '8']);
+            $this->assertEqualsWithDelta(0.28, $this->calculate([$priced, $invalid])['mock-model'], 0.00000001);
+        }
     }
 
     /** 小额历史价格及阶梯对象的科学计数法不应破坏整个模型列表。 */
