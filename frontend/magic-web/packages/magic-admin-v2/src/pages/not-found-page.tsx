@@ -10,6 +10,7 @@ export default function NotFoundPage() {
 		<div className="space-y-6" data-testid="not-found-page">
 			<EmptyState
 				icon={FileQuestion}
+				testId="not-found-empty"
 				title={t("notFound.title")}
 				description={t("notFound.description")}
 			/>

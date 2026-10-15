@@ -66,6 +66,8 @@ export type ListFilterPanelProps<T extends object> = {
 	desktopResetTestId?: string
 	mobileTriggerTestId?: string
 	mobileContentTestId?: string
+	mobileBodyTestId?: string
+	mobileCloseButtonTestId?: string
 	mobileResetTestId?: string
 	mobileApplyTestId?: string
 }
@@ -97,6 +99,8 @@ export function ListFilterPanel<T extends object>({
 	desktopResetTestId,
 	mobileTriggerTestId,
 	mobileContentTestId,
+	mobileBodyTestId,
+	mobileCloseButtonTestId,
 	mobileResetTestId,
 	mobileApplyTestId,
 }: ListFilterPanelProps<T>) {
@@ -175,6 +179,7 @@ export function ListFilterPanel<T extends object>({
 			) : null}
 			<SheetContent
 				data-testid={mobileContentTestId}
+				closeButtonTestId={mobileCloseButtonTestId}
 				side="bottom"
 				className="h-[85vh] max-h-[85vh] rounded-t-xl gap-0 p-0"
 				aria-describedby={undefined}
@@ -184,7 +189,7 @@ export function ListFilterPanel<T extends object>({
 				</SheetHeader>
 				{/* `[&>div]:!block` keeps Radix' table-layout wrapper from widening the body. */}
 				<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
-					<div className="grid gap-3 p-4">
+					<div className="grid gap-3 p-4" data-testid={mobileBodyTestId}>
 						{renderFields({
 							value: draft,
 							onChange: (patch) =>

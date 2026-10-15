@@ -345,17 +345,17 @@ export function OfficialSkillImportDialog({
                   <DialogFormField fieldId="official-skill-name-zh" label={t("officialMarketplace.skillImport.field.nameZh")} required>
                     <Input
                       aria-invalid={Boolean(formState.errors.nameZh)}
+                      data-testid="platform-official-marketplace-official-skill-name-zh-input"
                       id="official-skill-name-zh"
-                      {...register("nameZh")}
-                    data-testid="platform-official-marketplace-official-skill-name-zh-input" />
+                      {...register("nameZh")} />
                     <FieldError message={formState.errors.nameZh?.message} />
                   </DialogFormField>
                   <DialogFormField fieldId="official-skill-name-en" label={t("officialMarketplace.skillImport.field.nameEn")} required>
                     <Input
                       aria-invalid={Boolean(formState.errors.nameEn)}
+                      data-testid="platform-official-marketplace-official-skill-name-en-input"
                       id="official-skill-name-en"
-                      {...register("nameEn")}
-                    data-testid="platform-official-marketplace-official-skill-name-en-input" />
+                      {...register("nameEn")} />
                     <FieldError message={formState.errors.nameEn?.message} />
                   </DialogFormField>
                 </div>
@@ -363,17 +363,17 @@ export function OfficialSkillImportDialog({
                   <DialogFormField fieldId="official-skill-description-zh" label={t("officialMarketplace.skillImport.field.descriptionZh")} required>
                     <Textarea
                       aria-invalid={Boolean(formState.errors.descriptionZh)}
+                      data-testid="platform-official-marketplace-official-skill-description-zh-input"
                       id="official-skill-description-zh"
-                      {...register("descriptionZh")}
-                    data-testid="platform-official-marketplace-official-skill-description-zh-input" />
+                      {...register("descriptionZh")} />
                     <FieldError message={formState.errors.descriptionZh?.message} />
                   </DialogFormField>
                   <DialogFormField fieldId="official-skill-description-en" label={t("officialMarketplace.skillImport.field.descriptionEn")} required>
                     <Textarea
                       aria-invalid={Boolean(formState.errors.descriptionEn)}
+                      data-testid="platform-official-marketplace-official-skill-description-en-input"
                       id="official-skill-description-en"
-                      {...register("descriptionEn")}
-                    data-testid="platform-official-marketplace-official-skill-description-en-input" />
+                      {...register("descriptionEn")} />
                     <FieldError message={formState.errors.descriptionEn?.message} />
                   </DialogFormField>
                 </div>
@@ -381,9 +381,9 @@ export function OfficialSkillImportDialog({
                   <DialogFormField fieldId="official-skill-version" label={t("officialMarketplace.skillImport.field.version")} required>
                     <Input
                       aria-invalid={Boolean(formState.errors.version)}
+                      data-testid="platform-official-marketplace-official-skill-version-input"
                       id="official-skill-version"
-                      {...register("version")}
-                    data-testid="platform-official-marketplace-official-skill-version-input" />
+                      {...register("version")} />
                     <FieldError message={formState.errors.version?.message} />
                   </DialogFormField>
                   <DialogFormField fieldId="official-skill-category" label={t("officialMarketplace.skillImport.field.category")}>
@@ -437,7 +437,7 @@ export function OfficialSkillImportDialog({
                     <Controller
                       control={control}
                       name="featured"
-                      render={({ field }) => <Switch checked={field.value} disabled={submitting} onCheckedChange={field.onChange} data-testid="platform-official-marketplace-switch" />}
+                      render={({ field }) => <Switch checked={field.value} data-testid="platform-official-marketplace-switch" disabled={submitting} onCheckedChange={field.onChange} />}
                     />
                     {t("officialMarketplace.skillImport.field.featured")}
                   </label>
@@ -445,7 +445,7 @@ export function OfficialSkillImportDialog({
                     <Controller
                       control={control}
                       name="hidden"
-                      render={({ field }) => <Switch checked={field.value} disabled={submitting} onCheckedChange={field.onChange} data-testid="platform-official-marketplace-switch" />}
+                      render={({ field }) => <Switch checked={field.value} data-testid="platform-official-marketplace-switch" disabled={submitting} onCheckedChange={field.onChange} />}
                     />
                     {t("officialMarketplace.skillImport.field.hidden")}
                   </label>
@@ -453,19 +453,19 @@ export function OfficialSkillImportDialog({
                     {t("officialMarketplace.skillImport.field.sortOrder")}
                     <Input
                       className="h-8 w-24"
+                      data-testid="platform-official-marketplace-input"
                       min={0}
                       type="number"
                       {...register("sortOrder", {
                         setValueAs: (value) => (value === "" ? 0 : Number(value)),
-                      })}
-                    data-testid="platform-official-marketplace-input" />
+                      })} />
                   </label>
                 </div>
               </div>
             ) : null}
             </div>
             <DialogFooter className="border-t px-5 py-4">
-              <Button disabled={submitting} onClick={onCancel} type="button" variant="outline" data-testid="platform-official-marketplace-cancel-button">{t("officialMarketplace.skillImport.cancel")}</Button>
+              <Button data-testid="platform-official-marketplace-cancel-button" disabled={submitting} onClick={onCancel} type="button" variant="outline">{t("officialMarketplace.skillImport.cancel")}</Button>
               <Button disabled={!parsed || processing || submitting || logoUploading} type="submit" data-testid="platform-official-marketplace-save-button">
                 {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
                 {t("officialMarketplace.skillImport.confirm")}
@@ -482,11 +482,11 @@ export function OfficialSkillImportDialog({
             <DialogDescription>{t("officialMarketplace.skillImport.duplicateDescription")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button onClick={clearSelectedFile} type="button" variant="outline" data-testid="platform-official-marketplace-cancel-button">{t("officialMarketplace.skillImport.duplicateCancel")}</Button>
+            <Button data-testid="platform-official-marketplace-cancel-button" onClick={clearSelectedFile} type="button" variant="outline">{t("officialMarketplace.skillImport.duplicateCancel")}</Button>
             <Button
+              data-testid="platform-official-marketplace-save-button"
               onClick={() => void handleSubmit((values) => submitImport(values, true))()}
-              type="button"
-             data-testid="platform-official-marketplace-save-button">
+              type="button">
               {t("officialMarketplace.skillImport.duplicateContinue")}
             </Button>
           </DialogFooter>

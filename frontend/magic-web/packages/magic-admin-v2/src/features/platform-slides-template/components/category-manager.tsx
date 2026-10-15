@@ -246,6 +246,11 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 			<div className="space-y-4">
 				<ListFilterPanel
 					applyLabel={t("slidesTemplate.applyFilters")}
+					mobileApplyTestId="platform-slides-template-apply-button"
+					mobileBodyTestId="platform-slides-template-filter-body"
+					mobileCloseButtonTestId="platform-slides-template-category-filter-close-button"
+					mobileContentTestId="platform-slides-template-filter-sheet"
+					mobileResetTestId="platform-slides-template-reset-button"
 					createDefaultValue={createDefaultCategoryFilterDraft}
 					mobileOpen={mobileFilterOpen}
 					onMobileOpenChange={onMobileFilterOpenChange}
@@ -262,7 +267,17 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 						<>
 							<FilterControlField label={t("slidesTemplate.keyword")}>
 								<FilterSearchInput
+									clearButtonTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-clear-button"
+											: "platform-slides-template-secondary-clear-button"
+									}
 									clearLabel={t("common.clear")}
+									inputTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-input"
+											: "platform-slides-template-secondary-search-input"
+									}
 									onValueChange={(keyword) =>
 										layout === "grid"
 											? setDebouncedField("keyword", keyword)
@@ -274,7 +289,17 @@ export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManager
 							</FilterControlField>
 							<FilterControlField label={t("slidesTemplate.categoryCode")}>
 								<FilterSearchInput
+									clearButtonTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-clear-button"
+											: "platform-slides-template-tertiary-clear-button"
+									}
 									clearLabel={t("common.clear")}
+									inputTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-input"
+											: "platform-slides-template-tertiary-search-input"
+									}
 									onValueChange={(code) =>
 										layout === "grid"
 											? setDebouncedField("code", code)

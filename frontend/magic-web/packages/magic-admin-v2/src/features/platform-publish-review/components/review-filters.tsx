@@ -110,7 +110,7 @@ export function AdvancedFilterControls({
 						onChange({ order_by: order_by as PublishReviewOrderBy })
 					}
 				>
-					<SelectTrigger className="w-full">
+					<SelectTrigger className="w-full" data-testid="platform-publish-review-select-trigger">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent data-testid="platform-publish-review-select-content">
@@ -126,6 +126,7 @@ export function AdvancedFilterControls({
 			<FilterControlField className="w-full" label={t("publishReview.filter.createdAt")}>
 				<TimeFilterPanel
 					className="w-full"
+					testIdPrefix="platform-publish-review-time-filter"
 					onChange={(timeRange) =>
 						onChange({
 							end_time: timeRange?.endDate.slice(0, 10) ?? "",
@@ -160,8 +161,10 @@ export function SearchInput({
 		<FilterControlField className="w-full" label={label}>
 			<FilterSearchInput
 				aria-label={label}
+				clearButtonTestId="platform-publish-review-search-clear-button"
 				clearLabel={t("common.clear")}
 				containerClassName="min-w-0"
+				inputTestId="platform-publish-review-search-input"
 				onValueChange={onChange}
 				placeholder={placeholder}
 				value={value}

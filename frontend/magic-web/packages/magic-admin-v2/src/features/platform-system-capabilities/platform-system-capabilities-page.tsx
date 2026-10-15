@@ -91,6 +91,7 @@ export default function PlatformSystemCapabilitiesPage() {
 	return (
 		<>
 			<ListShell
+				testId="platform-system-capabilities-page"
 				actions={
 					<>
 						<PageHeaderFilterButton
@@ -125,7 +126,7 @@ export default function PlatformSystemCapabilitiesPage() {
 				}
 			>
 				{listQuery.isLoading ? (
-					<CapabilityListSkeleton />
+					<CapabilityListSkeleton  testId="platform-system-capabilities-loading" />
 				) : (
 					<div className="space-y-4 pb-6">
 						{listQuery.error ? (
@@ -136,6 +137,7 @@ export default function PlatformSystemCapabilitiesPage() {
 										t("common.requestFailed"),
 									)}
 									icon={AlertCircle}
+									testId="platform-system-capabilities-error"
 									title={t("systemCapabilities.error.loadTitle")}
 								/>
 							</div>
@@ -152,6 +154,7 @@ export default function PlatformSystemCapabilitiesPage() {
 								<EmptyState
 									description={t("systemCapabilities.empty.description")}
 									icon={Cpu}
+									testId="platform-system-capabilities-empty"
 									title={t("systemCapabilities.empty.title")}
 								/>
 							</div>

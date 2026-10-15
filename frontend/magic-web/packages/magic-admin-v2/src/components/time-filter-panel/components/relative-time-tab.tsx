@@ -74,6 +74,7 @@ export type RelativeTimeTabProps = {
 	onMonthApply: (monthKey: string) => void
 	/** 提交指定的快捷或标准预设。 */
 	onPresetApply: (presetKey: TimePresetKey) => void
+	testIdPrefix?: string
 }
 
 export function RelativeTimeTab({
@@ -99,7 +100,9 @@ export function RelativeTimeTab({
 	onCustomValueChange,
 	onMonthApply,
 	onPresetApply,
+	testIdPrefix,
 }: RelativeTimeTabProps) {
+	const testId = (suffix: string) => (testIdPrefix ? `${testIdPrefix}-${suffix}` : undefined)
 	const { t } = useTranslation()
 
 	return (
@@ -123,7 +126,11 @@ export function RelativeTimeTab({
 						<span className="text-xs font-medium text-muted-foreground">
 							{t("timeFilter.alignToUnit")}
 						</span>
-						<Switch checked={alignToUnit} onCheckedChange={onAlignToUnitChange} />
+						<Switch
+							checked={alignToUnit}
+							data-testid={testId("align-switch")}
+							onCheckedChange={onAlignToUnitChange}
+						/>
 					</div>
 				) : null}
 			</div>
@@ -169,6 +176,7 @@ export function RelativeTimeTab({
 										}
 										key={option.key}
 										onClick={() => onPresetApply(option.key)}
+										testId={testId("quick-preset-option")}
 									>
 										{getPresetLabel(option.labelKey, t)}
 									</TimeOptionButton>
@@ -225,6 +233,7 @@ export function RelativeTimeTab({
 							}
 							key={monthKey}
 							onClick={() => onMonthApply(monthKey)}
+							testId={testId("month-option")}
 						>
 							{formatMonthLabel(monthKey, t)}
 						</TimeOptionButton>
@@ -248,6 +257,7 @@ export function RelativeTimeTab({
 						</span>
 						<Input
 							className="h-8 w-20"
+							data-testid={testId("custom-value-input")}
 							min={1}
 							onChange={(event) =>
 								onCustomValueChange(Math.max(1, Number(event.target.value) || 1))
@@ -260,6 +270,7 @@ export function RelativeTimeTab({
 								aria-expanded={customUnitMenuOpen}
 								aria-haspopup="listbox"
 								className="flex h-8 w-28 max-w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-sm shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								data-testid={testId("custom-unit-trigger")}
 								onClick={() => onCustomUnitMenuOpenChange(!customUnitMenuOpen)}
 								type="button"
 							>
@@ -280,6 +291,7 @@ export function RelativeTimeTab({
 									{supportedUnits.map((unit) => (
 										<button
 											aria-selected={customUnit === unit}
+											data-testid={testId("custom-unit-option")}
 											className={cn(
 												"flex h-8 w-full items-center justify-between rounded-sm px-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
 												customUnit === unit &&
@@ -309,7 +321,12 @@ export function RelativeTimeTab({
 								{t("timeFilter.cancel")}
 							</Button>
 						) : null}
-						<Button className="w-fit" onClick={onCustomRelativeApply} size="sm">
+						<Button
+							className="w-fit"
+							data-testid={testId("custom-apply-button")}
+							onClick={onCustomRelativeApply}
+							size="sm"
+						>
 							{t("timeFilter.confirm")}
 						</Button>
 					</div>

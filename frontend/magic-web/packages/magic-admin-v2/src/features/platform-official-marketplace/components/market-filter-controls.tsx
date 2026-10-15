@@ -84,6 +84,11 @@ export function MarketFilters({
 			title={t("officialMarketplace.filter.title")}
 			value={filterDraft}
 			desktopResetTestId="platform-official-marketplace-reset-button"
+			mobileApplyTestId="platform-official-marketplace-apply-button"
+			mobileBodyTestId="platform-official-marketplace-filter-body"
+			mobileCloseButtonTestId="platform-official-marketplace-filter-close-button"
+			mobileContentTestId="platform-official-marketplace-filter-sheet"
+			mobileResetTestId="platform-official-marketplace-reset-button"
 		/>
 	)
 }
@@ -114,8 +119,10 @@ function SearchInput({
 		<FilterControlField label={label}>
 			<FilterSearchInput
 				aria-label={label}
+				clearButtonTestId="platform-official-marketplace-advanced-search-clear-button"
 				clearLabel={t("common.clear")}
 				containerClassName="min-w-0"
+				inputTestId="platform-official-marketplace-advanced-search-input"
 				onValueChange={onChange}
 				placeholder={placeholder}
 				value={value}
@@ -169,16 +176,24 @@ function MarketFilterFields({
 				<FilterControlField label={t("officialMarketplace.filter.category")}>
 					<SearchableMultiSelect
 						ariaLabel={t("officialMarketplace.filter.category")}
+						clearButtonTestId="platform-official-marketplace-multi-select-clear-button"
 						clearLabel={t("officialMarketplace.filter.clearCategories")}
+						contentTestId="platform-official-marketplace-multi-select-content"
 						emptyLabel={t("officialMarketplace.filter.allCategories")}
+						emptyTestId="platform-official-marketplace-multi-select-empty"
 						isLoading={categoryOptionsLoading}
+						loadingTestId="platform-official-marketplace-multi-select-loading"
 						noMatchingLabel={t("officialMarketplace.filter.noMatchingCategories")}
 						onChange={(category_ids) => onChange({ category_ids })}
+						optionTestId="platform-official-marketplace-multi-select-option"
 						options={categoryOptions}
+						searchClearButtonTestId="platform-official-marketplace-multi-select-search-clear-button"
+						searchInputTestId="platform-official-marketplace-multi-select-search-input"
 						searchPlaceholder={t("officialMarketplace.filter.searchCategories")}
 						selectedCountLabel={(count) =>
 							t("officialMarketplace.filter.selectedCategoryCount", { count })
 						}
+						triggerTestId="platform-official-marketplace-multi-select-trigger"
 						value={value.category_ids}
 					/>
 				</FilterControlField>
@@ -270,6 +285,7 @@ function MarketFilterFields({
 			<FilterControlField label={t("officialMarketplace.filter.createdAt")}>
 				<TimeFilterPanel
 					className="w-full"
+					testIdPrefix="platform-official-marketplace-time-filter"
 					onChange={(timeRange) =>
 						onChange({
 							end_time: timeRange?.endDate ?? "",

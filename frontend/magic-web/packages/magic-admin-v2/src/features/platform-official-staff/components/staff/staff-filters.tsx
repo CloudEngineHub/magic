@@ -35,8 +35,13 @@ export function StaffFilters({
 	return (
 		<ListFilterPanel
 			applyLabel={t("officialStaff.action.applyFilters")}
-			mobileContentTestId="platform-official-staff-filter-content"
+			desktopResetTestId="platform-official-staff-desktop-reset-button"
+			mobileApplyTestId="platform-official-staff-apply-button"
+			mobileBodyTestId="platform-official-staff-filter-body"
+			mobileCloseButtonTestId="platform-official-staff-filter-close-button"
+			mobileContentTestId="platform-official-staff-filter-sheet"
 			mobileOpen={mobileOpen}
+			mobileResetTestId="platform-official-staff-reset-button"
 			onMobileOpenChange={onMobileOpenChange}
 			showMobileTrigger={false}
 			createDefaultValue={createDefaultFilterDraft}
@@ -50,15 +55,30 @@ export function StaffFilters({
 	)
 }
 
-function StaffFilterFields({ onChange, value }: ListFilterPanelFieldsProps<FilterDraft>) {
+function StaffFilterFields({
+	layout,
+	onChange,
+	value,
+}: ListFilterPanelFieldsProps<FilterDraft>) {
 	const { t } = useTranslation()
+	const isSheet = layout === "sheet"
 
 	return (
 		<>
 			<FilterControlField label={t("officialStaff.filter.keyword")}>
 				<FilterSearchInput
 					aria-label={t("officialStaff.filter.keyword")}
+					clearButtonTestId={
+						isSheet
+							? "platform-official-staff-mobile-search-clear-button"
+							: "platform-official-staff-secondary-clear-button"
+					}
 					clearLabel={t("common.clear")}
+					inputTestId={
+						isSheet
+							? "platform-official-staff-mobile-search-input"
+							: "platform-official-staff-secondary-search-input"
+					}
 					onValueChange={(keyword) => onChange({ keyword })}
 					placeholder={t("officialStaff.placeholder.keyword")}
 					value={value.keyword}
@@ -67,7 +87,17 @@ function StaffFilterFields({ onChange, value }: ListFilterPanelFieldsProps<Filte
 			<FilterControlField label={t("officialStaff.filter.identifier")}>
 				<FilterSearchInput
 					aria-label={t("officialStaff.filter.identifier")}
+					clearButtonTestId={
+						isSheet
+							? "platform-official-staff-mobile-search-clear-button"
+							: "platform-official-staff-tertiary-search-clear-button"
+					}
 					clearLabel={t("common.clear")}
+					inputTestId={
+						isSheet
+							? "platform-official-staff-mobile-search-input"
+							: "platform-official-staff-tertiary-search-input"
+					}
 					onValueChange={(identifier) => onChange({ identifier })}
 					placeholder={t("officialStaff.placeholder.identifier")}
 					value={value.identifier}

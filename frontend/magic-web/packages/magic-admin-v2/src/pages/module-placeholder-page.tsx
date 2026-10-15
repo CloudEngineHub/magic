@@ -34,6 +34,7 @@ export default function ModulePlaceholderPage({
 			<div className="mt-2 pb-6">
 				<EmptyState
 					icon={Boxes}
+					testId="module-placeholder-empty"
 					title={t("modulePlaceholder.title")}
 					description={t("modulePlaceholder.description")}
 				/>

@@ -64,6 +64,11 @@ export function ReviewListPanel<TData>({
 		<div className="space-y-4">
 			<ListFilterPanel
 				desktopResetTestId="platform-publish-review-reset-button"
+				mobileApplyTestId="platform-publish-review-apply-button"
+				mobileBodyTestId="platform-publish-review-filter-body"
+				mobileCloseButtonTestId="platform-publish-review-filter-close-button"
+				mobileContentTestId="platform-publish-review-filter-sheet"
+				mobileResetTestId="platform-publish-review-reset-button"
 				applyLabel={t("publishReview.filter.apply")}
 				createDefaultValue={() => createDefaultFilterDraft(kind, variant)}
 				onChange={(patch) => onDraftChange((previous) => ({ ...previous, ...patch }))}
@@ -83,6 +88,7 @@ export function ReviewListPanel<TData>({
 				<div className="rounded-lg border border-border/50 p-4">
 					<EmptyState
 						icon={AlertCircle}
+						testId="platform-publish-review-error"
 						title={t("publishReview.error.loadTitle")}
 						description={queryError.message || t("publishReview.error.loadFailed")}
 					/>
@@ -90,11 +96,13 @@ export function ReviewListPanel<TData>({
 			) : (
 				<DataTable
 					columns={columns}
+					containerTestId="platform-publish-review-list"
 					data={data}
 					emptyState={
 						<div className="p-4">
 							<EmptyState
 								icon={emptyIcon}
+								testId="platform-publish-review-empty"
 								title={emptyTitle}
 								description={emptyDescription}
 							/>
@@ -106,7 +114,9 @@ export function ReviewListPanel<TData>({
 							: String(index)
 					}
 					isLoading={isFetching && data.length === 0}
+					loadingTestId="platform-publish-review-loading"
 					minWidth={minWidth}
+					rowTestId="platform-publish-review-row"
 					stickyRightColumnId="actions"
 				/>
 			)}
@@ -115,11 +125,17 @@ export function ReviewListPanel<TData>({
 				<ListPagination
 					showQuickJumper
 					className="px-1"
+					jumpInputTestId="publish-review-jump-input"
 					loading={isFetching}
+					nextButtonTestId="publish-review-next-button"
 					onPageChange={onPageChange}
 					onPageSizeChange={onPageSizeChange}
 					page={page}
 					pageSize={pageSize}
+					pageSizeOptionTestId="publish-review-page-size-option"
+					pageSizeTriggerTestId="publish-review-page-size-trigger"
+					previousButtonTestId="publish-review-previous-button"
+					testId="publish-review-pagination"
 					total={total}
 				/>
 			) : null}

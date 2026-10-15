@@ -205,6 +205,7 @@ export default function PlatformProviderListPage() {
 					</PageHeaderActionButton>
 				}
 				description={t("providerList.description")}
+				testId="provider-list-page"
 				title={t("providerList.title")}
 			>
 				<ProviderCategoryTabs
@@ -215,6 +216,7 @@ export default function PlatformProviderListPage() {
 				<div className="mt-5">
 					<EmptyState
 						icon={AlertCircle}
+						testId="provider-list-error"
 						title={t("providerList.error.loadTitle")}
 						description={queryError.message}
 					/>
@@ -261,6 +263,7 @@ export default function PlatformProviderListPage() {
 					</>
 				}
 				description={t("providerList.description")}
+				testId="provider-list-page"
 				title={t("providerList.title")}
 			>
 				<ProviderCategoryTabs

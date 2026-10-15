@@ -70,7 +70,9 @@ function CapabilityFilterFields({
 			<FilterControlField label={t("systemCapabilities.filter.keyword")}>
 				<FilterSearchInput
 					aria-label={t("systemCapabilities.filter.keyword")}
+					clearButtonTestId="platform-system-capabilities-search-clear-button"
 					clearLabel={t("common.clear")}
+					inputTestId="platform-system-capabilities-search-input"
 					onValueChange={(keyword) => onChange({ keyword })}
 					placeholder={t("systemCapabilities.placeholder.keyword")}
 					value={value.keyword}

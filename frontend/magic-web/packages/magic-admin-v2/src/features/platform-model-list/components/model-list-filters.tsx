@@ -65,8 +65,13 @@ export function ModelListFilters({
 			resetLabel={t("modelList.action.reset")}
 			title={t("modelList.filter.title")}
 			value={value}
+			desktopResetTestId="model-list-reset-button"
 			desktopTestId="model-list-filters"
-			mobileContentTestId="model-list-mobile-filters"
+			mobileApplyTestId="model-list-advanced-apply-button"
+			mobileBodyTestId="model-list-advanced-body"
+			mobileCloseButtonTestId="model-list-advanced-close-button"
+			mobileContentTestId="model-list-advanced-content"
+			mobileResetTestId="model-list-advanced-reset-button"
 		/>
 	)
 }
@@ -90,7 +95,17 @@ function ModelListFilterFields({
 			<FilterControlField label={t("modelList.filter.search")}>
 				<FilterSearchInput
 					aria-label={t("modelList.placeholder.search")}
+					clearButtonTestId={
+						layout === "sheet"
+							? "model-list-advanced-search-clear-button"
+							: "model-list-search-clear-button"
+					}
 					clearLabel={t("common.clear")}
+					inputTestId={
+						layout === "sheet"
+							? "model-list-advanced-search-input"
+							: "model-list-search-input"
+					}
 					onValueChange={(keyword) => onChange({ keyword })}
 					placeholder={t("modelList.placeholder.search")}
 					value={value.keyword}
@@ -161,7 +176,16 @@ function ModelListFilterFields({
 								? "model-list-advanced-model-type-content"
 								: "model-list-model-type-content"
 						}
-						optionTestId="platform-model-list-option"
+						clearButtonTestId={
+							layout === "sheet"
+								? "model-list-advanced-model-type-clear-button"
+								: "model-list-model-type-clear-button"
+						}
+						optionTestId={
+							layout === "sheet"
+								? "model-list-advanced-model-type-option"
+								: "model-list-model-type-option"
+						}
 						value={value.modelTypes}
 					/>
 				</FilterControlField>

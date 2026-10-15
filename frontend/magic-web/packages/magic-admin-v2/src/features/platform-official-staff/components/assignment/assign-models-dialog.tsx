@@ -259,20 +259,20 @@ export function AssignModelsDialog({
 							>
 								<TabsList>
 									<TabsTrigger
-										value={staffModelCategory.text}
 										data-testid="platform-official-staff-tab-trigger"
+										value={staffModelCategory.text}
 									>
 										{t("officialStaff.category.text")}
 									</TabsTrigger>
 									<TabsTrigger
-										value={staffModelCategory.image}
 										data-testid="platform-official-staff-tab-trigger"
+										value={staffModelCategory.image}
 									>
 										{t("officialStaff.category.image")}
 									</TabsTrigger>
 									<TabsTrigger
-										value={staffModelCategory.video}
 										data-testid="platform-official-staff-tab-trigger"
+										value={staffModelCategory.video}
 									>
 										{t("officialStaff.category.video")}
 									</TabsTrigger>
@@ -336,20 +336,20 @@ export function AssignModelsDialog({
 														</SelectTrigger>
 														<SelectContent data-testid="platform-official-staff-select-content">
 															<SelectItem
+																data-testid="platform-official-staff-option"
 																value={String(
 																	staffDistributionType.independent,
 																)}
-																data-testid="platform-official-staff-option"
 															>
 																{t(
 																	"officialStaff.assign.customConfig",
 																)}
 															</SelectItem>
 															<SelectItem
+																data-testid="platform-official-staff-option"
 																value={String(
 																	staffDistributionType.follow,
 																)}
-																data-testid="platform-official-staff-option"
 															>
 																{t(
 																	"officialStaff.assign.followOther",
@@ -409,9 +409,9 @@ export function AssignModelsDialog({
 															)
 															.map((item) => (
 																<SelectItem
+																	data-testid="platform-official-staff-option"
 																	key={item.id}
 																	value={item.id}
-																	data-testid="platform-official-staff-option"
 																>
 																	{getI18nText(
 																		item.name_i18n,
@@ -425,11 +425,11 @@ export function AssignModelsDialog({
 												<div className="flex items-center gap-2">
 													{canEdit && detail.mode.is_default !== 1 ? (
 														<Button
+															data-testid="platform-official-staff-confirm-button"
 															onClick={() =>
 																setConfirmAction({ kind: "reset" })
 															}
 															variant="outline"
-															data-testid="platform-official-staff-confirm-button"
 														>
 															<RotateCcw className="size-4" />
 															{t("officialStaff.action.resetDefault")}
@@ -437,13 +437,13 @@ export function AssignModelsDialog({
 													) : null}
 													{editable ? (
 														<Button
+															data-testid="platform-official-staff-create-button"
 															onClick={() =>
 																setGroupDialog({
 																	group: null,
 																	open: true,
 																})
 															}
-															data-testid="platform-official-staff-create-button"
 														>
 															<Plus className="size-4" />
 															{t("officialStaff.action.createGroup")}
@@ -514,10 +514,10 @@ export function AssignModelsDialog({
 				)}
 				<DialogFooter>
 					<Button
+						data-testid="platform-official-staff-cancel-button"
 						onClick={() => onOpenChange(false)}
 						type="button"
 						variant="outline"
-						data-testid="platform-official-staff-cancel-button"
 					>
 						{t("common.cancel")}
 					</Button>

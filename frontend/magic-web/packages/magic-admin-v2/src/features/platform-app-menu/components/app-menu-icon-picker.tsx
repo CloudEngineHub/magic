@@ -296,7 +296,9 @@ export function AppMenuIconPicker({ disabled, id, onChange, value }: AppMenuIcon
 				<div className="border-b p-3">
 					<FilterSearchInput
 						autoFocus
+						clearButtonTestId="platform-app-menu-search-clear-button"
 						clearLabel={t("common.clear")}
+						inputTestId="platform-app-menu-search-input"
 						onValueChange={setKeyword}
 						placeholder={t("appMenu.placeholder.searchIcon")}
 						value={keyword}

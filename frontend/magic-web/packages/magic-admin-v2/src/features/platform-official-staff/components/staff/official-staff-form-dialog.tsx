@@ -144,6 +144,7 @@ export function OfficialStaffFormDialog({
 		<Dialog open={open} onOpenChange={handleOpenChange}>
 			<DialogContent
 				className="sm:max-w-2xl"
+				closeButtonTestId="official-staff-form-dialog-close-button"
 				data-testid="platform-official-staff-dialog-content"
 			>
 				<DialogHeader>
@@ -167,6 +168,7 @@ export function OfficialStaffFormDialog({
 						<div className="flex gap-2">
 							<Input
 								{...identifierField}
+								data-testid="platform-official-staff-official-staff-identifier-input"
 								disabled={staff?.is_default === 1}
 								id="official-staff-identifier"
 								onChange={(event) => {
@@ -174,7 +176,6 @@ export function OfficialStaffFormDialog({
 									scheduleAgentLookup(event.target.value)
 								}}
 								placeholder={t("officialStaff.placeholder.staffIdentifier")}
-								data-testid="platform-official-staff-official-staff-identifier-input"
 							/>
 							<Button
 								disabled={!identifier.trim() || agentQuery.isFetching}
@@ -224,10 +225,10 @@ export function OfficialStaffFormDialog({
 							</Tabs>
 						</div>
 						<Input
+							data-testid="platform-official-staff-input"
 							disabled
 							value={form.watch(`name_i18n.${activeLocale}`)}
 							placeholder={t("officialStaff.placeholder.staffName")}
-							data-testid="platform-official-staff-input"
 						/>
 						<FieldError
 							message={
@@ -286,10 +287,10 @@ export function OfficialStaffFormDialog({
 							label={t("officialStaff.field.organizationWhitelist")}
 						>
 							<Input
+								data-testid="platform-official-staff-official-staff-organization-whitelist-input"
 								id="official-staff-organization-whitelist"
 								placeholder={t("officialStaff.placeholder.organizationWhitelist")}
 								{...form.register("organization_whitelist")}
-								data-testid="platform-official-staff-official-staff-organization-whitelist-input"
 							/>
 						</DialogFormField>
 					</div>
@@ -304,10 +305,10 @@ export function OfficialStaffFormDialog({
 						{t("common.cancel")}
 					</Button>
 					<Button
+						data-testid="platform-official-staff-save-button"
 						disabled={!canEdit || saveMutation.isPending}
 						form="official-staff-form"
 						type="submit"
-						data-testid="platform-official-staff-save-button"
 					>
 						{saveMutation.isPending ? (
 							<Loader2 className="size-4 animate-spin" />

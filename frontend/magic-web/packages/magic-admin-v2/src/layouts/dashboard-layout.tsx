@@ -276,6 +276,11 @@ function AppSidebar({
 					"dashboard-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden",
 					isCollapsed && "items-center px-1.5 py-2",
 				)}
+				data-testid={
+					isCollapsed
+						? "dashboard-sidebar-navigation-collapsed"
+						: "dashboard-sidebar-navigation"
+				}
 			>
 				{isCollapsed
 					? navigation.map((section) => (
@@ -437,7 +442,7 @@ function CollapsedPrimaryNavigation({
 
 	return (
 		<DropdownMenu modal={false} onOpenChange={handleMenuOpenChange} open={isMenuOpen}>
-			<DropdownMenuTrigger asChild>
+			<DropdownMenuTrigger asChild data-testid={section.testId}>
 				<Button
 					aria-label={t(section.titleKey)}
 					className={cn(
@@ -445,6 +450,7 @@ function CollapsedPrimaryNavigation({
 						isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 					)}
 					data-collapsed-nav-menu={menuScope}
+					data-testid={section.testId}
 					onPointerEnter={openMenu}
 					onPointerLeave={scheduleCloseMenu}
 					onPointerMove={trackPointerPosition}
@@ -459,6 +465,7 @@ function CollapsedPrimaryNavigation({
 				align="start"
 				className="w-60 p-2"
 				data-collapsed-nav-menu={menuScope}
+				data-testid={`${section.testId}-content`}
 				onPointerEnter={openMenu}
 				onPointerLeave={scheduleCloseMenu}
 				onPointerMove={trackPointerPosition}
@@ -508,7 +515,7 @@ function CollapsedNavigationGroupMenu({
 
 	if (group.href && group.items.length === 0) {
 		return (
-			<DropdownMenuItem asChild className="p-0">
+			<DropdownMenuItem asChild className="p-0" data-testid={group.testId}>
 				<NavLink
 					className={({ isActive: isLinkActive }) =>
 						cn(
@@ -516,6 +523,7 @@ function CollapsedNavigationGroupMenu({
 							isLinkActive && "bg-accent text-accent-foreground",
 						)
 					}
+					data-testid={group.testId}
 					onClick={onCloseMobile}
 					to={group.href}
 				>
@@ -536,6 +544,7 @@ function CollapsedNavigationGroupMenu({
 					"h-8 cursor-default rounded-md px-2 text-sm font-medium text-popover-foreground hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
 					isActive && "bg-accent text-accent-foreground",
 				)}
+				data-testid={group.testId}
 			>
 				<GroupIcon
 					className="mr-2 size-4 shrink-0 text-muted-foreground"
@@ -547,6 +556,7 @@ function CollapsedNavigationGroupMenu({
 				alignOffset={-4}
 				className="w-60 p-2"
 				data-collapsed-nav-menu={menuScope}
+				data-testid={`${group.testId}-content`}
 				onPointerEnter={onKeepRootMenuOpen}
 				onPointerLeave={onScheduleRootMenuClose}
 				onPointerMove={onTrackPointer}
@@ -568,6 +578,7 @@ function CollapsedNavigationGroupMenu({
 											isLinkActive && "bg-accent text-accent-foreground",
 										)
 									}
+									data-testid={item.testId}
 									onClick={onCloseMobile}
 									to={item.href}
 								>
@@ -611,6 +622,7 @@ function SidebarNavigationGroup({
 					sidebarNavigationInteraction,
 					isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 				)}
+				data-testid={group.testId}
 				onClick={onCloseMobile}
 				to={group.href}
 			>
@@ -638,6 +650,7 @@ function SidebarNavigationGroup({
 					sidebarNavigationInteraction,
 					isActive && "text-sidebar-accent-foreground",
 				)}
+				data-testid={group.testId}
 				onClick={() => setIsOpen((current) => !current)}
 				type="button"
 			>
@@ -692,6 +705,7 @@ function SidebarMenuLink({ activePathname, item, onCloseMobile }: SidebarMenuLin
 					sidebarNavigationInteraction,
 					isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 				)}
+				data-testid={item.testId}
 				onClick={onCloseMobile}
 				to={item.href}
 			>

@@ -166,6 +166,7 @@ export default function PlatformAppMenuPage() {
 	return (
 		<>
 			<ListShell
+				testId="app-menu-page"
 				actions={
 					<>
 						<PageHeaderFilterButton
@@ -225,11 +226,17 @@ export default function PlatformAppMenuPage() {
 						<ListPagination
 							showQuickJumper
 							className="px-1"
+							jumpInputTestId="app-menu-jump-input"
 							loading={listQuery.isFetching}
+							nextButtonTestId="app-menu-next-button"
 							onPageChange={setPage}
 							page={page}
 							pageSize={pageSize}
+							pageSizeOptionTestId="app-menu-page-size-option"
+							pageSizeTriggerTestId="app-menu-page-size-trigger"
+							previousButtonTestId="app-menu-previous-button"
 							onPageSizeChange={setPageSize}
+							testId="app-menu-pagination"
 							total={total}
 						/>
 					) : null}
@@ -247,7 +254,10 @@ export default function PlatformAppMenuPage() {
 			/>
 
 			<DeleteConfirmDialog
+				cancelButtonTestId="app-menu-delete-cancel-button"
+				confirmButtonTestId="app-menu-delete-confirm-button"
 				confirmLabel={t("appMenu.action.confirmDelete")}
+				contentTestId="app-menu-delete-dialog"
 				description={formatTemplate(t("appMenu.confirm.deleteDescription"), {
 					name: deleteTarget ? getMenuName(deleteTarget, language) : "",
 				})}

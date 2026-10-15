@@ -395,6 +395,11 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 			<div className="space-y-4">
 				<ListFilterPanel
 					desktopResetTestId="platform-slides-template-reset-button"
+					mobileApplyTestId="platform-slides-template-apply-button"
+					mobileBodyTestId="platform-slides-template-filter-body"
+					mobileCloseButtonTestId="platform-slides-template-filter-close-button"
+					mobileContentTestId="platform-slides-template-filter-sheet"
+					mobileResetTestId="platform-slides-template-reset-button"
 					applyLabel={t("slidesTemplate.applyFilters")}
 					createDefaultValue={createDefaultTemplateLibraryDraft}
 					mobileOpen={mobileFilterOpen}
@@ -411,7 +416,17 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 						<>
 							<FilterControlField label={t("slidesTemplate.keyword")}>
 								<FilterSearchInput
+									clearButtonTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-clear-button"
+											: "platform-slides-template-clear-button"
+									}
 									clearLabel={t("common.clear")}
+									inputTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-input"
+											: "platform-slides-template-search-input"
+									}
 									onValueChange={(keyword) =>
 										layout === "grid"
 											? setDebouncedField("keyword", keyword)
@@ -423,7 +438,9 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 							</FilterControlField>
 							<FilterControlField label={t("slidesTemplate.templateCode")}>
 								<FilterSearchInput
+									clearButtonTestId="platform-slides-template-advanced-search-clear-button"
 									clearLabel={t("common.clear")}
+									inputTestId="platform-slides-template-advanced-search-input"
 									onValueChange={(code) =>
 										layout === "grid"
 											? setDebouncedField("code", code)
@@ -436,23 +453,39 @@ export const TemplateLibrary = forwardRef<TemplateLibraryHandle, TemplateLibrary
 							<FilterControlField label={t("slidesTemplate.category")}>
 								<SearchableCategorySelect
 									ariaLabel={t("slidesTemplate.category")}
+									clearButtonTestId="platform-slides-template-advanced-category-clear-button"
+									clearSearchButtonTestId="platform-slides-template-advanced-category-search-clear-button"
+									contentTestId="platform-slides-template-advanced-category-content"
 									emptyLabel={t("slidesTemplate.all")}
+									emptyTestId="platform-slides-template-advanced-category-empty"
+									inputTestId="platform-slides-template-advanced-category-search-input"
 									isLoading={categories.isLoading}
+									loadingTestId="platform-slides-template-advanced-category-loading"
 									onChange={(category) => onChange({ category })}
 									onOpenChange={(open) => open && setCategoryOptionsOpen(true)}
+									optionTestId="platform-slides-template-advanced-category-option"
 									options={categories.data?.list ?? []}
+									triggerTestId="platform-slides-template-advanced-category-trigger"
 									value={value.category}
 								/>
 							</FilterControlField>
 							<FilterControlField label={t("slidesTemplate.tagsFilter")}>
 								<SearchableTagSelect
 									ariaLabel={t("slidesTemplate.tagsFilter")}
+									clearButtonTestId="platform-slides-template-advanced-tag-select-clear-button"
+									contentTestId="platform-slides-template-advanced-tag-select-content"
 									emptyLabel={t("slidesTemplate.allTags")}
+									emptyTestId="platform-slides-template-advanced-tag-select-empty"
 									isLoading={tags.isLoading}
+									loadingTestId="platform-slides-template-advanced-tag-select-loading"
 									maxVisibleTags={2}
 									onChange={(tagCodes) => onChange({ tagCodes })}
 									onOpenChange={(open) => open && setTagOptionsOpen(true)}
+									optionTestId="platform-slides-template-advanced-tag-select-option"
 									options={tagOptions}
+									searchClearButtonTestId="platform-slides-template-advanced-tag-select-search-clear-button"
+									searchInputTestId="platform-slides-template-advanced-tag-select-search-input"
+									triggerTestId="platform-slides-template-advanced-tag-select-trigger"
 									value={value.tagCodes}
 								/>
 							</FilterControlField>

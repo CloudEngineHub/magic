@@ -45,16 +45,22 @@ const capabilityIconMap: Partial<Record<string, LucideIcon>> = {
 }
 
 export const CapabilityCard = memo(function CapabilityCard({
+	cardTestId,
 	canEdit,
+	configButtonTestId,
 	item,
 	onConfig,
 	onStatusChange,
+	statusSwitchTestId,
 	statusPending,
 }: {
+	cardTestId?: string
 	canEdit: boolean
+	configButtonTestId?: string
 	item: AiPower
 	onConfig: (item: AiPower) => void
 	onStatusChange: (item: AiPower, checked: boolean) => void
+	statusSwitchTestId?: string
 	statusPending: boolean
 }) {
 	const { t } = useTranslation()
@@ -64,7 +70,7 @@ export const CapabilityCard = memo(function CapabilityCard({
 	const displayDescription = getCapabilityDisplayText(item.description)
 
 	return (
-		<Card className="h-full overflow-hidden border-border/50 py-0">
+		<Card className="h-full overflow-hidden border-border/50 py-0" data-testid={cardTestId}>
 			<CardContent className="flex h-full flex-col gap-4 p-4">
 				<div className="flex min-w-0 items-start gap-3">
 					<div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-background">
@@ -86,6 +92,7 @@ export const CapabilityCard = memo(function CapabilityCard({
 					<div className="flex items-center gap-2">
 						<Switch
 							checked={enabled}
+							data-testid={statusSwitchTestId}
 							disabled={!canEdit || statusPending}
 							onCheckedChange={(checked) => onStatusChange(item, checked)}
 						/>
@@ -95,6 +102,7 @@ export const CapabilityCard = memo(function CapabilityCard({
 					</div>
 					<Button
 						className="shrink-0"
+						data-testid={configButtonTestId}
 						disabled={!canEdit}
 						onClick={() => onConfig(item)}
 						size="sm"

@@ -200,8 +200,7 @@ export function ModelGroupCard({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
-                  onSelect={requestDeleteGroup}
-                 data-testid="platform-official-staff-menu-item">
+                  onSelect={requestDeleteGroup}>
                   <Trash2 className="mr-2 size-4" />
                   {t("officialStaff.action.deleteGroup")}
                 </DropdownMenuItem>

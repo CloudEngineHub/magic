@@ -22,17 +22,25 @@ import { getI18nText } from "@magic-admin-v2/features/platform-official-staff/ut
 import { useI18n } from "@magic-admin-v2/i18n/use-i18n"
 
 export function StaffCard({
+	assignButtonTestId,
+	cardTestId,
 	canEdit,
 	item,
+	moreButtonTestId,
 	onAssign,
 	onEdit,
 	onStatusChange,
+	statusSwitchTestId,
 }: {
+	assignButtonTestId?: string
+	cardTestId?: string
 	canEdit: boolean
 	item: OfficialStaff
+	moreButtonTestId?: string
 	onAssign: (item: OfficialStaff) => void
 	onEdit: (item: OfficialStaff) => void
 	onStatusChange: (item: OfficialStaff, status: boolean) => void
+	statusSwitchTestId?: string
 }) {
 	const { t } = useTranslation()
 	const { language } = useI18n()
@@ -41,7 +49,7 @@ export function StaffCard({
 	const placeholder = getI18nText(item.placeholder_i18n, language)
 
 	return (
-		<Card className="py-0">
+		<Card className="py-0" data-testid={cardTestId}>
 			<CardContent className="flex h-full flex-col gap-4 p-4">
 				<div className="flex min-w-0 gap-3">
 					<StaffAvatar item={item} />
@@ -69,6 +77,7 @@ export function StaffCard({
 					<div className="flex min-w-0 items-center gap-2">
 						<Switch
 							checked={item.status}
+							data-testid={statusSwitchTestId}
 							disabled={!canEdit || isDefault}
 							onCheckedChange={(checked) => onStatusChange(item, checked)}
 						/>
@@ -77,12 +86,18 @@ export function StaffCard({
 						</span>
 					</div>
 					<div className="flex items-center gap-2">
-						<Button onClick={() => onAssign(item)} size="sm" variant="outline">
+						<Button
+							data-testid={assignButtonTestId}
+							onClick={() => onAssign(item)}
+							size="sm"
+							variant="outline"
+						>
 							<Settings2 className="size-4" />
 							{t("officialStaff.action.assignModels")}
 						</Button>
 						{canEdit ? (
 							<Button
+								data-testid={moreButtonTestId}
 								disabled={isDefault}
 								onClick={() => onEdit(item)}
 								size="sm"
@@ -100,23 +115,29 @@ export function StaffCard({
 }
 
 export function DefaultSettingsCard({
+	cardTestId,
 	canEdit,
 	defaultAgentCode,
 	defaultAgentLoading,
 	defaultAgentOptions,
 	defaultAgentStaffList,
 	defaultConfigItem,
+	defaultAgentTriggerTestId,
+	defaultConfigAssignButtonTestId,
 	onAssign,
 	onDefaultAgentChange,
 	onFloatingOpenChange,
 	openFloatingId,
 }: {
+	cardTestId?: string
 	canEdit: boolean
 	defaultAgentCode?: string
 	defaultAgentLoading: boolean
 	defaultAgentOptions: DefaultAgentOption[]
 	defaultAgentStaffList: OfficialStaff[]
 	defaultConfigItem?: OfficialStaff
+	defaultAgentTriggerTestId?: string
+	defaultConfigAssignButtonTestId?: string
 	onAssign: (item: OfficialStaff) => void
 	onDefaultAgentChange: (value: string) => void
 	onFloatingOpenChange: (id: string | null) => void
@@ -128,7 +149,7 @@ export function DefaultSettingsCard({
 	)
 
 	return (
-		<Card className="overflow-hidden py-0">
+		<Card className="overflow-hidden py-0" data-testid={cardTestId}>
 			<CardContent className="grid p-0 md:grid-cols-2">
 				<div className="flex min-w-0 flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
 					<div className="flex min-w-0 items-center gap-3">
@@ -162,13 +183,13 @@ export function DefaultSettingsCard({
 							>
 								<SelectTrigger
 									className="w-full"
-									data-testid="platform-official-staff-select-trigger"
+									data-testid={defaultAgentTriggerTestId}
 								>
 									<SelectValue
 										placeholder={t("officialStaff.defaultAgent.placeholder")}
 									/>
 								</SelectTrigger>
-								<SelectContent data-testid="platform-official-staff-select-content">
+								<SelectContent data-testid="platform-official-staff-filter-content">
 									{defaultAgentOptions.map((option) => {
 										const staff = defaultAgentStaffList.find(
 											(item) => item.identifier === option.value,
@@ -225,6 +246,7 @@ export function DefaultSettingsCard({
 					</div>
 					{defaultConfigItem ? (
 						<Button
+							data-testid={defaultConfigAssignButtonTestId}
 							onClick={() => onAssign(defaultConfigItem)}
 							size="sm"
 							variant="outline"

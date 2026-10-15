@@ -198,6 +198,7 @@ export function PlatformAppMenuTable({
 				<EmptyState
 					description={error.message}
 					icon={AlertCircle}
+					testId="app-menu-error"
 					title={t("appMenu.error.loadTitle")}
 				/>
 			</div>
@@ -207,19 +208,23 @@ export function PlatformAppMenuTable({
 	return (
 		<DataTable
 			columns={columns}
+			containerTestId="app-menu-table"
 			data={items}
 			emptyState={
 				<div className="p-4">
 					<EmptyState
 						description={t("appMenu.empty.description")}
 						icon={MenuSquare}
+						testId="app-menu-empty"
 						title={t("appMenu.empty.title")}
 					/>
 				</div>
 			}
 			getRowId={(item) => item.id}
 			isLoading={isLoading}
+			loadingTestId="app-menu-loading"
 			minWidth={1140}
+			rowTestId="app-menu-row"
 			stickyRightColumnId="actions"
 		/>
 	)

@@ -100,14 +100,24 @@ export function ModelEditorRuntimeFields({
 									onValueChange={field.onChange}
 									value={field.value}
 								>
-									<SelectTrigger className="w-full" id="chat-api" data-testid="platform-model-list-chat-api-trigger">
+									<SelectTrigger
+										className="w-full"
+										id="chat-api"
+										data-testid="platform-model-list-chat-api-trigger"
+									>
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent data-testid="platform-model-list-chat-api-content">
-										<SelectItem value="chat_completions" data-testid="platform-model-list-option">
+										<SelectItem
+											value="chat_completions"
+											data-testid="platform-model-list-option"
+										>
 											{t("modelList.editor.chatApi.chatCompletions")}
 										</SelectItem>
-										<SelectItem value="responses" data-testid="platform-model-list-option">
+										<SelectItem
+											value="responses"
+											data-testid="platform-model-list-option"
+										>
 											{t("modelList.editor.chatApi.responses")}
 										</SelectItem>
 									</SelectContent>
@@ -133,14 +143,24 @@ export function ModelEditorRuntimeFields({
 										onValueChange={field.onChange}
 										value={field.value}
 									>
-										<SelectTrigger className="w-full" id="temperature-mode" data-testid="platform-model-list-temperature-mode-trigger">
+										<SelectTrigger
+											className="w-full"
+											id="temperature-mode"
+											data-testid="platform-model-list-temperature-mode-trigger"
+										>
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent data-testid="platform-model-list-temperature-mode-content">
-											<SelectItem value="recommended" data-testid="platform-model-list-option">
+											<SelectItem
+												value="recommended"
+												data-testid="platform-model-list-option"
+											>
 												{t("modelList.editor.temperature.recommended")}
 											</SelectItem>
-											<SelectItem value="fixed" data-testid="platform-model-list-option">
+											<SelectItem
+												value="fixed"
+												data-testid="platform-model-list-option"
+											>
 												{t("modelList.editor.temperature.fixed")}
 											</SelectItem>
 										</SelectContent>

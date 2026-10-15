@@ -52,7 +52,13 @@ export function PlatformAppMenuFilters({
 			resetLabel={t("appMenu.action.reset")}
 			title={t("appMenu.filter.title")}
 			value={value}
+			desktopResetTestId="app-menu-reset-button"
 			desktopTestId="app-menu-filters"
+			mobileApplyTestId="app-menu-advanced-apply-button"
+			mobileBodyTestId="app-menu-advanced-body"
+			mobileCloseButtonTestId="app-menu-advanced-close-button"
+			mobileContentTestId="app-menu-advanced-content"
+			mobileResetTestId="app-menu-advanced-reset-button"
 		/>
 	)
 }
@@ -72,7 +78,15 @@ function AppMenuFilterFields({
 			<FilterControlField label={t("appMenu.filter.name")}>
 				<FilterSearchInput
 					aria-label={t("appMenu.filter.name")}
+					clearButtonTestId={
+						layout === "sheet"
+							? "app-menu-advanced-name-clear-button"
+							: "app-menu-name-clear-button"
+					}
 					clearLabel={t("common.clear")}
+					inputTestId={
+						layout === "sheet" ? "app-menu-advanced-name-input" : "app-menu-name-input"
+					}
 					onValueChange={(name) =>
 						layout === "grid" ? onSearchValueChange(name) : onChange({ name })
 					}
@@ -85,7 +99,11 @@ function AppMenuFilterFields({
 					<SelectTrigger
 						aria-label={t("appMenu.filter.status")}
 						className="w-full"
-						data-testid="platform-app-menu-select-trigger"
+						data-testid={
+							layout === "sheet"
+								? "app-menu-advanced-status-trigger"
+								: "app-menu-status-trigger"
+						}
 					>
 						<SelectValue />
 					</SelectTrigger>

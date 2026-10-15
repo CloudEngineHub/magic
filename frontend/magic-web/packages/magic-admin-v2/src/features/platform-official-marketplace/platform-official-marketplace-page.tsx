@@ -60,10 +60,12 @@ export default function PlatformOfficialMarketplacePage() {
 
 	return (
 		<ListShell
+			testId="official-marketplace-page"
 			actions={
 				<>
 					{activeTab ? (
 						<PageHeaderFilterButton
+							data-testid="platform-official-marketplace-filter-button"
 							count={
 								activeTab === "employee"
 									? countActiveMarketFilters(employeeQueryState.filterDraft)

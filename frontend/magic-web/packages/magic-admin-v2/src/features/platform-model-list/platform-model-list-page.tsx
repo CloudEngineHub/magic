@@ -303,6 +303,7 @@ export default function PlatformModelListPage() {
 	return (
 		<>
 			<ListShell
+				testId="model-list-page"
 				actions={
 					<div className="flex items-center gap-2">
 						<PageHeaderFilterButton
@@ -361,6 +362,7 @@ export default function PlatformModelListPage() {
 					<div className="mt-5 rounded-lg border border-border/50 p-4">
 						<EmptyState
 							icon={AlertCircle}
+							testId="model-list-error"
 							title={t("modelList.error.loadTitle")}
 							description={queryError.message}
 						/>
@@ -370,28 +372,38 @@ export default function PlatformModelListPage() {
 						<DataTable
 							columns={columns}
 							containerClassName="mt-5"
+							containerTestId="model-list-table"
 							data={items}
 							emptyState={
 								<EmptyState
 									icon={BrainCircuit}
+									testId="model-list-empty"
 									title={t("modelList.empty.title")}
 									description={t("modelList.empty.description")}
 								/>
 							}
 							getRowId={(item) => item.model_id}
 							isLoading={listQuery.isLoading}
+							loadingTestId="model-list-loading"
 							minWidth={940}
+							rowTestId="model-list-row"
 							stickyRightColumnId="actions"
 						/>
 
 						<ListPagination
 							showQuickJumper
 							className="mt-4 px-1"
+							jumpInputTestId="model-list-jump-input"
 							loading={listQuery.isFetching}
+							nextButtonTestId="model-list-next-button"
 							onPageChange={setPage}
+							onPageSizeChange={setPageSize}
 							page={currentPage}
 							pageSize={currentPageSize}
-							onPageSizeChange={setPageSize}
+							pageSizeOptionTestId="model-list-page-size-option"
+							pageSizeTriggerTestId="model-list-page-size-trigger"
+							previousButtonTestId="model-list-previous-button"
+							testId="model-list-pagination"
 							total={total}
 						/>
 					</>

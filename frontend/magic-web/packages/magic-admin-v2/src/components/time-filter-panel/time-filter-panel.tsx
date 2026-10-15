@@ -577,13 +577,22 @@ export function TimeFilterPanel({
 		>
 			<div className="border-b px-4">
 				<TabsList className={cn(isInline && "grid w-full grid-cols-3")}>
-					<TabsTrigger value={timeFilterTab.relative}>
+					<TabsTrigger
+						data-testid={testId("relative-tab-trigger")}
+						value={timeFilterTab.relative}
+					>
 						{t("timeFilter.relative")}
 					</TabsTrigger>
-					<TabsTrigger value={timeFilterTab.absolute}>
+					<TabsTrigger
+						data-testid={testId("absolute-tab-trigger")}
+						value={timeFilterTab.absolute}
+					>
 						{t("timeFilter.absolute")}
 					</TabsTrigger>
-					<TabsTrigger value={timeFilterTab.history}>
+					<TabsTrigger
+						data-testid={testId("history-tab-trigger")}
+						value={timeFilterTab.history}
+					>
 						{t("timeFilter.history")}
 					</TabsTrigger>
 				</TabsList>
@@ -613,6 +622,7 @@ export function TimeFilterPanel({
 					onCustomValueChange={setCustomValue}
 					onMonthApply={handleMonthApply}
 					onPresetApply={handlePresetApply}
+					testIdPrefix={panelTestIdPrefix}
 				/>
 			</TabsContent>
 
@@ -634,6 +644,7 @@ export function TimeFilterPanel({
 					onAbsolutePresetSelect={handleAbsolutePresetSelect}
 					onAbsoluteTimeChange={handleAbsoluteTimeChange}
 					onMonthChange={(offset) => setVisibleMonth(addMonths(visibleMonth, offset))}
+					testIdPrefix={panelTestIdPrefix}
 				/>
 			</TabsContent>
 

@@ -36,11 +36,11 @@ import {
 	KeyRound,
 	Landmark,
 	LandPlot,
-	ListChecks,
 	LayoutDashboard,
 	LayoutGrid,
 	LayoutList,
 	LineChart,
+	ListChecks,
 	MenuSquare,
 	MessageSquareText,
 	MonitorCog,
@@ -51,9 +51,9 @@ import {
 	Plug,
 	Presentation,
 	ReceiptText,
+	ScrollText,
 	Route as RouteIcon,
 	ScanFace,
-	ScrollText,
 	ServerCog,
 	Shield,
 	ShieldAlert,
@@ -83,12 +83,14 @@ import type { Route } from "@magic-admin-v2/routes/types"
 
 export type NavigationItem = {
 	titleKey: string
+	testId: string
 	href: string
 	icon: LucideIcon
 }
 
 export type NavigationGroup = {
 	id: RouteGroupId
+	testId: string
 	titleKey: string
 	icon: LucideIcon
 	href?: string
@@ -97,6 +99,7 @@ export type NavigationGroup = {
 
 export type PrimaryNavigationItem = {
 	id: RouteSectionId
+	testId: string
 	titleKey: string
 	href: string
 	icon: LucideIcon
@@ -111,76 +114,175 @@ export type NavigationMatch = {
 
 type MenuCatalogItem = {
 	titleKey: string
+	testId: string
 	icon: LucideIcon
 	linkOnly?: boolean
 }
 
 const sectionCatalog: Partial<Record<RouteSectionId, MenuCatalogItem>> = {
-	[RouteSection.Platform]: { titleKey: "nav.primary.platform", icon: AppWindow },
-	[RouteSection.AiGovernance]: { titleKey: "nav.primary.aiGovernance", icon: Shield },
+	[RouteSection.Platform]: {
+		titleKey: "nav.primary.platform",
+		testId: "dashboard-navigation-platform-section",
+		icon: AppWindow,
+	},
+	[RouteSection.AiGovernance]: {
+		titleKey: "nav.primary.aiGovernance",
+		testId: "dashboard-navigation-ai-governance-section",
+		icon: Shield,
+	},
 	[RouteSection.EnterpriseManagement]: {
 		titleKey: "nav.primary.enterpriseManagement",
+		testId: "dashboard-navigation-enterprise-management-section",
 		icon: Building2,
 	},
-	[RouteSection.OfficeSuite]: { titleKey: "nav.primary.officeSuite", icon: Workflow },
-	[RouteSection.DataSecurity]: { titleKey: "nav.primary.dataSecurity", icon: Database },
-	[RouteSection.Examples]: { titleKey: "nav.primary.examples", icon: RouteIcon },
+	[RouteSection.OfficeSuite]: {
+		titleKey: "nav.primary.officeSuite",
+		testId: "dashboard-navigation-office-suite-section",
+		icon: Workflow,
+	},
+	[RouteSection.DataSecurity]: {
+		titleKey: "nav.primary.dataSecurity",
+		testId: "dashboard-navigation-data-security-section",
+		icon: Database,
+	},
+	[RouteSection.Examples]: {
+		titleKey: "nav.primary.examples",
+		testId: "dashboard-navigation-examples-section",
+		icon: RouteIcon,
+	},
 }
 
 const groupCatalog: Partial<Record<RouteGroupId, MenuCatalogItem>> = {
-	[RouteGroup.BasicSettings]: { titleKey: "nav.group.basicSettings", icon: SlidersHorizontal },
+	[RouteGroup.BasicSettings]: {
+		titleKey: "nav.group.basicSettings",
+		testId: "dashboard-navigation-basic-settings-group",
+		icon: SlidersHorizontal,
+	},
 	[RouteGroup.OperationsSettings]: {
 		titleKey: "nav.group.operationsSettings",
+		testId: "dashboard-navigation-operations-settings-group",
 		icon: MonitorCog,
 	},
-	[RouteGroup.PackageManagement]: { titleKey: "nav.group.packageManagement", icon: Package },
-	[RouteGroup.TenantManagement]: { titleKey: "nav.group.tenantManagement", icon: LandPlot },
-	[RouteGroup.AgentManagement]: { titleKey: "nav.group.agentManagement", icon: Bot },
-	[RouteGroup.ModelManagement]: { titleKey: "nav.group.modelManagement", icon: BrainCircuit },
-	[RouteGroup.CustomModels]: { titleKey: "nav.group.customModels", icon: Sparkles },
-	[RouteGroup.GovernancePolicies]: { titleKey: "nav.group.governancePolicies", icon: Sliders },
-	[RouteGroup.PublishReview]: { titleKey: "nav.group.publishAndReview", icon: FileCheck2 },
+	[RouteGroup.PackageManagement]: {
+		titleKey: "nav.group.packageManagement",
+		testId: "dashboard-navigation-package-management-group",
+		icon: Package,
+	},
+	[RouteGroup.TenantManagement]: {
+		titleKey: "nav.group.tenantManagement",
+		testId: "dashboard-navigation-tenant-management-group",
+		icon: LandPlot,
+	},
+	[RouteGroup.AgentManagement]: {
+		titleKey: "nav.group.agentManagement",
+		testId: "dashboard-navigation-agent-management-group",
+		icon: Bot,
+	},
+	[RouteGroup.ModelManagement]: {
+		titleKey: "nav.group.modelManagement",
+		testId: "dashboard-navigation-model-management-group",
+		icon: BrainCircuit,
+	},
+	[RouteGroup.CustomModels]: {
+		titleKey: "nav.group.customModels",
+		testId: "dashboard-navigation-custom-models-group",
+		icon: Sparkles,
+	},
+	[RouteGroup.GovernancePolicies]: {
+		titleKey: "nav.group.governancePolicies",
+		testId: "dashboard-navigation-governance-policies-group",
+		icon: Sliders,
+	},
+	[RouteGroup.PublishReview]: {
+		titleKey: "nav.group.publishAndReview",
+		testId: "dashboard-navigation-publish-review-group",
+		icon: FileCheck2,
+	},
 	[RouteGroup.ApplicationManagement]: {
 		titleKey: "nav.group.applicationManagement",
+		testId: "dashboard-navigation-application-management-group",
 		icon: LayoutGrid,
 	},
 	[RouteGroup.EnterpriseInfo]: {
 		titleKey: "nav.group.enterpriseInfo",
+		testId: "dashboard-navigation-enterprise-info-group",
 		icon: Building2,
 		linkOnly: true,
 	},
 	[RouteGroup.ResourceAlerts]: {
 		titleKey: "nav.item.resourceAlerts",
+		testId: "dashboard-navigation-resource-alerts-group",
 		icon: BellRing,
 		linkOnly: true,
 	},
 	[RouteGroup.OrganizationStructure]: {
 		titleKey: "nav.group.organizationStructure",
+		testId: "dashboard-navigation-organization-structure-group",
 		icon: Network,
 	},
-	[RouteGroup.IamAccess]: { titleKey: "nav.item.iamAccess", icon: ScanFace, linkOnly: true },
+	[RouteGroup.IamAccess]: {
+		titleKey: "nav.item.iamAccess",
+		testId: "dashboard-navigation-iam-access-group",
+		icon: ScanFace,
+		linkOnly: true,
+	},
 	[RouteGroup.PersonnelHandover]: {
 		titleKey: "nav.item.personnelHandover",
+		testId: "dashboard-navigation-personnel-handover-group",
 		icon: ArrowRightLeft,
 		linkOnly: true,
 	},
-	[RouteGroup.OaApproval]: { titleKey: "nav.group.oaApproval", icon: FileSignature },
-	[RouteGroup.DataDashboard]: { titleKey: "nav.group.dataDashboard", icon: LayoutDashboard },
+	[RouteGroup.OaApproval]: {
+		titleKey: "nav.group.oaApproval",
+		testId: "dashboard-navigation-oa-approval-group",
+		icon: FileSignature,
+	},
+	[RouteGroup.DataDashboard]: {
+		titleKey: "nav.group.dataDashboard",
+		testId: "dashboard-navigation-data-dashboard-group",
+		icon: LayoutDashboard,
+	},
 	// 原型中的“日志与分析”使用柱状图标，不使用 Activity 心电图图标。
-	[RouteGroup.LogsAnalytics]: { titleKey: "nav.group.logsAnalytics", icon: BarChart3 },
+	[RouteGroup.LogsAnalytics]: {
+		titleKey: "nav.group.logsAnalytics",
+		testId: "dashboard-navigation-logs-analytics-group",
+		icon: BarChart3,
+	},
 	[RouteGroup.SecurityPermissions]: {
 		titleKey: "nav.group.securityPermissions",
+		testId: "dashboard-navigation-security-permissions-group",
 		icon: ShieldCheck,
 	},
-	[RouteGroup.ExampleDashboard]: { titleKey: "nav.group.exampleDashboard", icon: GaugeCircle },
-	[RouteGroup.ExampleData]: { titleKey: "nav.group.exampleData", icon: Database },
-	[RouteGroup.ExampleForms]: { titleKey: "nav.group.exampleForms", icon: ClipboardList },
+	[RouteGroup.ExampleDashboard]: {
+		titleKey: "nav.group.exampleDashboard",
+		testId: "dashboard-navigation-example-dashboard-group",
+		icon: GaugeCircle,
+	},
+	[RouteGroup.ExampleData]: {
+		titleKey: "nav.group.exampleData",
+		testId: "dashboard-navigation-example-data-group",
+		icon: Database,
+	},
+	[RouteGroup.ExampleForms]: {
+		titleKey: "nav.group.exampleForms",
+		testId: "dashboard-navigation-example-forms-group",
+		icon: ClipboardList,
+	},
 	[RouteGroup.ExampleSettings]: {
 		titleKey: "nav.group.exampleSettings",
+		testId: "dashboard-navigation-example-settings-group",
 		icon: SlidersHorizontal,
 	},
-	[RouteGroup.ExampleDetails]: { titleKey: "nav.group.exampleDetails", icon: FileText },
-	[RouteGroup.ExampleStates]: { titleKey: "nav.group.exampleStates", icon: Activity },
+	[RouteGroup.ExampleDetails]: {
+		titleKey: "nav.group.exampleDetails",
+		testId: "dashboard-navigation-example-details-group",
+		icon: FileText,
+	},
+	[RouteGroup.ExampleStates]: {
+		titleKey: "nav.group.exampleStates",
+		testId: "dashboard-navigation-example-states-group",
+		icon: Activity,
+	},
 }
 
 const routeIcons: Record<string, LucideIcon> = {
@@ -379,6 +481,7 @@ export function createNavigation(
 		if (!section) {
 			section = {
 				id: sectionId,
+				testId: sectionDefinition.testId,
 				titleKey: sectionDefinition.titleKey,
 				icon: sectionDefinition.icon,
 				href,
@@ -393,6 +496,7 @@ export function createNavigation(
 		if (!group) {
 			group = {
 				id: groupId,
+				testId: groupDefinition.testId,
 				titleKey: groupDefinition.titleKey,
 				icon: groupDefinition.icon,
 				href: groupDefinition.linkOnly ? href : undefined,
@@ -404,6 +508,7 @@ export function createNavigation(
 
 		if (!groupDefinition.linkOnly) {
 			group.items.push({
+				testId: `dashboard-navigation-${route.name}-item`,
 				titleKey: route.titleKey,
 				href,
 				icon: routeIcons[route.name] ?? FileText,

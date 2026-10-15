@@ -44,13 +44,17 @@ export function MultiSelectFilter<T extends string | number>({
 		<Popover>
 			<PopoverTrigger
 				aria-label={ariaLabel}
-				data-testid={triggerTestId}
+				data-testid={triggerTestId ?? "platform-model-filter-trigger"}
 				className="inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm font-normal shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 			>
 				<span className="truncate">{triggerLabel}</span>
 				<ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
 			</PopoverTrigger>
-			<PopoverContent data-testid={contentTestId} align="start" className="z-[60] w-64 p-1.5">
+			<PopoverContent
+				data-testid={contentTestId ?? "platform-model-list-platform-model-filter-content"}
+				align="start"
+				className="z-[60] w-64 p-1.5"
+			>
 				<div className="grid gap-0.5">
 					{options.map((option) => {
 						const isSelected = value.includes(option.value)
@@ -58,7 +62,7 @@ export function MultiSelectFilter<T extends string | number>({
 						return (
 							<button
 								aria-checked={isSelected}
-								data-testid={optionTestId}
+								data-testid={optionTestId ?? "platform-model-filter-option"}
 								className={cn(
 									"flex min-h-9 items-center gap-2 rounded-sm px-2 text-left text-sm transition-colors hover:bg-accent",
 									isSelected && "bg-accent text-accent-foreground",
@@ -89,7 +93,7 @@ export function MultiSelectFilter<T extends string | number>({
 					<div className="mt-1 border-t pt-1">
 						<Button
 							className="w-full justify-start"
-							data-testid={clearButtonTestId}
+							data-testid={clearButtonTestId ?? "platform-model-list-action-button"}
 							onClick={() => onChange([])}
 							size="sm"
 							variant="ghost"

@@ -52,6 +52,7 @@ function OfficialStaffShell({ actions, children }: { actions?: ReactNode; childr
 		<ListShell
 			actions={actions}
 			description={t("nav.desc.officialStaff")}
+			testId="official-staff-page"
 			title={t("nav.item.officialStaff")}
 		>
 			{children}
@@ -245,7 +246,7 @@ export default function PlatformOfficialStaffPage() {
 						/>
 
 						{listQuery.isLoading ? (
-							<ListPageSkeleton rows={6} />
+							<ListPageSkeleton rows={6}  testId="platform-official-staff-loading" />
 						) : listQuery.isError ? (
 							<div className="rounded-lg border border-border/50 p-4">
 								<EmptyState
@@ -254,6 +255,7 @@ export default function PlatformOfficialStaffPage() {
 										t("officialStaff.error.loadFailed"),
 									)}
 									icon={Bot}
+									testId="platform-official-staff-error"
 									title={t("officialStaff.error.loadTitle")}
 								/>
 							</div>
@@ -262,6 +264,7 @@ export default function PlatformOfficialStaffPage() {
 								<EmptyState
 									description={t("officialStaff.empty.description")}
 									icon={Bot}
+									testId="platform-official-staff-empty"
 									title={t("officialStaff.empty.title")}
 								/>
 							</div>
@@ -290,11 +293,17 @@ export default function PlatformOfficialStaffPage() {
 								<ListPagination
 									showQuickJumper
 									className="px-1"
+									jumpInputTestId="official-staff-jump-input"
 									loading={listQuery.isFetching}
+									nextButtonTestId="official-staff-next-button"
 									onPageChange={setPage}
+									onPageSizeChange={setPageSize}
 									page={page}
 									pageSize={currentPageSize}
-									onPageSizeChange={setPageSize}
+									pageSizeOptionTestId="official-staff-page-size-option"
+									pageSizeTriggerTestId="official-staff-page-size-trigger"
+									previousButtonTestId="official-staff-previous-button"
+									testId="official-staff-pagination"
 									total={total}
 								/>
 							</div>
@@ -320,6 +329,9 @@ export default function PlatformOfficialStaffPage() {
 				staff={assignDialog.staff}
 			/>
 			<ConfirmDialog
+				cancelButtonTestId="platform-official-staff-confirm-dialog-cancel-button"
+				confirmButtonTestId="platform-official-staff-confirm-dialog-confirm-button"
+				contentTestId="platform-official-staff-confirm-dialog-content"
 				open={Boolean(statusDialog)}
 				onOpenChange={(open) => !open && setStatusDialog(null)}
 				onConfirm={handleStatusChange}

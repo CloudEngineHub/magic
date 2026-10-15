@@ -92,6 +92,7 @@ export function PlatformAppMenuFormDialog({
 		<Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
 			<DialogContent
 				data-testid="platform-app-menu-dialog-content"
+				closeButtonTestId="platform-app-menu-form-dialog-close-button"
 				className="max-h-[calc(100vh-2rem)] overflow-visible sm:max-w-2xl"
 			>
 				<DialogHeader>

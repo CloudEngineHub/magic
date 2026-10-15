@@ -223,8 +223,13 @@ export function ProviderListContent({
 				onMobileOpenChange={onMobileFilterOpenChange}
 				showMobileTrigger={false}
 				className="mt-5"
+				desktopResetTestId="provider-list-reset-button"
 				desktopTestId="provider-desktop-filters"
-				mobileContentTestId="provider-mobile-filters"
+				mobileApplyTestId="provider-advanced-apply-button"
+				mobileBodyTestId="provider-advanced-body"
+				mobileCloseButtonTestId="provider-advanced-close-button"
+				mobileContentTestId="provider-advanced-content"
+				mobileResetTestId="provider-advanced-reset-button"
 				createDefaultValue={createDefaultProviderFilterDraft}
 				onChange={(patch) => onFilterChange({ ...filter, ...patch })}
 				onReset={() => onFilterChange(createDefaultProviderFilterDraft())}
@@ -237,31 +242,44 @@ export function ProviderListContent({
 			<DataTable
 				columns={columns}
 				containerClassName="mt-5"
+				containerTestId="provider-list-table"
 				data={items}
 				emptyState={
 					<EmptyState
 						icon={ServerCog}
+						testId="provider-list-empty"
 						title={t("providerList.empty.title")}
 						description={t("providerList.empty.description")}
 					/>
 				}
 				getRowId={(row) => row.id}
 				isLoading={loading}
+				loadingTestId="provider-list-loading"
 				minWidth={1064}
+				rowTestId="provider-list-row"
 				stickyRightColumnId="actions"
 			/>
 
 			<ListPagination
 				showQuickJumper
 				className="mt-4 px-1"
+				jumpInputTestId="provider-list-jump-input"
+				nextButtonTestId="provider-list-next-button"
 				onPageChange={onPageChange}
 				onPageSizeChange={onPageSizeChange}
 				page={page}
 				pageSize={pageSize}
+				pageSizeOptionTestId="provider-list-page-size-option"
+				pageSizeTriggerTestId="provider-list-page-size-trigger"
+				previousButtonTestId="provider-list-previous-button"
+				testId="provider-list-pagination"
 				total={total}
 			/>
 
 			<DeleteConfirmDialog
+				cancelButtonTestId="provider-delete-cancel-button"
+				confirmButtonTestId="provider-delete-confirm-button"
+				contentTestId="provider-delete-dialog"
 				description={t("providerList.delete.description")}
 				isPending={deleting}
 				onConfirm={confirmDelete}
@@ -274,17 +292,23 @@ export function ProviderListContent({
 }
 
 function ProviderFilterFields({
+	layout,
 	onChange,
 	value,
 }: ListFilterPanelFieldsProps<ProviderFilterDraft>) {
 	const { t } = useTranslation()
+	const isSheet = layout === "sheet"
 
 	return (
 		<>
 			<FilterControlField label={t("providerList.filter.name")}>
 				<FilterSearchInput
 					aria-label={t("providerList.filter.name")}
+					clearButtonTestId={
+						isSheet ? "provider-name-clear-button" : "provider-list-name-clear-button"
+					}
 					clearLabel={t("providerList.action.clearSearch")}
+					inputTestId={isSheet ? "provider-name-input" : "provider-list-name-input"}
 					onValueChange={(name) => onChange({ name })}
 					placeholder={t("providerList.placeholder.searchName")}
 					value={value.name}
@@ -293,7 +317,11 @@ function ProviderFilterFields({
 			<FilterControlField label={t("providerList.filter.alias")}>
 				<FilterSearchInput
 					aria-label={t("providerList.filter.alias")}
+					clearButtonTestId={
+						isSheet ? "provider-alias-clear-button" : "provider-list-alias-clear-button"
+					}
 					clearLabel={t("providerList.action.clearSearch")}
+					inputTestId={isSheet ? "provider-alias-input" : "provider-list-alias-input"}
 					onValueChange={(alias) => onChange({ alias })}
 					placeholder={t("providerList.placeholder.searchAlias")}
 					value={value.alias}
@@ -302,7 +330,11 @@ function ProviderFilterFields({
 			<FilterControlField label={t("providerList.filter.providerId")}>
 				<FilterSearchInput
 					aria-label={t("providerList.filter.providerId")}
+					clearButtonTestId={
+						isSheet ? "provider-id-clear-button" : "provider-list-id-clear-button"
+					}
 					clearLabel={t("providerList.action.clearSearch")}
+					inputTestId={isSheet ? "provider-id-input" : "provider-list-id-input"}
 					onValueChange={(id) => onChange({ id })}
 					placeholder={t("providerList.placeholder.searchProviderId")}
 					value={value.id}
@@ -312,6 +344,7 @@ function ProviderFilterFields({
 				<ProviderStatusSelect
 					className="w-full"
 					onChange={(status) => onChange({ status })}
+					testId={isSheet ? "provider-advanced-status-trigger" : "provider-status-trigger"}
 					value={value.status}
 				/>
 			</FilterControlField>
@@ -319,6 +352,7 @@ function ProviderFilterFields({
 				<ProviderTypeSelect
 					className="w-full"
 					onChange={(provider_type) => onChange({ provider_type })}
+					testId={isSheet ? "provider-advanced-type-trigger" : "provider-type-trigger"}
 					value={value.provider_type}
 				/>
 			</FilterControlField>
@@ -420,20 +454,19 @@ function ProviderIdCell({ value }: { value: string }) {
 function ProviderStatusSelect({
 	className,
 	onChange,
+	testId,
 	value,
 }: {
 	className?: string
 	onChange: (value: string) => void
+	testId?: string
 	value: string
 }) {
 	const { t } = useTranslation()
 
 	return (
 		<Select value={value} onValueChange={onChange}>
-			<SelectTrigger
-				className={className}
-				data-testid="platform-provider-list-filter-content"
-			>
+			<SelectTrigger className={className} data-testid={testId}>
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent data-testid="platform-provider-list-filter-content">
@@ -463,20 +496,19 @@ function ProviderStatusSelect({
 function ProviderTypeSelect({
 	className,
 	onChange,
+	testId,
 	value,
 }: {
 	className?: string
 	onChange: (value: string) => void
+	testId?: string
 	value: string
 }) {
 	const { t } = useTranslation()
 
 	return (
 		<Select value={value} onValueChange={onChange}>
-			<SelectTrigger
-				className={className}
-				data-testid="platform-provider-list-platform-provider-list-content"
-			>
+			<SelectTrigger className={className} data-testid={testId}>
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent data-testid="platform-provider-list-platform-provider-list-content">

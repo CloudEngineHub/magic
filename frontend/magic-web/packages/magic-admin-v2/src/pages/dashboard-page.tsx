@@ -13,6 +13,7 @@ export default function DashboardPage() {
 	return (
 		<>
 			<PageHeader
+				testId="dashboard-page"
 				title={t("nav.item.overview")}
 				description={t("dashboard.description")}
 				actions={
@@ -92,6 +93,7 @@ export default function DashboardPage() {
 					title={t("dashboard.pendingTitle")}
 					description={t("dashboard.pendingDescription")}
 					actionLabel={t("common.createAgent")}
+					testId="dashboard-pending-empty"
 				/>
 			</section>
 		</>

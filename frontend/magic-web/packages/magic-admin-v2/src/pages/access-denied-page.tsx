@@ -8,6 +8,7 @@ export default function AccessDeniedPage() {
   return (
     <EmptyState
       icon={ShieldAlert}
+      testId="access-denied-empty"
       title={t("accessDenied.title")}
       description={t("accessDenied.description")}
     />

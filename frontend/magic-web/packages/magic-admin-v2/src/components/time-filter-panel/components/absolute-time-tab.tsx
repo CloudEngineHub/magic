@@ -50,6 +50,7 @@ type AbsoluteTimeTabProps = {
 	onAbsoluteTimeChange: (boundary: "start" | "end", value: string) => void
 	/** 按月切换日历；负数表示上一个月，正数表示下一个月。 */
 	onMonthChange: (offset: number) => void
+	testIdPrefix?: string
 }
 
 export function AbsoluteTimeTab({
@@ -69,7 +70,9 @@ export function AbsoluteTimeTab({
 	onAbsolutePresetSelect,
 	onAbsoluteTimeChange,
 	onMonthChange,
+	testIdPrefix,
 }: AbsoluteTimeTabProps) {
+	const testId = (suffix: string) => (testIdPrefix ? `${testIdPrefix}-${suffix}` : undefined)
 	const { t } = useTranslation()
 
 	return (
@@ -86,6 +89,7 @@ export function AbsoluteTimeTab({
 								disabled={!absoluteStartDate}
 								onChange={(value) => onAbsoluteTimeChange("start", value)}
 								precision={timePrecision}
+								testId={testId("start-time-trigger")}
 								value={getAbsoluteTimeInputValue(absoluteStartDate, timePrecision)}
 							/>
 							<AbsoluteTimeField
@@ -93,6 +97,7 @@ export function AbsoluteTimeTab({
 								disabled={!absoluteEndDate}
 								onChange={(value) => onAbsoluteTimeChange("end", value)}
 								precision={timePrecision}
+								testId={testId("end-time-trigger")}
 								value={getAbsoluteTimeInputValue(absoluteEndDate, timePrecision)}
 							/>
 						</div>
@@ -100,6 +105,7 @@ export function AbsoluteTimeTab({
 					<div className="flex items-center justify-between gap-2">
 						<Button
 							aria-label="Previous month"
+							data-testid={testId("previous-month-button")}
 							onClick={() => onMonthChange(-1)}
 							size="icon"
 							type="button"
@@ -115,6 +121,7 @@ export function AbsoluteTimeTab({
 						</div>
 						<Button
 							aria-label="Next month"
+							data-testid={testId("next-month-button")}
 							onClick={() => onMonthChange(1)}
 							size="icon"
 							type="button"
@@ -125,6 +132,7 @@ export function AbsoluteTimeTab({
 					</div>
 					<div className={cn("grid min-w-0 gap-1.5", !isInline && "lg:grid-cols-2")}>
 						<CalendarMonthPanel
+							dateButtonTestId={testId("date-button")}
 							endDate={absoluteEndDate}
 							intlLocale={intlLocale}
 							maxDate={maxDate}
@@ -134,6 +142,7 @@ export function AbsoluteTimeTab({
 						/>
 						{!isInline ? (
 							<CalendarMonthPanel
+								dateButtonTestId={testId("date-button")}
 								endDate={absoluteEndDate}
 								intlLocale={intlLocale}
 								maxDate={maxDate}
@@ -160,6 +169,7 @@ export function AbsoluteTimeTab({
 						<TimeOptionButton
 							key={preset.key}
 							onClick={() => onAbsolutePresetSelect(...preset.value)}
+							testId={testId("preset-option")}
 						>
 							{getAbsolutePresetLabel(preset.key, t)}
 						</TimeOptionButton>
@@ -188,6 +198,7 @@ export function AbsoluteTimeTab({
 						) : null}
 						<Button
 							className="w-fit shrink-0"
+							data-testid={testId("apply-button")}
 							disabled={!absoluteStartDate || !absoluteEndDate || absoluteRangeInvalid}
 							onClick={onAbsoluteApply}
 						>

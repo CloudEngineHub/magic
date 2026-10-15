@@ -95,6 +95,7 @@ export function MarketListPanel<TData>({
 						description={
 							queryError.message || t("officialMarketplace.error.loadFailed")
 						}
+						testId="platform-official-marketplace-error"
 					/>
 				</div>
 			) : (
@@ -107,6 +108,7 @@ export function MarketListPanel<TData>({
 								icon={emptyIcon}
 								title={emptyTitle}
 								description={emptyDescription}
+								testId="platform-official-marketplace-empty"
 							/>
 						</div>
 					}
@@ -115,8 +117,11 @@ export function MarketListPanel<TData>({
 							? String(item.id)
 							: String(index)
 					}
+					containerTestId="platform-official-marketplace-list"
 					isLoading={isFetching && data.length === 0}
+					loadingTestId="platform-official-marketplace-loading"
 					minWidth={minWidth}
+					rowTestId="platform-official-marketplace-row"
 					stickyLeftColumnId={stickyLeftColumnId}
 				/>
 			)}
@@ -125,11 +130,17 @@ export function MarketListPanel<TData>({
 				<ListPagination
 					showQuickJumper
 					className="px-1"
+					jumpInputTestId="official-marketplace-jump-input"
 					loading={isFetching}
+					nextButtonTestId="official-marketplace-next-button"
 					onPageChange={onPageChange}
 					onPageSizeChange={onPageSizeChange}
 					page={page}
 					pageSize={pageSize}
+					pageSizeOptionTestId="official-marketplace-page-size-option"
+					pageSizeTriggerTestId="official-marketplace-page-size-trigger"
+					previousButtonTestId="official-marketplace-previous-button"
+					testId="official-marketplace-pagination"
 					total={total}
 				/>
 			) : null}

@@ -84,18 +84,26 @@ export function MarketCategorySelectCell({
 		<SearchableMultiSelect
 			ariaLabel={ariaLabel}
 			className="w-[220px]"
+			clearButtonTestId="platform-official-marketplace-multi-select-clear-button"
 			clearLabel={clearLabel}
+			contentTestId="platform-official-marketplace-multi-select-content"
 			disabled={disabled ?? (!canEdit || isSaving || isLoading)}
 			emptyLabel={emptyLabel}
+			emptyTestId="platform-official-marketplace-multi-select-empty"
 			isLoading={isSaving || isLoading}
+			loadingTestId="platform-official-marketplace-multi-select-loading"
 			maxVisibleItems={1}
 			noMatchingLabel={noMatchingLabel}
 			onChange={handleChange}
 			onOpenChange={handleOpenChange}
 			open={open}
+			optionTestId="platform-official-marketplace-multi-select-option"
 			options={categoryOptions}
+			searchClearButtonTestId="platform-official-marketplace-multi-select-search-clear-button"
+			searchInputTestId="platform-official-marketplace-multi-select-search-input"
 			searchPlaceholder={searchPlaceholder}
 			selectedCountLabel={selectedCountLabel}
+			triggerTestId="platform-official-marketplace-multi-select-trigger"
 			value={draftCategoryIds}
 		/>
 	)

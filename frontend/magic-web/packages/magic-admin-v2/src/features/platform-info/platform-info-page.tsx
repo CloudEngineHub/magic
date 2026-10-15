@@ -176,10 +176,12 @@ export default function PlatformInfoPage() {
 					</PageHeaderActionButton>
 				}
 				description={t("nav.desc.platformInfo")}
+				testId="platform-info-page"
 				title={t("nav.item.platformInfo")}
 			>
 				<EmptyState
 					icon={AlertCircle}
+					testId="platform-info-error"
 					title={t("platformInfo.error.loadTitle")}
 					description={queryError.message}
 				/>
@@ -249,6 +251,7 @@ export default function PlatformInfoPage() {
 			}
 			contentClassName="space-y-4"
 			description={t("nav.desc.platformInfo")}
+			testId="platform-info-page"
 			title={t("nav.item.platformInfo")}
 			titleAddon={
 				isEditing ? (
@@ -260,6 +263,7 @@ export default function PlatformInfoPage() {
 				<SectionNavigation
 					mode="select"
 					sections={platformInfoSections}
+					testIdPrefix="platform-info-sections"
 					value={activeSection}
 					onValueChange={setActiveSection}
 				/>
@@ -268,6 +272,7 @@ export default function PlatformInfoPage() {
 				<SectionNavigation
 					mode="tabs"
 					sections={platformInfoSections}
+					testIdPrefix="platform-info-sections"
 					value={activeSection}
 					onValueChange={setActiveSection}
 				/>
@@ -277,11 +282,15 @@ export default function PlatformInfoPage() {
 					<SectionNavigation
 						mode="nav"
 						sections={platformInfoSections}
+						testIdPrefix="platform-info-sections"
 						value={activeSection}
 						onValueChange={setActiveSection}
 					/>
 				</aside>
-				<div className="min-w-0 flex-1">
+				<div
+					className="min-w-0 flex-1"
+					data-testid={isEditing ? "platform-info-form" : "platform-info-preview"}
+				>
 					{isEditing ? (
 						<PlatformInfoForm
 							activeSection={activeSection}
@@ -330,6 +339,7 @@ function PlatformInfoSkeleton({ hasEditRight }: { hasEditRight: boolean }) {
 			}
 			contentClassName="space-y-4"
 			description={t("nav.desc.platformInfo")}
+			testId="platform-info-page"
 			title={t("nav.item.platformInfo")}
 		>
 			<div className="md:hidden">
@@ -338,7 +348,7 @@ function PlatformInfoSkeleton({ hasEditRight }: { hasEditRight: boolean }) {
 			<div className="hidden md:block lg:hidden">
 				<SectionNavigationSkeleton mode="tabs" sections={platformInfoSections} />
 			</div>
-			<div className="flex min-h-0 gap-12">
+			<div className="flex min-h-0 gap-12" data-testid="platform-info-loading">
 				<aside className="hidden shrink-0 lg:block lg:w-52">
 					<SectionNavigationSkeleton mode="nav" sections={platformInfoSections} />
 				</aside>

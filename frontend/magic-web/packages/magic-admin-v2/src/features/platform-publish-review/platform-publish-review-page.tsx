@@ -84,10 +84,12 @@ export default function PlatformPublishReviewPage({
 
 	return (
 		<ListShell
+			testId="publish-review-page"
 			actions={
 				<>
 					{canViewEmployeeReview || canViewSkillReview ? (
 						<PageHeaderFilterButton
+							data-testid="platform-publish-review-reset-button"
 							count={
 								activeTab === "employee"
 									? countActiveReviewFilters(
