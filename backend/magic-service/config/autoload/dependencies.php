@@ -57,6 +57,16 @@ use App\Domain\AppMenu\Repository\Facade\AppMenuRepositoryInterface;
 use App\Domain\AppMenu\Repository\Persistence\AppMenuRepository;
 use App\Domain\Archive\Repository\Facade\ArchiveTaskRecordRepositoryInterface;
 use App\Domain\Archive\Repository\Persistence\ArchiveTaskRecordRepository;
+use App\Domain\Asset\Repository\Facade\AssetAgreementRepositoryInterface;
+use App\Domain\Asset\Repository\Facade\AssetProviderAssetRepositoryInterface;
+use App\Domain\Asset\Repository\Facade\AssetRepositoryInterface;
+use App\Domain\Asset\Repository\Facade\AssetTagRelationRepositoryInterface;
+use App\Domain\Asset\Repository\Facade\AssetTagRepositoryInterface;
+use App\Domain\Asset\Repository\Persistence\AssetAgreementRepository;
+use App\Domain\Asset\Repository\Persistence\AssetProviderAssetRepository;
+use App\Domain\Asset\Repository\Persistence\AssetRepository;
+use App\Domain\Asset\Repository\Persistence\AssetTagRelationRepository;
+use App\Domain\Asset\Repository\Persistence\AssetTagRepository;
 use App\Domain\Audit\Contract\PermissionLabelProviderInterface;
 use App\Domain\Audit\Contract\PermissionLabelServiceInterface;
 use App\Domain\Audit\ModelCall\Repository\Facade\AuditHourlyRecordRepositoryInterface;
@@ -344,6 +354,8 @@ use App\Infrastructure\Util\Locker\RedisLocker;
 use App\Infrastructure\Util\OrganizationEnvironment\Repository\OrganizationRepository;
 use App\Infrastructure\Util\Permission\Repository\OrganizationAdminRepository;
 use App\Infrastructure\Util\Permission\Repository\RoleRepository;
+use App\Infrastructure\Util\Video\FfmpegVideoFrameExtractor;
+use App\Infrastructure\Util\Video\VideoFrameExtractorInterface;
 use App\Interfaces\MCP\Facade\HttpTransportHandler\ApiKeyProviderAuthenticator;
 use Dtyq\PhpMcp\Shared\Auth\AuthenticatorInterface;
 use Dtyq\PhpMcp\Shared\Kernel\Packer\PackerInterface;
@@ -505,6 +517,12 @@ $dependencies = [
     RoleRepositoryInterface::class => RoleRepository::class,
     OrganizationAdminRepositoryInterface::class => OrganizationAdminRepository::class,
     ResourceVisibilityRepositoryInterface::class => ResourceVisibilityRepository::class,
+    AssetRepositoryInterface::class => AssetRepository::class,
+    AssetTagRepositoryInterface::class => AssetTagRepository::class,
+    AssetTagRelationRepositoryInterface::class => AssetTagRelationRepository::class,
+    AssetProviderAssetRepositoryInterface::class => AssetProviderAssetRepository::class,
+    AssetAgreementRepositoryInterface::class => AssetAgreementRepository::class,
+    VideoFrameExtractorInterface::class => FfmpegVideoFrameExtractor::class,
 
     // audit (操作日志)
     AdminOperationLogRepositoryInterface::class => AdminOperationLogRepository::class,
