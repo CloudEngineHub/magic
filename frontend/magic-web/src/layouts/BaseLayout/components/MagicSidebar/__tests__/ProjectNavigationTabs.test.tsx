@@ -3,9 +3,12 @@ import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import ProjectNavigationTabs from "../ProjectNavigationTabs"
 
-const { selectNavigationSection } = vi.hoisted(() => ({
+const { selectNavigationSection, containerSize } = vi.hoisted(() => ({
 	selectNavigationSection: vi.fn(),
+	containerSize: { width: 300, height: 32 },
 }))
+
+vi.mock("ahooks", () => ({ useSize: () => containerSize }))
 
 vi.mock("mobx-react-lite", () => ({
 	observer: <T,>(component: T) => component,
@@ -81,6 +84,7 @@ vi.mock("@/components/shadcn-ui/smooth-tabs", () => ({
 describe("ProjectNavigationTabs", () => {
 	beforeEach(() => {
 		selectNavigationSection.mockClear()
+		containerSize.width = 300
 	})
 
 	it("复用文件侧栏 SmoothTabs 样式并保留栏目切换事件", () => {
@@ -90,19 +94,11 @@ describe("ProjectNavigationTabs", () => {
 		const tabs = screen.getByTestId("sidebar-navigation-tabs")
 		const group = screen.getByRole("group")
 		const header = group.parentElement
-		expect(header).toHaveClass("z-20", "gap-2")
-		expect(header).not.toHaveClass("z-30")
+		expect(header).toHaveClass("z-30", "gap-2")
 		expect(header).toHaveClass("bg-sidebar")
-		expect(group).toHaveClass(
-			"[container-name:project-navigation-tabs]",
-			"[container-type:inline-size]",
-		)
 		expect(group.firstElementChild).toHaveClass("min-w-0", "w-full")
 		expect(tabs).toHaveAttribute("data-value", "workspaces")
-		expect(tabs).toHaveAttribute(
-			"data-class-name",
-			"h-auto w-full bg-muted p-[3px] [@container_project-navigation-tabs_(max-width:240px)]:[&>button>span:has(svg)]:hidden",
-		)
+		expect(tabs).toHaveAttribute("data-class-name", "h-auto w-full bg-muted p-[3px]")
 		expect(tabs).toHaveAttribute(
 			"data-button-class-name",
 			"h-[28px] min-w-0 px-1 py-0 text-[13px] font-normal focus-visible:bg-sidebar-accent focus-visible:ring-1",
@@ -121,5 +117,20 @@ describe("ProjectNavigationTabs", () => {
 		expect(managerButton).toHaveClass("!size-[34px]", "!rounded-[10px]", "!bg-muted")
 		fireEvent.click(managerButton)
 		expect(onOpenManager).toHaveBeenCalledTimes(1)
+	})
+
+	it("hides decorative icons at narrow widths and restores them after resizing", () => {
+		const { rerender } = render(
+			<ProjectNavigationTabs disabled={false} onOpenManager={vi.fn()} />,
+		)
+		const recent = screen.getByTestId("sidebar-recent-projects-toggle")
+		expect(recent.querySelector("svg")).toBeInTheDocument()
+		containerSize.width = 240
+		rerender(<ProjectNavigationTabs disabled={false} onOpenManager={vi.fn()} />)
+		expect(recent.querySelector("svg")).not.toBeInTheDocument()
+		expect(recent).toHaveTextContent("projectNavigation.recentShort")
+		containerSize.width = 241
+		rerender(<ProjectNavigationTabs disabled={false} onOpenManager={vi.fn()} />)
+		expect(recent.querySelector("svg")).toBeInTheDocument()
 	})
 })
