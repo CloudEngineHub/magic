@@ -28,7 +28,14 @@ use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\PrincipalType;
+use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
+use App\Domain\Permission\Service\ResourceVisibilityDomainService;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentDomainService;
+use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentMarketDomainService;
+use App\Domain\SuperMagic\Agent\Service\UserAgentDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\AskUserStatus;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicExecutionSource;
@@ -41,6 +48,7 @@ use App\Domain\SuperMagic\Message\Event\TopicMessageProcessEvent;
 use App\Domain\SuperMagic\Message\Repository\Model\TaskMessageModel;
 use App\Domain\SuperMagic\Message\Service\MessageQueueDomainService;
 use App\Domain\SuperMagic\Message\Service\TaskMessageDomainService;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Constant\AgentConstant;
 use App\Domain\SuperMagic\Task\Constant\AgentEventEnum;
@@ -83,6 +91,7 @@ use Carbon\Carbon;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\Amqp\Producer;
 use Hyperf\Contract\TranslatorInterface;
+use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Hyperf\Odin\Message\Role;
 use Hyperf\Redis\Redis;
@@ -90,6 +99,8 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 use Throwable;
+use TypeError;
+use ValueError;
 
 class TopicTaskAppService extends AbstractAppService
 {
@@ -118,6 +129,10 @@ class TopicTaskAppService extends AbstractAppService
         protected Producer $producer,
         private readonly SuperMagicAgentAccessAppService $superMagicAgentAccessAppService,
         private readonly TopicAgentConfigResolver $topicAgentConfigResolver,
+        private readonly UserAgentDomainService $userAgentDomainService,
+        private readonly SuperMagicAgentMarketDomainService $superMagicAgentMarketDomainService,
+        private readonly SuperMagicAgentDomainService $superMagicAgentDomainService,
+        private readonly ResourceVisibilityDomainService $resourceVisibilityDomainService,
     ) {
         $this->logger = $this->loggerFactory->get(get_class($this));
     }
@@ -642,94 +657,6 @@ class TopicTaskAppService extends AbstractAppService
         }
     }
 
-    /**
-     * 恢复当前等待任务绑定的执行环境，不创建新的任务记录。
-     */
-    private function recoverTaskSandbox(
-        DataIsolation $dataIsolation,
-        TopicEntity $topicEntity,
-        TaskEntity $task,
-    ): string {
-        $projectEntity = $this->projectDomainService->getProjectNotUserId($topicEntity->getProjectId());
-        if ($projectEntity === null) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND);
-        }
-
-        $agentContext = $this->agentDomainService->buildInitAgentContext(
-            dataIsolation: $dataIsolation,
-            projectEntity: $projectEntity,
-            topicEntity: $topicEntity,
-            taskEntity: $task,
-            // 传入当前绑定的 sandbox_id，由 Domain 负责判断旧环境是否还能复用；
-            // 不传 topic_id，避免跳过预热池的正常路径。
-            sandboxId: (string) $topicEntity->getSandboxId(),
-            skipInitMessage: true,
-        );
-
-        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
-            dataIsolation: $dataIsolation,
-            agentContext: $agentContext,
-            rootFileIds: new SandboxRootFileIds(
-                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
-                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory(
-                    $dataIsolation->getCurrentUserId(),
-                    $dataIsolation->getCurrentOrganizationCode()
-                ),
-                (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory(
-                    $projectEntity->getId(),
-                    $topicEntity->getId(),
-                    $dataIsolation->getCurrentUserId(),
-                    $dataIsolation->getCurrentOrganizationCode(),
-                    $projectEntity->getUserOrganizationCode()
-                )
-            )
-        );
-
-        $this->topicDomainService->updateTopicSandboxId($dataIsolation, $topicEntity->getId(), $sandboxId);
-        $this->taskDomainService->updateTaskSandboxId($dataIsolation, $task->getId(), $sandboxId);
-        $task->setSandboxId($sandboxId);
-
-        return $sandboxId;
-    }
-
-    /**
-     * 只有旧执行环境已经退出或找不到时，才允许自动恢复。
-     */
-    private function shouldRecoverTaskSandbox(TaskEntity $task, SandboxOperationException $initialError): bool
-    {
-        $sandboxId = trim($task->getSandboxId());
-        if ($sandboxId === '') {
-            return true;
-        }
-
-        try {
-            $status = $this->agentDomainService->getSandboxStatus($sandboxId)->getStatus();
-            $recoverable = in_array($status, [
-                SandboxStatus::EXITED,
-                SandboxStatus::NOT_FOUND,
-                SandboxStatus::UNKNOWN,
-            ], true);
-
-            $this->logger->info('CheckUserToolCallRecoverySandboxStatus', [
-                'task_id' => $task->getId(),
-                'sandbox_id' => $sandboxId,
-                'sandbox_status' => $status,
-                'recoverable' => $recoverable,
-                'initial_error' => $initialError->getMessage(),
-            ]);
-
-            return $recoverable;
-        } catch (Throwable $statusError) {
-            $this->logger->warning('Failed to check sandbox status before user tool call recovery', [
-                'task_id' => $task->getId(),
-                'sandbox_id' => $sandboxId,
-                'initial_error' => $initialError->getMessage(),
-                'status_error' => $statusError->getMessage(),
-            ]);
-            return false;
-        }
-    }
-
     public function handleUserToolCallCancelled(
         DataIsolation $dataIsolation,
         TaskEntity $task,
@@ -975,18 +902,13 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
-     * Create task from the simplified Open API DTO.
-     *
-     * Converts the plain-text content + model options carried by
-     * CreateOpenTaskRequestDTO into the internal rich-text message structure,
-     * then delegates to the shared createTaskByDataIsolation flow.
-     *
-     * This keeps all format-conversion logic in the service layer so the
-     * controller stays a thin auth + DTO pass-through.
+     * Create a task from a standard message prepared by the interface layer.
+     * Open API options are passed separately to the shared creation flow.
      */
     public function createTaskFromOpenApi(
         RequestContext $requestContext,
         CreateOpenTaskRequestDTO $requestDTO,
+        CreateTaskRequestDTO $internalDTO,
         SuperMagicExecutionSource $executionSource = SuperMagicExecutionSource::OpenApi
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
@@ -995,13 +917,12 @@ class TopicTaskAppService extends AbstractAppService
             $userAuthorization->getId()
         );
 
-        $internalDTO = $requestDTO->toCreateTaskRequestDTO();
-
         $result = $this->createTaskByDataIsolation(
             $dataIsolation,
             $internalDTO,
             executionSource: $executionSource,
-            messageSubscriptionConfig: $requestDTO->getMessageSubscriptionConfig()
+            messageSubscriptionConfig: $requestDTO->getMessageSubscriptionConfig(),
+            autoHireAgent: $requestDTO->isAutoHireAgent()
         );
 
         return $this->buildCreateTaskResponse($result);
@@ -1109,6 +1030,94 @@ class TopicTaskAppService extends AbstractAppService
         }
 
         return $result;
+    }
+
+    /**
+     * 恢复当前等待任务绑定的执行环境，不创建新的任务记录。
+     */
+    private function recoverTaskSandbox(
+        DataIsolation $dataIsolation,
+        TopicEntity $topicEntity,
+        TaskEntity $task,
+    ): string {
+        $projectEntity = $this->projectDomainService->getProjectNotUserId($topicEntity->getProjectId());
+        if ($projectEntity === null) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND);
+        }
+
+        $agentContext = $this->agentDomainService->buildInitAgentContext(
+            dataIsolation: $dataIsolation,
+            projectEntity: $projectEntity,
+            topicEntity: $topicEntity,
+            taskEntity: $task,
+            // 传入当前绑定的 sandbox_id，由 Domain 负责判断旧环境是否还能复用；
+            // 不传 topic_id，避免跳过预热池的正常路径。
+            sandboxId: (string) $topicEntity->getSandboxId(),
+            skipInitMessage: true,
+        );
+
+        $sandboxId = $this->agentDomainService->ensureSandboxInitialized(
+            dataIsolation: $dataIsolation,
+            agentContext: $agentContext,
+            rootFileIds: new SandboxRootFileIds(
+                (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
+                (string) $this->taskFileDomainService->findOrCreateUserRootDirectory(
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode()
+                ),
+                (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory(
+                    $projectEntity->getId(),
+                    $topicEntity->getId(),
+                    $dataIsolation->getCurrentUserId(),
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $projectEntity->getUserOrganizationCode()
+                )
+            )
+        );
+
+        $this->topicDomainService->updateTopicSandboxId($dataIsolation, $topicEntity->getId(), $sandboxId);
+        $this->taskDomainService->updateTaskSandboxId($dataIsolation, $task->getId(), $sandboxId);
+        $task->setSandboxId($sandboxId);
+
+        return $sandboxId;
+    }
+
+    /**
+     * 只有旧执行环境已经退出或找不到时，才允许自动恢复。
+     */
+    private function shouldRecoverTaskSandbox(TaskEntity $task, SandboxOperationException $initialError): bool
+    {
+        $sandboxId = trim($task->getSandboxId());
+        if ($sandboxId === '') {
+            return true;
+        }
+
+        try {
+            $status = $this->agentDomainService->getSandboxStatus($sandboxId)->getStatus();
+            $recoverable = in_array($status, [
+                SandboxStatus::EXITED,
+                SandboxStatus::NOT_FOUND,
+                SandboxStatus::UNKNOWN,
+            ], true);
+
+            $this->logger->info('CheckUserToolCallRecoverySandboxStatus', [
+                'task_id' => $task->getId(),
+                'sandbox_id' => $sandboxId,
+                'sandbox_status' => $status,
+                'recoverable' => $recoverable,
+                'initial_error' => $initialError->getMessage(),
+            ]);
+
+            return $recoverable;
+        } catch (Throwable $statusError) {
+            $this->logger->warning('Failed to check sandbox status before user tool call recovery', [
+                'task_id' => $task->getId(),
+                'sandbox_id' => $sandboxId,
+                'initial_error' => $initialError->getMessage(),
+                'status_error' => $statusError->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     /**
@@ -1271,6 +1280,55 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
+     * Ensure the task employee is hired through domain services before task side effects.
+     */
+    private function ensureAgentHired(SuperMagicAgentDataIsolation $dataIsolation, string $agentCode): void
+    {
+        if ($this->userAgentDomainService->findUserAgentOwnershipByCode($dataIsolation, $agentCode) !== null) {
+            return;
+        }
+
+        Db::beginTransaction();
+        try {
+            $permissionIsolation = new PermissionDataIsolation();
+            $permissionIsolation->extends($dataIsolation);
+            $marketEntity = $this->superMagicAgentMarketDomainService->getPublishedByAgentCodeForUpdate(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $agentCode
+            );
+            if ($marketEntity === null) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentCode]);
+            }
+
+            // The market lock serializes concurrent hires; recheck before installing.
+            if ($this->userAgentDomainService->findUserAgentOwnershipByCode($dataIsolation, $agentCode) !== null) {
+                Db::commit();
+                return;
+            }
+            if (! $this->superMagicAgentMarketDomainService->isMarketDiscoverableForUser(
+                $permissionIsolation,
+                $marketEntity,
+                $dataIsolation->getCurrentUserId()
+            )) {
+                ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $agentCode]);
+            }
+
+            $employee = $this->superMagicAgentDomainService->hireAgent($dataIsolation, $agentCode);
+            $this->resourceVisibilityDomainService->addResourceVisibilityByPrincipalsIfMissing(
+                $permissionIsolation,
+                ResourceVisibilityResourceType::SUPER_MAGIC_AGENT,
+                $employee->getCode(),
+                PrincipalType::USER,
+                [$dataIsolation->getCurrentUserId()]
+            );
+            Db::commit();
+        } catch (Throwable $exception) {
+            Db::rollBack();
+            throw $exception;
+        }
+    }
+
+    /**
      * Shared task creation flow for both first-party and third-party user messages.
      *
      * @return array{task_id: string, message_id: string, im_seq_id: ?string, deduplicated: bool}
@@ -1281,7 +1339,8 @@ class TopicTaskAppService extends AbstractAppService
         ?array $source = null,
         bool $deliverToAgent = true,
         ?SuperMagicExecutionSource $executionSource = null,
-        ?array $messageSubscriptionConfig = null
+        ?array $messageSubscriptionConfig = null,
+        bool $autoHireAgent = false
     ): array {
         $preparedRequestDTO = $this->createTaskRequestDTOWithSource($requestDTO, $source);
         if ($executionSource !== null) {
@@ -1294,6 +1353,11 @@ class TopicTaskAppService extends AbstractAppService
 
         try {
             $contentStruct = $this->validateAndParseMessage($preparedRequestDTO);
+            $parsedMessage = UserMessageDTOAssembler::parseMessageContent($contentStruct, $executionSource ?? SuperMagicExecutionSource::HumanChat);
+            if (strlen($parsedMessage['prompt']) > 65000) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::VALIDATE_FAILED, 'Message content exceeds maximum length');
+            }
+            UserMessageDTOAssembler::assertTaskCreationMessage($contentStruct, $parsedMessage);
 
             $topicEntity = $this->checkTopicPermission(
                 $dataIsolation,
@@ -1317,14 +1381,35 @@ class TopicTaskAppService extends AbstractAppService
             );
             $topicPattern = $topicAgentConfig->topicMode;
             $agentCode = $topicAgentConfig->agentCode;
+            $agentDataIsolation = SuperMagicAgentDataIsolation::create(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $dataIsolation->getCurrentUserId()
+            );
             [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
-                SuperMagicAgentDataIsolation::create(
-                    $dataIsolation->getCurrentOrganizationCode(),
-                    $dataIsolation->getCurrentUserId()
-                ),
+                $agentDataIsolation,
                 $topicPattern,
                 $agentCode
             );
+            if (! $allowed && $autoHireAgent && $topicPattern === ProjectMode::CUSTOM_AGENT->value && $agentCode !== '') {
+                try {
+                    $this->ensureAgentHired($agentDataIsolation, $agentCode);
+                } catch (Throwable $exception) {
+                    $this->logger->warning('Failed to automatically hire task employee', [
+                        'agent_code' => $agentCode,
+                        'organization_code' => $dataIsolation->getCurrentOrganizationCode(),
+                        'user_id' => $dataIsolation->getCurrentUserId(),
+                        'error_code' => $exception->getCode(),
+                        'error' => $exception->getMessage(),
+                    ]);
+                    ExceptionBuilder::throw(SuperMagicErrorCode::AutoHireAgentFailed, throwable: $exception);
+                }
+
+                [$allowed, $errorMessage] = $this->superMagicAgentAccessAppService->checkAgentAccess(
+                    $agentDataIsolation,
+                    $topicPattern,
+                    $agentCode
+                );
+            }
             if (! $allowed) {
                 ExceptionBuilder::throw(SuperMagicErrorCode::OperationFailed, $errorMessage);
             }
@@ -1367,7 +1452,7 @@ class TopicTaskAppService extends AbstractAppService
 
             $this->dispatchPreCheckEvent($dataIsolation, $topicEntity, $contentStruct, $taskId);
 
-            $taskEntity = $this->initializeTask($dataIsolation, $topicEntity, $preparedRequestDTO, $taskId, $contentStruct);
+            $taskEntity = $this->initializeTask($dataIsolation, $topicEntity, $preparedRequestDTO, $taskId, $contentStruct, $parsedMessage);
 
             $recordId = (int) IdGenerator::getSnowId();
             $businessMessageId = $businessMessageId !== '' ? $businessMessageId : (string) $recordId;
@@ -1379,6 +1464,7 @@ class TopicTaskAppService extends AbstractAppService
                 $contentStruct,
                 $recordId,
                 $businessMessageId,
+                $parsedMessage,
                 $source
             );
 
@@ -1393,7 +1479,8 @@ class TopicTaskAppService extends AbstractAppService
                     $businessMessageId,
                     $persistResult['imSeqId'],
                     $executionSource ?? SuperMagicExecutionSource::HumanChat,
-                    $messageSubscriptionConfig
+                    $messageSubscriptionConfig,
+                    $parsedMessage
                 );
             }
 
@@ -1737,37 +1824,21 @@ class TopicTaskAppService extends AbstractAppService
     /**
      * Validate and parse message structure.
      *
-     * @return TextContentInterface Content structure (guaranteed to be TextContentInterface)
      * @throws BusinessException When validation fails or message type is not supported
      */
-    private function validateAndParseMessage(CreateTaskRequestDTO $requestDTO): TextContentInterface
+    private function validateAndParseMessage(CreateTaskRequestDTO $requestDTO): MagicMessageStruct&TextContentInterface
     {
-        // Parse message structure once
-        $chatMessageType = ChatMessageType::from($requestDTO->getMessageType());
-        $messageStruct = MessageAssembler::getChatMessageStruct(
-            $chatMessageType,
-            $requestDTO->getMessageContent()
-        );
-        // Ensure content is TextContentInterface
-        if (! $messageStruct instanceof TextContentInterface) {
-            ExceptionBuilder::throw(
-                SuperAgentErrorCode::VALIDATE_FAILED,
-                'Unsupported message content type'
-            );
+        try {
+            $chatMessageType = ChatMessageType::from($requestDTO->getMessageType());
+            $messageStruct = MessageAssembler::getChatMessageStruct($chatMessageType, $requestDTO->getMessageContent());
+            if (! $messageStruct instanceof MagicMessageStruct || ! $messageStruct instanceof TextContentInterface) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::VALIDATE_FAILED, 'Unsupported message content type');
+            }
+            UserMessageDTOAssembler::prepareMessageContent($messageStruct);
+            return $messageStruct;
+        } catch (TypeError|ValueError $exception) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::VALIDATE_FAILED, 'Unsupported message content type');
         }
-
-        // Extract and validate prompt
-        $prompt = $messageStruct->getTextContent();
-
-        // Validate prompt length
-        if (strlen($prompt) > 65000) {
-            ExceptionBuilder::throw(
-                SuperAgentErrorCode::VALIDATE_FAILED,
-                'Message content exceeds maximum length'
-            );
-        }
-
-        return $messageStruct;
     }
 
     /**
@@ -1856,18 +1927,12 @@ class TopicTaskAppService extends AbstractAppService
         TopicEntity $topicEntity,
         CreateTaskRequestDTO $requestDTO,
         string $taskId,
-        TextContentInterface $contentStruct
+        TextContentInterface $contentStruct,
+        array $parsedMessage
     ): TaskEntity {
-        // Extract data from content structure
-        $prompt = $contentStruct->getTextContent();
-        $attachments = $contentStruct->getAttachments() ?? [];
-        // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
-        $superAgentExtra = $contentStruct->getExtra()?->getSuperAgent();
-        $mentions = $superAgentExtra?->getMentionsJsonStruct();
-        $mentionsJson = ! empty($mentions) ? json_encode($mentions, JSON_UNESCAPED_UNICODE) : null;
-
-        // Convert attachments to JSON string if not empty
-        $attachmentsJson = ! empty($attachments) ? json_encode($attachments, JSON_UNESCAPED_UNICODE) : '';
+        $prompt = $parsedMessage['prompt'];
+        $attachmentsJson = $parsedMessage['attachments'];
+        $mentionsJson = $parsedMessage['mentions'];
 
         $data = [
             'id' => (int) $taskId,
@@ -1909,6 +1974,7 @@ class TopicTaskAppService extends AbstractAppService
         TextContentInterface $contentStruct,
         int $recordId,
         string $messageId,
+        array $parsedMessage,
         ?array $source = null
     ): array {
         // 1. Get agent user
@@ -1918,11 +1984,11 @@ class TopicTaskAppService extends AbstractAppService
         );
 
         // 2. Extract data from content structure (no parsing needed, use reference)
-        $prompt = $contentStruct->getTextContent();
-        $attachments = $contentStruct->getAttachments() ?? [];
+        $prompt = $parsedMessage['prompt'];
+        $attachments = json_decode($parsedMessage['attachments'] ?: '[]', true, flags: JSON_THROW_ON_ERROR);
         // @phpstan-ignore-next-line method.notFound - MagicMessageStruct implements TextContentInterface and has getExtra()
         $superAgentExtra = $contentStruct->getExtra()?->getSuperAgent();
-        $mentions = $superAgentExtra?->getMentionsJsonStruct();
+        $mentions = json_decode($parsedMessage['mentions'] ?? 'null', true, flags: JSON_THROW_ON_ERROR);
 
         // Extract extra data for TaskContext
         $extraData = null;
@@ -2031,6 +2097,7 @@ class TopicTaskAppService extends AbstractAppService
             'project_id' => $requestDTO->getProjectId(),
             'topic_id' => $requestDTO->getTopicId(),
             'message_type' => $requestDTO->getMessageType(),
+            'force_interrupt' => $requestDTO->isForceInterrupt(),
             'message_content' => $messageContent,
         ]);
     }
@@ -2043,6 +2110,7 @@ class TopicTaskAppService extends AbstractAppService
             'project_id' => $requestDTO->getProjectId(),
             'topic_id' => $requestDTO->getTopicId(),
             'message_type' => $requestDTO->getMessageType(),
+            'force_interrupt' => $requestDTO->isForceInterrupt(),
             'message_content' => SuperMagicExecutionSource::stampMessageContent(
                 $requestDTO->getMessageContent(),
                 $executionSource
@@ -2196,23 +2264,26 @@ class TopicTaskAppService extends AbstractAppService
         string $messageId,
         ?int $imSeqId,
         SuperMagicExecutionSource $executionSource,
-        ?array $messageSubscriptionConfig = null
+        ?array $messageSubscriptionConfig = null,
+        ?array $parsedMessage = null
     ): void {
         $language = $this->translator->getLocale() ?? 'en_US';
 
-        // Build the unified UserMessageDTO from the parsed content struct.
-        // chatConversationId is resolved later by the consumer (agent conversation lookup).
-        $userMessageDTO = UserMessageDTOAssembler::fromMessageContentStruct(
-            contentStruct: $contentStruct,
-            topicEntity: $topicEntity,
-            agentUserId: $agentUserId,
-            messageType: $messageType,
-            messageId: $messageId,
-            messageSeqId: $imSeqId !== null ? (string) $imSeqId : '',
-            language: $language,
-            executionSource: $executionSource,
-            messageSubscriptionConfig: $messageSubscriptionConfig,
-        );
+        if (! $contentStruct instanceof MagicMessageStruct) {
+            throw new RuntimeException('Unsupported message content');
+        }
+        $parsedMessage ??= UserMessageDTOAssembler::parseMessageContent($contentStruct, $executionSource);
+        // chatConversationId is resolved later by the consumer.
+        $userMessageDTO = UserMessageDTOAssembler::fromParsedMessage($parsedMessage, [
+            'agent_user_id' => $agentUserId,
+            'chat_topic_id' => $topicEntity->getChatTopicId(),
+            'topic_id' => $topicEntity->getId(),
+            'chat_message_type' => $messageType,
+            'message_id' => $messageId,
+            'message_seq_id' => $imSeqId !== null ? (string) $imSeqId : '',
+            'language' => $language,
+            'message_subscription_config' => $messageSubscriptionConfig,
+        ]);
 
         // Create queue message DTO carrying the serialized UserMessageDTO and task id
         $queueMessageDTO = new TaskInitializationMessageDTO(

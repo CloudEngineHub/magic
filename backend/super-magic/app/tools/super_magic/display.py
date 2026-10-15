@@ -43,7 +43,7 @@ TOOL_SUBJECTS = {
     **dict.fromkeys(("list_workspaces", "get_workspace", "create_workspace", "update_workspace", "archive_workspace", "delete_workspace"), "workspace"),
     **dict.fromkeys(("list_projects", "get_project", "create_project", "update_project", "move_project", "delete_project"), "project"),
     **dict.fromkeys(("list_topics", "get_topic", "create_topic", "update_topic", "archive_topic", "delete_topic", "read_topic_messages", "start_topic_task", "send_topic_message", "list_topic_queued_messages"), "topic"),
-    **dict.fromkeys(("list_project_files", "get_project_file", "create_project_directory", "rename_project_file", "copy_project_files", "move_project_files", "delete_project_files", "prepare_project_files"), "file"),
+    **dict.fromkeys(("list_project_files", "search_project_files", "get_project_file", "create_project_directory", "rename_project_file", "copy_project_files", "move_project_files", "delete_project_files", "prepare_project_files"), "file"),
     "get_file_batch_status": "batch",
     "get_topic_task": "task", "cancel_topic_task": "task",
     "delete_topic_queued_message": "queue",
@@ -81,6 +81,11 @@ def _display_data(tool_name: str, result: ToolResult, arguments: dict | None, to
     for key in ("keyword", "page", "force_interrupt", "content", "purpose", "archived"):
         if key in args:
             data.setdefault(key, args[key])
+    if tool_name == "search_project_files":
+        if isinstance(args.get("keywords"), list):
+            data.setdefault("keyword", " | ".join(str(word) for word in args["keywords"]))
+        if isinstance(args.get("projects"), list):
+            data.setdefault("search_scopes", args["projects"])
     return data
 
 
@@ -89,7 +94,8 @@ def product_remark(tool_name: str, data: dict) -> str:
     name = next((_plain(data[k]) for k in ("name", f"{subject}_name") if data.get(k)), "")
     parts = [name] if name else []
     if isinstance(data.get("items"), list):
-        parts.append(_label("summary.records", count=len(data["items"])))
+        key = "search.matches" if tool_name == "search_project_files" else "summary.records"
+        parts.append(_label(key, count=len(data["items"])))
     elif isinstance(data.get("messages"), list):
         parts.append(_label("summary.messages", count=len(data["messages"])))
     elif isinstance(data.get("files"), list) or data.get("count") is not None or data.get("selected_count") is not None:
@@ -97,6 +103,10 @@ def product_remark(tool_name: str, data: dict) -> str:
         parts.append(_label("summary.files", count=count))
     if data.get("keyword"):
         parts.append(_label("summary.keyword", keyword=_plain(data["keyword"])))
+    if tool_name == "search_project_files" and isinstance(data.get("search_scopes"), list):
+        parts.append(_label("search.scopes", count=len(data["search_scopes"])))
+        if data.get("search_complete") is False:
+            parts.append(_label("search.incomplete_short"))
     state = _state(data)
     if state:
         parts.append(state)
@@ -167,11 +177,30 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
     if state in {"accepted", "queued", "waiting", "processing", "cancel_requested", "delete_requested"}:
         lines.extend(["", _label("pending")])
 
+    if tool_name == "search_project_files":
+        scopes = data.get("search_scopes", [])
+        if scopes:
+            lines.extend(["", _label("search.scopes", count=len(scopes)), ""])
+        for index, scope in enumerate(scopes, 1):
+            name = _visible_text(scope.get("project_name") or _label("search.project", number=index), 200).replace("\n", " ")
+            status = scope.get("status", "pending")
+            status = status if status in {"pending", "complete", "failed"} else "pending"
+            line = f"- {name}: {_label(f'search.scope.{status}')}"
+            if scope.get("error_code"):
+                line += " · " + _error_label(ToolResult.error("", data={"code": scope["error_code"]}))
+            lines.append(line)
+        if data.get("search_complete") is False:
+            lines.extend(["", _label("search.incomplete")])
+        if data.get("results_truncated"):
+            lines.extend(["", _label("search.truncated")])
+        lines.extend(["", _label("search.names_only")])
+
     for collection in ("items", "files"):
         records = data.get(collection)
         if not isinstance(records, list):
             continue
-        lines.extend(["", _label("records", count=len(records)), ""])
+        key = "search.matches" if tool_name == "search_project_files" else "records"
+        lines.extend(["", _label(key, count=len(records)), ""])
         if not records:
             lines.append(_label("empty"))
         else:
@@ -179,10 +208,13 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
             for index, item in enumerate(records[:100], 1):
                 if not isinstance(item, dict):
                     continue
-                name = next((item[key] for key in ("name", "project_name", "topic_name", "file_name") if item.get(key)), None)
+                name_fields = ("file_name", "name") if tool_name == "search_project_files" else ("name", "project_name", "topic_name", "file_name")
+                name = next((item[key] for key in name_fields if item.get(key)), None)
                 name = _visible_text(name, 200).replace("\n", " ") if name else _label("record", number=index)
                 timestamp = item.get("updated_at", item.get("created_at"))
                 location = _visible_text(item.get("relative_file_path") or item.get("workspace_name") or "-", 300).replace("\n", " ")
+                if tool_name == "search_project_files" and item.get("project_name"):
+                    location = _visible_text(item["project_name"], 200).replace("\n", " ") + " / " + location
                 lines.append(f"| {name} | {_state(item) or '-'} | {location} | {_time(timestamp) if timestamp is not None else '-'} |")
             if len(records) > 100:
                 lines.extend(["", _label("truncated")])
@@ -218,7 +250,7 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
             lines.extend(["", _label("truncated")])
     if state in {"failed", "suspended"} and data.get("error_message"):
         lines.extend(["", _label("task_failed")])
-    if data.get("partial_success"):
+    if data.get("partial_success") and tool_name != "search_project_files":
         lines.extend(["", _label("partial_success")])
     if data.get("coverage_limit") is not None:
         lines.extend(["", _label("coverage_limit", count=data["coverage_limit"])])

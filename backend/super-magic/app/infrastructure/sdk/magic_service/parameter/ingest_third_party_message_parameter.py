@@ -6,6 +6,8 @@ Parameter class for third-party IM inbound message persistence API.
 
 from typing import Any, Dict, Optional
 
+from agentlang.utils.metadata import MetadataUtil
+
 from ..kernel.magic_service_parameter import MagicServiceAbstractParameter
 
 
@@ -92,6 +94,7 @@ class IngestThirdPartyMessageParameter(MagicServiceAbstractParameter):
         }
         if self._request_id:
             headers["request-id"] = self._request_id
+        MetadataUtil.add_sandbox_id_header(headers)
         return headers
 
     def validate(self) -> None:

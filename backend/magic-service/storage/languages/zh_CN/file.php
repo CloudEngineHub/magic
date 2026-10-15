@@ -5,6 +5,17 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'open_api' => [
+        'invalid_id' => ':field 必须是有效的正整数 ID',
+        'files_must_be_list' => 'files 必须是文件列表',
+        'duplicate_file_key' => '同一批次不能包含重复的 file_key',
+        'invalid_upload' => '上传文件无效或未完整接收',
+        'upload_too_large' => '文件超过后端上传上限，请使用 STS 直传',
+        'key_out_of_scope' => '文件不属于当前项目上传范围',
+        'upload_not_completed' => '文件尚未完成上传',
+        'head_failed' => '无法校验上传文件，请稍后重试',
+        'registration_failed' => '文件登记失败',
+    ],
     'file_not_found' => '文件未找到',
     'file_exist' => '文件已存在',
     'illegal_file_key' => '非法的文件键',

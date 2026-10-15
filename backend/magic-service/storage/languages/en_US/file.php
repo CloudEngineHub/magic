@@ -5,6 +5,17 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'open_api' => [
+        'invalid_id' => ':field must be a valid positive integer ID',
+        'files_must_be_list' => 'files must be a list',
+        'duplicate_file_key' => 'Duplicate file_key in the same batch',
+        'invalid_upload' => 'The uploaded file is invalid or incomplete',
+        'upload_too_large' => 'File exceeds the backend upload limit; use STS direct upload',
+        'key_out_of_scope' => 'File is outside the project upload scope',
+        'upload_not_completed' => 'File upload has not completed',
+        'head_failed' => 'Unable to verify uploaded file; please retry',
+        'registration_failed' => 'File registration failed',
+    ],
     'file_not_found' => 'File not found',
     'file_exist' => 'File already exists',
     'illegal_file_key' => 'Illegal file key',
