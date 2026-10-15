@@ -290,7 +290,7 @@ final class VolcengineArkAssetProvider implements AssetProviderInterface
                 'ACTIVE' => 'PASS',
                 'PROCESSING' => 'PROCESSING',
                 'FAILED' => 'FAILED',
-                default => 'UNVERIFIED',
+                default => 'PROCESSING',
             },
             'metadata' => $response,
         ];

@@ -647,6 +647,34 @@ class AssetDomainService
         return true;
     }
 
+    /**
+     * Release the remote resources a failed sync left behind.
+     */
+    private function releaseFailedProviderResources(AssetDataIsolation $dataIsolation, ProviderAssetEntity $mapping): void
+    {
+        try {
+            // A reused mapping shares its remote asset with the row it was copied from.
+            if ($this->providerAssets->countOtherReferences($mapping) > 0) {
+                return;
+            }
+            if (! $this->reclaimProviderAsset($mapping)) {
+                return;
+            }
+            $mapping->setProviderAssetId('');
+            $mapping->setProviderGroupId('');
+            $this->providerAssets->saveMapping($dataIsolation, $mapping);
+        } catch (Throwable $throwable) {
+            // Releasing is a side effect: it must never mask the original sync failure.
+            $this->logger->error('第三方资源释放异常', [
+                'asset_id' => $mapping->getAssetId(),
+                'provider_asset_id' => $mapping->getProviderAssetId(),
+                'provider_group_id' => $mapping->getProviderGroupId(),
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+    }
+
     /** 创建公开资产：管理端仍同步等待，个人端由应用层调度协程。 */
     private function create(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
     {
@@ -734,21 +762,23 @@ class AssetDomainService
             $this->awaitProviderAssetPassed($dataIsolation, $providerAssetEntity);
         } catch (BusinessException $exception) {
             // 业务异常文案由错误码统一给出，本身即面向用户，可直接作为失败原因落库展示。
-            $this->markProviderStatus(
+            $failedMapping = $this->markProviderStatus(
                 $dataIsolation,
                 $asset,
                 ProviderAssetStatus::FAILED,
                 $exception->getMessage(),
             );
+            $this->releaseFailedProviderResources($dataIsolation, $failedMapping);
             throw $exception;
         } catch (Throwable $throwable) {
             // 非业务异常原文可能带第三方地址、凭证或原始响应体，只随日志排查，不写进对用户可见的失败原因。
-            $this->markProviderStatus(
+            $failedMapping = $this->markProviderStatus(
                 $dataIsolation,
                 $asset,
                 ProviderAssetStatus::FAILED,
                 trans('asset.provider_response_invalid'),
             );
+            $this->releaseFailedProviderResources($dataIsolation, $failedMapping);
             ExceptionBuilder::throw(AssetErrorCode::PROVIDER_RESPONSE_INVALID, '', [], null, $throwable);
         }
         return $providerAssetEntity;
@@ -952,7 +982,7 @@ class AssetDomainService
                     'provider_status' => $status->value,
                 ]);
                 $this->persistProviderStatus($dataIsolation, $providerAssetEntity, $status);
-                ExceptionBuilder::throw(AssetErrorCode::COMPLIANCE_FAILED);
+                ExceptionBuilder::throw(AssetErrorCode::COMPLIANCE_FAILED, trans('asset.compliance_failed', [], 'en_US'));
             }
             if ($this->isComplianceWaitExpired($deadline)) {
                 $this->logger->error('第三方素材合规回查超时', [
