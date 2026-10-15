@@ -15,7 +15,6 @@ import type { UserService } from "@/services/user/UserService"
 import type { ConfigService } from "@/services/config/ConfigService"
 import { useTranslation } from "react-i18next"
 import { getAuthCode } from "./Strategy"
-import { useStyles } from "./styles"
 import { thirdPartyOpenLink } from "./utils/openLink"
 import { userStore } from "@/models/user"
 import { convertSearchParams, routesMatch } from "@/routes/history/helpers"
@@ -39,7 +38,6 @@ export function withThirdPartyAuth<T extends object>(
 	} = {},
 ) {
 	return function WithThirdPartyAuth(props: T) {
-		const { styles } = useStyles()
 		const { t } = useTranslation("interface")
 
 		const { setClusterCode } = useClusterCode()
@@ -271,9 +269,9 @@ export function withThirdPartyAuth<T extends object>(
 				<MagicSpin
 					spinning={isLoading}
 					tip={t("spin.loadingLogin")}
-					wrapperClassName={styles.spin}
+					wrapperClassName="[&_.magic-spin-blur]:opacity-100 [&_.magic-spin]:[--magic-spin-content-height:unset]"
 				>
-					<div style={{ height: "100vh" }} />
+					<div className="h-screen" />
 				</MagicSpin>
 			)
 		}
