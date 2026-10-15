@@ -27,7 +27,13 @@ class MicroAppTransferRepository
         if ($model === null) {
             return null;
         }
-        $data = $model->toArray();
+        return self::hydrateProject($model->toArray());
+    }
+
+    /** Nullable columns (e.g. project_description) must fall back to entity defaults, not hit strict setters. */
+    public static function hydrateProject(array $data): ProjectEntity
+    {
+        $data = array_filter($data, static fn ($value) => $value !== null);
         $data['default_join_permission'] = MemberRole::fromString(($data['default_join_permission'] ?? '') ?: MemberRole::VIEWER->value);
         return new ProjectEntity($data);
     }

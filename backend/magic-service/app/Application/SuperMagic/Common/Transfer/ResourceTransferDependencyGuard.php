@@ -14,6 +14,7 @@ use App\Domain\Permission\Entity\ValueObject\OperationPermission\ResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as VisibilityResourceType;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentSkillDomainService;
+use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Qbhy\HyperfAuth\Authenticatable;
 
@@ -23,6 +24,7 @@ class ResourceTransferDependencyGuard
     public function __construct(
         private readonly ResourceAccessPolicyService $policy,
         private readonly SuperMagicAgentSkillDomainService $skills,
+        private readonly SkillMarketDomainService $skillMarket,
         private readonly KnowledgeBaseAppService $knowledge,
     ) {
     }
@@ -31,7 +33,16 @@ class ResourceTransferDependencyGuard
     {
         $org = $sender->getOrganizationCode();
         $receiverIsolation = SuperMagicAgentDataIsolation::create($org, $receiver->getUserId());
-        foreach ($this->skills->getByAgentCodeForCurrentVersion(SuperMagicAgentDataIsolation::create($org, $sender->getId()), $code) as $skill) {
+        $agentSkills = $this->skills->getByAgentCodeForCurrentVersion(SuperMagicAgentDataIsolation::create($org, $sender->getId()), $code);
+        // Official built-in and published market skills are available to everyone and carry no per-user grants.
+        $publicCodes = array_merge(
+            $this->skillMarket->getOfficialBuiltinSkillCodes(),
+            $this->skillMarket->getPublishedSkillCodes(array_map(static fn ($skill) => $skill->getSkillCode(), $agentSkills))
+        );
+        foreach ($agentSkills as $skill) {
+            if (in_array($skill->getSkillCode(), $publicCodes, true)) {
+                continue;
+            }
             $this->policy->assertReadable($receiverIsolation, ResourceType::Skill, VisibilityResourceType::SKILL, $skill->getSkillCode());
         }
         $receiverAuthorization = MagicUserAuthorization::fromUserEntity($receiver);
