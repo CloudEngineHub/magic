@@ -7,6 +7,8 @@ Base class for all Magic Service API parameters with authentication support.
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
+
+from agentlang.utils.metadata import MetadataUtil
 from app.infrastructure.sdk.base import AbstractParameter
 
 
@@ -139,6 +141,7 @@ class MagicServiceAbstractParameter(AbstractParameter):
         if self._request_id:
             headers['request-id'] = self._request_id
 
+        MetadataUtil.add_sandbox_id_header(headers)
         return headers
 
     def to_options(self, method: str) -> Dict[str, Any]:

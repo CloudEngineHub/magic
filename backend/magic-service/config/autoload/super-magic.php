@@ -5,6 +5,9 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'open_api' => [
+        'file_upload_max_size' => (int) \Hyperf\Support\env('SUPER_MAGIC_OPEN_API_FILE_UPLOAD_MAX_SIZE', 20 * 1024 * 1024),
+    ],
     'phones' => [],
     'task_number_limit' => 3,
     'user_task_limits' => [],

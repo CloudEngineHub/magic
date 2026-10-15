@@ -45,19 +45,20 @@ const mobileComposerEditorClassName = cn(
 	"[&_.ProseMirror]:m-0 [&_.ProseMirror]:max-h-[100px] [&_.ProseMirror]:overflow-y-auto",
 	"[&_.ProseMirror]:break-words [&_.ProseMirror]:text-sm [&_.ProseMirror]:outline-none",
 	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0",
-	"[&_.ProseMirror_.is-editor-empty:first-child]:relative",
-	// Absolute pseudo-elements shrink to their content unless their width is explicit.
+	// The placeholder lives in normal flow (a full-width block) instead of being absolutely
+	// positioned on top of the empty paragraph, so the composer dock grows with the prompt
+	// text and wraps it in full rather than clipping it to a single ellipsized line.
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:pointer-events-none",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:absolute",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:left-0",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:top-0",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:block",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:w-full",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:overflow-hidden",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:whitespace-nowrap",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:text-ellipsis",
+	"[&_.ProseMirror_.is-editor-empty:first-child::before]:whitespace-normal",
+	"[&_.ProseMirror_.is-editor-empty:first-child::before]:break-words",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:text-muted-foreground",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
+	// ProseMirror keeps an auxiliary <br> inside the empty paragraph to size its caret line.
+	// With the placeholder now occupying real space that line would add a blank line under it,
+	// so hide it from layout only (the node stays in the document, matching the WechatChatHistory case).
+	"[&_.ProseMirror_.is-editor-empty:first-child>.ProseMirror-trailingBreak]:hidden",
 )
 
 const MOBILE_VOICE_WAVEFORM_BAR_COUNT = 76

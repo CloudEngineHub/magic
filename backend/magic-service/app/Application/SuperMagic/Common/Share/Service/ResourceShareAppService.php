@@ -3621,8 +3621,11 @@ class ResourceShareAppService extends AbstractShareAppService
         // 确定目标项目名称
         $projectName = $targetProjectName ?? $sourceProjectEntity->getProjectName();
 
-        Db::beginTransaction();
+        $transactionOpen = false;
         try {
+            $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+            Db::beginTransaction();
+            $transactionOpen = true;
             // 发布 fork 开始检查事件
             AsyncEventUtil::dispatch(new ForkProjectStartEvent(
                 $dataIsolation->getCurrentOrganizationCode(),
@@ -3661,16 +3664,16 @@ class ResourceShareAppService extends AbstractShareAppService
             // 创建工作目录
             $workDir = WorkDirectoryUtil::getWorkDir($dataIsolation->getCurrentUserId(), $forkProjectEntity->getId());
 
-            // 初始化 Magic Chat 会话
-            [$chatConversationId, $chatConversationTopicId] = $this->chatAppService->initMagicChatConversation($dataIsolation);
+            // Prepare IM topics without changing the shared conversation default.
+            $pendingDefault = $this->chatAppService->createMagicChatTopicForConversationPair($dataIsolation, $conversationPair);
 
             // 创建默认话题
             $topicEntity = $this->topicDomainService->createTopic(
                 $dataIsolation,
                 $workspaceEntity->getId(),
                 $forkProjectEntity->getId(),
-                $chatConversationId,
-                $chatConversationTopicId,
+                $pendingDefault['chat_conversation_id'],
+                $pendingDefault['chat_topic_id'],
                 '',
                 $workDir
             );
@@ -3712,13 +3715,17 @@ class ResourceShareAppService extends AbstractShareAppService
                 $fileIds  // 新增: 传递文件ID列表
             );
 
+            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
             Db::commit();
+            $transactionOpen = false;
 
             // 返回复制结果
             $responseDto = CopyResourceFilesResponseDTO::fromEntity($forkProjectRecordEntity);
             $responseDto->projectMode = $forkProjectEntity->getProjectMode();
         } catch (Throwable $e) {
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             $this->logger->error('Copy resource files failed, error: ' . $e->getMessage());
             throw $e;
         }

@@ -54,8 +54,8 @@ async def test_each_tool_has_running_success_and_failure_display(tool_class, lan
         i18n.reset_language()
 
 
-def test_display_covers_the_actual_34_registered_tools():
-    assert len(TOOLS) == 34
+def test_display_covers_the_actual_registered_tools():
+    assert len(TOOLS) == 35
     assert set(TOOL_SUBJECTS) == {cls.name for cls in TOOLS}
 
 

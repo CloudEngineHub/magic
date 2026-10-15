@@ -49,4 +49,7 @@ enum SuperMagicErrorCode: int
 
     #[ErrorMessage(message: 'super_magic.task.chat_task_start_failed')]
     case ChatTaskStartFailed = 60013;
+
+    #[ErrorMessage(message: 'super_magic.task.auto_hire_agent_failed')]
+    case AutoHireAgentFailed = 60014;
 }

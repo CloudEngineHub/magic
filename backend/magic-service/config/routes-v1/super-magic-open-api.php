@@ -63,6 +63,8 @@ Router::addGroup(
 
         // 文件管理相关
         Router::addGroup('/file', static function () {
+            Router::post('/upload', [OpenFileApi::class, 'uploadProjectFile']);
+            Router::post('/project/batch-save', [OpenFileApi::class, 'batchSaveProjectFiles']);
             // 创建文件版本
             Router::post('/versions', [FileApi::class, 'createFileVersion']);
             // 获取文件最新版本
@@ -183,6 +185,10 @@ Router::addGroup(
         // 数字员工相关
         Router::addGroup('/agents', static function () {
             Router::get('/featured/sort-list', [OpenSuperMagicAgentApi::class, 'sortListQueries']);
+            // Hire a digital employee from the market.
+            Router::post('/{code}/hire', [OpenSuperMagicAgentApi::class, 'hireAgent']);
+            // Fire a digital employee using the existing deletion rules.
+            Router::post('/{code}/fire', [OpenSuperMagicAgentApi::class, 'fireAgent']);
             Router::get('/{code}/models', [OpenSuperMagicAgentApi::class, 'getModels']);
             Router::get('/{code}/default-config', [OpenSuperMagicAgentApi::class, 'getDefaultConfig']);
         });
