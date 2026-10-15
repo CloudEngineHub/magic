@@ -9,7 +9,6 @@ export const useSearchItemCommonStyles = createStyles(({ token }) => {
 			padding: "8px 12px 8px 12px",
 			display: "flex",
 			alignItems: "flex-start",
-			justifyItems: "center",
 			gap: 8,
 			borderRadius: "8px",
 			cursor: "pointer",
@@ -39,8 +38,8 @@ export const useSearchItemCommonStyles = createStyles(({ token }) => {
 				},
 			},
 
-			"&:last-child": {
-				borderBottom: "unset",
+			"&:last-child::before": {
+				display: "none",
 			},
 		},
 		icon: {

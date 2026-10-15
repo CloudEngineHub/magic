@@ -51,7 +51,7 @@ const useApprovalStyles = createStyles(({ token }) => {
 			color: token.magicColorUsages.text[2],
 		},
 		wrapper: {
-			height: "fix-content",
+			height: "fit-content",
 			display: "flex",
 			flexDirection: "column",
 			gap: 4,

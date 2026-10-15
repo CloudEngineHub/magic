@@ -46,7 +46,6 @@ export const useStyles = createStyles(({ token }) => {
 			color: token.magicColorUsages.text[0],
 			marginRight: 10,
 			marginBottom: 10,
-			floaty: "left",
 			cursor: "pointer",
 			fontSize: "14px",
 			fontWeight: 400,
