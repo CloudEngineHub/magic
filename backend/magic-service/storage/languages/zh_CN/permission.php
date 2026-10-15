@@ -8,6 +8,7 @@ return [
     'resource' => [
         'admin' => '管理后台',
         'admin_ai' => 'AI管理',
+        'admin_setting' => '系统设置',
         'admin_safe' => '安全与权限',
         'safe_function_permission' => '功能权限',
         'safe_admin' => '组织管理员',
@@ -19,6 +20,7 @@ return [
         'admin_ai_image' => '智能绘图',
         'ai_ability' => '能力管理',
         'ai_application' => '组织应用菜单',
+        'admin_setting_identity_watermark' => '页面身份水印',
         'admin_ai_agent' => '数字员工',
         'admin_ai_skill' => 'Skill',
         'ai_mode' => '模式',

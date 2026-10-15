@@ -8,6 +8,7 @@ return [
     'resource' => [
         'admin' => 'Admin',
         'admin_ai' => 'AI Management',
+        'admin_setting' => 'System Settings',
         'admin_safe' => 'Security & Permission',
         'safe_function_permission' => 'Function Permission',
         'safe_admin' => 'Organization Admin',
@@ -20,6 +21,7 @@ return [
         'ai_ability' => 'Ability Management',
         'admin_ai_agent' => 'Agent',
         'admin_ai_skill' => 'Skill',
+        'admin_setting_identity_watermark' => 'Identity Watermark',
         'ai_mode' => 'AI Mode',
         'ai_agent' => 'Agent Management',
         'ai_skill' => 'Skill Management',

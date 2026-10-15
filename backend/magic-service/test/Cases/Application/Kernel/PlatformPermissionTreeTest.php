@@ -147,6 +147,16 @@ class PlatformPermissionTreeTest extends HttpTestCase
         $this->assertSame('组织应用菜单-查询', $node['full_label'] ?? null);
     }
 
+    public function testGetPermissionTreeContainsOrganizationIdentityWatermarkPermission(): void
+    {
+        $tree = $this->permission->getPermissionTree(false);
+
+        $this->assertTrue($this->containsPermissionKey(
+            $tree,
+            $this->permission->buildPermission('admin.setting.identity_watermark', 'edit')
+        ));
+    }
+
     public function testGetPermissionTreeHidesPlatformResourcesForNonPlatformOrganization(): void
     {
         $tree = $this->permission->getPermissionTree(false);

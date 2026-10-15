@@ -29,6 +29,7 @@ enum MagicResourceEnum: string
 
     // ===== 二级：模块 =====
     case ADMIN_AI = 'admin.ai'; # 组织管理后台-AI管理
+    case ADMIN_SETTING = 'admin.setting'; # 组织管理后台-系统设置
     case ADMIN_SAFE = 'admin.safe'; # 安全管控
     case ADMIN_SAFE_FUNCTION_PERMISSION = 'admin.safe.function_permission'; # 安全管控-功能权限
     case PLATFORM_AI = 'platform.ai'; # 平台管理后台-AI管理
@@ -58,6 +59,7 @@ enum MagicResourceEnum: string
     case ADMIN_AI_MODE = 'platform.ai.mode_management'; # AI管理-模式管理管理
     case ADMIN_AI_ABILITY = 'platform.ai.ability'; # AI管理-能力管理
     case ADMIN_AI_APPLICATION_MENU = 'admin.ai.application.menu'; # AI管理-应用菜单
+    case ADMIN_SETTING_IDENTITY_WATERMARK = 'admin.setting.identity_watermark'; # 系统设置-页面身份水印
     case ADMIN_AI_MODEL_ACCESS_ROLE = 'admin.ai.model_access_role'; # AI管理-自定义大模型-模型访问权限
     case SAFE_ADMIN = 'admin.safe.admin';  # 安全管控-组织管理员
     case SAFE_SUB_ADMIN = 'admin.safe.sub_admin';  # 组织管理后台-安全管控-子管理员
@@ -87,6 +89,7 @@ enum MagicResourceEnum: string
             self::ADMIN => 'permission.resource.admin',
             self::WORKSPACE => 'permission.resource.workspace',
             self::ADMIN_AI => 'permission.resource.admin_ai',
+            self::ADMIN_SETTING => 'permission.resource.admin_setting',
             self::ADMIN_SAFE => 'permission.resource.admin_safe', # 安全与权限
             self::ADMIN_SAFE_FUNCTION_PERMISSION => 'permission.resource.safe_function_permission',
             self::PLATFORM_AGENT => 'permission.resource.platform_agent',
@@ -110,6 +113,7 @@ enum MagicResourceEnum: string
             self::ADMIN_AI_MODE => 'permission.resource.ai_mode',
             self::ADMIN_AI_ABILITY => 'permission.resource.ai_ability',
             self::ADMIN_AI_APPLICATION_MENU => 'permission.resource.ai_application',
+            self::ADMIN_SETTING_IDENTITY_WATERMARK => 'permission.resource.admin_setting_identity_watermark',
             self::WORKSPACE_ADMIN_AI_AGENT => 'permission.resource.admin_ai_agent',
             self::WORKSPACE_ADMIN_AI_SKILL => 'permission.resource.admin_ai_skill',
             self::ADMIN_AI_MODEL_ACCESS_ROLE => 'permission.resource.admin_ai_model_access_role',
@@ -158,6 +162,7 @@ enum MagicResourceEnum: string
             self::WORKSPACE_AI => self::WORKSPACE,
             self::WORKSPACE_MODEL => self::WORKSPACE,
             self::ADMIN_AI,
+            self::ADMIN_SETTING,
             self::ADMIN_SAFE => self::ADMIN,
             self::ADMIN_SAFE_FUNCTION_PERMISSION => self::ADMIN_SAFE,
             // 操作资源
@@ -178,6 +183,7 @@ enum MagicResourceEnum: string
             self::WORKSPACE_AI_MODEL_AUDIT_STATISTICS => self::WORKSPACE_AI,
             self::ADMIN_AI_ABILITY,
             self::ADMIN_AI_APPLICATION_MENU,
+            self::ADMIN_SETTING_IDENTITY_WATERMARK => self::ADMIN_SETTING,
             self::WORKSPACE_ADMIN_AI_AGENT,
             self::WORKSPACE_ADMIN_AI_SKILL,
             self::ADMIN_AI_MODEL_ACCESS_ROLE => self::ADMIN_AI,

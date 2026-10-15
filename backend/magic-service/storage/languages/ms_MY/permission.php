@@ -8,6 +8,7 @@ return [
     'resource' => [
         'admin' => 'Backend pentadbiran',
         'admin_ai' => 'Pengurusan AI',
+        'admin_setting' => 'Tetapan sistem',
         'admin_safe' => 'Keselamatan & Kebenaran',
         'safe_function_permission' => 'Kebenaran Fungsi',
         'safe_admin' => 'Pentadbir organisasi',
@@ -20,6 +21,7 @@ return [
         'ai_ability' => 'Pengurusan keupayaan',
         'admin_ai_agent' => 'Ejen',
         'admin_ai_skill' => 'Kemahiran',
+        'admin_setting_identity_watermark' => 'Tera air identiti',
         'ai_mode' => 'Mod',
         'ai_agent' => 'Pengurusan ejen',
         'ai_skill' => 'Pengurusan kemahiran',

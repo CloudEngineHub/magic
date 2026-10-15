@@ -245,6 +245,14 @@ return [
             ],
             'tag' => '应用菜单',
         ],
+        'admin.setting.identity_watermark' => [
+            'path' => [
+                ['key' => 'enterprise_function', 'label' => '企业功能', 'order' => 3],
+                ['key' => 'organization_settings', 'label' => '组织设置', 'order' => 5],
+                ['key' => 'identity_watermark', 'label' => '页面身份水印', 'order' => 1],
+            ],
+            'tag' => '组织设置',
+        ],
         'workspace.model.text' => [
             'path' => [
                 ['key' => 'ai_management', 'label' => '企业 AI 管理', 'order' => 2],
