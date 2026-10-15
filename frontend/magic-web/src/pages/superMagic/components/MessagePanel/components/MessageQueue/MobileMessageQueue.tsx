@@ -4,6 +4,7 @@ import { ChevronDown, Hourglass } from "lucide-react"
 import { cn } from "@/utils/cn"
 import type { MessageQueueProps } from "./index"
 import MessageQueueItems from "./MessageQueueItems"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 const MOBILE_QUEUE_AUTO_COLLAPSE_THRESHOLD = 3
 
@@ -66,9 +67,10 @@ function MobileMessageQueue({
 			</button>
 
 			{isExpanded && (
-				<div
-					className="flex max-h-[35vh] flex-col overflow-y-auto border-t border-border"
-					data-testid="mobile-message-queue-list"
+				<ScrollArea
+					className="border-t border-border"
+					viewportClassName="max-h-[35vh] [&>div]:!flex [&>div]:flex-col"
+					viewportProps={{ "data-testid": "mobile-message-queue-list" }}
 				>
 					<MessageQueueItems
 						queue={queue}
@@ -81,7 +83,7 @@ function MobileMessageQueue({
 						isOperationPending={isOperationPending}
 						variant="mobile"
 					/>
-				</div>
+				</ScrollArea>
 			)}
 		</div>
 	)

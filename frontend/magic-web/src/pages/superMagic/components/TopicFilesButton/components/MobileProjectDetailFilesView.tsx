@@ -13,6 +13,7 @@ import MobilePathBreadcrumb from "@/pages/superMagic/components/MobilePathBreadc
 import { DataEmptyState } from "@/pages/superMagicMobile/components/DataEmptyState"
 import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/utils/cn"
 import { isEmpty } from "lodash-es"
 import { observer } from "mobx-react-lite"
@@ -210,7 +211,7 @@ function toFileItem(item: AttachmentItem): FileItem {
 }
 
 /**
- * 将原型里的 40x40 浅底图标卡片抽成统一渲染，便于文件与文件夹保持相同视觉密度。
+ * Share the 40px icon cell so files and folders have consistent visual density.
  */
 function renderAttachmentIconCell(icon: ReactNode) {
 	return (
@@ -226,7 +227,7 @@ function renderAttachmentIconCell(icon: ReactNode) {
 }
 
 /**
- * 新移动端文件区：只负责目录浏览、搜索与轻量添加入口，业务写操作通过父层回调下沉。
+ * Browse and search files locally; delegate write operations to parent callbacks.
  */
 function MobileProjectDetailFilesView({
 	fileHelpContext,
@@ -277,7 +278,7 @@ function MobileProjectDetailFilesView({
 	const isSearching = searchValue.trim().length > 0
 
 	/**
-	 * 目录状态只保留稳定 key；真正展示节点始终从最新 attachments 树重新解析，避免刷新后继续读旧对象引用。
+	 * Store stable directory keys and resolve them from the latest attachments to avoid stale nodes after refresh.
 	 */
 	const resolvedPathStack = useMemo(() => {
 		const resolved: AttachmentItem[] = []
@@ -349,7 +350,7 @@ function MobileProjectDetailFilesView({
 	}, [searchValue, selectionResetKey])
 
 	useEffect(() => {
-		// attachments 变化后如果当前路径里有目录被删除/移动，自动回退到仍然存在的有效路径。
+		// Return to the remaining valid path if a directory is removed or moved.
 		if (resolvedPathStack.length === pathStackKeys.length) return
 		setPathStackKeys(resolvedPathStack.map((item) => getAttachmentKey(item)))
 	}, [pathStackKeys.length, resolvedPathStack])
@@ -364,14 +365,14 @@ function MobileProjectDetailFilesView({
 	}, [onSelectedKeysChange, selectedIds])
 
 	/**
-	 * 切换选中态只影响新的移动端外观层，并通过回调通知页面隐藏底部输入区。
+	 * Notify the page about selection changes so it can hide the bottom composer.
 	 */
 	const toggleSelected = (item: AttachmentItem) => {
 		setSelectedIds((prev) => toggleAttachmentSelection(item, prev))
 	}
 
 	/**
-	 * 目录导航仍保持“根目录 / 当前路径”结构，避免把后端树结构直接暴露给视图层。
+	 * Keep directory navigation in root/current-path form rather than exposing the backend tree.
 	 */
 	const handleNavigateTo = (index: number) => {
 		if (index < 0) {
@@ -383,14 +384,14 @@ function MobileProjectDetailFilesView({
 	}
 
 	/**
-	 * 全选只覆盖当前目录或当前搜索结果，和原型的“当前视图全选”行为保持一致。
+	 * Select all items only in the current directory or current search results.
 	 */
 	const handleToggleAll = () => {
 		setSelectedIds((prev) => toggleAllInCurrentView(currentViewSelectableKeys, prev))
 	}
 
 	/**
-	 * 创建面板里的预置文件图标和列表区保持同一套组件，避免不同入口出现图标分叉。
+	 * Reuse list icons for preset file types in the create panel.
 	 */
 	function renderCreateFileIcon(fileExtension?: string) {
 		return <TopicFileIcon fileExtension={fileExtension} />
@@ -479,7 +480,7 @@ function MobileProjectDetailFilesView({
 	}
 
 	/**
-	 * 菜单 sheet 只负责动作分组；真正的命名输入放到独立 create sheet，贴近原型的两段式交互。
+	 * Group actions in the menu sheet and collect names in a separate create sheet.
 	 */
 	function openCreateDraft(nextDraft: NonNullable<typeof createDraft>) {
 		setCreateDraft(nextDraft)
@@ -488,7 +489,7 @@ function MobileProjectDetailFilesView({
 	}
 
 	/**
-	 * 关闭 create sheet 时同步清理输入态，避免下次打开时误复用上一次的名称。
+	 * Clear the draft on close so reopening cannot reuse the previous name.
 	 */
 	function closeCreateSheet() {
 		setCreateSheetOpen(false)
@@ -496,14 +497,14 @@ function MobileProjectDetailFilesView({
 	}
 
 	/**
-	 * 创建态只更新文件名字段，保持其余类型和扩展名配置不被输入事件覆盖。
+	 * Update only the name so input changes preserve the file type and extension.
 	 */
 	function handleCreateDraftNameChange(fileName: string) {
 		setCreateDraft((prev) => (prev ? { ...prev, fileName } : prev))
 	}
 
 	/**
-	 * 统一渲染 sheet 分组标题，保证菜单态与原型一致的字号、边距和弱化层级。
+	 * Render consistent group labels across the action sheet.
 	 */
 	function renderSheetGroupLabel(label: string) {
 		return (
@@ -514,7 +515,7 @@ function MobileProjectDetailFilesView({
 	}
 
 	/**
-	 * 统一渲染菜单项与缩进分隔线，避免不同分组出现间距和分隔样式漂移。
+	 * Share menu rows and inset dividers to preserve spacing across groups.
 	 */
 	function renderSheetMenuItem({
 		key,
@@ -674,7 +675,7 @@ function MobileProjectDetailFilesView({
 	}, [allowDownload, getSingleFileDownloadMenuItems, onBatchZipDownload, selectedItems, access])
 
 	/**
-	 * 确认创建时直接复用既有父层回调，只替换展示层，不引入新的业务保存入口。
+	 * Confirm creation through existing parent callbacks without adding a persistence path.
 	 */
 	const handleSubmitCreateDraft = async () => {
 		if (!createDraft) return
@@ -773,7 +774,7 @@ function MobileProjectDetailFilesView({
 							</p>
 						</div>
 					</button>
-					{/* 用途按钮与打开、选择按钮并列，避免触屏查看说明时触发文件操作。 */}
+					{/* Keep help beside open/selection controls so touching it cannot trigger file actions. */}
 					<div data-file-tag className="w-max max-w-none shrink-0 empty:hidden">
 						<ProjectFileTag
 							item={item}
@@ -851,7 +852,7 @@ function MobileProjectDetailFilesView({
 							</p>
 						</div>
 					</button>
-					{/* 用途按钮与打开、选择按钮并列，避免触屏查看说明时触发文件操作。 */}
+					{/* Keep help beside open/selection controls so touching it cannot trigger file actions. */}
 					<div data-file-tag className="w-max max-w-none shrink-0 empty:hidden">
 						<ProjectFileTag
 							item={item}
@@ -1047,13 +1048,16 @@ function MobileProjectDetailFilesView({
 						testId: "project-detail-files-menu-close-button",
 					}}
 					position="bottom"
-					className="rounded-t-xl border-0 bg-muted"
-					bodyClassName="flex flex-col overflow-hidden p-0"
+					// Keep focus scrolling in the viewport instead of moving the fixed action header.
+					className="rounded-t-xl border-0 bg-muted supports-[overflow:clip]:overflow-clip"
+					bodyClassName="flex min-h-0 flex-col overflow-hidden p-0 supports-[overflow:clip]:overflow-clip"
 					style={MOBILE_SHEET_MAX_HEIGHT}
 					destroyOnClose={false}
 				>
-					<div
-						className="flex flex-col gap-2.5 overflow-y-auto px-[10px] pb-[max(var(--safe-area-inset-bottom),16px)] pt-2"
+					{/* The action groups scroll independently of the fixed sheet header. */}
+					<ScrollArea
+						className="grid min-h-0 w-full min-w-0 flex-1"
+						viewportClassName="h-auto min-h-0 min-w-0 px-[10px] pb-[max(var(--safe-area-inset-bottom),16px)] pt-2 [&>div]:!flex [&>div]:w-full [&>div]:flex-col [&>div]:gap-2.5"
 						data-testid="project-detail-files-menu-sheet"
 					>
 						<div className="flex flex-col gap-1.5">
@@ -1110,7 +1114,7 @@ function MobileProjectDetailFilesView({
 								})}
 							</div>
 						</div>
-					</div>
+					</ScrollArea>
 				</MagicPopup>
 
 				<MagicPopup

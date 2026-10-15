@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import MagicModal from "@/components/base/MagicModal"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
 	Select,
 	SelectContent,
@@ -140,7 +141,11 @@ function RecordingShareManagementDialog({
 					</div>
 				</div>
 
-				<div className="flex-1 overflow-y-auto px-3" style={{ maxHeight: "388px" }}>
+				{/* A full-height wrapper preserves the shared list's centered loading and empty states. */}
+				<ScrollArea
+					className="grid max-h-[388px] min-h-0 flex-1"
+					viewportClassName="h-auto min-h-0 px-3 [&>div]:!block [&>div]:h-full"
+				>
 					<FileShareManagementListCore
 						projectId={projectId}
 						filterStatus={filterStatus}
@@ -149,7 +154,7 @@ function RecordingShareManagementDialog({
 						onTotalPagesChange={handleTotalPagesChange}
 						fileShareUiConfig={recordingShareUiConfig}
 					/>
-				</div>
+				</ScrollArea>
 
 				<div className="mt-auto">
 					<ShareListFooter

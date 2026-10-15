@@ -1,7 +1,7 @@
 /**
- * The message list owns a plain scroll element instead of a Radix ScrollArea so the virtualizer
- * is the only writer of scroll compensation. Share pages still host the list inside their own
- * ScrollArea, so descendants that need to reach the owning viewport must accept both shapes.
+ * The message list marks its actual ScrollArea viewport so virtualizer and descendant scroll
+ * operations share the same element. Share pages may host rows in their own ScrollArea without
+ * that marker, so descendants must also accept the shared viewport slot.
  */
 export const MESSAGE_LIST_VIEWPORT_ATTRIBUTE = "data-message-list-viewport"
 

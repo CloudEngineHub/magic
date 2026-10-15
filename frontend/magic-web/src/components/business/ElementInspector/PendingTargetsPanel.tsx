@@ -19,6 +19,7 @@ import {
 	type PointerEvent,
 } from "react"
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/utils/cn"
 import type { HtmlMultiSelectionSubmitState, HtmlSelectionTarget } from "./types"
@@ -199,14 +200,27 @@ export function PendingTargetsPanel({
 
 	const targetList =
 		targets.length > 0 && isExpanded ? (
-			<div
+			<ScrollArea
 				id="element-inspector-pending-target-list"
+				// Override Radix's inline relative position to keep expansion outside the bar layout.
+				style={{ position: "absolute" }}
 				className={cn(
-					"inspector-pending-target-list max-h-48 space-y-1 overflow-y-auto rounded-[16px] border border-border/70 bg-background/95 p-2 shadow-[0_14px_36px_hsl(var(--foreground)/0.16)] backdrop-blur-xl",
+					"inspector-pending-target-list grid min-h-0 rounded-[16px] border border-border/70 bg-background/95 shadow-[0_14px_36px_hsl(var(--foreground)/0.16)] backdrop-blur-xl",
 					listPlacement === "bottom" ? "origin-top" : "origin-bottom",
 				)}
+				viewportClassName="h-auto max-h-[190px] p-2 [&>div]:!block [&>div]:space-y-1"
 				data-placement={listPlacement}
 				data-testid="element-inspector-pending-target-list"
+				// Scrollbar input must not start dragging the floating collection bar.
+				data-panel-drag-ignore="true"
+				onPointerDown={(event) => {
+					// Preserve focus after Radix starts the drag; capture would cancel its handler.
+					if (
+						(event.target as HTMLElement).closest("[data-slot='scroll-area-scrollbar']")
+					) {
+						event.preventDefault()
+					}
+				}}
 			>
 				{targets.map((target) => (
 					<div
@@ -271,7 +285,7 @@ export function PendingTargetsPanel({
 						</div>
 					</div>
 				))}
-			</div>
+			</ScrollArea>
 		) : null
 
 	return (

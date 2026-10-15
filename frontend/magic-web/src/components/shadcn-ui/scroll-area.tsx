@@ -6,7 +6,7 @@ import { useReducedMotion } from "framer-motion"
 
 import { cn } from "@/utils/cn"
 
-// 顶部提示紧接固定导航，采用较薄轨道；底部保留原有点击空间。
+// Use a thinner top hint below fixed navigation while retaining the bottom click target.
 export const SCROLL_HINT_HEIGHTS = { top: 16, bottom: 18 } as const
 
 type ScrollAreaViewportProps = Omit<
@@ -107,7 +107,7 @@ const ScrollArea = React.forwardRef<
 					Math.abs(viewport.scrollTop - scrollTargetRef.current) <= 1
 				)
 					scrollTargetRef.current = null
-				// 按未扣除提示区的可用高度判断溢出，避免箭头自身导致空列表一直溢出。
+				// Measure before hint insets so the arrows cannot make an empty list overflow.
 				const contentHeight =
 					viewport.firstElementChild?.getBoundingClientRect().height ?? 0
 				const overflows =
@@ -136,7 +136,7 @@ const ScrollArea = React.forwardRef<
 			const clearScrollTarget = () => {
 				scrollTargetRef.current = null
 			}
-			// 手动滚动接管后，不再恢复先前箭头点击的平滑滚动目标。
+			// Manual input takes over from any pending arrow-triggered smooth scroll.
 			viewport.addEventListener("wheel", clearScrollTarget, { passive: true })
 			viewport.addEventListener("pointerdown", clearScrollTarget)
 			viewport.addEventListener("keydown", clearScrollTarget)
@@ -156,15 +156,15 @@ const ScrollArea = React.forwardRef<
 			const anchor = pendingScrollRef.current
 			pendingScrollRef.current = null
 			if (!showHints || !viewport || !anchor) return
-			// 从底部向上翻页时，下方箭头出现不改变内容起点；重写 scrollTop 会打断原生平滑滚动。
+			// A new bottom hint does not shift content; avoid interrupting native smooth scrolling.
 			if (edges.top && !anchor.atBottom && viewport.offsetTop === anchor.topInset) return
-			// 顶部轨道只在上方有内容时占位；显隐时保持内容位置，到边界则完整露出首／末行。
+			// Preserve the content anchor as the top hint changes, fully revealing boundary rows.
 			viewport.scrollTop = !edges.top
 				? 0
 				: anchor.atBottom
 					? viewport.scrollHeight - viewport.clientHeight
 					: anchor.scrollTop + viewport.offsetTop - anchor.topInset
-			// 位置补偿会打断浏览器的平滑滚动，继续同一次箭头操作的剩余距离。
+			// Anchor compensation interrupts smooth scrolling, so resume its remaining distance.
 			if (scrollTargetRef.current !== null) {
 				const top = Math.max(
 					0,
@@ -191,6 +191,8 @@ const ScrollArea = React.forwardRef<
 				{...props}
 			>
 				<ScrollAreaPrimitive.Viewport
+					// Explicit focusability preserves keyboard scrolling in older Chrome/WebView versions.
+					tabIndex={0}
 					{...viewportProps}
 					id={viewportId}
 					ref={setViewportRef}
@@ -233,7 +235,7 @@ const ScrollArea = React.forwardRef<
 								}}
 								className={cn(
 									"z-10 flex w-6 items-center justify-center justify-self-center rounded-sm text-muted-foreground opacity-[0.65] outline-none transition-opacity hover:opacity-100 focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none",
-									// 向上箭头靠近固定导航，额外留白放在下方，与吸顶分类分开。
+									// Put spacing below the upper arrow to separate it from sticky navigation.
 									direction < 0 ? "row-start-1 pb-2" : "row-start-3",
 								)}
 							>

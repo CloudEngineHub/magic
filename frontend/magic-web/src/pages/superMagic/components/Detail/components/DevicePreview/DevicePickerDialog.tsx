@@ -4,6 +4,7 @@ import { Check } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { Dialog, DialogContent, DialogTitle } from "@/components/shadcn-ui/dialog"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/utils/cn"
 import { DEVICE_PRESETS, type DevicePreset } from "./devices"
 import { DeviceThumbnail } from "./DeviceThumbnail"
@@ -85,7 +86,8 @@ export function DevicePickerDialog({
 						aria-label={t("fileViewer.devicePreview.search")}
 					/>
 				</div>
-				<div className="grid max-h-[min(340px,50dvh)] grid-cols-2 gap-2 overflow-y-auto p-4 sm:grid-cols-3">
+				{/* Cap the viewport, with a vh fallback for browsers without dynamic viewport units. */}
+				<ScrollArea viewportClassName="h-auto max-h-[min(340px,50vh)] p-4 supports-[height:100dvh]:max-h-[min(340px,50dvh)] [&>div]:!grid [&>div]:grid-cols-2 [&>div]:gap-2 sm:[&>div]:grid-cols-3">
 					{devices.map((device) => (
 						<Button
 							key={device.id}
@@ -126,7 +128,7 @@ export function DevicePickerDialog({
 							{t("fileViewer.devicePreview.noResults")}
 						</p>
 					)}
-				</div>
+				</ScrollArea>
 				<div className="flex justify-between gap-2 border-t px-5 py-3 text-xs text-muted-foreground">
 					<span aria-live="polite">
 						{t("fileViewer.devicePreview.deviceCount", { count: devices.length })}

@@ -3,6 +3,7 @@ import { Typography } from "antd"
 import { Globe } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicImage from "@/components/base/MagicImage"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 export interface SearchResult {
 	title: string
@@ -47,7 +48,7 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 			const regex = new RegExp(`(${pattern})`, "gi")
 			const parts = text.split(regex)
 
-			// split 的捕获组位于奇数位置；直接使用命中片段，避免全局正则的 lastIndex 干扰下一段。
+			// Captures occupy odd indexes; use them directly to avoid global-regex lastIndex state.
 			return parts.map((part, index) =>
 				index % 2 === 1 ? (
 					<strong key={index} className="font-semibold text-foreground">
@@ -68,7 +69,11 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 
 	if (!results.length) {
 		return (
-			<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-y-auto p-7 text-center">
+			// Fill Radix's content wrapper so the empty message stays centered.
+			<ScrollArea
+				className="grid min-h-0 flex-1"
+				viewportClassName="h-auto min-h-0 p-7 text-center [&>div]:!flex [&>div]:min-h-full [&>div]:flex-col [&>div]:items-center [&>div]:justify-center [&>div]:gap-2"
+			>
 				<p className="text-sm text-foreground">
 					{currentGroup ? t("search.emptyGroupTitle") : t("search.emptyResults")}
 				</p>
@@ -77,12 +82,15 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 						{t("search.emptyGroupDescription")}
 					</p>
 				)}
-			</div>
+			</ScrollArea>
 		)
 	}
 
 	return (
-		<div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">
+		<ScrollArea
+			className="grid min-h-0 flex-1"
+			viewportClassName="h-auto min-h-0 px-4 pb-6 pt-3"
+		>
 			<div className="flex max-w-[800px] flex-col gap-[18px]">
 				{results.map((item, index) => {
 					const title = parseHTML(item.title)
@@ -94,7 +102,7 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 						source = url.hostname
 						sourcePath = url.pathname
 					} catch {
-						// 外部结果的 URL 不可解析时仍显示原文，不让单条来源异常打断整组结果。
+						// Preserve an invalid source URL without interrupting the rest of the results.
 					}
 
 					return (
@@ -141,7 +149,7 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 							>
 								{title}
 							</a>
-							{/* 只折叠已返回的摘要，不截短数据或重新抓取网页；溢出测量与展开状态交给排版组件。 */}
+							{/* Collapse only the returned snippet; Typography measures overflow and manages expansion. */}
 							<Typography.Paragraph
 								className="!mb-0 !text-sm !leading-relaxed !text-muted-foreground"
 								title={info}
@@ -163,6 +171,6 @@ export default memo(function SearchBody({ currentGroup }: SearchBodyProps) {
 					)
 				})}
 			</div>
-		</div>
+		</ScrollArea>
 	)
 })
