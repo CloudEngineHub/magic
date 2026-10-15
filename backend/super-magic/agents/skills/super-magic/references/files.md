@@ -19,6 +19,40 @@ Do not enumerate or mount other projects for an ordinary current-project request
 
 Mounting uses the sandbox's existing user credentials; the service enforces permissions. A successful read or project listing does not establish edit permission. Published micro-app access can be read-only and limited to published files. Respect permission failures without changing credentials. A missing or inaccessible root can mean denied access, a mount limit, or an unavailable resolver; it does not prove the project is empty. In particular, an empty `list_dir` result alone does not prove that mounting succeeded.
 
+## Find files across candidate projects
+
+For a request such as "find last year's review presentation", first narrow candidate projects by relevant names and workspace using [Projects](projects.md). Use the returned `project_name` field for names, not `name`. Then call `search_project_files` once for that candidate group. It aggregates authorized metadata queries and pagination into one visible search card. Do not replace it with a loop calling `list_project_files` for every owned/participated project; each call creates a separate card and reading only page one gives incomplete coverage.
+
+`search_project_files(projects, keywords, max_pages=20, max_results=100)` accepts:
+
+- `projects`: 1–20 selected scopes. Each has `project_id`, optional `project_name` from discovery for display, optional `parent_id`, `page_size` (default 50, maximum 100), and optional opaque `next_parent_ids` for continuation. Do not repeat the same project/directory scope.
+- `keywords`: 1–5 nonempty literal substrings, each at most 100 characters. Matching is case-insensitive; any keyword may match a file name or project-relative path. Directories are excluded. This is not a regular expression, content search, or server-side year/date filter.
+- `max_pages`: a total budget across all scopes (1–50). Scopes take turns fetching pages so a large first project does not consume the whole budget before others are checked.
+- `max_results`: 1–100 matching files to return. Searches also stop after about 45 seconds; an individual page request has a 15-second timeout. Failures in one scope preserve successful results from others. User interruption stops the search.
+
+```python
+from sdk.tool import tool
+
+found = tool.call("search_project_files", {
+    "projects": [
+        {"project_id": "<candidate-project-id>", "project_name": "<name-from-discovery>"},
+        {"project_id": "<another-candidate-project-id>", "project_name": "<name-from-discovery>"}
+    ],
+    "keywords": ["annual review", "performance review"],
+    "max_pages": 20,
+    "max_results": 30
+})
+print(found.content)
+```
+
+Use keywords in the user's language and relevant to the requested subject. Avoid adding a broad term such as `ppt` to every search: any-keyword matching would include unrelated presentations. Evaluate candidate results before expanding scope. A filename match does not establish the document's year; read selected files to confirm. Once the right project is identified, use its mount to inspect contents instead of searching all remaining projects.
+
+Read `content` even on failure. `data.items` contains selected matches with exact file/project IDs and metadata. `data.search_scopes` records each scope's `project_id`, `project_name`, `parent_id`, `status`, successful `pages_scanned`, and opaque `next_parent_ids`. Status is `complete`, `pending` (not yet fully scanned), or `failed` (with `error_code`). `search_complete` only describes coverage of the requested scopes from their supplied starting cursors, not all accessible projects. A complete search with no matches differs from a failed or unfinished search.
+
+When more coverage is necessary, make another aggregate call for only the relevant pending scopes, passing their `project_id`, `project_name`, `parent_id`, and `next_parent_ids` unchanged along with the same keywords. Do not pass response-only `status`, `pages_scanned`, or `error_code` as input. Do not restart completed scopes or treat a missing/repeated cursor as end-of-results. If `results_truncated` is true, some matches from already scanned pages were omitted; narrow the keywords or directory and search again, because continuing the cursor cannot recover those omitted matches. Report unsearched/failed scopes and omitted results rather than claiming an exhaustive search.
+
+For a current-project filename lookup that needs only a local path, ordinary mounted filesystem search remains appropriate. Use `list_project_files` for deliberate directory browsing and exact IDs needed by copy/move operations, not as a substitute for aggregate discovery.
+
 ## Read and write mounted contents
 
 Use `list_dir` for a narrow directory view, `read_files` for text, and the appropriate document/image tools for other formats. For other projects, pass the absolute path even to `list_dir`'s `relative_workspace_path` parameter. For example, after resolving an accessible project root and selecting an existing file:

@@ -378,5 +378,49 @@
     "field.location": {
         "zh_CN": "位置",
         "en_US": "Location"
+    },
+    "search.matches": {
+        "zh_CN": "找到 {{count}} 个匹配文件",
+        "en_US": "{{count}} matching files"
+    },
+    "search.scopes": {
+        "zh_CN": "搜索 {{count}} 个项目目录范围",
+        "en_US": "{{count}} project directory scopes"
+    },
+    "search.project": {
+        "zh_CN": "项目 {{number}}",
+        "en_US": "Project {{number}}"
+    },
+    "search.scope.pending": {
+        "zh_CN": "尚未搜索完",
+        "en_US": "Search incomplete"
+    },
+    "search.scope.complete": {
+        "zh_CN": "所选范围已搜索完",
+        "en_US": "Selected scope searched"
+    },
+    "search.scope.failed": {
+        "zh_CN": "查询失败",
+        "en_US": "Search failed"
+    },
+    "search.incomplete_short": {
+        "zh_CN": "部分范围未完成",
+        "en_US": "Incomplete coverage"
+    },
+    "search.incomplete": {
+        "zh_CN": "部分项目或目录尚未搜索完，当前结果不代表全部文件。",
+        "en_US": "Some project or directory scopes remain unsearched. These results do not cover all files."
+    },
+    "search.truncated": {
+        "zh_CN": "部分匹配文件未展示，请缩小关键词或目录范围；继续下一页无法找回本页省略的匹配项。",
+        "en_US": "Some matches were omitted. Narrow the keywords or directory scope; continuing the next page will not recover omitted matches."
+    },
+    "search.names_only": {
+        "zh_CN": "按文件名和路径匹配，未搜索文件正文；内容和年份需要打开文件确认。",
+        "en_US": "Matched file names and paths, not file contents. Open selected files to verify their subject and year."
+    },
+    "error.search_unavailable": {
+        "zh_CN": "此次搜索未能读取任何文件列表，请检查项目访问权限或稍后重试。",
+        "en_US": "No file lists could be read. Check project access or retry later."
     }
 }

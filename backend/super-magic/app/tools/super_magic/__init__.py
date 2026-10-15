@@ -12,6 +12,7 @@ from .files import (
 )
 from .messages import ReadTopicMessages
 from .prepare_files import PrepareProjectFiles
+from .search_files import SearchProjectFiles
 from .projects import (
     CreateProject,
     DeleteProject,
@@ -69,6 +70,7 @@ __all__ = [
     "PrepareProjectFiles",
     "ReadTopicMessages",
     "RenameProjectFile",
+    "SearchProjectFiles",
     "SendTopicMessage",
     "StartTopicTask",
     "UpdateProject",
