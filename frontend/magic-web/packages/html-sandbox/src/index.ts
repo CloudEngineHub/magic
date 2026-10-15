@@ -5,6 +5,7 @@
  * do not need to mirror the package's internal directory layout.
  */
 export * from "./telemetry"
+export * from "./utils/hostKeyboardMessages"
 export * from "./utils/inspectableTextContent"
 export * from "./utils/parentOrigin"
 export * from "./utils/safeUrl"

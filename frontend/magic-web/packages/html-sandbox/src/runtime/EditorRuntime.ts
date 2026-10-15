@@ -19,6 +19,7 @@ import {
 	registerSelectionHandlers,
 } from "../handlers"
 import { EventType } from "../core/types"
+import { KEYBOARD_MESSAGE_TYPES } from "../utils/hostKeyboardMessages"
 
 export class EditorRuntime {
 	private bridge: EditorBridge
@@ -31,6 +32,7 @@ export class EditorRuntime {
 	private dragDropManager: DragDropManager
 	private isEditMode = false
 	private keyboardShortcutHandler: ((event: KeyboardEvent) => Promise<void>) | null = null
+	private hostShortcutHandler: ((event: KeyboardEvent) => void) | null = null
 	private wheelEventHandler: ((event: WheelEvent) => void) | null = null
 	private imageUploadResultHandler: ((event: MessageEvent) => void) | null = null
 	private dragDropMessageHandler: ((event: MessageEvent) => void) | null = null
@@ -101,6 +103,9 @@ export class EditorRuntime {
 
 		// Setup keyboard shortcuts
 		this.setupKeyboardShortcuts()
+
+		// Forward save/exit shortcuts to the host without rewriting the user document
+		this.setupHostShortcutForwarding()
 
 		// Setup wheel handler for trackpad pinch-to-zoom
 		this.setupWheelHandler()
@@ -237,6 +242,60 @@ export class EditorRuntime {
 
 		window.addEventListener("keydown", this.keyboardShortcutHandler)
 		EditorLogger.info("Keyboard shortcuts registered for undo/redo/delete/duplicate")
+	}
+
+	/**
+	 * Forward Cmd/Ctrl+S, Shift+Cmd/Ctrl+S and Escape to the host editor.
+	 *
+	 * These used to be a <script> injected into the user's HTML when edit mode
+	 * started. That changed the document content, so the preview was rewritten in
+	 * place (document.open/write in the same Window) and page scripts with
+	 * top-level let/const/class failed to re-run, leaving scroll-reveal content
+	 * invisible. Installing the listener from the runtime keeps the document
+	 * untouched, so entering edit mode causes no reload and no flicker.
+	 *
+	 * Capture phase on document, so page handlers and text editing cannot swallow
+	 * the shortcut. The message shape matches the host's createKeyboardMessageHandler.
+	 */
+	private setupHostShortcutForwarding(): void {
+		this.hostShortcutHandler = (event: KeyboardEvent) => {
+			if (!this.isEditMode) return
+
+			const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+			const ctrlOrCmd = isMac ? event.metaKey : event.ctrlKey
+
+			// event.key is "S" while Shift is held (and with Caps Lock), so compare case-insensitively.
+			// Not event.code: it is the physical key and breaks Cmd+S on non-QWERTY layouts.
+			if (ctrlOrCmd && event.key.toLowerCase() === "s") {
+				event.preventDefault()
+				event.stopPropagation()
+				window.parent.postMessage(
+					{
+						type: event.shiftKey
+							? KEYBOARD_MESSAGE_TYPES.SAVE_AND_EXIT
+							: KEYBOARD_MESSAGE_TYPES.SAVE,
+						source: KEYBOARD_MESSAGE_TYPES.SOURCE,
+					},
+					getParentOrigin(),
+				)
+				return
+			}
+
+			if (event.key === "Escape") {
+				event.preventDefault()
+				// Keep the iframe selection active while the host closes its local panel.
+				event.stopImmediatePropagation()
+				window.parent.postMessage(
+					{
+						type: KEYBOARD_MESSAGE_TYPES.CANCEL,
+						source: KEYBOARD_MESSAGE_TYPES.SOURCE,
+					},
+					getParentOrigin(),
+				)
+			}
+		}
+
+		document.addEventListener("keydown", this.hostShortcutHandler, true)
 	}
 
 	/**
@@ -421,6 +480,11 @@ export class EditorRuntime {
 		if (this.keyboardShortcutHandler) {
 			window.removeEventListener("keydown", this.keyboardShortcutHandler)
 			this.keyboardShortcutHandler = null
+		}
+
+		if (this.hostShortcutHandler) {
+			document.removeEventListener("keydown", this.hostShortcutHandler, true)
+			this.hostShortcutHandler = null
 		}
 
 		// Remove wheel event handler
