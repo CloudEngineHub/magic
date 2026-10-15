@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { useStyles } from "./style"
+import { cn } from "@/utils/cn"
 
 interface AnimatedGridPatternProps extends React.HTMLAttributes<HTMLDivElement> {
 	width?: number
 	height?: number
 	x?: number
 	y?: number
-	strokeDasharray?: any
+	strokeDasharray?: React.SVGProps<SVGPathElement>["strokeDasharray"]
 	numSquares?: number
 	className?: string
 	maxOpacity?: number
@@ -43,9 +43,8 @@ export function AnimatedGridPattern({
 	children,
 	...props
 }: AnimatedGridPatternProps) {
-	const { styles, cx } = useStyles()
 	const id = useId()
-	const containerRef = useRef(null)
+	const containerRef = useRef<SVGSVGElement>(null)
 	const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
 
 	const getPos = useCallback(() => {
@@ -113,8 +112,16 @@ export function AnimatedGridPattern({
 	}, [containerRef])
 
 	return (
-		<div className={cx(styles.wrapper, className)} {...props}>
-			<svg ref={containerRef} aria-hidden="true" className={styles.container}>
+		<div
+			className={cn("fixed left-0 top-0 h-screen w-full overflow-hidden", className)}
+			{...props}
+		>
+			{/* Keep the decorative mask compatible with the Chrome 100 WebView. */}
+			<svg
+				ref={containerRef}
+				aria-hidden="true"
+				className="pointer-events-none absolute inset-0 size-full fill-neutral-100 stroke-neutral-100 [-webkit-mask-image:radial-gradient(circle_at_center,rgba(0,0,0,0.8),transparent_80%)] [background:radial-gradient(circle_at_center,rgb(var(--background-rgb))_0%,rgb(var(--card-rgb))_100%)] [mask-image:radial-gradient(circle_at_center,rgba(0,0,0,0.8),transparent_80%)] dark:fill-white/10 dark:stroke-neutral-800 [@media(max-width:700px)]:hidden"
+			>
 				<defs>
 					<pattern
 						id={id}
@@ -132,7 +139,7 @@ export function AnimatedGridPattern({
 					</pattern>
 				</defs>
 				<rect width="100%" height="100%" fill={`url(#${id})`} />
-				<svg x={x} y={y} className={styles.overflowSvg}>
+				<svg x={x} y={y} className="overflow-visible">
 					{squares.map(({ pos: [posX, posY], id: squareId }, index) => (
 						<motion.rect
 							initial={{ opacity: 0 }}
@@ -155,7 +162,7 @@ export function AnimatedGridPattern({
 					))}
 				</svg>
 			</svg>
-			<div className={styles.content}>{children}</div>
+			<div className="size-full">{children}</div>
 		</div>
 	)
 }
