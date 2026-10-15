@@ -37,7 +37,13 @@ export function MobileSettingsProfileView(props: MobileSettingsProfileViewProps)
 	} = props
 
 	const avatarNode = (
-		<MagicAvatar src={avatar} size={96} style={{ borderRadius: 9999 }} className="shadow-sm">
+		<MagicAvatar
+			src={avatar}
+			size={96}
+			shape="circle"
+			imgClassName="!rounded-full"
+			className="shadow-sm"
+		>
 			{nickname || "?"}
 		</MagicAvatar>
 	)
