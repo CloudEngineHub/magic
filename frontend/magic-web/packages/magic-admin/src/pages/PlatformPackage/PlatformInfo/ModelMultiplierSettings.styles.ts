@@ -1,35 +1,36 @@
 import { createStyles } from "antd-style"
 
-/** 沿用旧版样式体系，参考结果在窄屏回落到表单下方。 */
+/** 复用平台信息的行布局，补充折叠区域内的说明和价格对照样式。 */
 export const useModelMultiplierStyles = createStyles(({ css, token }) => ({
 	root: css`
 		width: 100%;
-		max-width: 896px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
 		color: ${token.colorText};
 	`,
-	layout: css`
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-		gap: 24px;
-		align-items: start;
-		@media (max-width: 768px) {
-			grid-template-columns: minmax(0, 1fr);
-		}
+	formField: css`
+		margin-bottom: 0;
 	`,
-	preview: css`
-		padding: 20px;
-		border-radius: 6px;
-		background: ${token.colorFillAlter};
+	fieldContent: css`
+		flex: 1;
 		min-width: 0;
 	`,
+	fieldHint: css`
+		margin: 6px 0 0;
+		color: ${token.colorTextSecondary};
+		font-size: 12px;
+		line-height: 1.6;
+	`,
 	muted: css`
+		margin: 0;
 		color: ${token.colorTextSecondary};
 		font-size: 13px;
 		line-height: 1.65;
 	`,
 	amount: css`
-		font-size: 24px;
-		font-weight: 600;
+		font-size: 14px;
+		font-weight: 500;
 		font-variant-numeric: tabular-nums;
 		overflow-wrap: anywhere;
 	`,
@@ -37,13 +38,11 @@ export const useModelMultiplierStyles = createStyles(({ css, token }) => ({
 		margin-top: 24px;
 		padding-top: 20px;
 		border-top: 1px solid ${token.colorBorderSecondary};
-	`,
-	row: css`
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 12px;
+		h4 {
+			margin: 0 0 8px;
+			font-size: 14px;
+			font-weight: 500;
+		}
 	`,
 	example: css`
 		display: grid;
