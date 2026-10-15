@@ -9,7 +9,6 @@ import { useKeyPress } from "ahooks"
 import AppearanceProvider from "@/providers/AppearanceProvider"
 import { DriveApi } from "@/apis"
 import Panels from "./Panels"
-import { useStyles } from "./styles"
 import { SearchPanelTypes } from "./types"
 
 interface SearchPanelProps {
@@ -20,8 +19,6 @@ interface SearchPanelProps {
 function SearchPanel(props: SearchPanelProps) {
 	const { searchQuery, maxHeight } = props
 	const { t } = useTranslation("search")
-
-	const { styles } = useStyles()
 
 	const [activeKey, setActiveKey] = useState<SearchPanelTypes>(SearchPanelTypes.Contacts)
 	const [debouncedQuery, setDebouncedQuery] = useState<string>("")
@@ -142,7 +139,7 @@ function SearchPanel(props: SearchPanelProps) {
 		<AppearanceProvider>
 			<Tabs
 				destroyOnHidden
-				className={styles.tabs}
+				className="size-full bg-card ![--magic-tabs-item-active-color:var(--magic-color-primary-active)] ![--magic-tabs-item-hover-color:var(--magic-color-primary-hover)] ![--magic-tabs-item-selected-color:rgb(var(--primary-rgb))] [&_.magic-tabs-content]:size-full [&_.magic-tabs-nav]:m-0 [&_.magic-tabs-nav]:h-11 [&_.magic-tabs-nav]:pl-5 [&_.magic-tabs-tabpane]:h-full"
 				activeKey={activeKey}
 				items={items}
 				onChange={(event) => setActiveKey(event as SearchPanelTypes)}
