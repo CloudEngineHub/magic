@@ -48,6 +48,7 @@ import type { ModelEditorFocusRequest } from "@magic-admin-v2/features/platform-
 import { useProviderModelDataSource } from "@magic-admin-v2/features/platform-model-list/utils/data-source"
 import { useProviderListQuery } from "@magic-admin-v2/features/platform-provider-list/queries"
 import {
+	providerStatus,
 	providerType,
 	type ProviderListItem,
 } from "@magic-admin-v2/features/platform-provider-list/types"
@@ -504,7 +505,9 @@ function ProviderSelectValue({
 	return <span className="truncate text-muted-foreground">ID：{providerId}</span>
 }
 
+/** 下拉与已选项共用服务商状态展示，不与模型绑定开关混淆或过滤已有绑定。 */
 function ProviderOption({ provider }: { provider: ProviderListItem }) {
+	const { t } = useTranslation()
 	return (
 		<span className="flex w-full min-w-0 items-center gap-2">
 			<EntityAvatarRender
@@ -519,8 +522,13 @@ function ProviderOption({ provider }: { provider: ProviderListItem }) {
 				})}
 			/>
 			<span className="flex min-w-0 flex-1 flex-col items-start text-left leading-none">
-				<span className="block max-w-full truncate leading-5">
-					{getProviderAlias(provider)}
+				<span className="flex w-full min-w-0 items-center gap-2 leading-5">
+					<span className="truncate">{getProviderAlias(provider)}</span>
+					{provider.status === providerStatus.disabled ? (
+						<Badge variant="warning" className="h-5 px-1.5">
+							{t("modelList.editor.providerDisabled")}
+						</Badge>
+					) : null}
 				</span>
 				<span className="block max-w-full truncate text-xs leading-4 text-muted-foreground">
 					{getProviderOptionSecondaryText(provider)}

@@ -187,6 +187,7 @@
 	"editor.progress.saveSuccessTitle": "保存成功",
 	"editor.progress.saveTitle": "正在保存模型配置",
 	"editor.progress.success": "所有服务商配置已处理完成。",
+	"editor.providerDisabled": "服务商已禁用",
 	"editor.reasoning.defaultLabel": "默认思考强度",
 	"editor.reasoning.high": "高",
 	"editor.reasoning.invalidDefault": "默认思考强度必须在可选档位中。",

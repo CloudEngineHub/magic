@@ -187,6 +187,7 @@
 	"editor.progress.saveSuccessTitle": "Saved successfully",
 	"editor.progress.saveTitle": "Saving model configuration",
 	"editor.progress.success": "All provider configurations have been processed.",
+	"editor.providerDisabled": "Provider disabled",
 	"editor.reasoning.defaultLabel": "Default reasoning effort",
 	"editor.reasoning.high": "High",
 	"editor.reasoning.invalidDefault": "The default reasoning effort must be an available level.",
