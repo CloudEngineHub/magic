@@ -100,12 +100,9 @@ const BaseLayoutMobile = () => {
 					<MaintenanceNotice />
 					<div
 						className={cx(styles.container, {
-							[styles.view]: hasVisibleTabBar,
 							[styles.noGlobalSafeAreaWithoutTabBar]:
 								(!shouldShowTabBar || !interfaceStore.mobileTabBarVisible) &&
 								isNoGlobalSafeArea,
-							[styles.noGlobalSafeAreaWithTabBar]:
-								hasVisibleTabBar && isNoGlobalSafeArea,
 						})}
 						onClick={handleClick}
 					>

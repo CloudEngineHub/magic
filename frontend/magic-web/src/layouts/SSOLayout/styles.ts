@@ -17,13 +17,6 @@ export const useStyles = createStyles(({ css, token }) => {
 			align-items: center;
 			justify-content: center;
 		`,
-		dragBar: css`
-			width: 100%;
-			height: ${token.titleBarHeight}px;
-			position: absolute;
-			left: 0;
-			top: 0;
-		`,
 		wrapper: css`
 			width: 100%;
 			height: 100%;
