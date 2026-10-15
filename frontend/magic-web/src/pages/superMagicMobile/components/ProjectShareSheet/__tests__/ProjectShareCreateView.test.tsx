@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
+import { NodeType } from "@dtyq/user-selector"
 import { ShareMode, ShareType } from "@/pages/superMagic/components/Share/types"
 import ProjectShareCreateView from "../components/ProjectShareCreateView"
 import type { ProjectShareSheetController } from "../types"
@@ -22,7 +23,56 @@ vi.mock("react-i18next", () => ({
 }))
 
 vi.mock("@/components/business/MemberDepartmentSelector", () => ({
-	default: () => null,
+	default: ({
+		open,
+		selectedValues,
+		onSelectChange,
+		onCancel,
+		onOk,
+	}: {
+		open?: boolean
+		selectedValues?: Array<{ id: string; name?: string; dataType?: number }>
+		onSelectChange?: (values: Array<{ id: string; name?: string; dataType?: number }>) => void
+		onCancel?: () => void
+		onOk?: (values: Array<{ id: string; name?: string; dataType?: number }>) => void
+	}) => {
+		if (!open) return null
+		return (
+			<div data-testid="mock-member-department-selector">
+				<span data-testid="mock-member-selector-count">{selectedValues?.length ?? 0}</span>
+				<button
+					type="button"
+					data-testid="mock-member-selector-select"
+					onClick={() =>
+						onSelectChange?.([
+							...(selectedValues || []),
+							{ id: "user-mock-added", name: "Added Mock User", dataType: 1 },
+						])
+					}
+				>
+					Select
+				</button>
+				<button
+					type="button"
+					data-testid="mock-member-selector-cancel"
+					onClick={() => {
+						// MobileUserSelector resets selection to empty on cancel
+						onSelectChange?.([])
+						onCancel?.()
+					}}
+				>
+					Cancel
+				</button>
+				<button
+					type="button"
+					data-testid="mock-member-selector-ok"
+					onClick={() => onOk?.(selectedValues || [])}
+				>
+					OK
+				</button>
+			</div>
+		)
+	},
 }))
 
 vi.mock(
@@ -572,5 +622,140 @@ describe("ProjectShareCreateView", () => {
 
 		expect(screen.queryByTestId("mock-recording-share-content-picker")).not.toBeInTheDocument()
 		expect(screen.getByText("share.noAvailableShareMethods")).toBeInTheDocument()
+	})
+
+	it("preserves confirmed members when cancelling the member selector modal", () => {
+		// Mock callbacks to verify whether cancel triggers commit or close actions
+		const closeMemberSelector = vi.fn()
+		const confirmMemberSelector = vi.fn()
+		const initialMembers = [
+			{
+				id: "user-mock-1",
+				name: "Mock Member One",
+				dataType: NodeType.User,
+			},
+			{
+				id: "user-mock-2",
+				name: "Mock Member Two",
+				dataType: NodeType.User,
+			},
+		]
+
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					memberSelectorOpen: true,
+					selectedMemberNodes: initialMembers,
+					closeMemberSelector,
+					confirmMemberSelector,
+					formState: {
+						...createController().formState,
+						shareType: ShareType.Organization,
+					},
+				})}
+			/>,
+		)
+
+		// Verify the staged selector is opened with the current confirmed members
+		expect(screen.getByTestId("mock-member-selector-count")).toHaveTextContent("2")
+
+		// Simulate adding a user inside the picker modal
+		fireEvent.click(screen.getByTestId("mock-member-selector-select"))
+		expect(screen.getByTestId("mock-member-selector-count")).toHaveTextContent("3")
+
+		// Click cancel (simulating MobileUserSelector clearing selection on cancel and closing)
+		fireEvent.click(screen.getByTestId("mock-member-selector-cancel"))
+
+		// Selector closes without committing unconfirmed staged selection
+		expect(closeMemberSelector).toHaveBeenCalledTimes(1)
+		expect(confirmMemberSelector).not.toHaveBeenCalled()
+	})
+
+	it("commits all staged members when clicking confirm in member selector", () => {
+		// Verify that confirming the picker commits both initial and newly selected members
+		const confirmMemberSelector = vi.fn()
+		const initialMembers = [
+			{
+				id: "user-mock-1",
+				name: "Mock Member One",
+				dataType: NodeType.User,
+			},
+		]
+
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					memberSelectorOpen: true,
+					selectedMemberNodes: initialMembers,
+					confirmMemberSelector,
+					formState: {
+						...createController().formState,
+						shareType: ShareType.Organization,
+					},
+				})}
+			/>,
+		)
+
+		expect(screen.getByTestId("mock-member-selector-count")).toHaveTextContent("1")
+
+		// Select an additional member and confirm
+		fireEvent.click(screen.getByTestId("mock-member-selector-select"))
+		fireEvent.click(screen.getByTestId("mock-member-selector-ok"))
+
+		expect(confirmMemberSelector).toHaveBeenCalledWith([
+			{
+				id: "user-mock-1",
+				name: "Mock Member One",
+				dataType: NodeType.User,
+			},
+			{
+				id: "user-mock-added",
+				name: "Added Mock User",
+				dataType: 1,
+			},
+		])
+	})
+
+	it("directly removes a member from confirmed list when clicking remove icon on card", () => {
+		// Verify clicking the remove button on member card calls confirmMemberSelector with remaining members
+		const confirmMemberSelector = vi.fn()
+		const initialMembers = [
+			{
+				id: "user-mock-1",
+				name: "Mock Member One",
+				dataType: NodeType.User,
+			},
+			{
+				id: "user-mock-2",
+				name: "Mock Member Two",
+				dataType: NodeType.User,
+			},
+		]
+
+		render(
+			<ProjectShareCreateView
+				controller={createController({
+					selectedMemberNodes: initialMembers,
+					confirmMemberSelector,
+					formState: {
+						...createController().formState,
+						shareType: ShareType.Organization,
+					},
+				})}
+			/>,
+		)
+
+		const removeButtons = screen.getAllByTestId("project-share-sheet-member-remove-button")
+		expect(removeButtons).toHaveLength(2)
+
+		fireEvent.click(removeButtons[0])
+
+		expect(confirmMemberSelector).toHaveBeenCalledWith([
+			{
+				id: "user-mock-2",
+				name: "Mock Member Two",
+				dataType: NodeType.User,
+			},
+		])
 	})
 })

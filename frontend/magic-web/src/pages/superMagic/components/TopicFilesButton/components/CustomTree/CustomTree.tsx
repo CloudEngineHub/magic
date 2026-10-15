@@ -11,6 +11,7 @@ import {
 	type VisibleTreeScrollAnchor,
 	type VisibleTreeNodeRow,
 } from "../../utils/visibleTreeRows"
+import { scrollFileRowIntoContainer } from "../../utils/scrollFileRowIntoContainer"
 import { useStyles } from "./style"
 import {
 	measureTreeSelect,
@@ -411,6 +412,21 @@ function CustomTree({
 		},
 		[onSelect, selectedKeySet, selectedKeys],
 	)
+
+	// Short trees render every row, so the virtualizer never receives scrollToKey.
+	// Scroll the file-list container here, before the parent confirms the locate.
+	useLayoutEffect(() => {
+		if (!scrollToKey || shouldVirtualize) return
+		const scrollElement = scrollElementRef?.current
+		if (!scrollElement) return
+
+		const index = visibleNodeIndexByKey.get(String(scrollToKey))
+		if (index === undefined) return
+		const row = scrollElement.querySelector(`[data-index="${index}"]`)
+		if (!(row instanceof HTMLElement)) return
+
+		scrollFileRowIntoContainer(scrollElement, row)
+	}, [scrollElementRef, scrollToKey, shouldVirtualize, visibleNodeIndexByKey, visibleNodes])
 
 	useEffect(() => {
 		if (!scrollToKey || !shouldVirtualize) return
