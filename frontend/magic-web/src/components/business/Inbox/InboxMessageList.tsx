@@ -2,12 +2,17 @@ import { observer } from "mobx-react-lite"
 import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Spinner } from "@/components/shadcn-ui/spinner"
+import { cn } from "@/utils/cn"
 import { groupInboxMessages } from "./groupInboxMessages"
 import InboxMessageCard from "./InboxMessageCard"
 import { inboxStore } from "./store"
 import { useInboxAutoRead } from "./useInboxAutoRead"
 
-const InboxMessageList = observer(function InboxMessageList() {
+const InboxMessageList = observer(function InboxMessageList({
+	mobile = false,
+}: {
+	mobile?: boolean
+}) {
 	const { t } = useTranslation("sidebar")
 	const [root, setRoot] = useState<HTMLDivElement | null>(null)
 	const messages = inboxStore.visibleMessages
@@ -30,7 +35,10 @@ const InboxMessageList = observer(function InboxMessageList() {
 		<div
 			ref={setRoot}
 			data-testid="inbox-feed"
-			className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+			className={cn(
+				"flex min-h-0 flex-1 flex-col overflow-y-auto bg-white dark:bg-background",
+				!mobile && "gap-[9px] px-[18px] pb-[26px] pt-4",
+			)}
 			onScroll={(event) => {
 				const node = event.currentTarget
 				if (node.scrollHeight - node.scrollTop - node.clientHeight < 96) {
@@ -56,8 +64,19 @@ const InboxMessageList = observer(function InboxMessageList() {
 				</div>
 			) : grouped ? (
 				groupInboxMessages(messages).map((group) => (
-					<section key={group.key} data-testid={`inbox-group-${group.key}`}>
-						<div className="px-4 py-2 text-xs text-muted-foreground">
+					<section
+						key={group.key}
+						data-testid={`inbox-group-${group.key}`}
+						className={cn("shrink-0", !mobile && "flex flex-col gap-[9px]")}
+					>
+						<div
+							className={cn(
+								"text-[#8a91a0] dark:text-muted-foreground",
+								mobile
+									? "bg-[#f7f8fa] px-4 pb-2 pt-3.5 text-xs dark:bg-muted"
+									: "px-1 pb-1.5 pt-[3px] text-[13px]",
+							)}
+						>
 							{group.key === "today"
 								? t("inbox.groups.today")
 								: group.key === "yesterday"
@@ -65,12 +84,14 @@ const InboxMessageList = observer(function InboxMessageList() {
 									: t("inbox.groups.earlier")}
 						</div>
 						{group.messages.map((message) => (
-							<InboxMessageCard key={message.id} message={message} />
+							<InboxMessageCard key={message.id} message={message} mobile={mobile} />
 						))}
 					</section>
 				))
 			) : (
-				messages.map((message) => <InboxMessageCard key={message.id} message={message} />)
+				messages.map((message) => (
+					<InboxMessageCard key={message.id} message={message} mobile={mobile} />
+				))
 			)}
 			{inboxStore.listLoadingMore ? (
 				<div

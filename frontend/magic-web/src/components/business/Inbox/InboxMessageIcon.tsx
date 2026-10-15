@@ -8,6 +8,7 @@ import {
 	CreditCard,
 	FileText,
 	Sparkles,
+	Share2,
 	Users,
 } from "lucide-react"
 import type { InboxIconName } from "./types"
@@ -15,7 +16,7 @@ import { cn } from "@/utils/cn"
 
 const INBOX_ICONS: Record<InboxIconName, LucideIcon> = {
 	users: Users,
-	share: Box,
+	share: Share2,
 	project: Box,
 	file: FileText,
 	alert: AlertCircle,
@@ -27,24 +28,25 @@ const INBOX_ICONS: Record<InboxIconName, LucideIcon> = {
 }
 
 const INBOX_ICON_TONE: Record<InboxIconName, string> = {
-	users: "bg-violet-500/10 text-violet-600",
-	share: "bg-blue-500/10 text-blue-600",
-	project: "bg-blue-500/10 text-blue-600",
-	file: "bg-blue-500/10 text-blue-600",
-	alert: "bg-destructive/10 text-destructive",
-	spark: "bg-violet-500/10 text-violet-600",
-	points: "bg-amber-500/10 text-amber-600",
-	payment: "bg-sky-500/10 text-sky-600",
-	success: "bg-emerald-500/10 text-emerald-600",
-	robot: "bg-violet-500/10 text-violet-600",
+	users: "bg-[#f0f2ff] text-[#5364d7] dark:bg-indigo-500/10 dark:text-indigo-400",
+	share: "bg-[#f0f2ff] text-[#5364d7] dark:bg-indigo-500/10 dark:text-indigo-400",
+	project: "bg-[#f1f3ff] text-[#5564d9] dark:bg-indigo-500/10 dark:text-indigo-400",
+	file: "bg-[#f1f3ff] text-[#5564d9] dark:bg-indigo-500/10 dark:text-indigo-400",
+	alert: "bg-[#fff0ef] text-[#ca5d63] dark:bg-destructive/10 dark:text-destructive",
+	spark: "bg-[#f1f3ff] text-[#5564d9] dark:bg-indigo-500/10 dark:text-indigo-400",
+	points: "bg-[#edf8f3] text-[#2c8466] dark:bg-emerald-500/10 dark:text-emerald-400",
+	payment: "bg-[#edf8f3] text-[#2c8466] dark:bg-emerald-500/10 dark:text-emerald-400",
+	success: "bg-[#edf8f3] text-[#2c8466] dark:bg-emerald-500/10 dark:text-emerald-400",
+	robot: "bg-[#f1f3ff] text-[#5564d9] dark:bg-indigo-500/10 dark:text-indigo-400",
 }
 
-function InboxMessageIcon({ name }: { name: InboxIconName }) {
+function InboxMessageIcon({ name, mobile = false }: { name: InboxIconName; mobile?: boolean }) {
 	const Icon = INBOX_ICONS[name]
 	return (
 		<div
 			className={cn(
-				"flex size-9 shrink-0 items-center justify-center rounded-full",
+				"flex shrink-0 items-center justify-center",
+				mobile ? "size-10 rounded-[12px]" : "size-[34px] rounded-[10px]",
 				INBOX_ICON_TONE[name],
 			)}
 			aria-hidden

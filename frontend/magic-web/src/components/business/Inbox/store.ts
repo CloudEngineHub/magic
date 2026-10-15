@@ -245,8 +245,11 @@ export class InboxStore {
 		await Promise.all(
 			ids.map((id) => NotificationApi.markNotificationRead(id).catch(() => undefined)),
 		)
-		this.messages.forEach((message) => {
-			if (message.category === "system") message.is_unread = false
+		// Async API completions must publish observable changes inside a MobX action.
+		runInAction(() => {
+			this.messages.forEach((message) => {
+				if (message.category === "system") message.is_unread = false
+			})
 		})
 		await this.refreshAfterMutation()
 	}
@@ -272,7 +275,9 @@ export class InboxStore {
 					message.is_unread = false
 				})
 			}
-			if (this.authorizationPending > 0) this.authorizationPending -= 1
+			runInAction(() => {
+				if (this.authorizationPending > 0) this.authorizationPending -= 1
+			})
 			await this.loadCounts()
 			return { ok: true as const, expired: message.business_result === "expired" }
 		} catch (error) {

@@ -42,7 +42,15 @@ export function resolveInboxCopy(
 	templates: Record<string, { title_template: string; body_template: string }> | undefined,
 ) {
 	const template = templates?.[templateCatalogKey(message.type, message.template_version)]
-	const payload = formatInboxPayload(message.payload)
+	const payload: Record<string, unknown> = formatInboxPayload(message.payload)
+	if (message.type === "task_finished" || message.type === "task_failed") {
+		// Match sidebar fallback names before substituting task notification templates.
+		payload.workspace_name =
+			message.payload.workspace_name ||
+			i18next.t("workspace.unnamedWorkspace", { ns: "super" })
+		payload.project_name =
+			message.payload.project_name || i18next.t("project.unnamedProject", { ns: "super" })
+	}
 	if (!template) {
 		logger.error({
 			eventKey: "inbox_template_unavailable",

@@ -21,6 +21,10 @@ export function inboxIconForType(type: string): InboxIconName {
 }
 
 export function mapNotificationItem(item: NotificationListItem): InboxMessage {
+	// Handling an invitation clears its dot even when the API read state lags behind.
+	const isHandledAuthorization =
+		item.category === "authorization" &&
+		(item.action_status === "accepted" || item.action_status === "rejected")
 	return {
 		id: item.notification_id,
 		category: item.category === "authorization" ? "auth" : "system",
@@ -28,7 +32,7 @@ export function mapNotificationItem(item: NotificationListItem): InboxMessage {
 		template_version: item.template_version,
 		payload: item.payload ?? {},
 		created_at: item.created_at,
-		is_unread: item.read_status === "unread",
+		is_unread: item.read_status === "unread" && !isHandledAuthorization,
 		auth_status:
 			item.action_status === "pending" ||
 			item.action_status === "accepted" ||

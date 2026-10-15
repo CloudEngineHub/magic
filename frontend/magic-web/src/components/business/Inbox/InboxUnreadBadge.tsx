@@ -4,12 +4,14 @@ interface InboxUnreadBadgeProps {
 	label: string | null
 	className?: string
 	testId?: string
+	variant?: "entry" | "system" | "auth"
 }
 
 function InboxUnreadBadge({
 	label,
 	className,
 	testId = "inbox-unread-badge",
+	variant = "entry",
 }: InboxUnreadBadgeProps) {
 	if (!label) return null
 
@@ -17,7 +19,13 @@ function InboxUnreadBadge({
 		<span
 			data-testid={testId}
 			className={cn(
-				"inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium leading-none text-white",
+				"inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full text-[11px] tabular-nums leading-none",
+				variant === "entry"
+					? "h-[22px] min-w-6 px-1.5 font-semibold"
+					: "h-[18px] min-w-5 px-1.5 font-normal",
+				variant === "system"
+					? "bg-[#f1f2f5] text-[#858b99] dark:bg-muted dark:text-muted-foreground"
+					: "bg-[#f04438] text-white",
 				className,
 			)}
 		>

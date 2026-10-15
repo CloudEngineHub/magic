@@ -31,6 +31,7 @@ const InboxMobileSidebarEntry = observer(function InboxMobileSidebarEntry({
 			</span>
 			<InboxUnreadBadge
 				label={inboxStore.unreadTotalLabel}
+				className="h-5 bg-[#ff3b30] px-[7px]"
 				testId="inbox-mobile-entry-badge"
 			/>
 		</button>

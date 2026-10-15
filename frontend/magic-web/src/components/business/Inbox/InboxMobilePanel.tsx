@@ -58,8 +58,8 @@ const InboxMobilePanel = observer(function InboxMobilePanel() {
 						{t("inbox.markAllRead")}
 					</Button>
 				</header>
-				<InboxTabs />
-				<InboxMessageList />
+				<InboxTabs mobile />
+				<InboxMessageList mobile />
 			</SheetContent>
 		</Sheet>
 	)
