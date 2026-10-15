@@ -57,7 +57,7 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 	public async setThemeConfig(theme: ThemeMode): Promise<void> {
 		try {
 			const themeConfig = await this.get(ConfigType.Theme)
-			this.put({
+			await this.put({
 				...themeConfig,
 				key: ConfigType.Theme,
 				value: theme,
@@ -127,7 +127,7 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 	public async setLocaleConfig(locale: string): Promise<void> {
 		try {
 			const localeConfig = await this.get(ConfigType.I18n)
-			this.put({
+			await this.put({
 				...localeConfig,
 				key: ConfigType.I18n,
 				value: locale,
@@ -175,7 +175,7 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 	public async setClusterConfig(cluster: string): Promise<void> {
 		try {
 			const clusterConfig = await this.get(ConfigType.Cluster)
-			this.put({
+			await this.put({
 				...clusterConfig,
 				key: ConfigType.Cluster,
 				value: cluster,
@@ -224,7 +224,7 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 	public async setClusterCacheConfig(cluster: string): Promise<void> {
 		try {
 			const clusterConfig = await this.get(ConfigType.clusterCodeCache)
-			this.put({
+			await this.put({
 				...clusterConfig,
 				key: ConfigType.clusterCodeCache,
 				value: cluster,
@@ -275,7 +275,7 @@ export class ConfigRepository extends GlobalBaseRepository<ConfigSchema> {
 	public async setFontScaleConfig(scale: number): Promise<void> {
 		try {
 			const fontScaleConfig = await this.get(ConfigType.FontScale)
-			this.put({
+			await this.put({
 				...fontScaleConfig,
 				key: ConfigType.FontScale,
 				value: scale.toString(),

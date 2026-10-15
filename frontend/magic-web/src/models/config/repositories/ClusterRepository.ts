@@ -14,8 +14,12 @@ export class ClusterRepository extends GlobalBaseRepository<Common.PrivateConfig
 
 	public async setClustersConfig(clustersConfig: Array<Common.PrivateConfig>): Promise<void> {
 		try {
-			clustersConfig.map((config) =>
-				this.put({ ...config, deployCode: config?.deployCode ?? "" }),
+			// Await every write so a failed put reaches the catch below instead of
+			// escaping as an unhandled rejection.
+			await Promise.all(
+				clustersConfig.map((config) =>
+					this.put({ ...config, deployCode: config?.deployCode ?? "" }),
+				),
 			)
 		} catch (error) {
 			logger.error({
