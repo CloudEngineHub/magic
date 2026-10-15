@@ -84,11 +84,36 @@ function isNetworkOffline(): boolean {
 	return typeof window !== "undefined" && !window.navigator.onLine
 }
 
+const OFFLINE_RELOAD_KEY = "magic:global-error-boundary:offline-reload-at"
+const OFFLINE_RELOAD_GUARD_MS = 10_000
+
+/**
+ * Allow at most one automatic offline reload within the guard window.
+ * If the reloaded document is still served (e.g. from HTTP cache) and the same
+ * error happens again, reloading again would loop forever, so the caller shows
+ * a manual refresh screen instead. When sessionStorage is unavailable the guard
+ * cannot be tracked, so it also falls back to the manual screen.
+ */
+function claimOfflineReload(): boolean {
+	try {
+		const now = Date.now()
+		const lastReloadAt = Number(window.sessionStorage.getItem(OFFLINE_RELOAD_KEY))
+		if (lastReloadAt && now - lastReloadAt < OFFLINE_RELOAD_GUARD_MS) return false
+		window.sessionStorage.setItem(OFFLINE_RELOAD_KEY, String(now))
+		return true
+	} catch {
+		return false
+	}
+}
+
 function GlobalErrorBoundary({ children }: PropsWithChildren) {
 	const { t } = useMainTranslation("interface")
 
 	const { styles } = useStyles()
 	const [targetDate, setTargetDate] = useState<number>()
+	// Set when an offline reload was skipped by the guard; the fallback then
+	// shows a manual refresh screen instead of the blank pre-reload state.
+	const [offlineReloadBlocked, setOfflineReloadBlocked] = useState(false)
 
 	const [countdown] = useCountDown({
 		targetDate,
@@ -113,7 +138,11 @@ function GlobalErrorBoundary({ children }: PropsWithChildren) {
 				// If an error occurs while offline (e.g., dynamic chunk loading failure),
 				// immediately reload to let the browser navigate and present its native offline page.
 				if (isNetworkOffline()) {
-					window.location.reload()
+					if (claimOfflineReload()) {
+						window.location.reload()
+					} else {
+						setOfflineReloadBlocked(true)
+					}
 					return
 				}
 
@@ -121,6 +150,25 @@ function GlobalErrorBoundary({ children }: PropsWithChildren) {
 				getNativePort().environment.webHasNewVersionToUpdate()
 			}}
 			fallbackRender={() => {
+				if (offlineReloadBlocked) {
+					// Offline and already reloaded once: no update countdown, only a manual refresh.
+					return (
+						<div className={styles.container}>
+							<div className={styles.wrapper}>
+								<Flex vertical align="center" gap={16}>
+									<span className={styles.title}>{t("networkTip.offline")}</span>
+									<Button
+										style={{ width: "fit-content" }}
+										onClick={() => window.location.reload()}
+									>
+										{t("global.refresh")}
+									</Button>
+								</Flex>
+							</div>
+						</div>
+					)
+				}
+
 				// Suppress the update fallback screen while offline to prevent UI flickering before reload
 				if (isNetworkOffline()) {
 					return null
