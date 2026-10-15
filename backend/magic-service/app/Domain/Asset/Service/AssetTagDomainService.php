@@ -160,11 +160,35 @@ class AssetTagDomainService
     /** @return AssetTagEntity[] */
     public function findAssetTags(AssetDataIsolation $dataIsolation, int|string $assetId): array
     {
+        return $this->findTagsByAssetIds($dataIsolation, [$assetId])[(string) $assetId] ?? [];
+    }
+
+    /**
+     * Batch variant of findAssetTags for list assembly: one relation query plus one tag query
+     * for the whole page, instead of two queries per asset.
+     *
+     * @param array<int, int|string> $assetIds
+     * @return array<string, AssetTagEntity[]> keyed by asset ID; assets without tags are absent
+     */
+    public function findTagsByAssetIds(AssetDataIsolation $dataIsolation, array $assetIds): array
+    {
+        $tagIdsByAsset = $this->relations->findTagIdsByAssetIds($dataIsolation, $assetIds);
+        $tagIds = [];
+        foreach ($tagIdsByAsset as $ids) {
+            foreach ($ids as $tagId) {
+                $tagIds[$tagId] = $tagId;
+            }
+        }
+        $tags = $this->tags->findByIds($dataIsolation, array_values($tagIds));
+        $currentUserId = $dataIsolation->getCurrentUserId();
         $result = [];
-        foreach ($this->relations->findTagIdsByAssetId($dataIsolation, $assetId) as $tagId) {
-            $tag = $this->tags->findById($dataIsolation, $tagId);
-            if ($tag !== null && ($tag->getOwnerUid() === null || $tag->getOwnerUid() === $dataIsolation->getCurrentUserId())) {
-                $result[] = $tag;
+        foreach ($tagIdsByAsset as $assetId => $ids) {
+            foreach ($ids as $tagId) {
+                $tag = $tags[(string) $tagId] ?? null;
+                // Personal tags are only visible to their owner; official tags (no owner) to everyone.
+                if ($tag !== null && ($tag->getOwnerUid() === null || $tag->getOwnerUid() === $currentUserId)) {
+                    $result[(string) $assetId][] = $tag;
+                }
             }
         }
         return $result;

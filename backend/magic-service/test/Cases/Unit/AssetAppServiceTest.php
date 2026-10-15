@@ -440,7 +440,7 @@ final class AssetAppServiceTest extends TestCase
         $defaultOnly = (new AssetTagEntity())->setNameI18n(['default' => '人物']);
 
         $tagDomainService = $this->createMock(AssetTagDomainService::class);
-        $tagDomainService->method('findAssetTags')->willReturn([$localized, $defaultOnly]);
+        $tagDomainService->method('findTagsByAssetIds')->willReturn(['51' => [$localized, $defaultOnly]]);
 
         $domainService = $this->createMock(AssetDomainService::class);
         $domainService->method('queries')->willReturn(['total' => 1, 'list' => [$asset]]);

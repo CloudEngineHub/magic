@@ -560,6 +560,13 @@ class AssetAppService extends AbstractAssetAppService
     {
         // 标签名与标签树接口（AssetAssembler）同一口径：优先当前语言，缺失回退 default。
         $language = $isolation->getLanguage();
+        $tagsByAsset = $this->assetTagDomainService->findTagsByAssetIds(
+            $isolation,
+            array_values(array_filter(array_map(
+                static fn (AssetEntity $asset): ?int => $asset->getId(),
+                $assets,
+            ))),
+        );
         $ownerIds = [];
         foreach ($assets as $asset) {
             $ownerId = $asset->getOwnerUid() ?: $asset->getUserId();
@@ -572,7 +579,7 @@ class AssetAppService extends AbstractAssetAppService
             $asset->setTags(array_map(static fn (AssetTagEntity $tag): array => [
                 'id' => (string) $tag->getId(),
                 'name' => $tag->getI18nName($language),
-            ], $this->assetTagDomainService->findAssetTags($isolation, (string) $asset->getId())));
+            ], $tagsByAsset[(string) $asset->getId()] ?? []));
         }
         $infos = [];
         foreach ($this->userDomainService->getUserByIdsInOrganization(array_values(array_unique($ownerIds)), $isolation->getCurrentOrganizationCode()) as $user) {

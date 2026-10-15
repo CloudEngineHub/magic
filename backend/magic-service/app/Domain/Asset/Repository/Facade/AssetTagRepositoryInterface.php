@@ -20,6 +20,14 @@ interface AssetTagRepositoryInterface
 
     public function findById(AssetDataIsolation $dataIsolation, int|string $id): ?AssetTagEntity;
 
+    /**
+     * Batch lookup by ID, mirroring findById: no status filter, missing IDs are absent.
+     *
+     * @param array<int, int|string> $ids
+     * @return array<string, AssetTagEntity> keyed by tag ID
+     */
+    public function findByIds(AssetDataIsolation $dataIsolation, array $ids): array;
+
     public function findOfficialByName(AssetDataIsolation $dataIsolation, array $nameI18n, string $nodeType, int $parentId): ?AssetTagEntity;
 
     public function save(AssetDataIsolation $dataIsolation, AssetTagEntity $entity): AssetTagEntity;

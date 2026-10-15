@@ -41,6 +41,24 @@ class AssetTagRelationRepository implements AssetTagRelationRepositoryInterface
         return AssetTagRelationModel::query()->whereIn('organization_code', $dataIsolation->getOrganizationCodes())->where('asset_id', $assetId)->pluck('tag_id')->map(static fn ($id): int => (int) $id)->all();
     }
 
+    /** @return array<string, int[]> */
+    public function findTagIdsByAssetIds(AssetDataIsolation $dataIsolation, array $assetIds): array
+    {
+        $assetIds = array_values(array_unique(array_filter(array_map('intval', $assetIds), static fn (int $id): bool => $id > 0)));
+        if ($assetIds === []) {
+            return [];
+        }
+        $relations = AssetTagRelationModel::query()
+            ->whereIn('organization_code', $dataIsolation->getOrganizationCodes())
+            ->whereIn('asset_id', $assetIds)
+            ->get(['asset_id', 'tag_id']);
+        $result = [];
+        foreach ($relations as $relation) {
+            $result[(string) $relation->asset_id][] = (int) $relation->tag_id;
+        }
+        return $result;
+    }
+
     public function deleteByTagId(AssetDataIsolation $dataIsolation, int|string $tagId): void
     {
         AssetTagRelationModel::query()

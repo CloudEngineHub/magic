@@ -45,7 +45,7 @@ class AssetDomainService
     public const string PROVIDER_CONTEXT_KEY = 'asset_provider_context:volcengine_ark_assets';
 
     /** 第三方合规轮询的最长等待时间。 */
-    private const int COMPLIANCE_TIMEOUT_SECONDS = 1800;
+    private const int COMPLIANCE_TIMEOUT_SECONDS = 300;
 
     /** 第三方项目名缺省值。 */
     private const string DEFAULT_PROJECT_NAME = 'default';

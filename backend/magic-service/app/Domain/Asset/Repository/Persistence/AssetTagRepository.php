@@ -56,6 +56,22 @@ class AssetTagRepository implements AssetTagRepositoryInterface
         return $model ? AssetTagFactory::modelToEntity($model) : null;
     }
 
+    /** @return array<string, AssetTagEntity> */
+    public function findByIds(AssetDataIsolation $dataIsolation, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+        if ($ids === []) {
+            return [];
+        }
+        $models = AssetTagModel::query()->whereIn('organization_code', $dataIsolation->getOrganizationCodes())->whereIn('id', $ids)->get();
+        $result = [];
+        foreach ($models as $model) {
+            $entity = AssetTagFactory::modelToEntity($model);
+            $result[(string) $entity->getId()] = $entity;
+        }
+        return $result;
+    }
+
     public function findOfficialByName(AssetDataIsolation $dataIsolation, array $nameI18n, string $nodeType, int $parentId): ?AssetTagEntity
     {
         $model = AssetTagModel::query()

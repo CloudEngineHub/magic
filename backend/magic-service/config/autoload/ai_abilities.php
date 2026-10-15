@@ -691,7 +691,7 @@ return [
                     'endpoint' => env('VOLCENGINE_ARK_ASSETS_ENDPOINT', 'https://open.volcengineapi.com'),
                     'access_key' => env('VOLCENGINE_ACCESS_KEY', ''),
                     'secret_key' => env('VOLCENGINE_SECRET_KEY', ''),
-                    'project_name' => env('VOLCENGINE_ARK_ASSETS_PROJECT_NAME', 'default_2026-09-22'),
+                    'project_name' => env('VOLCENGINE_ARK_ASSETS_PROJECT_NAME', 'default'),
                 ]],
             ],
         ],

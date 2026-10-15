@@ -21,6 +21,14 @@ interface AssetTagRelationRepositoryInterface
     /** @return int[] */
     public function findTagIdsByAssetId(AssetDataIsolation $dataIsolation, int|string $assetId): array;
 
+    /**
+     * Batch lookup of the tag IDs of several assets: one query instead of one per asset.
+     *
+     * @param array<int, int|string> $assetIds
+     * @return array<string, int[]> keyed by asset ID; assets without tags are absent
+     */
+    public function findTagIdsByAssetIds(AssetDataIsolation $dataIsolation, array $assetIds): array;
+
     /** @return int[] */
     public function findAssetIdsByTagId(AssetDataIsolation $dataIsolation, int|string $tagId): array;
 }
