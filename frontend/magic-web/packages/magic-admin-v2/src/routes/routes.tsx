@@ -18,6 +18,7 @@ import {
 	platformResourceAlertsAccess,
 	platformMarketplaceAccess,
 	platformModelAccess,
+	platformModelIdentifierMappingAccess,
 	platformOfficialStaffAccess,
 	platformOrderAccess,
 	platformPackageAccess,
@@ -52,6 +53,9 @@ const PlatformResourceAlertsPage = lazy(
 )
 const PlatformModelListPage = lazy(
 	() => import("@magic-admin-v2/features/platform-model-list/platform-model-list-page"),
+)
+const PlatformModelIdentifierMappingPage = lazy(
+	() => import("@magic-admin-v2/features/platform-model-identifier-mapping/platform-model-identifier-mapping-page"),
 )
 const PlatformOrderListPage = lazy(
 	() => import("@magic-admin-v2/features/platform-orders/platform-order-list-page"),
@@ -184,6 +188,14 @@ function createBaseFeatureRoutes(mode: RuntimeMode): Route[] {
 		element: <PlatformProviderListPage />,
 		titleKey: "nav.item.providerList",
 		validate: platformModelAccess,
+		meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
+	},
+	{
+		name: RouteName.PlatformModelIdentifierMapping,
+		path: RoutePath.PlatformModelIdentifierMapping,
+		element: <PlatformModelIdentifierMappingPage />,
+		titleKey: "nav.item.modelIdentifierMapping",
+		validate: platformModelIdentifierMappingAccess,
 		meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
 	},
 	{

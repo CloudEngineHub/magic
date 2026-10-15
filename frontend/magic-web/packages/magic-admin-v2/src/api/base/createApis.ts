@@ -6,6 +6,7 @@ import { createPlatformCustomProviderLicenseApi } from "@magic-admin-v2/features
 import { createPlatformInfoApi } from "@magic-admin-v2/features/platform-info/api"
 import { createPlatformMaintenanceApi } from "@magic-admin-v2/features/platform-maintenance/api"
 import { createPlatformModelApi } from "@magic-admin-v2/features/platform-model-list/api"
+import { createPlatformModelIdentifierMappingApi } from "@magic-admin-v2/features/platform-model-identifier-mapping/api"
 import { createPlatformOfficialMarketplaceApi } from "@magic-admin-v2/features/platform-official-marketplace/api"
 import { createPlatformOfficialStaffApi } from "@magic-admin-v2/features/platform-official-staff/api"
 import { createPlatformOrderApi } from "@magic-admin-v2/features/platform-orders/api"
@@ -30,6 +31,7 @@ export function createBaseApis(clients: Pick<ApiClients, "magic">) {
 		platformInfo: createPlatformInfoApi(clients.magic),
 		platformMaintenance: createPlatformMaintenanceApi(clients.magic),
 		platformModel: createPlatformModelApi(clients.magic),
+		platformModelIdentifierMapping: createPlatformModelIdentifierMappingApi(clients.magic),
 		officialMarketplace: createPlatformOfficialMarketplaceApi(clients.magic),
 		officialStaff: createPlatformOfficialStaffApi(clients.magic),
 		platformOrders: createPlatformOrderApi(clients.magic),

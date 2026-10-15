@@ -40,6 +40,7 @@ use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\AiAbilityDomainService;
+use App\Domain\Provider\Service\ModelIdentifierMappingDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -1201,6 +1202,16 @@ class LLMAppService extends AbstractLLMAppService
             } else {
                 // High availability is disabled, use the original model ID directly
                 $modeId = $proxyModelRequest->getModel();
+            }
+
+            // 将高可用最终确定的模型标识替换为平台配置的目标模型标识。
+            $modeId = di(ModelIdentifierMappingDomainService::class)->replaceModelIdentifier(
+                ProviderDataIsolation::create()->disabled(),
+                $modeId,
+            );
+            if ($proxyModelRequest instanceof AbstractRequestDTO) {
+                // 同步请求模型标识，确保后续模型加载和调用使用映射后的标识。
+                $proxyModelRequest->setModel($modeId);
             }
 
             try {

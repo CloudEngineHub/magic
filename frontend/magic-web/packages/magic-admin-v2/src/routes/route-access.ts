@@ -53,6 +53,8 @@ export const platformModelAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_EDIT,
 )
 
+export const platformModelIdentifierMappingAccess = platformModelAccess
+
 export const platformSystemCapabilitiesAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_QUERY,
 	PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_EDIT,

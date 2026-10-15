@@ -20,6 +20,7 @@ use App\Interfaces\Permission\Facade\OrganizationAdminApi;
 use App\Interfaces\Permission\Facade\PermissionApi;
 use App\Interfaces\Permission\Facade\RoleApi;
 use App\Interfaces\Provider\Facade\AiAbilityApi;
+use App\Interfaces\Provider\Facade\ModelIdentifierMappingApi;
 use App\Interfaces\Provider\Facade\ServiceProviderApi;
 use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateApi;
 use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateCategoryApi;
@@ -65,6 +66,20 @@ Router::addGroup('/api/v1/admin', static function () {
     Router::addGroup('/provider-models', static function () {
         Router::post('/queries', [ServiceProviderApi::class, 'queriesProviderModels']);
         Router::post('/groups/queries', [ServiceProviderApi::class, 'queriesProviderModelGroups']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
+    // 官方模型标识映射。静态批量和候选路由必须先于 groupId 动态路由注册。
+    Router::addGroup('/model-identifier-mappings', static function () {
+        Router::get('', [ModelIdentifierMappingApi::class, 'query']);
+        Router::post('', [ModelIdentifierMappingApi::class, 'create']);
+        Router::post('/batch-status', [ModelIdentifierMappingApi::class, 'batchStatus']);
+        Router::post('/batch-delete', [ModelIdentifierMappingApi::class, 'batchDelete']);
+        Router::get('/source-options', [ModelIdentifierMappingApi::class, 'sourceOptions']);
+        Router::get('/target-options', [ModelIdentifierMappingApi::class, 'targetOptions']);
+        Router::get('/{groupId}', [ModelIdentifierMappingApi::class, 'get']);
+        Router::put('/{groupId}', [ModelIdentifierMappingApi::class, 'update']);
+        Router::put('/{groupId}/status', [ModelIdentifierMappingApi::class, 'updateStatus']);
+        Router::delete('/{groupId}', [ModelIdentifierMappingApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // AI能力管理
