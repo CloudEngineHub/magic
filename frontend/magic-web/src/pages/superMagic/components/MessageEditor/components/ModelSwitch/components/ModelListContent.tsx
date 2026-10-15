@@ -5,6 +5,7 @@ import { SearchX, Sparkles } from "lucide-react"
 import { MyModelsList } from "./MyModelsList"
 import type { ModelItem, ModelListGroup, MessageEditorSize, ModelListKey } from "../types"
 import type React from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { isModelDisabled } from "../utils"
 import { ModelEmptyState } from "./ModelEmptyState"
@@ -35,6 +36,13 @@ export const ModelListContent = observer(function ModelListContent({
 	onModelsLoaded,
 }: ModelListContentProps) {
 	const { t } = useTranslation("super")
+	const [expandedMobileModelId, setExpandedMobileModelId] = useState<string | null>(
+		selectedModel?.model_id ?? null,
+	)
+	// 跨分组共享一个展开项；切换模型类型或外部选中项时跟随当前选择。
+	useEffect(() => {
+		setExpandedMobileModelId(selectedModel?.model_id ?? null)
+	}, [modelKey, selectedModel?.model_id])
 	const visibleGroups = getVisibleGroups({ modelList, modelKey, searchKeyword })
 	const isSearchResultEmpty = !!searchKeyword && visibleGroups.length === 0
 	const EmptyStateIcon = isSearchResultEmpty ? SearchX : Sparkles
@@ -80,6 +88,12 @@ export const ModelListContent = observer(function ModelListContent({
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
 					isLanguageModel={modelKey === "models"}
+					expandedMobileModelId={expandedMobileModelId}
+					onToggleMobileModel={(modelId) =>
+						setExpandedMobileModelId((current) =>
+							current === modelId ? null : modelId,
+						)
+					}
 				/>
 			))}
 		</ModelDetailsHoverProvider>

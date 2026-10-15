@@ -14,6 +14,7 @@ import ModelName from "./ModelName"
 import ModelTags from "./ModelTags"
 import ProviderName from "./ProviderName"
 import { ModelBillingMultiplier } from "./ModelBillingMultiplier"
+import { MobileModelRow } from "./MobileModelRow"
 
 export interface RenderableModelGroup extends ModelListGroup {
 	displayModels: ModelItem[]
@@ -27,6 +28,8 @@ interface ModelGroupSectionProps {
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
 	isLanguageModel?: boolean
+	expandedMobileModelId: string | null
+	onToggleMobileModel: (modelId: string) => void
 }
 
 export function ModelGroupSection({
@@ -37,6 +40,8 @@ export function ModelGroupSection({
 	selectedItemRef,
 	getModelDescription,
 	isLanguageModel = true,
+	expandedMobileModelId,
+	onToggleMobileModel,
 }: ModelGroupSectionProps) {
 	const { t } = useTranslation("super")
 	const isMobile = size === "mobile"
@@ -59,6 +64,21 @@ export function ModelGroupSection({
 					const isSelected = selectedModel?.model_id === model.model_id
 					const isDisabled = isModelDisabled(model)
 					const description = getModelDescription(model)
+					if (isMobile && isLanguageModel) {
+						return (
+							<MobileModelRow
+								key={model.model_id}
+								model={model}
+								description={description}
+								selected={isSelected}
+								disabled={isDisabled}
+								expanded={expandedMobileModelId === model.model_id}
+								selectedItemRef={selectedItemRef}
+								onToggle={() => onToggleMobileModel(model.model_id)}
+								onSelect={onModelClick}
+							/>
+						)
+					}
 					const ariaLabel = description
 						? `${model.model_name || model.model_id}，${description}`
 						: model.model_name || model.model_id

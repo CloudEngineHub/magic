@@ -28,6 +28,7 @@ import type {
 	ModelTabType,
 } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import type { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
 import type { CrewItem, ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import type { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -470,32 +471,37 @@ function MobileComposerModeSelectorComponent({
 							/>
 						</div>
 
-						<div
-							ref={modelScrollContainerRef}
-							className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-lg px-6 py-3"
-							data-testid="mobile-composer-mode-selector-model-list"
+						<ScrollArea
+							viewportRef={modelScrollContainerRef}
+							className="min-h-0 flex-1"
+							viewportClassName="h-full [&>div]:!block"
+							viewportProps={{
+								"data-testid": "mobile-composer-mode-selector-model-list",
+							}}
 						>
-							{isCurrentTabEmpty ? (
-								<DataEmptyState
-									variant="model"
-									compact
-									className="min-h-0 py-8"
-									testId="mobile-composer-mode-selector-model-empty"
-								/>
-							) : (
-								<ModelListContent
-									modelList={currentModelList}
-									selectedModel={currentSelectedModel || null}
-									searchKeyword={modelSearchKeyword}
-									size="mobile"
-									onModelClick={handleModelSelect}
-									selectedItemRef={selectedModelItemRef}
-									getModelDescription={getModelDescription}
-									modelKey={currentModelKey}
-									onModelsLoaded={validateSelectedModels}
-								/>
-							)}
-						</div>
+							<div className="flex min-w-0 flex-col gap-5 px-4 py-3">
+								{isCurrentTabEmpty ? (
+									<DataEmptyState
+										variant="model"
+										compact
+										className="min-h-0 py-8"
+										testId="mobile-composer-mode-selector-model-empty"
+									/>
+								) : (
+									<ModelListContent
+										modelList={currentModelList}
+										selectedModel={currentSelectedModel || null}
+										searchKeyword={modelSearchKeyword}
+										size="mobile"
+										onModelClick={handleModelSelect}
+										selectedItemRef={selectedModelItemRef}
+										getModelDescription={getModelDescription}
+										modelKey={currentModelKey}
+										onModelsLoaded={validateSelectedModels}
+									/>
+								)}
+							</div>
+						</ScrollArea>
 
 						<div className="shrink-0 px-2.5 pb-[max(var(--safe-area-inset-bottom),10px)] pt-2">
 							<div className="flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2.5 shadow-xs">
