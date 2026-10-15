@@ -380,6 +380,40 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
     }
 
     /**
+     * 批量获取模型和服务商配置均已启用的模型。
+     */
+    public function getAvailableByModelIds(ProviderDataIsolation $dataIsolation, array $modelIds): array
+    {
+        $modelIds = array_values(array_unique(array_filter($modelIds)));
+        if ($modelIds === []) {
+            return [];
+        }
+
+        $enabledConfigIds = $this->createBuilder($dataIsolation, ProviderConfigModel::query())
+            ->where('status', Status::Enabled->value)
+            ->whereNull('deleted_at')
+            ->pluck('id')
+            ->all();
+        if ($enabledConfigIds === []) {
+            return [];
+        }
+
+        $builder = $this->createBuilder($dataIsolation, ProviderModelModel::query())
+            ->whereIn('model_id', $modelIds)
+            ->where('status', Status::Enabled->value)
+            ->whereIn('service_provider_config_id', $enabledConfigIds)
+            ->orderBy('sort', 'desc')
+            ->orderBy('id');
+        $entities = ProviderModelAssembler::toEntities(Db::select($builder->toSql(), $builder->getBindings()));
+
+        $modelsByModelId = [];
+        foreach ($entities as $entity) {
+            $modelsByModelId[$entity->getModelId()][] = $entity;
+        }
+        return $modelsByModelId;
+    }
+
+    /**
      * 根据ID查询模型（不限制组织）.
      */
     public function getModelByIdWithoutOrgFilter(string $id): ?ProviderModelEntity

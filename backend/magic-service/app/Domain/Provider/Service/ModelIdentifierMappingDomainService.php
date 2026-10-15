@@ -206,7 +206,7 @@ class ModelIdentifierMappingDomainService
             ]));
         }
 
-        $models = $this->providerModelRepository->getByModelIds($dataIsolation, [$targetModelId]);
+        $models = $this->providerModelRepository->getAvailableByModelIds($dataIsolation, [$targetModelId]);
         $targetModel = $models[$targetModelId][0] ?? null;
         if ($targetModel === null || ! $targetModel->getStatus()->isEnabled()) {
             throw new BusinessException(__('service_provider.model_identifier_mapping.target_model_unavailable'));
@@ -250,7 +250,7 @@ class ModelIdentifierMappingDomainService
             throw new BusinessException(__('service_provider.model_identifier_mapping.valid_groups_required'));
         }
 
-        $models = $this->providerModelRepository->getByModelIds($dataIsolation, $targetModelIds);
+        $models = $this->providerModelRepository->getAvailableByModelIds($dataIsolation, $targetModelIds);
         foreach ($targetModelIds as $targetModelId) {
             $targetModel = $models[$targetModelId][0] ?? null;
             if ($targetModel === null || ! $targetModel->getStatus()->isEnabled()) {

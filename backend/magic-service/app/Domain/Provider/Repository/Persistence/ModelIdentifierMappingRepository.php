@@ -192,6 +192,8 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
             Status::Enabled->value,
             'DYNAMIC',
             'name',
+            false,
+            true,
         );
         $options = [];
         foreach ($query->get()->all() as $row) {
@@ -211,13 +213,25 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
         ?string $excludedType,
         string $orderBy,
         bool $distinct = false,
+        bool $aggregateByModelId = false,
     ): QueryBuilder {
         $query = Db::table('service_provider_models')
             ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
-            ->whereNull('deleted_at')
-            ->select('model_id', 'name', 'icon', 'status', 'type')
-            ->orderBy($orderBy)
-            ->limit($limit);
+            ->whereNull('deleted_at');
+        if ($aggregateByModelId) {
+            $query->selectRaw('model_id, MAX(name) as name, MAX(icon) as icon, MAX(status) as status, MAX(type) as type')
+                ->groupBy('model_id')
+                ->whereIn('service_provider_config_id', static function (QueryBuilder $builder) use ($dataIsolation): void {
+                    $builder->from('service_provider_configs')
+                        ->select('id')
+                        ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
+                        ->where('status', Status::Enabled->value)
+                        ->whereNull('deleted_at');
+                });
+        } else {
+            $query->select('model_id', 'name', 'icon', 'status', 'type');
+        }
+        $query->orderBy($orderBy)->limit($limit);
         if ($status !== null) {
             $query->where('status', $status);
         }

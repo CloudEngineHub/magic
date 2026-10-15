@@ -84,6 +84,13 @@ interface ProviderModelRepositoryInterface
     public function getByModelIds(ProviderDataIsolation $dataIsolation, array $modelIds): array;
 
     /**
+     * 批量获取模型和服务商配置均已启用的模型。
+     *
+     * @return array<string, ProviderModelEntity[]> 按模型标识分组的有效模型
+     */
+    public function getAvailableByModelIds(ProviderDataIsolation $dataIsolation, array $modelIds): array;
+
+    /**
      * @return array{total: int, list: ProviderModelEntity[]}
      */
     public function queries(ProviderDataIsolation $dataIsolation, ProviderModelQuery $query, Page $page): array;
