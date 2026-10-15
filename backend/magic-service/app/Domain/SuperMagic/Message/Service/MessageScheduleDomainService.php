@@ -16,6 +16,7 @@ use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 
 use function Hyperf\Translation\trans;
 
@@ -61,6 +62,35 @@ class MessageScheduleDomainService
     public function markDeletedForCleanup(int $id, string $updatedUid): void
     {
         $this->messageScheduleRepository->markDeletedForCleanup($id, $updatedUid);
+    }
+
+    public function getMessageScheduleByIdForUpdate(int $id): ?MessageScheduleEntity
+    {
+        return $this->messageScheduleRepository->findByIdForUpdate($id);
+    }
+
+    /** Update only execution-owned fields; never save the execution's stale configuration. */
+    public function updateScheduleExecutionState(MessageScheduleEntity $schedule, ?int $completed = null, ?int $enabled = null): void
+    {
+        $data = [
+            'updated_at' => date('Y-m-d H:i:s'),
+            'updated_uid' => $schedule->getUserId(),
+        ];
+        if ($completed !== null) {
+            $data['completed'] = $completed;
+        }
+        if ($enabled !== null) {
+            $data['enabled'] = $enabled;
+        }
+        $updated = $this->messageScheduleRepository->updateMessageScheduleByCondition([
+            'id' => $schedule->getId(),
+            'user_id' => $schedule->getUserId(),
+            'organization_code' => $schedule->getOrganizationCode(),
+        ], $data);
+        if (! $updated && (($completed !== null && $completed !== $schedule->getCompleted())
+            || ($enabled !== null && $enabled !== $schedule->getEnabled()))) {
+            throw new RuntimeException('Unable to update schedule execution state');
+        }
     }
 
     /**
@@ -396,8 +426,8 @@ class MessageScheduleDomainService
         $logEntity = new MessageScheduleLogEntity();
         $logEntity->setMessageScheduleId($messageSchedule->getId())
             ->setWorkspaceId($messageSchedule->getWorkspaceId())
-            ->setProjectId($messageSchedule->getProjectId())
-            ->setTopicId($messageSchedule->getTopicId())
+            ->setProjectId(0)
+            ->setTopicId(0)
             ->setTaskName($messageSchedule->getTaskName())
             ->setStatus(MessageScheduleLogEntity::STATUS_RUNNING)
             ->setExecutedAt($currentTime);

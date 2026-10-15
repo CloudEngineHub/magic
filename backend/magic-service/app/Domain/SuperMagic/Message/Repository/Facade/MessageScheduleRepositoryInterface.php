@@ -28,6 +28,8 @@ interface MessageScheduleRepositoryInterface
 
     public function markDeletedForCleanup(int $id, string $updatedUid): void;
 
+    public function findByIdForUpdate(int $id): ?MessageScheduleEntity;
+
     /**
      * Save message schedule.
      */

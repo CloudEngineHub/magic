@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
@@ -111,7 +111,15 @@ class CreateProjectDirectory(ProductTool[CreateDirectoryParams]):
 
 
 class RenameFileParams(GetProjectFileParams):
-    name: str = Field(..., min_length=1, max_length=255, description="Replacement file name.")
+    name: str = Field(..., min_length=1, max_length=255, description="Replacement file name, at most 255 UTF-8 bytes.")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name_bytes(cls, value: str) -> str:
+        # 与后端 WorkFileUtil 的 PHP trim + strlen 保持一致；中文和 emoji 不能按字符数计量。
+        if len(value.strip(" \t\n\r\0\v").encode("utf-8")) > 255:
+            raise ValueError("File name cannot exceed 255 UTF-8 bytes")
+        return value
 
 
 @tool(name="rename_project_file", code_mode_only=True)

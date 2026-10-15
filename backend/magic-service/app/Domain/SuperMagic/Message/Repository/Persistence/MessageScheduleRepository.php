@@ -86,6 +86,16 @@ class MessageScheduleRepository extends AbstractRepository implements MessageSch
         ]);
     }
 
+    public function findByIdForUpdate(int $id): ?MessageScheduleEntity
+    {
+        if (Db::transactionLevel() === 0) {
+            throw new RuntimeException('Schedule locking read requires a transaction');
+        }
+        /** @var null|MessageScheduleModel $model */
+        $model = $this->messageScheduleModel::query()->where('id', $id)->lockForUpdate()->first();
+        return $model ? $this->modelToEntity($model) : null;
+    }
+
     /**
      * Save message schedule.
      */
