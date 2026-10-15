@@ -76,6 +76,14 @@ const useStyles = createStyles(({ css, isDarkMode, token }) => {
 	}
 })
 
+/**
+ * Check whether the current browser environment is offline.
+ * When offline, static asset or chunk load failures should not be treated as a system update.
+ */
+function isNetworkOffline(): boolean {
+	return typeof window !== "undefined" && !window.navigator.onLine
+}
+
 function GlobalErrorBoundary({ children }: PropsWithChildren) {
 	const { t } = useMainTranslation("interface")
 
@@ -101,10 +109,23 @@ function GlobalErrorBoundary({ children }: PropsWithChildren) {
 					message: "Global Error Boundary caught an error:",
 					context: { componentStack: errorInfo.componentStack },
 				})
+
+				// If an error occurs while offline (e.g., dynamic chunk loading failure),
+				// immediately reload to let the browser navigate and present its native offline page.
+				if (isNetworkOffline()) {
+					window.location.reload()
+					return
+				}
+
 				setTargetDate(Date.now() + 3000)
 				getNativePort().environment.webHasNewVersionToUpdate()
 			}}
 			fallbackRender={() => {
+				// Suppress the update fallback screen while offline to prevent UI flickering before reload
+				if (isNetworkOffline()) {
+					return null
+				}
+
 				return (
 					<div className={styles.container}>
 						<div className={styles.wrapper}>
