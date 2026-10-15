@@ -425,6 +425,8 @@ export const AddModelModal = memo(
 								AiModel.ModelPower.SupportVision,
 							),
 							support_deep_think: modelPowerSet.has(AiModel.ModelPower.SupportThink),
+							reasoning_effort_levels: config.reasoning_effort_levels,
+							reasoning_effort_default: config.reasoning_effort_default,
 							chat_api: config.chat_api || AiModel.ChatApi.ChatCompletions,
 							creativity:
 								config.temperature_type === AiModel.ModelTemperatureType.Recommended
