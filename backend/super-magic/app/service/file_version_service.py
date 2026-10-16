@@ -85,7 +85,10 @@ class FileVersionService:
 
                 except Exception as e:
                     failed_files.append(filepath)
-                    logger.error(f"创建文件版本时发生异常: {filepath}, 错误: {e}")
+                    logger.error(
+                        f"创建文件版本时发生异常: {filepath}, "
+                        f"error_type={type(e).__name__}, 错误: {e!r}"
+                    )
 
             total_count = len(file_paths)
             result_data = {

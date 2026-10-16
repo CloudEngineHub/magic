@@ -15,8 +15,6 @@ import TopicFilesPanel, { TopicFilesPanelRef } from "./TopicFilesPanel"
 import type { AttachmentItem } from "./hooks/types"
 import type { PresetFileType } from "./constant"
 import type { TopicFileRowDecorationResolver } from "./topic-file-row-decoration.types"
-import { useIsMobile } from "@/hooks/useIsMobile"
-import { useDownloadVisibility } from "@/pages/superMagic/hooks/useDownloadVisibility"
 import magicToast from "@/components/base/MagicToaster/utils"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import {
@@ -29,6 +27,7 @@ import { SaveSlidesTemplateDialog, type SaveSlidesTemplateTarget } from "./compo
 import { buildConvertToSlidesTemplatePayload } from "@/pages/superMagic/utils/slidesTemplateActions"
 import type { TopicFilesSpaceConfig } from "./file-space"
 import type { CrossProjectOperationSuccessResult } from "./hooks/useCrossProjectFileOperation"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export { PRESET_FILE_TYPES, type PresetFileType } from "./constant"
 export type {
@@ -73,6 +72,8 @@ export interface TopicFilesButtonProps {
 	allowDownload?: boolean
 	// 是否允许只读场景复制文件到当前用户的项目
 	allowCopyTo?: boolean
+	/** Controls whether this file surface exposes the manual refresh action. */
+	showRefresh?: boolean
 	resolveTopicFileRowDecoration?: TopicFileRowDecorationResolver
 	mobileViewVariant?: "default" | "project-detail" | "chat-sheet"
 	refreshAttachments?: () => Promise<void> | void
@@ -87,6 +88,7 @@ export interface TopicFilesButtonProps {
 	isItemSelectable?: (item: AttachmentItem) => boolean
 	/** 特殊文件空间允许操作的固定根目录。 */
 	operationRoot?: AttachmentItem
+	projectFilesStore?: ProjectFilesStore
 }
 
 export interface TopicFilesButtonRef {
@@ -125,6 +127,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			filterBatchDownloadLayerMenuItems,
 			allowDownload,
 			allowCopyTo = false,
+			showRefresh,
 			resolveTopicFileRowDecoration,
 			fileHelpContext,
 			mobileViewVariant = "default",
@@ -136,13 +139,13 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 			spaceConfig,
 			isItemSelectable,
 			operationRoot,
+			projectFilesStore,
 		},
 		ref,
 	) {
 		const { styles, cx } = useStyles()
 		const { t } = useTranslation("super")
-		const isMobile = useIsMobile()
-		const effectiveAllowDownload = useDownloadVisibility(allowDownload !== false, isMobile)
+		const effectiveAllowDownload = allowDownload !== false
 		const panelRef = useRef<TopicFilesPanelRef>(null)
 		const [saveDialogOpen, setSaveDialogOpen] = useState(false)
 		const [saveDialogTemplates, setSaveDialogTemplates] = useState<SlidesTemplateItem[]>([])
@@ -284,6 +287,7 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 					filterBatchDownloadLayerMenuItems={filterBatchDownloadLayerMenuItems}
 					allowDownload={effectiveAllowDownload}
 					allowCopyTo={allowCopyTo}
+					showRefresh={showRefresh}
 					resolveTopicFileRowDecoration={resolveTopicFileRowDecoration}
 					fileHelpContext={fileHelpContext}
 					mobileViewVariant={mobileViewVariant}
@@ -299,13 +303,34 @@ const TopicFilesButton = forwardRef<TopicFilesButtonRef, TopicFilesButtonProps>(
 						!shareCode
 							? () =>
 									onFileClick({
-										file_manager: { spaceType: "project", projectId },
+										file_manager: {
+											spaceType: "project",
+											projectId,
+											area: "files",
+										},
+									})
+							: undefined
+					}
+					onOpenRecycleBin={
+						showFileManager &&
+						projectId &&
+						!spaceConfig?.scope &&
+						onFileClick &&
+						!shareCode
+							? () =>
+									onFileClick({
+										file_manager: {
+											spaceType: "project",
+											projectId,
+											area: "recycle",
+										},
 									})
 							: undefined
 					}
 					spaceConfig={spaceConfig}
 					isItemSelectable={isItemSelectable}
 					operationRoot={operationRoot}
+					projectFilesStore={projectFilesStore}
 				/>
 				<SaveSlidesTemplateDialog
 					open={saveDialogOpen}

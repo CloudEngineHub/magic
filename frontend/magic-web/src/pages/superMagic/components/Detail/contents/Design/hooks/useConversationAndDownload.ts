@@ -1,3 +1,7 @@
+import {
+	packAndDownloadFileEntries,
+	type PackDownloadFileEntry,
+} from "@/pages/superMagic/services/fileBundleDownload"
 import { useCallback } from "react"
 import {
 	ElementTypeEnum,
@@ -6,19 +10,14 @@ import {
 } from "@/components/CanvasDesign/runtime/document/types"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 import type { DesignAttachmentIndex } from "../utils/designAttachmentIndex"
-import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	DownloadImageMode,
 	type Workspace,
 	type ProjectListItem,
 } from "@/pages/superMagic/pages/Workspace/types"
 import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
-import {
-	packAndDownloadFileEntries,
-	convertFileItemToAttachmentItem,
-	getDesignDirectoryInfo,
-	type PackDownloadFileEntry,
-} from "../utils/utils"
+import { convertFileItemToAttachmentItem, getDesignDirectoryInfo } from "../utils/utils"
 import { resolveDesignCanvasResourceFileItem } from "../utils/designResourceReferenceResolver"
 import { useTranslation } from "react-i18next"
 import { addFileToCurrentChat, addMultipleFilesToNewChat } from "@/pages/superMagic/utils/topics"
@@ -282,6 +281,9 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 	} = options
 	const { t } = useTranslation("super")
 	const downloadProgress = useDownloadProgress()
+	// Canvas download requests must carry the ambient share identity bound at this
+	// React boundary; host trees get an unbound client (session default).
+	const fileApi = useFileApi()
 
 	/**
 	 * 添加图片至对话
@@ -451,7 +453,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 			if (resolvedEntries.length === 1) {
 				const [entry] = resolvedEntries
 				const downloadUrlItem = await retryOnce(async () => {
-					const singleDownloadUrls = await getTemporaryDownloadUrl({
+					const singleDownloadUrls = await fileApi.getTemporaryDownloadUrl({
 						file_ids: [entry.fileItem.file_id],
 						download_mode: getSingleDownloadMode(noWatermark, downloadOptions),
 						is_download: true,
@@ -529,7 +531,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 						packEntries,
 						getClientZipDownloadMode(noWatermark, downloadOptions),
 						archiveName,
-						{ signal, onProgress: reportProgress, retryCount: 1 },
+						{ signal, onProgress: reportProgress, retryCount: 1, fileApi },
 					),
 				onSuccess: ({ successCount, results }) => {
 					const failedCount = results.length - successCount
@@ -560,6 +562,7 @@ export function useConversationAndDownload(options: UseConversationAndDownloadOp
 			currentFile,
 			designProjectBasePath,
 			downloadProgress,
+			fileApi,
 			flatAttachments,
 			getContentViewElement,
 			projectId,

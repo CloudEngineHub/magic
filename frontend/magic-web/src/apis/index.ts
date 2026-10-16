@@ -17,6 +17,7 @@ import { generateGlobalApi } from "./modules/global"
 import { generateScheduledTaskApi } from "./modules/scheduledTask"
 import { generateSuperMagicApi } from "./modules/superMagic"
 import { generateSkillsApi } from "./modules/skills"
+import { generateHtmlDesignStylesApi } from "./modules/htmlDesignStyles"
 import { generateCrewApi } from "./modules/crew"
 import { generateOrgAiModelProviderApi } from "./modules/org-ai-model-provider"
 import { generateRecycleBinApi } from "./modules/recycle-bin"
@@ -27,6 +28,7 @@ import { generateMagicFSApi } from "./modules/magicFS"
 import { generateMagicBaseApi } from "./modules/magicBase"
 import { generateSlidesTemplateUploadApi } from "./modules/slidesTemplateUpload"
 import { generateNotificationApi } from "./modules/notifications"
+import { buildAssetVisibility, generateAssetsApi } from "./modules/assets"
 
 /** 重置服务 */
 export const UserApi = generateUserApi(magicClient)
@@ -54,6 +56,8 @@ export const SuperMagicApi = generateSuperMagicApi(magicClient)
 export const SlidesTemplateUploadApi = generateSlidesTemplateUploadApi(magicClient)
 /** Skills */
 export const SkillsApi = generateSkillsApi(magicClient)
+/** HTML design styles */
+export const HtmlDesignStylesApi = generateHtmlDesignStylesApi(magicClient)
 /** Crew */
 export const CrewApi = generateCrewApi(magicClient)
 
@@ -71,6 +75,7 @@ export const FunctionPermissionApi = generateFunctionPermissionApi(magicClient)
 export const MagicFSApi = generateMagicFSApi(magicClient)
 /** MagicBase */
 export const MagicBaseApi = generateMagicBaseApi(magicClient)
+export const AssetsApi = generateAssetsApi(magicClient)
 
 export { MAGIC_CLAW_STATUS } from "./modules/magicClaw"
 export {
@@ -103,6 +108,51 @@ export type {
 } from "./modules/magicFS"
 export type { FileScope } from "./modules/fileScope"
 export type {
+	AssetAgreementStatusResponse,
+	AssetBusinessType,
+	AssetComplianceResponse,
+	AssetComplianceStatus,
+	AssetComplianceSourceParams,
+	AssetFileSourceParams,
+	AssetItem,
+	AssetKind,
+	AssetMediaType,
+	AssetOwner,
+	AssetOwnerItem,
+	AssetQueryParams,
+	AssetQueryResponse,
+	AssetScope,
+	AssetSource,
+	AssetVisibilityType,
+	AssetTag,
+	AssetTagGroupItem,
+	AssetTagItem,
+	AssetTagListResponse,
+	AssetTagTreeNode,
+	AssetTagMatch,
+	AssetTagMutationResponse,
+	AssetTagNodeType,
+	AssetVisibilityConfig,
+	AssetVisibilityConfigResponse,
+	AssetVisibilityMember,
+	BatchDeleteAssetsParams,
+	BatchDeleteAssetsResponse,
+	BatchGetAssetsParams,
+	CreateAssetParams,
+	CreateAssetTagParams,
+	DeleteAssetResponse,
+	PrivateUploadTokenCredentials,
+	PrivateUploadTokenData,
+	PrivateUploadTokenParams,
+	SaveAssetToLibraryParams,
+	SaveAssetVisibility,
+	StartAssetComplianceParams,
+	TransferAssetOwnerParams,
+	TransferAssetOwnerResponse,
+	UpdateAssetTagParams,
+	UpdateAssetParams,
+} from "./modules/assets"
+export type {
 	MagicBaseColumn,
 	MagicBaseQueryRowsRequest,
 	MagicBaseQueryRowsResponse,
@@ -110,3 +160,4 @@ export type {
 	MagicBaseSortRule,
 	MagicBaseTable,
 } from "./modules/magicBase"
+export { buildAssetVisibility }

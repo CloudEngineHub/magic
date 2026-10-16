@@ -53,6 +53,8 @@ export interface ActionContext {
 	showRefreshButton: boolean
 	isNewestFileVersion: boolean
 	allowEdit: boolean
+	/** Allows the share action in read-only previews without granting edit permission. */
+	shareInReadOnly?: boolean
 	currentFile?: CurrentFileInfo
 	attachments?: AttachmentItem[]
 	fileContent?: string
@@ -138,6 +140,8 @@ export interface CommonHeaderV2Props {
 	/** Whether this cached preview should expose test ids. */
 	testIdsEnabled?: boolean
 	renderMode?: "full" | "actions"
+	/** Keeps the standard separator unless an embedded preview already provides its own border. */
+	showBottomBorder?: boolean
 	type?: string
 	onFullscreen?: () => void
 	onDownload?: (mode?: DownloadImageMode) => void

@@ -35,7 +35,7 @@ export class SidebarStore {
 	// Workspace expanded state (for lazy loading)
 	expandedWorkspaces: Set<string> = new Set()
 
-	// 分类始终二选一，重复点击保留当前选择；偏好按账号和组织保存，窄栏浮层不改写偏好。
+	// 分类始终保留一个选中项，重复点击保留当前选择；偏好按账号和组织保存，窄栏浮层不改写偏好。
 	expandedNavigationSection: "recent" | "workspaces" = "workspaces"
 
 	get recentProjectsExpanded() {

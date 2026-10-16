@@ -35,6 +35,7 @@ import { ModelTabSwitcher } from "./components/ModelTabSwitcher"
 import { resolveShowSelectedModelName } from "./utils"
 import { useOptionalAddModelStore } from "./components/AddModel/context"
 import { MODEL_TYPE_IMAGE, MODEL_TYPE_VIDEO } from "@/apis/modules/org-ai-model-provider"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 export const ModelSwitch = observer(function ModelSwitch({
 	size = "default",
@@ -68,7 +69,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 	const [addMenuOpen, setAddMenuOpen] = useState(false)
 	const dropdownJustClosedRef = useRef(false)
 	const openAddMenuTimerRef = useRef<number | null>(null)
-	// 将 t 保持在当前组件作用域内，便于 i18n Ally 正确识别默认命名空间 super。
+	// Keep t scoped to this component so i18n Ally recognizes the default namespace.
 	const { t } = useTranslation("super")
 	const addModelStore = useOptionalAddModelStore()
 
@@ -380,12 +381,13 @@ export const ModelSwitch = observer(function ModelSwitch({
 					<div className="flex h-[min(640px,calc(100vh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-44px))] min-h-0 w-full flex-col overflow-hidden bg-card">
 						{mobilePopoverHeader}
 						<div className="shrink-0 pt-2.5">{tabSwitcher}</div>
-						<div
-							ref={mobileScrollContainerRef}
-							className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-lg p-3"
+						<ScrollArea
+							viewportRef={mobileScrollContainerRef}
+							className="min-h-0 flex-1 rounded-lg"
+							viewportClassName="p-3 [&>div]:!flex [&>div]:flex-col [&>div]:gap-5"
 						>
 							{mainContent}
-						</div>
+						</ScrollArea>
 						<div className="shrink-0 px-2.5 pb-safe-bottom pt-2">
 							<div className="flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2.5 shadow-xs">
 								<Search className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -521,12 +523,13 @@ export const ModelSwitch = observer(function ModelSwitch({
 						<div className="flex flex-col">
 							{popoverHeader}
 							{tabSwitcher}
-							<div
-								ref={desktopScrollContainerRef}
-								className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
+							<ScrollArea
+								viewportRef={desktopScrollContainerRef}
+								className="min-h-0"
+								viewportClassName="max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] px-4 pr-2 [&>div]:!flex [&>div]:flex-col [&>div]:gap-2.5"
 							>
 								{mainContent}
-							</div>
+							</ScrollArea>
 						</div>
 					</DropdownMenuContent>
 				</DropdownMenu>

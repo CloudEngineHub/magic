@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { type ChangeEventHandler, memo, useLayoutEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
 	CollaborationProjectCreator,
@@ -7,7 +7,6 @@ import {
 	Workspace,
 	CollaborationJoinMethod,
 } from "@/pages/superMagic/pages/Workspace/types"
-import { SuperMagicApi } from "@/apis"
 import SuperMagicService from "@/pages/superMagic/services"
 import { useDebounce, useMemoizedFn } from "ahooks"
 import { CreatorFilter, SortSelector, ViewToggle } from "./components"
@@ -22,10 +21,15 @@ import routeManageService from "@/pages/superMagic/services/routeManageService"
 import { userStore } from "@/models/user"
 import magicToast from "@/components/base/MagicToaster/utils"
 
+import { ProjectsPanelToolbar } from "../ProjectsPanelToolbar"
 import { ProjectsPanelList } from "../ProjectsPanel"
+import { Button } from "@/components/shadcn-ui/button"
+import { useCollaborationProjects } from "./useCollaborationProjects"
 
 interface CollaborationProjectsContentProps {
 	open: boolean
+	location: string
+	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
 	searchValue: string
 	onClose?: () => void
 	onCollaborationProjectClick: (project: CollaborationProjectListItem) => void
@@ -36,8 +40,10 @@ interface CollaborationProjectsContentProps {
 }
 
 interface ProjectListProps {
-	projects: CollaborationProjectListItem[]
-	loading: boolean
+	location: string
+	searchValue: string
+	onSearchValueChange: ChangeEventHandler<HTMLInputElement>
+	query: ReturnType<typeof useCollaborationProjects>
 	tabType: CollaborationProjectType
 	currentTab: CollaborationProjectType
 	joinType: CollaborationJoinMethod
@@ -53,12 +59,13 @@ interface ProjectListProps {
 	onAddWorkspaceShortcut: (project: CollaborationProjectListItem) => void
 	onCancelWorkspaceShortcut: (projectId: string, workspaceId?: string) => void
 	onShortcutNavigateToWorkspace: (project: CollaborationProjectListItem) => void
-	refetchProjects: () => void
 }
 
 function SharedProjectList({
-	projects,
-	loading,
+	location,
+	searchValue,
+	onSearchValueChange,
+	query,
 	tabType,
 	currentTab,
 	joinType,
@@ -71,22 +78,53 @@ function SharedProjectList({
 	onProjectClick,
 	...actions
 }: ProjectListProps) {
+	const { t } = useTranslation("super")
 	return (
 		<ProjectsPanelList
-			projects={projects}
-			loading={loading}
+			projects={query.projects}
+			loading={query.loading}
+			total={query.total}
+			error={
+				query.failed && (
+					<div role="alert" className="flex items-center justify-center gap-2 py-4">
+						<span>{t("sidebarPanels.projectsLoadFailed")}</span>
+						<Button variant="outline" onClick={() => void query.retry()}>
+							{t("sidebarPanels.retry")}
+						</Button>
+					</div>
+				)
+			}
+			footer={
+				!query.failed &&
+				query.hasMore && (
+					<div className="flex justify-center py-4">
+						<Button
+							variant="outline"
+							disabled={query.loading}
+							onClick={() => void query.loadMore()}
+						>
+							{t("sidebarPanels.loadMore")}
+						</Button>
+					</div>
+				)
+			}
 			tabType={tabType}
 			viewMode={viewMode}
 			toolbar={
-				<>
+				<ProjectsPanelToolbar
+					location={location}
+					total={query.total}
+					searchValue={searchValue}
+					onSearchValueChange={onSearchValueChange}
+					viewToggle={<ViewToggle value={viewMode} onChange={onViewModeChange} />}
+				>
 					{tabType === CollaborationProjectType.Received &&
 						currentTab === CollaborationProjectType.Received &&
 						joinType === CollaborationJoinMethod.Internal && (
 							<CreatorFilter value={creatorFilter} onChange={onCreatorFilterChange} />
 						)}
-					<SortSelector value={sortType} onChange={onSortTypeChange} />
-					<ViewToggle value={viewMode} onChange={onViewModeChange} />
-				</>
+					<SortSelector value={sortType} onChange={onSortTypeChange} compact />
+				</ProjectsPanelToolbar>
 			}
 			itemProps={{
 				...actions,
@@ -104,25 +142,6 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 	const { isPersonalOrganization } = userStore.user
 
 	const debouncedSearchValue = useDebounce(props.searchValue, { wait: 500 })
-
-	// Per-tab cached data to avoid stale content when switching tabs
-	const [receivedProjects, setReceivedProjects] = useState<CollaborationProjectListItem[]>([])
-	const [sharedProjects, setSharedProjects] = useState<CollaborationProjectListItem[]>([])
-	const [loadingReceived, setLoadingReceived] = useState(false)
-	const [loadingShared, setLoadingShared] = useState(false)
-	const requestIds = useRef({
-		[CollaborationProjectType.Received]: 0,
-		[CollaborationProjectType.Shared]: 0,
-	})
-	const controllers = useRef<Partial<Record<CollaborationProjectType, AbortController>>>({})
-	const cancelRequests = useMemoizedFn(() => {
-		for (const tab of [CollaborationProjectType.Received, CollaborationProjectType.Shared]) {
-			requestIds.current[tab] += 1
-			controllers.current[tab]?.abort()
-			delete controllers.current[tab]
-		}
-	})
-	const isOpenRef = useRef(false)
 
 	const [currentTab, setCurrentTab] = useState<CollaborationProjectType>(
 		CollaborationProjectType.Received,
@@ -149,103 +168,38 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 	const handleSortTypeChange = useMemoizedFn((value: SortType) => setSortType(value))
 	const handleViewModeChange = useMemoizedFn((value: ViewMode) => setViewMode(value))
 
-	const fetchForTab = useMemoizedFn(
-		(
-			tab: CollaborationProjectType,
-			{ resetWhenError = false }: { resetWhenError?: boolean } = {},
-		) => {
-			if (!isOpenRef.current) return
-			controllers.current[tab]?.abort()
-			const controller = new AbortController()
-			controllers.current[tab] = controller
-			const requestId = ++requestIds.current[tab]
-			const isCurrentRequest = () =>
-				!controller.signal.aborted &&
-				isOpenRef.current &&
-				requestIds.current[tab] === requestId
-			const setLoading =
-				tab === CollaborationProjectType.Received ? setLoadingReceived : setLoadingShared
-			const setProjects =
-				tab === CollaborationProjectType.Received ? setReceivedProjects : setSharedProjects
-
-			setLoading(true)
-			SuperMagicApi.getCollaborationProjects(
-				{
-					page: 1,
-					page_size: 99,
-					name: debouncedSearchValue,
-					type: tab,
-					sort_field: sortType,
-					sort_direction: "desc",
-					creator_user_ids:
-						tab === CollaborationProjectType.Received &&
-						joinType === CollaborationJoinMethod.Internal &&
-						creatorFilter.length > 0
-							? creatorFilter.map((item) => item.user_id)
-							: undefined,
-					join_method: joinType,
-				},
-				{ signal: controller.signal },
-			)
-				.then((res) => {
-					if (isCurrentRequest()) setProjects(res?.list || [])
-				})
-				.catch(() => {
-					if (isCurrentRequest() && resetWhenError) setProjects([])
-				})
-				.finally(() => {
-					if (isCurrentRequest()) setLoading(false)
-				})
-		},
-	)
-
-	// Refetch current tab — used by action callbacks (pin, shortcut, etc.)
-	const refetchProjects = useMemoizedFn(
-		({ resetWhenError = false }: { resetWhenError?: boolean } = {}) => {
-			fetchForTab(currentTab, { resetWhenError })
-		},
-	)
+	// Per-tab cached data to avoid stale content when switching tabs
+	// Refresh all tabs when filter/sort params change
+	const queryOptions = {
+		open: props.open,
+		name: debouncedSearchValue,
+		sortType,
+		joinType,
+		creatorFilter,
+	}
+	// 打开和参数变化共用一次预取；动作后的刷新仍由原回调显式触发。
+	const received = useCollaborationProjects({
+		...queryOptions,
+		tab: CollaborationProjectType.Received,
+	})
+	const shared = useCollaborationProjects({
+		...queryOptions,
+		tab: CollaborationProjectType.Shared,
+	})
 
 	// Refetch both tabs — used after actions that affect all tabs
 	const refetchAllTabs = useMemoizedFn(() => {
-		fetchForTab(CollaborationProjectType.Received)
-		fetchForTab(CollaborationProjectType.Shared)
+		void received.refresh()
+		void shared.refresh()
 	})
 
 	useLayoutEffect(() => {
-		if (!props.open) isOpenRef.current = false
-		if (props.open) {
-			setCurrentTab(CollaborationProjectType.Received)
-		}
-		return () => {
-			isOpenRef.current = false
-			cancelRequests()
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
+		if (props.open) setCurrentTab(CollaborationProjectType.Received)
 	}, [props.open])
 
-	// Refresh all tabs when filter/sort params change
-	useEffect(() => {
-		if (!props.open) return
-		const resetWhenError = !isOpenRef.current
-		isOpenRef.current = true
-		// 打开和参数变化共用一次预取；动作后的刷新仍由原回调显式触发。
-		fetchForTab(CollaborationProjectType.Received, { resetWhenError })
-		fetchForTab(CollaborationProjectType.Shared, { resetWhenError })
-		return cancelRequests
-	}, [
-		props.open,
-		debouncedSearchValue,
-		creatorFilter,
-		sortType,
-		joinType,
-		fetchForTab,
-		cancelRequests,
-	])
-
 	const handleClose = useMemoizedFn(() => {
-		isOpenRef.current = false
-		cancelRequests()
+		received.cancel()
+		shared.cancel()
 		setCurrentTab(CollaborationProjectType.Received)
 		handleSortTypeChange(SortType.PROJECT_UPDATE_TIME)
 		setCreatorFilter([])
@@ -288,7 +242,11 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 
 	const { openManageModal, CollaboratorUpdatePanel } = useCollaboratorUpdatePanel({
 		selectedProject: selectedCollaborationProject,
-		onClose: () => setSelectedCollaborationProject(null),
+		onClose: () => {
+			setSelectedCollaborationProject(null)
+			// 与最近项目保持一致，成员或共享设置退出后重新取得列表及可用操作。
+			refetchAllTabs()
+		},
 	})
 
 	const onAddCollaborators = useMemoizedFn((project: CollaborationProjectListItem) => {
@@ -346,6 +304,9 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 	// Shared props for both ProjectList instances
 	const sharedListProps = useMemo(
 		() => ({
+			location: props.location,
+			searchValue: props.searchValue,
+			onSearchValueChange: props.onSearchValueChange,
 			currentTab,
 			joinType,
 			creatorFilter,
@@ -360,23 +321,19 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 			onAddWorkspaceShortcut,
 			onCancelWorkspaceShortcut: cancelWorkspaceShortcut,
 			onShortcutNavigateToWorkspace: shortcutNavigateToWorkspace,
-			refetchProjects,
 		}),
 		// Only re-compute when stable identities change — all handlers are memoized
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[currentTab, joinType, creatorFilter, sortType, viewMode],
-	)
-
-	// Stable per-tab fetch callbacks for ProjectList's refetchProjects prop
-	const refetchReceived = useCallback(
-		() => fetchForTab(CollaborationProjectType.Received),
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[],
-	)
-	const refetchShared = useCallback(
-		() => fetchForTab(CollaborationProjectType.Shared),
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[],
+		[
+			currentTab,
+			joinType,
+			creatorFilter,
+			sortType,
+			viewMode,
+			props.location,
+			props.searchValue,
+			props.onSearchValueChange,
+		],
 	)
 
 	return (
@@ -402,9 +359,7 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 							<SharedProjectList
 								{...sharedListProps}
 								tabType={CollaborationProjectType.Received}
-								projects={receivedProjects}
-								loading={loadingReceived}
-								refetchProjects={refetchReceived}
+								query={received}
 							/>
 						),
 					},
@@ -419,9 +374,7 @@ export function CollaborationProjectsContent(props: CollaborationProjectsContent
 							<SharedProjectList
 								{...sharedListProps}
 								tabType={CollaborationProjectType.Shared}
-								projects={sharedProjects}
-								loading={loadingShared}
-								refetchProjects={refetchShared}
+								query={shared}
 							/>
 						),
 					},

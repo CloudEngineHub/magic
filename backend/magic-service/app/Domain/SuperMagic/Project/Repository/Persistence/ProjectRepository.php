@@ -297,11 +297,17 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
 
     public function getOrganizationCodesByProjectIds(array $projectIds): array
     {
-        $organizationCodes = $this->projectModel::query()
-            ->whereIn('id', $projectIds)
-            ->select('user_organization_code')
-            ->pluck('user_organization_code')
-            ->toArray();
+        // projectIds 可能有数千个，一次 whereIn 会让 Grammar 编译长时间阻塞，分块查询并在 SQL 侧去重
+        $organizationCodes = [];
+        foreach (array_chunk(array_values(array_unique($projectIds)), 1000) as $chunk) {
+            $codes = $this->projectModel::query()
+                ->whereIn('id', $chunk)
+                ->distinct()
+                ->toBase()
+                ->pluck('user_organization_code')
+                ->toArray();
+            array_push($organizationCodes, ...$codes);
+        }
 
         return array_values(array_unique($organizationCodes));
     }
@@ -592,6 +598,15 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         return $this->modelToEntityForRestore($model);
     }
 
+    /** @return ProjectEntity[] */
+    public function findByWorkspaceIdForDeletion(int $workspaceId): array
+    {
+        // Match the complete scope of deleteProjectsByWorkspaceId, including hidden projects.
+        return $this->projectModel::query()->where('workspace_id', $workspaceId)
+            ->lockForUpdate()->get()
+            ->map(fn (ProjectModel $model) => $this->toEntity($model->toArray()))->all();
+    }
+
     /**
      * 恢复单个项目.
      *
@@ -778,6 +793,8 @@ class ProjectRepository extends AbstractRepository implements ProjectRepositoryI
         $entity->setId($model->id);
         $entity->setWorkspaceId($model->workspace_id);
         $entity->setDeletedAt($model->deleted_at ? (string) $model->deleted_at : null);
+        // 回收站预览仍按项目所属组织授权及签名，不能让实体默认空值误判为跨组织访问。
+        $entity->setUserOrganizationCode($model->user_organization_code);
 
         return $entity;
     }

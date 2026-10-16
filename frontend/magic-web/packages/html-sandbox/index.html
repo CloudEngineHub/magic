@@ -589,8 +589,10 @@
 					if (!existingStyle) {
 						var style = document.createElement("style")
 						style.id = styleId
+						// Keep animation timelines intact: animation:none cancels them and
+						// replays entrance effects when a cached slide becomes visible again.
 						style.textContent =
-							"*{animation:none!important}*::before,*::after{animation:none!important}"
+							"*,*::before,*::after{animation-play-state:paused!important}"
 						if (document.head) document.head.appendChild(style)
 						else if (document.documentElement)
 							document.documentElement.appendChild(style)
@@ -603,13 +605,12 @@
 						videos.forEach(function (video) {
 							if (!video.paused) video.setAttribute("data-was-playing", "true")
 							video.pause()
-							video.currentTime = 0
+							// Resident slides resume at the user's position after a page transition.
 						})
 
 						audios.forEach(function (audio) {
 							if (!audio.paused) audio.setAttribute("data-was-playing", "true")
 							audio.pause()
-							audio.currentTime = 0
 						})
 					} catch (error) {
 						console.warn("暂停媒体时出错:", error)

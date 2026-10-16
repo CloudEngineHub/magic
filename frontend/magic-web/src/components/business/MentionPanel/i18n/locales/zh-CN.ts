@@ -50,6 +50,7 @@ export const zhCN: I18nTexts = {
 		digitalEmployees: "数字员工",
 		flows: "流程",
 		agents: "智能体",
+		microApps: "微应用",
 		skills: "技能",
 		tools: "工具",
 		canvasElements: "画布元素",
@@ -65,6 +66,12 @@ export const zhCN: I18nTexts = {
 	},
 	mobileSelectedItemsLabel: "已选",
 	mobileSelectedItemsTitle: "已选",
+	selectionSummary: {
+		selected: "已选",
+		image: "图片",
+		video: "视频",
+		audio: "音频",
+	},
 
 	// Error messages
 	errorMessages: {

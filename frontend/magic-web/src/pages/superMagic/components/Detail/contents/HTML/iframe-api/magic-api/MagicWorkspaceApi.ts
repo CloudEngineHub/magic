@@ -3,8 +3,11 @@
  *
  * 向 iframe 内注入工作区级文件操作 API（高层 UI 集成）：
  *   - window.Magic.project.uploadFiles        — 将浏览器 File 对象上传到 workspace（OSS）
- *   - window.Magic.project.addFilesToMessage  — 将 workspace 文件附加到新建话题的消息输入框
+ *   - window.Magic.project.addFilesToMessage  — 将 workspace 文件附加到消息输入框
  *   - window.Magic.project.downloadFiles      — 触发 workspace 文件的浏览器下载
+ *
+ * 单话题宿主（龙虾 / 对话）上 addFilesToMessage 会附加到当前话题，
+ * 并忽略 agentMode，沿用 claw/chat 自己的 agent。
  *
  * 向后兼容（deprecated）：
  *   - window.Magic.uploadFiles
@@ -19,7 +22,7 @@
  * 所有操作通过 postMessage 委托给主站（parent window）处理。
  */
 
-import { BaseRuntimeBridgeApiPlugin } from "@dtyq/html-sandbox/runtime"
+import { BaseRuntimeBridgeApiPlugin } from "@dtyq/html-sandbox"
 import { MagicApiLogger } from "./MagicApiLogger"
 
 interface UploadFileItem {

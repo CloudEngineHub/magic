@@ -30,7 +30,7 @@ const NON_CONNECTABLE_ELEMENT_TYPES = new Set<ElementType>([ElementTypeEnum.Grou
  * - locked 和 visible 是元素级别的限制
  *
  * 限制说明：
- * - ❌ 不可见元素（visible === false）：不显示、不能 hover、不能选中、不参与对齐
+ * - ❌ 不可见元素（visible === false）：不显示、不能 hover、不能选中；几何操作仍保留其布局位置
  * - ⚠️ 锁定元素（locked === true）：可选中、可 hover；不可变换、不可删除等（见各 canXxx 方法）
  * - ⚠️ 缺少 document.write：可选中、可 hover；不能变换、不能删除等（见各 canXxx）
  * - ✅ 无 document.write 时允许使用选择工具和平移工具
@@ -106,8 +106,7 @@ export class PermissionManager {
 	 * - ❌ 不能通过画布点击选中
 	 * - ❌ 不能通过框选选中
 	 * - ❌ 不显示高亮边框
-	 * - ❌ 不参与对齐操作
-	 * - ❌ 不参与分布操作
+	 * - ✅ 仍参与对齐/分布/排列的几何范围计算
 	 * - ❌ 不参与吸附引导线计算
 	 * - ✅ 可以通过图层面板选中（用于编辑属性）
 	 * - ✅ 可以通过图层面板选中后进行变换、删除等操作
@@ -130,8 +129,7 @@ export class PermissionManager {
 	 * - ❌ 不能缩放
 	 * - ❌ 不能旋转
 	 * - ❌ 不能通过键盘快捷键删除
-	 * - ❌ 不参与对齐操作
-	 * - ❌ 不参与分布操作
+	 * - ⚠️ 不移动，但参与容器边界计算；不会进入自动排列布局图
 	 * - ❌ 不能被添加到画框
 	 * - ❌ 锁定的画框不能被解除
 	 * - ❌ 不参与吸附引导线计算
@@ -263,13 +261,14 @@ export class PermissionManager {
 	 *
 	 * 不可参与的情况：
 	 * 1. 元素不存在
-	 * 2. 元素不可见（visible === false）
-	 * 3. 元素被锁定（locked === true）
-	 * 4. 画布缺少 document.write 能力
+	 * 2. 元素被锁定（locked === true）
+	 * 3. 画布缺少 document.write 能力
+	 *
+	 * 隐藏节点仍然参与几何操作；它们可能通过图层面板被选中，并且必须
+	 * 继续占据布局/容器边界，避免显示状态切换后节点发生意外跳动。
 	 */
 	public canAlign(element: LayerElement | undefined): boolean {
 		if (!element) return false
-		if (!this.isVisible(element)) return false
 		if (this.isLocked(element)) return false
 		if (!this.can("document.write")) return false
 		return true
@@ -281,12 +280,16 @@ export class PermissionManager {
 	 * 不可添加的情况：
 	 * 1. 元素不存在
 	 * 2. 元素被锁定（locked === true）
-	 * 3. 画布缺少 document.write 能力
+	 * 3. 元素本身是 Frame/Group（当前画布不支持嵌套容器）
+	 * 4. 画布缺少 document.write 能力
 	 *
 	 * 注意：不可见元素仍然可以被添加到画框
 	 */
 	public canAddToFrame(element: LayerElement | undefined): boolean {
 		if (!element) return false
+		if (element.type === ElementTypeEnum.Frame || element.type === ElementTypeEnum.Group) {
+			return false
+		}
 		if (this.isLocked(element)) return false
 		if (!this.can("document.write")) return false
 		return true
@@ -408,13 +411,61 @@ export class PermissionManager {
 	}
 
 	/**
-	 * 当前选区是否可对齐 / 参与分布（所有选中项均满足 canAlign；分布快捷键与菜单与此一致）
+	 * 当前选区是否可对齐 / 参与分布。
+	 * 锁定项允许出现在选区中（操作会跳过它们），但 Frame/Group 与普通节点
+	 * 不允许混选，普通节点也必须来自同一父级。
 	 */
 	public canAlignCurrentSelection(): boolean {
 		if (!this.can("document.write")) return false
 		const ids = this.canvas.selectionManager.getSelectedIds()
 		if (ids.length === 0) return false
-		return ids.every((id) => this.canAlign(this.canvas.elementManager.getElementData(id)))
+		const elements = ids
+			.map((id) => this.canvas.elementManager.getElementData(id))
+			.filter((element): element is LayerElement => Boolean(element))
+		if (elements.length !== ids.length) return false
+
+		if (elements.length === 1) {
+			const [element] = elements
+			if (element.type !== ElementTypeEnum.Frame && element.type !== ElementTypeEnum.Group) {
+				return false
+			}
+			const children =
+				"children" in element && Array.isArray(element.children) ? element.children : []
+			return (
+				!this.isLocked(element) &&
+				children.some((child) => {
+					const latestChild = this.canvas.elementManager.getElementData(child.id) ?? child
+					return !this.isLocked(latestChild)
+				})
+			)
+		}
+
+		if (
+			elements.some(
+				(element) =>
+					element.type === ElementTypeEnum.Frame ||
+					element.type === ElementTypeEnum.Group,
+			)
+		) {
+			return false
+		}
+		const findParentId = this.canvas.elementManager.findParentIdForElement
+		const parentIds = elements.map((element) =>
+			typeof findParentId === "function"
+				? (findParentId.call(this.canvas.elementManager, element.id) ?? null)
+				: null,
+		)
+		if (parentIds.some((parentId) => parentId !== parentIds[0])) return false
+		const parentId = parentIds[0]
+		if (parentId) {
+			const parent = this.canvas.elementManager.getElementData(parentId)
+			if (!parent) return false
+			if (parent.type !== ElementTypeEnum.Frame && parent.type !== ElementTypeEnum.Group) {
+				return false
+			}
+			if (this.isLocked(parent)) return false
+		}
+		return elements.some((element) => !this.isLocked(element))
 	}
 
 	/**

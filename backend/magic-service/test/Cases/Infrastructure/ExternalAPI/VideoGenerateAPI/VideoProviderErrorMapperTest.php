@@ -15,11 +15,45 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 
+use function Hyperf\Translation\trans;
+
 /**
  * @internal
  */
 final class VideoProviderErrorMapperTest extends TestCase
 {
+    public function testMapsVolcengineProviderCodesToVideoErrorCodes(): void
+    {
+        self::assertSame(
+            VideoGenerateErrorCode::INVALID_PARAMETER,
+            ProviderVideoErrorMapper::resolveVolcengine(null, [
+                'error' => ['code' => 'InvalidParameter'],
+            ])['errorCode'],
+        );
+        self::assertSame(
+            VideoGenerateErrorCode::INPUT_IMAGE_SENSITIVE_CONTENT_DETECTED,
+            ProviderVideoErrorMapper::resolveVolcengine(null, [
+                'error' => ['code' => 'InputImageSensitiveContentDetected.FutureSubtype'],
+            ])['errorCode'],
+        );
+    }
+
+    public function testRefinesVolcengineInvalidParameterMessageByPayloadKeyword(): void
+    {
+        $result = ProviderVideoErrorMapper::resolveVolcengine(null, [
+            'error' => [
+                'code' => 'InvalidParameter',
+                'message' => 'Error while downloading video, video height specified in the request must be less than or equal to 6000.',
+            ],
+        ]);
+
+        self::assertSame(VideoGenerateErrorCode::INVALID_PARAMETER, $result['errorCode']);
+        self::assertSame(
+            trans('video_generate.invalid_parameter_video_dimension_exceeds_limit'),
+            $result['message'],
+        );
+    }
+
     public function testMapsDashScopeProviderCodeToVideoErrorCode(): void
     {
         self::assertSame(

@@ -5,6 +5,7 @@ import {
 	pickSelectedElementIdAtStagePointer,
 	resolveManagedElementIdFromKonvaNode,
 } from "../transform/elementNodeUtils"
+import { getNameLabelElementIdFromNode } from "../labels/nameLabelNodeUtils"
 
 /**
  * Hover 管理器 - 管理元素的 hover 效果
@@ -27,6 +28,8 @@ export class HoverManager {
 	private eventUnsubscribers: Array<() => void> = []
 	private isViewportGestureActive = false
 	private isViewportMotionActive = false
+	// During zoom, keep the existing hover visuals stable and defer only the new hit test until settle.
+	private preserveHoverDuringViewportMotion = false
 	private isStagePointerInside = true
 	private skipNextSynchronousPanRefresh = false
 	private viewportHoverRefreshTimerId: ReturnType<typeof setTimeout> | null = null
@@ -89,11 +92,11 @@ export class HoverManager {
 		this.eventUnsubscribers.push(
 			this.canvas.eventEmitter.on("viewport:scale", () => {
 				if (this.isViewportGestureActive) {
-					this.suspendHoverForViewportMotion()
+					this.suspendHoverForViewportMotion(true)
 					this.markViewportScaleRefreshHandled()
 					return
 				}
-				this.deferHoverRefreshUntilViewportSettles()
+				this.deferHoverRefreshUntilViewportSettles(true)
 				this.markViewportScaleRefreshHandled()
 			}),
 		)
@@ -108,7 +111,7 @@ export class HoverManager {
 					return
 				}
 				if (this.isViewportGestureActive) {
-					this.suspendHoverForViewportMotion()
+					this.suspendHoverForViewportMotion(this.preserveHoverDuringViewportMotion)
 					return
 				}
 				this.deferHoverRefreshUntilViewportSettles()
@@ -127,7 +130,11 @@ export class HoverManager {
 			this.canvas.eventEmitter.on("viewport:gesture", ({ data }) => {
 				this.isViewportGestureActive = data.active
 				if (data.active) {
-					this.suspendHoverForViewportMotion()
+					// Minimap gestures pan the viewport; pinch gestures are zoom interactions and keep
+					// the current hover visuals until the final pointer hit test.
+					this.suspendHoverForViewportMotion(
+						data.source === "touch-pinch" || data.source === "webkit-gesture",
+					)
 					this.cancelDeferredViewportHoverRefresh()
 				} else {
 					this.resumeHoverAfterViewportSettles()
@@ -173,18 +180,25 @@ export class HoverManager {
 		})
 	}
 
-	private suspendHoverForViewportMotion(): void {
+	private suspendHoverForViewportMotion(preserveVisualState = false): void {
 		this.isViewportMotionActive = true
 		this.pendingHoverTarget = null
 		this.cancelHoverFlush()
-		this.clearHover()
+		this.preserveHoverDuringViewportMotion =
+			preserveVisualState && this.canPreserveHoverVisualsDuringViewportMotion()
+		if (this.preserveHoverDuringViewportMotion) {
+			this.updateHoverNodeForViewport()
+		} else {
+			this.clearHover()
+		}
 	}
 
-	private deferHoverRefreshUntilViewportSettles(): void {
-		this.suspendHoverForViewportMotion()
+	private deferHoverRefreshUntilViewportSettles(preserveVisualState = false): void {
+		this.suspendHoverForViewportMotion(preserveVisualState)
 		this.cancelDeferredViewportHoverRefresh()
 		if (!this.isStagePointerInside) {
 			this.isViewportMotionActive = false
+			this.preserveHoverDuringViewportMotion = false
 			return
 		}
 
@@ -197,6 +211,7 @@ export class HoverManager {
 	private resumeHoverAfterViewportSettles(): void {
 		this.cancelDeferredViewportHoverRefresh()
 		this.isViewportMotionActive = false
+		this.preserveHoverDuringViewportMotion = false
 		if (this.isViewportGestureActive || !this.isStagePointerInside) return
 		this.refreshHoverAtCurrentPointer()
 	}
@@ -207,6 +222,55 @@ export class HoverManager {
 		this.viewportHoverRefreshTimerId = null
 	}
 
+	private updateHoverNodeForViewport(): void {
+		const elementId = this.hoveredElementId
+		const hoverNode = this.hoverNode
+		if (!elementId || !hoverNode) return
+
+		const adapter = this.canvas.elementManager.getNodeAdapter()
+		if (this.hoverNodeIsDefault && hoverNode instanceof Konva.Rect) {
+			const bounds = adapter.getElementBounds(elementId)
+			// Keep the current node if geometry is temporarily unavailable; the settled hit test will
+			// either retain it with fresh geometry or clear it without a visible intermediate blink.
+			if (!bounds) return
+
+			hoverNode.setAttrs({
+				x: bounds.x,
+				y: bounds.y,
+				width: bounds.width,
+				height: bounds.height,
+				stroke: HoverManager.HOVER_STROKE,
+				strokeWidth: this.getHoverStrokeWidth(),
+			})
+			return
+		}
+
+		adapter.updateHoverEffect(elementId, hoverNode, this.canvas.stage)
+	}
+
+	private getHoverStrokeWidth(): number {
+		const stageScale = this.canvas.stage.scaleX()
+		const safeStageScale = Number.isFinite(stageScale) && stageScale > 0 ? stageScale : 1
+		return HoverManager.HOVER_STROKE_WIDTH / safeStageScale
+	}
+
+	private canPreserveHoverVisualsDuringViewportMotion(): boolean {
+		return (
+			this.isStagePointerInside &&
+			!this.isExtendModeActive() &&
+			!this.isConnectionDragActive() &&
+			!this.canvas.transformManager.isTransformInteractionActive()
+		)
+	}
+
+	private shouldKeepHoverVisualsDuringViewportMotion(): boolean {
+		return (
+			this.isViewportMotionActive &&
+			this.preserveHoverDuringViewportMotion &&
+			this.canPreserveHoverVisualsDuringViewportMotion()
+		)
+	}
+
 	/**
 	 * 处理鼠标移动事件
 	 */
@@ -215,7 +279,7 @@ export class HoverManager {
 		if (this.shouldSuppressHover()) {
 			this.pendingHoverTarget = null
 			this.cancelHoverFlush()
-			this.clearHover()
+			if (!this.shouldKeepHoverVisualsDuringViewportMotion()) this.clearHover()
 			return
 		}
 
@@ -254,13 +318,19 @@ export class HoverManager {
 
 	private refreshHoverAtCurrentPointer(): void {
 		if (this.shouldSuppressHover()) {
-			this.clearHover()
+			if (!this.shouldKeepHoverVisualsDuringViewportMotion()) this.clearHover()
 			return
 		}
 
 		const pointerPosition = this.canvas.stage.getPointerPosition()
 		if (!pointerPosition) {
 			this.clearHover()
+			return
+		}
+
+		// 名称标签在 overlay 层；只查这一层，避免无连接时对整张 stage 做命中。
+		const overlayTarget = this.canvas.overlayLayer?.getIntersection?.(pointerPosition)
+		if (this.applyNameLabelHover(overlayTarget)) {
 			return
 		}
 
@@ -287,7 +357,7 @@ export class HoverManager {
 
 	private resolveHoverTarget(target: Konva.Node | null): void {
 		if (this.shouldSuppressHover()) {
-			this.clearHover()
+			if (!this.shouldKeepHoverVisualsDuringViewportMotion()) this.clearHover()
 			return
 		}
 
@@ -300,6 +370,10 @@ export class HoverManager {
 
 		if (this.isConnectionTarget(target)) {
 			this.clearHover()
+			return
+		}
+
+		if (this.applyNameLabelHover(target)) {
 			return
 		}
 
@@ -337,6 +411,7 @@ export class HoverManager {
 	private handleMouseLeave = (): void => {
 		this.isStagePointerInside = false
 		this.isViewportMotionActive = false
+		this.preserveHoverDuringViewportMotion = false
 		this.cancelDeferredViewportHoverRefresh()
 		this.pendingHoverTarget = null
 		this.cancelHoverFlush()
@@ -348,7 +423,7 @@ export class HoverManager {
 	 */
 	private setHover(elementId: string): void {
 		if (this.shouldSuppressHover()) {
-			this.clearHover()
+			if (!this.shouldKeepHoverVisualsDuringViewportMotion()) this.clearHover()
 			return
 		}
 
@@ -385,7 +460,7 @@ export class HoverManager {
 					width: boundingRect.width,
 					height: boundingRect.height,
 					stroke: HoverManager.HOVER_STROKE,
-					strokeWidth: HoverManager.HOVER_STROKE_WIDTH / this.canvas.stage.scaleX(),
+					strokeWidth: this.getHoverStrokeWidth(),
 				})
 			} else {
 				hoverNode = new Konva.Rect({
@@ -394,7 +469,7 @@ export class HoverManager {
 					width: boundingRect.width,
 					height: boundingRect.height,
 					stroke: HoverManager.HOVER_STROKE,
-					strokeWidth: HoverManager.HOVER_STROKE_WIDTH / this.canvas.stage.scaleX(),
+					strokeWidth: this.getHoverStrokeWidth(),
 					listening: false,
 					name: "hover-rect",
 				})
@@ -444,6 +519,22 @@ export class HoverManager {
 		return this.canvas.selectionManager.isSelected(elementId)
 			? this.hoverNode === null
 			: this.hoverNode !== null
+	}
+
+	private applyNameLabelHover(target: Konva.Node | null | undefined): boolean {
+		const elementId = getNameLabelElementIdFromNode(target)
+		if (!elementId) return false
+
+		const invalidElementReason = this.getInvalidElementIdReason(elementId)
+		if (invalidElementReason) {
+			this.clearHover()
+			return true
+		}
+
+		if (!this.isHoverStateCurrentForElement(elementId)) {
+			this.setHover(elementId)
+		}
+		return true
 	}
 
 	/**

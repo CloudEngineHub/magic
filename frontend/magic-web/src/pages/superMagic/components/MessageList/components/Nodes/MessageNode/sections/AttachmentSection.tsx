@@ -1,7 +1,8 @@
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
-import { memo, useMemo, type MouseEvent } from "react"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
+import { memo, useMemo, useRef, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -11,7 +12,7 @@ import { cn } from "@/utils/cn"
 import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
 import type { AttachmentProps } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/type"
 import { normalizeWorkspacePathForComparison } from "@/pages/superMagic/utils/markdownFileReference"
-import { useMessageListContext } from "@/pages/superMagic/components/MessageList/context"
+import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
 import {
 	buildFilePathAttachments,
 	findFilePathAttachment,
@@ -20,10 +21,16 @@ import {
 } from "@/pages/superMagic/components/MessageList/utils/attachmentByFilePath"
 import { openMessageFile } from "@/pages/superMagic/components/MessageList/utils/openMessageFile"
 import { superMagicStore } from "@/pages/superMagic/stores"
-import projectFilesStore from "@/stores/projectFiles"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
 import { useFilePathAttachmentDownload } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/hooks/useFilePathAttachmentDownload"
-import { resolveAttachmentList } from "@/pages/superMagic/components/MessageList/message-render-contract"
+import {
+	canRenderFinalAttachments,
+	resolveAttachmentList,
+} from "@/pages/superMagic/components/MessageList/message-render-contract"
+import {
+	HomeOnboardingAnchor,
+	startHomeOnboardingDeliverableRunIfDue,
+} from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 
 interface AttachmentSectionProps {
 	node?: Record<string, unknown>
@@ -43,12 +50,14 @@ export const AttachmentSection = observer(function AttachmentSection({
 	onSelectDetail,
 	className,
 }: AttachmentSectionProps) {
-	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
-	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
-	const attachments = resolveAttachmentList(node, fallbackNode) as AttachmentProps[]
+	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
+	const canDisplayAttachments = canRenderFinalAttachments(node)
+	const attachments = canDisplayAttachments
+		? (resolveAttachmentList(node, fallbackNode) as AttachmentProps[])
+		: []
 
 	const rawFilePathAttachments = useMemo(() => {
-		if (!prevSuperMessageId) return []
+		if (!canDisplayAttachments || !prevSuperMessageId) return []
 		const prevMessageNode = superMagicStore.getMessageNode(prevSuperMessageId) as
 			Record<string, unknown> | undefined
 		const prevContent =
@@ -62,12 +71,12 @@ export const AttachmentSection = observer(function AttachmentSection({
 			seenReferences.add(referenceKey)
 			return true
 		})
-	}, [prevSuperMessageId])
+	}, [canDisplayAttachments, prevSuperMessageId])
 
 	const seenFilePaths = new Set<string>()
 	const filePathAttachments = rawFilePathAttachments.flatMap((attachment) => {
 		const found = findFilePathAttachment(
-			resolvedProjectFilesStore.workspaceFilesList,
+			resolvedProjectFilesStore?.workspaceFilesList ?? [],
 			attachment,
 		)
 		if (!found || found.type === "directory" || found.is_directory) return []
@@ -95,6 +104,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 		onSelectDetail?.(item)
 	})
 
+	if (!canDisplayAttachments) return null
 	if (filePathAttachments.length > 0) {
 		return <FilePathAttachmentList attachments={filePathAttachments} className={className} />
 	}
@@ -122,8 +132,48 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useMessageViewState("file-path-attachments-expanded", false)
 	const downloadFileByPath = useFilePathAttachmentDownload()
+	/**
+	 * The block the new-user guide frames when it is opened from here.
+	 *
+	 * Marked by hand rather than declared in the markup, because the guide has to point at the block
+	 * that was *clicked* and nothing in the markup can tell the blocks apart: the message list holds
+	 * one of these per message, and they all look the same. See the tour's first step — the mark is
+	 * its anchor, and the entry that decides the tour is due is the only thing that knows which
+	 * block it belongs on.
+	 */
+	const sectionRef = useRef<HTMLDivElement>(null)
+	const { permissions: access } = useFileAccess()
 
 	if (attachments.length === 0) return null
+
+	/**
+	 * Opening one of these files — unless this is the first of them a new account has ever asked
+	 * for, in which case the guide takes the click and nothing is opened.
+	 *
+	 * The guide is about these files rather than about the one that was clicked: it says what a
+	 * task's results are and where they are kept, and both of its sentences are about the block the
+	 * user is looking at. Opening the file underneath would put that explanation on a screen the
+	 * user has not been introduced to yet, and the frame the first step draws around the block would
+	 * be over a panel that has just been replaced by the file's contents. So the click buys the
+	 * guide alone; the next one — what the guide's own words invite — opens the file, and every
+	 * click after that behaves as it always did.
+	 *
+	 * The block is still marked as the guide's anchor, and marked before the early return: the mark
+	 * is what the first step points at, and it is the only thing that can tell the guide which of
+	 * the page's attachment blocks was clicked. See `startHomeOnboardingDeliverableRunIfDue`.
+	 */
+	const openAttachment = (
+		attachment: FilePathAttachment & { presentation: FilePresentation },
+	) => {
+		if (startHomeOnboardingDeliverableRunIfDue()) {
+			sectionRef.current?.setAttribute(
+				"data-guide-anchor",
+				HomeOnboardingAnchor.DeliverableAttachment,
+			)
+			return
+		}
+		openFileByPath(attachment)
+	}
 
 	const toggleExpanded = (event: MouseEvent) => {
 		event.stopPropagation()
@@ -133,7 +183,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 		expanded || attachments.length < 4 ? attachments : attachments.slice(0, 4)
 
 	return (
-		<div className={cn("flex w-full flex-col rounded-md", className)}>
+		<div ref={sectionRef} className={cn("flex w-full flex-col rounded-md", className)}>
 			<div
 				className={cn(
 					"flex items-center gap-1",
@@ -160,7 +210,9 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 						<div
 							key={attachment.filePath}
 							className="w-full cursor-pointer"
-							onClick={() => openFileByPath(attachment)}
+							onClick={() => {
+								if (access.view && access.preview) openAttachment(attachment)
+							}}
 							data-testid="open-file-by-path"
 						>
 							<div
@@ -177,26 +229,31 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 								<span className="mr-2 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground">
 									{attachment.fileName}
 								</span>
-								<MagicIcon
-									className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
-									onClick={(event: MouseEvent) => {
-										event.stopPropagation()
-										openFileByPath(attachment)
-									}}
-									component={IconEye}
-									stroke={2}
-									size={18}
-								/>
-								<MagicIcon
-									className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
-									onClick={(event: MouseEvent) => {
-										event.stopPropagation()
-										downloadFileByPath(attachment)
-									}}
-									component={IconDownload}
-									stroke={2}
-									size={18}
-								/>
+								{access.view && access.preview && (
+									<MagicIcon
+										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
+										onClick={(event: MouseEvent) => {
+											event.stopPropagation()
+											if (access.view && access.preview)
+												openAttachment(attachment)
+										}}
+										component={IconEye}
+										stroke={2}
+										size={18}
+									/>
+								)}
+								{access.download && (
+									<MagicIcon
+										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
+										onClick={(event: MouseEvent) => {
+											event.stopPropagation()
+											downloadFileByPath(attachment)
+										}}
+										component={IconDownload}
+										stroke={2}
+										size={18}
+									/>
+								)}
 							</div>
 						</div>
 					))}

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { createIframeRuntimeScript } from "../../iframe-runtime/create-script"
 
 vi.mock("../nested-iframe-content", () => ({
 	getNestedIframeInterceptorScript: () => "",
@@ -17,7 +18,75 @@ vi.mock("@/models/config", () => ({
 	},
 }))
 
+describe("decodeHTMLEntities", () => {
+	it("does not decode an HTML document because a textarea contains escaped HTML", async () => {
+		const { decodeHTMLEntities } = await import("../full-content")
+		const script = `function escapeHtml(value) {
+			return String(value).replace(/'/g, () => '&#39;');
+		}`
+		const html = `<!DOCTYPE html><html><head><script>${script}</script></head><body>
+			<textarea>&lt;!DOCTYPE html&gt;\n&lt;html&gt;&lt;body&gt;Scene&lt;/body&gt;&lt;/html&gt;</textarea>
+		</body></html>`
+
+		expect(decodeHTMLEntities(html)).toBe(html)
+	})
+
+	it("still decodes a document whose first token is escaped HTML", async () => {
+		const { decodeHTMLEntities } = await import("../full-content")
+		expect(decodeHTMLEntities("&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;/html&gt;")).toBe(
+			"<!DOCTYPE html><html></html>",
+		)
+	})
+})
+
 describe("getFullContent", () => {
+	it("marks authored elements before user scripts can create runtime nodes", async () => {
+		const { getFullContent } = await import("../full-content")
+		const html = getFullContent(
+			'<html><body><section id="static"><p>Fixed</p><div id="dynamic"></div></section><script>document.querySelector("#dynamic").innerHTML = "<p>Dynamic</p>"</script></body></html>',
+		)
+		const doc = new DOMParser().parseFromString(html, "text/html")
+
+		expect(doc.documentElement.hasAttribute("data-magic-source-node")).toBe(true)
+		expect(doc.querySelector("#static p")?.hasAttribute("data-magic-source-node")).toBe(true)
+		expect(
+			doc
+				.querySelector('script[data-injected="true"]')
+				?.hasAttribute("data-magic-source-node"),
+		).toBe(false)
+	})
+
+	it("installs PPT touch zoom only when requested through compiled runtime preparation", async () => {
+		const { getFullContent } = await import("../full-content")
+		const html = "<!DOCTYPE html><html><body><h1>Slide</h1></body></html>"
+		expect(getFullContent(html)).not.toContain("magic-preview-pinch-ready")
+		const prepared = getFullContent(html, undefined, { enableTouchPinchZoom: true })
+		expect(prepared).toContain("magic-preview-pinch-ready")
+		const { filterInjectedTags } = await import("../index")
+		expect(filterInjectedTags(prepared, new Map())).not.toContain("magic-preview-pinch")
+		const doc = new DOMParser().parseFromString(prepared, "text/html")
+		const script = Array.from(doc.querySelectorAll("script[data-injected]")).find((item) =>
+			item.textContent?.includes("magic-preview-pinch-ready"),
+		)
+		expect(script).toBeDefined()
+		// Execute the final HTML's rewritten/minified installer, not just its TypeScript source.
+		const parent = {
+			get document() {
+				throw new DOMException("Cross-origin", "SecurityError")
+			},
+			postMessage: vi.fn(),
+		}
+		const sandbox = Object.assign(new EventTarget(), { parent })
+		new Function("window", "document", script?.textContent || "")(sandbox, document)
+		expect(parent.postMessage).toHaveBeenCalledWith(
+			{ type: "magic-preview-pinch-ready" },
+			window.location.origin,
+		)
+		;(
+			sandbox as typeof sandbox & { __MAGIC_PREVIEW_PINCH_CLEANUP__: () => void }
+		).__MAGIC_PREVIEW_PINCH_CLEANUP__()
+	})
+
 	it("refreshes a failed static image through its original relative path", async () => {
 		const { getFullContent } = await import("../full-content")
 		const html = getFullContent(
@@ -255,9 +324,26 @@ describe("getFullContent", () => {
 		)
 
 		expect(result).toContain('data-injected="html-navigation"')
-		expect(result).toContain('search: "?mode=preview"')
-		expect(result).toContain('hash: "#summary"')
-		expect(result).toContain('requestId: "file-1:1"')
+		const navigationScript =
+			new DOMParser()
+				.parseFromString(result, "text/html")
+				.querySelector('script[data-injected="html-navigation"]')?.textContent || ""
+		const target = {
+			location: { pathname: "/preview" },
+			history: { replaceState: vi.fn() },
+			__MAGIC_HTML_NAVIGATION__: undefined,
+		}
+		new Function("window", navigationScript)(target)
+		expect(target.__MAGIC_HTML_NAVIGATION__).toEqual({
+			search: "?mode=preview",
+			hash: "#summary",
+			requestId: "file-1:1",
+		})
+		expect(target.history.replaceState).toHaveBeenCalledWith(
+			null,
+			"",
+			"/preview?mode=preview#summary",
+		)
 		expect(result).not.toContain('data-injected="sandbox-html-navigation"')
 		expect(result).toContain("getInternalNavigationHref: getInternalNavigationHref")
 		expect(result).toContain("__magicGetFetchPostMessageTarget")
@@ -379,9 +465,11 @@ describe("getFullContent", () => {
 		)
 
 		expect(result).toContain("__MAGIC_DOCUMENT_FLOW_METRICS__")
-		expect(result).toContain('type: "contentMetrics"')
-		expect(result).toContain('var parentOrigin = "https://magic.example.com"')
-		expect(result).toContain("}, parentOrigin);")
+		expect(result).toContain(
+			createIframeRuntimeScript("content-metrics", {
+				parentOrigin: "https://magic.example.com",
+			}),
+		)
 	})
 
 	it("skips serviceWorker mock script when disabled", async () => {
@@ -394,7 +482,8 @@ describe("getFullContent", () => {
 			},
 		)
 
-		expect(result).not.toContain("setupServiceWorkerMock")
+		expect(result).not.toContain(createIframeRuntimeScript("service-worker", { mode: "off" }))
+		expect(result).not.toContain(createIframeRuntimeScript("service-worker", { mode: "auto" }))
 	})
 
 	it("injects serviceWorker mock script when force enabled", async () => {
@@ -407,8 +496,7 @@ describe("getFullContent", () => {
 			},
 		)
 
-		expect(result).toContain("setupServiceWorkerMock")
-		expect(result).toContain("serviceWorkerMockMode")
+		expect(result).toContain(createIframeRuntimeScript("service-worker", { mode: "on" }))
 	})
 
 	it("places environment prelude before magic-api prelude and original head scripts", async () => {

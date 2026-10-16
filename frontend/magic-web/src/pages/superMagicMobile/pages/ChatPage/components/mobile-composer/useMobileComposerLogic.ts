@@ -22,6 +22,12 @@ import { useOptionalSceneStateStore } from "@/pages/superMagic/components/MainIn
 import useChooseUploadDirModal from "@/pages/superMagic/components/MessageEditor/hooks/useChooseUploadDirModal"
 import useMessageEditorPubSub from "@/pages/superMagic/components/MessageEditor/hooks/useMessageEditorPubSub"
 import { useMessageEditor } from "@/pages/superMagic/components/MessageEditor/hooks/useMessageEditor"
+import { useMixedClipboardPaste } from "@/pages/superMagic/components/MessageEditor/hooks/useMixedClipboardPaste"
+import type { WechatChatImportController } from "@/pages/superMagic/components/MessageEditor/hooks/useWechatChatImport"
+import { isWechatChatText } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/parser"
+import { hasMagicClipboardData } from "@/pages/superMagic/components/MessageEditor/utils/pastedTextAttachment"
+import { CanvasDesignClipboard } from "@/components/CanvasDesign/public/clipboard"
+import { isInternationalEnv, isPrivateDeployment } from "@/utils/env"
 import useMessageSendHandler from "@/pages/superMagic/components/MessageEditor/hooks/useMessageSendHandler"
 import useResolvedEditorStore from "@/pages/superMagic/components/MessageEditor/hooks/useResolvedEditorStore"
 import useSharedDataFromApp from "@/pages/superMagic/components/MessageEditor/hooks/useSharedDataFromApp"
@@ -112,6 +118,7 @@ export interface MobileComposerLogic {
 	handleCompositionStart: () => void
 	handleCompositionEnd: () => void
 	handleBlurComposer: () => void
+	wechatChat: WechatChatImportController
 }
 
 function appendPresetSuffixContent(
@@ -146,6 +153,7 @@ export default function useMobileComposerLogic({
 	const { config: providerConfig } = useMessageEditorProvider()
 	const [isSending, setIsSending] = useState(false)
 	const [isPreparingSend, setIsPreparingSend] = useState(false)
+	const [isPreparingPaste, setIsPreparingPaste] = useState(false)
 	const [isComposerFocused, setIsComposerFocused] = useState(false)
 	const mentionPanelStore =
 		(editorContext.mentionPanelStore as typeof GlobalMentionPanelStore | undefined) ??
@@ -157,10 +165,19 @@ export default function useMobileComposerLogic({
 		topicModelStore: editorContext.topicModelStore,
 	})
 
-	const selectedProject = editorContext.selectedProject ?? projectStore.selectedProject
-	const selectedTopic = editorContext.selectedTopic ?? topicStore.selectedTopic
+	// Explicit null denotes a blank home composer, not the last visited global conversation.
+	const selectedProject =
+		editorContext.selectedProject !== undefined
+			? editorContext.selectedProject
+			: projectStore.selectedProject
+	const selectedTopic =
+		editorContext.selectedTopic !== undefined
+			? editorContext.selectedTopic
+			: topicStore.selectedTopic
 	const draftKey = editorContext.draftKey
 	const appliedDraftModeRef = useRef<string>()
+	const recoverTopicMode = editorContext.recoverTopicMode
+	const setTopicMode = editorContext.setTopicMode
 	useEffect(() => {
 		const metadata = editorContext.queueContext?.queueDraft?.queueDraft
 		if (!metadata) {
@@ -169,13 +186,14 @@ export default function useMobileComposerLogic({
 		}
 		if (appliedDraftModeRef.current === metadata.clientSyncId) return
 		appliedDraftModeRef.current = metadata.clientSyncId
-		if (metadata.topicMode)
-			(editorContext.recoverTopicMode ?? editorContext.setTopicMode)?.(metadata.topicMode)
-	}, [
-		editorContext.queueContext?.queueDraft,
-		editorContext.recoverTopicMode,
-		editorContext.setTopicMode,
-	])
+		if (metadata.topicMode) {
+			if (recoverTopicMode) {
+				recoverTopicMode(metadata.topicMode, metadata.agentCode)
+			} else {
+				setTopicMode?.(metadata.topicMode)
+			}
+		}
+	}, [editorContext.queueContext?.queueDraft, recoverTopicMode, setTopicMode])
 
 	const onReady = useMemoizedFn(() => {
 		editorContext.queueContext?.onEditorReady()
@@ -187,9 +205,9 @@ export default function useMobileComposerLogic({
 	const effectiveSetSelectedWorkspace =
 		editorContext.setSelectedWorkspace ?? workspaceStore.setSelectedWorkspace
 	const selectedWorkspace =
-		editorContext.selectedWorkspace ??
-		workspaceStore.selectedWorkspace ??
-		workspaceStore.firstWorkspace
+		editorContext.selectedWorkspace !== undefined
+			? editorContext.selectedWorkspace
+			: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 	const modePlaceholder =
 		lt(editorContext.placeholder) ??
 		superMagicModeService.getModePlaceholderWithLegacy(
@@ -309,7 +327,11 @@ export default function useMobileComposerLogic({
 		})
 	})
 
-	const { addFilesWithDir, UploadModal } = useChooseUploadDirModal({
+	const {
+		addFilesWithDir,
+		UploadModal,
+		onModalClose: cancelPendingUpload,
+	} = useChooseUploadDirModal({
 		addFiles: addFilesRaw,
 		selectedProject,
 		attachments: editorContext.attachments,
@@ -360,6 +382,7 @@ export default function useMobileComposerLogic({
 		if (!sendEnabled) return false
 		if (hasLoadingMarker) return false
 		if (isPreparingSend) return false
+		if (isPreparingPaste) return false
 		if (editorContext.queueContext?.editingQueueItem) return isAllFilesUploaded && !isSending
 
 		return !store.editorStore.isEmpty && isAllFilesUploaded && !isSending
@@ -368,6 +391,7 @@ export default function useMobileComposerLogic({
 		hasLoadingMarker,
 		isAllFilesUploaded,
 		isPreparingSend,
+		isPreparingPaste,
 		isSending,
 		sendEnabled,
 		store.editorStore.isEmpty,
@@ -412,8 +436,18 @@ export default function useMobileComposerLogic({
 
 		isPreparingSendRef.current = true
 		setIsPreparingSend(true)
+		let completion: Parameters<NonNullable<SceneEditorContext["onSendComplete"]>>[0] = {
+			success: false,
+			currentProject: null,
+			currentTopic: null,
+		}
 
 		try {
+			editorContext.onSendStart?.({
+				content: params.value,
+				mentionItems: params.mentionItems ?? [],
+			})
+			if (editorContext.beforeSend && !(await editorContext.beforeSend())) return
 			const isWaitingForUser = selectedTopic?.task_status === TaskStatus.WAITING_FOR_USER
 			const showLoading = editorContext.showLoading ?? false
 			const defaultParams: HandleSendParams = {
@@ -443,7 +477,8 @@ export default function useMobileComposerLogic({
 				}
 				return
 			}
-			if (showLoading && !isWaitingForUser && !params.isFromQueue && queueContext) {
+			const isTaskRunning = (editorContext.isTaskRunning ?? false) || showLoading
+			if (isTaskRunning && !isWaitingForUser && !params.isFromQueue && queueContext) {
 				const queueId = await queueContext.addToQueue(
 					buildQueueMessageInput(finalParams, params.value),
 				)
@@ -455,7 +490,7 @@ export default function useMobileComposerLogic({
 			}
 
 			if (
-				!editorContext.selectedWorkspace &&
+				editorContext.selectedWorkspace === undefined &&
 				!workspaceStore.selectedWorkspace &&
 				selectedWorkspace
 			) {
@@ -465,6 +500,7 @@ export default function useMobileComposerLogic({
 			const preparedSend = await preparePanelSend({
 				params: finalParams,
 				context: {
+					getTemporaryWorkdir: store.fileUploadStore.getTemporaryWorkdir,
 					selectedProject,
 					selectedTopic,
 					selectedWorkspace,
@@ -474,6 +510,7 @@ export default function useMobileComposerLogic({
 					topicStore: editorContext.topicStore ?? topicStore,
 					createTopic: editorContext.createTopic,
 					createProject: editorContext.createProject,
+					refreshProjectAfterTopicRename: editorContext.refreshProjectAfterTopicRename,
 				},
 				tabPattern: effectiveTopicMode,
 				editorRef: tiptapEditorRef.current,
@@ -498,23 +535,29 @@ export default function useMobileComposerLogic({
 				messagesLength: editorContext.messagesLength ?? 0,
 			})
 
-			if (sendResult) sceneStateStore?.incrementSendCount()
-			editorContext.onSendSuccess?.({
-				currentProject: sendResult?.currentProject ?? null,
-				currentTopic: sendResult?.currentTopic ?? null,
-			})
-			editorContext.onSendComplete?.({
+			if (sendResult) {
+				sceneStateStore?.incrementSendCount()
+				editorContext.onSendSuccess?.({
+					currentProject: sendResult.currentProject,
+					currentTopic: sendResult.currentTopic,
+				})
+			}
+			completion = {
 				success: Boolean(sendResult),
 				currentProject: sendResult?.currentProject ?? null,
 				currentTopic: sendResult?.currentTopic ?? null,
-			})
+			}
+			return Boolean(sendResult)
 		} finally {
+			// Release home controls even when preparation or destination validation fails.
+			editorContext.onSendComplete?.(completion)
 			isPreparingSendRef.current = false
 			setIsPreparingSend(false)
 		}
 	})
 
 	const handleSend = useMessageSendHandler({
+		isSendSuspended: () => wechatChat.isOpen(),
 		voiceInputRef,
 		canSendMessage,
 		hasLoadingMarker,
@@ -523,6 +566,7 @@ export default function useMobileComposerLogic({
 		store,
 		t,
 		onSend: handleSendToServer,
+		awaitSendSuccess: editorContext.deferProjectCreationUntilSend,
 		topicMode: effectiveTopicMode,
 		collectMentionItemsFromEditor,
 		isMountedRef,
@@ -535,7 +579,8 @@ export default function useMobileComposerLogic({
 		() => selectedTopic?.project_id ?? selectedProject?.id ?? draftKey?.projectId,
 	)
 
-	const { tiptapEditor, domRef } = useMessageEditor({
+	const { tiptapEditor, domRef, wechatChat } = useMessageEditor({
+		wechatChatEnabled: uploadEnabled && shouldEnableMention,
 		value: store.editorStore.value,
 		onSend: handleSend,
 		placeholder,
@@ -809,18 +854,44 @@ export default function useMobileComposerLogic({
 		[addFiles],
 	)
 
+	const getPasteSessionId = useMemoizedFn(
+		() =>
+			`${selectedTopic?.id ?? ""}:${selectedProject?.id ?? draftKey?.projectId ?? ""}:${draftKey?.workspaceId ?? ""}`,
+	)
+	const pasteFilesWithText = useMixedClipboardPaste({
+		getEditor,
+		getSessionId: getPasteSessionId,
+		getFiles: () => store.fileUploadStore.files,
+		addFiles: addFilesWithDir,
+		cancelPendingUpload,
+		isProjectContext: Boolean(selectedProject?.id),
+		onPreparingChange: setIsPreparingPaste,
+		wechatChatEnabled:
+			uploadEnabled && shouldEnableMention && !isInternationalEnv() && !isPrivateDeployment(),
+		onWechatImported: wechatChat.onImported,
+	})
 	const handlePaste = useCallback(
 		(event: React.ClipboardEvent) => {
 			const clipboardData = event.clipboardData
 			if (!clipboardData) return
 
-			const inputFiles = Array.from(clipboardData.files)
+			const inputFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(event.nativeEvent)
 			if (uploadEnabled && inputFiles.length > 0) {
 				event.preventDefault()
-				void addFiles(inputFiles)
+				event.stopPropagation()
+				if (shouldEnableMention) pasteFilesWithText(clipboardData, inputFiles)
+				else void addFiles(inputFiles)
+			} else if (
+				wechatChat.available &&
+				!hasMagicClipboardData(clipboardData) &&
+				isWechatChatText(clipboardData.getData("text/plain"))
+			) {
+				event.preventDefault()
+				event.stopPropagation()
+				pasteFilesWithText(clipboardData, [])
 			}
 		},
-		[addFiles, uploadEnabled],
+		[addFiles, uploadEnabled, shouldEnableMention, pasteFilesWithText, wechatChat.available],
 	)
 
 	const handleSelectMentionItem = useMemoizedFn(
@@ -928,6 +999,7 @@ export default function useMobileComposerLogic({
 
 	return {
 		parentStore,
+		wechatChat,
 		store,
 		domRef,
 		tiptapEditor,

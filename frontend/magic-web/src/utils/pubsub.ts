@@ -139,6 +139,8 @@ export const PubSubEvents = {
 	Open_File_Tab_By_Path: "super_magic_open_file_tab_by_path",
 	/** 超级麦吉 - 打开知识库文件预览tab（由引用点击触发） */
 	Open_Knowledge_Base_Tab: "super_magic_open_knowledge_base_tab",
+	/** Super Magic - open a micro-app preview tab from a mention click. */
+	Open_Micro_App_Tab: "super_magic_open_micro_app_tab",
 	/** 超级麦吉 - 打开演示模式tab */
 	Open_Playback_Tab: "super_magic_open_playback_tab",
 	/** 超级麦吉 - 展开话题对话面板 */
@@ -149,6 +151,8 @@ export const PubSubEvents = {
 	SuperMagicMessageQueueConsumed: "PubSub_Super_Magic_Message_Queue",
 	/** 超级麦吉 - WebSocket Intermediate 工程文件变更（订阅方自行处理） */
 	Super_Magic_File_Change_Intermediate: "PubSub_Super_Magic_File_Change_Intermediate",
+	/** 当前项目附件恢复快照已成功提交，不代表收到新的服务端文件事件。 */
+	Super_Magic_Project_Attachments_Reconciled: "super_magic_project_attachments_reconciled",
 	/** 超级麦吉 - WebSocket 检查点撤销/恢复通知（订阅方通过 HTTP 对账） */
 	Super_Magic_Checkpoint_Rollback: "PubSub_Super_Magic_Checkpoint_Rollback",
 	/** 录音总结 - 接收外部消息内容，发送消息 */
@@ -177,6 +181,8 @@ export const PubSubEvents = {
 	Receive_RecordSummary_Audio_File: "receive_record_summary_audio_file",
 	/** 超级麦吉 - 设置输入框消息 */
 	Set_Input_Message: "PubSub_Set_Input_Message",
+	/** 超级麦吉 - PPT 导出问题诊断 */
+	Pptx_Export_Issues: "PubSub_Pptx_Export_Issues",
 	/** Widget-only editor input maintenance command. */
 	Magic_Widget_Editor_Command: "magic_widget_editor_command",
 	/** 超级麦吉 - 设置目标模型 */
@@ -234,6 +240,8 @@ export const PubSubEvents = {
 	Add_File_To_Chat: "super_magic_add_file_to_chat",
 	/** 超级麦吉 - 发送打断消息（可选回调，打断完成后执行） */
 	Send_Interrupt_Message: "send_interrupt_message",
+	/** 超级麦吉 - 终止任务后把画布生成中的图片节点收敛为终止态（零参数） */
+	Terminate_Generating_Images: "super_magic_terminate_generating_images",
 	/** 超级麦吉 - 触发创建新话题（超时警告卡片触发） */
 	Trigger_Create_Topic: "super_magic_create_create_topic",
 	/** 超级麦吉 - 添加话题到列表（新话题创建完成后） */

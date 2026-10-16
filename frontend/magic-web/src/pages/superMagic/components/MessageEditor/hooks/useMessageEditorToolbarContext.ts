@@ -31,9 +31,11 @@ interface UseMessageEditorToolbarContextParams {
 	isEditingQueueItem: boolean
 	isUploadingFiles: boolean
 	voiceInputEnabled: boolean
+	commandMenu?: ButtonRendererContext["commandMenu"]
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
 	topicMode?: TopicMode
+	agentCode?: string | null
 	mentionPanelStore: MentionPanelStore
 	mcpButtonConfig: ButtonRendererContext["mcpButtonConfig"]
 	handleSelectMentionItem: (item: TiptapMentionAttributes) => Promise<void>
@@ -68,9 +70,11 @@ function useMessageEditorToolbarContext({
 	isEditingQueueItem,
 	isUploadingFiles,
 	voiceInputEnabled,
+	commandMenu,
 	selectedTopic,
 	selectedProject,
 	topicMode,
+	agentCode,
 	mentionPanelStore,
 	mcpButtonConfig,
 	handleSelectMentionItem,
@@ -103,11 +107,13 @@ function useMessageEditorToolbarContext({
 			isTaskRunning,
 			isUploadingFiles,
 			voiceInputEnabled,
+			commandMenu,
 			stopEventLoading,
 			isEditingQueueItem,
 			selectedTopic,
 			selectedProject,
 			topicMode,
+			agentCode,
 			mentionPanelStore,
 			mcpButtonConfig,
 			handleSelectMentionItem,
@@ -139,11 +145,13 @@ function useMessageEditorToolbarContext({
 			isTaskRunning,
 			isUploadingFiles,
 			voiceInputEnabled,
+			commandMenu,
 			stopEventLoading,
 			isEditingQueueItem,
 			selectedTopic,
 			selectedProject,
 			topicMode,
+			agentCode,
 			mentionPanelStore,
 			mcpButtonConfig,
 			handleSelectMentionItem,

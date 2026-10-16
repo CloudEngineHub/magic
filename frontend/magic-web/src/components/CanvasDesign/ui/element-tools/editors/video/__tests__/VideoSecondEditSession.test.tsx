@@ -2,12 +2,25 @@ import { act, render, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import VideoSecondEdit from "../VideoSecondEdit"
 import { MediaEditRecoveryManager } from "../../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
+import type { VideoElement } from "../../../../../runtime/document/types"
+import { VideoElement as VideoElementClass } from "../../../../../runtime/elements/video/VideoElement"
 
 const mocks = vi.hoisted(() => ({
 	commands: {} as Record<string, { execute: (command?: unknown) => void; state?: unknown }>,
 	renderProps: null as null | Record<string, unknown>,
 	isReplacing: false,
-	canvas: null as null | { mediaEditRecoveryManager: MediaEditRecoveryManager },
+	canvas: null as null | {
+		mediaEditRecoveryManager: MediaEditRecoveryManager
+		isSeedanceComplianceEnabled: () => boolean
+	},
+	videoModelList: [{ model_id: "video-model" }] as Array<Record<string, unknown>>,
+	estimateVideoPoints: vi.fn(),
+	getCachedVideoPointsEstimate: vi.fn(() => ({ points: 3190 })),
+	getVideoPointsEstimate: vi.fn(async () => ({ points: 3190 })),
+	confirmVideoGeneration: vi.fn(
+		async (options: { points: number | null; onConfirm: () => void | Promise<void> }) =>
+			options.onConfirm(),
+	),
 }))
 
 vi.mock("../../../../../app/providers/CanvasUIProvider", () => ({
@@ -20,10 +33,10 @@ vi.mock("../../../../../app/providers/CanvasProvider", () => ({
 
 vi.mock("../../../../../app/providers/MagicProvider", () => ({
 	useMagic: () => ({
-		methods: {},
-		videoModelList: [{ model_id: "video-model" }],
-		getCachedVideoPointsEstimate: vi.fn(),
-		getVideoPointsEstimate: vi.fn(),
+		methods: { estimateVideoPoints: mocks.estimateVideoPoints },
+		videoModelList: mocks.videoModelList,
+		getCachedVideoPointsEstimate: mocks.getCachedVideoPointsEstimate,
+		getVideoPointsEstimate: mocks.getVideoPointsEstimate,
 	}),
 }))
 
@@ -36,7 +49,7 @@ vi.mock("../../../../../app/hooks/canvas", () => ({
 }))
 
 vi.mock("../useVideoPointsConfirm", () => ({
-	useVideoPointsConfirm: () => vi.fn(),
+	useVideoPointsConfirm: () => mocks.confirmVideoGeneration,
 }))
 
 vi.mock("../model-config/video-editor-config.model", async () => {
@@ -84,16 +97,28 @@ const videoElement = {
 	],
 	activeContentId: "video-content-1",
 	mainContentId: "video-content-1",
-} as never
+} as VideoElement
 
 describe("VideoSecondEdit session routing", () => {
 	beforeEach(() => {
 		mocks.commands = {}
 		mocks.renderProps = null
 		mocks.isReplacing = false
+		mocks.videoModelList = [{ model_id: "video-model" }]
+		mocks.estimateVideoPoints.mockClear()
+		mocks.getCachedVideoPointsEstimate.mockReset()
+		mocks.getCachedVideoPointsEstimate.mockReturnValue({ points: 3190 })
+		mocks.getVideoPointsEstimate.mockReset()
+		mocks.getVideoPointsEstimate.mockResolvedValue({ points: 3190 })
+		mocks.confirmVideoGeneration.mockClear()
 		mocks.canvas = {
 			mediaEditRecoveryManager: new MediaEditRecoveryManager(),
+			isSeedanceComplianceEnabled: () => false,
 			mediaReplaceController: { isReplacing: () => mocks.isReplacing },
+			canvasFileUploadManager: { shouldDeferRemoteResourceLoad: () => false },
+			videoDraftFinalManager: {
+				start: vi.fn(async () => true),
+			},
 			elementManager: {
 				getElementInstance: vi.fn(),
 				getElementData: vi.fn(() => videoElement),
@@ -204,5 +229,220 @@ describe("VideoSecondEdit session routing", () => {
 		expect(mocks.commands["generation.generate-again"]?.state).toMatchObject({
 			available: true,
 		})
+	})
+
+	it("hides re-edit but keeps quick edit and generate-again for a final result", () => {
+		const finalVideo = {
+			...videoElement,
+			contents: [
+				{
+					...videoElement.contents[0],
+					generateVideoRequest: {
+						video_id: "final-task",
+						model_id: "video-model",
+						input_mode: "draft_task",
+						task: "generate",
+						inputs: { draft_task: { video_id: "draft-task" } },
+						generation: { resolution: "1080p" },
+					},
+				},
+			],
+		} as never
+
+		render(<VideoSecondEdit videoElement={finalVideo} />)
+
+		expect(mocks.commands["generation.quick-edit"]?.state).toMatchObject({ available: true })
+		expect(mocks.commands["generation.re-edit"]?.state).toMatchObject({ available: false })
+		expect(mocks.commands["generation.generate-again"]?.state).toMatchObject({
+			available: true,
+		})
+	})
+
+	it("submits a final generate-again with the same task id that was confirmed", async () => {
+		const finalVideo = {
+			...videoElement,
+			contents: [
+				{
+					...videoElement.contents[0],
+					generateVideoRequest: {
+						video_id: "previous-final-task",
+						model_id: "video-model",
+						input_mode: "draft_task",
+						task: "generate",
+						inputs: { draft_task: { video_id: "draft-task" } },
+						generation: { resolution: "1080p" },
+					},
+				},
+			],
+		} as VideoElement
+		const instance = Object.create(VideoElementClass.prototype) as VideoElementClass
+		const submitContentGeneration = vi
+			.fn<VideoElementClass["submitContentGeneration"]>()
+			.mockResolvedValue(true)
+		instance.submitContentGeneration = submitContentGeneration
+		const elementManager = (
+			mocks.canvas as typeof mocks.canvas & {
+				elementManager: { getElementInstance: ReturnType<typeof vi.fn> }
+			}
+		)?.elementManager
+		elementManager?.getElementInstance.mockReturnValue(instance)
+
+		render(<VideoSecondEdit videoElement={finalVideo} />)
+		await act(async () => mocks.commands["generation.generate-again"]?.execute())
+
+		await waitFor(() => expect(submitContentGeneration).toHaveBeenCalledOnce())
+		expect(submitContentGeneration).toHaveBeenCalledWith(
+			{
+				video_id: expect.any(String),
+				model_id: "video-model",
+				input_mode: "draft_task",
+				task: "generate",
+				inputs: { draft_task: { video_id: "draft-task" } },
+				generation: { resolution: "1080p" },
+			},
+			{ preserveVideoId: true },
+		)
+		expect(submitContentGeneration.mock.calls[0]?.[0].video_id).not.toBe("previous-final-task")
+	})
+
+	it("submits the exact confirmed draft-task request through the final manager", async () => {
+		mocks.videoModelList = [
+			{
+				model_id: "video-model",
+				video_generation_config: {
+					generation: { resolutions: ["480p", "1080p"] },
+					input_modes: {
+						draft_task: {
+							supported_fields: ["draft_task"],
+							generation_constraints: { resolutions: ["1080p"] },
+						},
+					},
+				},
+			},
+		]
+		const draftVideo = {
+			...videoElement,
+			contents: [
+				{
+					...videoElement.contents[0],
+					generateVideoRequest: {
+						video_id: "draft-task",
+						model_id: "video-model",
+						prompt: "server inherits this",
+						generation: {
+							draft: true,
+							resolution: "480p",
+							duration_seconds: 5,
+						},
+					},
+				},
+			],
+		} as never
+
+		render(<VideoSecondEdit videoElement={draftVideo} />)
+		await waitFor(() =>
+			expect(mocks.commands["generation.generate-final"]?.state).toMatchObject({
+				available: true,
+				data: {
+					videoGenerationEstimate: {
+						resolution: "1080P",
+						points: 3190,
+					},
+				},
+			}),
+		)
+		const generateFinal = mocks.commands["generation.generate-final"]
+		await act(async () => generateFinal?.execute())
+
+		await waitFor(() =>
+			expect(
+				(
+					mocks.canvas as typeof mocks.canvas & {
+						videoDraftFinalManager: { start: ReturnType<typeof vi.fn> }
+					}
+				)?.videoDraftFinalManager.start,
+			).toHaveBeenCalledOnce(),
+		)
+		const start = (
+			mocks.canvas as typeof mocks.canvas & {
+				videoDraftFinalManager: { start: ReturnType<typeof vi.fn> }
+			}
+		)?.videoDraftFinalManager.start
+		expect(mocks.confirmVideoGeneration).toHaveBeenCalledWith({
+			points: 3190,
+			onConfirm: expect.any(Function),
+		})
+		expect(start?.mock.calls[0]?.[0]).toEqual({
+			sourceElementId: "video-1",
+			sourceContentId: "video-content-1",
+			request: {
+				video_id: expect.any(String),
+				model_id: "video-model",
+				input_mode: "draft_task",
+				task: "generate",
+				inputs: { draft_task: { video_id: "draft-task" } },
+				generation: { resolution: "1080p" },
+			},
+		})
+	})
+
+	it("allows repeated final generation and uses a new task id for every node", async () => {
+		mocks.videoModelList = [
+			{
+				model_id: "video-model",
+				video_generation_config: {
+					generation: { resolutions: ["480p", "1080p"] },
+					input_modes: {
+						draft_task: {
+							supported_fields: ["draft_task"],
+							generation_constraints: { resolutions: ["1080p"] },
+						},
+					},
+				},
+			},
+		]
+		const draftVideo = {
+			...videoElement,
+			contents: [
+				{
+					...videoElement.contents[0],
+					generateVideoRequest: {
+						video_id: "draft-task",
+						model_id: "video-model",
+						generation: { draft: true, resolution: "480p" },
+					},
+				},
+			],
+		} as never
+
+		render(<VideoSecondEdit videoElement={draftVideo} />)
+		await waitFor(() =>
+			expect(mocks.commands["generation.generate-final"]?.state).toMatchObject({
+				available: true,
+				disabled: false,
+			}),
+		)
+		const start = (
+			mocks.canvas as typeof mocks.canvas & {
+				videoDraftFinalManager: { start: ReturnType<typeof vi.fn> }
+			}
+		)?.videoDraftFinalManager.start
+
+		await act(async () => mocks.commands["generation.generate-final"]?.execute())
+		await waitFor(() => expect(start).toHaveBeenCalledTimes(1))
+		await waitFor(() =>
+			expect(mocks.commands["generation.generate-final"]?.state).toMatchObject({
+				available: true,
+				disabled: false,
+			}),
+		)
+		await act(async () => mocks.commands["generation.generate-final"]?.execute())
+		await waitFor(() => expect(start).toHaveBeenCalledTimes(2))
+
+		const firstRequestId = start?.mock.calls[0]?.[0].request.video_id
+		const secondRequestId = start?.mock.calls[1]?.[0].request.video_id
+		expect(firstRequestId).toEqual(expect.any(String))
+		expect(secondRequestId).toEqual(expect.any(String))
+		expect(secondRequestId).not.toBe(firstRequestId)
 	})
 })

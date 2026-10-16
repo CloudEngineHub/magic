@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { IconPlus } from "@tabler/icons-react"
-import { useMemoizedFn, useCreation, useMount } from "ahooks"
+import { useMemoizedFn, useCreation } from "ahooks"
 import { AgentCommonModal } from "../../AgentCommonModal"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
@@ -9,7 +9,6 @@ import MagicImage from "@/components/base/MagicImage"
 import { useTranslation } from "react-i18next"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { getMCPAccess, loadMCPWithInstalledConnectorReconciliation } from "../store/mcp-access"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import AgentSettings from "../AgentSettings"
 import MobileMCPPluginsSheet from "./MobileMCPPluginsSheet"
 import { cn } from "@/utils/cn"
@@ -17,24 +16,23 @@ import { Plug, Unplug } from "lucide-react"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { Badge } from "@/components/shadcn-ui/badge"
 import { Switch } from "@/components/shadcn-ui/switch"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { MessageEditorSize } from "@/pages/superMagic/components/MessageEditor/types"
 import { observer } from "mobx-react-lite"
 import { mcpEnabledStore } from "../store/mcp-enabled-store"
 import ConnectorLibrary from "@/pages/superMagic/pages/ConnectorMarket/components/ConnectorLibrary"
 
-// 懒加载弹窗组件，避免阻塞按钮渲染
+// Lazy modal loading can keep the button render independent of modal initialization.
 // const LazyAgentCommonModal = lazy(() =>
 // 	import("../../AgentCommonModal").then((m) => ({ default: m.AgentCommonModal })),
 // )
 // const LazyAgentSettings = lazy(() => import("../AgentSettings"))
 
-// // 预加载函数：按钮渲染后立即触发，不阻塞渲染
+// Preload modal components after rendering the button without blocking it.
 // const preloadModalComponents = () => {
 // 	import("../../AgentCommonModal")
 // 	import("../AgentSettings")
 // }
-
-// Removed antd-style, using Tailwind CSS instead
 
 // Construct a unique AgentModal pop-up instance
 // class AgentModal {
@@ -70,7 +68,7 @@ export interface MCPButtonProps {
 	storageKey?: string
 	size?: MessageEditorSize
 	iconSize?: number
-	/** 是否使用本地临时存储模式（不通过接口保存） */
+	/** Use temporary local storage without saving through the API. */
 	useTempStorage?: boolean
 }
 
@@ -191,16 +189,9 @@ function MCPButton(props?: MCPButtonProps) {
 		mcpEnabledStore.setEnabledIds(ids)
 	}, [activeMCPAccess.initialized, activeMCPIds])
 
-	useMount(() => {
-		pubsub.publish(PubSubEvents.GuideTourElementReady, GuideTourElementId.MCPButton)
-		// 按钮渲染后立即预加载弹窗组件
-		// preloadModalComponents()
-	})
-
 	const button = (
 		<button
 			type="button"
-			id={GuideTourElementId.MCPButton}
 			className={cn(
 				"flex items-center justify-center gap-1 rounded-md border-0 bg-[#f5f5f5] text-foreground transition-all hover:opacity-80 active:opacity-60",
 				"dark:bg-sidebar dark:text-foreground dark:hover:bg-muted dark:hover:text-foreground",
@@ -231,7 +222,7 @@ function MCPButton(props?: MCPButtonProps) {
 		}
 	}, [openSettings])
 
-	// 声明式弹窗（懒加载，不阻塞按钮渲染）
+	// Declarative lazy modal alternative that does not block the button render.
 	// const modal = (
 	// 	<Suspense fallback={null}>
 	// 		<LazyAgentCommonModal
@@ -304,7 +295,10 @@ function MCPButton(props?: MCPButtonProps) {
 			<div className="px-3 pb-1 pt-2.5 text-xs font-medium text-muted-foreground">
 				{t("mcp.button.addedConnectors")}
 			</div>
-			<div className="max-h-[240px] overflow-y-auto px-1.5 pb-1">
+			<ScrollArea
+				className="min-h-0"
+				viewportClassName="max-h-[240px] pl-1.5 pr-3 pb-1 [&>div]:!block"
+			>
 				{displayMCPList.length > 0 ? (
 					displayMCPList.map((item) => (
 						<div
@@ -351,7 +345,7 @@ function MCPButton(props?: MCPButtonProps) {
 						</div>
 					</div>
 				)}
-			</div>
+			</ScrollArea>
 			<div className="border-t border-border p-1.5">
 				<button
 					type="button"

@@ -55,10 +55,12 @@ function toSingleGenerateImageResponse(
 		reference_images: request.reference_images ?? [],
 		status: response.status,
 		error_message: response.error_message,
-		created_at: "",
+		created_at: response.started_at ?? "",
 		updated_at: "",
 		file_url: firstImage?.file_url ?? null,
 		id: response.image_id,
+		expected_finished_at: response.expected_finished_at,
+		started_at: response.started_at,
 	}
 }
 
@@ -78,10 +80,12 @@ function toSingleImageGenerationResultResponse(
 		reference_images: [],
 		status: response.status,
 		error_message: response.error_message,
-		created_at: "",
+		created_at: response.started_at ?? "",
 		updated_at: "",
 		file_url: firstImage?.file_url ?? "",
 		id: response.image_id,
+		started_at: response.started_at,
+		expected_finished_at: response.expected_finished_at,
 	}
 }
 
@@ -155,19 +159,17 @@ export function useImageGeneration(options: UseImageGenerationOptions): UseImage
 				group: { id: string; name: string; icon: string; sort: number }
 				models: ImageModelItem[]
 			}) =>
-				(groupItem.models || []).map(
-					(model): ImageModelItem => ({
-						...model,
-						model_source: "official",
-						model_group: {
-							id: groupItem.group.id,
-							name: normalizeImageModelGroupLabel(groupItem.group.name),
-							icon: groupItem.group.icon,
-							sort: groupItem.group.sort,
-							source: "official",
-						},
-					}),
-				),
+				(groupItem.models || []).map((model): ImageModelItem => ({
+					...model,
+					model_source: "official",
+					model_group: {
+						id: groupItem.group.id,
+						name: normalizeImageModelGroupLabel(groupItem.group.name),
+						icon: groupItem.group.icon,
+						sort: groupItem.group.sort,
+						source: "official",
+					},
+				})),
 		)
 		const customModels = getRepresentativeModelsByModelId(
 			await superMagicCustomModelService.getMyModelsByType(MODEL_TYPE_IMAGE),

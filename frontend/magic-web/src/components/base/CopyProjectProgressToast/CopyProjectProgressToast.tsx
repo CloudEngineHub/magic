@@ -221,7 +221,6 @@ function CopyProjectProgressToast({
 				{
 					text: t("share.close"),
 					type: "text" as const,
-					style: { color: "red" },
 					onClick: handleClose,
 				},
 			]

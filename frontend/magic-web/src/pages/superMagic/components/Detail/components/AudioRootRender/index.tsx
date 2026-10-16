@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { cn } from "@/utils/cn"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { saveMediaSpeakersAndMagicProjectJs } from "../../contents/HTML/media/utils"
 import HTML from "../../contents/HTML"
 import { useRecordingAudioPlayer } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingAudioPlayer"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
-import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { useShareRecordingDetailData } from "@/pages/superMagic/pages/AudioRecordings/hooks/useShareRecordingDetailData"
+import { useRecordingDetailTranscriptPanelState } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingDetailTranscriptPanelState"
 import type { RecordingTranscriptSegment } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail"
 import {
 	FOLDER_RECORDING_DETAIL_CAPABILITIES,
@@ -15,6 +16,7 @@ import {
 } from "@/pages/superMagic/pages/AudioRecordings/types/recording-detail-capabilities"
 import { collectSpeakerIdsFromText } from "@/pages/superMagic/pages/AudioRecordings/utils/markdownTimeLinks"
 import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
+import { hasRecordingDetailTabStrip } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
 import { playTranscriptFromSegment } from "@/pages/superMagic/pages/AudioRecordings/utils/transcript-playback"
 import { RecordingDetailProvider } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailProvider"
 import { RecordingDetailWorkbench } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailWorkbench"
@@ -22,6 +24,8 @@ import { RecordingDetailLeftColumn } from "@/pages/superMagic/pages/AudioRecordi
 import { RecordingDetailRightPanel } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailRightPanel"
 import { RecordingDetailSpeakerDialog } from "@/pages/superMagic/pages/AudioRecordings/components/recording-detail/RecordingDetailSpeakerDialog"
 import { MobileAudioFolderContent } from "./MobileAudioFolderContent"
+import { RecordingArtifactHeader } from "./RecordingArtifactHeader"
+import type { RecordingArtifactContent } from "./useRecordingArtifactActions"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import {
 	RecordingDetailEmptyState,
@@ -34,6 +38,12 @@ interface AudioRootRenderProps {
 	attachmentList?: AttachmentItem[]
 	projectId?: string
 	isFileShare?: boolean
+	showFileHeader?: boolean
+	allowDownload?: boolean
+	allowEdit?: boolean
+	onFullscreen?: () => void
+	openFileTab?: (fileItem: AttachmentItem, autoEdit?: boolean) => void
+	isFullscreen?: boolean
 	[key: string]: unknown
 }
 
@@ -45,6 +55,8 @@ export default function AudioRootRender(props: AudioRootRenderProps) {
 		attachmentList = [],
 		projectId = "",
 		isFileShare,
+		showFileHeader = true,
+		allowDownload = true,
 		allowEdit = true,
 	} = props
 	const shareRoute = useShareRoute()
@@ -70,6 +82,10 @@ export default function AudioRootRender(props: AudioRootRenderProps) {
 		() => resolveFallbackHtml(data, attachments, attachmentList),
 		[data, attachments, attachmentList],
 	)
+	const recordingRoot = useMemo(
+		() => resolveRecordingRoot(data, attachments, attachmentList),
+		[data, attachments, attachmentList],
+	)
 
 	if (!isMobile && !detail.loading && detail.error && fallbackHtml) {
 		// The generated HTML remains the compatibility path when the attachment bundle cannot load.
@@ -88,6 +104,15 @@ export default function AudioRootRender(props: AudioRootRenderProps) {
 				<AudioFolderWorkbench
 					projectId={targetProjectId}
 					canEditSpeakers={capabilities.canEditSpeakers}
+					allowEdit={allowEdit}
+					showFileHeader={showFileHeader}
+					allowDownload={allowDownload}
+					isReadonlyShare={isReadonlyShare}
+					currentFile={recordingRoot}
+					shareAttachments={attachments}
+					onFullscreen={props.onFullscreen}
+					openFileTab={props.openFileTab}
+					isFullscreen={Boolean(props.isFullscreen)}
 					detail={detail}
 					showNotesTab={showNotesTab}
 				/>
@@ -99,6 +124,15 @@ export default function AudioRootRender(props: AudioRootRenderProps) {
 interface AudioFolderWorkbenchProps {
 	projectId: string
 	canEditSpeakers: boolean
+	allowEdit: boolean
+	showFileHeader: boolean
+	allowDownload: boolean
+	isReadonlyShare: boolean
+	currentFile: AttachmentItem
+	shareAttachments: AttachmentItem[]
+	onFullscreen?: () => void
+	openFileTab?: (fileItem: AttachmentItem, autoEdit?: boolean) => void
+	isFullscreen: boolean
 	detail: ReturnType<typeof useShareRecordingDetailData>
 	showNotesTab: boolean
 }
@@ -107,6 +141,15 @@ interface AudioFolderWorkbenchProps {
 function AudioFolderWorkbench({
 	projectId,
 	canEditSpeakers,
+	allowEdit,
+	showFileHeader,
+	allowDownload,
+	isReadonlyShare,
+	currentFile,
+	shareAttachments,
+	onFullscreen,
+	openFileTab,
+	isFullscreen,
 	detail,
 	showNotesTab,
 }: AudioFolderWorkbenchProps) {
@@ -127,12 +170,27 @@ function AudioFolderWorkbench({
 	const [speakerSettingsOpen, setSpeakerSettingsOpen] = useState(false)
 	const [speakerDraft, setSpeakerDraft] = useState<Record<string, string>>({})
 	const [speakerNameOverrides, setSpeakerNameOverrides] = useState<Record<string, string>>({})
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
+	const [selectedActiveKey, setSelectedActiveKey] = useState<string>()
 	const summaryReady = Boolean(fileMap?.summaryFiles.length)
+	// Folder previews collapse the transcript column only when the right panel still offers a tab-strip expand entry.
+	const canCollapseTranscript = summaryReady && hasRecordingDetailTabStrip(fileMap, showNotesTab)
+	const {
+		isTranscriptPanelCollapsed,
+		transcriptPanelWidth,
+		workbenchGridRef,
+		expandTranscriptPanel,
+		collapseTranscriptPanel,
+		setTranscriptPanelWidth,
+	} = useRecordingDetailTranscriptPanelState()
+
+	/** Routes a finished transcript drag to the matching persisted transition. */
+	const handleTranscriptDragCommit = useCallback(
+		(result: { collapsed: boolean; width: number }) => {
+			if (result.collapsed) collapseTranscriptPanel()
+			else setTranscriptPanelWidth(result.width)
+		},
+		[collapseTranscriptPanel, setTranscriptPanelWidth],
+	)
 	const summaryContent = useMemo(
 		() =>
 			Object.fromEntries(
@@ -163,9 +221,37 @@ function AudioFolderWorkbench({
 		[selectedSpeakerIds, speakerIds],
 	)
 	const colorSegments = useRecordingColorSegments(summaryReady, texts.summary.topics?.content)
+	const activeKey =
+		selectedActiveKey === "notes" && showNotesTab
+			? "notes"
+			: fileMap?.summaryFiles.some((file) => file.type === selectedActiveKey)
+				? selectedActiveKey || "notes"
+				: fileMap?.summaryFiles[0]?.type || "notes"
+	const activeContent = useMemo<RecordingArtifactContent>(() => {
+		if (activeKey === "notes") {
+			return { content: texts.notes?.content, fileId: fileMap?.notes?.file_id }
+		}
+		const summary = texts.summary[activeKey as keyof typeof texts.summary]
+		const summaryFile = fileMap?.summaryFiles.find((file) => file.type === activeKey)
+		return { content: summary?.content, fileId: summaryFile?.file?.file_id }
+	}, [activeKey, fileMap?.notes?.file_id, fileMap?.summaryFiles, texts])
+	const activeFile = useMemo(() => {
+		const summaryRef = fileMap?.summaryFiles.find((file) => file.type === activeKey)
+		const mappedFile = activeKey === "notes" ? fileMap?.notes : summaryRef?.file
+		if (mappedFile?.file_id) {
+			return attachmentList.find((item) => item.file_id === mappedFile.file_id) ?? mappedFile
+		}
+		if (!summaryRef?.fileName) return undefined
+		return attachmentList.find(
+			(item) =>
+				getAttachmentName(item) === summaryRef.fileName ||
+				item.relative_file_path === summaryRef.fileName,
+		)
+	}, [activeKey, attachmentList, fileMap?.notes, fileMap?.summaryFiles])
 
 	useEffect(() => {
 		setSpeakerNameOverrides({})
+		setSelectedActiveKey(undefined)
 	}, [fileMap?.magicProject?.file_id])
 
 	/** Opens the existing speaker editor with the latest persisted display names. */
@@ -188,7 +274,8 @@ function AudioFolderWorkbench({
 		})
 		setSpeakerNameOverrides(nextSpeakers)
 		setSpeakerSettingsOpen(false)
-		void refresh()
+		// Keep the embedded workbench mounted while persisted speaker metadata syncs in the background.
+		void refresh({ silent: true })
 	}, [canEditSpeakers, refresh, speakerDraft, speakerNameMap, texts.magicProject])
 
 	/** Seeks summary time links in the shared inline audio player. */
@@ -216,50 +303,100 @@ function AudioFolderWorkbench({
 	if (error) return <RecordingDetailEmptyState variant="pageError" className="flex-1" />
 
 	return (
-		<div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background pt-4">
-			<RecordingDetailWorkbench
-				left={
-					<RecordingDetailLeftColumn
-						searchScopeKey={projectId}
-						audioRef={player.audioRef}
-						audioUrl={audioUrl}
-						transcriptMarkdown={texts.transcript?.content}
-						currentSec={playerCurrentSec}
-						currentTime={player.currentTime}
-						duration={player.duration}
-						playing={player.playing}
-						expanded={playerExpanded}
-						playbackRate={player.playbackRate}
-						colorSegments={colorSegments}
-						speakerNameMap={speakerNameMap}
-						selectedSpeakerIds={effectiveSelectedSpeakerIds}
-						onSelectedSpeakerIdsChange={setSelectedSpeakerIds}
-						onToggle={player.toggle}
-						onSeek={player.seekTo}
-						onPlaySegment={handlePlaySegment}
-						onExpandedChange={setPlayerExpanded}
-						onPlaybackRateChange={player.setPlaybackRate}
-						onOpenSpeakerSettings={openSpeakerSettings}
-					/>
-				}
-				right={
-					<RecordingDetailRightPanel
-						fileMap={fileMap}
-						summaryContent={summaryContent}
-						notesContent={texts.notes?.content}
-						attachmentTree={attachmentTree as unknown as AttachmentFile[]}
-						notesFilePath={fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path}
-						attachmentList={attachmentList}
-						summaryReady={summaryReady}
-						summarizing={false}
-						summaryFailed={false}
-						showNotesTab={showNotesTab}
-						speakerNameMap={speakerNameMap}
-						onOpenSpeakerSettings={openSpeakerSettings}
-						onTimeClick={handleSummaryTimeClick}
-					/>
-				}
-			/>
+		<div
+			className={cn(
+				"flex h-full min-h-0 w-full flex-col overflow-hidden bg-background",
+				// Headerless embeds keep the spacing that previously separated content from the preview edge.
+				!showFileHeader && "pt-4",
+			)}
+		>
+			{showFileHeader ? (
+				<RecordingArtifactHeader
+					projectId={projectId}
+					recordingName={
+						currentFile.display_filename || currentFile.file_name || "Recording"
+					}
+					fileMap={fileMap}
+					activeContent={activeContent}
+					activeFile={activeFile}
+					currentFile={{
+						id: currentFile.file_id || "",
+						name: currentFile.display_filename || currentFile.file_name || "",
+						type: "audio",
+						projectId,
+					}}
+					attachments={shareAttachments}
+					allowEdit={allowEdit}
+					allowDownload={allowDownload}
+					isReadonlyShare={isReadonlyShare}
+					isFullscreen={isFullscreen}
+					onFullscreen={onFullscreen}
+					// Refresh the recording bundle in place; do not delegate to FilesViewer's
+					// generic handler, which changes tab.refreshKey and remounts the preview.
+					onRefresh={refresh}
+					openFileTab={openFileTab}
+				/>
+			) : null}
+			{/* Keep the action header mounted while refreshing; only the content area uses the existing skeleton. */}
+			{refreshing ? (
+				<RecordingDetailPageSkeleton />
+			) : (
+				<RecordingDetailWorkbench
+					transcriptCollapsed={isTranscriptPanelCollapsed}
+					transcriptWidth={transcriptPanelWidth}
+					canCollapseTranscript={canCollapseTranscript}
+					onTranscriptDragCommit={handleTranscriptDragCommit}
+					gridRef={workbenchGridRef}
+					compactHorizontalPadding
+					left={
+						<RecordingDetailLeftColumn
+							searchScopeKey={projectId}
+							audioRef={player.audioRef}
+							audioUrl={audioUrl}
+							transcriptMarkdown={texts.transcript?.content}
+							currentSec={player.currentTime}
+							currentTime={player.currentTime}
+							duration={player.duration}
+							playing={player.playing}
+							expanded={playerExpanded}
+							playbackRate={player.playbackRate}
+							colorSegments={colorSegments}
+							speakerNameMap={speakerNameMap}
+							selectedSpeakerIds={effectiveSelectedSpeakerIds}
+							onSelectedSpeakerIdsChange={setSelectedSpeakerIds}
+							onToggle={player.toggle}
+							onSeek={player.seekTo}
+							onPlaySegment={handlePlaySegment}
+							onExpandedChange={setPlayerExpanded}
+							onPlaybackRateChange={player.setPlaybackRate}
+							onOpenSpeakerSettings={openSpeakerSettings}
+						/>
+					}
+					right={
+						<RecordingDetailRightPanel
+							fileMap={fileMap}
+							summaryContent={summaryContent}
+							notesContent={texts.notes?.content}
+							attachmentTree={attachmentTree as unknown as AttachmentFile[]}
+							notesFilePath={
+								fileMap?.notes?.relative_file_path ?? fileMap?.notes?.path
+							}
+							attachmentList={attachmentList}
+							summaryReady={summaryReady}
+							summarizing={false}
+							summaryFailed={false}
+							showNotesTab={showNotesTab}
+							speakerNameMap={speakerNameMap}
+							onOpenSpeakerSettings={openSpeakerSettings}
+							onTimeClick={handleSummaryTimeClick}
+							activeKey={activeKey}
+							onActiveKeyChange={setSelectedActiveKey}
+							transcriptCollapsed={isTranscriptPanelCollapsed}
+							onExpandTranscript={expandTranscriptPanel}
+						/>
+					}
+				/>
+			)}
 			{canEditSpeakers ? (
 				<RecordingDetailSpeakerDialog
 					open={speakerSettingsOpen}
@@ -293,4 +430,15 @@ function resolveFallbackHtml(
 /** Returns the stable attachment display name used by bundle-entry matching. */
 function getAttachmentName(item: AttachmentItem): string {
 	return item.file_name || item.filename || item.display_filename || item.name || ""
+}
+
+/** Resolves legacy index.html previews back to the recording folder used by share and locate actions. */
+function resolveRecordingRoot(
+	data: AttachmentItem,
+	attachments: AttachmentItem[],
+	attachmentList: AttachmentItem[],
+): AttachmentItem {
+	if (data.is_directory || !data.parent_id) return data
+	const candidates = [...attachments, ...attachmentList]
+	return candidates.find((item) => item.file_id === data.parent_id) ?? data
 }

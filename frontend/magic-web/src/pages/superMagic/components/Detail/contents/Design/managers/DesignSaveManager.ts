@@ -6,7 +6,11 @@ import {
 	resolveDesignProjectBasePathFromAttachments,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import { getElementDetailsSidecarStatus, writeUserElementDetails } from "../utils/elementDetailsIo"
+import {
+	getElementDetailsSidecarStatus,
+	getHydratedElementDetailsProvenance,
+	writeUserElementDetails,
+} from "../utils/elementDetailsIo"
 import { isContentProjectVersion } from "../utils/magicProjectCompression"
 import { SuperMagicApi } from "@/apis"
 import type { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
@@ -174,10 +178,14 @@ export class DesignSaveManager {
 		this.stateBag.setters.setIsSaving(false)
 	}
 
-	async manualSave(): Promise<DesignSaveResult> {
+	async manualSave(designData?: DesignData): Promise<DesignSaveResult> {
 		this.cancelAutoSave()
 		this.stateBag.setters.setIsSaving(true)
-		return this.commitSave({ allowRemoteConflict: true, source: "manual-save" })
+		return this.commitSave({
+			allowRemoteConflict: true,
+			designData,
+			source: "manual-save",
+		})
 	}
 
 	syncDesignData(newDesignData: DesignData): void {
@@ -376,12 +384,14 @@ export class DesignSaveManager {
 			didSave = true
 			savedUpdatedAt = saveResponse?.success_files?.[0]?.data?.updated_at ?? null
 
-			// v3：主文件保存成功后写用户 sidecar（仅写 element-details-user.json）
+			// v3：主文件保存成功后只写用户 sidecar，不触碰 element-details.json
 			let didPersistDetails = true
 			if (isContentProjectVersion(designDataToSave.version)) {
 				const sidecarResult = await writeUserElementDetails(
 					designDataToSave,
 					sidecarContext,
+					this.stateBag.getElementDetailsProvenance?.() ??
+						getHydratedElementDetailsProvenance(designDataToSave),
 				)
 				didPersistDetails =
 					sidecarResult === "persisted" ||

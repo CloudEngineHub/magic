@@ -41,6 +41,7 @@ function createHoverManager(
 		viewportHitTarget?: Konva.Node | null
 		extendingElementId?: string | null
 		hasConnections?: boolean
+		customHoverNode?: Konva.Shape | Konva.Group | null
 	} = {},
 ) {
 	const stage = new Konva.Group()
@@ -50,6 +51,7 @@ function createHoverManager(
 	const emit = vi.fn()
 	const getPointerPosition = vi.fn(() => ({ x: 30, y: 40 }))
 	const getIntersection = vi.fn(() => options.viewportHitTarget ?? null)
+	const updateHoverEffect = vi.fn()
 	const eventHandlers = new Map<string, Array<(event: { data?: unknown }) => void>>()
 	const getOptionValue = (value: boolean | (() => boolean) | undefined, fallback: boolean) =>
 		typeof value === "function" ? value() : (value ?? fallback)
@@ -97,7 +99,8 @@ function createHoverManager(
 			getElementInstance: () => undefined,
 			getNodeAdapter: () => ({
 				getElementBounds: () => ({ x: 10, y: 20, width: 120, height: 80 }),
-				createHoverEffect: () => null,
+				createHoverEffect: () => options.customHoverNode ?? null,
+				updateHoverEffect,
 			}),
 		},
 		geometryCacheManager: {
@@ -141,7 +144,9 @@ function createHoverManager(
 		getPointerPosition,
 		manager,
 		requestLayerDraw,
+		stage,
 		target,
+		updateHoverEffect,
 	}
 }
 
@@ -431,6 +436,65 @@ describe("HoverManager", () => {
 		manager.destroy()
 	})
 
+	it("keeps the existing hover visuals during viewport scale and rechecks after settle", () => {
+		vi.useFakeTimers()
+		const raf = installRafMock()
+		const {
+			emit,
+			eventHandlers,
+			getPointerPosition,
+			manager,
+			requestLayerDraw,
+			stage,
+			target,
+		} = createHoverManager()
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		const hoverNode = manager.hoverNode
+		expect(hoverNode).toBeInstanceOf(Konva.Rect)
+		expect(manager.hoveredElementId).toBe("element-1")
+
+		stage.scale({ x: 2, y: 2 })
+		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBe(hoverNode)
+		expect((hoverNode as Konva.Rect).strokeWidth()).toBe(1)
+		expect(getPointerPosition).not.toHaveBeenCalled()
+		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
+		expect(emit).not.toHaveBeenCalledWith({
+			type: "element:hover",
+			data: { elementId: null },
+		})
+
+		vi.advanceTimersByTime(160)
+
+		expect(getPointerPosition).toHaveBeenCalledTimes(1)
+		expect(manager.hoveredElementId).toBeNull()
+		manager.destroy()
+	})
+
+	it("updates a custom hover node without recreating it during viewport scale", () => {
+		vi.useFakeTimers()
+		const customHoverNode = new Konva.Group()
+		const { eventHandlers, manager, stage, target, updateHoverEffect } = createHoverManager({
+			customHoverNode,
+		})
+		const raf = installRafMock()
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		expect(manager.hoverNode).toBe(customHoverNode)
+
+		stage.scale({ x: 2, y: 2 })
+		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
+
+		expect(manager.hoverNode).toBe(customHoverNode)
+		expect(updateHoverEffect).toHaveBeenCalledTimes(1)
+		manager.destroy()
+	})
+
 	it("hit-tests once after zoom emits scale and pan in the same update", async () => {
 		vi.useFakeTimers()
 		const { eventHandlers, getPointerPosition, manager } = createHoverManager({
@@ -536,12 +600,18 @@ describe("HoverManager", () => {
 		manager.destroy()
 	})
 
-	it("clears and suppresses hover refresh while viewport gesture is active", () => {
+	it("keeps hover visuals and suppresses hit testing while a pinch gesture is active", () => {
 		const raf = installRafMock()
-		const { eventHandlers, getIntersection, manager, requestLayerDraw, target } =
-			createHoverManager({
-				geometryHitIds: ["element-1"],
-			})
+		const {
+			eventHandlers,
+			getIntersection,
+			getPointerPosition,
+			manager,
+			requestLayerDraw,
+			target,
+		} = createHoverManager({
+			geometryHitIds: ["element-1"],
+		})
 
 		manager.handleMouseMove({ target })
 		raf.flush()
@@ -550,12 +620,41 @@ describe("HoverManager", () => {
 		eventHandlers.get("viewport:gesture")?.[0]?.({
 			data: { active: true, source: "touch-pinch", pointerCount: 2 },
 		})
-		expect(manager.hoveredElementId).toBeNull()
+		const hoverNode = manager.hoverNode
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(hoverNode).not.toBeNull()
 
 		getIntersection.mockReturnValue(null)
+		manager.handleMouseMove({ target: new Konva.Rect() })
+		expect(raf.count()).toBe(0)
 		eventHandlers.get("viewport:scale")?.[0]?.({ data: { scale: 2 } })
 
+		expect(manager.hoveredElementId).toBe("element-1")
+		expect(manager.hoverNode).toBe(hoverNode)
+		expect(getPointerPosition).not.toHaveBeenCalled()
+		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
+
+		eventHandlers.get("viewport:gesture")?.[0]?.({
+			data: { active: false, source: "touch-pinch" },
+		})
+
+		expect(getPointerPosition).toHaveBeenCalledTimes(1)
+		expect(manager.hoveredElementId).toBe("element-1")
+		manager.destroy()
+	})
+
+	it("still clears hover when a non-zoom viewport gesture starts", () => {
+		const raf = installRafMock()
+		const { eventHandlers, manager, requestLayerDraw, target } = createHoverManager()
+
+		manager.handleMouseMove({ target })
+		raf.flush()
+		eventHandlers.get("viewport:gesture")?.[0]?.({
+			data: { active: true, source: "minimap", pointerCount: 1 },
+		})
+
 		expect(manager.hoveredElementId).toBeNull()
+		expect(manager.hoverNode).toBeNull()
 		expect(requestLayerDraw).toHaveBeenCalledTimes(2)
 		manager.destroy()
 	})

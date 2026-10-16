@@ -478,7 +478,11 @@ class MCPClient:
         async with streamablehttp_client 边界将真实的 McpError 重新抛出，
         而不是停留在 CancelledError，从而让调用方获得准确的错误信息。
         """
-        async with _MCPClientSession(read_stream, write_stream) as session:
+        # stdio 服务器可能把启动日志写入 stdout。原生 ClientSession 会忽略这类
+        # 非 JSON-RPC 行并继续处理后续消息；HTTP 连接仍使用自定义会话，将解析异常
+        # 转换为可返回给调用方的 JSON-RPC 错误。
+        session_cls = ClientSession if self.config.type == MCPServerType.STDIO else _MCPClientSession
+        async with session_cls(read_stream, write_stream) as session:
             await session.initialize()
             self.session = session
             logger.debug(f"MCP 服务器 '{self.config.name}' 连接成功")

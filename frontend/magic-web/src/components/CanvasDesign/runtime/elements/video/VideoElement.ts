@@ -23,9 +23,9 @@ import {
 	ElementCornerActionsDecorator,
 	type ElementCornerActionConfig,
 } from "../decorators/ElementCornerActionsDecorator"
-import { MediaMainVersionTagDecorator } from "../decorators/MediaMainVersionTagDecorator"
+import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
-import type { TransformContext } from "../core/BaseElement"
+import type { NameLabelContent, TransformContext } from "../core/BaseElement"
 import {
 	appendReferenceImageInfos,
 	removeReferenceImageInfosByPath,
@@ -33,6 +33,7 @@ import {
 } from "../core/referenceImageInfos"
 import { VideoRenderer } from "./VideoRenderer"
 import { VideoPollingManager } from "../../resources/polling/VideoPollingManager"
+import { resolveMediaComplianceStatus } from "../../resources/asset/assetComplianceState"
 import { areCanvasHostResourceReferencesSame } from "../../shared/path/canvasResourcePath"
 import {
 	buildFullscreenVideoPlaybackConsumerId,
@@ -74,7 +75,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private pollingManager: VideoPollingManager
 	private borderDecorator?: BorderDecorator
 	private cornerActionsDecorator?: ElementCornerActionsDecorator
-	private mainVersionTagDecorator?: MediaMainVersionTagDecorator
+	private mainVersionTagDecorator?: MediaVersionTagDecorator
 	private legacyIsGenerating = false
 
 	public get isGenerating(): boolean {
@@ -370,7 +371,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	 */
 	public async submitContentGeneration(
 		request: GenerateVideoRequest,
-		options?: { recoveryIntent?: MediaEditIntent },
+		options?: { recoveryIntent?: MediaEditIntent; preserveVideoId?: boolean },
 	): Promise<boolean> {
 		const generateVideo = this.canvas.magicConfigManager.config?.methods?.generateVideo
 		if (
@@ -389,9 +390,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		const recoveryContent = this.getVideoContent()
 		const requestWithId: GenerateVideoRequest = {
 			...request,
-			prompt: request.prompt?.trim(),
-			// 追加 Content 必须对应全新的服务端任务，不能复用旧版本的 video_id。
-			video_id: generateUUID(),
+			...(request.prompt !== undefined ? { prompt: request.prompt.trim() || undefined } : {}),
+			// 默认仍强制生成新任务；正片“再次生成”会在积分预估前创建新 ID，
+			// 并显式要求提交同一份已经确认过的 payload。
+			video_id:
+				options?.preserveVideoId && request.video_id ? request.video_id : generateUUID(),
 		}
 		this.isGenerating = true
 		this.isGenerationErrorState = false
@@ -1076,6 +1079,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private renderPreview(group: Konva.Group, width: number, height: number): void {
 		const playerGroup = this.renderer.createPlayerNode(width, height, this.canvas, {
 			showLoadingOverlay: this.isInlinePlaybackPending || this.isInlinePlaybackRefreshing,
+			showDraftTag: this.getVideoContent()?.generateVideoRequest?.generation?.draft === true,
 			onPlayButtonClick: () => {
 				this.canvas.videoPlaybackInteractionManager.toggleElementPlayback(
 					this.data.id,
@@ -1095,7 +1099,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		this.createBorder(group, width, height, false)
 		this.createCornerActions(group, width, height, { fullscreen: true })
-		this.createMainVersionTag(group, width, height)
+		this.createMediaStatusTags(group, width, height)
 		this.setupContentUpdateListener(group)
 	}
 
@@ -1154,7 +1158,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				}
 
 				this.createCornerActions(group, width, height)
-				this.createMainVersionTag(group, width, height)
+				this.createMediaStatusTags(group, width, height)
 			},
 		})
 		this.setupContentUpdateListener(group)
@@ -1175,8 +1179,14 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.borderDecorator.create(backgroundNode)
 	}
 
+	private createMediaStatusTags(group: Konva.Group, width: number, height: number): void {
+		this.createMainVersionTag(group, width, height)
+		// Compliance failures are shown by the name-label shield and its tooltip;
+		// keep the media surface free of the redundant red status card.
+	}
+
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {
-		this.mainVersionTagDecorator = new MediaMainVersionTagDecorator(group, {
+		this.mainVersionTagDecorator = new MediaVersionTagDecorator(group, {
 			canvas: this.canvas,
 			width,
 			height,
@@ -1413,6 +1423,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			const height = this.data.height || 0
 			this.renderer.updatePlaceholderContentLayout(group, width, height)
 			this.renderer.updatePlayerViewportScaleLayout(group)
+			this.borderDecorator?.updateViewportScaleLayout()
 		}
 		const updateContentLayout = () => {
 			const width = this.data.width || 0
@@ -1526,23 +1537,32 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		})
 	}
 
-	/** 获取图层与画布名称共用的状态后缀。 */
-	public override getNameLabelText(): string {
+	/** 获取图层与画布名称共用的结构化状态后缀。 */
+	public override getNameLabelContent(): NameLabelContent {
 		const baseName = this.data.name || this.getRenderName()
 		const state = this.getDisplayState()
+		const withSuffix = (text: string): NameLabelContent => ({
+			primaryText: baseName,
+			suffix: { text },
+		})
+
 		switch (state.status) {
 			case "uploading":
-				return `${baseName}${this.getText("video.nameSuffix.uploading", "(上传中)")}`
+				return withSuffix(this.getText("video.nameSuffix.uploading", "(上传中)"))
 			case "generating":
-				return `${baseName}${this.getText("video.nameSuffix.generating", "(生成中)")}`
+				return withSuffix(this.getText("video.nameSuffix.generating", "(生成中)"))
 			case "composing":
-				return `${baseName}${this.getText("video.nameSuffix.composing", "(合并中)")}`
+				return withSuffix(this.getText("video.nameSuffix.composing", "(合并中)"))
 			case "failed":
 				return state.failureSource === "resource"
-					? baseName
-					: `${baseName}${this.getText("video.nameSuffix.failed", "(失败)")}`
+					? { primaryText: baseName }
+					: withSuffix(this.getText("video.nameSuffix.failed", "(失败)"))
 			default:
-				return baseName
+				return this.canvas.isSeedanceComplianceEnabled() &&
+					resolveMediaComplianceStatus(this.canvas, this.getVideoContent()) ===
+						"PROCESSING"
+					? withSuffix(this.getText("video.nameSuffix.complianceProcessing", "(校验中)"))
+					: { primaryText: baseName }
 		}
 	}
 

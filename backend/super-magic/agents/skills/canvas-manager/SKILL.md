@@ -1,6 +1,6 @@
 ---
 name: canvas-manager
-version: 1.1.2
+version: 1.2.0
 description: "Manage a Canvas through its business tools only — initialize and query projects, create Elements and Content candidates, frame Elements, wait on generation, and process design markers. Use when the user asks to create, edit, or generate anything on a Canvas, such as images, videos, storyboards, video edits, or a final composed video, or when the message contains [@design_canvas_project:...] or [@design_marker:...]. Also use when the user says 'generate an image on my canvas', 'make a video from this canvas project', 'add a new element to my design', or 'edit the marked region of this image'. Layout strategies, Connections, video point estimation, video composition, image search, asset reconciliation, and prompt inspiration live in the references."
 ---
 
@@ -28,16 +28,16 @@ You maintain a Canvas through its business tools first. Every normal read and wr
 - Examples use a one-level, space-free path such as `Demo`. This is only an example convention; when the user or runtime provides a path, preserve that exact path, including valid nested directories or spaces.
 - Never use file, directory, or shell tools to inspect or modify Canvas state during normal operations. The only exception is the controlled `magic.project.js` recovery fallback described in the asset-reconciliation reference.
 - Reuse the exact `element_id`, `content_id`, `connection_id`, and `generation_task_id` returned by earlier results; never guess IDs from names or positions.
-- Element and Content deletion are not available to you — tell the user to remove them on the Canvas.
+- Element/Content deletion and batch file rename require the scope-bound human confirmation in `references/element-management.md` or `references/naming.md`. Never infer confirmation from a tool success or a default answer.
 - Connection deletion or replacement requires an exact Connection ID and explicit user intent.
 - A generated Content may be retried at most 2 times, only when its status is explicitly `failed`, and only with the user's explicit consent; never loop retries automatically and never retry `pending`, `processing`, `queued`, `running`, or `completed` Content.
 - A timeout or a `pending`, `processing`, `queued`, or `running` state is a waiting state, not a failure. Waiting for an asynchronous task is conditional: wait when the next step needs the completed media, its path, dimensions, status, or user preview; otherwise return the submitted state and preserve the exact task ID for later tracking. When waiting, use bounded follow-up calls with the same generation task ID and never submit a duplicate generation request. Only an explicit failed status enters the retry flow.
-- The first Content of any Element is automatically its main Content; never ask whether to make it main and never call the main-selection tool for it. For a later candidate appended to an Element that already has a main Content, show the completed candidate and select it as main only after explicit user confirmation. Revising a Content never overwrites it; create a new candidate instead.
+- The first Content of any Element is automatically its main Content; never ask whether to make it main and never call the main-selection tool for it. For a later candidate appended to an Element that already has a main Content, show the completed candidate and select it as main only after explicit user confirmation. Revising a Content never overwrites it. Image revisions normally create independent Elements; append image Content only when the user explicitly requests versions inside one Element.
 - Billed video generation requires an independent point-estimation step and explicit user confirmation before submission. The estimate ID is not a generation-tool credential.
 - Re-query after any write when the next step depends on persisted state.
 - Provider-managed asset URIs such as `asset://...` are generation references, not workspace files. Never pass them to `visual_understanding`, file tools, import tools, or Canvas queries that expect a local media path.
-- You may read every Element type. You may create or edit only `frame`, `storyboard`, `video-edit`, `image`, `video`, and `audio`.
-- `text`, `rectangle`, `ellipse`, `triangle`, `star`, and `group` are read-only. Never create them, change their Content or main selection, lay them out, retry them, or include them in `frame_canvas_elements`.
+- You may read every Element type. You may create or change Content only for `frame`, `storyboard`, `video-edit`, `image`, `video`, and `audio`.
+- Never create `text`, `rectangle`, `ellipse`, `triangle`, `star`, or `group`, change their Content or main selection, or retry them. Dedicated management tools may rename, arrange, frame or remove existing Elements without unlocking them; read the matching reference first.
 
 ## Mandatory request preflight
 
@@ -85,16 +85,16 @@ You cannot:
 
 ## Core model
 
-- **Element** — a node on the Canvas. All types are readable, but only Frame, Storyboard, Video Edit, Image, Video, and Audio Elements are writable by this Agent.
+- **Element** — a node on the Canvas. All types are readable, but only Frame, Storyboard, Video Edit, Image, Video, and Audio Elements allow Content writes by this Agent. Existing Elements may be managed through the dedicated tools without changing their Content.
 - **Content** — one version of what an Element shows. An Element may hold several Content candidates; one is marked main.
 - **Frame** — a container Element with program-managed structural Content and `children`.
 - **Connection** — a business dependency from one Element to another. Professional video-production relations are defined in `references/professional-video-production.md`.
 
-Within the writable type set, you may add Elements, append Content, retry failed Content, select main Content, create Frames, change layout, and change Connections. Revising a Content never overwrites it; create a new candidate with `add_canvas_contents`.
+Within the writable type set, you may add Elements, append Content, retry failed Content, select main Content, create Frames, change layout, and change Connections. Revising a Content never overwrites it; create a new candidate with `add_canvas_contents`, except that image revisions default to a separate Element. Each Element has one shared title; each Content version may reference its own file.
 
 ## How to call tools
 
-Every Canvas tool is called in Code mode and returns a result whose `content` string is the only thing you read:
+Every Canvas tool is called in Code mode. Read `result.content` for business meaning; use `result.data` only for programmatic pagination as shown below:
 
 ```python
 from sdk.tool import tool
@@ -108,12 +108,12 @@ print(result.content)
 ```
 
 - The `from sdk.tool import tool` import is required in every snippet; it is shown once above and omitted in all later examples for brevity.
-- Read only `result.content`; never index the result object or read `result.data`.
+- Read `result.content`; never index the result object. Use `result.data["has_more"]` only to control pagination, not to replace the readable result.
 - `item_ref` is a batch-local label linking a request to its result, not a persisted Canvas ID.
 
 ## Confirmation and asking the user
 
-Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. The first Content of an Element, whether created with the Element or added to an otherwise empty Element, is automatically its main Content; do not ask whether to make that first Content main and do not call `select_canvas_main_content` for it. Tool success is not user approval — do not continue past an applicable gate until the user confirms or supplies a revision. In staged video work, confirm the first completed first frame before generating the remaining first frames, confirm the first completed trial shot video before generating the remaining shots, and confirm the final Video Edit configuration including `audioPolicy` before composing.
+Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. The first Content of an Element, whether created with the Element or added to an otherwise empty Element, is automatically its main Content; do not ask whether to make that first Content main and do not call `select_canvas_main_content` for it. Tool success is not user approval — do not continue past an applicable gate until the user confirms or supplies a revision. In staged video work, confirm the first completed shot reference image before generating the remaining shot reference images, confirm the first completed trial shot video before generating the remaining shots, and confirm the final Video Edit configuration including `audioPolicy` before composing.
 
 Use the `ask_user` tool as a **direct tool call** (not inside Code mode) for every applicable gate. Prefer:
 
@@ -130,7 +130,10 @@ New project or PROJECT_NOT_FOUND?            → initialize_canvas
 Don't know element IDs?                      → query_canvas_overview
 Need full content / hierarchy / media?       → query_canvas_element_details
 New logical element?                         → add_canvas_elements
-New candidate on an existing element?        → add_canvas_contents
+New candidate on an existing element?        → add_canvas_contents (image versions require explicit intent)
+Rename titles or image filenames?            → references/naming.md
+Search nearby / arrange / align / distribute? → references/layout.md
+Unframe / remove Elements or image files?    → references/element-management.md
 Failed generated content + user agrees?      → retry_canvas_content_generation
 User picked an appended candidate?           → select_canvas_main_content
 Group sibling elements?                      → frame_canvas_elements
@@ -145,7 +148,7 @@ User wants prompt inspiration / no ideas?    → search_canvas_image_prompts  (s
 
 ## Tool reference
 
-Each tool below is documented with when to use it, its parameters, and a minimal example. Read every result only from `result.content` and reuse returned IDs verbatim.
+Each tool below is documented with when to use it, its parameters, and a minimal example. Read `result.content` and reuse returned IDs verbatim; pagination uses `result.data["has_more"]`.
 
 ## `initialize_canvas`
 
@@ -166,7 +169,7 @@ Read the created-or-existing status. Next: `query_canvas_overview` when you need
 
 ## `query_canvas_overview`
 
-Use when element IDs are unknown, when resuming work, or when the user asks what is on the Canvas. Returns a lightweight Element index with compact relations.
+Use when element IDs are unknown, when resuming work, or when the user asks what is on the Canvas. Returns a lightweight text Element index with titles, current persisted Content IDs, media paths, filenames and compact relations. It does not render a Canvas image. A missing asset path means no persisted media reference; an existing path does not prove the file exists.
 
 Parameters: `project_path` is required; `page` and `limit` are optional.
 
@@ -179,13 +182,16 @@ Parameters: `project_path` is required; `page` and `limit` are optional.
 ```python
 result = tool.call("query_canvas_overview", {"project_path": "Demo", "page": 1, "limit": 50})
 print(result.content)
+# Inspect this page first. Stop when the requested Element is found.
+if result.ok and result.data["has_more"]:
+    print("Another page is available; request it only if more Elements are needed.")
 ```
 
-If it reports a next page, increment `page`. For full Content, hierarchy, or connections, pass the returned IDs to `query_canvas_element_details`.
+When looking for a specific Element, stop as soon as it is found. Otherwise increment `page` only when `result.data["has_more"]` is true; stop on false or a failed query. Do not fetch a fixed number of pages or infer pagination from `Next` in the readable content. If exact Element IDs are already known, call `query_canvas_element_details` directly for Content, hierarchy, or connections.
 
 ## `query_canvas_element_details`
 
-Query 1–10 exact element IDs; returns Content, status, media paths, Frame hierarchy, and related Connections.
+Query 1–10 exact element IDs; returns Content, status, media paths, Frame hierarchy, and related Connections. Each version includes its recorded prompt, model ID, reference images in binding order, source-image crop and saved generation settings when available. Read `references/element-management.md` for generation-record interpretation; never infer missing history from an image or current model defaults.
 
 Parameters: `project_path` and 1–10 exact `element_ids` are required. Use the `asset_path`, status, task ID, and Connection ID returned in the details only as real inputs to later tools.
 
@@ -206,7 +212,7 @@ Query before retrying, selecting a main version, deleting/replacing Connections,
 
 ## `add_canvas_elements`
 
-Create new writable logical Elements: `storyboard`, `video-edit`, `image`, `video`, or `audio`. Frames are created with `frame_canvas_elements`. Use `add_canvas_contents` for a candidate on an existing writable Element.
+Create new writable logical Elements: `storyboard`, `video-edit`, `image`, `video`, or `audio`. Frames are created with `frame_canvas_elements`. Use `add_canvas_contents` for a candidate on an existing writable Element; image revisions default to independent Elements.
 
 Parameters: `project_path` and `items` are required; each item needs at least `item_ref` and `element_type`.
 
@@ -251,7 +257,7 @@ When a user requests a transformation of an existing Canvas video, guide the wor
 
 Group exact sibling Elements into a new Frame.
 
-Parameters: `project_path` and `items` are required. Selected siblings must all be writable Element types. Never include `text`, `rectangle`, `ellipse`, `triangle`, `star`, or `group`. This tool does not frame existing Frames/Groups and does not offer unframing.
+Parameters: `project_path` and `items` are required. Select exact unlocked root-level siblings, including existing shapes or text. This tool does not frame existing Frames/Groups. Unframing uses `unframe_canvas_elements` from `references/element-management.md`.
 
 | Parameter | Required | Description |
 |---|---|---|
@@ -272,7 +278,7 @@ Confirm the exact sibling Element IDs first. Do not pass coordinates, size, or `
 
 ## `add_canvas_contents`
 
-Append a new Content candidate to an existing writable Element without overwriting previous candidates. Read-only Element types must only be queried.
+Append a new Content candidate to an existing writable Element without overwriting previous candidates. Image candidates inside one Element require an explicit same-Element version request; ordinary image revisions use `add_canvas_elements`. The Content writable type set remains unchanged.
 
 Parameters: `project_path` and `items` are required; each item uses an exact `element_id` and new Content.
 
@@ -389,6 +395,7 @@ Supports `row_incremental`, `dependency_flow`, and `explicit_position`. Use `exp
 result = tool.call("layout_canvas_elements", {
     "project_path": "Demo",
     "items": [{
+        "item_ref": "move-image",
         "element_id": "element-740000000000000001",
         "layout": {"strategy": "explicit_position", "position": {"x": 120, "y": 80}},
     }],
@@ -413,8 +420,8 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 
 - Initialization image: connect from every imported or confirmed Element materially combined into the result.
 - Storyboard: connect from the confirmed initialization anchors only, not the original imported assets behind them.
-- First frame: connect from the storyboard Element.
-- Shot video: connect from exactly its corresponding first-frame Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
+- Shot reference image: connect from the storyboard Element.
+- Shot video: connect from exactly its corresponding shot reference-image Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
 - Video edit: include direct incoming Connections from every `videoSequence` and `audioSequence` Element in the same `add_canvas_elements` call. Use `manage_canvas_connections` only for later standalone relationship maintenance.
 - Final video composition: pass ordered Video and Audio Element IDs in `composition.videoSequence` and `composition.audioSequence`. When a Video Edit is the direct predecessor, connect only the Video Edit to the final video; direct media Connections are used when composing without a Video Edit.
 
@@ -537,9 +544,9 @@ Use preset or numeric short-side resolutions in `output`, such as `1080p` or `76
 
 - Image design workflow: direct generation, referenced images, appended candidates, and main Content selection after confirmation only for appended candidates.
 - Ordinary video workflow: full creative target, point estimate and `ask_user` confirmation, then async generation and waiting.
-- Detailed video production workflow: Storyboard, first frames, shot videos, direct business Connections, `video-edit`, and the final MP4.
+- Detailed video production workflow: Storyboard, shot reference images, shot videos, direct business Connections, `video-edit`, and the final MP4.
 - `video-edit` Content stores an editable ordered plan via `videoSequence` and optional `audioSequence`; create matching incoming Connections in the same `add_canvas_elements` call when a reusable edit plan is needed.
-- Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups, and no unframing or deletion is offered.
+- Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups. Use `unframe_canvas_elements` to remove a Frame while retaining its children, or `delete_canvas_elements` for confirmed removal of a Frame and its descendants; follow `references/element-management.md`.
 - Layout strategies: `row_incremental`, `dependency_flow`, `explicit_position`.
 - Version management: the first Content is automatically main; appended candidates require user confirmation before main Content selection, with a retry cap on failures.
 
@@ -563,13 +570,13 @@ A `[@design_marker:name]` mention is the user annotating a region of a Canvas im
 ### Processing steps
 
 1. **Parse** — extract the marker name (the intent), the image path, and the marked area / coordinates.
-2. **Understand** — call `visual_understanding` on the image to get its content description and dimensions. Convert the marker's Canvas project-relative path to a Workspace-relative path by prefixing the exact `project_path` before this call (for example, `./images/dog.jpg` in project `Demo` becomes `Demo/images/dog.jpg`). Do not pass the bare `./images/...` path to `visual_understanding`. You need to know what the image contains to describe what should change and what must stay.
-3. **Build the prompt** — `[full scene from visual_understanding] + [the change, at the marked location] + [preserve everything else]`. Fold the marker coordinates directly into the prompt, combined with the object name from `visual_understanding`.
+2. **Look** — see the image to identify the object at the marked area and get the original dimensions. If the image is not already visible in your context, call `visual_understanding`; convert the marker's Canvas project-relative path to a Workspace-relative path by prefixing the exact `project_path` (for example, `./images/dog.jpg` in project `Demo` becomes `Demo/images/dog.jpg`). Do not pass the bare `./images/...` path to `visual_understanding`.
+3. **Build the prompt** — `[the change, at the marked location in Image 1] + [keep everything else in Image 1 unchanged]`. Name the marked object and fold in the coordinates so the model edits the right spot. The reference already shows the rest of the scene; re-describing it adds your misreadings as competing instructions (see Reference roles in `references/image-generation.md`).
 4. **Generate** — `add_canvas_elements` with a single image Element whose Content uses `source=generated`, `content_type=image`, a specific `name`, `reference_images=[original project-relative path]`, and `size` set to the original image's dimensions.
 
 ```python
-# visual_understanding was already called and returned the scene description
-# and the original dimensions (e.g. 1920x1080).
+# You have seen the image: the marked object is the dog's ear, and the original
+# dimensions are 1920x1080.
 
 result = tool.call("add_canvas_elements", {
     "project_path": "Demo",
@@ -582,10 +589,9 @@ result = tool.call("add_canvas_elements", {
             "content_type": "image",
             "name": "dog with red ear",
             "prompt": (
-                "A golden retriever sitting on grass, looking at the camera, warm afternoon "
-                "sunlight from the left. Change only the ear at approximately (64%, 7%) to bright "
-                "red — same fur texture, same lighting, just the color changed. Preserve the dog's "
-                "face, body, pose, the grass, and the entire background exactly as they appear."
+                "In Image 1, change only the dog's ear at approximately (64%, 7%) to bright red, "
+                "keeping its fur texture and lighting. Keep the dog's face, body, pose, and the "
+                "entire background exactly as in Image 1."
             ),
             "reference_images": ["./images/dog.jpg"],
             "size": "1920x1080",
@@ -595,7 +601,7 @@ result = tool.call("add_canvas_elements", {
 print(result.content)
 ```
 
-Key points: always pass the original image path in `reference_images`; always set `size` to the original dimensions; describe the full scene, not just the change, and explicitly state what is preserved; the new image is a separate Element — the original Element and file remain unchanged.
+Key points: always pass the original image path in `reference_images`; always set `size` to the original dimensions; describe the change precisely and state that everything else in Image 1 is kept, without re-describing the scene; the new image is a separate Element — the original Element and file remain unchanged.
 
 ## Mandatory context loading
 
@@ -614,4 +620,8 @@ Load references only when the matching task appears:
 - `references/prompt-library.md` — the user asks for prompt inspiration or says they have no idea (`search_canvas_image_prompts`).
 - `references/asset-reconciliation.md` — only when the user reports a mismatch between the Canvas and local `images`/`videos` folders.
 
-No reference may widen the deletion or retry boundaries. Direct file operations remain forbidden except for the controlled `magic.project.js` recovery fallback described in the asset-reconciliation reference.
+- `references/naming.md` — shared Canvas title, actual version files, batch naming and conflicts.
+- `references/layout.md` — finite spatial queries, relative arrangement, alignment and distribution.
+- `references/element-management.md` — saved generation records, unframing and confirmed Element/version/file removal.
+
+No reference may widen the confirmation or retry boundaries. Direct file operations remain forbidden except for the controlled `magic.project.js` recovery fallback described in the asset-reconciliation reference.

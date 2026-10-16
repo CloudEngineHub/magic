@@ -1,7 +1,10 @@
 import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import type { ReactNode, CSSProperties, RefObject } from "react"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
-import type { FileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
+import type {
+	FileManagerLocationSnapshot,
+	FileManagerSnapshot,
+} from "@/models/config/repositories/SuperProjectStateTypes"
 import type { MagicWidget } from "@magic-web/widget-sdk"
 import type {
 	DownloadImageMode,
@@ -14,6 +17,7 @@ import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import type { FileScope } from "@/apis/modules/fileScope"
 import type { FileReference, FileReferenceResult } from "@/apis/modules/superMagic"
 import type { HtmlNavigationRequest } from "../../contents/HTML/utils/html-navigation"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 // Base interfaces
 export interface FileSidebarControl {
@@ -70,7 +74,17 @@ export type FileManagerContext =
 			projectName?: string
 			topicId?: string
 	  }
-	| { spaceType: "project"; projectId: string; directoryId?: string }
+	| {
+			spaceType: "project"
+			projectId: string
+			directoryId?: string
+			area?: FileManagerLocationSnapshot["area"]
+	  }
+
+export interface FileManagerAreaRequest {
+	requestId: number
+	area: FileManagerLocationSnapshot["area"]
+}
 
 export interface FileManagerOpenRequest {
 	file_manager: FileManagerContext
@@ -81,11 +95,13 @@ export interface FileManagerStateChangeOptions {
 	deferred?: boolean
 	userInteraction?: boolean
 }
-export type FileViewerTabType = "file" | "website" | "knowledge_base" | "playback" | "file_manager"
+export type FileViewerTabType =
+	"file" | "website" | "knowledge_base" | "playback" | "file_manager" | "micro_app"
 export type ActiveDetailTabType = FileViewerTabType | null
 
 // File item interface
 export interface FileItem {
+	recycleBin?: { id: string; identityKey: string; projectId?: string }
 	/** 文件引用身份独立于 previewPolicy.fileScope 的编辑策略。 */
 	file_reference?: FileReference
 	space_type?: FileReference["space_type"]
@@ -132,6 +148,8 @@ export interface TabFileContext {
 export interface TabItem {
 	userIdentityKey?: string | null
 	fileManager?: FileManagerContext
+	/** 本次显式打开的区域；请求不进入持久化，恢复仍使用浏览快照。 */
+	fileManagerAreaRequest?: FileManagerAreaRequest
 	fileManagerState?: FileManagerSnapshot
 	returnTabId?: string
 	id: string
@@ -187,6 +205,7 @@ export interface PlaybackTabItem extends TabItem {
 // FilesViewer component props
 export interface FilesViewerProps extends BaseComponentProps {
 	fileHelpContext?: FileHelpContext
+	projectFilesStore?: ProjectFilesStore
 	attachmentLoadState?: AttachmentLoadState
 	attachments?: FileItem[]
 	attachmentList?: FileItem[]
@@ -223,6 +242,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 	canLocateFile?: boolean
 	/** Controls whether project-level preview tabs are restored and persisted across mounts. */
 	persistFileTabs?: boolean
+	onTabsEmpty?: () => void
 
 	// Render component props
 	allowEdit?: boolean
@@ -264,7 +284,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 
 // FilesViewer ref interface
 export interface FilesViewerRef {
-	openFileTab: (fileItem: any, autoEdit?: boolean) => void
+	openFileTab: (fileItem: any, autoEdit?: boolean, activate?: boolean) => void
 	closeFileTab: (fileId: string) => void
 	switchToTab: (fileId: string) => void
 	clearAllTabs: () => void
@@ -289,6 +309,8 @@ export interface FilesViewerRef {
 		fileExtension?: string
 	}) => void
 	closeKnowledgeBaseTab: (tabId: string) => void
+	openMicroAppTab: (data: { appId: string; appName?: string }) => void
+	closeMicroAppTab: (tabId: string) => void
 	/** Promotes the currently active file or playback tab without recreating it. */
 	enterPreviewFullscreen: () => void
 	/** Restores the current preview to its non-fullscreen layout without dismissing it. */

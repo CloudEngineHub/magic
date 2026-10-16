@@ -86,6 +86,7 @@ vi.mock("../SuperMagicCustomModelService", () => ({
 }))
 
 import superMagicModeService from "../SuperMagicModeService"
+import superMagicModeListRepository from "../repositories/SuperMagicModeListRepository"
 import superMagicCustomModelService from "../SuperMagicCustomModelService"
 import { SuperMagicApi } from "@/apis"
 import { userStore } from "@/models/user"
@@ -777,6 +778,12 @@ describe("SuperMagicModeService", () => {
 		expect(superMagicModeService.isModeVisible("hidden-agent")).toBe(false)
 	})
 
+	it("keeps the internal micro-app mode available without a crew-list entry", () => {
+		superMagicModeService._modeMap.clear()
+
+		expect(superMagicModeService.isModeValid(TopicMode.MicroApp)).toBe(true)
+	})
+
 	it("reuses fresh mode list in the same user context", async () => {
 		vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue({
 			list: [
@@ -1007,6 +1014,134 @@ describe("SuperMagicModeService", () => {
 
 		expect(SuperMagicApi.getDefaultModeModelList).toHaveBeenCalledTimes(1)
 	})
+
+	it.each(["cached", "missing", "invalid", "storage-error"])(
+		"keeps the micro-app model catalog when %s crew cache hydration finishes later",
+		async (cacheState) => {
+			const cachedCrewList = createCrewList("general").list
+			const pendingCache = createDeferred<ModeItem[] | undefined>()
+			if (cacheState === "invalid") {
+				window.localStorage.setItem(createModeListStorageKey("zh_CN"), "{}")
+			}
+			if (cacheState === "storage-error") {
+				vi.mocked(superMagicModeListRepository.getByKey).mockImplementationOnce(
+					async () => {
+						await pendingCache.promise
+						throw new Error("Cache unavailable")
+					},
+				)
+			} else {
+				vi.mocked(superMagicModeListRepository.getByKey).mockReturnValueOnce(
+					pendingCache.promise,
+				)
+			}
+			const model = createModelItem({
+				id: "default-1",
+				modelId: "default-model",
+				name: "Default Model",
+			})
+			const group = superMagicModeService._modeMap.get("general")?.groups[0].group
+			if (!group) throw new Error("Missing model group fixture")
+			vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+				...createModeItem(TopicMode.Default),
+				groups: [
+					{
+						group,
+						model_ids: [model.model_id],
+						image_model_ids: [model.model_id],
+						video_model_ids: [model.model_id],
+					},
+				],
+				models: { [model.model_id]: model },
+			})
+			vi.mocked(SuperMagicApi.getCrewList).mockResolvedValue(createCrewList("general"))
+
+			// Page mount loads default models independently of the slower crew cache read.
+			const hydration = superMagicModeService.hydrateFromStorage()
+			await flushPendingBootstrap()
+			await superMagicModeService.fetchDefaultModeModelList({ force: true })
+			expect(superMagicModeService.getModelListByMode(TopicMode.Default)).toEqual([model])
+
+			pendingCache.resolve(cacheState === "cached" ? cachedCrewList : undefined)
+			await hydration
+			await superMagicModeService.fetchModeList()
+			await superMagicModeService.fetchDefaultModeModelList()
+
+			// A fresh default response must remain reachable by the editor after hydration.
+			expect(superMagicModeService.getModelListByMode(TopicMode.Default)).toEqual([model])
+			expect(superMagicModeService.getImageModelListByMode(TopicMode.Default)).toEqual([
+				model,
+			])
+			expect(superMagicModeService.getVideoModelListByMode(TopicMode.Default)).toEqual([
+				model,
+			])
+			expect(SuperMagicApi.getDefaultModeModelList).toHaveBeenCalledTimes(1)
+		},
+	)
+
+	it.each(["language", "organization", "user"])(
+		"does not retain the previous default catalog after a %s change",
+		async (contextField) => {
+			vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+				...createModeItem(TopicMode.Default),
+				groups: [],
+				models: {},
+			})
+			await superMagicModeService.fetchDefaultModeModelList()
+			expect(superMagicModeService._modeMap.has(TopicMode.Default)).toBe(true)
+
+			if (contextField === "language") configStore.i18n.displayLanguage = "en_US"
+			if (contextField === "organization") userStore.user.organizationCode = "other-org"
+			if (contextField === "user") {
+				if (!userStore.user.userInfo) throw new Error("Missing user fixture")
+				userStore.user.userInfo.user_id = "other-user"
+			}
+			await superMagicModeService.hydrateFromStorage()
+
+			expect(superMagicModeService._modeMap.has(TopicMode.Default)).toBe(false)
+		},
+	)
+
+	it("refetches default models after returning to a previous context", async () => {
+		vi.mocked(SuperMagicApi.getDefaultModeModelList).mockResolvedValue({
+			...createModeItem(TopicMode.Default),
+			groups: [],
+			models: {},
+		})
+		await superMagicModeService.fetchDefaultModeModelList()
+		configStore.i18n.displayLanguage = "en_US"
+		await superMagicModeService.hydrateFromStorage()
+		configStore.i18n.displayLanguage = "zh_CN"
+		await superMagicModeService.hydrateFromStorage()
+		await superMagicModeService.fetchDefaultModeModelList()
+
+		expect(SuperMagicApi.getDefaultModeModelList).toHaveBeenCalledTimes(2)
+		expect(superMagicModeService._modeMap.has(TopicMode.Default)).toBe(true)
+	})
+
+	it.each(["resolved", "rejected"])(
+		"ignores a %s cache read from the previous context",
+		async (result) => {
+			const pendingCache = createDeferred<ModeItem[] | undefined>()
+			vi.mocked(superMagicModeListRepository.getByKey).mockImplementationOnce(async () => {
+				await pendingCache.promise
+				if (result === "rejected") throw new Error("Old cache unavailable")
+				return createCrewList("old-crew").list
+			})
+			const hydration = superMagicModeService.hydrateFromStorage()
+			await flushPendingBootstrap()
+			configStore.i18n.displayLanguage = "en_US"
+			mockModeListStore.set(
+				createModeListStorageKey("en_US"),
+				createCrewList("new-crew").list,
+			)
+			await superMagicModeService.hydrateFromStorage()
+			pendingCache.resolve(undefined)
+			await hydration
+
+			expect(superMagicModeService.modeList[0]?.mode.identifier).toBe("new-crew")
+		},
+	)
 
 	it("migrates and cleans localStorage entries from other organizations", async () => {
 		const foreignKey = "super_magic/mode_list/other-org/other-user/zh_CN"

@@ -21,6 +21,13 @@ export interface MCPOAuthStatus {
 	require_fields: Array<MCPOAuthRequireField>
 }
 
+/**
+ * Poll MCP user settings every two seconds until authorization succeeds.
+ * Register lifecycle callbacks with setCallbacks, then call start(id) or restart(id).
+ * An initial status avoids a duplicate first request; later polls fetch fresh settings.
+ * Call destroy when the owning UI unmounts to abort requests and clear timers.
+ * restart replaces the aborted controller and starts a new polling lifecycle.
+ */
 export class MCPOAuthService {
 	private api: typeof FlowApi
 	private qrRefreshTimer?: NodeJS.Timeout
@@ -28,7 +35,7 @@ export class MCPOAuthService {
 	private abortController: AbortController
 	private isDestroyed = false
 
-	// 回调函数类型定义
+	// Optional callbacks notify the owning UI about authorization status and failures.
 	private callbacks: {
 		onLoadingChange?: (loading: boolean) => void
 		onSuccess?: (response: MCPOAuthStatus) => void
@@ -42,8 +49,8 @@ export class MCPOAuthService {
 	}
 
 	/**
-	 * 设置回调函数
-	 * @param callbacks 回调函数集合
+	 * Merge callbacks into the current lifecycle handlers.
+	 * @param callbacks Handlers supplied by the owning UI.
 	 */
 	setCallbacks(callbacks: {
 		onLoadingChange?: (loading: boolean) => void
@@ -55,7 +62,7 @@ export class MCPOAuthService {
 	}
 
 	/**
-	 * 开始二维码流程
+	 * Start the authorization status polling lifecycle.
 	 */
 	async start(id: string, initialStatus?: MCPOAuthStatus) {
 		if (this.isDestroyed) return
@@ -68,7 +75,7 @@ export class MCPOAuthService {
 	}
 
 	/**
-	 * 开始轮询授权状态
+	 * Fetch authorization status and schedule the next poll when authorization is incomplete.
 	 * @param id MCP id
 	 */
 	private async startPolling(id: string, initialStatus?: MCPOAuthStatus) {
@@ -90,11 +97,11 @@ export class MCPOAuthService {
 			this.callbacks.onStatusUpdate?.(result)
 
 			if (result.auth_config.is_authenticated) {
-				// 授权成功，清理定时器并触发回调
+				// Stop polling and notify the UI when authorization succeeds.
 				this.clearTimers()
 				this.callbacks.onSuccess?.(result)
 			} else {
-				// 继续轮询
+				// Poll again while authorization remains incomplete.
 				this.pollTimer = setTimeout(() => {
 					this.startPolling(id)
 				}, 2000)
@@ -107,7 +114,7 @@ export class MCPOAuthService {
 	}
 
 	/**
-	 * 清理所有定时器
+	 * Clear all timers owned by this authorization lifecycle.
 	 */
 	private clearTimers() {
 		if (this.qrRefreshTimer) {
@@ -121,7 +128,7 @@ export class MCPOAuthService {
 	}
 
 	/**
-	 * 停止并清理所有资源
+	 * Stop polling, abort the current request, and release lifecycle resources.
 	 */
 	destroy() {
 		this.isDestroyed = true
@@ -130,7 +137,7 @@ export class MCPOAuthService {
 	}
 
 	/**
-	 * 重新开始整个流程
+	 * Restart authorization polling with a fresh abort controller.
 	 */
 	restart(id: string, initialStatus?: MCPOAuthStatus) {
 		this.destroy()

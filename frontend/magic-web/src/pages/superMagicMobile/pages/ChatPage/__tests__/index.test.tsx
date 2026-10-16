@@ -1,9 +1,84 @@
 import { forwardRef, type ReactNode } from "react"
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { runInAction } from "mobx"
 import { describe, expect, it, vi, beforeEach } from "vitest"
 
 import MobileHomePage from "../index"
+import "@/pages/superMagic/stores/core"
+import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
+
+const homeState = vi.hoisted(() => ({
+	search: "",
+	navigate: vi.fn(),
+	context: null as SceneEditorContext | null,
+}))
+vi.mock("@/pages/superMagic/components/MessageEditor/services/UploadTokenService", () => ({
+	UploadTokenService: class {},
+}))
+vi.mock("@/routes/hooks/useNavigate", () => ({ default: () => homeState.navigate }))
+vi.mock("@/pages/superMagic/pages/ChatHomePage/useChatHomeContext", () => ({
+	useChatHomeContext: () => ({
+		selectedProject: null,
+		selectedTopic: null,
+		selectedWorkspace: null,
+		draftKey: { workspaceId: "chat-home" },
+	}),
+}))
+vi.mock("../hooks/useTaskHomeContext", () => ({
+	useTaskHomeContext: () => ({
+		context: {
+			selectedProject: null,
+			selectedTopic: null,
+			draftKey: { workspaceId: "task-home" },
+		},
+		workspace: { id: "task-workspace", name: "Task workspace" },
+		selectWorkspace: vi.fn(),
+		loading: false,
+		error: false,
+	}),
+}))
+vi.mock("@/pages/superMagic/components/MessageEditor/stores", () => ({
+	MessageEditorStore: class {
+		fileUploadStore = { isAllFilesUploaded: true }
+		dispose = vi.fn()
+	},
+	MessageEditorStoreProvider: ({ children }: { children: ReactNode }) => children,
+}))
+vi.mock("@/pages/superMagic/components/MainInputContainer/stores", () => ({
+	createSceneStateStore: () => ({}),
+	SceneStateProvider: ({ children }: { children: ReactNode }) => children,
+}))
+vi.mock("@/components/shadcn-ui/scroll-area", () => ({
+	ScrollArea: ({ children }: { children: ReactNode }) => children,
+}))
+vi.mock("../components/TaskWorkspaceSheet", () => ({ default: () => null }))
+vi.mock("@/components/shadcn-ui/smooth-tabs", () => ({
+	SmoothTabs: ({
+		tabs,
+		value,
+		onChange,
+		"data-testid": dataTestId,
+	}: {
+		tabs: { value: string; label: string; "data-testid"?: string }[]
+		value: string
+		onChange: (value: string) => void
+		"data-testid"?: string
+	}) => (
+		<div role="tablist" data-testid={dataTestId}>
+			{tabs.map((tab) => (
+				<button
+					role="tab"
+					data-testid={tab["data-testid"]}
+					aria-selected={tab.value === value}
+					key={tab.value}
+					onClick={() => onChange(tab.value)}
+				>
+					{tab.label}
+				</button>
+			))}
+		</div>
+	),
+}))
 
 const mockUseOptionalSuperMobileShellOutlet = vi.fn()
 const {
@@ -53,7 +128,7 @@ vi.mock("@/pages/superMagicMobile/components/MobileShell", () => ({
 vi.mock("react-router", () => ({
 	useLocation: () => ({
 		pathname: "/global/mobile-home",
-		search: "",
+		search: homeState.search,
 	}),
 }))
 
@@ -114,7 +189,12 @@ vi.mock("../components/SloganSection", () => ({
 
 vi.mock("../components/MobileInputContainer", () => ({
 	__esModule: true,
-	default: forwardRef(() => <div data-testid="mobile-input-container" />),
+	default: forwardRef<HTMLDivElement, { editorContext: SceneEditorContext }>(
+		({ editorContext }, ref) => {
+			homeState.context = editorContext
+			return <div ref={ref} data-testid="mobile-input-container" />
+		},
+	),
 }))
 
 vi.mock("@/pages/mobileTabs/constants", () => ({
@@ -258,6 +338,11 @@ vi.mock("@/services/superMagic/ProjectTopicService", () => ({
 
 vi.mock("@/services/superMagic/DefaultAgentSelectionService", () => ({
 	getFallbackTopicModeIdentifier: () => "summary",
+	resolveDefaultAgentSelection: () => ({
+		topicPattern: "custom_agent",
+		modeIdentifier: "SMA-default",
+		agentCode: "SMA-default",
+	}),
 	resolveProjectModeForCreate: (mode?: string | null) => mode || "summary",
 }))
 
@@ -287,6 +372,7 @@ describe("MobileHomePage", () => {
 	beforeEach(() => {
 		const { topicStore, projectStore } = getSelectedContextStores()
 		vi.clearAllMocks()
+		homeState.search = ""
 		mockUseOptionalSuperMobileShellOutlet.mockReset()
 		mockUseOptionalSuperMobileShellOutlet.mockReturnValue({ openSidebar: vi.fn() })
 		roleStoreState.currentRole = "unavailable-agent"
@@ -329,9 +415,61 @@ describe("MobileHomePage", () => {
 	})
 
 	it("does not expose a separate homepage new-chat action", () => {
+		refreshFeaturedModeListMock.mockResolvedValue([])
 		render(<MobileHomePage />)
 
 		expect(screen.queryByTestId("mobile-header-primary-button")).not.toBeInTheDocument()
+	})
+
+	it("defaults to task mode with workspace selection", () => {
+		refreshFeaturedModeListMock.mockResolvedValue([])
+		render(<MobileHomePage />)
+		expect(screen.getByTestId("mobile-home-mode-controls")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-home-mode-tabs")).toBeInTheDocument()
+		expect(screen.getByTestId("mobile-home-mode-chat-tab")).toHaveAttribute(
+			"aria-selected",
+			"false",
+		)
+		expect(screen.getByTestId("mobile-home-mode-task-tab")).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
+		expect(screen.getByRole("tab", { name: "homeMode.task" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
+		expect(homeState.context?.showModeToggle).toBe(true)
+		expect(homeState.context?.showModelSelector).toBe(false)
+		expect(screen.getByTestId("mobile-home-workspace")).toBeInTheDocument()
+	})
+
+	it("switches mode without a page transition and shows task workspace separately", () => {
+		refreshFeaturedModeListMock.mockResolvedValue([])
+		homeState.search = "?homeMode=chat"
+		const view = render(<MobileHomePage />)
+		fireEvent.click(screen.getByRole("tab", { name: "homeMode.task" }))
+		expect(homeState.navigate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				query: { homeMode: "task" },
+				viewTransition: false,
+				replace: true,
+			}),
+		)
+		homeState.search = "?homeMode=task"
+		view.rerender(<MobileHomePage key="task-route" />)
+		expect(screen.getByTestId("mobile-home-workspace")).toBeInTheDocument()
+		expect(homeState.context?.showModeToggle).toBe(true)
+		expect(screen.getAllByTestId("mobile-input-container")).toHaveLength(1)
+	})
+
+	it("preserves employee deep links as task entries", () => {
+		refreshFeaturedModeListMock.mockResolvedValue([])
+		homeState.search = "?agentCode=SMA-explicit"
+		render(<MobileHomePage />)
+		expect(screen.getByRole("tab", { name: "homeMode.task" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		)
 	})
 
 	it("uses the configured default when the saved employee is unavailable", async () => {
@@ -400,7 +538,7 @@ describe("MobileHomePage", () => {
 		expect(applyResolvedRoleMock).not.toHaveBeenCalled()
 	})
 
-	it("restores the saved homepage employee after returning from a topic", async () => {
+	it("restores the saved employee without inheriting the previously visited topic", async () => {
 		const { topicStore, projectStore } = getSelectedContextStores()
 		roleStoreState.currentRole = "unavailable-agent"
 		getRawGlobalTopicModeMock.mockReturnValue("general")
@@ -416,15 +554,8 @@ describe("MobileHomePage", () => {
 		})
 		render(<MobileHomePage />)
 
-		expect(refreshFeaturedModeListMock).not.toHaveBeenCalled()
-		expect(recoverTopicModeMock).not.toHaveBeenCalled()
-
-		act(() => {
-			runInAction(() => {
-				topicStore.selectedTopic = null
-				projectStore.selectedProject = null
-			})
-		})
+		expect(homeState.context?.selectedProject).toBeNull()
+		expect(homeState.context?.selectedTopic).toBeNull()
 
 		await waitFor(() => {
 			expect(recoverTopicModeMock).toHaveBeenCalledWith("general")

@@ -22,12 +22,14 @@ export class KeyboardManager {
 	/** 窗口失焦时需要清理修饰键状态，避免 keyup 丢失后元素拖拽状态卡住 */
 	private readonly handleWindowBlur = (): void => {
 		this.canvas.resetKeepRatioModifier()
+		this.canvas.eventEmitter.emit({ type: "keyboard:alt:up", data: undefined })
 	}
 
 	/** 页面隐藏时浏览器可能不再派发 keyup，同样需要复位修饰键状态 */
 	private readonly handleVisibilityChange = (): void => {
 		if (document.visibilityState !== "visible") {
 			this.canvas.resetKeepRatioModifier()
+			this.canvas.eventEmitter.emit({ type: "keyboard:alt:up", data: undefined })
 		}
 	}
 
@@ -51,6 +53,7 @@ export class KeyboardManager {
 		"edit.undo": "keyboard:undo",
 		"edit.redo": "keyboard:redo",
 		"edit.copy": "keyboard:copy",
+		"edit.duplicate": "keyboard:duplicate",
 		"edit.copy-png": "keyboard:copy-png",
 		"edit.paste": "keyboard:paste",
 		// 选择快捷键
@@ -300,6 +303,11 @@ export class KeyboardManager {
 			return
 		}
 
+		if (e.key === "Alt") {
+			this.canvas.eventEmitter.emit({ type: "keyboard:alt:down", data: undefined })
+			return
+		}
+
 		// 处理 Meta/Command 键（Mac 上是 Meta，Windows/Linux 上是 Meta 或 Ctrl）
 		// 注意：只在单独按下 Meta 键时触发，不与其他键组合时触发
 		if (e.key === "Meta" && !e.shiftKey && !e.altKey && !e.ctrlKey) {
@@ -383,6 +391,9 @@ export class KeyboardManager {
 				break
 			case "keyboard:redo":
 				this.canvas.eventEmitter.emit({ type: "keyboard:redo", data: undefined })
+				break
+			case "keyboard:duplicate":
+				this.canvas.eventEmitter.emit({ type: "keyboard:duplicate", data: undefined })
 				break
 			case "keyboard:copy":
 				this.canvas.eventEmitter.emit({ type: "keyboard:copy", data: undefined })
@@ -496,6 +507,10 @@ export class KeyboardManager {
 		// keyup 可能因为输入框、浮层、窗口失焦等原因落到画布外。
 		if (this.isKeepRatioModifierKey(e)) {
 			this.canvas.setKeepRatioModifier(e.shiftKey || e.metaKey)
+		}
+		if (e.key === "Alt") {
+			this.canvas.eventEmitter.emit({ type: "keyboard:alt:up", data: undefined })
+			return
 		}
 
 		// 如果用户在输入框中，不处理快捷键
@@ -636,6 +651,8 @@ export class KeyboardManager {
 	 * @param target 目标元素
 	 */
 	private isInputElement(target: EventTarget | null): boolean {
+		// 图片标题是只读 DOM 文字：复制所选文字时不能被画布的复制元素快捷键截获。
+		if (target instanceof Element && target.closest("[data-canvas-name-label]")) return true
 		if (!target || !(target instanceof HTMLElement)) {
 			return false
 		}

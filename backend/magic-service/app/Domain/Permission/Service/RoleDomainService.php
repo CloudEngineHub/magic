@@ -92,6 +92,15 @@ readonly class RoleDomainService
                 ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.invalid_permission_key', ['key' => $permissionKey]);
             }
 
+            // A role editor may only delegate permissions that the editor
+            // already has.  Validity of a permission key is not an authority
+            // check: without this guard a sub-admin could add
+            // admin.safe.admin.edit (or an equivalent permission group) to a
+            // role and then use the newly-created authority immediately.
+            if (! $this->hasPermission($dataIsolation, $dataIsolation->getCurrentUserId(), $permissionKey)) {
+                ExceptionBuilder::throw(PermissionErrorCode::AccessDenied, 'permission.error.access_denied');
+            }
+
             // 跳过权限组常量，无需参与标签提取
             if (
                 $permissionKey === MagicPermission::ALL_PERMISSIONS

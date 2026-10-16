@@ -40,7 +40,10 @@ class TrustedMentionNodeView {
 	constructor(private node: { attrs: TiptapMentionAttributes }) {
 		this.dom = document.createElement("span")
 		this.dom.contentEditable = "false"
-		this.dom.className = "magic-mention inline-flex px-0.5 align-middle"
+		this.dom.className =
+			"magic-mention inline-flex cursor-grab select-none px-0.5 align-middle active:cursor-grabbing"
+		this.dom.draggable = false
+		this.dom.dataset.magicEditorNode = ""
 		this.render()
 	}
 
@@ -205,6 +208,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 			disableKeyboardShortcuts: false,
 			isAllowedMention: undefined,
 			dataService: undefined,
+			canToggleMultiSelectItem: undefined,
 			nodeViewRenderers: undefined,
 			shouldSkipInsertSync: undefined,
 			shouldSkipMentionValidation: undefined,

@@ -15,6 +15,7 @@
 	},
 	"chats": {
 		"empty": "暂无对话",
+		"myChats": "我的对话",
 		"newChat": "新建对话",
 		"refresh": "刷新对话列表",
 		"title": "对话"
@@ -26,6 +27,8 @@
 		"defaultUser": "用户",
 		"feedback": "使用反馈",
 		"freeAccount": "Free",
+		"globalRecycleBin": "全局回收站",
+		"globalRecycleBinHint": "查看你有权限访问的已删除空间、项目、话题、文件和微应用",
 		"helpCenter": "帮助中心",
 		"helpCenterTooltip": "查看超级麦吉使用指南",
 		"inbox": "站内信",
@@ -38,7 +41,7 @@
 		"upgradeNow": "立即升级"
 	},
 	"home": {
-		"title": "首页"
+		"title": "新建任务"
 	},
 	"inbox": {
 		"auth": {
@@ -220,7 +223,8 @@
 		"upgrade": "升级"
 	},
 	"skillsLibrary": {
-		"title": "技能 · 连接器"
+		"clawTitle": "技能",
+		"title": "数字员工・技能・连接器"
 	},
 	"slidesTemplates": {
 		"compactCount": "{{value}} 套",

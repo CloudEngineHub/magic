@@ -302,6 +302,16 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
         """在占位状态成功写回后执行子类异步后处理。"""
         return None
 
+    async def _after_placeholders_prepared(
+        self,
+        tool_context: ToolContext,
+        project_path_str: str,
+        placeholders: List[ElementDetail],
+        **kwargs: Any,
+    ) -> None:
+        """占位符保存后允许子类发送进度，不改变搜索等其他工具的展示。"""
+        return None
+
     def _build_result_content(
         self,
         project_path: Path,
@@ -391,6 +401,12 @@ class BaseGenerateCanvasElements(BaseDesignTool[TParams], Generic[TParams]):
             return error_result
 
         # Phase 2: 并发执行任务
+        await self._after_placeholders_prepared(
+            tool_context,
+            project_path_str,
+            all_placeholders,
+            **extra_kwargs,
+        )
         logger.info("Phase 2: 并发执行任务并即时更新")
 
         task_results: List[TaskExecutionResult] = list(await asyncio.gather(*[

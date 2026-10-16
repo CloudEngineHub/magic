@@ -10,6 +10,7 @@ import {
 	LockOpen,
 	Minimize2 as MinimizeIcon,
 	Search,
+	SquareCheckBig,
 	Type,
 	Workflow,
 	X,
@@ -17,6 +18,7 @@ import {
 import { FolderIcon } from "../../primitives/icons/index"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { Input } from "../../primitives/shadcn/input"
+import { Checkbox } from "../../primitives/shadcn/checkbox"
 import LayersEmpty from "../empty/index"
 import { Tooltip, TooltipTrigger, TooltipContent } from "../../primitives/shadcn/tooltip"
 import { usePortalContainer } from "../../primitives/custom/PortalContainerContext"
@@ -30,6 +32,7 @@ import {
 	type TriangleElement,
 	type StarElement,
 	type ImageElement,
+	type ImageElementContent,
 	type VideoElement,
 } from "../../../runtime/document/types"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
@@ -55,8 +58,16 @@ import {
 	hasActiveLayersFilter,
 	normalizeLayersFilter,
 } from "../layerFilters"
-import LayersFilterPopover, { LayersFilterForm } from "./LayersFilterPopover"
+import LayersFilterPopover from "./LayersFilterPopover"
 import { createLayerRefreshScheduler } from "./layerRefreshScheduler"
+import LayerBatchToolbar from "./LayerBatchToolbar"
+import {
+	areAllLayersChecked,
+	areSomeLayersChecked,
+	collectAllLayerIds,
+	getLayerCheckState,
+	toggleLayerTreeSelection,
+} from "../layerSelection"
 
 const LAYER_TREE_VIRTUAL_THRESHOLD = 80
 const LAYER_TREE_ROW_HEIGHT = 34
@@ -101,6 +112,7 @@ export default function LayersDrawer() {
 	const [hoveredLayerItemId, setHoveredLayerItemId] = useState<string | null>(null)
 	const [layerSearchValue, setLayerSearchValue] = useState("")
 	const [isLayersFilterOpen, setIsLayersFilterOpen] = useState(false)
+	const [isSelectMode, setIsSelectMode] = useState(false)
 	const [layersFilter, setLayersFilter] = useState<CanvasLayersFilterState>(() => {
 		if (methods?.getStorage) {
 			try {
@@ -172,6 +184,12 @@ export default function LayersDrawer() {
 		() => filterLayerTreeData(treeData, normalizedLayerSearchKeyword, layersFilter),
 		[treeData, normalizedLayerSearchKeyword, layersFilter],
 	)
+	const selectableLayerIds = useMemo(
+		() => collectAllLayerIds(filteredTreeData),
+		[filteredTreeData],
+	)
+	const isAllSelectableSelected = areAllLayersChecked(filteredTreeData, selectedElementIds)
+	const isPartiallySelected = areSomeLayersChecked(filteredTreeData, selectedElementIds)
 	const searchExpandedElementIds = useMemo(() => {
 		if (!isLayerSearching && !isLayerFiltering) {
 			return expandedElementIds
@@ -200,23 +218,29 @@ export default function LayersDrawer() {
 		})
 	}, [])
 
-	// 切换锁定状态
+	// 多选时点选中行的锁/眼睛，与右键菜单一样作用于整次选择。
 	const toggleLocked = useCallback(
 		(elementId: string, currentLocked: boolean) => {
 			if (!canvas) return
-			const willLock = !currentLocked
-			canvas.setElementLock(elementId, willLock)
+			if (selectedElementIds.length > 1 && selectedElementIds.includes(elementId)) {
+				canvas.userActionRegistry.execute("element.toggle-lock")
+				return
+			}
+			canvas.setElementLock(elementId, !currentLocked)
 		},
-		[canvas],
+		[canvas, selectedElementIds],
 	)
 
-	// 切换可见性
 	const toggleVisible = useCallback(
 		(elementId: string, currentVisible: boolean) => {
 			if (!canvas) return
+			if (selectedElementIds.length > 1 && selectedElementIds.includes(elementId)) {
+				canvas.userActionRegistry.execute("element.toggle-visible")
+				return
+			}
 			canvas.setElementVisible(elementId, !currentVisible)
 		},
-		[canvas],
+		[canvas, selectedElementIds],
 	)
 
 	const stopPropagation = useCallback((event: React.MouseEvent) => {
@@ -243,6 +267,44 @@ export default function LayersDrawer() {
 		setLayersFilter({ ...DEFAULT_LAYERS_FILTER })
 	}, [])
 
+	const clearLayerSelection = useCallback(() => {
+		canvas?.selectionManager.deselectAll()
+	}, [canvas])
+
+	const handleEnterSelectMode = useCallback(() => {
+		setIsSelectMode(true)
+	}, [])
+
+	const handleCancelSelectMode = useCallback(() => {
+		setIsSelectMode(false)
+		clearLayerSelection()
+	}, [clearLayerSelection])
+
+	const handleSelectAllLayers = useCallback(() => {
+		// Compact selection: selecting each visible root checks the whole subtree.
+		canvas?.selectionManager.replaceSelection(
+			filteredTreeData.map((node) => node.id),
+			false,
+		)
+	}, [canvas, filteredTreeData])
+
+	const handleToggleSelectAllLayers = useCallback(() => {
+		if (isAllSelectableSelected) {
+			clearLayerSelection()
+			return
+		}
+		handleSelectAllLayers()
+	}, [clearLayerSelection, handleSelectAllLayers, isAllSelectableSelected])
+
+	const toggleLayerSelection = useCallback(
+		(layerId: string) => {
+			if (!canvas) return
+			const nextIds = toggleLayerTreeSelection(filteredTreeData, selectedElementIds, layerId)
+			canvas.selectionManager.replaceSelection(nextIds, false)
+		},
+		[canvas, filteredTreeData, selectedElementIds],
+	)
+
 	useEffect(() => {
 		if (!methods?.saveStorage) return
 		try {
@@ -260,6 +322,9 @@ export default function LayersDrawer() {
 		(node: TreeNode<LayerTreeData>, context: RenderNodeContext) => {
 			const isLocked = node.data?.locked ?? false
 			const isVisible = node.data?.visible ?? true
+			const isDiscarded =
+				node.data?.type === ElementTypeEnum.Image &&
+				canvas?.getEffectiveContent<ImageElementContent>(node.id)?.discarded === true
 			const isEditing = layerRenamingElementId === node.id
 			const isLayerItemHovered = hoveredLayerItemId === node.id
 			const LockIcon = isLocked ? LockKeyhole : LockOpen
@@ -366,13 +431,36 @@ export default function LayersDrawer() {
 								}}
 							/>
 						) : (
-							<div className={styles.layerNodeLabelText}>{node.label}</div>
+							<div
+								className={styles.layerNodeLabelText}
+								onDoubleClick={(event) => {
+									event.stopPropagation()
+									if (!canWrite) return
+									if (
+										canvas?.elementManager.getElementData(node.id)?.type ===
+										"image"
+									) {
+										canvas.elementRenameManager.startRename(node.id, true)
+										return
+									}
+									setLayerRenamingElementId(node.id)
+								}}
+							>
+								{node.label}
+							</div>
+						)}
+						{isDiscarded && (
+							<span className={styles.layerNodeDiscarded}>
+								{t("elementBottomToolbar.discardedDraft", "废稿")}
+							</span>
 						)}
 					</div>
 				</div>
 			)
-			const renderActions = () =>
-				!isEditing && (
+			const isLayerSelected = selectedElementIds.includes(node.id)
+			const renderActions = () => {
+				if (isEditing || isSelectMode) return null
+				return (
 					<div className={styles.layerNodeActions}>
 						<div
 							className={cn(
@@ -423,6 +511,7 @@ export default function LayersDrawer() {
 						</div>
 					</div>
 				)
+			}
 
 			const renderLayerRow = (thumbnail?: React.ReactNode) => (
 				<div
@@ -455,9 +544,45 @@ export default function LayersDrawer() {
 			stopPropagation,
 			toggleLocked,
 			toggleVisible,
+			isSelectMode,
 			canWrite,
 			canvas,
 			setLayerRenamingElementId,
+			t,
+		],
+	)
+
+	const renderLayerLeading = useCallback(
+		(node: TreeNode<LayerTreeData>) => {
+			if (!isSelectMode || layerRenamingElementId === node.id) return null
+			const checkState = getLayerCheckState(filteredTreeData, selectedElementIds, node.id)
+			return (
+				<div
+					className={styles.layerNodeCheckboxSlot}
+					data-media-preview-ignore-hover=""
+					onPointerDown={(event) => event.stopPropagation()}
+					onDoubleClick={stopPropagation}
+				>
+					<Checkbox
+						checked={
+							checkState === "indeterminate"
+								? "indeterminate"
+								: checkState === "checked"
+						}
+						onCheckedChange={() => toggleLayerSelection(node.id)}
+						onClick={stopPropagation}
+						aria-label={node.label}
+					/>
+				</div>
+			)
+		},
+		[
+			filteredTreeData,
+			isSelectMode,
+			layerRenamingElementId,
+			selectedElementIds,
+			stopPropagation,
+			toggleLayerSelection,
 		],
 	)
 
@@ -472,18 +597,6 @@ export default function LayersDrawer() {
 			openMenu(event, node.id, "layers")
 		},
 		[openMenu, canvas],
-	)
-
-	const handleDoubleClick = useCallback(
-		(_event: React.MouseEvent, node: TreeNode<LayerTreeData>) => {
-			// 没有文档写能力时不允许编辑名称
-			if (!canWrite) {
-				return
-			}
-			// 双击进入编辑模式
-			setLayerRenamingElementId(node.id)
-		},
-		[canWrite, setLayerRenamingElementId],
 	)
 
 	const handleMouseEnter = useCallback(
@@ -553,7 +666,29 @@ export default function LayersDrawer() {
 			data-canvas-ui-component
 		>
 			<div className={styles.layersDrawerHeader}>
-				<span className={styles.layersDrawerTitle}>{t("layers.title", "图层")}</span>
+				{isSelectMode ? (
+					<label className={styles.layersSelectModeHeader}>
+						<Checkbox
+							checked={
+								isPartiallySelected
+									? "indeterminate"
+									: isAllSelectableSelected && selectableLayerIds.length > 0
+							}
+							onCheckedChange={handleToggleSelectAllLayers}
+							aria-label={t("layers.batch.selectAll", "全选")}
+						/>
+						<span className={styles.layersSelectModeLabel}>
+							{selectedElementIds.length > 0
+								? t("layers.batch.selected", {
+										defaultValue: "已选 {{count}} 项",
+										count: selectedElementIds.length,
+									})
+								: t("layers.batch.selectAll", "全选")}
+						</span>
+					</label>
+				) : (
+					<span className={styles.layersDrawerTitle}>{t("layers.title", "图层")}</span>
+				)}
 				{!collapsed && !!elements?.length && (
 					<div className={styles.layersDrawerHeaderActions}>
 						<div
@@ -582,15 +717,26 @@ export default function LayersDrawer() {
 							)}
 						</div>
 						<div className={styles.layersFilterActions}>
-							{isLayersFilterOpen && (
+							{isSelectMode ? (
 								<button
 									type="button"
-									className={styles.layersFilterReset}
-									disabled={!isLayerFiltering}
-									onClick={resetLayersFilter}
+									className={styles.layersSelectModeCancel}
+									onClick={handleCancelSelectMode}
 								>
-									{t("layers.filter.reset", "重置")}
+									{t("layers.batch.cancel", "取消")}
 								</button>
+							) : (
+								canWrite && (
+									<button
+										type="button"
+										className={styles.layersFilterTrigger}
+										aria-label={t("layers.batch.enter", "多选")}
+										title={t("layers.batch.enter", "多选")}
+										onClick={handleEnterSelectMode}
+									>
+										<SquareCheckBig size={14} />
+									</button>
+								)
 							)}
 							<LayersFilterPopover
 								filter={layersFilter}
@@ -598,15 +744,12 @@ export default function LayersDrawer() {
 								isOpen={isLayersFilterOpen}
 								onOpenChange={setIsLayersFilterOpen}
 								onFilterChange={updateLayersFilter}
+								onReset={resetLayersFilter}
 							/>
 						</div>
 					</div>
 				)}
 			</div>
-			{!collapsed && isLayersFilterOpen && (
-				<LayersFilterForm filter={layersFilter} onFilterChange={updateLayersFilter} />
-			)}
-			{!collapsed && isLayersFilterOpen && <div className={styles.layersFilterDivider} />}
 			<div className={styles.layersDrawerBody}>
 				{!collapsed &&
 					(elements?.length ? (
@@ -620,6 +763,7 @@ export default function LayersDrawer() {
 								data={filteredTreeData}
 								selectedIds={selectedIds}
 								hoveredIds={hoveredIds}
+								selectionMode="replace"
 								treeNodeContentClassName={
 									!canWrite ? styles.treeNodeContentViewOnly : undefined
 								}
@@ -635,8 +779,12 @@ export default function LayersDrawer() {
 										: handleLayersScrollTopChange
 								}
 								onSelect={(_nodes, ids) => {
-									// 智能判断：只有当选中状态发生变化时才自动聚焦
-									// 比较新旧选中的元素ID，判断是否有变化
+									const clickedId = ids[0]
+									if (!clickedId) return
+									if (isSelectMode) {
+										toggleLayerSelection(clickedId)
+										return
+									}
 									const hasSelectionChanged =
 										ids.length !== selectedElementIds.length ||
 										ids.some((id) => !selectedElementIds.includes(id)) ||
@@ -645,7 +793,6 @@ export default function LayersDrawer() {
 										ids,
 										hasSelectionChanged,
 									)
-									// 定位到选中的元素
 									if (ids.length > 0) {
 										canvas?.userActionRegistry.execute("view.focus-element", {
 											elementIds: ids,
@@ -654,9 +801,9 @@ export default function LayersDrawer() {
 								}}
 								expandedIds={searchExpandedElementIds}
 								onToggle={toggleExpandedElement}
+								renderLeading={isSelectMode ? renderLayerLeading : undefined}
 								renderNode={renderLayerNode}
 								onContextMenu={handleContextMenu}
-								onDoubleClick={handleDoubleClick}
 								onMouseEnter={handleMouseEnter}
 								onMouseLeave={handleMouseLeave}
 							/>
@@ -692,6 +839,9 @@ export default function LayersDrawer() {
 						</TooltipContent>
 					</TooltipPrimitive.Portal>
 				</Tooltip>
+				{!collapsed && isSelectMode && (
+					<LayerBatchToolbar selectedIds={selectedElementIds} />
+				)}
 			</div>
 		</div>
 	)

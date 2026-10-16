@@ -87,6 +87,24 @@ describe("resolveDesignDropResourcePaths", () => {
 			),
 		).toEqual([])
 	})
+
+	it("keeps a canonical asset reference without treating the id as a file name", () => {
+		expect(
+			resolveDesignDropResourcePaths(
+				projectFile(" asset://asset-video-1 ", "clip.mp4"),
+				DESIGN_A,
+			),
+		).toEqual(["asset://asset-video-1"])
+	})
+
+	it("rejects malformed asset references even when the payload has a media file name", () => {
+		expect(
+			resolveDesignDropResourcePaths(
+				projectFile("asset://asset-video-1/child", "clip.mp4"),
+				DESIGN_A,
+			),
+		).toEqual([])
+	})
 })
 
 describe("useDesignFileDropPaths", () => {
@@ -175,6 +193,28 @@ describe("useDesignFileDropPaths", () => {
 
 		expect(paths).toEqual(["./images/a.png"])
 		expect(copyFile).not.toHaveBeenCalled()
+	})
+
+	it("keeps a dropped asset reference without copying it into the workspace", async () => {
+		const updateAttachments = vi.fn()
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				updateAttachments,
+			}),
+		)
+
+		await expect(
+			result.current.getDataTransferFileInfo(
+				projectFile(" asset://shared-image-1 ", "portrait.png", {
+					projectId: "project-2",
+				}),
+			),
+		).resolves.toEqual(["asset://shared-image-1"])
+		expect(SuperMagicApi.copyFile).not.toHaveBeenCalled()
+		expect(updateAttachments).not.toHaveBeenCalled()
 	})
 
 	it("infers current-canvas ownership for a project mention without sourceCanvasId", async () => {
@@ -463,6 +503,36 @@ describe("useDesignFileDropPaths", () => {
 			path: "./images/a.png",
 			resourceIdentity: "workspace:/新建画布A/images/a.png",
 			fileName: "a.png",
+		})
+		expect(SuperMagicApi.copyFile).not.toHaveBeenCalled()
+	})
+
+	it("keeps an asset clipboard reference across canvases without copying", async () => {
+		const { result } = renderHook(() =>
+			useDesignFileDropPaths({
+				projectId: "project-1",
+				currentFile: { id: "canvas-1", name: DESIGN_A },
+				designProjectBasePath: DESIGN_A,
+				updateAttachments: vi.fn(),
+			}),
+		)
+
+		await expect(
+			result.current.resolveCanvasClipboardReference({
+				sourceProjectId: "project-2",
+				sourceCanvasId: "canvas-2",
+				resourceIdentity: "opaque-asset:asset://shared-video-1",
+				sourcePath: " asset://shared-video-1 ",
+				targetProjectId: "project-1",
+				targetCanvasId: "canvas-1",
+				target: "canvas-editor",
+				fileName: "shared-video.mp4",
+			}),
+		).resolves.toEqual({
+			kind: "current-canvas",
+			path: "asset://shared-video-1",
+			resourceIdentity: "opaque-asset:asset://shared-video-1",
+			fileName: "shared-video.mp4",
 		})
 		expect(SuperMagicApi.copyFile).not.toHaveBeenCalled()
 	})

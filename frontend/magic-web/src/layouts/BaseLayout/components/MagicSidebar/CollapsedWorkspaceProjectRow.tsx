@@ -14,6 +14,7 @@ import { canManageProject } from "@/pages/superMagic/utils/permission"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
+import ProjectTypeTag from "@/pages/superMagic/components/ProjectTypeTag"
 import { canDragSidebarProject } from "./projectDndUtils"
 import { Button } from "@/components/shadcn-ui/button"
 
@@ -24,6 +25,8 @@ interface CollapsedWorkspaceProjectRowProps {
 	dndDisabled?: boolean
 	description?: ReactNode
 	tooltipDisabled?: boolean
+	/** Collapse the action area until hover/focus so the project content can use the full row width. */
+	expandActionsOnHover?: boolean
 	workspaceId: string
 	isSelected: boolean
 	projectMenuContentRef?: React.RefObject<HTMLDivElement | null>
@@ -38,6 +41,7 @@ interface CollapsedWorkspaceProjectRowProps {
 	onDeleteProject?: ProjectRowActionHandler
 	onRenameProject?: (params: HandleRenameProjectParams) => Promise<void>
 	onInteractionChange?: (id: string, active: boolean) => void
+	showProjectTypeTag?: boolean
 }
 
 function CollapsedWorkspaceProjectRow({
@@ -45,6 +49,7 @@ function CollapsedWorkspaceProjectRow({
 	dndDisabled,
 	description,
 	tooltipDisabled = false,
+	expandActionsOnHover = false,
 	workspaceId,
 	isSelected,
 	projectMenuContentRef,
@@ -59,6 +64,7 @@ function CollapsedWorkspaceProjectRow({
 	onDeleteProject,
 	onRenameProject,
 	onInteractionChange,
+	showProjectTypeTag = false,
 }: CollapsedWorkspaceProjectRowProps) {
 	const { t } = useTranslation("super")
 	const [isHovered, setIsHovered] = useState(false)
@@ -165,9 +171,12 @@ function CollapsedWorkspaceProjectRow({
 			data-workspace-id={workspaceId}
 			draggable={false}
 			className={cn(
-				"relative size-8 shrink-0 bg-transparent p-0 before:absolute before:inset-0.5 before:rounded-md before:transition-colors",
+				expandActionsOnHover
+					? "relative h-7 w-0 shrink-0 overflow-hidden bg-transparent p-0 transition-[width] before:absolute before:inset-0.5 before:rounded-md before:transition-colors group-focus-within/project-row:pointer-events-auto group-focus-within/project-row:w-7 no-hover:pointer-events-auto no-hover:w-7"
+					: "relative size-8 shrink-0 bg-transparent p-0 before:absolute before:inset-0.5 before:rounded-md before:transition-colors",
 				"hover:bg-transparent hover:before:bg-sidebar-foreground/10 focus-visible:ring-0 focus-visible:before:bg-sidebar-foreground/10 active:before:bg-sidebar-foreground/15 dark:hover:bg-transparent",
 				"data-[state=open]:before:bg-sidebar-foreground/10",
+				expandActionsOnHover && (isHovered || open) && "w-7",
 				isSelected ? "text-sidebar-accent-foreground" : "text-sidebar-foreground",
 			)}
 			onClick={(e) => {
@@ -260,6 +269,12 @@ function CollapsedWorkspaceProjectRow({
 							status={project.project_status}
 							showDefaultIcon={false}
 						/>
+						{showProjectTypeTag && (
+							<ProjectTypeTag
+								projectMode={project.project_mode}
+								tooltipDisabled={hideNameTooltip}
+							/>
+						)}
 						{project.is_pinned && (
 							<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
 						)}

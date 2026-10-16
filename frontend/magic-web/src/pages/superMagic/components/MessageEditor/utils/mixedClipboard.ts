@@ -1,13 +1,18 @@
 import { htmlToClipboardMarkdown } from "../../MessageList/utils/clipboardMarkdown"
+import { isWechatChatText } from "../extensions/wechat-chat-history/parser"
 
 export type MixedClipboardPart =
-	| { type: "text"; text: string }
-	| { type: "file"; file: File; originalText: string }
+	{ type: "text"; text: string } | { type: "file"; file: File; originalText: string }
 
 export interface MixedClipboardContent {
 	parts: MixedClipboardPart[]
 	/** false 表示只保留了内容，无法证明附件与正文的穿插位置。 */
 	ordered: boolean
+}
+
+interface ParseMixedClipboardOptions {
+	/** paste 事件未提供文本时，通过 Clipboard API 补读的系统文本。 */
+	textFromClipboardApi?: boolean
 }
 
 interface FileMarker {
@@ -53,7 +58,7 @@ export function parseWeChatMixedClipboard(
 	for (const [index, header] of headers.entries()) {
 		const start = header.index + header[0].length
 		const body = text.slice(start, headers[index + 1]?.index ?? text.length).trimEnd()
-		const media = body.match(/^\[(图片|文件)\][ \t]+([^\n]+)$/)
+		const media = body.match(/^\[(图片|视频|文件)\][ \t]+([^\n]+)$/)
 		if (!media) continue
 		const file = files[markers.length]
 		if (!file) return null
@@ -63,7 +68,10 @@ export function parseWeChatMixedClipboard(
 			if (!isImage || (name !== file.name && !/^微信图片_[\d_]+\.dat$/i.test(name))) {
 				return null
 			}
-		} else if (name !== file.name) {
+		} else if (
+			name !== file.name ||
+			(media[1] === "视频" && !file.type.toLowerCase().startsWith("video/"))
+		) {
 			return null
 		}
 		markers.push({ start, end: start + body.length, file })
@@ -80,6 +88,11 @@ function localFileName(source: string): string | null {
 	} catch {
 		return null
 	}
+}
+
+function fileDisplayName(fileName: string): string {
+	const extensionIndex = fileName.lastIndexOf(".")
+	return extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName
 }
 
 function parseHtmlFiles(html: string, files: File[]): MixedClipboardContent | null {
@@ -128,24 +141,46 @@ export function parseMixedClipboard(
 	text: string,
 	html: string,
 	files: File[],
+	options: ParseMixedClipboardOptions = {},
 ): MixedClipboardContent {
 	let normalizedText = text.replace(/\r\n?/g, "\n")
-	// Finder 等文件管理器的文字格式只是文件 URL 列表，不是附带正文。
+	// Finder 等文件管理器可能返回路径、完整文件名，或隐藏扩展名后的显示名称；
+	// 后两种只接受 Clipboard API 的补读结果，避免吞掉事件中主动携带的同名正文。
 	const lines = normalizedText.trim().split("\n")
-	const remainingNames = files.map((file) => file.name)
+	const remainingFiles = [...files]
 	const isFileList =
 		lines.length === files.length &&
 		lines.every((line) => {
-			if (!/^(?:file:|\/)/.test(line.trim())) return false
-			const name = localFileName(line.trim())
-			const index = name ? remainingNames.indexOf(name) : -1
+			const source = line.trim()
+			const isExplicitLocalReference = /^(?:file:|\/)/.test(source)
+			if (!isExplicitLocalReference && !options.textFromClipboardApi) return false
+			const name = localFileName(source)
+			const index = name
+				? remainingFiles.findIndex(
+						(file) =>
+							file.name === name ||
+							(options.textFromClipboardApi && fileDisplayName(file.name) === name),
+					)
+				: -1
 			if (index < 0) return false
-			remainingNames.splice(index, 1)
+			remainingFiles.splice(index, 1)
 			return true
 		})
 	if (isFileList) normalizedText = ""
 	const wechat = parseWeChatMixedClipboard(normalizedText, files)
 	if (wechat) return wechat
+	// 微信头和消息正文以原始文本为准；HTML 退化不能把日期头或未匹配文件静默改写。
+	if (isWechatChatText(normalizedText))
+		return {
+			parts: [
+				{ type: "text", text: normalizedText },
+				...files.flatMap((file): MixedClipboardPart[] => [
+					{ type: "text", text: "\n" },
+					{ type: "file", file, originalText: "" },
+				]),
+			],
+			ordered: files.length === 0,
+		}
 	const htmlFiles = parseHtmlFiles(html, files)
 	if (htmlFiles) return htmlFiles
 

@@ -39,7 +39,10 @@ const mockState = vi.hoisted(() => ({
 	pptUnmount: vi.fn(),
 	previewMount: vi.fn(),
 	previewUnmount: vi.fn(),
+	quickOpenRender: vi.fn(),
 	renderPropsType: "html" as "html" | "md" | "image",
+	isShareRoute: false,
+	isMagicShareRoute: false,
 	tabCacheOptions: undefined as { enableCache?: boolean } | undefined,
 }))
 let restoreBoundingClientRect: (() => void) | undefined
@@ -54,6 +57,14 @@ vi.mock("@/hooks/useFullscreenMode", () => ({
 
 vi.mock("@/pages/superMagic/hooks/useShareRoute", () => ({
 	default: () => ({ isShareRoute: false }),
+}))
+
+vi.mock("@/stores/userFiles", () => ({
+	default: { editingFileIds: new Set<string>() },
+}))
+
+vi.mock("@/pages/superMagic/components/TopicFilesButton/components/FileInfoPanel", () => ({
+	default: () => null,
 }))
 
 vi.mock("react-i18next", () => ({
@@ -120,8 +131,15 @@ vi.mock("../hooks/useFilesViewer", () => ({
 		openKnowledgeBaseTab: mockState.noop,
 		closeKnowledgeBaseTab: mockState.noop,
 		isKnowledgeBaseTab: () => false,
+		openMicroAppTab: mockState.noop,
+		closeMicroAppTab: mockState.noop,
+		isPublishedMicroAppTab: () => false,
+		isShareRoute: mockState.isShareRoute,
+		isMagicShareRoute: mockState.isMagicShareRoute,
 		handleFileFullscreen: mockState.noop,
 		handleExitFullscreen: mockState.noop,
+		enterPreviewFullscreen: mockState.noop,
+		exitPreviewFullscreen: mockState.noop,
 		getCheckBeforeClose: () => undefined,
 	}),
 }))
@@ -197,7 +215,10 @@ vi.mock("../components/FileTabMagicIcon", () => ({
 }))
 
 vi.mock("../components/WebsitePresetMenu", () => ({
-	default: () => null,
+	default: () => {
+		mockState.quickOpenRender()
+		return <div data-testid="quick-open" />
+	},
 }))
 
 vi.mock("../components/CommonWebsitePresetDialog", () => ({
@@ -244,6 +265,9 @@ beforeEach(() => {
 	mockState.pptUnmount.mockReset()
 	mockState.previewMount.mockReset()
 	mockState.previewUnmount.mockReset()
+	mockState.quickOpenRender.mockReset()
+	mockState.isShareRoute = false
+	mockState.isMagicShareRoute = false
 })
 
 afterEach(() => {
@@ -252,6 +276,38 @@ afterEach(() => {
 	restoreBoundingClientRect = undefined
 	mockState.scrollTo.mockReset()
 	mockState.tabCacheOptions = undefined
+})
+
+it("renders quick open in a regular project", () => {
+	render(<FilesViewer />)
+
+	expect(screen.getByTestId("quick-open")).toBeInTheDocument()
+	expect(mockState.quickOpenRender).toHaveBeenCalled()
+})
+
+it("does not render quick open when the caller marks a file share", () => {
+	render(<FilesViewer isFileShare />)
+
+	expect(screen.queryByTestId("quick-open")).not.toBeInTheDocument()
+	expect(mockState.quickOpenRender).not.toHaveBeenCalled()
+})
+
+it("does not render quick open on a Magic Share route", () => {
+	mockState.isMagicShareRoute = true
+
+	render(<FilesViewer />)
+
+	expect(screen.queryByTestId("quick-open")).not.toBeInTheDocument()
+	expect(mockState.quickOpenRender).not.toHaveBeenCalled()
+})
+
+it("does not render quick open on a share route", () => {
+	mockState.isShareRoute = true
+
+	render(<FilesViewer />)
+
+	expect(screen.queryByTestId("quick-open")).not.toBeInTheDocument()
+	expect(mockState.quickOpenRender).not.toHaveBeenCalled()
 })
 
 describe("FilesViewer fullscreen portal", () => {

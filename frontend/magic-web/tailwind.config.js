@@ -20,6 +20,7 @@ const config = {
 			"./dingtalk.html",
 			"./src/**/*.{ts,tsx,jsx}",
 			"./enterprise/src/**/*.{ts,tsx,jsx}",
+			"./packages/magic-admin-v2/src/**/*.{ts,tsx,jsx}",
 			"!./src/**/node_modules/**",
 			"!./enterprise/src/**/node_modules/**",
 			"./node_modules/@dtyq/user-selector/dist/**/*.js",

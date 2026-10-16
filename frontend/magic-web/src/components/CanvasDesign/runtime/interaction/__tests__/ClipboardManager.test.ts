@@ -87,6 +87,9 @@ interface ClipboardManagerTestHarness {
 		audioResourceManager: {
 			primeCache: ReturnType<typeof vi.fn>
 		}
+		assetResourceManager: {
+			getResource: ReturnType<typeof vi.fn>
+		}
 	}
 	collectClipboardFiles: (elements: LayerElement[]) => Promise<{
 		metadata: Array<{
@@ -149,6 +152,9 @@ function createClipboardManager(): ClipboardManagerTestHarness {
 		},
 		audioResourceManager: {
 			primeCache: vi.fn(),
+		},
+		assetResourceManager: {
+			getResource: vi.fn(),
 		},
 	}
 	return manager
@@ -243,6 +249,80 @@ describe("ClipboardManager frame clipboard trees", () => {
 		vi.useRealTimers()
 	})
 
+	it("resolves asset metadata through the asset manager without workspace lookup", async () => {
+		const manager = createClipboardManager()
+		const getFileInfo = vi.fn()
+		;(manager.canvas as unknown as { magicConfigManager: unknown }).magicConfigManager = {
+			config: { methods: { getFileInfo } },
+		}
+		manager.canvas.assetResourceManager.getResource.mockResolvedValue({
+			assetId: "audio-asset",
+			mediaType: "audio",
+			fileUrl: "https://assets.test/audio-asset",
+			fileName: "voice",
+		})
+
+		const metadata = await (
+			manager as unknown as {
+				fetchOriginalFileMetadata: (options: {
+					src: string
+					fallbackFilename: string
+					fallbackMimeType: string
+					mediaType?: "image" | "video" | "audio"
+				}) => Promise<{
+					filename: string
+					mimeType: string
+					sourceRef?: { src?: string; ossUrl?: string }
+				} | null>
+			}
+		).fetchOriginalFileMetadata({
+			src: " asset://audio-asset ",
+			fallbackFilename: "audio.mp3",
+			fallbackMimeType: "audio/mpeg",
+			mediaType: "audio",
+		})
+
+		expect(metadata).toEqual({
+			filename: "voice.mp3",
+			mimeType: "audio/mpeg",
+			fileSize: 0,
+			sourceRef: {
+				src: "asset://audio-asset",
+				ossUrl: "https://assets.test/audio-asset",
+			},
+		})
+		expect(manager.canvas.assetResourceManager.getResource).toHaveBeenCalledWith("audio-asset")
+		expect(getFileInfo).not.toHaveBeenCalled()
+	})
+
+	it("rejects an asset whose declared element type disagrees with asset metadata", async () => {
+		const manager = createClipboardManager()
+		manager.canvas.assetResourceManager.getResource.mockResolvedValue({
+			assetId: "video-asset",
+			mediaType: "video",
+			fileUrl: "https://assets.test/video-asset",
+			fileName: "clip.mp4",
+		})
+
+		const metadata = await (
+			manager as unknown as {
+				fetchOriginalFileMetadata: (options: {
+					src: string
+					fallbackFilename: string
+					fallbackMimeType: string
+					mediaType?: "image" | "video" | "audio"
+				}) => Promise<unknown>
+			}
+		).fetchOriginalFileMetadata({
+			src: "asset://video-asset",
+			fallbackFilename: "image.png",
+			fallbackMimeType: "image/png",
+			mediaType: "image",
+		})
+
+		expect(metadata).toBeNull()
+	})
+
 	it("starts media metadata lookups concurrently so get-file-url can batch them", async () => {
 		const firstImage = v3<ImageElement>({
 			id: "first-image",
@@ -300,6 +380,50 @@ describe("ClipboardManager frame clipboard trees", () => {
 		await expect(resultPromise).resolves.toMatchObject({
 			metadata: [{ elementId: firstImage.id }, { elementId: secondImage.id }],
 		})
+	})
+
+	it("keeps source-less image and video placeholders in a multi-element copy", async () => {
+		const validImage = v3<ImageElement>({
+			id: "valid-image",
+			type: "image",
+			src: "source/valid.png",
+			x: 0,
+			y: 0,
+			width: 80,
+			height: 60,
+		})
+		const emptyImage = v3<ImageElement>({
+			id: "empty-image",
+			type: "image",
+			x: 100,
+			y: 0,
+			width: 80,
+			height: 60,
+		})
+		const emptyVideo = v3<VideoElement>({
+			id: "empty-video",
+			type: "video",
+			x: 200,
+			y: 0,
+			width: 80,
+			height: 60,
+		})
+		const getFileInfo = vi.fn(async (path: string) => ({
+			src: `https://example.test/${path}`,
+			fileName: path.split("/").pop() ?? "image.png",
+		}))
+		const manager = createClipboardManager()
+		;(manager.canvas as unknown as { magicConfigManager: unknown }).magicConfigManager = {
+			config: { methods: { getFileInfo } },
+		}
+
+		const result = await manager.collectClipboardFiles([validImage, emptyImage, emptyVideo])
+
+		expect(result.metadata).toEqual([
+			expect.objectContaining({ elementId: validImage.id, role: "element-media" }),
+		])
+		expect(getFileInfo).toHaveBeenCalledTimes(1)
+		expect(getFileInfo).toHaveBeenCalledWith("source/valid.png", { useImageProcess: false })
 	})
 
 	it("collects media metadata from frame children", async () => {

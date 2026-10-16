@@ -65,7 +65,11 @@ function ActionButtons({ collapsed }: ActionButtonsProps) {
 							placement={collapsed ? "right" : "top"}
 						>
 							<Button
-								aria-label={item.label}
+								aria-label={
+									item.id === "recycle-bin"
+										? t("footer.globalRecycleBin")
+										: item.label
+								}
 								variant="ghost"
 								size="icon-sm"
 								data-testid={`sidebar-action-${item.id}`}

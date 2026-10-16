@@ -28,7 +28,7 @@ interface UseUploadWithModalOptions {
 	selectedTopic?: any
 	attachments?: AttachmentItem[]
 	duplicateFileHandler?: ReturnType<typeof useDuplicateFileHandler>
-	onUpdateAttachments?: () => void
+	onUpdateAttachments?: (sourceProjectId?: string) => void
 	title?: string
 	resolveUploadTarget?: () => Promise<UploadTarget>
 }
@@ -73,7 +73,7 @@ export function useUploadWithModal({
 				uploadType: "file",
 				projectFiles: uploadAttachments,
 				uploadFileCount: files.length,
-				onUpdateAttachments: refreshAttachments,
+				onUpdateAttachments: () => refreshAttachments?.(projectId),
 			})
 
 			let firstError: unknown
@@ -180,7 +180,7 @@ export function useUploadWithModal({
 				uploadType: "folder",
 				projectFiles: attachments,
 				uploadFileCount: files.length,
-				onUpdateAttachments,
+				onUpdateAttachments: () => onUpdateAttachments?.(projectId),
 			})
 
 			// Folder upload: all files share one upload task.

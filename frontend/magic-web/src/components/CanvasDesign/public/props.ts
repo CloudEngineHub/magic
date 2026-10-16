@@ -2,7 +2,7 @@ import type { Node as TiptapNode } from "@/infrastructure/editors/tiptap/core"
 import type { ComponentType, RefObject } from "react"
 import type { ModifierAlias } from "../runtime/interaction/shortcuts/types"
 import type { Canvas } from "../runtime/core/Canvas"
-import type { MagicConfig } from "./magic-types"
+import type { CanvasAssetMediaType, MagicConfig } from "./magic-types"
 import type { ResolveCanvasResourceReference } from "./resource-reference"
 import type {
 	CanvasDeviceInfo,
@@ -13,6 +13,7 @@ import type {
 	Marker,
 	PaddingInsetConfig,
 } from "../runtime/document/types"
+import type { NameLabelIconResolver } from "../runtime/interaction/labels/nameLabelTypes"
 import type { ElementDetailsProvenance } from "../runtime/document/elementDetailsProvenance"
 import type { CanvasElementNameChange } from "../runtime/core/EventEmitter"
 import type { TFunction } from "./i18n-types"
@@ -35,6 +36,11 @@ export type {
 	CanvasDeviceInfo,
 	CanvasDeviceLayout,
 } from "../runtime/document/types"
+export type {
+	NameLabelIconContext,
+	NameLabelIconDescriptor,
+	NameLabelIconResolver,
+} from "../runtime/interaction/labels/nameLabelTypes"
 
 /**
  * Mention 面板语言入参（与宿主 MentionPanel LocaleInput 约定一致，避免依赖业务包）
@@ -89,6 +95,8 @@ export interface ReferenceResourcePanelFileData {
 	file_name: string
 	file_path: string
 	file_extension: string
+	/** 资产 URI 不携带扩展名时的显式媒体类型。 */
+	media_type?: CanvasAssetMediaType | null
 	file_size?: number
 	project_id?: string
 	source_project_id?: string
@@ -104,6 +112,21 @@ export interface ReferenceResourcePanelFileData {
 export interface ReferenceResourcePanelItem {
 	type: CanvasReferenceMentionProjectFileType
 	data: ReferenceResourcePanelFileData
+}
+
+export type ReferenceResourcePanelAssetType = "image" | "video" | "audio"
+
+/**
+ * 画布参考资源面板的多选数量摘要；保持在 renderer 边界内，避免宿主直接依赖
+ * MentionPanel 的业务数据结构。
+ */
+export interface ReferenceResourcePanelSelectionSummary {
+	currentCounts: Record<ReferenceResourcePanelAssetType, number>
+	limits: Partial<Record<ReferenceResourcePanelAssetType, number>>
+	getItemAssetType?: (
+		item: ReferenceResourcePanelItem,
+	) => ReferenceResourcePanelAssetType | undefined
+	isItemAlreadySelected?: (item: ReferenceResourcePanelItem) => boolean
 }
 
 export interface ReferenceResourcePanelListItem extends ReferenceResourcePanelItem {
@@ -226,6 +249,10 @@ export interface ReferenceResourcePanelRendererProps {
 	language?: string
 	/** 是否允许面板多选。默认 true；单槽替换场景传 false。 */
 	enableMultiSelect?: boolean
+	/** 连续选择会话的资源作用域；作用域变化时面板自动丢弃暂存项。 */
+	selectionScopeId?: string
+	/** 多选时显示在路径面包屑右侧的资源数量摘要。 */
+	selectionSummary?: ReferenceResourcePanelSelectionSummary
 	dataService?: MentionDataServicePort
 	initialLoadOptions?: ReferenceResourcePanelInitialLoadOptions
 	initialNavigationStack?: ReferenceResourcePanelNavigationItem[]
@@ -324,6 +351,7 @@ export const ElementToolTypeEnum = {
 	GenerationQuickEdit: "generation.quick-edit",
 	GenerationReEdit: "generation.re-edit",
 	GenerationGenerateAgain: "generation.generate-again",
+	GenerationGenerateFinal: "generation.generate-final",
 
 	VersionPrevious: "version.previous",
 	VersionNext: "version.next",
@@ -371,6 +399,8 @@ export interface CanvasDesignRef {
 		data: CanvasDocument,
 		options?: {
 			mode?: "smart" | "replace"
+			/** 文件操作已在服务端发生，不生成只能撤销画布引用的历史步骤。 */
+			historyPolicy?: "include" | "exclude"
 			/** sidecar 解析出的运行时来源；不会写入画布 DSL */
 			elementDetailsProvenance?: ElementDetailsProvenance
 		},
@@ -458,6 +488,8 @@ export interface CanvasDesignProps {
 	magic?: MagicConfig
 	/** 插件配置，由宿主注入系统内置插件，并可声明用户插件资源目录 */
 	plugins?: CanvasDesignPluginModuleConfig
+	/** 可选的名称标签图标 resolver；不传时名称标签保持纯文本 */
+	nameLabelIconResolver?: NameLabelIconResolver
 	/** 数据 配置 */
 	data?: {
 		/** 默认画布数据，用于初始化画布 */

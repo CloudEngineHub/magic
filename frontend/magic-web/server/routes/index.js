@@ -1,3 +1,4 @@
+const { designStylePreviewMiddleware } = require("../middleware/designStylePreviewMiddleware")
 const languageMiddleware = require("../middleware/languageMiddleware")
 const throttleMiddleware = require("../middleware/throttleMiddleware")
 const { logReportBody } = require("../middleware/logReportBody.cjs")
@@ -41,6 +42,8 @@ const configureRoutes = (app) => {
 	// Set the directive before every route so it also covers CORS responses,
 	// static assets, and errors.
 	app.use(noIndexMiddleware)
+	// Check preview access before CORS and static handling, including conditional requests.
+	app.use(designStylePreviewMiddleware)
 	// CORS 开启
 	app.use(cors())
 	const htmlSandboxAllowedOrigins = getHtmlSandboxAllowedOrigins()
@@ -61,12 +64,7 @@ const configureRoutes = (app) => {
 	app.get("/startupz", k8sOnlyMiddleware, configRoutes.startup)
 	app.get("/heartbeat", configRoutes.heartbeat)
 	// JSON 解析中间件只用于需要的路由
-	app.post(
-		"/log-report",
-		throttleMiddleware,
-		logReportBody,
-		logsRoutes.report.bind(logsRoutes),
-	)
+	app.post("/log-report", throttleMiddleware, logReportBody, logsRoutes.report.bind(logsRoutes))
 	app.get("/sw.js", serviceWorkerMiddleware)
 	app.get(
 		"/micro-app/:appId/manifest.webmanifest",
@@ -108,7 +106,7 @@ const configureRoutes = (app) => {
 			res.setHeader("Pragma", "no-cache")
 			res.setHeader("Expires", "0")
 			res.setHeader("Content-Type", "text/html; charset=utf-8")
-			res.send(getHtmlTemplate("login-popup-callback"))
+			res.send(getHtmlTemplate("login-popup-callback", req.get("user-agent")))
 		})
 	}
 

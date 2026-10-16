@@ -11,6 +11,12 @@ import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import { HoverManager } from "../../interaction/hover/HoverManager"
 import { normalizeSize } from "../../shared/normalize/normalizeUtils"
 
+/** 名称与运行状态分别布局；展示状态不进入元素名称或文件名。 */
+export interface NameLabelContent {
+	primaryText: string
+	suffix?: { text: string; inProgress?: boolean }
+}
+
 /**
  * 变换上下文
  */
@@ -185,11 +191,19 @@ export abstract class BaseElement<T extends LayerElement = LayerElement> {
 	public abstract getRenderName(): string
 
 	/**
-	 * 获取名称标签文本（子类可重写以添加状态后缀）
-	 * 优先使用 data.name（用户自定义名称），如果没有则使用 getRenderName()
+	 * 获取名称标签的结构化内容（子类可重写以添加运行时状态后缀）。
+	 * 后缀只用于渲染和其他展示入口，不会写入 DSL 的 data.name。
+	 */
+	public getNameLabelContent(): NameLabelContent {
+		return { primaryText: this.data.name || this.getRenderName() }
+	}
+
+	/**
+	 * 获取扁平化名称文本，兼容图层树、全屏入口等不需要独立布局后缀的调用方。
 	 */
 	public getNameLabelText(): string {
-		return this.data.name || this.getRenderName()
+		const content = this.getNameLabelContent()
+		return `${content.primaryText}${content.suffix?.text ?? ""}`
 	}
 
 	/**

@@ -192,6 +192,7 @@ export enum EditorMessageType {
 	ELEMENTS_DESELECTED = "ELEMENTS_DESELECTED",
 	ELEMENT_HOVERED = "ELEMENT_HOVERED",
 	ELEMENT_HOVER_END = "ELEMENT_HOVER_END",
+	DYNAMIC_ELEMENT_CLICKED = "DYNAMIC_ELEMENT_CLICKED",
 	SELECTION_MODE_CHANGED = "SELECTION_MODE_CHANGED",
 	IFRAME_ZOOM_REQUEST = "IFRAME_ZOOM_REQUEST",
 
@@ -513,6 +514,7 @@ export interface ElementSelectedPayload {
 	/** 常用 HTML 属性 */
 	attributes?: {
 		href?: string
+		dataMagicHref?: string
 		target?: string
 		rel?: string
 		download?: string

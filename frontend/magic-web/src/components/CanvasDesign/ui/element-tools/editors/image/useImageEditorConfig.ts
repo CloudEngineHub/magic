@@ -75,6 +75,8 @@ import {
 } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 
 interface UseImageEditorConfigOptions {
+	readOnly?: boolean
+	request?: GenerateImageRequest
 	imageElement: ImageElement
 	originalImageSrc?: string
 	originalImageName?: string
@@ -143,6 +145,7 @@ export interface ImageEditorConfig {
 	referenceSourceCrop: CropConfig | undefined
 	hasRestoredRef: React.RefObject<boolean>
 	isRestoringRef: React.RefObject<boolean>
+	hasGenerationRequest: boolean
 	restoreRevision: number
 	handlers: {
 		setSelectedModelId: (id: string) => void
@@ -177,7 +180,12 @@ export interface ImageEditorConfig {
 		replaceReferenceFileAt: (
 			slotIndex: number,
 			fileInfo: UploadFileResponse,
-			options?: { retainReferenceSlot?: boolean },
+			options?: {
+				retainReferenceSlot?: boolean
+				/** 用户显式选择已有素材时，确保编辑器存在对应的 @mention。 */
+				ensurePromptMention?: boolean
+				mentionPlacement?: "cursor" | "documentEnd"
+			},
 		) => void
 		triggerFileSelect: () => void
 		uploadFiles: (
@@ -210,6 +218,8 @@ export interface ImageEditorConfig {
 export function useImageEditorConfig(options: UseImageEditorConfigOptions): ImageEditorConfig {
 	const {
 		imageElement,
+		readOnly = false,
+		request,
 		originalImageSrc,
 		originalImageName,
 		editorFocusRef,
@@ -331,7 +341,17 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 	const maxReferenceFiles = selectedModel?.image_size_config?.max_reference_images
 
 	// 使用新的参考文件状态管理 hook
+	const readOnlyPaths = useMemo(
+		() =>
+			readOnly
+				? (request?.reference_images ??
+					activeImageContent.generateImageRequest?.reference_images ??
+					[])
+				: undefined,
+		[readOnly, request, activeImageContent.generateImageRequest],
+	)
 	const referenceFilesState = useReferenceImagesState({
+		readOnlyPaths,
 		canvas,
 		imageElementId: imageElement.id,
 		maxReferenceFiles,
@@ -605,7 +625,11 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		(
 			slotIndex: number,
 			fileInfo: UploadFileResponse,
-			options?: { retainReferenceSlot?: boolean },
+			options?: {
+				retainReferenceSlot?: boolean
+				ensurePromptMention?: boolean
+				mentionPlacement?: "cursor" | "documentEnd"
+			},
 		) => {
 			if (!canvas) return
 			const elementInstance = canvas.elementManager.getElementInstance(imageElement.id)
@@ -614,6 +638,36 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			const currentInfos =
 				elementInstance.getReferenceImageInfos() as ReferenceResourceFileInfo[]
 			const previousInfo = currentInfos[slotIndex]
+
+			const mentionItem = createReferenceResourcePanelItemFromPath(
+				fileInfo.path,
+				fileInfo.fileName || getCanvasResourceFileName(fileInfo.path) || fileInfo.path,
+				{
+					fileId: fileInfo.file_id,
+					sourceFileId: fileInfo.source_file_id,
+					sourceProjectId: fileInfo.source_project_id,
+					projectId: fileInfo.project_id,
+					mediaType: "image",
+				},
+			)
+			const ensurePromptMention = () => {
+				if (!options?.ensurePromptMention) return
+				const editor = editorFocusRef?.current
+				if (!editor) return
+				const alreadyMentioned = editor
+					.getMentionBindings()
+					.some((binding) =>
+						areCanvasResourceReferencesSame(
+							binding.path,
+							fileInfo.path,
+							resolveResourceReference,
+						),
+					)
+				if (alreadyMentioned) return
+				editor.insertMentionItems([mentionItem], {
+					placement: options.mentionPlacement ?? "cursor",
+				})
+			}
 
 			if (
 				Boolean(
@@ -634,6 +688,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 						),
 				)
 			) {
+				ensurePromptMention()
 				if (!options?.retainReferenceSlot) {
 					resetSelectedReferenceSlot()
 				}
@@ -653,6 +708,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			elementInstance.setReferenceImageInfos(compactNextInfos)
 			syncFromElement()
 
+			let replacedMention = false
 			if (previousInfo?.path) {
 				const nextProtectedReferencePaths = protectedReferencePaths.map((path) =>
 					areCanvasResourceReferencesSame(
@@ -670,20 +726,13 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 						resolveResourceReference,
 					),
 				)
-				editorFocusRef?.current?.replaceMentionItems(
-					createCanvasMentionPathMatcher(previousInfo.path, resolveResourceReference),
-					createReferenceResourcePanelItemFromPath(
-						normalizedInfo.path,
-						normalizedInfo.fileName,
-						{
-							fileId: normalizedInfo.file_id,
-							sourceFileId: normalizedInfo.source_file_id,
-							sourceProjectId: normalizedInfo.source_project_id,
-							projectId: normalizedInfo.project_id,
-						},
-					),
-				)
+				replacedMention =
+					editorFocusRef?.current?.replaceMentionItems(
+						createCanvasMentionPathMatcher(previousInfo.path, resolveResourceReference),
+						mentionItem,
+					) ?? false
 			}
+			if (options?.ensurePromptMention && !replacedMention) ensurePromptMention()
 
 			if (!options?.retainReferenceSlot) {
 				resetSelectedReferenceSlot()
@@ -1255,13 +1304,16 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 			sessionRestoreMentionBindingsRef.current ?? recoverySnapshot?.mentionBindings ?? []
 		sessionRestoreMentionBindingsRef.current = null
 		updateMentionBindings(restoredMentionBindings)
-		const currentRequest = activeImageContent.generateImageRequest
-		const requestToRestore = sessionRequest ?? recoveryRequest ?? currentRequest
+		const currentRequest = request ?? activeImageContent.generateImageRequest
+		const requestToRestore = readOnly
+			? currentRequest
+			: (sessionRequest ?? recoveryRequest ?? currentRequest)
 		if (requestToRestore) {
 			// 恢复模型ID
-			const restoredModelId =
-				requestToRestore.model_id &&
-				imageModelList.some((model) => model.model_id === requestToRestore.model_id)
+			const restoredModelId = readOnly
+				? requestToRestore.model_id
+				: requestToRestore.model_id &&
+					  imageModelList.some((model) => model.model_id === requestToRestore.model_id)
 					? requestToRestore.model_id
 					: imageModelList[0]?.model_id
 
@@ -1298,16 +1350,17 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 							fileName,
 						}
 					})
-				elementInstance.setReferenceImageInfos(
-					restoredReferenceFileInfos as UploadFileResponse[],
-				)
+				if (!readOnly)
+					elementInstance.setReferenceImageInfos(
+						restoredReferenceFileInfos as UploadFileResponse[],
+					)
 				applyBindingStateFromPromptAndReferences(
 					promptToRestore,
 					restoredReferenceFileInfos,
 					restoredMentionBindings,
 				)
 			} else {
-				elementInstance.clearReferenceImageInfos()
+				if (!readOnly) elementInstance.clearReferenceImageInfos()
 				updateProtectedReferencePaths([])
 			}
 
@@ -1334,6 +1387,15 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 				setSelectedScale(undefined)
 				setSelectedResolution(undefined)
 			}
+			if (readOnly) {
+				setSelectedSize(requestToRestore.size)
+				setSelectedResolution(requestToRestore.resolution)
+			}
+		} else if (readOnly) {
+			setPrompt("")
+			setSelectedModelId("")
+			setSelectedSize(undefined)
+			setSelectedResolution(undefined)
 		} else {
 			// 没有会话草稿时，尝试从 rootStorage 恢复
 			const methods = canvas.magicConfigManager.config?.methods
@@ -1420,7 +1482,6 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		}
 
 		hasRestoredRef.current = true
-		setRestoreRevision((revision) => revision + 1)
 
 		// 同步参考文件状态（确保恢复的 Element 文件 infos 同步到 state）
 		syncFromElement()
@@ -1429,6 +1490,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		setTimeout(() => {
 			isRestoringRef.current = false
 			isApplyingRestoreRef.current = false
+			// 参数或模型列表可能在恢复期间到达；释放标记后通知下一轮，不能漏掉新快照。
+			setRestoreRevision((revision) => revision + 1)
 		}, 0)
 	}, [
 		canvas,
@@ -1437,6 +1500,8 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		recoveryKey,
 		recoverySourceFingerprint,
 		activeImageContent.generateImageRequest,
+		readOnly,
+		request,
 		syncFromElement,
 		imageModelList,
 		resolvePromptReferencesByPaths,
@@ -1528,15 +1593,19 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 	// 从 Canvas 恢复管理器恢复之前填写的内容（等待模型列表加载完成后执行）
 	useEffect(() => {
+		if (readOnly) hasRestoredRef.current = false
+	}, [readOnly, request, activeImageContent.generateImageRequest, imageModelList])
+
+	useEffect(() => {
 		if (
 			!canvas ||
 			hasRestoredRef.current ||
 			isRestoringRef.current ||
-			imageModelList.length === 0
+			(!readOnly && imageModelList.length === 0)
 		)
 			return
 		restoreConfig()
-	}, [canvas, imageModelList, restoreConfig])
+	}, [canvas, imageModelList, restoreConfig, readOnly, restoreRevision])
 
 	useEffect(() => {
 		updateProtectedReferencePaths(
@@ -1555,6 +1624,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 
 	// 当用户填写的内容变化时，防抖写入 Canvas 恢复管理器。
 	useUpdateEffect(() => {
+		if (readOnly) return
 		if (isRestoringRef.current) return
 		scheduleDraftPersistence(buildRequestParams())
 	}, [buildRequestParams, scheduleDraftPersistence])
@@ -1603,6 +1673,7 @@ export function useImageEditorConfig(options: UseImageEditorConfigOptions): Imag
 		fileInputAccept,
 		hasRestoredRef,
 		isRestoringRef,
+		hasGenerationRequest: Boolean(request ?? activeImageContent.generateImageRequest),
 		restoreRevision,
 		handlers: {
 			setSelectedModelId,

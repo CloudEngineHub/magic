@@ -1,3 +1,10 @@
+import { useMessageDisplayPreference } from "../../services/messageDisplayPreference"
+import {
+	buildMessageProcessGroups,
+	projectMessageProcesses,
+	type ProcessNode,
+} from "./message-process-groups"
+import { MessageProcessToggle } from "./components/MessageProcessToggle"
 import { useMemoizedFn } from "ahooks"
 import {
 	type MutableRefObject,
@@ -53,6 +60,8 @@ import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
+import { useFileBundleDownload } from "@/pages/superMagic/hooks/useFileBundleDownload"
+import defaultProjectFilesStore from "@/stores/projectFiles"
 import MessageRenderContent from "./components/MessageRenderContent"
 import { projectRevokedMessageBranches } from "../../utils/project-visible-messages-by-revoked-tail"
 import { resolveBottomLoadingVisibility } from "./bottom-loading-visibility"
@@ -61,13 +70,17 @@ import {
 	composeVirtualMessageItems,
 	stabilizeVirtualMessageItems,
 	type VirtualMessageItem,
+	type VirtualMessageRowItem,
 } from "./virtual-message-items"
 import { VirtualMessageList } from "./components/VirtualMessageList"
-import { MessageViewStateProvider } from "./view-state/MessageViewStateContext"
+import { MessageListScrollArea } from "./components/MessageListScrollArea"
+import {
+	MessageViewStateProvider,
+	useMessageProcessViewState,
+} from "./view-state/MessageViewStateContext"
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 import { useStableArrayReference } from "./hooks/useStableArrayReference"
-import { classicNameResolver } from "typescript"
 
 export { MessageListProvider }
 
@@ -78,13 +91,17 @@ export interface MessageListExportApi {
 }
 
 interface MessageListProps {
+	/** 仅普通话题开启；分享、只读嵌入保持完整消息。 */
+	enableSimpleMode?: boolean
 	data: Array<SuperMagicMessageItem>
 	isShare?: boolean
 	setSelectedDetail?: (detail: any) => void
+	/** Host surface and fade tail: --message-list-surface / --message-list-sticky-fade-height. */
 	className?: string
 
 	classNames?: {
-		scrollWrapper?: string
+		/** Classes on the content column; its actual offset is measured by the virtualizer. */
+		content?: string
 	}
 	isEmptyStatus?: boolean
 	selectedTopic: Topic | null
@@ -118,8 +135,7 @@ interface MessageListProps {
 	/** Distance from the top at which a fresh upward gesture may load one history page. */
 	historyLoadThresholdPx?: number
 	/**
-	 * Top/bottom scroll edge fade on mobile (prototype ChatScreen).
-	 * Pass `false` to disable; default enables on mobile when not share.
+	 * Opt-in scroll edge fade. Uses the host surface unless a color token is supplied.
 	 */
 	scrollEdgeFade?: boolean | { fadeColor?: ScrollEdgeFadeColor }
 }
@@ -160,6 +176,7 @@ const MessageList = observer(
 	({
 		data,
 		isShare = false,
+		enableSimpleMode = false,
 		setSelectedDetail,
 		selectedTopic,
 		className,
@@ -196,25 +213,18 @@ const MessageList = observer(
 		 */
 		const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null)
 		const virtualizerRef = useRef<MessageListScrollAdapter | null>(null)
-		/** Scroll edge fade is mobile-only; desktop TopicMessagePanel / share pages stay unchanged. */
+		// Edge treatment is chosen by the containing panel, independently of device detection.
 		const scrollEdgeFadeConfig = useMemo(() => {
-			if (!isMobile || isShare) return null
-			if (scrollEdgeFade === false) return null
-			if (typeof scrollEdgeFade === "object") {
-				return {
-					fadeColor:
-						scrollEdgeFade.fadeColor ?? ("mobile-background" as ScrollEdgeFadeColor),
-				}
-			}
-			return { fadeColor: "mobile-background" as ScrollEdgeFadeColor }
-		}, [scrollEdgeFade, isMobile, isShare])
+			if (!scrollEdgeFade) return null
+			return typeof scrollEdgeFade === "object" ? scrollEdgeFade : {}
+		}, [scrollEdgeFade])
 
 		const renderedMessageKeysRef = useRef<Set<string>>(new Set())
 		const projectionCachesRef = useRef({
 			main: new MessageProjectionCache(),
 			revoked: new MessageProjectionCache(),
 		})
-		const normalVirtualMessageItemsRef = useRef<Array<VirtualMessageItem>>([])
+		const normalVirtualMessageItemsRef = useRef<Array<VirtualMessageRowItem>>([])
 		const canAnimateNewMessagesRef = useRef(false)
 		const currentTopicKeyRef = useRef<string>("")
 
@@ -331,6 +341,46 @@ const MessageList = observer(
 				}
 			}, [mainDisplayData, projectionVersion])
 
+		const displayPreference = useMessageDisplayPreference(enableSimpleMode && !isShare)
+		const collapseProcesses =
+			displayPreference.simpleMode && !(enableExport && exportStore.exportMode)
+		const processViewState = useMessageProcessViewState(displayPreference.simpleMode)
+		const processGroups = collapseProcesses
+			? buildMessageProcessGroups(
+					messages,
+					(message) =>
+						(superMagicStore.getMessageNode(message.super_message_id) ||
+							message.debug ||
+							message) as ProcessNode,
+					(message) => {
+						const phase = superMagicStore.getAssistantRenderPhase(
+							currentTopicKey,
+							message.super_message_id || "",
+							message.correlation_id,
+							message.app_message_id,
+						)
+						return Boolean(phase && phase !== "done")
+					},
+					new Set(normalVirtualMessageItems.map((item) => item.sourceIndex)),
+				)
+			: []
+		const processInteractionKey = `${collapseProcesses}:${processViewState.interactionKey}`
+		const processProjectionKey = `${collapseProcesses}:${processGroups.map((group) => `${group.key}:${group.answerIndex}:${[...group.processIndices].join(",")}:${processViewState.isExpanded(group.key)}`).join("\u0000")}`
+		const displayedNormalItems = useMemo(
+			() =>
+				collapseProcesses
+					? projectMessageProcesses(
+							normalVirtualMessageItems,
+							processGroups,
+							processViewState.isExpanded,
+							messages,
+						)
+					: normalVirtualMessageItems,
+			// The signature tracks semantic group visibility rather than streaming text snapshots.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+			[normalVirtualMessageItems, messages, processProjectionKey],
+		)
+
 		const isStreamLoading = superMagicStore.isTopicStreaming(currentTopicKey)
 
 		const entryAnimationMeta = useMemo(() => {
@@ -400,7 +450,7 @@ const MessageList = observer(
 		const { items: virtualMessageItems, userIndices } = useMemo(
 			() =>
 				composeVirtualMessageItems({
-					normalItems: normalVirtualMessageItems,
+					normalItems: displayedNormalItems,
 					revokedItems: revokedVirtualProjection.items,
 					firstRevokedUserKey: firstRevokedUserMessageKey,
 					includeRevoked: revokedDisplayMessages.length > 0 && !forceHideRevokedMessages,
@@ -413,7 +463,7 @@ const MessageList = observer(
 				forceHideRevokedMessages,
 				isFirstRevokedUserMessagePendingSend,
 				isRevokedMessagesExpanded,
-				normalVirtualMessageItems,
+				displayedNormalItems,
 				revokedDisplayMessages.length,
 				revokedVirtualProjection.items,
 			],
@@ -443,6 +493,11 @@ const MessageList = observer(
 			messages,
 			revokedDisplayMessages,
 		])
+		const currentTurnMessages = useMemo(() => {
+			const currentTurn = messageTurnGroups[messageTurnGroups.length - 1]
+			// 复用正常会话的用户轮次分组，排除撤回历史分支与无用户起点的历史片段。
+			return currentTurn?.stickyItem ? currentTurn.items.map(({ node }) => node) : []
+		}, [messageTurnGroups])
 		const activeStreamSuperMessageIds =
 			superMagicStore.getActiveStreamSuperMessageIds(currentTopicKey)
 		// 活跃 StreamState 和占位消息行都不代表用户已经看到流式进度；
@@ -454,6 +509,7 @@ const MessageList = observer(
 			isTopicTaskRunning: currentTopicStatus === TaskStatus.RUNNING,
 			activeStreamSuperMessageIds,
 			visibleMessages: effectiveVisibleMessages,
+			currentTurnMessages,
 			resolveMessageNode: (superMessageId) =>
 				superMagicStore.getMessageNode(superMessageId) as
 					| {
@@ -464,6 +520,9 @@ const MessageList = observer(
 					| undefined,
 			resolveStreamState: (superMessageId) =>
 				superMagicStore.getStreamState(currentTopicKey, superMessageId),
+			// 文案描述实际执行阶段；不把卡片为保留打字机顺序而延后的终态当作执行中。
+			resolveToolResponse: (toolCallId) =>
+				superMagicStore.toolResponseMap.get(currentTopicKey)?.get(toolCallId),
 		})
 		const isStalledLoadingVisible = useStalledGenerationLoading(
 			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
@@ -473,7 +532,9 @@ const MessageList = observer(
 		const shouldShowBottomLoading =
 			currentTopicStatus !== TaskStatus.WAITING_FOR_USER &&
 			currentTopicStatus !== TaskStatus.FINISHED &&
-			(bottomLoadingVisibility.showImmediately || isStalledLoadingVisible)
+			(bottomLoadingVisibility.showImmediately ||
+				isStalledLoadingVisible ||
+				bottomLoadingVisibility.isToolExecuting)
 		const showAiGeneratedTip =
 			!shouldShowBottomLoading &&
 			((mainDisplayData.length > 0 && currentTopicStatus !== TaskStatus.RUNNING) ||
@@ -511,22 +572,29 @@ const MessageList = observer(
 			() => scrollViewport ?? nodesPanelRef.current,
 			[scrollViewport],
 		)
-		const { showBackToLatest, scrollToBottom, notifyPullMoreStarted, onVirtualizerChange } =
-			useVirtualMessageScroll({
-				containerRef: nodesPanelRef,
-				virtualizerRef,
-				items: virtualMessageItems,
-				topicKey: currentTopicKey,
-				onPullMore: () => {
-					return handlePullMoreMessage?.(selectedTopic, notifyPullMoreStarted)
-				},
-				minTopDistance: historyLoadThresholdPx,
-				allowFollowOutput:
-					isStreamLoading ||
-					Boolean(showLoading) ||
-					currentTopicStatus === TaskStatus.RUNNING ||
-					shouldShowBottomLoading,
-			})
+		const {
+			showBackToLatest,
+			scrollToBottom,
+			notifyPullMoreStarted,
+			onVirtualizerChange,
+			prepareProjectionChange,
+		} = useVirtualMessageScroll({
+			containerRef: nodesPanelRef,
+			virtualizerRef,
+			items: virtualMessageItems,
+			projectionKey: processProjectionKey,
+			projectionInteractionKey: processInteractionKey,
+			topicKey: currentTopicKey,
+			onPullMore: () => {
+				return handlePullMoreMessage?.(selectedTopic, notifyPullMoreStarted)
+			},
+			minTopDistance: historyLoadThresholdPx,
+			allowFollowOutput:
+				isStreamLoading ||
+				Boolean(showLoading) ||
+				currentTopicStatus === TaskStatus.RUNNING ||
+				shouldShowBottomLoading,
+		})
 
 		const checkIsLastMessage = useMemoizedFn(createCheckIsLastMessage(messages))
 
@@ -578,6 +646,11 @@ const MessageList = observer(
 		})
 
 		const parentCtx = useMessageListContext()
+		const fileBundleDownload = useFileBundleDownload(
+			currentTopicKey,
+			parentCtx.projectFilesStore,
+			!isShare,
+		)
 		const workspaceFilesList = parentCtx.projectFilesStore?.workspaceFilesList
 
 		const exportTurns = useMemo(() => {
@@ -602,6 +675,8 @@ const MessageList = observer(
 		const augmentedMessageListContext = useMemo(
 			() => ({
 				...parentCtx,
+				fileBundleDownload,
+				projectFilesStore: parentCtx.projectFilesStore ?? defaultProjectFilesStore,
 				allowUserFileReferences: !isShare && parentCtx.allowUserFileReferences !== false,
 				allowExport: enableExport,
 				exportModeActive,
@@ -610,6 +685,7 @@ const MessageList = observer(
 			// eslint-disable-next-line react-hooks/exhaustive-deps
 			[
 				isShare,
+				fileBundleDownload,
 				parentCtx.allowUserFileReferences,
 				parentCtx.allowRevoke,
 				parentCtx.allowUserMessageCopy,
@@ -621,6 +697,7 @@ const MessageList = observer(
 				parentCtx.onTopicSwitch,
 				parentCtx.renderAssistantAvatar,
 				parentCtx.showTaskCompletedBadge,
+				parentCtx.projectFilesStore,
 				enableExport,
 				exportModeActive,
 				exportEnterRequest,
@@ -682,6 +759,8 @@ const MessageList = observer(
 			options?: {
 				disableEntryAnimation?: boolean
 				previousNode?: SuperMagicMessageItem
+				contentMode?: VirtualMessageRowItem["contentMode"]
+				suppressHeader?: boolean
 			},
 		): ReactNode => {
 			const nodeKey = getMessageNodeKey(node) || `${node?.role || "message"}-${index}`
@@ -706,7 +785,12 @@ const MessageList = observer(
 						role={node?.role || "user"}
 						node={node}
 						prevNode={previousNode}
-						isFirst={previousNode?.role === "user" && node?.role === "assistant"}
+						contentMode={options?.contentMode}
+						isFirst={
+							!options?.suppressHeader &&
+							previousNode?.role === "user" &&
+							node?.role === "assistant"
+						}
 						checkIsLastMessage={checkIsLastMessage}
 						selectedTopic={selectedTopic}
 						onSelectDetail={setSelectedDetail}
@@ -725,6 +809,16 @@ const MessageList = observer(
 		}
 
 		const renderVirtualMessageContent = (item: VirtualMessageItem): ReactNode => {
+			if (item.kind === "process-toggle")
+				return (
+					<MessageProcessToggle
+						item={item}
+						onToggle={() => {
+							prepareProjectionChange(item.key)
+							processViewState.toggle(item.groupKey)
+						}}
+					/>
+				)
 			const previousNode =
 				item.sourceIndex > 0
 					? item.renderMode === "message"
@@ -762,7 +856,10 @@ const MessageList = observer(
 			}
 
 			const content = renderNodeContent(item.node, item.sourceIndex, {
-				disableEntryAnimation: item.renderMode === "revoked-preview",
+				disableEntryAnimation:
+					item.renderMode === "revoked-preview" || item.contentMode !== undefined,
+				contentMode: item.contentMode,
+				suppressHeader: item.suppressHeader,
 				previousNode,
 			})
 			if (item.renderMode === "message") return content
@@ -842,6 +939,7 @@ const MessageList = observer(
 						<LoadingMessage
 							messages={visibleData}
 							showLoading={shouldShowBottomLoading}
+							isToolExecuting={bottomLoadingVisibility.isToolExecuting}
 							selectedTopic={selectedTopic}
 						/>
 					) : null}
@@ -864,19 +962,22 @@ const MessageList = observer(
 			selectedTopic,
 			shouldShowBottomLoading,
 			showAiGeneratedTip,
+			bottomLoadingVisibility.isToolExecuting,
 			t,
 			visibleData,
 		])
 
 		return (
 			<MessageListProvider value={augmentedMessageListContext}>
-				<MessageViewStateProvider topicKey={currentTopicKey}>
+				<>
+					{fileBundleDownload.agreementModal}
 					<div
 						className={cn(
-							"relative flex h-full w-full flex-1 flex-col overflow-hidden",
+							"relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden",
 							"message-list-container",
 							className,
 						)}
+						data-guide-anchor="message-list-container"
 					>
 						{enableExport && exportStore.exportMode && (
 							<div className="px-2 pt-2">
@@ -887,71 +988,45 @@ const MessageList = observer(
 								/>
 							</div>
 						)}
-						{/*
-						 * Plain scroll element instead of Radix ScrollArea: virtua compensates
-						 * measurement and prepend itself, so the list must own the only scroll
-						 * container. `overflow-anchor: none` keeps the browser's native anchoring
-						 * from fighting that compensation.
-						 */}
-						<div
-							ref={setScrollViewportRef}
-							data-message-list-viewport="true"
-							data-testid="message-list-viewport"
-							className={cn(
-								"h-full w-full overflow-y-auto overflow-x-hidden [overflow-anchor:none]",
-								// Restores the thin overlay scrollbar the Radix ScrollArea used to draw.
-								"[scrollbar-color:rgb(var(--border-rgb))_transparent] [scrollbar-width:thin]",
-								"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
-								"[&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
-							)}
+						<MessageListScrollArea
+							viewportRef={setScrollViewportRef}
+							contentClassName={classNames?.content}
 						>
-							{/*
-							 * Centered message column. The top padding used to live on the Radix
-							 * wrapper's first child; keeping it on the column means a prepended
-							 * history page cannot carry the spacing away with the old first row.
-							 */}
-							<div
-								className={cn(
-									// `min-h-full`, not `h-full`: the empty state still fills the
-									// viewport, but a growing list can push this column past it so
-									// the virtualizer canvas inside keeps its measurable height.
-									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
-									isMobile ? "px-4 pt-[10px]" : "pl-2 pt-[50px]",
-									classNames?.scrollWrapper,
-								)}
-							>
-								{visibleData.length > 0 || !isEmptyStatus ? (
-									<VirtualMessageList
-										topicId={currentTopicKey}
-										items={virtualMessageItems}
-										userIndices={userIndices}
-										isMobile={isMobile}
-										getScrollElement={getScrollElement}
-										startMargin={isMobile ? 10 : 50}
-										footer={messageListFooter}
-										stickyMessageClassName={stickyMessageClassName}
-										renderNode={renderVirtualMessageNode}
-										exportMode={enableExport && exportStore.exportMode}
-										selectedKeys={exportStore.selectedKeys}
-										onToggleSelect={handleToggleSelect}
-										limitReached={exportLimitReached}
-										virtualizerRef={virtualizerRef}
-										onVirtualizerChange={onVirtualizerChange}
-										allowResizeStickySync={
-											isStreamLoading ||
-											Boolean(showLoading) ||
-											currentTopicStatus === TaskStatus.RUNNING ||
-											shouldShowBottomLoading
-										}
-									/>
-								) : (
-									<Empty />
-								)}
-							</div>
-						</div>
+							{visibleData.length > 0 || !isEmptyStatus ? (
+								<VirtualMessageList
+									topicId={currentTopicKey}
+									processProjectionKey={processInteractionKey}
+									items={virtualMessageItems}
+									userIndices={userIndices}
+									getScrollElement={getScrollElement}
+									footer={messageListFooter}
+									stickyMessageClassName={stickyMessageClassName}
+									renderNode={renderVirtualMessageNode}
+									exportMode={enableExport && exportStore.exportMode}
+									selectedKeys={exportStore.selectedKeys}
+									onToggleSelect={handleToggleSelect}
+									limitReached={exportLimitReached}
+									virtualizerRef={virtualizerRef}
+									onVirtualizerChange={onVirtualizerChange}
+									allowResizeStickySync={
+										isStreamLoading ||
+										Boolean(showLoading) ||
+										currentTopicStatus === TaskStatus.RUNNING ||
+										shouldShowBottomLoading
+									}
+								/>
+							) : (
+								<Empty />
+							)}
+						</MessageListScrollArea>
 						{scrollEdgeFadeConfig ? (
 							<ScrollEdgeFadeOverlays
-								fadeColor={scrollEdgeFadeConfig.fadeColor}
+								fadeColor={scrollEdgeFadeConfig.fadeColor ?? "background"}
+								surfaceColor={
+									scrollEdgeFadeConfig.fadeColor
+										? undefined
+										: "var(--message-list-surface, rgb(var(--background-rgb)))"
+								}
 								showTopMask={showTopMask}
 								showBottomMask={showBottomMask}
 							/>
@@ -969,7 +1044,7 @@ const MessageList = observer(
 							/>
 						)}
 					</div>
-				</MessageViewStateProvider>
+				</>
 			</MessageListProvider>
 		)
 	},
@@ -991,5 +1066,9 @@ export default function MessageListEntry(props: MessageListProps) {
 		return props.fallbackRender || <MessageListFallback className={props.className} />
 	}
 
-	return <MessageList {...props} />
+	return (
+		<MessageViewStateProvider topicKey={props.selectedTopic?.chat_topic_id || ""}>
+			<MessageList {...props} />
+		</MessageViewStateProvider>
+	)
 }

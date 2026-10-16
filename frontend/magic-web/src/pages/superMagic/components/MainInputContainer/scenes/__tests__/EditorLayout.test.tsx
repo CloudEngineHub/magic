@@ -10,6 +10,7 @@ const {
 	defaultMCPStoreMock,
 	sceneStateStoreMock,
 	mockPlaybooks,
+	capturedEditorContext,
 } = vi.hoisted(() => ({
 	mockLoad: vi.fn(),
 	defaultMCPStoreMock: {
@@ -20,6 +21,7 @@ const {
 	},
 	mockSetCurrentScene: vi.fn(),
 	mockSetInputScopeKey: vi.fn(),
+	capturedEditorContext: { current: null as Record<string, unknown> | null },
 	mockPlaybooks: [] as Array<{
 		id: string
 		name: string
@@ -74,7 +76,10 @@ vi.mock("@/pages/superMagic/services", () => ({
 }))
 
 vi.mock("../../components/LazyScenePanel", () => ({
-	default: () => <div data-testid="lazy-scene-panel" />,
+	default: ({ editorContext }: { editorContext: Record<string, unknown> }) => {
+		capturedEditorContext.current = editorContext
+		return <div data-testid="lazy-scene-panel" />
+	},
 }))
 
 vi.mock("../../components/PluginTips", () => ({
@@ -152,6 +157,13 @@ describe("EditorLayout", () => {
 		sceneStateStoreMock.currentScene = null
 		sceneStateStoreMock.setCurrentScene = mockSetCurrentScene
 		sceneStateStoreMock.setInputScopeKey = mockSetInputScopeKey
+		capturedEditorContext.current = null
+	})
+
+	it("marks workspace-home entity creation as workspace regardless of selected mode", () => {
+		render(<EditorLayout mode={"SMA-agent" as TopicMode} />)
+
+		expect(capturedEditorContext.current?.creationScene).toBe("workspace")
 	})
 
 	it("shows plugin tips when user has no global MCP", async () => {

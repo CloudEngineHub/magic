@@ -5,6 +5,9 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'open_api' => [
+        'file_upload_max_size' => (int) \Hyperf\Support\env('SUPER_MAGIC_OPEN_API_FILE_UPLOAD_MAX_SIZE', 20 * 1024 * 1024),
+    ],
     'phones' => [],
     'task_number_limit' => 3,
     'user_task_limits' => [],
@@ -34,7 +37,6 @@ return [
     ],
     'message' => [
         'process_mode' => \Hyperf\Support\env('SUPER_MAGIC_MESSAGE_PROCESS_MODE', 'direct'), // direct OR queue
-        'enable_compensate' => \Hyperf\Support\env('SUPER_MAGIC_MESSAGE_ENABLE_COMPENSATE', false),
     ],
     'topic' => [
         'config_fixed' => (bool) \Hyperf\Support\env('SUPER_MAGIC_TOPIC_CONFIG_FIXED', true),
@@ -52,13 +54,19 @@ return [
     'file_version' => [
         'max_versions' => \Hyperf\Support\env('FILE_VERSION_MAX_VERSIONS', 10),
     ],
+    'file_limit' => [
+        // 项目空间/用户空间文件数上限，达到该值后禁止发起新的沙箱任务；<= 0 表示关闭校验
+        'max_count' => (int) \Hyperf\Support\env('SUPER_MAGIC_FILE_COUNT_LIMIT', 5000),
+    ],
     'agent' => [
         // Base path inside the agent sandbox where cross-project mounts live.
         // Used to translate relative file_path/directory_path in cross-project
         // mentions into absolute paths the agent can read.
+        // Must match the FUSE mount root the sandbox gateway mounts at
+        // (AGFS_FUSE_VOLUME_PATH + /agfs, e.g. /mnt/agfs-vol/agfs).
         'referenced_project_mount_base_path' => \Hyperf\Support\env(
             'AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH',
-            '/mnt/agfs/magicfs/referenced-projects'
+            '/mnt/agfs-vol/agfs/magicfs/referenced-projects'
         ),
     ],
     'publish_async' => [

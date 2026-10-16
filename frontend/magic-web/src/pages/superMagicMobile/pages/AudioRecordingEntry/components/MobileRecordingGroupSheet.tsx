@@ -3,6 +3,7 @@ import { Check, MoreHorizontal, Plus, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { Input } from "@/components/shadcn-ui/input"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
 	ALL_RECORDING_GROUP_ID,
 	UNGROUPED_RECORDING_GROUP_ID,
@@ -343,145 +344,151 @@ export function MobileRecordingGroupSheet({
 			headerTitle={resolveGroupSheetTitle(view, t, activeGroupLabel)}
 			headerLeadingAction={leadingAction}
 			headerTrailingAction={trailingAction}
-			className="max-h-[78vh] gap-0 rounded-t-[14px] border-0 bg-muted p-0"
-			bodyClassName="no-scrollbar flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-[14px] py-[10px]"
+			// Keep focus scrolling inside the list while the sheet header remains fixed.
+			className="max-h-[78vh] gap-0 rounded-t-[14px] border-0 bg-muted p-0 supports-[overflow:clip]:overflow-clip"
+			bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0 supports-[overflow:clip]:overflow-clip"
 			style={{ boxShadow: "0 -4px 24px rgba(0,0,0,0.08)" }}
 			data-testid="mobile-recording-group-sheet"
 		>
-			{view === "menu" ? (
-				<>
-					<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
-						<GroupRow
-							label={t("super:mobile.recordingEntry.groupSheet.all")}
-							count={totalCount}
-							selected={selectedGroupId === ALL_RECORDING_GROUP_ID}
-							dataTestId="mobile-recording-group-option-all"
-							onClick={() => handleSelect(ALL_RECORDING_GROUP_ID)}
-							reserveActionSpace
-						/>
-						<div className="h-px w-full bg-border" />
-						<GroupRow
-							label={t("super:mobile.recordingEntry.groupSheet.ungrouped")}
-							count={ungroupedCount}
-							selected={selectedGroupId === UNGROUPED_RECORDING_GROUP_ID}
-							dataTestId="mobile-recording-group-option-ungrouped"
-							onClick={() => handleSelect(UNGROUPED_RECORDING_GROUP_ID)}
-							reserveActionSpace
-						/>
-						{groups.map((group) => (
-							<div key={group.id}>
-								<div className="h-px w-full bg-border" />
-								<GroupRow
-									label={resolveGroupLabel(group, unnamedGroupLabel)}
-									count={group.projectCount}
-									selected={selectedGroupId === group.id}
-									dataTestId="mobile-recording-group-option"
-									onClick={() => handleSelect(group.id)}
-									onMore={() => openGroupActions(group)}
-									moreAriaLabel={t(
-										"super:mobile.recordingEntry.groupSheet.moreGroupAria",
-										{
-											name: resolveGroupLabel(group, unnamedGroupLabel),
-										},
-									)}
-									moreTestId="mobile-recording-group-more-button"
-								/>
-							</div>
-						))}
+			<ScrollArea
+				className="grid min-h-0 flex-1"
+				viewportClassName="h-auto min-h-0 px-[14px] py-[10px] [&>div]:!flex [&>div]:flex-col [&>div]:gap-2.5"
+			>
+				{view === "menu" ? (
+					<>
+						<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
+							<GroupRow
+								label={t("super:mobile.recordingEntry.groupSheet.all")}
+								count={totalCount}
+								selected={selectedGroupId === ALL_RECORDING_GROUP_ID}
+								dataTestId="mobile-recording-group-option-all"
+								onClick={() => handleSelect(ALL_RECORDING_GROUP_ID)}
+								reserveActionSpace
+							/>
+							<div className="h-px w-full bg-border" />
+							<GroupRow
+								label={t("super:mobile.recordingEntry.groupSheet.ungrouped")}
+								count={ungroupedCount}
+								selected={selectedGroupId === UNGROUPED_RECORDING_GROUP_ID}
+								dataTestId="mobile-recording-group-option-ungrouped"
+								onClick={() => handleSelect(UNGROUPED_RECORDING_GROUP_ID)}
+								reserveActionSpace
+							/>
+							{groups.map((group) => (
+								<div key={group.id}>
+									<div className="h-px w-full bg-border" />
+									<GroupRow
+										label={resolveGroupLabel(group, unnamedGroupLabel)}
+										count={group.projectCount}
+										selected={selectedGroupId === group.id}
+										dataTestId="mobile-recording-group-option"
+										onClick={() => handleSelect(group.id)}
+										onMore={() => openGroupActions(group)}
+										moreAriaLabel={t(
+											"super:mobile.recordingEntry.groupSheet.moreGroupAria",
+											{
+												name: resolveGroupLabel(group, unnamedGroupLabel),
+											},
+										)}
+										moreTestId="mobile-recording-group-more-button"
+									/>
+								</div>
+							))}
+						</div>
+
+						<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
+							<ActionRow
+								icon={<Plus className="size-[18px] text-foreground" />}
+								label={t("super:mobile.recordingEntry.groupSheet.newGroup")}
+								dataTestId="mobile-recording-group-create-trigger"
+								onClick={() => {
+									setDraftName("")
+									setView("create")
+								}}
+							/>
+						</div>
+					</>
+				) : null}
+
+				{view === "create" ? (
+					<div className="flex flex-col gap-2">
+						<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
+							{t("super:mobile.recordingEntry.groupSheet.groupNameLabel")}
+						</p>
+						<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
+							<Input
+								type="text"
+								value={draftName}
+								onChange={(event) => setDraftName(event.target.value)}
+								placeholder={t(
+									"super:mobile.recordingEntry.groupSheet.groupNamePlaceholder",
+								)}
+								autoFocus
+								disabled={isSubmitting}
+								className="h-12 rounded-none border-0 bg-transparent px-[14px] py-0 text-[16px] text-foreground shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
+								data-testid="mobile-recording-group-create-input"
+								onKeyDown={(event) => {
+									if (event.key === "Enter") void handleCreateConfirm()
+									if (event.key === "Escape") setView("menu")
+								}}
+							/>
+						</div>
 					</div>
+				) : null}
 
-					<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
-						<ActionRow
-							icon={<Plus className="size-[18px] text-foreground" />}
-							label={t("super:mobile.recordingEntry.groupSheet.newGroup")}
-							dataTestId="mobile-recording-group-create-trigger"
-							onClick={() => {
-								setDraftName("")
-								setView("create")
-							}}
-						/>
+				{view === "rename" ? (
+					<div className="flex flex-col gap-2">
+						<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
+							{t("super:mobile.recordingEntry.groupSheet.renameLabel")}
+						</p>
+						<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
+							<Input
+								type="text"
+								value={draftName}
+								onChange={(event) => setDraftName(event.target.value)}
+								placeholder={t(
+									"super:mobile.recordingEntry.groupSheet.renamePlaceholder",
+								)}
+								autoFocus
+								disabled={isSubmitting}
+								className="h-12 rounded-none border-0 bg-transparent px-[14px] py-0 text-[16px] text-foreground shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
+								data-testid="mobile-recording-group-rename-input"
+								onKeyDown={(event) => {
+									if (event.key === "Enter") void handleRenameConfirm()
+									if (event.key === "Escape") setView("groupActions")
+								}}
+							/>
+						</div>
 					</div>
-				</>
-			) : null}
+				) : null}
 
-			{view === "create" ? (
-				<div className="flex flex-col gap-2">
-					<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
-						{t("super:mobile.recordingEntry.groupSheet.groupNameLabel")}
-					</p>
-					<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
-						<Input
-							type="text"
-							value={draftName}
-							onChange={(event) => setDraftName(event.target.value)}
-							placeholder={t(
-								"super:mobile.recordingEntry.groupSheet.groupNamePlaceholder",
-							)}
-							autoFocus
-							disabled={isSubmitting}
-							className="h-12 rounded-none border-0 bg-transparent px-[14px] py-0 text-[16px] text-foreground shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
-							data-testid="mobile-recording-group-create-input"
-							onKeyDown={(event) => {
-								if (event.key === "Enter") void handleCreateConfirm()
-								if (event.key === "Escape") setView("menu")
-							}}
+				{view === "groupActions" && activeGroup ? (
+					<MenuGroup>
+						<MenuItem
+							label={t("super:mobile.recordingEntry.groupSheet.rename")}
+							showDivider
+							dataTestId="mobile-recording-group-rename-trigger"
+							onClick={startRenameGroup}
 						/>
-					</div>
-				</div>
-			) : null}
-
-			{view === "rename" ? (
-				<div className="flex flex-col gap-2">
-					<p className="px-[14px] text-[14px] leading-5 text-muted-foreground">
-						{t("super:mobile.recordingEntry.groupSheet.renameLabel")}
-					</p>
-					<div className="w-full shrink-0 overflow-hidden rounded-lg bg-card">
-						<Input
-							type="text"
-							value={draftName}
-							onChange={(event) => setDraftName(event.target.value)}
-							placeholder={t(
-								"super:mobile.recordingEntry.groupSheet.renamePlaceholder",
-							)}
-							autoFocus
-							disabled={isSubmitting}
-							className="h-12 rounded-none border-0 bg-transparent px-[14px] py-0 text-[16px] text-foreground shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent"
-							data-testid="mobile-recording-group-rename-input"
-							onKeyDown={(event) => {
-								if (event.key === "Enter") void handleRenameConfirm()
-								if (event.key === "Escape") setView("groupActions")
-							}}
+						<MenuItem
+							label={t("super:mobile.recordingEntry.groupSheet.deleteGroup")}
+							danger
+							dataTestId="mobile-recording-group-delete-trigger"
+							onClick={() => setView("deleteConfirm")}
 						/>
+					</MenuGroup>
+				) : null}
+
+				{view === "deleteConfirm" && activeGroup ? (
+					<div className="flex flex-col items-center px-4 pt-6">
+						<p className="text-center text-[16px] leading-6 text-foreground">
+							{t("super:mobile.recordingEntry.groupSheet.deleteConfirm", {
+								name: activeGroupLabel,
+							})}
+						</p>
 					</div>
-				</div>
-			) : null}
-
-			{view === "groupActions" && activeGroup ? (
-				<MenuGroup>
-					<MenuItem
-						label={t("super:mobile.recordingEntry.groupSheet.rename")}
-						showDivider
-						dataTestId="mobile-recording-group-rename-trigger"
-						onClick={startRenameGroup}
-					/>
-					<MenuItem
-						label={t("super:mobile.recordingEntry.groupSheet.deleteGroup")}
-						danger
-						dataTestId="mobile-recording-group-delete-trigger"
-						onClick={() => setView("deleteConfirm")}
-					/>
-				</MenuGroup>
-			) : null}
-
-			{view === "deleteConfirm" && activeGroup ? (
-				<div className="flex flex-col items-center px-4 pt-6">
-					<p className="text-center text-[16px] leading-6 text-foreground">
-						{t("super:mobile.recordingEntry.groupSheet.deleteConfirm", {
-							name: activeGroupLabel,
-						})}
-					</p>
-				</div>
-			) : null}
+				) : null}
+			</ScrollArea>
 		</MagicPopup>
 	)
 }

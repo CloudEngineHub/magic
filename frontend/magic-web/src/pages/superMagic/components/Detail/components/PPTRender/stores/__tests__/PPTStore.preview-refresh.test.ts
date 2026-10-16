@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PPT_FILE_UPDATE_DEBOUNCE_MS, PPTStore } from "../PPTStore"
+import { SlideScreenshotService } from "../../services/SlideScreenshotService"
 
 const mockState = vi.hoisted(() => ({
 	downloadFileContent: vi.fn(),
@@ -85,6 +86,9 @@ describe("PPTStore preview refresh isolation", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.spyOn(SlideScreenshotService.prototype, "generateScreenshot").mockResolvedValue(
+			"blob:regenerated",
+		)
 		mockState.processHtmlContent.mockImplementation(async ({ content }) => ({
 			processedContent: content,
 		}))
@@ -128,6 +132,21 @@ describe("PPTStore preview refresh isolation", () => {
 
 	afterEach(() => {
 		store.dispose()
+	})
+
+	it("preserves the loaded preview when visibility metadata and attachments are reconciled", async () => {
+		const slide = store.slides[0]
+		for (const hiddenSlides of [["slides/1.html"], []]) {
+			await store.updateConfig({
+				displayConfig: { slides: ["slides/1.html"], hidden_slides: hiddenSlides },
+			})
+			await store.updateConfig({ attachmentList: createFinishedDeckAttachments() })
+			expect(store.slides[0]).toBe(slide)
+			expect(store.slides[0].content).toBe("<div>finished</div>")
+			expect(store.slides[0].thumbnailUrl).toBe("blob:finished")
+			expect(store.getConfigForExport().displayConfig?.hidden_slides).toEqual(hiddenSlides)
+		}
+		expect(mockState.downloadFileContent).not.toHaveBeenCalled()
 	})
 
 	it("does not reload a finished deck when the sibling template is rewritten", async () => {

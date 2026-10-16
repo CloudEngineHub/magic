@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import {
 	getHomepageRecordingStartBlocker,
 	isHomepageRecordingStartReady,
+	resolveEnsuredRecordingTopicMode,
 	resolveRecordingStartContext,
 	resolveSelectedProjectStartContext,
 } from "../recordingStartContext"
@@ -15,6 +17,36 @@ const selectedWorkspace = { id: "selected-workspace" } as never
 const selectedProject = { id: "selected-project", workspace_id: "selected-workspace" } as never
 const selectedTopic = { id: "selected-topic", project_id: "selected-project" } as never
 const selectedModel = { model_id: "selected-model" } as never
+
+describe("resolveEnsuredRecordingTopicMode", () => {
+	it("keeps an existing project on the record-summary topic", () => {
+		expect(
+			resolveEnsuredRecordingTopicMode({
+				hasProject: true,
+				fallbackTopicMode: TopicMode.General,
+			}),
+		).toBe(TopicMode.RecordSummary)
+	})
+
+	it("uses the homepage topic mode when recording must create the project", () => {
+		expect(
+			resolveEnsuredRecordingTopicMode({
+				hasProject: false,
+				recordingNewProjectTopicMode: TopicMode.RecordSummary,
+				fallbackTopicMode: TopicMode.General,
+			}),
+		).toBe(TopicMode.RecordSummary)
+	})
+
+	it("keeps the previous fallback when no homepage topic mode is provided", () => {
+		expect(
+			resolveEnsuredRecordingTopicMode({
+				hasProject: false,
+				fallbackTopicMode: TopicMode.General,
+			}),
+		).toBe(TopicMode.General)
+	})
+})
 
 describe("resolveRecordingStartContext", () => {
 	it("uses the homepage selection when the full context is available", () => {

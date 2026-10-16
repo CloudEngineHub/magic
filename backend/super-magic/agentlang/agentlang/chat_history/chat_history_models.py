@@ -7,6 +7,7 @@
 import json
 import re
 import uuid
+from enum import StrEnum
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
@@ -751,20 +752,26 @@ class UserMessage:
     # 规范化的多模态内容片段；历史只保存文本和 image_ref，不保存 Provider payload。
     # 放在既有字段之后，避免破坏外部对 UserMessage 的位置参数构造。
     content_parts: Optional[List[UserMessageContentPart]] = None
+    # None 表示未做原生视觉裁剪；False 表示整个 user 消息不进入原生视觉请求。
+    include_in_native_visual: Optional[bool] = None
 
     def __post_init__(self) -> None:
         """规范化内容片段对象，并兼容旧代码传入的历史字典结构。"""
-        if self.content_parts is None:
-            return
-        normalized_parts: List[UserMessageContentPart] = []
-        for part in self.content_parts:
-            if isinstance(part, UserMessageContentPart):
-                normalized_parts.append(part)
-            elif isinstance(part, dict):
-                normalized_parts.append(UserMessageContentPart.from_dict(part))
-            else:
-                raise TypeError(f"Unsupported user message content part: {type(part)!r}")
-        self.content_parts = normalized_parts
+        if self.content_parts is not None:
+            normalized_parts: List[UserMessageContentPart] = []
+            for part in self.content_parts:
+                if isinstance(part, UserMessageContentPart):
+                    normalized_parts.append(part)
+                elif isinstance(part, dict):
+                    normalized_parts.append(UserMessageContentPart.from_dict(part))
+                else:
+                    raise TypeError(f"Unsupported user message content part: {type(part)!r}")
+            self.content_parts = normalized_parts
+        if self.include_in_native_visual is not None and not isinstance(
+            self.include_in_native_visual,
+            bool,
+        ):
+            raise ValueError("include_in_native_visual must be a boolean or None")
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -778,6 +785,8 @@ class UserMessage:
             d["source"] = self.source
         if self.content_parts is not None:
             d["content_parts"] = [part.to_dict() for part in self.content_parts]
+        if self.include_in_native_visual is not None:
+            d["include_in_native_visual"] = self.include_in_native_visual
         return d
 
     def to_llm_dict(self) -> Dict[str, Any]:
@@ -801,6 +810,7 @@ class UserMessage:
             created_at=data.get("timestamp", datetime.now().isoformat()),
             source=data.get("source"),
             content_parts=[UserMessageContentPart.from_dict(part) for part in (raw_parts or [])] or None,
+            include_in_native_visual=data.get("include_in_native_visual"),
         )
 
 @dataclass
@@ -974,6 +984,22 @@ class AssistantMessage:
 
         return msg
 
+class ContextSource(StrEnum):
+    """内部归类提示；不进入模型消息或改变工具执行语义。"""
+    SKILLS = "skills"
+    MCP = "mcp"
+    MIXED = "mixed"
+
+    @classmethod
+    def from_value(cls, value: object) -> "ContextSource | None":
+        if not isinstance(value, str):
+            return None
+        try:
+            return cls(value)
+        except ValueError:
+            return None
+
+
 @dataclass
 class ToolMessage:
     """工具执行结果消息"""
@@ -985,12 +1011,15 @@ class ToolMessage:
     show_in_ui: bool = True # <--- 重命名并设置默认值 (中断提示会在 append 时设为 False)
     duration_ms: Optional[float] = None # 内部存储为毫秒 float
 
+    context_source: ContextSource | None = None
+
     def to_dict(self) -> Dict[str, Any]:
         result = {
             "id": str(uuid.uuid4()), # 运行时 ID
             "timestamp": self.created_at,
             "role": self.role,
             "content": self.content,
+            "context_source": self.context_source,
             "tool_call_id": self.tool_call_id,
             "system": self.system,
             "show_in_ui": self.show_in_ui,
@@ -1013,6 +1042,7 @@ class ToolMessage:
         """从字典创建工具消息对象"""
         return cls(
             content=data.get("content", ""),
+            context_source=ContextSource.from_value(data.get("context_source")),
             tool_call_id=data.get("tool_call_id", ""),
             role=data.get("role", "tool"),
             system=data.get("system"), # 可以为 None

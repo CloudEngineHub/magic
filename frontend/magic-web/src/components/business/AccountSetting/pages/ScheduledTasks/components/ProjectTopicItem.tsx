@@ -2,8 +2,8 @@ import { Form, Flex } from "antd"
 import { get } from "lodash-es"
 import { useTranslation } from "react-i18next"
 import { resolveToString } from "@dtyq/es6-template-strings"
-import { MagicSwitch } from "@/components/base/MagicSwitch"
 import { useModifyStyles } from "../styles"
+import { FormSwitch } from "./FormSwitch"
 import SelectItem, { type OptionItem } from "./SelectItem"
 
 interface ProjectTopicItemProps {
@@ -31,7 +31,7 @@ function ProjectTopicItem({
 				<Flex gap={4} align="center">
 					{t(`accountPanel.timedTasks.${mode}`)}
 					<Form.Item name={`${mode}_enabled`} noStyle valuePropName="checked">
-						<MagicSwitch size="small" />
+						<FormSwitch />
 					</Form.Item>
 				</Flex>
 			}

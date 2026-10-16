@@ -1,3 +1,4 @@
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useMemo, useState } from "react"
 import type { RecordingDetailFileMap } from "../../types/recording-detail"
 import {
@@ -12,6 +13,7 @@ interface RecordingDetailShareControlsInput {
 
 /** Exposes share dialog state and actions for the recording detail owner shell dialogs region. */
 export function useRecordingDetailShareControls(input: RecordingDetailShareControlsInput) {
+	const { permissions: access } = useFileAccess()
 	const { projectId, fileMap } = input
 	const [shareModalOpen, setShareModalOpen] = useState(false)
 	const [shareManagementOpen, setShareManagementOpen] = useState(false)
@@ -49,11 +51,13 @@ export function useRecordingDetailShareControls(input: RecordingDetailShareContr
 
 	/** Opens the existing recording file-share creation dialog. */
 	function openCreateShare() {
+		if (!access.share) return
 		setShareModalOpen(true)
 	}
 
 	/** Opens the PC recording-local share manager instead of the global share-management modal. */
 	function openManageShare() {
+		if (!access.share) return
 		setShareManagementOpen(true)
 	}
 
@@ -68,8 +72,8 @@ export function useRecordingDetailShareControls(input: RecordingDetailShareContr
 	}
 
 	return {
-		shareModalOpen,
-		shareManagementOpen,
+		shareModalOpen: shareModalOpen && access.share,
+		shareManagementOpen: shareManagementOpen && access.share,
 		attachments,
 		attachmentList,
 		defaultSelectedFileIds,

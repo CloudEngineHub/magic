@@ -6,7 +6,7 @@ import {
 	type LayerElement,
 	type VideoElement,
 } from "../document/types"
-import { updateContent } from "../document/elementContent"
+import { updateContent, getImageContents, updateImageContent } from "../document/elementContent"
 import type { CommitGenerationTarget } from "../elements/core/ElementManager"
 import type { GenerationAttempt, GenerationFailurePolicy } from "./GenerationRuntimeManager"
 
@@ -48,7 +48,29 @@ export class GenerationAttemptCoordinator {
 			return false
 		}
 
-		this.canvas.elementManager.commitGenerationTargets(targets)
+		// 确认提交时保留实际提交开始时间；批量和图片编辑工具也走同一出口。
+		const timedTargets = targets.map((target) => {
+			const element = this.canvas.elementManager.getElementData(target.elementId)
+			if (element?.type !== ElementTypeEnum.Image) return target
+			const committed = { ...element, ...target.persistedPatch } as ImageElement
+			const contentId = target.contentId ?? committed.activeContentId
+			if (!contentId) return target
+			const content = getImageContents(committed).find(
+				(entry) => entry.contentId === contentId,
+			)
+			if (!content) return target
+			const imageId =
+				content.generateImageRequest?.image_id ?? content.imageGenerationTaskMeta?.image_id
+			if (!imageId) return target
+			const next = updateImageContent(committed, contentId, {
+				generationTiming: { startedAt: attempt.startedAt, imageId, source: "submitted" },
+			})
+			return {
+				...target,
+				persistedPatch: { ...target.persistedPatch, contents: next.contents },
+			}
+		})
+		this.canvas.elementManager.commitGenerationTargets(timedTargets)
 		this.canvas.generationRuntimeManager.completeAttempt(attemptId)
 		return true
 	}

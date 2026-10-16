@@ -15,7 +15,7 @@
 | 当前工作区、项目和话题 | 每次 Loop 开始时，以及每批工具执行结束后 | 当前业务位置与上次提供的信息不同 | 未变化不写；一个 Loop 内若多次切换，可以多次写 |
 | 正在使用的文本模型 | 每次 Loop 开始时，以及每批工具执行结束后 | 现有模型变化标记表明需要更新 | 没变化不重复写 |
 | 可用的图像、视频模型及其用法 | 每次 Loop 开始时，以及每批工具执行结束后 | 图像或视频模型发生变化，且已有有效能力信息 | 只更新发生变化的部分 |
-| 工作区文件列表 | 每次 Loop 开始时，以及每批工具执行结束后 | 文件或目录路径增加、删除 | 没有路径变化不写；不把文件内容修改当作路径变化 |
+| 工作区文件列表 | 每次 Loop 开始时，以及每批工具执行结束后 | 变更账本给出了文件或目录路径的增加、删除；账本自报缺口时改为整份重发当前列表 | 没有变化不写；不把文件内容修改当作路径变化；不把目录树比对当作变更来源 |
 | 已追踪文件的内容变化 | 每次 Loop 开始时，以及每批工具执行结束后 | 检测到相对已知内容的变化 | 没变化不写；多次检测到新的变化时可以多次写 |
 | 已观察的浏览器页面变化 | 每次 Loop 开始时，以及每批工具执行结束后 | 已观察页面发生有效地址跳转或关闭 | 无相关变化不写；仅标题或地址锚点变化不单独通知 |
 | 用户当前页面的信息 | 每次 Loop 开始时，以及每批工具执行结束后 | 前端提供的页面资料新增、改变或明确清空 | 没变化不重复写 |
@@ -62,7 +62,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional, Tuple, Union
 from urllib.parse import urldefrag
 
 if TYPE_CHECKING:
@@ -70,7 +70,7 @@ if TYPE_CHECKING:
     from app.core.entity.message.client_message import SuperMagicProductContext
     from app.utils.file_utils import WorkspaceSnapshot
 
-from agentlang.chat_history.chat_history_models import UserMessage
+from agentlang.chat_history.chat_history_models import ChatMessage, UserMessage
 from agentlang.logger import get_logger
 from agentlang.utils.token_estimator import num_tokens_from_string
 from app.core.horizon.diff_builder import detect_file_changes
@@ -97,6 +97,8 @@ from app.core.horizon.models import (
     VideoModelState,
 )
 from app.core.horizon.store import HorizonStore
+from app.core.horizon.time_awareness import TimeAwareness, collect_time_awareness, render_current_time
+from app.infrastructure.changefeed.workspace_path_changes import WorkspaceChangeSet
 from app.core.entity.user_context import UserContextSnapshot
 from app.core.horizon.profile_context import build_agent_identity, render_agent_identity, render_user_context
 from app.core.process_runtime import PROCESS_STARTED_AT_NS
@@ -229,50 +231,32 @@ async def _read_file_content_for_snapshot(abs_path: str) -> tuple[str, str, Opti
         return "", "metadata_only", "read_failed"
 
 
-def _workspace_entries_to_path_set(entries: list) -> Set[str]:
-    """从结构化条目列表提取路径集合，用于 diff 比对。"""
-    return {e["path"] for e in entries if isinstance(e, dict) and "path" in e}
+# 变更清单里逐个列名字的上限；超过就只给数量。一段几百行的清单既占上下文又没有
+# 信息量，而模型真正需要的是"有哪些新文件值得看一眼"。
+_WORKSPACE_CHANGE_NAME_LIMIT = 8
 
 
-def _workspace_files_diff(old_entries: list, new_entries: list) -> str:
-    """语义化工作区文件变化：报告新增/删除的文件和目录。
+def _render_workspace_changes(changes: "WorkspaceChangeSet") -> str:
+    """把一批已证明的工作区路径变化渲染成模型可读的清单。
 
-    added 条目带文件大小（size 存于 new_entries 中），removed 不带（文件已不存在）。
+    唯一的变化来源是变更账本，所以这个函数不需要考虑"这份清单完不完整"：事件本身
+    就是结论。它只负责在"逐个列名字"和"只给数量"之间选一个。
+
+    例：3 个新增、1 个删除 →
+        +3 added: a.md, b.md, docs/
+        -1 removed: old.txt
     """
-    old_paths = _workspace_entries_to_path_set(old_entries)
-    new_paths = _workspace_entries_to_path_set(new_entries)
-    added_paths = new_paths - old_paths
-    removed_paths = old_paths - new_paths
-    if not added_paths and not removed_paths:
-        return ""
-
-    # 建立 path -> size 映射，用于展示新增文件的大小
-    new_size_map: dict[str, Optional[int]] = {
-        e["path"]: e.get("size") for e in new_entries if isinstance(e, dict)
-    }
-
-    def _fmt_size(size: Optional[int]) -> str:
-        if not size:
-            return ""
-        if size < 1024:
-            return f" ({size}B)"
-        if size < 1024 * 1024:
-            return f" ({size / 1024:.1f}KB)"
-        return f" ({size / (1024 * 1024):.1f}MB)"
-
-    parts = []
-    if added_paths:
-        if len(added_paths) <= 8:
-            names = ", ".join(f"{p}{_fmt_size(new_size_map.get(p))}" for p in sorted(added_paths))
-            parts.append(f"+{len(added_paths)} added: {names}")
+    parts: list[str] = []
+    if changes.added:
+        if len(changes.added) <= _WORKSPACE_CHANGE_NAME_LIMIT:
+            parts.append(f"+{len(changes.added)} added: {', '.join(sorted(changes.added))}")
         else:
-            parts.append(f"+{len(added_paths)} files/dirs added")
-    if removed_paths:
-        if len(removed_paths) <= 8:
-            names = ", ".join(sorted(removed_paths))
-            parts.append(f"-{len(removed_paths)} removed: {names}")
+            parts.append(f"+{len(changes.added)} files/dirs added")
+    if changes.removed:
+        if len(changes.removed) <= _WORKSPACE_CHANGE_NAME_LIMIT:
+            parts.append(f"-{len(changes.removed)} removed: {', '.join(sorted(changes.removed))}")
         else:
-            parts.append(f"-{len(removed_paths)} files/dirs removed")
+            parts.append(f"-{len(changes.removed)} files/dirs removed")
     return "\n".join(parts)
 
 
@@ -440,6 +424,8 @@ class AgentHorizon:
         self._state = HorizonState(agent_id=agent_id)
         self._loaded = False
         self._agent_context = agent_context
+        self._im_progress_reference: float | None = None
+        self._im_progress_interval: float = 0.0
 
         # 以下为纯内存状态，不持久化（session 级别）
         self._last_llm_model_id: str = ""
@@ -451,12 +437,15 @@ class AgentHorizon:
         self._context_used: int = 0    # 上一次 LLM 响应结束后的真实 Token 总量
         self._context_total: int = 0   # 模型最大上下文窗口
 
+        # 只比较同一实例、同一窗口的时间采样；重启和 fork 不继承单调时钟基准。
+        self._last_time_sample: float | None = None
+        self._last_time_history_message: ChatMessage | None = None
+
         # 当前上下文窗口是否尚未完成首包注入；只有为 True 时才输出完整 <initial_context>
         self._is_first_injection: bool = True
         # 运行时 staging：表示这次消息处理前刚拿到的 current 状态，不落持久化。
         # 持久化 state.* 则始终表达模型上次已经看到的 baseline。
         self._workspace_files_current: Optional[str] = None
-        self._workspace_entries_current: Optional[list] = None
         self._memory_directory_current: MemoryDirectorySnapshot | None = None
         self._client_context_current: Optional[str] = None
         self._cli_status_current: Optional[str] = None
@@ -465,6 +454,17 @@ class AgentHorizon:
         # 任意运行时阶段登记、下一个安全 Horizon 注入点写入的隐藏 user 消息。
         # 该队列只存在于当前进程，消息对象由 ChatHistory 在注入时持久化。
         self._pending_user_messages: list[UserMessage] = []
+
+        # 变更账本证明的工作区路径变化，等待下一个 Horizon 注入点交付。
+        #
+        # 与 pending_notifications 同构：登记与交付解耦，是因为"有没有变化"由采集方
+        # （Agent 轮询账本）决定，而"这一轮放不放得下"由这里决定。整包超限时队列必须
+        # 原样保留，否则变化会在一次预算失败里被永久丢掉。
+        self._pending_workspace_changes: WorkspaceChangeSet = WorkspaceChangeSet()
+
+        # 账本自报缺口后置位：下次注入时整份重发工作区列表，因为那段时间的变更已经
+        # 读不到了，逐条列举无从谈起。
+        self._workspace_files_refresh_requested: bool = False
 
         # magiclaw 文件驱动启动状态（纯内存，per-context-window，不持久化）
         self._is_magiclaw: bool = False              # 会话是否为 magiclaw 模式
@@ -478,6 +478,50 @@ class AgentHorizon:
     # ─────────────────────────────────────────────────────────────────────────
     # 初始化
     # ─────────────────────────────────────────────────────────────────────────
+
+    def begin_im_progress(self) -> None:
+        """仅记录 run 时间；没有后台计时任务，压缩也不会重置这两个值。"""
+        from agentlang.config.config import config
+        from app.core.context.execution_source import SuperMagicExecutionSource
+
+        context = self._agent_context
+        self.end_im_progress()
+        if context is not None and context.is_interactive_main_agent_context() and (
+            context.get_execution_source() == SuperMagicExecutionSource.THIRD_PARTY_IM
+        ):
+            self._im_progress_reference = time.monotonic()
+            self._im_progress_interval = max(1.0, float(config.get("agent.im_progress_initial_seconds", 60)))
+
+    def end_im_progress(self) -> None:
+        self._im_progress_reference = None
+        self._im_progress_interval = 0.0
+
+    def record_im_delivery(self) -> None:
+        if self._im_progress_reference is not None:
+            self._im_progress_reference = time.monotonic()
+
+    def _im_progress_notice(self, injection_point: HorizonInjectionPoint) -> str:
+        context = self._agent_context
+        if (
+            self._im_progress_reference is None
+            or context is None
+            or context.is_interruption_requested()
+            or injection_point not in {
+                HorizonInjectionPoint.AFTER_TOOL_RESULT,
+                HorizonInjectionPoint.BEFORE_CONTINUATION_LLM,
+            }
+            or time.monotonic() - self._im_progress_reference < self._im_progress_interval
+        ):
+            return ""
+        return (
+            '<im_progress_reminder>'
+            'The user is waiting in an IM channel where intermediate replies may not be visible. '
+            'Decide whether a short, truthful progress message would help. '
+            'If you already explained the wait or have no useful update, continue silently. '
+            'Use an available sending tool for the current channel; for WeChat use send_wechat_message. '
+            'A progress message does not replace the final result. Never invent progress.'
+            '</im_progress_reminder>'
+        )
 
     async def _ensure_loaded(self) -> None:
         if self._loaded:
@@ -508,6 +552,8 @@ class AgentHorizon:
     def _apply_loaded_state(self, loaded: Optional[HorizonState]) -> None:
         """应用持久 baseline，并清空不属于该 baseline 的运行时状态。"""
         self._state = loaded if loaded is not None else HorizonState(agent_id=self._store.agent_id)
+        self._last_time_sample = None
+        self._last_time_history_message = None
         self._loaded = True
 
         # 容器重启 / Agent 实例重建时，只恢复“这个上下文窗口是否已经发过首包”。
@@ -524,7 +570,6 @@ class AgentHorizon:
         self._pending_user_messages.clear()
 
         self._workspace_files_current = None
-        self._workspace_entries_current = None
         self._memory_directory_current = None
         self._client_context_current = None
         self._cli_status_current = None
@@ -710,6 +755,23 @@ class AgentHorizon:
         await self._ensure_loaded()
         return _abs(file_path) in self._state.file_records
 
+    async def has_complete_file_read(self, file_path: Union[str, Path]) -> bool:
+        """查询当前观察版本是否已完整提供；搜索快照和 AutoRead 来源不构成阅读证明。"""
+        await self._ensure_loaded()
+        record = self._state.file_records.get(_abs(file_path))
+        if not record or not record.file_hash or record.metadata.get("complete_read_hash") != record.file_hash:
+            return False
+        # 整包更新被预算拒绝时仍保留旧观察版本；不能据此跳过磁盘上已变化的候选。
+        try:
+            stat = await get_fresh_file_stat(record.path)
+            current_hash = (
+                await calculate_file_hash(record.path)
+                if stat.size <= HASH_DETECTION_THRESHOLD else f"__mtime__{stat.mtime}"
+            )
+            return current_hash == record.file_hash
+        except OSError:
+            return False
+
     async def on_context_reset(self) -> None:
         """聊天历史压缩或 /new 后调用，重置与上下文内容相关的所有状态。
 
@@ -740,6 +802,8 @@ class AgentHorizon:
         self._image_model_changed = False
         self._video_model_changed = False
         self._is_first_injection = True
+        self._last_time_sample = None
+        self._last_time_history_message = None
         self._state.initial_context_injected = False
         self._state.last_injected_date = ""
         self._state.context_usage_baseline_used = 0
@@ -770,6 +834,7 @@ class AgentHorizon:
         tool_name: str,
         ranges: Optional[list[tuple[int, int]]] = None,
         metadata: Optional[dict] = None,
+        source_content: str | None = None,
     ) -> None:
         """read_file 工具成功读取后调用。
 
@@ -785,10 +850,23 @@ class AgentHorizon:
 
             file_content, snapshot_mode, snapshot_reason = await _read_file_content_for_snapshot(abs_path)
 
-            record_metadata = dict(metadata or {})
+            previous = self._state.file_records.get(abs_path)
+            record_metadata = dict(previous.metadata if previous else {})
+            record_metadata.update(metadata or {})
             record_metadata["snapshot_mode"] = snapshot_mode
             if snapshot_reason:
                 record_metadata["snapshot_reason"] = snapshot_reason
+            else:
+                record_metadata.pop("snapshot_reason", None)
+
+            # 工具读到 A 后文件可能变成 B；只有本次全文与稳定的观察版本一致才确认完整。
+            # 同版本后续范围读取不清除已经确认的全文；搜索或写入也不能推进该凭据。
+            if (
+                source_content is not None and not truncated
+                and snapshot_mode == "full" and source_content == file_content
+                and await calculate_file_hash(abs_path) == file_hash
+            ):
+                record_metadata["complete_read_hash"] = file_hash
 
             self._state.file_records[abs_path] = FileContextRecord(
                 path=abs_path,
@@ -1052,6 +1130,34 @@ class AgentHorizon:
             content=content,
         )
         self._state.pending_notifications.append(notif)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 工作区变更队列（事件源）
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def request_workspace_files_refresh(self) -> None:
+        """请求下次注入时整份重发工作区列表。
+
+        用在账本自报缺口之后。这不是"降级回目录树比对"——两者对模型的含义完全不同：
+        比对出来的差异会让模型以为那就是全部变化，而这里明确告诉它"这是一份新的全量
+        状态，逐条差异无从列举"。缺口的成因（窗口挤爆 / 进程重启 / 路径解析失败）已经
+        由 Agent 记在日志里，这里只负责让模型的工作区认知重新对齐。
+        """
+        self._workspace_files_refresh_requested = True
+
+    def add_workspace_changes(self, changes: WorkspaceChangeSet) -> None:
+        """登记一批由事件源证明的工作区路径变化，等待下一个注入点交付。
+
+        调用方（Agent）负责采集和路径换算，这里只负责"什么时候告诉模型"。与目录树
+        比对相比，事件源的价值在于它不依赖观测完整性：扫描被预算截断时集合差不敢下
+        结论，而一条 create/delete 事件本身就是结论。
+
+        例：模型在 3 万文件的项目里改了 a.py，而扫描被预算截断在别处；集合差说不出话，
+        账本里的事件仍然能把这次变化通知出去。
+        """
+        if changes.empty and not changes.unresolved and not changes.out_of_scope:
+            return
+        self._pending_workspace_changes.merge(changes)
 
     async def suggest_skills(
         self,
@@ -1443,10 +1549,6 @@ class AgentHorizon:
     def _get_workspace_files_current(self) -> str:
         return self._workspace_files_current if self._workspace_files_current is not None else self._state.workspace_files
 
-    def _get_workspace_entries_current(self) -> list:
-        entries = self._workspace_entries_current if self._workspace_entries_current is not None else self._state.workspace_entries
-        return list(entries)
-
     def _get_client_context_current(self) -> str:
         return self._client_context_current if self._client_context_current is not None else self._state.client_context
 
@@ -1457,13 +1559,15 @@ class AgentHorizon:
         return self._language_current if self._language_current is not None else self._state.user_preferred_language
 
     async def set_workspace_snapshot(self, snapshot: "WorkspaceSnapshot") -> None:
-        """更新运行时 current 工作区快照，不直接覆盖持久化 baseline。"""
+        """更新运行时 current 工作区列表，不直接覆盖持久化 baseline。
+
+        只比较展示字符串：它同时承载了目录索引与缺口说明，是模型唯一看到的那份东西。
+        条目集合本身由 `WorkspaceEntryIndex` 持有，不再需要在这里再存一份——变更
+        清单已经不由它推导了。
+        """
         await self._ensure_loaded()
-        current_paths = _workspace_entries_to_path_set(self._get_workspace_entries_current())
-        new_paths = _workspace_entries_to_path_set(snapshot.entries)
-        if snapshot.display != self._get_workspace_files_current() or new_paths != current_paths:
+        if snapshot.display != self._get_workspace_files_current():
             self._workspace_files_current = snapshot.display
-            self._workspace_entries_current = list(snapshot.entries)
 
     async def set_memory_directory_snapshot(self, snapshot: MemoryDirectorySnapshot | None) -> None:
         """
@@ -1526,7 +1630,7 @@ class AgentHorizon:
             f"limit={HorizonDisplayBudget.from_config().context_max_tokens:,} limit_unit=tokens "
             f"sha256={_sha256_short(content)} "
             f"blocks={_format_context_block_lengths(content)} "
-            f"workspace_entries={len(self._get_workspace_entries_current())} "
+            f"workspace_files_len={len(self._get_workspace_files_current())} "
             f"workspace_files_len={len(self._get_workspace_files_current()):,} "
             f"file_records={len(self._state.file_records)} "
             f"pending_notifications={len(self._state.pending_notifications)} "
@@ -1607,7 +1711,8 @@ class AgentHorizon:
           <runtime_environment_changed> — Python 进程代次变化时输出
           <context_usage>    — context_total > 0 且达到分段阈值时
           <model_info>       — LLM 模型或图片模型发生变化时
-          <workspace_files_changed> — workspace_files 变化时
+          <workspace_files_changed> — 变更账本报出工作区路径增删时
+          <workspace_files_refreshed> — 账本自报缺口后，整份重发当前工作区列表
           <local_cli_context_changed> — 本地 CLI 上下文变化时
           <language_changed> — user_preferred_language 变化时
           <file_changes>     — 文件有变化时
@@ -1695,20 +1800,40 @@ class AgentHorizon:
         ]
 
         # ── 时间 ────────────────────────────────────────────────────────────
-        from agentlang.utils.datetime_formatter import get_current_datetime_str
+        from agentlang.utils.datetime_formatter import format_datetime, get_current_datetime
         tz = self._agent_context.get_user_timezone() if self._agent_context else None
-        now_str = get_current_datetime_str(tz)
+        now = get_current_datetime(tz or "UTC")
+        time_sample = time.monotonic()
         # 格式固定为 "YYYY-MM-DD HH:MM:SS Weekday (Week N) TZ (UTC+xx:xx)"
-        today_date = now_str[:10]
+        today_date = now.date().isoformat()
         date_changed = today_date != self._state.last_injected_date
         # 同一天内省略周几、第几周、时区，只保留 "YYYY-MM-DD HH:MM:SS"
-        time_display = now_str if date_changed else now_str[:19]
+        # 简略展示仍带 UTC offset；日期判断和展示共用一次结构化采样，不切割字符串。
+        time_display = format_datetime(now, include_calendar=self._is_first_injection or date_changed)
+        elapsed_seconds: float | None = None
+        time_awareness = TimeAwareness()
+        messages: tuple[ChatMessage, ...] = ()
+        # ChatHistory 是 Agent 初始化时动态挂载的边界对象，确认类型后只读快照。
+        from agentlang.chat_history.chat_history import ChatHistory
+
+        chat_history = getattr(self._agent_context, "chat_history", None)
+        if isinstance(chat_history, ChatHistory):
+            messages = chat_history.get_message_snapshot()
+        if self._last_time_sample is not None:
+            elapsed_seconds = time_sample - self._last_time_sample
+            time_awareness = collect_time_awareness(
+                messages, after_message=self._last_time_history_message,
+            )
+        current_time_context = render_current_time(
+            time_display,
+            elapsed_seconds=elapsed_seconds,
+            awareness=time_awareness,
+        )
 
         # 目录扫描由 Agent 提前完成；这里只比较并展示，整包超限时仍不推进基准。
         memory_directory_context = self._build_memory_directory_context(today_date)
 
         current_workspace_files = self._get_workspace_files_current()
-        current_workspace_entries = self._get_workspace_entries_current()
         current_client_context = self._get_client_context_current()
         current_cli_status = self._get_cli_status_current()
         current_language = self._get_language_current()
@@ -1728,7 +1853,10 @@ class AgentHorizon:
         parts = ["<system_injected_context>"]
         identity = build_agent_identity(self._agent_context) if self._agent_context else None
         if identity is not None and identity != self._state.agent_identity:
-            parts.append(render_agent_identity(identity))
+            parts.append(render_agent_identity(
+                identity,
+                inherited_history=self._agent_context.is_subagent_forked(),
+            ))
         if user_block:
             parts.append(user_block)
         was_first_injection = self._is_first_injection
@@ -1738,8 +1866,8 @@ class AgentHorizon:
         if was_first_injection:
             # 当前上下文窗口的首包注入：只应发生在真正的新窗口里，而不是容器重启恢复后
             init_parts = [
-                f"<current_time>{now_str}</current_time>"
-                "\n<!-- When handling time expressions like 'this year', 'recently', 'now', use the above as your authoritative current time. -->"
+                current_time_context
+                + "\n<!-- When handling time expressions like 'this year', 'recently', 'now', use the above as your authoritative current time. -->"
             ]
             init_parts.append(_build_runtime_environment_context(process_started_at_ns))
 
@@ -1798,7 +1926,7 @@ class AgentHorizon:
 
         else:
             # 常规增量注入：同一天只输出时间，跨天输出完整日期时间
-            parts.append(f"<current_time>{time_display}</current_time>")
+            parts.append(current_time_context)
 
             if self._state.process_started_at_ns == 0:
                 parts.append(_build_runtime_environment_context(process_started_at_ns))
@@ -1855,13 +1983,25 @@ class AgentHorizon:
                 parts.extend(model_info_parts)
                 parts.append("</model_info>")
 
-            # 增量注入：用“模型已知 baseline”与“本轮 current staging”直接计算 diff
-            cur_paths = _workspace_entries_to_path_set(current_workspace_entries)
-            baseline_paths = _workspace_entries_to_path_set(self._state.workspace_entries)
-            if cur_paths != baseline_paths:
-                diff = _workspace_files_diff(self._state.workspace_entries, current_workspace_entries)
-                if diff:
-                    parts.append(f"<workspace_files_changed>\n{diff}\n</workspace_files_changed>")
+            # 变更清单只有一个来源：变更账本的事件。目录树比对不参与——它是有预算的
+            # 观测，证明不了删除，在大项目上要么什么都不说要么说错。
+            pending_workspace_changes = self._pending_workspace_changes
+            if not pending_workspace_changes.empty:
+                rendered = _render_workspace_changes(pending_workspace_changes)
+                if rendered:
+                    parts.append(f"<workspace_files_changed>\n{rendered}\n</workspace_files_changed>")
+
+            # 账本自报缺口之后，逐条列举无从谈起（那段时间的变更已经读不到了），
+            # 只能把当前这份观测整份交给模型。
+            if self._workspace_files_refresh_requested and current_workspace_files:
+                parts.append(
+                    "<workspace_files_refreshed>\n"
+                    "The workspace changed while the change log had a gap, so the individual "
+                    "changes cannot be listed. This is the current full listing; treat it as the "
+                    "workspace state from now on.\n"
+                    f"<workspace_files>\n{current_workspace_files}\n</workspace_files>\n"
+                    "</workspace_files_refreshed>"
+                )
 
             if self._state.client_context != current_client_context:
                 if not current_client_context and self._state.client_context:
@@ -1914,6 +2054,10 @@ class AgentHorizon:
         if browser_pages_context:
             parts.append(browser_pages_context)
 
+        im_progress_notice = self._im_progress_notice(injection_point)
+        if im_progress_notice:
+            parts.append(im_progress_notice)
+
         if notif_blocks:
             parts.append("<notifications>")
             parts.extend(notif_blocks)
@@ -1940,7 +2084,16 @@ class AgentHorizon:
             self._log_oversized_context_update(context_update, injection_point)
             return HORIZON_CONTEXT_OVERSIZED_NOTICE
 
+        if im_progress_notice:
+            from agentlang.config.config import config
+
+            self._im_progress_reference = time.monotonic()
+            maximum = max(self._im_progress_interval, float(config.get("agent.im_progress_max_seconds", 240)))
+            self._im_progress_interval = min(self._im_progress_interval * 2, maximum)
+
         # 只有确认本轮上下文会进入 ChatHistory，才推进运行时标志和持久化 baseline。
+        self._last_time_sample = time_sample
+        self._last_time_history_message = messages[-1] if messages else None
         if was_first_injection:
             self._is_first_injection = False
             self._llm_model_changed = False
@@ -1994,9 +2147,6 @@ class AgentHorizon:
         if self._state.workspace_files != current_workspace_files:
             self._state.workspace_files = current_workspace_files
             persistence_changed = True
-        if self._state.workspace_entries != current_workspace_entries:
-            self._state.workspace_entries = list(current_workspace_entries)
-            persistence_changed = True
         if self._state.client_context != current_client_context:
             self._state.client_context = current_client_context
             persistence_changed = True
@@ -2029,6 +2179,7 @@ class AgentHorizon:
         for abs_path, (cur_hash, cur_size) in current_hashes.items():
             rec = self._state.file_records.get(abs_path)
             if rec and cur_hash and rec.file_hash != cur_hash:
+                previous_fully_read = rec.metadata.get("complete_read_hash") == rec.file_hash
                 rec.file_hash = cur_hash
                 rec.file_size_bytes = cur_size
                 rec.file_mtime_ms = current_mtimes.get(abs_path, rec.file_mtime_ms)
@@ -2047,6 +2198,11 @@ class AgentHorizon:
                 """
                 displayed = displayed_files.get(abs_path)
                 snapshot = displayed.new_snapshot if displayed is not None else None
+                if (
+                    snapshot is not None and displayed is not None
+                    and (displayed.is_full_read or previous_fully_read)
+                ):
+                    rec.metadata["complete_read_hash"] = cur_hash
                 if snapshot is not None and num_tokens_from_string(snapshot) <= display_budget.file_snapshot_max_tokens:
                     rec.file_content = snapshot
                     rec.metadata["snapshot_mode"] = "full"
@@ -2057,6 +2213,10 @@ class AgentHorizon:
                     rec.metadata["snapshot_reason"] = "changed_content_not_cached"
 
         self._state.pending_notifications.clear()
+        # 变更队列同样只在正文通过预算检查后才清空：整包超限时前面已提前返回，
+        # 这里清空等于把还没告诉模型的变化永久丢掉。
+        self._pending_workspace_changes.clear()
+        self._workspace_files_refresh_requested = False
 
         if state_changed:
             await self._save()

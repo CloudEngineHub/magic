@@ -1,5 +1,6 @@
 import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 
 export interface RecordingStartContext {
 	workspace: Workspace | null
@@ -60,6 +61,23 @@ export function getHomepageRecordingStartBlocker(
 	if (!context.workspace?.id) return "missingWorkspace"
 	if (!context.model?.model_id) return "missingModel"
 	return null
+}
+
+/**
+ * An existing project always gets a record-summary topic. A homepage start with no
+ * project uses the caller's topic mode so the new project stays a recording project.
+ */
+export function resolveEnsuredRecordingTopicMode({
+	hasProject,
+	recordingNewProjectTopicMode,
+	fallbackTopicMode,
+}: {
+	hasProject: boolean
+	recordingNewProjectTopicMode?: TopicMode
+	fallbackTopicMode: TopicMode
+}): TopicMode {
+	if (hasProject) return TopicMode.RecordSummary
+	return recordingNewProjectTopicMode ?? fallbackTopicMode
 }
 
 /** Homepage recording requires a selected workspace and model. */

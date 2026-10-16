@@ -21,6 +21,7 @@ import vitePluginTransformBaseImports from "./plugins/vite-plugin-transform-base
 import { lucideDynamicAggregatePlugin } from "./plugins/vite-plugin-lucide-dynamic-aggregate"
 import vitePluginCriticalFontPreload from "./plugins/vite-plugin-font-preload"
 import vitePluginMagicApi from "./plugins/vite-plugin-magic-api"
+import vitePluginIframeRuntime from "./plugins/vite-plugin-iframe-runtime"
 import { externalGlobalsPlugin } from "./plugins/vite-plugin-external-globals"
 import { getOverlayViteConfig } from "./vite/overlay"
 import { createCodeSplittingGroups } from "./vite/code-splitting-groups"
@@ -43,7 +44,8 @@ function formatLucideComponentImportName(componentName: string): string {
 		.toLowerCase()}.js`
 }
 
-function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string): UserConfig {
+// Factory function for shared base Vite configuration
+export function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string): UserConfig {
 	// Env overlay resolution runs before this factory so every config decision
 	// observes the same winning physical files as import.meta.env and child tasks.
 	const allowedHosts = env.MAGIC_DEV_ALLOWED_HOSTS
@@ -64,6 +66,8 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 			enabled: isEnableDevtools,
 		},
 		build: {
+			// Enable chunk import maps in production to decouple chunk hash updates
+			chunkImportMap: !isDev,
 			outDir: resolve(__dirname, "dist"),
 			// Enterprise uses root `enterprise/`; outDir is repo `dist/` (outside root).
 			emptyOutDir: true,
@@ -184,6 +188,10 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 					replacement: resolve(__dirname, "src"),
 				},
 				{
+					find: "@magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src"),
+				},
+				{
 					find: "@enterprise",
 					replacement: resolve(__dirname, "enterprise/src"),
 				},
@@ -198,44 +206,6 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 				{
 					find: "@magic-web/html2image",
 					replacement: resolve(__dirname, "packages/html2image/src/index.ts"),
-				},
-				{
-					find: /^@dtyq\/html-sandbox\/index\.html(\?raw)?$/,
-					replacement: `${resolve(__dirname, "packages/html-sandbox/index.html")}$1`,
-				},
-				{
-					find: "@dtyq/html-sandbox/runtime",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/safeUrl",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/utils/safeUrl.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/textContent",
-					replacement: resolve(
-						__dirname,
-						"packages/html-sandbox/src/utils/textContent.ts",
-					),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/inspectableTextContent",
-					replacement: resolve(
-						__dirname,
-						"packages/html-sandbox/src/utils/inspectableTextContent.ts",
-					),
-				},
-				{
-					find: "@dtyq/html-sandbox/telemetry",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
-				},
-				{
-					find: /^@dtyq\/html-sandbox\/(.+)$/,
-					replacement: resolve(__dirname, "packages/html-sandbox/src/$1"),
 				},
 				...(isDev
 					? [
@@ -255,6 +225,7 @@ function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: string):
 			lucideDynamicAggregatePlugin(),
 			createAppServiceWorkerPlugin(),
 			vitePluginMagicApi({ projectRoot: __dirname }),
+			vitePluginIframeRuntime({ projectRoot: __dirname }),
 			vitePluginMagicAdminSource({
 				projectRoot: __dirname,
 			}),

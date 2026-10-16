@@ -4,6 +4,7 @@
 export { default as AiManageRoutes } from "@admin/pages/AiManage/routes"
 export { default as PlatformPackageRoutes } from "@admin/pages/PlatformPackage/routes"
 export { otherRoutes } from "@admin/routes"
+export { withAccessibleIndexRedirect } from "@admin/routes/FirstAccessibleRedirect"
 
 // 3. 导出页面组件（功能管理）
 export { RouteName, RoutePath } from "@admin/const/routes"

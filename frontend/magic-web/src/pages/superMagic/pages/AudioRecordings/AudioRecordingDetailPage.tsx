@@ -1,3 +1,4 @@
+import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -24,9 +25,9 @@ import {
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
 import { collectSpeakerIdsFromText } from "./utils/markdown-time-links"
 import { normalizeSpeakerSelection } from "./utils/speaker-filter"
+import { hasRecordingDetailTabStrip } from "./utils/recording-detail-files"
 import { useRecordingDetailData } from "./hooks/useRecordingDetailData"
 import { useRecordingAudioPlayer } from "./hooks/useRecordingAudioPlayer"
-import { useRecordingPlayerCurrentSec } from "./hooks/useRecordingPlayerCurrentSec"
 import { useRecordingColorSegments } from "./hooks/useRecordingColorSegments"
 import { useRecordingDetailActions } from "./hooks/useRecordingDetailActions"
 import {
@@ -60,11 +61,13 @@ import { useAudioRecordingCopyToProject } from "./hooks/useAudioRecordingCopyToP
 import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver"
 import { useRecordingProjectChat } from "./hooks/useRecordingProjectChat"
 import { useRecordingDetailConversationPanelState } from "./hooks/useRecordingDetailConversationPanelState"
+import { useRecordingDetailTranscriptPanelState } from "./hooks/useRecordingDetailTranscriptPanelState"
+import { RecordingDetailConversationResizeHandle } from "./components/recording-detail/RecordingDetailConversationResizeHandle"
 import {
 	RECORDING_CHAT_COLLAPSED_WIDTH,
-	RECORDING_CHAT_EXPANDED_WIDTH,
 	RECORDING_CHAT_HISTORY_WIDTH,
 } from "./components/recording-detail/recording-detail-layout"
+import type { ConversationPanelDragCommit } from "./stores/RecordingConversationPanelDragStore"
 
 const MobileAudioRecordingDetailPage = lazy(
 	() => import("@/pages/superMagicMobile/pages/AudioRecordingDetail"),
@@ -103,11 +106,6 @@ function AudioRecordingDetailPageDesktop() {
 
 	const player = useRecordingAudioPlayer(audioUrl)
 	const { seekTo, playSegment } = player
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const [detailItem, setDetailItem] = useState<AudioProjectListItem | null>(null)
 	const [titleOverride, setTitleOverride] = useState("")
 	const [playerExpanded, setPlayerExpanded] = useState(false)
@@ -121,8 +119,15 @@ function AudioRecordingDetailPageDesktop() {
 	const [groups, setGroups] = useState<AudioRecordingGroup[]>([])
 	const [ungroupedCount, setUngroupedCount] = useState(0)
 	const [chatHistoryOpen, setChatHistoryOpen] = useState(false)
-	const { isConversationPanelCollapsed, toggleConversationPanel, expandConversationPanel } =
-		useRecordingDetailConversationPanelState()
+	const {
+		isConversationPanelCollapsed,
+		conversationPanelWidth,
+		conversationPanelRef,
+		toggleConversationPanel,
+		expandConversationPanel,
+		collapseConversationPanel,
+		setConversationPanelWidth,
+	} = useRecordingDetailConversationPanelState()
 	const chat = useRecordingProjectChat({
 		projectId,
 		attachmentsLoading: loading,
@@ -171,6 +176,22 @@ function AudioRecordingDetailPageDesktop() {
 	const handleExpandConversationPanel = useCallback(() => {
 		expandConversationPanel()
 	}, [expandConversationPanel])
+
+	/**
+	 * Persists a finished conversation drag. Collapse closes topic history first and keeps the
+	 * pre-drag conversation width; a normal release only updates that width.
+	 */
+	const handleConversationDragCommit = useCallback(
+		(result: ConversationPanelDragCommit) => {
+			if (result.collapsed) {
+				setChatHistoryOpen(false)
+				collapseConversationPanel()
+				return
+			}
+			setConversationPanelWidth(result.width)
+		},
+		[collapseConversationPanel, setConversationPanelWidth],
+	)
 
 	useEffect(() => {
 		setSpeakerNameOverrides(fileMap?.magicProjectConfig?.metadata?.speakers ?? {})
@@ -225,6 +246,27 @@ function AudioRecordingDetailPageDesktop() {
 		summaryReady ||
 		(Boolean(resolvedItem && isAudioProjectSummarizing(resolvedItem)) &&
 			Boolean(fileMap?.magicProject && fileMap.magicProjectConfig))
+
+	// A collapsed transcript column needs a tab-strip expand entry, so collapse only when the summary is ready.
+	const canCollapseTranscript =
+		summaryPreviewAvailable && hasRecordingDetailTabStrip(fileMap, true)
+	const {
+		isTranscriptPanelCollapsed,
+		transcriptPanelWidth,
+		workbenchGridRef,
+		expandTranscriptPanel,
+		collapseTranscriptPanel,
+		setTranscriptPanelWidth,
+	} = useRecordingDetailTranscriptPanelState()
+
+	/** Routes a finished transcript drag to the matching persisted transition. */
+	const handleTranscriptDragCommit = useCallback(
+		(result: { collapsed: boolean; width: number }) => {
+			if (result.collapsed) collapseTranscriptPanel()
+			else setTranscriptPanelWidth(result.width)
+		},
+		[collapseTranscriptPanel, setTranscriptPanelWidth],
+	)
 
 	const detailSummaryState = useMemo(
 		() =>
@@ -381,17 +423,20 @@ function AudioRecordingDetailPageDesktop() {
 			})
 			setSpeakerNameOverrides(nextSpeakers)
 			setSpeakerSettingsOpen(false)
-			void refresh()
+			// Keep the rendered detail and active player mounted while persisted speaker metadata syncs.
+			void refresh({ silent: true })
 		} catch {
 			// save errors surface through shared media util logging
 		}
 	}
 
-	const conversationPanelWidth = isConversationPanelCollapsed
+	// Collapsed is the 24px rail. Expanded width is the persisted conversation surface; history adds 240 on top.
+	const conversationRailWidth = isConversationPanelCollapsed
 		? RECORDING_CHAT_COLLAPSED_WIDTH
-		: RECORDING_CHAT_EXPANDED_WIDTH
+		: conversationPanelWidth
 	const chatPanelWidth =
-		conversationPanelWidth + (chatHistoryOpen ? RECORDING_CHAT_HISTORY_WIDTH : 0)
+		conversationRailWidth +
+		(!isConversationPanelCollapsed && chatHistoryOpen ? RECORDING_CHAT_HISTORY_WIDTH : 0)
 
 	return (
 		<RecordingDetailProvider capabilities={OWNER_RECORDING_DETAIL_CAPABILITIES}>
@@ -453,13 +498,18 @@ function AudioRecordingDetailPageDesktop() {
 
 						{!loading && !error && !detailUnavailable ? (
 							<RecordingDetailWorkbench
+								transcriptCollapsed={isTranscriptPanelCollapsed}
+								transcriptWidth={transcriptPanelWidth}
+								canCollapseTranscript={canCollapseTranscript}
+								onTranscriptDragCommit={handleTranscriptDragCommit}
+								gridRef={workbenchGridRef}
 								left={
 									<RecordingDetailLeftColumn
 										searchScopeKey={projectId}
 										audioRef={player.audioRef}
 										audioUrl={audioUrl}
 										transcriptMarkdown={texts.transcript?.content}
-										currentSec={playerCurrentSec}
+										currentSec={player.currentTime}
 										currentTime={player.currentTime}
 										duration={player.duration}
 										playing={player.playing}
@@ -499,6 +549,8 @@ function AudioRecordingDetailPageDesktop() {
 										onTimeClick={handleSummaryTimeClick}
 										onGenerateSummary={handleSummaryAction}
 										summarySubmitting={actions.summarySubmitting}
+										transcriptCollapsed={isTranscriptPanelCollapsed}
+										onExpandTranscript={expandTranscriptPanel}
 									/>
 								}
 							/>
@@ -508,30 +560,47 @@ function AudioRecordingDetailPageDesktop() {
 					{/* Mount chat as soon as the page is not fatal; detail attachment loading must not unmount it. */}
 					{!error && !detailUnavailable ? (
 						<div
-							className="h-full min-h-0 max-w-full shrink-0 overflow-hidden bg-sidebar transition-[width,min-width] duration-300"
+							ref={conversationPanelRef}
+							className="relative h-full min-h-0 max-w-full shrink-0 bg-sidebar transition-[width,min-width] duration-300 data-[resizing=true]:select-none [&[data-resizing=true]>div]:pointer-events-none [&[data-resizing=true]_[data-slot=resizable-handle]]:pointer-events-auto"
 							style={{ width: chatPanelWidth, minWidth: chatPanelWidth }}
 							data-testid="recording-detail-chat-rail"
 							data-collapsed={String(isConversationPanelCollapsed)}
 						>
-							{/* Keep the conversation mounted while only its sibling rail width changes. */}
-							<RecordingDetailChatPanel
-								isConversationPanelCollapsed={isConversationPanelCollapsed}
-								historyOpen={chatHistoryOpen}
-								onToggleConversationPanel={handleToggleConversationPanel}
-								onExpandConversationPanel={handleExpandConversationPanel}
-								onToggleHistory={() => setChatHistoryOpen((current) => !current)}
-								topicsLoading={chat.topicsLoading}
-								topicStore={chat.topicStore}
-								topicActions={chat.topicActions}
-								selectedTopic={chat.selectedTopic}
-								project={chat.project}
-								workspace={chat.workspace}
-								setSelectedTopic={chat.topicStore.setSelectedTopic}
-								projectFilesStore={chat.projectFilesStore}
-								mentionPanelStore={chat.mentionPanelStore}
-								attachments={chat.projectFilesStore.workspaceFileTree}
-								attachmentList={chat.projectFilesStore.workspaceFilesList}
-							/>
+							{/* Keep the handle outside the clipped chat so it can sit in the page gap. */}
+							{isConversationPanelCollapsed ? null : (
+								<RecordingDetailConversationResizeHandle
+									panelRef={conversationPanelRef}
+									conversationWidth={conversationPanelWidth}
+									historyOffset={
+										chatHistoryOpen ? RECORDING_CHAT_HISTORY_WIDTH : 0
+									}
+									onCommit={handleConversationDragCommit}
+								/>
+							)}
+							{/* Clip chat independently so collapse still hides overflowing messages. */}
+							<div className="h-full min-h-0 overflow-hidden">
+								{/* Keep the conversation mounted while only its sibling rail width changes. */}
+								<RecordingDetailChatPanel
+									isConversationPanelCollapsed={isConversationPanelCollapsed}
+									historyOpen={chatHistoryOpen}
+									onToggleConversationPanel={handleToggleConversationPanel}
+									onExpandConversationPanel={handleExpandConversationPanel}
+									onToggleHistory={() =>
+										setChatHistoryOpen((current) => !current)
+									}
+									topicsLoading={chat.topicsLoading}
+									topicStore={chat.topicStore}
+									topicActions={chat.topicActions}
+									selectedTopic={chat.selectedTopic}
+									project={chat.project}
+									workspace={chat.workspace}
+									setSelectedTopic={chat.topicStore.setSelectedTopic}
+									projectFilesStore={chat.projectFilesStore}
+									mentionPanelStore={chat.mentionPanelStore}
+									attachments={chat.projectFilesStore.workspaceFileTree}
+									attachmentList={chat.projectFilesStore.workspaceFilesList}
+								/>
+							</div>
 						</div>
 					) : null}
 				</div>
@@ -631,8 +700,6 @@ function AudioRecordingDetailPage() {
 	return <ObservedAudioRecordingDetailPageDesktop />
 }
 
-export default AudioRecordingDetailPage
-
 /** Collects every speaker id from loaded detail text files for the shared editor. */
 function collectRecordingSpeakerIds(contents: Array<string | undefined>) {
 	return Array.from(
@@ -645,3 +712,11 @@ function collectRecordingSpeakerIds(contents: Array<string | undefined>) {
  * if (isAudioProjectMode(projectMode)) return <RecordingDetailShareShell projectId={...} />
  * See types/recording-detail-capabilities.ts SHARE_RECORDING_DETAIL_CAPABILITIES.
  */
+
+export default function FileAccessPage() {
+	return (
+		<FileAccessProvider>
+			<AudioRecordingDetailPage />
+		</FileAccessProvider>
+	)
+}

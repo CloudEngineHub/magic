@@ -83,15 +83,6 @@ vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => false,
 }))
 
-vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
-	useFileActionVisibility: () => ({
-		hideCopyTo: false,
-		hideCreateNewTopic: false,
-		hideMoveTo: false,
-		hideShareFile: false,
-	}),
-}))
-
 vi.mock("../../style", () => ({
 	useStyles: () => ({
 		styles: {
@@ -125,7 +116,6 @@ function createOptions(overrides: Partial<Parameters<typeof useContextMenu>[0]> 
 		handleDeleteItem: vi.fn(),
 		handleDownloadOriginal: vi.fn(),
 		handleDownloadPdf: vi.fn(),
-		handleDownloadPpt: vi.fn(),
 		handleDownloadPptx: vi.fn(),
 		handleOpenFile: vi.fn(),
 		handleStartRename: vi.fn(),

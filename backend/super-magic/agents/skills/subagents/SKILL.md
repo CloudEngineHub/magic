@@ -152,13 +152,18 @@ User-facing label shown directly in the UI for this delegated task. It is not th
 
 ### prompt
 
-With `fork=False, resume=False`, the sub-agent has no access to the parent's conversation history. The prompt must be fully self-contained. Include:
+With `fork=False, resume=False`, the sub-agent has no access to the parent's conversation history. Write the prompt as a self-contained task brief:
 
-- The exact task
-- Expected output format
-- Relevant file paths or object identifiers
-- Constraints (e.g. read-only, specific file to write)
-- Success criteria
+- Objective: one sentence, the single outcome you want.
+- Background: the minimum facts needed to act, such as what already exists and which decisions are made. Do not assume shared context.
+- In scope: the concrete targets or steps.
+- Out of scope: the adjacent things the sub-agent must not touch. Be specific.
+- Deliverable: the exact output path or object and its format.
+- Constraints: for example read-only, or nothing created besides the deliverable.
+- Done when: the check that proves the task is finished.
+- Report: what the final reply must contain.
+
+Naming what is out of scope matters most. A sub-agent told only what to do invents adjacent work: extra tool directories, rebuilds of files it does not own, cleanup nobody asked for. A sub-agent told what not to touch reports the problem instead.
 
 Bad:
 
@@ -166,12 +171,22 @@ Bad:
 Find out what competitors are doing and summarize.
 ```
 
+Bad, specific about the work but silent about the boundary:
+
+```text
+Write the analysis section of report.md. Make sure the whole report is consistent.
+```
+
 Good:
 
 ```text
-Search the web for the top 3 competitors of [product category] that have launched or updated in the past 12 months.
-For each, return: product name, target users, main differentiator, and source URL.
-Focus on product launch articles, review sites, and tech media. Do not modify files.
+Objective: write the competitor analysis section of an existing report.
+Background: reports/market.md already has an approved structure, an intro, and a data section written by another agent.
+In scope: replace the placeholder under "## Competitor analysis" in reports/market.md.
+Out of scope: do not edit other sections, restructure the report, touch reports/data.md, or create any file or directory.
+Deliverable: that section, 400-600 words of Markdown.
+Done when: the section is written and every claim has a source URL.
+Report: word count, source URLs, and any inconsistency you noticed elsewhere without fixing it.
 ```
 
 ### background
@@ -184,6 +199,16 @@ Use `background=True` in two scenarios:
 1. **Parallel workloads**: sequential `call_subagent(..., background=True)` calls result in concurrent execution regardless of whether the model supports parallel tool calls.
 2. **Long-running tasks**: even a single sub-agent should use `background=True` when the task may take more than a few seconds. This gives the parent progress visibility via `wait_for_subagents` (timeout snapshots, `pattern` matching for checkpoint-based interleaving), and keeps the sandbox alive during long waits.
 
+### Parallel context in the prompt
+
+When several sub-agents work on the same plan, every prompt must include a parallel context line:
+
+```text
+Parallel context: N sub-agents are working on this plan at the same time. You own <this slice>. The others own <their slices>. Do not edit, regenerate, or clean up their slices, and do not build shared tooling for them. <who> merges the results.
+```
+
+Only you can write this. Sub-agents are dispatched one at a time and cannot discover or message each other, so you hold the only complete picture of the split. The runtime already tells every sub-agent that siblings may exist and that their work is not its to fix; you add how many there are, who owns what, and who merges.
+
 ### fork
 
 - `False` (default): sub-agent starts with empty conversation history. The `prompt` must be fully self-contained.
@@ -192,6 +217,13 @@ Use `background=True` in two scenarios:
 If `fork=true` receives a non-empty `agent_name` that does not identify the current Agent, the runtime ignores it, uses the current Agent, and includes a short warning in `result.content`.
 
 Fork mode is useful when the sub-agent needs to reason over the same conversation context as the parent, e.g. generating a summary, extracting decisions, or continuing a task in isolation.
+
+A fork sees everything you promised the user and everything still unfinished. State the boundary, or it may pick up work that is not its own:
+
+```text
+From the conversation above, extract only the decisions we made about the data model and write them to docs/decisions.md as a bullet list.
+Do not act on any other open item in that conversation and do not continue tasks I have not finished.
+```
 
 ### resume
 
@@ -217,7 +249,7 @@ result = tool.call("wait_for_subagents", {
 
 | Value | Behavior |
 |-------|----------|
-| `> 0` | Wait up to N seconds. If agents are still running, returns current status with progress snapshot. You must either call again to keep waiting, or use kill=True. Unattended agents run indefinitely. |
+| `> 0` | Wait up to N seconds. If agents are still running, returns current status with a progress snapshot, not a final result. Wait again before finishing; use kill=True only when the delegated work is no longer needed. |
 | `= 0` | Return current status snapshot immediately without waiting. |
 | `= -1` | Wait indefinitely until all agents finish (capped at 60 minutes). |
 
@@ -229,12 +261,14 @@ Set `kill=True` to immediately terminate all specified sub-agents and return the
 
 ### Handling `running` status
 
-When `wait_for_subagents` returns agents with status `running`, those agents are still executing in the background. You must take one of these actions:
+When `wait_for_subagents` returns agents with status `running`, their work is not complete. Before finishing the parent task:
 
-1. **Keep waiting**: call `wait_for_subagents` again with the same `agent_ids` (and optionally a longer timeout)
-2. **Kill**: call `wait_for_subagents` with `kill=True` to terminate them immediately
+1. **Keep waiting**: call `wait_for_subagents` again with the same `agent_ids` (and optionally a longer timeout), then collect and process their final results.
+2. **Stop unneeded work**: use `kill=True` only when the delegated task is no longer needed.
 
-Do not proceed without dealing with running agents — they run indefinitely and consume resources until explicitly waited on or killed. Read the `Last message:` progress snapshot in the result to decide: if the agent is making progress, wait longer; if it looks stuck or the task is no longer needed, kill it.
+You may do independent work while sub-agents run, but collect and process their final results before finishing the parent task. A timeout, a progress message, or a pattern match is not completion. Read `Last message:` to understand progress and keep waiting when the delegated work is still needed.
+
+When the parent is waiting for a user answer, background sub-agents continue running. Do not stop them merely because you asked the user a question. Any runtime reminder supplies current status; you still need to call the tools to wait or explicitly stop unneeded work.
 
 Awaits all listed agents together. `result.content` uses this format per agent:
 
@@ -249,12 +283,12 @@ Result:
 - `status` values: `done`, `error`, `interrupted`, `running`, `not_found`, `ambiguous`
 - `Result:` appears only when status is `done` — contains the sub-agent's final output
 - When status is `running` (timed out), `Result:` is replaced by `Last message:` — this is the last assistant message the sub-agent produced before the timeout, useful for gauging progress
-- `wait_for_subagents` is idempotent — if status is still `running`, call it again or kill it. Do not ignore running agents — they consume resources indefinitely until explicitly waited on or killed.
+- `wait_for_subagents` can be called repeatedly — if status is still `running`, keep waiting and collect the final results before finishing. Stop the agent explicitly only when its delegated work is no longer needed.
 - `result.data["results"]`: structured list for programmatic access, fields: `agent_id` (legacy session ID), `agent_name`, `task_label`, `status`, `result`, `error`, `last_activity`, `matched_content`
 
 ## Output Target
 
-Decide where results go before dispatching. If the output target is missing from the prompt, the sub-agent will guess — and will usually create a file or object it shouldn't.
+Decide where results go before dispatching. When the output target is missing, a sub-agent does not stop. It guesses, and the guess usually becomes a new file, a new directory, or a rebuild of something it does not own. In parallel runs several sub-agents make the same guess independently and collide.
 
 Three patterns:
 
@@ -317,12 +351,15 @@ def dispatch(session_id_base, task_label, prompt):
 
 competitors_id = dispatch("research-competitors", "competitor research", """Search the web for the top 3-5 competitors in this product space.
 For each, return: product name, target users, main differentiator, and source URL.
-Focus on product launches, review sites, and tech media from the past 12 months.""")
+Focus on product launches, review sites, and tech media from the past 12 months. Do not create files.
+Parallel context: 2 sub-agents are working on this research. You own competitors; the other owns market signals. Do not cover market signals. The parent agent merges the results.""")
 signals_id = dispatch("research-market-signals", "market signals", """Search the web for recent market signals in this product space.
 Return:
 1. notable user needs or pain points (with source URLs)
 2. recurring themes across articles or community discussions
-3. any emerging trends worth tracking""")
+3. any emerging trends worth tracking
+Do not create files.
+Parallel context: 2 sub-agents are working on this research. You own market signals; the other owns competitors. Do not profile individual competitors. The parent agent merges the results.""")
 ```
 
 Then wait:
@@ -336,9 +373,8 @@ result = tool.call("wait_for_subagents", {
 print(result.content)
 # If result shows any agent with status "running":
 # - Read "Last message:" to gauge progress
-# - Call wait_for_subagents again to keep waiting, OR
-# - Call wait_for_subagents with kill=True to terminate
-# Do NOT ignore running agents — they consume resources indefinitely.
+# - Keep waiting and process the final results before finishing the parent task
+# - Use kill=True only if the delegated work is no longer needed
 ```
 
 ## Advanced: Checkpoint Pattern Matching
@@ -377,7 +413,7 @@ Rules:
 - `pattern` applies only when `timeout != 0` and `kill=False`
 - Only messages produced AFTER the wait call are scanned — no false triggers from historical content
 - When matched, `result.data["results"][i]["matched_content"]` contains the full message that triggered the match
-- The sub-agent continues running after a pattern match — call `wait_for_subagents` again to keep collecting, or use `kill=True` to terminate if the task is done
+- The sub-agent continues running after a pattern match. After processing intermediate results, wait again and collect the final result before finishing the parent task. Use `kill=True` only if the remaining delegated work is no longer needed.
 - If the agent finishes before any match, returns normally with `status: done`
 - Pattern errors (invalid regex) return an immediate error result
 
@@ -391,6 +427,9 @@ Before dispatching:
 - For waiting or resuming, are you using the exact final `session_id` returned by `call_subagent`?
 - For an existing session, is `resume=True` and `fork=False`?
 - Is `task_label` concise, distinct, and written in the same language as the user's request?
+- Does the prompt name what is out of scope, not just what is in scope?
+- For parallel dispatch, does every prompt say how many siblings exist, who owns what, and who merges?
+- For a fork, does the prompt say which parts of the inherited conversation the sub-agent must not act on?
 - Is the output target explicit and conflict-free?
-- If `background=True`, is there a matching `wait_for_subagents`?
+- Before finishing, have you collected and processed the final results of background sub-agents, or explicitly stopped work that is no longer needed?
 - If an agent needs to be stopped, use `wait_for_subagents(agent_ids=[...], kill=True)` instead of re-dispatching

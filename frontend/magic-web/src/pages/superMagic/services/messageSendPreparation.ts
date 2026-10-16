@@ -25,6 +25,7 @@ import TopicService from "./topicService"
 import SuperMagicService from "./index"
 import type { CreatedProject, ProjectListItem, Topic, Workspace } from "../pages/Workspace/types"
 import type { TopicMode } from "../pages/Workspace/TopicMode"
+import { analyticsService } from "@/services/analytics"
 
 interface CreateProjectParams {
 	projectMode: TopicMode
@@ -36,9 +37,13 @@ interface CreateTopicParams {
 }
 
 export interface MessageSendPreparationContext {
+	/** Consume only the active composer's temporary uploads when creating its project. */
+	getTemporaryWorkdir?: () => string | undefined
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
 	selectedWorkspace?: Workspace | null
+	/** Explicit business entry for creation analytics, independent of the selected agent mode. */
+	creationScene?: string
 	setSelectedProject?: (project: ProjectListItem | null) => void
 	setSelectedTopic?: (topic: Topic | null) => void
 	setSelectedWorkspace?: (workspace: Workspace | null) => void
@@ -112,13 +117,19 @@ export function releaseHtmlScreenshotsAfterSend(
 export function resolveMessageSendContext(
 	context?: MessageSendPreparationContext,
 ): ResolvedPreparationContext {
-	const selectedProject = context?.selectedProject ?? projectStore.selectedProject
+	// Local blank composers deliberately pass null to exclude the previous global conversation.
+	const selectedProject =
+		context?.selectedProject !== undefined
+			? context.selectedProject
+			: projectStore.selectedProject
 	const selectedTopic =
-		context?.selectedTopic ?? context?.topicStore?.selectedTopic ?? topicStore.selectedTopic
+		context?.selectedTopic !== undefined
+			? context.selectedTopic
+			: (context?.topicStore?.selectedTopic ?? topicStore.selectedTopic)
 	const selectedWorkspace =
-		context?.selectedWorkspace ??
-		workspaceStore.selectedWorkspace ??
-		workspaceStore.firstWorkspace
+		context?.selectedWorkspace !== undefined
+			? context.selectedWorkspace
+			: (workspaceStore.selectedWorkspace ?? workspaceStore.firstWorkspace)
 
 	const setSelectedProject = context?.setSelectedProject ?? projectStore.setSelectedProject
 	const setSelectedTopic =
@@ -154,6 +165,7 @@ export function resolveMessageSendContext(
 			createProjectForContext({
 				params,
 				selectedWorkspace,
+				creationScene: context?.creationScene,
 				setSelectedProject,
 				setSelectedTopic,
 			}))
@@ -210,7 +222,10 @@ export async function preparePanelSend({
 	if (!currentProject?.id) {
 		const createdProject = await resolvedContext.createProject({
 			projectMode: tabPattern,
-			workdir: superMagicUploadTokenService.getLastWorkDir(),
+			workdir: (
+				context?.getTemporaryWorkdir ??
+				(() => superMagicUploadTokenService.getLastWorkDir())
+			)(),
 		})
 
 		if (!createdProject?.project || !createdProject.topic) {
@@ -295,7 +310,7 @@ export async function preparePanelSend({
 			selectedWorkspace: resolvedContext.selectedWorkspace,
 			// Preserve the scoped store so dispatchMessage can update the visible Topic immediately.
 			topicStore: resolvedContext.topicStore,
-			workspaceId: resolvedContext.workspaceId,
+			workspaceId: resolvedContext.workspaceId ?? currentProject.workspace_id,
 			updateTopicName: resolvedContext.updateTopicName,
 			refreshProjectAfterTopicRename: resolvedContext.refreshProjectAfterTopicRename,
 			renameProject: resolvedContext.renameProject,
@@ -380,11 +395,13 @@ export async function createTopicForMessageContext(
 async function createProjectForContext({
 	params,
 	selectedWorkspace,
+	creationScene,
 	setSelectedProject,
 	setSelectedTopic,
 }: {
 	params: CreateProjectParams
 	selectedWorkspace: Workspace | null
+	creationScene?: string
 	setSelectedProject: (project: ProjectListItem | null) => void
 	setSelectedTopic: (topic: Topic | null) => void
 }): Promise<CreatedProject | null> {
@@ -392,6 +409,11 @@ async function createProjectForContext({
 		return null
 	}
 
+	analyticsService.report("project_create_attempted", {
+		workspaceId: selectedWorkspace.id,
+		sceneOverride: creationScene,
+		mode: params.projectMode,
+	})
 	const createdProject = await SuperMagicApi.createProject({
 		workspace_id: selectedWorkspace.id,
 		project_name: "",
@@ -403,7 +425,6 @@ async function createProjectForContext({
 	if (!createdProject?.project || !createdProject.topic) {
 		return null
 	}
-
 	await copyGlobalModelConfiguration({
 		projectMode: params.projectMode,
 		createdProject,
@@ -432,6 +453,8 @@ async function createTopicForContext({
 		return new TopicService({ store: localTopicStore }).createTopic({
 			projectId: selectedProject.id,
 			topicName: "",
+			workspaceId: selectedProject.workspace_id,
+			mode: selectedProject.project_mode,
 		})
 	}
 
@@ -444,6 +467,11 @@ async function createTopicForContext({
 		})
 	}
 
+	analyticsService.report("topic_create_attempted", {
+		projectId: selectedProject.id,
+		workspaceId: selectedProject.workspace_id,
+		mode: selectedProject.project_mode,
+	})
 	const newTopic = await SuperMagicApi.createTopic({
 		project_id: selectedProject.id,
 		topic_name: "",

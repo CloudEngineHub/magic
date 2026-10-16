@@ -99,7 +99,7 @@ export interface CanvasEventMap {
 	"element:rerendered": { elementId: string; data: LayerElement } // 元素节点重新渲染（不记录历史）
 	"element:deleted": { elementId: string; persistence?: "runtime-only" }
 	"element:change": CanvasElementChangePayload | undefined // 任何元素变化时触发，用于触发UI更新
-	"element:batchupdated": void // 批量更新完成事件
+	"element:batchupdated": { elementIds?: string[] } | undefined // 批量更新完成事件
 	"element:batchdeleted": { elementIds: string[] } // 批量删除完成事件
 	"referenceImages:changed": { elementId: string } // 图片元素参考图增删（触发未引用资源清理）
 	"connection:change": {
@@ -140,7 +140,11 @@ export interface CanvasEventMap {
 	}
 	"canvas:dblclick": { x: number; y: number; canvasX: number; canvasY: number }
 	"element:contextmenu": { elementId: string; x: number; y: number }
-	"element:image:infoButtonClick": { elementId: string }
+	/** 画布名称标签或菜单开始重命名，供 React overlay 同步输入框 */
+	"element:rename-start": { elementId: string }
+	/** 提交或取消画布重命名，供 React overlay 关闭输入框 */
+	"element:rename-end": { elementId: string }
+	"element:image:infoButtonClick": { elementId: string; contentId?: string }
 	"element:video:infoButtonClick": { elementId: string }
 	/** 失败态点击重新生成，交给 UI 打开编辑器并恢复草稿 */
 	"element:image:retryClick": { elementId: string }
@@ -221,6 +225,8 @@ export interface CanvasEventMap {
 		phase?: "uploading" | "applying"
 	}
 	"element:image:resultUpdated": { elementId: string }
+	/** 等待期限到达只刷新展示，不表示后端生成失败。 */
+	"element:image:displayStateChanged": { elementId: string; contentId: string }
 	"element:image:loaded": { elementId: string } // 图片加载完成事件
 	"element:image:ossSrcReady": { elementId: string } // ossSrc 获取成功事件
 	"text:editing-state-change": { active: boolean; elementId: string | null }
@@ -383,6 +389,7 @@ export interface CanvasEventMap {
 		strokeCount: number
 		canUndo: boolean
 		canRedo: boolean
+		mode: "erase" | "restore"
 	}
 
 	// 键盘事件
@@ -396,12 +403,15 @@ export interface CanvasEventMap {
 	"keyboard:zoom:fit": void
 	"keyboard:shift:down": void
 	"keyboard:shift:up": void
+	"keyboard:alt:down": void
+	"keyboard:alt:up": void
 	"keyboard:meta:down": void
 	"keyboard:meta:up": void
 	"keyboard:select:all": void
 	"keyboard:undo": void
 	"keyboard:redo": void
 	"keyboard:copy": void
+	"keyboard:duplicate": void
 	"keyboard:copy-png": void
 	"keyboard:paste": ClipboardEvent // 传递 ClipboardEvent 以便访问剪贴板数据
 	"keyboard:frame:create": void

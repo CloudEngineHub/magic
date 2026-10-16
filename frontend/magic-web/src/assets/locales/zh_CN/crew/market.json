@@ -57,6 +57,7 @@
 			"namePlaceholder": "例如：我的连接器",
 			"oauthLabels": {
 				"authorizationContentType": "Authorization Content Type",
+				"authorizationMethod": "Token Request Method",
 				"authorizationUrl": "Authorization URL",
 				"clientId": "Client ID",
 				"clientSecret": "Client Secret",
@@ -768,6 +769,7 @@
 	"tabs": {
 		"connectors": "连接器",
 		"crewMarket": "员工市场",
+		"digitalEmployees": "数字员工",
 		"organizationShared": "组织共享",
 		"skillsLibrary": "技能"
 	},

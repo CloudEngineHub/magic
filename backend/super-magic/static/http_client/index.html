@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>超级麦吉调试客户端</title>
-    <link rel="stylesheet" href="css/styles.css?v=mcp-authorization-config-1">
+    <link rel="stylesheet" href="css/styles.css?v=reply-order-2">
     <link rel="stylesheet" href="css/model_picker.css?v=unified-model-picker-6">
 </head>
 
@@ -36,6 +36,16 @@
                     </div>
                     <label class="toggle-switch" title="长期记忆开关">
                         <input type="checkbox" id="longTermMemoryToggle" checked>
+                        <span class="toggle-switch-slider"></span>
+                    </label>
+                </div>
+                <div class="debug-preference-row">
+                    <div class="debug-preference-copy">
+                        <label for="followUpSuggestionsToggle">追加问题</label>
+                        <small>聊天结束后生成可继续追问的问题，并在本页查询</small>
+                    </div>
+                    <label class="toggle-switch" title="追加问题开关">
+                        <input type="checkbox" id="followUpSuggestionsToggle" checked>
                         <span class="toggle-switch-slider"></span>
                     </label>
                 </div>
@@ -422,7 +432,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
     <script src="js/model_picker.js?v=unified-model-picker-4"></script>
-    <script src="js/client.js?v=mcp-authorization-config-1"></script>
+    <script src="js/client.js?v=reply-order-2"></script>
 </body>
 
 </html>

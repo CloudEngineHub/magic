@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { RecordingDetailRightPanel } from "../RecordingDetailRightPanel"
 
@@ -7,6 +7,14 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string) => key,
 	}),
+}))
+
+// The base barrel re-exports editor components that initialize the i18n store at module load,
+// which this suite's minimal react-i18next mock cannot satisfy. Mock the barrel so only the
+// pass-through MagicTooltip remains; the TabStrip is already mocked below, so the leading
+// expand action never reaches a real render.
+vi.mock("@/components/base", () => ({
+	MagicTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
 
 vi.mock("@/components/base-mobile/ScrollEdgeFade", () => ({
@@ -18,10 +26,21 @@ vi.mock("../RecordingDetailSummaryState", () => ({
 }))
 
 vi.mock("../RecordingDetailTabStrip", () => ({
-	RecordingDetailTabStrip: ({ tabs }: { tabs: Array<{ key: string }> }) => (
+	RecordingDetailTabStrip: ({
+		tabs,
+		onChange,
+	}: {
+		tabs: Array<{ key: string }>
+		onChange?: (key: string) => void
+	}) => (
 		<div data-testid="summary-tabs">
 			{tabs.map((tab) => (
-				<span key={tab.key} data-testid={`summary-tab-${tab.key}`} />
+				<button
+					key={tab.key}
+					type="button"
+					data-testid={`summary-tab-${tab.key}`}
+					onClick={() => onChange?.(tab.key)}
+				/>
 			))}
 		</div>
 	),
@@ -154,6 +173,39 @@ describe("RecordingDetailRightPanel responsive height", () => {
 		expect(screen.queryByTestId("summary-tab-notes")).not.toBeInTheDocument()
 	})
 
+	it("places notes right after the leading summary tab", () => {
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: { file_id: "mock-summary-file", file_name: "summary.md" },
+						},
+						{
+							type: "topics",
+							fileName: "topics.md",
+							file: { file_id: "mock-topics-file", file_name: "topics.md" },
+						},
+					],
+					notes: { file_id: "mock-notes-file", file_name: "mock-notes.md" },
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				}}
+				summaryContent={{ summary: "content", topics: "content" }}
+			/>,
+		)
+
+		// TabStrip is mocked to render buttons in the exact order the panel passes them.
+		const tabKeys = screen
+			.getAllByTestId(/summary-tab-/)
+			.map((tab) => tab.getAttribute("data-testid")?.replace("summary-tab-", ""))
+
+		expect(tabKeys).toEqual(["summary", "notes", "topics"])
+	})
+
 	it("keeps the share visibility gate in addition to the bundle config", () => {
 		render(
 			<RecordingDetailRightPanel
@@ -200,5 +252,81 @@ describe("RecordingDetailRightPanel responsive height", () => {
 		)
 
 		expect(screen.getByTestId("summary-content")).toHaveAttribute("data-attachment-count", "1")
+	})
+
+	it("reports the resolved tab when a controlled activeKey becomes invalid", () => {
+		const onActiveKeyChange = vi.fn()
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				activeKey="nonexistent"
+				onActiveKeyChange={onActiveKeyChange}
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: { file_id: "mock-summary-file", file_name: "summary.md" },
+						},
+					],
+				}}
+				summaryContent={{ summary: "content" }}
+			/>,
+		)
+
+		expect(onActiveKeyChange).toHaveBeenCalledWith("summary")
+	})
+
+	it("does not report when the controlled activeKey is already valid", () => {
+		const onActiveKeyChange = vi.fn()
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				activeKey="summary"
+				onActiveKeyChange={onActiveKeyChange}
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: { file_id: "mock-summary-file", file_name: "summary.md" },
+						},
+					],
+				}}
+				summaryContent={{ summary: "content" }}
+			/>,
+		)
+
+		expect(onActiveKeyChange).not.toHaveBeenCalled()
+	})
+
+	it("forwards tab selection to the controlled owner without owning the state", () => {
+		const onActiveKeyChange = vi.fn()
+		render(
+			<RecordingDetailRightPanel
+				{...baseProps}
+				summaryReady
+				activeKey="summary"
+				onActiveKeyChange={onActiveKeyChange}
+				fileMap={{
+					summaryFiles: [
+						{
+							type: "summary",
+							fileName: "summary.md",
+							file: { file_id: "mock-summary-file", file_name: "summary.md" },
+						},
+					],
+					notes: { file_id: "mock-notes-file", file_name: "mock-notes.md" },
+					magicProjectConfig: { files: { notes: "notes/mock-notes.md" } },
+				}}
+				summaryContent={{ summary: "content" }}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("summary-tab-notes"))
+
+		expect(onActiveKeyChange).toHaveBeenCalledWith("notes")
 	})
 })

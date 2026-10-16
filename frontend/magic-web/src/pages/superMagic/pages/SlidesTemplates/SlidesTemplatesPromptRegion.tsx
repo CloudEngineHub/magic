@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
 import SlidesTemplatePromptDock from "./SlidesTemplatePromptDock"
 
@@ -27,7 +28,14 @@ export default function SlidesTemplatesPromptRegion({
 			data-testid="slides-templates-page-prompt-region"
 		>
 			<div className="min-h-0 overflow-hidden">
-				{/* 提前挂载编辑器，首次选择模板时只切换可见性，避免初始化导致整页闪动。 */}
+				{/*
+				 * 提前挂载编辑器，首次选择模板时只切换可见性，避免初始化导致整页闪动。
+				 * The onboarding run's last step points here: this panel holds the template the guide
+				 * picked and the editor where the request is described, and it is the only thing on
+				 * the page that says both. It is also always mounted — the run may have picked
+				 * nothing, in which case the panel is only an empty row — so the step's anchor is
+				 * never missing, only small.
+				 */}
 				<motion.div
 					initial={false}
 					animate={{
@@ -46,6 +54,7 @@ export default function SlidesTemplatesPromptRegion({
 					}
 					aria-hidden={!selectedTemplate}
 					data-testid="slides-templates-page-prompt-panel"
+					data-guide-anchor={HomeOnboardingAnchor.SlidesTemplatesPrompt}
 				>
 					<SlidesTemplatePromptDock
 						selectedTemplate={selectedTemplate}

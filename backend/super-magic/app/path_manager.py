@@ -2,11 +2,26 @@
 路径相关的常量和工具函数，使用面向对象方式实现
 """
 
+import os
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar, Optional
 
 from agentlang.path_manager import PathManager as BasePathManager
+
+
+class RuntimeEnvironment(StrEnum):
+    """
+    Agent 所在运行环境，决定注入哪一份存储与网络提示词。
+
+    | 环境 | .workspace 实际位置 | 存储规则 |
+    | sandbox | 解析到 <AGFS 挂载点>/magicfs/ 下（MagicFS 网络盘） | 两层存储、小文件约 2 秒、重建后本地盘清空 |
+    | local | 本机普通目录（开发机等没有 AGFS 的环境） | 普通磁盘，沙盒规则不适用 |
+    """
+
+    SANDBOX = "sandbox"
+    LOCAL = "local"
 
 
 class PathManager(BasePathManager):
@@ -36,6 +51,9 @@ class PathManager(BasePathManager):
             memory_after_run/ ← 运行后记忆整理临时上下文
             llm_requests/   ← LLM 调试日志
             slide-template-maker/ ← 幻灯片模板作者中间文件
+            micro-app/      ← 累积 @micro_app MagicBase 范围
+            follow_up_suggestions/ ← 追加问题本地查询副本
+        .box/                ← Agent 自由使用的本地工作目录（预创建，0700，沙盒重建清空，不做时间淘汰）
         app/i18n/            ← 语言翻译（源码只读目录）
         .checkpoints/        ← 检查点（getter 内按需创建）
         .workspace/          ← MagicFS 云端持久工作区（父类管理）
@@ -43,6 +61,7 @@ class PathManager(BasePathManager):
             .magic/          ← Magic 配置（按需创建）
                 config/      ← Magic 全局配置
                 skills/      ← skills 配置
+                startup/     ← 每次服务启动时执行的启动任务定义
                 .env         ← Magic 全局环境变量
             .tmp/            ← 临时文件（按需创建）
         ~/.magic/            ← 个人 Magic 目录（按需创建）
@@ -57,8 +76,8 @@ class PathManager(BasePathManager):
 
     持久化边界：
     - `.chat_history/` 是运行期聊天历史持久状态；沙箱内它是指向 localfs
-      空间挂载的 symlink（/mnt/agfs/localfs/chat_history，gateway 在 bind
-      时创建），每次保存由 checkpoint hook 增量记账进 checkpoint；本地开
+      空间挂载的 symlink（<AGFS FUSE 挂载根>/localfs/chat_history，gateway
+      在 bind 时创建），每次保存由 checkpoint hook 增量记账进 checkpoint；本地开
       发环境（无 agfs 挂载）它是普通本地目录，只是没有帧记账。
     - `.topic/chat_history/` 是启动恢复源；恢复到配置的 `.chat_history/` 后再运行。
       活动会话不放在 `.topic/`，避免频繁读写话题网络卷；需要持久保留的内容
@@ -119,6 +138,14 @@ class PathManager(BasePathManager):
 
     # 通用沙箱任务状态目录：project_root/.runtime/sandbox_tasks（按需创建）
     _runtime_sandbox_tasks_dir_name: ClassVar[str] = "sandbox_tasks"
+
+    # Agent 本地工作目录：project_root/.box（预创建）
+    # 与 .runtime 区别：.runtime 归应用、有淘汰规则；.box 归 Agent，放依赖缓存、构建中间产物等可重建数据。
+    _box_dir_name: ClassVar[str] = ".box"
+    _box_dir: ClassVar[Optional[Path]] = None
+
+    # 运行环境识别结果，每个进程只算一次；重新设置 project_root 时清空
+    _runtime_environment: ClassVar[Optional[RuntimeEnvironment]] = None
 
     # ── workspace（project_root/.workspace）下 ────────────────────────────────
 
@@ -183,6 +210,8 @@ class PathManager(BasePathManager):
 
         cls._runtime_dir = cls._project_root / cls._runtime_dir_name
         cls._bg_shell_dir = cls._runtime_dir / cls._bg_shell_dir_name
+        cls._box_dir = cls._project_root / cls._box_dir_name
+        cls._runtime_environment = None
 
         cls._languages_dir = cls._project_root / cls._languages_dir_name
         cls._translations_dir = cls._languages_dir / "translations"
@@ -236,6 +265,10 @@ class PathManager(BasePathManager):
         ):
             if d is not None:
                 d.mkdir(exist_ok=True)
+
+        # .box 只给当前用户读写，子进程通过 MAGIC_BOX_DIR 使用，需启动即存在
+        if cls._box_dir is not None:
+            cls._box_dir.mkdir(mode=0o700, exist_ok=True)
 
         # workspace 下无预创建目录，均由各业务按需创建
 
@@ -667,6 +700,43 @@ class PathManager(BasePathManager):
         return cls.get_runtime_dir() / cls._llm_requests_dir_name
 
     @classmethod
+    def get_box_dir(cls) -> Path:
+        """获取 Agent 本地工作目录（project_root/.box，预创建）。"""
+        cls._ensure_app_initialization()
+        return cls._box_dir
+
+    @classmethod
+    def get_startup_task_dir(cls) -> Path:
+        """获取启动任务定义目录（.workspace/.magic/startup/，按需创建）。"""
+        cls._ensure_app_initialization()
+        return cls.get_magic_dir() / "startup"
+
+    @classmethod
+    def get_agfs_fuse_mount_path(cls) -> Path:
+        """获取 AGFS FUSE 挂载点（默认 /mnt/agfs），其下 magicfs/ 为网络存储空间。"""
+        return Path(os.getenv("AGFS_FUSE_MOUNT_PATH", "/mnt/agfs"))
+
+    @classmethod
+    def get_runtime_environment(cls) -> RuntimeEnvironment:
+        """
+        判断当前运行在云端沙盒还是本地机器。
+
+        判据是 .workspace 解析后的真实位置：沙盒中它是指向 <挂载点>/magicfs/project 的软链，
+        本地开发机上是普通目录。realpath 只读软链目标、不访问挂载内容，AGFS 尚未就绪也能判断。
+        不用 APP_ENV：它表示部署阶段（local/dev/prod），dev、test 也跑在容器里，与存储形态无关。
+        """
+        cls._ensure_app_initialization()
+        if cls._runtime_environment is None:
+            workspace_real_path = Path(os.path.realpath(cls.get_workspace_dir()))
+            magicfs_root = Path(os.path.realpath(cls.get_agfs_fuse_mount_path() / "magicfs"))
+            cls._runtime_environment = (
+                RuntimeEnvironment.SANDBOX
+                if workspace_real_path.is_relative_to(magicfs_root)
+                else RuntimeEnvironment.LOCAL
+            )
+        return cls._runtime_environment
+
+    @classmethod
     def get_bg_shell_dir(cls) -> Path:
         """获取后台 shell 任务日志目录（project_root/.runtime/bg_shell，按需创建）"""
         cls._ensure_app_initialization()
@@ -682,6 +752,13 @@ class PathManager(BasePathManager):
         """获取通用沙箱任务状态目录（project_root/.runtime/sandbox_tasks，按需创建）。"""
         cls._ensure_app_initialization()
         return cls.get_runtime_dir() / cls._runtime_sandbox_tasks_dir_name
+
+    @classmethod
+    def get_im_uploads_dir(cls, channel: str) -> Path:
+        """统一入站附件目录，渠道值来自内部注册标识。"""
+        if channel not in {"wechat", "wecom", "dingtalk", "lark"}:
+            raise ValueError(f"Unknown IM channel: {channel}")
+        return cls.get_workspace_dir() / "uploads" / "im-channels" / channel
 
     @classmethod
     def get_wechat_im_uploads_dir(cls) -> Path:

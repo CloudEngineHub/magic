@@ -38,6 +38,8 @@ interface ProviderModelRepositoryInterface
 
     public function updateStatus(ProviderDataIsolation $dataIsolation, string $id, Status $status): void;
 
+    public function updateStatusByModelIds(ProviderDataIsolation $dataIsolation, array $modelIds, Status $status): void;
+
     public function deleteByModelParentId(ProviderDataIsolation $dataIsolation, string $modelParentId): void;
 
     public function deleteByModelParentIds(ProviderDataIsolation $dataIsolation, array $modelParentIds): void;

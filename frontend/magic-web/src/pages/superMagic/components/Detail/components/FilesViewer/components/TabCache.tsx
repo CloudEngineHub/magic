@@ -1,14 +1,20 @@
+import {
+	useFileAccess as useRequestFileAccess,
+	FileAccessProvider as RequestFileAccessProvider,
+} from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { lazy, Suspense, memo, useCallback, useEffect, useRef } from "react"
 import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
 import PlaybackTabContent, { type PlaybackTabContentProps } from "./PlaybackTabContent"
 import KnowledgeBaseTabContent from "./KnowledgeBaseTabContent"
+import MicroAppTabContent from "./MicroAppTabContent"
 import WebsiteIframeTabContent from "./WebsiteIframeTabContent"
 import { getWebsiteTabData } from "../utils/websiteTabs"
 import type { TabItem, FileManagerContext, FileManagerStateChangeOptions } from "../types"
 import type { FileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
+import type { PublishedMicroAppTabData } from "../hooks/usePublishedMicroAppTab"
 import { getFileViewerTabType } from "../utils/tabType"
 import {
 	FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_TAB_CONTENT_CLASS_NAME,
@@ -49,8 +55,10 @@ interface TabCacheProps {
 	/** When true, content fills the viewer without reserving tab bar height */
 	hideTabBar?: boolean
 	knowledgeBaseData?: KnowledgeBaseTabData
+	microAppData?: PublishedMicroAppTabData
 	/** The tab is rendered inside a stable surface that already owns its geometry. */
 	fillPortalSurface?: boolean
+	onCloseTab?: (tabId: string) => void
 }
 
 /**
@@ -72,7 +80,9 @@ const TabCache = memo(
 		playbackProps,
 		hideTabBar = false,
 		knowledgeBaseData,
+		microAppData,
 		fillPortalSurface = false,
+		onCloseTab,
 	}: TabCacheProps) => {
 		const tabType = getFileViewerTabType(tab)
 		const managerState = tab.fileManager
@@ -81,6 +91,7 @@ const TabCache = memo(
 		const isPlaybackTab = tabType === "playback"
 		const isWebsite = tabType === "website"
 		const isKnowledgeBaseTab = tabType === "knowledge_base"
+		const isMicroAppTab = tabType === "micro_app"
 		const tabContentRef = useRef<HTMLDivElement>(null)
 		const isFullscreenMode = useFullscreenMode()
 
@@ -93,6 +104,10 @@ const TabCache = memo(
 			},
 			[onActiveFileChange],
 		)
+
+		const handleMicroAppLeave = useCallback(() => {
+			onCloseTab?.(tab.id)
+		}, [onCloseTab, tab.id])
 
 		// 监听 tab 激活状态变化，当 tab 变为非激活时暂停音频播放
 		useEffect(() => {
@@ -126,14 +141,33 @@ const TabCache = memo(
 			? FILE_VIEWER_FULLSCREEN_TAB_CONTENT_CLASS_NAME
 			: FILE_VIEWER_FULLSCREEN_BROWSER_TAB_CONTENT_CLASS_NAME
 
-		const renderContent = (
+		const inheritedRequestAccess = useRequestFileAccess()
+		const recycleBin = tab.fileData?.recycleBin
+		const filePreview = (
 			<Render
 				key={tab.refreshKey || tab.id}
 				{...renderProps}
-				onActiveFileChange={handleActiveFileChange}
+				onActiveFileChange={recycleBin ? undefined : handleActiveFileChange}
 				openFileTab={openFileTab}
 				isTabActive={isActive}
 			/>
+		)
+		const renderContent = (
+			<RequestFileAccessProvider
+				value={
+					recycleBin
+						? {
+								kind: "recycle-bin",
+								recycleBinId: recycleBin.id,
+								fileId: tab.fileData!.file_id,
+								identityKey: recycleBin.identityKey,
+								projectId: recycleBin.projectId,
+							}
+						: inheritedRequestAccess
+				}
+			>
+				{filePreview}
+			</RequestFileAccessProvider>
 		)
 
 		return (
@@ -154,7 +188,8 @@ const TabCache = memo(
 					isActive
 						? "pointer-events-auto visible opacity-100"
 						: "pointer-events-none invisible opacity-0",
-					(isPlaybackTab || isKnowledgeBaseTab) && "bg-white dark:bg-background",
+					(isPlaybackTab || isKnowledgeBaseTab || isMicroAppTab) &&
+						"bg-white dark:bg-background",
 				)}
 			>
 				{tabType === "file_manager" && tab.fileManager ? (
@@ -169,6 +204,8 @@ const TabCache = memo(
 								}
 								isActive={isActive}
 								context={tab.fileManager}
+								onPreviewFile={managerProps.onPreviewFile}
+								onPreviewRemoved={managerProps.onPreviewRemoved}
 								onFileClick={managerProps.onFileClick}
 								projectId={managerProps.selectedProject?.id}
 								projectName={managerProps.selectedProject?.project_name}
@@ -185,6 +222,7 @@ const TabCache = memo(
 								}
 								isActive={isActive}
 								projectId={tab.fileManager.projectId}
+								areaRequest={tab.fileManagerAreaRequest}
 								initialDirectoryId={tab.fileManager.directoryId}
 							/>
 						)}
@@ -195,6 +233,8 @@ const TabCache = memo(
 					<WebsiteIframeTabContent {...getWebsiteTabData(tab)} isActive={isActive} />
 				) : isKnowledgeBaseTab && knowledgeBaseData ? (
 					<KnowledgeBaseTabContent data={knowledgeBaseData} />
+				) : isMicroAppTab && microAppData ? (
+					<MicroAppTabContent data={microAppData} onLeave={handleMicroAppLeave} />
 				) : (
 					renderContent
 				)}

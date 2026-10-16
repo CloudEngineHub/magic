@@ -8,8 +8,8 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Task\Service;
 
 use App\Application\Chat\Service\MagicUserInfoAppService;
-use App\Application\SuperMagic\Task\DTO\UserAccountDTO;
 use App\Application\SuperMagic\Task\DTO\UserAccountDataStatus;
+use App\Application\SuperMagic\Task\DTO\UserAccountDTO;
 use App\Application\SuperMagic\Task\DTO\UserInfoDTO;
 use App\Application\SuperMagic\Task\DTO\UserPointsDTO;
 use App\Application\SuperMagic\Task\DTO\UserSubscriptionDTO;

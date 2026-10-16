@@ -111,6 +111,9 @@ return [
             'skill' => '技能',
             'agent' => '数字员工',
             'magic_claw' => '龙虾',
+            'micro_app' => '微应用',
+            'topic' => '话题',
+            'project' => '项目',
         ],
         'functions' => [
             'skill_create' => [
@@ -137,6 +140,14 @@ return [
                 'name' => '龙虾创建',
                 'description' => '创建 Magic Claw 入口。',
             ],
+            'micro_app_share_public' => ['name' => '微应用公开分享', 'description' => '允许微应用使用公开访问方式分享。'],
+            'micro_app_share_password' => ['name' => '微应用密码分享', 'description' => '允许微应用使用密码保护方式分享。'],
+            'micro_app_share_team' => ['name' => '微应用团队分享', 'description' => '允许微应用分享给团队成员。'],
+            'project_share_public' => ['name' => '项目公开分享', 'description' => '允许项目使用公开访问方式分享。'],
+            'project_share_password' => ['name' => '项目密码分享', 'description' => '允许项目使用密码保护方式分享。'],
+            'project_share_team' => ['name' => '项目团队分享', 'description' => '允许项目分享给团队成员。'],
+            'topic_share_public' => ['name' => '话题公开分享', 'description' => '允许话题使用公开访问方式分享。'],
+            'topic_share_password' => ['name' => '话题密码分享', 'description' => '允许话题使用密码保护方式分享。'],
         ],
         'binding_scope_label' => [
             'all_users_available' => '全员可用',

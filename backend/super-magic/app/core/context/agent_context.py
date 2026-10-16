@@ -140,6 +140,7 @@ class AgentContext(BaseAgentContext):
         self._subagent_depth = 0
         self._subagent_parent_agent_name: Optional[str] = None
         self._subagent_parent_agent_id: Optional[str] = None
+        self._subagent_forked = False
 
         # 运行时身份 / 上下文标识
         # context_id 用于 Skill Code Mode 路由；
@@ -228,6 +229,18 @@ class AgentContext(BaseAgentContext):
     def get_subagent_parent_agent_id(self) -> Optional[str]:
         """获取父 Agent ID；主 Agent 返回 None。"""
         return self._subagent_parent_agent_id
+
+    def set_subagent_forked(self, forked: bool) -> None:
+        """记录本次子 Agent 会话是否由 fork 创建。
+
+        这是本次派发的意图，不随 resume 延续：resume 一条 fork 会话时为 False。
+        身份块已在 fork 首轮写进历史，resume 时不需要再强调「继承的历史只是背景」。
+        """
+        self._subagent_forked = forked
+
+    def is_subagent_forked(self) -> bool:
+        """当前子 Agent 会话是否带着父 Agent 的完整历史启动。"""
+        return self._subagent_forked
 
     def mark_chat_history_persisted(self) -> None:
         self._chat_history_persisted = True
@@ -331,6 +344,8 @@ class AgentContext(BaseAgentContext):
             "attachments": ({}, Dict[str, Attachment]),
             "chat_client_message": (None, Optional[ChatClientMessage]),
             "super_magic_product_context": (None, Optional[SuperMagicProductContext]),
+            # None 表示任务尚未建立平台提示词快照；空字符串表示已建立快照但平台未配置内容。
+            "global_system_prompt": (None, Optional[str]),
             "task_id": (None, Optional[str]),
             "interrupt_queue": (None, Optional[asyncio.Queue]),
             "sandbox_id": ("", str),
@@ -338,6 +353,8 @@ class AgentContext(BaseAgentContext):
             "organization_code": (None, Optional[str]),
             "token_usage_report_manager": (None, Optional[TokenUsageReport]),
             "final_token_usage_report": (None, Optional[TokenUsageCollection]),
+            # 当前 run 已解析的自动整理阈值；0 表示尚未解析或自动整理未启用。
+            "compaction_threshold_tokens": (0, int),
             "final_response": (None, Optional[str]),
             "final_task_state": (None, Optional[FinalTaskState]),
             "finish_task_files": (None, Optional[List[str]]),
@@ -777,6 +794,21 @@ class AgentContext(BaseAgentContext):
         """获取本轮最新的 Super Magic 产品上下文。"""
         return self.shared_context.get_field("super_magic_product_context")
 
+    def initialize_global_system_prompt(self, prompt: str) -> bool:
+        """首次加载时固定平台级全局系统提示词，后续配置刷新不覆盖任务快照。"""
+        if self.is_global_system_prompt_initialized():
+            return False
+        self.shared_context.update_field("global_system_prompt", prompt if isinstance(prompt, str) else "")
+        return True
+
+    def is_global_system_prompt_initialized(self) -> bool:
+        """判断当前任务是否已经建立平台级全局系统提示词快照。"""
+        return self.shared_context.get_field("global_system_prompt") is not None
+
+    def get_global_system_prompt(self) -> str:
+        """获取平台级全局系统提示词。"""
+        return self.shared_context.get_field("global_system_prompt") or ""
+
     def has_stream(self, stream: Stream) -> bool:
         """检查是否存在指定的通信流
 
@@ -904,8 +936,10 @@ class AgentContext(BaseAgentContext):
         Returns:
             bool: 如果超时则返回True，否则返回False
         """
-        # 等待前端工具调用完成期间，不触发空闲超时
-        if self.has_user_tool_call_pending():
+        from app.service.user_tool_call_service import UserToolCallService
+        # AskUser 只等待真人，状态可恢复后允许释放环境；其它前端工具沿用保护。
+        if not UserToolCallService.get_instance().can_release_idle_context(self):
+            # 等待前端工具调用完成期间，不触发空闲超时
             return False
         return self.shared_context.is_idle_timeout()
 
@@ -1427,8 +1461,17 @@ class AgentContext(BaseAgentContext):
         # cancellation handle 不重置，由 register_worker_cancel 在新 worker 创建时覆盖
         self.shared_context.update_field("interruption_requested", False)
         self.shared_context.update_field("interruption_reason", None)
+        self.set_compaction_threshold_tokens(0)
         self._interruption_event.clear()
         self.set_resumption_context(None, None)
+
+    def set_compaction_threshold_tokens(self, threshold: int) -> None:
+        """保存业务模型实际采用的整理阈值，供消息工厂透传，不重新计算。"""
+        self.shared_context.update_field("compaction_threshold_tokens", threshold)
+
+    def get_compaction_threshold_tokens(self) -> int:
+        """读取当前 run 的整理阈值；新 run 清零，避免沿用上一轮模型的阈值。"""
+        return self.shared_context.get_field("compaction_threshold_tokens")
 
     # ====== 思考状态管理方法 ======
 
@@ -1488,8 +1531,18 @@ class AgentContext(BaseAgentContext):
             pass
 
     def get_streaming_sinks(self) -> list:
-        """返回当前所有额外流式推送目标列表。"""
-        return self.shared_context.get_field("streaming_sinks") or []
+        """返回当前所有额外流式推送目标列表。
+
+        本地 /subscribe 是进程级单例：子 Agent 不继承 streaming_sinks，
+        但只要调试面板连着，主 / 子请求都要把 chunk 抄过去。
+        """
+        sinks = list(self.shared_context.get_field("streaming_sinks") or [])
+        from app.streaming.local_subscribe_driver import get_local_subscribe_driver
+
+        local_driver = get_local_subscribe_driver()
+        if local_driver.has_subscribers() and local_driver not in sinks:
+            sinks.append(local_driver)
+        return sinks
 
     # ====== 消息版本协商 ======
 

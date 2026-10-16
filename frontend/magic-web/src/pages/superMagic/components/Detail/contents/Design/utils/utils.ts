@@ -1,4 +1,5 @@
 import { getFileContentById } from "@/pages/superMagic/utils/api"
+import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { parseMagicProjectConfigContent } from "@/pages/superMagic/utils/magicProjectConfigParser"
 import { flattenAttachments, findMatchingFile } from "../../HTML/utils"
 import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
@@ -13,7 +14,6 @@ import { t } from "i18next"
 import { AttachmentSource } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { ProjectAttachmentMentionNode } from "@/components/CanvasDesign/public/props"
-import { ImageFormat, ImageProcessOptions } from "@/utils/image-processing"
 import { toDesignProjectBasePath } from "./designPath"
 import {
 	migrateLoadedDesignDataPaths,
@@ -83,21 +83,30 @@ export async function loadMagicProjectJsContent(
 	fileId: string,
 	options?: {
 		file_versions?: Record<string, number>
+		/** Bound file client; omitted callers keep the host-session default (unbound leaf). */
+		fileApi?: FileApi
 	},
 ): Promise<string> {
 	if (!fileId) {
 		throw new Error(t("design.errors.fileIdRequired", { ns: "super" }))
 	}
 
+	const fileApi = options?.fileApi
+	const fileVersions = options?.file_versions
 	const maxRetries = 1
 	let content: string | null = null
 	let retryCount = 0
 
 	while (retryCount <= maxRetries) {
-		content = (await getFileContentById(fileId, {
-			responseType: "text",
-			file_versions: options?.file_versions,
-		})) as string | null
+		content = (await (fileApi
+			? fileApi.getFileContentById(fileId, {
+					responseType: "text",
+					file_versions: fileVersions,
+				})
+			: getFileContentById(fileId, {
+					responseType: "text",
+					file_versions: fileVersions,
+				}))) as string | null
 
 		// 检查内容是否为空
 		const isEmpty = !content || (typeof content === "string" && content.trim().length === 0)
@@ -167,11 +176,7 @@ export function generateMagicProjectJsContent(
 }
 
 export type MagicProjectCanvasStatus =
-	| "valid-empty"
-	| "valid-non-empty"
-	| "missing"
-	| "invalid"
-	| "decompress-failed"
+	"valid-empty" | "valid-non-empty" | "missing" | "invalid" | "decompress-failed"
 
 export interface MagicProjectJsParseDiagnostics {
 	data: DesignData | null
@@ -325,8 +330,7 @@ export function parseMagicProjectJsContent(content: string): DesignData | null {
 			connections = getConnectionsFromCanvasObject(canvasObj)
 		} else {
 			const canvasObj = canvasField as
-				| { elements?: LayerElement[]; connections?: unknown }
-				| undefined
+				{ elements?: LayerElement[]; connections?: unknown } | undefined
 			elements = canvasObj?.elements || []
 			connections = getConnectionsFromCanvasObject(canvasObj ?? null)
 		}
@@ -516,6 +520,7 @@ function replaceVideoContentPaths(
 	}
 	replaceUri(inputs.video as PathRecord | undefined)
 	replaceUri(inputs.mask as PathRecord | undefined)
+	replaceUri(inputs.draft_task as PathRecord | undefined)
 	return hasReplaced
 }
 
@@ -598,9 +603,7 @@ export function replaceNameInMagicProjectJsContent(
 		const rawCanvas = config.canvas
 		const canvasCompressed = isCompressedCanvas(rawCanvas)
 		const canvasObj = (canvasCompressed ? decompressCanvasData(rawCanvas) : rawCanvas) as
-			| { elements?: LayerElement[] }
-			| null
-			| undefined
+			{ elements?: LayerElement[] } | null | undefined
 
 		if (canvasObj?.elements && Array.isArray(canvasObj.elements)) {
 			for (let i = 0; i < canvasObj.elements.length; i++) {
@@ -720,8 +723,10 @@ export async function findMagicProjectJsFile(params: {
 	attachments: FileItem[]
 	currentFileId: string
 	currentFileName: string
+	/** Bound file client threaded from the Design boundary (share-aware). */
+	fileApi?: FileApi
 }): Promise<MagicProjectJsFileInfo | null> {
-	const { attachments, currentFileId, currentFileName } = params
+	const { attachments, currentFileId, currentFileName, fileApi } = params
 
 	if (!attachments || !currentFileId || !currentFileName) {
 		return null
@@ -852,7 +857,7 @@ export async function findMagicProjectJsFile(params: {
 		}
 
 		// 使用统一的读取函数获取文件内容（带重试机制）
-		const content = await loadMagicProjectJsContent(magicProjectJsFile.file_id)
+		const content = await loadMagicProjectJsContent(magicProjectJsFile.file_id, { fileApi })
 
 		return {
 			fileId: magicProjectJsFile.file_id,
@@ -1537,248 +1542,6 @@ export function renameFilesForUpload(files: File[], existingFiles: FileItem[]): 
 	}
 
 	return renamedFiles
-}
-
-export interface PackDownloadFileEntry {
-	/** 元素级唯一键；同一个项目文件可以对应多个画布元素。 */
-	key: string
-	file: FileItem
-	fileName?: string
-	imageProcess?: ImageProcessOptions
-}
-
-export interface PackDownloadFileEntriesOptions {
-	signal?: AbortSignal
-	onProgress?: (progress: number) => void
-	retryCount?: number
-}
-
-export interface PackDownloadFilesResult {
-	successCount: number
-	results: Array<{ success: boolean; fileName: string; error?: unknown }>
-}
-
-function createAbortError(): Error {
-	if (typeof DOMException !== "undefined") {
-		return new DOMException("Download aborted", "AbortError")
-	}
-	const error = new Error("Download aborted")
-	error.name = "AbortError"
-	return error
-}
-
-function throwIfDownloadAborted(signal?: AbortSignal) {
-	if (signal?.aborted) throw createAbortError()
-}
-
-function isAbortError(error: unknown): boolean {
-	return error instanceof Error && error.name === "AbortError"
-}
-
-async function retryDownloadTask<T>(
-	task: () => Promise<T>,
-	retryCount: number,
-	signal?: AbortSignal,
-): Promise<T> {
-	let lastError: unknown
-	for (let attempt = 0; attempt <= retryCount; attempt += 1) {
-		throwIfDownloadAborted(signal)
-		try {
-			return await task()
-		} catch (error) {
-			if (isAbortError(error) || signal?.aborted) throw createAbortError()
-			lastError = error
-		}
-	}
-	throw lastError
-}
-
-function getPackEntryFileName(entry: PackDownloadFileEntry, index: number): string {
-	const rawFileName =
-		entry.fileName ||
-		entry.file.file_name ||
-		entry.file.display_filename ||
-		entry.file.filename ||
-		`file-${index + 1}`
-	const processedFormat = normalizeImageProcessFormat(entry.imageProcess?.format)
-	if (!processedFormat) {
-		if (rawFileName.includes(".")) return rawFileName
-		const originalExtension = entry.file.file_extension
-		return originalExtension ? `${rawFileName}.${originalExtension}` : rawFileName
-	}
-
-	const lastDotIndex = rawFileName.lastIndexOf(".")
-	const baseFileName = lastDotIndex === -1 ? rawFileName : rawFileName.slice(0, lastDotIndex)
-	return `${baseFileName}.${processedFormat}`
-}
-
-function makePackEntryFileNames(entries: PackDownloadFileEntry[]): string[] {
-	const usedFileNames = new Set<string>()
-	return entries.map((entry, index) => {
-		const requestedFileName = getPackEntryFileName(entry, index)
-		const lastDotIndex = requestedFileName.lastIndexOf(".")
-		const baseFileName =
-			lastDotIndex === -1 ? requestedFileName : requestedFileName.slice(0, lastDotIndex)
-		const extension = lastDotIndex === -1 ? "" : requestedFileName.slice(lastDotIndex)
-		let finalFileName = requestedFileName
-		let counter = 1
-		while (usedFileNames.has(finalFileName)) {
-			finalFileName = `${baseFileName}-${counter}${extension}`
-			counter += 1
-		}
-		usedFileNames.add(finalFileName)
-		return finalFileName
-	})
-}
-
-/**
- * 画布裁剪/同源多实例的客户端 ZIP 适配器。
- * 下载地址仍复用项目文件 API；这里只保留项目批量接口无法表达的逐元素图片处理参数。
- */
-export async function packAndDownloadFileEntries(
-	entries: PackDownloadFileEntry[],
-	downloadMode?: import("@/pages/superMagic/pages/Workspace/types").DownloadImageMode,
-	zipFileName = "design-media.zip",
-	options: PackDownloadFileEntriesOptions = {},
-): Promise<PackDownloadFilesResult> {
-	const { loadJSZip } = await import("@/infrastructure/vendors/jszip")
-	const { getTemporaryDownloadUrl } = await import("@/pages/superMagic/utils/api")
-	const { downloadFileWithAnchor } = await import("@/pages/superMagic/utils/handleFIle")
-	const JSZip = await loadJSZip()
-	const zip = new JSZip()
-	const fileNames = makePackEntryFileNames(entries)
-	const retryCount = options.retryCount ?? 1
-	const sharedDownloadUrlByFileId = new Map<string, string>()
-	let completedCount = 0
-
-	throwIfDownloadAborted(options.signal)
-	const unprocessedFileIds = [
-		...new Set(
-			entries.filter((entry) => !entry.imageProcess).map((entry) => entry.file.file_id),
-		),
-	]
-	if (unprocessedFileIds.length > 0) {
-		try {
-			const downloadUrls = await retryDownloadTask(
-				() =>
-					getTemporaryDownloadUrl({
-						file_ids: unprocessedFileIds,
-						download_mode: downloadMode,
-						is_download: true,
-						enableErrorMessagePrompt: false,
-					}),
-				retryCount,
-				options.signal,
-			)
-			downloadUrls.forEach((item, index) => {
-				const fileId = item.file_id || unprocessedFileIds[index]
-				if (fileId && item.url) sharedDownloadUrlByFileId.set(fileId, item.url)
-			})
-		} catch (error) {
-			if (isAbortError(error) || options.signal?.aborted) throw createAbortError()
-			// 批量取地址失败后由各元素单独重试，确保仍可产出成功子集。
-		}
-	}
-
-	const results = await Promise.all(
-		entries.map(async (entry, index) => {
-			const fileName = fileNames[index]
-			try {
-				let downloadUrl = entry.imageProcess
-					? undefined
-					: sharedDownloadUrlByFileId.get(entry.file.file_id)
-				if (!downloadUrl) {
-					downloadUrl = await retryDownloadTask(
-						async () => {
-							const downloadUrls = await getTemporaryDownloadUrl({
-								file_ids: [entry.file.file_id],
-								download_mode: downloadMode,
-								is_download: true,
-								options: entry.imageProcess
-									? { xMagicImageProcess: entry.imageProcess }
-									: undefined,
-								enableErrorMessagePrompt: false,
-							})
-							const url = downloadUrls?.[0]?.url
-							if (!url) throw new Error(t("design.errors.cannotGetDownloadUrl"))
-							return url
-						},
-						retryCount,
-						options.signal,
-					)
-				}
-
-				const blob = await retryDownloadTask(
-					async () => {
-						throwIfDownloadAborted(options.signal)
-						const response = await fetch(downloadUrl, { signal: options.signal })
-						if (!response.ok) {
-							throw new Error(
-								t("design.errors.downloadImageFailed", {
-									statusText: response.statusText,
-								}),
-							)
-						}
-						return response.blob()
-					},
-					retryCount,
-					options.signal,
-				)
-				zip.file(fileName, blob)
-				return { success: true, fileName }
-			} catch (error) {
-				if (isAbortError(error) || options.signal?.aborted) throw createAbortError()
-				return { success: false, fileName, error }
-			} finally {
-				completedCount += 1
-				options.onProgress?.(entries.length ? (completedCount / entries.length) * 90 : 90)
-			}
-		}),
-	)
-
-	const successCount = results.filter((result) => result.success).length
-	if (successCount === 0) {
-		throw new Error(t("design.errors.noDownloadableImages"))
-	}
-
-	throwIfDownloadAborted(options.signal)
-	const zipBlob = await zip.generateAsync({ type: "blob" }, ({ percent }) => {
-		options.onProgress?.(90 + percent * 0.1)
-	})
-	throwIfDownloadAborted(options.signal)
-
-	const url = URL.createObjectURL(zipBlob)
-	await downloadFileWithAnchor(url, zipFileName, undefined, {
-		onModalClose: () => URL.revokeObjectURL(url),
-	})
-	options.onProgress?.(100)
-
-	return { successCount, results }
-}
-
-/** 兼容设计页已有调用；逐元素能力由 packAndDownloadFileEntries 承担。 */
-export async function packAndDownloadFiles(
-	imageFiles: FileItem[],
-	downloadMode?: import("@/pages/superMagic/pages/Workspace/types").DownloadImageMode,
-	zipFileName = "design-images.zip",
-	xMagicImageProcessByFileId?: Record<string, ImageProcessOptions>,
-): Promise<PackDownloadFilesResult> {
-	return packAndDownloadFileEntries(
-		imageFiles.map((file, index) => ({
-			key: `${file.file_id}:${index}`,
-			file,
-			imageProcess: xMagicImageProcessByFileId?.[file.file_id],
-		})),
-		downloadMode,
-		zipFileName,
-	)
-}
-
-function normalizeImageProcessFormat(format?: ImageFormat): string | undefined {
-	if (!format) return undefined
-	if (format === "jpg") return "jpg"
-	if (format === "tiff") return "tiff"
-	return format
 }
 
 /**

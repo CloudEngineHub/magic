@@ -32,7 +32,9 @@ use App\Domain\Provider\Entity\ValueObject\Category;
 use App\Domain\Provider\Entity\ValueObject\ModelType;
 use App\Domain\Provider\Entity\ValueObject\NaturalLanguageProcessing;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\Provider\Entity\ValueObject\ProviderConfigSearchField;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
+use App\Domain\Provider\Entity\ValueObject\ProviderVirtualIdentity;
 use App\Domain\Provider\Entity\ValueObject\Query\ProviderModelQuery;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Event\ProviderConfigCreatedEvent;
@@ -48,6 +50,7 @@ use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
+use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
 use App\Infrastructure\Util\FuzzMatchUtil;
 use App\Interfaces\Agent\Assembler\FileAssembler;
@@ -101,6 +104,39 @@ readonly class AdminProviderAppService
         $this->processProviderAndModelsIcons($providerModels);
 
         return $providerModels;
+    }
+
+    /**
+     * 按指定字段搜索服务商配置。
+     *
+     * @return array{total: int, list: array<int, array<string, mixed>>}
+     */
+    public function searchProviderConfigs(
+        MagicUserAuthorization $authorization,
+        Page $page,
+        ProviderConfigSearchField $searchField,
+        string $keyword
+    ): array {
+        $dataIsolation = ProviderDataIsolation::create(
+            $authorization->getOrganizationCode(),
+            $authorization->getId(),
+        );
+
+        if (ProviderVirtualIdentity::matchesPlatformOfficialSearch($searchField, $keyword)) {
+            return [
+                'total' => 1,
+                'list' => $page->getPage() === 1
+                    ? [ProviderVirtualIdentity::platformOfficialSelectorItem()]
+                    : [],
+            ];
+        }
+
+        return $this->providerConfigDomainService->searchProviderConfigs(
+            $dataIsolation,
+            $page,
+            $searchField,
+            $keyword
+        );
     }
 
     /**
@@ -923,13 +959,16 @@ readonly class AdminProviderAppService
             'source_id' => SourceId::CONNECTIVITY_TEST,
         ];
 
+        $supportFunction = $providerModelEntity->getConfig()?->isSupportFunction() ?? false;
+
         return LLMConnectivityTestExecutor::execute(
-            function () use ($llmAppService, $modelPrimaryId, $businessParams): void {
+            function () use ($llmAppService, $modelPrimaryId, $businessParams, $supportFunction): void {
                 $completionDTO = $this->buildSavedModelConnectivityCompletion(
                     $modelPrimaryId,
                     $businessParams,
                     [['role' => 'user', 'content' => '你好']],
-                    -1
+                    -1,
+                    $supportFunction ? LLMConnectivityTestMessageBuilder::buildFunctionCallTools() : []
                 );
                 $llmAppService->chatCompletion($completionDTO);
             },
@@ -953,7 +992,8 @@ readonly class AdminProviderAppService
         string $modelPrimaryId,
         array $businessParams,
         array $messages,
-        int $maxTokens
+        int $maxTokens,
+        array $tools = []
     ): CompletionDTO {
         $completionDTO = new CompletionDTO();
         if (defined('MAGIC_ACCESS_TOKEN')) {
@@ -964,6 +1004,7 @@ readonly class AdminProviderAppService
         $completionDTO->setEnableHighAvailability(false);
         $completionDTO->setBusinessParams($businessParams);
         $completionDTO->setMaxTokens($maxTokens);
+        $completionDTO->setTools($tools);
         return $completionDTO;
     }
 

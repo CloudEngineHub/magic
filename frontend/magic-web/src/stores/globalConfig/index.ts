@@ -4,6 +4,7 @@ import type { useTranslation } from "react-i18next"
 import { SupportLocales } from "@/constants/locale"
 import MagicCrewLogo from "@/assets/logos/magic-crew.png"
 import { DEFAULT_MAINTENANCE_CONFIG } from "@/constants/maintenance"
+import { setPlatformWatermarkConfig } from "@/utils/watermark"
 
 export class GlobalConfigStore {
 	globalConfig?: PlatformConfig
@@ -123,6 +124,7 @@ export class GlobalConfigStore {
 			},
 			favicon: config.favicon || MagicCrewLogo,
 		}
+		setPlatformWatermarkConfig(this.globalConfig.watermark)
 		if (this.globalConfig?.favicon) {
 			this.updateFavicon(this.globalConfig.favicon)
 		}

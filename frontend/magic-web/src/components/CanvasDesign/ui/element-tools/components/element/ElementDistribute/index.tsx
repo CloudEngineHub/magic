@@ -1,5 +1,14 @@
 import { useCallback, useMemo, useState } from "react"
-import { AlignHorizontalSpaceAround, AlignVerticalSpaceAround, LayoutGrid } from "lucide-react"
+import {
+	AlignHorizontalSpaceAround,
+	AlignVerticalSpaceAround,
+	Columns3,
+	Grid3X3,
+	LayoutGrid,
+	Network,
+	Rows3,
+	Sparkles,
+} from "lucide-react"
 import {
 	Select,
 	SelectContent,
@@ -7,9 +16,14 @@ import {
 	SelectTrigger,
 } from "../../../../primitives/shadcn/select"
 import styles from "./index.module.css"
-import type { DistributeType } from "../../../../../runtime/interaction/align/AlignmentManager"
+import type {
+	ArrangementMode,
+	DistributeType,
+} from "../../../../../runtime/interaction/align/AlignmentManager"
 import { useCanvasDesignI18n } from "../../../../../app/providers/I18nProvider"
 import { useElementToolResolution } from "../../../model/ElementToolResolutionContext"
+
+type MenuMode = ArrangementMode | "horizontal-spacing" | "vertical-spacing"
 
 export default function ElementDistribute() {
 	const { t } = useCanvasDesignI18n()
@@ -17,57 +31,90 @@ export default function ElementDistribute() {
 	const [selectedValue, setSelectedValue] = useState<string>("")
 
 	const DISTRIBUTE_OPTIONS = useMemo(
-		() => [
-			{
-				value: "horizontal-spacing" as const,
-				label: t("elementTools.elementDistribute.horizontalSpacing", "水平间距"),
-				icon: AlignHorizontalSpaceAround,
-				shortcut: ["⇧", "H"],
-			},
-			{
-				value: "vertical-spacing" as const,
-				label: t("elementTools.elementDistribute.verticalSpacing", "垂直间距"),
-				icon: AlignVerticalSpaceAround,
-				shortcut: ["⇧", "V"],
-			},
-			{
-				value: "auto-layout" as const,
-				label: t("elementTools.elementDistribute.autoLayout", "自动排列"),
-				icon: LayoutGrid,
-				shortcut: ["⇧", "A"],
-			},
-		],
+		() =>
+			[
+				{
+					value: "smart" as const,
+					label: t("elementTools.elementDistribute.smart", "智能排列"),
+					icon: Sparkles,
+					shortcut: ["⇧", "A"],
+				},
+				{
+					value: "layered" as const,
+					label: t("elementTools.elementDistribute.layered", "按连线分层排列"),
+					icon: Network,
+				},
+				{
+					value: "type-group" as const,
+					label: t("elementTools.elementDistribute.typeGroup", "按类型分组排列"),
+					icon: LayoutGrid,
+				},
+				{
+					value: "compact-grid" as const,
+					label: t("elementTools.elementDistribute.compactGrid", "紧凑网格排列"),
+					icon: Grid3X3,
+				},
+				{
+					value: "horizontal-row" as const,
+					label: t("elementTools.elementDistribute.horizontalRow", "横向一行排列"),
+					icon: Rows3,
+				},
+				{
+					value: "vertical-column" as const,
+					label: t("elementTools.elementDistribute.verticalColumn", "纵向一列排列"),
+					icon: Columns3,
+				},
+				{
+					value: "horizontal-spacing" as const,
+					label: t("elementTools.elementDistribute.horizontalSpacing", "水平间距"),
+					icon: AlignHorizontalSpaceAround,
+					shortcut: ["⇧", "H"],
+				},
+				{
+					value: "vertical-spacing" as const,
+					label: t("elementTools.elementDistribute.verticalSpacing", "垂直间距"),
+					icon: AlignVerticalSpaceAround,
+					shortcut: ["⇧", "V"],
+				},
+			] satisfies Array<{
+				value: MenuMode
+				label: string
+				icon: typeof Network
+				shortcut?: string[]
+			}>,
 		[t],
 	)
 
-	// 处理分布操作
 	const handleDistributeChange = useCallback(
 		(value: string) => {
-			// 根据分布类型映射到对应的 action ID
-			const actionIdMap: Record<DistributeType, string> = {
-				"horizontal-spacing": "distribute.horizontal",
-				"vertical-spacing": "distribute.vertical",
-				"auto-layout": "distribute.auto-layout",
+			if (tool?.visibility === "visible") {
+				const mode = value as DistributeType
+				if (mode === "horizontal-spacing") {
+					void tool.execute?.({ actionId: "distribute.horizontal" })
+				} else if (mode === "vertical-spacing") {
+					void tool.execute?.({ actionId: "distribute.vertical" })
+				} else {
+					void tool.execute?.({ actionId: "distribute.arrange", mode })
+				}
 			}
-
-			const distributeType = value as DistributeType
-			const actionId = actionIdMap[distributeType]
-			if (actionId && tool?.visibility === "visible") void tool.execute?.({ actionId })
-			// 操作完成后重置为空，这样下次可以再次选择相同的选项
 			setTimeout(() => setSelectedValue(""), 0)
 		},
 		[tool],
 	)
 
-	// 获取当前选中的图标
 	const SelectedIcon =
-		DISTRIBUTE_OPTIONS.find((opt) => opt.value === selectedValue)?.icon ||
-		AlignHorizontalSpaceAround
+		DISTRIBUTE_OPTIONS.find((option) => option.value === selectedValue)?.icon || Grid3X3
+	const arrangeLabel = t("elementTools.elementDistribute.title", "排列方式")
 
 	return (
-		<Select value={selectedValue} onValueChange={handleDistributeChange}>
-			<SelectTrigger className={styles.selectTrigger}>
+		<Select
+			value={selectedValue}
+			onValueChange={handleDistributeChange}
+			disabled={tool?.visibility !== "visible"}
+		>
+			<SelectTrigger className={styles.selectTrigger} aria-label={arrangeLabel}>
 				<SelectedIcon size={16} />
+				<span className={styles.triggerLabel}>{arrangeLabel}</span>
 			</SelectTrigger>
 			<SelectContent style={{ width: 240 }}>
 				{DISTRIBUTE_OPTIONS.map((option) => {
@@ -81,13 +128,15 @@ export default function ElementDistribute() {
 							<div className={styles.selectOptionItemContent}>
 								<Icon size={16} className={styles.icon} />
 								<span className={styles.label}>{option.label}</span>
-								<div className={styles.shortcut}>
-									{option.shortcut.map((key, index) => (
-										<div key={index} className={styles.key}>
-											{key}
-										</div>
-									))}
-								</div>
+								{option.shortcut ? (
+									<div className={styles.shortcut}>
+										{option.shortcut.map((key) => (
+											<div key={key} className={styles.key}>
+												{key}
+											</div>
+										))}
+									</div>
+								) : null}
 							</div>
 						</SelectItem>
 					)

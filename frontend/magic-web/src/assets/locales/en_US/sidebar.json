@@ -15,6 +15,7 @@
 	},
 	"chats": {
 		"empty": "No conversations",
+		"myChats": "My chats",
 		"newChat": "New chat",
 		"refresh": "Refresh conversations",
 		"title": "Chats"
@@ -26,6 +27,8 @@
 		"defaultUser": "User",
 		"feedback": "Feedback",
 		"freeAccount": "Free",
+		"globalRecycleBin": "Global recycle bin",
+		"globalRecycleBinHint": "View deleted spaces, projects, topics, files and micro apps you can access",
 		"helpCenter": "Help Center",
 		"helpCenterTooltip": "View the Super Magic user guide",
 		"inbox": "Inbox",
@@ -38,7 +41,7 @@
 		"upgradeNow": "Upgrade"
 	},
 	"home": {
-		"title": "Home"
+		"title": "New task"
 	},
 	"inbox": {
 		"auth": {
@@ -220,7 +223,8 @@
 		"upgrade": "Upgrade"
 	},
 	"skillsLibrary": {
-		"title": "Skills · Connectors"
+		"clawTitle": "Skills",
+		"title": "Crew · Skills · Connectors"
 	},
 	"slidesTemplates": {
 		"compactCount": "{{value}} templates",

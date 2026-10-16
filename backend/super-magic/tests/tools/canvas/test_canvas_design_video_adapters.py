@@ -72,6 +72,27 @@ def test_design_video_payload_maps_canvas_parameters_and_provider_uri(tmp_path: 
     }
 
 
+def test_design_video_payload_treats_shot_image_as_omni_reference(tmp_path: Path) -> None:
+    """精细模式的镜头图片是全能模式参考图，不是起始帧。"""
+    payload = DesignVideoPayloadBuilder(tmp_path).build(
+        "mock-project",
+        GenerationParameters(
+            prompt="animate the shot reference [image1]",
+            model_id="video-model",
+            reference_image_paths=("./images/shot-reference.png",),
+        ),
+        "vid-shot-1",
+        "/mock-project/videos/",
+        _ToolContext(),
+    )
+
+    assert payload["input_mode"] == "omni_reference"
+    assert payload["inputs"]["reference_images"] == [
+        {"uri": "/mock-project/images/shot-reference.png"}
+    ]
+    assert payload["inputs"]["frames"] == []
+
+
 def test_design_video_payload_normalizes_provider_uri_with_leading_slash(tmp_path: Path) -> None:
     """Canvas Design 请求应去掉 provider URI 误加的前导斜杠。"""
     payload = DesignVideoPayloadBuilder(tmp_path).build(

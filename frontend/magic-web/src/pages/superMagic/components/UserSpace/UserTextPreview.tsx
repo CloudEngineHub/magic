@@ -5,7 +5,7 @@ import { DetailType, type TextFileSession } from "../Detail/types"
 import type { FileItem } from "../Detail/components/FilesViewer/types"
 import { MemoryEditConflictDialog } from "../LongTremMemory/components/MemoryEditConflictDialog"
 import { resolveUserFileHref } from "../../utils/markdownFileReference"
-import { getTemporaryDownloadUrl } from "../../utils/api"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import {
 	getFileReferenceIdentityKey,
 	resolveFileReference,
@@ -27,6 +27,7 @@ type UserTextPreviewProps = Omit<ComponentProps<typeof Md>, "data"> & {
 /** 原预览器负责 UI 和关闭保存注册；用户会话只负责稳定快照、草稿和冲突处理。 */
 export default observer(function UserTextPreview({ data, ...props }: UserTextPreviewProps) {
 	const identityKey = getFileReferenceIdentityKey()
+	const fileApi = useFileApi()
 	const currentFile = useRef<string | null>(data.file_id)
 	currentFile.current = data.file_id
 	useEffect(
@@ -64,7 +65,7 @@ export default observer(function UserTextPreview({ data, ...props }: UserTextPre
 	const resolveImageUrl = useMemoizedFn(async (href: string) => {
 		const file = await resolveRelativeFile(href)
 		if (!file || file.is_directory) return href
-		const urls = await getTemporaryDownloadUrl({ file_ids: [file.file_id] })
+		const urls = await fileApi.getTemporaryDownloadUrl({ file_ids: [file.file_id] })
 		assertCurrent()
 		return urls?.[0]?.url ?? href
 	})
@@ -82,6 +83,7 @@ export default observer(function UserTextPreview({ data, ...props }: UserTextPre
 		loading: editor.loading,
 		loadError: editor.loadError,
 		saving: editor.saving,
+		saveStage: editor.saveStage,
 		setDraft: editor.setDraft,
 		refresh: editor.load,
 		save,

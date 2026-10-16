@@ -27,6 +27,7 @@ import { MarkerManager } from "../interaction/marker/MarkerManager"
 import { SnapGuideManager } from "../interaction/snap/SnapGuideManager"
 import { PermissionManager } from "./PermissionManager"
 import { NameLabelManager } from "../interaction/labels/NameLabelManager"
+import { complianceNameLabelIconResolver } from "../interaction/labels/complianceNameLabelIconResolver"
 import { SizeLabelManager } from "../interaction/labels/SizeLabelManager"
 import type { TFunction } from "../../public/i18n-types"
 import type { CanvasAccessUpdate } from "./CanvasAccessPolicy"
@@ -40,6 +41,7 @@ import { UserActionRegistry } from "../actions/UserActionRegistry"
 import { BackgroundManager } from "../interaction/background/BackgroundManager"
 import { CanvasFileUploadManager } from "../resources/upload/CanvasFileUploadManager"
 import { GeometryCacheManager } from "../shared/geometry/GeometryCacheManager"
+import { CanvasViewportQueryCoordinator } from "../shared/geometry/CanvasViewportQueryCoordinator"
 import { ImageResourceManager } from "../resources/image/ImageResourceManager"
 import { CanvasImagePresentationScheduler } from "../resources/image/CanvasImagePresentationScheduler"
 import { ImageBatchPollingRegistry } from "../resources/polling/ImageBatchPollingRegistry"
@@ -47,9 +49,15 @@ import { SubmitImageWorkerManager } from "../resources/upload/SubmitImageWorkerM
 import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
 import { VideoResourceManager } from "../resources/video/VideoResourceManager"
 import { VideoCompositionManager } from "../resources/video-composition/VideoCompositionManager"
+import { VideoDraftFinalManager } from "../resources/video-draft-final/VideoDraftFinalManager"
 import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
 import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
 import { AudioWaveformManager } from "../resources/audio/AudioWaveformManager"
+import { CanvasAssetResourceManager } from "../resources/asset/CanvasAssetResourceManager"
+import { CanvasAssetImportManager } from "../resources/asset/CanvasAssetImportManager"
+import { CanvasAssetCompliancePollingManager } from "../resources/asset/CanvasAssetCompliancePollingManager"
+import { CanvasAssetComplianceTaskManager } from "../resources/asset/CanvasAssetComplianceTaskManager"
+import { reconcileUnverifiedComplianceInDocument } from "../resources/asset/canvasAssetDocumentReconcile"
 import { AudioReplaceController } from "../interaction/audio/AudioReplaceController"
 import { ImageReplaceController } from "../interaction/image/ImageReplaceController"
 import { MediaReplaceController } from "../interaction/media/MediaReplaceController"
@@ -177,7 +185,7 @@ export class Canvas {
 	public selectionLayer: Konva.Layer // 2. 选择层：框选矩形和选中高亮效果
 	public controlsLayer: Konva.Layer // 3. 控制层：Transformer 和 Hover 边框
 	public markersLayer: Konva.Layer // 4. 标记层：图片上的 Marker 标记（在最上层，不被遮挡）
-	public overlayLayer: Konva.Layer // 5. 辅助层：吸附辅助线、名称标签、尺寸标签
+	public overlayLayer: Konva.Layer // 5. 辅助层：吸附辅助线、名称标签、尺寸标签；仅名称标签接收命中
 
 	public viewportController: ViewportController
 	public eventEmitter: EventEmitter<CanvasEventMap>
@@ -220,16 +228,26 @@ export class Canvas {
 	public backgroundManager: BackgroundManager
 	public canvasFileUploadManager: CanvasFileUploadManager
 	public geometryCacheManager: GeometryCacheManager
+	public viewportQueryCoordinator: CanvasViewportQueryCoordinator
 	public imageResourceManager: ImageResourceManager
 	public imagePresentationScheduler: CanvasImagePresentationScheduler
 	public imageBatchPollingRegistry: ImageBatchPollingRegistry
 	public submitImageWorkerManager: SubmitImageWorkerManager
 	public videoResourceManager: VideoResourceManager
 	public videoCompositionManager: VideoCompositionManager
+	/** 当前图片和视频标签是否常驻显示；默认按 hover/选中状态显示。 */
+	private mediaLabelsAlwaysVisible = false
+	public videoDraftFinalManager: VideoDraftFinalManager
+	/** Seedance 合规能力关闭时，画布不展示合规 UI，也不恢复合规轮询。 */
+	private seedanceComplianceEnabled = false
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
 	public audioWaveformManager: AudioWaveformManager
+	public assetResourceManager: CanvasAssetResourceManager
+	public assetCompliancePollingManager: CanvasAssetCompliancePollingManager
+	public assetComplianceTaskManager: CanvasAssetComplianceTaskManager
+	public assetImportManager: CanvasAssetImportManager
 	public audioReplaceController: AudioReplaceController
 	public imageReplaceController: ImageReplaceController
 	public mediaReplaceController: MediaReplaceController
@@ -314,7 +332,8 @@ export class Canvas {
 		this.selectionLayer = new Konva.Layer({ name: "selection", listening: false })
 		this.markersLayer = new Konva.Layer({ name: "markers", listening: true })
 		this.controlsLayer = new Konva.Layer({ name: "controls", listening: true })
-		this.overlayLayer = new Konva.Layer({ name: "overlay", listening: false })
+		// 名称标签需要命中；尺寸标签、吸附线等子节点保持 listening: false，空白处仍穿透到下层。
+		this.overlayLayer = new Konva.Layer({ name: "overlay", listening: true })
 
 		// 按顺序添加到 Stage（从底到顶）
 		this.stage.add(this.contentLayer)
@@ -378,6 +397,11 @@ export class Canvas {
 			canvas: this,
 			config: options.magic,
 		})
+		// asset:// paths resolve through the asset service and must stay separate from
+		// workspace attachment resolution and its persistent media cache.
+		this.assetResourceManager = new CanvasAssetResourceManager(this)
+		this.assetCompliancePollingManager = new CanvasAssetCompliancePollingManager(this)
+		this.assetComplianceTaskManager = new CanvasAssetComplianceTaskManager(this)
 
 		// 初始化 CanvasFileUploadManager（全局文件上传管理器）
 		this.canvasFileUploadManager = new CanvasFileUploadManager({
@@ -461,6 +485,7 @@ export class Canvas {
 		this.geometryCacheManager = new GeometryCacheManager({
 			canvas: this,
 		})
+		this.viewportQueryCoordinator = new CanvasViewportQueryCoordinator({ canvas: this })
 
 		// 初始化关联线管理器（使用 contentLayer 内的 connectionGroup 绘制元素业务因果关系）
 		this.connectionManager = new ConnectionManager({
@@ -469,6 +494,7 @@ export class Canvas {
 		this.connectionAssociationSeedManager = new ConnectionAssociationSeedManager({
 			canvas: this,
 		})
+		this.assetImportManager = new CanvasAssetImportManager(this)
 
 		// 初始化 SelectionManager（使用 Content Layer 用于查询节点）
 		this.selectionManager = new SelectionManager({
@@ -534,6 +560,9 @@ export class Canvas {
 		this.historyManager = new HistoryManager({
 			canvas: this,
 		})
+		// 正片转正需要同时提交临时元素与运行时连线，因此在元素、连线和历史管理器
+		// 都准备完成后再初始化该生命周期管理器。
+		this.videoDraftFinalManager = new VideoDraftFinalManager({ canvas: this })
 
 		// 初始化标记管理器（使用 Markers Layer）
 		this.markerManager = new MarkerManager({
@@ -548,6 +577,7 @@ export class Canvas {
 		// 初始化名称标签管理器（使用共享的 Overlay Layer）
 		this.nameLabelManager = new NameLabelManager({
 			canvas: this,
+			iconResolver: options.nameLabelIconResolver ?? complianceNameLabelIconResolver,
 		})
 
 		this.elementRenameManager = new ElementRenameManager({
@@ -933,6 +963,10 @@ export class Canvas {
 			this.userActionRegistry.execute("selection.select-all")
 		})
 
+		this.eventEmitter.on("keyboard:duplicate", () => {
+			void this.userActionRegistry.execute("edit.duplicate")
+		})
+
 		// 监听复制快捷键
 		this.eventEmitter.on("keyboard:copy", () => {
 			this.userActionRegistry.execute("edit.copy")
@@ -1117,6 +1151,14 @@ export class Canvas {
 	): void {
 		this.clearPreviewContent()
 		const normalizedDoc = normalizeStoryboardDocument(doc)
+		// Start the asset batch request before URL warmup so legacy asset:// entries
+		// can share the same Canvas-level detail request instead of issuing one call
+		// per media element.
+		void this.assetResourceManager.preloadDocumentAssets(normalizedDoc).finally(() => {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+			this.refreshNameLabelIcons()
+			this.refreshMediaComplianceFailedTags()
+		})
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocument")
 		this.elementDetailsRuntimeManager.replace(options?.elementDetailsProvenance)
 
@@ -1130,6 +1172,8 @@ export class Canvas {
 			// 即使某个加载阶段出现未预期异常，也不能让历史记录永久保持禁用。
 			this.historyManager.enable()
 		}
+
+		reconcileUnverifiedComplianceInDocument(this)
 
 		// 记录初始状态
 		this.historyManager.recordHistoryImmediate()
@@ -1154,6 +1198,11 @@ export class Canvas {
 	): void {
 		this.clearPreviewContent()
 		const normalizedDoc = normalizeStoryboardDocument(doc)
+		void this.assetResourceManager.preloadDocumentAssets(normalizedDoc).finally(() => {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+			this.refreshNameLabelIcons()
+			this.refreshMediaComplianceFailedTags()
+		})
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocumentSmart")
 		if (options?.elementDetailsProvenance) {
 			this.elementDetailsRuntimeManager.replace(options.elementDetailsProvenance)
@@ -1178,6 +1227,36 @@ export class Canvas {
 		if (!didEmitDocumentRestored && (didChangeElements || didChangeConnections)) {
 			this.eventEmitter.emit({ type: "document:restored", data: undefined })
 		}
+		reconcileUnverifiedComplianceInDocument(this)
+	}
+
+	/**
+	 * Keeps the compliance refresh entry point used by asset workflows while the
+	 * failure state is represented by the name-label shield instead of an in-element card.
+	 */
+	public refreshMediaComplianceFailedTags(): void {
+		this.refreshNameLabelIcons()
+	}
+
+	public isSeedanceComplianceEnabled(): boolean {
+		return this.seedanceComplianceEnabled
+	}
+
+	public setSeedanceComplianceEnabled(enabled: boolean): void {
+		if (this.seedanceComplianceEnabled === enabled) return
+		this.seedanceComplianceEnabled = enabled
+		if (!enabled) {
+			this.assetComplianceTaskManager.stopAllComplianceWatching()
+		} else {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+		}
+		this.refreshNameLabelIcons()
+		this.refreshMediaComplianceFailedTags()
+	}
+
+	/** Refreshes label icon/text state after runtime asset compliance changes. */
+	public refreshNameLabelIcons(elementIds?: readonly string[]): void {
+		this.nameLabelManager?.refreshIcons(elementIds)
 	}
 
 	/**
@@ -1235,15 +1314,22 @@ export class Canvas {
 	 */
 	public toggleElementsVisibility(visible: boolean): void {
 		const selectedIds = this.selectionManager.getSelectedIds()
-		if (selectedIds.length === 0) return
+		const changedIds = selectedIds.filter((id) => {
+			const element = this.elementManager.getElementData(id)
+			return element !== undefined && (element.visible ?? true) !== visible
+		})
+		if (changedIds.length === 0) return
 
 		// 批量更新
-		const updates = selectedIds.map((id) => ({
+		const updates = changedIds.map((id) => ({
 			id,
 			data: { visible },
 		}))
 
-		this.elementManager.batchUpdate(updates)
+		this.historyManager.runTransaction(() => {
+			this.elementManager.batchUpdate(updates)
+			if (!visible) this.deselectHiddenElements()
+		})
 	}
 
 	/**
@@ -1316,7 +1402,23 @@ export class Canvas {
 	 * @param visible - 可见性状态
 	 */
 	public setElementVisible(elementId: string, visible: boolean): void {
-		this.elementManager.setElementVisible(elementId, visible)
+		const element = this.elementManager.getElementData(elementId)
+		if (!element || (element.visible ?? true) === visible) return
+
+		// 图层眼睛的一次点击立即形成历史，不等待普通连续更新的防抖。
+		this.historyManager.runTransaction(() => {
+			this.elementManager.setElementVisible(elementId, visible)
+			if (!visible) this.deselectHiddenElements()
+		})
+	}
+
+	private deselectHiddenElements(): void {
+		// 隐藏父容器也会让已选择的子项不可见；以后仍可从图层面板主动选择它们。
+		for (const id of this.selectionManager.getSelectedIds()) {
+			if (!this.elementManager.isElementVisibleInDataTree(id)) {
+				this.selectionManager.deselect(id)
+			}
+		}
 	}
 
 	/**
@@ -1409,8 +1511,7 @@ export class Canvas {
 
 	public getEffectiveContentId(elementId: string): string | undefined {
 		const element = this.elementManager.getElementData(elementId) as
-			| ContentViewElement
-			| undefined
+			ContentViewElement | undefined
 		const previewContentId = this.previewContentIds.get(elementId)
 		const resolution = resolveEffectiveContentIdForElement(element, previewContentId)
 		if (previewContentId && !resolution.previewMatched) {
@@ -1421,8 +1522,7 @@ export class Canvas {
 
 	public getEffectiveContent<T extends { contentId: string }>(elementId: string): T | undefined {
 		const element = this.elementManager.getElementData(elementId) as
-			| (LayerElement & { contents?: readonly T[] })
-			| undefined
+			(LayerElement & { contents?: readonly T[] }) | undefined
 		if (!element || !Array.isArray(element.contents)) return undefined
 		const contentId = this.getEffectiveContentId(elementId)
 		return element.contents.find((content) => content.contentId === contentId) as T | undefined
@@ -1644,6 +1744,23 @@ export class Canvas {
 	}
 
 	/**
+	 * 统一切换图片和视频的标题、分辨率标签显示模式，确保两个标签管理器保持一致。
+	 */
+	public setMediaLabelsAlwaysVisible(alwaysVisible: boolean): void {
+		if (this.mediaLabelsAlwaysVisible === alwaysVisible) return
+		this.mediaLabelsAlwaysVisible = alwaysVisible
+		// 两种标签会互相通知；先统一模式，关闭时不再按另一管理器的旧常驻状态布局。
+		this.nameLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible, false)
+		this.sizeLabelManager.setMediaLabelsAlwaysVisible(alwaysVisible, false)
+		this.nameLabelManager.syncMediaLabelsVisibility()
+		this.sizeLabelManager.syncMediaLabelsVisibility()
+	}
+
+	public isMediaLabelsAlwaysVisible(): boolean {
+		return this.mediaLabelsAlwaysVisible
+	}
+
+	/**
 	 * 销毁画布
 	 */
 	public destroy(): void {
@@ -1694,6 +1811,7 @@ export class Canvas {
 		this.eraserManager.destroy()
 		this.imageEditingCoordinator.destroy()
 		this.videoCompositionManager?.destroy()
+		this.videoDraftFinalManager?.destroy()
 		this.generationRuntimeManager.destroy()
 		this.elementDetailsRuntimeManager?.setOnChange(undefined)
 		this.mediaPlaybackCoordinator.destroy()
@@ -1705,6 +1823,8 @@ export class Canvas {
 		this.storyboardInteractionManager.destroy()
 		this.videoEditInteractionManager.destroy()
 		this.videoContinuationManager.destroy()
+		this.assetCompliancePollingManager.destroy()
+		this.assetImportManager.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()
@@ -1713,6 +1833,7 @@ export class Canvas {
 		this.cursorManager.destroy()
 		this.permissionManager.destroy()
 		this.imageBatchPollingRegistry.destroy()
+		this.viewportQueryCoordinator.destroy()
 		this.elementManager.destroy()
 		this.geometryCacheManager.destroy()
 		this.connectionManager.destroy()
@@ -1747,6 +1868,7 @@ export class Canvas {
 		this.videoPlaybackManager.destroy()
 		this.videoResourceManager.destroy()
 		this.audioResourceManager.destroy()
+		this.assetResourceManager.destroy()
 		this.mediaResourceOfflineCacheManager.destroy()
 		this.pluginManager.destroy()
 		this.stage.destroy()

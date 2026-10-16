@@ -243,8 +243,81 @@ class VolcengineArkVideoClientTest extends TestCase
             self::fail('Expected ProviderVideoException was not thrown.');
         } catch (ProviderVideoException $exception) {
             $previous = $exception->getPrevious();
+            self::assertSame(VideoGenerateErrorCode::INPUT_IMAGE_PRIVACY_FAILED->getMessage(), $exception->getMessage());
+            self::assertSame(VideoGenerateErrorCode::INPUT_IMAGE_PRIVACY_FAILED, $exception->getVideoErrorCode());
             self::assertInstanceOf(RequestException::class, $previous);
             self::assertSame($errorResponse, $previous->getResponse()?->getBody()->getContents());
+        }
+    }
+
+    public function testPostReturnsGenericInvalidParameterMessageWhenNoHintMatched(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('post')
+            ->willThrowException(new RequestException(
+                'original invalid parameter message',
+                new Request('POST', 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks'),
+                new Response(400, [], json_encode([
+                    'error' => [
+                        'code' => 'InvalidParameter',
+                        'message' => 'Error while downloading image.',
+                    ],
+                ], JSON_THROW_ON_ERROR)),
+            ));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->expects($this->once())
+            ->method('get')
+            ->with(VolcengineArkVideoClient::class)
+            ->willReturn(new VolcengineArkRecordingLogger());
+
+        $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
+
+        try {
+            $client->post(
+                'https://ark.cn-beijing.volces.com/api/v3',
+                'secret-api-key',
+                '/contents/generations/tasks',
+                ['model' => 'doubao-seedance-2-0-260128'],
+            );
+            self::fail('Expected ProviderVideoException was not thrown.');
+        } catch (ProviderVideoException $exception) {
+            self::assertSame(VideoGenerateErrorCode::INVALID_PARAMETER->getMessage(), $exception->getMessage());
+            self::assertSame(VideoGenerateErrorCode::INVALID_PARAMETER, $exception->getVideoErrorCode());
+        }
+    }
+
+    public function testPostReturnsFriendlyMessageForOutputSensitiveContentCode(): void
+    {
+        $httpClient = $this->createMock(Client::class);
+        $httpClient->expects($this->once())
+            ->method('post')
+            ->willThrowException(new RequestException(
+                'original sensitive content message',
+                new Request('POST', 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks'),
+                new Response(400, [], json_encode([
+                    'error' => ['code' => 'OutputVideoSensitiveContentDetected.PolicyViolation'],
+                ], JSON_THROW_ON_ERROR)),
+            ));
+
+        $clientFactory = $this->createMock(ClientFactory::class);
+        $clientFactory->expects($this->once())->method('create')->willReturn($httpClient);
+        $loggerFactory = $this->createMock(LoggerFactory::class);
+        $loggerFactory->expects($this->once())->method('get')->with(VolcengineArkVideoClient::class)
+            ->willReturn(new VolcengineArkRecordingLogger());
+        $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
+
+        try {
+            $client->post('https://ark.cn-beijing.volces.com/api/v3', 'secret-api-key', '/contents/generations/tasks', ['model' => 'model']);
+            self::fail('Expected ProviderVideoException was not thrown.');
+        } catch (ProviderVideoException $exception) {
+            self::assertSame(
+                VideoGenerateErrorCode::OUTPUT_VIDEO_SENSITIVE_CONTENT_DETECTED_POLICY_VIOLATION->getMessage(),
+                $exception->getMessage(),
+            );
         }
     }
 
@@ -278,7 +351,7 @@ class VolcengineArkVideoClientTest extends TestCase
         $client = new VolcengineArkVideoClient($clientFactory, $loggerFactory);
 
         $this->expectException(ProviderVideoException::class);
-        $this->expectExceptionMessage(VideoGenerateErrorCode::INVALID_PARAMETER->getMessage());
+        $this->expectExceptionMessage(VideoGenerateErrorCode::INVALID_PARAMETER_INVALID_RESOLUTION->getMessage());
 
         $client->post(
             'https://ark.cn-beijing.volces.com/api/v3',

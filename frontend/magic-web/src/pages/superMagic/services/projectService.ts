@@ -1,3 +1,4 @@
+import { assertProjectDeletionAllowed } from "@/services/recordSummary/projectDeletionRecordingGuard"
 import { userStore } from "@/models/user"
 import recentProjectsStore from "../stores/core/recentProjects"
 import { SuperMagicApi } from "@/apis"
@@ -22,6 +23,7 @@ import { topicStore, workspaceStore } from "../stores/core"
 import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
+import { analyticsService } from "@/services/analytics"
 
 export interface FetchProjectsParams {
 	workspaceId: string
@@ -52,6 +54,8 @@ export interface HandleCreateProjectParams {
 	isEditProject?: boolean
 	workdir?: string
 	projectName?: string
+	/** Explicit workspace override so list pages are not bound to a stale selectedWorkspace. */
+	workspaceId?: string
 }
 
 /** Parameters for moving a project to another workspace (maps to projects/move API). */
@@ -72,21 +76,25 @@ type RequestKey = string
 
 class ProjectService {
 	private visitKey: string | null = null
+	private visitScope: object | undefined
 	private visitGeneration = 0
 
 	resetVisit() {
 		this.visitKey = null
+		this.visitScope = undefined
 		this.visitGeneration++
 	}
 
 	/** 每次进入只记录一次；话题切换、后台详情刷新及预取不会制造新访问。 */
-	recordProjectVisit(project: ProjectListItem) {
+	recordProjectVisit(project: ProjectListItem, visitScope?: object) {
 		const userId = userStore.user.userInfo?.user_id
 		const organizationCode = userStore.user.organizationCode
 		if (!userId || !organizationCode) return
 		const key = JSON.stringify([userId, organizationCode, project.id])
-		if (this.visitKey === key && projectStore.selectedProject?.id === project.id) return
+		// 专用页面有独立 store，以页面进入范围去重，不依赖普通项目的选中态。
+		if (this.visitKey === key && this.visitScope === visitScope) return
 		this.visitKey = key
+		this.visitScope = visitScope
 		const generation = this.visitGeneration
 		void SuperMagicApi.recordProjectVisit(project.id)
 			.then((result) => {
@@ -364,21 +372,32 @@ class ProjectService {
 		projectMode,
 		workdir,
 		projectName,
+		creationScene,
 	}: {
 		workspaceId: string
 		projectMode: TopicMode
 		workdir?: string
 		projectName?: string
+		/** The product entry that initiated creation; independent from the selected agent mode. */
+		creationScene?: string
 	}): Promise<CreatedProject | null> => {
 		const requestKey = this.getRequestKey("createProject", {
 			workspaceId,
 			projectMode,
 			workdir,
 			projectName,
+			creationScene,
 		})
 
 		return this.getOrCreateRequest(requestKey, async () => {
 			try {
+				// Report after local de-duplication accepts the action but before the request,
+				// so failed requests still count as creation attempts.
+				analyticsService.report("project_create_attempted", {
+					workspaceId,
+					sceneOverride: creationScene,
+					mode: projectMode,
+				})
 				const res = await SuperMagicApi.createProject({
 					workspace_id: workspaceId,
 					project_name: projectName || "",
@@ -487,6 +506,7 @@ class ProjectService {
 	}
 
 	deleteProject = async (id: string, workspaceId: string): Promise<void> => {
+		assertProjectDeletionAllowed([id])
 		const operationId = `delete_${id}_${Date.now()}`
 		const requestKey = this.getRequestKey("deleteProject", { id, workspaceId })
 
@@ -532,7 +552,8 @@ class ProjectService {
 	}
 
 	/**
-	 * Move project to new workspace; optional targetProjectName is sent as `target_project_name`.
+	 * Move a project to another workspace. This does not change selectedWorkspace —
+	 * callers that leave the current view (detail exit, desktop switch) update it themselves.
 	 */
 	moveProject = async ({
 		projectId,
@@ -564,9 +585,6 @@ class ProjectService {
 		const targetWorkspace = workspaceStore.workspaces.find(
 			(workspace) => workspace.id === targetWorkspaceId,
 		)
-		const sourceWorkspace = workspaceStore.workspaces.find(
-			(workspace) => workspace.id === sourceWorkspaceId,
-		)
 		const movedActiveProject = activeProject
 			? {
 					...activeProject,
@@ -580,12 +598,12 @@ class ProjectService {
 				}
 			: null
 
-		// Optimistic update: remove only list entries so the active project and its file state survive.
+		// Optimistic update: drop list entries only. Keep selectedWorkspace on the
+		// viewing workspace so a list-page move does not send later create/refresh to B.
 		this.saveSnapshot(operationId)
 		runInAction(() => {
 			projectStore.removeProjectFromCollections(projectId)
 			if (movedActiveProject) projectStore.setSelectedProject(movedActiveProject)
-			if (targetWorkspace) workspaceStore.setSelectedWorkspace?.(targetWorkspace)
 		})
 
 		// Await move API so callers (e.g. save-as-project + list reload) do not race ahead of server state
@@ -616,7 +634,6 @@ class ProjectService {
 				if (activeProject) {
 					runInAction(() => {
 						projectStore.setSelectedProject(activeProject)
-						if (sourceWorkspace) workspaceStore.setSelectedWorkspace(sourceWorkspace)
 					})
 				}
 				this.rollbackSnapshot(operationId)
@@ -787,10 +804,11 @@ class ProjectService {
 			workspaceId,
 		})
 
-		// Optimistic update: remove project from list immediately
+		// Optimistic update: remove the shortcut project from the list cache without
+		// clearing the active selection — the project itself is not deleted.
 		this.saveSnapshot(operationId)
 		runInAction(() => {
-			projectStore.removeProject(projectId)
+			projectStore.removeProjectFromCollections(projectId)
 		})
 
 		// Await API so callers refreshing the list do not race ahead of server state
@@ -799,6 +817,18 @@ class ProjectService {
 				await SuperMagicApi.updateCollaborationProjectShortcutStatus(projectId, {
 					workspace_id: workspaceId,
 					is_bind_workspace: 0,
+				})
+
+				// Sync the active project's binding flags so the "取消关联" menu item
+				// hides immediately instead of waiting for a full list refresh.
+				runInAction(() => {
+					if (projectStore.selectedProject?.id === projectId) {
+						projectStore.selectedProject = {
+							...projectStore.selectedProject,
+							is_bind_workspace: false,
+							bind_workspace_id: "",
+						}
+					}
 				})
 
 				this.fetchProjects({

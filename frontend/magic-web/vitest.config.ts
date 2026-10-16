@@ -2,6 +2,7 @@ import { resolve } from "path"
 import { defaultClientConditions } from "vite"
 import { defineConfig, mergeConfig } from "vitest/config"
 import { getOverlayViteConfig } from "./vite/overlay"
+import vitePluginIframeRuntime from "./plugins/vite-plugin-iframe-runtime"
 
 const fixAntdLocaleImportExtensions = () => ({
 	name: "fix-antd-locale-import-extensions",
@@ -33,7 +34,10 @@ const fixAntdLocaleImportExtensions = () => ({
 
 const getVitestBaseConfig = () => {
 	return {
-		plugins: [fixAntdLocaleImportExtensions()],
+		plugins: [
+			fixAntdLocaleImportExtensions(),
+			vitePluginIframeRuntime({ projectRoot: __dirname }),
+		],
 		resolve: {
 			// Match application resolution so tests do not depend on a previously built dist.
 			conditions: ["magic-web-source", ...defaultClientConditions],
@@ -71,51 +75,6 @@ const getVitestBaseConfig = () => {
 					replacement: resolve(__dirname, "test/mocks/magic-api-prelude.ts"),
 				},
 				{
-					find: /^@dtyq\/html-sandbox\/index\.html(\?raw)?$/,
-					replacement: `${resolve(__dirname, "packages/html-sandbox/index.html")}$1`,
-				},
-				{
-					find: "@dtyq/html-sandbox/runtime",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/runtime/index.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/parentOrigin",
-					replacement: resolve(
-						__dirname,
-						"packages/html-sandbox/src/utils/parentOrigin.ts",
-					),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/safeUrl",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/utils/safeUrl.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/textContent",
-					replacement: resolve(
-						__dirname,
-						"packages/html-sandbox/src/utils/textContent.ts",
-					),
-				},
-				{
-					find: "@dtyq/html-sandbox/utils/inspectableTextContent",
-					replacement: resolve(
-						__dirname,
-						"packages/html-sandbox/src/utils/inspectableTextContent.ts",
-					),
-				},
-				{
-					find: "@dtyq/html-sandbox/telemetry",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/telemetry/index.ts"),
-				},
-				{
-					find: "@dtyq/html-sandbox",
-					replacement: resolve(__dirname, "packages/html-sandbox/src/index.ts"),
-				},
-				{
-					find: /^@dtyq\/html-sandbox\/(.+)$/,
-					replacement: resolve(__dirname, "packages/html-sandbox/src/$1"),
-				},
-				{
 					find: "@dtyq/es6-template-strings",
 					replacement: resolve(__dirname, "test/mocks/es6-template-strings.ts"),
 				},
@@ -142,6 +101,14 @@ const getVitestBaseConfig = () => {
 				{
 					find: "@dtyq/x-markdown",
 					replacement: resolve(__dirname, "packages/x-markdown/src/index.ts"),
+				},
+				{
+					find: "@magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src"),
+				},
+				{
+					find: "@dtyq/magic-admin-v2",
+					replacement: resolve(__dirname, "packages/magic-admin-v2/src/index.ts"),
 				},
 			],
 		},

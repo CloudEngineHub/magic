@@ -42,6 +42,12 @@ class ProjectDomainService
 
     private const CACHE_TTL_UNGROUPED_COUNT = 60;
 
+    /**
+     * A fork record whose progress has not advanced for this long is treated as abandoned.
+     * Must stay well above the consumer's lock TTL so a slow but live migration is never reclaimed.
+     */
+    private const FORK_STALE_TIMEOUT_SECONDS = 900;
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -154,6 +160,12 @@ class ProjectDomainService
         ];
 
         return $this->projectRepository->updateProjectByCondition($conditions, $data);
+    }
+
+    /** @return ProjectEntity[] */
+    public function getProjectsForWorkspaceDeletion(int $workspaceId): array
+    {
+        return $this->projectRepository->findByWorkspaceIdForDeletion($workspaceId);
     }
 
     /**
@@ -280,6 +292,19 @@ class ProjectDomainService
         string $userOrganizationCode,
         ?string $projectMode = null
     ): array {
+        // A live migration refreshes updated_at on every processed batch, so a running record left
+        // untouched past the timeout has lost its consumer and will never finish. Reclaim it here,
+        // otherwise a single lost migration blocks every later copy of the same project forever.
+        $staleBefore = date('Y-m-d H:i:s', time() - self::FORK_STALE_TIMEOUT_SECONDS);
+        if ($this->projectForkRepository->failStaleRunningForks($userId, $sourceProjectId, $staleBefore, 'File migration failed')) {
+            $this->logger->warning(sprintf(
+                'Reclaimed abandoned fork of project %d for user %s, no progress since %s',
+                $sourceProjectId,
+                $userId,
+                $staleBefore
+            ));
+        }
+
         // Check if user already has a running fork for this project
         if ($this->projectForkRepository->hasRunningFork($userId, $sourceProjectId)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_FORK_ALREADY_RUNNING, trans('project.fork_already_running'));
@@ -334,6 +359,27 @@ class ProjectDomainService
     public function getForkProjectRecordById(int $forkId): ?ProjectForkEntity
     {
         return $this->projectForkRepository->findById($forkId);
+    }
+
+    /**
+     * Mark a running fork record as failed.
+     *
+     * Returns false when the record is missing or already in a terminal state, so callers may
+     * invoke it defensively without overwriting a more accurate failure recorded earlier.
+     */
+    public function markForkRecordFailed(int $forkId, string $errMsg): bool
+    {
+        $forkRecord = $this->projectForkRepository->findById($forkId);
+        if ($forkRecord === null || $forkRecord->getStatus() !== ForkStatus::RUNNING) {
+            return false;
+        }
+
+        return $this->projectForkRepository->updateStatus(
+            $forkId,
+            ForkStatus::FAILED->value,
+            $forkRecord->getProgress(),
+            $errMsg
+        );
     }
 
     /**
@@ -420,16 +466,25 @@ class ProjectDomainService
                 );
 
                 // Update tasks workspace_id
-                $taskUpdateResult = $this->taskRepository->updateTaskByCondition(
+                // 路线 C：task 表无 project_id 索引，先经 topics 表（含已软删话题）取 topic_id，再按 topic_id 一次性更新
+                $topicIds = $this->topicRepository->getTopicIdsByCondition(
                     [
                         'project_id' => $sourceProjectId,
                         'workspace_id' => $originalWorkspaceId,
                     ],
-                    [
-                        'workspace_id' => $targetWorkspaceId,
-                        'updated_at' => $currentTime,
-                    ]
+                    true
                 );
+                if ($topicIds !== []) {
+                    $this->taskRepository->updateTaskByCondition(
+                        [
+                            'topic_id' => $topicIds,
+                        ],
+                        [
+                            'workspace_id' => $targetWorkspaceId,
+                            'updated_at' => $currentTime,
+                        ]
+                    );
+                }
 
                 $this->messageScheduleDomainService->syncMovedProjectSchedules(
                     [$sourceProjectId],

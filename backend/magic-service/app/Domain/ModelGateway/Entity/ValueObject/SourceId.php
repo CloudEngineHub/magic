@@ -43,6 +43,8 @@ final class SourceId
 
     public const string DESIGN_VIDEO_FILE_NAME_GENERATION = 'design_video_file_name_generation';
 
+    public const string ASSET_COMPLIANCE_PRECHECK = 'asset_compliance_precheck';
+
     public const string DESIGN_IMAGE_MARK_IDENTIFY = 'design_image_mark_identify';
 
     public const string SK_FLOW = 'sk_flow';
@@ -68,6 +70,9 @@ final class SourceId
     public const string DESIGN_TEXT_CONTENT_COMPLETION = 'design_text_content_completion';
 
     public const string CONNECTIVITY_TEST = 'connectivity_test';
+
+    /** 定时任务连通性测试的调用来源。 */
+    public const string CRONTAB_CONNECTIVITY_TEST = 'crontab_connectivity_test';
 
     public const string AI_SEARCH = 'ai_search';
 
@@ -100,6 +105,7 @@ final class SourceId
         self::API_PLATFORM,
         self::FOLLOW_UP_SUGGESTIONS,
         self::AI_ABILITY_CONNECTIVITY_TEST,
+        self::ASSET_COMPLIANCE_PRECHECK,
         self::SLIDES_TEMPLATE_VECTOR_SYNC,
         self::SKILL_MARKET_VECTOR_SYNC,
         self::AGENT_MARKET_VECTOR_SYNC,

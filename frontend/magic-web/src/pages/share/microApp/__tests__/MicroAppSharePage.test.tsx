@@ -54,8 +54,8 @@ describe("MicroAppSharePage", () => {
 				resource_id: "resource-1",
 				password: undefined,
 			})
-			expect(mocks.getShareResourceFiles).toHaveBeenCalledWith({
-				resource_id: "resource-1",
+			expect(mocks.loadShareFilesV2).toHaveBeenCalledWith({
+				resourceId: "resource-1",
 				password: undefined,
 			})
 		})
@@ -76,6 +76,10 @@ describe("MicroAppSharePage", () => {
 		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
 			"data-project-id",
 			"project-1",
+		)
+		expect(screen.getByTestId("mock-html-preview")).toHaveAttribute(
+			"data-is-share-preview",
+			"true",
 		)
 		expect(screen.queryByTestId("micro-app-share-safety-notice")).not.toBeInTheDocument()
 	})
@@ -232,20 +236,32 @@ describe("MicroAppSharePage", () => {
 		expect(screen.queryByTestId("micro-app-share-cover")).not.toBeInTheDocument()
 	})
 
-	it("sets the share context before loading app.json", async () => {
+	it("loads app.json with explicit share access and does not set window identity", async () => {
 		mocks.getTemporaryDownloadUrl.mockImplementation(async () => {
-			expect(window.temporary_token).toBe("token-1")
-			expect(window.project_id).toBe("project-1")
+			expect(window.temporary_token).toBeUndefined()
+			expect(window.project_id).toBeUndefined()
 			return [{ url: "https://example.com/app.json" }]
 		})
 
 		renderPage()
 
 		expect(await screen.findByTestId("micro-app-share-safety-notice")).toBeInTheDocument()
+		expect(mocks.getTemporaryDownloadUrl).toHaveBeenCalledWith(
+			expect.objectContaining({
+				file_ids: ["app-json-1"],
+				access: expect.objectContaining({
+					kind: "share",
+					token: "token-1",
+					projectId: "project-1",
+				}),
+			}),
+		)
+		expect(window.temporary_token).toBeUndefined()
+		expect(window.project_id).toBeUndefined()
 	})
 
 	it("replaces the current preview across repeated html navigation", async () => {
-		mocks.getShareResourceFiles.mockResolvedValue({
+		mocks.loadShareFilesV2.mockResolvedValue({
 			tree: [
 				{
 					file_id: "app-json-1",
@@ -313,7 +329,7 @@ describe("MicroAppSharePage", () => {
 	})
 
 	it("shows empty state when published files do not contain a root html entry", async () => {
-		mocks.getShareResourceFiles.mockResolvedValue({
+		mocks.loadShareFilesV2.mockResolvedValue({
 			tree: [
 				{
 					file_id: "app-json-1",

@@ -1,6 +1,10 @@
 import Dexie from "dexie"
 import type { TableSchema } from "./types"
 import { logger as Logger } from "@/infrastructure/logger"
+import {
+	STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
+	STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
+} from "@/app/services/storage/storageFailure"
 
 const logger = Logger.createLogger("database")
 
@@ -186,10 +190,11 @@ export class DatabaseManager {
 		const storageStatus = await checkStorageQuota()
 		if (!storageStatus.available) {
 			logger.error({
-				eventKey: "storage_quota_insufficient_failed",
-				errorKind: "quota",
+				eventKey: STORAGE_QUOTA_EXCEEDED_EVENT_KEY,
+				errorKind: STORAGE_QUOTA_EXCEEDED_ERROR_KIND,
 				message: "storageQuotaInsufficient",
 				context: {
+					source: "database_manager_estimate",
 					usage: storageStatus.usage,
 					quota: storageStatus.quota,
 					usageRatio:
@@ -405,6 +410,11 @@ export class DatabaseManager {
 
 		// 个人标签按现有账号身份独立保存；其余表沿用前一版本。
 		db.version(7).stores({ "super-user-file-tabs": "&id" })
+
+		// 首次 UTM 归因按固定记录 ID 存储；不再为已移除的创建交接状态维护冗余索引。
+		db.version(8).stores({
+			"analytics-state": "&id",
+		})
 
 		this.globalDatabase = db
 		return this.globalDatabase

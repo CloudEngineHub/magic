@@ -1,5 +1,6 @@
 import { isObject, merge } from "lodash-es"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import { serializeWechatChatContent } from "../components/MessageEditor/extensions/wechat-chat-history/transform"
 import { ChatApi, SuperMagicApi } from "@/apis"
 import { EventType } from "@/types/chat"
 import {
@@ -46,6 +47,8 @@ import { shouldSyncChatConversationName, syncChatProjectNameOnly } from "./chatC
 import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
 import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSendRenameTask"
 import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
+import { analyticsService } from "@/services/analytics"
+import { getConversationTopicModeOverride } from "./conversationTopicModeOverride"
 
 const logger = Logger.createLogger("messageSendService")
 
@@ -97,6 +100,10 @@ export interface DispatchMessageParams {
 	content?: string
 	jsonContent?: JSONContent
 	options?: SendMessageOptions
+	/** Editor surface classification used only by analytics, never serialized to chat payloads. */
+	analyticsTopicMode?: TopicMode
+	/** Queue replay was already counted when the user enqueued the message. */
+	shouldTrackAttempt?: boolean
 	showLoading: boolean
 	selectedProject?: ProjectListItem | null
 	selectedTopic?: Topic | null
@@ -184,6 +191,8 @@ class MessageSendService {
 		jsonContent,
 		showLoading,
 		options,
+		analyticsTopicMode,
+		shouldTrackAttempt = true,
 		selectedProject,
 		selectedTopic,
 		context,
@@ -206,7 +215,9 @@ class MessageSendService {
 		let resolvedJson: JSONContent | undefined
 		if (isObject(jsonContent)) {
 			// Preserve structured mention nodes in the rich-text payload so refreshes can restore them.
-			resolvedJson = normalizeTextMentionLabelsForBackend(jsonContent)
+			resolvedJson = normalizeTextMentionLabelsForBackend(
+				serializeWechatChatContent(jsonContent),
+			)
 		} else if (trimmedText) {
 			resolvedJson = buildPlainTextJSONContent(trimmedText)
 		} else {
@@ -358,6 +369,26 @@ class MessageSendService {
 			if (!isConfirmed) return false
 		}
 
+		if (shouldTrackAttempt) {
+			try {
+				analyticsService.report("conversation_message_send_attempted", {
+					topicId: currentTopic.id,
+					projectId: currentProject?.id,
+					workspaceId:
+						context?.selectedWorkspace?.id ??
+						context?.workspaceId ??
+						currentProject?.workspace_id,
+					topicMode:
+						getConversationTopicModeOverride(currentTopic.id) ??
+						analyticsTopicMode ??
+						readTopicPattern(sendOptions) ??
+						currentTopic.topic_mode,
+					workspaceType: context?.selectedWorkspace?.workspace_type,
+				})
+			} catch {
+				// Analytics must never fail the send path.
+			}
+		}
 		markLocalExecutionStarted()
 		sendMessage()
 		if (context?.refreshProjectAfterTopicRename && currentProject && renameTask) {
@@ -389,7 +420,6 @@ class MessageSendService {
 		}
 
 		setIsSending(true)
-		void tabPattern
 
 		try {
 			if (!currentProject?.id || !currentTopic?.id) {
@@ -417,6 +447,8 @@ class MessageSendService {
 				selectedProject: currentProject,
 				selectedTopic: currentTopic,
 				context,
+				analyticsTopicMode: params.topicMode ?? tabPattern,
+				shouldTrackAttempt: !params.isFromQueue,
 			})
 			if (!isDispatched) return
 			this.deps.pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom, { time: 1000 })
@@ -598,6 +630,11 @@ function generateUniqueId(): string {
 	const timestamp = Date.now().toString(36)
 	const randomPart = Math.random().toString(36).substring(2, 15)
 	return `${timestamp}-${randomPart}`
+}
+
+function readTopicPattern(options?: SendMessageOptions): string | undefined {
+	const topicPattern = options?.extra?.super_agent?.topic_pattern
+	return typeof topicPattern === "string" ? topicPattern : undefined
 }
 
 function stripTempOptions(options?: SendMessageOptions): SendMessageOptions | undefined {

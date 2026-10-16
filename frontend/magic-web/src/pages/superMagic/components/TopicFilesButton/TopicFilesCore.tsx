@@ -3,11 +3,12 @@ import { FileResourceIcon } from "./components/FileResourceIcon"
 import { getFilePresentationIndex, resolveFilePresentation } from "./utils/file-presentation"
 import type { FileHelpContext } from "./utils/magic-system-folder"
 import { ProjectFileTag } from "./components/TopicFileTag"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { IconChevronDown, IconChevronRight, IconDots } from "@tabler/icons-react"
-import { Loader2, ChevronDown } from "lucide-react"
+import { Loader2, ChevronDown, Files, ArrowRight } from "lucide-react"
 import { Flex, message } from "antd"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
-import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect } from "react"
+import { useMemo, useImperativeHandle, forwardRef, useRef, useEffect, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
@@ -127,6 +128,7 @@ import {
 	DialogDescription,
 	DialogFooter,
 } from "@/components/shadcn-ui/dialog"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export interface TopicFilesExpansionState {
 	hasExpandableFolders: boolean
@@ -163,7 +165,7 @@ interface TopicFilesCoreProps {
 	onSelectionChange?: (selectedCount: number, totalCount: number) => void
 	onExpansionStateChange?: (state: TopicFilesExpansionState) => void
 	allowEdit?: boolean
-	onUpdateAttachments?: () => void
+	onUpdateAttachments?: (sourceProjectId?: string) => void
 	afterAddFileToNewTopic?: () => void
 	afterAddFileToCurrentTopic?: () => void
 	// 添加直接更新attachments的回调
@@ -200,6 +202,7 @@ interface TopicFilesCoreProps {
 	isItemSelectable?: (item: AttachmentItem) => boolean
 	/** 特殊文件空间允许操作的固定根目录。 */
 	operationRoot?: AttachmentItem
+	projectFilesStore?: ProjectFilesStore
 }
 
 const DEFAULT_ITEM_SELECTABLE = () => true
@@ -229,7 +232,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		scrollElementRef,
 		attachments = [],
 		setUserSelectDetail,
-		onFileClick,
+		onFileClick: onFileClickProp,
 		projectId,
 		shareCode,
 		sharePassword,
@@ -273,9 +276,19 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		spaceConfig,
 		isItemSelectable = DEFAULT_ITEM_SELECTABLE,
 		operationRoot,
+		projectFilesStore,
 	},
 	ref,
 ) {
+	const { permissions: access } = useFileAccess()
+	// Folder, keyboard and custom display entries all use this callback to open a file.
+	const guardedFileClick = useCallback<NonNullable<TopicFilesCoreProps["onFileClick"]>>(
+		(item) => {
+			if (access.view && access.preview) onFileClickProp?.(item)
+		},
+		[access.view, access.preview, onFileClickProp],
+	)
+	const onFileClick = onFileClickProp ? guardedFileClick : undefined
 	const { t, i18n } = useTranslation("super")
 	const { styles, cx } = useStyles({ isExpanded: true })
 	const isMobile = useIsMobile()
@@ -376,7 +389,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleDeleteItem,
 		handleDownloadOriginal,
 		handleDownloadPdf,
-		handleDownloadPpt,
 		handleDownloadPptx,
 		handleDownloadImage,
 		handleOpenFile,
@@ -406,6 +418,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		attachments,
 		selectedTopic,
 		projectId,
+		projectFilesStore,
 		fileScope: spaceConfig?.scope,
 		// 添加文件创建成功回调
 		onFileCreated: (fileItem: any) => {
@@ -608,6 +621,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		expandedKeys,
 		onDesignProjectCreate: createDesignProject,
 		onAttachmentsChange,
+		isCurrent: operations?.isCurrent,
 	})
 
 	const {
@@ -1273,7 +1287,6 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 		handleDeleteWithConfirm: operations ? (item) => void deleteWithConfirm([item]) : undefined,
 		handleDownloadOriginal,
 		handleDownloadPdf,
-		handleDownloadPpt,
 		handleDownloadPptx,
 		handleDownloadImage,
 		handleOpenFile,
@@ -2246,6 +2259,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 								{imagePreviewSource ? (
 									<ProjectFileImageSmartTooltip
 										source={imagePreviewSource}
+										allowDownload={allowDownload}
 										className={cx(
 											"min-w-0 flex-1",
 											styles.ellipsis,
@@ -2793,7 +2807,15 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 									: t("topicFiles.moving")
 						}
 						position="top"
-						width={280}
+						icon={
+							(crossProjectOperation.isOperating &&
+								crossProjectOperation.operationType === "copy") ||
+							importOperation.isOperating ? (
+								<Files size={10} />
+							) : (
+								<ArrowRight size={10} />
+							)
+						}
 						showPercentage={true}
 						progressHeight={4}
 						zIndex={99999}

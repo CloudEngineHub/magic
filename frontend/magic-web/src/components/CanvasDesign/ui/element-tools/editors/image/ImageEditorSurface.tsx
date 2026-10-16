@@ -8,6 +8,7 @@ import {
 	type CSSProperties,
 	type MutableRefObject,
 } from "react"
+import type { AssetItem } from "@/apis"
 import { ArrowUp, LoaderCircle } from "lucide-react"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasModeUI } from "../../../../app/providers/CanvasUIProvider"
@@ -15,9 +16,10 @@ import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useHostUiLocale } from "../../../../app/providers/HostUiLocaleProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
 import type { ImageElement } from "../../../../runtime/document/types"
-import type {
-	ReferenceResourceFileInfo,
-	ReferenceResourceSourceType,
+import {
+	REFERENCE_RESOURCE_SOURCE_TYPES,
+	type ReferenceResourceFileInfo,
+	type ReferenceResourceSourceType,
 } from "../../../editors/message/reference-assets/reference-resource.types"
 import type {
 	ReferenceResourcePanelItem,
@@ -55,7 +57,8 @@ import { Button } from "../../../primitives/shadcn/button"
 import { FloatingSurfaceScope } from "../../../primitives/shadcn/popover"
 import { useBottomFloatingSurface } from "../../../../app/providers/BottomFloatingStackProvider"
 import ImageEditorControls from "./ImageEditorControls"
-import type { ImageEditorConfig } from "./useImageEditorConfig"
+import type { ImageEditorConfig, ImageReferenceSlotInfo } from "./useImageEditorConfig"
+import { applyImportedAssetsToImageSlots } from "./assetsSelection"
 import styles from "./index.module.css"
 import type { MediaResourceFullscreenPreviewItem } from "../../../fullscreen/media-resource/index"
 import LinkedEditorInputsBar from "../../../editors/connection/LinkedEditorInputsBar"
@@ -94,6 +97,7 @@ import {
 	type CanvasClipboardAsset,
 } from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
 import { collectImageEditorExistingClipboardResourceKeys } from "../../../../runtime/resources/clipboard/collectMediaEditorExistingClipboardResourceKeys"
+import AssetsModal from "../../../toolbar/AssetsModal"
 
 import {
 	createPromptPlaceholderTokenFactory,
@@ -101,6 +105,7 @@ import {
 } from "../../../editors/message/reference-assets/promptPlaceholderTokenConfig"
 
 interface ImageEditorSurfaceProps {
+	readOnly?: boolean
 	imageElement: ImageElement
 	config: ImageEditorConfig
 	editorRef: MutableRefObject<MessageEditorRef | null>
@@ -121,6 +126,13 @@ interface ImageEditorSurfaceProps {
 	isMediaResourcePreviewOpen?: boolean
 }
 
+interface ImageAssetSelectionSession {
+	elementId: string
+	contentId: string | null
+	selectionPersistenceKey: string
+	slot: ImageReferenceSlotInfo
+}
+
 /** 只有权威 resolver 确认删除的引用阻塞提交；上传 pending 窗口内保持可恢复。 */
 export function hasDeletedReference(
 	paths: string[],
@@ -136,6 +148,7 @@ export function hasDeletedReference(
 export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const {
 		imageElement,
+		readOnly = false,
 		config,
 		editorRef,
 		shouldShow,
@@ -211,6 +224,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const [hasScrollbar, setHasScrollbar] = useState(false)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
 	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
+	const [assetsModalOpen, setAssetsModalOpen] = useState(false)
+	const [assetSelectionSlot, setAssetSelectionSlot] = useState<ImageReferenceSlotInfo | null>(
+		null,
+	)
+	const assetSelectionSessionRef = useRef<ImageAssetSelectionSession | null>(null)
 	const [, forceResourceStateRefresh] = useState(0)
 	const {
 		prompt,
@@ -242,6 +260,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		handleMentionChange: handleAssociationMentionChange,
 		handleLinkedMediaSelectionChange,
 	} = useLinkedMediaAssociationController({
+		readOnly,
 		targetElementId: imageElement.id,
 		targetKind: "image",
 		mediaPolicy: linkedMediaPolicy,
@@ -354,21 +373,133 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleSelectSource = useCallback(
 		(source: ReferenceResourceSourceType) => {
-			if (source !== "local-upload") return
-			handlers.setPopoverOpen(false)
-			if (
-				!config.selectedReferenceSlot?.path &&
-				(config.isReferenceFileLimitReached || effectiveIsReferenceFileLimitReached)
-			) {
+			if (source === "local-upload") {
+				handlers.setPopoverOpen(false)
+				if (
+					!config.selectedReferenceSlot?.path &&
+					(config.isReferenceFileLimitReached || effectiveIsReferenceFileLimitReached)
+				) {
+					return
+				}
+				handlers.triggerFileSelect()
 				return
 			}
-			handlers.triggerFileSelect()
+			if (source !== REFERENCE_RESOURCE_SOURCE_TYPES.assets || readOnly || !canvas) return
+			const selectedSlot = config.selectedReferenceSlot
+			if (!selectedSlot || maxReferenceFiles === undefined || maxReferenceFiles <= 0) return
+
+			// Capture the slot and content session before closing the popover. The
+			// library confirmation is asynchronous and must not target a new edit.
+			const capturedSlot = { ...selectedSlot }
+			setAssetSelectionSlot(capturedSlot)
+			assetSelectionSessionRef.current = {
+				elementId: imageElement.id,
+				contentId: imageElement.activeContentId ?? null,
+				selectionPersistenceKey,
+				slot: capturedSlot,
+			}
+			handlers.setPopoverOpen(false)
+			setAssetsModalOpen(true)
 		},
 		[
+			canvas,
 			config.isReferenceFileLimitReached,
-			config.selectedReferenceSlot?.path,
+			config.selectedReferenceSlot,
 			effectiveIsReferenceFileLimitReached,
 			handlers,
+			imageElement.activeContentId,
+			imageElement.id,
+			maxReferenceFiles,
+			readOnly,
+			selectionPersistenceKey,
+		],
+	)
+
+	const assetSelectionMaxCount = useMemo(() => {
+		if (!assetSelectionSlot || maxReferenceFiles === undefined) return 0
+		return Math.max(
+			0,
+			maxReferenceFiles -
+				effectiveCurrentReferenceFiles.length +
+				(assetSelectionSlot.path ? 1 : 0),
+		)
+	}, [assetSelectionSlot, effectiveCurrentReferenceFiles.length, maxReferenceFiles])
+
+	const isAssetSelectionCurrent = useCallback(() => {
+		const session = assetSelectionSessionRef.current
+		if (!session || !isMountedRef.current || !canvas || canvas.isDestroyed) return false
+		if (
+			session.elementId !== imageElement.id ||
+			session.selectionPersistenceKey !== selectionPersistenceKey
+		)
+			return false
+
+		const currentElement = canvas.elementManager.getElementData(imageElement.id)
+		if (
+			currentElement?.type !== imageElement.type ||
+			(currentElement?.activeContentId ?? null) !== session.contentId
+		)
+			return false
+
+		const currentSlot = config.selectedReferenceSlot
+		return (
+			currentSlot !== null &&
+			currentSlot.slotIndex === session.slot.slotIndex &&
+			currentSlot.slotKey === session.slot.slotKey &&
+			currentSlot.path === session.slot.path
+		)
+	}, [
+		canvas,
+		config.selectedReferenceSlot,
+		imageElement.id,
+		imageElement.type,
+		selectionPersistenceKey,
+	])
+
+	const handleAssetsModalClose = useCallback(() => {
+		setAssetsModalOpen(false)
+		setAssetSelectionSlot(null)
+		assetSelectionSessionRef.current = null
+	}, [])
+
+	useEffect(() => {
+		if (!assetsModalOpen || assetSelectionMaxCount > 0) return
+		// A model/content change can remove the capacity captured when the dialog
+		// opened; clear the stale session instead of leaving a hidden modal armed.
+		handleAssetsModalClose()
+	}, [assetSelectionMaxCount, assetsModalOpen, handleAssetsModalClose])
+
+	const handleAssetsConfirm = useCallback(
+		async (assets: AssetItem[]) => {
+			if (!canvas || !assetSelectionSlot || assets.length === 0) {
+				throw new Error("Asset selection context is unavailable")
+			}
+			if (!isAssetSelectionCurrent()) throw new Error("Asset selection session is stale")
+
+			const imported = await canvas.assetImportManager.importAndConnectMany({
+				assetIds: assets.map((asset) => asset.asset_id),
+				targetElementId: imageElement.id,
+				targetKind: "image-generator",
+				slot: { kind: "reference" },
+				allowedMediaTypes: ["image"],
+				isCurrent: isAssetSelectionCurrent,
+			})
+			if (!isAssetSelectionCurrent()) throw new Error("Asset selection session is stale")
+
+			applyImportedAssetsToImageSlots({
+				slot: assetSelectionSlot,
+				imported,
+				currentReferenceFileCount: currentReferenceFiles.length,
+				handlers,
+			})
+		},
+		[
+			assetSelectionSlot,
+			canvas,
+			currentReferenceFiles.length,
+			handlers,
+			imageElement.id,
+			isAssetSelectionCurrent,
 		],
 	)
 
@@ -482,6 +613,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handlePaste = useCallback(
 		(event: ClipboardEvent<HTMLDivElement>) => {
+			if (readOnly) {
+				event.preventDefault()
+				event.stopPropagation()
+				return
+			}
 			const nativeEvent = event.nativeEvent
 			const files = CanvasDesignClipboard.readEventFilesSnapshot(nativeEvent)
 			const nativeFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(nativeEvent)
@@ -591,7 +727,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 							const item = createReferenceResourcePanelItemFromPath(
 								asset.reference.path,
 								asset.reference.fileName,
-								{ fileId: asset.reference.fileId },
+								{ fileId: asset.reference.fileId, mediaType: asset.type },
 							)
 							if (selectedSlotForPaste && pastedAssetIndex === 0) {
 								clipboardHandlersRef.current.replaceReferenceFileAt(
@@ -641,11 +777,12 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			config.mentionBindings,
 			config.referenceFileInfos,
 			resolveResourceReference,
+			readOnly,
 		],
 	)
 
 	const { overlayState, dragEvents } = useReferenceResourceDrop({
-		isEnabled: isDropEnabled,
+		isEnabled: isDropEnabled && !readOnly,
 		checkProjectFiles: canAcceptProjectFiles,
 		checkLocalFiles: canAcceptLocalFiles,
 		getProjectHoverState: getHoverDropState,
@@ -656,13 +793,14 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleMentionChange = useCallback(
 		(paths: string[], currentPrompt: string, context: MessageEditorMentionChangeContext) => {
+			if (readOnly) return
 			const currentMentionBindings = editorRef.current?.getMentionBindings()
 			if (currentMentionBindings) handlers.updateMentionBindings(currentMentionBindings)
 			if (handleAssociationMentionChange(paths, currentPrompt, context)) {
 				syncMentionPaths(paths, currentPrompt, context)
 			}
 		},
-		[editorRef, handleAssociationMentionChange, handlers, syncMentionPaths],
+		[editorRef, handleAssociationMentionChange, handlers, syncMentionPaths, readOnly],
 	)
 
 	const handleReferenceFileRemoveFromPopover = useCallback(
@@ -678,7 +816,9 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		[config.referenceFileInfos, editorRef, handlers, prompt, resolveResourceReference],
 	)
 
-	const handleSend = useCallback(() => onSend(linkedEditorInputs), [linkedEditorInputs, onSend])
+	const handleSend = useCallback(() => {
+		if (!readOnly) return onSend(linkedEditorInputs)
+	}, [linkedEditorInputs, onSend, readOnly])
 
 	const buildPromptOptimizationRequest = useCallback(() => {
 		const currentPrompt = prompt.trim()
@@ -739,6 +879,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				dragEvents={dragEvents}
 			>
 				<input
+					disabled={readOnly}
 					ref={fileInputRef}
 					type="file"
 					accept={fileInputAccept}
@@ -747,7 +888,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					onChange={handlers.handleFileChange}
 				/>
 				<div ref={setSourceListContainer} className={styles.sourceListMount} />
-				{linkedEditorInputs?.textConnections.length ? (
+				{!readOnly && linkedEditorInputs?.textConnections.length ? (
 					<div className={styles.linkedInputs}>
 						<LinkedEditorInputsBar
 							textConnections={linkedEditorInputs.textConnections}
@@ -759,51 +900,70 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						/>
 					</div>
 				) : null}
-				<MessageEditor
-					ref={editorRef}
-					autoFocus={autoFocus}
-					autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
-					fullWidth
-					selectionPersistenceKey={selectionPersistenceKey}
-					placeholder={placeholder}
-					value={prompt}
-					onChange={handlers.setPrompt}
-					onEnter={handleSend}
-					onScrollbarChange={setHasScrollbar}
-					matchableItems={matchableItems}
-					mentionBindings={config.mentionBindings}
-					mentionDataService={mentionDataService}
-					mentionExtension={mentionExtension}
-					mentionItemsReady={Boolean(config.hasRestoredRef.current)}
-					onMentionChange={handleMentionChange}
-					onMentionItemHoverChange={setHoveredMentionPath}
-					mentionEnabled={mentionEnabled}
-					enrichClipboardMentionAttrs={enrichClipboardMentionAttrs}
-					onPasteCapture={handlePaste}
-				/>
+				<div hidden={readOnly && !config.hasGenerationRequest}>
+					<MessageEditor
+						readOnly={readOnly}
+						ref={editorRef}
+						autoFocus={autoFocus}
+						autoFocusAtDocumentEnd={autoFocusAtDocumentEnd}
+						fullWidth
+						selectionPersistenceKey={selectionPersistenceKey}
+						placeholder={placeholder}
+						value={prompt}
+						onChange={handlers.setPrompt}
+						onEnter={handleSend}
+						onScrollbarChange={setHasScrollbar}
+						matchableItems={matchableItems}
+						mentionBindings={config.mentionBindings}
+						mentionDataService={mentionDataService}
+						mentionExtension={mentionExtension}
+						mentionItemsReady={Boolean(config.hasRestoredRef.current)}
+						onMentionChange={handleMentionChange}
+						onMentionItemHoverChange={setHoveredMentionPath}
+						mentionEnabled={mentionEnabled}
+						enrichClipboardMentionAttrs={enrichClipboardMentionAttrs}
+						onPasteCapture={handlePaste}
+					/>
+				</div>
+				{readOnly && !config.hasGenerationRequest ? (
+					<div className={styles.readOnlyWaiting}>
+						{t(
+							"imageEditor.parametersPending",
+							"生成参数尚未同步，收到后将在这里显示。",
+						)}
+					</div>
+				) : null}
 				<ImageEditorControls
+					readOnly={readOnly}
 					config={config}
 					hoveredMentionPath={hoveredMentionPath}
 					onSelectSource={handleSelectSource}
 					onProjectSelect={handleProjectSelect}
 					onReferenceFileRemove={handleReferenceFileRemoveFromPopover}
-					linkedMediaItems={linkedEditorInputs?.mediaItems}
-					onLinkedMediaSelectionChange={handleLinkedMediaSelectionChange}
-					renderPromptOptimizationButton={() => (
-						<PromptOptimizationButton
-							buildRequest={buildPromptOptimizationRequest}
-							referencePrompt={`${linkedEditorInputs.textPrompt}\n${prompt}\n${effectiveCurrentReferenceFiles.join("\n")}`}
-							placeholderPaths={promptOptimizationPlaceholderPaths}
-							onApply={handlers.setPrompt}
-							onPreviewMediaResource={onPreviewMediaResource}
-							isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
-						/>
-					)}
+					linkedMediaItems={readOnly ? undefined : linkedEditorInputs?.mediaItems}
+					onLinkedMediaSelectionChange={
+						readOnly ? undefined : handleLinkedMediaSelectionChange
+					}
+					renderPromptOptimizationButton={
+						readOnly
+							? undefined
+							: () => (
+									<PromptOptimizationButton
+										buildRequest={buildPromptOptimizationRequest}
+										referencePrompt={`${linkedEditorInputs.textPrompt}\n${prompt}\n${effectiveCurrentReferenceFiles.join("\n")}`}
+										placeholderPaths={promptOptimizationPlaceholderPaths}
+										onApply={handlers.setPrompt}
+										onPreviewMediaResource={onPreviewMediaResource}
+										isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+									/>
+								)
+					}
 					renderSendButton={() => (
 						<Button
 							className={styles.sendButton}
 							onClick={handleSend}
 							disabled={
+								readOnly ||
 								isSending ||
 								!canSendPrompt ||
 								!config.selectedModelId ||
@@ -819,7 +979,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 						</Button>
 					)}
 					renderRestoreDefaultConfigButton={
-						showRestoreDefaultConfig && onRestoreDefaultConfig
+						!readOnly && showRestoreDefaultConfig && onRestoreDefaultConfig
 							? () => (
 									<Button
 										variant="ghost"
@@ -835,6 +995,16 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					sourceListContainer={sourceListContainer}
 				/>
 			</ReferenceResourceDropSurface>
+			{assetSelectionSlot && assetSelectionMaxCount > 0 ? (
+				<AssetsModal
+					open={assetsModalOpen}
+					onClose={handleAssetsModalClose}
+					onConfirmMultiple={handleAssetsConfirm}
+					mediaTypes={["IMAGE"]}
+					multiple
+					maxCount={assetSelectionMaxCount}
+				/>
+			) : null}
 		</FloatingSurfaceScope>
 	)
 }

@@ -10,6 +10,7 @@ namespace HyperfTest\Cases\Application\Design\Service;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
 use App\Application\Design\Event\Publish\DesignVideoSubmitPublisher;
 use App\Application\Design\Service\DesignVideoAppService;
+use App\Application\Design\Support\DesignDraftTaskResolver;
 use App\Application\ModelGateway\Mapper\ModelAttributes;
 use App\Application\ModelGateway\Mapper\ModelEntry;
 use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
@@ -42,6 +43,7 @@ use Hyperf\Contract\TranslatorInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Qbhy\HyperfAuth\Authenticatable;
+use ReflectionClass;
 use ReflectionProperty;
 use RuntimeException;
 
@@ -175,6 +177,7 @@ class DesignVideoAppServiceTest extends TestCase
             $modelGatewayMapper,
             new DesignGenerationTaskDomainService($repository),
             new UnexpectedDesignVideoSubmissionDomainService(),
+            $this->createDraftTaskResolver(),
             $producer,
         );
         $entity = $this->createCanvasCompositionEntity();
@@ -208,6 +211,7 @@ class DesignVideoAppServiceTest extends TestCase
             $modelGatewayMapper,
             new DesignGenerationTaskDomainService($repository),
             new UnexpectedDesignVideoSubmissionDomainService(),
+            $this->createDraftTaskResolver(),
             $this->createMock(Producer::class),
         );
 
@@ -248,6 +252,7 @@ class DesignVideoAppServiceTest extends TestCase
             $modelGatewayMapper,
             new DesignGenerationTaskDomainService($repository),
             new StubDesignVideoSubmissionDomainService(),
+            $this->createDraftTaskResolver(),
             $producer,
         );
         $entity = DesignGenerationTaskFactory::createVideoTask(new DesignVideoCreateDTO([
@@ -296,6 +301,7 @@ class DesignVideoAppServiceTest extends TestCase
             $modelGatewayMapper,
             new DesignGenerationTaskDomainService($repository),
             new StubDesignVideoSubmissionDomainService(),
+            $this->createDraftTaskResolver(),
             $this->createMock(Producer::class),
         );
 
@@ -304,6 +310,15 @@ class DesignVideoAppServiceTest extends TestCase
         $this->assertSame(DesignGenerationStatus::COMPLETED, $result->getStatus());
         $this->assertSame('9003', $result->getFileId());
         $this->assertSame('https://cdn.example.com/smart-video.mp4', $result->getFileUrl());
+    }
+
+    /**
+     * 本文件用例都不涉及样片成片，且 draft_task 为空时 resolve() 会提前返回，
+     * 因此跳过构造即可，不必为其准备仓储。
+     */
+    private function createDraftTaskResolver(): DesignDraftTaskResolver
+    {
+        return (new ReflectionClass(DesignDraftTaskResolver::class))->newInstanceWithoutConstructor();
     }
 
     private function createModelEntry(): ModelEntry
@@ -499,6 +514,15 @@ class InMemoryDesignVideoTaskRepository implements DesignGenerationTaskRepositor
         string $generationId
     ): ?DesignGenerationTaskEntity {
         return $this->foundEntity;
+    }
+
+    public function findByProjectAndOutputFilePath(
+        DesignDataIsolation $dataIsolation,
+        int $projectId,
+        DesignGenerationAssetType $assetType,
+        string $relativeFilePath
+    ): ?DesignGenerationTaskEntity {
+        return null;
     }
 
     public function findProcessingTasksAfterId(int $cursorId, int $limit): array

@@ -25,6 +25,7 @@ return [
         'scope' => '授权范围',
         'authorization_url' => '授权URL',
         'authorization_content_type' => '授权内容类型',
+        'authorization_method' => '授权请求方法',
         'issuer_url' => '发行方URL',
         'resource_metadata_url' => '资源元数据URL',
         'authorization_server_url' => '授权服务器URL',

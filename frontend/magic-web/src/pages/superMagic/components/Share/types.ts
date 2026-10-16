@@ -16,6 +16,12 @@ export enum ShareMode {
 	Project = "project",
 }
 
+/**
+ * Selects the administrator permission group applied to a share.
+ * Topics own a group, so their public access can be closed without affecting projects or files.
+ */
+export type SharePermissionResource = "microApp" | "project" | "topic"
+
 /** Share context type */
 export enum ShareContextType {
 	/** Topic */

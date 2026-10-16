@@ -5,6 +5,7 @@ import type { TopicFilesSpaceConfig } from "../../file-space"
 import type { ProjectListItem, Topic } from "../../../../pages/Workspace/types"
 import type { FileManagerLocationSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type { FileManagerStateChangeOptions } from "../../../Detail/components/FilesViewer/types"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export type FileManagerView = FileManagerLocationSnapshot["view"]
 export type FileManagerSort = FileManagerLocationSnapshot["sort"]
@@ -85,6 +86,7 @@ export interface FileManagerProps {
 	allowDownload?: boolean
 	spaceConfig?: TopicFilesSpaceConfig
 	isItemMutable?: (file: AttachmentItem) => boolean
+	projectFilesStore?: ProjectFilesStore
 }
 
 /** 内容布局同时用于虚拟行和框选命中，不能从已挂载的 DOM 推断完整选择范围。 */

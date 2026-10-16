@@ -8,6 +8,11 @@
 # 4. 此文件会被提交到Git，不要在此文件中暴露任何敏感信息
 # =====================================================
 
+wechat:
+  # 本地保守正文预算，超出后交由 Agent 分段，不是服务端官方限制。
+  text_max_bytes: 4000
+  text_file_max_bytes: 1048576
+
 browser:
   # 浏览器后端：local_playwright、remote_playwright 或 chrome_extension。
   # 未配置时，本地环境使用 local_playwright，其他环境使用 remote_playwright。
@@ -114,11 +119,14 @@ llm:
   # 第二阶梯：非流式退避重试
   non_stream_timeout_seconds: 600          # 非流式请求超时
   backoff_max_retries: 5                   # 最大退避重试次数
-  # 原生视觉请求连续返回 400 后，当前沙箱将当前模型降级为非视觉；2 表示第三次请求使用非视觉。
+  # 原生视觉请求连续返回 4xx 后，当前沙箱将当前模型降级为非视觉；2 表示第三次请求使用非视觉。
   native_visual_400_failure_threshold: ${LLM_NATIVE_VISUAL_400_FAILURE_THRESHOLD:-2}
-  # Chat 用户消息首批原生视觉图片数；不约束 visual_understanding 追加消息，也不限制整个 Agent 轮次累计数量。
+  # Chat 用户消息首批原生视觉图片数；不约束 visual_understanding 追加消息。
   # -1 表示 Chat 首批不限制，0 表示 Chat 图片不直接进入原生视觉。
   native_visual_max_image_refs: ${LLM_NATIVE_VISUAL_MAX_IMAGE_REFS:-10}
+  # 历史加当前合计允许保留的原生视觉图片总数。超过后，历史里的原生视觉 user 消息全部不再带图；当前消息不受影响。
+  # -1 表示不限制，0 表示历史消息都不直接发送原生视觉图片。
+  native_visual_max_history_image_refs: ${LLM_NATIVE_VISUAL_MAX_HISTORY_IMAGE_REFS:-20}
   # 单次原生视觉请求的 Base64 图片总字节数上限；-1 表示不限制。
   native_visual_max_image_bytes: ${LLM_NATIVE_VISUAL_MAX_IMAGE_BYTES:--1}
   # 原生视觉 Base64 进程内缓存的最大条目数。
@@ -350,6 +358,8 @@ model_profiles:
       currency: "USD"
 
 agent:
+  im_progress_initial_seconds: 60
+  im_progress_max_seconds: 240
   # 只限制最终模型正文；预览先取前几行，再限制估算 token，单行也受限。
   tool_result:
     max_inline_tokens: 20000
@@ -520,6 +530,12 @@ pdf_understanding:
 audio_understanding:
   api_key: "${VOICE_UNDERSTANDING_API_KEY}"
   api_base_url: "${VOICE_UNDERSTANDING_API_BASE_URL}"
+  # 连续查询失败达到此值才结束；合法响应后重置计数，不重发已提交任务。
+  max_consecutive_query_failures: 5
+  format_preparation_enabled: true
+  duration_validation_enabled: true
+  canonical_fallback_enabled: true
+  max_fallback_attempts: 1
 
 # Checkpoint管理配置
 checkpoint:
@@ -541,6 +557,11 @@ chat_history_cleanup:
 diagnostic_retention:
   llm_failed_max_count: 3
   memory_after_run_max_count: 3
+
+# 两阶段范围编辑返回给模型的命中片段上限。
+file_edit:
+  range_preview_max_tokens: 2000
+  range_preview_context_lines: 3
 
 # .runtime 清理默认值。
 # 容量字段支持 MB、MiB、KB、KiB 等写法；本项目的 MB 和 MiB 都按 1024 进制换算。
@@ -584,6 +605,23 @@ runtime_cleanup:
     max_total_size: 16MB
     target_total_size: 12MB
 
+  # 原生视觉图片 Base64 的跨 run 复用缓存。
+  # 一个缓存项最大约 512KB（data URL 上限）+ JSON 开销，512 项与 256MB 高水位大致对应。
+  native_visual_cache:
+    max_age_days: 7
+    max_file_count: 512
+    target_file_count: 384
+    max_total_size: 256MB
+    target_total_size: 192MB
+
+  # 两阶段文件编辑的短期范围和失败内容，绑定当前 AgentContext。
+  file_edits:
+    max_age_days: 7
+    max_file_count: 128
+    target_file_count: 96
+    max_total_size: 256MiB
+    target_total_size: 192MiB
+
   llm_request:
     max_file_count: 10
 
@@ -596,6 +634,20 @@ runtime_cleanup:
   slide_template_maker:
     max_age_days: 3
     max_directory_count: 16
+
+  # 追加问题的本地查询副本。产品查询仍走 magic-service。
+  follow_up_suggestions:
+    max_age_days: 7
+    max_file_count: 64
+    target_file_count: 48
+
+# 启动任务：每次沙盒启动后在后台按顺序执行 .workspace/.magic/startup/ 下登记的脚本。
+startup_task:
+  # 单个任务默认与最大运行时长（秒）；最大值不能超过后台 shell 任务 1 小时的存活上限。
+  default_timeout_seconds: 900
+  max_timeout_seconds: 3600
+  # 前台观察多久后转为后台任务；转后台后 Agent 可以用 shell_await 查看输出。
+  background_after_seconds: 1
 
 # Horizon 的展示额度与 5 MiB 文件扫描保护相互独立。
 # 例：普通文件每份最多 4K，重要规则文件每份最多 16K；所有文件变化合计仍受 24K 约束。
@@ -648,6 +700,13 @@ memory:
     extraction_task_threshold: ${MEMORY_AFTER_RUN_EXTRACTION_TASK_THRESHOLD:-5}
     # 未达到阈值时，连续 10 分钟无操作后触发一次完整 fork 提取
     extraction_idle_timeout_seconds: ${MEMORY_AFTER_RUN_EXTRACTION_IDLE_TIMEOUT_SECONDS:-600}
+
+# 追加问题是允许失败的辅助生成，超时只限制后台请求，不推迟主任务完成通知。
+follow_up_suggestions:
+  # 达到 10 个有效循环迭代后提前生成；未达阈值的短任务在正常完成时生成。
+  min_effective_loops: ${FOLLOW_UP_SUGGESTIONS_MIN_EFFECTIVE_LOOPS:-10}
+  model_timeout_seconds: ${FOLLOW_UP_SUGGESTIONS_MODEL_TIMEOUT_SECONDS:-60}
+  report_timeout_seconds: ${FOLLOW_UP_SUGGESTIONS_REPORT_TIMEOUT_SECONDS:-5}
 
 # =====================================================
 # AI Ability Configuration (AI能力配置)

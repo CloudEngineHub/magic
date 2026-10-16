@@ -23,7 +23,7 @@ browser_find_visual(target: str, tab_id: str | None = None)
 
 Screenshots and visual tools capture the current tab. Each Tool Detail screenshot is bound to the actual tab used by that operation, even when a different desktop tab is visible or an action opens a popup. If that tab disappears before capture, the tool keeps its result without substituting another tab's image.
 
-`browser_visual_query` captures and analyzes the page in one call. Do not call `browser_screenshot` first when the task is to answer a visual question.
+`browser_visual_query` captures the page once, publishes one topic-scoped screenshot artifact, and attaches it as native visual input for the next main model request. Do not call `browser_screenshot` first when the task is to answer a visual question, and do not call `visual_understanding` on the Browser screenshot separately.
 
 For long, dense visual content, scroll one viewport at a time and call `browser_visual_query` on each viewport. Use `full_page=True` only for overall layout because very long screenshots lose fine detail when compressed.
 

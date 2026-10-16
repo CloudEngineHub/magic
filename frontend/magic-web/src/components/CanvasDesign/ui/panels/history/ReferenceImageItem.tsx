@@ -21,9 +21,12 @@ import {
 import { Tooltip, TooltipTrigger } from "../../primitives/shadcn/tooltip"
 import ResourcePathTooltipContent from "../../primitives/custom/ResourcePathTooltipContent"
 import { buildPreviewMediaResourceItem } from "./mediaPreviewItem"
+import type { CanvasAssetMediaType } from "../../../public/magic-types"
 
 interface ReferenceImageItemProps {
 	path: string
+	/** asset:// 路径的媒体类型，由生成请求或显式引用 metadata 提供。 */
+	mediaType?: CanvasAssetMediaType | null
 	/** 基于源图像素的裁剪区 */
 	sourceCrop?: Pick<CropConfig, "width" | "height" | "x" | "y">
 	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
@@ -55,14 +58,18 @@ function useObserveBoxSize(active: boolean) {
 
 function ReferenceImageItemVideo(props: {
 	path: string
+	mediaType?: CanvasAssetMediaType | null
 	onPreviewMediaResource: (resource: MediaResourceFullscreenPreviewItem) => void
 	previewEnabled: boolean
 }) {
-	const { path, onPreviewMediaResource, previewEnabled } = props
+	const { path, mediaType, onPreviewMediaResource, previewEnabled } = props
 	const { loadState, posterClone } = useReferenceVideoPoster(path)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const displayName = useMemo(() => getCanvasResourceFileName(path) || path, [path])
-	const previewItem = useMemo(() => buildPreviewMediaResourceItem(path), [path])
+	const previewItem = useMemo(
+		() => buildPreviewMediaResourceItem(path, mediaType),
+		[mediaType, path],
+	)
 	const interactive = previewEnabled && previewItem != null
 
 	const openPreview = useCallback(() => {
@@ -127,12 +134,13 @@ function ReferenceImageItemVideo(props: {
 
 export default function ReferenceImageItem({
 	path,
+	mediaType,
 	sourceCrop,
 	onPreviewMediaResource,
 	resolveResourceReference,
 }: ReferenceImageItemProps) {
-	const isOpaqueAsset = isOpaqueAssetReference(path)
-	const fileType = useMemo(() => getMediaResourcePathKind(path), [path])
+	const isOpaqueAsset = isOpaqueAssetReference(path) && !mediaType
+	const fileType = useMemo(() => getMediaResourcePathKind(path, { mediaType }), [mediaType, path])
 	const isImageLike = fileType === "image"
 	const isDeleted = getCanvasResourceAvailability(path, resolveResourceReference) === "deleted"
 	const { lowUrl, isLoading, hasError, imageInfo } = useReferenceImageUrls(path, {
@@ -157,7 +165,10 @@ export default function ReferenceImageItem({
 		)
 	}, [canCropLayout, sourceCrop, imageInfo, previewBoxW, previewBoxH])
 
-	const previewItem = useMemo(() => buildPreviewMediaResourceItem(path), [path])
+	const previewItem = useMemo(
+		() => buildPreviewMediaResourceItem(path, mediaType),
+		[mediaType, path],
+	)
 
 	const openPreview = useCallback(() => {
 		if (!previewItem) return
@@ -190,6 +201,7 @@ export default function ReferenceImageItem({
 		return (
 			<ReferenceImageItemVideo
 				path={path}
+				mediaType={mediaType}
 				onPreviewMediaResource={onPreviewMediaResource}
 				previewEnabled={!isDeleted}
 			/>

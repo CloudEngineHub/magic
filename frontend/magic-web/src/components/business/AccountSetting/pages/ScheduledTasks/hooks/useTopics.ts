@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { analyticsService } from "@/services/analytics"
 
 /** Loads topics for the selected project while isolating responses by project context. */
 export function useTopics(workspaceId?: string, projectId?: string) {
@@ -38,6 +39,7 @@ export function useTopics(workspaceId?: string, projectId?: string) {
 				return
 			}
 
+			analyticsService.report("topic_create_attempted", { projectId, workspaceId })
 			const response = await SuperMagicApi.createTopic({
 				topic_name: topicName,
 				project_id: projectId,

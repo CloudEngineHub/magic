@@ -228,6 +228,8 @@ async def export_workspace_endpoint(request: WorkspaceExportRequest) -> BaseResp
             source_path=request.source_path,
             archive_root=request.archive_root,
             file_name=request.file_name,
+            exclude_paths=request.exclude_paths,
+            skills_md_hash=request.skills_md_hash,
         )
         response_data = WorkspaceExportData.model_validate(result)
 

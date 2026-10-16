@@ -13,3 +13,5 @@ bin/splitsh-lite
 .codex
 .workspace
 .zcode
+.workbuddy
+logs/

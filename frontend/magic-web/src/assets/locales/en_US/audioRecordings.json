@@ -71,6 +71,7 @@
 		"emptyTranscriptFiltered": "No transcript matches this filter",
 		"emptyTranscriptSearch": "No matching transcript",
 		"entryNotFound": "Recording entry file not found",
+		"expandTranscriptPanelAria": "Expand transcript sidebar",
 		"export": "Export",
 		"exportAll": "Export all",
 		"exportAudio": "Export audio",
@@ -99,13 +100,22 @@
 		"player": {
 			"collapsePlayerAria": "Collapse player",
 			"expandPlayerAria": "Expand player",
+			"moreActions": "More actions",
 			"playbackRateMenuAria": "Playback speed",
 			"playbackSpeed": "{{rate}}x",
 			"skipBackAria": "Skip back 15 seconds",
 			"skipForwardAria": "Skip forward 15 seconds",
 			"waveformSeekAria": "Playback progress on waveform; drag or use arrow keys to seek"
 		},
+		"pullConversationToCancel": "Drag left to cancel",
+		"pullConversationToCollapse": "Drag right to collapse conversation",
+		"pullTranscriptToCancel": "Drag right to cancel",
+		"pullTranscriptToCollapse": "Drag left to collapse transcript",
 		"relatedDialogue": "Related dialogue",
+		"releaseConversationToCollapse": "Release to collapse conversation",
+		"releaseConversationToKeepOpen": "Release to keep open",
+		"releaseTranscriptToCollapse": "Release to collapse transcript",
+		"releaseTranscriptToKeepOpen": "Release to keep open",
 		"searchContent": "Search content",
 		"searchContentClear": "Clear search query",
 		"searchContentClose": "Close content search",
@@ -182,7 +192,7 @@
 	"listCount": "Recordings · {{count}}",
 	"loading": "Loading...",
 	"loadingMore": "Loading more...",
-	"pageTitle": "Recordings & summaries",
+	"pageTitle": "AI Recordings",
 	"refresh": "Refresh list",
 	"searchClear": "Clear search",
 	"searchPlaceholder": "Search recordings",
@@ -197,12 +207,12 @@
 			"transcript": "Transcript"
 		}
 	},
-	"subtitle": "View and manage audio recordings and AI summaries.",
+	"subtitle": "Record with AI, intelligently summarize, analyze, and extract key points.",
 	"summary": {
 		"missingModel": "Unable to load summary model. Please try again later.",
 		"missingParams": "Missing parameters required for summary. Please refresh the list.",
 		"retryMergeFailed": "Failed to retry merge. Please try again later.",
 		"submitFailed": "Failed to submit summary. Please try again later."
 	},
-	"title": "Recordings & summaries"
+	"title": "AI Recordings"
 }

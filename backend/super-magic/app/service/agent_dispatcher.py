@@ -35,7 +35,9 @@ from app.core.stream.stdout_stream import StdoutStream
 from agentlang.config.config import config
 from app.magic.agent import Agent
 from app.service.agent_service import AgentService
+from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
 from app.service.agent_event.file_storage_listener_service import FileStorageListenerService
+from app.service.follow_up_suggestion.listener import FollowUpSuggestionListener
 
 from app.service.agent_event.rag_listener_service import RagListenerService
 from app.service.agent_event.resource_cleanup_listener_service import ResourceCleanupListenerService
@@ -46,11 +48,11 @@ from app.service.memory.runtime.events.memory_event_listener import MemoryListen
 from app.infrastructure.observability import install_tool_monitoring_listener
 from app.service.mcp_service import MCPService
 from app.path_manager import PathManager
-from app.service.agent_event.user_tool_call_listener_service import UserToolCallListenerService
 from app.service.agent_event.channel_startup_listener_service import ChannelStartupListenerService
 from app.core.entity.message.client_message import InitClientMessage, ChatClientMessage, AgentMode
 from app.service.cli_manager import CliManagerService
 from app.service.home_persistence_service import HomePersistenceService
+from app.service.startup_task import StartupTaskService
 from app.service.crew_downloader import (
     CrewPackageFetchError,
     CrewPackageInvalidError,
@@ -172,8 +174,8 @@ class AgentDispatcher(Base):
         MemoryListenerService.register_standard_listeners(self.agent_context)
         ResourceCleanupListenerService.register_standard_listeners(self.agent_context)
         ChannelStartupListenerService.register_standard_listeners(self.agent_context)
-        UserToolCallListenerService.register_standard_listeners(self.agent_context)
         ThirdPartyMessageListenerService.register_standard_listeners(self.agent_context)
+        FollowUpSuggestionListener.register_standard_listeners(self.agent_context)
 
         # 注册工具监控监听器（非侵入式）
         install_tool_monitoring_listener(self.agent_context)
@@ -251,25 +253,17 @@ class AgentDispatcher(Base):
 
         self.agent_context.set_super_magic_product_context(init_message.super_magic_product_context)
 
-        # 阶段二：init_client_message.json 已就绪，触发 magic-service 模型列表加载
-        try:
-            from agentlang.config.models.model_config_manager import model_config_manager
-            from app.core.model_providers.magic_service_provider import MagicServiceProvider
-            await model_config_manager.refresh_provider(MagicServiceProvider())
-        except Exception as e:
-            logger.error(f"MagicServiceProvider refresh failed, continuing without it: {e}")
+        # 阶段二：init_client_message.json 已就绪，执行可注册的动态配置初始化器。
+        from app.service.init.config_initializers import (
+            AIAbilityConfigInitializer,
+            ModelConfigInitializer,
+        )
+        from app.service.init.initializer_registry import InitInitializerRegistry
 
-        # 阶段二：init_client_message.json 已就绪，触发 magic-service AI 能力配置加载
-        try:
-            from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
-            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
-            await ai_ability_config_manager.refresh_provider(
-                MagicServiceAIAbilityProvider(
-                    (init_message.dynamic_config or {}).get("ai_abilities")
-                )
-            )
-        except Exception as e:
-            logger.error(f"MagicServiceAIAbilityProvider refresh failed, continuing without it: {e}")
+        initializer_registry = InitInitializerRegistry()
+        initializer_registry.register(ModelConfigInitializer())
+        initializer_registry.register(AIAbilityConfigInitializer(init_message.dynamic_config))
+        await initializer_registry.run(self.agent_context)
 
         # 从 init_message.metadata 提取并设置关键字段
         if init_message.metadata:
@@ -374,7 +368,14 @@ class AgentDispatcher(Base):
         if not self.is_workspace_initialized:
             return
         # TODO：runtime-ready 处理项增多后，改为可注册的生命周期监听机制，
-        # 避免不同业务继续直接堆叠在本方法中；当前只承载 resumption，不提前引入抽象。
+        # 避免不同业务继续直接堆叠在本方法中。当前承载两项，不提前引入抽象：
+        # 1. 启动任务：在后台按顺序运行用户登记的脚本（如重装依赖），不等待结果；
+        # 2. 重启后续办（resumption）：Agent 主动重启沙盒前在 Horizon 记下的未完成事项，
+        #    新进程就绪后自动提交一条内部 /resume，让 Agent 接着完成。
+        try:
+            StartupTaskService.get_instance().start()
+        except Exception:
+            logger.exception("启动任务后台调度失败")
         from app.service.agent_resumption_service import AgentResumptionService
         await AgentResumptionService.resume_pending(self)
 
@@ -590,7 +591,9 @@ class AgentDispatcher(Base):
         agent_context.register_run_cleanup() immediately after this method returns —
         it will run when the new run ends or is interrupted.
         """
+        sandbox_restart_coordinator.ensure_accepting_runs(self.agent_context.context_id)
         await self.agent_context.stop_run(reason="new message")
+        sandbox_restart_coordinator.ensure_accepting_runs()
         self.agent_context.reset_run_state()
         self.agent_context.set_resumption_context(resumption_id, resumption_run_id)
 
@@ -707,14 +710,12 @@ class AgentDispatcher(Base):
         # 确保 magic-service AI 能力配置已加载，失败不阻断 chat。
         try:
             from agentlang.config.ai_abilities.ability_config_manager import ai_ability_config_manager
-            from app.core.ai_ability_providers.magic_service_provider import MagicServiceAIAbilityProvider
-            dynamic_ai_abilities = (message.dynamic_config or {}).get("ai_abilities")
-            ability_provider = MagicServiceAIAbilityProvider(dynamic_ai_abilities)
-            if isinstance(dynamic_ai_abilities, Mapping) and dynamic_ai_abilities:
-                await ai_ability_config_manager.refresh_provider(ability_provider)
-            else:
-                await ai_ability_config_manager.ensure_provider_loaded(ability_provider)
-            ai_ability_config_manager.maybe_refresh_in_background(ability_provider.provider_type)
+            from app.core.ai_ability_providers.magic_service_provider import PROVIDER_TYPE
+            from app.service.init.config_initializers import AIAbilityConfigInitializer
+
+            await AIAbilityConfigInitializer(message.dynamic_config).run(self.agent_context)
+            # 后台刷新只更新共享 AI 能力配置，不覆盖当前任务已经固定的提示词快照。
+            ai_ability_config_manager.maybe_refresh_in_background(PROVIDER_TYPE)
         except Exception as e:
             logger.warning(f"dispatch_message: AI ability provider check failed, continuing: {e}")
 

@@ -33,6 +33,8 @@ import { SuperMagicApi } from "@/apis"
 import { loadDesignDataToRuntime } from "../utils/designDataLoader"
 import type { LoadDesignDataToRuntimeResult } from "../utils/designDataLoader"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
+import type { SuperMagicProjectAttachmentsReconciledPayload } from "@/pages/superMagic/events/files"
+import { getSharedMediaResourceScope } from "@/pages/superMagic/services/sharedMediaResourceScope"
 
 const DESIGN_ELEMENT_TOOL_NAMES = [
 	// "create_canvas_element",
@@ -113,21 +115,26 @@ function designDataHasMediaMissingFromAttachments(
 	return missing
 }
 
-/** 生成配置位于 sidecar；任一 processing Content 缺配置时需要等待附件树同步后重读。 */
-export function designDataHasPendingMediaWithoutGenerationRequest(designData: DesignData): boolean {
+/** 生成配置位于 sidecar；任一 processing Content 配置未同步完整时需要等待附件树后重读。 */
+export function designDataHasPendingMediaWithoutGenerationDetails(designData: DesignData): boolean {
 	let missing = false
 	const walk = (elements: LayerElement[] | undefined): void => {
 		if (!elements?.length || missing) return
 
 		for (const element of elements) {
 			if (element.type === ElementTypeEnum.Image) {
-				const hasMissingRequest = getImageContents(element as ImageElement).some(
-					(content) =>
-						(content.status === "pending" || content.status === "processing") &&
-						!content.generateImageRequest &&
-						!content.imageGenerationTaskMeta,
+				const hasIncompleteDetails = getImageContents(element as ImageElement).some(
+					(content) => {
+						if (content.status !== "pending" && content.status !== "processing") {
+							return false
+						}
+						if (content.imageGenerationTaskMeta) return false
+
+						const request = content.generateImageRequest
+						return !request?.start_time || !request.expected_finished_at
+					},
 				)
-				if (hasMissingRequest) {
+				if (hasIncompleteDetails) {
 					missing = true
 					return
 				}
@@ -228,6 +235,9 @@ export class DesignRemoteListener {
 	private localSaveUpdatedAtMs: number | null = null
 	private projectKey: string
 	private latestRemoteApplyToken = 0
+	private pendingReconciliation: SuperMagicProjectAttachmentsReconciledPayload | null = null
+	private lastReconciledSnapshot:
+		SuperMagicProjectAttachmentsReconciledPayload["snapshot"] | null = null
 
 	constructor(options: DesignRemoteListenerOptions) {
 		this.options = options
@@ -249,6 +259,8 @@ export class DesignRemoteListener {
 		this.options = { ...this.options, ...options }
 		this.projectKey = this.getProjectKey(this.options)
 		if (prevProjectKey !== this.projectKey) {
+			this.pendingReconciliation = null
+			this.lastReconciledSnapshot = null
 			this.latestRemoteApplyToken += 1
 			this.fileId = null
 			this.hasPendingFileChangeDuringSave = false
@@ -264,17 +276,28 @@ export class DesignRemoteListener {
 			this.unsubscribeRemoteUpdateEvents(prevMode)
 			this.subscribeRemoteUpdateEvents()
 		}
+		this.flushPendingReconciliation()
 	}
 
 	mount(): void {
 		this.isMounted = true
 		this.initializeMagicProjectJsUpdatedAtFromOptions()
 		this.subscribeRemoteUpdateEvents()
+		pubsub.subscribe(
+			PubSubEvents.Super_Magic_Project_Attachments_Reconciled,
+			this.handleProjectAttachmentsReconciled,
+		)
 	}
 
 	unmount(): void {
 		this.isMounted = false
 		this.unsubscribeRemoteUpdateEvents()
+		pubsub.unsubscribe(
+			PubSubEvents.Super_Magic_Project_Attachments_Reconciled,
+			this.handleProjectAttachmentsReconciled,
+		)
+		this.pendingReconciliation = null
+		this.lastReconciledSnapshot = null
 		if (this.debounceTimer) {
 			clearTimeout(this.debounceTimer)
 			this.debounceTimer = null
@@ -341,7 +364,61 @@ export class DesignRemoteListener {
 	}
 
 	private getProjectKey(options: DesignRemoteListenerOptions): string {
-		return `${options.projectId ?? ""}:${options.designProjectId ?? ""}`
+		return `${options.projectId ?? ""}:${options.designProjectId ?? ""}:${options.fileApi?.identityKey ?? ""}`
+	}
+
+	private readonly handleProjectAttachmentsReconciled = (
+		payload: SuperMagicProjectAttachmentsReconciledPayload,
+	): void => {
+		if (
+			!this.isMounted ||
+			this.getAccessMode() === "share" ||
+			payload.projectId !== this.options.projectId ||
+			payload.accessScope !== getSharedMediaResourceScope() ||
+			payload.snapshot === this.lastReconciledSnapshot
+		)
+			return
+
+		this.pendingReconciliation = payload
+		this.flushPendingReconciliation()
+	}
+
+	private flushPendingReconciliation(): void {
+		const pending = this.pendingReconciliation
+		if (!this.isMounted || !pending || !this.options.getMagicProjectJsFileId()) return
+		if (pending.accessScope !== getSharedMediaResourceScope()) {
+			this.pendingReconciliation = null
+			return
+		}
+
+		// MobX 提交后 React 才把附件传进管理器。按真实列表引用等待，不能猜渲染延迟。
+		const list = this.options.flatAttachments
+		const hasCurrentAttachments = list
+			? list === pending.snapshot.list || list === pending.store.workspaceFilesList
+			: this.options.attachments === pending.snapshot.tree ||
+				this.options.attachments === pending.store.workspaceFileTree
+		if (!hasCurrentAttachments) return
+
+		this.pendingReconciliation = null
+		this.lastReconciledSnapshot = pending.snapshot
+		if (this.deferRemoteRefreshDuringSave()) return
+		const projectKey = this.projectKey
+		const applyToken = this.latestRemoteApplyToken
+		void this.options
+			.checkRemoteUpdate()
+			.then(({ hasUpdate, isCheckReliable, currentVersion }) => {
+				if (
+					!this.isMounted ||
+					projectKey !== this.projectKey ||
+					applyToken !== this.latestRemoteApplyToken ||
+					pending.accessScope !== getSharedMediaResourceScope()
+				)
+					return
+				if (!hasUpdate && isCheckReliable) return
+				// 保存延期、历史版本和本地草稿仍交给原远端更新流程处理。
+				this.debouncedLoadAndApply(undefined, currentVersion)
+			})
+			.catch(() => undefined)
 	}
 
 	private subscribeRemoteUpdateEvents(): void {
@@ -689,7 +766,9 @@ export class DesignRemoteListener {
 		let parsed: DesignData | null = null
 		let parsedLoadResult: LoadDesignDataToRuntimeResult | null = null
 		try {
-			const content = await loadMagicProjectJsContent(fid)
+			const content = await loadMagicProjectJsContent(fid, {
+				fileApi: this.options.fileApi,
+			})
 			const loaded = await loadDesignDataToRuntime({
 				content,
 				elementDetailsContext: {
@@ -697,6 +776,7 @@ export class DesignRemoteListener {
 					flatAttachments: this.options.flatAttachments,
 					mainFileId: fid,
 					projectId: this.options.projectId,
+					fileApi: this.options.fileApi,
 				},
 				pathContext: {
 					projectBasePath: dslBase,
@@ -724,7 +804,7 @@ export class DesignRemoteListener {
 			dslBase,
 		)
 		const hasPendingGenerationWithoutInfo =
-			designDataHasPendingMediaWithoutGenerationRequest(parsed)
+			designDataHasPendingMediaWithoutGenerationDetails(parsed)
 		if (!hasMissingMedia && !hasPendingGenerationWithoutInfo)
 			return { data: parsed, loadResult: parsedLoadResult }
 
@@ -740,7 +820,9 @@ export class DesignRemoteListener {
 		}
 
 		try {
-			const content = await loadMagicProjectJsContent(fid)
+			const content = await loadMagicProjectJsContent(fid, {
+				fileApi: this.options.fileApi,
+			})
 			const loaded = await loadDesignDataToRuntime({
 				content,
 				elementDetailsContext: {
@@ -748,6 +830,7 @@ export class DesignRemoteListener {
 					flatAttachments: this.options.flatAttachments,
 					mainFileId: fid,
 					projectId: this.options.projectId,
+					fileApi: this.options.fileApi,
 				},
 				pathContext: {
 					projectBasePath: dslBase,

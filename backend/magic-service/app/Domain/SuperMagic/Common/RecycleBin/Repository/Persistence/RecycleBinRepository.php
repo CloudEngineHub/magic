@@ -12,6 +12,7 @@ use App\Domain\SuperMagic\Common\RecycleBin\Entity\RecycleBinFileQuery;
 use App\Domain\SuperMagic\Common\RecycleBin\Enum\RecycleBinResourceType;
 use App\Domain\SuperMagic\Common\RecycleBin\Repository\Facade\RecycleBinRepositoryInterface;
 use App\Domain\SuperMagic\Common\RecycleBin\Repository\Model\RecycleBinModel;
+use App\Domain\SuperMagic\File\Repository\Model\TaskFileModel;
 use App\Infrastructure\Core\AbstractRepository;
 use Hyperf\Database\Model\Builder;
 use Hyperf\Database\Query\Builder as QueryBuilder;
@@ -196,8 +197,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
     public function getCountsByTypeVisibleToUser(string $userId, ?string $keyword = null, ?int $projectId = null): array
     {
         if ($projectId !== null) {
-            return [RecycleBinResourceType::File->value =>
-                $this->buildOwnerVisibleQuery($userId, RecycleBinResourceType::File->value, null, $projectId)->count()
+            return [RecycleBinResourceType::File->value => $this->buildOwnerVisibleQuery($userId, RecycleBinResourceType::File->value, null, $projectId)->count()
                 + $this->buildCollaborativeFileQuery($userId, null, $projectId)->count(),
             ];
         }
@@ -440,6 +440,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
     protected function applyVisibleToUserScope(Builder $query, string $userId): Builder
     {
         $table = $this->model->getTable();
+        $this->applyUserVisibleFileScope($query, $table);
         $query->leftJoin('magic_super_agent_project_members as pm', function ($join) use ($table, $userId): void {
             $join->on($table . '.parent_id', '=', 'pm.project_id')
                 ->where('pm.target_type', '=', 'User')
@@ -502,6 +503,8 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
 
         $this->applyKeywordFilter($query, $table . '.resource_name', $keyword);
 
+        $this->applyUserVisibleFileScope($query, $table);
+
         return $query;
     }
 
@@ -526,6 +529,8 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         }
         $this->applyKeywordFilter($query, 'rb.resource_name', $keyword);
 
+        $this->applyUserVisibleFileScope($query, 'rb');
+
         return $query;
     }
 
@@ -537,6 +542,8 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
             ->where('owner_id', $userId);
 
         $this->applyKeywordFilter($query, 'resource_name', $keyword);
+
+        $this->applyUserVisibleFileScope($query, $this->model->getTable());
 
         return (int) $query->count('id');
     }
@@ -558,7 +565,30 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
 
         $this->applyKeywordFilter($query, 'rb.resource_name', $keyword);
 
+        $this->applyUserVisibleFileScope($query, 'rb');
+
         return (int) $query->count('rb.id');
+    }
+
+    /**
+     * 列表、数量和用户按 ID 操作共用文件范围；系统到期清理不调用此条件。
+     * 例：topic 日志不显示也不计数，普通项目 report.log 仍可恢复。
+     */
+    private function applyUserVisibleFileScope(Builder|QueryBuilder $query, string $prefix): void
+    {
+        $fileModel = new TaskFileModel();
+        // 回收站文件已软删除，必须保留其元数据参与分类；父目录是否存在另由恢复流程处理。
+        $files = TaskFileModel::query()->withTrashed()->visibleProjectFiles()
+            ->selectRaw('1')
+            ->whereColumn($fileModel->qualifyColumn('file_id'), $prefix . '.resource_id')
+            ->whereColumn($fileModel->qualifyColumn('project_id'), $prefix . '.parent_id')
+            ->toBase();
+
+        $baseQuery = $query instanceof Builder ? $query->getQuery() : $query;
+        $baseQuery->where(static function (QueryBuilder $visible) use ($prefix, $files): void {
+            $visible->where($prefix . '.resource_type', '<>', RecycleBinResourceType::File->value)
+                ->addWhereExistsQuery($files, 'or');
+        });
     }
 
     private function applyKeywordFilter(Builder|QueryBuilder $query, string $column, ?string $keyword): void
@@ -621,6 +651,7 @@ class RecycleBinRepository extends AbstractRepository implements RecycleBinRepos
         $hasMore = $rows->count() > $pageSize;
         $models = $this->model::query()->hydrate($rows->take($pageSize)->map(static fn ($row) => (array) $row)->all());
         $entities = [];
+        /** @var null|RecycleBinModel $model */
         foreach ($models as $model) {
             $entities[] = $this->modelToEntity($model);
         }

@@ -63,29 +63,13 @@ class AzureOpenAIImageGenerateModel extends AbstractImageGenerate
             'reference_images_count' => count($imageGenerateRequest->getReferenceImages()),
         ]);
 
+        $fields = $this->buildImageFields($imageGenerateRequest);
+
         if ($imageGenerateRequest->getReferenceImages() !== []) {
-            return $this->api->editImage(
-                $this->model,
-                $imageGenerateRequest->getReferenceImages(),
-                null,
-                $imageGenerateRequest->getPrompt(),
-                $imageGenerateRequest->getSize(),
-                $imageGenerateRequest->getN(),
-                $imageGenerateRequest->getQuality()
-            );
+            return $this->api->editImage($this->model, $imageGenerateRequest->getReferenceImages(), $fields);
         }
 
-        $requestData = [
-            'model' => $this->model,
-            'prompt' => $imageGenerateRequest->getPrompt(),
-            'size' => $imageGenerateRequest->getSize(),
-            'n' => $imageGenerateRequest->getN(),
-        ];
-        if ($imageGenerateRequest->getQuality() !== null) {
-            $requestData['quality'] = $imageGenerateRequest->getQuality();
-        }
-
-        return $this->api->generateImage($this->model, $requestData);
+        return $this->api->generateImage($this->model, array_merge(['model' => $this->model], $fields));
     }
 
     public function setAK(string $ak): void
@@ -157,6 +141,36 @@ class AzureOpenAIImageGenerateModel extends AbstractImageGenerate
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * 组装 images/generations 与 images/edits 共用的请求字段，键即线上字段名。
+     * 可选字段为 null / '' 时不出现，与既有的逐字段判断等价。
+     *
+     * @return array<string, mixed>
+     */
+    private function buildImageFields(AzureOpenAIImageRequest $request): array
+    {
+        $fields = [
+            'prompt' => $request->getPrompt(),
+            'size' => $request->getSize(),
+            'n' => $request->getN(),
+        ];
+
+        if ($request->getQuality() !== null) {
+            $fields['quality'] = $request->getQuality();
+        }
+        if ($request->getBackground() !== null) {
+            $fields['background'] = $request->getBackground();
+        }
+        if ($request->getOutputFormat() !== '') {
+            $fields['output_format'] = $request->getOutputFormat();
+        }
+        if (! empty($request->getExtra())) {
+            $fields['extra'] = $request->getExtra();
+        }
+
+        return $fields;
     }
 
     private function buildResponse(array $result): ImageGenerateResponse

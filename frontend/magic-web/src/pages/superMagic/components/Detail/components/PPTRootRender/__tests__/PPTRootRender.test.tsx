@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactNode } from "react"
 import PPTRootRender from "../index"
@@ -53,7 +53,11 @@ vi.mock("../../PPTRender", () => ({
 		attachmentList,
 		mainFileId,
 		isFullscreen,
+		isFileFullscreen,
+		showRefresh,
 		onSortSave,
+		onDeckConfigSaved,
+		displayConfig,
 		openNewTab,
 		slideStructureAdapter,
 	}: {
@@ -62,12 +66,19 @@ vi.mock("../../PPTRender", () => ({
 		attachmentList?: Array<{ file_id?: string; relative_file_path?: string }>
 		mainFileId?: string
 		isFullscreen?: boolean
+		isFileFullscreen?: boolean
+		showRefresh?: boolean
 		onSortSave?: (slidePaths: string[]) => void
+		onDeckConfigSaved?: (config: Record<string, unknown>) => void
+		displayConfig?: { hidden_slides?: string[]; transitions?: unknown }
 		openNewTab?: (fileId: string, path: string) => void
 		slideStructureAdapter?: unknown
 	}) => (
 		<div
 			data-testid="ppt-render"
+			data-hidden-slides={JSON.stringify(displayConfig?.hidden_slides)}
+			data-transitions={JSON.stringify(displayConfig?.transitions ?? null)}
+			data-show-refresh={String(showRefresh)}
 			data-slide-paths={JSON.stringify(slidePaths || [])}
 			data-main-relative-path={
 				attachments?.find((item) => item.file_id === mainFileId)?.relative_file_path
@@ -80,7 +91,26 @@ vi.mock("../../PPTRender", () => ({
 			)}
 			data-has-structure-adapter={String(Boolean(slideStructureAdapter))}
 			data-is-fullscreen={String(Boolean(isFullscreen))}
+			data-is-file-fullscreen={String(Boolean(isFileFullscreen))}
 		>
+			<button
+				data-testid="local-transition"
+				onClick={() =>
+					onDeckConfigSaved?.({
+						slides: ["slides/slide-1.html"],
+						transitions: { default: { effect: "fade", duration_ms: 400 } },
+					})
+				}
+			/>
+			<button
+				data-testid="local-hide"
+				onClick={() =>
+					onDeckConfigSaved?.({
+						slides: ["slides/slide-1.html"],
+						hidden_slides: ["slides/slide-1.html"],
+					})
+				}
+			/>
 			<button
 				type="button"
 				data-testid="local-insert"
@@ -127,7 +157,7 @@ function createDeckFiles(magicUpdatedAt: string) {
 function renderRoot(
 	magicUpdatedAt: string,
 	slides = ["slides/slide-1.html"],
-	options: { isFullscreen?: boolean } = {},
+	options: { isFullscreen?: boolean; showRefresh?: boolean; hiddenSlides?: string[] } = {},
 ) {
 	const attachmentList = createDeckFiles(magicUpdatedAt)
 
@@ -141,9 +171,11 @@ function renderRoot(
 			attachments={attachmentList}
 			displayConfig={{
 				type: "slide",
+				hidden_slides: options.hiddenSlides,
 				slides,
 			}}
 			isFullscreen={options.isFullscreen}
+			showRefresh={options.showRefresh}
 			activeFileId="index-file"
 		/>,
 	)
@@ -165,12 +197,152 @@ describe("PPTRootRender", () => {
 		)
 	})
 
+	it("takes hidden pages from canonical config and clears stale display metadata", async () => {
+		renderRoot("1", ["slides/slide-1.html"], { hiddenSlides: ["slides/slide-1.html"] })
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-hidden-slides", "[]"),
+		)
+	})
+
+	it("publishes locally confirmed hidden config immediately without old source overwrite", async () => {
+		renderRoot("1")
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-hidden-slides", "[]"),
+		)
+		fireEvent.click(screen.getByTestId("local-hide"))
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-hidden-slides",
+				'["slides/slide-1.html"]',
+			),
+		)
+	})
+
+	it("keeps confirmed transitions when an older download finishes after saving, then reads a newer server edit", async () => {
+		let resolveOld!: (content: string) => void
+		mockState.getFileContentById.mockImplementationOnce(
+			() =>
+				new Promise<string>((resolve) => {
+					resolveOld = resolve
+				}),
+		)
+		const view = renderRoot("1")
+		await waitFor(() => expect(mockState.getFileContentById).toHaveBeenCalled())
+		fireEvent.click(screen.getByTestId("local-transition"))
+		await act(async () => {
+			resolveOld("window.magicProjectConfig = { slides: ['slides/slide-1.html'] }")
+		})
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-transitions",
+				JSON.stringify({ default: { effect: "fade", duration_ms: 400 } }),
+			),
+		)
+		mockState.getFileContentById.mockResolvedValue(
+			"window.magicProjectConfig = { slides: ['slides/slide-1.html'], transitions: { default: { effect: 'none' } } }",
+		)
+		view.rerender(
+			<PPTRootRender
+				data={{ file_id: "index-file", file_name: "index.html" }}
+				attachmentList={createDeckFiles("2")}
+				attachments={createDeckFiles("2")}
+				displayConfig={{ slides: ["slides/slide-1.html"] }}
+			/>,
+		)
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-transitions",
+				JSON.stringify({ default: { effect: "none" } }),
+			),
+		)
+	})
+
+	it("accepts a newer remote update while local confirmed content is still processing", async () => {
+		const view = renderRoot("1")
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-hidden-slides", "[]"),
+		)
+		let finishLocal!: (value: unknown) => void
+		mockState.processHtmlContent.mockImplementation(
+			async ({ content }: { content: string }) => {
+				if (content.includes('"fade"'))
+					return new Promise((resolve) => {
+						finishLocal = resolve
+					})
+				return { filePathMapping: new Map(), originalSlidesPaths: ["slides/slide-1.html"] }
+			},
+		)
+		fireEvent.click(screen.getByTestId("local-transition"))
+		await waitFor(() => expect(finishLocal).toBeTypeOf("function"))
+		mockState.getFileContentById.mockResolvedValue(
+			"window.magicProjectConfig = { slides: ['slides/slide-1.html'], transitions: { default: { effect: 'none' } } }",
+		)
+		view.rerender(
+			<PPTRootRender
+				data={{ file_id: "index-file", file_name: "index.html" }}
+				attachmentList={createDeckFiles("2")}
+				attachments={createDeckFiles("2")}
+				displayConfig={{ slides: ["slides/slide-1.html"] }}
+			/>,
+		)
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-transitions",
+				JSON.stringify({ default: { effect: "none" } }),
+			),
+		)
+		await act(async () =>
+			finishLocal({
+				filePathMapping: new Map(),
+				originalSlidesPaths: ["slides/slide-1.html"],
+			}),
+		)
+		expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+			"data-transitions",
+			JSON.stringify({ default: { effect: "none" } }),
+		)
+	})
+
+	it("loads transitions from canonical content on reopen", async () => {
+		const transitions = { default: { effect: "wipe", duration_ms: 450, direction: "up" } }
+		mockState.getFileContentById.mockResolvedValue(
+			`window.magicProjectConfig = ${JSON.stringify({ slides: ["slides/slide-1.html"], transitions })}`,
+		)
+		const view = renderRoot("1")
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-transitions",
+				JSON.stringify(transitions),
+			),
+		)
+		view.unmount()
+		renderRoot("1")
+		await waitFor(() =>
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-transitions",
+				JSON.stringify(transitions),
+			),
+		)
+	})
+
+	it("forwards showRefresh to PPTRender", async () => {
+		renderRoot("1", ["slides/slide-1.html"], { showRefresh: false })
+
+		await waitFor(() => {
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-show-refresh", "false")
+		})
+	})
+
 	it("keeps FilesViewer fullscreen separate from PPT presentation fullscreen", async () => {
 		renderRoot("1", ["slides/slide-1.html"], { isFullscreen: true })
 
 		expect(screen.getByTestId("ppt-project-preview")).toBeInTheDocument()
 		await waitFor(() => {
 			expect(screen.getByTestId("ppt-render")).toHaveAttribute("data-is-fullscreen", "false")
+			expect(screen.getByTestId("ppt-render")).toHaveAttribute(
+				"data-is-file-fullscreen",
+				"true",
+			)
 		})
 	})
 

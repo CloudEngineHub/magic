@@ -2,7 +2,11 @@ import type { FileReference } from "@/apis/modules/superMagic"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { INSPECTOR_DETAIL_TYPE } from "@/pages/superMagic/components/MessageEditor/extensions/inspector-detail/const"
 import type { TiptapMentionAttributes } from "../tiptap-plugin/types"
-import { MentionItemType, type UserFileReferenceMention } from "../types"
+import {
+	MentionItemType,
+	type ProjectFileMentionData,
+	type UserFileReferenceMention,
+} from "../types"
 import { resolveFileReference } from "@/pages/superMagic/services/userFileReferenceResolver"
 import {
 	getFileDisplayPath,
@@ -54,7 +58,13 @@ export async function createFileReferenceMention(
 ): Promise<TiptapMentionAttributes | null> {
 	const id = String(file.file_id ?? "")
 	let reference = file.file_reference?.file_id === id ? file.file_reference : undefined
-	if (!reference && (file.space_type === "user" || !isValidProjectReferenceId(file.project_id))) {
+	// 项目 ID 不能代替文件路径；缺路径时按真实文件 ID 读取，不能生成只有名称的引用。
+	if (
+		!reference &&
+		(file.space_type === "user" ||
+			!isValidProjectReferenceId(file.project_id) ||
+			!file.relative_file_path)
+	) {
 		if (!isValidProjectReferenceId(id)) return null
 		const result = await resolveFileReference({ file_id: id }, signal)
 		if (result.status !== "resolved") return null
@@ -95,7 +105,12 @@ export function needsFileReferenceNormalization(attrs: TiptapMentionAttributes):
 	if (attrs.type !== MentionItemType.PROJECT_FILE && attrs.type !== MentionItemType.FOLDER)
 		return false
 	const data = attrs.data as { project_id?: string; source_project_id?: string } | undefined
-	return data?.project_id === "0" || data?.source_project_id === "0"
+	return (
+		data?.project_id === "0" ||
+		data?.source_project_id === "0" ||
+		(attrs.type === MentionItemType.PROJECT_FILE &&
+			!(attrs.data as ProjectFileMentionData | undefined)?.file_path)
+	)
 }
 
 /** 历史富引用以原始 ID 复核，禁止改用当前用户的同名路径。 */
@@ -104,12 +119,24 @@ export async function normalizeFileReferenceMention(
 	signal?: AbortSignal,
 ): Promise<TiptapMentionAttributes | null> {
 	if (!needsFileReferenceNormalization(attrs)) return attrs
+	if (attrs.type === MentionItemType.PROJECT_FILE) {
+		const data = attrs.data as ProjectFileMentionData
+		// 仅补同一项目引用已有的路径；个人空间旧引用仍须按原 ID 复核身份。
+		if (
+			data.project_id !== "0" &&
+			data.source_project_id !== "0" &&
+			!data.file_path &&
+			data.relative_file_path
+		) {
+			return { ...attrs, data: { ...data, file_path: data.relative_file_path } }
+		}
+	}
 	const data = attrs.data as { file_id?: string; directory_id?: string } | undefined
 	const id = data?.file_id || data?.directory_id
 	if (!isValidProjectReferenceId(id)) return null
 	const result = await resolveFileReference({ file_id: id }, signal)
 	if (result.status !== "resolved") return null
-	return createFileReferenceMention(
+	const normalized = await createFileReferenceMention(
 		{
 			...result.reference,
 			file_reference: result.reference,
@@ -117,6 +144,13 @@ export async function normalizeFileReferenceMention(
 		undefined,
 		signal,
 	)
+	// 补缺路径不丢掉跨项目复制的来源及待处理属性；空间转换沿用原有规范化结果。
+	return attrs.type === MentionItemType.PROJECT_FILE &&
+		(attrs.data as ProjectFileMentionData).project_id !== "0" &&
+		(attrs.data as ProjectFileMentionData).source_project_id !== "0" &&
+		normalized?.type === MentionItemType.PROJECT_FILE
+		? { ...attrs, ...normalized, data: { ...attrs.data, ...normalized.data } }
+		: normalized
 }
 
 /** 只遍历当前消息文档；失败时保留文字，发送前可要求中止。 */

@@ -10,6 +10,7 @@ import { SuperMagicApi } from "@/apis"
 import { useMemoizedFn, useMount } from "ahooks"
 import MagicAvatar from "@/components/base/MagicAvatar"
 import { Input } from "@/components/shadcn-ui/input"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 export interface CreatorFilterComponentRef {
 	refreshCreators: () => void
@@ -57,9 +58,9 @@ const CreatorFilterComponent = forwardRef<CreatorFilterComponentRef, CreatorFilt
 							className="h-10 rounded-none border-0 border-b border-border/60 bg-transparent px-4 text-base shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0"
 							onKeyDown={(event) => event.stopPropagation()}
 						/>
-						<div
-							className="scrollbar-y-thin max-h-60 overflow-y-auto overscroll-contain p-1.5"
-							onWheel={(event) => event.stopPropagation()}
+						<ScrollArea
+							viewportClassName="max-h-60 overscroll-contain p-1.5 [&>div]:!block"
+							viewportProps={{ onWheel: (event) => event.stopPropagation() }}
 						>
 							{filteredCreators.map((item) => {
 								const selected = value.some((v) => v.user_id === item.user_id)
@@ -90,7 +91,7 @@ const CreatorFilterComponent = forwardRef<CreatorFilterComponentRef, CreatorFilt
 									{t("project.noCreators")}
 								</div>
 							)}
-						</div>
+						</ScrollArea>
 					</div>
 				)}
 			>

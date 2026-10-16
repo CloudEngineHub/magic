@@ -143,6 +143,7 @@ def test_metadata_migrates_legacy_top_level_long_term_memory_field():
     assert "long_term_memory_enabled" not in serialized
     assert serialized["personal_preferences"] == {
         "long_term_memory_enabled": False,
+        "show_follow_up_suggestions": True,
     }
 
 

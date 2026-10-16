@@ -1,5 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react"
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react"
+import {
+	forwardRef,
+	type ButtonHTMLAttributes,
+	type InputHTMLAttributes,
+	type ReactNode,
+} from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import MessageHeader from "../index"
 
@@ -172,6 +177,7 @@ vi.mock("lucide-react", () => {
 
 	return {
 		MessageCirclePlus: createIcon("message-circle-plus"),
+		FolderTree: createIcon("folder-tree"),
 		PanelRightClose: createIcon("panel-right-close"),
 		PanelRightOpen: createIcon("panel-right-open"),
 		Ellipsis: createIcon("ellipsis"),
@@ -186,22 +192,21 @@ vi.mock("@tabler/icons-react", () => ({
 }))
 
 vi.mock("@/components/shadcn-ui/button", () => ({
-	Button: ({
-		children,
-		className,
-		onClick,
-		disabled,
-		...props
-	}: ButtonHTMLAttributes<HTMLButtonElement>) => (
-		<button
-			type="button"
-			className={className}
-			onClick={onClick}
-			disabled={disabled}
-			{...props}
-		>
-			{children}
-		</button>
+	Button: forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>(
+		function MockButton({ children, className, onClick, disabled, ...props }, ref) {
+			return (
+				<button
+					ref={ref}
+					type="button"
+					className={className}
+					onClick={onClick}
+					disabled={disabled}
+					{...props}
+				>
+					{children}
+				</button>
+			)
+		},
 	),
 }))
 
@@ -238,12 +243,17 @@ vi.mock("@/stores/recordingSummary", () => ({
 	},
 }))
 
-vi.mock("@/pages/superMagic/providers/file-action-visibility-provider", () => ({
-	useFileActionVisibility: () => ({
-		hideCreateNewTopic: false,
-		hideShareTopic: true,
-	}),
-}))
+vi.mock("@/pages/superMagic/providers/FileAccessProvider", async (importOriginal) => {
+	const actual =
+		await importOriginal<typeof import("@/pages/superMagic/providers/FileAccessProvider")>()
+	return {
+		...actual,
+		useFileAccess: () => ({
+			permissions: actual.DEFAULT_FILE_ACCESS,
+			options: { ...actual.DEFAULT_FILE_ACTION_OPTIONS, shareTopic: false },
+		}),
+	}
+})
 
 const chatWorkspaceId = "chat-workspace-mock-1"
 
@@ -430,6 +440,27 @@ describe("MessageHeader", () => {
 
 		expect(screen.queryByTestId("message-header-history-button")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("mock-topic-history-dropdown")).not.toBeInTheDocument()
+	})
+
+	it("项目侧栏收起后使用圆形白色投影按钮展开", () => {
+		renderComponent({
+			fileSidebarControl: {
+				isCollapsed: true,
+				onToggle: vi.fn(),
+				triggerRef: { current: null },
+			},
+		})
+
+		expect(screen.getByTestId("message-header-expand-files")).toHaveClass(
+			"!ml-3",
+			"!size-7",
+			"!min-h-7",
+			"!min-w-7",
+			"!rounded-full",
+			"!bg-background",
+			"shadow-md",
+		)
+		expect(screen.getByTestId("icon-folder-tree")).toBeInTheDocument()
 	})
 
 	it("collapses the history panel together when collapsing the conversation panel", () => {

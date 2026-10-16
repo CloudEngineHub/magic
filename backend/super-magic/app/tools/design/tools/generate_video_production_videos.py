@@ -41,7 +41,14 @@ class VideoProductionVideoTask(BaseModel):
     prompt: str = Field(..., description="Video generation prompt.")
     name: str = Field(..., description="Specific video Element name in the user's language.")
     aspect_ratio: Optional[str] = Field(default=None, description="Video aspect ratio.")
-    input_mode: str = Field(default="", description="Video model input mode.")
+    input_mode: str = Field(
+        default="",
+        description=(
+            "Video model input mode. Use omni_reference for a shot reference image in "
+            "reference_image_paths; use keyframe_guided only for an explicitly requested "
+            "start/end-frame transition."
+        ),
+    )
     task: str = Field(default="generate", description="Video generation task type.")
     reference_image_paths: list[str] = Field(
         default_factory=list,
@@ -60,7 +67,7 @@ class VideoProductionVideoTask(BaseModel):
         max_length=20,
         description=(
             "Direct upstream Canvas Element IDs for this generated video, not a list of reference files. "
-            "For a shot video, pass exactly the corresponding confirmed first-frame Image Element ID; "
+            "For a shot video, pass exactly the corresponding confirmed shot reference-image Element ID; "
             "do not add initialization, product, scene, or other reference-image Element IDs. Omit to "
             "preserve existing relations when updating an Element; pass an empty list to clear managed "
             "upstream relations."
@@ -68,11 +75,11 @@ class VideoProductionVideoTask(BaseModel):
     )
     frame_start_path: str = Field(
         default="",
-        description="First-frame image path from a project file, upload, or earlier tool result.",
+        description="Start-frame image path from a project file, upload, or earlier tool result.",
     )
     frame_end_path: str = Field(
         default="",
-        description="Last-frame image path from a project file, upload, or earlier tool result.",
+        description="End-frame image path from a project file, upload, or earlier tool result.",
     )
     duration_seconds: Optional[int] = Field(default=None, description="Video duration in seconds.")
     resolution: Optional[str] = Field(default=None, description="Video resolution tier.")

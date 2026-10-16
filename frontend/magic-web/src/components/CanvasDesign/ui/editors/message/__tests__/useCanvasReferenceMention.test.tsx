@@ -89,7 +89,14 @@ function getConfiguredOptions() {
 	return firstCall[0] as {
 		getInitialLoadOptions?: () => { itemId?: string } | undefined
 		getInitialNavigationStack?: () => Array<{ id: string; name: string }> | undefined
+		getSelectionSummary?: () =>
+			| {
+					currentCounts: Record<string, number>
+					limits: Record<string, number | undefined>
+			  }
+			| undefined
 		canSelectItem?: (item: { type?: string; isFolder?: boolean }) => boolean
+		canToggleMultiSelectItem?: (item: { type?: string; isFolder?: boolean }) => boolean
 		nodeViewRenderers?: Record<string, CanvasMentionNodeViewRenderer>
 	}
 }
@@ -258,6 +265,46 @@ describe("useCanvasReferenceMention", () => {
 		])
 	})
 
+	it("keeps selection summary fresh without rebuilding the mention extension", () => {
+		const { rerender } = renderMention({
+			folderId: "design-a",
+			folderName: "Design A",
+			tree: [],
+			options: {
+				maxReferenceFiles: 2,
+				currentReferenceFiles: [],
+				referenceResourceType: "image",
+			},
+		})
+		const options = getConfiguredOptions()
+
+		expect(configureMentionExtension).toHaveBeenCalledTimes(1)
+		expect(options.getSelectionSummary?.()?.currentCounts).toEqual({
+			image: 0,
+			video: 0,
+			audio: 0,
+		})
+
+		rerender(
+			<Providers folderId="design-a" folderName="Design A" tree={[]}>
+				<MentionProbe
+					options={{
+						maxReferenceFiles: 2,
+						currentReferenceFiles: ["design-a/cat.png"],
+						referenceResourceType: "image",
+					}}
+				/>
+			</Providers>,
+		)
+
+		expect(configureMentionExtension).toHaveBeenCalledTimes(1)
+		expect(options.getSelectionSummary?.()?.currentCounts).toEqual({
+			image: 1,
+			video: 0,
+			audio: 0,
+		})
+	})
+
 	it("returns the same default directory for @ mention and project-select panel runtime", () => {
 		const { rerender } = renderRuntime({
 			folderId: "design-a",
@@ -269,6 +316,7 @@ describe("useCanvasReferenceMention", () => {
 
 		expect(runtime.initialLoadOptions).toEqual(getInitialLoadOptions())
 		expect(runtime.initialNavigationStack).toEqual(getInitialNavigationStack())
+		expect(runtime.selectionScopeId).toBe("design-a")
 
 		rerender(
 			<Providers folderId="design-b" folderName="Design B">
@@ -281,12 +329,21 @@ describe("useCanvasReferenceMention", () => {
 		expect(getRuntime().getInitialLoadOptions).toBe(getInitialLoadOptions)
 		expect(getRuntime().getInitialNavigationStack).toBe(getInitialNavigationStack)
 		expect(getRuntime().initialLoadOptions).toEqual({ itemId: "design-b" })
+		expect(getRuntime().selectionScopeId).toBe("design-b")
 		expect(getInitialLoadOptions()).toEqual({ itemId: "design-b" })
 	})
 
 	it("allows folder navigation but prevents folder insertion", () => {
-		renderRuntime({ folderId: "design-a", folderName: "Design A" })
+		render(
+			<Providers folderId="design-a" folderName="Design A" tree={[]}>
+				<RuntimeProbe
+					options={{ referenceResourceType: "image", referenceFileInfos: [] }}
+				/>
+				<MentionProbe />
+			</Providers>,
+		)
 		const runtime = getRuntime()
+		const options = getConfiguredOptions()
 
 		expect(
 			runtime.catalogBehavior.shouldEnterFolderDirectly?.({
@@ -299,6 +356,18 @@ describe("useCanvasReferenceMention", () => {
 		).toBe(true)
 		expect(
 			runtime.canSelectItem({
+				type: CANVAS_REFERENCE_MENTION_ITEM_TYPE.folder,
+				isFolder: true,
+			}),
+		).toBe(false)
+		expect(
+			runtime.canSelectItem({
+				type: CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile,
+				isFolder: true,
+			}),
+		).toBe(false)
+		expect(
+			options.canToggleMultiSelectItem?.({
 				type: CANVAS_REFERENCE_MENTION_ITEM_TYPE.folder,
 				isFolder: true,
 			}),
@@ -376,8 +445,7 @@ describe("useCanvasReferenceMention", () => {
 
 		const doc = getContentFromString("@cat.png", getMention().matchableItems)
 		const mentionNode = doc.content?.[0]?.content?.[0] as
-			| { attrs?: { data?: { file_path?: string } } }
-			| undefined
+			{ attrs?: { data?: { file_path?: string } } } | undefined
 		expect(mentionNode?.attrs?.data?.file_path).toBe("current/cat.png")
 	})
 

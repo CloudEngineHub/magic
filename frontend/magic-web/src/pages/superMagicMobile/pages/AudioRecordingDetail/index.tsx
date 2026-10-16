@@ -35,7 +35,6 @@ import { resolveDetailSummaryVisualState } from "@/pages/superMagic/pages/AudioR
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
 import type { MobileRecordingSourceTab, MobileRecordingTopTab } from "./types"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
-import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
 import { useMobileRecordingDetailData } from "./hooks/useMobileRecordingDetailData"
 import { MobileRecordingAudioPlayer } from "./components/MobileRecordingAudioPlayer"
@@ -64,6 +63,7 @@ import { AudioRecordingCopyDialog } from "@/pages/superMagic/pages/AudioRecordin
 import { useAudioRecordingCopyToProject } from "@/pages/superMagic/pages/AudioRecordings/hooks/useAudioRecordingCopyToProject"
 import { canCopyAudioProject } from "@/pages/superMagic/pages/AudioRecordings/utils/copy-availability"
 import { SuperMagicApi } from "@/apis"
+import { analyticsService } from "@/services/analytics"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
 import { ProjectFilesStore } from "@/stores/projectFiles"
@@ -105,11 +105,6 @@ export default function MobileAudioRecordingDetailPage() {
 		initialTitle: locationState?.projectName,
 	})
 	const player = useMobileRecordingAudioPlayer(audioUrl)
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const [playerScrollSignal, setPlayerScrollSignal] = useState(0)
 	const [detailItem, setDetailItem] = useState<AudioProjectListItem | null>(null)
 	const [titleOverride, setTitleOverride] = useState("")
@@ -394,10 +389,15 @@ export default function MobileAudioRecordingDetailPage() {
 	/** Creates a fully mapped topic for the bottom composer before its first send. */
 	async function createTopicForComposer() {
 		if (!chatProject?.id) return null
+		analyticsService.report("topic_create_attempted", {
+			projectId: chatProject.id,
+			workspaceId: chatProject.workspace_id,
+			sceneOverride: "ai_recording",
+		})
 		const created = await SuperMagicApi.createTopic({
 			project_id: chatProject.id,
 			topic_name: "",
-			project_mode: chatProject.project_mode,
+			project_mode: chatProject.project_mode || undefined,
 		})
 		let topic = created as Topic
 		if (topic?.id && (!topic.chat_topic_id || !topic.chat_conversation_id)) {
@@ -1030,6 +1030,7 @@ export default function MobileAudioRecordingDetailPage() {
 							<ProjectTopicListView
 								className="min-h-0 flex-1"
 								projectId={projectId}
+								key={projectId}
 								topics={topics}
 								loading={showTopicsSkeleton}
 								onRefresh={refreshRecordingTopics}
@@ -1070,7 +1071,7 @@ export default function MobileAudioRecordingDetailPage() {
 				<MobileRecordingAudioPlayer
 					audioRef={player.audioRef}
 					audioUrl={audioUrl}
-					currentSec={playerCurrentSec}
+					currentSec={player.currentTime}
 					duration={player.duration}
 					playing={player.playing}
 					expanded={playerExpanded}
@@ -1132,6 +1133,7 @@ export default function MobileAudioRecordingDetailPage() {
 						setTopicRenameOpen(false)
 						setTopicActionItem(null)
 					},
+					testId: "mobile-recording-topic-rename-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
@@ -1139,6 +1141,7 @@ export default function MobileAudioRecordingDetailPage() {
 					onClick: () => void submitRecordingTopicRename(),
 					disabled: !topicRenameValue.trim(),
 					tone: "primary",
+					testId: "mobile-recording-topic-rename-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-4"
 			>
@@ -1166,12 +1169,14 @@ export default function MobileAudioRecordingDetailPage() {
 						setTopicDeleteOpen(false)
 						setTopicActionItem(null)
 					},
+					testId: "mobile-recording-topic-delete-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
 					ariaLabel: t("super:common.confirm"),
 					onClick: () => void confirmRecordingTopicDelete(),
 					tone: "destructive",
+					testId: "mobile-recording-topic-delete-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-6"
 			>

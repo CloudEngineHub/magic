@@ -1,4 +1,11 @@
-import { ReactElement, ReactNode, useEffect, useRef, useState } from "react"
+import {
+	useEffect,
+	useRef,
+	useState,
+	type FocusEvent,
+	type ReactElement,
+	type ReactNode,
+} from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
@@ -27,6 +34,8 @@ interface MagicTooltipProps {
 	contentZIndex?: number
 	/** Distance between the trigger and tooltip content. */
 	sideOffset?: number
+	/** 覆盖这一条提示的悬停等待。未传时仍使用全局 700ms。 */
+	delayDuration?: number
 	/** Disable the tooltip while another menu or popover is open. */
 	disabled?: boolean
 }
@@ -53,6 +62,7 @@ export function MagicTooltip({
 	contentClassName,
 	contentZIndex,
 	sideOffset = 4,
+	delayDuration,
 	disabled = false,
 }: MagicTooltipProps) {
 	const isMobile = useIsMobile()
@@ -67,9 +77,23 @@ export function MagicTooltip({
 	}, [disabled])
 
 	// 菜单打开后使本次悬停失效；恢复可用时必须重新进入或聚焦，旧等待不能重新弹出提示。
-	const handleInteraction = () => {
+	/** Allow hover to start the delay; click-focus must not reuse this grant. */
+	function handlePointerEnter() {
 		canOpenRef.current = !disabled
 	}
+
+	/** Hide on press so the focus that follows a pointer click cannot flash the tip. */
+	function handlePointerDown() {
+		canOpenRef.current = false
+		setOpen(false)
+	}
+
+	/** Keyboard-only: click-induced focus is not :focus-visible and must not enable the tip. */
+	function handleFocus(event: FocusEvent<HTMLElement>) {
+		if (!event.currentTarget.matches(":focus-visible")) return
+		canOpenRef.current = !disabled
+	}
+
 	const handleOpenChange = (nextOpen: boolean) => {
 		setOpen(nextOpen && !disabled && canOpenRef.current)
 	}
@@ -96,8 +120,17 @@ export function MagicTooltip({
 	// 桌面端正常显示
 	const container = getPopupContainer?.() ?? undefined
 	return (
-		<Tooltip open={open && !disabled} onOpenChange={handleOpenChange}>
-			<TooltipTrigger asChild onPointerEnter={handleInteraction} onFocus={handleInteraction}>
+		<Tooltip
+			open={open && !disabled}
+			onOpenChange={handleOpenChange}
+			delayDuration={delayDuration}
+		>
+			<TooltipTrigger
+				asChild
+				onPointerEnter={handlePointerEnter}
+				onPointerDown={handlePointerDown}
+				onFocus={handleFocus}
+			>
 				{children}
 			</TooltipTrigger>
 			<TooltipContent

@@ -522,7 +522,6 @@ class SuperMagicService {
 		navigationState?: Record<string, unknown> | null,
 	) {
 		this.flushCurrentTopicReadProgress("switch-project")
-
 		let resolvedProject = mergeProjectListItemWithStoreCache(project) ?? project
 		if (!resolvedProject.user_role) {
 			const detail = await this.project
@@ -531,6 +530,18 @@ class SuperMagicService {
 			if (detail) {
 				resolvedProject = mergeProjectListItemWithStoreCache(detail) ?? detail
 			}
+		}
+		if (resolvedProject.project_mode === TopicMode.MagiClaw && resolvedProject.claw_code) {
+			this.project.recordProjectVisit(resolvedProject)
+			projectStore.setSelectedProject(resolvedProject)
+			this.route.navigateToClawPlayground(resolvedProject.claw_code)
+			return
+		}
+		if (resolvedProject.project_mode === TopicMode.MicroApp && resolvedProject.micro_app_id) {
+			this.project.recordProjectVisit(resolvedProject)
+			projectStore.setSelectedProject(resolvedProject)
+			this.route.navigateToMicroApp(resolvedProject.micro_app_id)
+			return
 		}
 
 		// 1. 同步设置与检查
@@ -545,6 +556,10 @@ class SuperMagicService {
 
 		// 2. 乐观状态更新
 		projectStore.setSelectedProject(resolvedProject)
+		// Clear the previous project's topic list before switching. Read-only
+		// collaboration projects skip topic fetching below, so without this the
+		// topic view would keep rendering the last visited project's topics.
+		this.topicStore.setTopics([])
 
 		// 如果工作区已在缓存中，立即更新
 		let optimisticWorkspaceId: string | null = null
@@ -575,12 +590,22 @@ class SuperMagicService {
 		if (optimisticTopicId && navigationWorkspaceId) {
 			// Navigate to topic optimistically
 			this.topicStore.setSelectedTopic(null) // Clear first, wait for background data
-			this.route.navigateToTopic({
-				workspaceId: navigationWorkspaceId,
-				projectId: resolvedProject.id,
-				topicId: optimisticTopicId,
-				state: navigationState,
-			})
+			if (interfaceStore.isMobile) {
+				// Mobile has a dedicated project-topic route. navigateToTopic intentionally
+				// resolves to the project page there, so use the detail route directly.
+				this.route.navigateToProjectTopicOnMobile({
+					workspaceId: navigationWorkspaceId,
+					projectId: resolvedProject.id,
+					topicId: optimisticTopicId,
+				})
+			} else {
+				this.route.navigateToTopic({
+					workspaceId: navigationWorkspaceId,
+					projectId: resolvedProject.id,
+					topicId: optimisticTopicId,
+					state: navigationState,
+				})
+			}
 			navigatedToTopic = true
 		} else {
 			// Navigate to project optimistically
@@ -680,6 +705,18 @@ class SuperMagicService {
 		navigationState?: Record<string, unknown> | null,
 	) {
 		this.flushCurrentTopicReadProgress("switch-project")
+		if (project.project_mode === TopicMode.MagiClaw && project.claw_code) {
+			this.project.recordProjectVisit(project)
+			projectStore.setSelectedProject(project)
+			this.route.navigateToClawPlayground(project.claw_code)
+			return
+		}
+		if (project.project_mode === TopicMode.MicroApp && project.micro_app_id) {
+			this.project.recordProjectVisit(project)
+			projectStore.setSelectedProject(project)
+			this.route.navigateToMicroApp(project.micro_app_id)
+			return
+		}
 		// 1. 同步设置与检查
 		const _isReadOnlyProject = isReadOnlyProject(project.user_role)
 		const _isOwner = isOwner(project.user_role)
@@ -836,6 +873,8 @@ class SuperMagicService {
 					.createTopic({
 						projectId: project.id,
 						topicName: "",
+						workspaceId: project.workspace_id,
+						mode: project.project_mode,
 					})
 					.catch(() => null)
 				if (newTopic) {
@@ -1192,17 +1231,25 @@ class SuperMagicService {
 	handleCreateProject = async (
 		params: HandleCreateProjectParams,
 	): Promise<CreatedProject | null> => {
-		const { projectMode, isAutoSelect = true, isEditProject, workdir, projectName } = params
+		const {
+			projectMode,
+			isAutoSelect = true,
+			isEditProject,
+			workdir,
+			projectName,
+			workspaceId,
+		} = params
 		// Note: isEditProject is kept for backward compatibility but editing state
 		// is now managed within ProjectsMenu component via useProjectEditing hook
 		void isEditProject
 
-		const selectedWorkspace = workspaceStore.selectedWorkspace
-		if (!selectedWorkspace) return null
+		// Prefer an explicit workspaceId so route-scoped pages are not bound to store selection.
+		const resolvedWorkspaceId = workspaceId || workspaceStore.selectedWorkspace?.id
+		if (!resolvedWorkspaceId) return null
 
 		try {
 			const res = await this.project.createProject({
-				workspaceId: selectedWorkspace.id,
+				workspaceId: resolvedWorkspaceId,
 				projectMode,
 				workdir,
 				projectName,
@@ -1261,7 +1308,7 @@ class SuperMagicService {
 					} else {
 						topicStore.setSelectedTopic(res.topic)
 						this.route.navigateToTopic({
-							workspaceId: selectedWorkspace.id,
+							workspaceId: resolvedWorkspaceId,
 							projectId: res.project.id,
 							topicId: res.topic.id,
 						})
@@ -1314,6 +1361,8 @@ class SuperMagicService {
 			const newTopic = await this.topic.createTopic({
 				projectId: project.id,
 				topicName: topicName || "",
+				workspaceId: project.workspace_id,
+				mode: project.project_mode,
 				sourceTopic,
 			})
 

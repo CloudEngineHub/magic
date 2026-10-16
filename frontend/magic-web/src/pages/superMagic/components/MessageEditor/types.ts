@@ -138,7 +138,7 @@ export interface MessageEditorProps {
 		shouldClearEditorAfterSend?: boolean
 		extra?: Record<string, unknown>
 		targetTopic?: Topic | null
-	}) => void
+	}) => void | boolean | Promise<void | boolean>
 	/** Placeholder */
 	placeholder?: string
 	/** Rotating prompt examples shown while the editor is empty */
@@ -163,6 +163,8 @@ export interface MessageEditorProps {
 	topicMode?: TopicMode
 	/** Model catalog mode. Defaults to topicMode when not specified. */
 	modelTopicMode?: TopicMode
+	/** Composer employee used for model selection; overrides the historical topic employee. */
+	agentCode?: string | null
 	/** Component size */
 	size?: MessageEditorSize
 	/** Module capability configuration */
@@ -219,6 +221,10 @@ export interface MessageEditorProps {
 }
 
 export interface SendMessageByContentPayload {
+	/** Optional scoped request acknowledgement; transport failures remain in message history. */
+	targetProjectId?: string
+	tryClaim?: () => boolean
+	onHandled?: (accepted: boolean) => void
 	jsonContent: JSONContent
 	mentionItems?: MentionListItem[]
 	topicMode?: TopicMode
@@ -427,6 +433,7 @@ export interface DraftServiceInterface {
 export enum ToolbarButton {
 	DRAFT_BOX = "draftBox",
 	AT = "at",
+	SLASH_COMMAND = "slashCommand",
 	MODEL_SWITCH = "modelSwitch",
 	INTERNET_SEARCH = "internetSearch",
 	MCP = "mcp",

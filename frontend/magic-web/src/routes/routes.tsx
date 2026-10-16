@@ -1,5 +1,6 @@
 import type { RouteObject } from "react-router"
 import { lazy } from "react"
+import { createRouteObjects, RuntimeMode } from "@dtyq/magic-admin-v2"
 import { RoutePath, RoutePathMobile } from "@/constants/routes"
 import magicAdminRoutes from "@/routes/modules/admin/routes"
 import magiClawRoutes from "@/routes/modules/magi-claw/routes"
@@ -161,6 +162,7 @@ const BaseLayout = lazy(() => import("@/layouts/BaseLayout"))
 /** 平台布局（用于分发不同平台入口） */
 const MagicPlatformLayout = lazy(() => import("@/layouts/PlatformLayout/MagicPlatformLayout"))
 const AdminPlatformLayout = lazy(() => import("@/layouts/PlatformLayout/AdminPlatformLayout"))
+const MagicAdminEmbeddedLayout = lazy(() => import("@/pages/magicAdminV2"))
 
 interface RouteConfig {
 	isPersonalOrganization?: boolean
@@ -478,6 +480,11 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 					},
 					...superMagicMicroAppRoutes,
 					{
+						name: RouteName.SuperChatHome,
+						path: `/:clusterCode${RoutePath.SuperChatHome}`,
+						element: <WorkspacePage />,
+					},
+					{
 						name: RouteName.SuperChatProjectState,
 						path: `/:clusterCode${RoutePath.SuperChatProjectState}`,
 						element: <ChatProjectPage />,
@@ -607,6 +614,16 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 			path: "/admin",
 			element: <AdminPlatformLayout />,
 			children: magicAdminRoutes,
+		},
+		{
+			path: "/admin-v2",
+			element: <AdminPlatformLayout />,
+			children: [
+				{
+					element: <MagicAdminEmbeddedLayout />,
+					children: createRouteObjects(RuntimeMode.Embedded),
+				},
+			],
 		},
 		{
 			name: RouteName.MagicPlatform,

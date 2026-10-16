@@ -6,6 +6,12 @@ import { EditorMessageType } from "../../iframe-bridge/types/messages"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import { useHTMLEditorV2 } from "../useHTMLEditorV2"
 
+const toastInfo = vi.hoisted(() => vi.fn())
+
+vi.mock("@/components/base/MagicToaster/utils", () => ({
+	default: { info: toastInfo },
+}))
+
 const bridgeState = vi.hoisted(() => ({
 	instances: [] as Array<{
 		request: ReturnType<typeof vi.fn>
@@ -82,6 +88,8 @@ interface TestHarnessProps {
 	contentInjected?: boolean
 	renderSiteUrl?: string
 	editorRef?: RefObject<HTMLEditorV2Ref>
+	saveEditContent?: Parameters<typeof useHTMLEditorV2>[0]["saveEditContent"]
+	prepareSaveContent?: (content: string) => string
 }
 
 function TestHarness({
@@ -90,6 +98,8 @@ function TestHarness({
 	contentInjected = true,
 	renderSiteUrl,
 	editorRef,
+	saveEditContent,
+	prepareSaveContent,
 }: TestHarnessProps) {
 	const iframeRef = useRef(createIframeRef().current)
 	const localEditorRef = useRef<HTMLEditorV2Ref>(null)
@@ -104,6 +114,9 @@ function TestHarness({
 		renderSiteUrl,
 		targetOrigin: "*",
 		filePathMapping: new Map(),
+		fileId: "slide-1",
+		saveEditContent,
+		prepareSaveContent,
 	})
 
 	return null
@@ -111,9 +124,92 @@ function TestHarness({
 
 describe("useHTMLEditorV2 edit lifecycle", () => {
 	beforeEach(() => {
+		toastInfo.mockClear()
 		bridgeState.instances.length = 0
 		bridgeState.requests.length = 0
 		bridgeState.activationMessages.length = 0
+	})
+
+	it("explains why a JavaScript-created element cannot be edited", async () => {
+		render(<TestHarness isEditMode />)
+		await waitFor(() => expect(bridgeState.instances).toHaveLength(1))
+		act(() => bridgeState.instances[0].emit(EditorMessageType.DYNAMIC_ELEMENT_CLICKED))
+		expect(toastInfo).toHaveBeenCalledOnce()
+	})
+
+	it("uses metadata updated during GET_CONTENT and returns the exact submitted snapshot", async () => {
+		const editorRef = { current: null } as RefObject<HTMLEditorV2Ref>
+		let resolveContent!: (result: { cleanHtml: string }) => void
+		let finishSave!: () => void
+		const saveEditContent = vi.fn<(content: string) => Promise<void>>().mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					finishSave = resolve
+				}),
+		)
+		const oldMetadata = vi.fn((html: string) => `${html}Old metadata`)
+		const latestMetadata = vi.fn((html: string) => `${html}Latest metadata`)
+		const futureMetadata = vi.fn((html: string) => `${html}Future metadata`)
+		const props = { isEditMode: true, editorRef, saveEditContent }
+		const view = render(<TestHarness {...props} prepareSaveContent={oldMetadata} />)
+		await waitFor(() => expect(bridgeState.instances).toHaveLength(1))
+		bridgeState.instances[0].request.mockImplementation((type: string) => {
+			return type === EditorMessageType.GET_CONTENT
+				? new Promise<{ cleanHtml: string }>((resolve) => {
+						resolveContent = resolve
+					})
+				: Promise.resolve({})
+		})
+		const save = editorRef.current?.save
+		if (!save) throw new Error("Editor save handle is missing")
+		const result = save()
+		view.rerender(<TestHarness {...props} prepareSaveContent={latestMetadata} />)
+		await act(async () => {
+			resolveContent({
+				cleanHtml:
+					'<main>Edited body</main><script data-injected="true">editorRuntime()</script>',
+			})
+		})
+		expect(oldMetadata).not.toHaveBeenCalled()
+		expect(latestMetadata).toHaveBeenCalledTimes(1)
+		expect(latestMetadata.mock.calls[0][0]).not.toContain("editorRuntime")
+		expect(saveEditContent).toHaveBeenCalledWith(
+			expect.stringContaining("<main>Edited body</main>"),
+			"slide-1",
+			true,
+			undefined,
+			undefined,
+		)
+		expect(saveEditContent.mock.calls[0][0]).toBe(latestMetadata.mock.results[0].value)
+		view.rerender(<TestHarness {...props} prepareSaveContent={futureMetadata} />)
+		finishSave()
+		expect(await result).toEqual(
+			expect.objectContaining({
+				success: true,
+				cleanContent: saveEditContent.mock.calls[0][0],
+			}),
+		)
+		expect(futureMetadata).not.toHaveBeenCalled()
+	})
+
+	it("does not prepare or persist source metadata when the iframe has no save content", async () => {
+		const editorRef = { current: null } as RefObject<HTMLEditorV2Ref>
+		const saveEditContent = vi.fn(async () => true)
+		const prepareSaveContent = vi.fn((html: string) => html)
+		render(
+			<TestHarness
+				isEditMode
+				editorRef={editorRef}
+				saveEditContent={saveEditContent}
+				prepareSaveContent={prepareSaveContent}
+			/>,
+		)
+		await waitFor(() => expect(bridgeState.instances).toHaveLength(1))
+		const save = editorRef.current?.save
+		if (!save) throw new Error("Editor save handle is missing")
+		expect(await save()).toEqual(expect.objectContaining({ success: false, cleanContent: "" }))
+		expect(prepareSaveContent).not.toHaveBeenCalled()
+		expect(saveEditContent).not.toHaveBeenCalled()
 	})
 
 	it("retries runtime activation until the iframe confirms readiness", async () => {

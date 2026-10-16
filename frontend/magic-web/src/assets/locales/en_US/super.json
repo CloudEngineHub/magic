@@ -177,6 +177,7 @@
 		}
 	},
 	"agentThink": {
+		"interrupted": "Thinking interrupted",
 		"thinkDone": "Done thinking",
 		"thinking": "Thinking..."
 	},
@@ -190,29 +191,30 @@
 			"submit": "Submit"
 		},
 		"answersTitle": "Answers",
-		"defaultValueHint": "The default value will be used after timeout: {{defaultValue}}",
+		"defaultValueHint": "If you don’t choose, we’ll use: {{defaultValue}}",
 		"otherPlaceholder": "other",
 		"placeholder": "Enter your answer",
 		"questionCount": "{{count}} question(s)",
 		"remarkLabel": "Remark",
-		"remarkPlaceholder": "Add context, constraints, or anything else you want the agent to know",
+		"remarkPlaceholder": "Add context, constraints, or anything else you want to share",
 		"status": {
-			"alreadyProcessed": "This question has already been processed",
+			"alreadyProcessed": "This question is already closed and can’t be submitted.",
 			"answered": "Answered",
 			"answeredWithValue": "Answered: {{answer}}",
-			"autoSubmitIn": "Auto-submit in {{time}}",
-			"autoSubmitInFixed": "Auto-submit in {{minutes}} minute(s)",
+			"autoSubmitIn": "We’ll continue with the default option in {{time}}",
+			"autoSubmitInFixed": "We’ll continue with the default option in {{minutes}} minute(s)",
 			"cancelled": "Cancelled",
 			"emptyAnswer": "Not provided",
-			"expiredPending": "Locally expired. Waiting for the server to confirm the final status",
+			"expiredPending": "We’re still processing this. Please wait.",
 			"processingFailed": "Processing failed. Please try again later",
-			"processingInProgress": "Processing in progress. Please do not submit again",
+			"processingInProgress": "Your answer is being submitted. Please wait.",
+			"recoveryFailed": "We cannot continue processing right now. Please try again later. Your answer has been kept.",
 			"skipped": "Skipped",
 			"submitFailed": "Failed to submit. Please try again later",
-			"taskNotFound": "The task was not found or has ended. Please refresh and try again",
-			"timeout": "Timed out",
-			"timeoutWithDefault": "Timed out. The agent continued with the default value: {{defaultValue}}",
-			"timeoutWithDefaultItem": "{{question}}: continued with the default value ({{defaultValue}})"
+			"taskNotFound": "This question has ended. Refresh the page to continue.",
+			"timeout": "The response window has ended",
+			"timeoutWithDefault": "We didn’t receive a choice, so we continued with the default option: {{defaultValue}}",
+			"timeoutWithDefaultItem": "{{question}}: no choice was received, so we continued with the default option ({{defaultValue}})"
 		},
 		"subQuestionLabel": "Question {{index}}",
 		"title": "Needs your input",
@@ -222,6 +224,72 @@
 			"required": "This field is required",
 			"unlimited": "unlimited"
 		}
+	},
+	"assetAgreement": {
+		"accept": "I have read and agree to the Seedance Model Use Commitment above",
+		"clause1Detail": "Including but not limited to images, videos, audio, text, human likenesses, virtual likenesses, voices, and brand elements. If the uploaded assets may involve another person's likeness, voice, biometric features, or intellectual-property elements such as trademarks or copyrighted content, you must ensure that you have obtained sufficient authorization and have not infringed any third party's lawful rights.",
+		"clause1Title": "You have sufficient lawful rights to the assets you are about to upload or use",
+		"clause2Detail": "You fully understand that AI-generated results are uncertain. You alone decide whether to publish, distribute, or use the generated content commercially, and you assume the corresponding legal responsibility.",
+		"clause2Title": "You will be responsible for the generated content and the consequences of its use",
+		"clause3Detail": "Any misuse of assets involving third-party lawful rights will be deemed a violation. The platform may take measures including, without limitation, blocking generation, deleting content, restricting downloads, or suspending or terminating services. If this causes losses to the platform or any third party, you must bear the compensation liability yourself.",
+		"clause3Title": "If you use the service in violation of these terms, the platform may impose restrictions",
+		"confirm": "Agree and use",
+		"disagree": "Disagree",
+		"intro": "To help ensure that you use the services provided by the Seedance model lawfully and compliantly, please carefully read, fully understand, and make the following commitments before use:",
+		"title": "Seedance Model Use Commitment"
+	},
+	"assetLibrarySave": {
+		"bindingSkipped": "The asset was saved, but the image content changed and was not linked",
+		"cancel": "Cancel",
+		"cancelCreate": "Cancel create",
+		"cancelEdit": "Cancel edit",
+		"clearTags": "Clear",
+		"createTag": "New tag",
+		"customTags": "Custom tags",
+		"deleteTag": "Delete",
+		"deletingTag": "Deleting",
+		"description": "Edit the asset information before saving it to Assets",
+		"descriptionLabel": "Description",
+		"descriptionPlaceholder": "Add an optional description",
+		"editDescription": "Edit the asset name, description, visibility, and tags",
+		"editSuccess": "Asset information updated",
+		"editTag": "Edit",
+		"editTitle": "Edit asset",
+		"loadingTags": "Loading tags...",
+		"manageTags": "Manage custom tags",
+		"nameLabel": "Asset name",
+		"namePlaceholder": "Enter an asset name",
+		"nameRequired": "Enter an asset name",
+		"noCustomTags": "No custom tags yet",
+		"noMatchingTags": "No matching tags",
+		"noTags": "No tags available",
+		"preview": "Asset preview",
+		"previewUnavailable": "Preview unavailable",
+		"privateHint": "Only you can view this asset",
+		"privateVisibility": "Only me",
+		"projectUnavailable": "The current project is unavailable. The asset cannot be saved.",
+		"removeTag": "Remove tag",
+		"removeTarget": "Remove",
+		"save": "Save asset",
+		"saveAndVerify": "Save and verify",
+		"saveFailed": "Failed to save the asset. Please try again later.",
+		"selectTargets": "Select members or departments",
+		"selectedCount": "{{count}} selected",
+		"sourceUnavailable": "This image is not a project file that can be saved",
+		"success": "Asset saved to Assets",
+		"tagDuplicate": "Names must be unique",
+		"tagMutationFailed": "Tag action failed. Please try again.",
+		"tagPlaceholder": "Enter a tag name",
+		"tagSelected": "Selected",
+		"tagsLabel": "Tags",
+		"tagsPlaceholder": "Select tags",
+		"tagsSearchPlaceholder": "Search tags",
+		"teamVisibility": "Team",
+		"title": "Save to Assets",
+		"unsupportedFile": "This file type is not supported",
+		"visibilityLabel": "Visibility",
+		"visibilityReadOnly": "This visibility scope cannot be edited here and will be kept unchanged",
+		"visibilityTargetRequired": "Select at least one member or department"
 	},
 	"assistant": {
 		"agentChatPlaceholder": "You can enter your conversation content with \"{{agentName}}\"",
@@ -294,6 +362,7 @@
 		"emptyTitle": "No conversations yet",
 		"minutesAgo": "{{count}} minutes ago",
 		"newChat": "New chat",
+		"newConversation": "New conversation",
 		"searchPlaceholder": "Search",
 		"swipeDelete": "Delete",
 		"swipeMore": "More",
@@ -469,6 +538,7 @@
 			"reload": "Reload Page",
 			"title": "Page Load Failed"
 		},
+		"fileCannotOpen": "Unable to open this file: {{path}}",
 		"fileNotFoundOrLoadFailed": "File not found or failed to load",
 		"fileUrlFetchFailed": "Failed to fetch file URL",
 		"generalMode": "General",
@@ -676,6 +746,7 @@
 			"parseFileFailed": "Failed to parse magic.project.js file",
 			"projectIdNotExists": "Project ID does not exist, cannot upload image",
 			"projectIdNotExistsForGenerate": "Project ID does not exist, cannot generate image",
+			"projectUnavailable": "The current project is unavailable. Refresh and try again.",
 			"refreshFailed": "Refresh failed, please try again later",
 			"removeBackgroundImagesDirUnresolved": "Cannot resolve the design project's images folder. Make sure the design file is open in the topic attachments.",
 			"removeBackgroundParamsIncomplete": "Remove background failed: image task ID and source file path are required.",
@@ -707,6 +778,12 @@
 		"offlineNotice": {
 			"description": "You can continue editing and saving the canvas after the network reconnects.",
 			"title": "Network disconnected. Canvas is read-only"
+		},
+		"rename": {
+			"fileChanged": "The file changed. Reopen the naming panel.",
+			"fileRenamedSaveFailed": "The file was renamed, but canvas references could not be updated. Refresh and check the result.",
+			"fileUnavailable": "Cannot resolve a writable project file. Refresh and try again.",
+			"verifyResult": "The rename result could not be confirmed. Refresh the file list before retrying."
 		},
 		"saved": "Saved",
 		"saving": "Saving",
@@ -1365,6 +1442,16 @@
 		},
 		"fileFormatNotSupported": "File format not supported for preview",
 		"fileNotSupported": "File preview not supported, please download the file",
+		"fileSave": {
+			"blocked": "Some changes are not synced yet. Use Retry, Overwrite remote, or Restore remote in the save-failed notice first.",
+			"conflict": "The remote file changed. Your local edits are not synced.",
+			"failed": "Save did not reach the server. Local content was kept.",
+			"overwrite": "Overwrite remote",
+			"restoreRemote": "Restore remote",
+			"retry": "Retry",
+			"syncing": "Syncing",
+			"unsynced": "Unsynced"
+		},
 		"goToFirstPage": "Go to first page",
 		"joinEditFailed": "Failed to join editing",
 		"pleaseDownloadToView": "Please download the file to view content",
@@ -2382,9 +2469,35 @@
 		"generatedBy": "Generated by {{platformName}}",
 		"platformFallback": "Platform"
 	},
+	"feedback": {
+		"processing": "Processing"
+	},
+	"fileDownload": {
+		"cancelled": "Download cancelled",
+		"download": "Download ZIP",
+		"downloadFile": "Download {{name}}",
+		"downloadOne": "Download file",
+		"downloading": "Preparing your download",
+		"downloadingFile": "Preparing {{name}} for download",
+		"failed": "Some files could not be retrieved. No archive was created. Please retry.",
+		"fileCount": "{{count}} files",
+		"fileFailed": "Could not download this file. Please retry.",
+		"files": "View file list",
+		"noWatermark": "High quality · No watermark",
+		"preparing": "Preparing the file collection",
+		"retry": "Retry download",
+		"started": "Download started",
+		"title": "File bundle",
+		"tooLarge": "This collection exceeds the browser packaging limit. Select fewer files or download from the file manager.",
+		"unavailable": "The file collection is unavailable. Ask AI to create a new download card.",
+		"view": "View"
+	},
 	"fileManager": {
 		"back": "Back",
 		"browseFolder": "Browse folder",
+		"checkItem": "Select {{name}}",
+		"checkSelectionHint": "Check files; expand folders to keep selecting",
+		"clearSelection": "Clear all",
 		"clipboard": {
 			"copied": "Copied {{count}} items. Go to the destination to paste.",
 			"cut": "Cut {{count}} items. Paste to review and confirm the move.",
@@ -2441,9 +2554,13 @@
 		"copyTarget": "Copy {{count}} items to {{target}}",
 		"cut": "Cut",
 		"empty": "This folder is empty",
+		"entry": "File manager",
+		"entryHint": "Browse and manage files in this project",
 		"files": "Files",
 		"forward": "Forward",
 		"itemCount": "{{count}} items",
+		"locateSelectedFile": "Locate file: {{path}}",
+		"locateUnavailable": "This file cannot be located. It may have been deleted or is no longer accessible.",
 		"memory": {
 			"current": "Current",
 			"noMatches": "No matching projects",
@@ -2456,6 +2573,7 @@
 		"name": "Name",
 		"newFolder": "New folder",
 		"noMatches": "No matching files in this folder",
+		"openSelectedProject": "Go to project: {{name}}",
 		"operationProgress": "Processing {{progress}}%",
 		"paste": "Paste",
 		"path": "File path",
@@ -2467,14 +2585,26 @@
 			"target": "{{count}} selected · Destination: {{target}}"
 		},
 		"processing": "Processing…",
+		"recent": "Recently updated",
+		"recentEmpty": "No recently updated files",
 		"recycle": {
 			"back": "Back to files",
+			"backToProject": "Back to project files",
 			"permanentPhrase": "Permanently delete {{count}} items",
 			"permanentWarning": "Permanently deleted files cannot be restored. Check every file and its original path.",
+			"projectEntryHint": "View deleted files you can access in this project",
+			"projectHeading": "Project recycle bin · {{name}}",
+			"projectTitle": "Project recycle bin",
 			"scope": "Deleted files you can access across projects and personal space. This list is not limited to the current project.",
 			"title": "File trash"
 		},
+		"removeSelected": "Remove {{name}}",
 		"restoredDirectoryUnavailable": "The previous folder is unavailable. Opened the nearest available folder.",
+		"searchProjectFiles": "Search project files or paths",
+		"selectedCount": "{{count}} selected",
+		"selectedFiles": "Selected files",
+		"selectionEmpty": "No files selected",
+		"selectionEmptyHint": "Check files on the left to add them here",
 		"selectionHint": "Click to select, double-click to open",
 		"sort": "Sort",
 		"sortModified": "By modified date",
@@ -2483,6 +2613,21 @@
 		"type": "Type",
 		"up": "Up one level",
 		"uploadTarget": "Upload to {{target}}"
+	},
+	"filePreview": {
+		"downloadFailed": "Image download failed",
+		"downloadImage": "Download image",
+		"expandImage": "Expand preview",
+		"retry": "Retry"
+	},
+	"fileSpaceLimit": {
+		"cleanupCount": "We recommend removing about {{count}} files you no longer need",
+		"description": "Please organize the file space before continuing so the task can run reliably.",
+		"feedback": "Report a problem",
+		"feedbackDefault": "This task cannot continue because the file space needs cleanup. We recommend removing about {{count}} files you no longer need and trying again.",
+		"openFiles": "Organize files",
+		"temporaryNotice": "We are improving support for larger file spaces.",
+		"title": "File space needs cleanup"
 	},
 	"fileTree": {
 		"collapseAll": "Collapse All",
@@ -2620,6 +2765,7 @@
 		"newSlidePromptSuffix": ", please help me fill in the content:",
 		"nextPage": "Next",
 		"noSlidesTitle": "No presentation available",
+		"openCorrespondingFile": "Open Corresponding File",
 		"openInNewWindow": "Open in new window",
 		"openUrl": "Open in new tab",
 		"outline": "Outline",
@@ -2681,6 +2827,7 @@
 		"waitForPreviousOperation": "Please wait for the previous operation to complete",
 		"website": {
 			"add": "Open website",
+			"clearSearch": "Clear search",
 			"closeLoadFallback": "Close loading notice",
 			"commonAddTitle": "Save common link",
 			"commonAlreadyExists": "This link is already saved",
@@ -2701,8 +2848,17 @@
 			"loadFallbackDescription": "If the page is not fully visible, the site may restrict iframe embedding or the network may be loading slowly.",
 			"loadFallbackTitle": "This page is taking longer to load",
 			"menuTitle": "Common websites",
+			"microApps": {
+				"empty": "No micro apps available",
+				"loading": "Loading micro apps...",
+				"loadingMore": "Loading more...",
+				"searchPlaceholder": "Search micro apps",
+				"title": "Micro apps"
+			},
+			"noResults": "No matching results",
 			"openCustom": "Open",
 			"openExternal": "Open externally",
+			"openUrl": "Open {{url}}",
 			"presets": {
 				"baiduImages": {
 					"description": "Image search and visual references",
@@ -2733,8 +2889,17 @@
 					"title": "ZCOOL"
 				}
 			},
+			"quickOpen": "Quick open",
+			"quickOpenDescription": "Search files, websites, or micro apps",
 			"refresh": "Refresh",
-			"removeCommon": "Remove common link"
+			"removeCommon": "Remove common link",
+			"searchAllPlaceholder": "Search files, websites, or micro apps, or enter a URL",
+			"sections": {
+				"all": "All",
+				"files": "Files",
+				"label": "Content categories",
+				"websites": "Websites"
+			}
 		}
 	},
 	"filenameValidator": {
@@ -2761,6 +2926,12 @@
 			"continueUpload": "Continue Upload",
 			"expand": "Expand",
 			"hideCompleted": "Hide Completed",
+			"locate": "Locate",
+			"locateDirectory": "Locate folder",
+			"locateFile": "Locate file",
+			"mention": "@ Reference",
+			"mentionCurrentChat": "Reference in current chat",
+			"noEditableChat": "No editable chat input is available",
 			"pause": "Pause",
 			"pauseAll": "Pause All",
 			"pauseAllTasks": "Pause All",
@@ -2769,6 +2940,10 @@
 			"resumeAll": "Resume All",
 			"retry": "Retry",
 			"retryFailed": "Retry Failed Files",
+			"scrollDown": "View files below",
+			"scrollUp": "View files above",
+			"switchProjectFirst": "Locate the project first to reference this file",
+			"targetUnavailable": "The file was uploaded, but is not available in the file list. Refresh the list and try again.",
 			"viewDetails": "View Details",
 			"viewFailedFiles": "View Failed Files"
 		},
@@ -2817,6 +2992,15 @@
 			"viewProject": "View Project"
 		},
 		"globalSummary": "Total {{count}} upload tasks",
+		"hint": {
+			"close": "Dismiss upload guide",
+			"directory": "Expand uploads to locate the uploaded folder.",
+			"disable": "Don’t show again",
+			"expand": "View uploads",
+			"locate": "Expand uploads to open the project and locate your files.",
+			"locateAndMention": "Expand uploads to locate files or reference them in the current chat.",
+			"title": "View uploaded files"
+		},
 		"labels": {
 			"uploadTo": "Upload to: {{path}}"
 		},
@@ -2996,9 +3180,180 @@
 		"sloganTitle": "What do you need help with today?"
 	},
 	"htmlEditor": {
+		"designStyle": {
+			"apply": "Add to chat",
+			"browseCategories": "Browse categories",
+			"buttons": "Buttons",
+			"cancel": "Cancel",
+			"categories": {
+				"ai": "AI & language models",
+				"all": "All",
+				"automotive": "Automotive",
+				"commerce": "E-commerce & retail",
+				"design": "Design & creative tools",
+				"developer": "Developer tools",
+				"featured": "Featured",
+				"finance": "Finance & digital currency",
+				"media": "Media & consumer electronics",
+				"other": "Other",
+				"productivity": "Software & productivity tools",
+				"retro": "Retro websites",
+				"scenario": "Page scenarios"
+			},
+			"categoryLabel": "Style categories",
+			"colorCount": "{{count}} colors",
+			"colorSystem": "Colors and usage",
+			"colorSystemDescription": "Colors for page backgrounds, content areas, highlights, and text.",
+			"componentStates": "Component preview",
+			"componentStatesDescription": "Control states using this palette; see the guidelines for component definitions.",
+			"contentArea": "Content area",
+			"copied": "Copied",
+			"copy": "Copy",
+			"copyAllTokens": "Copy all style values",
+			"copyColor": "Copy color value {{value}}",
+			"copyFontStack": "Copy fonts",
+			"copyRawSource": "Copy source",
+			"copyToken": "Copy style value",
+			"copyTokenValue": "Copy value",
+			"dangerState": "Error",
+			"defaultState": "Default",
+			"definedComponents": "Components defined in the specification",
+			"description": "Find a visual expression that fits your content.",
+			"detailSectionsLabel": "Style detail sections",
+			"disabledState": "Disabled",
+			"empty": "No matching styles",
+			"errorState": "Invalid input",
+			"featured": "Featured",
+			"focusState": "Focused",
+			"formStates": "Inputs",
+			"fullGuidelines": "Complete guidelines",
+			"gallery": {
+				"applyHint": "Applying fills the request in chat for you to review and send.",
+				"back": "Back to styles",
+				"clearFilters": "Clear filters",
+				"exampleNotice": "This is a style example. Your current page has not changed.",
+				"styleExample": "Style example",
+				"viewportLabel": "Example page size"
+			},
+			"guidelinesTitle": "Layout, components and guidelines",
+			"inputState": "Default",
+			"layoutTitle": "Layout and visual direction",
+			"layouts": {
+				"centered": "Centered",
+				"grid": "Grid",
+				"magazine": "Magazine",
+				"sidebar": "Sidebar",
+				"split": "Split columns",
+				"stacked": "Stacked"
+			},
+			"libraryLabel": "Style library",
+			"loadError": "Failed to load design styles",
+			"loading": "Loading styles…",
+			"mainColor": "Main color",
+			"noColorTokens": "No colors available",
+			"noRadiusValues": "No corner radius values available",
+			"noSpacingValues": "No spacing values available",
+			"noTypographyTokens": "No text styles available",
+			"open": "Choose style",
+			"originalLanguage": "Original source language. Expand a heading to read.",
+			"outlineState": "Outline",
+			"pageBackground": "Page background",
+			"pagePreview": "Page preview",
+			"previewLoadError": "Preview failed to load",
+			"previewLoading": "Generating preview…",
+			"promptFile": "Apply the specified design style to this HTML file: ",
+			"promptPreserve": "Preserve the existing content, data requests, interactions, forms, permissions, navigation, and responsive behavior.",
+			"promptReport": "When finished, report the changes, the behaviors you verified, and any remaining visual or responsive risks.",
+			"promptSkill": "Use the `html-design-style` skill to complete this task:",
+			"promptStyle": "Target style: \"{{styleName}}\" (style_code: {{styleCode}}).",
+			"promptUpdateOriginal": "Update the original file directly. Do not create a copy.",
+			"promptVisualOnly": "Change only the visual style.",
+			"rawMode": "DESIGN.md",
+			"rawSource": "DESIGN.md source",
+			"rawSourceDescription": "Raw source document for {{code}}",
+			"rawSourceEmpty": "The source document is empty",
+			"rawSourceError": "Failed to load the source document",
+			"rawSourceLoading": "Loading source document…",
+			"rawSourceRetry": "Retry",
+			"readFullSource": "Read the complete DESIGN.md",
+			"resultCount": "{{count}} styles",
+			"retry": "Try again",
+			"scene": {
+				"active": "Active",
+				"activity": "Activity",
+				"all": "All",
+				"brand": "Design Exploration",
+				"chart": "Data trend chart",
+				"collection": "Selected collection",
+				"commerceDescription": "Give the work room to speak. Discover something new in the details.",
+				"commerceTitle": "Everyday things,\nworth keeping.",
+				"complete": "Complete",
+				"components": "Components",
+				"dashboardDescription": "Bring team health, key metrics, and recent progress together for faster decisions.",
+				"dashboardTitle": "Information,\nmade clear.",
+				"editorialDescription": "Let typography, imagery and space express the character of your content.",
+				"editorialTitle": "Room for\nnew ideas.",
+				"email": "Email address",
+				"empty": "No content",
+				"explore": "Explore",
+				"illustration": "Scene illustration",
+				"landingDescription": "From color to space, every detail serves the content.",
+				"landingTitle": "A voice\nof your own.",
+				"latest": "New release",
+				"metricOne": "Active projects",
+				"metricThree": "On-time delivery",
+				"metricTwo": "Team efficiency",
+				"name": "Project",
+				"navigation": "Example page navigation",
+				"newsletter": "Get the editor's selection",
+				"notifications": "Notifications",
+				"overview": "Overview",
+				"portfolioDescription": "A considered selection of work, process, and the thinking behind each outcome.",
+				"portfolioTitle": "Work that\nspeaks for itself.",
+				"progress": "Progress",
+				"projectOne": "Brand refresh",
+				"projectThree": "Product launch",
+				"projectTwo": "Growth study",
+				"projects": "Projects",
+				"readTime": "6 min read",
+				"save": "Save",
+				"saved": "Saved",
+				"search": "Search",
+				"settings": "Settings",
+				"sort": "Sort",
+				"status": "Status",
+				"subscribe": "Subscribe",
+				"subscribed": "Subscribed",
+				"terminalDescription": "A clear, fast interface for building, debugging, and shipping.",
+				"terminalTitle": "From ideas\nto something real."
+			},
+			"searchPlaceholder": "Search style names or tags",
+			"semanticRoles": "Color usage",
+			"shape": "Corner radius",
+			"shapeAppliedDescription": "See how different corner sizes look on buttons and inputs.",
+			"sourceFrontmatterOnly": "This specification is defined in frontmatter. Open the source to read all definitions.",
+			"spacing": "Spacing",
+			"spacingAppliedDescription": "See different spacing values around a content area.",
+			"statusStates": "Messages",
+			"successState": "Success",
+			"textColor": "Text",
+			"title": "Choose a design style",
+			"tokenDetails": "Guidelines",
+			"typography": "Text styles",
+			"typographyCount": "{{count}} text styles",
+			"typographyDescription": "Declared fonts and type hierarchy; unavailable fonts use local fallbacks.",
+			"typographySample": "Text sample · Style preview · 012345",
+			"viewports": {
+				"desktop": "Desktop",
+				"mobile": "Mobile",
+				"tablet": "Tablet"
+			},
+			"warningState": "Warning"
+		},
 		"dropOverlay": {
 			"hint": "Release to insert image"
 		},
+		"dynamicElementNotEditable": "This element is generated by JavaScript and cannot be edited directly. Exit the editor and use Select to ask AI to change it.",
 		"permissionAuthorizationConfirm": {
 			"allow": "Allow",
 			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting permission to use: {{scope}} under the legacy short-term authorization policy.",
@@ -3093,6 +3448,10 @@
 			"updateDurationSuccess": "Authorization duration updated",
 			"version": "App version"
 		},
+		"previewRefreshFailed": "The preview could not update. The displayed content may be out of date.",
+		"previewRefreshTooltip": "Load the latest content and restart the page.",
+		"previewRetry": "Retry",
+		"previewUpdating": "Updating preview…",
 		"projectContextUnavailable": "This feature is not supported in share mode. Try sharing through collaboration instead.",
 		"projectFileOperationConfirm": {
 			"cancel": "Cancel",
@@ -3110,6 +3469,8 @@
 			},
 			"title": "Confirm Project File {{operation}}"
 		},
+		"serverUpdateTooltip": "New content is available on the server. Compare versions while keeping your unsaved edits.",
+		"specifiedAgentUnavailable": "This conversation cannot use the specified agent. Using the current one.",
 		"userInfoAuthorizationConfirm": {
 			"allow": "Allow",
 			"appConfigUnavailableContent": "This HTML micro-app's app.json is temporarily unavailable and is requesting access to: {{fields}} through the legacy flow.",
@@ -3226,6 +3587,7 @@
 			"unknownProviderTypeWithCode": "Unknown provider type ({{providerTypeId}})"
 		},
 		"at": "Reference",
+		"copyMention": "Copy mention",
 		"deleteUploadedFileConfirm": {
 			"cancel": "Cancel",
 			"confirm": "Delete",
@@ -3360,6 +3722,14 @@
 		"refreshTopics": "Refresh topics",
 		"rename": "Rename",
 		"renameTopicSuccess": "Rename topic successfully",
+		"restartSandbox": "Restart virtual machine",
+		"restartSandboxBusy": "The virtual machine is busy. Please try again later.",
+		"restartSandboxFailed": "Virtual machine restart failed. Please try again later.",
+		"restartSandboxLoading": "Restarting the virtual machine. Please wait…",
+		"restartSandboxNetworkError": "Unable to confirm the virtual machine restart result. Please check again later.",
+		"restartSandboxNotFound": "The virtual machine was not found. Refresh the page and try again.",
+		"restartSandboxPermissionDenied": "You don’t have permission to restart this virtual machine.",
+		"restartSandboxSuccess": "The virtual machine is ready. You can continue using it.",
 		"searchHistoryTopics": "Search",
 		"share": "Share",
 		"today": "Today",
@@ -3445,8 +3815,26 @@
 	},
 	"microAppPage": {
 		"conversation": {
+			"collapse": "Collapse message panel",
+			"currentAppLink": "You are already viewing this micro app",
+			"defaultAppName": "Micro app",
+			"development": "Development project",
 			"emptyDescription": "Describe it and I’ll update this micro app.",
-			"emptyTitle": "What would you like to change?"
+			"emptyTitle": "What would you like to change?",
+			"expand": "Expand message panel",
+			"loadFailed": "Failed to load the project. Please try again.",
+			"mentionAppHintAction": "@ the current app first.",
+			"mentionAppHintHoverAction": "click to add this micro app",
+			"mentionAppHintPrefix": "To edit this micro app's data, ",
+			"switchToPreviewCancel": "Cancel",
+			"switchToPreviewCancelled": "Action cancelled",
+			"switchToPreviewConfirm": "Switch",
+			"switchToPreviewDescription": "Creating topics and sending messages require Preview mode. Switch now?",
+			"switchToPreviewTitle": "Switch to Preview mode",
+			"title": "Chat",
+			"usage": "Usage project",
+			"usageEmptyDescription": "Messages will appear here after you run the micro-app.",
+			"usageEmptyTitle": "No usage project yet"
 		},
 		"databasePanel": {
 			"accessPermissions": "Access permissions",
@@ -3654,6 +4042,7 @@
 			"totalRows": "{{total}} records",
 			"yes": "Yes"
 		},
+		"defaultProjectName": "Project",
 		"edit": {
 			"button": "Edit micro app details",
 			"captureCover": "Generate page cover",
@@ -3683,6 +4072,9 @@
 			"loadFailed": "Unable to load this micro app. Please try again later.",
 			"permissionDescription": "You may not have access to this project, or its sharing settings may have changed. Return to the list to view available micro apps.",
 			"permissionTitle": "You can’t access this micro app"
+		},
+		"fileManagerDialog": {
+			"title": "File manager"
 		},
 		"header": {
 			"backToApps": "Back to micro apps",
@@ -3725,6 +4117,11 @@
 			"files": "Files",
 			"preview": "Preview"
 		},
+		"mode": {
+			"ariaLabel": "Micro-app work mode",
+			"development": "Development mode",
+			"preview": "Preview mode"
+		},
 		"navigation": {
 			"ariaLabel": "Micro app editor",
 			"database": "Data",
@@ -3732,7 +4129,8 @@
 			"longMemory": "Long-term memory",
 			"preview": "Preview",
 			"scheduledTasks": "Scheduled tasks",
-			"shareManagement": "Share management"
+			"shareManagement": "Share management",
+			"skills": "Skills"
 		},
 		"preview": {
 			"buildingDescription": "The preview will appear here as soon as the page is ready.",
@@ -3752,6 +4150,7 @@
 		"previewToolbar": {
 			"address": "Current preview address",
 			"aiEdit": "AI Edit",
+			"closePage": "Close page",
 			"desktop": "Desktop preview",
 			"disableDebug": "Disable debugging",
 			"enableDebug": "Enable debugging",
@@ -3759,6 +4158,10 @@
 			"fullscreen": "Fullscreen preview",
 			"more": "More",
 			"noHtml": "No previewable HTML files",
+			"noOpenPages": "No open pages",
+			"openPage": "Open HTML page",
+			"openPageHint": "Use + above to choose an HTML page to preview.",
+			"pages": "Open pages",
 			"phone": "Mobile preview",
 			"refresh": "Refresh preview",
 			"title": "Preview"
@@ -3778,6 +4181,11 @@
 			"coverTooLarge": "Cover image must be 10 MB or smaller",
 			"coverUpload": "Upload cover",
 			"coverUploadFailed": "Cover upload failed. Please try again.",
+			"defaultOpenFile": "Default entry",
+			"defaultOpenFileAuto": "Auto select",
+			"defaultOpenFileDescription": "Choose an HTML file from any project folder. Invalid entries fall back automatically.",
+			"defaultOpenFileEmpty": "No matching HTML files",
+			"defaultOpenFileSearch": "Search file name or path",
 			"description": "After you configure access, others can use this micro app through the published link.",
 			"displaySettings": "Advanced options",
 			"fullScreen": "Fullscreen",
@@ -3810,10 +4218,39 @@
 			"unpublishFailed": "Failed to unpublish. Please retry.",
 			"unpublishSuccess": "Micro app unpublished",
 			"update": "Save settings"
+		},
+		"skills": {
+			"addToConversation": "Add to conversation",
+			"cancel": "Cancel",
+			"contentEmpty": "This skill has no SKILL.md content",
+			"create": "Create skill",
+			"createDescription": "Describe what the skill should do. The request will be sent to the current conversation.",
+			"createFailed": "Could not send the creation request. Please try again.",
+			"createPrompt": "Create a skill in the current project for the following requirements:\n\n{{requirement}}\n\nConsider existing project features and check existing skills to avoid overwriting or duplicating them. Write .magic/skills/<skill-directory>/SKILL.md with name and description metadata, use cases, trigger conditions, inputs, steps, and expected outputs. Add supporting scripts or references only when needed. Explain what the skill does and how to use it when finished.",
+			"createSubmit": "Create",
+			"detailEmpty": "Select a skill to view its SKILL.md",
+			"edit": "Edit",
+			"empty": "No skills in this project",
+			"loadFailed": "Failed to load skills. Please try again.",
+			"loading": "Loading skills...",
+			"noDescription": "No description",
+			"requirement": "Skill requirements",
+			"requirementPlaceholder": "For example: find industry trends, suggest topics, and organize them in the content calendar.",
+			"save": "Save",
+			"saveFailed": "Failed to save skill. Please try again.",
+			"saveSuccess": "Skill saved",
+			"saving": "Saving...",
+			"subtitle": "Choose a skill to add it to the current conversation editor.",
+			"title": "Project skills",
+			"trigger": "Skills",
+			"use": "Use",
+			"usePrompt": "Use the {{skill}} skill",
+			"workspaceSubtitle": "Browse project skills and their SKILL.md files"
 		}
 	},
 	"microAppShare": {
 		"copyLink": "Copy link",
+		"crossOrganizationConversationUnsupported": "Micro app conversations across organizations are not supported yet",
 		"errorTitle": "Micro app unavailable",
 		"install": "Install to desktop",
 		"installConfirm": "Continue installation",
@@ -3827,6 +4264,9 @@
 		"installWebViewTitle": "Use your system browser",
 		"linkCopied": "Link copied",
 		"login": "Log in",
+		"loginRequiredConfirm": "Sign in",
+		"loginRequiredDescription": "This action requires an account. Would you like to sign in?",
+		"loginRequiredTitle": "Sign in to continue",
 		"noEntryDescription": "The published content does not include a runnable root HTML file.",
 		"noEntryTitle": "No entry HTML found",
 		"openInBrowser": "Open in system browser",
@@ -3852,6 +4292,7 @@
 		"user": "Signed-in user"
 	},
 	"microAppsPage": {
+		"accessTitle": "Open apps",
 		"actions": {
 			"collaboratorsFailed": "Failed to load collaborator information. Please retry.",
 			"collaboratorsNoPermission": "You do not have permission to manage collaborators for this app.",
@@ -3873,8 +4314,14 @@
 			"renaming": "Saving..."
 		},
 		"backToCreate": "Back to create a micro app",
+		"clearSearch": "Clear search",
+		"continueDevelopment": "Continue development",
+		"createApp": "Create app",
+		"createBlankApp": "Create blank app",
 		"createProject": "New Project",
 		"createProjectFailed": "Failed to create the project. Please retry.",
+		"creating": "Creating…",
+		"developmentTitle": "Continue building",
 		"draftBadge": "In progress",
 		"emptyDescription": "Describe your idea above to create your first micro app.",
 		"emptyTitle": "No micro app projects",
@@ -3899,16 +4346,27 @@
 		"heroTitleProduct": "Micro App",
 		"heroTitleProductHint": "",
 		"loadMore": "Load more",
+		"loadMoreFailed": "Could not load more. You can still use the apps shown.",
+		"loadedCount": "Showing {{count}} of {{total}} apps",
 		"noSearchResults": "No matching micro apps",
 		"noSearchResultsDescription": "Try a different keyword.",
+		"openApp": "Open app",
 		"openGallery": "View micro app list",
 		"publishedEmptyDescription": "Micro apps shared with you will appear here.",
 		"publishedEmptyTitle": "No accessible micro apps",
+		"recentEmptyDescription": "Apps you visit will appear here so you can easily return to them.",
+		"recentEmptyTitle": "No recent apps",
 		"refresh": "Refresh",
+		"resizePanels": "Resize development and access panels",
+		"retryLoadMore": "Retry loading",
+		"scopeAccessible": "Accessible",
 		"scopeAll": "All",
 		"scopeCollaborated": "Collaborated",
 		"scopeCreated": "Created by me",
+		"scopeRecent": "Recently visited",
+		"searchLoadedCount": "Showing {{count}} apps",
 		"searchPlaceholder": "Search micro apps",
+		"searchResultsTitle": "Search results",
 		"shareType": {
 			"organization": "Team visible",
 			"password": "Password access",
@@ -3921,7 +4379,8 @@
 		"tabPublished": "Published Apps",
 		"title": "Micro Apps",
 		"unnamedApp": "Untitled micro app",
-		"updatedAt": "Updated {{date}}"
+		"updatedAt": "Updated {{date}}",
+		"viewProject": "View project"
 	},
 	"mobile": {
 		"apps": {
@@ -4469,6 +4928,11 @@
 		"unfavorite": "Remove from favorites",
 		"unfavoriteSuccess": "Template removed from favorites"
 	},
+	"noSend": {
+		"description": "This content remains visible on Web and is not sent to WeChat",
+		"invalidClosing": "The reply contains an unmatched delivery marker; other content is still sent normally",
+		"unclosed": "This content remains visible on Web and is not sent to WeChat; its delivery marker was not closed"
+	},
 	"notification": {
 		"superMagicTitle": "$t(common:platform.name) Notification",
 		"taskCompleteBody": "🟢 Task \"{{taskName}}\" completed, click to view"
@@ -4512,6 +4976,76 @@
 		"submitSuccess": "Submit successfully",
 		"uploadImageCountLimit": "It supports adding up to 10 JPG or PNG images.",
 		"uploadImageSizeLimit": "The file size should be less than 2MB."
+	},
+	"operationResultList": {
+		"added": "Added",
+		"collapse": "Collapse result list",
+		"deleted": "Deleted",
+		"detailsShort": "Details",
+		"directory": "Folder",
+		"download": {
+			"batch": "Batch download progress",
+			"cancelled": "Stopped",
+			"completed": "Downloaded",
+			"downloading": "Downloading",
+			"estimated": "Batch progress estimated by processed files",
+			"failed": "Download failed",
+			"more": "{{count}} more files; full results after downloading",
+			"noFileProgress": "Per-file progress is not available yet",
+			"pending": "Waiting",
+			"processed": "{{completed}} of {{total}} files processed",
+			"retrying": "Retrying",
+			"skipped": "Already exists",
+			"unknownSize": "Downloading, total size unknown"
+		},
+		"expand": "Expand result list",
+		"failedCount": "{{count}} incomplete",
+		"file": "File",
+		"generationDetails": "Generation details",
+		"interrupted": "Operation interrupted",
+		"itemCount": "{{count}} results",
+		"itemCount_one": "{{count}} result",
+		"lines": "lines",
+		"locateCanvasElement": "Locate canvas element: {{label}}",
+		"locateShort": "Locate",
+		"modifiedLines": "Modified {{count}} lines",
+		"moreWebpages": "Show {{count}} more pages",
+		"omitted": "{{count}} more results in details",
+		"openGenerationDetails": "View generation details: {{label}}",
+		"openImage": "View image: {{label}}",
+		"openReport": "View tool details",
+		"openWebpage": "Open webpage",
+		"readFailed": "Not read",
+		"running": "Processing",
+		"searchCount": "{{count}} results found",
+		"skipped": "Skipped",
+		"stages": {
+			"analyze": "Analyzed",
+			"completed": "Completed",
+			"download": "Downloaded",
+			"edit": "Modified",
+			"find": "Found",
+			"load": "Loaded",
+			"read": "Read",
+			"transcribed": "Transcribed"
+		},
+		"summary": "{{success}} succeeded · {{error}} failed",
+		"summaryCompleted": "{{count}} completed",
+		"summaryFailed": "{{count}} failed",
+		"summaryProcessing": "Processing {{count}} items",
+		"summaryProcessing_one": "Processing {{count}} item",
+		"summarySucceeded": "{{count}} succeeded",
+		"title": "Operation results",
+		"unavailable": "Operation results are unavailable",
+		"units": {
+			"files": "{{count}} files",
+			"images": "{{count}} images",
+			"videos": "{{count}} videos",
+			"webpages": "{{count}} pages"
+		},
+		"viewFile": "View file",
+		"viewImage": "View image",
+		"viewInCanvas": "View in canvas"
 	},
 	"personalPet": {
 		"collapse": "Collapse pet",
@@ -4613,6 +5147,33 @@
 		"viewProcess": "View Process"
 	},
 	"ppt": {
+		"batch": {
+			"actions": "Slide actions",
+			"cancel": "Cancel",
+			"clear": "Clear",
+			"copy": "Duplicate selected slides",
+			"filesRetained": "{{count}} created files have been retained in project files.",
+			"hidden": "Hidden",
+			"hide": "Hide slides",
+			"moveFirst": "Move to start",
+			"moveLast": "Move to end",
+			"operationConflict": "Slides changed elsewhere. Refresh before retrying.",
+			"operationFailed": "The operation did not complete. Refresh and verify the deck before retrying.",
+			"operationUnknown": "The outcome is unconfirmed. Refresh the deck to verify.",
+			"page": "Slide {{page}}",
+			"remove": "Remove from presentation",
+			"removeDescription": "Only remove these slides from the presentation. Source HTML files and assets will be kept.",
+			"removeTitle": "Remove {{count}} selected slides?",
+			"saveNotesFirst": "Save or retry pending speaker notes before changing slides.",
+			"saved": "Slides updated",
+			"search": "Search",
+			"select": "Select",
+			"selectAll": "Select all",
+			"selectPage": "Select slide {{page}}",
+			"selectedCount": "{{count}} slides selected",
+			"show": "Show slides",
+			"stop": "Stop remaining operations"
+		},
 		"codeVersionCompare": {
 			"description": "A new server source version has been detected. Compare your current edits with the latest server version and choose which version to keep.",
 			"title": "Source Version Comparison"
@@ -4640,22 +5201,94 @@
 		"fileNotFound": "File Not Found",
 		"fitToWindow": "Fit to window",
 		"fullscreen": "Fullscreen",
+		"hiddenPageSkipped": "This slide is hidden and skipped during presentation.",
+		"hiddenSlide": "Hidden",
+		"includeHiddenSlides": "Include hidden slides",
 		"initializing": "Initializing...",
 		"loadError": "Load Failed",
 		"loading": "Loading",
 		"navigationConfirmDescription": "Current page has unsaved changes. Save before switching to page {{page}}?",
 		"navigationConfirmTitle": "Save and Navigate",
 		"noSlidesAvailable": "No PPT pages available",
+		"noVisibleSlides": "All slides are hidden. Show a slide before presenting.",
 		"pageNumber": "Page {{page}}",
 		"pleaseSelectSlides": "Please select at least one slide",
+		"presenter": {
+			"elapsedTime": "Elapsed time",
+			"endOfPresentation": "End of presentation",
+			"endSlideShow": "End slide show",
+			"enterFullscreen": "Enter fullscreen",
+			"frameTitle": "PPT presentation",
+			"loadNextSlideFailed": "Could not load the next slide",
+			"loadingNextSlide": "Loading next slide…",
+			"nextSlide": "Next slide",
+			"primarySuffix": " (Primary)",
+			"resetTimer": "Reset timer",
+			"resizeColumns": "Resize columns",
+			"resizeFilmstrip": "Resize preview and thumbnails",
+			"resizeNotes": "Resize next slide and notes",
+			"retryFullscreen": "Presenter mode could not open. Click Start slideshow again to present in this window.",
+			"screen": "Switch display",
+			"screenOption": "Display {{index}}",
+			"scrollNext": "Scroll to later slides",
+			"scrollPrevious": "Scroll to earlier slides",
+			"selectScreen": "Switch display",
+			"slideNumber": "Slide {{number}}",
+			"slideTitle": "Slide {{page}} · Presenter",
+			"slides": "Slide navigation",
+			"title": "Presenter"
+		},
 		"refreshCurrentSlide": "Refresh",
-		"reloadAllSlides": "Reload all",
-		"reloadCurrentSlide": "Reload current",
+		"reloadAllSlides": "Refresh all",
+		"reloadCurrentSlide": "Refresh",
 		"saveAndNavigate": "Save",
 		"saveChanges": "Save Changes",
 		"saveWithServerUpdate": "A new server version has been detected. Saving will overwrite the latest server version. Continue?",
 		"saveWithServerUpdateTitle": "Confirm Save",
 		"saving": "Saving",
+		"search": {
+			"after": "After",
+			"allPages": "All slides",
+			"back": "Back to search",
+			"before": "Before",
+			"cancel": "Stop remaining replacements",
+			"cancelled": "Not submitted",
+			"cancelling": "Waiting for the current save",
+			"cannotReplace": "Cannot safely replace",
+			"caseSensitive": "Match case",
+			"complete": "Saved {{success}} slides; {{conflict}} changed elsewhere; {{failed}} failed",
+			"confirm": "Confirm replacement",
+			"conflict": "Changed elsewhere; not replaced",
+			"description": "Search static text, including hidden slides. Notes, attributes, scripts, and runtime chart text are excluded.",
+			"emptyReplacement": "Remove this text",
+			"error": "The operation could not complete. Search again and retry.",
+			"failed": "Replacement failed",
+			"hidden": "Hidden",
+			"matchCount": "{{count}} matches",
+			"next": "Next match",
+			"noMatches": "No matches found",
+			"noScannedMatches": "No matches in scanned slides; some slides were not scanned",
+			"notScanned": "Slide {{page}} was not scanned. Refresh to retry.",
+			"page": "Slide {{page}}",
+			"preview": "Replace {{count}} matches across {{pages}} slides",
+			"previous": "Previous match",
+			"progress": "Scanned {{done}} / {{total}} slides",
+			"query": "Find",
+			"refresh": "Search again",
+			"refreshFailed": "Saved, but some previews could not refresh. Refresh the page to view them.",
+			"replaceAll": "Replace all",
+			"replaceOne": "Replace this match",
+			"replacement": "Replace with",
+			"resultCount": "Found {{count}} matches on {{pages}} slides",
+			"saved": "Saved",
+			"scope": "Search scope",
+			"selectedPages": "Selected slides",
+			"start": "Enter text to find",
+			"title": "Search slide text",
+			"unknown": "Outcome unconfirmed",
+			"unknownHelp": "Some save outcomes are unconfirmed. Remaining replacements stopped. Search again and verify the content before continuing.",
+			"unsupported": "{{count}} matches cannot be safely mapped to source. Replace other matches individually."
+		},
 		"selectAll": "Select All",
 		"selectSlidesToExport": "Select Slides to Export",
 		"selectedCount": "{{count}} selected",
@@ -4667,6 +5300,60 @@
 		"slideIdleDescription": "Slide {{index}} is waiting to load",
 		"slideLoadError": "Failed to load slide {{index}}",
 		"slideLoading": "Loading slide {{index}}...",
+		"speakerNotes": {
+			"acceptAllChanges": "Accept all",
+			"acceptChange": "Accept next",
+			"allPages": "All slides ({{count}})",
+			"autoApply": "Apply automatically",
+			"cancelGeneration": "Cancel generation",
+			"contentChanged": "The content changed. Your edits were preserved. Please generate again.",
+			"currentPage": "Current slide",
+			"currentPageTitle": "Current slide · Notes",
+			"custom": {
+				"placeholder": "Describe how to revise the notes, e.g. a lighter tone with one example.",
+				"submit": "Revise",
+				"trigger": "Custom"
+			},
+			"decreaseFontSize": "Decrease font size",
+			"displaySize": "Display size",
+			"empty": "No notes yet.",
+			"fontSize": "Font size",
+			"generate": "Write script",
+			"generationFailed": "Generation failed. Your notes were preserved. Please try again.",
+			"increaseFontSize": "Increase font size",
+			"loadFailed": "Could not load notes for this slide",
+			"loading": "Loading notes…",
+			"noChanges": "No changes needed. Your notes were kept.",
+			"overviewPlaceholder": "Click here to add notes for this slide.",
+			"pageTitle": "Slide {{page}} · Notes",
+			"patchConflict": "Some suggestions conflicted with your edits and were discarded.",
+			"pendingChanges": "{{count}} changes to review",
+			"placeholder": "Click here to add what you want to say on this slide, or choose “Write script” to get a first draft from AI.",
+			"polish": "Polish",
+			"rejectAllChanges": "Reject all",
+			"rejectChange": "Reject next",
+			"resize": "Resize notes panel",
+			"retry": "Retry",
+			"reviewChanges": "Review changes",
+			"save": "Save",
+			"saveFailed": "Save failed. Try again.",
+			"saved": "Saved",
+			"saving": "Saving",
+			"settings": {
+				"autoApplyHint": "When on, AI results are written to the notes directly. When off, you accept or skip each change first.",
+				"description": "Choose the model AI uses for notes. It powers Write script, Polish, Shorten and Custom.",
+				"hint": "Configure the model AI uses here.",
+				"hintDismiss": "Got it",
+				"model": "Model",
+				"noModels": "No models available",
+				"title": "Model settings",
+				"trigger": "Model settings"
+			},
+			"shorten": "Shorten",
+			"title": "Notes",
+			"unsaved": "Unsaved"
+		},
+		"startSlideshow": "Start slideshow",
 		"templateReplacement": {
 			"button": "Change Template",
 			"confirm": "Use Template",
@@ -4676,6 +5363,50 @@
 			"selectHint": "Select a template",
 			"selected": "Selected: {{name}}",
 			"title": "Select a Slide Template"
+		},
+		"transitions": {
+			"all": "All slides",
+			"applied": "Applied to {{count}} slides",
+			"batchAction": "Set slide transitions",
+			"close": "Close transitions",
+			"conflict": "Slide settings changed. Refresh before saving again.",
+			"cover": "Cover",
+			"current": "Current slide",
+			"deckChanged": "The presentation changed. Close this panel and reopen it to edit.",
+			"direction": "Movement direction",
+			"down": "Down",
+			"duration": "Duration (seconds)",
+			"easing": "Easing",
+			"effect": "Effect",
+			"fade": "Fade",
+			"inherited": "Using deck default · {{effect}}",
+			"left": "Left",
+			"linear": "Linear",
+			"mixed": "Mixed settings",
+			"none": "None",
+			"preview": "Preview effect",
+			"previewCurrent": "Current slide preview · Slide {{page}}",
+			"previewFailed": "Could not load the slide preview. Refresh the slide and try again.",
+			"previewFirst": "For mixed effects, preview prioritizes the current slide’s settings.",
+			"previewLoading": "Loading slide preview…",
+			"previewPages": "Preview: slide {{from}} → slide {{to}}",
+			"push": "Push",
+			"reducedMotion": "Following your system’s reduced motion setting",
+			"replaceOverrides": "This will replace {{count}} individual slide settings",
+			"right": "Right",
+			"save": "Save settings",
+			"saveFailed": "Settings were not saved. Your draft is kept. Check the error message before retrying.",
+			"scope": "Apply to",
+			"selected": "{{count}} selected slides",
+			"smooth": "Smooth",
+			"title": "Slide transitions",
+			"unsavedDescription": "Your transition changes have not been saved. Save to continue, or discard these changes.",
+			"unsavedTitle": "Save transition settings?",
+			"unsupported": "This effect is not supported. Choose another effect.",
+			"up": "Up",
+			"useDefault": "Use deck default",
+			"wipe": "Wipe",
+			"zoom": "Subtle zoom"
 		},
 		"unsavedChangesDescription": "You have unsaved changes in the current slide. Do you want to save your changes?",
 		"unsavedChangesTitle": "Unsaved Changes",
@@ -4844,6 +5575,19 @@
 		"workspaces": "Workspaces",
 		"workspacesShort": "Spaces"
 	},
+	"projectResources": {
+		"allTypes": "All types",
+		"createTime": "Created",
+		"filterType": "Filter project type",
+		"generalType": "General projects",
+		"lastActiveTime": "Last active",
+		"role": "Role: {{role}}",
+		"statusUnknown": "Unknown status",
+		"updateTime": "Updated",
+		"updatedAt": "Updated {{date}}",
+		"version": "Version {{version}}",
+		"workspaceOrder": "Workspace order"
+	},
 	"projectShare": {
 		"advancedSettings": "Advanced settings",
 		"copyLink": "Copy link",
@@ -4893,6 +5637,14 @@
 		"typePasswordDescription": "Requires a correct password to access",
 		"typePublic": "Public",
 		"typePublicDescription": "Anyone on the internet with the link can access"
+	},
+	"projectTypeTag": {
+		"agent": "Agent project",
+		"audio": "Audio project",
+		"chat": "Chat project",
+		"magicClaw": "Lobster project",
+		"microApp": "Micro-app project",
+		"skill": "Skill project"
 	},
 	"recordingSummary": {
 		"actions": {
@@ -5196,6 +5948,14 @@
 			"pause": "Pause",
 			"resume": "Resume"
 		},
+		"projectDeletion": {
+			"active": "This project has an unfinished recording. Complete or cancel the recording before deleting the project.",
+			"confirm": "Got it",
+			"otherTab": "Another tab has an unfinished recording whose project could not be identified. Return to that tab and finish recording before deleting.",
+			"projectMissing": "The project no longer exists. Recording has stopped. Local audio can be exported from recording history.",
+			"projectMissingSaveFailed": "The project no longer exists. Recording has stopped, but the local recording could not be saved. Check your browser storage.",
+			"title": "Finish recording first"
+		},
 		"projectSelector": {
 			"change": "Change",
 			"createProject": "Create Project",
@@ -5346,6 +6106,7 @@
 			"loadFailed": "Load failed, please retry",
 			"retry": "Retry"
 		},
+		"globalTitle": "Global recycle bin",
 		"item": {
 			"deletedOn": "Deleted on {{date}}",
 			"more": "More actions",
@@ -5362,6 +6123,11 @@
 		},
 		"loader": {
 			"noMoreData": "You've seen everything!"
+		},
+		"preview": {
+			"open": "Preview",
+			"readonly": "Deleted file, preview only",
+			"unavailable": "This file is unavailable or you no longer have access."
 		},
 		"project": {
 			"applyRange": "Apply",
@@ -5540,6 +6306,16 @@
 		"weeklyAt": "Runs weekly on {{day}} · {{time}}",
 		"workspaceDescription": "Automate recurring work and keep every task under control"
 	},
+	"scriptExecution": {
+		"code": "Code",
+		"copyCode": "Copy code",
+		"noCodeToCopy": "No code to copy",
+		"noOutput": "No output",
+		"output": "Output",
+		"stderr": "Standard error",
+		"stdout": "Standard output",
+		"title": "Python script"
+	},
 	"search": {
 		"batchSummary_one": "{{count}} search in this batch",
 		"batchSummary_other": "{{count}} searches in this batch",
@@ -5561,8 +6337,10 @@
 		"all": "All",
 		"cannotSelectCurrentFolder": "Cannot select the currently selected folder as move target",
 		"chatCount": "{{count}} chats",
+		"collaboratedMicroApps": "Collaborating",
 		"completeFolderCreation": "Complete Folder Creation",
 		"confirm": "Confirm",
+		"createdMicroApps": "Created by me",
 		"createdSuccessfully": "Created Successfully",
 		"defaultFolderName": "New Folder",
 		"defaultProjectName": "New Project",
@@ -5589,7 +6367,10 @@
 		"mentionEmptyProject": "This project has no files",
 		"mentionOtherProjectFiles": "Select Other Project/File",
 		"mentionProjectLimit": "You can select projects or files from up to 10 different projects",
+		"microAppSourceFiles": "Micro app projects and files",
+		"microApps": "Micro apps",
 		"myAgents": "My Digital Employees",
+		"myMicroApps": "My micro apps",
 		"mySkills": "My Skills",
 		"myWorkspaces": "My Workspaces",
 		"newProject": "New Project",
@@ -5602,8 +6383,13 @@
 		"onlySelectableAdministratorDocument": "Only Selectable Administrator Document",
 		"pleaseSelectFile": "Please Select File",
 		"preserveParentPath": "Preserve folder hierarchy",
-		"preserveParentPathConfirmTitle": "Confirm cross-project operation",
+		"preserveParentPathConfirmTitle": "Keep the original folder path?",
 		"preserveParentPathDescription": "Recreate the original parent-folder path in the target project. Leave this unchecked to place the items directly in the selected folder.",
+		"preserveParentPathExamples": "Compare folder path options",
+		"preserveParentPathFlatDescription": "Selected files will be stored directly in the current folder.",
+		"preserveParentPathFlatTitle": "Place in current folder",
+		"preserveParentPathKeepDescription": "Selected files will be stored in the target project under their original folder paths.",
+		"preserveParentPathKeepTitle": "Keep folder path",
 		"projects": "projects",
 		"returnSearch": "Exit Search",
 		"rootDirectory": "Root",
@@ -5614,6 +6400,7 @@
 		"searchResult": "Search Result",
 		"searchWorkspace": "Search Workspace",
 		"selectMentionResource": "Select a project or file",
+		"selectProject": "Select project {{name}}",
 		"selectSourceFiles": "Destination",
 		"selectSpaceOrFolder": "Select Space or Folder",
 		"selectStorageLocation": "Storage Location",
@@ -5711,6 +6498,7 @@
 			"suffix": ""
 		},
 		"createdDate": "Created",
+		"currentShareMethodUnavailable": "The current sharing method has been disabled by the administrator. Select another method",
 		"days": "days",
 		"departmentOrMemberFileShare": "Specified members can access the file",
 		"departmentOrMemberFileShareDescription": "Specified members can access the file: {{fileName}}",
@@ -5799,6 +6587,7 @@
 		"newProjectDescription": "By default, the copied project will retain the same name as the original. If you need to distinguish between different projects more clearly, you can also customize the name as needed.",
 		"newProjectName": "New project name",
 		"newProjectWorkspaceDescription": "Please select the workspace to store the copied project, or select the workspace to store the copied project",
+		"noAvailableShareMethods": "The administrator has not enabled any sharing methods",
 		"noPermission": "No permission to view replay",
 		"noPermissionToView": "No permission to view",
 		"noPreviewSupport": "Preview not supported, please download the file",
@@ -5878,6 +6667,7 @@
 		"shareMessageWithPassword": "I've shared {{fileName}} via this link. Please click the link and enter the access password to view:",
 		"shareMessageWithoutPassword": "I've shared {{fileName}} via this link. Please click to view:",
 		"shareMethod": "Share Method",
+		"shareMethodRestrictedByAdmin": "The administrator has restricted the available sharing methods, so this cannot be changed",
 		"shareName": "Share Name",
 		"shareNamePlaceholder": "Enter share name (required)",
 		"shareNameRequired": "Please enter share name",
@@ -6105,6 +6895,8 @@
 		"viewShortcuts": "View Shortcuts"
 	},
 	"sidebarPanels": {
+		"absoluteTime": "Full timestamp",
+		"activityTimeFormat": "Last active, currently {{format}}; choose a time format",
 		"browseWorkspaces": "Workspaces",
 		"clearSearch": "Clear search",
 		"collapseFiles": "Collapse files",
@@ -6117,6 +6909,7 @@
 		"loadMore": "Load more",
 		"loadedProjects": "Showing {{count}} / {{total}} projects",
 		"noMatchingProjects": "No matching projects",
+		"projectLocation": "Location",
 		"projectManager": "Project manager",
 		"projectManagerDescription": "Browse and manage projects across workspaces",
 		"projectName": "Project name",
@@ -6125,11 +6918,16 @@
 		"pullLeftToCollapse": "Keep dragging left to collapse",
 		"pullRightToCancel": "Drag back right to cancel",
 		"pullRightToCollapse": "Keep dragging right to collapse",
+		"relativeTime": "Relative time",
 		"releaseKeepsOpen": "Releasing keeps the panel open",
 		"releaseToCollapse": "Release to collapse",
 		"renameCancel": "Cancel (Esc)",
 		"renameSave": "Save (Enter)",
+		"resizeGuideDescription": "Drag an edge or the bottom-right corner to adjust the width and height. Your preferred size will be remembered.",
+		"resizeGuideDismiss": "Got it",
+		"resizeGuideTitle": "You can resize this window",
 		"resizeSidebar": "Resize sidebar",
+		"restoreRecommendedSize": "Restore recommended size",
 		"retry": "Retry",
 		"updatedTime": "Updated",
 		"workspacesLoadFailed": "Could not load workspaces"
@@ -6154,6 +6952,19 @@
 		"replaceFile": "Replace file",
 		"searchBoard": "Search dashboards",
 		"shareBoard": "Share dashboard"
+	},
+	"simpleMode": {
+		"collapse": "Hide process",
+		"description": "Collapse the process after a task completes and keep the final reply.",
+		"dismiss": "Got it",
+		"enable": "Enable simple mode",
+		"enabled": "Enabled",
+		"expand": "View process",
+		"guideHelp": "You can turn it off anytime in More.",
+		"guideTitle": "Try simple mode",
+		"messageCount_one": "{{count}} message",
+		"messageCount_other": "{{count}} messages",
+		"title": "Simple mode"
 	},
 	"slidesTemplatePreview": {
 		"save": {
@@ -6261,6 +7072,7 @@
 			"top": "Top"
 		},
 		"boxModelSideLabel": "{{layer}} {{side}}",
+		"clickLink": "Navigation",
 		"closeContextPanel": "Close element style panel",
 		"closeDevConsole": "Close Dev Mode",
 		"colorStops": "Color Stops",
@@ -6705,7 +7517,12 @@
 		"linkGaps": "Link row and column gaps",
 		"linkRel": "Link relationship",
 		"linkRelPlaceholder": "For example: noopener noreferrer",
+		"linkRemove": "Remove link",
 		"linkSettings": "Link settings",
+		"linkSlide": "Target slide",
+		"linkSlideHint": "After saving, click the element to go to this slide. Reordering slides keeps the target intact.",
+		"linkSlideOption": "Slide {{page}} · {{title}}",
+		"linkSlidePlaceholder": "Select a slide",
 		"linkTarget": "Open in",
 		"linkTargetBlank": "New window",
 		"linkTargetParent": "Parent window",
@@ -6713,6 +7530,10 @@
 		"linkTargetTop": "Top-level window",
 		"linkTitle": "Tooltip text",
 		"linkTitlePlaceholder": "Shown when hovering the link",
+		"linkType": "Link type",
+		"linkTypeSlide": "PPT slide",
+		"linkTypeUrl": "URL",
+		"linkUpdateFailed": "Could not update the link. Please try again.",
 		"linkUrl": "Link URL",
 		"linkUrlPlaceholder": "Enter a URL or page path",
 		"lockAspectRatio": "Lock Aspect Ratio",
@@ -6811,6 +7632,19 @@
 		"zoomIn": "Zoom In",
 		"zoomOut": "Zoom Out"
 	},
+	"subagents": {
+		"durationHours": "{{hours}}h {{minutes}}m",
+		"durationMinutes": "{{minutes}}m {{seconds}}s",
+		"durationSeconds": "{{seconds}}s",
+		"settled": "Finished waiting",
+		"status": {
+			"done": "Finished",
+			"error": "Failed",
+			"interrupted": "Stopped",
+			"notFound": "Not found",
+			"running": "In progress"
+		}
+	},
 	"superMagicMessageListFallback": {
 		"cardMarketingSlogan": "Creative marketing slogan",
 		"cardProductIntro": "Write product introduction",
@@ -6896,7 +7730,7 @@
 				"detail": {
 					"example": "A report command returns 0. Next, check that the report exists and meets the requirements.",
 					"guide": {
-						"actions": "If a call returns an error, copy the original record and analyze it alongside the actual command and error details. This interface does not retry or rerun commands automatically.",
+						"actions": "For a nonzero exit code, copy the original record and examine the command and output. This interface does not retry or rerun commands automatically.",
 						"context": "To assess the final result, consider the tool description, output, generated files and Magic’s subsequent checks together.",
 						"diagramTitle": "Information needed to assess the result",
 						"exampleContent": "Exit code 0 → Usually a normal return\nNonzero exit code → Usually a problem\nTask completed → Requires checking the output and deliverable",
@@ -6907,7 +7741,7 @@
 								"title": "Check this return"
 							},
 							{
-								"description": "Read the results of a normal return. For an error, find the relevant keywords and read the surrounding output.",
+								"description": "Read the output. For a nonzero exit code, check the command and surrounding context to understand why.",
 								"title": "Read the output"
 							},
 							{
@@ -6918,7 +7752,7 @@
 						"title": "Distinguish a normal return from a completed task"
 					},
 					"note": "A tool that waits for or reads output from a background command may return normally while that command is still running. Exit code 0 for that read does not establish that the background command has finished. A missing exit code does not establish a result either.",
-					"usage": "The footer describes how the current call returned. An exit code is a number returned by the program or tool: usually 0 means a normal return and a nonzero value indicates a problem. The code alone does not prove that your task is complete."
+					"usage": "The footer shows this command's exit code. Usually 0 means a normal return; a nonzero code needs the command and output for context and does not mean the whole topic failed. The code alone does not prove the task is complete."
 				},
 				"title": "Status and exit codes"
 			},
@@ -6935,6 +7769,7 @@
 		"result": "Result",
 		"returnedNormally": "Returned normally",
 		"returnedWithError": "Returned with an error",
+		"returnedWithNonzeroExitCode": "Nonzero command exit code",
 		"scrollToEnd": "Go to end",
 		"searchMatches": "{{current}} / {{count}}",
 		"searchOutput": "Find in output",
@@ -6955,6 +7790,9 @@
 		"callTool": "Call Tool",
 		"initPlugin": "Initialize Plugin"
 	},
+	"toolWaitCountdown": {
+		"elapsed": "Waited {{seconds}}s of {{total}}s"
+	},
 	"tools": {
 		"analysis_slide_webpage": "Analysis Slide Webpage",
 		"analyze_audio_project": "Analyze Audio Project",
@@ -6963,7 +7801,7 @@
 		"backup_dashboard_template": "Backup Dashboard Template",
 		"batch_create_canvas_elements": "Batch Create Canvas Elements",
 		"batch_update_canvas_elements": "Batch Update Canvas Elements",
-		"call_subagent": "Call Subagent",
+		"call_subagent": "Call Agent",
 		"compact_chat_history": "Compact Chat History",
 		"connect_dingtalk_bot": "Connect Ding Talk Bot",
 		"connect_lark_bot": "Connect Lark Bot",
@@ -6992,6 +7830,7 @@
 		"edit_file": "Edit File",
 		"edit_file_range": "Edit File Range",
 		"file_search": "File Search",
+		"find_file_range": "Find File Range",
 		"generate_canvas_images": "Generate Canvas Images",
 		"generate_canvas_videos": "Generate Canvas Videos",
 		"generate_image": "Generate Image",
@@ -7077,6 +7916,7 @@
 			"moveMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
 			"moveOpenFailureContent": "This operation will move the canvas project entry file. The canvas may fail to open. Continue?",
 			"pathRepairFailureContent": "Some canvas resource paths could not be repaired before this operation:\n{{failures}}\nContinue anyway?",
+			"pathRepairFailureTitle": "Canvas Path Preflight",
 			"pathRepairSaveFailed": "Canvas path repair failed. Please try again.",
 			"renameContentLossContent": "This operation will rename data or resources required by the canvas content. Some canvas content may disappear. Continue?",
 			"renameMixedContent": "This operation affects the canvas project entry file and data or resources required by the canvas content. The canvas may fail to open or lose visible content. Continue?",
@@ -7677,13 +8517,20 @@
 		"exportImage": "Download Image Format",
 		"exportImageJpeg": "JPEG Format",
 		"exportImagePng": "PNG Format",
+		"exportIssueCompletedWithIssuesTitle": "Export completed with page issues",
+		"exportIssueFailedTitle": "PPT export failed",
+		"exportIssuePage": "Page {{page}}",
+		"exportIssuePageUnknown": "Unknown page",
+		"exportIssuePromptItem": "{{page}}: {{message}}",
+		"exportIssueRepair": "Ask AI to fix",
+		"exportIssueRepairPrompt": "Please fix the following PPT export issues. Check the HTML containers, element IDs, script initialization timing, and resource references while preserving other working content:",
 		"exportPdf": "Download PDF Format",
 		"exportPdfFullPage": "Full Page",
 		"exportPdfPaginated": "Paginated",
 		"exportPdfPaginationTitle": "Choose PDF Export Mode",
 		"exportPdfRaster": "Download PDF Format (Screenshot)",
 		"exportPpt": "Download PPTX Format",
-		"exportPptx": "Download PPT Format (Editable)",
+		"exportPptx": "Download PPTX Format (Editable)",
 		"exportSource": "Download Original File",
 		"exportSuccess": "Export successful",
 		"exporting": "Exporting",
@@ -8192,7 +9039,7 @@
 							}
 						]
 					},
-					"note": "Describing roles in files does not mean collaborators have already been started.",
+					"note": "Describing roles in files does not mean collaborators have already been started. The gray people folder identifies collaboration role instructions, not the project's current member list.",
 					"preview": [
 						"For example, one role organizes material and another checks sources before a report is assembled.",
 						"Describing roles in files does not mean collaborators have already been started."
@@ -8234,7 +9081,7 @@
 							}
 						]
 					},
-					"note": "Assets support content creation and processing; they do not all need to be read as prompt text.",
+					"note": "Assets support content creation and processing; they do not all need to be read as prompt text. The yellow image folder identifies a resource collection that can include data and other assets, not only images.",
 					"preview": [
 						"A report might use a team logo or an existing template.",
 						"Assets support content creation and processing; they do not all need to be read as prompt text."
@@ -8320,7 +9167,7 @@
 						"steps": [],
 						"title": "Teach AI a reusable way to complete a type of work"
 					},
-					"note": "The standard filename is SKILL.md. On case-sensitive file systems, lowercase or mixed-case variants may not be loaded by the current skill scanner. Scripts perform operations; assets provide material for the output. If a directory contains multiple case variants, keep one clearly identified standard entry.",
+					"note": "The standard filename is SKILL.md. On case-sensitive file systems, lowercase or mixed-case variants may not be loaded by the current skill scanner. Scripts perform operations; assets provide material for the output. If a directory contains multiple case variants, keep one clearly identified standard entry. The rounded puzzle icon identifies the main instructions, distinct from the puzzle folder containing the whole skill package.",
 					"preview": [
 						"Keeps the workflow and expected result clear.",
 						"The standard filename is SKILL.md."
@@ -8351,7 +9198,7 @@
 							}
 						]
 					},
-					"note": "These are evaluation requirements, not evaluation results.",
+					"note": "These are evaluation requirements, not evaluation results. The JSON icon identifies the data format; the cases badge identifies its role in evaluation.",
 					"preview": [
 						"For example: generate a report from three sources, preserving citations and separating unconfirmed information.",
 						"These are evaluation requirements, not evaluation results."
@@ -8393,7 +9240,7 @@
 							}
 						]
 					},
-					"note": "Keep inputs separate from outputs, and do not substitute example answers for the actual input.",
+					"note": "Keep inputs separate from outputs, and do not substitute example answers for the actual input. The green input arrow identifies material supplied to an evaluation, not a download action.",
 					"preview": [
 						"Using the same input documents makes it easier to compare the effects of a change in method.",
 						"Keep inputs separate from outputs, and do not substitute example answers for the actual input."
@@ -8435,7 +9282,7 @@
 							}
 						]
 					},
-					"note": "Evaluation files do not prove that an evaluation ran or passed. Ordinary use does not require you to write evaluations.",
+					"note": "Evaluation files do not prove that an evaluation ran or passed. Ordinary use does not require you to write evaluations. The green flask folder identifies evaluation methods and cases; the color distinguishes purpose only.",
 					"preview": [
 						"Prepare several common report tasks and compare whether a revised skill produces more complete results that meet the requirements.",
 						"Evaluation files do not prove that an evaluation ran or passed."
@@ -8467,7 +9314,7 @@
 							}
 						]
 					},
-					"note": "An example teaches the method; it does not mean the current task has been completed.",
+					"note": "An example teaches the method; it does not mean the current task has been completed. The teal lightbulb folder identifies examples for learning and comparison.",
 					"preview": [
 						"Before using an unfamiliar skill, a complete example can help you understand which material to prepare.",
 						"An example teaches the method; it does not mean the current task has been completed."
@@ -8558,7 +9405,7 @@
 						"tipsTitle": "Share skills without packaging personal credentials",
 						"title": "Find the skills available for project work here"
 					},
-					"note": "Project skills are the skills stored here, not a complete list of everything AI can do. Installation does not sign in to external accounts or grant access; complete any required service setup separately.",
+					"note": "Project skills are the skills stored here, not a complete list of everything AI can do. Installation does not sign in to external accounts or grant access; complete any required service setup separately. The grid folder identifies a skill collection; a puzzle folder identifies one skill within it.",
 					"preview": [
 						"Project members can use these skills for project tasks.",
 						"Configure personal credentials in personal space."
@@ -8589,7 +9436,7 @@
 							}
 						]
 					},
-					"note": "The actual text determines the conditions. A filename alone does not grant every permission.",
+					"note": "The actual text determines the conditions. A filename alone does not grant every permission. The regular file icon is retained, while the license badge identifies the permission statement.",
 					"preview": [
 						"Read the terms before sharing an external skill with a team or using it for a particular purpose.",
 						"The actual text determines the conditions."
@@ -8621,7 +9468,7 @@
 							}
 						]
 					},
-					"note": "Selecting publication content and completing publication are separate actions.",
+					"note": "Selecting publication content and completing publication are separate actions. The configuration icon and publication badge identify what to publish, not an action that publishes it.",
 					"preview": [
 						"Choose the intended skill before publishing so temporary content does not enter the published package.",
 						"Selecting publication content and completing publication are separate actions."
@@ -8652,7 +9499,7 @@
 							}
 						]
 					},
-					"note": "README helps people use the skill; SKILL.md mainly teaches AI to perform it.",
+					"note": "README helps people use the skill; SKILL.md mainly teaches AI to perform it. The Markdown icon identifies the format; the usage badge identifies the guidance written for people.",
 					"preview": [
 						"To decide whether a skill suits your needs, read what it can do, which inputs it needs and its usage examples.",
 						"README helps people use the skill; SKILL."
@@ -8720,7 +9567,7 @@
 						"steps": [],
 						"title": "Read the common method first, specialist details when needed"
 					},
-					"note": "SKILL.md must say which file to read under which conditions. Creating a references folder alone does not define loading behavior. Requirements that apply to every task still belong in the main instructions.",
+					"note": "SKILL.md must say which file to read under which conditions. Creating a references folder alone does not define loading behavior. Requirements that apply to every task still belong in the main instructions. The blue book folder identifies reference material; its badge describes the purpose.",
 					"preview": [
 						"Read the main method first, then relevant detail.",
 						"SKILL.md explains when to read each file."
@@ -8752,7 +9599,7 @@
 							}
 						]
 					},
-					"note": "Programs perform operations; on-demand guidance provides knowledge to read. A script’s presence does not mean it has run.",
+					"note": "Programs perform operations; on-demand guidance provides knowledge to read. A script’s presence does not mean it has run. The orange code folder identifies executable programs. Neither the icon nor its purpose badge runs a script.",
 					"preview": [
 						"A program can repeatedly combine a set of tables using defined steps.",
 						"Programs perform operations; on-demand guidance provides knowledge to read."
@@ -8803,7 +9650,7 @@
 							}
 						]
 					},
-					"note": "One skill addresses a type of work; a skill library collects several skills.",
+					"note": "One skill addresses a type of work; a skill library collects several skills. The puzzle folder represents the whole skill package. Open it to read SKILL.md and use supporting resources as needed.",
 					"preview": [
 						"A report skill may include a workflow, specialist rules and templates.",
 						"One skill addresses a type of work; a skill library collects several skills."
@@ -8834,7 +9681,7 @@
 							}
 						]
 					},
-					"note": "A template supplies structure. Example figures and conclusions are not facts for the current task.",
+					"note": "A template supplies structure. Example figures and conclusions are not facts for the current task. The warm-orange layout folder identifies reusable content structure, distinct from a completed output.",
 					"preview": [
 						"For reports with conclusions, evidence and recommendations, prepare that structure once and fill it with the current task’s real content.",
 						"A template supplies structure."
@@ -8872,7 +9719,7 @@
 				"license": "License",
 				"publishConfig": "Publish configuration",
 				"readme": "Usage notes",
-				"references": "On-demand guidance",
+				"references": "References",
 				"scripts": "Scripts",
 				"skill": "Skill",
 				"templates": "Templates"
@@ -8955,7 +9802,7 @@
 						]
 					},
 					"label": "{{clawBrand}} skills",
-					"note": "Skills explain methods; execution still needs the relevant tools and permissions.",
+					"note": "Skills explain methods; execution still needs the relevant tools and permissions. The grid folder identifies the skill collection in this scope.",
 					"preview": [
 						"Prepare skills for recurring work so the {{clawBrand}} has a method available when a suitable task appears.",
 						"Skills explain methods; execution still needs the relevant tools and permissions."
@@ -9047,7 +9894,7 @@
 						"title": "Give a digital employee methods suited to its role"
 					},
 					"label": "Employee skills",
-					"note": "The editing area is for preparing changes. Other users work with the published employee version. Putting files in a folder does not complete skill configuration or publication.",
+					"note": "The editing area is for preparing changes. Other users work with the published employee version. Putting files in a folder does not complete skill configuration or publication. The grid folder identifies the skill collection in this scope.",
 					"preview": [
 						"Configured, published skills work alongside built-in capabilities.",
 						"Organize skills around the employee’s role."
@@ -9134,7 +9981,7 @@
 						"title": "Find reusable methods in one place"
 					},
 					"label": "Skill library",
-					"note": "Folder contents do not establish installation status, account access or a published employee version.",
+					"note": "Folder contents do not establish installation status, account access or a published employee version. The grid folder identifies the skill collection in this scope.",
 					"preview": [
 						"Each skill provides a reusable working method.",
 						"The owning space determines its audience."
@@ -9226,7 +10073,7 @@
 						"title": "Reuse your methods when you move to another project"
 					},
 					"label": "Personal skills",
-					"note": "Personal skills belong to the current organization and account. They are not automatically shared with people who join a project. Put team methods in the project or configure them for a digital employee.",
+					"note": "Personal skills belong to the current organization and account. They are not automatically shared with people who join a project. Put team methods in the project or configure them for a digital employee. The grid folder identifies the skill collection in this scope.",
 					"preview": [
 						"Combines your recurring preferences with the current task.",
 						"Project membership does not automatically share personal skills."
@@ -9768,6 +10615,18 @@
 		"swipePin": "Pin",
 		"swipeUnpin": "Unpin"
 	},
+	"topicTypeFilter": {
+		"all": "All",
+		"empty": "No topics match these filters",
+		"failed": "Could not load topics. Please try again.",
+		"label": "Filter topic types",
+		"more": "Load more",
+		"only": "Only",
+		"onlyLabel": "Show only {{name}}",
+		"retry": "Retry",
+		"scheduledTask": "Scheduled tasks",
+		"topic": "Topics"
+	},
 	"transferModal": {
 		"actions": {
 			"cancel": "Cancel",
@@ -9861,6 +10720,7 @@
 		"deleteWorkspaceConfirmTitle": "Delete Workspace?",
 		"deleteWorkspaceDescription": "\"{{name}}\" will be moved to Trash, along with all projects, topics, and files. You can restore it or delete it permanently from Trash.",
 		"deleteWorkspaceDescriptionWithoutName": "will be moved to Trash, along with all projects, topics, and files. You can restore it or delete it permanently from Trash.",
+		"executing": "Executing...",
 		"expandAllFiles": "Expand All Files",
 		"expandUserMessage": "Expand",
 		"filePreviewNotSupported": "File preview not supported, please download the file",
@@ -9923,10 +10783,164 @@
 		"taskSuspended": "Task terminated",
 		"thinking": "Thinking...",
 		"tokenUsage": {
-			"compressContext": "Compress Context",
+			"approximate": "About {{count}}",
+			"autoCompactThreshold": "Auto-compaction threshold: {{threshold}} Tokens",
+			"automatic": "The system organizes automatically",
+			"breakdownNote": "Estimated from text in the latest request.",
+			"breakdownTitle": "Input text composition · estimate",
+			"categories": {
+				"conversation": "Conversation",
+				"mcp": "MCP output",
+				"other": "Other tools",
+				"skills": "Skill instructions",
+				"system": "System instructions",
+				"tools": "Tool definitions"
+			},
+			"categoryDescriptions": {
+				"conversation": "Your questions, AI answers, call arguments and task summaries",
+				"mcp": "MCP workflow output with a known source actually passed to AI",
+				"other": "File reads, ordinary tool results and mixed output without a single source",
+				"skills": "Skill catalogs, methods and steps actually loaded",
+				"system": "Role and working rules; recognized skill instructions are counted separately",
+				"tools": "Tool descriptions and parameters supplied for this request"
+			},
+			"closeCard": "Close usage card",
+			"compressContext": "Organize now",
 			"contextUsage": "Context Usage",
-			"contextUsageDescription": "Conversation memory usage. When the progress bar is full, AI may forget earlier content.",
-			"highContextWarning": "High context length may significantly increase the cost per response",
+			"contextUsageDescription": "Near the limit, the system organizes automatically to make room for the rest of the conversation. No action or usage monitoring is needed.",
+			"currentUsage": "Current usage",
+			"guide": {
+				"articles": {
+					"compaction": "Automatic organization",
+					"memory": "Long-term memory",
+					"skills": "Skill instructions",
+					"usage": "Context usage"
+				},
+				"content": {
+					"actionContinue": "Usually, continue the same task and let the system handle earlier content. “Organize now” lets you organize earlier, but is not an automatic organization switch.",
+					"actionMaterials": "Give AI a clear goal, necessary materials and file locations instead of pasting the same long content repeatedly. For exact data, ask it to read the corresponding file rather than recall it only from a summary.",
+					"actionTitle": "5. What should I do when usage is high?",
+					"actionTopic": "For an independent new task, create a topic with the necessary background. A new topic and context organization serve different purposes; there is no need to switch repeatedly to chase a lower number.",
+					"autoIntro": "You do not need to watch the usage or click “Organize now” to continue. The system summarizes earlier content to make room for the rest of the conversation.",
+					"autoLead": "When the conversation is almost full, the system organizes it automatically. You do not need to do anything.",
+					"budgetTitle": "Read usage and the organization threshold together",
+					"exampleCapacity": "200K capacity",
+					"exampleCaption": "Example: 122K / 200K = 61%. Input text is approximately 120K, including 12K of skill instructions and 24K of MCP output. Colors show an approximate text composition; total usage comes from the model.",
+					"examplePercent": "61% used",
+					"exampleThreshold": "Automatic organization at 180K",
+					"exampleUsed": "122K used",
+					"filesKept": "Automatic organization does not delete generated files or undo completed actions. You can still use earlier reports, tables and other results.",
+					"filesNote": "Storing a file in the project does not mean its full contents enter every request. Only content actually prepared for this answer belongs to this request’s input.",
+					"filesNoteTitle": "A common point of confusion",
+					"filesReread": "What changes is the conversation content AI refers to next: a summary replaces earlier long discussions. To check file details again, tell AI the file name and what to check so it can reread the material.",
+					"filesTitle": "3. Will my files or completed work disappear?",
+					"flowCaption": "How organization works",
+					"flowTitle": "Keep the current task moving",
+					"historyCompleted": "Work already completed",
+					"historyFiles": "Materials already read",
+					"historyLimit": "Reference content approaches the limit",
+					"historyLimits": "Chat history helps check what was discussed; original files help check what the material actually says. History lookup relies on records that remain accessible. It does not guarantee permanent storage or recovery of every detail. Keep important materials and lasting requirements in files or long-term memory.",
+					"historyRequirements": "Your requirements and discussions",
+					"historyTitle": "The conversation grows",
+					"inputsCaption": "Content overview",
+					"inputsLessonDescription": "AI uses more than the messages you see. The system also supplies working rules, available tool descriptions, materials already read and tool results for the task.",
+					"inputsLessonGrowth": "Usage can grow even when only a few short messages appear. Reading a long report adds its text to the reference content; querying data may also produce results that take space.",
+					"inputsLessonTitle": "1. Why is context larger than the visible chat?",
+					"inputsPurpose": "These sources help AI understand the task and produce an answer.",
+					"inputsTitle": "What does an answer refer to?",
+					"keepFiles": "Organization does not delete files or undo completed actions.",
+					"keepFilesTitle": "Completed files are kept",
+					"limitCost": "Models with larger context windows can handle longer conversations, but still have limits. Processing more content usually takes more computation, costs more and may slow answers and tasks. Long tasks still need organization; no model can retain unlimited context.",
+					"limitDescription": "AI has a limit on how much content it can refer to at once. As the conversation, materials and tool results grow, less space remains. Near the limit, the system automatically summarizes earlier content to make room.",
+					"limitTitle": "1. Why can’t the entire conversation stay available forever?",
+					"manualDescription": "It lets you request organization earlier and is optional. Even if you never click it, the system organizes when needed. This button does not switch automatic organization on or off.",
+					"manualOptional": "“Organize now” is an optional way to organize earlier. The system also handles it automatically if you never click it.",
+					"manualTitle": "5. What does “Organize now” do?",
+					"manualTopic": "Continue the current topic while the task is unfinished. For a completely different task, create a new topic and provide the necessary background. There is no need to repeatedly organize or start topics just to lower the usage number.",
+					"memoryDescription": "Automatic organization mainly helps you continue the current task. It does not store the entire chat as permanent memory. Tell AI which important preferences or background to save for future use, and read the long-term memory guide.",
+					"memoryExample": "For example, “This report still needs conclusions” is current progress. “I prefer reports to start with conclusions, then supporting evidence” may be a lasting preference. Keep exact numbers and materials you need to quote in original files.",
+					"memoryTitle": "6. Will future tasks remember this content too?",
+					"nearLimitDescription": "The system automatically organizes earlier content to make room for the rest of the conversation.",
+					"nearLimitTitle": "No action is needed near the limit",
+					"numbersColors": "Colors show an approximate text composition within the used area, not each category’s exact share of capacity. Character estimates cannot precisely split images or audio. Total usage still comes from the model; these estimates are not billing figures.",
+					"numbersColumn": "Card information",
+					"numbersDifference": "In the example, the model reports 122K total usage, while input text estimates add up to about 120K. They need not match: totals and text categories use different methods, and the model applies its own counting rules. “About” and “≈” indicate estimates.",
+					"numbersInput": "Input text composition",
+					"numbersInputMeaning": "Approximately how many tokens does each text category use? For example, 12K of skill instructions and 24K of MCP output.",
+					"numbersMeaningColumn": "What it tells you",
+					"numbersThreshold": "Automatic organization threshold",
+					"numbersThresholdMeaning": "What usage level guides the system’s organization? It comes from the current session configuration rather than a fixed frontend percentage.",
+					"numbersTitle": "3. How do total usage, estimates and the threshold fit together?",
+					"numbersUsage": "61% total usage",
+					"numbersUsageMeaning": "How much of the capacity has been used? For example, 122K / 200K = 61%.",
+					"recover": "A summary may omit details. AI can look up earlier chats when needed and reread original materials to check exact data.",
+					"recoverTitle": "Missing details can be found in history",
+					"recoveryHistory": "AI can also actively search saved chat history to recover earlier requirements, discussions and conclusions. If a detail is missing from the summary, you do not necessarily have to explain it again. AI can find and read relevant records before continuing.",
+					"recoverySummary": "Organization tries to keep your goal, important requirements, agreed conclusions and unfinished work so AI can continue. Earlier discussions are shortened, so some wording, numbers and details may no longer be complete.",
+					"recoveryTitle": "2. What if the summary leaves out details?",
+					"recoveryTradeoff": "This is the tradeoff: a summary takes less space but cannot preserve every detail of the original. Automatic organization helps a long task continue; it does not let AI remember an unlimited conversation.",
+					"reportContinue": "You have agreed to analyze by region and already created the table. After organization, you can say “Continue with the main conclusions” without summarizing the whole chat yourself.",
+					"reportHistory": "If AI is unsure about the earlier grouping requirement, it can check chat history. You can also say “Look up the grouping method we agreed on, then continue.” You do not need to paste the entire conversation again.",
+					"reportOriginal": "For an exact number or quote from the report, say “Please reread the report and check this item.” Reading the original material is more reliable than recalling it from a summary.",
+					"reportTitle": "For example, you are writing a report with AI",
+					"sourcesExampleInstalled": "A skill that is installed but not loaded does not contribute its whole file. If its name and description appear in the current skill catalog, that small amount of text still takes space.",
+					"sourcesExampleOutput": "MCP returns 1,000 records, but the script prints a summary of only 10. The summary takes context space, not all 1,000 records.",
+					"sourcesExampleTitle": "A data query · teaching example",
+					"sourcesMcp": "MCP connects external tools and services. “MCP output” estimates output with a known source that is actually passed to AI. A script may retrieve a large dataset, then print a small filtered result. Intermediate data that does not enter context is not counted.",
+					"sourcesMixed": "Some scripts combine MCP, file reading and other operations into one output. To avoid guessing, mixed output counts as “Other tools”. A zero MCP estimate therefore does not prove that no MCP calls occurred.",
+					"sourcesOther": "Other tools include ordinary file reads and tool results. Tool definitions are descriptions and parameters directly supplied to AI. A subagent’s entire separate history is not added to the main conversation; only the result it actually returns contributes to the main context.",
+					"sourcesSkills": "Skills provide methods, steps and instructions. Skill catalogs, preloaded content and skill instructions actually read by AI count as “Skill instructions”. The same text is not also counted as system instructions or other tools. Installed skills and content loaded for this request are different things.",
+					"sourcesTitle": "4. What do the skill and MCP numbers include?",
+					"summaryConclusions": "Agreed conclusions",
+					"summaryContinue": "Make room and continue the task",
+					"summaryGoal": "The goal",
+					"summaryNext": "What to do next",
+					"summaryRequirements": "Your requirements",
+					"summaryTitle": "The system creates a summary automatically",
+					"tokenDescription": "Text, images and other content use space according to the model’s rules. Usage is not a message count.",
+					"tokenTitle": "Tokens measure content",
+					"tokensLessonDescription": "A token is a unit the model uses to measure content, roughly a small piece of text. It is not a fixed one-to-one match with characters or words. Language, code, formatting and the model all affect the count.",
+					"tokensLessonK": "K means thousand. For example, 122K is about 122,000 tokens. Images and other non-text content may also use model space, so counting visible characters is not enough.",
+					"tokensLessonReading": "You do not need to convert each sentence into tokens yourself. Read total usage, capacity and the automatic organization explanation to understand the conversation’s available space.",
+					"tokensLessonTitle": "2. What is a token, and what does K mean?",
+					"updatesBreakdown": "Categories follow content still referenced in the current request. They do not accumulate every past file read or tool call. When earlier tool results become a task summary, that summary counts as conversation content, without retaining the earlier category numbers.",
+					"updatesRemaining": "The system still keeps important task information and some conversation. Reading new materials also uses space again. Organization does not reset usage to zero or guarantee the same percentage every time.",
+					"updatesTiming": "The card shows the latest usage reported by the model. Organization, the next request using new context, and the model returning updated usage happen at different times.",
+					"updatesTitle": "6. Why doesn’t usage drop immediately after organization?",
+					"usageIntro": "Context is the content AI refers to for this answer. Higher usage means less space remains.",
+					"waitingDescription": "No extra action is needed. The system prepares the summary automatically, and you can usually continue the task. If it needs time to finish, the task may pause briefly. Wait instead of clicking the button repeatedly to make room.",
+					"waitingThreshold": "The “Automatic organization” marker is a reference for when the system handles usage. Preparation may start earlier rather than exactly at that number. You do not need to monitor the percentage or worry about forgetting to click “Organize now”.",
+					"waitingTitle": "4. What do I need to do during organization?",
+					"waitingUsage": "Updated usage may appear only after the next answer finishes. A number that does not drop immediately does not by itself mean organization failed."
+				},
+				"conversation": "Understanding conversations",
+				"label": "What is this?",
+				"navigationHint": "Explore how conversations work",
+				"readingDescriptions": {
+					"compaction": "Continue without extra steps, and understand its benefits and limits.",
+					"memory": "What helps the current task, and what should be saved for later?",
+					"usage": "Understand capacity, content composition and the organization marker."
+				},
+				"readingTitles": {
+					"compaction": "How automatic organization works",
+					"memory": "Organization and long-term memory",
+					"usage": "How to read usage"
+				},
+				"recommended": "Recommended reading",
+				"related": "Related topics",
+				"subtitle": "Understand context, automatic organization and memory",
+				"title": "Conversation guide"
+			},
+			"help": {
+				"summary": "The system organizes automatically near the limit. No action is needed.",
+				"title": "Automatic organization"
+			},
+			"highContextWarning": "The conversation is getting long. The system will summarize the key details and continue automatically.",
+			"manualNote": "You can also organize earlier",
+			"mixedNote": "Mixed output or output without a known source counts as other tools.",
+			"noActionNeeded": "No manual action needed",
+			"nonTextNote": "Images and audio are excluded from text categories.",
+			"thresholdMarker": "Organize automatically at {{threshold}}",
 			"tokenCount": "{{used}} / {{max}} Tokens"
 		},
 		"usedImageModel": "Image Model: ",
@@ -10810,6 +11824,65 @@
 		"imageUnavailable": "Preview unavailable",
 		"loadingImage": "Loading Image...",
 		"tryNow": "Try Now"
+	},
+	"wechatChat": {
+		"actions": "Chat block actions",
+		"append": "Append chat history",
+		"attachment": "Attachment",
+		"close": "Close",
+		"command": "/微信聊天记录",
+		"commandDescription": "Paste and preview, then add to the current editor",
+		"commandHint": "Search commands · Enter to select · Esc to dismiss",
+		"commands": "Slash commands",
+		"confirm": "Confirm and return",
+		"confirmHint": "Confirmation returns to the editor. Chat history and instructions reach the current Agent only when you send.",
+		"copyGuideTitle": "Select and copy chat messages",
+		"delete": "Delete block",
+		"desktopGuide": "In WeChat, right-click a message, choose Select, select messages and click Copy at the bottom. Return here and press {{shortcut}} to paste.",
+		"desktopGuideAlt": "Desktop WeChat: right-click a message, select messages, then copy",
+		"desktopPasteHint": "After copying, click here and press {{shortcut}} to paste. Text, images and files can be imported together.",
+		"edit": "Edit",
+		"editorHint": "Edit on the left; the preview updates on the right.",
+		"enlargeGuide": "Click to enlarge",
+		"filesGuideAlt": "WeChat example: select text, an image, PDF, Word and Excel files together, then click Copy at the bottom",
+		"filesGuideTitle": "Import images and files together",
+		"guideTitle": "First time importing? Start here",
+		"importGroup": "Import material",
+		"instructionPlaceholder": "Tell AI how to process this chat, e.g. summarize key points and list tasks and owners",
+		"link": "Link",
+		"linksGuideAlt": "WeChat example: select Xiaohongshu and Zhihu share cards and a plain link together, then click Copy at the bottom",
+		"linksGuideTitle": "Include share cards and links",
+		"markerOnly": "This paste provided an attachment marker without the corresponding file content.",
+		"mediaGuide": "Select, copy and import text, images, files and shared links together.",
+		"mediaLoadFailed": "The attachment could not be loaded or access was denied. Its original reference is preserved.",
+		"mediaLoading": "Loading attachment",
+		"messageCount": "{{count}} messages",
+		"mobileGuide": "In WeChat, press and hold a message, choose Select, select messages and tap Copy at the bottom. Return here and press and hold to paste.",
+		"mobileGuideAlt": "Mobile WeChat: hold a message, select messages, then copy",
+		"mobilePasteHint": "Tap here, then press and hold in the chat text area to paste. Text, images and files can be imported together.",
+		"noCommand": "No matching commands",
+		"pasteHere": "Click here to paste WeChat chat history",
+		"pause": "Pause",
+		"play": "Play",
+		"playbackProgress": "Playback progress",
+		"prepareFailed": "Attachment upload preparation failed. The original chat is preserved; check the upload notice and paste again.",
+		"preview": "Preview",
+		"previewAttachment": "Preview attachment: {{name}}",
+		"previewTitle": "Chat history preview",
+		"provenance": "Contact names come from the original chat. Avatars are illustrative.",
+		"retry": "Retry",
+		"searchCommands": "Search commands",
+		"simulatedAvatar": "Simulated avatar: {{name}}",
+		"syncScroll": "Sync scrolling",
+		"title": "WeChat chat history",
+		"titleGroup": "Chat history with {{first}} and {{count}} participants",
+		"titlePair": "Chat history between {{first}} and {{second}}",
+		"titleSingle": "Chat history with {{name}}",
+		"unlinkedMedia": "This attachment is not linked yet. Check its upload status or paste the complete history with attachments again.",
+		"unmatchedMedia": "This attachment could not be reliably matched to its message and remains as separate material in the editor.",
+		"unrecognized": "Some text was not recognized as chat messages and remains in the editor.",
+		"uploadFailed": "Attachment upload failed",
+		"uploading": "Uploading {{progress}}%"
 	},
 	"workspace": {
 		"addWorkspace": "New Workspace",

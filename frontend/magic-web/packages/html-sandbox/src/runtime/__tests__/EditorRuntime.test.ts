@@ -240,6 +240,74 @@ describe("EditorRuntime", () => {
 		})
 	})
 
+	describe("host shortcut forwarding", () => {
+		function shortcutMessages() {
+			return postMessageSpy.mock.calls
+				.map(([data]) => data as { type?: string; source?: string })
+				.filter((data) => data?.source === "magic-html-iframe")
+		}
+
+		function press(key: string, init: KeyboardEventInit = {}) {
+			const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+			// A real keyboard reports an upper-case letter in `key` while Shift is held.
+			const realKey = init.shiftKey && key.length === 1 ? key.toUpperCase() : key
+			const event = new KeyboardEvent("keydown", {
+				key: realKey,
+				metaKey: isMac && Boolean(init.ctrlKey ?? init.metaKey),
+				ctrlKey: !isMac && Boolean(init.ctrlKey ?? init.metaKey),
+				shiftKey: init.shiftKey,
+				bubbles: true,
+				cancelable: true,
+			})
+			document.body.dispatchEvent(event)
+			return event
+		}
+
+		it("does nothing before edit mode starts", () => {
+			press("s", { ctrlKey: true })
+			press("Escape")
+			expect(shortcutMessages()).toEqual([])
+		})
+
+		it("forwards save, save-and-exit and cancel without touching the document", async () => {
+			const htmlBefore = document.documentElement.outerHTML
+			await sendRuntimeRequest("ENTER_EDIT_MODE")
+
+			const save = press("s", { ctrlKey: true })
+			press("s", { ctrlKey: true, shiftKey: true })
+			const escape = press("Escape")
+
+			expect(save.defaultPrevented).toBe(true)
+			expect(escape.defaultPrevented).toBe(true)
+			expect(shortcutMessages().map((data) => data.type)).toEqual([
+				"MAGIC_KEYBOARD_SAVE",
+				"MAGIC_KEYBOARD_SAVE_AND_EXIT",
+				"MAGIC_KEYBOARD_CANCEL",
+			])
+			expect(document.documentElement.outerHTML).toBe(htmlBefore)
+		})
+
+		it("recognises the shortcut when key is reported in upper case (Shift or Caps Lock)", async () => {
+			await sendRuntimeRequest("ENTER_EDIT_MODE")
+			// Caps Lock without Shift: upper-case key, Shift not pressed.
+			press("S", { ctrlKey: true })
+			// Shift held: the helper reports "S" like a real keyboard.
+			press("s", { ctrlKey: true, shiftKey: true })
+			expect(shortcutMessages().map((data) => data.type)).toEqual([
+				"MAGIC_KEYBOARD_SAVE",
+				"MAGIC_KEYBOARD_SAVE_AND_EXIT",
+			])
+		})
+
+		it("stops forwarding after the runtime is destroyed", async () => {
+			await sendRuntimeRequest("ENTER_EDIT_MODE")
+			runtime.destroy()
+			press("s", { ctrlKey: true })
+			expect(shortcutMessages()).toEqual([])
+			runtime = new EditorRuntime()
+		})
+	})
+
 	describe("keyboard shortcuts", () => {
 		beforeEach(() => {
 			// Create a test element for keyboard events

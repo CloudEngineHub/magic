@@ -205,7 +205,7 @@ class SuperMagicModeService {
 					this._isModeAvailabilityResolved = false
 				})
 				if (!organizationCode || !userId) {
-					this.resetModeList()
+					this.resetCrewModeList()
 					return
 				}
 
@@ -308,11 +308,12 @@ class SuperMagicModeService {
 		}
 
 		if (!storageKey) {
-			this.resetModeList()
+			this.resetCrewModeList()
 			return
 		}
 
 		this.logTemporaryDiagnostic("mode-storage:hydrate-start", { storageKey })
+		const requestContextKey = this.currentContextKey
 		const cachedDefaultAgentCode = this.readPersistedDefaultAgentCode(storageKey)
 
 		// Make sure any legacy entry for this key has been moved to IDB first
@@ -320,6 +321,7 @@ class SuperMagicModeService {
 
 		try {
 			const data = await superMagicModeListRepository.getByKey(storageKey)
+			if (requestContextKey !== this.currentContextKey) return
 			if (Array.isArray(data)) {
 				this.applyModeListSnapshot(data, cachedDefaultAgentCode)
 				this.logTemporaryDiagnostic("mode-storage:hydrate-end", {
@@ -333,6 +335,7 @@ class SuperMagicModeService {
 				logger.warn("Invalid mode list data in IndexedDB, expected array")
 			}
 		} catch (error) {
+			if (requestContextKey !== this.currentContextKey) return
 			logger.warn(
 				"Failed to load mode list from IndexedDB, falling back to localStorage",
 				error,
@@ -356,7 +359,7 @@ class SuperMagicModeService {
 		try {
 			const raw = window.localStorage.getItem(storageKey)
 			if (!raw) {
-				this.resetModeList()
+				this.resetCrewModeList()
 				return
 			}
 			const parsed = JSON.parse(raw)
@@ -365,7 +368,7 @@ class SuperMagicModeService {
 				logger.log("Loaded mode list from localStorage fallback")
 			} else {
 				logger.warn("Invalid mode list data in localStorage fallback")
-				this.resetModeList()
+				this.resetCrewModeList()
 			}
 		} catch (error) {
 			logger.error({
@@ -374,7 +377,7 @@ class SuperMagicModeService {
 				error: error,
 				message: "Failed to load mode list from localStorage fallback",
 			})
-			this.resetModeList()
+			this.resetCrewModeList()
 		}
 	}
 
@@ -567,19 +570,38 @@ class SuperMagicModeService {
 		}
 	}
 
+	private replaceModeMap(modeList: ModeItem[]) {
+		// Crew snapshots do not own the independently loaded Default catalog. Keep it
+		// across cache hydration/misses and refreshes, but never across user/org/locale changes.
+		const defaultEntry =
+			this._defaultModeModelFreshnessState.lastContextKey === this.currentContextKey
+				? this._modeMap.get(TopicMode.Default)
+				: undefined
+		this._modeMap = buildModeMapFromModeList(modeList)
+		if (defaultEntry) {
+			this._modeMap.set(TopicMode.Default, defaultEntry)
+		} else {
+			// Dropping the catalog must also invalidate its fetch cache, including when
+			// returning to a previously visited context within the freshness window.
+			this._defaultModeModelList = null
+			this._defaultModeModelFreshnessState = createEmptyFreshnessState()
+		}
+	}
+
 	private applyModeListSnapshot(modeList: ModeItem[], defaultAgentCode?: string) {
 		runInAction(() => {
 			this._modeList = modeList
-			this._modeMap = buildModeMapFromModeList(modeList)
+			this.replaceModeMap(modeList)
 			this._defaultAgentCode = defaultAgentCode
 			this._isModeAvailabilityResolved = true
 		})
 	}
 
-	private resetModeList() {
+	/** Reset crew availability; Default models follow their independent context lifecycle. */
+	private resetCrewModeList() {
 		runInAction(() => {
 			this._modeList = []
-			this._modeMap = new Map()
+			this.replaceModeMap([])
 			this._defaultAgentCode = undefined
 			this._isModeAvailabilityResolved = false
 		})
@@ -937,6 +959,8 @@ class SuperMagicModeService {
 				TopicMode.CrewCreator,
 				TopicMode.SkillCreator,
 				TopicMode.MagiClaw,
+				// Micro-app topics use an internal agent and are not returned by the crew list.
+				TopicMode.MicroApp,
 			].includes(mode as TopicMode)
 		if (interfaceStore.isMobile) {
 			return isValid && mode !== TopicMode.Chat
@@ -998,7 +1022,7 @@ class SuperMagicModeService {
 
 		const requestContext = this.resolveCurrentModeListContext()
 		if (!requestContext) {
-			this.resetModeList()
+			this.resetCrewModeList()
 			runInAction(() => {
 				this._isModeListLoading = false
 			})
@@ -1079,16 +1103,9 @@ class SuperMagicModeService {
 						}
 					}),
 				}))
-				// Default entry is owned by fetchDefaultModeModelList; preserve it
-				// across featured-list rebuilds to avoid a window where the UI reads
-				// an empty list while the cached Default data is still valid.
-				const preservedDefaultEntry = this._modeMap.get(TopicMode.Default) ?? null
 				runInAction(() => {
 					this._modeList = nextModeList
-					this._modeMap = buildModeMapFromModeList(nextModeList)
-					if (preservedDefaultEntry) {
-						this._modeMap.set(TopicMode.Default, preservedDefaultEntry)
-					}
+					this.replaceModeMap(nextModeList)
 					this._defaultAgentCode = res.default_agent_code?.trim() || undefined
 					this._isModeAvailabilityResolved = true
 					this._modeListFreshnessState = this.markFreshForContext(

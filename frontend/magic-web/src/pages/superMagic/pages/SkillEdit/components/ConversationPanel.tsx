@@ -16,6 +16,7 @@ import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSe
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { messageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import {
+	isTopicTaskRunning,
 	isTopicWaitingForUser,
 	type ProjectListItem,
 } from "@/pages/superMagic/pages/Workspace/types"
@@ -81,7 +82,7 @@ function ConversationPanel({
 		onTopicDetailLoaded: topicStore.updateTopic,
 	})
 
-	const { topicModelStore } = useTopicModel({
+	useTopicModel({
 		selectedTopic,
 		selectedProject,
 		topicMode: TopicMode.Default,
@@ -104,12 +105,13 @@ function ConversationPanel({
 		onConversationGeneratingChange: conversation.setConversationGenerating,
 		onTopicMessagesChange: handleTopicMessagesChange,
 	})
+	const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 
 	const messageQueue = useMessageQueue({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode: selectedTopic?.agent_code,
-		isTaskRunning: showLoading,
+		isTaskRunning,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
@@ -182,12 +184,14 @@ function ConversationPanel({
 			layoutConfig: DEFAULT_LAYOUT_CONFIG,
 			showLoading,
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
+				const resolvedProject = currentProject ?? selectedProject
+				const resolvedTopic = currentTopic ?? topicStore.selectedTopic
 				if (!success) return
 
 				applyOptimisticTopicRunningState({
 					topicStore,
-					topic: currentTopic ?? topicStore.selectedTopic,
-					project: currentProject ?? selectedProject,
+					topic: resolvedTopic,
+					project: resolvedProject,
 				})
 			},
 			mergeSendParams: ({ defaultParams }) => {
@@ -241,6 +245,7 @@ function ConversationPanel({
 					topicStore={topicStore}
 					topicActions={topicActions}
 					hideTopicListModeIcon
+					hideTopicTypeFilter
 					historyTriggerMode={historyTriggerMode}
 					isHistoryPanelOpen={isHistoryPanelOpen}
 					onToggleHistoryPanel={onToggleHistoryPanel}

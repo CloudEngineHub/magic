@@ -1,6 +1,7 @@
 import ConversationPanelScaffold from "@/pages/superMagic/components/ConversationPanelScaffold"
 import { SuperMagicMessageItem } from "@/pages/superMagic/components/MessageList/type"
 import {
+	isTopicTaskRunning,
 	isTopicWaitingForUser,
 	type ProjectListItem,
 } from "@/pages/superMagic/pages/Workspace/types"
@@ -56,6 +57,7 @@ interface CrewTopicPanelProps {
 	mentionPanelStore: MentionPanelStore
 	projectFilesStore: ProjectFilesStore
 	onTerminalTopicStatusChange?: () => void
+	setSelectedDetail?: (detail: unknown) => void
 }
 
 function CrewTopicPanel({
@@ -72,6 +74,7 @@ function CrewTopicPanel({
 	mentionPanelStore,
 	projectFilesStore,
 	onTerminalTopicStatusChange,
+	setSelectedDetail,
 }: CrewTopicPanelProps) {
 	const { t } = useTranslation("crew/create")
 	const { conversation } = useCrewEditStore()
@@ -106,12 +109,13 @@ function CrewTopicPanel({
 		onConversationGeneratingChange: conversation.setConversationGenerating,
 		onTopicMessagesChange: handleTopicMessagesChange,
 	})
+	const isTaskRunning = showLoading || isTopicTaskRunning(selectedTopic)
 
 	const messageQueue = useMessageQueue({
 		projectId: selectedProject?.id,
 		topicId: selectedTopic?.id,
 		agentCode: crewId,
-		isTaskRunning: showLoading,
+		isTaskRunning,
 		isWaitingForUser: isTopicWaitingForUser(selectedTopic),
 		isEmptyStatus: false,
 		isShowLoadingInit: isMessagesInitialLoading,
@@ -178,7 +182,10 @@ function CrewTopicPanel({
 			}),
 			selectedTopic,
 			selectedProject,
-			topicMode: TopicMode.Default,
+			topicMode: TopicMode.CrewCreator,
+			// Crew creation is a business mode; its model picker uses the default catalog.
+			modelTopicMode: TopicMode.Default,
+			agentCode: crewId,
 			topicStore,
 			setSelectedTopic: topicStore.setSelectedTopic,
 			mentionPanelStore,
@@ -189,12 +196,14 @@ function CrewTopicPanel({
 			showLoading,
 			size: detailPanelVisible ? "small" : "default",
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
+				const resolvedProject = currentProject ?? selectedProject
+				const resolvedTopic = currentTopic ?? topicStore.selectedTopic
 				if (!success) return
 
 				applyOptimisticTopicRunningState({
 					topicStore,
-					topic: currentTopic ?? topicStore.selectedTopic,
-					project: currentProject ?? selectedProject,
+					topic: resolvedTopic,
+					project: resolvedProject,
 				})
 			},
 			mergeSendParams: ({ defaultParams }) => {
@@ -250,6 +259,7 @@ function CrewTopicPanel({
 					topicStore={topicStore}
 					topicActions={topicActions}
 					hideTopicListModeIcon
+					hideTopicTypeFilter
 					historyTriggerMode={historyTriggerMode}
 					isHistoryPanelOpen={isHistoryPanelOpen}
 					onToggleHistoryPanel={onToggleHistoryPanel}
@@ -267,6 +277,7 @@ function CrewTopicPanel({
 			editor={<DefaultMessageEditorContainer editorContext={editorContext} />}
 			editorNodes={editorNodes}
 			messageListProviderValue={messageListProviderValue}
+			setSelectedDetail={setSelectedDetail}
 			messages={messages as SuperMagicMessageItem[]}
 			selectedTopic={selectedTopic}
 			handlePullMoreMessage={handlePullMoreMessage}

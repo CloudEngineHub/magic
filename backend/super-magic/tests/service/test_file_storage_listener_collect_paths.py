@@ -45,35 +45,35 @@ def _snap(
 def test_internal_space_entries_excluded_from_both():
     """核心回归：topic 空间条目（聊天历史）不进附件也不进版本。"""
     snapshots = [
-        _snap("1", "/mnt/agfs/magicfs/project/report.md", space="project"),
+        _snap("1", "/mnt/agfs-vol/agfs/magicfs/project/report.md", space="project"),
         # 聊天历史文件：本轮被频繁保存，但属于内部状态
-        _snap("2", "/mnt/agfs/magicfs/topic/chat_history/magic<main>.json",
+        _snap("2", "/mnt/agfs-vol/agfs/magicfs/topic/chat_history/magic<main>.json",
               space=TOPIC_SPACE),
-        _snap("3", "/mnt/agfs/magicfs/topic/chat_history/magic<main>.horizon.json",
+        _snap("3", "/mnt/agfs-vol/agfs/magicfs/topic/chat_history/magic<main>.horizon.json",
               space=TOPIC_SPACE),
     ]
 
     assert select_changed_attachment_paths(snapshots) == [
-        "/mnt/agfs/magicfs/project/report.md",
+        "/mnt/agfs-vol/agfs/magicfs/project/report.md",
     ]
     assert select_file_version_paths(snapshots) == [
-        "/mnt/agfs/magicfs/project/report.md",
+        "/mnt/agfs-vol/agfs/magicfs/project/report.md",
     ]
 
 
 def test_user_space_in_versions_but_not_attachments():
     """策略拆分核心：user 空间变更创建文件版本，但不进变更附件列表。"""
     snapshots = [
-        _snap("1", "/mnt/agfs/magicfs/project/report.md", space="project"),
-        _snap("2", "/mnt/agfs/magicfs/user/notes.txt", space=USER_SPACE),
+        _snap("1", "/mnt/agfs-vol/agfs/magicfs/project/report.md", space="project"),
+        _snap("2", "/mnt/agfs-vol/agfs/magicfs/user/notes.txt", space=USER_SPACE),
     ]
 
     assert select_changed_attachment_paths(snapshots) == [
-        "/mnt/agfs/magicfs/project/report.md",
+        "/mnt/agfs-vol/agfs/magicfs/project/report.md",
     ]
     assert select_file_version_paths(snapshots) == [
-        "/mnt/agfs/magicfs/project/report.md",
-        "/mnt/agfs/magicfs/user/notes.txt",
+        "/mnt/agfs-vol/agfs/magicfs/project/report.md",
+        "/mnt/agfs-vol/agfs/magicfs/user/notes.txt",
     ]
 
 
@@ -85,20 +85,20 @@ def test_hidden_path_files_in_versions_and_project_attachments():
     进附件与版本。
     """
     snapshots = [
-        _snap("1", "/mnt/agfs/magicfs/user/.magic/memory/global/MEMORY.md",
+        _snap("1", "/mnt/agfs-vol/agfs/magicfs/user/.magic/memory/global/MEMORY.md",
               FileOperation.CREATED, space=USER_SPACE),
-        _snap("2", "/mnt/agfs/magicfs/user/.venv/lib.py", space=USER_SPACE),
-        _snap("3", "/mnt/agfs/magicfs/project/.magic/skills/README.md",
+        _snap("2", "/mnt/agfs-vol/agfs/magicfs/user/.venv/lib.py", space=USER_SPACE),
+        _snap("3", "/mnt/agfs-vol/agfs/magicfs/project/.magic/skills/README.md",
               space="project"),
     ]
 
     assert select_changed_attachment_paths(snapshots) == [
-        "/mnt/agfs/magicfs/project/.magic/skills/README.md",
+        "/mnt/agfs-vol/agfs/magicfs/project/.magic/skills/README.md",
     ]
     assert select_file_version_paths(snapshots) == [
-        "/mnt/agfs/magicfs/user/.magic/memory/global/MEMORY.md",
-        "/mnt/agfs/magicfs/user/.venv/lib.py",
-        "/mnt/agfs/magicfs/project/.magic/skills/README.md",
+        "/mnt/agfs-vol/agfs/magicfs/user/.magic/memory/global/MEMORY.md",
+        "/mnt/agfs-vol/agfs/magicfs/user/.venv/lib.py",
+        "/mnt/agfs-vol/agfs/magicfs/project/.magic/skills/README.md",
     ]
 
 

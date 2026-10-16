@@ -31,6 +31,7 @@ import type {
 	StoreSkillItem,
 	UpdateSkillInfoParams,
 } from "@/apis/modules/skills"
+import { analyticsService } from "@/services/analytics"
 
 export type { SkillDetailResponse }
 
@@ -124,6 +125,9 @@ export interface SkillDetailView {
 export type UserSkillsListScope = "created" | "team-shared" | "collaborated" | "market-installed"
 
 export class SkillsService {
+	/** The marketplace install API returns no identity, so retain the code from the loaded row. */
+	private storeSkillCodes = new Map<string, string>()
+
 	async getSkillMarketCategories(
 		params: GetSkillMarketCategoriesParams = {},
 	): Promise<SkillMarketCategoryView[]> {
@@ -135,8 +139,13 @@ export class SkillsService {
 		params: GetStoreSkillsParams = {},
 	): Promise<StoreSkillsPage<StoreSkillView>> {
 		const data = await SkillsApi.getStoreSkills(params)
+		const list = data.list.map((item) => {
+			const skillCode = item.code?.trim() || item.skill_code?.trim()
+			if (skillCode) this.storeSkillCodes.set(String(item.id), skillCode)
+			return this.mapStoreSkill(item)
+		})
 		return {
-			list: data.list.map((item) => this.mapStoreSkill(item)),
+			list,
 			page: data.page,
 			pageSize: data.page_size,
 		}
@@ -173,6 +182,9 @@ export class SkillsService {
 	}
 
 	async createEmptySkill(): Promise<{ id?: string; code: string }> {
+		analyticsService.report("skill_create_attempted", { source_type: "empty" })
+		// An empty Skill also provisions its project and default topic asynchronously.
+		analyticsService.report("project_create_attempted", { sceneOverride: "skill" })
 		const data = await SkillsApi.createSkill()
 		const code = this.resolveCreatedSkillCode(data)
 		if (!code) throw new Error("create-skill-missing-code")
@@ -182,8 +194,15 @@ export class SkillsService {
 		}
 	}
 
-	addSkillFromStore(storeSkillId: string) {
-		return SkillsApi.addSkillFromStore({ store_skill_id: storeSkillId })
+	async addSkillFromStore(storeSkillId: string, knownSkillCode?: string) {
+		analyticsService.report("skill_create_attempted", { source_type: "store" })
+		const result = await SkillsApi.addSkillFromStore({ store_skill_id: storeSkillId })
+		const skillCode =
+			this.resolveSkillCodeFromUnknown(result) ??
+			this.storeSkillCodes.get(String(storeSkillId)) ??
+			knownSkillCode?.trim()
+		void skillCode
+		return result
 	}
 
 	deleteSkill(code: string) {
@@ -202,8 +221,10 @@ export class SkillsService {
 		return SkillsApi.parseOfficialSkillFile({ file_key })
 	}
 
-	importSkill(params: ImportSkillParams): Promise<ImportSkillResponse> {
-		return SkillsApi.importSkill(params)
+	async importSkill(params: ImportSkillParams): Promise<ImportSkillResponse> {
+		analyticsService.report("skill_create_attempted", { source_type: "import" })
+		const result = await SkillsApi.importSkill(params)
+		return result
 	}
 
 	importOfficialSkill(params: ImportOfficialSkillParams): Promise<ImportOfficialSkillResponse> {
@@ -314,8 +335,8 @@ export class SkillsService {
 			// Keep edit/import flows supplied with a stable i18n shape while list cards
 			// render the locale-resolved fields above. The API may remove these raw
 			// fields after the migration, so the resolved value seeds missing entries.
-			nameI18n: this.ensureSkillI18nText(item.name_i18n, name),
-			descriptionI18n: this.ensureSkillI18nText(item.description_i18n, description),
+			nameI18n: this.ensureSkillI18nText(undefined, name),
+			descriptionI18n: this.ensureSkillI18nText(undefined, description),
 			logo: item.logo,
 			sourceType: item.source_type,
 			creatorName: item.creator_info?.name,
@@ -443,7 +464,20 @@ export class SkillsService {
 
 	private resolveCreatedSkillCode(data: CreateSkillResponse | null | undefined) {
 		if (!data) return ""
-		return data.code || data.skill_code || ""
+		return data.code?.trim() || data.skill_code?.trim() || ""
+	}
+
+	/** Market install may return an object or a one-item list; never treat store id as skill_code. */
+	private resolveSkillCodeFromUnknown(result: unknown): string | undefined {
+		if (!result) return undefined
+		if (Array.isArray(result)) {
+			return this.resolveSkillCodeFromUnknown(result[0])
+		}
+		if (typeof result === "object") {
+			const value = result as { skill_code?: string; code?: string }
+			return value.skill_code?.trim() || value.code?.trim() || undefined
+		}
+		return undefined
 	}
 }
 

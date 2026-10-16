@@ -125,7 +125,7 @@ const CUSTOM_TAG_PATTERN = /<\/?([a-z][a-z0-9_-]*)((?:\s+[^>/]*)?)\s*\/?>/gi
 const UNDERSCORE_EMPHASIS_PATTERN = /_([^_`]+)_/g
 
 // 预处理 Markdown 内容，只转义 _text_ 而保留 *text*
-export const preprocessMarkdown = (content: string) => {
+export const preprocessMarkdown = (content: string, preserveNoSend = false) => {
 	if (!content) return ""
 
 	let processedContent = content
@@ -152,6 +152,10 @@ export const preprocessMarkdown = (content: string) => {
 
 	if (processedContent.includes("<")) {
 		processedContent = processedContent.replace(CUSTOM_TAG_PATTERN, (match, tagName) => {
+			// assistant 正文已区分控制区域和字面示例；不能再给代码示例插入反引号。
+			if (preserveNoSend && ["no_send", "no-send"].includes(tagName.toLowerCase())) {
+				return match
+			}
 			// 如果是标准 HTML 标签，不转义
 			if (HTML_TAGS.has(tagName.toLowerCase())) {
 				return match

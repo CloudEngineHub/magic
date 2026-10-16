@@ -4,12 +4,13 @@ import { MagicFSApi, SuperMagicApi, type MagicFSFile } from "@/apis"
 import type { MagicFSFileTree } from "@/apis/modules/magicFS"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import type { FileItem, FilePreviewPolicy } from "../../Detail/components/FilesViewer/types"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 
 export const USER_FILE_PREVIEW_POLICY: Readonly<FilePreviewPolicy> = {
 	standalone: true,
 	editingPresence: false,
 	allowShare: false,
-	allowVersionHistory: false,
+	allowVersionHistory: true,
 	fileScope: "user",
 	syncWithAttachments: false,
 	persistTab: true,
@@ -68,11 +69,16 @@ export class UserSpaceFileService {
 	}
 
 	/** 读取指定用户文件的文本正文。 */
-	async readFileContent(fileId: string, signal?: AbortSignal): Promise<string> {
+	async readFileContent(
+		fileId: string,
+		signal?: AbortSignal,
+		access?: FileAccessContext | null,
+	): Promise<string> {
 		return getFileContentById(fileId, {
 			responseType: "text",
 			forceRefresh: true,
 			signal,
+			access: access ?? undefined,
 		}) as Promise<string>
 	}
 
@@ -87,10 +93,14 @@ export class UserSpaceFileService {
 	 *
 	 * 读取正文前后各校验一次修订号，避免把变化中的文件作为编辑基准。
 	 */
-	async readStableSnapshot(fileId: string, signal?: AbortSignal): Promise<UserFileSnapshot> {
+	async readStableSnapshot(
+		fileId: string,
+		signal?: AbortSignal,
+		access?: FileAccessContext | null,
+	): Promise<UserFileSnapshot> {
 		for (let attempt = 0; attempt < STABLE_SNAPSHOT_MAX_ATTEMPTS; attempt += 1) {
 			const before = await this.getFileInfo(fileId, signal)
-			const content = await this.readFileContent(fileId, signal)
+			const content = await this.readFileContent(fileId, signal, access)
 			const after = await this.getFileInfo(fileId, signal)
 
 			if (before.version === after.version) {

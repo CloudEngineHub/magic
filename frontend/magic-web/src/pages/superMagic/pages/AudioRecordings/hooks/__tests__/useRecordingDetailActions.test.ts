@@ -1,12 +1,18 @@
+import { canDeleteRecordingProjects } from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { act, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { toast } from "sonner"
 import { useRecordingDetailActions } from "../useRecordingDetailActions"
 import {
+	deleteAudioRecordingProjects,
 	moveAudioRecordingProjects,
 	resubmitAudioRecordingSummary,
 } from "../../utils/audio-recording-actions"
 import type { AudioProjectListItem } from "@/types/audioProject"
+
+vi.mock("@/pages/superMagic/hooks/useDownloadProgress", () => ({
+	useDownloadProgress: () => ({ startDownload: vi.fn() }),
+}))
 
 vi.mock("sonner", () => ({
 	toast: {
@@ -73,6 +79,32 @@ const baseProjectItem: AudioProjectListItem = {
 }
 
 describe("useRecordingDetailActions", () => {
+	it("leaves a recording detail unchanged when deletion is blocked", async () => {
+		vi.mocked(canDeleteRecordingProjects).mockReturnValueOnce(false)
+		const onProjectItemChange = vi.fn()
+		const onRefresh = vi.fn()
+		const { result } = renderHook(() =>
+			useRecordingDetailActions({
+				projectId: "project-alpha",
+				projectItem: baseProjectItem,
+				fileMap: null,
+				recordingName: "Weekly sync",
+				onProjectItemChange,
+				onRefresh,
+			}),
+		)
+		let deleted: boolean | undefined
+		await act(async () => {
+			deleted = await result.current.deleteProject()
+		})
+		expect(deleted).toBe(false)
+		expect(result.current.deleting).toBe(false)
+		expect(deleteAudioRecordingProjects).not.toHaveBeenCalled()
+		expect(onProjectItemChange).not.toHaveBeenCalled()
+		expect(onRefresh).not.toHaveBeenCalled()
+		expect(toast.success).not.toHaveBeenCalled()
+		expect(toast.error).not.toHaveBeenCalled()
+	})
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
@@ -131,3 +163,8 @@ describe("useRecordingDetailActions", () => {
 		expect(onRefresh).toHaveBeenCalled()
 	})
 })
+
+vi.mock("@/services/recordSummary/projectDeletionRecordingNotice", () => ({
+	canDeleteRecordingProjects: vi.fn(() => true),
+	handleRecordingProjectDeletionError: vi.fn(() => false),
+}))

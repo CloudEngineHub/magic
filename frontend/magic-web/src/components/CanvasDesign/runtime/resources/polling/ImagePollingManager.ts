@@ -6,8 +6,19 @@ import {
 	isImageElementContent,
 	updateImageContent,
 } from "../../document/elementContent"
+import {
+	finalizeMediaSourceReplacement,
+	mergeMediaSourceReplacementFields,
+} from "../../document/mediaSourceReplacement"
 import { GenerationStatus, type GetImageGenerationResultParams } from "../../../public/magic-types"
 import { IMAGE_CONFIG } from "../../elements/image/ImageElement.config"
+import {
+	getImageGenerationId,
+	getImageGenerationTiming,
+	isPendingImageGeneration,
+	parseImageGenerationCreatedAt,
+	type ImageGenerationTiming,
+} from "../../elements/image/imageGenerationTiming"
 import {
 	getCanvasHostResourceReferenceResolver,
 	resolveCanvasStorageResourceReference,
@@ -51,9 +62,18 @@ export class ImagePollingManager {
 	private observedPollingKeyByIdentity = new Map<string, string>()
 	private pausedPollingKeys = new Set<string>()
 	private unsubscribeElementUpdated?: () => void
+	private unsubscribeGeneration?: () => void
+	private deadlineTimer?: ReturnType<typeof setTimeout>
+	private timings = new Map<string, ImageGenerationTiming>()
+	private expiredTimings = new Set<string>()
+	private destroyed = false
 
 	constructor(config: PollingManagerConfig) {
 		this.config = config
+		this.unsubscribeGeneration = config.canvas.generationRuntimeManager.subscribeElement(
+			config.elementId,
+			() => this.syncGenerationTiming(),
+		)
 		const eventEmitter = config.canvas.eventEmitter as typeof config.canvas.eventEmitter & {
 			on?: (
 				event: "element:updated",
@@ -85,6 +105,7 @@ export class ImagePollingManager {
 	}
 
 	public syncWithElementData(): void {
+		this.syncGenerationTiming()
 		this.reconcileObservedTargets()
 		const targets = this.getPollingTargets()
 		if (targets.length === 0) {
@@ -97,6 +118,114 @@ export class ImagePollingManager {
 			this.pollingRunId += 1
 		}
 		this.schedulePolling(this.pollingRunId)
+	}
+
+	public getGenerationTiming(contentId: string): ImageGenerationTiming | undefined {
+		return this.timings.get(contentId)
+	}
+
+	/**
+	 * 等待期限不依赖接口轮询是否暂停。例：Agent 找不到结果文件时停止查文件，
+	 * 仍在十分钟后显示超时；真实结果后来写入则自动清除此版本的等待状态。
+	 */
+	private syncGenerationTiming(): void {
+		if (this.destroyed) return
+		if (this.deadlineTimer !== undefined) clearTimeout(this.deadlineTimer)
+		this.deadlineTimer = undefined
+		// 构造图片实例时尚未注册到 ElementManager，等待注册后再保存观察时间。
+		if (!this.config.canvas.elementManager.hasElement(this.config.elementId)) {
+			queueMicrotask(() => {
+				if (
+					!this.destroyed &&
+					this.config.canvas.elementManager.hasElement(this.config.elementId)
+				) {
+					this.syncGenerationTiming()
+				}
+			})
+			return
+		}
+		const element = this.config.getElementData()
+		if (!isImageElementContent(element)) return
+		if (this.config.canvas.elementManager.isTemporary(this.config.elementId)) return
+		const now = Date.now()
+		let nextDeadline = Number.POSITIVE_INFINITY
+		const activeContentIds = new Set<string>()
+		const activeDeadlineKeys = new Set<string>()
+		let nextElement = element
+		for (const content of getImageContents(element)) {
+			const runtime = this.config.canvas.generationRuntimeManager.getTargetState(
+				this.config.elementId,
+				content.contentId,
+			)
+			const observedContent = runtime
+				? {
+						...content,
+						generateImageRequest:
+							runtime.generateImageRequest ?? content.generateImageRequest,
+						imageGenerationTaskMeta:
+							runtime.imageGenerationTaskMeta ?? content.imageGenerationTaskMeta,
+					}
+				: content
+			if (!isPendingImageGeneration(observedContent)) continue
+			activeContentIds.add(content.contentId)
+			const imageId = getImageGenerationId(observedContent)
+			const previous = this.timings.get(content.contentId)
+			const persisted = getImageGenerationTiming(observedContent)
+			const timing =
+				persisted ??
+				(previous && (previous.imageId === imageId || !previous.imageId)
+					? { ...previous, imageId }
+					: {
+							startedAt: runtime?.startedAt ?? now,
+							imageId,
+							source: runtime ? ("submitted" as const) : ("observed" as const),
+						})
+			this.timings.set(content.contentId, timing)
+			// 观察时间只在拥有写权限时随既有 DSL 保存；不写入请求或后端状态。
+			if (
+				!runtime &&
+				!persisted &&
+				this.config.canvas.permissionManager.can("document.write")
+			) {
+				nextElement = updateImageContent(nextElement, content.contentId, {
+					generationTiming: timing,
+				})
+			}
+			const deadline = timing.startedAt + IMAGE_CONFIG.GENERATION_TIMEOUT_MS + 1
+			const deadlineKey = `${content.contentId}:${imageId ?? ""}:${timing.startedAt}`
+			activeDeadlineKeys.add(deadlineKey)
+			if (deadline <= now) {
+				if (!this.expiredTimings.has(deadlineKey)) {
+					this.expiredTimings.add(deadlineKey)
+					this.config.canvas.eventEmitter.emit({
+						type: "element:image:displayStateChanged",
+						data: { elementId: this.config.elementId, contentId: content.contentId },
+					})
+				}
+			} else {
+				nextDeadline = Math.min(nextDeadline, deadline)
+			}
+		}
+		for (const contentId of this.timings.keys()) {
+			if (!activeContentIds.has(contentId)) this.timings.delete(contentId)
+		}
+		for (const key of this.expiredTimings) {
+			if (!activeDeadlineKeys.has(key)) this.expiredTimings.delete(key)
+		}
+		if (nextElement !== element) {
+			this.config.canvas.elementManager.update(
+				this.config.elementId,
+				{ contents: nextElement.contents },
+				{ silent: false, historyPolicy: "exclude" },
+			)
+			return
+		}
+		if (Number.isFinite(nextDeadline)) {
+			this.deadlineTimer = setTimeout(
+				() => this.syncGenerationTiming(),
+				Math.max(0, nextDeadline - now),
+			)
+		}
 	}
 
 	/**
@@ -336,14 +465,6 @@ export class ImagePollingManager {
 							result.file_name,
 						)
 					: undefined
-			const contentPatch = {
-				...getGenerationResultStatusPatch(
-					result.status,
-					result.error_message,
-					Boolean(storagePath),
-				),
-				...(storagePath ? { src: storagePath } : {}),
-			}
 			if (storagePath && result.file_name) {
 				this.primeGeneratedImageResource(storagePath, result.file_url, result.file_name)
 			}
@@ -352,12 +473,34 @@ export class ImagePollingManager {
 			if (!isImageElementContent(currentElement)) return
 			const currentContent = getImageContentById(currentElement, target.contentId)
 			if (!currentContent) return
+			const createdAt = parseImageGenerationCreatedAt(result.created_at)
+			const contentPatch = mergeMediaSourceReplacementFields(currentContent, {
+				...(createdAt !== undefined &&
+				currentContent.generationTiming?.startedAt !== createdAt
+					? {
+							generationTiming: {
+								startedAt: createdAt,
+								imageId: target.imageId,
+								source: "server" as const,
+							},
+						}
+					: {}),
+				...getGenerationResultStatusPatch(
+					result.status,
+					result.error_message,
+					Boolean(storagePath),
+				),
+				...(storagePath ? { src: storagePath } : {}),
+			})
 			const shouldActivate =
 				result.status === GenerationStatus.Completed &&
 				Boolean(storagePath) &&
 				this.config.shouldAutoActivateContent?.(target.contentId)
 			const namePatch =
-				storagePath && result.file_name && !target.content.imageGenerationTaskMeta
+				storagePath &&
+				result.file_name &&
+				!currentElement.name &&
+				!target.content.imageGenerationTaskMeta
 					? { name: extractSmartNameFromFileName(result.file_name) }
 					: {}
 			const didUpdateElement =
@@ -377,6 +520,14 @@ export class ImagePollingManager {
 					},
 					{ silent: false, historyPolicy: "exclude" },
 				)
+				if (storagePath) {
+					finalizeMediaSourceReplacement(this.config.canvas, {
+						previousSrc: currentContent.src,
+						nextSrc: storagePath,
+						previousComplianceCheckId: currentContent.complianceCheckId,
+						previousAssetId: currentContent.assetId,
+					})
+				}
 			}
 
 			if (didUpdateElement) {
@@ -458,16 +609,29 @@ export class ImagePollingManager {
 				)
 				const currentElement = this.config.getElementData()
 				if (!isImageElementContent(currentElement)) return
-				const nextElement = updateImageContent(currentElement, target.contentId, {
+				const currentContent = getImageContentById(currentElement, target.contentId)
+				if (!currentContent) return
+				const recoveryPatch = mergeMediaSourceReplacementFields(currentContent, {
 					src: persistedPath,
 					status: GenerationStatus.Completed,
 					errorMessage: undefined,
 				})
+				const nextElement = updateImageContent(
+					currentElement,
+					target.contentId,
+					recoveryPatch,
+				)
 				this.config.canvas.elementManager.update(
 					this.config.elementId,
 					{ contents: nextElement.contents },
 					{ silent: false, historyPolicy: "exclude" },
 				)
+				finalizeMediaSourceReplacement(this.config.canvas, {
+					previousSrc: currentContent.src,
+					nextSrc: persistedPath,
+					previousComplianceCheckId: currentContent.complianceCheckId,
+					previousAssetId: currentContent.assetId,
+				})
 				this.config.canvas.eventEmitter.emit({
 					type: "element:image:resultUpdated",
 					data: { elementId: this.config.elementId },
@@ -511,6 +675,11 @@ export class ImagePollingManager {
 	}
 
 	public destroy(): void {
+		this.destroyed = true
+		if (this.deadlineTimer !== undefined) clearTimeout(this.deadlineTimer)
+		this.unsubscribeGeneration?.()
+		this.timings.clear()
+		this.expiredTimings.clear()
 		this.stop()
 		this.unsubscribeElementUpdated?.()
 		this.unsubscribeElementUpdated = undefined

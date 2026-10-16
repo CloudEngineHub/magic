@@ -1,8 +1,9 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton/components/FileResourceIcon"
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
+import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { AttachmentProps } from "./type"
 import MagicIcon from "@/components/base/MagicIcon"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
@@ -17,10 +18,13 @@ import { cn } from "@/utils/cn"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
 import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
-import projectFilesStore from "@/stores/projectFiles"
 import { observer } from "mobx-react-lite"
-import { useMessageListContext } from "../../context"
+import { useMessageListProjectFilesStore } from "../../context"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
+import {
+	HomeOnboardingAnchor,
+	startHomeOnboardingDeliverableRunIfDue,
+} from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 
 export const Attachment = observer(function Attachment({
 	attachments,
@@ -34,11 +38,20 @@ export const Attachment = observer(function Attachment({
 	className?: string
 }) {
 	const { t } = useTranslation("super")
-	const { projectFilesStore: scopedProjectFilesStore } = useMessageListContext()
-	const resolvedProjectFilesStore = scopedProjectFilesStore ?? projectFilesStore
+	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
 	const isMobile = useIsMobile()
+	const { permissions: access } = useFileAccess()
 	const handleDownload = useMessageAttachmentDownload(attachments)
 	const [expanded, setExpanded] = useState(false)
+	/**
+	 * The block the new-user guide frames when it is opened from here.
+	 *
+	 * Marked by hand rather than declared in the markup, because the guide has to point at the block
+	 * that was *clicked* and nothing in the markup can tell the blocks apart: the message list holds
+	 * one of these per message, and they all look the same. See
+	 * `HomeOnboardingAnchor.DeliverableAttachment` and the tour's first step.
+	 */
+	const sectionRef = useRef<HTMLDivElement>(null)
 
 	const toggleExpanded = (e: any) => {
 		e.stopPropagation()
@@ -52,24 +65,25 @@ export const Attachment = observer(function Attachment({
 	const resolveMagicProject = (item: MagicProjectAttachmentFile) =>
 		resolveMagicProjectAttachment(
 			item,
-			resolvedProjectFilesStore.workspaceFilesList,
-			resolvedProjectFilesStore.workspaceFileTree,
+			resolvedProjectFilesStore?.workspaceFilesList ?? [],
+			resolvedProjectFilesStore?.workspaceFileTree ?? [],
 		)
 
 	const handleOpenFile = (item: any) => {
+		if (!access.view || !access.preview) return
 		const fileName = item.display_filename || item.file_name || item.filename
 		const magicProjectResolution = isMagicProjectConfigFile(fileName)
 			? resolveMagicProject(item)
 			: undefined
 		const openTarget = magicProjectResolution?.projectDirectory || item
 
-		if (!isMobile && openTarget.file_id) {
-			openMessageFile(openTarget)
+		if (onFileClick && openTarget.file_id) {
+			onFileClick(openTarget)
 			return
 		}
 
-		if (onFileClick && openTarget.file_id) {
-			onFileClick(openTarget)
+		if (!isMobile && openTarget.file_id) {
+			openMessageFile(openTarget)
 			return
 		}
 
@@ -100,12 +114,38 @@ export const Attachment = observer(function Attachment({
 			})
 		}
 	}
+	/**
+	 * Opening one of these files — unless this is the first of them a new account has ever asked
+	 * for, in which case the guide takes the click and nothing is opened.
+	 *
+	 * The guide is about these files rather than about the one that was clicked: it says what a
+	 * task's results are and where they are kept, and both of its sentences are about the block the
+	 * user is looking at. Opening the file underneath would put that explanation on a screen the
+	 * user has not been introduced to yet, and the frame the first step draws around the block would
+	 * be over a panel that has just been replaced by the file's contents. So the click buys the
+	 * guide alone; the next one — what the guide's own words invite — opens the file, and every
+	 * click after that behaves as it always did.
+	 *
+	 * The block is still marked as the guide's anchor, and marked before the early return: the mark
+	 * is what the first step points at, and it is the only thing that can tell the guide which of
+	 * the page's attachment blocks was clicked. See `startHomeOnboardingDeliverableRunIfDue`.
+	 */
+	const openAttachment = (item: AttachmentProps) => {
+		if (startHomeOnboardingDeliverableRunIfDue()) {
+			sectionRef.current?.setAttribute(
+				"data-guide-anchor",
+				HomeOnboardingAnchor.DeliverableAttachment,
+			)
+			return
+		}
+		handleOpenFile(item)
+	}
 	const getMetaDataName = (item: any) => {
 		return item?.name ? `${item?.name}` : null
 	}
 	if (!show) return null
 	return (
-		<div className={cn("flex w-full flex-col rounded-md", className)}>
+		<div ref={sectionRef} className={cn("flex w-full flex-col rounded-md", className)}>
 			<div
 				className={cn(
 					"flex items-center gap-1",
@@ -152,7 +192,7 @@ export const Attachment = observer(function Attachment({
 										return
 									}
 									e.stopPropagation()
-									handleOpenFile(item)
+									openAttachment(item)
 								}}
 								data-testid="handle-open-file"
 							>
@@ -189,17 +229,19 @@ export const Attachment = observer(function Attachment({
 									>
 										{attachmentName}
 									</span>
-									<MagicIcon
-										className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
-										onClick={(e: any) => {
-											e.stopPropagation()
-											handleOpenFile(item)
-										}}
-										component={IconEye}
-										stroke={2}
-										size={18}
-									/>
-									{isEmpty(attachmentDisplayConfig) && (
+									{access.view && access.preview && (
+										<MagicIcon
+											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
+											onClick={(e: any) => {
+												e.stopPropagation()
+												openAttachment(item)
+											}}
+											component={IconEye}
+											stroke={2}
+											size={18}
+										/>
+									)}
+									{access.download && isEmpty(attachmentDisplayConfig) && (
 										<MagicIcon
 											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
 											onClick={(e: any) => {

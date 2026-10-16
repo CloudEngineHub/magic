@@ -6,7 +6,6 @@ import type { AttachmentFile } from "@/pages/superMagic/utils/image-url-resolver
 import { saveMediaSpeakersAndMagicProjectJs } from "../../contents/HTML/media/utils"
 import { useRecordingAudioPlayer } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingAudioPlayer"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
-import { useRecordingPlayerCurrentSec } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingPlayerCurrentSec"
 import { collectSpeakerIdsFromText } from "@/pages/superMagic/pages/AudioRecordings/utils/markdownTimeLinks"
 import { normalizeSpeakerSelection } from "@/pages/superMagic/pages/AudioRecordings/utils/speaker-filter"
 import { hasConfiguredRecordingFile } from "@/pages/superMagic/pages/AudioRecordings/utils/recording-detail-files"
@@ -55,11 +54,6 @@ export function MobileAudioFolderContent({
 	const { t } = useTranslation("audioRecordings")
 	const { fileMap, texts, audioUrl, attachmentTree, attachmentList, refresh } = detail
 	const player = useRecordingAudioPlayer(audioUrl)
-	const playerCurrentSec = useRecordingPlayerCurrentSec(
-		player.audioRef,
-		player.playing,
-		player.currentTime,
-	)
 	const [activeTab, setActiveTab] = useState<MobileContentTab>("transcript")
 	const [playerExpanded, setPlayerExpanded] = useState(false)
 	const [selectedSpeakerIds, setSelectedSpeakerIds] = useState<string[]>([])
@@ -249,7 +243,7 @@ export function MobileAudioFolderContent({
 			<MobileRecordingAudioPlayer
 				audioRef={player.audioRef}
 				audioUrl={audioUrl}
-				currentSec={playerCurrentSec}
+				currentSec={player.currentTime}
 				duration={player.duration}
 				playing={player.playing}
 				expanded={playerExpanded}

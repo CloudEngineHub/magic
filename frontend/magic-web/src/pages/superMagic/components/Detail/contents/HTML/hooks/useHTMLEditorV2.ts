@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useImperativeHandle, useState } from "react"
+import { useTranslation } from "react-i18next"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { MessageBridge } from "../iframe-bridge/bridge/MessageBridge"
 import { useStylePanelStore } from "../iframe-bridge/contexts/StylePanelContext"
 import {
@@ -36,6 +38,8 @@ interface UseHTMLEditorV2Options {
 		fetchFileVersions?: (fileId: string) => void,
 		isPPTEditMode?: boolean,
 	) => Promise<boolean | void>
+	/** 清理编辑器标记后、提交保存前，合并宿主维护的最新元数据 */
+	prepareSaveContent?: (content: string) => string
 	/** 文件 ID */
 	fileId?: string
 	/** 文件路径映射 */
@@ -55,6 +59,7 @@ interface UseHTMLEditorV2Options {
  * 管理 V2 编辑脚本的注入、MessageBridge 的初始化和编辑器 ref 的创建
  */
 export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
+	const { t } = useTranslation("super")
 	const {
 		iframeRef,
 		isEditMode,
@@ -64,6 +69,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		targetOrigin,
 		scaleRatio,
 		saveEditContent,
+		prepareSaveContent,
 		fileId,
 		filePathMapping,
 		editorRef,
@@ -85,6 +91,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	const stylePanelStoreRef = useRef(stylePanelStore)
 	const onZoomRequestRef = useRef(onZoomRequest)
 	const onContentChangedRef = useRef(onContentChanged)
+	const prepareSaveContentRef = useRef(prepareSaveContent)
 	const editTransitionIdRef = useRef(0)
 	const editLifecycleRef = useRef<"idle" | "activating" | "active" | "deactivating">("idle")
 
@@ -98,6 +105,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	stylePanelStoreRef.current = stylePanelStore
 	onZoomRequestRef.current = onZoomRequest
 	onContentChangedRef.current = onContentChanged
+	prepareSaveContentRef.current = prepareSaveContent
 	desiredEditModeRef.current = Boolean(isEditMode)
 	contentInjectedRef.current = contentInjected
 
@@ -212,6 +220,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				computedStyles: payload.computedStyles,
 			})
 		})
+		bridge.on(EditorMessageType.DYNAMIC_ELEMENT_CLICKED, () => {
+			magicToast.info(t("htmlEditor.dynamicElementNotEditable"))
+		})
 
 		// 监听 ELEMENTS_DESELECTED 事件
 		bridge.on(EditorMessageType.ELEMENTS_DESELECTED, () => {
@@ -321,7 +332,11 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 						return defaultResult
 					}
 
-					const cleanContent = filterInjectedTags(htmlForClean, filePathMapping)
+					const filteredContent = filterInjectedTags(htmlForClean, filePathMapping)
+					// Read the latest metadata after GET_CONTENT finishes, then use this exact
+					// snapshot for both persistence and the caller's saved-content baseline.
+					const cleanContent =
+						prepareSaveContentRef.current?.(filteredContent) ?? filteredContent
 					await saveEditContent(
 						cleanContent,
 						String(fileId),

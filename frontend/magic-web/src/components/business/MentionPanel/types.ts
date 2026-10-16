@@ -38,6 +38,7 @@ export const MentionBusinessItemType = {
 	AGENT: "agent",
 	SKILL: "skill",
 	TOOL: "tool",
+	MICRO_APP: "micro_app",
 	PROJECT: "project",
 	PROJECT_FILE: "project_file",
 	USER_FILE: "user_file",
@@ -98,6 +99,11 @@ export interface ToolMentionData {
 	description?: string
 }
 
+export interface MicroAppMentionData {
+	app_id: string
+	app_name?: string
+}
+
 export interface ProjectMentionData {
 	project_id: string
 	/** Display name retained for rendering the mention chip after insertion. */
@@ -105,6 +111,8 @@ export interface ProjectMentionData {
 }
 
 export interface ProjectFileMentionData {
+	/** 原附件来源用于沿用 AI 图片下载策略，不从名称或 URL 猜测。 */
+	source?: import("@/pages/superMagic/components/TopicFilesButton/hooks/types").AttachmentSource
 	file_id: string
 	file_name: string
 	file_path: string
@@ -279,6 +287,7 @@ export interface MentionCoreItemDataMap {
 export interface MentionBusinessItemDataMap {
 	[MentionBusinessItemType.MCP]: McpMentionData
 	[MentionBusinessItemType.AGENT]: AgentMentionData
+	[MentionBusinessItemType.MICRO_APP]: MicroAppMentionData
 	[MentionBusinessItemType.SKILL]: SkillMentionData
 	[MentionBusinessItemType.TOOL]: ToolMentionData
 	[MentionBusinessItemType.PROJECT]: ProjectMentionData
@@ -599,6 +608,25 @@ export interface MentionPanelGalleryOptions {
 	enablePreviewModal?: boolean
 }
 
+/** 多选面板顶部摘要支持的资源类型。 */
+export type MentionPanelSelectionAssetType = "image" | "video" | "audio"
+
+/**
+ * 多选面板的资源数量摘要。
+ *
+ * `currentCounts` 是打开面板前已经占用的数量，暂存项会在渲染时增量计算。
+ * 资源类型和「已存在」判断由宿主提供，MentionPanel 本身不依赖具体文件格式。
+ */
+export interface MentionPanelSelectionSummary {
+	currentCounts: Record<MentionPanelSelectionAssetType, number>
+	limits: Partial<Record<MentionPanelSelectionAssetType, number>>
+	getItemAssetType?: (item: MentionItem) => MentionPanelSelectionAssetType | undefined
+	isItemAlreadySelected?: (item: MentionItem) => boolean
+}
+
+/** 多选会话在目录导航时的保留策略。 */
+export type MentionPanelMultiSelectNavigationPolicy = "clear" | "preserve"
+
 // Component props interfaces
 export interface MentionPanelProps<TCatalogId extends string = string> extends BaseComponentProps {
 	visible?: boolean
@@ -613,6 +641,12 @@ export interface MentionPanelProps<TCatalogId extends string = string> extends B
 	disableKeyboardShortcuts?: boolean
 	/** 是否允许多选。默认 true；单槽替换等一换一场景可关闭。 */
 	enableMultiSelect?: boolean
+	/** 目录切换时是否保留本次面板会话的多选项；默认兼容旧行为并清空。 */
+	multiSelectNavigationPolicy?: MentionPanelMultiSelectNavigationPolicy
+	/** 多选会话的资源作用域；作用域变化时会丢弃旧会话，避免跨资源提交。 */
+	selectionScopeId?: string
+	/** 多选时显示在路径面包屑右侧的资源数量摘要。 */
+	selectionSummary?: MentionPanelSelectionSummary
 	/**
 	 * 为 true 时禁止 Radix 因「外部」交互自动关闭（画布内嵌套 Portal 易出现误判）。
 	 * 仍可通过 onClose / 键盘退出等显式关闭。

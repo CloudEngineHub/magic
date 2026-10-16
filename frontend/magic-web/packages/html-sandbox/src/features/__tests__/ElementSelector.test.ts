@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { ElementSelector } from "../ElementSelector"
 import { EditorBridge } from "../../core/EditorBridge"
+import { markSourceNode, markSourceNodes } from "../../utils/sourceNodes"
 
 describe("ElementSelector", () => {
 	let selector: ElementSelector
@@ -26,6 +27,7 @@ describe("ElementSelector", () => {
 		selector.destroy()
 		bridge.destroy()
 		document.body.removeChild(container)
+		document.documentElement.removeAttribute("data-magic-source-node")
 		sendEventSpy.mockRestore()
 	})
 
@@ -69,6 +71,43 @@ describe("ElementSelector", () => {
 	})
 
 	describe("selectElement", () => {
+		it("rejects JavaScript-created descendants and reports clicks without selecting them", () => {
+			container.innerHTML = '<p id="fixed">Fixed</p>'
+			markSourceNodes(document)
+			const fixed = container.querySelector("#fixed") as HTMLElement
+			const dynamic = document.createElement("p")
+			dynamic.textContent = "Dynamic"
+			container.appendChild(dynamic)
+
+			selector.selectElement(fixed)
+			sendEventSpy.mockClear()
+			selector.selectElement(dynamic)
+			expect(selector.getSelectedCount()).toBe(1)
+			expect(sendEventSpy).not.toHaveBeenCalledWith("ELEMENT_SELECTED", expect.anything())
+
+			selector.enable()
+			dynamic.click()
+			expect(sendEventSpy).toHaveBeenCalledWith("DYNAMIC_ELEMENT_CLICKED", {})
+			expect(selector.getSelectedCount()).toBe(0)
+		})
+
+		it("allows editor-inserted nodes after they receive source provenance", () => {
+			container.innerHTML = "<section id='fixed'>Fixed</section>"
+			markSourceNodes(document)
+			const inserted = document.createElement("p")
+			inserted.textContent = "Inserted"
+			container.appendChild(inserted)
+			markSourceNode(inserted)
+
+			selector.selectElement(inserted)
+
+			expect(selector.getSelectedCount()).toBe(1)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({ tagName: "p" }),
+			)
+		})
+
 		it("should select valid element", () => {
 			container.innerHTML = "<div id='test'>Content</div>"
 			const element = container.querySelector("#test") as HTMLElement
@@ -334,6 +373,17 @@ describe("ElementSelector", () => {
 						color: "red",
 						"--card-gap": "12px",
 					},
+				}),
+			)
+		})
+
+		it("recognizes configured click links on non-anchor elements", () => {
+			container.innerHTML = '<div id="linked" data-magic-href="slide-2.html">Go</div>'
+			selector.selectElement(container.querySelector("#linked") as HTMLElement)
+			expect(sendEventSpy).toHaveBeenCalledWith(
+				"ELEMENT_SELECTED",
+				expect.objectContaining({
+					attributes: expect.objectContaining({ dataMagicHref: "slide-2.html" }),
 				}),
 			)
 		})

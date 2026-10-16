@@ -51,9 +51,15 @@ export interface SceneEditorContext {
 	/** Optional rotating examples shown while the editor is empty */
 	promptCarousel?: EditorPromptCarouselConfig
 	draftKey?: DraftKey
+	/** Portal target for the scene editor; blank chat uses its own target during route transitions. */
+	sceneInputContainerId?: string
+	/** Blank composers upload temporary attachments without creating a project before send. */
+	deferProjectCreationUntilSend?: boolean
 	selectedTopic: Topic | null
 	selectedProject: ProjectListItem | null
 	selectedWorkspace?: Workspace | null
+	/** Product surface that owns entity creation; do not infer it from the selected agent. */
+	creationScene?: string
 	setSelectedTopic?: (topic: Topic | null) => void
 	/** 话题自动命名完成后，让目标详情页同步话题名称并重新读取项目名称。 */
 	refreshProjectAfterTopicRename?: boolean
@@ -66,7 +72,7 @@ export interface SceneEditorContext {
 	agentCode?: string
 	setTopicMode?: (mode: TopicMode) => void
 	/** Runtime recovery that must not persist user preferences. */
-	recoverTopicMode?: (mode: TopicMode) => void
+	recoverTopicMode?: (mode: TopicMode, agentCode?: string | null) => void
 	topicExamplesMode?: TopicMode
 	size?: MessageEditorSize
 	className?: string
@@ -101,6 +107,8 @@ export interface SceneEditorContext {
 		content: JSONContent | undefined
 		mentionItems: MentionListItem[]
 	}) => void
+	/** Validate the destination before preparing a new mobile home message, including retries. */
+	beforeSend?: () => Promise<boolean>
 	onSendComplete?: (params: {
 		success: boolean
 		currentProject: ProjectListItem | null
@@ -124,6 +132,10 @@ export interface SceneEditorContext {
 	editorModeSwitch?: ({ disabled }: { disabled: boolean }) => ReactNode
 	/** Controls whether recording-summary editors can enter recording mode. */
 	allowRecordingMode?: boolean
+	/** When false, the recording start button cannot choose an existing project. */
+	allowSelectRecordingProject?: boolean
+	/** Topic mode for a project created by the recording start button. */
+	recordingNewProjectTopicMode?: TopicMode
 	modelSwitch?: ReactNode
 	topicStore?: TopicStore
 	/** 挂载后自动聚焦编辑器（移动端弹窗打开时使用） */

@@ -1,5 +1,11 @@
 import { lazy } from "react"
-import type { DetailHTMLData, DetailTerminalData, DetailUniverData } from "../../types"
+import type {
+	DetailHTMLData,
+	DetailScriptExecutionData,
+	DetailTerminalData,
+	DetailUniverData,
+} from "../../types"
+import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { DetailType } from "../../types"
 import {
 	isFileInSlideCanvasMode,
@@ -23,6 +29,7 @@ const PDFViewer = lazy(() => import("../../contents/Pdf"))
 const Search = lazy(() => import("../../contents/Search"))
 const KnowledgeSearch = lazy(() => import("../../contents/KnowledgeSearch"))
 const Terminal = lazy(() => import("../../contents/Terminal"))
+const ScriptExecution = lazy(() => import("../../contents/ScriptExecution"))
 const OnlyOfficeViewer = lazy(() => import("../../contents/OnlyOffice"))
 const OfficePreview = lazy(() => import("../../contents/OfficePreview"))
 const Image = lazy(() => import("../../contents/Image"))
@@ -53,19 +60,31 @@ interface ContentRendererProps {
 }
 
 function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
+	const fileAccess = useFileAccess()
 	// console.log("ContentRenderer:", type, data, commonProps)
 
-	// 在 playbackTab 中，除了 FileTree、Browser、Search、Terminal，其他类型都不需要显示 CommonHeader
+	// 在 playbackTab 中，工具执行详情需要保留公共标题栏，其它文件预览不显示该标题栏。
 	const { isPlaybackMode, showFileHeader: originalShowFileHeader } = commonProps
-	const typesWithHeader = [DetailType.Browser, DetailType.Search, DetailType.Terminal]
+	const typesWithHeader = [
+		DetailType.Browser,
+		DetailType.Search,
+		DetailType.Terminal,
+		DetailType.ScriptExecution,
+	]
 	const showFileHeader = isPlaybackMode ? typesWithHeader.includes(type) : originalShowFileHeader
 
 	commonProps = {
 		...commonProps,
 		showFileHeader,
+		// Keep legacy share callers hidden while allowing runtime surfaces to opt in explicitly.
+		showRefresh: commonProps.showRefresh ?? !commonProps.isShareRoute,
 	}
 
-	if (data?.space_type === "user" || data?.file_reference?.space_type === "user") {
+	// 回收站文本使用绑定的只读文件接口，不进入活跃个人文件的编辑／冲突会话。
+	if (
+		fileAccess?.kind !== "recycle-bin" &&
+		(data?.space_type === "user" || data?.file_reference?.space_type === "user")
+	) {
 		if ([DetailType.Md, DetailType.Text, DetailType.Code].includes(type)) {
 			return <UserTextPreview data={data} {...commonProps} />
 		}
@@ -98,6 +117,8 @@ function ContentRenderer({ type, data, commonProps }: ContentRendererProps) {
 			return <KnowledgeSearch data={data} {...commonProps} />
 		case DetailType.Terminal:
 			return <Terminal data={data as DetailTerminalData} {...commonProps} />
+		case DetailType.ScriptExecution:
+			return <ScriptExecution data={data as DetailScriptExecutionData} {...commonProps} />
 		case DetailType.Text:
 			return <Text data={data} {...commonProps} />
 		case DetailType.Pdf:

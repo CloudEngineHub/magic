@@ -14,12 +14,13 @@ import {
 	type DesignSaveMetadata,
 } from "../managers"
 import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
-import type { DesignDraftReason } from "../utils/designDraftStorage"
+import type { DesignDraftReason, DesignDraftWriteResult } from "../utils/designDraftStorage"
 import type { ElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document"
 import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
 import type { DesignVersionLoadResult } from "../managers/DesignVersionManager"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import { resolveDesignAccessMode } from "../managers/types"
+import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 
 export type UseDesignProjectManagerOptions = DesignProjectManagerOptions
 
@@ -47,7 +48,12 @@ export interface UseDesignProjectManagerReturn {
 		designData: DesignData,
 		options?: { immediate?: boolean; reason?: DesignDraftReason },
 	) => void
-	manualSave: () => Promise<boolean>
+	persistLocalDraftAndWait: (
+		designData: DesignData,
+		options?: { immediate?: boolean; reason?: DesignDraftReason },
+	) => Promise<DesignDraftWriteResult | null>
+	hasUnsavedChanges: (designData?: DesignData) => boolean
+	manualSave: (designData?: DesignData) => Promise<boolean>
 	syncDesignData: (newDesignData: DesignData) => void
 	persistPendingDesignUpgrade: () => Promise<boolean>
 
@@ -112,6 +118,9 @@ export function useDesignProjectManager(
 	options: UseDesignProjectManagerOptions,
 ): UseDesignProjectManagerReturn {
 	const { t } = useTranslation("super")
+	// Bind the ambient file identity once here; managers live outside React and
+	// receive this closure instead of each helper sprouting an `access` param.
+	const fileApi = useFileApi()
 
 	const [magicProjectJsFileId, setMagicProjectJsFileId] = useState<string | null>(null)
 	const [designData, updateDesignData] = useImmer<DesignData>(INITIAL_DESIGN_DATA)
@@ -234,6 +243,7 @@ export function useDesignProjectManager(
 				accessMode: resolveDesignAccessMode(options),
 				isOffline: options.isOffline,
 				getT: () => t,
+				fileApi,
 			},
 			getFileVersionsList: () => fileVersionsListRef.current,
 			getFileVersion: () => fileVersionRef.current,
@@ -248,8 +258,9 @@ export function useDesignProjectManager(
 			accessMode: resolveDesignAccessMode(options),
 			isOffline: options.isOffline,
 			getT: () => t,
+			fileApi,
 		})
-	}, [manager, options, t])
+	}, [manager, options, t, fileApi])
 
 	useEffect(() => {
 		if (options.isShareRoute || !magicProjectJsFileId) return
@@ -325,7 +336,10 @@ export function useDesignProjectManager(
 		cancelAutoSave: () => manager.cancelAutoSave(),
 		persistLocalDraft: (data, persistOptions) =>
 			manager.persistLocalDraft(data, persistOptions),
-		manualSave: () => manager.manualSave(),
+		persistLocalDraftAndWait: (data, persistOptions) =>
+			manager.persistLocalDraftAndWait(data, persistOptions),
+		hasUnsavedChanges: (data) => manager.hasUnsavedChanges(data),
+		manualSave: (data) => manager.manualSave(data),
 		syncDesignData: (data) => manager.syncDesignData(data),
 		persistPendingDesignUpgrade: () => manager.persistPendingDesignUpgrade(),
 

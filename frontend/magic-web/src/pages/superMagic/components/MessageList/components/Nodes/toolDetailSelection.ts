@@ -1,6 +1,7 @@
 import projectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { DisabledDetailToolTypes } from "@/pages/superMagic/components/Detail/constants"
+import { isInlineToolDetail } from "@/pages/superMagic/utils/toolDetailDisplay"
 import { reaction } from "mobx"
 import magicToast from "@/components/base/MagicToaster/utils"
 import i18n from "i18next"
@@ -30,19 +31,21 @@ type ToolDetail = Record<string, unknown> & {
 
 export type ToolCardInteractionTarget =
 	| { type: "disabled" }
+	| { type: "inline" }
 	| { type: "playback" }
 	| { type: "file"; fileId: string }
 	| { type: "file-reference"; fileId?: string; filePath?: string }
-	| { type: "design" }
+	| { type: "canvas" }
 
-const DESIGN_TOOL_NAMES = new Set([
+// 旧消息可能没有 DisplayType.DESIGN，保留稳定的 Canvas 导航工具名作为兼容兜底。
+// 工具属于 Design 领域不等于卡片点击必须打开 Canvas；query_canvas_overview 只打开详情。
+const LEGACY_CANVAS_NAVIGATION_TOOL_NAMES = new Set([
 	"create_design_project",
 	"create_canvas_element",
 	"update_canvas_element",
 	"batch_create_canvas_elements",
 	"batch_update_canvas_elements",
 	"reorder_canvas_elements",
-	"query_canvas_overview",
 	"query_canvas_element",
 	"generate_images_to_canvas",
 	"search_images_to_canvas",
@@ -53,13 +56,23 @@ const DESIGN_TOOL_NAMES = new Set([
 	"generate_canvas_videos",
 ])
 
+type ToolFilesStore = Pick<
+	typeof projectFilesStore,
+	"workspaceFilesList" | "currentSelectedProject"
+>
+
 interface SelectToolDetailOptions {
 	detail: Record<string, unknown>
 	onSelectDetail?: (detail: ToolDetail) => void
+	filesStore?: ToolFilesStore
 }
 
 interface SelectSourceFileOptions extends SelectToolDetailOptions {
 	fileId: string
+}
+
+function resolveFilesStore(filesStore?: ToolFilesStore): ToolFilesStore {
+	return filesStore ?? projectFilesStore
 }
 
 export function resolveToolFileId(data: unknown): string | undefined {
@@ -87,13 +100,22 @@ export function getToolCardInteractionTarget(
 	if (toolName && DisabledDetailToolTypes.includes(toolName)) {
 		return { type: "disabled" }
 	}
-	if (toolName && DESIGN_TOOL_NAMES.has(toolName)) {
-		return { type: "design" }
-	}
+	if (isInlineToolDetail(detail)) return { type: "inline" }
 
 	const detailRecord = detail as Record<string, unknown>
+	// 明确的 DisplayType.DESIGN 详情表示卡片点击需要进入 Canvas。
+	if (detailRecord.type === "design") {
+		return { type: "canvas" }
+	}
+	if (toolName && LEGACY_CANVAS_NAVIGATION_TOOL_NAMES.has(toolName)) {
+		return { type: "canvas" }
+	}
 	if (detailRecord.type === "browser") {
 		return { type: "playback" }
+	}
+	// 生成进度详情只承载预期完成时间，没有可预览的内容，不能因为卡片在生成中就变成可点。
+	if (detailRecord.type === "generation_progress") {
+		return { type: "disabled" }
 	}
 	const data = detailRecord.data
 	if (data && typeof data === "object" && !Array.isArray(data)) {
@@ -115,14 +137,20 @@ export function selectToolFile({
 	detail,
 	target,
 	onSelectDetail,
+	filesStore,
 }: SelectToolDetailOptions & {
 	target: ToolCardInteractionTarget
 }): boolean {
 	if (target.type === "file")
-		return selectSourceFileFromTool({ detail, fileId: target.fileId, onSelectDetail })
+		return selectSourceFileFromTool({
+			detail,
+			fileId: target.fileId,
+			onSelectDetail,
+			filesStore,
+		})
 	if (target.type !== "file-reference") return false
 	pendingFileSelection?.abort()
-	void selectReferencedToolFile({ detail, target, onSelectDetail })
+	void selectReferencedToolFile({ detail, target, onSelectDetail, filesStore })
 	return true
 }
 
@@ -130,16 +158,18 @@ async function selectReferencedToolFile({
 	detail,
 	target,
 	onSelectDetail,
+	filesStore,
 }: SelectToolDetailOptions & {
 	target: Extract<ToolCardInteractionTarget, { type: "file-reference" }>
 }): Promise<void> {
+	const resolvedFilesStore = resolveFilesStore(filesStore)
 	const controller = new AbortController()
 	pendingFileSelection = controller
 	const identity = getFileReferenceIdentityKey()
-	const projectId = projectFilesStore.currentSelectedProject?.id
+	const projectId = resolvedFilesStore.currentSelectedProject?.id
 	const cancel = () => controller.abort()
 	const disposeIdentity = reaction(
-		() => [getFileReferenceIdentityKey(), projectFilesStore.currentSelectedProject?.id],
+		() => [getFileReferenceIdentityKey(), resolvedFilesStore.currentSelectedProject?.id],
 		cancel,
 	)
 	const selectionEvents = [
@@ -172,7 +202,7 @@ async function selectReferencedToolFile({
 				if (result.status === "resolved") reference = result.reference
 			} else if (pathTarget?.scope === "workspace" && projectId) {
 				const attachment = findAttachmentByPath(
-					projectFilesStore.workspaceFilesList,
+					resolvedFilesStore.workspaceFilesList,
 					pathTarget.relativePath,
 				)
 				if (attachment)
@@ -187,7 +217,7 @@ async function selectReferencedToolFile({
 		}
 		if (reference?.space_type === "project" && !reference.is_directory) {
 			// ID 已完成鉴权；直接使用其元信息，不再通过同路径查找另一个目标。
-			const attachment = projectFilesStore.workspaceFilesList.find(
+			const attachment = resolvedFilesStore.workspaceFilesList.find(
 				(item) => String(item.file_id) === reference.file_id,
 			)
 			file = {
@@ -206,7 +236,7 @@ async function selectReferencedToolFile({
 		if (
 			controller.signal.aborted ||
 			identity !== getFileReferenceIdentityKey() ||
-			projectId !== projectFilesStore.currentSelectedProject?.id
+			projectId !== resolvedFilesStore.currentSelectedProject?.id
 		)
 			return
 		release()
@@ -230,8 +260,8 @@ async function selectReferencedToolFile({
 	}
 }
 
-function isFileInAttachments(fileId: string): boolean {
-	return projectFilesStore.workspaceFilesList.some(
+function isFileInAttachments(fileId: string, filesStore?: ToolFilesStore): boolean {
+	return resolveFilesStore(filesStore).workspaceFilesList.some(
 		(item) => String(item.file_id ?? "") === fileId,
 	)
 }
@@ -256,9 +286,10 @@ export function selectSourceFileFromTool({
 	detail,
 	fileId,
 	onSelectDetail,
+	filesStore,
 }: SelectSourceFileOptions): boolean {
 	// Runtime artifacts (e.g. browser screenshots) are not workspace files.
-	if (!isFileInAttachments(fileId)) return false
+	if (!isFileInAttachments(fileId, filesStore)) return false
 
 	pubsub.publish(PubSubEvents.Open_File_Tab, { fileId })
 	pubsub.publish(PubSubEvents.Locate_File_In_Tree, fileId)
@@ -267,6 +298,7 @@ export function selectSourceFileFromTool({
 }
 
 export function selectToolDetail({ detail, onSelectDetail }: SelectToolDetailOptions) {
+	if (isInlineToolDetail(detail)) return
 	pubsub.publish(PubSubEvents.Open_Playback_Tab, detail)
 	onSelectDetail?.(markSelectionTarget(detail, "detail"))
 }

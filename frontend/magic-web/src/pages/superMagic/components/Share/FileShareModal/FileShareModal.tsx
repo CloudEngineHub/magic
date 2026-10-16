@@ -38,10 +38,20 @@ import { Separator } from "@/components/shadcn-ui/separator"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { projectStore } from "@/pages/superMagic/stores/core"
 import { userStore } from "@/models/user"
+import { ensureFileSavesSynced } from "@/pages/superMagic/components/Detail/services/fileSaveQueue"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
+import { analyticsService } from "@/services/analytics"
 import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
 import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
+import { useShareTypePermissions } from "../hooks/useShareTypePermissions"
+import {
+	canCreateShareType,
+	isFreePlanFromSubscription,
+	pickDefaultShareType,
+} from "../utils/sharePlanRestrictions"
+import { useSharePermissionResource } from "../SharePermissionResourceContext"
+
 interface FileShareModalProps {
 	attachments?: any[] // 可选，如果没有 resourceId 时使用（文件树）
 	attachmentList?: any[] // 可选，扁平化的文件列表
@@ -104,7 +114,20 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
 
-	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
+	const isFreePlan = isFreePlanFromSubscription(userStore.user.organizationSubscriptionInfo)
+	const sharePermissionResource = useSharePermissionResource()
+	const shareTypePermissions = useShareTypePermissions(sharePermissionResource)
+	// Project and child-file shares inherit the permission group injected by their owning page.
+	const shouldControlShareType = shareMode === ShareMode.Project || shareMode === ShareMode.File
+	const permittedShareTypes = useMemo(() => {
+		if (!shouldControlShareType || shareTypePermissions.isLoading) return undefined
+		return shareTypePermissions.permittedShareTypes.filter((type) => types.includes(type))
+	}, [
+		shareTypePermissions.isLoading,
+		shareTypePermissions.permittedShareTypes,
+		shouldControlShareType,
+		types,
+	])
 	const initialLockShareProject = fileShareUiConfig?.lockShareProject ?? false
 	const initialForceViewFileList = fileShareUiConfig?.forceViewFileList
 
@@ -127,6 +150,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const [shareType, setShareType] = useState<ShareType>(
 		isFreePlan ? ShareType.Public : ShareType.PasswordProtected,
 	)
+	const isSelectedShareTypePermitted =
+		permittedShareTypes === undefined || permittedShareTypes.includes(shareType)
+	const hasNoPermittedShareType = permittedShareTypes?.length === 0
+	// Every method is controlled off, so no share can be created or managed here: only the method
+	// block and its explanation stay, and the other controls disappear instead of showing dead ends.
+	const isShareDetailHidden = hasNoPermittedShareType === true
 	const [shareProject, setShareProject] = useState<boolean>(
 		initialLockShareProject ? false : shareMode === ShareMode.Project,
 	)
@@ -399,36 +428,46 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		setDefaultOpenFileId(fileId)
 	}, [])
 
+	const commitShareType = useCallback((confirmedType: ShareType) => {
+		setShareType(confirmedType)
+		// Keep password state aligned so a previous password never leaks into another share type.
+		setExtraData((prev) => ({
+			...prev,
+			passwordEnabled: confirmedType === ShareType.PasswordProtected,
+			password:
+				confirmedType === ShareType.PasswordProtected
+					? prev.password || generateSharePassword()
+					: prev.password,
+		}))
+	}, [])
+
 	// Handle share type change
 	const handleShareTypeChange = useCallback(
 		(newType: ShareType) => {
 			handleShareTypeChangeWithConfirm({
 				currentType: shareType,
 				newType,
-				onConfirm: (confirmedType) => {
-					// Just set the confirmed type directly
-					// Public and PasswordProtected are separate types now
-					setShareType(confirmedType)
-					// Keep passwordEnabled in sync with share type. Switching to
-					// Organization/Public must clear it, otherwise success URL still
-					// embeds the previous password even though the API omits it.
-					if (confirmedType === ShareType.PasswordProtected) {
-						setExtraData((prev) => ({
-							...prev,
-							passwordEnabled: true,
-							password: prev.password || generateSharePassword(),
-						}))
-					} else {
-						setExtraData((prev) => ({
-							...prev,
-							passwordEnabled: false,
-						}))
-					}
-				},
+				onConfirm: commitShareType,
 			})
 		},
-		[shareType],
+		[commitShareType, shareType],
 	)
+
+	useEffect(() => {
+		if (
+			externalResourceId ||
+			permittedShareTypes === undefined ||
+			permittedShareTypes.includes(shareType)
+		) {
+			return
+		}
+
+		// New resource shares start on the first option allowed by both function permission and plan.
+		// When nothing satisfies both gates the current type is kept: switching to another forbidden
+		// method would only trade one unusable option for another.
+		const nextType = pickDefaultShareType(permittedShareTypes, isFreePlan)
+		if (nextType !== undefined) commitShareType(nextType)
+	}, [commitShareType, externalResourceId, isFreePlan, permittedShareTypes, shareType])
 
 	// Handle password copy
 	const handlePasswordCopy = useCallback(() => {
@@ -665,8 +704,6 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				// Step 2: Get full file tree
 				const fileTreeRes = await loadProjectAttachments({
 					projectId: resolvedProjectId,
-					// @ts-ignore 使用window添加临时的token
-					temporaryToken: window?.temporary_token || "",
 				})
 				if (latestExternalResourceIdRef.current !== requestResourceId) return
 				const fileTree = fileTreeRes.tree || []
@@ -705,6 +742,22 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 
 	// Manual save function (called by footer button)
 	const handleSave = useCallback(async () => {
+		if (shouldControlShareType && !isSelectedShareTypePermitted) {
+			magicToast.error(t("share.currentShareMethodUnavailable"))
+			return
+		}
+
+		// Backstop for the paid-plan gate. `ShareTypeField` already refuses to select a plan-disabled
+		// method and an existing share keeps its own one, so this only fires if some future caller
+		// sets the state directly — and it must never reach the create/update request.
+		if (
+			shouldControlShareType &&
+			!externalResourceId &&
+			!canCreateShareType(shareType, isFreePlan)
+		) {
+			return
+		}
+
 		// Validation: resource_name is required
 		if (!shareName || shareName.trim() === "") {
 			magicToast.error(t("share.shareNameRequired"))
@@ -721,7 +774,20 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 			return
 		}
 
+		const flushed = await ensureFileSavesSynced(
+			effectiveShareProject ? undefined : submittedFileIds,
+		)
+		if (!flushed) return
+
 		setIsSaving(true)
+		// Capture create vs edit before the API; the first successful save marks the resource created.
+		const isNewShare = !hasResourceIdCreated.current
+		if (isNewShare) {
+			analyticsService.report("content_share_attempted", {
+				resourceType: ResourceType.FileCollection,
+				shareProject: effectiveShareProject,
+			})
+		}
 
 		try {
 			let currentResourceId = resourceId
@@ -864,6 +930,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		shareRange,
 		shareTargets,
 		documentDependencyAnalysisError,
+		isSelectedShareTypePermitted,
+		isFreePlan,
+		shouldControlShareType,
 		extraData.passwordEnabled,
 		extraData.password,
 		extraData.allowCopy,
@@ -941,92 +1010,115 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 						data-testid="file-share-mobile-options"
 					>
 						<div className="flex flex-col gap-3" data-testid="file-share-mobile-fields">
-							{/* File Selection Card - 单文件模式下不显示 */}
-							<div
-								className="flex flex-col gap-3 self-stretch rounded-[10px] border border-border p-5 shadow-xs"
-								data-testid="file-share-selection-card"
-							>
-								{/* Card Header */}
-								<div className="flex flex-col gap-0.5 self-stretch">
-									<div className="text-lg font-medium leading-normal text-foreground">
-										{t("share.selectShareFiles")}
-									</div>
-									<div className="text-xs leading-normal text-muted-foreground">
-										{t("share.clickToSelectFiles")}
-									</div>
-								</div>
-
-								{/* Select Button */}
-								<button
-									className="flex items-center justify-center gap-2 self-stretch rounded-lg bg-primary px-4 py-2 text-sm font-medium leading-normal text-primary-foreground shadow-xs"
-									onClick={() => setFileSelectorPopupVisible(true)}
-									data-testid="set-file-selector-popup-visible"
-									aria-label={t("share.selectShareFiles")}
+							{/* 全部分享方式被管控时，只有分享方式与提示保留，其它内容不再渲染。 */}
+							{!isShareDetailHidden && (
+								<div
+									className="flex flex-col gap-3 self-stretch rounded-[10px] border border-border p-5 shadow-xs"
+									data-testid="file-share-selection-card"
 								>
-									{t("share.selectFileWithCount", {
-										count: actualFileCount,
-									})}
-								</button>
-							</div>
+									{/* Card Header */}
+									<div className="flex flex-col gap-0.5 self-stretch">
+										<div className="text-lg font-medium leading-normal text-foreground">
+											{t("share.selectShareFiles")}
+										</div>
+										<div className="text-xs leading-normal text-muted-foreground">
+											{t("share.clickToSelectFiles")}
+										</div>
+									</div>
+
+									{/* Select Button */}
+									<button
+										className="flex items-center justify-center gap-2 self-stretch rounded-lg bg-primary px-4 py-2 text-sm font-medium leading-normal text-primary-foreground shadow-xs"
+										onClick={() => setFileSelectorPopupVisible(true)}
+										data-testid="set-file-selector-popup-visible"
+										aria-label={t("share.selectShareFiles")}
+									>
+										{t("share.selectFileWithCount", {
+											count: actualFileCount,
+										})}
+									</button>
+								</div>
+							)}
 
 							{/* Share Name */}
-							<ShareNameField
-								value={shareName}
-								onChange={setShareName}
-								defaultOpenFileId={defaultOpenFileId || undefined}
-								selectedFiles={selectedFiles}
-								attachments={attachments}
-								shareProject={effectiveShareProject}
-								projectName={internalProjectName}
-								projectMode={projectMode}
-							/>
+							{!isShareDetailHidden && (
+								<ShareNameField
+									value={shareName}
+									onChange={setShareName}
+									defaultOpenFileId={defaultOpenFileId || undefined}
+									selectedFiles={selectedFiles}
+									attachments={attachments}
+									shareProject={effectiveShareProject}
+									projectName={internalProjectName}
+									projectMode={projectMode}
+								/>
+							)}
 
 							{/* Share Type */}
 							<ShareTypeField
 								value={normalizedShareType}
 								onChange={handleShareTypeChange}
 								availableTypes={types}
+								permittedTypes={permittedShareTypes}
+								preserveCurrentType={Boolean(externalResourceId)}
 							/>
+							{hasNoPermittedShareType ? (
+								<p className="text-sm text-destructive" role="alert">
+									{t("share.noAvailableShareMethods")}
+								</p>
+							) : !isSelectedShareTypePermitted ? (
+								<p className="text-sm text-destructive" role="alert">
+									{t("share.currentShareMethodUnavailable")}
+								</p>
+							) : null}
 
-							{/* Share Range - only show for Organization share type */}
-							{shareType === ShareType.Organization && (
-								<ShareRangeField
-									value={shareRange}
-									onChange={setShareRange}
-									targets={shareTargets}
-									onTargetsChange={setShareTargets}
-									resourceId={resourceId}
-								/>
+							{!isShareDetailHidden && (
+								<>
+									{/* Share Range - only show for Organization share type */}
+									{shareType === ShareType.Organization && (
+										<ShareRangeField
+											value={shareRange}
+											onChange={setShareRange}
+											targets={shareTargets}
+											onTargetsChange={setShareTargets}
+											resourceId={resourceId}
+										/>
+									)}
+
+									{/* Password Field - only show if password protected */}
+									{showPasswordField && (
+										<SharePasswordField
+											password={extraData.password || ""}
+											onCopy={handlePasswordCopy}
+											onReset={handlePasswordReset}
+										/>
+									)}
+
+									{/* Expiry Field */}
+									<ShareExpiryField
+										value={shareExpiry}
+										onChange={setShareExpiry}
+									/>
+
+									{documentDependencyOption}
+
+									{/* Advanced Settings */}
+									<ShareAdvancedSettings
+										settings={{
+											allowCopy: extraData.allowCopy,
+											showFileList: extraData.showFileList,
+											showOriginalInfo: extraData.showOriginalInfo,
+											hideCreatorInfo: extraData.hideCreatorInfo,
+											allowDownloadProjectFile:
+												extraData.allowDownloadProjectFile,
+											pureMode: extraData.pureMode,
+										}}
+										onChange={handleAdvancedSettingsChange}
+										mode={ShareMode.File}
+										hiddenSettingKeys={advancedHiddenSettingKeys}
+									/>
+								</>
 							)}
-
-							{/* Password Field - only show if password protected */}
-							{showPasswordField && (
-								<SharePasswordField
-									password={extraData.password || ""}
-									onCopy={handlePasswordCopy}
-									onReset={handlePasswordReset}
-								/>
-							)}
-
-							{/* Expiry Field */}
-							<ShareExpiryField value={shareExpiry} onChange={setShareExpiry} />
-
-							{documentDependencyOption}
-
-							{/* Advanced Settings */}
-							<ShareAdvancedSettings
-								settings={{
-									allowCopy: extraData.allowCopy,
-									showFileList: extraData.showFileList,
-									showOriginalInfo: extraData.showOriginalInfo,
-									hideCreatorInfo: extraData.hideCreatorInfo,
-									allowDownloadProjectFile: extraData.allowDownloadProjectFile,
-									pureMode: extraData.pureMode,
-								}}
-								onChange={handleAdvancedSettingsChange}
-								mode={ShareMode.File}
-								hiddenSettingKeys={advancedHiddenSettingKeys}
-							/>
 						</div>
 					</div>
 
@@ -1037,7 +1129,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 						onSave={handleSave}
 						onCancelShare={handleCancelShare}
 						isSaving={isSaving}
-						isDisabled={selectedFileIds.length === 0 || isAnalyzingDocumentDependencies}
+						isDisabled={
+							selectedFileIds.length === 0 ||
+							isAnalyzingDocumentDependencies ||
+							(shouldControlShareType && shareTypePermissions.isLoading) ||
+							!isSelectedShareTypePermitted
+						}
 						hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					/>
 				</div>
@@ -1068,58 +1165,59 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	return (
 		<div className="flex flex-col" data-testid="file-share-modal">
 			<div className={styles.body} data-testid="file-share-modal-body">
-				{/* Left: File selector - 单文件模式下不显示 */}
-				<div
-					className={styles.fileListSection}
-					style={{ width: leftPanelWidth }}
-					data-testid="file-share-file-list-section"
-				>
-					{!hideShareProjectToggle ? (
-						<>
-							<div className="flex items-start gap-3 px-3 py-3 pb-0">
-								<Switch
-									checked={shareProject}
-									onCheckedChange={handleShareProjectChange}
-									data-testid="handle-share-project-change"
-								/>
-								<div className="flex flex-col gap-2">
-									<div className="text-sm font-medium leading-none text-foreground">
-										{t("share.shareProject")}
-									</div>
-									<div className="text-xs leading-normal text-muted-foreground">
-										{t("share.shareProjectDescription")}
+				{/* Left: File selector - 全部分享方式被管控时不展示（含「分享项目」开关） */}
+				{!isShareDetailHidden && (
+					<div
+						className={styles.fileListSection}
+						style={{ width: leftPanelWidth }}
+						data-testid="file-share-file-list-section"
+					>
+						{!hideShareProjectToggle ? (
+							<>
+								<div className="flex items-start gap-3 px-3 py-3 pb-0">
+									<Switch
+										checked={shareProject}
+										onCheckedChange={handleShareProjectChange}
+									/>
+									<div className="flex flex-col gap-2">
+										<div className="text-sm font-medium leading-none text-foreground">
+											{t("share.shareProject")}
+										</div>
+										<div className="text-xs leading-normal text-muted-foreground">
+											{t("share.shareProjectDescription")}
+										</div>
 									</div>
 								</div>
-							</div>
 
-							<Separator className="mx-3 mt-2" style={{ width: "auto" }} />
-						</>
-					) : null}
+								<Separator className="mx-3 mt-2" style={{ width: "auto" }} />
+							</>
+						) : null}
 
-					{/* File Selector */}
-					<FileSelector
-						attachments={attachments}
-						selectedFileIds={selectedFileIds}
-						onSelectionChange={handleFileSelectionChange}
-						defaultSelectedFileIds={defaultSelectedFileIds}
-						defaultOpenFileId={defaultOpenFileId || undefined}
-						onDefaultOpenFileChange={handleDefaultOpenFileChange}
-						disabled={effectiveShareProject}
-						allowSetDefaultOpen
-						showSelectAll={showSelectAll}
-						className={styles.fileSelector}
-					/>
+						{/* File Selector */}
+						<FileSelector
+							attachments={attachments}
+							selectedFileIds={selectedFileIds}
+							onSelectionChange={handleFileSelectionChange}
+							defaultSelectedFileIds={defaultSelectedFileIds}
+							defaultOpenFileId={defaultOpenFileId || undefined}
+							onDefaultOpenFileChange={handleDefaultOpenFileChange}
+							disabled={effectiveShareProject}
+							allowSetDefaultOpen
+							showSelectAll={showSelectAll}
+							className={styles.fileSelector}
+						/>
 
-					{/* Resize Handle */}
-					<div
-						className={styles.resizeHandle}
-						onMouseDown={handleResizeMouseDown}
-						data-testid="handle-resize-mouse-down"
-					>
-						<div className="resize-bar" />
-						<div className="resize-bar" style={{ marginLeft: 2 }} />
+						{/* Resize Handle */}
+						<div
+							className={styles.resizeHandle}
+							onMouseDown={handleResizeMouseDown}
+							data-testid="handle-resize-mouse-down"
+						>
+							<div className="resize-bar" />
+							<div className="resize-bar" style={{ marginLeft: 2 }} />
+						</div>
 					</div>
-				</div>
+				)}
 
 				{/* Right: Statistics + Share type selector */}
 				<div
@@ -1132,64 +1230,85 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 							className="flex flex-col gap-3"
 							data-testid="file-share-settings-fields"
 						>
-							{/* Share Name */}
-							<ShareNameField
-								value={shareName}
-								onChange={setShareName}
-								defaultOpenFileId={defaultOpenFileId || undefined}
-								selectedFiles={selectedFiles}
-								attachments={attachments}
-								shareProject={effectiveShareProject}
-								projectName={internalProjectName}
-								projectMode={projectMode}
-							/>
+							{/* 全部分享方式被管控时，只有分享方式与提示保留，其它内容不再渲染。 */}
+							{!isShareDetailHidden && (
+								<ShareNameField
+									value={shareName}
+									onChange={setShareName}
+									defaultOpenFileId={defaultOpenFileId || undefined}
+									selectedFiles={selectedFiles}
+									attachments={attachments}
+									shareProject={effectiveShareProject}
+									projectName={internalProjectName}
+									projectMode={projectMode}
+								/>
+							)}
 
 							{/* Share Type */}
 							<ShareTypeField
 								value={normalizedShareType}
 								onChange={handleShareTypeChange}
 								availableTypes={types}
+								permittedTypes={permittedShareTypes}
+								preserveCurrentType={Boolean(externalResourceId)}
 							/>
+							{hasNoPermittedShareType ? (
+								<p className="text-sm text-destructive" role="alert">
+									{t("share.noAvailableShareMethods")}
+								</p>
+							) : !isSelectedShareTypePermitted ? (
+								<p className="text-sm text-destructive" role="alert">
+									{t("share.currentShareMethodUnavailable")}
+								</p>
+							) : null}
 
-							{/* Share Range - only show for Organization share type */}
-							{shareType === ShareType.Organization && (
-								<ShareRangeField
-									value={shareRange}
-									onChange={setShareRange}
-									targets={shareTargets}
-									onTargetsChange={setShareTargets}
-									resourceId={resourceId}
-								/>
+							{!isShareDetailHidden && (
+								<>
+									{/* Share Range - only show for Organization share type */}
+									{shareType === ShareType.Organization && (
+										<ShareRangeField
+											value={shareRange}
+											onChange={setShareRange}
+											targets={shareTargets}
+											onTargetsChange={setShareTargets}
+											resourceId={resourceId}
+										/>
+									)}
+
+									{/* Password Field - only show if password protected */}
+									{showPasswordField && (
+										<SharePasswordField
+											password={extraData.password || ""}
+											onCopy={handlePasswordCopy}
+											onReset={handlePasswordReset}
+										/>
+									)}
+
+									{/* Expiry Field */}
+									<ShareExpiryField
+										value={shareExpiry}
+										onChange={setShareExpiry}
+									/>
+
+									{documentDependencyOption}
+
+									{/* Advanced Settings */}
+									<ShareAdvancedSettings
+										settings={{
+											allowCopy: extraData.allowCopy,
+											showFileList: extraData.showFileList,
+											showOriginalInfo: extraData.showOriginalInfo,
+											hideCreatorInfo: extraData.hideCreatorInfo,
+											allowDownloadProjectFile:
+												extraData.allowDownloadProjectFile,
+											pureMode: extraData.pureMode,
+										}}
+										onChange={handleAdvancedSettingsChange}
+										mode={ShareMode.File}
+										hiddenSettingKeys={advancedHiddenSettingKeys}
+									/>
+								</>
 							)}
-
-							{/* Password Field - only show if password protected */}
-							{showPasswordField && (
-								<SharePasswordField
-									password={extraData.password || ""}
-									onCopy={handlePasswordCopy}
-									onReset={handlePasswordReset}
-								/>
-							)}
-
-							{/* Expiry Field */}
-							<ShareExpiryField value={shareExpiry} onChange={setShareExpiry} />
-
-							{documentDependencyOption}
-
-							{/* Advanced Settings */}
-							<ShareAdvancedSettings
-								settings={{
-									allowCopy: extraData.allowCopy,
-									showFileList: extraData.showFileList,
-									showOriginalInfo: extraData.showOriginalInfo,
-									hideCreatorInfo: extraData.hideCreatorInfo,
-									allowDownloadProjectFile: extraData.allowDownloadProjectFile,
-									pureMode: extraData.pureMode,
-								}}
-								onChange={handleAdvancedSettingsChange}
-								mode={ShareMode.File}
-								hiddenSettingKeys={advancedHiddenSettingKeys}
-							/>
 						</div>
 					</div>
 				</div>
@@ -1204,7 +1323,9 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 				isSaving={isSaving}
 				isDisabled={
 					(selectedFileIds.length === 0 && !effectiveShareProject) ||
-					isAnalyzingDocumentDependencies
+					isAnalyzingDocumentDependencies ||
+					(shouldControlShareType && shareTypePermissions.isLoading) ||
+					!isSelectedShareTypePermitted
 				}
 				hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 			/>

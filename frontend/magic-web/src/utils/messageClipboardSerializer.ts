@@ -1,3 +1,5 @@
+import { serializeWechatChatContent } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/transform"
+import { WECHAT_CHAT_HISTORY } from "@/pages/superMagic/components/MessageEditor/extensions/wechat-chat-history/types"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { DOMSerializer } from "prosemirror-model"
 import type { EditorView } from "prosemirror-view"
@@ -159,6 +161,64 @@ export interface SerializeMessageClipboardOptions {
 	enrichMentionAttrs?: (attrs: TiptapMentionAttributes) => TiptapMentionAttributes
 }
 
+function escapeClipboardHtml(text: string): string {
+	return text.replace(/[&<>"']/g, (character) => {
+		const escaped: Record<string, string> = {
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			'"': "&quot;",
+			"'": "&#039;",
+		}
+		return escaped[character] ?? character
+	})
+}
+
+/** Programmatic copy for history / reconstructed docs that have no EditorView selection. */
+export function createMessageClipboardPayloadFromContent(
+	content: JSONContent,
+	options?: SerializeMessageClipboardOptions,
+): MessageClipboardPayload {
+	const enrichMentionAttrs = options?.enrichMentionAttrs
+	const workspaceFiles = options?.workspaceFiles ?? []
+	const sourceProjectId = options?.sourceProjectId
+	const applyEnrichment = (attrs: TiptapMentionAttributes): TiptapMentionAttributes =>
+		enrichMentionAttrs ? enrichMentionAttrs(attrs) : attrs
+
+	const projected = serializeWechatChatContent(
+		content.type === "doc" ? content : { type: "doc", content: [content] },
+	)
+	const sourceNodes = projected.content ?? []
+	const richTextContent: JSONContent[] = []
+	sourceNodes.forEach((node) => {
+		const enriched = enrichRichTextMentions(node, applyEnrichment)
+		const normalized = normalizeRichTextNode(enriched)
+		if (normalized) richTextContent.push(normalized)
+	})
+	const richTextJson: JSONContent = serializeWechatChatContent({
+		type: "doc",
+		content: richTextContent,
+	})
+	const mentions: TiptapMentionAttributes[] = []
+	collectMentionAttrs(richTextJson, mentions)
+
+	const metadata: MessageClipboardMetadata = {
+		richText: JSON.stringify(richTextJson),
+		sourceProjectId,
+		mentions: mentions.map((attrs) => ({ attrs })),
+	}
+	const metadataBase64 = btoa(encodeURIComponent(JSON.stringify(metadata)))
+	const plainText = getClipboardPlainText(richTextJson, workspaceFiles, sourceProjectId)
+
+	return {
+		plainText,
+		htmlWithMetadata: `<div data-magic-clipboard="${metadataBase64}">${escapeClipboardHtml(
+			plainText,
+		)}</div>`,
+		metadata,
+	}
+}
+
 export function serializeMessageClipboard(
 	view: EditorView,
 	options?: SerializeMessageClipboardOptions,
@@ -190,10 +250,10 @@ export function serializeMessageClipboard(
 		const normalized = normalizeRichTextNode(enriched)
 		if (normalized) richTextContent.push(normalized)
 	})
-	const richTextJson: JSONContent = {
+	const richTextJson: JSONContent = serializeWechatChatContent({
 		type: "doc",
 		content: richTextContent,
-	}
+	})
 	collectMentionAttrs(richTextJson, mentions)
 
 	// Require structured file/folder mention identity, not portable markdown hrefs.
@@ -201,8 +261,11 @@ export function serializeMessageClipboard(
 	// round-trip through metadata even when external plain-text links are unavailable.
 	// 独立元素标签和非文件 Mention 也有结构语义，不能回退为浏览器纯文本。
 	const containsInspector = (node: JSONContent): boolean =>
-		node.type === INSPECTOR_DETAIL_TYPE || Boolean(node.content?.some(containsInspector))
-	if (mentions.length === 0 && !containsInspector(richTextJson)) return null
+		node.type === INSPECTOR_DETAIL_TYPE ||
+		node.type === WECHAT_CHAT_HISTORY ||
+		Boolean(node.content?.some(containsInspector))
+	if (mentions.length === 0 && !containsInspector({ type: "doc", content: richTextContent }))
+		return null
 
 	const metadata: MessageClipboardMetadata = {
 		richText: JSON.stringify(richTextJson),

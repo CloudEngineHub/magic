@@ -856,6 +856,45 @@ describe("ConnectionManager", () => {
 		}
 	})
 
+	it("rerenders connection geometry after a batched layout update", () => {
+		const { canvas, connectionGroup } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+
+		manager.loadDocument({
+			connections: [{ id: "edge", sourceElementId: "source", targetElementId: "target" }],
+		})
+		const rerender = vi.spyOn(manager, "rerender")
+		connectionGroup.destroyChildren.mockClear()
+		connectionGroup.add.mockClear()
+
+		canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+
+		expect(rerender).toHaveBeenCalledTimes(1)
+	})
+
+	it("invalidates only the elements named by a batched update", () => {
+		const { canvas } = createCanvasStub()
+		const manager = new ConnectionManager({ canvas })
+		const hitTester = (
+			manager as unknown as {
+				hitTester: {
+					invalidateElements: (elementIds: string[]) => void
+					invalidateAll: () => void
+				}
+			}
+		).hitTester
+		const invalidateElements = vi.spyOn(hitTester, "invalidateElements")
+		const invalidateAll = vi.spyOn(hitTester, "invalidateAll")
+
+		canvas.eventEmitter.emit({
+			type: "element:batchupdated",
+			data: { elementIds: ["source", "target"] },
+		})
+
+		expect(invalidateElements).toHaveBeenCalledWith(["source", "target"])
+		expect(invalidateAll).not.toHaveBeenCalled()
+	})
+
 	it("adds valid connections and rejects missing or self connections", () => {
 		const { canvas } = createCanvasStub()
 		const manager = new ConnectionManager({ canvas })

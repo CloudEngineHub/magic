@@ -15,12 +15,18 @@ import {
 	createContentId,
 	getActiveContent,
 	getActiveImageContent,
+	getContentById,
 	isImageElementContent,
 	mapContents,
 	updateContent,
 	updateImageContent,
 } from "../../document/elementContent"
-import { GenerationStatus, type UploadFileResponse } from "../../../public/magic-types"
+import { mergeMediaSourceReplacementFields } from "../../document/mediaSourceReplacement"
+import {
+	GenerationStatus,
+	type CanvasAssetMediaType,
+	type UploadFileResponse,
+} from "../../../public/magic-types"
 import { toast } from "sonner"
 import {
 	getMediaDimensions,
@@ -32,9 +38,18 @@ import {
 	validateFile,
 } from "../../shared/ids"
 import { AUDIO_CONFIG } from "../../elements/audio/AudioElement.config"
-import { filterRedundantElements, getCanvasCenter } from "../../shared/placement/elementUtils"
+import {
+	filterRedundantElements,
+	getCanvasCenter,
+	getResolvedMediaPlacementConfig,
+} from "../../shared/placement/elementUtils"
 import { resolveGridPlacements } from "../../shared/placement/placementEngine"
-import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
+import {
+	buildAssetResourcePath,
+	getCanvasResourceFileName,
+	isAssetResourceScheme,
+	parseAssetResourcePath,
+} from "../../shared/path/canvasResourcePath"
 import {
 	CanvasElementClipboard,
 	type CanvasElementClipboardBrowserOptions,
@@ -143,6 +158,7 @@ function isCanvasContainerElement(element: LayerElement): element is CanvasConta
  */
 export class ClipboardManager {
 	private canvas: Canvas
+	private duplicating = false
 
 	constructor(options: { canvas: Canvas }) {
 		const { canvas } = options
@@ -423,6 +439,23 @@ export class ClipboardManager {
 		return extension ? (extensionMimeTypeMap[extension] ?? fallback) : fallback
 	}
 
+	private getMimeTypeFromAssetMediaType(mediaType: CanvasAssetMediaType): string {
+		switch (mediaType) {
+			case "image":
+				return DEFAULT_IMAGE_MIME_TYPE
+			case "video":
+				return DEFAULT_VIDEO_MIME_TYPE
+			case "audio":
+				return DEFAULT_AUDIO_MIME_TYPE
+		}
+	}
+
+	private getAssetFallbackFilename(filename: string, mediaType: CanvasAssetMediaType): string {
+		if (/\.[^/.]+$/.test(filename)) return filename
+		const extension = mediaType === "image" ? "png" : mediaType === "video" ? "mp4" : "mp3"
+		return `${filename}.${extension}`
+	}
+
 	/**
 	 * 获取原始未压缩资源信息。
 	 *
@@ -433,18 +466,41 @@ export class ClipboardManager {
 		src: string
 		fallbackFilename: string
 		fallbackMimeType: string
+		mediaType?: CanvasAssetMediaType
 	}): Promise<{
 		filename: string
 		mimeType: string
 		fileSize: number
 		sourceRef: CanvasElementClipboardFileMetadata["sourceRef"]
 	} | null> {
-		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
-		if (!getFileInfo) {
-			return null
-		}
-
 		try {
+			const assetId = parseAssetResourcePath(options.src)
+			if (assetId !== undefined) {
+				// Asset URLs are stable logical references. Resolve their current URL and
+				// media type through the Canvas asset manager instead of sending the
+				// opaque URI to the workspace file resolver.
+				const asset = await this.canvas.assetResourceManager.getResource(assetId)
+				if (!asset.fileUrl || !asset.mediaType) return null
+				if (options.mediaType && asset.mediaType !== options.mediaType) return null
+
+				const filename = this.getAssetFallbackFilename(
+					asset.fileName || options.fallbackFilename,
+					asset.mediaType,
+				)
+				return {
+					filename,
+					mimeType: this.getMimeTypeFromAssetMediaType(asset.mediaType),
+					fileSize: 0,
+					sourceRef: {
+						src: buildAssetResourcePath(assetId),
+						ossUrl: asset.fileUrl,
+					},
+				}
+			}
+			if (isAssetResourceScheme(options.src)) return null
+
+			const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
+			if (!getFileInfo) return null
 			let fileInfo = await getFileInfo(options.src, { useImageProcess: false })
 			if (isOssExpiring(fileInfo?.expires_at)) {
 				// A clipboard payload can be consumed after this interaction finishes.
@@ -487,6 +543,7 @@ export class ClipboardManager {
 		src: string
 		fallbackFilename: string
 		fallbackMimeType: string
+		mediaType?: CanvasAssetMediaType
 	}): Promise<OriginalFileBlobData | null> {
 		const metadata = await this.fetchOriginalFileMetadata(options)
 		if (!metadata?.sourceRef?.ossUrl) {
@@ -907,6 +964,7 @@ export class ClipboardManager {
 			src,
 			fallbackFilename: `${element.name || "image"}.png`,
 			fallbackMimeType: DEFAULT_IMAGE_MIME_TYPE,
+			mediaType: "image",
 		})
 		if (!originalFile) {
 			return null
@@ -938,6 +996,7 @@ export class ClipboardManager {
 			src,
 			fallbackFilename: `${element.name || "image"}.png`,
 			fallbackMimeType: DEFAULT_IMAGE_MIME_TYPE,
+			mediaType: "image",
 		})
 
 		return metadata ? { element, ...metadata } : null
@@ -953,6 +1012,7 @@ export class ClipboardManager {
 			src,
 			fallbackFilename: `${element.name || "video"}.mp4`,
 			fallbackMimeType: DEFAULT_VIDEO_MIME_TYPE,
+			mediaType: "video",
 		})
 
 		return metadata ? { element, ...metadata } : null
@@ -967,6 +1027,7 @@ export class ClipboardManager {
 				(element.name ? `${element.name}.mp3` : getCanvasResourceFileName(src)) ||
 				"audio.mp3",
 			fallbackMimeType: DEFAULT_AUDIO_MIME_TYPE,
+			mediaType: "audio",
 		})
 		return metadata ? { element, ...metadata } : null
 	}
@@ -1072,10 +1133,21 @@ export class ClipboardManager {
 				}),
 			),
 		])
-		// Element media has no inline Blob in the standard copy payload. Writing
-		// the element without a usable source reference would create a clipboard
-		// item that can only fail later during paste, so abort the copy instead.
-		if (mediaMetadataResults.some((result) => !result)) {
+		// A source-less image/video/audio can be a valid placeholder element (for
+		// example, an unfinished generation node), so it must stay in payload.elements
+		// without contributing file metadata. Only fail when an existing source could
+		// not be resolved, because that would create a media element that cannot be
+		// restored during paste.
+		const hasUnresolvedSourceBackedMedia = mediaMetadataResults.some((result, index) => {
+			if (result) return false
+			const element = mediaElements[index]
+			const source =
+				element.type === ElementTypeEnum.Image
+					? this.getEffectiveImageContent(element).src
+					: this.getEffectiveContent(element)?.src
+			return Boolean(source)
+		})
+		if (hasUnresolvedSourceBackedMedia) {
 			throw new Error("Unable to prepare a valid media source for clipboard copy")
 		}
 		const metadataList: CanvasElementClipboardFileMetadata[] = []
@@ -1325,6 +1397,83 @@ export class ClipboardManager {
 		}
 	}
 
+	public canDuplicate(elementIds = this.canvas.selectionManager.getSelectedIds()): boolean {
+		if (this.duplicating || !this.canvas.permissionManager.can("document.write")) return false
+		if (!this.canvas.permissionManager.can("sideEffect.copy") || elementIds.length === 0)
+			return false
+		const elements = elementIds.map((id) => this.canvas.elementManager.getElementData(id))
+		if (elements.some((element) => !element)) return false
+		return Array.from(this.getClipboardElementIds(elements as LayerElement[])).every(
+			(id) =>
+				!this.canvas.elementManager.isTemporary(id) &&
+				!this.canvas.mediaReplaceController.isReplacing(id),
+		)
+	}
+
+	/**
+	 * 例：复制图片后修改参考图，原图仍保留。只创建新元素，不改系统剪贴板或发起生成。
+	 * 复用粘贴的 Content 身份重建、任务身份清理、容器连线和一次撤销机制。
+	 */
+	public async duplicate(
+		elementIds = this.canvas.selectionManager.getSelectedIds(),
+	): Promise<void> {
+		if (!this.canDuplicate(elementIds)) return
+		this.duplicating = true
+		try {
+			const selectedIds = filterRedundantElements(elementIds, this.canvas.elementManager)
+			const elements = selectedIds.flatMap((id) => {
+				const element = this.canvas.elementManager.getElementData(id)
+				const node = this.canvas.elementManager.getElementInstance(id)?.getNode()
+				if (!element || !node) return []
+				// 子元素单独复制到根层时，保留它在画布中的位置与父级缩放。
+				const transform = this.canvas.contentLayer
+					.getAbsoluteTransform()
+					.copy()
+					.invert()
+					.multiply(node.getAbsoluteTransform())
+					.decompose()
+				const projected = this.projectElementTreeForContentView(element)
+				return [
+					this.sanitizeElementTreeForClipboard({
+						...projected,
+						x: transform.x,
+						y: transform.y,
+						scaleX: transform.scaleX,
+						scaleY: transform.scaleY,
+					}),
+				]
+			})
+			const nodes = selectedIds.flatMap((id) => {
+				const node = this.canvas.elementManager.getElementInstance(id)?.getNode()
+				return node ? [node] : []
+			})
+			const bounds = calculateNodesRect(nodes, this.canvas.stage, this.canvas.elementManager)
+			if (elements.length === 0 || !bounds) return
+			// 反向使用粘贴的同一中心算法，只平移选区宽度和既有间距，避免缩放或容器影响落位。
+			const centerOffset =
+				elements.length === 1
+					? this.getElementCenterOffset(elements[0], { x: 0, y: 0 })
+					: this.getElementsCenterOffset(elements, { x: 0, y: 0 })
+			const position = {
+				x:
+					-centerOffset.offsetX +
+					bounds.width +
+					getResolvedMediaPlacementConfig(this.canvas).spacing,
+				y: -centerOffset.offsetY,
+			}
+			await this.pasteCanvasElementsFromRichClipboard(
+				elements,
+				[],
+				[],
+				this.getClipboardConnections(elements),
+				this.canvas.id,
+				position,
+			)
+		} finally {
+			this.duplicating = false
+		}
+	}
+
 	/**
 	 * 聚焦到元素（单个或多个）
 	 * @param elementIds 元素ID数组
@@ -1407,29 +1556,45 @@ export class ClipboardManager {
 		uploadResult: UploadFileResponse,
 		targetContentId: string,
 	): CanvasFileElement {
+		const currentContent = getContentById(finalElement, targetContentId)
 		if (finalElement.type === ElementTypeEnum.Audio) {
+			const patch = currentContent
+				? mergeMediaSourceReplacementFields(currentContent, { src: uploadResult.path })
+				: { src: uploadResult.path }
 			return {
-				...updateContent(finalElement, targetContentId, {
-					src: uploadResult.path,
-				}),
+				...updateContent(finalElement, targetContentId, patch),
 				visible: true,
 			} as CanvasFileElement
 		}
 		if (finalElement.type === ElementTypeEnum.Image && isImageElementContent(finalElement)) {
+			const patch = currentContent
+				? mergeMediaSourceReplacementFields(currentContent, {
+						src: uploadResult.path,
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+					})
+				: {
+						src: uploadResult.path,
+						status: GenerationStatus.Completed,
+						errorMessage: undefined,
+					}
 			return this.stripMediaGenerationTaskIdentity(
-				updateImageContent(finalElement, targetContentId, {
+				updateImageContent(finalElement, targetContentId, patch),
+			) as CanvasFileElement
+		}
+		const patch = currentContent
+			? mergeMediaSourceReplacementFields(currentContent, {
 					src: uploadResult.path,
 					status: GenerationStatus.Completed,
 					errorMessage: undefined,
-				}),
-			) as CanvasFileElement
-		}
+				})
+			: {
+					src: uploadResult.path,
+					status: GenerationStatus.Completed,
+					errorMessage: undefined,
+				}
 		return this.stripMediaGenerationTaskIdentity(
-			updateContent(finalElement, targetContentId, {
-				src: uploadResult.path,
-				status: GenerationStatus.Completed,
-				errorMessage: undefined,
-			}),
+			updateContent(finalElement, targetContentId, patch),
 		)
 	}
 

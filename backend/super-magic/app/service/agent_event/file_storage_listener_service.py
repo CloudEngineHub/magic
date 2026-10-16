@@ -481,7 +481,7 @@ class FileStorageListenerService:
         return info_response
 
     @staticmethod
-    async def _archive_and_upload_project(agent_context: AgentContext) -> None:
+    async def _archive_and_upload_project(agent_context: AgentContext) -> bool:
         """
         Compress and upload project directories separately with independent versioning
 
@@ -492,7 +492,7 @@ class FileStorageListenerService:
         enable_archive = os.getenv("ENABLE_PROJECT_ARCHIVE", "true").lower() == "true"
         if not enable_archive:
             logger.info("ENABLE_PROJECT_ARCHIVE=false，跳过项目归档上传")
-            return
+            return False
 
         try:
             # Get directory paths
@@ -502,7 +502,7 @@ class FileStorageListenerService:
 
             if not topic_id:
                 logger.error("无法获取topic_id，无法进行分离式打包")
-                return
+                return False
 
             # Load local manifest to check current state
             # local_manifest = FileStorageListenerService._load_local_manifest()
@@ -552,6 +552,7 @@ class FileStorageListenerService:
 
             # 每轮只上传本轮 checkpoint 归档与 manifest（不再整目录打包全量上传）
             await FileStorageListenerService._sync_checkpoints_archive(topic_id, storage_service)
+            return uploaded
 
             # Save and upload the final manifest
             # await FileStorageListenerService._save_and_upload_project_archive_info(project_archive_info, agent_context)
@@ -559,6 +560,7 @@ class FileStorageListenerService:
         except Exception as e:
             logger.error(f"分离式打包和上传过程中发生错误: {e}")
             logger.error(traceback.format_exc())
+            return False
 
     @staticmethod
     async def _process_workspace_archive(
@@ -732,6 +734,18 @@ class FileStorageListenerService:
             f"构造文件键成功: {filepath}, file_id: {file_id}, 存储键: {s3_key}"
         )
         return ConstructedFileKey(file_key=s3_key, file_id=file_id)
+
+    @staticmethod
+    async def create_workspace_attachment(filepath: str) -> Attachment:
+        """投递前取得真实文件身份；无 MagicFS key 时拒绝产生不可下载的镜像。"""
+        constructed = await FileStorageListenerService._construct_file_key(filepath)
+        if constructed is None:
+            raise ValueError("The file has no MagicFS storage identity; wait for file synchronization.")
+        stat = await async_stat(filepath)
+        return FileStorageListenerService._build_attachment(
+            filepath, constructed.file_key, constructed.file_id, AttachmentTag.FINAL,
+            file_size=stat.st_size,
+        )
 
     @staticmethod
     def _create_attachment_from_uploaded_file(
@@ -978,6 +992,7 @@ class FileStorageListenerService:
         file_id: Optional[str],
         file_tag: AttachmentTag,
         source: int = 3,
+        file_size: Optional[int] = None,
     ) -> Attachment:
         """
         构造 Attachment 对象的公共实现，供事件路径与 checkpoint 路径共用。
@@ -993,7 +1008,8 @@ class FileStorageListenerService:
             Attachment: 构造好的附件对象
         """
         file_path_obj = Path(filepath)
-        file_size = os.path.getsize(filepath)
+        if file_size is None:
+            file_size = os.path.getsize(filepath)
         file_ext = file_path_obj.suffix.lstrip('.')
         file_name = file_path_obj.name
 

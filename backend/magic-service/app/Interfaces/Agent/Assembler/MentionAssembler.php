@@ -18,6 +18,7 @@ use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\File\User
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Mcp\McpMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionInterface;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MentionType;
+use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\MicroApp\MicroAppMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Project\ProjectMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Skill\SkillMention;
 use App\Domain\Chat\DTO\Message\Common\MessageExtra\SuperAgent\Mention\Tool\ToolMention;
@@ -42,6 +43,7 @@ final class MentionAssembler
             MentionType::AGENT => new AgentMention($mention),
             MentionType::ASSISTANT => new AssistantMention($mention),
             MentionType::MCP => new McpMention($mention),
+            MentionType::MICRO_APP => new MicroAppMention($mention),
             MentionType::TOOL => new ToolMention($mention),
             MentionType::DESIGN_MARKER => new DesignMarkerMention($mention),
             MentionType::SKILL => new SkillMention($mention),

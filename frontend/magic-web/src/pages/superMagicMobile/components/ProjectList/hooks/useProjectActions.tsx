@@ -1,3 +1,7 @@
+import {
+	canDeleteRecordingProjects,
+	handleRecordingProjectDeletionError,
+} from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { useBoolean, useMemoizedFn, useMount } from "ahooks"
 import { useEffect, useMemo, useState } from "react"
 import { ActionsPopup } from "../../ActionsPopup/types"
@@ -517,6 +521,7 @@ export function useProjectListActions({
 		const deleteWorkspaceId = isOtherCollaborationProject(deletedProject)
 			? SHARE_WORKSPACE_ID
 			: (selectedWorkspace?.id ?? deletedProject.workspace_id)
+		if (!canDeleteRecordingProjects([deletedProject.id])) return
 		const shouldExitProjectDetailPage = shouldExitDetailPageAfterDelete({
 			deletedProjectId: deletedProject.id,
 			selectedProjectId: projectStore.selectedProject?.id,
@@ -577,7 +582,8 @@ export function useProjectListActions({
 			}
 			await onProjectChanged?.()
 			setDeleteModalVisible(false)
-		} catch {
+		} catch (error) {
+			handleRecordingProjectDeletionError(error)
 			// Keep the confirm sheet open so the user can retry after a failed delete.
 		}
 	})
@@ -706,6 +712,7 @@ export function useProjectListActions({
 					icon: <IconX />,
 					ariaLabel: t("common.cancel"),
 					onClick: () => setRenameModalVisible(false),
+					testId: isChatMode ? "chat-rename-popup-close" : "project-rename-popup-close",
 				}}
 				headerTrailingAction={{
 					icon: <Check />,
@@ -719,6 +726,9 @@ export function useProjectListActions({
 					},
 					disabled: !currentActionItem?.project_name?.trim(),
 					tone: "primary",
+					testId: isChatMode
+						? "chat-rename-popup-confirm"
+						: "project-rename-popup-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-0"
 			>

@@ -1,3 +1,7 @@
+import {
+	canDeleteRecordingProjects,
+	handleRecordingProjectDeletionError,
+} from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { lazy, Suspense, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
@@ -116,11 +120,17 @@ function useProjectItemActionProps({ selectedWorkspace }: UseProjectItemActionPr
 						content={deleteProject.project_name || t("project.unnamedProject")}
 						needConfirm={false}
 						onSubmit={async () => {
+							if (!canDeleteRecordingProjects([deleteProject.id])) {
+								setDeleteProject(null)
+								return
+							}
 							try {
 								await SuperMagicService.deleteProject(deleteProject)
 								magicToast.success(t("project.deleteProjectSuccess"))
 							} catch (error) {
+								if (handleRecordingProjectDeletionError(error)) return
 								console.log("删除项目失败，失败原因：", error)
+								throw error
 							}
 						}}
 						onClose={() => setDeleteProject(null)}

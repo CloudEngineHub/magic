@@ -1,3 +1,4 @@
+import type { TopicTypeFilterValue } from "@/pages/superMagic/utils/topicTypeFilter"
 import type { ServiceHttpClient, RequestConfig } from "@/infrastructure/network/http/clients"
 import type { SeqRecord } from "@/apis/modules/chat/types"
 import type { FileScope } from "./fileScope"
@@ -303,6 +304,21 @@ export interface GetProjectAttachmentsV2Params {
 	temporaryToken?: string
 }
 
+export type ShareFilesV2NextParentState = ProjectAttachmentsV2NextParentState
+
+export interface GetShareResourceFilesV2Response {
+	list: AttachmentItem[]
+	next_parent_ids: ShareFilesV2NextParentState[] | null
+	has_more: boolean
+}
+
+export interface GetShareResourceFilesV2Params {
+	resourceId: string
+	password?: string
+	pageSize?: number
+	nextParentIds: ShareFilesV2NextParentState[]
+}
+
 export interface BatchSavePayload {
 	project_id: string
 	parent_id?: string // 父目录ID，为空表示根目录
@@ -392,6 +408,10 @@ export interface GenerateImageResponse {
 	file_url: string | null
 	/** ID */
 	id: string
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度 */
+	expected_finished_at?: string
 }
 
 export interface GeneratedImageResultItem {
@@ -445,6 +465,10 @@ export interface GenerateImagesResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），后端下发，用于估算进度；聊天工具卡用的是同一个值 */
+	expected_finished_at?: string
 }
 
 /**
@@ -549,6 +573,10 @@ export interface ImageGenerationResultResponse {
 	file_url: string
 	/** ID */
 	id: string
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），用于估算进度 */
+	expected_finished_at?: string
 }
 
 /**
@@ -587,6 +615,10 @@ export interface ImageGenerationResultsResponse {
 	error_message: string | null
 	/** 已返回的图片列表 */
 	images: GeneratedImageResultItem[]
+	/** 任务发起时间（ISO 8601 日期时间），与 expected_finished_at 配对计算进度 */
+	started_at?: string
+	/** 预期完成时间（ISO 8601 日期时间），用于估算进度 */
+	expected_finished_at?: string
 }
 
 /** 视频生成参数；画布合成暂不使用，保留为后续输出配置扩展。 */
@@ -597,6 +629,8 @@ export interface GenerateVideoGeneration {
 	resolution?: string
 	/** 时长（秒） */
 	duration_seconds?: number
+	/** 是否以样片模式生成；仅在模型能力声明 draft 时发送 */
+	draft?: boolean
 	/** 预留扩展字段 */
 	[key: string]: unknown
 }
@@ -611,6 +645,27 @@ export interface GenerateVideoRequest {
 	model_id?: string
 	/** 提示词 */
 	prompt?: string
+	/** 视频输入模式；draft_task 为样片成片内部模式。 */
+	input_mode?:
+		| "standard"
+		| "image_reference"
+		| "omni_reference"
+		| "video_edit"
+		| "keyframe_guided"
+		| "draft_task"
+	/** 任务类型；样片成片仍使用 generate。 */
+	task?: "generate" | "extend" | "edit" | "upscale"
+	/** 结构化视频输入。 */
+	inputs?: {
+		frames?: Array<{ role: "start" | "end"; uri: string }>
+		reference_images?: Array<{ uri: string; reference_type?: "asset" | "style" }>
+		reference_videos?: Array<{ uri: string }>
+		reference_audios?: Array<{ uri: string }>
+		video?: { uri: string }
+		mask?: { uri: string }
+		audio?: Array<{ uri: string }>
+		draft_task?: { video_id?: string; uri?: string }
+	}
 	/** 文件目录，一定是本项目存在的目录 */
 	file_dir?: string
 	/** 宽高比 */
@@ -835,6 +890,9 @@ export interface GetConvertHightConfigResponse {
 /** 获取 AI 能力可用性响应数据 */
 export interface AiAbilityAvailabilityResponse {
 	abilities: {
+		volcengine_ark_assets?: {
+			enabled?: boolean
+		}
 		image_convert_high: GetConvertHightConfigResponse
 		image_remove_background: {
 			enabled: boolean
@@ -875,16 +933,25 @@ export interface ShareResourceSettings {
 export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	getSlidesTemplates(
 		params: SlidesTemplateQueryParams,
-		options?: { xMagicImageProcess?: ImageProcessOptions },
+		options?: {
+			xMagicImageProcess?: ImageProcessOptions
+			temporaryToken?: string
+		},
 	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch
 			.get<SlidesTemplateRawListResponse>("/api/v1/slides-templates", {
-				params: { scope: "official", ...params },
+				params: {
+					scope: "official",
+					...params,
+					...(temporaryToken ? { token: temporaryToken } : {}),
+				},
 				headers: {
 					...(options?.xMagicImageProcess && {
 						"X-Magic-Image-Process": buildImageProcessQuery(options.xMagicImageProcess),
 					}),
 				},
+				...getShareModeRequestConfig(temporaryToken),
 			})
 			.then(normalizeSlidesTemplateResponse)
 	},
@@ -939,9 +1006,17 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		return fetch.delete<[]>(`/api/v1/slides-templates/${code}`)
 	},
 
-	getSlidesTemplateCategories(params: SlidesTemplateCategoryQueryParams) {
+	getSlidesTemplateCategories(
+		params: SlidesTemplateCategoryQueryParams,
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateCategoryListResponse>("/api/v1/slides-template-categories", {
-			params: { ...params },
+			params: {
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
@@ -951,15 +1026,32 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		})
 	},
 
-	getSlidesTemplateTagGroups(params: { category_code?: string } = {}) {
+	getSlidesTemplateTagGroups(
+		params: { category_code?: string } = {},
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateTagGroupItem[]>("/api/v1/slides-template/tags/groups", {
-			params: { ...params },
+			params: {
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
-	getSlidesTemplateCount(params: SlidesTemplateQueryParams) {
+	getSlidesTemplateCount(
+		params: SlidesTemplateQueryParams,
+		options?: { temporaryToken?: string },
+	) {
+		const temporaryToken = options?.temporaryToken
 		return fetch.get<SlidesTemplateCountResponse>("/api/v1/slides-templates/count", {
-			params: { scope: "official", ...params },
+			params: {
+				scope: "official",
+				...params,
+				...(temporaryToken ? { token: temporaryToken } : {}),
+			},
+			...getShareModeRequestConfig(temporaryToken),
 		})
 	},
 
@@ -1600,6 +1692,14 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	getTopicSandboxStatus({ id }: { id: string }) {
 		return fetch.get(`/api/v1/super-agent/admin/topic/${id}/sandbox`)
 	},
+	/**
+	 * @description 重启普通项目话题绑定的沙盒（服务端按升级语义执行）
+	 */
+	restartTopicSandbox({ topic_id }: { topic_id: string }) {
+		return fetch.put<{ sandbox_id: string }>("/api/v1/super-agent/sandbox/restart", {
+			topic_id,
+		})
+	},
 
 	/**
 	 * @description 通过工作区id获取话题列表
@@ -1614,6 +1714,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	getSidebarTopicsByProjectId({
+		topicType,
 		id,
 		page,
 		page_size,
@@ -1623,9 +1724,17 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		page: number
 		page_size: number
 		q?: string
+		topicType?: TopicTypeFilterValue
 	}) {
 		return fetch.get<WithPage<Topic>>(`/api/v1/super-agent/projects/${id}/sidebar-topics`, {
-			params: { page, page_size, q },
+			params: {
+				page,
+				page_size,
+				q,
+				...(topicType && topicType !== "all"
+					? { topic_types: topicType === "topic" ? 1 : 2 }
+					: {}),
+			},
 		})
 	},
 
@@ -1757,16 +1866,24 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	/**
-	 * @description 获取分享资源的文件列表
-	 * @param resource_id 资源ID
-	 * @param password 密码（可选）
+	 * @description get share resource files v2 page
 	 */
-	getShareResourceFiles({ resource_id, password }: { resource_id: string; password?: string }) {
-		return fetch.post(`/api/v1/share/resources/${resource_id}/files/queries`, {
-			pwd: password,
-			page: 1,
-			page_size: 999,
-		})
+	getShareResourceFilesV2Page(
+		params: GetShareResourceFilesV2Params,
+		requestConfig?: Omit<RequestConfig, "url" | "body">,
+	) {
+		return fetch.post<GetShareResourceFilesV2Response>(
+			`/api/v2/share/resources/${params.resourceId}/files/queries`,
+			{
+				page_size: params.pageSize ?? 1000,
+				...(params.password !== undefined ? { pwd: params.password } : {}),
+				next_parent_ids: params.nextParentIds,
+			},
+			{
+				enableRequestUnion: false,
+				...requestConfig,
+			},
+		)
 	},
 
 	/**
@@ -2089,7 +2206,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		return fetch.post("/api/v1/super-agent/file/batch-download/create", {
 			file_ids,
 			project_id,
-			token: token || (window as any).temporary_token || "",
+			token: token || "",
 		})
 	},
 
@@ -2098,8 +2215,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	 * @param batch_key The batch task key
 	 * @returns Batch download status and download url if ready
 	 */
-	checkBatchDownloadStatus(batch_key: string) {
-		const token = (window as any).temporary_token
+	checkBatchDownloadStatus(batch_key: string, token?: string) {
 		const url = token
 			? `/api/v1/super-agent/file/batch-download/check?batch_key=${batch_key}&token=${token}`
 			: `/api/v1/super-agent/file/batch-download/check?batch_key=${batch_key}`
@@ -2259,6 +2375,10 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			page_size,
 			show_collaboration = 1,
 			sort_mode,
+			include_special = 0,
+			project_type,
+			sort_field,
+			sort_direction,
 		}: {
 			workspace_id?: string
 			project_name?: string
@@ -2266,12 +2386,27 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 			page_size: number
 			show_collaboration?: number
 			sort_mode?: "workspace" | "recent"
+			include_special?: number
+			project_type?: "all" | "general" | "claw" | "micro-app" | "agent" | "skill"
+			sort_field?: "last_active_at" | "updated_at" | "created_at"
+			sort_direction?: "asc" | "desc"
 		},
 		options?: Omit<RequestConfig, "url">,
 	) {
 		return fetch.post<WithPage<ProjectListItem>>(
 			"/api/v1/super-agent/projects/participated",
-			{ workspace_id, project_name, page, page_size, show_collaboration, sort_mode },
+			{
+				workspace_id,
+				project_name,
+				page,
+				page_size,
+				show_collaboration,
+				sort_mode,
+				include_special,
+				project_type,
+				sort_field,
+				sort_direction,
+			},
 			options,
 		)
 	},
@@ -2547,23 +2682,6 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	/**
-	 * @description 导出pdf或者ppt
-	 * @param data
-	 */
-	exportPdfOrPpt(data: {
-		file_ids: string[]
-		project_id?: string
-		is_debug?: boolean
-		convert_type?: "pdf" | "ppt"
-	}) {
-		return fetch.post("/api/v1/super-agent/file-convert/create", {
-			...data,
-			// @ts-ignore
-			token: window.temporary_token,
-		})
-	},
-
-	/**
 	 * @description 创建文件或文件夹
 	 * @param data
 	 * @param config Optional request config
@@ -2579,18 +2697,6 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		config?: { enableErrorMessagePrompt?: boolean },
 	) {
 		return fetch.post("/api/v1/super-agent/file", data, config)
-	},
-
-	/**
-	 * @description 查询文件导出pdf或者ppt的状态
-	 * @param task_key
-	 */
-	checkExportPdfOrPptStatus(task_key: string) {
-		const token = (window as any).temporary_token
-		const url = token
-			? `/api/v1/super-agent/file-convert/check?task_key=${task_key}&token=${token}`
-			: `/api/v1/super-agent/file-convert/check?task_key=${task_key}`
-		return fetch.get(url)
 	},
 
 	/**

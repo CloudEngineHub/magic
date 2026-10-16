@@ -1,3 +1,4 @@
+import { SimpleModeGuide } from "@/pages/superMagic/components/MessageHeader/components/SimpleModeGuide"
 import { useMemoizedFn, useUpdateEffect } from "ahooks"
 import {
 	useMemo,
@@ -50,7 +51,9 @@ import PreviewDetailPopup, {
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { useMobileFilePreviewPubSub } from "@/pages/superMagic/hooks/useMobileFilePreviewPubSub"
 import { useMobileKnowledgeBasePreview } from "@/pages/superMagic/hooks/useMobileKnowledgeBasePreview"
+import { useMobileMicroAppPreview } from "@/pages/superMagic/hooks/useMobileMicroAppPreview"
 import { cn } from "@/utils/cn"
+import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import ProjectPageInputContainer from "@/pages/superMagic/components/ProjectPageInputContainer"
 import ChatActions from "../ProjectPage/ProjectPageMain/components/ChatActions"
 import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
@@ -88,6 +91,7 @@ import {
 import { useProjectFirstAttachmentRender } from "@/pages/superMagic/hooks/useProjectFirstAttachmentRender"
 import { resolveTopicPageMessageListFallback } from "./components/TopicPageMessageListFallback"
 import KnowledgeBasePreviewPopup from "@/pages/superMagic/components/KnowledgeBasePreviewPopup"
+import MicroAppPreviewPopup from "@/pages/superMagic/components/MicroAppPreviewPopup"
 import { buildMobileFilePreviewDetail } from "./mobileFilePreview"
 
 interface TopicPageProps {
@@ -122,11 +126,13 @@ function TopicPage({
 	onInitialMessagesReadyChange,
 }: TopicPageProps = {}) {
 	const { t } = useTranslation("super")
+	const { t: tMainInput } = useTranslation("super/mainInput")
 	const { styles, cx } = useStyles()
 	const isMobile = useIsMobile()
 	const location = useLocation()
 	const routeName = routesMatch(location.pathname)?.route.name as RouteName | undefined
 	const resolvedPageKind = pageKind ?? resolveMobileTopicPageKind(routeName)
+	const isSingleTopicChat = resolvedPageKind === MobileTopicPageKind.SingleTopicChat
 	const capabilities = getMobileTopicPageCapabilities(resolvedPageKind)
 	const isStandaloneProjectTopicPage = routeName === RouteName.SuperWorkspaceProjectTopicState
 	// 独立项目话题子页由壳层头部承载返回与标题，避免与页内 ChatHeader 叠成双头部。
@@ -181,6 +187,7 @@ function TopicPage({
 
 	// Refs
 	const footerRef = useRef<HTMLDivElement>(null)
+	const simpleModeAnchorRef = useRef<HTMLSpanElement>(null)
 	const { shouldRenderProjectFirstRequest, resetProjectFirstRequestRender } =
 		useProjectFirstAttachmentRender()
 	const { startRequest: startAttachmentsRequest, cancelCurrent: cancelAttachmentsRequest } =
@@ -530,7 +537,12 @@ function TopicPage({
 					)
 				: undefined,
 		}
-	}, [capabilities.canCreateSiblingTopic, switchToProjectTopic, topicModeConfig])
+	}, [
+		capabilities.canCreateSiblingTopic,
+		projectFilesStore,
+		switchToProjectTopic,
+		topicModeConfig,
+	])
 
 	const setUserSelectDetail = useMemoizedFn((detail: PreviewDetail | null) => {
 		if (!detail) return
@@ -538,11 +550,14 @@ function TopicPage({
 	})
 
 	// Topic list actions
-	const { openActionsPopup, openShareModal, topicActionComponents } = useTopicListActions()
+	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
+	const simpleModeAvailable = pageKind === MobileTopicPageKind.ProjectTopic && !isReadonly
+	const { openActionsPopup, openShareModal, topicActionComponents } = useTopicListActions({
+		enableSimpleMode: simpleModeAvailable,
+	})
 
 	const previewDetailPopupRef = useRef<PreviewDetailPopupRef>(null)
 	const linkPreviewPopupRef = useRef<PreviewDetailPopupRef>(null)
-	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
 
 	useEffect(() => {
 		// A direct message click may open before the project tree arrives; enrich it afterwards.
@@ -556,169 +571,207 @@ function TopicPage({
 		onFileClick,
 	})
 	const knowledgeBasePreviewState = useMobileKnowledgeBasePreview()
+	const microAppPreviewState = useMobileMicroAppPreview()
 
 	return (
-		<div className={cn(styles.container, className)} data-testid="topic-page-root">
-			{projectTopicMorePortalTarget &&
-				createPortal(
-					<Button
-						variant="ghost"
-						className="h-12 w-12 shrink-0 rounded-full p-0 text-foreground hover:bg-transparent active:opacity-70"
-						onClick={openProjectTopicActionSheet}
-						aria-label={t("topic.moreAria")}
-						data-testid="project-topic-header-more-button"
-					>
-						<Ellipsis className="h-[22px] w-[22px]" />
-					</Button>,
-					projectTopicMorePortalTarget,
-				)}
-			{shouldRenderInlineHeader && (
-				<ChatHeader
-					selectedTopic={selectedTopic}
-					openActionsPopup={(topic: Topic) => {
-						openActionsPopup(topic, selectedProject)
-					}}
-					onNewTopicClick={
-						capabilities.canCreateSiblingTopic ? onNewTopicClick : undefined
-					}
-					onHistoryClick={onHistoryClick}
-					onFilesClick={handleOpenFilesPopup}
-					onShareClick={onShareClick}
-				/>
-			)}
-			<div className={cn(styles.body, bodyClassName)} data-testid="topic-page-message-panel">
-				<MessageListProvider value={value}>
-					{/* MessageList owns pagination, anchor restoration, and auto-follow for this viewport. */}
-					<MessageList
-						data={messages as any}
-						setSelectedDetail={setUserSelectDetail}
-						selectedTopic={selectedTopic}
-						className={cx(messageListClassName)}
-						handlePullMoreMessage={handlePullMoreMessage}
-						showLoading={showLoading}
-						onFileClick={onFileClick}
-						isMessagesLoading={isMessagesInitialLoading}
-						fallbackRender={resolvedMessageListFallbackRender}
-					/>
-				</MessageListProvider>
-			</div>
-			<div
-				ref={footerRef}
-				className={cn(styles.footer, footerClassName)}
-				data-testid="topic-page-footer"
-			>
-				<div
-					className={cn("flex flex-col gap-2", footerInnerClassName)}
-					data-testid="topic-page-input-panel"
-				>
-					{!hideChatActions && (
-						<ChatActions
-							onNewTopicClick={
-								capabilities.canCreateSiblingTopic ? onNewTopicClick : undefined
-							}
-							onHistoryTopicsClick={onHistoryClick}
-						/>
+		<HostConversationProvider selectedProject={selectedProject} topicStore={topicStore}>
+			<div className={cn(styles.container, className)} data-testid="topic-page-root">
+				{projectTopicMorePortalTarget &&
+					createPortal(
+						<>
+							<Button
+								variant="ghost"
+								className="h-12 w-12 shrink-0 rounded-full p-0 text-foreground hover:bg-transparent active:opacity-70"
+								onClick={openProjectTopicActionSheet}
+								aria-label={t("topic.moreAria")}
+								data-testid="project-topic-header-more-button"
+							>
+								{/* Ghost Button shrinks SVGs whose class lacks "size-" to 16px.
+								    size-[22px] keeps this ellipsis on the same 22px stroke scale
+								    as the other mobile header more icons, and the anchor centers it. */}
+								<span
+									ref={simpleModeAnchorRef}
+									className="flex size-[22px] items-center justify-center"
+								>
+									<Ellipsis className="size-[22px]" />
+								</span>
+							</Button>
+							<SimpleModeGuide
+								anchorRef={simpleModeAnchorRef}
+								available={simpleModeAvailable && Boolean(selectedTopic)}
+								menuOpen={projectTopicActionSheetVisible}
+							/>
+						</>,
+						projectTopicMorePortalTarget,
 					)}
-					<ProjectPageInputContainer
-						className="mx-auto max-w-3xl rounded-2xl"
-						classNames={{
-							editor: "border-none",
+				{shouldRenderInlineHeader && (
+					<ChatHeader
+						enableSimpleMode={simpleModeAvailable}
+						selectedTopic={selectedTopic}
+						openActionsPopup={(topic: Topic) => {
+							openActionsPopup(topic, selectedProject)
 						}}
-						messages={messages}
-						showLoading={showLoading}
+						onNewTopicClick={
+							capabilities.canCreateSiblingTopic ? onNewTopicClick : undefined
+						}
+						onHistoryClick={onHistoryClick}
+						onFilesClick={handleOpenFilesPopup}
+						onShareClick={onShareClick}
+					/>
+				)}
+				<div
+					className={cn(styles.body, bodyClassName)}
+					data-testid="topic-page-message-panel"
+				>
+					<MessageListProvider value={value}>
+						{/* MessageList owns pagination, anchor restoration, and auto-follow for this viewport. */}
+						<MessageList
+							enableSimpleMode={simpleModeAvailable}
+							data={messages as any}
+							setSelectedDetail={setUserSelectDetail}
+							selectedTopic={selectedTopic}
+							className={cx(
+								"[--message-list-surface:rgb(var(--mobile-background-rgb))] [--message-list-sticky-fade-height:0px]",
+								messageListClassName,
+							)}
+							classNames={{ content: "px-4 pt-[10px]" }}
+							scrollEdgeFade
+							handlePullMoreMessage={handlePullMoreMessage}
+							showLoading={showLoading}
+							onFileClick={onFileClick}
+							isMessagesLoading={isMessagesInitialLoading}
+							fallbackRender={resolvedMessageListFallbackRender}
+						/>
+					</MessageListProvider>
+				</div>
+				<div
+					ref={footerRef}
+					className={cn(styles.footer, footerClassName)}
+					data-testid="topic-page-footer"
+				>
+					<div
+						className={cn("flex flex-col gap-2", footerInnerClassName)}
+						data-testid="topic-page-input-panel"
+					>
+						{!hideChatActions && (
+							<ChatActions
+								onNewTopicClick={
+									capabilities.canCreateSiblingTopic ? onNewTopicClick : undefined
+								}
+								onHistoryTopicsClick={onHistoryClick}
+							/>
+						)}
+						<ProjectPageInputContainer
+							className="mx-auto max-w-3xl rounded-2xl"
+							classNames={{
+								editor: "border-none",
+							}}
+							messages={messages}
+							showLoading={showLoading}
+							selectedProject={selectedProject}
+							selectedTopic={selectedTopic}
+							setSelectedTopic={topicStore.setSelectedTopic}
+							onFileClick={onFileClick}
+							selectedWorkspace={selectedWorkspace}
+							// Chat details use the same model-only selector as the chat home.
+							showModeToggle={isSingleTopicChat ? false : undefined}
+							showModelSelector={isSingleTopicChat ? true : undefined}
+							placeholder={
+								isSingleTopicChat
+									? tMainInput("mobileHome.chatPlaceholder")
+									: undefined
+							}
+							attachments={attachments}
+							isShowLoadingInit={isShowLoadingInit}
+							enableReEditMessageFromPubSub
+							onSendComplete={handleEditorSendComplete}
+							topicModeLogic={{
+								topicMode,
+								setTopicMode,
+								recoverTopicMode,
+							}}
+						/>
+					</div>
+				</div>
+				{!hideTopicActions &&
+					(isStandaloneProjectTopicPage
+						? projectTopicActionComponents
+						: topicActionComponents)}
+				{isStandaloneProjectTopicPage ? (
+					<ConversationActionsPopup
+						enableSimpleMode={simpleModeAvailable}
+						visible={projectTopicActionSheetVisible}
+						title={projectTopicActionPopupTitle}
+						subtitle={projectTopicActionPopupSubtitle}
+						actionGroups={projectTopicActionGroups}
+						onClose={closeProjectTopicActionSheet}
+					/>
+				) : null}
+				{isStandaloneProjectTopicPage ? (
+					<MobileSettingsFeedbackSheet
+						open={projectTopicFeedbackSheetOpen}
+						onClose={closeProjectTopicConversationFeedback}
+						prefill={projectTopicFeedbackPrefill}
+					/>
+				) : null}
+				{isStandaloneProjectTopicPage ? (
+					<TopicFilesPopup
+						open={projectTopicFilesDrawerOpen}
+						onOpenChange={setProjectTopicFilesDrawerOpen}
+						attachments={attachments}
+						attachmentList={attachmentList}
 						selectedProject={selectedProject}
 						selectedTopic={selectedTopic}
-						setSelectedTopic={topicStore.setSelectedTopic}
-						onFileClick={onFileClick}
 						selectedWorkspace={selectedWorkspace}
-						attachments={attachments}
-						isShowLoadingInit={isShowLoadingInit}
-						enableReEditMessageFromPubSub
-						onSendComplete={handleEditorSendComplete}
-						topicModeLogic={{
-							topicMode,
-							setTopicMode,
-							recoverTopicMode,
-						}}
+						projects={projectStore.projects}
+						workspaces={workspaceStore.workspaces}
+						projectId={selectedProject?.id}
+						refreshAttachments={refreshTopicFiles}
 					/>
-				</div>
+				) : null}
+				{!isStandaloneProjectTopicPage ? (
+					<TopicFilesPopup
+						open={filesPopupOpen}
+						onOpenChange={setFilesPopupOpen}
+						attachments={attachments}
+						attachmentList={attachmentList}
+						selectedProject={selectedProject}
+						selectedTopic={selectedTopic}
+						selectedWorkspace={selectedWorkspace}
+						projects={projectStore.projects}
+						workspaces={workspaceStore.workspaces}
+						projectId={selectedProject?.id}
+						refreshAttachments={refreshTopicFiles}
+					/>
+				) : null}
+				<PreviewDetailPopup
+					ref={previewDetailPopupRef}
+					setUserSelectDetail={setUserSelectDetail}
+					selectedTopic={selectedTopic}
+					selectedProject={selectedProject}
+					allowEdit={!isReadonly}
+					onOpenNewPopup={(detail, attachmentTree, attachmentList) => {
+						linkPreviewPopupRef.current?.open(detail, attachmentTree, attachmentList)
+					}}
+				/>
+				{/* 用于打开链接的新弹层 */}
+				<PreviewDetailPopup
+					selectedTopic={selectedTopic}
+					selectedProject={selectedProject}
+					ref={linkPreviewPopupRef}
+					allowEdit={!isReadonly}
+					setUserSelectDetail={(detail: PreviewDetail | null) => {
+						if (!detail) return
+						linkPreviewPopupRef.current?.open(detail, attachments, attachmentList)
+					}}
+					onClose={() => {
+						// 关闭链接弹层时不做任何操作
+					}}
+				/>
+				<KnowledgeBasePreviewPopup state={knowledgeBasePreviewState} />
+				<MicroAppPreviewPopup state={microAppPreviewState} />
 			</div>
-			{!hideTopicActions &&
-				(isStandaloneProjectTopicPage
-					? projectTopicActionComponents
-					: topicActionComponents)}
-			{isStandaloneProjectTopicPage ? (
-				<ConversationActionsPopup
-					visible={projectTopicActionSheetVisible}
-					title={projectTopicActionPopupTitle}
-					subtitle={projectTopicActionPopupSubtitle}
-					actionGroups={projectTopicActionGroups}
-					onClose={closeProjectTopicActionSheet}
-				/>
-			) : null}
-			{isStandaloneProjectTopicPage ? (
-				<MobileSettingsFeedbackSheet
-					open={projectTopicFeedbackSheetOpen}
-					onClose={closeProjectTopicConversationFeedback}
-					prefill={projectTopicFeedbackPrefill}
-				/>
-			) : null}
-			{isStandaloneProjectTopicPage ? (
-				<TopicFilesPopup
-					open={projectTopicFilesDrawerOpen}
-					onOpenChange={setProjectTopicFilesDrawerOpen}
-					attachments={attachments}
-					attachmentList={attachmentList}
-					selectedProject={selectedProject}
-					selectedTopic={selectedTopic}
-					selectedWorkspace={selectedWorkspace}
-					projects={projectStore.projects}
-					workspaces={workspaceStore.workspaces}
-					projectId={selectedProject?.id}
-					refreshAttachments={refreshTopicFiles}
-				/>
-			) : null}
-			{!isStandaloneProjectTopicPage ? (
-				<TopicFilesPopup
-					open={filesPopupOpen}
-					onOpenChange={setFilesPopupOpen}
-					attachments={attachments}
-					attachmentList={attachmentList}
-					selectedProject={selectedProject}
-					selectedTopic={selectedTopic}
-					selectedWorkspace={selectedWorkspace}
-					projects={projectStore.projects}
-					workspaces={workspaceStore.workspaces}
-					projectId={selectedProject?.id}
-					refreshAttachments={refreshTopicFiles}
-				/>
-			) : null}
-			<PreviewDetailPopup
-				ref={previewDetailPopupRef}
-				setUserSelectDetail={setUserSelectDetail}
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				allowEdit={!isReadonly}
-				onOpenNewPopup={(detail, attachmentTree, attachmentList) => {
-					linkPreviewPopupRef.current?.open(detail, attachmentTree, attachmentList)
-				}}
-			/>
-			{/* 用于打开链接的新弹层 */}
-			<PreviewDetailPopup
-				selectedTopic={selectedTopic}
-				selectedProject={selectedProject}
-				ref={linkPreviewPopupRef}
-				allowEdit={!isReadonly}
-				setUserSelectDetail={(detail: PreviewDetail | null) => {
-					if (!detail) return
-					linkPreviewPopupRef.current?.open(detail, attachments, attachmentList)
-				}}
-				onClose={() => {
-					// 关闭链接弹层时不做任何操作
-				}}
-			/>
-			<KnowledgeBasePreviewPopup state={knowledgeBasePreviewState} />
-		</div>
+		</HostConversationProvider>
 	)
 }
 

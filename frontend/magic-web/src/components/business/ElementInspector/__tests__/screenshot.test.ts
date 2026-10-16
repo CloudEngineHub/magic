@@ -123,6 +123,7 @@ describe("HTML screenshot geometry", () => {
 			type: "MAGIC_INSPECTOR_SCREENSHOT_REQUEST",
 			selection,
 			outputSize: { width: 160, height: 120 },
+			selector: undefined,
 		})
 
 		const event = new MessageEvent("message", {
@@ -225,6 +226,52 @@ describe("HTML screenshot geometry", () => {
 		}
 	})
 
+	it("prefers iframe runtime even when a live capture session already exists", async () => {
+		const iframe = document.createElement("iframe")
+		const targetWindow = { postMessage: vi.fn() }
+		Object.defineProperty(iframe, "contentWindow", {
+			configurable: true,
+			value: targetWindow,
+		})
+		const authorization = vi.fn()
+		const currentTabSession = {
+			acquire: vi.fn(() => new Promise<MediaStream>(() => undefined)),
+			release: vi.fn(),
+			hasLiveStream: () => true,
+		}
+		const selection = { left: 12, top: 18, width: 80, height: 60 }
+		const capture = captureIframeRegion({
+			iframe,
+			selection,
+			iframeTargetOrigin: "https://husky.example.test",
+			currentTabSession,
+			requestCurrentTabCaptureAuthorization: authorization,
+			selector: "section.card",
+		})
+		const request = targetWindow.postMessage.mock.calls[0]?.[0]
+		expect(request).toMatchObject({
+			type: "MAGIC_INSPECTOR_SCREENSHOT_REQUEST",
+			selection,
+			selector: "section.card",
+		})
+
+		const event = new MessageEvent("message", {
+			origin: "https://husky.example.test",
+			data: {
+				type: "MAGIC_INSPECTOR_SCREENSHOT_RESPONSE",
+				requestId: request.requestId,
+				success: true,
+				blob: new Blob(["png"], { type: "image/png" }),
+			},
+		})
+		Object.defineProperty(event, "source", { configurable: true, value: targetWindow })
+		window.dispatchEvent(event)
+
+		await expect(capture).resolves.toMatch(/^data:image\/png;base64,/)
+		expect(authorization).not.toHaveBeenCalled()
+		expect(currentTabSession.acquire).not.toHaveBeenCalled()
+	})
+
 	it("waits for the capture chrome to hide before requesting browser capture", async () => {
 		const iframe = document.createElement("iframe")
 		const targetWindow = { postMessage: vi.fn() }
@@ -237,6 +284,7 @@ describe("HTML screenshot geometry", () => {
 		const currentTabSession = {
 			acquire: vi.fn(() => captureStream.promise),
 			release: vi.fn(),
+			hasLiveStream: () => false,
 		}
 		const capture = captureIframeRegion({
 			iframe,
@@ -657,6 +705,7 @@ describe("HTML screenshot geometry", () => {
 			await expect(session.acquire()).resolves.toBe(stream)
 
 			expect(getDisplayMedia).toHaveBeenCalledOnce()
+			expect(session.hasLiveStream()).toBe(true)
 			expect(getDisplayMedia).toHaveBeenCalledWith(
 				expect.objectContaining({
 					video: { displaySurface: "browser", cursor: "never" },
@@ -669,6 +718,7 @@ describe("HTML screenshot geometry", () => {
 			)
 
 			session.release()
+			expect(session.hasLiveStream()).toBe(false)
 			expect(stop).toHaveBeenCalledOnce()
 			ended?.()
 		} finally {

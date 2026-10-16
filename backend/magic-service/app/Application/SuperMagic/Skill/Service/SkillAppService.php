@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Skill\Service;
 
+use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
 use App\Application\SuperMagic\Publish\PublishAsyncStatusManager;
 use App\Application\SuperMagic\Skill\DTO\PublishSkillResultDTO;
@@ -137,6 +138,7 @@ class SkillAppService extends AbstractSkillAppService
         protected SkillCategoryDomainService $skillCategoryDomainService,
         protected SkillPackageParser $skillPackageParser,
         protected PublishAsyncStatusManager $publishAsyncStatusManager,
+        protected SuperMagicAgentAppService $agentAppService,
         LoggerFactory $loggerFactory
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
@@ -838,7 +840,10 @@ class SkillAppService extends AbstractSkillAppService
         ]);
 
         if (! $requestDTO->getExportFileFromProject()) {
-            if (empty($skillEntity->getFileKey())) {
+            if (trim($skillEntity->getPackageName()) === '') {
+                // 不导出项目文件时没有 metadata 可回填包名，空包名版本会阻断引用它的员工发布
+                $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => '技能缺少 package_name，请完善技能信息后重试']);
+            } elseif (empty($skillEntity->getFileKey())) {
                 $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => '技能文件不存在']);
             } else {
                 $version = $this->skillVersionDomainService->finalizePreparedSkill($dataIsolation, (int) $versionEntity->getId(), (string) $skillEntity->getFileKey());
@@ -926,9 +931,9 @@ class SkillAppService extends AbstractSkillAppService
             } elseif (in_array($sandboxStatus, ['COMPLETED', 'SUCCESS'], true) && ($result['file_key'] ?? '') !== '') {
                 Db::beginTransaction();
                 try {
-                    $version = $this->skillVersionDomainService->finalizePreparedSkill($dataIsolation, (int) $status['version_id'], (string) $result['file_key']);
-                    $skill = $this->skillDomainService->findSkillByCode($dataIsolation, $code);
                     $packageName = (string) ($result['metadata']['package_name'] ?? '');
+                    $version = $this->skillVersionDomainService->finalizePreparedSkill($dataIsolation, (int) $status['version_id'], (string) $result['file_key'], $packageName !== '' ? $packageName : null);
+                    $skill = $this->skillDomainService->findSkillByCode($dataIsolation, $code);
                     if ($packageName !== '') {
                         $skill->setPackageName($packageName);
                     }
@@ -1173,6 +1178,14 @@ class SkillAppService extends AbstractSkillAppService
         $requestedCodes = array_values(array_unique(array_filter($filterCodes)));
 
         $accessibleSkillCodes = $this->getAccessibleSkillCodes($dataIsolation);
+        if ($requestDTO->agentCode !== null && $requestDTO->agentCode !== '') {
+            $boundCodes = $this->agentAppService->getDownloadableBoundSkillCodes(
+                $userAuthorization,
+                $requestDTO->agentCode,
+                $requestDTO->agentDraft
+            );
+            $accessibleSkillCodes = array_values(array_unique(array_merge($accessibleSkillCodes, $boundCodes)));
+        }
 
         if ($requestedCodes) {
             $accessibleSkillCodes = array_values(array_intersect($requestedCodes, $accessibleSkillCodes));
@@ -2263,6 +2276,11 @@ class SkillAppService extends AbstractSkillAppService
             if ($packageName !== '') {
                 $skillEntity->setPackageName($packageName);
             }
+        }
+
+        if (trim($skillEntity->getPackageName()) === '') {
+            // 空包名版本会阻断引用它的员工发布，发布前必须能从 skill_config.yaml 解析出包名
+            ExceptionBuilder::throw(SkillErrorCode::PACKAGE_NAME_REQUIRED, 'skill.package_name_required');
         }
 
         if (empty($skillEntity->getFileKey())) {

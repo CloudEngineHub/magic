@@ -18,6 +18,7 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 		renderChildren = true,
 		onToggle,
 		onSelect,
+		renderLeading,
 		renderNode,
 		onContextMenu,
 		onDoubleClick,
@@ -28,6 +29,13 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 	const isExpanded = expandedIds.has(node.id)
 	const isSelected = selectedIds?.includes(node.id) ?? false
 	const isHovered = hoveredIds?.includes(node.id) ?? false
+	const nodeContext = {
+		noHoverClassName: styles.noHover,
+		noActiveClassName: styles.noActive,
+		showOnHoverClassName: styles.showOnHover,
+		isExpanded,
+		isSelected,
+	}
 
 	const handleToggle = useCallback(
 		(e: React.MouseEvent) => {
@@ -42,9 +50,12 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 	const handleSelect = useCallback(
 		(e: React.MouseEvent) => {
 			e.stopPropagation()
-			// 如果点击的是展开/收起箭头，不触发选中
+			// 如果点击的是展开/收起箭头或前置操作区，不触发选中
 			const target = e.target as HTMLElement
-			if (target.closest(`.${styles.treeNodeToggle}`)) {
+			if (
+				target.closest(`.${styles.treeNodeToggle}`) ||
+				target.closest(`.${styles.treeNodeLeading}`)
+			) {
 				return
 			}
 			const isMultiSelect = isMultiSelectEvent(e)
@@ -69,10 +80,11 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 	const handleDoubleClick = useCallback(
 		(e: React.MouseEvent) => {
 			e.stopPropagation()
-			// 如果双击的是展开/收起箭头，不触发双击事件
+			// 展开箭头、前置勾选区、媒体预览内容不触发行级双击
 			const target = e.target as HTMLElement
 			if (
 				target.closest(`.${styles.treeNodeToggle}`) ||
+				target.closest(`.${styles.treeNodeLeading}`) ||
 				target.closest("[data-media-preview-content]")
 			) {
 				return
@@ -153,6 +165,11 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 				onMouseEnter={handleMouseEnter}
 				onMouseLeave={handleMouseLeave}
 			>
+				{renderLeading ? (
+					<span className={styles.treeNodeLeading}>
+						{renderLeading(node, nodeContext)}
+					</span>
+				) : null}
 				{hasChildren && (
 					<IconButton className={styles.treeNodeToggle} onClick={handleToggle}>
 						<ChevronRightIcon
@@ -164,17 +181,12 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 						/>
 					</IconButton>
 				)}
-				{!hasChildren && <span className={styles.treeNodeTogglePlaceholder} />}
+				{/* Leading checkbox already occupies the left slot; skip empty toggle spacer so checkbox→icon gap stays natural. */}
+				{!hasChildren && !renderLeading && (
+					<span className={styles.treeNodeTogglePlaceholder} />
+				)}
 				<span className={styles.treeNodeLabel}>
-					{renderNode
-						? renderNode(node, {
-								noHoverClassName: styles.noHover,
-								noActiveClassName: styles.noActive,
-								showOnHoverClassName: styles.showOnHover,
-								isExpanded,
-								isSelected,
-							})
-						: node.label}
+					{renderNode ? renderNode(node, nodeContext) : node.label}
 				</span>
 			</div>
 			{renderChildren && hasChildren && node.children && (
@@ -197,6 +209,7 @@ export default function TreeNodeItem<T extends TreeData = TreeData>(props: TreeN
 								renderChildren={renderChildren}
 								onToggle={onToggle}
 								onSelect={onSelect}
+								renderLeading={renderLeading}
 								renderNode={renderNode}
 								onContextMenu={onContextMenu}
 								onDoubleClick={onDoubleClick}

@@ -14,6 +14,11 @@ export function getMentionItemSelectionKey(item: MentionItem): string {
 	return `${item.type}:${item.id}`
 }
 
+/** A folder represents a navigation target, even when a host omits `isFolder`. */
+export function isMentionFolderItem(item: MentionItem): boolean {
+	return item.isFolder === true || item.type === MentionItemType.FOLDER
+}
+
 export function canTogglePendingItem(item: MentionItem): boolean {
 	if (item.type === MentionItemType.TITLE || item.type === MentionItemType.DIVIDER) return false
 	if (item.unSelectable) return false
@@ -50,6 +55,8 @@ export function inferRootEntryIdFromItem(item: MentionItem): string | null {
 			return (item.data as AgentMentionData | undefined)?.agent_source === "digital_employee"
 				? BuiltinRootId.DIGITAL_EMPLOYEES
 				: BuiltinRootId.AGENTS
+		case MentionItemType.MICRO_APP:
+			return BuiltinRootId.MICRO_APPS
 		case MentionItemType.SKILL:
 			return BuiltinRootId.SKILLS
 		case MentionItemType.TOOL:

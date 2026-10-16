@@ -10,6 +10,7 @@ import type {
 import type { CrewI18nText } from "@/apis/modules/crew"
 import { buildCrewI18nText } from "@/apis/modules/crew"
 import { CREW_SKILLS_TAB, type CrewSkillsTab } from "../../../store"
+import { skillsService } from "@/services/skills/SkillsService"
 
 const SKILLS_PANEL_PAGE_SIZE = 20
 /** Debounce after pause; throttle caps request rate for auto-search. */
@@ -371,7 +372,8 @@ export function useSkillsPanel({
 			try {
 				if (activeTab === CREW_SKILLS_TAB.Library) {
 					if (!skill.isInUserLibrary) {
-						await SkillsApi.addSkillFromStore({ store_skill_id: skill.id })
+						// The install API may return no identity, so preserve the code already shown in the row.
+						await skillsService.addSkillFromStore(skill.id, skillCode)
 					}
 
 					const rawIndex = rawLibrary.findIndex((item) => item.skillCode === skillCode)

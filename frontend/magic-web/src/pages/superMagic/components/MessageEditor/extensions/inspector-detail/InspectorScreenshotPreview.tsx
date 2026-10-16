@@ -7,6 +7,8 @@ import {
 	type UploadFileMentionData,
 } from "@/components/business/MentionPanel/types"
 import { MediaPreviewTooltip } from "@/components/base/MediaPreview"
+import { useFileMediaSource } from "@/pages/superMagic/services/useFileMediaSource"
+import { downloadFile } from "@/utils/file"
 import { useFileUrl } from "@/pages/superMagic/hooks/useFileUrl"
 import { htmlScreenshotUploadService } from "@/pages/superMagic/components/MessageEditor/services/HtmlScreenshotUploadService"
 
@@ -26,6 +28,17 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 	const isLocalScreenshot =
 		mention.type === MentionItemType.UPLOAD_FILE &&
 		Boolean((data as UploadFileMentionData | undefined)?.is_html_screenshot)
+	const remoteSource = useFileMediaSource(
+		data && !isLocalScreenshot
+			? {
+					spaceType: "project",
+					fileId: data.file_id,
+					fileName: data.file_name,
+					fileExtension: data.file_extension,
+				}
+			: null,
+		{ loadThumbnail: false },
+	)
 	const {
 		fileUrl,
 		isLoading: remoteLoading,
@@ -126,15 +139,29 @@ export function InspectorScreenshotPreview({ mention, trigger }: InspectorScreen
 			mediaType="image"
 			fileName={data.file_name}
 			previewUrl={previewUrl}
+			resourceKey={remoteSource?.resourceKey ?? `screenshot:${storageId}`}
+			imageActions={
+				isLocalScreenshot
+					? {
+							load: async ({ signal }) =>
+								signal.aborted ? null : { url: previewUrl },
+							onDownload: async () => {
+								const result = await downloadFile(
+									previewUrl,
+									data.file_name,
+									data.file_extension,
+								)
+								if (!result.success) throw new Error("Screenshot download failed")
+							},
+						}
+					: remoteSource?.imageActions
+			}
 			errorMessage={t("common.fileUrlFetchFailed", "预览加载失败")}
-			closeLabel={t("common.close", "关闭")}
 			audioLabels={{
 				play: t("common.play", "播放"),
 				pause: t("common.pause", "暂停"),
 				progress: t("common.progress", "播放进度"),
 			}}
-			maxWidth={250}
-			maxHeight={250}
 		>
 			{previewTrigger}
 		</MediaPreviewTooltip>

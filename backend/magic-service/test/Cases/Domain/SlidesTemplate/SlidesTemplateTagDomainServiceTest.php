@@ -23,6 +23,7 @@ use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
+use Psr\SimpleCache\CacheInterface;
 use ReflectionClass;
 use RuntimeException;
 
@@ -150,7 +151,31 @@ class SlidesTemplateTagDomainServiceTest extends TestCase
         $this->assertSame('purpose-annual-report', $tags[0]->getCode());
     }
 
-    private function makeService(CapturingSlidesTemplateTagRepository $repository): SlidesTemplateTagDomainService
+    public function testQueriesCachedVisibleGroupsUsesCacheAroundRealtimeQuery(): void
+    {
+        $repository = new CapturingSlidesTemplateTagRepository();
+        $group = $this->makeGroup();
+        $repository->visibleGroups = [$group];
+
+        $cache = $this->createMock(CacheInterface::class);
+        $cache->expects($this->once())
+            ->method('get')
+            ->with($this->isType('string'))
+            ->willReturn(null);
+        $cache->expects($this->once())
+            ->method('set')
+            ->with($this->isType('string'), [$group], 60)
+            ->willReturn(true);
+
+        $groups = $this->makeService($repository, $cache)->queriesCachedVisibleGroupsWithTagsByCategory(
+            $this->makeDataIsolation(),
+            'PPT-CATE-work',
+        );
+
+        $this->assertSame([$group], $groups);
+    }
+
+    private function makeService(CapturingSlidesTemplateTagRepository $repository, ?CacheInterface $cache = null): SlidesTemplateTagDomainService
     {
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn(new NullLogger());
@@ -158,6 +183,7 @@ class SlidesTemplateTagDomainServiceTest extends TestCase
             $repository,
             new NullSlidesTemplateTagRelationRepository(),
             $loggerFactory,
+            $cache ?? $this->createMock(CacheInterface::class),
         );
     }
 
@@ -207,6 +233,9 @@ class CapturingSlidesTemplateTagRepository implements SlidesTemplateTagRepositor
     /** @var SlidesTemplateTagEntity[] */
     public array $entitiesByCodes = [];
 
+    /** @var SlidesTemplateTagEntity[] */
+    public array $visibleGroups = [];
+
     public function findById(SlidesTemplateDataIsolation $dataIsolation, int|string $id): ?SlidesTemplateTagEntity
     {
         return $this->entityToFind;
@@ -234,7 +263,7 @@ class CapturingSlidesTemplateTagRepository implements SlidesTemplateTagRepositor
 
     public function queriesVisibleGroupsWithTagsByCategory(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): array
     {
-        return [];
+        return $this->visibleGroups;
     }
 
     public function queriesTree(SlidesTemplateDataIsolation $dataIsolation): array

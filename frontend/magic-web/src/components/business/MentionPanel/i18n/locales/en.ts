@@ -50,6 +50,7 @@ export const en: I18nTexts = {
 		digitalEmployees: "Digital Employees",
 		flows: "Flows",
 		agents: "Agents",
+		microApps: "Micro apps",
 		skills: "Skills",
 		tools: "Tools",
 		canvasElements: "Canvas Elements",
@@ -65,6 +66,12 @@ export const en: I18nTexts = {
 	},
 	mobileSelectedItemsLabel: "Selected",
 	mobileSelectedItemsTitle: "Selected",
+	selectionSummary: {
+		selected: "Selected",
+		image: "Images",
+		video: "Videos",
+		audio: "Audio",
+	},
 
 	// Error messages
 	errorMessages: {

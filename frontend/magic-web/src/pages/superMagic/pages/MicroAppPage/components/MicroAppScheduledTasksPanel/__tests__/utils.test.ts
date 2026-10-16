@@ -50,6 +50,99 @@ describe("serializeScheduledTaskModel", () => {
 })
 
 describe("formatTaskSchedule", () => {
+	it("binds runtime tasks and prepends one trusted mention on every save", () => {
+		const existingMention = {
+			type: "mention" as const,
+			attrs: { type: "micro_app" as const, data: { app_id: "app-1", app_name: "Old name" } },
+		}
+		const otherMention = {
+			type: "mention" as const,
+			attrs: { type: "micro_app" as const, data: { app_id: "app-2", app_name: "Other app" } },
+		}
+		const originalContent = {
+			type: "doc",
+			content: [
+				{
+					type: "paragraph",
+					content: [
+						{ type: "text", text: "Run report" },
+						existingMention,
+						otherMention,
+						existingMention,
+					],
+				},
+			],
+		}
+		const task: ScheduledTask.UpdateTask = {
+			task_name: "Report",
+			message_type: "rich_text",
+			enabled: 1,
+			workspace_id: "source-workspace",
+			project_id: "source-project",
+			topic_id: "",
+			time_config: { type: ScheduledTask.ScheduleType.Daily, time: "09:00" },
+			message_content: {
+				content: JSON.stringify(originalContent),
+				extra: {
+					super_agent: {
+						mentions: [existingMention, otherMention, existingMention],
+						model: null,
+					},
+				},
+			},
+		}
+		const context = {
+			workspaceId: "runtime-workspace",
+			projectId: "runtime-project",
+			microAppId: "app-1",
+			microAppName: "Current app",
+		}
+		const result = applyMicroAppScheduledTaskContext(task, context)
+		const expectedMention = {
+			...existingMention,
+			attrs: { ...existingMention.attrs, data: { app_id: "app-1", app_name: "Current app" } },
+		}
+		expect(JSON.parse(result.message_content.content as string).content[0].content).toEqual([
+			expectedMention,
+			{ type: "text", text: "Run report" },
+			otherMention,
+		])
+		expect(result.message_content.extra?.super_agent.mentions).toEqual([
+			expectedMention,
+			otherMention,
+		])
+		expect(result).toMatchObject({
+			workspace_id: "runtime-workspace",
+			project_id: "runtime-project",
+		})
+		expect(applyMicroAppScheduledTaskContext(result, context)).toEqual(result)
+		expect(JSON.parse(task.message_content.content as string)).toEqual(originalContent)
+	})
+
+	it("puts the mention before a leading heading when creating a runtime task", () => {
+		const task = {
+			message_content: {
+				content: {
+					type: "doc",
+					content: [{ type: "heading", content: [{ type: "text", text: "Report" }] }],
+				},
+			},
+		} as ScheduledTask.UpdateTask
+		const result = applyMicroAppScheduledTaskContext(task, {
+			workspaceId: "w",
+			projectId: "p",
+			microAppId: "app-1",
+		})
+		const content = JSON.parse(result.message_content.content as string)
+		expect(content.content[0]).toMatchObject({
+			type: "paragraph",
+			content: [{ type: "mention", attrs: { data: { app_id: "app-1", app_name: "app-1" } } }],
+		})
+		expect(content.content[1]).toEqual(
+			(task.message_content.content as { content: unknown[] }).content[0],
+		)
+	})
+
 	it("formats weekly tasks with a localized weekday", () => {
 		expect(
 			formatTaskSchedule(

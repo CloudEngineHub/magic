@@ -349,6 +349,53 @@ class ToolCallExecutor:
                     result,
                     result.execution_time,
                 )
+            except asyncio.CancelledError:
+                # 用户中断（或上层取消）。CancelledError 属 BaseException，不会被下面的
+                # except Exception 捕获；若不在此补发终态事件，工具卡片会永远停在
+                # before_tool_call 的“进行中”状态（例如一直显示“正在生成图像”）。
+                result_content_mode = ToolResultContentMode.GLOBAL
+                cancelled_execution_time = (
+                    time.time() - tool_start_time if "tool_start_time" in locals() else 0.0
+                )
+                cancelled_result = ToolResult(
+                    content=i18n.translate(
+                        "tool.call_cancelled_content",
+                        category="tool.messages",
+                        tool_name=tool_name,
+                    ),
+                    tool_call_id=tool_call.id,
+                    name=tool_name,
+                    ok=False,
+                    execution_time=cancelled_execution_time,
+                    # extra_info 只在进程内流转，用于把“被取消”这一语义带给消息工厂，
+                    # 使其渲染“已终止”而不是通用的“遇到问题”。
+                    extra_info={"cancelled": True},
+                )
+                if tool_context is not None and tool_arguments_dict is not None:
+                    try:
+                        # shield：补发期间若再次被取消，事件发送仍能跑完
+                        await asyncio.shield(
+                            ToolCallEventManager.trigger_after_tool_call(
+                                agent_context,
+                                openai_tool_call_for_event,
+                                tool_context,
+                                tool_name,
+                                tool_arguments_dict,
+                                cancelled_result,
+                                cancelled_execution_time,
+                            )
+                        )
+                    except Exception as event_error:
+                        logger.error(
+                            f"中断时补发工具终态事件失败: {tool_name}, 错误: {event_error}",
+                            exc_info=True,
+                        )
+                else:
+                    logger.warning(
+                        f"中断时缺少 tool_context/arguments，无法为 {tool_name} 补发终态事件"
+                    )
+                # 终态事件已发出，继续向上传播取消
+                raise
             except Exception as e:
                 result_content_mode = ToolResultContentMode.GLOBAL
                 # 计算执行时间（即使出错）

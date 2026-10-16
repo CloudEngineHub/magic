@@ -27,6 +27,7 @@ import projectFilesStore from "@/stores/projectFiles"
 import { isInApp } from "@/pages/superMagicMobile/utils/mobile"
 import { userStore } from "@/models/user"
 import { flattenAttachments } from "../TopicFilesButton/hooks"
+import { isFreePlanFromSubscription } from "./utils/sharePlanRestrictions"
 
 const useStyles = createStyles(({ css, token }) => ({
 	shareModal: {
@@ -89,7 +90,7 @@ export default memo(function ShareModel(props: ShareModalProps) {
 	} = props
 
 	// Check if user is in free plan
-	const isFreePlan = userStore.user.organizationSubscriptionInfo?.is_paid_plan === false
+	const isFreePlan = isFreePlanFromSubscription(userStore.user.organizationSubscriptionInfo)
 
 	// 默认的取消分享方法
 	const handleCancelShareDefault = useCallback(

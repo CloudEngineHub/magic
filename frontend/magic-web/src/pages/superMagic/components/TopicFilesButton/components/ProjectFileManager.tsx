@@ -8,6 +8,7 @@ import { requestProjectAttachmentsFullRefresh } from "../../../services/attachme
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import type { ProjectFileManagerSnapshot } from "@/models/config/repositories/SuperProjectStateTypes"
 import type { FileManagerStateChangeOptions } from "../../Detail/components/FilesViewer/types"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export interface ProjectFileManagerProps {
 	projectId: string
@@ -26,6 +27,7 @@ export interface ProjectFileManagerProps {
 	) => void
 	isActive?: boolean
 	onFileClick: (file: AttachmentItem) => void
+	projectFilesStore?: ProjectFilesStore
 }
 
 /** 项目入口只适配身份与附件；管理器在项目及用户切换时重新建立交互状态。 */

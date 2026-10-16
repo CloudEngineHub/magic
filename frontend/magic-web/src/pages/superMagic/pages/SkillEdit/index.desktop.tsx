@@ -31,7 +31,7 @@ import { useDeferUntilFileTabsCacheLoaded } from "@/pages/superMagic/hooks/useDe
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "@/pages/superMagic/hooks/useProjectAttachmentsChangeRealtime"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
-import { loadProjectAttachments } from "@/pages/superMagic/services"
+import SuperMagicService, { loadProjectAttachments } from "@/pages/superMagic/services"
 import {
 	normalizeUpdateAttachmentsPayload,
 	releaseAttachmentsRefreshWaitersWithoutFetch,
@@ -48,10 +48,11 @@ import {
 	runAsyncPublish,
 } from "@/pages/superMagic/utils/asyncPublish"
 import {
-	FileActionVisibilityProvider,
-	HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS,
-	VIEWER_FILE_ACTIONS,
-} from "@/pages/superMagic/providers/file-action-visibility-provider"
+	FileAccessProvider,
+	EDITOR_FILE_CONFIG,
+	VIEWER_FILE_CONFIG,
+} from "@/pages/superMagic/providers/FileAccessProvider"
+import { HostConversationProvider } from "@/pages/superMagic/contexts/HostConversationContext"
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import { SkillEditStoreProvider, useSkillEditStore } from "./context"
 import QuickActionCards from "./components/QuickActionCards"
@@ -355,16 +356,12 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 				return
 			}
 
-			const temporaryToken =
-				(window as Window & { temporary_token?: string }).temporary_token || ""
-
 			let didLoad = false
 			pubsub.publish(PubSubEvents.Update_Attachments_Loading, true)
 			withAttachmentsRefreshWaitersResolved(
 				projectId,
 				loadProjectAttachments({
 					projectId,
-					temporaryToken,
 				})
 					.then((res) => {
 						store.projectFilesStore.setWorkspaceFileTree(res.tree)
@@ -395,6 +392,13 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 		setIsInitialAttachmentsLoaded(false)
 		void store.initFromSkillCode(skillCode)
 	}, [skillCode, store])
+
+	const visitScope = useRef({})
+	useEffect(() => {
+		if (!store.project || store.loading || store.error || store.currentSkillCode !== skillCode)
+			return
+		SuperMagicService.project.recordProjectVisit(store.project, visitScope.current)
+	}, [skillCode, store, store.project, store.loading, store.error, store.currentSkillCode])
 
 	useEffect(() => {
 		store.projectFilesStore.setSelectedProject(store.project)
@@ -852,178 +856,182 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 	}
 
 	return (
-		<FileActionVisibilityProvider
-			value={isViewer ? VIEWER_FILE_ACTIONS : HIDE_COPY_MOVE_SHARE_FILE_AND_TOPIC_ACTIONS}
-		>
-			<>
-				<TopicDesktopPanels
-					containerClassName="flex h-full w-full min-w-0 items-center overflow-hidden"
-					detailPanelClassName="flex h-full flex-col"
-					isDetailPanelFullscreen={isDetailPanelFullscreen}
-					keepDetailMountedWhenHidden
-					historyLayout={
-						isViewer || isPublishPanelVisible
-							? undefined
-							: {
-									isOpen: isTopicHistoryPanelOpen,
-									onClose: closeTopicHistoryPanel,
-									onToggle: toggleTopicHistoryPanel,
-									renderPanel: ({
-										isConversationPanelCollapsed,
-										onExpandConversationPanel,
-										onClose,
-										closeButtonRef,
-									}) => (
-										<MessageHeaderTopicHistoryPanel
-											selectedProject={selectedProject}
-											topicStore={topicStore}
-											topicActions={topicActions}
-											isConversationPanelCollapsed={
-												isConversationPanelCollapsed
-											}
-											onExpandConversationPanel={onExpandConversationPanel}
-											hideTopicListModeIcon
-											onClose={onClose}
-											closeButtonRef={closeButtonRef}
-										/>
-									),
-								}
-					}
-					sidebar={
-						<div
-							className="flex h-full flex-col gap-1"
-							data-testid="skill-edit-sidebar"
-						>
-							<div className="flex shrink-0 items-center gap-1">
-								<Button
-									variant="outline"
-									size="icon"
-									className="h-9 w-9 rounded-lg bg-background shadow-xs"
-									onClick={handleBack}
-									data-testid="crew-edit-back-button"
-								>
-									<ArrowLeft className="h-4 w-4" />
-								</Button>
-								<button
-									type="button"
-									className="flex h-9 flex-1 items-center gap-1.5 overflow-hidden rounded-lg border border-border bg-background px-2 py-1.5 text-left shadow-xs transition-colors hover:bg-accent/30"
-									onClick={handleOpenSettingsDialog}
-									disabled={isViewer}
-									data-testid="skill-name-input"
-								>
-									<div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-sm">
-										{store.skill?.logo ? (
-											<img
-												src={store.skill?.logo}
-												alt=""
-												className="h-full w-full object-cover"
-												data-testid="index-desktop-image"
+		<HostConversationProvider selectedProject={selectedProject} topicStore={topicStore}>
+			<FileAccessProvider {...(isViewer ? VIEWER_FILE_CONFIG : EDITOR_FILE_CONFIG)}>
+				<>
+					<TopicDesktopPanels
+						containerClassName="flex h-full w-full min-w-0 items-center overflow-hidden"
+						detailPanelClassName="flex h-full flex-col"
+						isDetailPanelFullscreen={isDetailPanelFullscreen}
+						keepDetailMountedWhenHidden
+						historyLayout={
+							isViewer || isPublishPanelVisible
+								? undefined
+								: {
+										isOpen: isTopicHistoryPanelOpen,
+										onClose: closeTopicHistoryPanel,
+										onToggle: toggleTopicHistoryPanel,
+										renderPanel: ({
+											isConversationPanelCollapsed,
+											onExpandConversationPanel,
+											onClose,
+											closeButtonRef,
+										}) => (
+											<MessageHeaderTopicHistoryPanel
+												selectedProject={selectedProject}
+												topicStore={topicStore}
+												topicActions={topicActions}
+												isConversationPanelCollapsed={
+													isConversationPanelCollapsed
+												}
+												onExpandConversationPanel={
+													onExpandConversationPanel
+												}
+												hideTopicListModeIcon
+												hideTopicTypeFilter
+												onClose={onClose}
+												closeButtonRef={closeButtonRef}
 											/>
-										) : (
-											<RoleIcon className="h-3.5 w-3.5" />
+										),
+									}
+						}
+						sidebar={
+							<div
+								className="flex h-full flex-col gap-1"
+								data-testid="skill-edit-sidebar"
+							>
+								<div className="flex shrink-0 items-center gap-1">
+									<Button
+										variant="outline"
+										size="icon"
+										className="h-9 w-9 rounded-lg bg-background shadow-xs"
+										onClick={handleBack}
+										data-testid="crew-edit-back-button"
+									>
+										<ArrowLeft className="h-4 w-4" />
+									</Button>
+									<button
+										type="button"
+										className="flex h-9 flex-1 items-center gap-1.5 overflow-hidden rounded-lg border border-border bg-background px-2 py-1.5 text-left shadow-xs transition-colors hover:bg-accent/30"
+										onClick={handleOpenSettingsDialog}
+										disabled={isViewer}
+										data-testid="skill-name-input"
+									>
+										<div className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-sm">
+											{store.skill?.logo ? (
+												<img
+													src={store.skill?.logo}
+													alt=""
+													className="h-full w-full object-cover"
+													data-testid="index-desktop-image"
+												/>
+											) : (
+												<RoleIcon className="h-3.5 w-3.5" />
+											)}
+										</div>
+										<div className="min-w-0 flex-1">
+											<p className="truncate text-sm font-medium text-sidebar-foreground">
+												{skillDisplayName}
+											</p>
+										</div>
+									</button>
+								</div>
+
+								<div className="flex-1 overflow-hidden rounded-lg border border-border bg-background pt-1">
+									<SkillFilesPanel
+										readOnly={isViewer}
+										attachments={attachments}
+										setUserSelectDetail={setUserSelectDetail}
+										onFileClick={handleFileClickWithPanel}
+										projectId={store.project?.id}
+										activeFileId={activeFileId}
+										title={tSuper("topicFiles.fileTitle")}
+										onAttachmentsChange={
+											store.projectFilesStore.setWorkspaceFileTree
+										}
+										selectedProject={store.project}
+										selectedWorkspace={skillsWorkspace}
+									/>
+								</div>
+
+								{store.skill && (
+									<QuickActionCards
+										settingsLabel={t("skillEditPage.actions.settings")}
+										publishLabel={t("skillEditPage.actions.publish")}
+										unpublishedChangesLabel={t(
+											"skillEditPage.actions.unpublishedChanges",
 										)}
-									</div>
-									<div className="min-w-0 flex-1">
-										<p className="truncate text-sm font-medium text-sidebar-foreground">
-											{skillDisplayName}
-										</p>
-									</div>
-								</button>
+										publishStatus={store.skill?.publishStatus}
+										isPublishPrepareLoading={
+											isPublishPrepareLoading ||
+											isEnsuringSkillConfigForPublish
+										}
+										canPublish={canOpenSkillPublishPanel}
+										hideSettings={isViewer}
+										hidePublish={isViewer}
+										activeAction={
+											isSkillIdentityDialogOpen
+												? "settings"
+												: activeQuickActionPanel
+										}
+										onSettingsClick={handleOpenSettingsDialog}
+										onPublishClick={handleOpenPublishPanel}
+										extraContent={
+											isViewer ? null : (
+												<SkillCollaboratorsQuickAction
+													skillCode={skillCode}
+													userRole={store.project?.user_role}
+												/>
+											)
+										}
+									/>
+								)}
 							</div>
-
-							<div className="flex-1 overflow-hidden rounded-lg border border-border bg-background pt-1">
-								<SkillFilesPanel
-									readOnly={isViewer}
-									attachments={attachments}
+						}
+						detailPanel={
+							isPublishPanelVisible ? (
+								<PublishPanel
+									store={publishPanelStore}
+									onClose={handleClosePublishPanel}
+									onCreateNewVersion={openPublishCreateView}
+								/>
+							) : (
+								<Detail
+									ref={detailRef}
+									disPlayDetail={userSelectDetail}
 									setUserSelectDetail={setUserSelectDetail}
-									onFileClick={handleFileClickWithPanel}
-									projectId={store.project?.id}
+									userSelectDetail={userSelectDetail}
+									attachments={attachments}
+									attachmentList={attachmentList}
 									activeFileId={activeFileId}
-									title={tSuper("topicFiles.fileTitle")}
-									onAttachmentsChange={
-										store.projectFilesStore.setWorkspaceFileTree
-									}
+									onActiveFileChange={setActiveFileId}
+									onActiveTabChange={handleActiveDetailTabChange}
+									onFullscreenChange={setIsDetailPanelFullscreen}
+									onFileTabsCacheLoaded={onFileTabsCacheLoaded}
+									allowEdit={!isViewer}
 									selectedProject={store.project}
-									selectedWorkspace={skillsWorkspace}
+									projectId={store.project?.id}
+									showFallbackWhenEmpty
 								/>
-							</div>
-
-							{store.skill && (
-								<QuickActionCards
-									settingsLabel={t("skillEditPage.actions.settings")}
-									publishLabel={t("skillEditPage.actions.publish")}
-									unpublishedChangesLabel={t(
-										"skillEditPage.actions.unpublishedChanges",
-									)}
-									publishStatus={store.skill?.publishStatus}
-									isPublishPrepareLoading={
-										isPublishPrepareLoading || isEnsuringSkillConfigForPublish
-									}
-									canPublish={canOpenSkillPublishPanel}
-									hideSettings={isViewer}
-									hidePublish={isViewer}
-									activeAction={
-										isSkillIdentityDialogOpen
-											? "settings"
-											: activeQuickActionPanel
-									}
-									onSettingsClick={handleOpenSettingsDialog}
-									onPublishClick={handleOpenPublishPanel}
-									extraContent={
-										isViewer ? null : (
-											<SkillCollaboratorsQuickAction
-												skillCode={skillCode}
-												userRole={store.project?.user_role}
-											/>
-										)
-									}
-								/>
-							)}
-						</div>
-					}
-					detailPanel={
-						isPublishPanelVisible ? (
-							<PublishPanel
-								store={publishPanelStore}
-								onClose={handleClosePublishPanel}
-								onCreateNewVersion={openPublishCreateView}
-							/>
-						) : (
-							<Detail
-								ref={detailRef}
-								disPlayDetail={userSelectDetail}
-								setUserSelectDetail={setUserSelectDetail}
-								userSelectDetail={userSelectDetail}
-								attachments={attachments}
-								attachmentList={attachmentList}
-								activeFileId={activeFileId}
-								onActiveFileChange={setActiveFileId}
-								onActiveTabChange={handleActiveDetailTabChange}
-								onFullscreenChange={setIsDetailPanelFullscreen}
-								onFileTabsCacheLoaded={onFileTabsCacheLoaded}
-								allowEdit={!isViewer}
-								selectedProject={store.project}
-								projectId={store.project?.id}
-								showFallbackWhenEmpty
-							/>
-						)
-					}
-					isReadOnly={isViewer || isPublishPanelVisible}
-					showProjectResizeHandle
-					shouldShowDetailPanel={shouldShowDetailPanel}
-					renderMessagePanel={renderMessagePanel}
-				/>
-				<EditSkillDialog
-					open={isSkillIdentityDialogOpen}
-					onOpenChange={handleSkillIdentityDialogOpenChange}
-					skillCode={skillCode}
-					onSuccess={handleSkillIdentitySaved}
-					isPrePublishMode={isPublishIdentityDialogOpen}
-					defaultNameRequiredMessage={t("skillEditPage.publishNameDialog.required")}
-				/>
-				{noticeDialog}
-			</>
-		</FileActionVisibilityProvider>
+							)
+						}
+						isReadOnly={isViewer || isPublishPanelVisible}
+						showProjectResizeHandle
+						shouldShowDetailPanel={shouldShowDetailPanel}
+						renderMessagePanel={renderMessagePanel}
+					/>
+					<EditSkillDialog
+						open={isSkillIdentityDialogOpen}
+						onOpenChange={handleSkillIdentityDialogOpenChange}
+						skillCode={skillCode}
+						onSuccess={handleSkillIdentitySaved}
+						isPrePublishMode={isPublishIdentityDialogOpen}
+						defaultNameRequiredMessage={t("skillEditPage.publishNameDialog.required")}
+					/>
+					{noticeDialog}
+				</>
+			</FileAccessProvider>
+		</HostConversationProvider>
 	)
 }
 

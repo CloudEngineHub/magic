@@ -79,6 +79,9 @@ class ModeAppService extends AbstractModeAppService
         $modeAggregateDTOs = $this->buildModeAggregateDTOs($authorization, $modeAggregates);
 
         $list = [];
+        // 多个 agent 会共用同一个聚合 DTO（如 default），按对象缓存 groups，避免重复整树 encode/decode
+        /** @var array<int, array<array-key, mixed>> $groupsCache */
+        $groupsCache = [];
         foreach ($allAgents as $agent) {
             $modeAggregateDTO = $modeAggregateDTOs[$agent->getCode()] ?? null;
             if (! $modeAggregateDTO) {
@@ -115,7 +118,7 @@ class ModeAppService extends AbstractModeAppService
                     'type' => $agent->getType()->value,
                     'category' => $agent->getCategory(),
                 ],
-                'groups' => $modeAggregateDTO->toArray()['groups'] ?? [],
+                'groups' => $this->getGroupsArrayCached($modeAggregateDTO, $groupsCache),
             ];
         }
 
@@ -255,6 +258,29 @@ class ModeAppService extends AbstractModeAppService
             'models' => $modeRuntimeData['models'],
             'groups' => $this->buildModeGroups($modeAggregateDTO),
         ];
+    }
+
+    /**
+     * 同一个聚合 DTO 只做一次 toArray（内部为 json encode + decode，开销大）。
+     * 序列化结果缺少具体类型，确认分组为数组后再写入缓存，保证引用参数的类型稳定。
+     *
+     * @param array<int, array<array-key, mixed>> $cache 以 spl_object_id 为键的分组缓存，生命周期限于单次调用
+     * @return array<array-key, mixed>
+     */
+    private function getGroupsArrayCached(ModeAggregateDTO $modeAggregateDTO, array &$cache): array
+    {
+        $key = spl_object_id($modeAggregateDTO);
+        if (isset($cache[$key])) {
+            return $cache[$key];
+        }
+
+        $groups = $modeAggregateDTO->toArray()['groups'] ?? [];
+        if (! is_array($groups)) {
+            $groups = [];
+        }
+        $cache[$key] = $groups;
+
+        return $groups;
     }
 
     /**

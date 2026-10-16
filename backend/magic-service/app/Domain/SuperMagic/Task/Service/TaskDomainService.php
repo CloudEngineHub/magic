@@ -118,10 +118,10 @@ class TaskDomainService
         if (empty($topicEntity->getTopicMode())) {
             $topicEntity->setTopicMode($topicMode);
             $data['topic_mode'] = $topicMode;
-            if (! empty($agentCode)) {
-                $topicEntity->setAgentCode($agentCode);
-                $data['agent_code'] = $agentCode;
-            }
+        }
+        if (! empty($agentCode)) {
+            $topicEntity->setAgentCode($agentCode);
+            $data['agent_code'] = $agentCode;
         }
         $this->topicRepository->updateTopicByCondition($conditions, $data);
         return $taskEntity;
@@ -512,6 +512,16 @@ class TaskDomainService
     }
 
     /**
+     * Get topic messages after a cursor ID.
+     *
+     * @return array{list: TaskMessageEntity[], has_more: bool, next_cursor: ?string}
+     */
+    public function getMessagesByTopicIdAfterId(int $topicId, ?int $afterId = null, int $limit = 20, bool $showInUi = true): array
+    {
+        return $this->messageRepository->findByTopicIdAfterId($topicId, $afterId, $limit, $showInUi);
+    }
+
+    /**
      * Get topic attachment list.
      *
      * @param int $topicId Topic ID
@@ -543,11 +553,6 @@ class TaskDomainService
     public function getTaskAttachmentsByProjectId(int $projectId, DataIsolation $dataIsolation, int $page = 1, int $pageSize = 20, array $fileType = [], string $storageType = '', ?string $updatedAfter = null): array
     {
         return $this->taskFileRepository->getByProjectId($projectId, $page, $pageSize, $fileType, $storageType, $updatedAfter);
-    }
-
-    public function getTaskBySandboxId(string $sandboxId): ?TaskEntity
-    {
-        return $this->taskRepository->getTaskBySandboxId($sandboxId);
     }
 
     /**
@@ -631,11 +636,11 @@ class TaskDomainService
     }
 
     /**
-     * Update task status by sandbox IDs.
+     * Update task status by topic IDs.
      * Only updates tasks that are in active status (waiting or running) to prevent
      * accidentally updating already completed or error tasks.
      */
-    public function updateTaskStatusBySandboxIds(array $sandboxIds, TaskStatus $taskStatus, ?string $errMsg = null): int
+    public function updateTaskStatusByTopicIds(array $topicIds, TaskStatus $taskStatus, ?string $errMsg = null): int
     {
         $finishedTime = null;
         if ($taskStatus->isFinal()) {
@@ -643,7 +648,7 @@ class TaskDomainService
         }
         // Only update tasks with active statuses (waiting or running)
         $activeStatuses = [TaskStatus::WAITING->value, TaskStatus::RUNNING->value];
-        return $this->taskRepository->updateTaskStatusBySandboxIds($sandboxIds, $taskStatus->value, $errMsg, $finishedTime, $activeStatuses);
+        return $this->taskRepository->updateTaskStatusByTopicIds($topicIds, $taskStatus->value, $errMsg, $finishedTime, $activeStatuses);
     }
 
     public function executeScriptTask(DataIsolation $dataIsolation, ScriptTaskEntity $scriptTaskEntity): void

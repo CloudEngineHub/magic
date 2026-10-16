@@ -143,12 +143,8 @@ Background mode rules (allow_background=True):
 
             logger.debug(f"Executing command: {params.command}, working directory: {work_dir}")
 
-            before_events, after_events = ShellCommandParser.parse_file_operations(params.command, work_dir)
-            for file_path, event_type in before_events:
-                try:
-                    await self._dispatch_file_event(tool_context, file_path, event_type)
-                except Exception as e:
-                    logger.warning(f"Failed to dispatch before-execution event: {e}")
+            # 文件快照由 MagicFS 维护；这里只记录附件候选，不预发尚未执行的文件事件。
+            file_changes = await ShellCommandParser.prepare_file_operations(params.command, work_dir)
 
             extra_env = self._build_shell_extra_env(tool_context)
             read_file_path = extract_read_file_path(params.command, work_dir)
@@ -196,18 +192,18 @@ Background mode rules (allow_background=True):
                 result.horizon_hint = None
 
             # 命令实际执行完成（exit_code >= 0），即使返回非零退出码也视为工具调用成功
-            command_ok = result.ok
             if result.exit_code >= 0:
                 result.ok = True
 
             apply_tool_detail_markers(result)
 
-            if command_ok:
-                for file_path, event_type in after_events:
-                    try:
-                        await self._dispatch_file_event(tool_context, file_path, event_type)
-                    except Exception as e:
-                        logger.warning(f"Failed to dispatch after-execution event: {e}")
+            if result.exit_code == 0:
+                try:
+                    file_events = await ShellCommandParser.collect_file_events(file_changes)
+                    for file_event in file_events:
+                        await self._dispatch_file_event(tool_context, str(file_event.path), file_event.event_type)
+                except Exception as e:
+                    logger.warning(f"Failed to dispatch after-execution event: {e}")
 
             if (
                 not params.cwd

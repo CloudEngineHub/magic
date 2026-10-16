@@ -19,18 +19,7 @@ let websocket = null;
 let isWebSocketConnected = false;
 let wsOpenCallbacks = []; // 等待连接建立的 Promise 回调队列
 
-// LLM token 流走 Magic Service 的 Socket.IO；HTTP WebSocket 只负责事件消息。
-let socketIoClient = null;
-let socketIoConfigKey = '';
-let isSocketIoConnected = false;
-let socketIoReconnectTimer = null;
-let socketIoReconnectAttempt = 0;
-const SOCKETIO_RECONNECT_BASE_MS = 1000;
-const SOCKETIO_RECONNECT_MAX_MS = 30000;
-let socketIoHeartbeatTimer = null;
-let socketIoPingInterval = 25000;
-let socketIoPingTimeout = 20000;
-let socketIoAuthContext = {};
+// V2 chunk 和事件消息都走本地 /subscribe WebSocket。
 
 // 确保 WebSocket 已连接，未连接则自动发起连接并等待
 function ensureWebSocketConnected() {
@@ -335,17 +324,145 @@ function compactRestoredChatLog(entries) {
             result[existingIndex] = nextEntry;
         }
     }
+    return normalizeAssistantLogOrder(result);
+}
+
+const ASSISTANT_LOG_TYPES = new Set(['thinking', 'ai', 'tool_call']);
+const ASSISTANT_TYPE_ORDER = { thinking: 0, ai: 1, tool_call: 2 };
+
+function isAssistantLogEntry(entry) {
+    return Boolean(entry && ASSISTANT_LOG_TYPES.has(entry.type));
+}
+
+function getAssistantLogReplyKey(entry) {
+    if (!entry) return '';
+    if (entry.type === 'tool_call') return String(entry.replyKey || '');
+    return String(entry.key || '');
+}
+
+// 回放按 chatLog 到达顺序 append，工具常比正文先入日志，刷新后就会跑到正文上面。
+// 按用户消息分段，把同一轮的思考 / 正文 / 工具排回展示顺序；event 等其它条目留在原槽位。
+function normalizeAssistantLogOrder(entries) {
+    const result = [];
+    let segment = [];
+    const flush = () => {
+        if (segment.length) result.push(...reorderAssistantSegment(segment));
+        segment = [];
+    };
+    for (const entry of entries) {
+        if (entry && entry.type === 'client') {
+            flush();
+            result.push(entry);
+            continue;
+        }
+        segment.push(entry);
+    }
+    flush();
+    return result;
+}
+
+function reorderAssistantSegment(segment) {
+    const slots = [];
+    const assistants = [];
+    for (let i = 0; i < segment.length; i++) {
+        if (!isAssistantLogEntry(segment[i])) continue;
+        slots.push(i);
+        assistants.push(segment[i]);
+    }
+    if (slots.length < 2) return segment;
+    const ordered = orderAssistantLogEntries(assistants);
+    const next = segment.slice();
+    slots.forEach((slot, index) => {
+        next[slot] = ordered[index];
+    });
+    return next;
+}
+
+function orderAssistantLogEntries(items) {
+    const keyedCount = items.filter((entry) => getAssistantLogReplyKey(entry)).length;
+    if (keyedCount === items.length) {
+        return orderAssistantLogEntriesByKey(items);
+    }
+    return orderUnkeyedAssistantLogEntries(items);
+}
+
+function orderAssistantLogEntriesByKey(items) {
+    const groups = new Map();
+    const groupOrder = [];
+    for (const item of items) {
+        const key = getAssistantLogReplyKey(item);
+        if (!groups.has(key)) {
+            groups.set(key, []);
+            groupOrder.push(key);
+        }
+        groups.get(key).push(item);
+    }
+    const result = [];
+    for (const key of groupOrder) {
+        result.push(...sortAssistantLogTypes(groups.get(key)));
+    }
+    return result;
+}
+
+function sortAssistantLogTypes(items) {
+    return items
+        .map((entry, index) => ({ entry, index }))
+        .sort((left, right) => {
+            const typeDiff = (ASSISTANT_TYPE_ORDER[left.entry.type] ?? 9)
+                - (ASSISTANT_TYPE_ORDER[right.entry.type] ?? 9);
+            if (typeDiff !== 0) return typeDiff;
+            return left.index - right.index;
+        })
+        .map((item) => item.entry);
+}
+
+function orderUnkeyedAssistantLogEntries(items) {
+    const thinkings = items.filter((entry) => entry.type === 'thinking');
+    const ais = items.filter((entry) => entry.type === 'ai');
+    const tools = items.filter((entry) => entry.type === 'tool_call');
+    const stepCount = Math.max(thinkings.length, ais.length, tools.length ? 1 : 0);
+    const result = [];
+    const usedTools = new Set();
+    for (let step = 0; step < stepCount; step++) {
+        if (thinkings[step]) result.push(thinkings[step]);
+        if (ais[step]) result.push(ais[step]);
+        const stepTs = Number((ais[step] || thinkings[step] || {}).timestamp) || 0;
+        const nextTsRaw = (ais[step + 1] || thinkings[step + 1] || {}).timestamp;
+        const nextTs = nextTsRaw === undefined ? undefined : Number(nextTsRaw) || 0;
+        for (const tool of tools) {
+            if (usedTools.has(tool)) continue;
+            const toolTs = Number(tool.timestamp) || 0;
+            if (step === stepCount - 1 || nextTs === undefined
+                || Math.abs(toolTs - stepTs) <= Math.abs(toolTs - nextTs)) {
+                result.push(tool);
+                usedTools.add(tool);
+            }
+        }
+    }
+    for (const tool of tools) {
+        if (!usedTools.has(tool)) result.push(tool);
+    }
     return result;
 }
 
 function renderLogEntry(entry) {
     switch (entry.type) {
         case 'client':    renderClientEntry(entry); break;
-        case 'ai':        showAIMessage(entry.content, entry.timestamp, true); break;
-        case 'thinking':  showThinkingMessage(entry.content, entry.timestamp, true); break;
+        case 'ai':        showAIMessage(entry.content, entry.timestamp, true, {
+            key: entry.key,
+            replace: true,
+            finalize: true,
+        }); break;
+        case 'thinking':  showThinkingMessage(entry.content, entry.timestamp, true, {
+            key: entry.key,
+            replace: true,
+            finalize: true,
+        }); break;
         case 'tool_call': showToolCallMessage(entry.tool, entry.eventType, entry.timestamp, true, {
             modelContent: entry.modelContent || '',
             attachments: entry.attachments || entry.tool?.attachments || [],
+            replyKey: entry.replyKey || entry.key || '',
+            toolCallId: entry.toolCallId,
         }); break;
         case 'event':     showEventLog(entry.data, true); break;
         case 'system':    showSystemMessage(entry.text, true, { key: entry.key }); break;
@@ -385,6 +502,7 @@ function renderClientEntry(entry, options = {}) {
 const serverUrlInput = document.getElementById('serverUrl');
 const authTokenInput = document.getElementById('authToken');
 const longTermMemoryToggle = document.getElementById('longTermMemoryToggle');
+const followUpSuggestionsToggle = document.getElementById('followUpSuggestionsToggle');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const interruptBtn = document.getElementById('interruptBtn');
@@ -436,6 +554,12 @@ const messageInputPanel = document.getElementById('messageInputPanel');
 const INIT_CONFIG_PANEL_OPEN_KEY = 'httpClient.initConfigPanelOpen';
 const MCP_CONFIG_PANEL_OPEN_KEY = 'httpClient.mcpConfigPanelOpen';
 const LONG_TERM_MEMORY_ENABLED_KEY = 'httpClient.longTermMemoryEnabled';
+const FOLLOW_UP_SUGGESTIONS_ENABLED_KEY = 'httpClient.followUpSuggestionsEnabled';
+const SUGGESTION_STATUS_PENDING = 0;
+const SUGGESTION_STATUS_FAILED = 2;
+const SUGGESTION_RELATION_TYPE_TASK = 1;
+const SUGGESTION_MAX_RETRY_COUNT = 3;
+const SUGGESTION_RETRY_DELAY_MS = 3000;
 const TOKEN_CONTEXT_DEFAULT_LIMIT = 200_000;
 const TOKEN_CONTEXT_WARNING_THRESHOLD = 0.7;
 const TOKEN_CONTEXT_RING_CIRCUMFERENCE = 42.41;
@@ -1644,6 +1768,13 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem(LONG_TERM_MEMORY_ENABLED_KEY, String(longTermMemoryToggle.checked));
         });
     }
+    if (followUpSuggestionsToggle) {
+        const savedFollowUpSuggestionsEnabled = localStorage.getItem(FOLLOW_UP_SUGGESTIONS_ENABLED_KEY);
+        followUpSuggestionsToggle.checked = savedFollowUpSuggestionsEnabled !== 'false';
+        followUpSuggestionsToggle.addEventListener('change', () => {
+            localStorage.setItem(FOLLOW_UP_SUGGESTIONS_ENABLED_KEY, String(followUpSuggestionsToggle.checked));
+        });
+    }
     if (imChannelSelect) {
         imChannelSelect.addEventListener('change', () => {
             currentImChannel = imChannelSelect.value;
@@ -1752,7 +1883,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 页面加载后自动尝试订阅 WebSocket
     autoConnectWebSocket();
-    connectSocketIoStreamFromConfig();
 });
 
 // 清理模型列表：清除 localStorage 缓存并恢复文本输入框
@@ -2046,6 +2176,7 @@ async function sendHttpMessage(messageData) {
     try {
         injectDebugTaskId(messageData);
         injectLongTermMemoryPreference(messageData);
+        injectFollowUpPreference(messageData);
         applyLocalDebugOptions(messageData);
         const response = await fetch(`${serverUrl}/api/v1/messages/chat`, {
             method: 'POST',
@@ -2081,12 +2212,16 @@ async function sendHttpMessage(messageData) {
  * 为调试面板发送的普通聊天消息注入新的任务 ID.
  * 初始化消息和中断消息不切换任务，避免影响当前运行中的任务状态.
  */
+let currentDebugTaskId = '';
+let followUpPollToken = 0;
+
 function injectDebugTaskId(messageData) {
     if (!messageData || messageData.type !== MessageType.CHAT) return;
     if (messageData.context_type === ContextType.INTERRUPT) return;
 
     messageData.metadata = messageData.metadata || {};
     messageData.metadata.super_magic_task_id = generateDebugTaskId();
+    currentDebugTaskId = messageData.metadata.super_magic_task_id;
 }
 
 /**
@@ -2101,6 +2236,22 @@ function injectLongTermMemoryPreference(messageData) {
         ...(messageData.metadata.personal_preferences || {}),
         long_term_memory_enabled: longTermMemoryToggle
             ? longTermMemoryToggle.checked
+            : true,
+    };
+}
+
+/**
+ * 将调试面板中的追加问题开关注入每次 CHAT metadata。
+ * 关闭后本次主任务不生成追加问题，本页也不再查询。
+ */
+function injectFollowUpPreference(messageData) {
+    if (!messageData || messageData.type !== MessageType.CHAT) return;
+
+    messageData.metadata = messageData.metadata || {};
+    messageData.metadata.personal_preferences = {
+        ...(messageData.metadata.personal_preferences || {}),
+        show_follow_up_suggestions: followUpSuggestionsToggle
+            ? followUpSuggestionsToggle.checked
             : true,
     };
 }
@@ -2311,7 +2462,6 @@ async function sendInitMessage() {
         // 解析配置内容
         const configData = normalizeInitConfig(JSON.parse(uploadConfigContent.value));
         updateInitConfigContent(configData);
-        connectSocketIoStreamFromConfig(configData);
 
         // 显示客户端消息
         showClientMessage({
@@ -2356,7 +2506,6 @@ function handleConfigFileUpload(event) {
             // 保存到 localStorage
             localStorage.setItem('savedConfigContent', normalizedContent);
             localStorage.setItem('savedConfigFileName', currentFileName);
-            connectSocketIoStreamFromConfig(configData);
 
             showSystemMessage(`配置文件 "${file.name}" 上传成功并已保存`);
         } catch (error) {
@@ -2834,6 +2983,7 @@ let eventLogObjectSeen = new WeakSet();
 const streamMessageRegistry = new Map();
 const rawStreamRegistry = new Map();
 const toolCallRegistry = new Map();
+const toolStreamIdByIndex = new Map();
 const superMagicChunkSeenKeys = new Set();
 const superMagicChunkSeenQueue = [];
 const SUPER_MAGIC_CHUNK_SEEN_LIMIT = 3000;
@@ -2940,11 +3090,82 @@ function appendMessageNode(node, options = {}) {
     // 懒加载预渲染旧消息时，追加到临时 fragment 而非主 DOM
     if (lazyPrependTarget) {
         lazyPrependTarget.appendChild(node);
+    } else if (options.insertBefore && options.insertBefore.parentNode === messageList) {
+        messageList.insertBefore(node, options.insertBefore);
+    } else if (options.insertAfter && options.insertAfter.parentNode === messageList) {
+        options.insertAfter.after(node);
     } else {
         messageList.appendChild(node);
     }
     keepAssistantActivityLast(node);
     syncScrollAfterMessageChange(shouldStickToBottom, { showLatestButton: options.showLatestButton !== false });
+}
+
+function findReplyContentNode(replyKey) {
+    if (!replyKey) return null;
+    const state = streamMessageRegistry.get(`content:${replyKey}`);
+    const node = state && state.messageDiv;
+    return node && node.isConnected ? node : null;
+}
+
+function findReplyThinkingNode(replyKey) {
+    if (!replyKey) return null;
+    const state = streamMessageRegistry.get(`reasoning:${replyKey}`);
+    const node = state && state.wrapper;
+    return node && node.isConnected ? node : null;
+}
+
+// 同一轮 assistant 固定为：思考 -> 正文 -> 工具。
+// 工具 delta 常比正文先到，先按 replyKey 挂到轮次末尾；正文到达后再插到首个同轮工具前。
+function placeAssistantReplyNode(node, replyKey, kind) {
+    if (!replyKey) {
+        appendMessageNode(node);
+        return;
+    }
+    if (kind === 'thinking') {
+        appendMessageNode(node, {
+            insertBefore: findReplyContentNode(replyKey) || findFirstReplyToolNode(replyKey) || undefined,
+        });
+        return;
+    }
+    if (kind === 'content') {
+        const firstTool = findFirstReplyToolNode(replyKey);
+        if (firstTool) {
+            appendMessageNode(node, { insertBefore: firstTool });
+            return;
+        }
+        const thinking = findReplyThinkingNode(replyKey);
+        appendMessageNode(node, { insertAfter: thinking || undefined });
+        return;
+    }
+    node.dataset.replyKey = String(replyKey);
+    appendMessageNode(node, {
+        insertAfter: findLastReplyToolNode(replyKey)
+            || findReplyContentNode(replyKey)
+            || findReplyThinkingNode(replyKey)
+            || undefined,
+    });
+}
+
+function findFirstReplyToolNode(replyKey) {
+    if (!replyKey || !messageList) return null;
+    return messageList.querySelector(`[data-reply-key="${CSS.escape(String(replyKey))}"]`);
+}
+
+function findLastReplyToolNode(replyKey) {
+    const first = findFirstReplyToolNode(replyKey);
+    if (!first) return null;
+    let last = first;
+    let node = first.nextSibling;
+    while (node) {
+        if (node.dataset && node.dataset.replyKey === String(replyKey)) {
+            last = node;
+            node = node.nextSibling;
+            continue;
+        }
+        break;
+    }
+    return last;
 }
 
 function syncScrollAfterMessageChange(shouldStickToBottom, options = {}) {
@@ -3099,6 +3320,7 @@ function resetConnectionStatusLog() {
     rawStreamRegistry.clear();
     streamMessageRegistry.clear();
     toolCallRegistry.clear();
+    toolStreamIdByIndex.clear();
     superMagicChunkSeenKeys.clear();
     superMagicChunkSeenQueue.length = 0;
 }
@@ -3192,6 +3414,7 @@ function rerenderChatLog() {
     systemMessageRegistry.clear();
     streamMessageRegistry.clear();
     toolCallRegistry.clear();
+    toolStreamIdByIndex.clear();
     rawStreamRegistry.forEach(state => {
         if (state.timer) clearTimeout(state.timer);
     });
@@ -3715,372 +3938,6 @@ function handleWebSocketOpen(event) {
     wsOpenCallbacks.splice(0).forEach(cb => cb.resolve());
 }
 
-function scheduleSocketIoReconnectFromConfig() {
-    if (socketIoReconnectTimer) clearTimeout(socketIoReconnectTimer);
-    socketIoReconnectAttempt = 0;
-    socketIoReconnectTimer = setTimeout(() => {
-        socketIoReconnectTimer = null;
-        connectSocketIoStreamFromConfig();
-    }, 500);
-}
-
-function scheduleSocketIoAutoReconnect() {
-    if (socketIoReconnectTimer) return; // 已有重连计划
-    const delay = Math.min(
-        SOCKETIO_RECONNECT_BASE_MS * Math.pow(2, socketIoReconnectAttempt),
-        SOCKETIO_RECONNECT_MAX_MS
-    );
-    socketIoReconnectAttempt++;
-    showConnectionStatusMessage(`Socket.IO 将在 ${(delay / 1000).toFixed(1)}s 后重连...`);
-    socketIoReconnectTimer = setTimeout(() => {
-        socketIoReconnectTimer = null;
-        connectSocketIoStreamFromConfig();
-    }, delay);
-}
-
-function connectSocketIoStreamFromConfig(configData = null) {
-    const streamConfig = buildSocketIoStreamConfig(configData);
-    if (!streamConfig) return;
-
-    const nextKey = `${streamConfig.baseUrl}|${streamConfig.socketioPath}`;
-    // 已连接且 key 相同则跳过；若 client 已关闭则允许重连
-    if (socketIoClient && socketIoConfigKey === nextKey
-        && socketIoClient.readyState === WebSocket.OPEN) return;
-
-    disconnectSocketIoStream();
-    socketIoConfigKey = nextKey;
-    socketIoAuthContext = streamConfig.authContext || {};
-
-    try {
-        const socketUrl = buildSocketIoWebSocketUrl(streamConfig);
-        socketIoClient = new WebSocket(socketUrl);
-
-        socketIoClient.onopen = () => {
-            isSocketIoConnected = true;
-            socketIoReconnectAttempt = 0;
-            showConnectionStatusMessage("Socket.IO 流式通道已连接");
-        };
-        socketIoClient.onclose = () => {
-            isSocketIoConnected = false;
-            stopSocketIoHeartbeat();
-            hideAssistantActivity();
-            showConnectionStatusMessage("Socket.IO 流式通道已断开");
-            scheduleSocketIoAutoReconnect();
-        };
-        socketIoClient.onerror = () => {
-            isSocketIoConnected = false;
-            hideAssistantActivity();
-            // onclose 会紧跟触发，重连由 onclose 负责
-        };
-        socketIoClient.onmessage = handleSocketIoPacketMessage;
-    } catch (error) {
-        showConnectionStatusMessage(`Socket.IO 流式通道初始化失败: ${error.message}`);
-        scheduleSocketIoAutoReconnect();
-    }
-}
-
-function disconnectSocketIoStream() {
-    // 取消待执行的重连计划
-    if (socketIoReconnectTimer) {
-        clearTimeout(socketIoReconnectTimer);
-        socketIoReconnectTimer = null;
-    }
-    socketIoReconnectAttempt = 0;
-    if (!socketIoClient) return;
-    stopSocketIoHeartbeat();
-    socketIoClient.onopen = null;
-    socketIoClient.onclose = null;
-    socketIoClient.onerror = null;
-    socketIoClient.onmessage = null;
-    socketIoClient.close();
-    socketIoClient = null;
-    isSocketIoConnected = false;
-}
-
-function buildSocketIoWebSocketUrl(streamConfig) {
-    const path = streamConfig.socketioPath.endsWith('/')
-        ? streamConfig.socketioPath
-        : `${streamConfig.socketioPath}/`;
-    return `${streamConfig.baseUrl}${path}?EIO=4&transport=websocket&timestamp=${Date.now()}`;
-}
-
-function startSocketIoHeartbeat() {
-    // EIO=4: 服务端主动发 ping('2')，客户端回 pong('3')。
-    // 这里启动超时监控：若超过 pingInterval + pingTimeout 未收到服务端 ping，则认为连接已死。
-    stopSocketIoHeartbeat();
-    resetSocketIoPingWatchdog();
-}
-
-function resetSocketIoPingWatchdog() {
-    if (socketIoHeartbeatTimer) clearTimeout(socketIoHeartbeatTimer);
-    socketIoHeartbeatTimer = setTimeout(() => {
-        // 超时未收到服务端 ping，断开重连
-        if (socketIoClient && socketIoClient.readyState === WebSocket.OPEN) {
-            console.warn('Socket.IO ping watchdog timeout, closing connection');
-            socketIoClient.close();
-        }
-    }, socketIoPingInterval + (socketIoPingTimeout || 20000));
-}
-
-function stopSocketIoHeartbeat() {
-    if (socketIoHeartbeatTimer) {
-        clearTimeout(socketIoHeartbeatTimer);
-        socketIoHeartbeatTimer = null;
-    }
-}
-
-function connectSocketIoNamespace() {
-    if (socketIoClient && socketIoClient.readyState === WebSocket.OPEN) {
-        // Socket.IO v3/v4 (EIO=4): namespace CONNECT 包格式为 40/namespace,
-        socketIoClient.send('40/im,');
-    }
-}
-
-function sendSocketIoLoginMessage() {
-    if (!socketIoClient || socketIoClient.readyState !== WebSocket.OPEN) return;
-
-    const payload = {
-        context: {
-            timestamp: Date.now(),
-            authorization: '',
-            organization_code: '',
-            language: 'zh_CN',
-            signature: '',
-            ...socketIoAuthContext,
-        },
-        data: {
-            message: {
-                type: 'text',
-                text: { content: '登录' },
-                app_message_id: `debug-login-${Date.now()}`,
-            },
-            conversation_id: '',
-        },
-    };
-    socketIoClient.send(`42/im,0${JSON.stringify(['login', payload])}`);
-}
-
-function buildSocketIoStreamConfig(configData = null) {
-    const config = configData || getUploadedConfig();
-    if (!config) return null;
-
-    const wsHost = config.magic_service_ws_host || '';
-    const httpHost = config.magic_service_host || '';
-    const authContext = buildSocketIoAuthContext(config);
-    if (wsHost) {
-        const streamConfig = buildSocketIoConfigFromHost(wsHost, false);
-        return streamConfig ? { ...streamConfig, authContext } : null;
-    }
-    if (httpHost) {
-        const streamConfig = buildSocketIoConfigFromHost(httpHost, true);
-        return streamConfig ? { ...streamConfig, authContext } : null;
-    }
-    return null;
-}
-
-function buildSocketIoAuthContext(config) {
-    const metadata = config.metadata || {};
-    const authorization = config.authorization || metadata.authorization || '';
-    return {
-        authorization,
-        'user-authorization': authorization,
-        organization_code: metadata.organization_code || metadata.magicOrganizationCode || '',
-        language: metadata.language || config.language || 'zh_CN',
-        super_magic_agent_user_id: metadata.agent_user_id || '',
-        topic_id: metadata.chat_topic_id || '',
-    };
-}
-
-function getUploadedConfig() {
-    const rawConfig = uploadConfigContent && uploadConfigContent.value;
-    if (!rawConfig || rawConfig === "请上传配置文件") return null;
-    try {
-        return normalizeInitConfig(JSON.parse(rawConfig));
-    } catch (e) {
-        return null;
-    }
-}
-
-function buildSocketIoConfigFromHost(host, convertHttpToWs) {
-    try {
-        const parsed = new URL(host);
-        let protocol = parsed.protocol.replace(':', '');
-        if (convertHttpToWs) {
-            if (protocol === 'https') protocol = 'wss';
-            else if (protocol === 'http') protocol = 'ws';
-        } else if (protocol === 'https') {
-            protocol = 'wss';
-        } else if (protocol === 'http') {
-            protocol = 'ws';
-        }
-        if (!['ws', 'wss'].includes(protocol)) return null;
-
-        let port = parsed.port;
-        if (convertHttpToWs && port === '9501') port = '9502';
-        const portPart = port ? `:${port}` : '';
-        const baseUrl = `${protocol}://${parsed.hostname}${portPart}`;
-        const normalizedPath = parsed.pathname.replace(/\/$/, '');
-        const socketioPath = normalizedPath ? `${normalizedPath}/socket.io/` : '/socket.io/';
-        return { baseUrl, socketioPath };
-    } catch (e) {
-        return null;
-    }
-}
-
-function handleSocketIoPacketMessage(event) {
-    const data = event && event.data;
-    if (typeof data !== 'string' || !data) return;
-
-    const engineIoPacketType = data.slice(0, 1);
-    if (engineIoPacketType === '0') {
-        handleSocketIoOpenPacket(data);
-        return;
-    }
-    if (engineIoPacketType === '2') {
-        // EIO=4: 服务端发来 ping，客户端必须回 pong
-        if (socketIoClient && socketIoClient.readyState === WebSocket.OPEN) {
-            socketIoClient.send('3');
-        }
-        resetSocketIoPingWatchdog();
-        return;
-    }
-    if (engineIoPacketType === '3') {
-        // pong（EIO=3 兼容，正常忽略）
-        return;
-    }
-    if (engineIoPacketType !== '4') {
-        return;
-    }
-
-    const packet = decodeSocketIoPacket(data.slice(1));
-    if (!packet) return;
-    if (packet.type === '0' || packet.type === '3') return;
-
-    const packetData = packet.data;
-    if (Array.isArray(packetData) && packetData.length >= 2) {
-        const [eventName, payload] = packetData;
-        if (eventName === 'intermediate') {
-            handleSocketIoIntermediateMessage(payload);
-            return;
-        }
-        showEventLog({ socketio_event: eventName, payload });
-        return;
-    }
-
-    showEventLog({ socketio_packet: packet });
-}
-
-function handleSocketIoOpenPacket(data) {
-    try {
-        const openPayload = JSON.parse(data.slice(1));
-        if (Number.isFinite(openPayload.pingInterval)) {
-            socketIoPingInterval = openPayload.pingInterval;
-        }
-        if (Number.isFinite(openPayload.pingTimeout)) {
-            socketIoPingTimeout = openPayload.pingTimeout;
-        }
-    } catch (e) {
-        socketIoPingInterval = 25000;
-        socketIoPingTimeout = 20000;
-    }
-    startSocketIoHeartbeat();
-    connectSocketIoNamespace();
-    sendSocketIoLoginMessage();
-}
-
-function decodeSocketIoPacket(packetText) {
-    if (!packetText) return null;
-
-    const packetType = packetText.slice(0, 1);
-    let payloadText = packetText.slice(1);
-    let namespace = '';
-    if (payloadText.startsWith('/')) {
-        const namespaceEnd = payloadText.indexOf(',');
-        if (namespaceEnd === -1) return { type: packetType, namespace: payloadText, id: null, data: null };
-        namespace = payloadText.slice(0, namespaceEnd);
-        payloadText = payloadText.slice(namespaceEnd + 1);
-    }
-
-    let ackId = null;
-    const payloadStart = payloadText.search(/[\[{]/);
-    if (payloadStart > 0) {
-        const ackText = payloadText.slice(0, payloadStart);
-        ackId = /^\d+$/.test(ackText) ? Number(ackText) : null;
-        payloadText = payloadText.slice(payloadStart);
-    }
-
-    if (!payloadText) return { type: packetType, namespace, id: ackId, data: null };
-    try {
-        return {
-            type: packetType,
-            namespace,
-            id: ackId,
-            data: JSON.parse(payloadText),
-        };
-    } catch (e) {
-        console.warn('Socket.IO packet parse failed:', e, packetText);
-        return null;
-    }
-}
-
-function handleSocketIoIntermediateMessage(message) {
-    const decoded = decodeSocketIoPayload(message);
-    if (!decoded) return;
-    showEventLog(decoded);
-    if (handleSuperMagicChunkMessage(decoded)) return;
-    if (handleRawStreamMessage(decoded)) return;
-    showEventLog({ socketio_intermediate_unhandled: decoded });
-}
-
-function decodeSocketIoPayload(message) {
-    let payload = message;
-    if (typeof payload === 'string') {
-        try {
-            payload = JSON.parse(payload);
-        } catch (e) {
-            return null;
-        }
-    }
-
-    const shadowText =
-        (payload && payload.shadow) ||
-        (payload && payload.obfuscated && typeof payload.data === 'string' ? payload.data : '');
-    if (shadowText) {
-        try {
-            return JSON.parse(unshadowText(shadowText));
-        } catch (e) {
-            console.warn('Socket.IO shadow payload decode failed:', e);
-            return null;
-        }
-    }
-
-    return payload;
-}
-
-const SHADOW_PREFIX = 'SHADOWED_';
-const UNSHUFFLE_MAP = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-    62, 116, 33, 102, 126, 59, 119, 114, 44, 79, 100, 88, 67, 34, 103, 89, 46, 87, 53, 38, 41, 85, 65, 108, 97, 71, 74, 72, 36, 92, 81, 49, 40, 117,
-    55, 109, 42, 78, 110, 93, 95, 54, 80, 106, 61, 51, 123, 58, 124, 99, 90, 98, 73, 111, 35, 63, 121, 105, 45, 43, 104, 70, 77, 84, 64, 57,
-    52, 82, 91, 68, 60, 37, 115, 83, 125, 122, 75, 101, 48, 66, 107, 56, 39, 86, 69, 113, 112, 96, 76, 118, 32, 120, 50, 94, 47, 127,
-    129, 128, 131, 130, 133, 132, 135, 134, 137, 136, 139, 138, 141, 140, 143, 142, 145, 144, 147, 146, 149, 148, 151, 150, 153, 152, 155, 154, 157, 156, 159, 158,
-    161, 160, 163, 162, 165, 164, 167, 166, 169, 168, 171, 170, 173, 172, 175, 174, 177, 176, 179, 178, 181, 180, 183, 182, 185, 184, 187, 186, 189, 188, 191, 190,
-    193, 192, 195, 194, 197, 196, 199, 198, 201, 200, 203, 202, 205, 204, 207, 206, 209, 208, 211, 210, 213, 212, 215, 214, 217, 216, 219, 218, 221, 220, 223, 222,
-    225, 224, 227, 226, 229, 228, 231, 230, 233, 232, 235, 234, 237, 236, 239, 238, 241, 240, 243, 242, 245, 244, 247, 246, 249, 248, 251, 250, 253, 252, 255, 254
-];
-
-function unshadowText(value) {
-    if (!value || !value.startsWith(SHADOW_PREFIX)) return value;
-    const obfuscatedPart = value.slice(SHADOW_PREFIX.length);
-    const inputBytes = new TextEncoder().encode(obfuscatedPart);
-    const resultBytes = new Uint8Array(inputBytes.length);
-    for (let i = 0; i < inputBytes.length; i++) {
-        const byteValue = inputBytes[i];
-        resultBytes[i] = byteValue < UNSHUFFLE_MAP.length ? UNSHUFFLE_MAP[byteValue] : byteValue;
-    }
-    return new TextDecoder('utf-8', { fatal: false }).decode(resultBytes);
-}
-
 function handleWebSocketMessage(event) {
     try {
         let data;
@@ -4137,6 +3994,7 @@ function handleWebSocketMessage(event) {
                 showToolCallMessage(tool, eventType, payload.send_timestamp, false, {
                     correlationId: payload.correlation_id,
                     toolCallId: tool.id,
+                    replyKey: payload.app_message_id || payload.correlation_id || '',
                 });
                 if (eventType === 'before_tool_call') {
                     showAssistantActivity('tool');
@@ -4175,34 +4033,48 @@ function handleSuperMagicChunkMessage(data) {
 		chunk.correlation_id,
 	);
     const choices = Array.isArray(chunk.choices) ? chunk.choices : [];
+    const timestamp = Math.floor((envelope.timestampMs || Date.now()) / 1000);
+    const streamKey = messageKey || `chunk-${chunk.correlation_id || chunk.i || Date.now()}`;
+    const chunkIndex = chunk.i ?? chunk.chunk_id ?? chunk.index;
     for (const choice of choices) {
         const delta = choice && choice.delta ? choice.delta : {};
         if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
             if (isDuplicateSuperMagicChunkDelta(envelope, choice, 'reasoning')) continue;
             showAssistantActivity('thinking');
-            showThinkingMessage(delta.reasoning_content, Math.floor((envelope.timestampMs || Date.now()) / 1000), true, {
-                key: messageKey || `reasoning-${chunk.correlation_id || chunk.i || Date.now()}`,
-                append: true,
+            queueRawStreamChunk({
+                key: streamKey,
+                content: delta.reasoning_content,
+                contentType: 'reasoning',
+                streamStatus: 1,
+                timestamp,
+                isFinal: false,
+                chunkId: chunkIndex === undefined || chunkIndex === null ? undefined : `${chunkIndex}:reasoning`,
             });
         }
         if (typeof delta.content === 'string' && delta.content) {
             if (isDuplicateSuperMagicChunkDelta(envelope, choice, 'content')) continue;
             showAssistantActivity('writing');
-            showAIMessage(delta.content, Math.floor((envelope.timestampMs || Date.now()) / 1000), true, {
-                key: messageKey || `content-${chunk.correlation_id || chunk.i || Date.now()}`,
-                append: true,
+            queueRawStreamChunk({
+                key: streamKey,
+                content: delta.content,
+                contentType: 'content',
+                streamStatus: 1,
+                timestamp,
+                isFinal: false,
+                chunkId: chunkIndex === undefined || chunkIndex === null ? undefined : `${chunkIndex}:content`,
             });
         }
-    }
-    if (isSuperMagicChunkFinished(choices)) {
-        hideAssistantActivity();
+        const toolCalls = Array.isArray(delta.tool_calls) ? delta.tool_calls : [];
+        for (const toolCall of toolCalls) {
+            const toolIndex = toolCall && toolCall.index !== undefined ? toolCall.index : 0;
+            if (isDuplicateSuperMagicChunkDelta(envelope, { index: `${choice.index || 0}:${toolIndex}` }, 'tool')) {
+                continue;
+            }
+            enqueueToolStreamDelta(streamKey, toolCall, timestamp, chunkIndex);
+        }
     }
 
     return true;
-}
-
-function isSuperMagicChunkFinished(choices) {
-    return choices.some(choice => choice && choice.finish_reason === 'stop');
 }
 
 function isDuplicateSuperMagicChunkDelta(envelope, choice, deltaType) {
@@ -4231,6 +4103,70 @@ function isDuplicateSuperMagicChunkDelta(envelope, choice, deltaType) {
         if (oldKey) superMagicChunkSeenKeys.delete(oldKey);
     }
     return false;
+}
+
+function resolveToolStreamKey(messageKey, toolCall) {
+    const index = toolCall && toolCall.index !== undefined ? toolCall.index : 0;
+    const indexKey = `${messageKey || 'unknown'}:${index}`;
+    const fallbackKey = `tool-stream:${indexKey}`;
+    if (toolCall && toolCall.id) {
+        const previous = toolStreamIdByIndex.get(indexKey);
+        toolStreamIdByIndex.set(indexKey, toolCall.id);
+        const oldKey = previous || (streamMessageRegistry.has(`tool:${fallbackKey}`) ? fallbackKey : '');
+        if (oldKey && oldKey !== toolCall.id) {
+            retargetToolStream(oldKey, toolCall.id);
+        }
+        return toolCall.id;
+    }
+    return toolStreamIdByIndex.get(indexKey) || fallbackKey;
+}
+
+function retargetToolStream(oldKey, newKey) {
+    if (!oldKey || !newKey || oldKey === newKey) return;
+    const rawOld = `tool:${oldKey}`;
+    const rawNew = `tool:${newKey}`;
+    const paced = rawStreamRegistry.get(rawOld);
+    if (paced) {
+        paced.key = newKey;
+        rawStreamRegistry.set(rawNew, paced);
+        rawStreamRegistry.delete(rawOld);
+    }
+    const box = streamMessageRegistry.get(rawOld);
+    if (box) {
+        box.toolCallId = newKey;
+        streamMessageRegistry.set(rawNew, box);
+        streamMessageRegistry.delete(rawOld);
+    }
+}
+
+function enqueueToolStreamDelta(messageKey, toolCall, timestamp, chunkIndex) {
+    const fn = (toolCall && toolCall.function) || {};
+    const streamKey = resolveToolStreamKey(messageKey, toolCall);
+    const args = typeof fn.arguments === 'string' ? fn.arguments : '';
+    if (fn.name || fn.label) {
+        showToolStreamMessage('', timestamp, true, {
+            key: streamKey,
+            replace: true,
+            toolName: fn.name || '',
+            toolLabel: fn.label || '',
+            toolCallId: streamKey,
+            replyKey: messageKey,
+        });
+    }
+    if (!args) return;
+    showAssistantActivity('tool');
+    queueRawStreamChunk({
+        key: streamKey,
+        content: args,
+        contentType: 'tool',
+        streamStatus: 1,
+        timestamp,
+        isFinal: false,
+        chunkId: chunkIndex === undefined || chunkIndex === null ? undefined : `${chunkIndex}:tool:${streamKey}`,
+        toolName: fn.name || '',
+        toolLabel: fn.label || '',
+        replyKey: messageKey,
+    });
 }
 
 function handleRawStreamMessage(data) {
@@ -4263,7 +4199,7 @@ function handleRawStreamMessage(data) {
     return true;
 }
 
-function queueRawStreamChunk({ key, content, contentType, streamStatus, timestamp, isFinal, chunkId }) {
+function queueRawStreamChunk({ key, content, contentType, streamStatus, timestamp, isFinal, chunkId, toolName, toolLabel, replyKey }) {
     const streamKey = `${contentType}:${key || 'default'}`;
     let state = rawStreamRegistry.get(streamKey);
     if (!state) {
@@ -4278,9 +4214,15 @@ function queueRawStreamChunk({ key, content, contentType, streamStatus, timestam
             isFinal: false,
             seenChunkIds: new Set(),
             loggedFinal: false,
+            toolName: toolName || '',
+            toolLabel: toolLabel || '',
+            replyKey: replyKey || '',
         };
         rawStreamRegistry.set(streamKey, state);
     }
+    if (toolName) state.toolName = toolName;
+    if (toolLabel) state.toolLabel = toolLabel;
+    if (replyKey) state.replyKey = replyKey;
 
     if (chunkId !== undefined && chunkId !== null) {
         if (state.seenChunkIds.has(chunkId)) return;
@@ -4337,7 +4279,8 @@ function queueRawStreamFinal(key, contentType, content, timestamp) {
 
 function getRenderedStreamContent(contentType, key) {
     if (!key) return '';
-    const registryKey = `${contentType === 'reasoning' ? 'reasoning' : 'content'}:${key}`;
+    const prefix = contentType === 'reasoning' ? 'reasoning' : (contentType === 'tool' ? 'tool' : 'content');
+    const registryKey = `${prefix}:${key}`;
     const messageState = streamMessageRegistry.get(registryKey);
     return messageState && typeof messageState.content === 'string' ? messageState.content : '';
 }
@@ -4350,6 +4293,14 @@ function scheduleRawStreamRender(state, streamKey) {
     }, 12);
 }
 
+// 积压短时一次吐 2 个字，保持打字感；合并包把积压拉大时加快，避免越跟越慢。
+function getPacedRenderStep(remaining) {
+    if (remaining > 800) return 40;
+    if (remaining > 200) return 12;
+    if (remaining > 40) return 5;
+    return 2;
+}
+
 function renderRawStreamStep(state, streamKey) {
     if (state.renderedContent.length >= state.targetContent.length) {
         if (state.isFinal) {
@@ -4360,7 +4311,7 @@ function renderRawStreamStep(state, streamKey) {
     }
 
     const remaining = state.targetContent.length - state.renderedContent.length;
-    const step = state.targetContent.length > 120 ? 5 : 2;
+    const step = getPacedRenderStep(remaining);
     const nextLength = state.renderedContent.length + Math.min(step, remaining);
     const nextContent = state.targetContent.slice(0, nextLength);
     state.renderedContent = nextContent;
@@ -4371,6 +4322,14 @@ function renderRawStreamStep(state, streamKey) {
     };
     if (state.contentType === 'reasoning') {
         showThinkingMessage(nextContent, state.timestamp, true, options);
+    } else if (state.contentType === 'tool') {
+        showToolStreamMessage(nextContent, state.timestamp, true, {
+            ...options,
+            toolName: state.toolName,
+            toolLabel: state.toolLabel,
+            toolCallId: state.key,
+            replyKey: state.replyKey,
+        });
     } else {
         showAIMessage(nextContent, state.timestamp, true, options);
     }
@@ -4379,6 +4338,7 @@ function renderRawStreamStep(state, streamKey) {
 }
 
 function persistRawStreamFinal(state, streamKey) {
+    if (state.contentType === 'tool') return;
     if (state.loggedFinal || !state.renderedContent) return;
     state.loggedFinal = true;
     hideAssistantActivity();
@@ -4387,6 +4347,7 @@ function persistRawStreamFinal(state, streamKey) {
         content: state.renderedContent,
         timestamp: state.timestamp,
         rawStreamKey: streamKey,
+        key: state.key,
     };
 
     const existingIndex = chatLog.findIndex(item => item.rawStreamKey === streamKey);
@@ -4458,24 +4419,34 @@ function handleSuperMagicMessage(smsg, payload) {
     let hasVisibleContent = false;
     let hasReplyContent = false;
 
-    // 最终消息是权威全文；如果已有流式气泡，则原地校准，不再新增一条。
+    // 最终消息是权威全文。若匀速渲染还在跑，只校正目标文本，让剩下的字继续打完。
     if (!isToolRole && smsg.reasoning_content) {
-        showThinkingMessage(smsg.reasoning_content, payload.send_timestamp, false, {
-            key: messageKey,
-            replace: true,
-            finalize: true,
-        });
-        hasVisibleContent = true;
-        hasReplyContent = true;
+        if (queueRawStreamFinal(messageKey, 'reasoning', smsg.reasoning_content, payload.send_timestamp)) {
+            hasVisibleContent = true;
+            hasReplyContent = true;
+        } else {
+            showThinkingMessage(smsg.reasoning_content, payload.send_timestamp, false, {
+                key: messageKey,
+                replace: true,
+                finalize: true,
+            });
+            hasVisibleContent = true;
+            hasReplyContent = true;
+        }
     }
     if (!isToolRole && smsg.content) {
-        showAIMessage(smsg.content, payload.send_timestamp, false, {
-            key: messageKey,
-            replace: true,
-            finalize: true,
-        });
-        hasVisibleContent = true;
-        hasReplyContent = true;
+        if (queueRawStreamFinal(messageKey, 'content', smsg.content, payload.send_timestamp)) {
+            hasVisibleContent = true;
+            hasReplyContent = true;
+        } else {
+            showAIMessage(smsg.content, payload.send_timestamp, false, {
+                key: messageKey,
+                replace: true,
+                finalize: true,
+            });
+            hasVisibleContent = true;
+            hasReplyContent = true;
+        }
     }
 
     const tools = collectToolsFromSuperMagicMessage(smsg, payload);
@@ -4487,6 +4458,7 @@ function handleSuperMagicMessage(smsg, payload) {
             correlationId: smsg.correlation_id || payload.correlation_id,
             toolCallId: item.toolCallId,
             modelContent: item.modelContent,
+            replyKey: messageKey,
             attachments: isFinalTaskTool(item.tool)
                 ? (finishedAttachments || [])
                 : undefined,
@@ -4506,8 +4478,90 @@ function handleSuperMagicMessage(smsg, payload) {
     }
     if (isMainAgentFinished(payload)) {
         hideAssistantActivity();
+        void pollFollowUpSuggestions(currentDebugTaskId);
     }
     return hasVisibleContent;
+}
+
+function isFollowUpSuggestionsEnabled() {
+    return !followUpSuggestionsToggle || followUpSuggestionsToggle.checked;
+}
+
+function delayFollowUpRetry(ms) {
+    return new Promise((resolve) => {
+        window.setTimeout(resolve, ms);
+    });
+}
+
+/**
+ * 主任务正常结束后，按前端同样的节奏查询追加问题。
+ * status 为 0 时最多再等 3 次，每次 3 秒；完成且有内容才展示，失败或超时不展示。
+ */
+async function pollFollowUpSuggestions(taskId) {
+    if (!taskId || !isFollowUpSuggestionsEnabled()) return;
+    const token = ++followUpPollToken;
+    const serverUrl = (serverUrlInput.value.trim() || 'http://127.0.0.1:8002').replace(/\/+$/, '');
+
+    for (let retryCount = 0; retryCount <= SUGGESTION_MAX_RETRY_COUNT; retryCount += 1) {
+        if (token !== followUpPollToken || !isFollowUpSuggestionsEnabled()) return;
+        let meta = null;
+        try {
+            const response = await fetch(`${serverUrl}/api/v1/debug/follow-up-suggestions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: SUGGESTION_RELATION_TYPE_TASK,
+                    relation_id: taskId,
+                }),
+            });
+            const json = await response.json().catch(() => null);
+            if (!response.ok || !json || json.code !== 1000) return;
+            meta = json.data || null;
+        } catch (error) {
+            console.warn('查询追加问题失败:', error);
+            return;
+        }
+        if (token !== followUpPollToken) return;
+        if (!meta || meta.status === SUGGESTION_STATUS_PENDING) {
+            if (retryCount >= SUGGESTION_MAX_RETRY_COUNT) return;
+            await delayFollowUpRetry(SUGGESTION_RETRY_DELAY_MS);
+            continue;
+        }
+        if (meta.status === SUGGESTION_STATUS_FAILED) return;
+        renderFollowUpSuggestions(taskId, Array.isArray(meta.suggestions) ? meta.suggestions : []);
+        return;
+    }
+}
+
+function renderFollowUpSuggestions(taskId, suggestions) {
+    const items = suggestions.filter((item) => typeof item === 'string' && item.trim());
+    if (!items.length || !messageList) return;
+    const existing = messageList.querySelector(`[data-follow-up-task-id="${taskId}"]`);
+    if (existing) existing.remove();
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message follow-up-suggestions';
+    wrapper.dataset.followUpTaskId = taskId;
+
+    const title = document.createElement('div');
+    title.className = 'follow-up-suggestions-title';
+    title.textContent = '追加问题';
+    wrapper.appendChild(title);
+
+    items.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'follow-up-suggestion-item';
+        button.textContent = item;
+        button.addEventListener('click', () => {
+            if (!messageInput || messageInput.disabled) return;
+            messageInput.value = item;
+            messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+            messageInput.focus();
+        });
+        wrapper.appendChild(button);
+    });
+    appendMessageNode(wrapper);
 }
 
 function isMainAgentFinished(payload) {
@@ -4739,7 +4793,11 @@ function buildRenderedView(content) {
 
 // 显示 AI 回复消息气泡，支持 markdown 渲染、原文切换和流式更新。
 function showAIMessage(content, timestamp, _noLog = false, options = {}) {
-    if (!_noLog) pushLog({ type: 'ai', content, timestamp });
+    if (!_noLog) {
+        const entry = { type: 'ai', content, timestamp };
+        if (options.key) entry.key = options.key;
+        pushLog(entry);
+    }
 
     const registryKey = options.key ? `content:${options.key}` : '';
     let messageState = registryKey ? streamMessageRegistry.get(registryKey) : null;
@@ -4806,17 +4864,18 @@ function showAIMessage(content, timestamp, _noLog = false, options = {}) {
     if (registryKey) {
         streamMessageRegistry.set(registryKey, messageState);
     }
-    appendMessageNode(messageDiv);
+    placeAssistantReplyNode(messageDiv, options.key, 'content');
 }
 
 function updateAIMessageState(messageState, content, options = {}) {
     if (shouldIgnoreLateStreamAppend(messageState, options)) return;
+    const shouldStickToBottom = isMessageViewportAtBottom();
     const nextContent = options.append ? messageState.content + content : content;
     messageState.content = nextContent;
     if (options.finalize) messageState.finalized = true;
     messageState.renderedView.replaceChildren(buildRenderedView(nextContent));
     messageState.rawView.textContent = nextContent;
-    syncScrollAfterMessageChange(isMessageViewportAtBottom());
+    syncScrollAfterMessageChange(shouldStickToBottom);
 }
 
 /**
@@ -4828,7 +4887,11 @@ function shouldIgnoreLateStreamAppend(messageState, options = {}) {
 
 // 显示思考过程（折叠展示）
 function showThinkingMessage(content, timestamp, _noLog = false, options = {}) {
-    if (!_noLog) pushLog({ type: 'thinking', content, timestamp });
+    if (!_noLog) {
+        const entry = { type: 'thinking', content, timestamp };
+        if (options.key) entry.key = options.key;
+        pushLog(entry);
+    }
 
     const registryKey = options.key ? `reasoning:${options.key}` : '';
     let thinkingState = registryKey ? streamMessageRegistry.get(registryKey) : null;
@@ -4866,15 +4929,114 @@ function showThinkingMessage(content, timestamp, _noLog = false, options = {}) {
     if (registryKey) {
         streamMessageRegistry.set(registryKey, thinkingState);
     }
-    appendMessageNode(wrapper);
+    placeAssistantReplyNode(wrapper, options.key, 'thinking');
 }
 
 function updateThinkingMessageState(thinkingState, content, options = {}) {
     if (shouldIgnoreLateStreamAppend(thinkingState, options)) return;
+    const shouldStickToBottom = isMessageViewportAtBottom();
     thinkingState.content = options.append ? thinkingState.content + content : content;
     if (options.finalize) thinkingState.finalized = true;
     thinkingState.detail.textContent = thinkingState.content;
-    syncScrollAfterMessageChange(isMessageViewportAtBottom());
+    if (shouldStickToBottom) {
+        thinkingState.detail.scrollTop = thinkingState.detail.scrollHeight;
+    }
+    syncScrollAfterMessageChange(shouldStickToBottom);
+}
+
+function showToolStreamMessage(content, timestamp, _noLog = false, options = {}) {
+    const registryKey = options.key ? `tool:${options.key}` : '';
+    let streamState = registryKey ? streamMessageRegistry.get(registryKey) : null;
+    if (streamState) {
+        updateToolStreamState(streamState, content, options);
+        return;
+    }
+
+    const timeStr = timestamp
+        ? new Date(timestamp * 1000).toLocaleTimeString()
+        : new Date().toLocaleTimeString();
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'tool-call-block tool-call-running tool-stream-block';
+
+    const header = document.createElement('div');
+    header.className = 'tool-call-header';
+
+    const statusDot = document.createElement('span');
+    statusDot.className = 'tool-call-status-dot';
+
+    const actionSpan = document.createElement('span');
+    actionSpan.className = 'tool-call-action';
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'tool-call-time';
+    timeSpan.textContent = timeStr;
+
+    header.appendChild(statusDot);
+    header.appendChild(actionSpan);
+    header.appendChild(timeSpan);
+
+    const detail = document.createElement('pre');
+    detail.className = 'tool-call-detail tool-stream-detail';
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(detail);
+
+    streamState = {
+        wrapper,
+        actionSpan,
+        detail,
+        content: '',
+        toolCallId: options.toolCallId || options.key || '',
+        toolName: options.toolName || '',
+        toolLabel: options.toolLabel || '',
+        replyKey: options.replyKey || '',
+    };
+    updateToolStreamState(streamState, content, options);
+    if (registryKey) {
+        streamMessageRegistry.set(registryKey, streamState);
+    }
+    placeAssistantReplyNode(wrapper, options.replyKey, 'tool');
+}
+
+function updateToolStreamState(streamState, content, options = {}) {
+    const shouldStickToBottom = isMessageViewportAtBottom();
+    streamState.content = options.append ? streamState.content + content : content;
+    if (options.toolName) streamState.toolName = options.toolName;
+    if (options.toolLabel) streamState.toolLabel = options.toolLabel;
+    if (options.toolCallId) streamState.toolCallId = options.toolCallId;
+    if (options.replyKey) {
+        streamState.replyKey = options.replyKey;
+        streamState.wrapper.dataset.replyKey = String(options.replyKey);
+    }
+    const title = streamState.toolLabel || streamState.toolName || '工具调用';
+    streamState.actionSpan.textContent = `流式 · ${title}`;
+    streamState.detail.textContent = streamState.content;
+    if (shouldStickToBottom) {
+        streamState.detail.scrollTop = streamState.detail.scrollHeight;
+    }
+    syncScrollAfterMessageChange(shouldStickToBottom);
+}
+
+function findToolStreamBox(toolKey) {
+    if (!toolKey) return null;
+    const direct = streamMessageRegistry.get(`tool:${toolKey}`);
+    if (direct) return { key: toolKey, state: direct };
+    for (const [regKey, state] of streamMessageRegistry.entries()) {
+        if (!regKey.startsWith('tool:')) continue;
+        if (state.toolCallId === toolKey || regKey === `tool:${toolKey}`) {
+            return { key: regKey.slice(5), state };
+        }
+    }
+    return null;
+}
+
+function stopToolStream(streamKey) {
+    const rawKey = `tool:${streamKey}`;
+    const state = rawStreamRegistry.get(rawKey);
+    if (state && state.timer) clearTimeout(state.timer);
+    rawStreamRegistry.delete(rawKey);
+    streamMessageRegistry.delete(rawKey);
 }
 
 // ─── ask_user 交互卡片 ───────────────────────────────────────────────────────
@@ -5266,10 +5428,16 @@ function renderAskUserCard(data, container) {
 // 显示工具调用消息块（before_tool_call / after_tool_call）
 function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options = {}) {
     if (isCodeModeToolMessage(tool)) return;
+
+    const toolKey = getToolCallKey(tool, options);
+    const streamBox = findToolStreamBox(toolKey);
+    const replyKey = options.replyKey || (streamBox && streamBox.state && streamBox.state.replyKey) || '';
     if (!_noLog) {
         const logEntry = { type: 'tool_call', tool, eventType, timestamp };
         if (options.modelContent) logEntry.modelContent = options.modelContent;
         if (Array.isArray(options.attachments)) logEntry.attachments = options.attachments;
+        if (replyKey) logEntry.replyKey = replyKey;
+        if (options.toolCallId || toolKey) logEntry.toolCallId = options.toolCallId || toolKey;
         pushLog(logEntry);
     }
 
@@ -5277,7 +5445,6 @@ function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options
         ? new Date(timestamp * 1000).toLocaleTimeString()
         : new Date().toLocaleTimeString();
 
-    const toolKey = getToolCallKey(tool, options);
     let toolState = toolKey ? toolCallRegistry.get(toolKey) : null;
     if (toolState) {
         updateToolCallState(toolState, tool, eventType, timeStr, options);
@@ -5360,7 +5527,24 @@ function showToolCallMessage(tool, eventType, timestamp, _noLog = false, options
     if (toolKey) {
         toolCallRegistry.set(toolKey, toolState);
     }
-    appendMessageNode(wrapper);
+    if (replyKey) wrapper.dataset.replyKey = String(replyKey);
+    if (streamBox && streamBox.state.wrapper && streamBox.state.wrapper.parentNode) {
+        stopToolStream(streamBox.key);
+        streamBox.state.wrapper.replaceWith(wrapper);
+        const expectedPrev = findReplyContentNode(replyKey) || findReplyThinkingNode(replyKey);
+        if (expectedPrev && !isNodeAfter(wrapper, expectedPrev)) {
+            expectedPrev.after(wrapper);
+        }
+        keepAssistantActivityLast(wrapper);
+        syncScrollAfterMessageChange(isMessageViewportAtBottom());
+    } else {
+        placeAssistantReplyNode(wrapper, replyKey, 'tool');
+    }
+}
+
+function isNodeAfter(node, earlier) {
+    if (!node || !earlier || node.parentNode !== earlier.parentNode) return false;
+    return Boolean(earlier.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
 
 function isCodeModeToolMessage(tool) {

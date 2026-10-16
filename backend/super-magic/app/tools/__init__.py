@@ -7,6 +7,7 @@
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
 from app.tools.micro_app_plan import MicroAppPlanTool
+from app.tools.update_html_app_memory import UpdateHtmlAppMemory
 from app.tools.web_search import WebSearch
 from app.tools.find_agents import FindAgentsTool
 from app.tools.call_subagent import CallSubagent
@@ -18,6 +19,7 @@ from app.tools.read_chat_history import ReadChatHistory
 from app.tools.core import BaseTool, BaseToolParams, tool, tool_factory
 from app.tools.create_slide import CreateSlide
 from app.tools.create_slide_project import CreateSlideProject
+from app.tools.update_slide_transitions import UpdateSlideTransitions
 from app.tools.slide_template_builder import (
     CreateSlideTemplateProject,
     FinalizeSlideTemplate,
@@ -33,11 +35,12 @@ from app.tools.download_from_url import DownloadFromUrl
 from app.tools.download_from_urls import DownloadFromUrls
 from app.tools.edit_file import EditFile
 from app.tools.edit_file_range import EditFileRange
+from app.tools.find_file_range import FindFileRange
 from app.tools.multi_edit_file import MultiEditFile
-from app.tools.multi_edit_file_range import MultiEditFileRange
 from app.tools.file_search import FileSearch
 from app.tools.get_js_cdn_address import GetJsCdnAddress
 from app.tools.get_sandbox_info import GetSandboxInfo
+from app.tools.get_user_language import GetUserLanguage
 from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
@@ -50,8 +53,10 @@ from app.tools.purify import Purify
 # 导出工具类
 from app.tools.read_file import ReadFile
 from app.tools.read_files import ReadFiles
+from app.tools.create_client_side_file_bundle import CreateClientSideFileBundle
 # Code Mode 也依赖模块显式导入完成工具注册；仅写 Skill 示例不会让运行时找到这个工具。
 from app.tools.inspect_memory import InspectMemory
+from app.tools.inspect_path_storage import InspectPathStorage
 from app.tools.read_webpages_as_markdown import ReadWebpagesAsMarkdown
 from app.tools.reflection import Reflection
 from app.tools.deep_write import DeepWrite
@@ -112,6 +117,13 @@ from app.tools.document_parse import (
     UnderstandDocumentImages,
 )
 from app.tools.cli_manager import CliManagerApply, CliManagerList, CliManagerRemove
+from app.tools.startup_task import (
+    StartupTaskCreate,
+    StartupTaskDelete,
+    StartupTaskList,
+    StartupTaskRun,
+    StartupTaskUpdate,
+)
 from app.tools.env_manager import GetEnv, ListEnv, SetEnv, UnsetEnv
 from app.tools.share import (
     CreateFileShare,
@@ -131,7 +143,7 @@ from app.tools.visual_understanding import VisualUnderstanding
 from app.tools.visual_understanding_webpage import VisualUnderstandingWebpage
 from app.tools.video_understanding import VideoUnderstanding
 from app.tools.analysis_slide_webpage import AnalysisSlideWebpage
-from app.tools.channel import ConnectDingTalkBot, ConnectLarkBot, ConnectWecomBot, ConnectWechatBot, GetIMChannelStatus, WaitWechatLogin
+from app.tools.channel import ConnectDingTalkBot, ConnectLarkBot, ConnectWecomBot, ConnectWechatBot, GetIMChannelStatus, WaitWechatLogin, SendWechatMessage
 
 # 数据分析看板工具
 from app.tools.data_analyst_dashboard_tools import (
@@ -184,6 +196,11 @@ from app.tools.design.tools import (
 
 # 独立 Canvas Agent 工具集；不复用旧 Design Canvas 工具实现
 from app.tools.canvas import (
+    QueryCanvasLayout,
+    ArrangeCanvasElements,
+    RenameCanvasElements,
+    UnframeCanvasElements,
+    DeleteCanvasElements,
     AddCanvasContents,
     AddCanvasElements,
     FrameCanvasElements,
@@ -202,11 +219,25 @@ from app.tools.canvas import (
 
 # 用户信息工具
 from app.tools.get_user_info import GetUserInfo
+# CodeModeOnly MagicBase tools: see agents/skills/use-magicbase/SKILL.md.
 from app.tools.magicbase_tools import (
+    BatchCreateMagicRows,
+    BatchDeleteMagicRows,
+    BatchGetMagicRows,
     CreateMagicColumn,
     CreateMagicTable,
+    CreateMagicRow,
+    DeleteMagicColumn,
+    DeleteMagicRow,
+    DeleteMagicTable,
+    GetMagicRow,
     GetMagicTable,
+    QueryMagicRows,
     QueryMagicTables,
+    QueryMagicTablesAllMentionedApps,
+    UpdateMagicColumn,
+    UpdateMagicRow,
+    UpdateMagicTablePermissions,
 )
 
 # Skill 管理工具
@@ -258,6 +289,45 @@ from app.tools.remote import (
     CallSimpleTool,
 )
 
+# Code Mode 产品工具也需进入加密打包的显式导入链。
+from app.tools.super_magic import (
+    ArchiveTopic,
+    ArchiveWorkspace,
+    CancelTopicTask,
+    CopyProjectFiles,
+    CreateProject,
+    CreateProjectDirectory,
+    CreateTopic,
+    CreateWorkspace,
+    DeleteProject,
+    DeleteProjectFiles,
+    DeleteTopic,
+    DeleteTopicQueuedMessage,
+    DeleteWorkspace,
+    GetFileBatchStatus,
+    GetProject,
+    GetProjectFile,
+    GetTopic,
+    GetTopicTask,
+    GetWorkspace,
+    ListProjectFiles,
+    ListProjects,
+    ListTopicQueuedMessages,
+    ListTopics,
+    ListWorkspaces,
+    MoveProject,
+    MoveProjectFiles,
+    PrepareProjectFiles,
+    ReadTopicMessages,
+    RenameProjectFile,
+    SearchProjectFiles,
+    SendTopicMessage,
+    StartTopicTask,
+    UpdateProject,
+    UpdateTopic,
+    UpdateWorkspace,
+)
+
 # 兼容加密环境中的旧 Design 包导入。
 # TODO(下一版本): 旧 Design 目录删除时同步移除这些导入。
 import app.tools.design.manager
@@ -268,6 +338,7 @@ __all__ = [
     "DummyTool",
     "AskUserTool",
     "MicroAppPlanTool",
+    "UpdateHtmlAppMemory",
 
     # 核心组件
     "BaseTool",
@@ -287,6 +358,7 @@ __all__ = [
     "ConnectWecomBot",
     "ConnectWechatBot",
     "WaitWechatLogin",
+    "SendWechatMessage",
     "CompactChatHistory",
     "ListChatHistory",
     "SearchChatHistory",
@@ -303,6 +375,11 @@ __all__ = [
     "CliManagerApply",
     "CliManagerList",
     "CliManagerRemove",
+    "StartupTaskCreate",
+    "StartupTaskDelete",
+    "StartupTaskList",
+    "StartupTaskRun",
+    "StartupTaskUpdate",
     "GetEnv",
     "ListEnv",
     "SetEnv",
@@ -321,6 +398,7 @@ __all__ = [
     "UpdateTopicShare",
     "CreateSlide",
     "CreateSlideProject",
+    "UpdateSlideTransitions",
     "CreateSlideTemplateProject",
     "FinalizeSlideTemplate",
     "PrepareSlideTemplateSource",
@@ -334,11 +412,12 @@ __all__ = [
     "DownloadFromUrls",
     "EditFile",
     "EditFileRange",
+    "FindFileRange",
     "MultiEditFile",
-    "MultiEditFileRange",
     "FileSearch",
     "GetJsCdnAddress",
     "GetSandboxInfo",
+    "GetUserLanguage",
     "GrepSearch",
     "ImageSearch",
     "GenerateImages",
@@ -347,7 +426,9 @@ __all__ = [
     "FindSkillsTool",
     "GetUserInfo",
     "QueryMagicTables",
+    "QueryMagicTablesAllMentionedApps",
     "GetMagicTable",
+    "BatchGetMagicRows",
     "CreateMagicTable",
     "CreateMagicColumn",
     "InstallSkillsTool",
@@ -360,7 +441,9 @@ __all__ = [
     "InstallSlidesTemplate",
     "ReadFile",
     "InspectMemory",
+    "InspectPathStorage",
     "ReadFiles",
+    "CreateClientSideFileBundle",
     "ReadWebpagesAsMarkdown",
     "Reflection",
     "ShellExec",
@@ -457,6 +540,11 @@ __all__ = [
     "UpsertStoryboard",
 
     # 独立 Canvas Agent 工具
+    "QueryCanvasLayout",
+    "ArrangeCanvasElements",
+    "RenameCanvasElements",
+    "UnframeCanvasElements",
+    "DeleteCanvasElements",
     "AddCanvasContents",
     "AddCanvasElements",
     "InitializeCanvas",
@@ -503,4 +591,40 @@ __all__ = [
     "CallAssistant",
     "CallSimpleAgent",
     "CallSimpleTool",
+    # Super Magic 产品工具集
+    "ArchiveTopic",
+    "ArchiveWorkspace",
+    "CancelTopicTask",
+    "CopyProjectFiles",
+    "CreateProject",
+    "CreateProjectDirectory",
+    "CreateTopic",
+    "CreateWorkspace",
+    "DeleteProject",
+    "DeleteProjectFiles",
+    "DeleteTopic",
+    "DeleteTopicQueuedMessage",
+    "DeleteWorkspace",
+    "GetFileBatchStatus",
+    "GetProject",
+    "GetProjectFile",
+    "GetTopic",
+    "GetTopicTask",
+    "GetWorkspace",
+    "ListProjectFiles",
+    "ListProjects",
+    "ListTopicQueuedMessages",
+    "ListTopics",
+    "ListWorkspaces",
+    "MoveProject",
+    "MoveProjectFiles",
+    "PrepareProjectFiles",
+    "ReadTopicMessages",
+    "RenameProjectFile",
+    "SearchProjectFiles",
+    "SendTopicMessage",
+    "StartTopicTask",
+    "UpdateProject",
+    "UpdateTopic",
+    "UpdateWorkspace",
 ]

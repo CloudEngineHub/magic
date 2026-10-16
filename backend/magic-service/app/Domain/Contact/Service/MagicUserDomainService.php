@@ -16,6 +16,7 @@ use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Entity\ValueObject\PlatformType;
 use App\Domain\Contact\Entity\ValueObject\UserOption;
+use App\Domain\Contact\Entity\ValueObject\UserSearchField;
 use App\Domain\Contact\Entity\ValueObject\UserType;
 use App\Domain\OrganizationEnvironment\Entity\MagicEnvironmentEntity;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
@@ -140,6 +141,12 @@ class MagicUserDomainService extends AbstractContactDomainService
     public function getUserByIds(array $ids, DataIsolation $dataIsolation, array $column = ['*']): array
     {
         return $this->userRepository->getUserByIdsAndOrganizations($ids, [$dataIsolation->getCurrentOrganizationCode()], $column);
+    }
+
+    /** @return array<MagicUserEntity> */
+    public function getUserByIdsInOrganization(array $ids, string $organizationCode): array
+    {
+        return $this->userRepository->getUserByIdsAndOrganizations($ids, [$organizationCode]);
     }
 
     public function getUserByPageToken(string $pageToken = '', int $pageSize = 50): array
@@ -362,6 +369,21 @@ class MagicUserDomainService extends AbstractContactDomainService
     public function queriesPlatformUsers(Page $page, ?array $filters = null): array
     {
         return $this->userRepository->queriesPlatformUsers($page, $filters);
+    }
+
+    /**
+     * 按指定字段搜索用户。
+     *
+     * @param null|string $organizationCodeFilter 组织编码过滤条件；null 表示不限制组织
+     * @return array{total: int, list: array<int, array<string, mixed>>}
+     */
+    public function searchUsers(
+        Page $page,
+        UserSearchField $searchField,
+        string $keyword,
+        ?string $organizationCodeFilter = null
+    ): array {
+        return $this->userRepository->searchUsers($page, $searchField, $keyword, $organizationCodeFilter);
     }
 
     public function addUserManual(string $userId, string $userManual): void

@@ -4,9 +4,12 @@ import { getActiveContent, getActiveImageContent } from "../../document/elementC
 import { parseExpiresAt, isOssExpired } from "../offline-cache/ossExpiryUtils"
 import {
 	getCanvasHostResourceReferenceIdentity,
+	isAssetResourcePath,
 	isRemoteOrSpecialPath,
+	parseAssetResourcePath,
 	type CanvasResourceReferenceResolverChangeOptions,
 } from "../../shared/path/canvasResourcePath"
+import { CanvasAssetResourceError } from "../asset/CanvasAssetResourceManager"
 import {
 	getFailureReasonFromGetFileInfoError,
 	type ResourceLoadFailureReason,
@@ -337,8 +340,7 @@ export class CanvasResourceUrlWarmupManager {
 	private collectResourceRefs(element: LayerElement): WarmupResourceRef[] {
 		const refs: WarmupResourceRef[] = []
 		const effectiveContent = this.canvas.getEffectiveContent(element.id) as
-			| { src?: string }
-			| undefined
+			{ src?: string } | undefined
 		// warmupDocument runs before ElementManager has loaded the document, so the
 		// input snapshot is the only available source during initial registration.
 		const imageSrc =
@@ -367,7 +369,7 @@ export class CanvasResourceUrlWarmupManager {
 
 	private getOrCreateEntry(ref: WarmupResourceRef, reason: string): WarmupEntry | null {
 		const path = ref.path.trim()
-		if (!path || isRemoteOrSpecialPath(path)) {
+		if (!path || (isRemoteOrSpecialPath(path) && !isAssetResourcePath(path))) {
 			this.statsSnapshot.skippedCount += 1
 			return null
 		}
@@ -510,13 +512,40 @@ export class CanvasResourceUrlWarmupManager {
 			if (!this.pathRefCounts.has(entry.key)) this.entries.delete(entry.key)
 			return
 		}
-		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
-		if (!getFileInfo) {
-			this.markFailed(entry, "getFileInfo unavailable", "load-error")
-			return
-		}
-
 		try {
+			const assetId = parseAssetResourcePath(entry.path)
+			if (assetId !== undefined) {
+				const assetInfo = await this.awaitWithAbortSignal(
+					this.canvas.assetResourceManager.getResource(assetId, {
+						priority: entry.priority,
+					}),
+					signal,
+				)
+				if (resolverGeneration !== this.resolverGeneration) return
+				if (this.destroyed || signal.aborted || !this.pathRefCounts.has(entry.key)) {
+					this.warmingKeys.delete(entry.key)
+					if (!this.pathRefCounts.has(entry.key)) this.entries.delete(entry.key)
+					return
+				}
+				this.warmingKeys.delete(entry.key)
+				if (!assetInfo.fileUrl) {
+					this.markFailed(entry, "asset file URL unavailable", "not-found")
+					return
+				}
+				if (assetInfo.mediaType !== entry.mediaType) {
+					this.markFailed(entry, "asset media type mismatch", "load-error")
+					return
+				}
+				this.markReady(entry)
+				return
+			}
+
+			const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
+			if (!getFileInfo) {
+				this.markFailed(entry, "getFileInfo unavailable", "load-error")
+				return
+			}
+
 			const fileInfo = await this.awaitWithAbortSignal(
 				getFileInfo(entry.path, {
 					useImageProcess: entry.mediaType === "image",
@@ -536,14 +565,7 @@ export class CanvasResourceUrlWarmupManager {
 				this.markFailed(entry, "empty fileInfo src", "load-error")
 				return
 			}
-			entry.status = "ready"
-			entry.lastError = undefined
-			entry.failedAt = undefined
-			entry.retryAfterAt = undefined
-			entry.warmedAt = Date.now()
-			entry.expiresAt = fileInfo.expires_at
-			entry.resourceVersion = fileInfo.resource_version
-			this.statsSnapshot.successCount += 1
+			this.markReady(entry, fileInfo.expires_at, fileInfo.resource_version)
 		} catch (error) {
 			if (resolverGeneration !== this.resolverGeneration) return
 			if (isAbortError(error)) {
@@ -555,9 +577,22 @@ export class CanvasResourceUrlWarmupManager {
 			this.markFailed(
 				entry,
 				getErrorMessage(error),
-				getFailureReasonFromGetFileInfoError(error),
+				error instanceof CanvasAssetResourceError
+					? error.reason
+					: getFailureReasonFromGetFileInfoError(error),
 			)
 		}
+	}
+
+	private markReady(entry: WarmupEntry, expiresAt?: string, resourceVersion?: string): void {
+		entry.status = "ready"
+		entry.lastError = undefined
+		entry.failedAt = undefined
+		entry.retryAfterAt = undefined
+		entry.warmedAt = Date.now()
+		entry.expiresAt = expiresAt
+		entry.resourceVersion = resourceVersion
+		this.statsSnapshot.successCount += 1
 	}
 
 	private markFailed(

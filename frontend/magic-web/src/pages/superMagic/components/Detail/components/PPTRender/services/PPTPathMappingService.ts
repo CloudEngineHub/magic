@@ -237,7 +237,11 @@ export class PPTPathMappingService {
 		if (fileIds.length === 0) return
 
 		try {
-			const response = await getTemporaryDownloadUrl({ file_ids: fileIds })
+			const response = await (
+				this.config.fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+			)({
+				file_ids: fileIds,
+			})
 
 			response?.forEach((item: any) => {
 				if (item.file_id && item.url) {
@@ -281,7 +285,11 @@ export class PPTPathMappingService {
 		if (fileIds.length === 0) return urlMap
 
 		try {
-			const response = await getTemporaryDownloadUrl({ file_ids: fileIds })
+			const response = await (
+				this.config.fileApi?.getTemporaryDownloadUrl ?? getTemporaryDownloadUrl
+			)({
+				file_ids: fileIds,
+			})
 
 			const shouldCommit = options.shouldCommit?.() !== false
 			response?.forEach((item: any) => {

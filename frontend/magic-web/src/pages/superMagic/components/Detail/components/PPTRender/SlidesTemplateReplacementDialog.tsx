@@ -75,8 +75,9 @@ export default function SlidesTemplateReplacementDialog({
 				selectedTemplate={selectedTemplate}
 				onTemplateClick={setSelectedTemplate}
 				className="h-full"
-				toolbarClassName="sticky top-0 z-20 bg-background/95 pb-3 backdrop-blur"
-				gridClassName="min-h-0 flex-1"
+				// The dialog shell provides the inset; match the other picker without doubling it.
+				toolbarClassName="sticky top-0 z-20 bg-background/95 px-0 pb-3 pt-0 backdrop-blur"
+				gridClassName="min-h-0 flex-1 p-0 pt-1 ![grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr))]"
 				showMyTemplates
 				enableMyTemplateRemoval
 			/>

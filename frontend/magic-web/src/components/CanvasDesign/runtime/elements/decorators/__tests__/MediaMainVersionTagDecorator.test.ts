@@ -1,6 +1,6 @@
 import Konva from "konva"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { MediaMainVersionTagDecorator } from "../MediaMainVersionTagDecorator"
+import { MediaVersionTagDecorator } from "../MediaVersionTagDecorator"
 
 function createEventEmitterMock() {
 	const handlers = new Map<string, Array<() => void>>()
@@ -81,7 +81,7 @@ function versionedMedia(type: "image" | "video", activeContentId = "main") {
 	} as never
 }
 
-describe("MediaMainVersionTagDecorator", () => {
+describe("MediaVersionTagDecorator", () => {
 	beforeEach(() => {
 		vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
 			clearRect: vi.fn(),
@@ -101,7 +101,7 @@ describe("MediaMainVersionTagDecorator", () => {
 		"shows the static main-version tag for a main %s Content",
 		(type) => {
 			const { canvas, group, stage } = createHarness()
-			const decorator = new MediaMainVersionTagDecorator(group, {
+			const decorator = new MediaVersionTagDecorator(group, {
 				canvas: canvas as never,
 				width: 240,
 				height: 160,
@@ -123,7 +123,7 @@ describe("MediaMainVersionTagDecorator", () => {
 
 	it("hides the tag when the active Content is not the main Content", () => {
 		const { canvas, group, stage } = createHarness()
-		const decorator = new MediaMainVersionTagDecorator(group, {
+		const decorator = new MediaVersionTagDecorator(group, {
 			canvas: canvas as never,
 			width: 240,
 			height: 160,
@@ -147,7 +147,7 @@ describe("MediaMainVersionTagDecorator", () => {
 		Konva.autoDrawEnabled = false
 		try {
 			const { canvas, group, stage, viewportLayouts } = createHarness()
-			const decorator = new MediaMainVersionTagDecorator(group, {
+			const decorator = new MediaVersionTagDecorator(group, {
 				canvas: canvas as never,
 				width: 240,
 				height: 160,

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import type { IMCPItem } from "@/components/Agent/MCP/types"
 import { FlowApi } from "@/apis"
 import { Check, Loader2, Plus, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useConfirmDialog } from "@/components/shadcn-composed/confirm-dialog"
 import { openAgentCommonModal } from "@/components/Agent/AgentCommonModal"
 import AgentAuthorizationTools from "@/components/Agent/AgentTools/AgentAuthorizationTools/AgentAuthorizationTools"
@@ -87,6 +88,8 @@ export default function ConnectorLibrary({
 	} = useConnectorMarket(searchQuery, group, selectedItems)
 	const ownViewportRef = useRef<HTMLDivElement | null>(null)
 	const viewportRef = scrollViewportRef ?? ownViewportRef
+	// The full market page already owns its ScrollArea; only embedded panels need a local one.
+	const ListContainer = embedded ? ScrollArea : Fragment
 	const [statusLoadingIds, setStatusLoadingIds] = useState<Set<string>>(new Set())
 	const handleAutoLoadMore = useCallback(() => loadMore(), [loadMore])
 	const sentinelRef = useAutoLoadMoreSentinel({
@@ -280,6 +283,8 @@ export default function ConnectorLibrary({
 						<SkillMarketTabs
 							value={SKILL_MARKET_TAB_VALUES.connectors}
 							onValueChange={(value) => {
+								if (value === SKILL_MARKET_TAB_VALUES.crew)
+									navigate({ name: RouteName.CrewMarketCrew })
 								if (value === SKILL_MARKET_TAB_VALUES.skills)
 									navigate({ name: RouteName.CrewMarketSkills })
 							}}
@@ -321,100 +326,108 @@ export default function ConnectorLibrary({
 				</MarketStickyHeader>
 			) : null}
 
-			<section
-				ref={embedded ? (viewportRef as RefObject<HTMLDivElement>) : undefined}
-				className={
-					embedded
-						? "min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-4"
-						: "flex min-w-0 flex-col gap-5 pb-5 sm:gap-6 sm:pb-6"
-				}
-				data-testid="connector-market-list"
+			<ListContainer
+				{...(embedded
+					? {
+							className: "min-h-0 min-w-0 flex-1",
+							viewportRef: viewportRef as RefObject<HTMLDivElement>,
+							// Keep pagination rooted in the viewport and prevent Radix's table wrapper from widening the grid.
+							viewportClassName: "min-w-0 px-5 py-4 [&>div]:!block",
+						}
+					: {})}
 			>
-				{error ? (
-					<div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground">
-						<span>{t("connectors.loadFailed")}</span>
-						<Button variant="outline" size="sm" onClick={retry}>
-							{t("connectors.retry")}
-						</Button>
-					</div>
-				) : loading && list.length === 0 ? (
-					<div className="flex items-center justify-center py-16">
-						<Loader2 className="size-5 animate-spin text-muted-foreground" />
-					</div>
-				) : list.length === 0 ? (
-					<div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-						{t("connectors.empty")}
-					</div>
-				) : (
-					<div
-						className="mt-4 grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
-						data-testid="connector-card-grid"
-					>
-						{list.map((connector) => (
-							<ConnectorCard
-								key={connector.id}
-								connector={connector}
-								selected={selectedIds.has(connector.id)}
-								loading={loadingIds.has(connector.id)}
-								onToggle={handleConnectorToggle}
-								onOpenDetail={openDetail}
-								showManageMenu={group === CONNECTOR_MARKET_GROUPS.mine}
-								descriptionMaxLines={3}
-								onEdit={editConnector}
-								onAuthorize={authorizeConnector}
-								onManagePermissions={manageConnectorPermissions}
-								onDelete={requestDeleteConnector}
-								onToggleEnabled={(item) => void toggleConnectorEnabled(item)}
-							/>
-						))}
-					</div>
-				)}
-				{list.length > 0 ? (
-					<div
-						ref={sentinelRef}
-						className="h-1 w-full"
-						data-testid="connector-market-scroll-sentinel"
-					/>
-				) : null}
-				{list.length > 0 ? (
-					<div className="flex items-center justify-center py-2">
-						{loadingMoreError ? (
-							<div className="flex items-center justify-center gap-2 text-xs text-destructive">
-								<span>{t("connectors.loadFailed")}</span>
+				<section
+					className={
+						embedded ? "min-w-0" : "flex min-w-0 flex-col gap-5 pb-5 sm:gap-6 sm:pb-6"
+					}
+					data-testid="connector-market-list"
+				>
+					{error ? (
+						<div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted-foreground">
+							<span>{t("connectors.loadFailed")}</span>
+							<Button variant="outline" size="sm" onClick={retry}>
+								{t("connectors.retry")}
+							</Button>
+						</div>
+					) : loading && list.length === 0 ? (
+						<div className="flex items-center justify-center py-16">
+							<Loader2 className="size-5 animate-spin text-muted-foreground" />
+						</div>
+					) : list.length === 0 ? (
+						<div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+							{t("connectors.empty")}
+						</div>
+					) : (
+						<div
+							className="mt-4 grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-h-0"
+							data-testid="connector-card-grid"
+						>
+							{list.map((connector) => (
+								<ConnectorCard
+									key={connector.id}
+									connector={connector}
+									selected={selectedIds.has(connector.id)}
+									loading={loadingIds.has(connector.id)}
+									onToggle={handleConnectorToggle}
+									onOpenDetail={openDetail}
+									showManageMenu={group === CONNECTOR_MARKET_GROUPS.mine}
+									descriptionMaxLines={3}
+									onEdit={editConnector}
+									onAuthorize={authorizeConnector}
+									onManagePermissions={manageConnectorPermissions}
+									onDelete={requestDeleteConnector}
+									onToggleEnabled={(item) => void toggleConnectorEnabled(item)}
+								/>
+							))}
+						</div>
+					)}
+					{list.length > 0 ? (
+						<div
+							ref={sentinelRef}
+							className="h-1 w-full"
+							data-testid="connector-market-scroll-sentinel"
+						/>
+					) : null}
+					{list.length > 0 ? (
+						<div className="flex items-center justify-center py-2">
+							{loadingMoreError ? (
+								<div className="flex items-center justify-center gap-2 text-xs text-destructive">
+									<span>{t("connectors.loadFailed")}</span>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="h-7 px-2"
+										onClick={handleAutoLoadMore}
+									>
+										{t("connectors.retry")}
+									</Button>
+								</div>
+							) : hasMore ? (
 								<Button
 									variant="ghost"
 									size="sm"
-									className="h-7 px-2"
 									onClick={handleAutoLoadMore}
+									disabled={loadingMore}
+									data-testid="connector-market-load-more"
 								>
-									{t("connectors.retry")}
+									{loadingMore ? (
+										<Loader2 className="mr-2 size-4 animate-spin" />
+									) : null}
+									{loadingMore ? t("loadingMore") : t("loadMore")}
 								</Button>
-							</div>
-						) : hasMore ? (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={handleAutoLoadMore}
-								disabled={loadingMore}
-								data-testid="connector-market-load-more"
-							>
-								{loadingMore ? (
-									<Loader2 className="mr-2 size-4 animate-spin" />
-								) : null}
-								{loadingMore ? t("loadingMore") : t("loadMore")}
-							</Button>
-						) : (
-							<div
-								className="flex items-center justify-center gap-1 opacity-30"
-								data-testid="connector-market-no-more"
-							>
-								<Check className="size-4" />
-								<span className="text-xs">{t("noMoreData")}</span>
-							</div>
-						)}
-					</div>
-				) : null}
-			</section>
+							) : (
+								<div
+									className="flex items-center justify-center gap-1 opacity-30"
+									data-testid="connector-market-no-more"
+								>
+									<Check className="size-4" />
+									<span className="text-xs">{t("noMoreData")}</span>
+								</div>
+							)}
+						</div>
+					) : null}
+				</section>
+			</ListContainer>
 		</div>
 	)
 }

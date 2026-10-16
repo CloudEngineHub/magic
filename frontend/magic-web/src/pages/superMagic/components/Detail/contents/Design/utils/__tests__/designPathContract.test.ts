@@ -13,7 +13,8 @@ import {
 	normalizePath,
 	replaceNameInMagicProjectJsContent,
 } from "../utils"
-import { decompressCanvasData } from "../magicProjectCompression"
+import { compressCanvasData, decompressCanvasData } from "../magicProjectCompression"
+import { rewriteLayerElementsPathsForMagicProjectSave } from "../internal/designPathPrimitives"
 
 const DESIGN_A = "新建画布A"
 const DESIGN_B = "新建画布B"
@@ -219,6 +220,53 @@ describe("designPath contract", () => {
 		expect(canvas.elements?.[1].contents?.[0]).toMatchObject({ src: "./audios/voice.mp3" })
 		expect(JSON.stringify(canvas)).not.toContain(`/${DESIGN_A}/images/cat.png`)
 		expect(JSON.stringify(canvas)).not.toContain(`/${DESIGN_A}/audios/voice.mp3`)
+	})
+
+	it("keeps the draft-task uri valid across save and canvas-directory rename", () => {
+		const videoElement = {
+			id: "video-1",
+			type: "video",
+			activeContentId: "video-1-content-1",
+			mainContentId: "video-1-content-1",
+			contents: [
+				{
+					contentId: "video-1-content-1",
+					src: `/${DESIGN_A}/videos/final.mp4`,
+					generateVideoRequest: {
+						input_mode: "draft_task",
+						inputs: {
+							draft_task: {
+								video_id: "draft-video-id",
+								uri: `/${DESIGN_A}/videos/draft.mp4`,
+							},
+						},
+					},
+				},
+			],
+		} as LayerElement
+		const savedElements = [JSON.parse(JSON.stringify(videoElement)) as LayerElement]
+		rewriteLayerElementsPathsForMagicProjectSave(savedElements, DESIGN_A)
+		const savedRequest = savedElements[0].contents?.[0] as unknown as {
+			generateVideoRequest: { inputs: { draft_task: { video_id: string; uri: string } } }
+		}
+		expect(savedRequest.generateVideoRequest.inputs.draft_task).toEqual({
+			video_id: "draft-video-id",
+			uri: "./videos/draft.mp4",
+		})
+
+		const absolute = `window.magicProjectConfig = ${JSON.stringify({
+			version: "3.0.0",
+			name: DESIGN_A,
+			canvas: compressCanvasData({ elements: [videoElement] }),
+		})};`
+		const renamed = replaceNameInMagicProjectJsContent(absolute, DESIGN_A, "重命名画布")
+		const renamedRequest = readCanvas(renamed).elements?.[0].contents?.[0] as unknown as {
+			generateVideoRequest: { inputs: { draft_task: { video_id: string; uri: string } } }
+		}
+		expect(renamedRequest.generateVideoRequest.inputs.draft_task).toEqual({
+			video_id: "draft-video-id",
+			uri: "/重命名画布/videos/draft.mp4",
+		})
 	})
 
 	it("keeps external workspace resources absolute when saving magic.project.js", () => {

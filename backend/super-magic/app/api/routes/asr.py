@@ -43,7 +43,10 @@ def _build_task_response(task: AsrTaskResult) -> AsrTaskResponse:
         error_message=task.error_message or task.audio_format_error,
         files=task.files,
         deleted_files=task.deleted_files,
-        operations=task.operations
+        operations=task.operations,
+        degraded=task.degraded,
+        completion_mode=task.completion_mode,
+        missing_shard_indices=task.missing_shard_indices,
     )
 
 
@@ -119,16 +122,18 @@ async def _get_task_and_check_completed_or_error(
 
     # 如果任务出错，返回错误
     if existing_task.status == AsrTaskStatus.ERROR.value:
-        if allow_error_retry:
+        # 普通重复 finish 是幂等查询，不得重新开启等待窗口。
+        # 只有调用方显式 force_reset 才允许从 error 状态人工重试。
+        if allow_error_retry and force_reset:
             retry_ok, retry_count, max_retries = await AsrMergeTaskManager.instance().request_retry(
-                task_key, force=force_reset
+                task_key, force=True
             )
             if retry_ok:
                 existing_task = await AsrMergeTaskManager.instance().get_task(task_key)
                 if existing_task is not None:
                     logger.warning(
                         f"🔁 [asrmerge] task_key={task_key} ERROR 任务进入重试: "
-                        f"retry_count={retry_count}/{max_retries} force_reset={force_reset}"
+                        f"retry_count={retry_count}/{max_retries} force_reset=True"
                     )
                     return None, existing_task
             response_data = _build_task_response(existing_task)

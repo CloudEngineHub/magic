@@ -27,11 +27,12 @@ describe("TopicFilesCore", () => {
 		expect(source).toContain("(contextMenuItemId === itemId || shouldShowInlineFileAction) &&")
 	})
 
-	it("uses the standard template detector and dedicated folder icon", async () => {
+	it("uses the standard template detector and shared resource icon", async () => {
 		const source = await readTopicFilesCoreSource()
 
 		expect(source).toContain("isSlidesTemplateFolder(item)")
-		expect(source).toContain("<SlidesTemplateFolderIcon size={16} />")
+		expect(source).toContain("<FileResourceIcon")
+		expect(source).toContain("presentation={presentation}")
 	})
 
 	it("opens a standard template folder as a memory-only PPT template detail", async () => {

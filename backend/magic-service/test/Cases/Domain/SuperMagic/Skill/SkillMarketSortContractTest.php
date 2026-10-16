@@ -19,8 +19,23 @@ use RuntimeException;
 /** @internal */
 final class SkillMarketSortContractTest extends TestCase
 {
+    /**
+     * 被替换掉的原始容器，tearDownAfterClass 时还回去。
+     *
+     * 这里替换的是进程级的 ApplicationContext。不还原的话，同一进程里后续每个测试
+     * 都会拿到这个桩容器：它对除 PhpSerializerPacker 以外的任何服务都抛
+     * "Unsupported service"，于是任何需要 ConfigurationInterface 的代码路径
+     * （例如 ExceptionBuilder 读 config('error_message')）都会直接炸掉。
+     * 套件里确实有测试因此挂掉 —— 修复方式就是还回去。
+     */
+    private static ?ContainerInterface $originalContainer = null;
+
     public static function setUpBeforeClass(): void
     {
+        self::$originalContainer = ApplicationContext::hasContainer()
+            ? ApplicationContext::getContainer()
+            : null;
+
         ApplicationContext::setContainer(new class implements ContainerInterface {
             public function get(string $id): mixed
             {
@@ -36,6 +51,16 @@ final class SkillMarketSortContractTest extends TestCase
                 return $id === PhpSerializerPacker::class;
             }
         });
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        if (self::$originalContainer !== null) {
+            ApplicationContext::setContainer(self::$originalContainer);
+            self::$originalContainer = null;
+        }
+
+        parent::tearDownAfterClass();
     }
 
     public function testMarketEntityExposesPersistedTotalInstallCount(): void
@@ -180,9 +205,6 @@ final class SkillMarketSortContractTest extends TestCase
             'name',
             'description',
             'source',
-            [],
-            [],
-            [],
             '',
             'USER',
             [],

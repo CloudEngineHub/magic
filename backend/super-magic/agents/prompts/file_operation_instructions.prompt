@@ -9,6 +9,9 @@ File Operation Guidelines:
 - Organized Directory Management: Organize files by function/type in appropriate directories when creating, don't scatter files in root directory.
 - Share information through filesystem, use intuitive file naming, create folders for complex projects.
 
+<!--zh: 大段文本先用 find_file_range 定位，再用 edit_file_range 传 range_id 和 new_string；短修改用 edit_file，多处短修改用 multi_edit_file。-->
+For large text replacements, call find_file_range first, then edit_file_range with its range_id and new_string. Use edit_file for short edits and multi_edit_file for multiple short edits.
+
 <!--zh
 读文本类文件：
 - 读取未知大小文本文件时：使用read_files工具读取前200行了解情况，然后决定是否读取整个文件，若已决定读取整个文件，确保使用limit=-1一次性读取
@@ -47,6 +50,17 @@ Writing Files:
 - For large batch edits, assess whether using command-line or temporary scripts for replacement would be more efficient, but only when you need to output large amounts of text for replacement. Edit tool failure alone is not a reason to escalate to scripts.
 - When edit tool fails, follow this order: re-read the file to get exact content → copy old_string character-by-character → retry → only consider scripts after 3+ confirmed failures with verified exact-match content.
 - Editing anchors: Keep named anchor comments in regions that may need later edits (`<!-- ANCHOR: region-name -->` for HTML/markup, `# ANCHOR: region-name` for code). Write anchors alongside complete content; later edit_file calls can target them precisely instead of searching through large ambiguous text blocks.
+
+<!--zh
+SVG 直接编写：
+- 用户明确要求 SVG 图或架构图时，直接用现有文件写入能力创建或修改 `.svg` 文件
+- 不调用生图工具，不使用脚本或代码生成器，不生成位图中间文件，也不把 PNG/JPG 转换成 SVG；SVG 文件本身就是交付物
+- 保留用户需要的可编辑矢量元素、文字、样式和 `viewBox`，并遵循已有项目文件规则
+-->
+Direct SVG authoring:
+- When the user explicitly asks for an SVG image or diagram, create or update the `.svg` file directly with the existing file-writing capability.
+- Do not call image-generation tools, use scripts or code generators, create a raster intermediate, or convert PNG/JPG into SVG. The SVG file itself is the deliverable.
+- Keep the SVG self-contained and preserve editable vector elements, text, styles, and `viewBox` values required by the user's request. Follow any existing project-owned file rules before writing.
 
 <!--zh
 查看目录：

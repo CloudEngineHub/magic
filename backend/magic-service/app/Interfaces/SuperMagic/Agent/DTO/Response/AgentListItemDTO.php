@@ -42,6 +42,8 @@ class AgentListItemDTO extends AbstractDTO
 
     private string $sourceType;
 
+    private string $source;
+
     private bool $enabled;
 
     /**
@@ -88,6 +90,7 @@ class AgentListItemDTO extends AbstractDTO
         int $iconType,
         array $playbooks,
         string $sourceType,
+        string $source,
         bool $enabled,
         ?bool $isStoreOffline,
         ?string $latestVersionCode,
@@ -115,6 +118,7 @@ class AgentListItemDTO extends AbstractDTO
         $this->iconType = $iconType;
         $this->playbooks = $playbooks;
         $this->sourceType = $sourceType;
+        $this->source = $source;
         $this->enabled = $enabled;
         $this->isStoreOffline = $isStoreOffline;
         $this->latestVersionCode = $latestVersionCode;
@@ -149,6 +153,7 @@ class AgentListItemDTO extends AbstractDTO
             'icon_type' => $this->iconType,
             'playbooks' => $this->playbooks,
             'source_type' => $this->sourceType,
+            'source' => $this->source,
             'enabled' => $this->enabled,
             'is_store_offline' => $this->isStoreOffline,
             'latest_version_code' => $this->latestVersionCode,

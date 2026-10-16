@@ -9,6 +9,7 @@ import {
 	isImageElementContent,
 } from "@/components/CanvasDesign/runtime/document/elementContent"
 import type {
+	CanvasAssetResourceInfo,
 	IdentifyImageMarkRequest,
 	IdentifyImageMarkResponse,
 	UploadPrivateFile,
@@ -129,6 +130,8 @@ export interface SuperMagicMarkerManagerDependencies {
 	uploadPrivateFiles?: (files: UploadPrivateFile[]) => Promise<UploadPrivateFileResponse[]>
 	/** getFileInfo API */
 	getFileInfo?: (path: string) => Promise<{ src?: string }>
+	/** 素材库详情 API；离画布合成 asset:// 图片时使用。 */
+	getAssetResourceInfo?: (assetId: string) => Promise<CanvasAssetResourceInfo>
 	/** 发布事件到 MessageEditor */
 	publishToMessageEditor?: (
 		event: MarkerManagerPublishEvent,
@@ -152,6 +155,10 @@ export class SuperMagicMarkerManager {
 	private compositePathByProject = new Map<string, Record<string, CompositePathCacheEntry>>()
 	private storage: MarkerStorage
 	private dependencies: SuperMagicMarkerManagerDependencies = {}
+	private dependenciesByDesignProjectId = new Map<
+		string,
+		Map<symbol, SuperMagicMarkerManagerDependencies>
+	>()
 	private loadingMarkers = new Set<string>()
 	private activeMarkerRequests = new Map<
 		string,
@@ -174,6 +181,51 @@ export class SuperMagicMarkerManager {
 
 	updateDependencies(deps: Partial<SuperMagicMarkerManagerDependencies>): void {
 		this.dependencies = { ...this.dependencies, ...deps }
+	}
+
+	/**
+	 * Bind Canvas-only dependencies to one mounted design project.
+	 *
+	 * Cached file tabs can keep several Design components mounted at once, so a scoped stack avoids
+	 * one tab's cleanup clearing another tab's callbacks. Releasing the final registration drops the
+	 * closures that otherwise retain the complete Canvas document through this global singleton.
+	 */
+	registerDependencies(
+		designProjectId: string,
+		deps: SuperMagicMarkerManagerDependencies,
+	): () => void {
+		const token = Symbol(designProjectId)
+		let registrations = this.dependenciesByDesignProjectId.get(designProjectId)
+		if (!registrations) {
+			registrations = new Map()
+			this.dependenciesByDesignProjectId.set(designProjectId, registrations)
+		}
+		registrations.set(token, deps)
+
+		let released = false
+		return () => {
+			if (released) return
+			released = true
+			const currentRegistrations = this.dependenciesByDesignProjectId.get(designProjectId)
+			if (!currentRegistrations) return
+			currentRegistrations.delete(token)
+			if (currentRegistrations.size === 0) {
+				this.dependenciesByDesignProjectId.delete(designProjectId)
+			}
+		}
+	}
+
+	private getDependencies(designProjectId: string): SuperMagicMarkerManagerDependencies {
+		const registrations = this.dependenciesByDesignProjectId.get(designProjectId)
+		if (!registrations?.size) return this.dependencies
+
+		let scopedDependencies: SuperMagicMarkerManagerDependencies | undefined
+		registrations.forEach((registeredDependencies) => {
+			scopedDependencies = registeredDependencies
+		})
+		return scopedDependencies
+			? { ...this.dependencies, ...scopedDependencies }
+			: this.dependencies
 	}
 
 	private getElementSrcCache(designProjectId: string): Record<string, string> {
@@ -373,6 +425,7 @@ export class SuperMagicMarkerManager {
 		if (!marker) return
 
 		this.publishToMessageEditor(PubSubEvents.Super_Magic_Marker_Data_Updated, {
+			designProjectId,
 			updates: [
 				{
 					markerId,
@@ -507,11 +560,12 @@ export class SuperMagicMarkerManager {
 			getCanvasElements,
 			getElementImageInfo,
 			getFileInfo,
+			getAssetResourceInfo,
 			uploadPrivateFiles,
 			identifyImageMark,
 			projectId,
-		} = this.dependencies
-		if (!getFileInfo || !uploadPrivateFiles || !identifyImageMark) return
+		} = this.getDependencies(designProjectId)
+		if (!uploadPrivateFiles || !identifyImageMark) return
 
 		const requestId = options?.requestId ?? this.getNextMarkerRequestId(markerId)
 		const controller = new AbortController()
@@ -581,6 +635,7 @@ export class SuperMagicMarkerManager {
 		try {
 			const methods: MarkerCompositorMethods = {
 				getFileInfo,
+				getAssetResourceInfo,
 				uploadPrivateFiles:
 					uploadPrivateFiles as MarkerCompositorMethods["uploadPrivateFiles"],
 				identifyImageMark:
@@ -675,9 +730,18 @@ export class SuperMagicMarkerManager {
 	private publishToMessageEditor(
 		event: MarkerManagerPublishEvent,
 		payload: MarkerManagerPublishPayload,
+		designProjectId?: string,
 	): void {
+		const payloadDesignProjectId =
+			"designProjectId" in payload && typeof payload.designProjectId === "string"
+				? payload.designProjectId
+				: undefined
+		const scopedDesignProjectId = designProjectId ?? payloadDesignProjectId
+		const scopedDependencies = scopedDesignProjectId
+			? this.getDependencies(scopedDesignProjectId)
+			: this.dependencies
 		const publish =
-			this.dependencies.publishToMessageEditor ??
+			scopedDependencies.publishToMessageEditor ??
 			((e: MarkerManagerPublishEvent, p: MarkerManagerPublishPayload) => pubsub.publish(e, p))
 		publish(event, payload)
 	}
@@ -690,7 +754,7 @@ export class SuperMagicMarkerManager {
 		marker: Marker,
 		markNumber: number,
 	): Promise<CanvasMarkerMentionData | null> {
-		const { getCanvasElements, projectId, topicId } = this.dependencies
+		const { getCanvasElements, projectId, topicId } = this.getDependencies(designProjectId)
 		const elements = getCanvasElements?.(designProjectId)?.elements
 		if (!Array.isArray(elements)) return null
 
@@ -757,9 +821,13 @@ export class SuperMagicMarkerManager {
 			)
 			if (!mentionData) return
 
-			this.publishToMessageEditor(PubSubEvents.Super_Magic_Insert_Marker_To_Chat, {
-				items: [{ type: MentionItemType.DESIGN_MARKER, data: mentionData }],
-			})
+			this.publishToMessageEditor(
+				PubSubEvents.Super_Magic_Insert_Marker_To_Chat,
+				{
+					items: [{ type: MentionItemType.DESIGN_MARKER, data: mentionData }],
+				},
+				designProjectId,
+			)
 			return
 		}
 
@@ -784,9 +852,13 @@ export class SuperMagicMarkerManager {
 					}
 				}
 				if (items.length > 0) {
-					this.publishToMessageEditor(PubSubEvents.Super_Magic_Sync_Markers_To_Chat, {
-						items,
-					})
+					this.publishToMessageEditor(
+						PubSubEvents.Super_Magic_Sync_Markers_To_Chat,
+						{
+							items,
+						},
+						designProjectId,
+					)
 				}
 			} finally {
 				this.isSyncingToEditor = false

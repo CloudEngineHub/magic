@@ -1,0 +1,483 @@
+import { Filter, MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
+import type { ColumnDef } from "@tanstack/react-table"
+import { DataTable } from "@magic-admin-v2/components/data-table"
+import { EmptyState } from "@magic-admin-v2/components/empty-state"
+import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
+import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
+import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
+import { ListPagination } from "@magic-admin-v2/components/list-pagination"
+import { Button } from "@magic-admin-v2/components/ui/button"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@magic-admin-v2/components/ui/dropdown-menu"
+import { Input } from "@magic-admin-v2/components/ui/input"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@magic-admin-v2/components/ui/select"
+import { Switch } from "@magic-admin-v2/components/ui/switch"
+import { useRuntime } from "@magic-admin-v2/runtime/context"
+import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
+import { usePagination } from "@magic-admin-v2/hooks/use-pagination"
+import { useSlidesTemplateCategoryMutations } from "@magic-admin-v2/features/platform-slides-template/mutations"
+import { useSlidesTemplateCategoriesQuery } from "@magic-admin-v2/features/platform-slides-template/queries"
+import { useRowPendingIds } from "@magic-admin-v2/features/platform-slides-template/hooks"
+import {
+	slidesTemplateStatus,
+	type SlidesTemplateCategory,
+	type SlidesTemplateCategoryQueryParams,
+} from "@magic-admin-v2/features/platform-slides-template/types"
+import {
+	formatDateTime,
+	resolveSlidesTemplateCategoryName,
+	toStatus,
+} from "@magic-admin-v2/features/platform-slides-template/utils"
+import { CategoryDialog } from "@magic-admin-v2/features/platform-slides-template/components/category-dialog"
+import { CopyableCode } from "@magic-admin-v2/features/platform-slides-template/components/copyable-code"
+
+const emptyStatus = "all"
+
+type CategoryFilterDraft = {
+	code: string
+	keyword: string
+	status: string
+}
+
+function createDefaultCategoryFilterDraft(): CategoryFilterDraft {
+	return { code: "", keyword: "", status: emptyStatus }
+}
+
+function toCategoryListParams(
+	draft: CategoryFilterDraft,
+	page: number,
+	pageSize: number,
+): SlidesTemplateCategoryQueryParams {
+	return {
+		page,
+		page_size: pageSize,
+		code: draft.code || undefined,
+		keyword: draft.keyword || undefined,
+		status: draft.status === emptyStatus ? null : (Number(draft.status) as 0 | 1),
+	}
+}
+
+type CategoryManagerProps = {
+	canEdit: boolean
+	onDelete: (record: SlidesTemplateCategory) => void
+}
+
+export type CategoryManagerHandle = {
+	create: () => void
+	reset: () => void
+}
+
+export const CategoryManager = forwardRef<CategoryManagerHandle, CategoryManagerProps>(
+	function CategoryManager({ canEdit, onDelete }, ref) {
+		const { t } = useTranslation()
+		const { language } = useRuntime()
+		const { pageSize, setPageSize } = usePagination()
+		const toParams = useCallback(
+			(draft: CategoryFilterDraft, page: number) =>
+				toCategoryListParams(draft, page, pageSize),
+			[pageSize],
+		)
+		const {
+			filterDraft: filters,
+			page,
+			params,
+			setDebouncedField,
+			setFilterDraft,
+			setPage,
+		} = useListQueryParams({
+			debounceFields: ["keyword", "code"],
+			extraResetKey: pageSize,
+			initialDraft: createDefaultCategoryFilterDraft,
+			toParams,
+		})
+		const [dialogOpen, setDialogOpen] = useState(false)
+		const [editing, setEditing] = useState<SlidesTemplateCategory | null>(null)
+		const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
+		const [advancedFilterDraft, setAdvancedFilterDraft] = useState(
+			createDefaultCategoryFilterDraft,
+		)
+		const query = useSlidesTemplateCategoriesQuery(params)
+		const mutations = useSlidesTemplateCategoryMutations()
+		const { pendingIds: statusPendingIds, run: runStatusPending } = useRowPendingIds()
+		const { pendingIds: sortPendingIds, run: runSortPending } = useRowPendingIds()
+		const create = useCallback(() => {
+			if (!canEdit) return
+			setEditing(null)
+			setDialogOpen(true)
+		}, [canEdit])
+
+		const columns = useMemo<Array<ColumnDef<SlidesTemplateCategory>>>(
+			() => [
+				{
+					accessorKey: "name",
+					header: t("slidesTemplate.categoryName"),
+					cell: ({ row }) => resolveSlidesTemplateCategoryName(row.original),
+				},
+				{
+					accessorKey: "code",
+					header: t("slidesTemplate.categoryCode"),
+					cell: ({ row }) => <CopyableCode value={row.original.code} />,
+				},
+				{ accessorKey: "template_count", header: t("slidesTemplate.categoryCount") },
+				{
+					accessorKey: "status",
+					header: t("slidesTemplate.status"),
+					meta: { mobile: { kind: "control" } },
+					cell: ({ row }) => (
+						<Switch
+							checked={row.original.status === slidesTemplateStatus.enabled}
+							disabled={!canEdit}
+							loading={statusPendingIds.has(row.original.id)}
+							onCheckedChange={async (checked) => {
+								try {
+									await runStatusPending(row.original.id, () =>
+										mutations.updateStatus.mutateAsync({
+											id: row.original.id,
+											status: toStatus(checked),
+										}),
+									)
+								} catch (error) {
+									toast.error(
+										(error as { message?: string }).message ||
+											t("common.requestFailed"),
+									)
+								}
+							}}
+							data-testid="platform-slides-template-switch"
+						/>
+					),
+				},
+				{
+					accessorKey: "sort",
+					header: t("slidesTemplate.sort"),
+					cell: ({ row }) => (
+						<Input
+							className="h-8 w-20"
+							defaultValue={row.original.sort}
+							disabled={!canEdit || sortPendingIds.has(row.original.id)}
+							key={`${row.original.id}-${row.original.sort}`}
+							onBlur={async (event) => {
+								const sort = Number(event.target.value)
+								if (!Number.isFinite(sort) || sort === row.original.sort) return
+								try {
+									await runSortPending(row.original.id, () =>
+										mutations.updateSort.mutateAsync({
+											id: row.original.id,
+											sort,
+										}),
+									)
+								} catch (error) {
+									toast.error(
+										(error as { message?: string }).message ||
+											t("common.requestFailed"),
+									)
+								}
+							}}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") event.currentTarget.blur()
+							}}
+							type="number"
+							data-testid="platform-slides-template-input"
+						/>
+					),
+				},
+				{
+					accessorKey: "updated_at",
+					header: t("slidesTemplate.updatedAt"),
+					cell: ({ row }) =>
+						formatDateTime(
+							row.original.updated_at,
+							language === "en_US" ? "en-US" : "zh-CN",
+						),
+				},
+				{
+					id: "actions",
+					header: t("slidesTemplate.actions"),
+					enableSorting: false,
+					meta: {
+						fitContent: true,
+					},
+					cell: ({ row }) => (
+						<div className="flex justify-end">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										aria-label={t("slidesTemplate.actions")}
+										size="icon"
+										variant="ghost"
+										data-testid="platform-slides-template-category-menu-trigger"
+									>
+										<MoreHorizontal className="size-4" aria-hidden="true" />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									<DropdownMenuItem
+										disabled={!canEdit}
+										onSelect={() => {
+											setEditing(row.original)
+											setDialogOpen(true)
+										}}
+										data-testid="platform-slides-template-category-edit-item"
+									>
+										<Pencil className="mr-2 size-4" />
+										{t("common.edit")}
+									</DropdownMenuItem>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem
+										className="text-destructive focus:text-destructive"
+										disabled={!canEdit}
+										onSelect={() => onDelete(row.original)}
+										data-testid="platform-slides-template-category-delete-item"
+									>
+										<Trash2 className="mr-2 size-4" />
+										{t("common.delete")}
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						</div>
+					),
+				},
+			],
+			[
+				canEdit,
+				language,
+				mutations,
+				onDelete,
+				runSortPending,
+				runStatusPending,
+				sortPendingIds,
+				statusPendingIds,
+				t,
+			],
+		)
+		const reset = useCallback(() => {
+			const next = createDefaultCategoryFilterDraft()
+			setFilterDraft(next)
+			setAdvancedFilterDraft(next)
+		}, [setFilterDraft])
+		const handleFilterSheetOpenChange = useCallback(
+			(open: boolean) => {
+				if (open) setAdvancedFilterDraft(filters)
+				setIsFilterSheetOpen(open)
+			},
+			[filters],
+		)
+		const applyAdvancedFilters = useCallback(() => {
+			setFilterDraft(advancedFilterDraft)
+			setIsFilterSheetOpen(false)
+		}, [advancedFilterDraft, setFilterDraft])
+
+		useImperativeHandle(ref, () => ({ create, reset }), [create, reset])
+
+		return (
+			<div className="space-y-4">
+				<div className="sticky top-0 z-40 -mx-4 flex min-w-0 items-end gap-2 bg-background px-4 py-2 md:hidden lg:-mx-6 lg:px-6">
+					<FilterControlField
+						className="min-w-0 flex-1"
+						label={t("slidesTemplate.keyword")}
+					>
+						<FilterSearchInput
+							clearLabel={t("common.clear")}
+							clearButtonTestId="platform-slides-template-advanced-clear-button"
+							onValueChange={(value) => setDebouncedField("keyword", value)}
+							placeholder={t("slidesTemplate.keyword")}
+							value={filters.keyword}
+							inputTestId="platform-slides-template-advanced-search-input"
+						/>
+					</FilterControlField>
+					<Button
+						aria-label={t("slidesTemplate.filterTitle")}
+						onClick={() => handleFilterSheetOpenChange(true)}
+						size="icon"
+						variant="outline"
+						data-testid="platform-slides-template-filter-button"
+					>
+						<Filter className="size-4" aria-hidden="true" />
+					</Button>
+				</div>
+				<div className="sticky top-0 z-40 -mx-4 hidden flex-wrap items-end gap-2 bg-background px-4 py-2 md:flex lg:-mx-6 lg:px-6">
+					<FilterControlField
+						className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
+						label={t("slidesTemplate.keyword")}
+					>
+						<FilterSearchInput
+							clearLabel={t("common.clear")}
+							clearButtonTestId="platform-slides-template-secondary-clear-button"
+							onValueChange={(value) => setDebouncedField("keyword", value)}
+							placeholder={t("slidesTemplate.keyword")}
+							value={filters.keyword}
+							inputTestId="platform-slides-template-secondary-search-input"
+						/>
+					</FilterControlField>
+					<FilterControlField
+						className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
+						label={t("slidesTemplate.categoryCode")}
+					>
+						<FilterSearchInput
+							clearLabel={t("common.clear")}
+							clearButtonTestId="platform-slides-template-tertiary-clear-button"
+							onValueChange={(value) => setDebouncedField("code", value)}
+							placeholder={t("slidesTemplate.categoryCode")}
+							value={filters.code}
+							inputTestId="platform-slides-template-tertiary-search-input"
+						/>
+					</FilterControlField>
+					<FilterControlField className="w-fit" label={t("slidesTemplate.status")}>
+						<Select
+							value={filters.status}
+							onValueChange={(status) => {
+								setFilterDraft((state) => ({ ...state, status }))
+							}}
+						>
+							<SelectTrigger
+								className="w-fit max-w-full"
+								data-testid="platform-slides-template-select-trigger"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent data-testid="platform-slides-template-select-content">
+								<SelectItem
+									value={emptyStatus}
+									data-testid="platform-slides-template-option"
+								>
+									{t("slidesTemplate.all")}
+								</SelectItem>
+								<SelectItem value="1" data-testid="platform-slides-template-option">
+									{t("slidesTemplate.enabled")}
+								</SelectItem>
+								<SelectItem value="0" data-testid="platform-slides-template-option">
+									{t("slidesTemplate.disabled")}
+								</SelectItem>
+							</SelectContent>
+						</Select>
+					</FilterControlField>
+				</div>
+				<FilterSheet
+					contentTestId="platform-slides-template-filter-sheet"
+					bodyTestId="platform-slides-template-filter-body"
+					resetButtonTestId="platform-slides-template-reset-button"
+					applyButtonTestId="platform-slides-template-apply-button"
+					closeButtonTestId="platform-slides-template-category-filter-close-button"
+					applyLabel={t("slidesTemplate.applyFilters")}
+					description={t("slidesTemplate.categoryFilterDescription")}
+					onApply={applyAdvancedFilters}
+					onOpenChange={handleFilterSheetOpenChange}
+					onReset={() => setAdvancedFilterDraft(createDefaultCategoryFilterDraft())}
+					open={isFilterSheetOpen}
+					presentation="mobile-only"
+					resetLabel={t("slidesTemplate.reset")}
+					title={t("slidesTemplate.filterTitle")}
+				>
+					<FilterControlField className="w-full" label={t("slidesTemplate.keyword")}>
+						<FilterSearchInput
+							clearLabel={t("common.clear")}
+							onValueChange={(keyword) =>
+								setAdvancedFilterDraft((previous) => ({ ...previous, keyword }))
+							}
+							placeholder={t("slidesTemplate.keyword")}
+							value={advancedFilterDraft.keyword}
+							inputTestId="platform-slides-template-advanced-search-input"
+							clearButtonTestId="platform-slides-template-advanced-search-clear-button"
+						/>
+					</FilterControlField>
+					<FilterControlField className="w-full" label={t("slidesTemplate.categoryCode")}>
+						<FilterSearchInput
+							clearLabel={t("common.clear")}
+							onValueChange={(code) =>
+								setAdvancedFilterDraft((previous) => ({ ...previous, code }))
+							}
+							placeholder={t("slidesTemplate.categoryCode")}
+							value={advancedFilterDraft.code}
+							inputTestId="platform-slides-template-advanced-search-input"
+							clearButtonTestId="platform-slides-template-advanced-search-clear-button"
+						/>
+					</FilterControlField>
+					<FilterControlField className="w-full" label={t("slidesTemplate.status")}>
+						<Select
+							value={advancedFilterDraft.status}
+							onValueChange={(status) =>
+								setAdvancedFilterDraft((previous) => ({ ...previous, status }))
+							}
+						>
+							<SelectTrigger
+								className="w-full"
+								data-testid="platform-slides-template-select-trigger"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent data-testid="platform-slides-template-select-content">
+								<SelectItem
+									value={emptyStatus}
+									data-testid="platform-slides-template-option"
+								>
+									{t("slidesTemplate.all")}
+								</SelectItem>
+								<SelectItem value="1" data-testid="platform-slides-template-option">
+									{t("slidesTemplate.enabled")}
+								</SelectItem>
+								<SelectItem value="0" data-testid="platform-slides-template-option">
+									{t("slidesTemplate.disabled")}
+								</SelectItem>
+							</SelectContent>
+						</Select>
+					</FilterControlField>
+				</FilterSheet>
+				<div>
+					<DataTable
+						columns={columns}
+						data={query.data?.list ?? []}
+						emptyState={
+							<EmptyState
+								icon={Tags}
+								title={t("slidesTemplate.emptyCategories")}
+								testId="platform-slides-template-empty"
+							/>
+						}
+						getRowId={(row) => row.id}
+						isLoading={query.isLoading}
+						minWidth={900}
+						stickyRightColumnId="actions"
+						containerTestId="platform-slides-template-list"
+						loadingTestId="platform-slides-template-loading"
+						rowTestId="platform-slides-template-row"
+					/>
+					<ListPagination
+						previousButtonTestId="slides-template-category-previous-button"
+						nextButtonTestId="slides-template-category-next-button"
+						pageSizeTriggerTestId="slides-template-category-page-size-trigger"
+						pageSizeOptionTestId="slides-template-category-page-size-option"
+						jumpInputTestId="slides-template-category-jump-input"
+						testId="slides-template-category-pagination"
+						showQuickJumper
+						loading={query.isFetching}
+						onPageChange={setPage}
+						onPageSizeChange={setPageSize}
+						page={page}
+						pageSize={pageSize}
+						total={query.data?.total ?? 0}
+					/>
+				</div>
+				<CategoryDialog
+					editing={editing}
+					mutations={mutations}
+					onOpenChange={setDialogOpen}
+					open={dialogOpen}
+				/>
+			</div>
+		)
+	},
+)

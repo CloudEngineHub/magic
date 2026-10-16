@@ -49,10 +49,12 @@ function FolderMentionNodeView({
 		<NodeViewWrapper
 			as="span"
 			className={cn(
-				"magic-mention relative !inline-flex max-w-full !overflow-visible !bg-transparent !p-0 !align-middle",
+				"magic-mention relative !inline-flex max-w-full !cursor-grab select-none !overflow-visible !bg-transparent !p-0 !align-middle",
 				attrs.pending && "opacity-50",
 			)}
 			contentEditable={false}
+			draggable={false}
+			data-magic-editor-node
 			data-mention-node-view="folder"
 			data-testid="folder-mention-node-view"
 			data-type={attrs.type}

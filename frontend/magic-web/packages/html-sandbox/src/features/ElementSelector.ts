@@ -5,6 +5,7 @@
 
 import type { EditorBridge } from "../core/EditorBridge"
 import { getElementSelector, isInjectedElement } from "../utils/dom"
+import { isSourceNode } from "../utils/sourceNodes"
 import { normalizeColor, normalizeTextAlign } from "../utils/css"
 import { getEditableTextContent } from "../utils/textContent"
 
@@ -136,6 +137,7 @@ interface ElementInfo {
 	inlineStyles?: Record<string, string>
 	attributes?: {
 		href?: string
+		dataMagicHref?: string
 		target?: string
 		rel?: string
 		download?: string
@@ -422,11 +424,10 @@ export class ElementSelector {
 	}
 
 	private getCommonAttributes(element: HTMLElement): ElementInfo["attributes"] {
-		if (element.tagName.toLowerCase() !== "a") return undefined
-
 		const read = (name: string) => element.getAttribute(name) || undefined
 		return {
 			href: read("href"),
+			dataMagicHref: read("data-magic-href"),
 			target: read("target"),
 			rel: read("rel"),
 			download: read("download"),
@@ -767,11 +768,7 @@ export class ElementSelector {
 			rect: { top: number; left: number; width: number; height: number }
 		}> = []
 		let current = element.parentElement
-		while (
-			current &&
-			!this.isDocumentRoot(current) &&
-			ancestors.length < 8
-		) {
+		while (current && !this.isDocumentRoot(current) && ancestors.length < 8) {
 			if (!isInjectedElement(current)) {
 				const { rect } = this.getElementRectWithRotation(current)
 				const textContent = getEditableTextContent(current).trim()
@@ -816,7 +813,7 @@ export class ElementSelector {
 		}
 
 		// Ignore injected elements
-		if (isInjectedElement(element)) {
+		if (isInjectedElement(element) || !isSourceNode(element)) {
 			return
 		}
 
@@ -871,7 +868,7 @@ export class ElementSelector {
 	 */
 	hoverElement(element: HTMLElement): void {
 		if (!element || this.isDocumentRoot(element)) return
-		if (isInjectedElement(element)) return
+		if (isInjectedElement(element) || !isSourceNode(element)) return
 
 		this.hoveredElement = element
 		if (this.isSelected(element)) return
@@ -980,7 +977,7 @@ export class ElementSelector {
 			}
 
 			// Ignore injected elements
-			if (isInjectedElement(target)) return
+			if (isInjectedElement(target) || !isSourceNode(target)) return
 
 			// Find the actual selectable element (might be a container like ECharts)
 			const selectableElement = this.findSelectableElement(target)
@@ -1025,6 +1022,13 @@ export class ElementSelector {
 
 				// Ignore injected elements
 				if (isInjectedElement(target)) return
+				if (!isSourceNode(target)) {
+					e.preventDefault()
+					e.stopPropagation()
+					this.clearSelection()
+					this.bridge.sendEvent("DYNAMIC_ELEMENT_CLICKED", {})
+					return
+				}
 
 				// Check if there's a text selection - if so, don't trigger element selection
 				// This prevents accidentally selecting other elements when releasing mouse after text selection

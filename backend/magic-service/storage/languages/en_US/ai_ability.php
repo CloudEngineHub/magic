@@ -33,6 +33,7 @@ return [
         'weather_forecast' => 'Weather Forecast',
         'follow_up_questions' => 'Follow-up Questions',
         'ai_search_model' => 'AI Search Model',
+        'volcengine_ark_assets' => 'Volcengine Ark Assets',
     ],
     'description' => [
         'ocr' => 'This capability covers all OCR application scenarios on the platform, accurately capturing and extracting text information from PDFs, scanned documents, and various images.',
@@ -62,5 +63,6 @@ return [
         'weather_forecast' => 'This capability covers weather data query scenarios on the platform, providing accurate weather forecast information with support for multiple cities and forecast days.',
         'follow_up_questions' => 'This capability covers scenarios where follow-up question suggestions are generated from conversation history to guide users to explore topics further.',
         'ai_search_model' => 'This capability manages the language model used across AI search scenarios.',
+        'volcengine_ark_assets' => 'This capability manages the credentials of the Volcengine Ark Assets API, used to sync reference materials into Ark assets and reuse their asset IDs.',
     ],
 ];

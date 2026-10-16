@@ -31,10 +31,15 @@ from app.service.channel_context_service import ChannelContextService
 from app.core.client_context import ClientContextService
 from app.service.image_model_sizes_service import ImageModelSizesService
 from app.service.video_model_config_service import VideoModelConfigService
+from app.service.sandbox_restart_coordinator import sandbox_restart_coordinator
 from app.service.cli_manager.service import CliManagerService
 from app.service.cli_status import CliStatusFactory
 from app.core.base_service import Base
 from app.service.mention import MentionContextBuilder
+from app.service.mention.utils.micro_app_prompt import (
+    format_bound_micro_app_scope_context,
+    sync_micro_app_project_scope_from_prompt,
+)
 from app.service.topic_persistence import (
     TopicPersistenceManager,
     get_chat_history_excluded_dir_names,
@@ -513,6 +518,13 @@ class AgentService(Base):
         await agent_context.horizon.reload_from_store()
         CliManagerService.schedule_initial_status_detection(agent_context)
 
+        # 恢复先于接收回答；失败时保留话题可用性，未恢复的旧问题仍由回执入口拒绝。
+        from app.service.user_tool_call_service import UserToolCallService
+        try:
+            await UserToolCallService.get_instance().restore_pending_from_disk(agent_context)
+        except Exception as e:
+            logger.warning("User tool call recovery failed; initialization continues: %s", e, exc_info=True)
+
         # 触发初始化后事件
         after_init_data = AfterInitEventData(tool_context=tool_context, agent_context=agent_context, success=True)
         await agent_context.dispatch_event(EventType.AFTER_INIT, after_init_data)
@@ -529,6 +541,7 @@ class AgentService(Base):
         agent_context = agent.agent_context
         chat_client_message = agent_context.get_chat_client_message()
         query = chat_client_message.prompt
+        await sync_micro_app_project_scope_from_prompt(query)
 
         # ASR 录音纪要聊天模式：注入上下文 Diff
         try:
@@ -546,19 +559,23 @@ class AgentService(Base):
             logger.error(f"{ASR_CHAT_LOG_PREFIX} injectContextFailed error={e}")
             # 失败不影响聊天主流程
 
-        # 处理mentions信息（顶部引用区）- 添加到用户prompt中
-        mentions = getattr(chat_client_message, "mentions", [])
+        # Inject structured mentions from the request payload (legacy clients).
+        mentions = getattr(chat_client_message, "mentions", None) or []
         if mentions:
             mentions_context = await self._build_mentions_context(mentions, agent_context)
             query = f"{mentions_context}\n\n---\n\n{query}"
-            logger.info(f"已将{len(mentions)}个mentions添加到用户prompt中")
+            logger.info(f"Injected {len(mentions)} mention(s) into query")
+        else:
+            bound_context = await format_bound_micro_app_scope_context()
+            if bound_context:
+                query = f"{bound_context}\n\n---\n\n{query}"
+                logger.info("Injected bound micro-app scope into follow-up query")
 
         # 处理输入框内联引用（[@file_path:格式）
         query = agent._process_user_input_with_mentions(query, [])
 
         # 追加渠道专属上下文片段（如微信消息携带的媒体文件路径），不支持的渠道返回空串不影响
         query = ChannelContextService.append_channel_context(query, chat_client_message)
-        await ChannelContextService.suggest_channel_skills(chat_client_message, agent_context)
 
         # 原生视觉消费 mention 模块提取出的工作区或挂载目录图片路径。
         image_refs = await self._mention_builder.extract_image_refs(mentions, agent_context)
@@ -591,12 +608,31 @@ class AgentService(Base):
         """
         await CliStatusFactory.wait_initial(agent_context)
 
+        run_succeeded = False
         try:
             request = AgentRunRequest(query=query, image_refs=image_refs)
             await agent.run_main_agent(request)
+            run_succeeded = agent.is_agent_finished()
         finally:
-            # 持久化聊天记录·
-            await FileStorageListenerService._archive_and_upload_project(agent_context)
+            try:
+                await sandbox_restart_coordinator.prepare_pending_restart(
+                    agent_context=agent_context,
+                    run_succeeded=run_succeeded,
+                )
+                # 持久化聊天记录·
+                await FileStorageListenerService._archive_and_upload_project(agent_context)
+            except asyncio.CancelledError:
+                await sandbox_restart_coordinator.cancel_pending_restart(agent_context.context_id)
+                raise
+            except Exception as exc:
+                if not sandbox_restart_coordinator.has_pending_restart(agent_context.context_id):
+                    raise
+                # 重启用于恢复异常环境；归档失败保留日志，不把它变成重启门槛。
+                logger.warning("Agent run finalization failed: %s", exc, exc_info=True)
+            await sandbox_restart_coordinator.dispatch_pending_restart(
+                agent_context=agent_context,
+                run_succeeded=run_succeeded,
+            )
 
     def create_agent_context(
         self,

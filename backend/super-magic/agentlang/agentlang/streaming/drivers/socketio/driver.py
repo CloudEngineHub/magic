@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, TextIO
@@ -17,6 +18,52 @@ from ...models import ChunkData, StreamingResult
 from .config import SocketIODriverConfig
 
 logger = get_logger(__name__)
+
+# 连接按进程复用后，发送可能落后于入队；1000 刚好顶满一轮压缩后的长流。
+_MESSAGE_QUEUE_MAXSIZE = 5000
+# 进程退出才等排空。单轮 LLM 结束不再 join，避免 Agent 空等 Engine.IO。
+_SHUTDOWN_DRAIN_TIMEOUT_SECONDS = 20.0
+
+_shared_driver: Optional["SocketIODriver"] = None
+
+
+@dataclass(frozen=True)
+class _QueuedSocketIOMessage:
+    request_id: str
+    message: Dict[str, Any]
+
+
+def get_shared_socketio_driver(config: SocketIODriverConfig) -> "SocketIODriver":
+    """进程内复用同一条发往 magic-service 的 Socket.IO 连接。
+
+    | 时机           | 行为                                      |
+    | 第一次推流     | 新建 driver，initialize 时才握手          |
+    | 之后每轮 LLM   | 返回同一实例，只替换当轮 message_builder  |
+    | 单轮 finalize  | 不断开                                    |
+    | 进程 shutdown  | shutdown_shared_socketio_driver 再断开    |
+    """
+    global _shared_driver
+    if _shared_driver is None:
+        _shared_driver = SocketIODriver(config)
+    else:
+        _shared_driver.attach_runtime_config(config)
+    return _shared_driver
+
+
+def reset_shared_socketio_driver() -> None:
+    """测试用：丢掉单例引用，不负责断开真实连接。"""
+    global _shared_driver
+    _shared_driver = None
+
+
+async def shutdown_shared_socketio_driver() -> None:
+    """进程退出：等队列排空后断开，并清空单例。"""
+    global _shared_driver
+    driver = _shared_driver
+    _shared_driver = None
+    if driver is None:
+        return
+    await driver.shutdown()
 
 # Environment variable name for debug log file path (same as StdoutStream)
 STDOUT_STREAM_DEBUG_FILE_ENV = "STDOUT_STREAM_DEBUG_FILE"
@@ -57,6 +104,11 @@ class SocketIODriver(StreamingInterface):
 
     def get_driver_name(self) -> str:
         return "socketio"
+
+    def attach_runtime_config(self, config: SocketIODriverConfig) -> None:
+        """复用连接时只换当轮消息构建器，不改 base_url / namespace。"""
+        if config.message_builder is not None:
+            self.config.message_builder = config.message_builder
 
     def get_push_statistics(self, request_id: str) -> Dict[str, int]:
         """获取指定请求的推送统计信息"""
@@ -183,24 +235,26 @@ class SocketIODriver(StreamingInterface):
         return self.config.enabled and SOCKETIO_AVAILABLE
 
     async def initialize(self) -> StreamingResult:
-        """完整初始化连接，确保命名空间连接可用"""
+        """握手连接。已连通则直接复用，不重建 client / worker。"""
         try:
-            # 验证配置有效性
             if not self.config.validate():
                 return StreamingResult(success=False, message="Invalid streaming configuration")
 
             if not self.config.enabled:
                 return StreamingResult(success=False, message="Socket.IO streaming disabled")
 
-            # 初始化消息队列系统
-            await self._initialize_message_queue()
+            created_queue = await self._initialize_message_queue()
+
+            if self.sio_client and self.sio_client.connected:
+                logger.debug("Socket.IO connection reused")
+                return StreamingResult(success=True, message="Socket.IO reused")
 
             try:
-                # 建立完整连接（包括命名空间连接确认）
                 await self._establish_full_connection()
             except Exception:
-                # 连接失败时清理已创建的队列任务，防止 background task 泄漏
-                await self._shutdown_message_queue()
+                # 首轮建连失败才拆掉刚建的 worker；复用中的队列继续给后续重连用。
+                if created_queue:
+                    await self._shutdown_message_queue()
                 raise
 
             return StreamingResult(success=True, message="Socket.IO ready")
@@ -210,22 +264,24 @@ class SocketIODriver(StreamingInterface):
             return StreamingResult(success=False, message=f"Init error: {e}")
 
     async def push(self, chunk_data: ChunkData) -> StreamingResult:
-        """推送临时消息（加入消息队列，保证顺序发送）"""
+        """入队前用当轮 builder 构好消息，避免复用连接时发到下一轮 builder。"""
         try:
-            # 统计预期发送数量
             request_id = chunk_data.request_id
             if request_id not in self.stats_by_request:
                 self.stats_by_request[request_id] = {"expected": 0, "actual": 0}
             self.stats_by_request[request_id]["expected"] += 1
 
-            # 检查消息队列是否可用
             if not self.message_queue:
                 logger.warning(f"Message queue not initialized, discarding message for {request_id}")
                 return StreamingResult(success=False, message="Queue not initialized")
 
-            # 将消息放入队列，非阻塞
+            message = await self._build_message(chunk_data)
+            if message is None:
+                logger.debug(f"Message build failed for {request_id}, skipping push")
+                return StreamingResult(success=False, message="Message build failed")
+
             try:
-                self.message_queue.put_nowait(chunk_data)
+                self.message_queue.put_nowait(_QueuedSocketIOMessage(request_id, message))
                 logger.debug(f"Message queued for {request_id}, queue size: {self.message_queue.qsize()}")
                 return StreamingResult(success=True)
             except asyncio.QueueFull:
@@ -236,39 +292,23 @@ class SocketIODriver(StreamingInterface):
             logger.warning(f"Push error for request {chunk_data.request_id} (ignored): {e}")
             return StreamingResult(success=False, message="Push failed, discarded")
 
-    async def _async_push(self, chunk_data: ChunkData) -> bool:
-        """异步推送实现（内部方法）
-
-        Returns:
-            bool: 推送是否成功
-        """
-        request_id = chunk_data.request_id
+    async def _async_push(self, item: _QueuedSocketIOMessage) -> bool:
+        """真正写 websocket。调用方是后台 worker，不在 Agent 热路径上。"""
+        request_id = item.request_id
         try:
-            # 轻量级连接检查
             await self._ensure_connection()
 
-            # 最后一次安全检查连接状态
             if not self.sio_client or not self.sio_client.connected:
                 logger.warning(f"Connection failed for {request_id}, skipping push")
                 return False
 
-            # 构建消息
-            message = await self._build_message(chunk_data)
-            if message is None:
-                # 没有消息构建器或构建失败，跳过推送
-                logger.debug(f"Message build failed for {request_id}, skipping push")
-                return False
+            self._write_to_debug_file(request_id, item.message)
 
-            # Write to debug file if enabled
-            self._write_to_debug_file(request_id, message)
-
-            # 发送消息（设置短超时，快速失败）
             await asyncio.wait_for(
-                self.sio_client.emit(self.config.event_name, message, namespace=self.config.namespace),
+                self.sio_client.emit(self.config.event_name, item.message, namespace=self.config.namespace),
                 timeout=self.config.push_timeout
             )
 
-            # 统计实际发送成功数量
             if request_id in self.stats_by_request:
                 self.stats_by_request[request_id]["actual"] += 1
 
@@ -276,7 +316,6 @@ class SocketIODriver(StreamingInterface):
             return True
 
         except Exception as e:
-            # 记录但不处理错误，保持轻量化
             logger.warning(f"Async push failed for {request_id}: {e}")
             return False
 
@@ -409,46 +448,47 @@ class SocketIODriver(StreamingInterface):
             return False
 
     async def finalize(self) -> StreamingResult:
-        """断开连接，清理资源"""
+        """单轮 LLM 结束：包已入队即可，不断开、不等 Engine.IO 排空。
+
+        落库消息 / 工具消息可以赶到尾巴 chunk 前面，前端已兼容。
+        真正断开走 shutdown()，由进程退出调用。
+        """
+        queue_size = self.message_queue.qsize() if self.message_queue else 0
+        logger.info(
+            f"Socket.IO connection reused after stream, remaining queued messages: {queue_size}"
+        )
+        return StreamingResult(success=True, message="Socket.IO reused, drain in background")
+
+    async def shutdown(self, timeout: float = _SHUTDOWN_DRAIN_TIMEOUT_SECONDS) -> StreamingResult:
+        """进程退出时排空发送队列并断开。"""
         try:
-            # 等待消息队列处理完成（在关闭前）
-            completion_success = await self.wait_for_queue_completion(timeout=3.0)
-
-            # 打印所有请求的推送统计信息
+            completion_success = await self.wait_for_queue_completion(timeout=timeout)
             self._log_all_push_statistics()
-
-            # 停止消息队列系统
             await self._shutdown_message_queue()
-
-            # 断开连接，清理资源
             await self._close_connection()
-
-            # Close debug file
             self._close_debug_file()
-
             if completion_success:
                 return StreamingResult(success=True, message="Connection closed after queue completion")
-            else:
-                return StreamingResult(success=True, message="Connection closed with queue timeout warnings")
-
+            return StreamingResult(success=True, message="Connection closed with queue timeout warnings")
         except Exception as e:
-            logger.warning(f"Finalize error: {e}")
+            logger.warning(f"Shutdown error: {e}")
             return StreamingResult(success=True, message="Connection closed with warnings")
 
-    async def _initialize_message_queue(self) -> None:
-        """初始化消息队列系统"""
+    async def _initialize_message_queue(self) -> bool:
+        """启动发送 worker。已在跑则复用，返回是否新建。"""
+        if (
+            self.message_queue is not None
+            and self.queue_worker_task is not None
+            and not self.queue_worker_task.done()
+        ):
+            return False
+
         try:
-            # 创建消息队列（设置合理的最大大小防止内存溢出）
-            self.message_queue = asyncio.Queue(maxsize=1000)
-
-            # 创建关闭事件
+            self.message_queue = asyncio.Queue(maxsize=_MESSAGE_QUEUE_MAXSIZE)
             self._shutdown_event = asyncio.Event()
-
-            # 启动队列工作任务
             self.queue_worker_task = asyncio.create_task(self._message_queue_worker())
-
             logger.debug("Message queue system initialized")
-
+            return True
         except Exception as e:
             logger.error(f"Failed to initialize message queue: {e}")
             raise

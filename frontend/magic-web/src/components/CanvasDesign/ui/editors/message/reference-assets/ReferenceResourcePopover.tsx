@@ -28,7 +28,7 @@ import type {
 } from "../../../../public/props"
 import { useCanvasReferenceMentionRuntime } from "./useCanvasReferenceMentionRuntime"
 import { filterReferenceResourcePanelBatchItems } from "./referenceResourceSelection"
-import { FolderOpen, Upload } from "lucide-react"
+import { FolderOpen, Library, Upload } from "lucide-react"
 
 function defaultIconForSourceType(source: ReferenceResourceSourceType) {
 	if (source === REFERENCE_RESOURCE_SOURCE_TYPES.localUpload)
@@ -41,6 +41,10 @@ function defaultIconForSourceType(source: ReferenceResourceSourceType) {
 				aria-hidden
 				strokeWidth={5}
 			/>
+		)
+	if (source === REFERENCE_RESOURCE_SOURCE_TYPES.assets)
+		return (
+			<Library size={16} className="shrink-0 text-foreground" aria-hidden strokeWidth={5} />
 		)
 	return null
 }
@@ -59,6 +63,8 @@ interface ReferenceResourcePopoverProps {
 	trigger: ReactNode
 	/** 不传时使用内置「本地上传 / 项目选择」文案与默认禁用逻辑 */
 	sourceOptions?: ReferenceResourceSourceOption[]
+	/** 仅素材可被当前业务消费时启用；其他入口保持原有两个来源。 */
+	includeAssetsSource?: boolean
 	onSelectSource: (source: ReferenceResourceSourceType) => void
 	maxReferenceFiles?: number
 	currentReferenceFiles?: string[]
@@ -100,6 +106,7 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 		onMouseLeave,
 		trigger,
 		sourceOptions: sourceOptionsProp,
+		includeAssetsSource = false,
 		onSelectSource,
 		maxReferenceFiles,
 		currentReferenceFiles,
@@ -186,8 +193,17 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 				label: t("referenceAssets.projectSelect", "从项目选择"),
 				disabled: false,
 			},
+			...(includeAssetsSource
+				? [
+						{
+							value: REFERENCE_RESOURCE_SOURCE_TYPES.assets,
+							label: t("referenceAssets.assets", "素材库"),
+							disabled: Boolean(isReferenceFileLimitReached),
+						},
+					]
+				: []),
 		]
-	}, [t, isReferenceFileLimitReached])
+	}, [includeAssetsSource, isReferenceFileLimitReached, t])
 
 	const sourceOptions = sourceOptionsProp ?? defaultSourceOptions
 	const shouldRenderSourceActions = displayMode === "click" && sourceOptions.length > 0
@@ -454,6 +470,8 @@ export default function ReferenceResourcePopover(props: ReferenceResourcePopover
 					onSelect={handleProjectSelect}
 					onClose={handleProjectSelectClose}
 					dataService={projectSelectRuntime.dataService}
+					selectionScopeId={projectSelectRuntime.selectionScopeId}
+					selectionSummary={projectSelectRuntime.selectionSummary}
 					initialLoadOptions={projectSelectRuntime.initialLoadOptions}
 					initialNavigationStack={projectSelectRuntime.initialNavigationStack}
 					catalogBehavior={projectSelectRuntime.catalogBehavior}

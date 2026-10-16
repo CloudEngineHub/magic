@@ -11,12 +11,14 @@ use App\Interfaces\SuperMagic\Agent\Facade\OpenApi\OpenSuperMagicAgentApi;
 use App\Interfaces\SuperMagic\Agent\Facade\Sandbox\SkillSandboxApi;
 use App\Interfaces\SuperMagic\Agent\Facade\Sandbox\SuperMagicAgentSandboxApi;
 use App\Interfaces\SuperMagic\Common\Share\Facade\ShareApi;
+use App\Interfaces\SuperMagic\Design\Facade\Sandbox\HtmlDesignStyleSandboxApi;
 use App\Interfaces\SuperMagic\File\Facade\InternalApi\FileApi;
 use App\Interfaces\SuperMagic\File\Facade\OpenApi\OpenFileApi;
 use App\Interfaces\SuperMagic\Message\Facade\OpenApi\OpenMessageScheduleApi;
 use App\Interfaces\SuperMagic\Project\Facade\OpenApi\OpenMicroAppApi;
 use App\Interfaces\SuperMagic\Project\Facade\OpenApi\OpenProjectApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\AiAbilityApi;
+use App\Interfaces\SuperMagic\Task\Facade\InternalApi\FollowUpSuggestionApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\SandboxApi as InternalSandboxApi;
 use App\Interfaces\SuperMagic\Task\Facade\InternalApi\TaskApi as InternalTaskApi;
 use App\Interfaces\SuperMagic\Task\Facade\OpenApi\OAuth2CallbackRelayApi;
@@ -57,9 +59,12 @@ Router::addGroup(
         Router::put('/upgrade', [InternalSandboxApi::class, 'upgradeSandbox']);
         // 检查沙箱镜像版本（当前版本 vs 最新版本）
         Router::get('/version-check', [InternalSandboxApi::class, 'checkSandboxVersion']);
+        Router::post('/follow-up-suggestions', [FollowUpSuggestionApi::class, 'report']);
 
         // 文件管理相关
         Router::addGroup('/file', static function () {
+            Router::post('/upload', [OpenFileApi::class, 'uploadProjectFile']);
+            Router::post('/project/batch-save', [OpenFileApi::class, 'batchSaveProjectFiles']);
             // 创建文件版本
             Router::post('/versions', [FileApi::class, 'createFileVersion']);
             // 获取文件最新版本
@@ -152,6 +157,11 @@ Router::addGroup(
             // 获取市场技能库列表
             Router::post('/queries', [SkillSandboxApi::class, 'queriesMarket']);
         });
+
+        // HTML 设计风格源文，供 super-magic 内部 Skill 调用
+        Router::addGroup('/html-design-styles', static function () {
+            Router::get('/{styleCode}/source', [HtmlDesignStyleSandboxApi::class, 'getSource']);
+        });
     },
     ['middleware' => [SandboxUserAuthMiddleware::class]]
 );
@@ -175,6 +185,10 @@ Router::addGroup(
         // 数字员工相关
         Router::addGroup('/agents', static function () {
             Router::get('/featured/sort-list', [OpenSuperMagicAgentApi::class, 'sortListQueries']);
+            // Hire a digital employee from the market.
+            Router::post('/{code}/hire', [OpenSuperMagicAgentApi::class, 'hireAgent']);
+            // Fire a digital employee using the existing deletion rules.
+            Router::post('/{code}/fire', [OpenSuperMagicAgentApi::class, 'fireAgent']);
             Router::get('/{code}/models', [OpenSuperMagicAgentApi::class, 'getModels']);
             Router::get('/{code}/default-config', [OpenSuperMagicAgentApi::class, 'getDefaultConfig']);
         });

@@ -63,6 +63,7 @@ export const RecordSummaryEditorPanel = forwardRef<
 		panelMode,
 		saveSuperMagicTopicModel,
 		selectedProjectId,
+		allowSelectRecordingProject,
 		size,
 		uploading,
 		uploadProgress,
@@ -100,6 +101,7 @@ export const RecordSummaryEditorPanel = forwardRef<
 				isSmall={isSmall}
 				iconSize={iconSize}
 				selectedProjectId={selectedProjectId}
+				allowSelectRecordingProject={allowSelectRecordingProject}
 				isStartingRecord={isStartingRecord}
 				isModelReady={isModelReady}
 				isRecordingBlocked={panelMode === "blocked"}

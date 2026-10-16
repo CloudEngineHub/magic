@@ -8,9 +8,11 @@ use App\Infrastructure\Util\Middleware\RequestContextMiddleware;
 use App\Interfaces\Admin\Facade\Agent\AdminAgentApi;
 use App\Interfaces\Admin\Facade\Agent\AgentGlobalSettingsApi;
 use App\Interfaces\Admin\Facade\AppMenu\AppMenuAdminApi;
+use App\Interfaces\Asset\Facade\AdminAssetApi;
 use App\Interfaces\Audit\Facade\AdminOperationLogApi;
 use App\Interfaces\Contact\Facade\Admin\PlatformUserApi;
 use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
+use App\Interfaces\Middleware\Auth\UserAuthMiddleware;
 use App\Interfaces\OrganizationEnvironment\Facade\Admin\OrganizationApi;
 use App\Interfaces\Permission\Facade\FunctionPermissionAdminApi;
 use App\Interfaces\Permission\Facade\ModelAccessRoleApi;
@@ -53,6 +55,7 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::post('/connectivity-test', [ServiceProviderApi::class, 'connectivityTest']);
         Router::post('/connectivity-tests/config-based', [ServiceProviderApi::class, 'connectivityTestByConfig']);
         Router::post('/by-category', [ServiceProviderApi::class, 'getOrganizationProvidersByCategory']);
+        Router::post('/search', [ServiceProviderApi::class, 'searchProviderConfigs']);
         Router::get('/office-info', [ServiceProviderApi::class, 'isCurrentOrganizationOfficial']);
         Router::get('/templates/queries', [ServiceProviderApi::class, 'queriesServiceProviderTemplates']);
         Router::get('/model-pricing-templates/queries', [ServiceProviderApi::class, 'queriesProviderModelPricingTemplates']);
@@ -132,9 +135,15 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::post('/statistics', [AdminOperationLogApi::class, 'modelAuditStatistics']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
+    // 用户搜索
+    Router::addGroup('/users', static function () {
+        Router::post('/search', [PlatformUserApi::class, 'search']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
     // 组织列表
     Router::addGroup('/organizations', static function () {
         Router::get('', [OrganizationApi::class, 'queries']);
+        Router::post('/search', [OrganizationApi::class, 'search']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // 平台用户列表
@@ -195,6 +204,20 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::put('/{id:\d+}/sort', [AdminSlidesTemplateApi::class, 'updateSort']);
         Router::delete('/{id:\d+}', [AdminSlidesTemplateApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
+
+    // 资产库管理：创建、查询、更新和删除公开资产。
+    Router::addGroup('/assets', static function (): void {
+        Router::post('', [AdminAssetApi::class, 'create']);
+        Router::post('/queries', [AdminAssetApi::class, 'queries']);
+        // 第三方素材 / 素材组占用数量（配额核对）。
+        Router::get('/provider-resource-usage', [AdminAssetApi::class, 'providerResourceUsage']);
+        Router::get('/tags', [AdminAssetApi::class, 'tags']);
+        Router::post('/tags', [AdminAssetApi::class, 'createTag']);
+        Router::put('/tags/{tagId:\d+}', [AdminAssetApi::class, 'updateTag']);
+        Router::delete('/tags/{tagId:\d+}', [AdminAssetApi::class, 'deleteTag']);
+        Router::patch('/{assetId:\d+}', [AdminAssetApi::class, 'update']);
+        Router::delete('/{assetId:\d+}', [AdminAssetApi::class, 'delete']);
+    }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
 });
 
 // 平台设置（管理端）

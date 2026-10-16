@@ -85,6 +85,7 @@ class DesignVideoPayloadBuilder:
             "fps": parameters.fps,
             "seed": parameters.seed,
             "watermark": parameters.watermark,
+            "draft": parameters.draft,
             "generate_audio": VideoAudioPolicyResolver.to_legacy_generate_audio(
                 parameters.audio_policy,
                 model_id or parameters.model_id or "",

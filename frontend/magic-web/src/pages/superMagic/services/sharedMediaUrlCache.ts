@@ -2,6 +2,10 @@ import {
 	getTemporaryDownloadUrl,
 	type GetTemporaryDownloadUrlItem,
 } from "@/pages/superMagic/utils/api"
+import {
+	getFileAccessIdentityKey,
+	type FileAccessContext,
+} from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { DownloadImageMode } from "@/pages/superMagic/pages/Workspace/types"
 import type { ImageProcessOptions } from "@/utils/image-processing"
 import { getFileUrlDownloadModeForNoWatermark } from "@/utils/aiWatermarkPreviewFileUrlMode"
@@ -41,6 +45,9 @@ export interface SharedMediaUrlRequest {
 	imageProcess?: ImageProcessOptions
 	/** Allow a usable attachment-list URL to satisfy an image preview request. */
 	allowAttachmentListUrl?: boolean
+	access?: FileAccessContext
+	/** Stable identity supplied by a bound FileApi for cache-only callers. */
+	identityKey?: string
 }
 
 export type SharedMediaUrlBatchOptions = Omit<
@@ -154,11 +161,6 @@ function syncSharedMediaUrlScope(): void {
 	currentDefaultScope = nextScope
 }
 
-function getDefaultScope(): string {
-	syncSharedMediaUrlScope()
-	return currentDefaultScope ?? getSharedMediaResourceScope()
-}
-
 function normalizeScope(scope?: string): string {
 	const trimmedScope = scope?.trim()
 	if (trimmedScope) return trimmedScope
@@ -197,6 +199,7 @@ function buildRequestKey(
 		isDownload: request.isDownload ?? false,
 		cache: request.cache ?? null,
 		imageProcess: request.imageProcess ?? null,
+		identityKey: request.identityKey ?? getFileAccessIdentityKey(request.access),
 	})
 }
 
@@ -225,6 +228,8 @@ function buildBatchRequest(
 		forceRefresh: options.forceRefresh,
 		imageProcess: options.imageProcess,
 		allowAttachmentListUrl: options.allowAttachmentListUrl,
+		access: options.access,
+		identityKey: options.identityKey,
 	}
 }
 
@@ -356,7 +361,7 @@ function hydrateThumbnailExchangeEntry(
 		resourceVersion: request.resourceVersion,
 		downloadMode: resolveEffectiveDownloadMode(request.downloadMode),
 		isDownload: request.isDownload ?? false,
-		cache: request.cache,
+		cache: request.forceRefresh ? false : request.cache,
 		imageProcess: request.imageProcess,
 		cachedAt: record.cachedAt,
 		lastAccessAt: accessedAt,
@@ -481,7 +486,7 @@ function cacheResolvedItem(
 		resourceVersion: request.resourceVersion,
 		downloadMode: resolveEffectiveDownloadMode(request.downloadMode),
 		isDownload: request.isDownload ?? false,
-		cache: request.cache,
+		cache: request.forceRefresh ? false : request.cache,
 		imageProcess: request.imageProcess,
 		cachedAt,
 		lastAccessAt: cachedAt,
@@ -528,9 +533,10 @@ function createSingleRequest(
 			request.fileVersion === undefined ? undefined : { [fileId]: request.fileVersion },
 		download_mode: resolveEffectiveDownloadMode(request.downloadMode),
 		is_download: request.isDownload,
-		cache: request.cache,
+		cache: request.forceRefresh ? false : request.cache,
 		options: request.imageProcess ? { xMagicImageProcess: request.imageProcess } : undefined,
 		enableErrorMessagePrompt: false,
+		access: request.access,
 	})
 		.then((items) =>
 			cacheResolvedItem(
@@ -714,11 +720,12 @@ export function requestSharedMediaUrls(
 			file_versions: Object.keys(fileVersions).length > 0 ? fileVersions : undefined,
 			download_mode: resolveEffectiveDownloadMode(options.downloadMode),
 			is_download: options.isDownload,
-			cache: options.cache,
+			cache: options.forceRefresh ? false : options.cache,
 			options: options.imageProcess
 				? { xMagicImageProcess: options.imageProcess }
 				: undefined,
 			enableErrorMessagePrompt: false,
+			access: options.access,
 		})
 
 		for (const { request, requestKey } of missing) {

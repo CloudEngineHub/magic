@@ -14,7 +14,7 @@ import { observer } from "mobx-react-lite"
 import userFilesStore from "@/stores/userFiles"
 import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import { IconMenu2, IconX } from "@tabler/icons-react"
-import { PanelLeftOpen } from "lucide-react"
+import { FolderTree } from "lucide-react"
 import { clipboard } from "@/utils/clipboard-helpers"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useFileInfoPanel } from "../../../TopicFilesButton/hooks/useFileInfoPanel"
@@ -64,6 +64,7 @@ import {
 	FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
 	shouldUseFileViewerFullscreenSafeArea,
 } from "./utils/fullscreenSafeArea"
+import { PLAYBACK_TAB_ID } from "./utils/tabConstants"
 import { shouldUsePPTRootRender } from "../../utils/file"
 
 // 获取文件路径用作tooltip的工具函数
@@ -125,11 +126,11 @@ const FilesViewer = memo(
 				isAwaitingProjectAttachments,
 				openFileTab,
 				openWebsiteTab,
-				closeFileTab,
+				closeFileTab: closeFileTabState,
 				switchToTab,
-				clearAllTabs,
-				closeOtherTabs,
-				closeTabsToRight,
+				clearAllTabs: clearAllTabsState,
+				closeOtherTabs: closeOtherTabsState,
+				closeTabsToRight: closeTabsToRightState,
 				getRenderProps,
 				fullscreenFileId,
 				handleRefresh,
@@ -140,6 +141,9 @@ const FilesViewer = memo(
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
 				isKnowledgeBaseTab,
+				openMicroAppTab,
+				closeMicroAppTab,
+				isPublishedMicroAppTab,
 				handleFileFullscreen,
 				handleExitFullscreen,
 				enterPreviewFullscreen,
@@ -148,10 +152,14 @@ const FilesViewer = memo(
 				getTabFileContext,
 				getFileManagerState,
 				updateFileManagerState,
+				isShareRoute,
+				isMagicShareRoute,
 			} = useFilesViewer(props)
+			// Route state covers topic/pure/Magic shares; the prop covers file-share callers during setup.
+			const shouldRenderQuickOpen = !isShareRoute && !isMagicShareRoute && !props.isFileShare
 			const tabsRef = useRef(tabs)
 			tabsRef.current = tabs
-			const closingLeftTabsRef = useRef(false)
+			const closingBatchTabsRef = useRef(false)
 			const { handleShowInfo, fileInfoPanel } = useFileInfoPanel()
 
 			const handleFileInfo = (tabId: string) => {
@@ -220,47 +228,62 @@ const FilesViewer = memo(
 			// })
 			// -----------------注册快捷键-----------------
 
+			const confirmTabClosures = async (tabIds: string[]) => {
+				for (const tabId of tabIds) {
+					const tab = tabsRef.current.find((candidate) => candidate.id === tabId)
+					if (!tab || tab.closeable === false) continue
+
+					const checkBeforeClose = getCheckBeforeClose(tabId)
+					if (checkBeforeClose && !(await checkBeforeClose())) return false
+				}
+				return true
+			}
+
+			const runConfirmedTabClose = async (options: {
+				tabIds: string[]
+				close: () => void
+				isStillValid?: () => boolean
+				clearCacheAfter?: boolean
+			}) => {
+				if (closingBatchTabsRef.current) return false
+				closingBatchTabsRef.current = true
+				try {
+					if (!(await confirmTabClosures(options.tabIds))) return false
+					if (options.isStillValid && !options.isStillValid()) return false
+
+					options.close()
+					if (options.clearCacheAfter) clearCache()
+					return true
+				} finally {
+					closingBatchTabsRef.current = false
+				}
+			}
+
 			// 处理 tab 关闭时的缓存清理
 			const handleTabClose = async (tabId: string) => {
-				// Get checkBeforeClose function for this tab/file
-				const checkBeforeClose = getCheckBeforeClose(tabId)
-
-				// If tab has checkBeforeClose method, call it first
-				if (checkBeforeClose && typeof checkBeforeClose === "function") {
-					const canClose = await checkBeforeClose()
-					if (!canClose) {
-						// User canceled the close operation
-						return
-					}
-				}
-
-				closeFileTab(tabId)
-				removeFromCache(tabId)
+				await runConfirmedTabClose({
+					tabIds: [tabId],
+					close: () => {
+						closeFileTabState(tabId)
+						removeFromCache(tabId)
+					},
+				})
 			}
 
 			// 处理所有 tabs 关闭时的缓存清理
 			const handleClearAllTabs = async () => {
-				// Check if any tab has unsaved changes
-				for (const tab of tabs) {
-					if (tab.closeable === false) continue
-
-					const checkBeforeClose = getCheckBeforeClose(tab.id)
-
-					if (checkBeforeClose && typeof checkBeforeClose === "function") {
-						const canClose = await checkBeforeClose()
-						if (!canClose) {
-							// User canceled the operation
-							return
-						}
-					}
-				}
-
-				clearAllTabs()
-				clearCache()
+				const candidates = tabsRef.current
+					.filter((tab) => tab.closeable !== false)
+					.map((tab) => tab.id)
+				await runConfirmedTabClose({
+					tabIds: candidates,
+					close: clearAllTabsState,
+					clearCacheAfter: true,
+				})
 			}
 
 			const handleCloseTabsToLeft = async (tabId: string) => {
-				if (closingLeftTabsRef.current) return
+				if (closingBatchTabsRef.current) return
 				const targetIndex = tabsRef.current.findIndex((tab) => tab.id === tabId)
 				if (targetIndex <= 0) return
 				const candidates = tabsRef.current
@@ -268,29 +291,71 @@ const FilesViewer = memo(
 					.filter((tab) => tab.closeable !== false)
 					.map((tab) => tab.id)
 				if (candidates.length === 0) return
-				closingLeftTabsRef.current = true
 				try {
 					// 先完成这一批的编辑确认；取消时不关闭前面已确认的标签。
-					for (const candidateId of candidates) {
-						if (!tabsRef.current.some((tab) => tab.id === tabId)) return
-						const candidate = tabsRef.current.find((tab) => tab.id === candidateId)
-						if (!candidate || candidate.closeable === false) continue
-						const checkBeforeClose = getCheckBeforeClose(candidateId)
-						if (checkBeforeClose && !(await checkBeforeClose())) return
-					}
-					if (!tabsRef.current.some((tab) => tab.id === tabId)) return
-					for (const candidateId of candidates) {
-						const candidate = tabsRef.current.find((tab) => tab.id === candidateId)
-						if (!candidate || candidate.closeable === false) continue
-						closeFileTab(candidateId)
-						removeFromCache(candidateId)
-					}
-					switchToTab(tabId)
+					await runConfirmedTabClose({
+						tabIds: candidates,
+						isStillValid: () => tabsRef.current.some((tab) => tab.id === tabId),
+						close: () => {
+							for (const candidateId of candidates) {
+								closeFileTabState(candidateId)
+								removeFromCache(candidateId)
+							}
+							switchToTab(tabId)
+						},
+					})
 				} catch {
 					magicToast.error(t("fileViewer.tabs.closeFailed"))
-				} finally {
-					closingLeftTabsRef.current = false
 				}
+			}
+
+			const handleCloseOtherTabs = async (tabId: string) => {
+				if (closingBatchTabsRef.current) return
+				const candidates =
+					tabId === PLAYBACK_TAB_ID
+						? tabsRef.current
+								.filter((tab) => tab.closeable !== false)
+								.map((tab) => tab.id)
+						: tabsRef.current
+								.filter((tab) => tab.id !== tabId && tab.closeable !== false)
+								.map((tab) => tab.id)
+				await runConfirmedTabClose({
+					tabIds: candidates,
+					isStillValid: () =>
+						tabId === PLAYBACK_TAB_ID ||
+						tabsRef.current.some((tab) => tab.id === tabId),
+					close: () => {
+						closeOtherTabsState(tabId)
+						for (const candidateId of candidates) removeFromCache(candidateId)
+					},
+				})
+			}
+
+			const handleCloseTabsToRight = async (tabId: string) => {
+				if (closingBatchTabsRef.current) return
+				const targetIndex = tabsRef.current.findIndex((tab) => tab.id === tabId)
+				const candidates =
+					tabId === PLAYBACK_TAB_ID
+						? tabsRef.current
+								.filter((tab) => tab.closeable !== false)
+								.map((tab) => tab.id)
+						: targetIndex < 0
+							? []
+							: tabsRef.current
+									.slice(targetIndex + 1)
+									.filter((tab) => tab.closeable !== false)
+									.map((tab) => tab.id)
+				if (candidates.length === 0) return
+				await runConfirmedTabClose({
+					tabIds: candidates,
+					isStillValid: () =>
+						tabId === PLAYBACK_TAB_ID ||
+						tabsRef.current.some((tab) => tab.id === tabId),
+					close: () => {
+						closeTabsToRightState(tabId)
+						for (const candidateId of candidates) removeFromCache(candidateId)
+					},
+				})
 			}
 
 			// Handle refresh tab action
@@ -354,9 +419,9 @@ const FilesViewer = memo(
 				getFileContext: getTabFileContext,
 				actions: {
 					closeFileTab: handleTabClose,
-					closeOtherTabs,
+					closeOtherTabs: handleCloseOtherTabs,
 					closeTabsToLeft: handleCloseTabsToLeft,
-					closeTabsToRight,
+					closeTabsToRight: handleCloseTabsToRight,
 					clearAllTabs: handleClearAllTabs,
 					refreshTab: handleRefreshTab,
 					addWebsiteToCommon: handleAddWebsiteToCommon,
@@ -376,11 +441,11 @@ const FilesViewer = memo(
 			// 暴露组件方法
 			useImperativeHandle(ref, () => ({
 				openFileTab,
-				closeFileTab,
+				closeFileTab: handleTabClose,
 				switchToTab,
-				clearAllTabs,
-				closeOtherTabs,
-				closeTabsToRight,
+				clearAllTabs: handleClearAllTabs,
+				closeOtherTabs: handleCloseOtherTabs,
+				closeTabsToRight: handleCloseTabsToRight,
 				isFullscreen: !!fullscreenFileId,
 				// 暴露缓存相关方法
 				getCacheStats,
@@ -392,6 +457,8 @@ const FilesViewer = memo(
 				// Knowledge base tab相关方法
 				openKnowledgeBaseTab,
 				closeKnowledgeBaseTab,
+				openMicroAppTab,
+				closeMicroAppTab,
 				enterPreviewFullscreen,
 				exitPreviewFullscreen,
 				// Website tab相关方法
@@ -523,12 +590,12 @@ const FilesViewer = memo(
 					<button
 						ref={props.fileSidebarControl.triggerRef}
 						type="button"
-						className="mx-1 flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+						className="mx-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-background shadow-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
 						onClick={props.fileSidebarControl.onToggle}
 						aria-label={t("sidebarPanels.expandFiles")}
 						data-testid="file-viewer-expand-files"
 					>
-						<PanelLeftOpen size={16} />
+						<FolderTree size={16} />
 					</button>
 				</Tooltip>
 			) : null
@@ -676,6 +743,8 @@ const FilesViewer = memo(
 					// 判断是否是知识库tab
 					const isKbTab = isKnowledgeBaseTab(tab.id)
 					const knowledgeBaseData = isKbTab ? (tab as any).data : undefined
+					const isMicroAppTab = isPublishedMicroAppTab(tab.id)
+					const microAppData = isMicroAppTab ? (tab as any).data : undefined
 					return {
 						isActive,
 						node: (
@@ -683,6 +752,7 @@ const FilesViewer = memo(
 								getFileManagerState={getFileManagerState}
 								onFileManagerStateChange={updateFileManagerState}
 								managerProps={{
+									projectFilesStore: props.projectFilesStore,
 									attachments: (props.attachments ?? []) as AttachmentItem[],
 									selectedProject: props.selectedProject,
 									selectedTopic: props.selectedTopic,
@@ -691,6 +761,10 @@ const FilesViewer = memo(
 									loading: isAwaitingProjectAttachments,
 									attachmentLoadState: props.attachmentLoadState,
 									onFileClick: openFileTab,
+									onPreviewFile: (file, activate) =>
+										openFileTab(file, false, activate),
+									onPreviewRemoved: (ids) =>
+										ids.forEach((id) => closeFileTab(`recycle-bin:${id}`)),
 								}}
 								key={tab.id}
 								tab={tab as any}
@@ -703,7 +777,9 @@ const FilesViewer = memo(
 								playbackProps={playbackProps}
 								hideTabBar={props.hideTabBar}
 								knowledgeBaseData={knowledgeBaseData}
+								microAppData={microAppData}
 								fillPortalSurface={!isDocumentFlowFullscreen}
+								onCloseTab={handleTabClose}
 							/>
 						),
 					}
@@ -720,10 +796,13 @@ const FilesViewer = memo(
 				shouldRenderTab,
 				cachedTabIds,
 				isPlaybackTab,
+				isKnowledgeBaseTab,
+				isPublishedMicroAppTab,
 				props,
 				props.autoDetail,
 				props.userSelectDetail,
 				openFileTab,
+				handleTabClose,
 			])
 			const inlineCachedTabs = cachedTabRenders
 				.filter(() => isDocumentFlowFullscreen)
@@ -788,7 +867,14 @@ const FilesViewer = memo(
 									{tabs.map(renderTabItem)}
 								</HeadlessHorizontalScroll>
 
-								<WebsitePresetMenu onOpenWebsiteTab={openWebsiteTab} />
+								{shouldRenderQuickOpen ? (
+									<WebsitePresetMenu
+										onOpenWebsiteTab={openWebsiteTab}
+										onOpenMicroAppTab={openMicroAppTab}
+										onOpenFileTab={openFileTab}
+										fileAttachments={tabAttachments}
+									/>
+								) : null}
 
 								{/* 展开按钮 */}
 								<DropdownMenu

@@ -2,9 +2,9 @@
 
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
@@ -25,22 +25,33 @@ from app.tools.core.tool_decorator import tool
 
 logger = get_logger(__name__)
 
-# Python 侧内部超时（秒），与 PHP 侧 Redis TTL=3600s 配合
-ASK_USER_TIMEOUT_MIN_SECONDS = 10 * 60
-ASK_USER_TIMEOUT_MAX_SECONDS = 30 * 60
-ASK_USER_TIMEOUT_DEFAULT_SECONDS = 10 * 60
+# 用户可见的等待策略只有两档：默认一直等待，简单选择题最多等待 60 秒。
+ASK_USER_TIMEOUT_SECONDS = 60
+ASK_USER_NO_TIMEOUT = 0
 ASK_USER_POLICY_SKIP_SECONDS = 1
 
 class AskUserParams(BaseToolParams):
+    prepared_tool_call_id: str | None = Field(
+        default=None,
+        description="Bind a prepared Canvas deletion or batch file rename. Omit questions: the runtime supplies the exact confirmation question. Never invent a confirmation ID.",
+    )
     questions: str = Field(
+        default="",
         description="""<!--zh: 用 XML 格式描述要问用户的问题。支持 type: confirm / input / select / multi_select。每个问题用 <question> 标签包裹。-->
 Questions in XML format. Wrap each question in a <question> tag with a `type` attribute (confirm / input / select / multi_select). For select/multi_select, add <option> children. Optional attributes: default, placeholder, min, max.""",
     )
-    timeout: int = Field(
-        default=ASK_USER_TIMEOUT_DEFAULT_SECONDS,
-        description="""<!--zh: 等待用户回答的超时秒数（600~1800，即 10~30 分钟）。根据问题复杂程度自行判断：简单确认填 600，需要用户思考或输入内容填 900~1200，涉及复杂决策或需要用户查阅资料填 1200~1800。-->
-How many seconds to wait for the user's answer (600–1800, i.e. 10–30 minutes). Choose based on the complexity of the question: 600 for simple confirmations, 900–1200 when the user needs to think or type content, 1200–1800 for complex decisions or when the user may need to look something up.""",
+    timeout: Optional[Literal[60]] = Field(
+        default=None,
+        description="""<!--zh: 可选等待时间。默认不传，表示一直等用户回答；只有简单的是否确认或单选、每题都有安全默认值时才传 60。包含输入题、需要思考或会明显影响后续方向的问题不要传 timeout。-->
+Optional response deadline. Omit it by default to wait for the user indefinitely. Set it to 60 only for simple confirm or single-select questions where every question has a safe default. Omit timeout for input questions, questions that need thought, or decisions that can materially change the next steps.""",
     )
+
+
+    @model_validator(mode="after")
+    def require_questions_or_preparation(self) -> "AskUserParams":
+        if not self.questions and not self.prepared_tool_call_id:
+            raise ValueError("questions is required unless prepared_tool_call_id is supplied")
+        return self
 
 
 @tool()
@@ -68,6 +79,12 @@ class AskUserTool(BaseUserToolCallTool[AskUserParams]):
 3. shell 中带删除语义的命令（rm、find -delete 等）——先 dry-run 列出受影响文件，用日常语言向用户解释结果，confirm 后再执行
 4. 发送消息、调用外部 API 等不可撤回操作——说明将发送的内容和目标，confirm
 5. 修改系统配置、环境变量、定时任务——说明变更内容和可能影响，confirm
+
+等待时间策略（必须遵守）：
+- 默认不传 timeout，表示一直等用户回答。
+- 只有简单的 confirm 或单选 select，且每道题都有安全默认值时，才传 timeout=60。
+- input、多题填写、需要用户思考或会明显影响后续方向的问题，不传 timeout。
+- 不要使用其它等待时长。用户需要较长时间时，宁可一直等待，也不要替用户决定。
 
 问题撰写要求（适用于所有类型的提问）：
 - 假设用户不懂技术，使用日常语言，不要只贴命令或裸路径
@@ -112,7 +129,7 @@ questions 参数的 XML 格式示例：
 
 支持的类型：confirm、input、select、multi_select。
 select/multi_select 会自动追加一个"其他"自由输入选项。
-可用 default 属性设置超时或用户跳过时的回退值。
+使用 timeout=60 时，必须为每道题设置安全的 default 属性；不设置 timeout 时不要依赖默认值自动结束问题。
 -->
 When to call ask_user:
 - Must-know information that cannot be reasonably inferred (target path, credentials, format preference, etc.)
@@ -126,6 +143,12 @@ Destructive / irreversible operation rules (MUST confirm even when the user casu
 3. Shell commands with delete semantics (rm, find -delete, etc.) — dry-run first to list affected files, explain the result in plain language, then confirm before executing.
 4. Sending messages or calling external APIs (non-reversible) — describe what will be sent and to where, then confirm.
 5. Changing system config, env vars, or cron jobs — explain the change and potential impact, then confirm.
+
+Response deadline policy (MUST follow):
+- Omit timeout by default; wait for the user indefinitely.
+- Set timeout=60 only for simple confirm or single-select questions where every question has a safe default.
+- Omit timeout for input questions, multi-question forms, questions that need thought, or decisions that can materially change the next steps.
+- Do not use any other deadline. When the user may need more time, keep waiting instead of deciding for them.
 
 How to write good questions (applies to ALL question types, not only destructive confirmations):
 - Assume the user may not be technical. Use everyday language; do not paste raw commands or bare paths.
@@ -172,20 +195,29 @@ Features to enable:
 
 Allowed types: confirm, input, select, multi_select.
 For select/multi_select, the system auto-appends an "Other" free-input option.
-Use the `default` attribute to set a fallback when the user times out or skips.
+When using timeout=60, every question must have a safe `default` attribute. Without timeout, do not rely on an automatic fallback.
 """
 
-    user_tool_call_timeout = ASK_USER_TIMEOUT_DEFAULT_SECONDS
+    user_tool_call_timeout: Optional[int] = None
 
     async def _prepare(self, tool_context: ToolContext) -> None:
         """Parse questions XML and store for BEFORE_TOOL_CALL card and execute."""
         from app.tools.ask_user_parser import parse_questions_xml
 
         raw_xml = tool_context.arguments.get("questions", "")
+        source = self._get_execution_source(tool_context)
+        prepared_id = tool_context.arguments.get("prepared_tool_call_id")
+        if prepared_id and is_ask_user_allowed_source(source):
+            from xml.sax.saxutils import escape
+            from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
+
+            confirmation = CanvasOperationConfirmation.from_tool(tool_context)
+            prepared = await confirmation.read(str(prepared_id))
+            raw_xml = f'<question type="confirm">{escape(prepared.question)}</question>'
+            tool_context.arguments["questions"] = raw_xml
         tool_context.arguments["parsed_questions"] = parse_questions_xml(raw_xml)
         tool_context.arguments["status"] = "pending"
 
-        source = self._get_execution_source(tool_context)
         policy_blocked = not is_ask_user_allowed_source(source)
         tool_context.arguments["ask_user_policy_blocked"] = policy_blocked
         tool_context.arguments["ask_user_policy_source"] = source.value
@@ -194,14 +226,43 @@ Use the `default` attribute to set a fallback when the user times out or skips.
             tool_context.arguments["expires_at"] = int(time.time()) + ASK_USER_POLICY_SKIP_SECONDS
             return
 
-        # 用大模型指定的超时覆盖基类写入的默认值，限制在 [600, 1800] 秒内
+        if prepared_id:
+            parsed = tool_context.arguments["parsed_questions"]
+            await confirmation.bind(str(prepared_id), tool_context.tool_call_id, parsed[0]["sub_id"])
+            # 画布危险操作等待真人决定，默认不以超时答案代替确认。
+            tool_context.arguments["expires_at"] = 0
+            return
+
+        # 默认一直等待；只有简单选择题才允许使用 60 秒。
+        tool_context.arguments["expires_at"] = ASK_USER_NO_TIMEOUT
         raw_timeout = tool_context.arguments.get("timeout")
-        if raw_timeout is not None:
-            clamped = max(
-                ASK_USER_TIMEOUT_MIN_SECONDS,
-                min(ASK_USER_TIMEOUT_MAX_SECONDS, int(raw_timeout)),
-            )
-            tool_context.arguments["expires_at"] = int(time.time()) + clamped
+        if raw_timeout != ASK_USER_TIMEOUT_SECONDS:
+            return
+
+        if self._allows_short_timeout(tool_context.arguments["parsed_questions"]):
+            tool_context.arguments["expires_at"] = int(time.time()) + ASK_USER_TIMEOUT_SECONDS
+            return
+
+        logger.warning(
+            "ask_user timeout=60 ignored because questions require more than a quick choice; "
+            "waiting indefinitely instead"
+        )
+
+    @staticmethod
+    def _allows_short_timeout(parsed_questions: List[dict]) -> bool:
+        """只允许简单选择题使用短等待，避免截断用户输入或重要决策。"""
+        if not parsed_questions:
+            return False
+        for question in parsed_questions:
+            interaction_type = question.get("interaction_type")
+            default_value = question.get("default_value")
+            if interaction_type not in {"confirm", "select"}:
+                return False
+            if not isinstance(default_value, str) or not default_value.strip():
+                return False
+            if interaction_type == "select" and default_value not in (question.get("options") or []):
+                return False
+        return True
 
     @staticmethod
     def _get_execution_source(tool_context: ToolContext) -> SuperMagicExecutionSource:
@@ -219,6 +280,7 @@ Use the `default` attribute to set a fallback when the user times out or skips.
         """
         return {
             "parsed_questions": tool_context.arguments.get("parsed_questions", []),
+            "prepared_tool_call_id": tool_context.arguments.get("prepared_tool_call_id"),
             "policy_blocked": bool(tool_context.arguments.get("ask_user_policy_blocked", False)),
             "policy_source": tool_context.arguments.get(
                 "ask_user_policy_source",

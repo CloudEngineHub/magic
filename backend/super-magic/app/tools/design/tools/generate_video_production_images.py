@@ -61,7 +61,7 @@ class VideoProductionImageTask(BaseModel):
     )
     shot_id: Optional[str] = Field(
         default=None,
-        description="Storyboard shot ID that this image represents. Use it for storyboard first frames.",
+        description="Storyboard shot ID that this image represents. Use it for storyboard shot reference images.",
     )
     element_id: Optional[str] = Field(
         default=None,
@@ -99,7 +99,7 @@ class GenerateVideoProductionImagesParams(BaseToolParams):
         default=None,
         description=(
             "Storyboard Element whose current image model, aspect ratio, and resolution apply to all tasks. "
-            "Use this for storyboard first-frame generation."
+            "Use this for storyboard shot reference-image generation."
         ),
     )
     tasks: list[VideoProductionImageTask] = Field(..., min_length=1, max_length=6)

@@ -4,6 +4,10 @@ import {
 	encodeCanvasToPngBlob,
 	findVideosInCaptureClip,
 	IMAGE_ENCODE_TIMEOUT_MS,
+	buildCaptureClip,
+	freezeIframeMotion,
+	toSnapdomPageClip,
+	resolveCaptureRoot,
 	SCREENSHOT_WEBP_MIME_TYPE,
 	SCREENSHOT_WEBP_QUALITY,
 	SYNC_PNG_ENCODE_MAX_PIXELS,
@@ -493,8 +497,25 @@ describe("waitForCaptureVideosInClip", () => {
 describe("encodeCanvasToScreenshotBlob", () => {
 	afterEach(() => vi.restoreAllMocks())
 
+	it("encodes tiny canvases with a synchronous PNG data URL", async () => {
+		const canvas = document.createElement("canvas")
+		canvas.width = 8
+		canvas.height = 8
+		const toBlob = vi.spyOn(HTMLCanvasElement.prototype, "toBlob")
+		const toDataURL = vi
+			.spyOn(HTMLCanvasElement.prototype, "toDataURL")
+			.mockReturnValue("data:image/png;base64,QQ==")
+
+		const blob = await encodeCanvasToScreenshotBlob(canvas)
+		expect(blob.type).toBe("image/png")
+		expect(toDataURL).toHaveBeenCalledWith("image/png")
+		expect(toBlob).not.toHaveBeenCalled()
+	})
+
 	it("prefers high-quality WebP when the browser supports it", async () => {
 		const canvas = document.createElement("canvas")
+		canvas.width = 300
+		canvas.height = 300
 		const webpBlob = new Blob(["webp"], { type: SCREENSHOT_WEBP_MIME_TYPE })
 		const toBlob = vi
 			.spyOn(HTMLCanvasElement.prototype, "toBlob")
@@ -510,6 +531,8 @@ describe("encodeCanvasToScreenshotBlob", () => {
 
 	it("falls back to PNG when WebP encoding is unavailable", async () => {
 		const canvas = document.createElement("canvas")
+		canvas.width = 300
+		canvas.height = 300
 		const pngBlob = new Blob(["png"], { type: "image/png" })
 		const toBlob = vi
 			.spyOn(HTMLCanvasElement.prototype, "toBlob")
@@ -521,5 +544,82 @@ describe("encodeCanvasToScreenshotBlob", () => {
 			SCREENSHOT_WEBP_MIME_TYPE,
 			"image/png",
 		])
+	})
+})
+
+describe("resolveCaptureRoot", () => {
+	it("prefers the requested selector over document.body", () => {
+		const root = document.createElement("section")
+		root.id = "hero"
+		document.body.append(root)
+		try {
+			expect(
+				resolveCaptureRoot({ left: 0, top: 0, width: 10, height: 10 }, "section#hero"),
+			).toBe(root)
+		} finally {
+			root.remove()
+		}
+	})
+})
+
+describe("buildCaptureClip", () => {
+	it("captures the full root when the selector matched", () => {
+		expect(
+			buildCaptureClip(
+				{ left: 40, top: 80, width: 200, height: 50 },
+				{ left: 800, top: 400, width: 1308, height: 122 },
+				true,
+			),
+		).toEqual({ x: 0, y: 0, width: 200, height: 50 })
+	})
+
+	it("keeps a 1px clip when a mismatched selection misses the root", () => {
+		expect(
+			buildCaptureClip(
+				{ left: 40, top: 80, width: 200, height: 50 },
+				{ left: 800, top: 400, width: 1308, height: 122 },
+				false,
+			),
+		).toEqual({ x: 760, y: 320, width: 1, height: 1 })
+	})
+})
+
+describe("toSnapdomPageClip", () => {
+	it("maps a full-element local clip onto the element's page box", () => {
+		expect(
+			toSnapdomPageClip(
+				{ left: 165.5, top: 229.73 },
+				{ x: 0, y: 0, width: 688, height: 105 },
+			),
+		).toEqual({ x: 165.5, y: 229.73, width: 688, height: 105 })
+	})
+})
+
+describe("freezeIframeMotion", () => {
+	it("pauses animations instead of injecting a global stylesheet", () => {
+		const animation = {
+			currentTime: 80,
+			playState: "running",
+			pause: vi.fn(),
+			play: vi.fn(),
+			finish: vi.fn(),
+		} as unknown as Animation
+		const previousGetAnimations = document.getAnimations
+		Object.defineProperty(document, "getAnimations", {
+			configurable: true,
+			value: () => [animation],
+		})
+		try {
+			const restore = freezeIframeMotion()
+			expect(animation.pause).toHaveBeenCalledOnce()
+			expect(document.querySelector("[data-magic-inspector-screenshot]")).toBeNull()
+			restore()
+			expect(animation.play).toHaveBeenCalledOnce()
+		} finally {
+			Object.defineProperty(document, "getAnimations", {
+				configurable: true,
+				value: previousGetAnimations,
+			})
+		}
 	})
 })

@@ -388,7 +388,7 @@ export class FrameManager {
 	/**
 	 * 创建画框
 	 * 将选中的元素组合成一个画框
-	 * @param boundsExpansion - 显式覆盖默认边距；省略时边距为内容短边的 5%
+	 * @param boundsExpansion - 显式覆盖默认边距；省略时边距为内容短边的 8%
 	 * @returns 创建的画框 ID，如果创建失败返回 null
 	 */
 	public createFrame(boundsExpansion?: number): string | null {
@@ -397,26 +397,44 @@ export class FrameManager {
 			return null
 		}
 
-		// 获取选中的元素数据，过滤掉锁定的元素
+		// 容器不能参与新 Frame 创建；先在权限过滤前检查原始选区，避免把一个
+		// 锁定的 Frame/Group 过滤掉后，误把剩余普通节点单独包进新容器。
 		const selectedElements = selectedIds
 			.map((id) => this.canvas.elementManager.getElementData(id))
-			.filter((el): el is LayerElement => {
-				// 使用 PermissionManager 统一判断元素是否可以被添加到画框
-				return el !== undefined && this.canvas.permissionManager.canAddToFrame(el)
-			})
+			.filter((el): el is LayerElement => Boolean(el))
 
-		if (selectedElements.length === 0) {
+		if (
+			selectedElements.some(
+				(el) => el.type === ElementTypeEnum.Frame || el.type === ElementTypeEnum.Group,
+			)
+		) {
 			return null
 		}
 
-		// 校验：选中的元素中不能包含 frame 元素
-		const hasFrameElement = selectedElements.some((el) => el.type === ElementTypeEnum.Frame)
-		if (hasFrameElement) {
+		// Keep the no-nesting invariant at the manager boundary as well as in the
+		// action catalog. A direct API caller must not be able to move an existing
+		// Frame/Group child into a newly created Frame and leave the old parent stale.
+		const findParentId = this.canvas.elementManager.findParentIdForElement
+		if (
+			typeof findParentId === "function" &&
+			selectedElements.some((element) =>
+				findParentId.call(this.canvas.elementManager, element.id),
+			)
+		) {
+			return null
+		}
+
+		// 获取选中的元素数据，过滤掉锁定或无写权限的元素。
+		const permittedElements = selectedElements.filter((element) =>
+			this.canvas.permissionManager.canAddToFrame(element),
+		)
+
+		if (permittedElements.length === 0) {
 			return null
 		}
 
 		// 计算选中元素的总体边界
-		const rect = calculateElementsRect(selectedElements)
+		const rect = calculateElementsRect(permittedElements)
 		if (!rect) {
 			return null
 		}
@@ -426,7 +444,7 @@ export class FrameManager {
 		const frameY = rect.y - layout.padding
 
 		// 获取选中元素的最大 zIndex，Frame 将使用这个位置
-		const maxSelectedZIndex = Math.max(...selectedElements.map((el) => el.zIndex ?? 0))
+		const maxSelectedZIndex = Math.max(...permittedElements.map((el) => el.zIndex ?? 0))
 
 		// 创建新的 Frame 元素数据
 		const frameId = generateElementId()
@@ -464,7 +482,7 @@ export class FrameManager {
 			}
 
 			// 按原有 zIndex 从大到小排序，然后从大到小分配画框内 zIndex，保持相对顺序
-			const sortedElements = [...selectedElements].sort(
+			const sortedElements = [...permittedElements].sort(
 				(a, b) => (b.zIndex ?? 0) - (a.zIndex ?? 0),
 			)
 

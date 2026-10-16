@@ -19,6 +19,11 @@ from app.tools.canvas.tools.layout_canvas_elements import LayoutCanvasElements, 
 from app.tools.canvas.tools.manage_canvas_connections import ConnectionInput, ManageCanvasConnections
 from app.tools.canvas.tools.query_canvas_element_details import QueryCanvasElementDetails
 from app.tools.canvas.tools.query_canvas_overview import QueryCanvasOverview
+from app.tools.canvas.tools.query_canvas_layout import QueryCanvasLayout
+from app.tools.canvas.tools.arrange_canvas_elements import ArrangeCanvasElements
+from app.tools.canvas.tools.rename_canvas_elements import RenameCanvasElements
+from app.tools.canvas.tools.unframe_canvas_elements import UnframeCanvasElements
+from app.tools.canvas.tools.delete_canvas_elements import DeleteCanvasElements
 from app.tools.canvas.tools.retry_canvas_content_generation import (
     GenerationOverrideInput,
     RetryCanvasContentGeneration,
@@ -32,6 +37,11 @@ from app.tools.canvas.tools.wait_canvas_generation import WaitCanvasGeneration, 
 CreationConnectionInput = CanvasCreationConnectionInput
 
 __all__ = [
+    "QueryCanvasLayout",
+    "ArrangeCanvasElements",
+    "RenameCanvasElements",
+    "UnframeCanvasElements",
+    "DeleteCanvasElements",
     "AddCanvasContents",
     "AddCanvasElements",
     "AddContentInput",

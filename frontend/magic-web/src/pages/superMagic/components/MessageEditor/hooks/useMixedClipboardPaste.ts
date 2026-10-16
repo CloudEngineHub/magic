@@ -15,6 +15,8 @@ import {
 	createUploadFileMentionAttributes,
 	transformUploadFileToProjectFile,
 } from "../utils/mention"
+import { isWechatChatText } from "../extensions/wechat-chat-history/parser"
+import { insertWechatChat } from "../extensions/wechat-chat-history/commands"
 
 interface UseMixedClipboardPasteOptions {
 	getEditor: () => Editor | null
@@ -24,6 +26,8 @@ interface UseMixedClipboardPasteOptions {
 	cancelPendingUpload: () => void
 	isProjectContext: boolean
 	onPreparingChange: (preparing: boolean) => void
+	wechatChatEnabled?: boolean
+	onWechatImported?: (id: string) => void
 }
 
 function buildContent(
@@ -73,6 +77,8 @@ export function useMixedClipboardPaste({
 	cancelPendingUpload,
 	isProjectContext,
 	onPreparingChange,
+	wechatChatEnabled = false,
+	onWechatImported,
 }: UseMixedClipboardPasteOptions) {
 	const { t } = useTranslation("super")
 	const mounted = useRef(true)
@@ -104,6 +110,7 @@ export function useMixedClipboardPaste({
 		const text = data.getData("text/plain")
 		const html = data.getData("text/html")
 		let textReadFailed = false
+		const textFromClipboardApi = !text && !html
 		// 必须在 paste 的用户手势内发起读取，不能等目录弹窗或上一批上传结束后再读剪贴板。
 		const textPromise =
 			text || html
@@ -123,25 +130,30 @@ export function useMixedClipboardPaste({
 		const operation = queue.current.then(async () => {
 			const resolvedText = await textPromise
 			if (!isCurrent()) return
-			const content = parseMixedClipboard(resolvedText, html, files)
+			const content = parseMixedClipboard(resolvedText, html, files, {
+				textFromClipboardApi,
+			})
 			const filesOnly =
 				!html &&
 				content.parts.every((part) =>
 					part.type === "text" ? !part.text.trim() : !part.originalText,
 				)
 			const addedIds = new Map<File, string>()
+			let preparationFailed = false
 			try {
-				await addFiles(files, {
-					isCurrent,
-					onFileAdded: filesOnly
-						? undefined
-						: (addedFiles, sourceFiles) => {
-								addedFiles.forEach((file, index) =>
-									addedIds.set(sourceFiles[index], file.id),
-								)
-							},
-				})
+				if (files.length)
+					await addFiles(files, {
+						isCurrent,
+						onFileAdded: filesOnly
+							? undefined
+							: (addedFiles, sourceFiles) => {
+									addedFiles.forEach((file, index) =>
+										addedIds.set(sourceFiles[index], file.id),
+									)
+								},
+					})
 			} catch {
+				preparationFailed = true
 				if (isCurrent()) magicToast.warning(t("fileUpload.clipboardUploadFailed"))
 			}
 			if (!isCurrent()) return
@@ -171,8 +183,52 @@ export function useMixedClipboardPaste({
 				? selection
 				: { from: editor.state.selection.to, to: editor.state.selection.to }
 			if (nodes.some((node) => node.content?.length)) {
-				editor.commands.insertContentAt(range, nodes)
-				editor.commands.focus()
+				if (wechatChatEnabled && isWechatChatText(resolvedText)) {
+					// 无法证明配对时，原记录留在区块，未绑定附件作为独立资料保留，不能挂到最后一条消息。
+					const chatNodes = content.ordered
+						? nodes
+						: buildContent(
+								[{ type: "text", text: resolvedText }],
+								uploads,
+								isProjectContext,
+							)
+					// 原文件未成为 mention 时记录原因，避免把凭证失败误报为用户没有复制媒体。
+					for (const paragraph of chatNodes) {
+						if (paragraph.content?.some((node) => node.type === "mention")) continue
+						const body =
+							paragraph.content?.map((node) => node.text ?? "").join("") ?? ""
+						if (!/^\[(图片|视频|文件)\]/.test(body.trim())) continue
+						paragraph.attrs = {
+							...paragraph.attrs,
+							wechatMediaState: preparationFailed
+								? "prepareFailed"
+								: files.length === 0
+									? "markerOnly"
+									: !content.ordered
+										? "unmatched"
+										: "unavailable",
+						}
+					}
+					const id = insertWechatChat(
+						editor,
+						range,
+						chatNodes,
+						t("wechatChat.instructionPlaceholder"),
+					)
+					if (!content.ordered && uploads.size)
+						editor.commands.insertContentAt(
+							editor.state.doc.content.size,
+							buildContent(
+								content.parts.filter((part) => part.type === "file"),
+								uploads,
+								isProjectContext,
+							),
+						)
+					if (id) onWechatImported?.(id)
+				} else {
+					editor.commands.insertContentAt(range, nodes)
+					editor.commands.focus()
+				}
 			}
 			if (!content.ordered) {
 				magicToast.info(t("fileUpload.clipboardOrderUnavailable"))

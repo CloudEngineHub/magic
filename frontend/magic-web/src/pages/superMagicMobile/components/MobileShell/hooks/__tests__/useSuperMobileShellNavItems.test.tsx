@@ -8,6 +8,7 @@ import { useSuperMobileShellNavItems } from "../useSuperMobileShellNavItems"
 const { envMock, permissionMock, useFunctionPermissionMock, userStoreMock } = vi.hoisted(() => ({
 	envMock: {
 		isPrivateDeployment: false,
+		microAppEnabled: "",
 	},
 	permissionMock: {
 		canAccessMagicClaw: true,
@@ -30,7 +31,7 @@ vi.mock("@/hooks/useFunctionPermission", () => ({
 }))
 
 vi.mock("@/utils/env", () => ({
-	env: () => "",
+	env: (key: string) => (key === "MAGIC_MICRO_APP_ENABLED" ? envMock.microAppEnabled : ""),
 	getPrivateDeploymentConfig: () => null,
 	isCommercial: () => false,
 	isDev: false,
@@ -68,6 +69,7 @@ vi.mock("@/pages/superMagicMobile/components/icons/MagiClawNavIcon", () => ({
 describe("useSuperMobileShellNavItems", () => {
 	beforeEach(() => {
 		envMock.isPrivateDeployment = false
+		envMock.microAppEnabled = ""
 		permissionMock.canAccessMagicClaw = true
 		permissionMock.isLoading = false
 		useFunctionPermissionMock.mockReset()
@@ -126,12 +128,6 @@ describe("useSuperMobileShellNavItems", () => {
 				nativeRecordingTab: undefined,
 			},
 			{
-				key: "apps",
-				label: "label:mobile.shell.navApps",
-				routeName: RouteName.SuperApps,
-				nativeRecordingTab: undefined,
-			},
-			{
 				key: "microApps",
 				label: "label:mobile.shell.navMicroApps",
 				routeName: RouteName.MicroApps,
@@ -141,6 +137,12 @@ describe("useSuperMobileShellNavItems", () => {
 				key: "trash",
 				label: "label:mobile.shell.navTrash",
 				routeName: RouteName.RecycleBin,
+				nativeRecordingTab: undefined,
+			},
+			{
+				key: "apps",
+				label: "label:mobile.shell.navApps",
+				routeName: RouteName.SuperApps,
 				nativeRecordingTab: undefined,
 			},
 		])
@@ -195,5 +197,20 @@ describe("useSuperMobileShellNavItems", () => {
 		const { result } = renderHook(() => useSuperMobileShellNavItems())
 
 		expect(result.current.map(({ key }) => key)).not.toContain("microApps")
+	})
+
+	it("hides only micro apps when explicitly disabled outside private deployment", () => {
+		envMock.microAppEnabled = "false"
+		const { result } = renderHook(() => useSuperMobileShellNavItems())
+		expect(result.current.map(({ key }) => key)).not.toContain("microApps")
+		expect(result.current.map(({ key }) => key)).toContain("recording")
+	})
+
+	it("allows micro apps without enabling recording in private deployment", () => {
+		envMock.isPrivateDeployment = true
+		envMock.microAppEnabled = "true"
+		const { result } = renderHook(() => useSuperMobileShellNavItems())
+		expect(result.current.map(({ key }) => key)).toContain("microApps")
+		expect(result.current.map(({ key }) => key)).not.toContain("recording")
 	})
 })

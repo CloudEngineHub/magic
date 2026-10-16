@@ -13,6 +13,14 @@ from typing import Optional
 from app.utils.fuzzy_text_matcher import find_in_text
 
 
+class RangeMatchError(ValueError):
+    """A match failure with a stable code for tool-level recovery."""
+
+    def __init__(self, message: str, *, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 @dataclass(frozen=True)
 class ContextRange:
     """上下文解析结果"""
@@ -127,7 +135,7 @@ def resolve_replace_range(
         ValueError: 锚点无法唯一定位时
     """
     if replace_start == "" and replace_end == "":
-        raise ValueError("replace_start and replace_end cannot both be empty.")
+        raise RangeMatchError("replace_start and replace_end cannot both be empty.", code="invalid_anchors")
 
     warnings: list[str] = []
 
@@ -136,13 +144,17 @@ def resolve_replace_range(
         if end_resolution.warning:
             warnings.append(end_resolution.warning)
         if end_resolution.is_ambiguous:
-            raise ValueError("replace_end is ambiguous after normalization. Make replace_end more specific.")
+            raise RangeMatchError(
+                "replace_end is ambiguous after normalization. Make replace_end more specific.",
+                code="range_ambiguous",
+            )
         if len(end_resolution.positions) == 0:
-            raise ValueError("replace_end not found in file.")
+            raise RangeMatchError("replace_end not found in file.", code="range_not_found")
         if len(end_resolution.positions) > 1:
-            raise ValueError(
+            raise RangeMatchError(
                 f"replace_end is ambiguous: found {len(end_resolution.positions)} matches. "
-                "Make replace_end more specific."
+                "Make replace_end more specific.",
+                code="range_ambiguous",
             )
 
         end_pos = end_resolution.positions[0]
@@ -162,13 +174,17 @@ def resolve_replace_range(
         if start_resolution.warning:
             warnings.append(start_resolution.warning)
         if start_resolution.is_ambiguous:
-            raise ValueError("replace_start is ambiguous after normalization. Make replace_start more specific.")
+            raise RangeMatchError(
+                "replace_start is ambiguous after normalization. Make replace_start more specific.",
+                code="range_ambiguous",
+            )
         if len(start_resolution.positions) == 0:
-            raise ValueError("replace_start not found in file.")
+            raise RangeMatchError("replace_start not found in file.", code="range_not_found")
         if len(start_resolution.positions) > 1:
-            raise ValueError(
+            raise RangeMatchError(
                 f"replace_start is ambiguous: found {len(start_resolution.positions)} matches. "
-                "Make replace_start more specific."
+                "Make replace_start more specific.",
+                code="range_ambiguous",
             )
 
         start_index = start_resolution.positions[0]
@@ -207,11 +223,15 @@ def resolve_replace_range(
                 candidates.append((start_pos, end_pos + len(end_resolution.actual_anchor)))
 
     if len(candidates) == 0:
-        raise ValueError("No valid range found: replace_start appears after all replace_end matches.")
+        raise RangeMatchError(
+            "No valid range found: replace_start appears after all replace_end matches.",
+            code="range_order_invalid",
+        )
     if len(candidates) > 1:
-        raise ValueError(
+        raise RangeMatchError(
             f"Replace range is ambiguous: found {len(candidates)} possible ranges. "
-            "Make replace_start/replace_end more specific."
+            "Make replace_start/replace_end more specific.",
+            code="range_ambiguous",
         )
 
     start_index, end_index = candidates[0]

@@ -11,6 +11,18 @@ const isGenerationMedia = (context: Parameters<ElementToolDefinition["isApplicab
 	generationToolAllowed(context) &&
 	!context.interaction.isEditing
 
+function isDraftTaskVideoResult(
+	context: Parameters<ElementToolDefinition["isApplicable"]>[0],
+): boolean {
+	if (context.element.type !== ElementTypeEnum.Video) return false
+	const request = context.content.active?.generateVideoRequest
+	return (
+		typeof request === "object" &&
+		request !== null &&
+		(request as { input_mode?: unknown }).input_mode === "draft_task"
+	)
+}
+
 export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 	{
 		id: ElementToolTypeEnum.GenerationQuickEdit,
@@ -54,6 +66,7 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 		isApplicable: (context) =>
 			isGenerationMedia(context) &&
 			context.capabilities.canGenerateContent &&
+			!isDraftTaskVideoResult(context) &&
 			(context.runtime.toolsById.get(ElementToolTypeEnum.GenerationReEdit)?.available ??
 				true),
 		resolve: (context) =>
@@ -102,6 +115,36 @@ export const GENERATION_TOOL_DEFINITIONS: ElementToolDefinition[] = [
 					"generation",
 					30,
 				),
+			),
+	},
+	{
+		id: ElementToolTypeEnum.GenerationGenerateFinal,
+		scope: "generation",
+		execution: "command",
+		effect: "document",
+		requiredCapability: "sideEffect.generate",
+		commandRoute: "generation",
+		surfaces: {
+			bottom: bottomAction(
+				undefined,
+				"videoEditor.generateFinal",
+				"生成正片",
+				"generation",
+				40,
+			),
+		},
+		// 该工具没有通用兜底能力；只有 VideoSecondEdit 完成样片和模型能力
+		// 校验并注册运行时命令后才允许显示。
+		isApplicable: (context) =>
+			isGenerationMedia(context) &&
+			context.element.type === ElementTypeEnum.Video &&
+			context.runtime.toolsById.get(ElementToolTypeEnum.GenerationGenerateFinal)
+				?.available === true,
+		resolve: (context) =>
+			resolveRuntimeTool(
+				context,
+				ElementToolTypeEnum.GenerationGenerateFinal,
+				bottomAction(undefined, "videoEditor.generateFinal", "生成正片", "generation", 40),
 			),
 	},
 ]

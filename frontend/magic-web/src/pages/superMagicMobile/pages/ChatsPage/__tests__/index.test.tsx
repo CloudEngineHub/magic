@@ -123,7 +123,7 @@ vi.mock("../hooks/useChatConversationList", () => ({
 				},
 			},
 		],
-		isLoading: false,
+		isInitialChatListLoading: false,
 		searchValue: "",
 		setSearchValue: vi.fn(),
 		debouncedSearchValue: "",
@@ -348,3 +348,8 @@ describe("ChatsPage", () => {
 		expect(screen.getByTestId("chat-list")).toBeInTheDocument()
 	})
 })
+
+vi.mock("@/services/recordSummary/projectDeletionRecordingNotice", () => ({
+	canDeleteRecordingProjects: vi.fn(() => true),
+	handleRecordingProjectDeletionError: vi.fn(() => false),
+}))
