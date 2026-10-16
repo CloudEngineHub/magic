@@ -165,6 +165,7 @@
 		"nameRequired": "智能体名称不能为空",
 		"placeholder": "请输入智能体的提示词内容，按“/”唤起菜单",
 		"promptRequired": "提示词不能为空",
+		"refreshHtml": "刷新 HTML",
 		"saveSuccess": "保存成功",
 		"title": "自定义智能体",
 		"toolSelectModal": {
@@ -8407,6 +8408,7 @@
 			"selectMultiple": "多选",
 			"shareFile": "分享",
 			"showInfo": "显示简介",
+			"upload": "上传",
 			"uploadError": "文件上传失败",
 			"uploadFile": "上传文件",
 			"uploadFolder": "上传文件夹",
@@ -8489,6 +8491,8 @@
 		"entryFileNotFound": "未找到可导出的入口文件（index.html），请检查该文件夹内是否包含 index.html",
 		"error": {
 			"copyFileFailed": "复制文件失败",
+			"createDesignFailed": "创建画布项目失败",
+			"createDesignSuccess": "创建画布项目成功",
 			"createFileSuccess": "文件创建成功",
 			"createFolderSuccess": "文件夹创建成功",
 			"deleteFileFailed": "删除文件失败",
