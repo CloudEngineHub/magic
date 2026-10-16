@@ -54,11 +54,9 @@ import { useTranslation } from "react-i18next"
 import type { ApiError } from "@magic-admin-v2/api/types"
 import { useRuntime } from "@magic-admin-v2/runtime/context"
 import { cn } from "@magic-admin-v2/utils/cn"
-import { useIsMobile } from "@magic-admin-v2/hooks/use-is-mobile"
 import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 
 export default function PlatformModelListPage() {
-	const isMobile = useIsMobile()
 	const { t } = useTranslation()
 	const { access } = useRuntime()
 	const dataSource = useProviderModelDataSource()
@@ -215,28 +213,32 @@ export default function PlatformModelListPage() {
 						<div className="flex justify-end">
 							<div className="flex items-center gap-2">
 								<Button
-									className="whitespace-nowrap"
+									className="whitespace-nowrap md:w-auto md:gap-1.5 md:px-2.5"
 									data-testid="model-list-view-button"
 									onClick={() => setDetailTarget(row.original)}
-									size="sm"
+									size="icon-sm"
 									variant="outline"
 								>
 									<Eye className="size-4" aria-hidden="true" />
-									{!isMobile && t("modelList.action.viewDetails")}
+									<span className="hidden md:inline">
+										{t("modelList.action.viewDetails")}
+									</span>
 								</Button>
 								{rowCanEdit ? (
 									<Button
-										className="whitespace-nowrap"
+										className="whitespace-nowrap md:w-auto md:gap-1.5 md:px-2.5"
 										data-testid="model-list-edit-button"
 										onClick={() => {
 											setEditorTarget(row.original)
 											setIsEditorOpen(true)
 										}}
-										size="sm"
+										size="icon-sm"
 										variant="outline"
 									>
 										<Pencil className="size-4" aria-hidden="true" />
-										{!isMobile && t("modelList.action.edit")}
+										<span className="hidden md:inline">
+											{t("modelList.action.edit")}
+										</span>
 									</Button>
 								) : null}
 							</div>
@@ -245,7 +247,7 @@ export default function PlatformModelListPage() {
 				},
 			},
 		],
-		[categoryAccess, t, isMobile],
+		[categoryAccess, t],
 	)
 
 	useEffect(() => {

@@ -49,8 +49,8 @@ export function StaffCard({
 	const placeholder = getI18nText(item.placeholder_i18n, language)
 
 	return (
-		<Card className="py-0" data-testid={cardTestId}>
-			<CardContent className="flex h-full flex-col gap-4 p-4">
+		<Card className="min-w-0 overflow-hidden py-0" data-testid={cardTestId}>
+			<CardContent className="flex min-w-0 h-full flex-col gap-4 p-4">
 				<div className="flex min-w-0 gap-3">
 					<StaffAvatar item={item} />
 					<div className="min-w-0 flex-1">
@@ -63,7 +63,7 @@ export function StaffCard({
 							) : null}
 						</div>
 						<CopyableValue
-							className="max-w-full"
+							className="min-w-0 w-full max-w-full"
 							displayValue={item.identifier}
 							value={item.identifier}
 						/>
@@ -89,22 +89,26 @@ export function StaffCard({
 						<Button
 							data-testid={assignButtonTestId}
 							onClick={() => onAssign(item)}
-							size="sm"
+							size="icon-sm"
+							className="md:w-auto md:gap-1.5 md:px-2.5"
 							variant="outline"
 						>
 							<Settings2 className="size-4" />
-							{t("officialStaff.action.assignModels")}
+							<span className="hidden md:inline">
+								{t("officialStaff.action.assignModels")}
+							</span>
 						</Button>
 						{canEdit ? (
 							<Button
 								data-testid={moreButtonTestId}
 								disabled={isDefault}
 								onClick={() => onEdit(item)}
-								size="sm"
+								size="icon-sm"
+								className="md:w-auto md:gap-1.5 md:px-2.5"
 								variant="outline"
 							>
 								<Edit3 className="size-4" aria-hidden="true" />
-								{t("common.edit")}
+								<span className="hidden md:inline">{t("common.edit")}</span>
 							</Button>
 						) : null}
 					</div>

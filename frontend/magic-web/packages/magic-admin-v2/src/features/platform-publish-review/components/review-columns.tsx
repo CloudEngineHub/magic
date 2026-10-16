@@ -120,7 +120,8 @@ export function createReviewActionColumn<TRecord extends ReviewRecordBase>({
 						data-testid="platform-publish-review-view-button"
 						disabled={!canReview || rowPending}
 						onClick={() => onReview(row.original, "APPROVED")}
-						size="sm"
+						size="icon-sm"
+						className="md:w-auto md:gap-1.5 md:px-2.5"
 						variant="outline"
 					>
 						{rowPending ? (
@@ -133,11 +134,11 @@ export function createReviewActionColumn<TRecord extends ReviewRecordBase>({
 						</span>
 					</Button>
 					<Button
-						className="text-destructive hover:text-destructive"
+						className="text-destructive hover:text-destructive md:w-auto md:gap-1.5 md:px-2.5"
 						data-testid="platform-publish-review-view-button"
 						disabled={!canReview || rowPending}
 						onClick={() => onReview(row.original, "REJECTED")}
-						size="sm"
+						size="icon-sm"
 						variant="outline"
 					>
 						<XCircle className="size-4" aria-hidden="true" />

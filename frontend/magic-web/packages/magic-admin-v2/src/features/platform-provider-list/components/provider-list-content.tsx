@@ -22,7 +22,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@magic-admin-v2/components/ui/select"
-import { useIsMobile } from "@magic-admin-v2/hooks/use-is-mobile"
 import { ProviderStatusSwitch } from "@magic-admin-v2/features/platform-provider-list/components/provider-status-switch"
 import {
 	canDeleteProvider,
@@ -90,7 +89,6 @@ export function ProviderListContent({
 	statusPendingIds: ReadonlySet<string>
 	total: number
 }) {
-	const isMobile = useIsMobile()
 	const { t } = useTranslation()
 	const [deleteTarget, setDeleteTarget] = useState<ProviderListItem | null>(null)
 	const columns = useMemo<Array<ColumnDef<ProviderListItem>>>(
@@ -148,21 +146,22 @@ export function ProviderListContent({
 					const canDelete = canDeleteProvider(categoryAccess, provider)
 
 					return (
-						<div className="flex justify-end gap-1">
+						<div className="flex justify-end gap-2">
 							<Button
-								className="whitespace-nowrap"
+								className="whitespace-nowrap md:w-auto md:gap-1.5 md:px-2.5"
 								data-testid="provider-list-configure-button"
 								onClick={() => onOpenDetail(provider)}
-								size="sm"
+								size="icon-sm"
 								variant="outline"
 							>
 								<Eye className="size-4" aria-hidden="true" />
-								{!isMobile &&
-									t(
+								<span className="hidden md:inline">
+									{t(
 										canEdit
 											? "providerList.action.configure"
 											: "providerList.action.view",
 									)}
+								</span>
 							</Button>
 							{canDelete ? (
 								<Button
@@ -170,12 +169,12 @@ export function ProviderListContent({
 									data-testid="provider-list-delete-button"
 									disabled={deleting}
 									onClick={() => setDeleteTarget(provider)}
-									size="sm"
+									size="icon-sm"
 									variant="outline"
-									className="text-destructive hover:text-destructive"
+									className="text-destructive hover:text-destructive md:w-auto md:gap-1.5 md:px-2.5"
 								>
 									<Trash2 className="size-4" aria-hidden="true" />
-									{!isMobile && t("common.delete")}
+									<span className="hidden md:inline">{t("common.delete")}</span>
 								</Button>
 							) : null}
 						</div>
@@ -183,7 +182,7 @@ export function ProviderListContent({
 				},
 			},
 		],
-		[categoryAccess, deleting, isMobile, onOpenDetail, onStatusChange, statusPendingIds, t],
+		[categoryAccess, deleting, onOpenDetail, onStatusChange, statusPendingIds, t],
 	)
 
 	async function confirmDelete() {
@@ -344,7 +343,9 @@ function ProviderFilterFields({
 				<ProviderStatusSelect
 					className="w-full"
 					onChange={(status) => onChange({ status })}
-					testId={isSheet ? "provider-advanced-status-trigger" : "provider-status-trigger"}
+					testId={
+						isSheet ? "provider-advanced-status-trigger" : "provider-status-trigger"
+					}
 					value={value.status}
 				/>
 			</FilterControlField>

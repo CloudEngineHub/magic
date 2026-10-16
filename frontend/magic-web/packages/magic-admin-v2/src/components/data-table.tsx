@@ -419,7 +419,7 @@ function MobileDataCard<TData>({
 						: null}
 				</div>
 				{actionCell ? (
-					<div className="-mr-2 -mt-2 shrink-0">
+					<div className="shrink-0">
 						{flexRender(actionCell.column.columnDef.cell, actionCell.getContext())}
 					</div>
 				) : null}

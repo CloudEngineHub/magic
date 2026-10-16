@@ -88,7 +88,7 @@ export const CapabilityCard = memo(function CapabilityCard({
 					{displayDescription || t("common.emptyValue")}
 				</p>
 
-				<div className="mt-auto flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+				<div className="mt-auto flex border-t pt-4 flex-row items-center justify-between">
 					<div className="flex items-center gap-2">
 						<Switch
 							checked={enabled}
