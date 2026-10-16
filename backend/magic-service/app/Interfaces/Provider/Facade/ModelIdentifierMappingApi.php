@@ -17,8 +17,10 @@ use App\Interfaces\Provider\DTO\Request\QueryModelIdentifierMappingGroupsRequest
 use App\Interfaces\Provider\DTO\Request\QueryModelIdentifierMappingOptionsRequest;
 use App\Interfaces\Provider\DTO\Request\SaveModelIdentifierMappingGroupRequest;
 use App\Interfaces\Provider\DTO\Request\UpdateModelIdentifierMappingStatusRequest;
+use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\Di\Annotation\Inject;
 
+#[ApiResponse('low_code')]
 class ModelIdentifierMappingApi extends AbstractApi
 {
     #[Inject]
