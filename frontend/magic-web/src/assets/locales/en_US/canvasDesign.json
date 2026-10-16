@@ -127,6 +127,9 @@
 		"mediaKindVideo": "Video",
 		"reorderLinkedText": "Reorder linked text"
 	},
+	"contextMenu": {
+		"seedanceCompliance": "Seedance 2.0 Compliance Check"
+	},
 	"dropOverlay": {
 		"loading": "Loading",
 		"referenceImageLimitReached": "Reference image limit reached",

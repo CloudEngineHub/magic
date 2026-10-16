@@ -368,11 +368,12 @@ describe("ImageEditorSurface asset library", () => {
 		const view = renderSurface("image-editor-session-1")
 		fireEvent.click(screen.getByRole("button", { name: "打开素材库" }))
 		await screen.findByTestId("assets-modal")
+		const staleConfirm = mocks.assetsModalProps?.onConfirmMultiple
 
 		view.rerender(
 			<ImageEditorSurface
 				imageElement={imageElement as never}
-				config={view.config}
+				config={{ ...view.config, selectedModelId: "changed-image-model" }}
 				editorRef={createRef<MessageEditorRef>()}
 				shouldShow={() => true}
 				floatingId="image-editor"
@@ -383,9 +384,10 @@ describe("ImageEditorSurface asset library", () => {
 			/>,
 		)
 
-		await expect(
-			mocks.assetsModalProps?.onConfirmMultiple?.(mocks.confirmAssets),
-		).rejects.toThrow("stale")
+		await act(async () => {
+			await expect(staleConfirm?.(mocks.confirmAssets)).rejects.toThrow("stale")
+		})
 		expect(mocks.assetImportMany).not.toHaveBeenCalled()
+		expect(screen.queryByTestId("assets-modal")).not.toBeInTheDocument()
 	})
 })

@@ -264,38 +264,31 @@
 	gap: var(--spacing-1, 4px);
 	align-items: center;
 	justify-content: center;
-	flex: 0 0 104px;
-	width: 104px;
-	min-width: 104px !important;
+	white-space: nowrap;
+	min-width: var(--width-w-6, 24px) !important;
 	height: var(--height-h-6, 24px) !important;
 	padding: var(--spacing-1, 4px) var(--spacing-1-5, 6px) !important;
-}
-
-/* Reserve the full points-label width so the settings Popover anchor does not move. */
-.sendButtonSlot {
-	flex: 0 0 104px;
-	width: 104px;
-}
-
-.sendButtonContent,
-.sendButtonLoading {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
 }
 
 .sendButtonLoading {
 	position: absolute;
 	inset: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
 }
 
 .sendButtonPoints {
-	overflow: hidden;
-	text-overflow: ellipsis;
 	font-size: var(--text-xs-font-size, 12px);
 	line-height: 1;
 	white-space: nowrap;
-	font-variant-numeric: tabular-nums;
+}
+
+.sendButtonContent {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing-1, 4px);
 }
 
 .sendConfirmContent {

@@ -28,7 +28,8 @@ import type {
 } from "../../../../public/props"
 import { useCanvasReferenceMentionRuntime } from "./useCanvasReferenceMentionRuntime"
 import { filterReferenceResourcePanelBatchItems } from "./referenceResourceSelection"
-import { FolderOpen, Library, Upload } from "lucide-react"
+import { FolderOpen, Upload } from "lucide-react"
+import { AssetLibraryIcon } from "../../../primitives/icons/index"
 
 function defaultIconForSourceType(source: ReferenceResourceSourceType) {
 	if (source === REFERENCE_RESOURCE_SOURCE_TYPES.localUpload)
@@ -43,9 +44,7 @@ function defaultIconForSourceType(source: ReferenceResourceSourceType) {
 			/>
 		)
 	if (source === REFERENCE_RESOURCE_SOURCE_TYPES.assets)
-		return (
-			<Library size={16} className="shrink-0 text-foreground" aria-hidden strokeWidth={5} />
-		)
+		return <AssetLibraryIcon size={16} className="shrink-0 text-foreground" aria-hidden />
 	return null
 }
 

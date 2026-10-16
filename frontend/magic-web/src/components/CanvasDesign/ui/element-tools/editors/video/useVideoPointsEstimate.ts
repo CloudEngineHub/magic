@@ -158,13 +158,19 @@ export function useVideoPointsEstimate(
 		estimateSignature === signature && typeof estimate?.points === "number"
 			? estimate.points
 			: null
+	const hasStaleEstimateWhileRequesting =
+		canEstimate &&
+		Boolean(signature) &&
+		estimateSignature !== null &&
+		estimateSignature !== signature &&
+		typeof estimate?.points === "number"
 
 	return {
 		estimate: estimateSignature === signature ? estimate : null,
 		points: pointsForCurrentSignature,
 		isLoading:
 			estimateGate.blockedReason === "pending_resource_deferrals" ||
-			(canEstimate && isLoading),
+			(canEstimate && (isLoading || hasStaleEstimateWhileRequesting)),
 		error,
 		blockedReason: estimateGate.blockedReason,
 	}

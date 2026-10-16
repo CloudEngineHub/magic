@@ -30,6 +30,8 @@ interface UseMixedClipboardPasteOptions {
 	onWechatImported?: (id: string) => void
 }
 
+type ClipboardSnapshot = { text: string; html: string }
+
 function buildContent(
 	parts: MixedClipboardPart[],
 	uploads: ReadonlyMap<File, FileData>,
@@ -101,19 +103,21 @@ export function useMixedClipboardPaste({
 		}
 	}, [])
 
-	return useMemoizedFn((data: DataTransfer, files: File[]) => {
+	return useMemoizedFn((data: DataTransfer, files: File[], snapshot?: ClipboardSnapshot) => {
 		const editor = getEditor()
 		if (!editor || editor.isDestroyed) return
 		const sessionId = getSessionId()
 		const initialDoc = editor.state.doc
 		const selection = { from: editor.state.selection.from, to: editor.state.selection.to }
-		const text = data.getData("text/plain")
-		const html = data.getData("text/html")
+		// DataTransfer is not guaranteed to remain readable after a delayed Canvas
+		// bundle lookup, so use the paste-time snapshot when one was supplied.
+		const text = snapshot?.text ?? data.getData("text/plain")
+		const html = snapshot?.html ?? data.getData("text/html")
 		let textReadFailed = false
-		const textFromClipboardApi = !text && !html
+		const textFromClipboardApi = !snapshot && !text && !html
 		// 必须在 paste 的用户手势内发起读取，不能等目录弹窗或上一批上传结束后再读剪贴板。
 		const textPromise =
-			text || html
+			snapshot || text || html
 				? Promise.resolve(text)
 				: clipboard.readText().catch(() => {
 						textReadFailed = true

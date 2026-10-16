@@ -127,6 +127,9 @@
 		"mediaKindVideo": "视频",
 		"reorderLinkedText": "调整关联文本顺序"
 	},
+	"contextMenu": {
+		"seedanceCompliance": "Seedance 2.0 合规校验"
+	},
 	"dropOverlay": {
 		"loading": "加载中",
 		"referenceImageLimitReached": "参考图数量已达上限",
@@ -990,7 +993,7 @@
 		"referenceVideoMaxReached": "参考视频最多可上传 {{max}} 个",
 		"removeSlotResource": "移除该参考资源",
 		"resolution": "分辨率",
-		"sendButtonEstimatedPoints": "预计{{points}}",
+		"sendButtonEstimatedPoints": "预计 {{points}}",
 		"sendConfirmDescription": "本次任务预计消耗约 {{points}} 积分，是否确认执行？",
 		"sendConfirmOk": "确认执行",
 		"sendConfirmSkip": "下次不再提示",

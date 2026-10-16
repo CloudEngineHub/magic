@@ -22,11 +22,14 @@ import useElementPositionEffect from "../../../../app/hooks/layout/useElementPos
 import { useFloatingComponent } from "../../../../app/hooks/layout/useFloatingComponent"
 import { useCanvasEvent, useIsMediaReplacing } from "../../../../app/hooks/canvas"
 import { ElementTypeEnum, type VideoElement } from "../../../../runtime/document/types"
+import type { Canvas } from "../../../../runtime/core/Canvas"
+import type { CanvasAssetImportResult } from "../../../../runtime/resources/asset/CanvasAssetImportManager"
 import type {
 	CompleteImagePromptRequest,
 	GenerateVideoInputs,
 	GenerateVideoRequest,
 	ReferenceImageOptions,
+	VideoInputMode,
 	VideoInputModeConfig,
 } from "../../../../public/magic-types"
 import type {
@@ -134,7 +137,11 @@ import {
 } from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
 import { collectVideoEditorExistingClipboardResourceKeys } from "../../../../runtime/resources/clipboard/collectMediaEditorExistingClipboardResourceKeys"
 import { synchronizeLinkedFrameBindings } from "./linkedFrameBindings"
-import { applyImportedAssetToVideoSlot, resolveVideoAssetMediaTypes } from "./assetsSelection"
+import {
+	applyImportedAssetToVideoSlot,
+	resolveVideoAssetMediaTypes,
+	validateVideoAssetSelection,
+} from "./assetsSelection"
 import AssetsModal from "../../../toolbar/AssetsModal"
 import {
 	createFrameSlotPromptPlaceholderAllocator,
@@ -164,6 +171,61 @@ interface VideoGenerateEditorRenderProps {
 	syncElementSize?: UseVideoEditorConfigOptions["syncElementSize"]
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	isMediaResourcePreviewOpen?: boolean
+}
+
+interface VideoAssetSelectionSession {
+	canvas: Canvas
+	elementId: string
+	contentId: string | null
+	modelId: string
+	inputMode: VideoInputMode
+	sessionIntent?: MediaEditIntent
+	sessionSourceFingerprint?: string
+	referencePaths: string[]
+	slot: VideoInputSlotInfo
+}
+
+function cloneVideoInputSlot(slot: VideoInputSlotInfo): VideoInputSlotInfo {
+	return {
+		...slot,
+		...(slot.referenceAssetKinds ? { referenceAssetKinds: [...slot.referenceAssetKinds] } : {}),
+	}
+}
+
+function areVideoInputSlotsEqual(
+	first: VideoInputSlotInfo | null,
+	second: VideoInputSlotInfo,
+): boolean {
+	if (!first) return false
+	if (
+		first.inputTab !== second.inputTab ||
+		first.slotIndex !== second.slotIndex ||
+		first.slotKey !== second.slotKey ||
+		first.referenceAssetKind !== second.referenceAssetKind ||
+		first.path !== second.path
+	)
+		return false
+	const firstKinds = first.referenceAssetKinds ?? []
+	const secondKinds = second.referenceAssetKinds ?? []
+	return (
+		firstKinds.length === secondKinds.length &&
+		firstKinds.every((kind, index) => kind === secondKinds[index])
+	)
+}
+
+function areReferencePathSnapshotsEqual(
+	first: readonly string[],
+	second: readonly string[],
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
+	return (
+		first.length === second.length &&
+		first.every(
+			(path, index) =>
+				getCanvasResourceReferenceIdentity(path, resolveResourceReference) ===
+				getCanvasResourceReferenceIdentity(second[index] ?? "", resolveResourceReference),
+		)
+	)
 }
 
 /** 画布内浮动的视频生成编辑器：提示词、模型、输入区与发送 */
@@ -205,6 +267,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 	const [isSending, setIsSending] = useState(false)
 	const [assetsModalOpen, setAssetsModalOpen] = useState(false)
 	const [assetSelectionSlot, setAssetSelectionSlot] = useState<VideoInputSlotInfo | null>(null)
+	const assetSelectionSessionRef = useRef<VideoAssetSelectionSession | null>(null)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
 	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
 	const sendingRef = useRef(false)
@@ -242,6 +305,20 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		getAdditionalReferenceAssetInfos,
 	})
 	const { handlers } = config
+	// Asset confirmation can outlive the render that opened the modal. Read the
+	// current editor session from this ref so a stale callback cannot commit to
+	// a changed model, input mode, Content, or slot.
+	const latestAssetSelectionStateRef = useLatest({
+		canvas,
+		elementId: videoElement.id,
+		contentId: videoElement.activeContentId ?? null,
+		modelId: config.selectedModelId,
+		inputMode: config.selectedInputMode,
+		sessionIntent,
+		sessionSourceFingerprint,
+		selectedResourceSlot: config.selectedResourceSlot,
+		isReferencePolicyReady: config.isReferencePolicyReady,
+	})
 	const clipboardSessionIdRef = useRef("")
 	const getClipboardSessionId = useCallback(
 		() =>
@@ -483,6 +560,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		() => mergedReferenceAssetInfos.map((info) => info.path),
 		[mergedReferenceAssetInfos],
 	)
+	// The asset dialog may remain open while linked references or a restored
+	// draft change. Keep an identity-aware snapshot outside the confirmation
+	// callback so those changes invalidate the captured batch.
+	const latestAssetSelectionReferencePathsRef = useLatest(effectiveReferencePaths)
 	const effectiveReferenceAssetCounts = useMemo(
 		() => countVideoReferenceAssetInfosByKind(mergedReferenceAssetInfos),
 		[mergedReferenceAssetInfos],
@@ -724,42 +805,166 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				return
 			}
 			if (source !== REFERENCE_RESOURCE_SOURCE_TYPES.assets || !canvas) return
+			if (!config.isReferencePolicyReady) return
 			const selectedSlot = config.selectedResourceSlot
 			if (!selectedSlot) return
 
-			// Popover 关闭后 selectedResourceSlot 可能被其它交互重置，素材确认必须绑定打开时的槽位。
-			setAssetSelectionSlot({
-				...selectedSlot,
-				...(selectedSlot.referenceAssetKinds
-					? { referenceAssetKinds: [...selectedSlot.referenceAssetKinds] }
-					: {}),
-			})
+			// Popover 关闭后 selectedResourceSlot 可能被其它交互重置，素材确认必须绑定打开时的槽位和模型会话。
+			const capturedSlot = cloneVideoInputSlot(selectedSlot)
+			setAssetSelectionSlot(capturedSlot)
+			assetSelectionSessionRef.current = {
+				canvas,
+				elementId: videoElement.id,
+				contentId: videoElement.activeContentId ?? null,
+				modelId: config.selectedModelId,
+				inputMode: config.selectedInputMode,
+				sessionIntent,
+				sessionSourceFingerprint,
+				referencePaths: [...effectiveReferencePaths],
+				slot: capturedSlot,
+			}
 			handlers.setPopoverOpen(false)
 			setAssetsModalOpen(true)
 		},
-		[canvas, config.isUploading, config.selectedResourceSlot, handlers],
+		[
+			canvas,
+			config.isUploading,
+			config.isReferencePolicyReady,
+			config.selectedInputMode,
+			config.selectedModelId,
+			config.selectedResourceSlot,
+			effectiveReferencePaths,
+			handlers,
+			sessionIntent,
+			sessionSourceFingerprint,
+			videoElement.activeContentId,
+			videoElement.id,
+		],
 	)
 
 	const handleAssetsModalClose = useCallback(() => {
 		setAssetsModalOpen(false)
-		if (assetSelectionSlot) handlers.resetSelectedResourceSlot(assetSelectionSlot)
 		setAssetSelectionSlot(null)
-	}, [assetSelectionSlot, handlers])
+		assetSelectionSessionRef.current = null
+	}, [])
+
+	useEffect(() => {
+		if (
+			!assetsModalOpen ||
+			!assetSelectionSlot ||
+			!assetSelectionMediaTypes ||
+			assetSelectionMediaTypes.canvasMediaTypes.length === 0 ||
+			assetSelectionMaxCount === undefined ||
+			assetSelectionMaxCount > 0
+		)
+			return
+		// A model/content update can consume the capacity captured when the
+		// dialog opened. Drop that stale session instead of leaving a picker
+		// that cannot produce a valid batch.
+		handleAssetsModalClose()
+	}, [
+		assetSelectionMaxCount,
+		assetSelectionMediaTypes,
+		assetSelectionSlot,
+		assetsModalOpen,
+		handleAssetsModalClose,
+	])
+
+	const isAssetSelectionCurrent = useCallback(() => {
+		const currentState = latestAssetSelectionStateRef.current
+		const session = assetSelectionSessionRef.current
+		if (
+			!currentState ||
+			!session ||
+			!isMountedRef.current ||
+			!currentState.canvas ||
+			currentState.canvas.isDestroyed
+		)
+			return false
+		if (session.canvas !== currentState.canvas) return false
+		if (!currentState.isReferencePolicyReady) return false
+		if (
+			session.elementId !== currentState.elementId ||
+			session.contentId !== currentState.contentId ||
+			session.modelId !== currentState.modelId ||
+			session.inputMode !== currentState.inputMode ||
+			session.sessionIntent !== currentState.sessionIntent ||
+			session.sessionSourceFingerprint !== currentState.sessionSourceFingerprint
+		)
+			return false
+		const currentReferencePaths = latestAssetSelectionReferencePathsRef.current
+		if (!currentReferencePaths) return false
+		if (
+			!areReferencePathSnapshotsEqual(
+				session.referencePaths,
+				currentReferencePaths,
+				resolveResourceReference,
+			)
+		)
+			return false
+		const currentElement = currentState.canvas.elementManager.getElementData(
+			currentState.elementId,
+		)
+		if (
+			currentElement?.type !== ElementTypeEnum.Video ||
+			(currentElement?.activeContentId ?? null) !== currentState.contentId
+		)
+			return false
+		return areVideoInputSlotsEqual(currentState.selectedResourceSlot, session.slot)
+	}, [
+		latestAssetSelectionReferencePathsRef,
+		latestAssetSelectionStateRef,
+		resolveResourceReference,
+	])
 
 	const handleAssetsConfirm = useCallback(
 		async (assets: AssetItem[]) => {
-			if (!canvas || !assetSelectionSlot || !assetSelectionMediaTypes) {
+			if (
+				!canvas ||
+				!assetSelectionSlot ||
+				!assetSelectionMediaTypes ||
+				assetSelectionMediaTypes.canvasMediaTypes.length === 0
+			) {
 				throw new Error("Asset selection context is unavailable")
 			}
+			if (!isAssetSelectionCurrent()) {
+				handleAssetsModalClose()
+				throw new Error("Asset selection session is stale")
+			}
 
-			for (const [index, asset] of assets.entries()) {
-				const imported = await canvas.assetImportManager.importAndConnect({
-					assetId: asset.asset_id,
+			const validationError = validateVideoAssetSelection({
+				slot: assetSelectionSlot,
+				assets,
+				allowedMediaTypes: assetSelectionMediaTypes.assetMediaTypes,
+				currentReferenceAssets: mergedReferenceAssetInfos,
+				inputMode: config.selectedInputMode,
+				modeConfig: config.currentInputModeConfig,
+				resolveResourceReference,
+			})
+			if (validationError) throw new Error(validationError)
+
+			let imported: CanvasAssetImportResult[]
+			try {
+				imported = await canvas.assetImportManager.importAndConnectMany({
+					assetIds: assets.map((asset) => asset.asset_id),
 					targetElementId: videoElement.id,
 					targetKind: "video-generator",
 					slot: { kind: assetSelectionSlot.inputTab },
 					allowedMediaTypes: assetSelectionMediaTypes.canvasMediaTypes,
+					isCurrent: isAssetSelectionCurrent,
 				})
+			} catch (error) {
+				// A stale session is terminal for this picker; ordinary import errors
+				// deliberately leave it open so the user can retry the same selection.
+				if (!isAssetSelectionCurrent()) handleAssetsModalClose()
+				throw error
+			}
+			if (!isAssetSelectionCurrent()) {
+				handleAssetsModalClose()
+				throw new Error("Asset selection session is stale")
+			}
+
+			for (const [index, importedAsset] of imported.entries()) {
 				applyImportedAssetToVideoSlot({
 					slot: {
 						...assetSelectionSlot,
@@ -768,10 +973,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 								? assetSelectionSlot.slotIndex + index
 								: assetSelectionSlot.slotIndex,
 					},
-					imported,
+					imported: importedAsset,
 					supportsStartFrame: config.supportsStartFrame,
 					supportsEndFrame: config.supportsEndFrame,
-					retainResourceSlot: index < assets.length - 1,
+					retainResourceSlot: index < imported.length - 1,
 					handlers,
 				})
 			}
@@ -780,9 +985,15 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			assetSelectionMediaTypes,
 			assetSelectionSlot,
 			canvas,
+			config.currentInputModeConfig,
 			config.supportsEndFrame,
+			config.selectedInputMode,
 			config.supportsStartFrame,
+			handleAssetsModalClose,
 			handlers,
+			isAssetSelectionCurrent,
+			mergedReferenceAssetInfos,
+			resolveResourceReference,
 			videoElement.id,
 		],
 	)
@@ -1615,6 +1826,15 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 
 	const sendButtonBusy = isSending || isEstimateLoading
 
+	// Keep the last known estimated points during loading so the button content
+	// (and thus width) stays stable instead of flicking to ArrowUp and back.
+	const lastEstimatedPointsRef = useRef<number | null>(null)
+	if (estimatedPoints != null) {
+		lastEstimatedPointsRef.current = estimatedPoints
+	}
+	const displayPoints =
+		estimatedPoints ?? (sendButtonBusy ? lastEstimatedPointsRef.current : null)
+
 	return (
 		<FloatingSurfaceScope id="video-generate-editor">
 			<ReferenceResourceDropSurface
@@ -1712,48 +1932,45 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 							: undefined
 					}
 					renderSendButton={() => (
-						<div className={styles.sendButtonSlot}>
-							<Button
-								className={styles.sendButton}
-								onClick={handleSend}
-								disabled={
-									sendButtonBusy ||
-									config.isUploading ||
-									editorRef.current?.hasPendingUploadMentions?.() === true ||
-									!hasSubmitIntent ||
-									!config.selectedModelId
-								}
-								aria-busy={sendButtonBusy}
-								data-testid="video-generate-editor-send-button"
-							>
-								{/* Keep the button footprint stable while loading; the spinner is an overlay. */}
-								<span className={styles.sendButtonContent}>
-									{estimatedPoints != null ? (
-										<>
-											<ZapIcon size={16} fill="currentColor" />
-											<span className={styles.sendButtonPoints}>
-												{t("videoEditor.sendButtonEstimatedPoints", {
-													defaultValue: "预计{{points}}",
-													points: estimatedPoints,
-												})}
-											</span>
-										</>
-									) : (
-										<ArrowUp size={16} />
-									)}
+						<Button
+							className={styles.sendButton}
+							onClick={handleSend}
+							disabled={
+								sendButtonBusy ||
+								config.isUploading ||
+								editorRef.current?.hasPendingUploadMentions?.() === true ||
+								!hasSubmitIntent ||
+								!config.selectedModelId
+							}
+							aria-busy={sendButtonBusy}
+							data-testid="video-generate-editor-send-button"
+						>
+							<span className={styles.sendButtonContent}>
+								{displayPoints != null ? (
+									<>
+										<ZapIcon size={16} fill="currentColor" />
+										<span className={styles.sendButtonPoints}>
+											{t("videoEditor.sendButtonEstimatedPoints", {
+												defaultValue: "预计 {{points}}",
+												points: displayPoints,
+											})}
+										</span>
+									</>
+								) : (
+									<ArrowUp size={16} />
+								)}
+							</span>
+							{sendButtonBusy ? (
+								<span className={styles.sendButtonLoading} aria-hidden="true">
+									<LoaderCircle size={16} className="animate-spin" />
 								</span>
-								{sendButtonBusy ? (
-									<span className={styles.sendButtonLoading} aria-hidden="true">
-										<LoaderCircle size={16} className="animate-spin" />
-									</span>
-								) : null}
-							</Button>
-						</div>
+							) : null}
+						</Button>
 					)}
 					sourceListContainer={sourceListContainer}
 				/>
 			</ReferenceResourceDropSurface>
-			{assetSelectionMediaTypes ? (
+			{assetSelectionMediaTypes && assetSelectionMediaTypes.canvasMediaTypes.length > 0 ? (
 				<AssetsModal
 					open={assetsModalOpen}
 					onClose={handleAssetsModalClose}

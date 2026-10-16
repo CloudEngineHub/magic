@@ -12,6 +12,7 @@ export {
 	type CanvasClipboardMediaType,
 	type CanvasClipboardPasteCallbacks,
 	type CanvasClipboardPasteResult,
+	type CanvasClipboardTextSnapshot,
 	type CanvasClipboardTarget,
 } from "../runtime/resources/clipboard/CanvasClipboardPasteController"
 

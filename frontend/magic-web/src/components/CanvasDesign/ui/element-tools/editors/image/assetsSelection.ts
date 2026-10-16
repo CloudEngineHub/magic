@@ -17,10 +17,21 @@ export function applyImportedAssetsToImageSlots(options: {
 	handlers: ImageAssetSelectionHandlers
 }): void {
 	const { slot, imported, currentReferenceFileCount, handlers } = options
+	// Linked-media entries are rendered after the manual reference array and
+	// therefore have a slot index that is larger than the array we mutate. They
+	// cannot be replaced through this image-content API; treat them like the
+	// empty append slot so a multi-select confirmation never overwrites its own
+	// first imported item on the second iteration.
+	const replacesManualSlot = Boolean(
+		slot.path && slot.slotIndex >= 0 && slot.slotIndex < currentReferenceFileCount,
+	)
+	const firstSlotIndex = replacesManualSlot ? slot.slotIndex : currentReferenceFileCount
 
 	for (const [index, result] of imported.entries()) {
 		const slotIndex =
-			index === 0 ? slot.slotIndex : currentReferenceFileCount + index - (slot.path ? 1 : 0)
+			index === 0
+				? firstSlotIndex
+				: currentReferenceFileCount + index - (replacesManualSlot ? 1 : 0)
 		const fileInfo: UploadFileResponse = {
 			path: result.workspacePath,
 			src: result.workspacePath,

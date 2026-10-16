@@ -227,6 +227,18 @@ function normalizeAssetIds(assetIds: readonly string[]): string[] {
 	return Array.from(new Set(assetIds.map((assetId) => assetId.trim()).filter(Boolean)))
 }
 
+function getImportPolicyKey(request: CanvasAssetImportCommonRequest): string {
+	// A frame import and a reference import can share the same asset, but they
+	// have different seed semantics. Keep concurrent promises isolated by the
+	// slot and media policy as well as the target element.
+	return [
+		request.targetElementId,
+		request.targetKind,
+		request.slot.kind,
+		Array.from(new Set(request.allowedMediaTypes)).sort().join(","),
+	].join("\u0000")
+}
+
 function validateImportRequest(request: CanvasAssetImportCommonRequest): void {
 	if (request.allowedMediaTypes.length === 0) {
 		throw new Error("No asset media type is allowed for this slot")
@@ -238,6 +250,14 @@ function validateImportRequest(request: CanvasAssetImportCommonRequest): void {
 			request.allowedMediaTypes.some((mediaType) => mediaType !== "image"))
 	) {
 		throw new Error("Image generator asset imports only support image references")
+	}
+
+	if (
+		request.targetKind === "video-generator" &&
+		request.slot.kind === "frame" &&
+		request.allowedMediaTypes.some((mediaType) => mediaType !== "image")
+	) {
+		throw new Error("Video frame asset imports only support image media")
 	}
 }
 
@@ -268,19 +288,26 @@ export class CanvasAssetImportManager {
 		request: CanvasAssetImportRequest,
 	): Promise<CanvasAssetImportResult> {
 		const assetId = request.assetId.trim()
-		const connectionKey = `${request.targetElementId}\u0000${request.targetKind}\u0000${assetId}`
-		const existingConnectionPromise = this.connectionPromises.get(connectionKey)
+		const connectionKey = `${getImportPolicyKey(request)}\u0000${assetId}`
+		// A session guard belongs to the caller, so sharing a guarded promise
+		// across two editor sessions could let a stale caller cancel a current one.
+		const existingConnectionPromise = request.isCurrent
+			? undefined
+			: this.connectionPromises.get(connectionKey)
 		if (existingConnectionPromise) {
 			const result = await existingConnectionPromise
 			return { ...result, source: "existing-connection" }
 		}
 
 		const connectionPromise = this.importAndConnectInternal(request)
-		this.connectionPromises.set(connectionKey, connectionPromise)
+		if (!request.isCurrent) this.connectionPromises.set(connectionKey, connectionPromise)
 		try {
 			return await connectionPromise
 		} finally {
-			if (this.connectionPromises.get(connectionKey) === connectionPromise) {
+			if (
+				!request.isCurrent &&
+				this.connectionPromises.get(connectionKey) === connectionPromise
+			) {
 				this.connectionPromises.delete(connectionKey)
 			}
 		}
@@ -322,22 +349,30 @@ export class CanvasAssetImportManager {
 	): Promise<CanvasAssetImportResult[]> {
 		const assetIds = normalizeAssetIds(request.assetIds)
 		if (assetIds.length === 0) throw new Error("At least one asset id is required")
+		if (request.slot.kind === "frame" && assetIds.length !== 1) {
+			throw new Error("A frame asset import accepts exactly one asset")
+		}
 
-		const connectionKey = [request.targetElementId, request.targetKind, ...assetIds].join(
-			"\u0000",
-		)
-		const existingConnectionPromise = this.batchConnectionPromises.get(connectionKey)
+		const connectionKey = [getImportPolicyKey(request), ...assetIds].join("\u0000")
+		// See the single-item path above: guarded calls must keep their own
+		// lifecycle instead of sharing a promise with another editor session.
+		const existingConnectionPromise = request.isCurrent
+			? undefined
+			: this.batchConnectionPromises.get(connectionKey)
 		if (existingConnectionPromise) {
 			const results = await existingConnectionPromise
 			return results.map((result) => ({ ...result, source: "existing-connection" }))
 		}
 
 		const connectionPromise = this.importAndConnectManyInternal({ ...request, assetIds })
-		this.batchConnectionPromises.set(connectionKey, connectionPromise)
+		if (!request.isCurrent) this.batchConnectionPromises.set(connectionKey, connectionPromise)
 		try {
 			return await connectionPromise
 		} finally {
-			if (this.batchConnectionPromises.get(connectionKey) === connectionPromise) {
+			if (
+				!request.isCurrent &&
+				this.batchConnectionPromises.get(connectionKey) === connectionPromise
+			) {
 				this.batchConnectionPromises.delete(connectionKey)
 			}
 		}
@@ -450,23 +485,100 @@ export class CanvasAssetImportManager {
 			}
 			pendingConnections.push(prepared)
 		}
+		const previousSeed =
+			request.slot.kind === "reference"
+				? this.canvas.connectionAssociationSeedManager.peek(request.targetElementId)
+				: null
+		// `register` replaces the previous seed before allocating the new one. Keep
+		// an explicit restoration path for a mocked/host implementation that throws
+		// after that replacement, so a failed batch cannot consume an older seed.
+		const restorePreviousSeed = () => {
+			this.canvas.connectionAssociationSeedManager.remove(request.targetElementId)
+			if (!previousSeed) return
+			const { id: previousSeedId, ...seed } = previousSeed
+			void previousSeedId
+			this.canvas.connectionAssociationSeedManager.register(seed)
+		}
 		if (pendingConnections.length === 0) {
+			if (request.isCurrent?.() === false) throw new Error("Asset import session is stale")
 			const existingResults = request.assetIds.map((assetId) => {
 				const result = resultsByAssetId.get(assetId)
 				if (!result) throw new Error("Failed to resolve imported asset media connections")
 				return result
 			})
-			this.registerReferenceSeed(request, existingResults)
+			let registeredSeedId: string | null = null
+			try {
+				registeredSeedId = this.registerReferenceSeed(request, existingResults)
+			} catch (error) {
+				restorePreviousSeed()
+				throw error
+			}
+			if (request.isCurrent?.() === false) {
+				if (registeredSeedId) {
+					const currentSeed = this.canvas.connectionAssociationSeedManager.peek(
+						request.targetElementId,
+					)
+					if (currentSeed?.id === registeredSeedId) {
+						restorePreviousSeed()
+					}
+				}
+				throw new Error("Asset import session is stale")
+			}
 			return existingResults
 		}
 
 		const createdElements: string[] = []
 		let createdConnectionIds: string[] = []
+		let registeredSeedId: string | null = null
+		const rollbackSeed = () => {
+			if (!registeredSeedId) return
+			const currentSeed = this.canvas.connectionAssociationSeedManager.peek(
+				request.targetElementId,
+			)
+			if (currentSeed?.id !== registeredSeedId) return
+			restorePreviousSeed()
+			registeredSeedId = null
+		}
+		const rollbackCreatedBatch = () => {
+			const rollback = () => {
+				const connectionIds = new Set(createdConnectionIds)
+				// A connection manager may report an invalid batch after partially
+				// inserting edges. Include any edge from this batch that was not in
+				// the success response before deleting the newly created elements.
+				this.canvas.connectionManager
+					.getUpstreamConnections(request.targetElementId)
+					.forEach((connection) => {
+						if (createdElements.includes(connection.sourceElementId)) {
+							connectionIds.add(connection.id)
+						}
+					})
+				if (connectionIds.size > 0) {
+					this.canvas.connectionManager.removeConnections([...connectionIds], {
+						emitChange: false,
+					})
+				}
+				createdElements.forEach((elementId) => {
+					if (this.canvas.elementManager.getElementData(elementId)) {
+						this.canvas.elementManager.delete(elementId)
+					}
+				})
+			}
+			// Rollback after the transaction must not create a second undo step.
+			this.canvas.historyManager.runTransaction(rollback, () => false)
+		}
 		const connectionResult = this.canvas.historyManager.runTransaction(
 			() => {
 				const rollback = () => {
-					if (createdConnectionIds.length > 0) {
-						this.canvas.connectionManager.removeConnections(createdConnectionIds, {
+					const connectionIds = new Set(createdConnectionIds)
+					this.canvas.connectionManager
+						.getUpstreamConnections(request.targetElementId)
+						.forEach((connection) => {
+							if (createdElements.includes(connection.sourceElementId)) {
+								connectionIds.add(connection.id)
+							}
+						})
+					if (connectionIds.size > 0) {
+						this.canvas.connectionManager.removeConnections([...connectionIds], {
 							emitChange: false,
 						})
 					}
@@ -478,6 +590,7 @@ export class CanvasAssetImportManager {
 				}
 
 				try {
+					if (request.isCurrent?.() === false) return null
 					for (const prepared of pendingConnections) {
 						const elementId = this.createMediaElement(prepared, request.targetElementId)
 						if (!elementId) {
@@ -495,12 +608,17 @@ export class CanvasAssetImportManager {
 					})
 					if (
 						connection.status !== "created" ||
-						connection.connectionIds.length !== createdElements.length
+						connection.connectionIds.length !== createdElements.length ||
+						connection.connectionIds.some((connectionId) => !connectionId)
 					) {
 						rollback()
 						return null
 					}
 					createdConnectionIds = connection.connectionIds
+					if (request.isCurrent?.() === false) {
+						rollback()
+						return null
+					}
 					return connection
 				} catch {
 					rollback()
@@ -512,6 +630,10 @@ export class CanvasAssetImportManager {
 
 		if (!connectionResult) {
 			throw new Error("Failed to create asset media connections")
+		}
+		if (request.isCurrent?.() === false) {
+			rollbackCreatedBatch()
+			throw new Error("Asset import session is stale")
 		}
 
 		pendingConnections.forEach((prepared, index) => {
@@ -530,11 +652,26 @@ export class CanvasAssetImportManager {
 
 		const results = request.assetIds.map((assetId) => resultsByAssetId.get(assetId))
 		if (results.some((result) => !result)) {
+			rollbackCreatedBatch()
 			throw new Error("Failed to resolve imported asset media connections")
 		}
 		const resolvedResults = results as CanvasAssetImportResult[]
 
-		this.registerReferenceSeed(request, resolvedResults)
+		try {
+			registeredSeedId = this.registerReferenceSeed(request, resolvedResults)
+		} catch (error) {
+			// `register` may remove the prior seed before throwing. The normal
+			// rollback only has an id after successful registration, so restore the
+			// captured seed explicitly on this failure path.
+			restorePreviousSeed()
+			rollbackCreatedBatch()
+			throw error
+		}
+		if (request.isCurrent?.() === false) {
+			rollbackSeed()
+			rollbackCreatedBatch()
+			throw new Error("Asset import session is stale")
+		}
 
 		return resolvedResults
 	}
@@ -542,10 +679,10 @@ export class CanvasAssetImportManager {
 	private registerReferenceSeed(
 		request: CanvasAssetImportCommonRequest,
 		results: CanvasAssetImportResult[],
-	): void {
-		if (request.slot.kind !== "reference" || results.length === 0) return
+	): string | null {
+		if (request.slot.kind !== "reference" || results.length === 0) return null
 
-		this.canvas.connectionAssociationSeedManager.register({
+		return this.canvas.connectionAssociationSeedManager.register({
 			targetElementId: request.targetElementId,
 			targetKind: request.targetKind,
 			rootElementIds: results.map((result) => result.elementId),

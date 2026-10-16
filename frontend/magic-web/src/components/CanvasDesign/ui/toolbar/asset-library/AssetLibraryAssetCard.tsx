@@ -217,9 +217,8 @@ export function AssetLibraryAssetCard({
 	const visibilityLabel = getAssetVisibilityLabel(displayAsset, t)
 	const complianceLabel = getAssetComplianceLabel(displayAsset, t)
 	const complianceBadgeClassName = cn(
-		// Stay icon-sized until hover. The label width animates open inside this pill;
-		// the right-anchored corner row grows left into the preview, clear of the menu.
-		"group/badge inline-flex h-6 items-center overflow-hidden rounded-md border border-white shadow-sm",
+		// Keep the preview corner compact; the full status text is available from the tooltip.
+		"inline-flex h-6 items-center overflow-hidden rounded-md shadow-sm",
 		displayAsset.compliance_status === "PASS" && "bg-primary text-primary-foreground",
 		displayAsset.compliance_status === "PROCESSING" && "bg-background/90 text-foreground",
 		displayAsset.compliance_status === "FAILED" && "bg-destructive text-destructive-foreground",
@@ -243,17 +242,14 @@ export function AssetLibraryAssetCard({
 		displayAsset.compliance_status === "FAILED"
 			? (displayAsset.compliance_failed_reason?.trim() ?? "")
 			: ""
+	const complianceTooltipTitle =
+		displayAsset.compliance_status === "FAILED" && complianceFailedReason
+			? complianceFailedReason
+			: complianceLabel
 	const complianceBadge = (
-		<span
-			className={complianceBadgeClassName}
-			role={complianceFailedReason ? "img" : undefined}
-			aria-label={complianceFailedReason || undefined}
-		>
+		<span className={complianceBadgeClassName} role="img" aria-label={complianceTooltipTitle}>
 			<span className="inline-flex size-6 shrink-0 items-center justify-center">
 				{complianceBadgeIcon}
-			</span>
-			<span className="min-w-0 max-w-0 overflow-hidden whitespace-nowrap text-xs leading-4 transition-[max-width,padding] duration-200 ease-out group-hover/badge:max-w-52 group-hover/badge:pr-2 motion-reduce:transition-none">
-				{complianceLabel}
 			</span>
 		</span>
 	)
@@ -265,7 +261,7 @@ export function AssetLibraryAssetCard({
 			aria-pressed={selected}
 			className={cn(
 				"flex h-[320px] flex-col overflow-hidden rounded-xl border bg-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-				selected && "border-primary ring-2 ring-primary/15",
+				selected && "ring-2 ring-primary/15",
 				!selected && "hover:border-primary/60",
 				selectionBlocked && "cursor-not-allowed opacity-60",
 			)}
@@ -340,24 +336,19 @@ export function AssetLibraryAssetCard({
 					</div>
 				)}
 				{selected ? (
-					<span className="absolute left-2.5 top-2.5 inline-flex size-6 items-center justify-center rounded-full border border-white bg-primary text-primary-foreground shadow-sm">
+					<span className="absolute left-2.5 top-2.5 inline-flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
 						<Check className="size-4" aria-hidden="true" />
 					</span>
 				) : null}
 				<div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
 					{seedanceComplianceAvailable ? (
-						complianceFailedReason ? (
-							// The reason used to sit on the preview and cover the media.
-							<MagicTooltip
-								title={complianceFailedReason}
-								placement="top"
-								delayDuration={0}
-							>
-								{complianceBadge}
-							</MagicTooltip>
-						) : (
-							complianceBadge
-						)
+						<MagicTooltip
+							title={complianceTooltipTitle}
+							placement="top"
+							delayDuration={0}
+						>
+							{complianceBadge}
+						</MagicTooltip>
 					) : null}
 					{showActionsMenu ? (
 						<DropdownMenu modal={false} onOpenChange={onMenuOpenChange}>

@@ -16,6 +16,14 @@ vi.mock("../../../../runtime/resources/asset/AssetDetailStore", () => ({
 	},
 }))
 
+vi.mock("@/components/base/MagicTooltip", () => ({
+	default: ({ title, children }: { title?: ReactNode; children: ReactNode }) => (
+		<div data-testid="asset-compliance-tooltip" data-tooltip-title={String(title ?? "")}>
+			{children}
+		</div>
+	),
+}))
+
 vi.mock("@/components/shadcn-ui/dropdown-menu", () => ({
 	DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 	DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -68,6 +76,71 @@ const baseAsset: AssetItem = {
 }
 
 describe("AssetLibraryAssetCard compliance menu", () => {
+	it("shows the passed status in the compliance tooltip", () => {
+		render(
+			<AssetLibraryAssetCard
+				asset={{ ...baseAsset, compliance_status: "PASS" }}
+				selected={false}
+				selectionBlocked={false}
+				manageable={false}
+				t={t}
+				onToggle={vi.fn()}
+				onPreview={vi.fn()}
+				seedanceComplianceAvailable
+			/>,
+		)
+
+		expect(screen.getByTestId("asset-compliance-tooltip")).toHaveAttribute(
+			"data-tooltip-title",
+			"已通过合规检查",
+		)
+		expect(screen.queryByText("已通过合规检查")).not.toBeInTheDocument()
+		expect(screen.getByRole("img", { name: "已通过合规检查" })).not.toHaveClass("border")
+	})
+
+	it("uses the selection ring without a selected border", () => {
+		render(
+			<AssetLibraryAssetCard
+				asset={{ ...baseAsset, compliance_status: "PASS" }}
+				selected
+				selectionBlocked={false}
+				manageable={false}
+				t={t}
+				onToggle={vi.fn()}
+				onPreview={vi.fn()}
+				seedanceComplianceAvailable
+			/>,
+		)
+
+		const card = screen.getByRole("button", { pressed: true })
+		expect(card).toHaveClass("ring-2", "ring-primary/15")
+		expect(card).not.toHaveClass("border-primary")
+		const selectedBadge = card.querySelector("span.absolute")
+		expect(selectedBadge).toHaveClass("size-6", "rounded-md")
+		expect(selectedBadge).not.toHaveClass("border")
+	})
+
+	it("keeps failed reasons in the tooltip instead of the badge", () => {
+		render(
+			<AssetLibraryAssetCard
+				asset={baseAsset}
+				selected={false}
+				selectionBlocked={false}
+				manageable={false}
+				t={t}
+				onToggle={vi.fn()}
+				onPreview={vi.fn()}
+				seedanceComplianceAvailable
+			/>,
+		)
+
+		expect(screen.getByTestId("asset-compliance-tooltip")).toHaveAttribute(
+			"data-tooltip-title",
+			"reason",
+		)
+		expect(screen.queryByText("reason")).not.toBeInTheDocument()
+	})
+
 	it("does not show compliance menu item for PASS assets", () => {
 		render(
 			<AssetLibraryAssetCard

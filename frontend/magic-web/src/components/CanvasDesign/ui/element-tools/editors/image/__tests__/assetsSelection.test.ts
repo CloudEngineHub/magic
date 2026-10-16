@@ -60,6 +60,19 @@ describe("applyImportedAssetsToImageSlots", () => {
 		expect(replaceReferenceFileAt.mock.calls.map(([slotIndex]) => slotIndex)).toEqual([2, 3])
 	})
 
+	it("appends after manual references when the selected slot belongs to linked media", () => {
+		const replaceReferenceFileAt = vi.fn()
+
+		applyImportedAssetsToImageSlots({
+			slot: { slotIndex: 3, path: "./linked/reference.png" },
+			currentReferenceFileCount: 2,
+			imported: [createImported("first"), createImported("second")],
+			handlers: { replaceReferenceFileAt },
+		})
+
+		expect(replaceReferenceFileAt.mock.calls.map(([slotIndex]) => slotIndex)).toEqual([2, 3])
+	})
+
 	it("does not mutate the editor when no assets were confirmed", () => {
 		const replaceReferenceFileAt = vi.fn()
 

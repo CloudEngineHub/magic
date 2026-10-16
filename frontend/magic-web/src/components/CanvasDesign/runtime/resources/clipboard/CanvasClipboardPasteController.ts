@@ -68,6 +68,13 @@ export interface CanvasClipboardTarget {
 	projectId?: string
 	canvasId?: string
 	hasProjectContext?: boolean
+	/**
+	 * Some browsers expose Canvas' native media representation as `Files` and
+	 * hide the private MIME from the synchronous paste event. MessageEditor can
+	 * opt into reading the private bundle first, while retaining native files as
+	 * the fallback when the Clipboard API is unavailable or the bundle is absent.
+	 */
+	preferPrivateBundleWithNativeFallback?: boolean
 	maxCount?: number
 	maxCountByType?: Partial<Record<CanvasClipboardMediaType, number>>
 	/**
@@ -86,6 +93,11 @@ export interface CanvasClipboardPasteResult {
 	accepted: CanvasClipboardAsset[]
 	skipped: Array<{ reason: string; fileName?: string }>
 	failed: Array<{ reason: string; fileName?: string }>
+}
+
+export interface CanvasClipboardTextSnapshot {
+	text: string
+	html: string
 }
 
 export interface CanvasClipboardPasteControllerOptions extends CanvasClipboardAssetResolverOptions {
@@ -112,6 +124,15 @@ type CanvasClipboardHostReferenceResolver = (input: {
 
 export interface CanvasClipboardPasteCallbacks {
 	onAsset?: (asset: CanvasClipboardAsset) => void | Promise<void>
+	/**
+	 * Handles a native external file after a private bundle probe. The text and
+	 * HTML values are captured during the paste event because DataTransfer data
+	 * is not guaranteed to remain readable after the event returns.
+	 */
+	onExternalFile?: (
+		asset: CanvasClipboardAsset,
+		clipboard: CanvasClipboardTextSnapshot,
+	) => void | Promise<void>
 	/**
 	 * Called as soon as rich-text parts are capacity-filtered. Asset parts may still
 	 * lack `file` / `reference` while host resolve/materialize runs in parallel.
@@ -294,6 +315,22 @@ function getEventTypes(event?: ClipboardEvent): string[] {
 		if (typeof item.type === "string" && item.type) types.add(item.type)
 	}
 	return Array.from(types)
+}
+
+function getClipboardTextSnapshot(event?: ClipboardEvent): CanvasClipboardTextSnapshot {
+	const clipboardData = event?.clipboardData
+	if (!clipboardData) return { text: "", html: "" }
+	const read = (type: string): string => {
+		try {
+			return clipboardData.getData(type)
+		} catch {
+			return ""
+		}
+	}
+	return {
+		text: read("text/plain"),
+		html: read("text/html"),
+	}
 }
 
 function hasNativeFileData(event?: ClipboardEvent): boolean {
@@ -626,12 +663,15 @@ export class CanvasClipboardPasteController {
 		if (event) {
 			const eventTypes = getEventTypes(event)
 			const messageClipboard = hasMessageClipboardData(event)
+			const shouldPreferPrivateBundle =
+				target.preferPrivateBundleWithNativeFallback === true && hasNativeFileData(event)
 			const shouldSynchronouslyHandleMessage =
 				messageClipboard && target.messagePasteMode === "rich-text-with-media"
 			if (
 				!hasPrivateMimeType(eventTypes) &&
 				!messageClipboard &&
-				(hasNativeFileData(event) || hasTextOrHtml(eventTypes))
+				(hasNativeFileData(event) || hasTextOrHtml(eventTypes)) &&
+				!shouldPreferPrivateBundle
 			) {
 				return Promise.resolve({ handled: false, accepted: [], skipped: [], failed: [] })
 			}
@@ -640,7 +680,11 @@ export class CanvasClipboardPasteController {
 			if (!claimCanvasClipboardPasteEvent(event)) {
 				return Promise.resolve({ handled: true, accepted: [], skipped: [], failed: [] })
 			}
-			if (hasPrivateMimeType(eventTypes) || shouldSynchronouslyHandleMessage) {
+			if (
+				hasPrivateMimeType(eventTypes) ||
+				shouldSynchronouslyHandleMessage ||
+				shouldPreferPrivateBundle
+			) {
 				event.preventDefault()
 				event.stopPropagation()
 			}
@@ -668,18 +712,27 @@ export class CanvasClipboardPasteController {
 				? readMessageClipboardContent(event)
 				: { recognized: false, parts: [] as CanvasClipboardMessagePart[] }
 		const hasFiles = eventFiles.length > 0
+		const shouldPreferPrivateBundle =
+			target.preferPrivateBundleWithNativeFallback === true && hasFiles
+		const clipboardText = getClipboardTextSnapshot(event)
 
-		if (!privateMime && !messageClipboard && hasFiles) {
+		if (!privateMime && !messageClipboard && hasFiles && !shouldPreferPrivateBundle) {
 			return { handled: false, accepted: [], skipped: [], failed: [] }
 		}
 
-		if (!privateMime && !messageClipboard && hasTextOrHtml(eventTypes)) {
+		if (
+			!privateMime &&
+			!messageClipboard &&
+			hasTextOrHtml(eventTypes) &&
+			!shouldPreferPrivateBundle
+		) {
 			return { handled: false, accepted: [], skipped: [], failed: [] }
 		}
 
 		let items: ClipboardItem[] | null = null
 		if (
 			privateMime ||
+			shouldPreferPrivateBundle ||
 			(!messageMime && !messageClipboard && !hasFiles && !hasTextOrHtml(eventTypes))
 		) {
 			items = await this.readClipboardItems()
@@ -790,6 +843,7 @@ export class CanvasClipboardPasteController {
 		// clipboard contents must remain a no-op for the host editor.
 		if (
 			!privateMime &&
+			!shouldPreferPrivateBundle &&
 			(privatePayloadRecognized ||
 				(messagePayloadRecognized && rawAssets.length > 0) ||
 				rawAssets.length > 0)
@@ -861,7 +915,11 @@ export class CanvasClipboardPasteController {
 				fileName: resolvedFile?.name || reference?.fileName || rawAsset.fileName,
 			}
 			try {
-				await callbacks.onAsset?.(asset)
+				if (asset.origin === "external-file" && callbacks.onExternalFile) {
+					await callbacks.onExternalFile(asset, clipboardText)
+				} else {
+					await callbacks.onAsset?.(asset)
+				}
 			} catch (error) {
 				failed.push({
 					reason: error instanceof Error ? error.message : "asset-submit-failed",
