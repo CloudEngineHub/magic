@@ -404,11 +404,8 @@
 	},
 	"collaborationManage": {
 		"collaboratorList": {
-			"batchAction": "批量操作",
-			"empty": "暂无协作者",
 			"joinedViaInviteLink": "通过邀请链接加入",
 			"owner": "创建人",
-			"remove": "移除",
 			"selectPlaceholder": "请选择",
 			"title": "协作者"
 		},
