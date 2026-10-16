@@ -134,9 +134,8 @@ export function useShareRecordingDetailData(input: ShareRecordingDetailDataInput
 					loadTextFiles(fileApi, nextFileMap, magicProjectContent),
 					loadAudioUrl(fileApi, nextFileMap.audio),
 				])
-				if (!nextFileMap.audio?.file_id || !nextAudioUrl) {
-					throw new Error("Recording bundle is missing a playable audio attachment")
-				}
+				// Audio is optional share content, so a missing attachment must not fail the whole load:
+				// the player shows its noAudio empty state while the texts loaded above keep rendering.
 				if (!isCurrentRequest()) return
 
 				setProjectItem(
