@@ -1419,7 +1419,7 @@
 		"unsupportedFileType": "Unsupported file type",
 		"untitledFile": "Untitled File",
 		"upload": "Upload",
-		"upload_max_count_placeholder": "",
+		"upload_max_count_placeholder": "File upload limit: {{maxCount}}",
 		"upload_max_size_placeholder": "Maximum {{size}}MB per file"
 	},
 	"completeInformationModal": {
