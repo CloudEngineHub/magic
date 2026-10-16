@@ -21,7 +21,6 @@
 	"aiWatermarkSubtitle": "View and manage the agreement state for AI unwatermarked downloads",
 	"aiWatermarkToggleDescription": "After enabling the watermark removal option, AI-generated content created or produced by your current account will no longer include visible watermarks.",
 	"aiWatermarkToggleLabel": "Remove AI-Generated Watermark",
-	"aiWatermarkVipDescription": "Your current plan is personal unpaid. Please upgrade before configuring the AI unwatermarked download agreement.",
 	"allPointsIncluded": "Includes All Points, Both Free And Paid",
 	"availablePoints": "Available Points",
 	"cancel": "Cancel",
