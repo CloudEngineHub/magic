@@ -3573,6 +3573,7 @@
 			"billingMultiplierHint": "倍率仅供参考，实际消耗以用量和计费规则为准。",
 			"billingMultiplierValue": "消耗倍率 {{value}} 倍",
 			"collapseDescription": "收起模型描述",
+			"contextWindow": "上下文窗口",
 			"expandDescription": "展开模型描述",
 			"headerTitle": "模型选择",
 			"imageModel": "生图模型",

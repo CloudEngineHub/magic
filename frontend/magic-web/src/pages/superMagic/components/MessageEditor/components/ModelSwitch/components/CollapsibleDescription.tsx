@@ -9,6 +9,7 @@ interface CollapsibleDescriptionProps {
 	expandLabel: string
 	collapseLabel: string
 	onToggle: (event: React.MouseEvent<HTMLButtonElement>) => void
+	className?: string
 }
 
 export function CollapsibleDescription({
@@ -18,6 +19,7 @@ export function CollapsibleDescription({
 	expandLabel,
 	collapseLabel,
 	onToggle,
+	className,
 }: CollapsibleDescriptionProps) {
 	const descriptionRef = useRef<HTMLDivElement>(null)
 	const [canToggle, setCanToggle] = useState(false)
@@ -61,6 +63,7 @@ export function CollapsibleDescription({
 		<div
 			className={cn(
 				"relative text-xs font-normal leading-4 text-muted-foreground",
+				className,
 				isDisabled && "opacity-50",
 			)}
 		>

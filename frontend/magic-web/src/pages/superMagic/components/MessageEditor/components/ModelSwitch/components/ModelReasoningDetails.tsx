@@ -16,6 +16,13 @@ import { CollapsibleDescription } from "./CollapsibleDescription"
 import { ModelBillingMultiplier } from "./ModelBillingMultiplier"
 import { cn } from "@/utils/cn"
 
+function formatContextWindow(value?: number | null) {
+	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null
+	if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 ? 1 : 0)}M`
+	if (value >= 1_000) return `${Math.round(value / 1_000)}K`
+	return String(value)
+}
+
 interface ModelReasoningDetailsProps {
 	model: ModelItem
 	description?: string
@@ -70,6 +77,7 @@ export function ModelReasoningDetails({
 		typeof model.billing_multiplier === "number" &&
 		Number.isFinite(model.billing_multiplier) &&
 		model.billing_multiplier >= 0
+	const contextWindow = formatContextWindow(model.max_context_tokens)
 
 	/** 在详情和子菜单的任意入口取消父层关闭及其他模型的待切换任务。 */
 	function keepOpen() {
@@ -161,7 +169,7 @@ export function ModelReasoningDetails({
 		<Button
 			ref={strengthRef}
 			variant="ghost"
-			className="h-9 w-full justify-between bg-accent px-2 text-sm font-normal"
+			className="h-10 w-full justify-between rounded-lg px-2 text-sm font-normal hover:bg-muted/70"
 			onClick={mobile ? () => setLevelsOpen(true) : undefined}
 			onPointerEnter={(event) => {
 				if (!mobile && event.pointerType === "mouse") scheduleLevels()
@@ -189,7 +197,7 @@ export function ModelReasoningDetails({
 					ref={anchorRef}
 					className={cn(
 						"flex min-w-0 items-center gap-1",
-						open && !mobile && "[&_[data-testid=model-switch-item]]:bg-accent",
+						open && !mobile && "[&_[data-testid=model-switch-item]]:bg-muted/80",
 					)}
 					onPointerEnter={(event) => {
 						if (!mobile && event.pointerType === "mouse") showDetails()
@@ -247,11 +255,13 @@ export function ModelReasoningDetails({
 			</PopoverAnchor>
 			<PopoverContent
 				ref={detailRef}
-				side={mobile ? "top" : "right"}
+				// 桌面端把详情放在模型列表左侧，形成“详情 | 列表”的主次层级；空间不足时由 Radix 自动翻转。
+				side={mobile ? "top" : "left"}
 				align="start"
-				sideOffset={mobile ? 8 : 0}
+				// 负间距让两张卡片的边缘相接，避免浮层之间出现视觉断层。
+				sideOffset={mobile ? 8 : -8}
 				collisionPadding={12}
-				className="w-64 max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border-border/80 bg-card p-0 shadow-xl duration-100"
+				className="w-64 max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl border-border/80 bg-card p-0 shadow-[0_12px_32px_rgba(15,23,42,0.14)] duration-100"
 				onPointerEnter={keepOpen}
 				onPointerLeave={scheduleClose}
 				onFocusCapture={keepOpen}
@@ -297,14 +307,15 @@ export function ModelReasoningDetails({
 					</>
 				) : (
 					<>
-						<div className="border-b border-border/70 px-4 py-3">
-							<div className="break-words text-sm font-semibold leading-5">
+						<div className="border-b border-border/70 px-4 pb-4 pt-4">
+							<div className="break-words text-base font-medium leading-6">
 								{model.model_name}
 							</div>
 							{description && (
 								<ScrollArea viewportClassName="mt-1.5 max-h-28">
 									<CollapsibleDescription
 										description={description}
+										className="!text-sm !leading-5"
 										isExpanded={descriptionExpanded}
 										expandLabel={t(
 											"messageEditor.modelSwitch.expandDescription",
@@ -318,20 +329,20 @@ export function ModelReasoningDetails({
 							)}
 						</div>
 						{hasMultiplier && (
-							<div className="border-b border-border/70 px-4 py-3 text-sm">
+							<div className="border-b border-border/70 px-4 py-3.5 text-sm">
 								<div className="flex items-center justify-between">
 									<span className="text-muted-foreground">
 										{t("messageEditor.modelSwitch.billingMultiplier")}
 									</span>
 									<ModelBillingMultiplier value={model.billing_multiplier} />
 								</div>
-								<p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+								<p className="leading-3.5 mt-1 text-[10px] text-muted-foreground">
 									{t("messageEditor.modelSwitch.billingMultiplierHint")}
 								</p>
 							</div>
 						)}
 						{levels.length > 0 && (
-							<div className="px-3 py-3">
+							<div className="px-3 py-2.5">
 								{mobile ? (
 									strengthButton
 								) : (
@@ -345,7 +356,7 @@ export function ModelReasoningDetails({
 										<PopoverTrigger asChild>{strengthButton}</PopoverTrigger>
 										<PopoverContent
 											ref={levelsRef}
-											side="right"
+											side="left"
 											align="start"
 											sideOffset={4}
 											className="w-36 p-0 duration-100"
@@ -374,6 +385,17 @@ export function ModelReasoningDetails({
 										</PopoverContent>
 									</Popover>
 								)}
+							</div>
+						)}
+						{contextWindow && (
+							<div className="flex items-center justify-between border-t border-border/70 px-4 py-3.5 text-sm">
+								<span className="text-foreground">
+									{t("messageEditor.modelSwitch.contextWindow")}
+								</span>
+								<span className="flex items-center gap-1 text-muted-foreground">
+									<span className="tabular-nums">{contextWindow}</span>
+									<ChevronRight className="size-4" aria-hidden="true" />
+								</span>
 							</div>
 						)}
 					</>

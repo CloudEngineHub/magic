@@ -19,6 +19,7 @@ function setup(
 	mobile = false,
 	levels: ModelItem["reasoning_effort_levels"] = ["none", "high"],
 	multiplier?: number | null,
+	maxContextTokens?: number | null,
 ) {
 	const model: ModelItem = {
 		id: "mock-model",
@@ -32,6 +33,7 @@ function setup(
 		model_status: ModelStatusEnum.Normal,
 		reasoning_effort_levels: levels,
 		billing_multiplier: multiplier,
+		max_context_tokens: maxContextTokens,
 	}
 	const onSelect = vi.fn()
 	render(
@@ -57,6 +59,15 @@ describe("模型详情思考强度", () => {
 		setup(false, [], null)
 		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplierHint")).toBeNull()
 		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplier")).toBeNull()
+	})
+	it("只在模型下发上下文上限时显示上下文窗口", () => {
+		setup(false, [], undefined, 1_000_000)
+		expect(screen.getByText("messageEditor.modelSwitch.contextWindow")).toBeTruthy()
+		expect(screen.getByText("1M")).toBeTruthy()
+
+		cleanup()
+		setup(false, [], undefined, null)
+		expect(screen.queryByText("messageEditor.modelSwitch.contextWindow")).toBeNull()
 	})
 
 	it("Esc 关闭桌面详情并返回模型行，不因恢复焦点再次打开", async () => {

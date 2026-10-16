@@ -66,6 +66,8 @@ export interface ModelItem {
 	/** 仅发送快照使用；模型列表中的能力对象不写入此选择值。 */
 	reasoning_effort?: ReasoningEffort | null
 	model_description: string
+	/** Optional user-facing context limit; omitted when the model API does not provide one. */
+	max_context_tokens?: number | null
 	/** 可选展示值；当前接口未下发时隐藏，不从价格或思考档位推算倍率。 */
 	billing_multiplier?: number | null
 	model_icon: string

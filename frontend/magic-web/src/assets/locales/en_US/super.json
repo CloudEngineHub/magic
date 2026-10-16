@@ -3573,6 +3573,7 @@
 			"billingMultiplierHint": "Multipliers are for reference only. Actual consumption depends on usage and billing rules.",
 			"billingMultiplierValue": "Usage multiplier: {{value}}x",
 			"collapseDescription": "Collapse model description",
+			"contextWindow": "Context window",
 			"expandDescription": "Expand model description",
 			"headerTitle": "Model Selection",
 			"imageModel": "Image",

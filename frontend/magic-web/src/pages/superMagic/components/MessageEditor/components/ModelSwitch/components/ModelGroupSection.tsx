@@ -3,7 +3,6 @@ import { Check } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import FlexBox from "@/components/base/FlexBox"
-import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/utils/cn"
 import type React from "react"
 import type { ModelItem, ModelListGroup, MessageEditorSize } from "../types"
@@ -68,11 +67,10 @@ export function ModelGroupSection({
 							key={model.model_id}
 							ref={isSelected ? selectedItemRef : null}
 							className={cn(
-								"relative flex min-h-10 items-center gap-3 rounded-lg border border-transparent px-3 py-1.5",
+								"relative flex min-h-11 items-center gap-3 rounded-xl border border-transparent px-3 py-2",
 								"cursor-pointer transition-colors duration-100",
-								"group",
-								"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent/70",
-								isSelected && "border-border/60 bg-accent/60 shadow-xs",
+								"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/70",
+								isSelected && "bg-muted/80",
 								isDisabled && "cursor-not-allowed opacity-50",
 							)}
 							onClick={() => onModelClick(model)}
@@ -85,6 +83,7 @@ export function ModelGroupSection({
 								onModelClick(model)
 							}}
 							aria-label={ariaLabel}
+							aria-pressed={isSelected}
 							data-testid="model-switch-item"
 							data-model-id={model.model_id}
 							data-model-name={model.model_name}
@@ -108,7 +107,7 @@ export function ModelGroupSection({
 										model={model}
 										isSelected={false}
 										className={cn(
-											"w-fit max-w-full",
+											"w-fit max-w-full !text-sm !font-medium",
 											isLanguageModel && "min-w-0 flex-1",
 											isDisabled && "opacity-50",
 										)}
@@ -133,22 +132,26 @@ export function ModelGroupSection({
 								)}
 							</FlexBox>
 							{isLanguageModel && (
-								<div className="flex min-w-[3.5rem] shrink-0 justify-end">
-									<ModelBillingMultiplier value={model.billing_multiplier} />
+								<div className="flex min-w-[4.5rem] shrink-0 justify-end">
+									<ModelBillingMultiplier
+										value={model.billing_multiplier}
+										className="text-sm"
+									/>
 								</div>
 							)}
-							<Checkbox
-								checked={isSelected}
-								onCheckedChange={() => onModelClick(model)}
-								onClick={(event) => event.stopPropagation()}
-								className={cn(
-									"flex-shrink-0",
-									"invisible opacity-0 transition-opacity",
-									"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
-									"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
-									isSelected && "visible opacity-100",
-								)}
-							/>
+							{/* 保留固定勾选列，让倍率在每一行保持同一条垂直基线。 */}
+							<span
+								className="flex size-5 shrink-0 items-center justify-center"
+								aria-hidden="true"
+							>
+								{isSelected ? (
+									<Check
+										className="size-4 text-emerald-500"
+										strokeWidth={2.5}
+										data-testid="model-switch-item-selected-icon"
+									/>
+								) : null}
+							</span>
 						</div>
 					) : (
 						<div
@@ -173,6 +176,7 @@ export function ModelGroupSection({
 								onModelClick(model)
 							}}
 							aria-label={ariaLabel}
+							aria-pressed={isSelected}
 							title={description || model.model_name || model.model_id}
 							data-testid="model-switch-item"
 							data-model-id={model.model_id}
