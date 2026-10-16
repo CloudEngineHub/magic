@@ -93,7 +93,7 @@
 			"upload.inspirationImage": "Upload inspiration image",
 			"upload.inspirationImage.help": "Upload one inspiration image. AI will borrow its color, craftsmanship, trims, and decorative language while keeping the prototype silhouette.",
 			"upload.prototypeImage": "Upload prototype image",
-			"upload.prototypeImage.help": "Upload the prototype silhouette image as the anchor for silhouette, proportion, and key structural lines."
+			"upload.prototypeImage.help": "Upload one or more prototype images. Each prototype is paired with the inspiration image for a separate generation."
 		},
 		"zh-CN": {
 			"button.aiPlaceholder": "AI 生成",
@@ -169,7 +169,7 @@
 			"upload.inspirationImage": "点击上传灵感图",
 			"upload.inspirationImage.help": "上传 1 张灵感图，AI 将借鉴其配色、工艺、辅料与装饰语言，同时严格保持原型图的廓形。",
 			"upload.prototypeImage": "点击上传原型图",
-			"upload.prototypeImage.help": "上传参考廓形的原型图，作为廓形、比例与关键结构线的锚点。"
+			"upload.prototypeImage.help": "可上传多张原型图，每张原型图将分别与灵感图配对生成。"
 		}
 	},
 	"name": "garment-style-design",
