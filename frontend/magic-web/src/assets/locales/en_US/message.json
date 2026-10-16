@@ -3,6 +3,7 @@
 	"FileNotFound": "File path does not exist",
 	"chat": {
 		"NoContent": "No content",
+		"NotSupport": "Not supported yet",
 		"pleaseEnterMessageContent": "Please enter message",
 		"recording_summary": {
 			"ai_result": "AI summary",

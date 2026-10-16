@@ -3,6 +3,7 @@
 	"FileNotFound": "文件路径不存在",
 	"chat": {
 		"NoContent": "无内容",
+		"NotSupport": "暂不支持",
 		"pleaseEnterMessageContent": "请输入消息",
 		"recording_summary": {
 			"ai_result": "智能总结",
