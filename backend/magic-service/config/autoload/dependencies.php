@@ -216,6 +216,8 @@ use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationsPlatformRe
 use App\Domain\OrganizationEnvironment\Repository\MagicEnvironmentsRepository;
 use App\Domain\OrganizationEnvironment\Repository\OrganizationsEnvironmentRepository;
 use App\Domain\OrganizationEnvironment\Repository\OrganizationsPlatformRepository;
+use App\Domain\Permission\Gateway\OrganizationAdminSyncInterface;
+use App\Domain\Permission\Gateway\NullOrganizationAdminSync;
 use App\Domain\Permission\Repository\Facade\OperationPermissionRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\OrganizationAdminRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\ResourceVisibilityRepositoryInterface;
@@ -703,5 +705,6 @@ foreach ($dependenciesPriority as $interface => $definition) {
 // regardless of the fallback bindings declared above or other provider order.
 $dependencies[AgentExecuteInterface::class] = SuperAgentMessageSubscriberV2::class;
 $dependencies[SuperAgentMessageInterface::class] = SuperAgentMessage::class;
+$dependencies[OrganizationAdminSyncInterface::class] = NullOrganizationAdminSync::class;
 
 return $dependencies;

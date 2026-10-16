@@ -13,6 +13,7 @@ use App\Domain\OrganizationEnvironment\Entity\OrganizationEntity;
 use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationRepositoryInterface;
 use App\Domain\Permission\Entity\OrganizationAdminEntity;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Gateway\OrganizationAdminSyncInterface;
 use App\Domain\Permission\Repository\Facade\OrganizationAdminRepositoryInterface;
 use App\ErrorCode\PermissionErrorCode;
 use App\ErrorCode\UserErrorCode;
@@ -33,7 +34,8 @@ class OrganizationAdminDomainService
         private readonly OrganizationAdminRepositoryInterface $organizationAdminRepository,
         private readonly MagicUserRepositoryInterface $userRepository,
         private readonly RoleDomainService $roleDomainService,
-        private readonly OrganizationRepositoryInterface $organizationRepository
+        private readonly OrganizationRepositoryInterface $organizationRepository,
+        private readonly OrganizationAdminSyncInterface $organizationAdminSync,
     ) {
         $this->logger = ApplicationContext::getContainer()->get(LoggerFactory::class)?->get(static::class);
     }
@@ -105,23 +107,26 @@ class OrganizationAdminDomainService
             ]);
         }
 
-        // 在删除组织管理员记录之前，先移除其在权限系统中的 role_user 关联
-        try {
-            // 创建权限隔离对象，用于操作角色服务
-            $permissionIsolation = PermissionDataIsolation::create(
-                $dataIsolation->getCurrentOrganizationCode(),
-                $dataIsolation->getCurrentUserId() ?? ''
-            );
+        Db::transaction(function () use ($dataIsolation, $organizationAdminEntity): void {
+            // 在删除组织管理员记录之前，先移除其在权限系统中的 role_user 关联
+            try {
+                $permissionIsolation = PermissionDataIsolation::create(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $dataIsolation->getCurrentUserId() ?? ''
+                );
 
-            $this->roleDomainService->removeOrganizationAdmin($permissionIsolation, $organizationAdminEntity->getUserId());
-        } catch (Throwable $e) {
-            $this->logger->error('Failed to remove organization admin role when destroying admin', [
-                'exception' => $e,
-            ]);
-        }
+                $this->roleDomainService->removeOrganizationAdmin($permissionIsolation, $organizationAdminEntity->getUserId());
+            } catch (Throwable $e) {
+                $this->logger->error('Failed to remove organization admin role when destroying admin', [
+                    'exception' => $e,
+                ]);
+            }
 
-        // 删除组织管理员记录
-        $this->organizationAdminRepository->delete($dataIsolation, $organizationAdminEntity);
+            // 删除组织管理员记录
+            $this->organizationAdminRepository->delete($dataIsolation, $organizationAdminEntity);
+        });
+
+        $this->syncTeamshareAdmin($dataIsolation, $organizationAdminEntity->getUserId(), 'revoke');
     }
 
     /**
@@ -172,25 +177,29 @@ class OrganizationAdminDomainService
             ExceptionBuilder::throw(UserErrorCode::USER_NOT_EXIST, 'user.not_exist', ['userId' => $userId]);
         }
 
-        // 创建人标记只能由 magic_organizations.creator_id 派生。保留参数是为了兼容
-        // 旧调用方，但不再允许调用方自行声明创建人。
-        $organizationAdmin = $this->organizationAdminRepository->grant($dataIsolation, $userId, $grantorUserId, $remarks, $isOrganizationCreator);
+        $organizationAdmin = Db::transaction(function () use ($dataIsolation, $userId, $grantorUserId, $remarks, $isOrganizationCreator): OrganizationAdminEntity {
+            // 创建人标记只能由 magic_organizations.creator_id 派生。
+            $organizationAdmin = $this->organizationAdminRepository->grant($dataIsolation, $userId, $grantorUserId, $remarks, $isOrganizationCreator);
 
-        // 同步创建 / 更新组织管理员角色
-        try {
-            $permissionIsolation = PermissionDataIsolation::create(
-                $dataIsolation->getCurrentOrganizationCode(),
-                $dataIsolation->getCurrentUserId() ?? ''
-            );
-            $this->roleDomainService->addOrganizationAdmin($permissionIsolation, [$userId]);
-        } catch (Throwable $e) {
-            $this->logger->warning('Failed to add organization admin role', [
-                'exception' => $e,
-                'userId' => $userId,
-                'organizationCode' => $dataIsolation->getCurrentOrganizationCode(),
-            ]);
-        }
+            // 同步创建 / 更新组织管理员角色
+            try {
+                $permissionIsolation = PermissionDataIsolation::create(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $dataIsolation->getCurrentUserId() ?? ''
+                );
+                $this->roleDomainService->addOrganizationAdmin($permissionIsolation, [$userId]);
+            } catch (Throwable $e) {
+                $this->logger->warning('Failed to add organization admin role', [
+                    'exception' => $e,
+                    'userId' => $userId,
+                    'organizationCode' => $dataIsolation->getCurrentOrganizationCode(),
+                ]);
+            }
 
+            return $organizationAdmin;
+        });
+
+        $this->syncTeamshareAdmin($dataIsolation, $userId, 'grant');
         return $organizationAdmin;
     }
 
@@ -270,20 +279,53 @@ class OrganizationAdminDomainService
             ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.error.organization_creator_cannot_be_revoked', ['userId' => $userId]);
         }
 
-        $this->organizationAdminRepository->revoke($dataIsolation, $userId);
+        Db::transaction(function () use ($dataIsolation, $userId): void {
+            $this->organizationAdminRepository->revoke($dataIsolation, $userId);
 
-        // 同步移除组织管理员角色
+            // 同步移除组织管理员角色
+            try {
+                $permissionIsolation = PermissionDataIsolation::create(
+                    $dataIsolation->getCurrentOrganizationCode(),
+                    $dataIsolation->getCurrentUserId() ?? ''
+                );
+                $this->roleDomainService->removeOrganizationAdmin($permissionIsolation, $userId);
+            } catch (Throwable $e) {
+                $this->logger->warning('Failed to remove organization admin role', [
+                    'exception' => $e,
+                    'userId' => $userId,
+                    'organizationCode' => $dataIsolation->getCurrentOrganizationCode(),
+                ]);
+            }
+        });
+
+        $this->syncTeamshareAdmin($dataIsolation, $userId, 'revoke');
+    }
+
+    private function syncTeamshareAdmin(DataIsolation $dataIsolation, string $userId, string $operation): void
+    {
+        // A nested domain operation may still be inside its caller's transaction.
+        // Let the outer operation finish and rely on reconciliation for that rare path.
+        if (Db::connection()->transactionLevel() > 0) {
+            return;
+        }
+
+        $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
+        if ($organization === null || $organization->isPersonal()) {
+            return;
+        }
+
         try {
-            $permissionIsolation = PermissionDataIsolation::create(
+            $this->organizationAdminSync->sync(
                 $dataIsolation->getCurrentOrganizationCode(),
-                $dataIsolation->getCurrentUserId() ?? ''
+                $userId,
+                $operation
             );
-            $this->roleDomainService->removeOrganizationAdmin($permissionIsolation, $userId);
         } catch (Throwable $e) {
-            $this->logger->warning('Failed to remove organization admin role', [
-                'exception' => $e,
-                'userId' => $userId,
+            $this->logger->warning('Failed to sync organization admin to Teamshare', [
                 'organizationCode' => $dataIsolation->getCurrentOrganizationCode(),
+                'userId' => $userId,
+                'operation' => $operation,
+                'exception' => $e,
             ]);
         }
     }
