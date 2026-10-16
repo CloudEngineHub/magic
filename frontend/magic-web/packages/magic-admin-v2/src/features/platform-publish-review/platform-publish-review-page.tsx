@@ -89,7 +89,7 @@ export default function PlatformPublishReviewPage({
 				<>
 					{canViewEmployeeReview || canViewSkillReview ? (
 						<PageHeaderFilterButton
-							data-testid="platform-publish-review-reset-button"
+							data-testid="platform-publish-review-filter-button"
 							count={
 								activeTab === "employee"
 									? countActiveReviewFilters(
