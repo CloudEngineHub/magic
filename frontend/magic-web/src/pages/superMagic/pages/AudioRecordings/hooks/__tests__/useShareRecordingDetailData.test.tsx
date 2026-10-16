@@ -74,6 +74,36 @@ describe("useShareRecordingDetailData", () => {
 		expect(result.current.texts.summary.summary?.content).toBe("# Shared summary")
 	})
 
+	it("keeps the share page usable when the shared bundle has no audio attachment", async () => {
+		// A share may carry only text artifacts; audio is optional and must not fail the whole load.
+		const magicProject = createAttachment("share-config-file", "magic.project.js")
+		const transcript = createAttachment("share-transcript-file", "transcript.md")
+		const attachments = {
+			tree: [{ ...magicProject, children: [magicProject, transcript] }],
+			list: [magicProject, transcript],
+		}
+		vi.mocked(getFileContentById).mockImplementation(async (fileId) => {
+			if (fileId === "share-config-file") {
+				return 'window.magicProjectConfig = { files: { transcript: "transcript.md" } }'
+			}
+			if (fileId === "share-transcript-file") return "# Shared transcript"
+			return ""
+		})
+
+		const { result } = renderHook(() =>
+			useShareRecordingDetailData({ projectId: "project-share", attachments }),
+		)
+
+		await waitFor(() => expect(result.current.loading).toBe(false))
+		// The missing audio degrades to the player empty state instead of the page-level error view.
+		expect(result.current.error).toBe(false)
+		expect(result.current.audioUrl).toBe("")
+		expect(vi.mocked(getTemporaryDownloadUrl)).not.toHaveBeenCalled()
+		// Texts loaded for the same bundle must survive the absent audio.
+		expect(result.current.fileMap?.transcript?.file_id).toBe("share-transcript-file")
+		expect(result.current.texts.transcript?.content).toBe("# Shared transcript")
+	})
+
 	it("shows the refresh skeleton only for an explicit refresh, not silent syncs", async () => {
 		const { attachments } = buildAudioBundle()
 		vi.mocked(getTemporaryDownloadUrl).mockResolvedValue([

@@ -114,5 +114,4 @@ class FollowUpSuggestionAppService extends AbstractAppService
             'topic_id' => (string) $topicId,
         ];
     }
-
 }

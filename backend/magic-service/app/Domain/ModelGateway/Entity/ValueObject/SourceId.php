@@ -71,6 +71,9 @@ final class SourceId
 
     public const string CONNECTIVITY_TEST = 'connectivity_test';
 
+    /** 定时任务连通性测试的调用来源。 */
+    public const string CRONTAB_CONNECTIVITY_TEST = 'crontab_connectivity_test';
+
     public const string AI_SEARCH = 'ai_search';
 
     public const string FOLLOW_UP_SUGGESTIONS = 'follow_up_suggestions';

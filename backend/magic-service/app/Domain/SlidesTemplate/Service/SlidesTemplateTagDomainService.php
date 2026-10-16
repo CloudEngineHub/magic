@@ -20,8 +20,8 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use Hyperf\Database\Exception\QueryException;
 use Hyperf\Logger\LoggerFactory;
-use Psr\SimpleCache\CacheInterface;
 use Psr\Log\LoggerInterface;
+use Psr\SimpleCache\CacheInterface;
 use Throwable;
 
 class SlidesTemplateTagDomainService
@@ -83,36 +83,6 @@ class SlidesTemplateTagDomainService
         }
 
         return $groups;
-    }
-
-    private function getVisibleGroupsCacheKey(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): string
-    {
-        $organizationCodes = array_values(array_unique(array_filter($dataIsolation->getOrganizationCodes())));
-        sort($organizationCodes);
-
-        $officialOrganizationCodes = array_values(array_unique(array_filter($dataIsolation->getOfficialOrganizationCodes())));
-        sort($officialOrganizationCodes);
-
-        $payload = json_encode([
-            'organization_codes' => $organizationCodes,
-            'official_organization_codes' => $officialOrganizationCodes,
-            'isolation_enabled' => $dataIsolation->isEnable(),
-            'only_official_organization' => $dataIsolation->isOnlyOfficialOrganization(),
-            'category_code' => $categoryCode ?? '',
-        ], JSON_THROW_ON_ERROR);
-
-        return self::VISIBLE_GROUPS_CACHE_PREFIX . hash('sha256', $payload);
-    }
-
-    private function isValidCachedGroups(array $cachedGroups): bool
-    {
-        foreach ($cachedGroups as $group) {
-            if (! $group instanceof SlidesTemplateTagEntity) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**
@@ -259,6 +229,36 @@ class SlidesTemplateTagDomainService
         foreach ($templates as $template) {
             $template->setTags($tagMap[(int) $template->getId()] ?? []);
         }
+    }
+
+    private function getVisibleGroupsCacheKey(SlidesTemplateDataIsolation $dataIsolation, ?string $categoryCode): string
+    {
+        $organizationCodes = array_values(array_unique(array_filter($dataIsolation->getOrganizationCodes())));
+        sort($organizationCodes);
+
+        $officialOrganizationCodes = array_values(array_unique(array_filter($dataIsolation->getOfficialOrganizationCodes())));
+        sort($officialOrganizationCodes);
+
+        $payload = json_encode([
+            'organization_codes' => $organizationCodes,
+            'official_organization_codes' => $officialOrganizationCodes,
+            'isolation_enabled' => $dataIsolation->isEnable(),
+            'only_official_organization' => $dataIsolation->isOnlyOfficialOrganization(),
+            'category_code' => $categoryCode ?? '',
+        ], JSON_THROW_ON_ERROR);
+
+        return self::VISIBLE_GROUPS_CACHE_PREFIX . hash('sha256', $payload);
+    }
+
+    private function isValidCachedGroups(array $cachedGroups): bool
+    {
+        foreach ($cachedGroups as $group) {
+            if (! $group instanceof SlidesTemplateTagEntity) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function prepareRestoreDeletedTag(SlidesTemplateDataIsolation $dataIsolation, SlidesTemplateTagEntity $entity): void

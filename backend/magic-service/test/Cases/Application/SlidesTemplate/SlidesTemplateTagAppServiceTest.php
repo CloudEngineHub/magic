@@ -35,7 +35,7 @@ class SlidesTemplateTagAppServiceTest extends TestCase
         self::$hadOriginalContainer = ApplicationContext::hasContainer();
         self::$originalContainer = self::$hadOriginalContainer ? ApplicationContext::getContainer() : null;
 
-        ApplicationContext::setContainer(new class () implements ContainerInterface {
+        ApplicationContext::setContainer(new class implements ContainerInterface {
             public function get(string $id): mixed
             {
                 if ($id === PhpSerializerPacker::class) {

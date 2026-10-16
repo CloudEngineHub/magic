@@ -22,10 +22,6 @@ class TaskFileModel extends AbstractModel
 {
     use SoftDeletes;
 
-    protected ?string $table = 'magic_super_agent_task_files';
-
-    protected string $primaryKey = 'file_id';
-
     /**
      * file_id 由调用方按雪花 ID 显式赋值，不依赖数据库自增，必须保持 false。
      *
@@ -37,6 +33,10 @@ class TaskFileModel extends AbstractModel
      * （51300 文件不存在），挂载端改这个新节点就失败。
      */
     public bool $incrementing = false;
+
+    protected ?string $table = 'magic_super_agent_task_files';
+
+    protected string $primaryKey = 'file_id';
 
     /**
      * 可填充字段列表.
