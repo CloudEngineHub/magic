@@ -46,7 +46,13 @@ final readonly class ShareNotificationAppService
             return;
         }
 
-        $previous = $this->snapshot($before ?? $after);
+        // A soft-deleted share starts a new notification cycle when it is
+        // restored. Do not carry the previous cycle's recipient snapshot into
+        // the new share, otherwise re-sharing to the same user is treated as
+        // an already-notified recipient and no event is published.
+        $previous = $before !== null && $before->getDeletedAt() !== null
+            ? []
+            : $this->snapshot($before ?? $after);
         $newRecipients = array_values(array_diff($currentRecipients, $previous));
 
         // 无新增收件人时不产生事件，但保留历史快照，便于后续配置变更继续计算差集。

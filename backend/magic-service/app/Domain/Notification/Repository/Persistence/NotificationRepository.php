@@ -43,10 +43,49 @@ final class NotificationRepository implements NotificationRepositoryInterface
                 $entity->getRecipientUserId()
             );
             if ($existing !== null) {
+                if (
+                    $entity->getSourceDomain() === 'share'
+                    && $existing->getMessageStatus() === NotificationMessageStatus::WITHDRAWN
+                ) {
+                    // A share can be cancelled and later restored while
+                    // retaining its business share ID. Start a fresh visible
+                    // notification cycle without changing the idempotency key.
+                    $this->restoreWithdrawn($dataIsolation, $entity);
+                    $entity->setId($existing->getId());
+                    return $entity;
+                }
                 return $existing;
             }
             throw $throwable;
         }
+    }
+
+    private function restoreWithdrawn(
+        NotificationDataIsolation $dataIsolation,
+        NotificationEntity $entity
+    ): void {
+        $this->organizationQuery($dataIsolation)
+            ->where('source_event_key', $entity->getSourceEventKey())
+            ->where('recipient_user_id', $entity->getRecipientUserId())
+            ->where('message_status', NotificationMessageStatus::WITHDRAWN->value)
+            ->update([
+                'category' => $entity->getCategory()?->value,
+                'type' => $entity->getType(),
+                'template_version' => $entity->getTemplateVersion(),
+                'payload' => json_encode($entity->getPayload(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'source_domain' => $entity->getSourceDomain(),
+                'source_type' => $entity->getSourceType(),
+                'source_id' => $entity->getSourceId(),
+                'source_version' => $entity->getSourceVersion(),
+                'message_status' => NotificationMessageStatus::ACTIVE->value,
+                'read_at' => null,
+                'action_status' => $entity->getActionStatus()->value,
+                'business_result' => null,
+                'actioned_at' => null,
+                'actioned_by' => null,
+                'created_at' => $this->now(),
+                'updated_at' => $this->now(),
+            ]);
     }
 
     public function findById(

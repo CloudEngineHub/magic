@@ -9,6 +9,9 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Domain\Notification;
 
 use App\Domain\Notification\Constant\NotificationCategory;
+use App\Domain\Notification\Constant\NotificationActionStatus;
+use App\Domain\Notification\Constant\NotificationMessageStatus;
+use App\Domain\Notification\Entity\NotificationEntity;
 use App\Domain\Notification\Repository\Persistence\NotificationRepository;
 use App\Domain\Notification\Entity\ValueObject\NotificationDataIsolation;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
@@ -110,6 +113,66 @@ final class NotificationRepositoryIsolationAndCursorTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $repository->listByRecipient($isolation, null, 'not-a-cursor', 10);
+    }
+
+    public function testCreateReactivatesWithdrawnNotificationForANewShareCycle(): void
+    {
+        $organization = 'notification_test_restore_' . bin2hex(random_bytes(3));
+        $user = 'notification_test_restore_user_' . bin2hex(random_bytes(3));
+        $sourceEventKey = 'share:ORG:project:1001:12:' . $user;
+        $id = (string) IdGenerator::getSnowId();
+        $this->notificationIds[] = $id;
+
+        Db::table('magic_notifications')->insert([
+            'id' => $id,
+            'organization_code' => $organization,
+            'recipient_user_id' => $user,
+            'category' => NotificationCategory::SYSTEM->value,
+            'type' => 'project_shared',
+            'template_version' => 1,
+            'payload' => json_encode(['resource_name' => 'old'], JSON_THROW_ON_ERROR),
+            'source_event_key' => $sourceEventKey,
+            'source_domain' => 'share',
+            'source_type' => 'project',
+            'source_id' => '1001',
+            'source_version' => null,
+            'message_status' => NotificationMessageStatus::WITHDRAWN->value,
+            'read_at' => '2026-10-16 10:00:00',
+            'action_status' => NotificationActionStatus::NONE->value,
+            'business_result' => null,
+            'actioned_at' => null,
+            'actioned_by' => null,
+            'created_at' => '2026-10-16 09:00:00',
+            'updated_at' => '2026-10-16 10:00:00',
+        ]);
+
+        $entity = new NotificationEntity();
+        $entity->setOrganizationCode($organization);
+        $entity->setRecipientUserId($user);
+        $entity->setCategory(NotificationCategory::SYSTEM);
+        $entity->setType('project_shared');
+        $entity->setTemplateVersion(2);
+        $entity->setPayload(['resource_name' => 'new']);
+        $entity->setSourceEventKey($sourceEventKey);
+        $entity->setSourceDomain('share');
+        $entity->setSourceType('project');
+        $entity->setSourceId('1001');
+        $entity->setMessageStatus(NotificationMessageStatus::ACTIVE);
+        $entity->setActionStatus(NotificationActionStatus::NONE);
+
+        $restored = (new NotificationRepository())->create(
+            NotificationDataIsolation::create($organization, $user),
+            $entity
+        );
+
+        self::assertSame($id, $restored->getId());
+        $row = Db::table('magic_notifications')->where('id', $id)->first();
+        $row = (array) $row;
+        self::assertSame(NotificationMessageStatus::ACTIVE->value, $row['message_status']);
+        self::assertNull($row['read_at']);
+        self::assertSame(2, (int) $row['template_version']);
+        self::assertSame(['resource_name' => 'new'], json_decode($row['payload'], true, 512, JSON_THROW_ON_ERROR));
+        self::assertNotSame('2026-10-16 09:00:00', $row['created_at']);
     }
 
     private function insertNotification(string $organization, string $user, string $createdAt): string
