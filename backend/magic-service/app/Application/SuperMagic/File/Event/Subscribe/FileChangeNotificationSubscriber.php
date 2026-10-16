@@ -215,7 +215,9 @@ class FileChangeNotificationSubscriber implements ListenerInterface
             );
             return;
         }
-        if (! $this->isProjectSpaceFile($fileEntity)) return;
+        if (! $this->isProjectSpaceFile($fileEntity)) {
+            return;
+        }
         $projectEntity = $this->projectDomainService->getProjectNotUserId($fileEntity->getProjectId());
 
         if (! $projectEntity) {
@@ -291,7 +293,9 @@ class FileChangeNotificationSubscriber implements ListenerInterface
             fn (TaskFileEntity $fileEntity): bool => $this->isUserSpaceFile($fileEntity)
         ));
         if ($userFileEntities !== []) {
-            if ($this->shouldSkipRecycleBinDeleteForBatch($userFileEntities, $event->getSource())) return;
+            if ($this->shouldSkipRecycleBinDeleteForBatch($userFileEntities, $event->getSource())) {
+                return;
+            }
             $authorization = $event->getUserAuthorization();
             $changes = array_map(
                 static fn (TaskFileEntity $fileEntity): array => [

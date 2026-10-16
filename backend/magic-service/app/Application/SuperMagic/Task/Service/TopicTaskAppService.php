@@ -482,24 +482,6 @@ class TopicTaskAppService extends AbstractAppService
     }
 
     /**
-     * 计算任务从开始到成功完成的耗时（秒）.
-     */
-    private function resolveTaskDurationSeconds(TaskEntity $task): int
-    {
-        $startedAt = $task->getStartedAt();
-        if (empty($startedAt)) {
-            return 0;
-        }
-
-        $startedTimestamp = strtotime($startedAt);
-        if ($startedTimestamp === false) {
-            return 0;
-        }
-
-        return max(0, time() - $startedTimestamp);
-    }
-
-    /**
      * 处理用户工具调用的答复（Human-in-the-Loop 回调入口）.
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文（来自 WebSocket 认证用户）
@@ -1030,6 +1012,24 @@ class TopicTaskAppService extends AbstractAppService
         }
 
         return $result;
+    }
+
+    /**
+     * 计算任务从开始到成功完成的耗时（秒）.
+     */
+    private function resolveTaskDurationSeconds(TaskEntity $task): int
+    {
+        $startedAt = $task->getStartedAt();
+        if (empty($startedAt)) {
+            return 0;
+        }
+
+        $startedTimestamp = strtotime($startedAt);
+        if ($startedTimestamp === false) {
+            return 0;
+        }
+
+        return max(0, time() - $startedTimestamp);
     }
 
     /**

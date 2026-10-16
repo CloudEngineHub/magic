@@ -127,17 +127,6 @@ class ModeAppService extends AbstractModeAppService
         ];
     }
 
-    /**
-     * 同一个聚合 DTO 只做一次 toArray（内部为 json encode + decode，开销大）。
-     *
-     * @param array<int, array> $cache 以 spl_object_id 为键的 groups 缓存，生命周期限于单次调用
-     */
-    private function getGroupsArrayCached(ModeAggregateDTO $modeAggregateDTO, array &$cache): array
-    {
-        $key = spl_object_id($modeAggregateDTO);
-        return $cache[$key] ??= $modeAggregateDTO->toArray()['groups'] ?? [];
-    }
-
     public function getFeaturedAgent(MagicUserAuthorization $authorization): array
     {
         $modeDataIsolation = $this->getModeDataIsolation($authorization);
@@ -268,6 +257,17 @@ class ModeAppService extends AbstractModeAppService
             'models' => $modeRuntimeData['models'],
             'groups' => $this->buildModeGroups($modeAggregateDTO),
         ];
+    }
+
+    /**
+     * 同一个聚合 DTO 只做一次 toArray（内部为 json encode + decode，开销大）。
+     *
+     * @param array<int, array> $cache 以 spl_object_id 为键的 groups 缓存，生命周期限于单次调用
+     */
+    private function getGroupsArrayCached(ModeAggregateDTO $modeAggregateDTO, array &$cache): array
+    {
+        $key = spl_object_id($modeAggregateDTO);
+        return $cache[$key] ??= $modeAggregateDTO->toArray()['groups'] ?? [];
     }
 
     /**

@@ -4,13 +4,12 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-
 use Hyperf\Database\Exception\QueryException;
 use Hyperf\Database\Migrations\Migration;
 use Hyperf\Database\Schema\Blueprint;
 use Hyperf\Database\Schema\Schema;
 
-/**
+/*
  * Indexes for the two bounded metadata primitives used by MagicFS:
  *
  *  - exact parent/name lookup while resolving a path component;

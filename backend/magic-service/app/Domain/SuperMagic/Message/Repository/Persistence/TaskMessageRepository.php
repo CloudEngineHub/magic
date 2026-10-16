@@ -592,5 +592,4 @@ class TaskMessageRepository implements TaskMessageRepositoryInterface
                 TaskStatus::ERROR->value,
             ]);
     }
-
 }

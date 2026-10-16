@@ -402,5 +402,4 @@ class AuditLogRepository extends AbstractRepository implements AuditLogRepositor
             AuditType::SLIDES_TEMPLATE->value,
         ];
     }
-
 }

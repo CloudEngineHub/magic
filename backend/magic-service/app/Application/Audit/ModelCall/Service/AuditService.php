@@ -96,6 +96,14 @@ class AuditService
         ];
     }
 
+    /**
+     * 计费侧按 event_id 回写积分（供计费组件包直接注入调用，不对外暴露 HTTP 接口）.
+     */
+    public function recordPointsByEventId(string $eventId, int $points): void
+    {
+        $this->modelCallAuditDomainService->recordPointsByEventId($eventId, $points);
+    }
+
     /** @param array<string, mixed> $filters */
     private function queryStatistics(
         array $filters,
@@ -325,14 +333,6 @@ class AuditService
             ],
             'breakdown' => $breakdown,
         ];
-    }
-
-    /**
-     * 计费侧按 event_id 回写积分（供计费组件包直接注入调用，不对外暴露 HTTP 接口）.
-     */
-    public function recordPointsByEventId(string $eventId, int $points): void
-    {
-        $this->modelCallAuditDomainService->recordPointsByEventId($eventId, $points);
     }
 
     /**
