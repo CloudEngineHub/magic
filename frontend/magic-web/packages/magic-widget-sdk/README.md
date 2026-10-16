@@ -424,6 +424,7 @@ namespace MagicWidget {
 				id: string
 				label: string
 				icon?: string
+				iconUrl?: string
 				items: Array<{
 					id: string
 					type: string
@@ -431,6 +432,7 @@ namespace MagicWidget {
 					title?: string
 					description?: string
 					icon?: string
+					iconUrl?: string
 					data?: Record<string, unknown>
 				}>
 			}>
@@ -503,7 +505,9 @@ Field caps:
 
 | Field                                      | `config.panel.customGroups`                                              | `blocks[].mention`                                                                               |
 | ------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `id` / `type` / `icon`                     | Required and non-empty, at most 64 characters                            | No length limit                                                                                  |
+| `id` / `type`                              | Required and non-empty, at most 64 characters                            | No length limit                                                                                  |
+| `icon`                                     | Optional TSIcon token, at most 64 characters                             | No length limit                                                                                  |
+| `iconUrl`                                  | Optional HTTPS image URL, at most 2,048 characters                       | No length limit                                                                                  |
 | `label` / `text` / `title` / `description` | `text` is required and non-empty; each at most 512 characters            | With `type: "text"`, `data.id`, `data.label`, and `data.text` must be non-empty; no length limit |
 | Item count                                 | At most 50 groups, 1,000 items per group, 5,000 items in total           | No limit on the number of `blocks`                                                               |
 | Payload size                               | At most 32 KiB per item and 2 MiB for the complete snapshot (UTF-8 JSON) | No byte budget; values only need to survive structured cloning across the window boundary        |

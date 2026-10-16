@@ -395,6 +395,49 @@ test.describe("Magic Widget SDK contract", () => {
 		)
 	})
 
+	test("renders static and dynamic custom Mention items with iconUrl", async ({ page }) => {
+		const frame = widgetFrame(page)
+		await frame.getByTestId("super-message-editor-at-button").click()
+		const scroller = frame.getByTestId("virtuoso-scroller")
+		await expect(scroller).toBeVisible()
+		await expect(frame.getByRole("option").first()).toBeVisible()
+		await expect
+			.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight))
+			.toBe(true)
+		await scroller.evaluate((element) => {
+			element.scrollTop = element.scrollHeight
+		})
+		const group = frame.getByRole("option").filter({ hasText: "Business charts" })
+		await expect(group).toBeVisible()
+		await expect(group.locator("img")).toHaveAttribute(
+			"src",
+			"https://example.com/icons/group.png",
+		)
+
+		// Enter group and verify static item iconUrl
+		await group.locator("button").click()
+		const chart = frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Chart A" })
+		await expect(chart).toBeVisible()
+		await expect(chart.locator("img")).toHaveAttribute(
+			"src",
+			"https://example.com/icons/chart-a.png",
+		)
+
+		// Search dynamically and verify dynamic result iconUrl
+		const searchInput = frame
+			.getByRole("searchbox", { name: "Search input area" })
+			.locator("input")
+		await searchInput.fill("dynamic chart")
+		const dynamicChart = frame
+			.getByTestId("mention-panel-menu-item")
+			.filter({ hasText: "Dynamic Chart" })
+		await expect(dynamicChart).toBeVisible()
+		await expect(dynamicChart.locator("img")).toHaveAttribute(
+			"src",
+			"https://example.com/icons/dynamic.png",
+		)
+	})
+
 	test("filters custom Mention overflow without interrupting iframe rendering", async ({
 		page,
 	}) => {

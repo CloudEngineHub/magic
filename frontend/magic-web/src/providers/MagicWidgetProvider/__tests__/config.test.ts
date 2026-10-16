@@ -154,4 +154,67 @@ describe("acceptMagicWidgetConfig", () => {
 		).toBeLessThanOrEqual(2 * 1024 * 1024)
 		expect(payloadWarnings[0]?.details.reasons).toContain("MAX_PAYLOAD_BYTES")
 	})
+
+	it("preserves safe HTTPS iconUrl for groups and items and rejects invalid ones", () => {
+		const validConfig = {
+			panel: {
+				customGroups: [
+					{
+						id: "valid-group",
+						label: "Valid Group",
+						icon: "ts-doc-file",
+						iconUrl: "https://example.com/icon.png",
+						items: [
+							{
+								id: "item-1",
+								type: "card",
+								text: "Card 1",
+								icon: "ts-api",
+								iconUrl: "https://example.com/item.png",
+							},
+						],
+					},
+				],
+			},
+		}
+		expect(acceptMagicWidgetConfig(validConfig)).toEqual(validConfig)
+
+		// Reject HTTP URL
+		expect(() =>
+			acceptMagicWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "http-group",
+							label: "HTTP Group",
+							iconUrl: "http://insecure.com/icon.png",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/https:/)
+
+		// Reject javascript protocol
+		expect(() =>
+			acceptMagicWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "js-group",
+							label: "JS Group",
+							items: [
+								{
+									id: "item-js",
+									type: "card",
+									text: "Card",
+									iconUrl: "javascript:alert(1)",
+								},
+							],
+						},
+					],
+				},
+			}),
+		).toThrow(/https:/)
+	})
 })

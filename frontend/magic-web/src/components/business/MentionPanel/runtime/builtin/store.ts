@@ -66,10 +66,29 @@ type CustomMentionSearchHandler = (
 	signal: AbortSignal,
 ) => Promise<MagicWidget.CustomMentionSearchResult[]>
 
-/** Maps host icon tokens to the existing local icon set; URLs are intentionally ignored. */
-function normalizeCustomMentionIcon(icon: string | undefined): string {
-	if (!icon || /^(https?:|data:|blob:|\/\/)/i.test(icon)) return "ts-file-text"
-	return icon.startsWith("ts-") || icon === "file-folder" ? icon : "ts-file-text"
+export const DEFAULT_CUSTOM_MENTION_ICON = "ts-doc-file"
+
+/** Normalizes host icon tokens to local TSIcon names; falls back to the safe ts-doc-file token. */
+export function normalizeCustomMentionIcon(icon: string | undefined): string {
+	if (!icon || typeof icon !== "string") return DEFAULT_CUSTOM_MENTION_ICON
+	const trimmed = icon.trim()
+	if (/^(https?:|data:|blob:|\/\/)/i.test(trimmed)) return DEFAULT_CUSTOM_MENTION_ICON
+	return trimmed.startsWith("ts-") || trimmed === "file-folder"
+		? trimmed
+		: DEFAULT_CUSTOM_MENTION_ICON
+}
+
+/** Resolves an optional HTTPS icon URL safely; rejects non-HTTPS, malformed, or oversized URLs. */
+export function normalizeCustomMentionIconUrl(url: string | undefined): string | undefined {
+	if (!url || typeof url !== "string") return undefined
+	const trimmed = url.trim()
+	if (trimmed.length > 2048) return undefined
+	try {
+		const parsed = new URL(trimmed)
+		return parsed.protocol === "https:" ? trimmed : undefined
+	} catch {
+		return undefined
+	}
 }
 
 const BUILTIN_VISIBILITY_IDS: Record<keyof MentionPanelBuiltinVisibility, string[]> = {
@@ -320,6 +339,8 @@ export class MentionPanelStore {
 			.map((item) => {
 				// Keep the short UI label separate from the self-contained text sent to the Agent.
 				const displayLabel = item.title?.trim() || item.text
+				const icon = normalizeCustomMentionIcon(item.icon)
+				const iconUrl = normalizeCustomMentionIconUrl(item.iconUrl)
 				return {
 					id: item.id,
 					name: displayLabel,
@@ -333,10 +354,12 @@ export class MentionPanelStore {
 						text: item.text,
 						type: item.type,
 					},
-					icon: normalizeCustomMentionIcon(item.icon),
+					icon,
+					iconUrl,
 					metadata: {
 						customMention: true,
 						customMentionGroupId: group.id,
+						...(iconUrl ? { iconUrl } : {}),
 					},
 				}
 			})
@@ -492,18 +515,24 @@ export class MentionPanelStore {
 				...defaultItems,
 				...this.customMentionGroups
 					.filter((group) => group.items.length > 0)
-					.map((group) => ({
-						id: group.id,
-						type: MentionItemType.FOLDER,
-						name: group.label,
-						icon: normalizeCustomMentionIcon(group.icon),
-						hasChildren: true,
-						isFolder: true,
-						metadata: {
-							customMentionGroup: true,
-							customMentionGroupId: group.id,
-						},
-					})),
+					.map((group) => {
+						const icon = normalizeCustomMentionIcon(group.icon)
+						const iconUrl = normalizeCustomMentionIconUrl(group.iconUrl)
+						return {
+							id: group.id,
+							type: MentionItemType.FOLDER,
+							name: group.label,
+							icon,
+							iconUrl,
+							hasChildren: true,
+							isFolder: true,
+							metadata: {
+								customMentionGroup: true,
+								customMentionGroupId: group.id,
+								...(iconUrl ? { iconUrl } : {}),
+							},
+						}
+					}),
 			]
 		}
 		if (this.projectFilesStore.currentSelectedProject) {

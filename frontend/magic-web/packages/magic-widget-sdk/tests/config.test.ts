@@ -444,4 +444,137 @@ describe("Widget config", () => {
 		expect(payloadWarnings[0]?.details.reasons).toContain("MAX_PAYLOAD_BYTES")
 		expect(payloadWarnings[0]?.details.droppedItems).toBeGreaterThan(0)
 	})
+
+	it("validates and preserves safe HTTPS iconUrl for groups and items", () => {
+		const source = {
+			panel: {
+				customGroups: [
+					{
+						id: "docs-group",
+						label: "Documentation",
+						icon: "ts-doc-file",
+						iconUrl: "https://example.com/icons/group.png",
+						items: [
+							{
+								id: "item-1",
+								type: "doc",
+								text: "API Reference",
+								icon: "ts-api",
+								iconUrl: "https://example.com/icons/item-1.png",
+							},
+						],
+					},
+				],
+			},
+		}
+		const normalized = normalizeWidgetConfig(source)
+		const group = normalized.panel?.customGroups?.[0]
+		expect(group?.icon).toBe("ts-doc-file")
+		expect(group?.iconUrl).toBe("https://example.com/icons/group.png")
+		expect(group?.items[0]?.icon).toBe("ts-api")
+		expect(group?.items[0]?.iconUrl).toBe("https://example.com/icons/item-1.png")
+	})
+
+	it("rejects non-HTTPS or malformed iconUrl on groups and items", () => {
+		// Reject HTTP protocol
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "group-http",
+							label: "HTTP Group",
+							iconUrl: "http://insecure.com/icon.png",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/https:/)
+
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "group-valid",
+							label: "Group",
+							items: [
+								{
+									id: "item-http",
+									type: "card",
+									text: "Card",
+									iconUrl: "http://insecure.com/icon.png",
+								},
+							],
+						},
+					],
+				},
+			}),
+		).toThrow(/https:/)
+
+		// Reject javascript / data / blob protocols
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "group-js",
+							label: "JS Group",
+							iconUrl: "javascript:alert(1)",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/https:/)
+
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "group-data",
+							label: "Data Group",
+							iconUrl: "data:image/png;base64,abc",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/https:/)
+
+		// Reject malformed URL
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "group-bad",
+							label: "Bad Group",
+							iconUrl: "not-a-url",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/valid HTTPS URL/)
+
+		// Reject oversized URL (> 2048 chars)
+		const oversizedUrl = `https://example.com/${"a".repeat(2040)}`
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "group-oversized",
+							label: "Oversized Group",
+							iconUrl: oversizedUrl,
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/at most 2048 characters/)
+	})
 })

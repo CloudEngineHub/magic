@@ -18,6 +18,7 @@ export const MAGIC_WIDGET_CUSTOM_GROUP_LIMITS = {
 	maxPayloadBytes: 2 * 1024 * 1024,
 	maxIdAndTypeLength: 64,
 	maxTextLength: 512,
+	maxIconUrlLength: 2048,
 } as const
 
 const RESERVED_MENTION_ROOT_IDS = new Set([
@@ -42,6 +43,38 @@ const RESERVED_MENTION_ROOT_IDS = new Set([
 /** Creates a provider-side validation error without exposing transport details. */
 function invalidConfig(message: string): Error {
 	return new Error(message)
+}
+
+/**
+ * Validates that an optional icon URL is a safe, absolute HTTPS URL within length limits.
+ * Rejects non-strings, http, data, blob, javascript, protocol-relative, and malformed URLs.
+ */
+function readOptionalIconUrl(
+	value: Record<string, unknown>,
+	key: string,
+	label: string,
+	maxLength = MAGIC_WIDGET_CUSTOM_GROUP_LIMITS.maxIconUrlLength,
+): string | undefined {
+	const field = value[key]
+	if (field === undefined) return undefined
+	if (typeof field !== "string" || !field.trim() || field.length > maxLength) {
+		throw invalidConfig(
+			`Magic widget ${label}.${key} must be a non-empty string of at most ${maxLength} characters`,
+		)
+	}
+	const trimmed = field.trim()
+	try {
+		const parsed = new URL(trimmed)
+		if (parsed.protocol !== "https:") {
+			throw invalidConfig(`Magic widget ${label}.${key} must use the https: protocol`)
+		}
+	} catch (error) {
+		if (error instanceof Error && error.message.includes("https:")) {
+			throw error
+		}
+		throw invalidConfig(`Magic widget ${label}.${key} must be a valid HTTPS URL`)
+	}
+	return trimmed
 }
 
 /** Accepts plain records only so class instances cannot cross the iframe state boundary. */
@@ -138,7 +171,16 @@ function normalizeItems(
 		const rawItem = candidateItems[index]
 		const itemLabel = `${label}.items[${index}]`
 		const item = requirePlainObject(rawItem, itemLabel)
-		const allowedKeys = new Set(["id", "type", "text", "title", "description", "icon", "data"])
+		const allowedKeys = new Set([
+			"id",
+			"type",
+			"text",
+			"title",
+			"description",
+			"icon",
+			"iconUrl",
+			"data",
+		])
 		const unknownKey = Object.keys(item).find((key) => !allowedKeys.has(key))
 		if (unknownKey) throw invalidConfig(`${itemLabel}.${unknownKey} is not supported`)
 		const { id, type, text } = item
@@ -185,9 +227,15 @@ function normalizeItems(
 			throw invalidConfig(
 				`${itemLabel}.icon must be a string of at most ${MAGIC_WIDGET_CUSTOM_GROUP_LIMITS.maxIdAndTypeLength} characters`,
 			)
+		const iconUrl = readOptionalIconUrl(item, "iconUrl", itemLabel)
 		if (item.data !== undefined) requirePlainObject(item.data, `${itemLabel}.data`)
 		assertJsonSafe(item, itemLabel)
-		const clone = JSON.parse(JSON.stringify(item)) as MagicWidget.CustomMentionItem
+		const clone = JSON.parse(
+			JSON.stringify({
+				...item,
+				...(iconUrl !== undefined ? { iconUrl } : {}),
+			}),
+		) as MagicWidget.CustomMentionItem
 		if (
 			getUtf8ByteLength(JSON.stringify(clone)) > MAGIC_WIDGET_CUSTOM_GROUP_LIMITS.maxItemBytes
 		) {
@@ -271,7 +319,7 @@ export function normalizeMagicWidgetCustomGroups(
 	const groups = candidateGroups.map((rawGroup, index) => {
 		const label = `config.panel.customGroups[${index}]`
 		const group = requirePlainObject(rawGroup, label)
-		const allowedKeys = new Set(["id", "label", "icon", "items"])
+		const allowedKeys = new Set(["id", "label", "icon", "iconUrl", "items"])
 		const unknownKey = Object.keys(group).find((key) => !allowedKeys.has(key))
 		if (unknownKey) throw invalidConfig(`${label}.${unknownKey} is not supported`)
 		const { id, label: displayLabel } = group
@@ -304,6 +352,7 @@ export function normalizeMagicWidgetCustomGroups(
 			throw invalidConfig(
 				`${label}.icon must be a string of at most ${MAGIC_WIDGET_CUSTOM_GROUP_LIMITS.maxIdAndTypeLength} characters`,
 			)
+		const iconUrl = readOptionalIconUrl(group, "iconUrl", label)
 		if (!Array.isArray(group.items))
 			throw invalidConfig(`Magic widget ${label}.items must be an array`)
 		const items = normalizeItems(
@@ -318,6 +367,7 @@ export function normalizeMagicWidgetCustomGroups(
 				id,
 				label: displayLabel,
 				...(group.icon === undefined ? {} : { icon: group.icon }),
+				...(iconUrl === undefined ? {} : { iconUrl }),
 				items,
 			}),
 		) as MagicWidget.CustomMentionGroup

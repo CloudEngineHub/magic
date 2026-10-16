@@ -416,6 +416,8 @@ export interface MentionItem<T extends MentionPanelItemTypeValue = MentionPanelI
 	type: T
 	name: string
 	icon?: string | ReactNode
+	/** Direct HTTPS image URL for custom icons. Takes precedence over icon token. */
+	iconUrl?: string
 	/**
 	 * 是否不可选择，对于标题和分割线，默认不可选择
 	 */

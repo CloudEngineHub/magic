@@ -118,7 +118,10 @@ export declare namespace MagicWidget {
 		/** Short optional label shown in the editor and message panel; falls back to text. */
 		title?: string
 		description?: string
+		/** Built-in TSIcon or IconPark token name. */
 		icon?: string
+		/** HTTPS URL pointing to an icon image; takes precedence over icon token. */
+		iconUrl?: string
 		data?: Record<string, unknown>
 	}
 
@@ -126,7 +129,10 @@ export declare namespace MagicWidget {
 	export interface CustomMentionGroup {
 		id: string
 		label: string
+		/** Built-in TSIcon or IconPark token name. */
 		icon?: string
+		/** HTTPS URL pointing to an icon image; takes precedence over icon token. */
+		iconUrl?: string
 		items: CustomMentionItem[]
 	}
 

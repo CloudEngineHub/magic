@@ -76,28 +76,52 @@ const hostname = process.env.WIDGET_EXAMPLE_HOST ?? "127.0.0.1";
 const template = await Bun.file(join(import.meta.dir, "index.html")).text();
 const html = renderHtml(template, sdkUrl, envJson);
 
-/** Serves the rendered example page plus a health check endpoint. */
-Bun.serve({
-	port,
-	hostname,
-	fetch(request) {
-		const url = new URL(request.url);
+/**
+ * Serves the rendered example page plus a health check endpoint.
+ *
+ * The port being taken by a previous run is the most common local failure, so the failure
+ * is reported with the exact command that frees the port. The example intentionally does
+ * not fall back to the next free port: a browser tab on the documented port would then
+ * silently keep talking to the stale instance instead of the server just started.
+ */
+function startServer(): void {
+	try {
+		Bun.serve({
+			port,
+			hostname,
+			fetch(request) {
+				const url = new URL(request.url);
 
-		if (url.pathname === "/healthz") {
-			return new Response("ok", {
-				headers: { "content-type": "text/plain; charset=utf-8" },
-			});
+				if (url.pathname === "/healthz") {
+					return new Response("ok", {
+						headers: { "content-type": "text/plain; charset=utf-8" },
+					});
+				}
+
+				if (url.pathname === "/" || url.pathname === "/index.html") {
+					return new Response(html, {
+						headers: { "content-type": "text/html; charset=utf-8" },
+					});
+				}
+
+				return new Response("Not found", { status: 404 });
+			},
+		});
+	} catch (error) {
+		// Bun throws a SystemError carrying the socket errno code; only that case gets advice.
+		if ((error as { code?: string }).code === "EADDRINUSE") {
+			console.error(
+				`Port ${port} on ${hostname} is already in use. ` +
+					`Stop the process holding it (lsof -nP -iTCP:${port} -sTCP:LISTEN) ` +
+					`or start this example elsewhere with WIDGET_EXAMPLE_PORT=<port>.`,
+			);
+			process.exit(1);
 		}
+		throw error;
+	}
+}
 
-		if (url.pathname === "/" || url.pathname === "/index.html") {
-			return new Response(html, {
-				headers: { "content-type": "text/html; charset=utf-8" },
-			});
-		}
-
-		return new Response("Not found", { status: 404 });
-	},
-});
+startServer();
 
 console.log(`Magic Widget SDK example listening on http://${hostname}:${port}`);
 console.log(`SDK script: ${sdkUrl}`);

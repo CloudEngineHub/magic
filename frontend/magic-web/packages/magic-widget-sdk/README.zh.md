@@ -424,6 +424,7 @@ namespace MagicWidget {
 				id: string
 				label: string
 				icon?: string
+				iconUrl?: string
 				items: Array<{
 					id: string
 					type: string
@@ -431,6 +432,7 @@ namespace MagicWidget {
 					title?: string
 					description?: string
 					icon?: string
+					iconUrl?: string
 					data?: Record<string, unknown>
 				}>
 			}>
@@ -503,7 +505,9 @@ Mention 有两条互不相通的设置入口，边界规则并不相同：`confi
 
 | 字段                                       | `config.panel.customGroups`                       | `blocks[].mention`                                                          |
 | ------------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------- |
-| `id` / `type` / `icon`                     | 必填且非空，最多 64 字符                          | 无长度限制                                                                  |
+| `id` / `type`                              | 必填且非空，最多 64 字符                          | 无长度限制                                                                  |
+| `icon`                                     | 可选 TSIcon token，最多 64 字符                   | 无长度限制                                                                  |
+| `iconUrl`                                  | 可选 HTTPS 图片地址，最多 2,048 字符              | 无长度限制                                                                  |
 | `label` / `text` / `title` / `description` | `text` 必填且非空，各最多 512 字符                | `type: "text"` 时要求 `data.id`、`data.label`、`data.text` 非空，无长度限制 |
 | 条目数量                                   | 最多 50 组、每组 1,000 条、合计 5,000 条          | `blocks` 数量无上限                                                         |
 | 数据体积                                   | 单条最多 32 KiB、完整快照最多 2 MiB（UTF-8 JSON） | 无字节预算，仅要求可跨窗口结构化克隆                                        |

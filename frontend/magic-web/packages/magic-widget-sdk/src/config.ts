@@ -68,6 +68,7 @@ export const CUSTOM_MENTION_LIMITS = {
 	maxPayloadBytes: 2 * 1024 * 1024,
 	maxIdAndTypeLength: 64,
 	maxTextLength: 512,
+	maxIconUrlLength: 2048,
 } as const
 
 type ConfigWarningReporter = (warning: MagicWidget.ConfigWarning) => void
@@ -206,6 +207,40 @@ function readOptionalDisplayText(
 	return trimmed
 }
 
+/**
+ * Validates that an optional icon URL is a safe, absolute HTTPS URL within length limits.
+ * Rejects non-strings, http, data, blob, javascript, protocol-relative, and malformed URLs.
+ */
+function readOptionalIconUrl(
+	value: Record<string, unknown>,
+	key: string,
+	label: string,
+	maxLength = CUSTOM_MENTION_LIMITS.maxIconUrlLength,
+): string | undefined {
+	const field = value[key]
+	if (field === undefined) return undefined
+	if (typeof field !== "string" || !field.trim() || field.length > maxLength) {
+		throw createInvalidConfigError(
+			`Magic widget ${label}.${key} must be a non-empty string of at most ${maxLength} characters`,
+		)
+	}
+	const trimmed = field.trim()
+	try {
+		const parsed = new URL(trimmed)
+		if (parsed.protocol !== "https:") {
+			throw createInvalidConfigError(
+				`Magic widget ${label}.${key} must use the https: protocol`,
+			)
+		}
+	} catch (error) {
+		if (error instanceof Error && error.message.includes("https:")) {
+			throw error
+		}
+		throw createInvalidConfigError(`Magic widget ${label}.${key} must be a valid HTTPS URL`)
+	}
+	return trimmed
+}
+
 /** Measures UTF-8 bytes consistently with the browser postMessage JSON payload. */
 function getUtf8ByteLength(value: string): number {
 	if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(value).byteLength
@@ -300,7 +335,7 @@ function normalizeCustomMentionItems(
 		const item = requirePlainObject(rawItem, `${label}.items[${index}]`)
 		assertKnownKeys(
 			item,
-			new Set(["id", "type", "text", "title", "description", "icon", "data"]),
+			new Set(["id", "type", "text", "title", "description", "icon", "iconUrl", "data"]),
 			`${label}.items[${index}]`,
 		)
 		const id = item.id
@@ -357,11 +392,17 @@ function normalizeCustomMentionItems(
 				`${label}.items[${index}].icon must be a string of at most ${CUSTOM_MENTION_LIMITS.maxIdAndTypeLength} characters`,
 			)
 		}
+		const iconUrl = readOptionalIconUrl(item, "iconUrl", `${label}.items[${index}]`)
 		if (item.data !== undefined) {
 			requirePlainObject(item.data, `${label}.items[${index}].data`)
 		}
 		assertJsonSafe(item, `${label}.items[${index}]`)
-		const cloned = JSON.parse(JSON.stringify(item)) as MagicWidget.CustomMentionItem
+		const cloned = JSON.parse(
+			JSON.stringify({
+				...item,
+				...(iconUrl !== undefined ? { iconUrl } : {}),
+			}),
+		) as MagicWidget.CustomMentionItem
 		if (getUtf8ByteLength(JSON.stringify(cloned)) > CUSTOM_MENTION_LIMITS.maxItemBytes) {
 			recordCustomMentionFilter(stats, "MAX_ITEM_BYTES", { items: 1 })
 			continue
@@ -443,7 +484,7 @@ function normalizeCustomGroupsConfig(
 	const groups = candidateGroups.map((rawGroup, groupIndex) => {
 		const groupLabel = `${label}[${groupIndex}]`
 		const group = requirePlainObject(rawGroup, groupLabel)
-		assertKnownKeys(group, new Set(["id", "label", "icon", "items"]), groupLabel)
+		assertKnownKeys(group, new Set(["id", "label", "icon", "iconUrl", "items"]), groupLabel)
 		const id = group.id
 		const displayLabel = group.label
 		if (
@@ -477,6 +518,7 @@ function normalizeCustomGroupsConfig(
 			throw createInvalidConfigError(
 				`${groupLabel}.icon must be a string of at most ${CUSTOM_MENTION_LIMITS.maxIdAndTypeLength} characters`,
 			)
+		const iconUrl = readOptionalIconUrl(group, "iconUrl", groupLabel)
 		if (!Array.isArray(group.items))
 			throw createInvalidConfigError(`${groupLabel}.items must be an array`)
 		const items = normalizeCustomMentionItems(
@@ -491,6 +533,7 @@ function normalizeCustomGroupsConfig(
 				id,
 				label: displayLabel,
 				...(group.icon === undefined ? {} : { icon: group.icon }),
+				...(iconUrl === undefined ? {} : { iconUrl }),
 				items,
 			}),
 		) as MagicWidget.CustomMentionGroup

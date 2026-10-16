@@ -425,6 +425,73 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			})
 		})
 
+		it("resolves valid tokens and HTTPS iconUrls for custom groups and items", async () => {
+			mentionPanelStore.setCustomMentionGroups([
+				{
+					id: "icon-group",
+					label: "Icon Group",
+					icon: "ts-doc-file",
+					iconUrl: "https://example.com/group-icon.png",
+					items: [
+						{
+							id: "icon-item-valid",
+							type: "card",
+							text: "Card With Icon",
+							icon: "ts-api",
+							iconUrl: "https://example.com/item-icon.png",
+						},
+						{
+							id: "icon-item-fallback",
+							type: "card",
+							text: "Card With Fallback",
+							icon: "invalid-token-name",
+							iconUrl: "http://insecure.com/rejected.png",
+						},
+					],
+				},
+			])
+
+			const rootItems = await getDefaultItems()
+			const customGroupItem = rootItems.find((item) => item.id === "icon-group")
+			expect(customGroupItem).toMatchObject({
+				id: "icon-group",
+				icon: "ts-doc-file",
+				iconUrl: "https://example.com/group-icon.png",
+				metadata: expect.objectContaining({
+					customMentionGroup: true,
+					iconUrl: "https://example.com/group-icon.png",
+				}),
+			})
+
+			const contentItems = await mentionPanelStore.dispatch({
+				kind: "children",
+				id: "icon-group",
+			})
+			expect(contentItems.items).toHaveLength(2)
+
+			// Valid item
+			expect(contentItems.items?.[0]).toMatchObject({
+				id: "icon-item-valid",
+				icon: "ts-api",
+				iconUrl: "https://example.com/item-icon.png",
+				metadata: expect.objectContaining({
+					customMention: true,
+					iconUrl: "https://example.com/item-icon.png",
+				}),
+			})
+
+			// Fallback item: invalid token falls back to ts-doc-file, insecure http URL is stripped
+			expect(contentItems.items?.[1]).toMatchObject({
+				id: "icon-item-fallback",
+				icon: "ts-doc-file",
+				iconUrl: undefined,
+				metadata: expect.objectContaining({
+					customMention: true,
+				}),
+			})
+			expect(contentItems.items?.[1]?.iconUrl).toBeUndefined()
+		})
+
 		it("should show other project files without a current project", async () => {
 			projectFilesStore.setSelectedProject(null)
 
