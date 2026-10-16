@@ -22,7 +22,7 @@ export function isAudioProjectMode(projectMode: unknown): boolean {
 	return projectMode === "audio"
 }
 
-/** Prevents the audio share shell from mounting before the share route has both audio mode and share files. */
+/** Mounts the audio share shell only for audio-mode shares that really carry a recording bundle. */
 export function shouldRenderAudioRecordingShareShell(input: {
 	projectMode: unknown
 	attachments?: ShareAttachmentSnapshot | null
@@ -30,7 +30,20 @@ export function shouldRenderAudioRecordingShareShell(input: {
 	const { projectMode, attachments } = input
 	if (!isAudioProjectMode(projectMode)) return false
 
-	return Boolean(attachments?.tree?.length || attachments?.list?.length)
+	return hasSharedRecordingBundle(attachments)
+}
+
+/**
+ * Detects recording bundle content from the audio display config that travels with the shared rows.
+ * The tree and the flat list are both scanned because either shape may hydrate the snapshot first.
+ */
+function hasSharedRecordingBundle(attachments?: ShareAttachmentSnapshot | null): boolean {
+	const items = [
+		...flattenShareAttachments(attachments?.tree || []),
+		...flattenShareAttachments(attachments?.list || []),
+	]
+
+	return items.some(isAudioShareTarget)
 }
 
 /**
