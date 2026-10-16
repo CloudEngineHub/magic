@@ -70,7 +70,7 @@ Router::addGroup('/api/v1/admin', static function () {
 
     // 官方模型标识映射。静态批量和候选路由必须先于 groupId 动态路由注册。
     Router::addGroup('/model-identifier-mappings', static function () {
-        Router::post('/queries', [ModelIdentifierMappingApi::class, 'query']);
+        Router::get('', [ModelIdentifierMappingApi::class, 'query']);
         Router::post('', [ModelIdentifierMappingApi::class, 'create']);
         Router::post('/batch-status', [ModelIdentifierMappingApi::class, 'batchStatus']);
         Router::post('/batch-delete', [ModelIdentifierMappingApi::class, 'batchDelete']);
