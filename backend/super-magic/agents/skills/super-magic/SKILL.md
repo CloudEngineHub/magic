@@ -1,6 +1,6 @@
 ---
 name: super-magic
-description: Find, read, create, edit, and organize the current user's Super Magic workspaces, projects, topics, project files, messages, and Agent tasks, including resources outside the current topic or project.
+description: Find, read, create, edit, and organize the current user's Super Magic workspaces, projects, topics, project files, messages, skills and their source projects, and Agent tasks, including resources outside the current topic or project.
 ---
 
 # Super Magic product resources
@@ -30,6 +30,7 @@ When delegating work to other topics as part of the current task, wait for the s
 
 Read only the references needed for the operation:
 
+- [Skills](references/skills.md): conversation-to-skill authoring, skill project discovery, @ project edits, confirmed publication and version updates.
 - [Workspaces](references/workspaces.md): project classification, listing, creation, rename, archive, deletion.
 - [Projects](references/projects.md): owned and participated discovery, time ordering, details, creation, rename, classification move, deletion.
 - [Topics](references/topics.md): listing, name search, recent updates, details, creation, rename, archive, deletion.

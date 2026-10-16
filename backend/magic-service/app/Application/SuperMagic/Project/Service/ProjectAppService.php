@@ -1994,7 +1994,8 @@ class ProjectAppService extends AbstractAppService
     public function createAgentProject(
         RequestContext $requestContext,
         CreateAgentProjectRequestDTO $requestDTO,
-        ProjectMode $projectMode = ProjectMode::CUSTOM_AGENT
+        ProjectMode $projectMode = ProjectMode::CUSTOM_AGENT,
+        bool $setDefaultTopic = true
     ) {
         $this->logger->info('Starting agent project creation');
 
@@ -2051,7 +2052,10 @@ class ProjectAppService extends AbstractAppService
                 $requestDTO->getInitTemplateFiles()
             );
 
-            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
+            // A background skill draft must not redirect the conversation that requested it.
+            if ($setDefaultTopic) {
+                $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
+            }
             Db::commit();
             $transactionOpen = false;
 

@@ -1,5 +1,7 @@
 # Project files
 
+Skill projects are discovered with `list_skills` / `get_skill`, not the ordinary project list. Follow [Skills](skills.md) for creation, project references and publication.
+
 ## Choose the project and access path
 
 Use the sandbox's AGFS mounts for file contents. Product tools discover projects and file IDs and perform product-level organization. A product workspace is a grouping of projects, not a filesystem directory.

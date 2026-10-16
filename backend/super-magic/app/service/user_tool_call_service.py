@@ -352,16 +352,16 @@ class UserToolCallService:
             content, extra_info = str(e), {"status": "error"}
 
         if pending.tool_data.get("prepared_tool_call_id"):
-            from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
+            from app.service.prepared_operation_confirmation import PreparedOperationConfirmation
             try:
-                await CanvasOperationConfirmation(pending.agent_context).answer(
+                await PreparedOperationConfirmation(pending.agent_context).answer(
                     str(pending.tool_data["prepared_tool_call_id"]), pending.tool_call_id,
-                    response_status, extra_info.get("answers", {}),
+                    response_status, extra_info.get("answers", {}), remark=remark or "",
                 )
             except Exception:
                 # 凭据落盘失败不能变成授权；普通提问和恢复流程仍继续。
-                logger.error("Canvas operation confirmation was not recorded", exc_info=True)
-                content += "\nThe Canvas operation was not authorized. Prepare and confirm it again."
+                logger.error("Prepared operation confirmation was not recorded", exc_info=True)
+                content += "\nThe prepared operation was not authorized. Prepare and confirm it again."
 
         # 结果内容可能包含用户答案和备注，不在日志中记录完整正文。
         logger.info(
@@ -459,13 +459,13 @@ class UserToolCallService:
         prepared_id = pending.tool_data.get("prepared_tool_call_id")
         if not prepared_id:
             return
-        from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
+        from app.service.prepared_operation_confirmation import PreparedOperationConfirmation
         try:
-            await CanvasOperationConfirmation(pending.agent_context).answer(
+            await PreparedOperationConfirmation(pending.agent_context).answer(
                 str(prepared_id), pending.tool_call_id, "cancelled", {},
             )
         except Exception:
-            logger.warning("Canvas confirmation cancellation could not be recorded", exc_info=True)
+            logger.warning("Prepared confirmation cancellation could not be recorded", exc_info=True)
 
     # ─── 持久化 ───────────────────────────────────────────────────────────────
 

@@ -566,6 +566,14 @@ file_edit:
 # .runtime 清理默认值。
 # 容量字段支持 MB、MiB、KB、KiB 等写法；本项目的 MB 和 MiB 都按 1024 进制换算。
 runtime_cleanup:
+  # 发布前供审查的本地 Skill 快照；服务端准备凭据独立在 24 小时后过期。
+  skill_publish:
+    max_age_hours: 24
+    max_directory_count: 32
+    target_directory_count: 24
+    max_total_size: 500MiB
+    target_total_size: 400MiB
+
   # 自动结果文件由独立 owner 按容量和存活时间清理。
   tool_results:
     max_file_size: 8MiB

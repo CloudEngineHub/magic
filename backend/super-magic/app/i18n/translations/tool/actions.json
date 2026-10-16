@@ -464,8 +464,8 @@
         "en_US": "Update employee"
     },
     "create_skill": {
-        "zh_CN": "创建技能",
-        "en_US": "Create skill"
+        "zh_CN": "创建技能草稿",
+        "en_US": "Create skill draft"
     },
     "edit_skill": {
         "zh_CN": "编辑技能",
@@ -1206,5 +1206,25 @@
     "search_project_files": {
         "zh_CN": "搜索项目文件",
         "en_US": "Search project files"
+    },
+    "list_skills": {
+        "zh_CN": "查找技能",
+        "en_US": "Find skills"
+    },
+    "get_skill": {
+        "zh_CN": "查看技能",
+        "en_US": "View skill"
+    },
+    "prepare_skill_publish": {
+        "zh_CN": "准备技能发布",
+        "en_US": "Prepare skill publication"
+    },
+    "publish_skill": {
+        "zh_CN": "发布技能",
+        "en_US": "Publish skill"
+    },
+    "get_skill_publish_result": {
+        "zh_CN": "查看技能发布状态",
+        "en_US": "Check skill publication"
     }
 }

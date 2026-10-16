@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Skill\Service;
 
 use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
+use App\Application\SuperMagic\Project\DTO\Request\CreateAgentProjectRequestDTO;
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
 use App\Application\SuperMagic\Publish\PublishAsyncStatusManager;
 use App\Application\SuperMagic\Skill\DTO\PublishSkillResultDTO;
@@ -26,6 +27,7 @@ use App\Domain\Permission\Service\OperationPermissionDomainService;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Skill\Entity\SkillCategoryEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
@@ -70,10 +72,12 @@ use App\Infrastructure\Util\ZipUtil;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Kernel\Assembler\OperatorAssembler;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\AddSkillFromStoreRequestDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Request\CreateSkillDraftRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\GetLatestPublishedSkillVersionsRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\GetSkillFileUrlsRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ImportSkillRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\ParseFileImportRequestDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Request\PrepareSkillPublishRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\PublishSkillRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\QuerySkillVersionsRequestDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\UpdateSkillInfoRequestDTO;
@@ -83,6 +87,7 @@ use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillFileUrlItemDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillPublishPrefillResponseDTO;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
+use Hyperf\Codec\Json;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\Log\LoggerInterface;
@@ -335,6 +340,242 @@ class SkillAppService extends AbstractSkillAppService
             Db::rollBack();
             throw $throwable;
         }
+    }
+
+    /** Create the draft and its project in one transaction; retries use a stable skill code. */
+    public function createDraft(RequestContext $context, CreateSkillDraftRequestDTO $request): array
+    {
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $key = 'skill:draft:' . hash('sha256', $isolation->getCurrentOrganizationCode() . ':' . $isolation->getCurrentUserId() . ':' . $request->requestId);
+        $owner = $this->acquireImportLock($key);
+        try {
+            $code = $this->redis->get($key);
+            if (! is_string($code) || $code === '') {
+                $code = $request->existingSkillCode ?? SkillEntity::generateNewCode();
+                // Persist the identity before creating anything, including on an uncertain response.
+                if (! $this->redis->setex($key, 86400, $code)) {
+                    throw new RuntimeException('Could not persist skill creation identity');
+                }
+            }
+            if ($request->existingSkillCode !== null && $code !== $request->existingSkillCode) {
+                ExceptionBuilder::throw(SkillErrorCode::PROJECT_BINDING_CONFLICT);
+            }
+            return Db::transaction(function () use ($context, $request, $isolation, $code) {
+                $skill = $this->skillDomainService->findOptionalSkillByCode($isolation, $code);
+                if ($skill === null) {
+                    if ($request->existingSkillCode !== null) {
+                        ExceptionBuilder::throw(SkillErrorCode::SKILL_NOT_FOUND);
+                    }
+                    $skill = $this->createSkillInternal(
+                        $isolation,
+                        $isolation->getCurrentUserId(),
+                        $isolation->getCurrentOrganizationCode(),
+                        '',
+                        '',
+                        '',
+                        $code,
+                        SkillSourceType::DIALOGUE_CREATION,
+                        ['default' => $request->name],
+                        ['default' => $request->description],
+                        null
+                    );
+                }
+                $project = $this->createAndBindProject($context, $request->name, $code, false);
+                return [
+                    'id' => (string) $skill->getId(), 'skill_code' => $code, 'project_id' => (string) $project['project']['id'],
+                    'name' => $skill->getI18nName(CoContext::getLanguage()), 'description' => $skill->getI18nDescription(CoContext::getLanguage()),
+                ];
+            });
+        } finally {
+            $this->releaseImportLock($key, $owner);
+        }
+    }
+
+    /** Shared by Web creation and conversation creation. Never replace an existing binding. */
+    public function createAndBindProject(RequestContext $context, string $name, string $code, bool $setDefaultTopic = true): array
+    {
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $this->assertSkillEditable($isolation, $code);
+        $key = 'skill:bind:' . $code;
+        $owner = $this->acquireImportLock($key);
+        try {
+            return Db::transaction(function () use ($context, $isolation, $name, $code, $setDefaultTopic) {
+                $this->skillDomainService->lockSkill($isolation, $code);
+                $skill = $this->skillDomainService->findUserSkillByCode($isolation, $code);
+                if ($skill->getProjectId()) {
+                    return ['project' => ['id' => (string) $skill->getProjectId()]];
+                }
+                $dto = new CreateAgentProjectRequestDTO();
+                $dto->setProjectName($name);
+                $dto->setInitTemplateFiles(false);
+                $project = $this->projectAppService->createAgentProject($context, $dto, ProjectMode::SKILL_CREATOR, $setDefaultTopic);
+                $this->bindProject($context, $code, (int) $project['project']['id']);
+                return $project;
+            });
+        } finally {
+            $this->releaseImportLock($key, $owner);
+        }
+    }
+
+    public function getSkillByProject(RequestContext $context, int $projectId): SkillDetailResponseDTO
+    {
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $isolation->disabled();
+        $skill = $this->skillDomainService->findSkillByProjectId($isolation, $projectId);
+        // The project lookup is for editing source, not accessing a marketplace author's draft.
+        $this->assertSkillEditable($isolation, $skill->getCode());
+        return $this->getSkillDetail($context, $skill->getCode());
+    }
+
+    /** Export only. No version, visibility or review state changes before confirmation. */
+    public function prepareSkillPublish(RequestContext $context, string $code, PrepareSkillPublishRequestDTO $request): array
+    {
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $this->assertSkillEditable($isolation, $code);
+        $isolation->disabled();
+        $token = hash('sha256', $isolation->getCurrentOrganizationCode() . ':' . $isolation->getCurrentUserId() . ':' . $code . ':' . $request->requestId);
+        $key = 'skill:prepare:' . $token;
+        $owner = $this->acquireImportLock($key);
+        try {
+            if ($this->redis->exists($key)) {
+                return $this->readSkillPreparation($context, $code, $token);
+            }
+            $skill = $this->skillDomainService->findSkillByCode($isolation, $code);
+            $project = $this->projectDomainService->getProjectNotUserId((int) $skill->getProjectId());
+            if ($project === null) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND);
+            }
+            $config = $this->readSkillProjectConfig((int) $skill->getProjectId(), $project);
+            $dir = $config['skill']['dir'];
+            $latest = $this->skillVersionDomainService->findLatestSkillVersionByCode($isolation, $code);
+            $current = $this->skillVersionDomainService->findCurrentPublishedVersionsByCodes($isolation, [$code])[$code] ?? null;
+            $target = $request->publishTargetType ?? $current?->getPublishTargetType()->value ?? PublishTargetType::PRIVATE->value;
+            if (! in_array($target, ['PRIVATE', 'ORGANIZATION', 'MARKET'], true)) {
+                // Existing MEMBER releases require an explicit supported target, never a silent scope change.
+                ExceptionBuilder::throw(SkillErrorCode::PUBLISH_TARGET_TYPE_INVALID);
+            }
+            if ($target === 'ORGANIZATION' && $isolation->getOrganizationInfoManager()->getOrganizationType() === OrganizationType::Personal) {
+                ExceptionBuilder::throw(SkillErrorCode::PUBLISH_TARGET_TYPE_INVALID);
+            }
+            if ($skill->getSourceType()->isMarket()) {
+                ExceptionBuilder::throw(SkillErrorCode::STORE_SKILL_CANNOT_PUBLISH);
+            }
+            $record = [
+                'prepare_token' => $token, 'publish_task_id' => $token, 'status' => 'processing',
+                'skill_code' => $code, 'project_id' => (string) $skill->getProjectId(),
+                'organization_code' => $isolation->getCurrentOrganizationCode(), 'user_id' => $isolation->getCurrentUserId(),
+                'name' => $request->name ?? $skill->getI18nName(CoContext::getLanguage()),
+                'description' => $request->description ?? $skill->getI18nDescription(CoContext::getLanguage()),
+                'name_i18n' => $request->name === null ? $skill->getNameI18n() : ['default' => $request->name],
+                'description_i18n' => $request->description === null ? ($skill->getDescriptionI18n() ?? []) : ['default' => $request->description],
+                'version' => $request->version ?? $this->skillVersionDomainService->getNextAvailableVersion($isolation, $code, $latest?->getVersion()),
+                'publish_target_type' => $target, 'current_publish_target_type' => $current?->getPublishTargetType()->value,
+                'base_version_id' => (string) ($latest?->getId() ?? ''), 'skill_dir' => $dir,
+                'created_at' => time(), 'expires_at' => time() + 86400,
+                'task_key' => 'prepare:skill:' . $token,
+            ];
+            // Store before submitting export so an HTTP retry resumes the same task.
+            $this->writeSkillPreparation($token, $record);
+            $sandboxId = $this->initializeSkillPublishSandbox($isolation, $code, $project);
+            $record['sandbox_id'] = $sandboxId;
+            $this->writeSkillPreparation($token, $record);
+            $result = $this->skillDomainService->createSkillWorkspaceExportAsync(
+                $isolation,
+                $code,
+                $sandboxId,
+                SkillProjectConfigUtil::SKILLS_ROOT_PATH . '/' . $dir,
+                $dir,
+                $code . '_' . $token . '.zip',
+                $record['task_key']
+            );
+            if (($result['status'] ?? '') === 'FAILED' || ! in_array($result['code'] ?? 1000, [1000, 4000], true)) {
+                throw new RuntimeException('Skill export could not be started');
+            }
+            return $record;
+        } catch (Throwable $error) {
+            if (isset($record)) {
+                $record['status'] = 'failed';
+                $this->writeSkillPreparation($token, $record);
+            }
+            throw $error;
+        } finally {
+            $this->releaseImportLock($key, $owner);
+        }
+    }
+
+    public function checkSkillPreparation(RequestContext $context, string $code, string $token): array
+    {
+        $key = 'skill:prepare:' . $token;
+        $owner = $this->acquireImportLock($key);
+        try {
+            return $this->advanceSkillPreparation($context, $code, $token);
+        } finally {
+            $this->releaseImportLock($key, $owner);
+        }
+    }
+
+    /** Publish exactly the confirmed ZIP. A response lost after commit is recovered by version + file key. */
+    public function publishSkillPreparation(RequestContext $context, string $code, string $token): array
+    {
+        $record = $this->readSkillPreparation($context, $code, $token);
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $isolation->disabled();
+        $key = 'skill:publish:' . $code;
+        $owner = $this->acquireImportLock($key);
+        try {
+            $versions = $this->skillVersionDomainService->findAllSkillVersionsByCode($isolation, $code);
+            foreach ($versions as $version) {
+                if ($version->getVersion() === $record['version']) {
+                    if ($version->getFileKey() === ($record['file_key'] ?? null) && $version->getPublisherUserId() === $record['user_id']) {
+                        return $this->skillPublishReceipt($version);
+                    }
+                    ExceptionBuilder::throw(SkillErrorCode::VERSION_ALREADY_EXISTS);
+                }
+            }
+            if ($record['status'] !== 'ready') {
+                ExceptionBuilder::throw(SkillErrorCode::PUBLISH_PREPARATION_STALE);
+            }
+            $skill = $this->skillDomainService->findSkillByCode($isolation, $code);
+            $latest = $this->skillVersionDomainService->findLatestSkillVersionByCode($isolation, $code);
+            if ((string) ($latest?->getId() ?? '') !== $record['base_version_id']
+                || (string) $skill->getProjectId() !== $record['project_id']
+                || $record['manifest'] !== $this->skillProjectManifest((int) $record['project_id'], $record['skill_dir'])) {
+                ExceptionBuilder::throw(SkillErrorCode::PUBLISH_PREPARATION_STALE);
+            }
+            return Db::transaction(function () use ($isolation, $skill, $record) {
+                $skill->setNameI18n($record['name_i18n']);
+                $skill->setDescriptionI18n($record['description_i18n']);
+                $skill->setPackageName($record['package_name']);
+                $skill->setPackageDescription($record['package_description']);
+                $skill->setFileKey($record['file_key']);
+                $version = new SkillVersionEntity();
+                $version->setVersion($record['version']);
+                $version->setVersionDescriptionI18n($record['description_i18n']);
+                $version->setPublishTargetType($record['publish_target_type']);
+                $version->setSkillFileKey($record['skill_file_key']);
+                $version = $this->skillVersionDomainService->publishSkill($isolation, $skill, $version, expectedLatestVersionId: $record['base_version_id']);
+                if ($version->getPublishStatus()->isPublished()) {
+                    $this->syncPublishedSkillScope($isolation, $skill, $version);
+                }
+                return $this->skillPublishReceipt($version);
+            });
+        } finally {
+            $this->releaseImportLock($key, $owner);
+        }
+    }
+
+    public function getPreparedSkillPublishResult(RequestContext $context, string $code, string $token): array
+    {
+        $record = $this->readSkillPreparation($context, $code, $token);
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $isolation->disabled();
+        foreach ($this->skillVersionDomainService->findAllSkillVersionsByCode($isolation, $code) as $version) {
+            if ($version->getVersion() === $record['version'] && $version->getFileKey() === ($record['file_key'] ?? null)
+                && $version->getPublisherUserId() === $record['user_id']) {
+                return $this->skillPublishReceipt($version);
+            }
+        }
+        return ['skill_code' => $code, 'status' => 'not_submitted', 'preparation_status' => $record['status'], 'submitted' => false];
     }
 
     /**
@@ -1375,6 +1616,115 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         return array_values(array_unique(array_merge($skillCodes, $builtinSkillCodes)));
+    }
+
+    private function advanceSkillPreparation(RequestContext $context, string $code, string $token): array
+    {
+        $record = $this->readSkillPreparation($context, $code, $token);
+        if ($record['status'] !== 'processing' || empty($record['sandbox_id'])) {
+            return $record;
+        }
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $result = $this->skillDomainService->checkSkillWorkspaceExportAsync($isolation, $record['sandbox_id'], $record['task_key']);
+        $status = strtoupper((string) ($result['status'] ?? ''));
+        if ($status === 'FAILED' || ($result['code'] ?? 1000) === 4004) {
+            $record['status'] = 'failed';
+        } elseif (in_array($status, ['SUCCESS', 'COMPLETED'], true) && ! empty($result['file_key'])) {
+            $package = $this->skillPackageParser->parseByFileKey($record['organization_code'], $result['file_key'], true);
+            $record['file_key'] = $result['file_key'];
+            $record['package_name'] = $package->packageName;
+            $record['package_description'] = $package->packageDescription;
+            $record['manifest'] = $package->manifest;
+            $record['package_sha256'] = $package->sha256;
+            if ($package->manifest !== $this->skillProjectManifest((int) $record['project_id'], $record['skill_dir'])) {
+                ExceptionBuilder::throw(SkillErrorCode::PUBLISH_PREPARATION_STALE);
+            }
+            // A separate immutable object, extracted from the very same ZIP being confirmed.
+            $snapshot = new SkillVersionEntity();
+            $snapshot->setId((int) IdGenerator::getSnowId());
+            $snapshot->setCode($code);
+            $snapshot->setOrganizationCode($record['organization_code']);
+            $snapshot->setFileKey($record['file_key']);
+            $record['skill_file_key'] = $this->uploadSkillFileFromPackage($snapshot);
+            $record['status'] = 'ready';
+        }
+        $this->writeSkillPreparation($token, $record);
+        return $record;
+    }
+
+    private function skillPublishReceipt(SkillVersionEntity $version): array
+    {
+        return [
+            'skill_code' => $version->getCode(), 'project_id' => (string) $version->getProjectId(),
+            'version_id' => (string) $version->getId(), 'version' => $version->getVersion(),
+            'publish_status' => $version->getPublishStatus()->value, 'review_status' => $version->getReviewStatus()->value,
+            'publish_target_type' => $version->getPublishTargetType()->value,
+            'status' => match (true) {
+                $version->getPublishStatus()->isPublished() => 'published',
+                $version->getPublishStatus() === PublishStatus::OFFLINE => 'offline',
+                default => strtolower($version->getReviewStatus()->value),
+            },
+        ];
+    }
+
+    private function readSkillPreparation(RequestContext $context, string $code, string $token): array
+    {
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $this->assertSkillEditable($isolation, $code);
+        $raw = $this->redis->get('skill:prepare:' . $token);
+        $record = is_string($raw) ? Json::decode($raw) : null;
+        if (! is_array($record) || ($record['skill_code'] ?? '') !== $code
+            || ($record['organization_code'] ?? '') !== $isolation->getCurrentOrganizationCode()
+            || ($record['user_id'] ?? '') !== $isolation->getCurrentUserId()
+            || ($record['expires_at'] ?? 0) < time()) {
+            ExceptionBuilder::throw(SkillErrorCode::PUBLISH_PREPARATION_STALE);
+        }
+        return $record;
+    }
+
+    private function writeSkillPreparation(string $token, array $record): void
+    {
+        // Confirmation must fail closed when Redis is unavailable; the legacy progress cache is best effort.
+        if (! $this->redis->setex('skill:prepare:' . $token, max(1, $record['expires_at'] - time()), Json::encode($record))) {
+            throw new RuntimeException('Could not persist skill preparation');
+        }
+    }
+
+    /** Hash actual cloud bytes, not project timestamps or mutable object keys. */
+    private function skillProjectManifest(int $projectId, string $expectedDir): array
+    {
+        $project = $this->projectDomainService->getProjectNotUserId($projectId);
+        if ($project === null || $this->readSkillProjectConfig($projectId, $project)['skill']['dir'] !== $expectedDir) {
+            ExceptionBuilder::throw(SkillErrorCode::PUBLISH_PREPARATION_STALE);
+        }
+        $directory = $this->taskFileDomainService->findDirectoryByPath($projectId, SkillProjectConfigUtil::SKILLS_ROOT_PATH . '/' . $expectedDir);
+        if ($directory === null) {
+            ExceptionBuilder::throw(SkillErrorCode::PUBLISH_PREPARATION_STALE);
+        }
+        $files = $this->taskFileDomainService->findFilesRecursivelyByParentId($projectId, $directory->getFileId());
+        $byId = [$directory->getFileId() => $directory];
+        foreach ($files as $file) {
+            $byId[$file->getFileId()] = $file;
+        }
+        $tempDir = self::TEMP_DIR_BASE . 'manifest_' . IdGenerator::getUniqueId32();
+        mkdir($tempDir, 0700, true);
+        $manifest = [];
+        try {
+            foreach ($files as $file) {
+                if ($file->getIsDirectory()) {
+                    continue;
+                }
+                $path = $this->buildRelativePathFromSkillDir($file, $directory->getFileId(), $byId);
+                $local = $tempDir . '/content';
+                $this->fileDomainService->downloadByChunks($project->getUserOrganizationCode(), $file->getFileKey(), $local, StorageBucketType::SandBox);
+                $manifest[$path] = hash_file('sha256', $local);
+                unlink($local);
+            }
+            ksort($manifest);
+            return $manifest;
+        } finally {
+            $this->removeDirectory($tempDir);
+        }
     }
 
     /**

@@ -12,6 +12,12 @@ Assess where the user is and jump in from there.
 
 ---
 
+## Conversation and product Skill projects
+
+For a conversation-to-skill request, or editing a Skill through an @ project/file reference, first read `super-magic/references/skills.md`. That workflow governs creation, file ownership, review, confirmation and publication. Infer the useful procedure from the available conversation; ask only for missing choices that affect the result. Create a private draft project, write its files, validate, review the fixed snapshot with `skill-vetter`, and obtain the bound publication confirmation.
+
+In this product workflow, do not require an employee AGENTS.md change or a separate plan approval before creating the draft. Do not ask again whether to upload after the user has requested publication. Edit the existing skill files in place; same-name skills are not permission to overwrite another project. Do not use `upload_skill.py`, re-import a ZIP, clear `.magic`, or install automatically. The general workflow below still applies to standalone skill authoring and package-only requests; its employee registration, directory replacement and upload steps do not override the product project workflow.
+
 ## Language Awareness
 
 - If the user explicitly specifies an output language in the current request, use that language

@@ -422,5 +422,45 @@
     "error.search_unavailable": {
         "zh_CN": "此次搜索未能读取任何文件列表，请检查项目访问权限或稍后重试。",
         "en_US": "No file lists could be read. Check project access or retry later."
+    },
+    "subject.skill": {
+        "zh_CN": "技能",
+        "en_US": "Skill"
+    },
+    "status.published": {
+        "zh_CN": "已发布",
+        "en_US": "Published"
+    },
+    "status.under_review": {
+        "zh_CN": "已提交审核",
+        "en_US": "Submitted for review"
+    },
+    "status.ready": {
+        "zh_CN": "待确认发布",
+        "en_US": "Ready for confirmation"
+    },
+    "status.draft": {
+        "zh_CN": "私有草稿",
+        "en_US": "Private draft"
+    },
+    "skill.confirm": {
+        "zh_CN": "是否发布技能「{{name}}」？\n描述：{{description}}\n版本：{{version}}\n范围：{{audience}}（当前生效范围：{{previous}}）\n共 {{count}} 个文件。\n组织及市场发布需要审核；改为私有会撤下已有市场发布。",
+        "en_US": "Publish skill “{{name}}”?\nDescription: {{description}}\nVersion: {{version}}\nAudience: {{audience}} (current audience: {{previous}})\n{{count}} files.\nOrganization and market submissions require review; changing to private withdraws existing market distribution."
+    },
+    "skill.audience.PRIVATE": {
+        "zh_CN": "私有",
+        "en_US": "Private"
+    },
+    "skill.audience.ORGANIZATION": {
+        "zh_CN": "全组织",
+        "en_US": "Organization"
+    },
+    "skill.audience.MARKET": {
+        "zh_CN": "技能市场",
+        "en_US": "Skill market"
+    },
+    "skill.audience.none": {
+        "zh_CN": "尚未发布",
+        "en_US": "No published version"
     }
 }

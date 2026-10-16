@@ -40,6 +40,7 @@ def _visible_text(value: object, limit: int = 2000) -> str:
 
 # 每个注册工具都声明展示对象；只读取已知业务字段，不把模型正文或 ID 当摘要。
 TOOL_SUBJECTS = {
+    **dict.fromkeys(('list_skills', 'get_skill', 'create_skill', 'prepare_skill_publish', 'publish_skill', 'get_skill_publish_result'), "skill"),
     **dict.fromkeys(("list_workspaces", "get_workspace", "create_workspace", "update_workspace", "archive_workspace", "delete_workspace"), "workspace"),
     **dict.fromkeys(("list_projects", "get_project", "create_project", "update_project", "move_project", "delete_project"), "project"),
     **dict.fromkeys(("list_topics", "get_topic", "create_topic", "update_topic", "archive_topic", "delete_topic", "read_topic_messages", "start_topic_task", "send_topic_message", "list_topic_queued_messages"), "topic"),

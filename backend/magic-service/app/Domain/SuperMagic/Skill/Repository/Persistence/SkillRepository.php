@@ -31,6 +31,18 @@ class SkillRepository extends AbstractRepository implements SkillRepositoryInter
     ) {
     }
 
+    public function lockByCode(SkillDataIsolation $dataIsolation, string $code): void
+    {
+        $this->createBuilder($dataIsolation, $this->skillModel::query())->where('code', $code)->lockForUpdate()->first();
+    }
+
+    public function findByProjectId(SkillDataIsolation $dataIsolation, int $projectId): array
+    {
+        $models = $this->createBuilder($dataIsolation, $this->skillModel::query())
+            ->where('project_id', $projectId)->limit(2)->get();
+        return array_map(fn (array $row) => $this->toEntity($row), $models->toArray());
+    }
+
     /**
      * 根据 code 查找 Skill.
      */

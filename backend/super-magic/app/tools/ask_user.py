@@ -33,7 +33,7 @@ ASK_USER_POLICY_SKIP_SECONDS = 1
 class AskUserParams(BaseToolParams):
     prepared_tool_call_id: str | None = Field(
         default=None,
-        description="Bind a prepared Canvas deletion or batch file rename. Omit questions: the runtime supplies the exact confirmation question. Never invent a confirmation ID.",
+        description="Bind a prepared operation, including skill publication. Omit questions: the runtime supplies the exact confirmation question. Never invent a confirmation ID.",
     )
     questions: str = Field(
         default="",
@@ -209,9 +209,9 @@ When using timeout=60, every question must have a safe `default` attribute. With
         prepared_id = tool_context.arguments.get("prepared_tool_call_id")
         if prepared_id and is_ask_user_allowed_source(source):
             from xml.sax.saxutils import escape
-            from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
+            from app.service.prepared_operation_confirmation import PreparedOperationConfirmation
 
-            confirmation = CanvasOperationConfirmation.from_tool(tool_context)
+            confirmation = PreparedOperationConfirmation.from_tool(tool_context)
             prepared = await confirmation.read(str(prepared_id))
             raw_xml = f'<question type="confirm">{escape(prepared.question)}</question>'
             tool_context.arguments["questions"] = raw_xml
@@ -229,7 +229,7 @@ When using timeout=60, every question must have a safe `default` attribute. With
         if prepared_id:
             parsed = tool_context.arguments["parsed_questions"]
             await confirmation.bind(str(prepared_id), tool_context.tool_call_id, parsed[0]["sub_id"])
-            # 画布危险操作等待真人决定，默认不以超时答案代替确认。
+            # 准备好的操作等待真人决定，不以超时答案代替确认。
             tool_context.arguments["expires_at"] = 0
             return
 

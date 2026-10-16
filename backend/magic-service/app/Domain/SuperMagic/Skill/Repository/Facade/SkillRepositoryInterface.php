@@ -17,6 +17,11 @@ use App\Infrastructure\Core\ValueObject\Page;
  */
 interface SkillRepositoryInterface
 {
+    public function lockByCode(SkillDataIsolation $dataIsolation, string $code): void;
+
+    /** @return SkillEntity[] */
+    public function findByProjectId(SkillDataIsolation $dataIsolation, int $projectId): array;
+
     /**
      * 根据 code 查找 Skill.
      *

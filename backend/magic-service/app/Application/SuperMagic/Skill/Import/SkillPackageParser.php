@@ -15,6 +15,9 @@ use App\Infrastructure\Core\ValueObject\StorageBucketType;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\SkillUtil;
 use App\Infrastructure\Util\ZipUtil;
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use RuntimeException;
 
 final class SkillPackageParser
@@ -30,7 +33,7 @@ final class SkillPackageParser
     ) {
     }
 
-    public function parseByFileKey(string $organizationCode, string $fileKey): SkillPackageDTO
+    public function parseByFileKey(string $organizationCode, string $fileKey, bool $includeManifest = false): SkillPackageDTO
     {
         $tempDir = self::TEMP_DIR_BASE . 'skill_download_' . IdGenerator::getUniqueId32();
         if (! is_dir($tempDir)) {
@@ -49,13 +52,13 @@ final class SkillPackageParser
                 ExceptionBuilder::throw(SkillErrorCode::FILE_DOWNLOAD_FAILED, 'skill.file_download_failed');
             }
 
-            return $this->parseFile($filePath, $fileKey);
+            return $this->parseFile($filePath, $fileKey, $includeManifest);
         } finally {
             $this->removeDirectory($tempDir);
         }
     }
 
-    public function parseFile(string $filePath, string $fileKey = ''): SkillPackageDTO
+    public function parseFile(string $filePath, string $fileKey = '', bool $includeManifest = false): SkillPackageDTO
     {
         $this->validateFile($filePath);
         $extractDir = self::TEMP_DIR_BASE . 'skill_import_' . IdGenerator::getUniqueId32();
@@ -67,7 +70,21 @@ final class SkillPackageParser
             }
 
             [$packageName, $packageDescription] = SkillUtil::parseSkillMd($skillDir . '/SKILL.md');
-            return new SkillPackageDTO($fileKey, $packageName, $packageDescription);
+            if (! $includeManifest) {
+                return new SkillPackageDTO($fileKey, $packageName, $packageDescription);
+            }
+            $manifest = [];
+            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($skillDir, FilesystemIterator::SKIP_DOTS));
+            foreach ($iterator as $file) {
+                if ($file->isLink()) {
+                    throw new RuntimeException('Skill packages cannot contain symbolic links');
+                }
+                if ($file->isFile()) {
+                    $manifest[substr($file->getPathname(), strlen($skillDir) + 1)] = hash_file('sha256', $file->getPathname());
+                }
+            }
+            ksort($manifest);
+            return new SkillPackageDTO($fileKey, $packageName, $packageDescription, manifest: $manifest, sha256: (string) hash_file('sha256', $filePath));
         } catch (RuntimeException $e) {
             if (str_contains($e->getMessage(), 'exceeds maximum')) {
                 ExceptionBuilder::throw(SkillErrorCode::EXTRACTED_FILE_TOO_LARGE, 'skill.extracted_file_too_large');

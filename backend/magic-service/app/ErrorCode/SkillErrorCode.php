@@ -139,4 +139,10 @@ enum SkillErrorCode: int
 
     #[ErrorMessage('skill.official_skill_not_found')]
     case OFFICIAL_SKILL_NOT_FOUND = 51280;
+
+    #[ErrorMessage('skill.publish_preparation_stale')]
+    case PUBLISH_PREPARATION_STALE = 51281;
+
+    #[ErrorMessage('skill.project_binding_conflict')]
+    case PROJECT_BINDING_CONFLICT = 51282;
 }

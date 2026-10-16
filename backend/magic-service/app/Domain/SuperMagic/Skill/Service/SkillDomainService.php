@@ -89,6 +89,23 @@ class SkillDomainService
         return $this->skillRepository->findByCode($dataIsolation, $code);
     }
 
+    public function lockSkill(SkillDataIsolation $dataIsolation, string $code): void
+    {
+        $this->skillRepository->lockByCode($dataIsolation, $code);
+    }
+
+    public function findSkillByProjectId(SkillDataIsolation $dataIsolation, int $projectId): SkillEntity
+    {
+        $skills = $this->skillRepository->findByProjectId($dataIsolation, $projectId);
+        if (count($skills) > 1) {
+            ExceptionBuilder::throw(SkillErrorCode::PROJECT_BINDING_CONFLICT);
+        }
+        if ($skills === []) {
+            ExceptionBuilder::throw(SkillErrorCode::SKILL_NOT_FOUND, 'skill.skill_not_found');
+        }
+        return $skills[0];
+    }
+
     /**
      * 根据 code 列表批量查询技能.
      *
