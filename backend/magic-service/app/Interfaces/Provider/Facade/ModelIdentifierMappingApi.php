@@ -67,37 +67,41 @@ class ModelIdentifierMappingApi extends AbstractApi
      * 校验单组状态并更新映射组启停状态。
      */
     #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL, MagicOperationEnum::EDIT)]
-    public function updateStatus(UpdateModelIdentifierMappingStatusRequest $request, string $groupId): void
+    public function updateStatus(UpdateModelIdentifierMappingStatusRequest $request, string $groupId): array
     {
         $this->appService->updateStatus($this->getAuthorization(), $groupId, $request->getStatus());
+        return [];
     }
 
     /**
      * 校验批量状态参数并执行批量启停。
      */
     #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL, MagicOperationEnum::EDIT)]
-    public function batchStatus(BatchModelIdentifierMappingGroupsRequest $request): void
+    public function batchStatus(BatchModelIdentifierMappingGroupsRequest $request): array
     {
         $this->appService->batchUpdateStatus($this->getAuthorization(), $request->toDTO());
+        return [];
     }
 
     /**
      * 删除指定映射组。
      */
     #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL, MagicOperationEnum::EDIT)]
-    public function delete(ModelIdentifierMappingGroupIdRequest $request, string $groupId): void
+    public function delete(ModelIdentifierMappingGroupIdRequest $request, string $groupId): array
     {
         $request->validated();
         $this->appService->delete($this->getAuthorization(), $groupId);
+        return [];
     }
 
     /**
      * 校验批量删除参数并删除映射组。
      */
     #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL, MagicOperationEnum::EDIT)]
-    public function batchDelete(BatchModelIdentifierMappingGroupsRequest $request): void
+    public function batchDelete(BatchModelIdentifierMappingGroupsRequest $request): array
     {
         $this->appService->batchDelete($this->getAuthorization(), $request->toDTO());
+        return [];
     }
 
     /**
