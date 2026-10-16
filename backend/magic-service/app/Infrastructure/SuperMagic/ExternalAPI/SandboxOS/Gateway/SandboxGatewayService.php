@@ -474,7 +474,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
     public function listSandboxes(array $statuses = []): SandboxListResult
     {
         $statuses = array_values(array_unique(array_filter(
-            array_map(static fn (mixed $status): string => is_string($status) ? trim($status) : '', $statuses),
+            array_map(static fn (string $status): string => trim($status), $statuses),
             static fn (string $status): bool => $status !== ''
         )));
 
