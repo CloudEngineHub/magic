@@ -5,12 +5,6 @@
 		"retry": "Retry",
 		"retryHint": "Please try again later"
 	},
-	"freePointsReward": {
-		"description": "Today's reward points expire at midnight. Come back tomorrow for more!",
-		"pointsCredited": "Points Credited",
-		"title": "Login Reward",
-		"useNow": "Use Now"
-	},
 	"magicDatePicker": {
 		"selectDate": "Select date"
 	},
