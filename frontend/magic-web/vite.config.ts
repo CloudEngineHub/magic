@@ -95,7 +95,7 @@ export function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: s
 					},
 					assetFileNames: "assets/[name]-[hash][extname]",
 					codeSplitting: {
-						groups: createCodeSplittingGroups(),
+						groups: createCodeSplittingGroups(__dirname),
 					},
 				},
 			},

@@ -12,6 +12,20 @@ import { isPrivateDeployment, env } from "@/utils/env"
 import { useOrganization, useAccount, useCurrentMagicOrganization } from "@/models/user/hooks"
 import useNavigate from "@/routes/hooks/useNavigate"
 import { useSafeArea } from "@/providers/AppearanceProvider/hooks/useSafeArea"
+import { DEFAULT_LOCALE, SupportLocales, SUPPORT_LOCALES } from "@/constants/locale"
+
+/**
+ * The admin console ships zh_CN / en_US translations only. Map the global
+ * language onto that pair so an unsupported stored preference falls back to the
+ * app default instead of reaching the admin provider as an unknown value.
+ */
+function resolveAdminLanguage(language?: string): LanguageType {
+	if (SUPPORT_LOCALES.includes(language as SupportLocales)) {
+		return language as LanguageType
+	}
+	if (language?.startsWith("zh")) return LanguageType.zh_CN
+	return DEFAULT_LOCALE.startsWith("zh") ? LanguageType.zh_CN : LanguageType.en_US
+}
 
 const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 	const { prefersColorScheme } = useTheme()
@@ -34,11 +48,12 @@ const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 	}, [accounts, userInfo])
 
 	const lang = useGlobalLanguage(false)
+	const adminLanguage = useMemo(() => resolveAdminLanguage(lang), [lang])
 	const platformName = tMainCommon("platform.name")
 
 	const config: AdminProviderProps = useMemo(
 		() => ({
-			language: lang as LanguageType,
+			language: adminLanguage,
 			theme: prefersColorScheme,
 			platformName,
 			apiClients: {
@@ -74,7 +89,7 @@ const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 			},
 		}),
 		[
-			lang,
+			adminLanguage,
 			prefersColorScheme,
 			clusterCode,
 			isPersonalOrganization,
@@ -94,7 +109,7 @@ const MagicAdminProvider = observer(({ children }: PropsWithChildren) => {
 	return (
 		<AdminProvider {...config}>
 			<AdminComponentsProvider
-				language={lang as LanguageType}
+				language={adminLanguage}
 				theme={prefersColorScheme as ThemeType}
 			>
 				{children}
