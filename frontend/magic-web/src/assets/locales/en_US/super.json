@@ -404,11 +404,8 @@
 	},
 	"collaborationManage": {
 		"collaboratorList": {
-			"batchAction": "Batch Actions",
-			"empty": "No collaborators",
 			"joinedViaInviteLink": "Joined via invite link",
 			"owner": "Owner",
-			"remove": "Remove",
 			"selectPlaceholder": "Select",
 			"title": "Collaborators"
 		},
