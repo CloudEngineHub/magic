@@ -203,6 +203,7 @@
 		"allSubscriptionExpiredTime": "Expired Time {{date}}",
 		"allSubscriptionPackage": "Plan {{index}}",
 		"allowPopups": "Please allow new windows to open",
+		"applyRefund": "Apply Refund",
 		"approximateMonthPrice": "Around {{price}}/Month",
 		"availableLimit": "Available Limit",
 		"availablePoints": "Available Points",
@@ -430,6 +431,7 @@
 		"oneTask": "1 Task",
 		"onlyPersonalSubscription": "Personal Only",
 		"onlyTeamSubscription": "Team Subscription Only",
+		"openPackage": "Subscribe",
 		"operation": "Operation",
 		"orderGroups": {
 			"earlier": "Earlier",

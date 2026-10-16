@@ -5,12 +5,6 @@
 		"retry": "重试",
 		"retryHint": "请稍后重试"
 	},
-	"freePointsReward": {
-		"description": "奖励的积分在今日内有效，明天登录还能领取新的积分哦！",
-		"pointsCredited": "积分到账",
-		"title": "每日登录奖励",
-		"useNow": "马上去使用"
-	},
 	"magicDatePicker": {
 		"selectDate": "选择日期"
 	},

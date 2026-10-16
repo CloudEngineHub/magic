@@ -833,6 +833,7 @@
 	},
 	"storyboard": {
 		"addShot": "Add shot",
+		"aspectRatio": "Aspect ratio",
 		"defaultName": "Storyboard generation",
 		"descriptionPlaceholder": "Describe this shot",
 		"empty": "No shots yet",

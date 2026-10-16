@@ -81,6 +81,7 @@
 		"label": "手机号码",
 		"placeholder": "请输入手机号码"
 	},
+	"pleaseSendTo": "请输入并发送至",
 	"pleaseSendToEnd": "请输入发送至 {{phone}} 的 {{count}} 位验证码，有效期 {{minutes}} 分钟。",
 	"popupLoginErrorCodeLabel": "错误码",
 	"popupLoginErrorDefaultMessage": "登录过程中发生异常，请返回主窗口后重试。",
