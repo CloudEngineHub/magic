@@ -249,8 +249,9 @@ export function ModelReasoningDetails({
 				ref={detailRef}
 				side={mobile ? "top" : "right"}
 				align="start"
-				sideOffset={4}
-				className="w-64 max-w-[calc(100vw-32px)] p-3 duration-100"
+				sideOffset={mobile ? 8 : 0}
+				collisionPadding={12}
+				className="w-64 max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border-border/80 bg-card p-0 shadow-xl duration-100"
 				onPointerEnter={keepOpen}
 				onPointerLeave={scheduleClose}
 				onFocusCapture={keepOpen}
@@ -296,10 +297,12 @@ export function ModelReasoningDetails({
 					</>
 				) : (
 					<>
-						<div className="break-words text-sm font-semibold">{model.model_name}</div>
-						{description && (
-							<ScrollArea viewportClassName="max-h-48">
-								<div className="mt-2">
+						<div className="border-b border-border/70 px-4 py-3">
+							<div className="break-words text-sm font-semibold leading-5">
+								{model.model_name}
+							</div>
+							{description && (
+								<ScrollArea viewportClassName="mt-1.5 max-h-28">
 									<CollapsibleDescription
 										description={description}
 										isExpanded={descriptionExpanded}
@@ -311,22 +314,24 @@ export function ModelReasoningDetails({
 										)}
 										onToggle={() => setDescriptionExpanded((value) => !value)}
 									/>
-								</div>
-							</ScrollArea>
-						)}
+								</ScrollArea>
+							)}
+						</div>
 						{hasMultiplier && (
-							<div className="mt-3 border-t px-2 py-3 text-sm">
+							<div className="border-b border-border/70 px-4 py-3 text-sm">
 								<div className="flex items-center justify-between">
-									<span>{t("messageEditor.modelSwitch.billingMultiplier")}</span>
+									<span className="text-muted-foreground">
+										{t("messageEditor.modelSwitch.billingMultiplier")}
+									</span>
 									<ModelBillingMultiplier value={model.billing_multiplier} />
 								</div>
-								<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+								<p className="mt-1 text-[11px] leading-4 text-muted-foreground">
 									{t("messageEditor.modelSwitch.billingMultiplierHint")}
 								</p>
 							</div>
 						)}
 						{levels.length > 0 && (
-							<div className={hasMultiplier ? undefined : "mt-3 border-t pt-3"}>
+							<div className="px-3 py-3">
 								{mobile ? (
 									strengthButton
 								) : (

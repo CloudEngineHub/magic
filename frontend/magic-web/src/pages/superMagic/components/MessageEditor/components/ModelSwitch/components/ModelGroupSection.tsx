@@ -52,9 +52,9 @@ export function ModelGroupSection({
 	}
 
 	return (
-		<FlexBox gap={4} vertical className="last:border-b-0 last:pb-0">
+		<FlexBox gap={3} vertical className="last:border-b-0 last:pb-0">
 			<ProviderName item={item.group} />
-			<div className="flex flex-col gap-1">
+			<div className="flex flex-col gap-0.5">
 				{item.displayModels.map((model) => {
 					const isSelected = selectedModel?.model_id === model.model_id
 					const isDisabled = isModelDisabled(model)
@@ -68,10 +68,11 @@ export function ModelGroupSection({
 							key={model.model_id}
 							ref={isSelected ? selectedItemRef : null}
 							className={cn(
-								"flex items-center rounded px-3 py-2",
-								"relative min-h-11 cursor-pointer gap-2.5 transition-colors duration-100",
+								"relative flex min-h-10 items-center gap-3 rounded-lg border border-transparent px-3 py-1.5",
+								"cursor-pointer transition-colors duration-100",
 								"group",
-								"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent",
+								"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent/70",
+								isSelected && "border-border/60 bg-accent/60 shadow-xs",
 								isDisabled && "cursor-not-allowed opacity-50",
 							)}
 							onClick={() => onModelClick(model)}
@@ -132,7 +133,9 @@ export function ModelGroupSection({
 								)}
 							</FlexBox>
 							{isLanguageModel && (
-								<ModelBillingMultiplier value={model.billing_multiplier} />
+								<div className="flex min-w-[3.5rem] shrink-0 justify-end">
+									<ModelBillingMultiplier value={model.billing_multiplier} />
+								</div>
 							)}
 							<Checkbox
 								checked={isSelected}

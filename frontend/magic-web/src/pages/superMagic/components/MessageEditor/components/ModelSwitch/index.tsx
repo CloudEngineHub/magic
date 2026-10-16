@@ -503,7 +503,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 					<DropdownMenuContent
 						side={getSide()}
 						align="start"
-						className="z-dropdown max-h-[min(90dvh,var(--radix-dropdown-menu-content-available-height))] w-[380px] overflow-hidden p-0"
+						className="z-dropdown max-h-[min(90dvh,var(--radix-dropdown-menu-content-available-height))] w-[380px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border-border/80 bg-card p-0 shadow-lg"
 						sideOffset={4}
 						collisionPadding={12}
 						onInteractOutside={(event) => {
