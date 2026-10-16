@@ -10,6 +10,11 @@
 		"confirm": "Confirm"
 	},
 	"copyright": "Copyright © 2023 Guangdong Lighthouse Engine Technology Co., Ltd. All Rights Reserved.",
+	"device": {
+		"app": "client",
+		"dingTalk": "DingTalk",
+		"unknown": "unknown"
+	},
 	"hi": "👋 Hi, my friend",
 	"login": "Log in",
 	"magicOrganizationSyncStep": {

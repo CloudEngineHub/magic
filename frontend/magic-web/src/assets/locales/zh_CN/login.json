@@ -10,6 +10,11 @@
 		"confirm": "确认"
 	},
 	"copyright": "Copyright © 2023 广东灯塔引擎科技有限公司 All Rights Reserved.",
+	"device": {
+		"app": "客户端",
+		"dingTalk": "钉钉",
+		"unknown": "未知"
+	},
 	"hi": "👋 嗨，我的朋友",
 	"login": "登录",
 	"magicOrganizationSyncStep": {
