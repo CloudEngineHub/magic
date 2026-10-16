@@ -155,7 +155,8 @@
 			"markAllRead": "系统通知已全部标记为已读，授权邀请仍需处理",
 			"rejected": "已拒绝邀请，并通知邀请人",
 			"withdrawn": "该消息已撤回"
-		}
+		},
+		"viewProject": "查看项目"
 	},
 	"mobileShell": {
 		"themeToggle": {

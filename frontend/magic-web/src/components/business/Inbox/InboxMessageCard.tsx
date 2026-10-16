@@ -1,9 +1,13 @@
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Check, X } from "lucide-react"
+import { Link } from "react-router-dom"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
+import { RouteName } from "@/routes/constants"
+import { getRoutePath } from "@/routes/history/helpers"
+import { getInboxProjectId } from "./getInboxProjectId"
 import InboxMessageIcon from "./InboxMessageIcon"
 import { resolveInboxCopy } from "./resolveInboxCopy"
 import { inboxStore } from "./store"
@@ -27,6 +31,13 @@ const InboxMessageCard = observer(function InboxMessageCard({
 	const organization = message.payload.organization_name
 	const permission = copy.payload.permission
 	const points = message.payload.points
+	const projectId = getInboxProjectId(message)
+	const projectPath = projectId
+		? getRoutePath({
+				name: RouteName.SuperWorkspaceProjectState,
+				params: { projectId: encodeURIComponent(projectId) },
+			})
+		: null
 	const statusLabel =
 		message.auth_status === "accepted"
 			? t("inbox.meta.accepted")
@@ -108,6 +119,26 @@ const InboxMessageCard = observer(function InboxMessageCard({
 				<p className="mt-[5px] break-words text-[13px] leading-[1.55] text-[#7a8394] dark:text-muted-foreground">
 					{copy.body}
 				</p>
+				{projectPath && (
+					<Link
+						to={projectPath}
+						className="mt-1.5 inline-block rounded-sm text-[13px] text-primary underline underline-offset-4 hover:text-primary/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+						onClick={(event) => {
+							// Keep the inbox open in this tab when a modifier opens another tab/window.
+							if (
+								event.button === 0 &&
+								!event.metaKey &&
+								!event.ctrlKey &&
+								!event.shiftKey &&
+								!event.altKey
+							) {
+								inboxStore.close()
+							}
+						}}
+					>
+						{t("inbox.viewProject")}
+					</Link>
+				)}
 				{message.category === "auth" && (organization || permission) ? (
 					<div
 						className={cn(

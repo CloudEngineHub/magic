@@ -155,7 +155,8 @@
 			"markAllRead": "System notifications marked as read. Approvals still need action.",
 			"rejected": "Invite declined. The sender will be notified.",
 			"withdrawn": "This message was withdrawn"
-		}
+		},
+		"viewProject": "View project"
 	},
 	"mobileShell": {
 		"themeToggle": {
