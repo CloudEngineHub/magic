@@ -259,7 +259,11 @@ function MicroAppPageMobileInner({
 			ensureConversation={ensureMobileHostConversation}
 			requestPreviewMode={requestPreviewMode}
 		>
-			<MicroAppPermissionsProvider projectId={projectId} attachmentList={attachmentList}>
+			<MicroAppPermissionsProvider
+				appId={appId}
+				projectId={projectId}
+				attachmentList={attachmentList}
+			>
 				<FileAccessProvider>
 					<div
 						className="absolute inset-0 flex h-full min-h-0 w-full flex-col overflow-hidden bg-mobile-background"

@@ -15,6 +15,13 @@ export interface HtmlPermissionGrantIdentity {
 	appRootDir: string
 	entryPath: string
 	appFingerprint: string
+	/**
+	 * Stable identity of a standalone micro app. When set (or when `entryFileId` is set) the
+	 * grant key ignores path and content, so edits, renames and moves keep existing grants.
+	 */
+	appId?: string
+	/** Stable file id of an ordinary HTML app entry; used when no `appId` exists. */
+	entryFileId?: string
 }
 
 export interface HtmlPermissionGrant extends HtmlPermissionGrantIdentity {
@@ -41,6 +48,21 @@ export function isHtmlPermissionGrantActive(grant: HtmlPermissionGrant, now: num
 }
 
 export function createHtmlPermissionAppKey(identity: HtmlPermissionGrantIdentity): string {
+	if (identity.appId || identity.entryFileId) {
+		// "v3" keeps stable-identity keys disjoint from legacy fingerprint keys below.
+		return sha256(
+			JSON.stringify([
+				"v3",
+				identity.mode,
+				identity.userId,
+				identity.projectId,
+				identity.appId || "",
+				identity.entryFileId || "",
+			]),
+		).toString()
+	}
+	// Legacy key (path + content fingerprint). Still used to find and migrate grants saved by
+	// earlier versions; never produced for new grants.
 	const source = JSON.stringify([
 		identity.mode,
 		identity.userId,

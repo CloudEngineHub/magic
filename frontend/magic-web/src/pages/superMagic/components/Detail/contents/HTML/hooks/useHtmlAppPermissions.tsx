@@ -49,6 +49,8 @@ interface UseHtmlAppPermissionsOptions {
 	projectId?: string
 	fileList: HtmlAppFileItem[]
 	enabled?: boolean
+	/** Standalone micro app id; when set, authorization is keyed on it instead of the entry file. */
+	appId?: string
 }
 
 export function shouldShowHtmlPermissionManager(
@@ -65,6 +67,7 @@ export function useHtmlAppPermissions({
 	projectId,
 	fileList,
 	enabled = true,
+	appId,
 }: UseHtmlAppPermissionsOptions) {
 	const { t } = useTranslation("super")
 	const fileAccess = useFileAccess()
@@ -121,6 +124,16 @@ export function useHtmlAppPermissions({
 	const appConfigFileUpdatedAt = appConfigFile?.updated_at || ""
 
 	const userId = userStore.user.userInfo?.user_id?.trim() || ""
+	// The entry file id is the stable identity of an ordinary HTML app: it survives edits,
+	// renames and moves, while copies and re-created files get a new id.
+	const entryFileId = useMemo(() => {
+		if (appId) return ""
+		return (
+			fileList.find(
+				(file) => file?.relative_file_path?.replace(/^\/+/, "") === cleanedEntryPath,
+			)?.file_id || ""
+		)
+	}, [appId, cleanedEntryPath, fileList])
 	const htmlAppInstance = useMemo(() => {
 		return {
 			userId,
@@ -128,36 +141,51 @@ export function useHtmlAppPermissions({
 			appRootDir,
 			entryPath: cleanedEntryPath,
 			content: rawSourceCode || content || "",
-			runtimeFingerprint: JSON.stringify(
-				fileList
-					.filter((file) => {
-						const filePath = file?.relative_file_path || ""
-						return (
-							isFileInsideHtmlApp(filePath, appRootDir) &&
-							isHtmlOrJavaScriptFile(filePath)
-						)
-					})
-					.map((file) => ({
-						fileId: file.file_id,
-						path: file.relative_file_path.replace(/^\/+/, ""),
-						updatedAt: file.updated_at || "",
-					}))
-					.sort((a, b) => a.path.localeCompare(b.path)),
-			),
+			appId: appId || "",
+			entryFileId,
+			// Only needed to adopt grants saved by earlier (fingerprint-keyed) versions, so it is
+			// computed lazily instead of hashing the whole file list on every update.
+			getRuntimeFingerprint: () =>
+				JSON.stringify(
+					fileList
+						.filter((file) => {
+							const filePath = file?.relative_file_path || ""
+							return (
+								isFileInsideHtmlApp(filePath, appRootDir) &&
+								isHtmlOrJavaScriptFile(filePath)
+							)
+						})
+						.map((file) => ({
+							fileId: file.file_id,
+							path: file.relative_file_path.replace(/^\/+/, ""),
+							updatedAt: file.updated_at || "",
+						}))
+						.sort((a, b) => a.path.localeCompare(b.path)),
+				),
 		}
-	}, [appRootDir, cleanedEntryPath, content, fileList, projectId, rawSourceCode, userId])
+	}, [
+		appId,
+		appRootDir,
+		cleanedEntryPath,
+		content,
+		entryFileId,
+		fileList,
+		projectId,
+		rawSourceCode,
+		userId,
+	])
 
 	const htmlPermissionGrantStore = useMemo(() => getHtmlPermissionGrantStore(), [])
-	// Queue lifetime follows the app identity and executable runtime so stale
-	// requests cannot authorize a different HTML app after a renderer switch.
+	// Queue lifetime follows the app identity only. File edits must not rebuild it, otherwise an
+	// in-flight authorization is aborted every time the user or agent saves a file.
 	const htmlPermissionAuthorizationQueue = useMemo(
 		() => new HtmlPermissionAuthorizationQueue(),
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[
 			htmlAppInstanceKey,
 			userId,
-			htmlAppInstance.content,
-			htmlAppInstance.runtimeFingerprint,
+			htmlAppInstance.appId,
+			htmlAppInstance.entryFileId,
 			htmlAppConfigState,
 			enabled,
 		],

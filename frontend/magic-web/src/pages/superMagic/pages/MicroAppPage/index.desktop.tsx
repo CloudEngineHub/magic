@@ -383,7 +383,11 @@ function MicroAppPageInner({
 			ensureConversation={ensureHostConversation}
 			requestPreviewMode={requestPreviewMode}
 		>
-			<MicroAppPermissionsProvider projectId={projectId} attachmentList={attachmentList}>
+			<MicroAppPermissionsProvider
+				appId={appId}
+				projectId={projectId}
+				attachmentList={attachmentList}
+			>
 				<FileAccessProvider>
 					<div
 						className={cn(

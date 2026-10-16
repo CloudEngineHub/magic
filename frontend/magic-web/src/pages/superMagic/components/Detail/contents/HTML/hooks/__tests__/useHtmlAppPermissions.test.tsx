@@ -152,7 +152,7 @@ describe("useHtmlAppPermissions", () => {
 		expect(mocks.getIframeDownloadUrl).toHaveBeenCalledTimes(1)
 	})
 
-	it("only fingerprints HTML and JavaScript files", async () => {
+	it("keys grants on the entry file id so edits to any file keep the identity", async () => {
 		const initialFileList = [
 			{
 				file_id: "entry-file",
@@ -182,7 +182,8 @@ describe("useHtmlAppPermissions", () => {
 		)
 
 		await waitFor(() => expect(mocks.grantStore.getAppGrants).toHaveBeenCalled())
-		const initialFingerprint = mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]
+		const initialIdentity = mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]
+		expect(initialIdentity).toMatchObject({ entryFileId: "entry-file", appFingerprint: "" })
 		mocks.grantStore.getAppGrants.mockClear()
 
 		rerender({
@@ -194,7 +195,7 @@ describe("useHtmlAppPermissions", () => {
 		})
 
 		await waitFor(() => expect(mocks.grantStore.getAppGrants).toHaveBeenCalled())
-		expect(mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]).toEqual(initialFingerprint)
+		expect(mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]).toEqual(initialIdentity)
 
 		mocks.grantStore.getAppGrants.mockClear()
 		rerender({
@@ -206,7 +207,8 @@ describe("useHtmlAppPermissions", () => {
 		})
 
 		await waitFor(() => expect(mocks.grantStore.getAppGrants).toHaveBeenCalled())
-		expect(mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]).not.toEqual(initialFingerprint)
+		// Editing an executable sibling must not change the identity grants are keyed on.
+		expect(mocks.grantStore.getAppGrants.mock.calls.at(-1)?.[0]).toEqual(initialIdentity)
 	})
 
 	it("does not expose manageable grants for legacy apps without saved authorization", async () => {

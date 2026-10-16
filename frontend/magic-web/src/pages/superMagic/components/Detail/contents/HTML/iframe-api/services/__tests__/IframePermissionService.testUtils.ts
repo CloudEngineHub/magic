@@ -5,6 +5,7 @@ import {
 	type IframePermissionServiceConfig,
 } from "../IframePermissionService"
 import {
+	createHtmlPermissionAppKey,
 	isHtmlPermissionGrantActive,
 	type HtmlPermissionGrant,
 	type HtmlPermissionGrantIdentity,
@@ -60,16 +61,7 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 	})
 	save = vi.fn(async (grant: HtmlPermissionGrant) => {
 		this.grants = this.grants.filter(
-			(item) =>
-				!(
-					item.mode === grant.mode &&
-					item.userId === grant.userId &&
-					item.projectId === grant.projectId &&
-					item.appRootDir === grant.appRootDir &&
-					item.entryPath === grant.entryPath &&
-					item.appFingerprint === grant.appFingerprint &&
-					item.scope === grant.scope
-				),
+			(item) => !(matchesIdentity(item, grant) && item.scope === grant.scope),
 		)
 		this.grants.push(grant)
 		return true
@@ -93,14 +85,8 @@ export class MemoryGrantStore implements HtmlPermissionGrantStore {
 }
 
 function matchesIdentity(grant: HtmlPermissionGrant, identity: HtmlPermissionGrantIdentity) {
-	return (
-		grant.mode === identity.mode &&
-		grant.userId === identity.userId &&
-		grant.projectId === identity.projectId &&
-		grant.appRootDir === identity.appRootDir &&
-		grant.entryPath === identity.entryPath &&
-		grant.appFingerprint === identity.appFingerprint
-	)
+	// Same key derivation as the real stores, so stable-id and legacy identities stay distinct.
+	return createHtmlPermissionAppKey(grant) === createHtmlPermissionAppKey(identity)
 }
 
 export function createService(overrides: Partial<IframePermissionServiceConfig> = {}) {
@@ -130,6 +116,7 @@ export function createService(overrides: Partial<IframePermissionServiceConfig> 
 			projectId: "project-1",
 			appRootDir: "app/",
 			entryPath: "app/index.html",
+			entryFileId: "file-1",
 			content: "<html>manifest</html>",
 		},
 		...overrides,

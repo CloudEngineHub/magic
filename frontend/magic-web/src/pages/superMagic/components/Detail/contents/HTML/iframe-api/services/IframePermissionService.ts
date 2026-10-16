@@ -1,6 +1,7 @@
 import { htmlMicroAppPreviewLogger } from "../../utils/htmlMicroAppPreviewLogger"
 import type { HTMLAppConfig, HtmlPermissionScope } from "../types"
 import {
+	createHtmlPermissionAppKey,
 	type HtmlPermissionGrant,
 	type HtmlPermissionGrantIdentity,
 	type HtmlPermissionGrantStore,
@@ -60,8 +61,19 @@ export interface IframePermissionAppInstance {
 	appRootDir: string
 	entryPath: string
 	content: string
-	/** Stable versions of executable files belonging to this HTML app. */
+	/**
+	 * Stable micro-app id. Grants are keyed on it (not on path or content), so editing,
+	 * renaming or moving files keeps existing authorization.
+	 */
+	appId?: string
+	/** Stable file id of the HTML entry for ordinary HTML apps without an `appId`. */
+	entryFileId?: string
+	/**
+	 * Only used to locate grants saved by earlier versions, which were keyed on a content
+	 * fingerprint. Prefer the lazy getter so the file list is not hashed on every render.
+	 */
 	runtimeFingerprint?: string
+	getRuntimeFingerprint?: () => string
 }
 
 export type HtmlAppConfigState =
@@ -151,7 +163,7 @@ export class IframePermissionService {
 		const context = await this.resolveContext()
 		if (!context || this.authorizationQueue.isDisposed || signal.aborted) return false
 
-		const { appConfig, appConfigLoadError, mode, appFingerprint, declaration } = context
+		const { appConfig, appConfigLoadError, mode, declaration } = context
 		if (appConfigLoadError) {
 			htmlMicroAppPreviewLogger.warn(
 				"Permission fallback: app.json unavailable, using legacy confirmation",
@@ -171,13 +183,15 @@ export class IframePermissionService {
 			}
 		}
 
-		const identity = this.buildGrantIdentity(mode, appFingerprint)
+		const identity = this.buildGrantIdentity(mode)
 		const persistenceAvailable =
 			this.canPersistGrant(identity) && (await this.cfg.grantStore.isPersistentAvailable())
 		if (this.authorizationQueue.isDisposed || signal.aborted) return false
 		if (options.allowOnce === false && !persistenceAvailable) return false
 		const existingScopes = new Set(
-			(await this.cfg.grantStore.getAppGrants(identity)).map((grant) => grant.scope),
+			(await this.loadAppGrants(identity, mode, declaration.declaredScopes)).map(
+				(grant) => grant.scope,
+			),
 		)
 		if (this.authorizationQueue.isDisposed || signal.aborted) return false
 		const missingScopes = requestedScopes.filter((scope) => !existingScopes.has(scope))
@@ -255,9 +269,8 @@ export class IframePermissionService {
 		const appConfig = configState.status === "loaded" ? configState.config : null
 		const mode: HtmlPermissionMode = appConfig ? "manifest" : "legacy"
 		const declaration = analyzeHtmlPermissionDeclarations(appConfig)
-		const appFingerprint = await this.getAppFingerprint(mode, appConfig)
-		const identity = this.buildGrantIdentity(mode, appFingerprint)
-		const grants = await this.cfg.grantStore.getAppGrants(identity)
+		const identity = this.buildGrantIdentity(mode)
+		const grants = await this.loadAppGrants(identity, mode, declaration.declaredScopes)
 
 		return this.createSnapshot(mode, appConfig, declaration, grants)
 	}
@@ -265,10 +278,9 @@ export class IframePermissionService {
 	async revoke(scope: HtmlPermissionScope): Promise<HtmlPermissionSnapshot> {
 		const context = await this.resolveContext()
 		if (context) {
-			await this.cfg.grantStore.remove(
-				this.buildGrantIdentity(context.mode, context.appFingerprint),
-				scope,
-			)
+			await this.cfg.grantStore.remove(this.buildGrantIdentity(context.mode), scope)
+			// A revoked grant must not come back through legacy migration.
+			await this.removeLegacyGrants(context.mode, context.appConfig, scope)
 			this.cfg.onGrantsChanged?.()
 		}
 		return this.getPermissionSnapshot()
@@ -283,7 +295,7 @@ export class IframePermissionService {
 		const context = await this.resolveContext()
 		if (!context) throw new Error("Permission context is not ready")
 
-		const { mode, appFingerprint, declaration } = context
+		const { mode, declaration } = context
 		if (mode === "manifest" && !declaration.declaredScopes.includes(scope)) {
 			throw new Error("Permission scope is not declared")
 		}
@@ -298,8 +310,10 @@ export class IframePermissionService {
 			throw new Error("Permission duration is not allowed")
 		}
 
-		const identity = this.buildGrantIdentity(mode, appFingerprint)
-		const existingGrant = await this.cfg.grantStore.getGrant(identity, scope)
+		const identity = this.buildGrantIdentity(mode)
+		const existingGrant = (
+			await this.loadAppGrants(identity, mode, declaration.declaredScopes)
+		).find((grant) => grant.scope === scope)
 		if (!existingGrant) throw new Error("Active permission grant was not found")
 
 		const saved = await this.cfg.grantStore.save({
@@ -316,9 +330,8 @@ export class IframePermissionService {
 	async revokeAll(): Promise<HtmlPermissionSnapshot> {
 		const context = await this.resolveContext()
 		if (context) {
-			await this.cfg.grantStore.remove(
-				this.buildGrantIdentity(context.mode, context.appFingerprint),
-			)
+			await this.cfg.grantStore.remove(this.buildGrantIdentity(context.mode))
+			await this.removeLegacyGrants(context.mode, context.appConfig)
 			this.cfg.onGrantsChanged?.()
 		}
 		return this.getPermissionSnapshot()
@@ -392,7 +405,6 @@ export class IframePermissionService {
 			mode,
 			appConfigLoadError:
 				appConfigState.status === "error" ? appConfigState.error : undefined,
-			appFingerprint: await this.getAppFingerprint(mode, appConfig),
 			declaration: analyzeHtmlPermissionDeclarations(appConfig),
 		}
 	}
@@ -411,10 +423,49 @@ export class IframePermissionService {
 		this.cfg.onMissingDeclaration?.({ appName, declaredScopes, scope })
 	}
 
-	private async getAppFingerprint(
+	/**
+	 * Identity of the current app. It deliberately excludes file content and sibling files:
+	 * code is edited constantly during development and must not invalidate authorization.
+	 * Path fields are display-only; the key comes from `appId` / `entryFileId`.
+	 */
+	private buildGrantIdentity(mode: HtmlPermissionMode): HtmlPermissionGrantIdentity {
+		return {
+			mode,
+			userId: this.cfg.appInstance.userId,
+			projectId: this.cfg.appInstance.projectId,
+			appRootDir: this.cfg.appInstance.appRootDir,
+			entryPath: this.cfg.appInstance.entryPath,
+			appFingerprint: "",
+			appId: this.cfg.appInstance.appId || undefined,
+			entryFileId: this.cfg.appInstance.appId
+				? undefined
+				: this.cfg.appInstance.entryFileId || undefined,
+		}
+	}
+
+	/** Identity under which earlier versions stored grants (path + content fingerprint). */
+	private async buildLegacyGrantIdentity(
+		mode: HtmlPermissionMode,
+		appConfig: HTMLAppConfig | null,
+	): Promise<HtmlPermissionGrantIdentity> {
+		return {
+			mode,
+			userId: this.cfg.appInstance.userId,
+			projectId: this.cfg.appInstance.projectId,
+			appRootDir: this.cfg.appInstance.appRootDir,
+			entryPath: this.cfg.appInstance.entryPath,
+			appFingerprint: await this.getLegacyAppFingerprint(mode, appConfig),
+		}
+	}
+
+	private async getLegacyAppFingerprint(
 		mode: HtmlPermissionMode,
 		appConfig: HTMLAppConfig | null,
 	): Promise<string> {
+		const runtimeFingerprint =
+			this.cfg.appInstance.runtimeFingerprint ??
+			this.cfg.appInstance.getRuntimeFingerprint?.() ??
+			""
 		const source =
 			mode === "manifest"
 				? stableStringify({
@@ -423,33 +474,88 @@ export class IframePermissionService {
 						version: appConfig?.version || "",
 						entry: appConfig?.entry || "",
 						permissions: appConfig?.permissions || {},
-						runtimeFingerprint: this.cfg.appInstance.runtimeFingerprint || "",
+						runtimeFingerprint,
 						entryContent: this.cfg.appInstance.content || "",
 					})
 				: stableStringify({
 						entryContent: this.cfg.appInstance.content || "",
-						runtimeFingerprint: this.cfg.appInstance.runtimeFingerprint || "",
+						runtimeFingerprint,
 					})
 		return shortHash(source)
 	}
 
-	private buildGrantIdentity(
+	/**
+	 * Reads grants for the stable identity and, once per store instance and app, adopts grants
+	 * that earlier versions saved under a content fingerprint. Only grants whose fingerprint
+	 * still matches the current content can be found (the old key is a one-way hash), so
+	 * grants made for older edits simply expire. The original expiry is kept, never extended.
+	 */
+	private async loadAppGrants(
+		identity: HtmlPermissionGrantIdentity,
 		mode: HtmlPermissionMode,
-		appFingerprint: string,
-	): HtmlPermissionGrantIdentity {
-		return {
-			mode,
-			userId: this.cfg.appInstance.userId,
-			projectId: this.cfg.appInstance.projectId,
-			appRootDir: this.cfg.appInstance.appRootDir,
-			entryPath: this.cfg.appInstance.entryPath,
-			appFingerprint,
+		declaredScopes: HtmlPermissionScope[],
+	): Promise<HtmlPermissionGrant[]> {
+		const grants = await this.cfg.grantStore.getAppGrants(identity)
+		if (!this.canPersistGrant(identity)) return grants
+
+		const migratedKeys = getMigratedAppKeys(this.cfg.grantStore)
+		const migrationKey = createHtmlPermissionAppKey(identity)
+		if (migratedKeys.has(migrationKey)) return grants
+
+		try {
+			const appConfig =
+				this.cfg.appConfigState.status === "loaded" ? this.cfg.appConfigState.config : null
+			const legacyIdentity = await this.buildLegacyGrantIdentity(mode, appConfig)
+			if (!legacyIdentity.appFingerprint) return grants
+			const legacyGrants = await this.cfg.grantStore.getAppGrants(legacyIdentity)
+			const knownScopes = new Set(grants.map((grant) => grant.scope))
+			const adopted: HtmlPermissionGrant[] = []
+			for (const legacy of legacyGrants) {
+				if (knownScopes.has(legacy.scope)) continue
+				if (mode === "manifest" && !declaredScopes.includes(legacy.scope)) continue
+				const migrated: HtmlPermissionGrant = {
+					...identity,
+					scope: legacy.scope,
+					grantedAt: legacy.grantedAt,
+					expiresAt: legacy.expiresAt,
+				}
+				// Keep the grant effective for this call even if persisting the copy fails.
+				adopted.push(migrated)
+				if (await this.cfg.grantStore.save(migrated)) {
+					await this.cfg.grantStore.remove(legacyIdentity, legacy.scope)
+				}
+			}
+			migratedKeys.add(migrationKey)
+			return adopted.length > 0 ? [...grants, ...adopted] : grants
+		} catch (error) {
+			htmlMicroAppPreviewLogger.warn("Failed to migrate legacy permission grants", {
+				error: error instanceof Error ? error.message : String(error),
+			})
+			return grants
+		}
+	}
+
+	private async removeLegacyGrants(
+		mode: HtmlPermissionMode,
+		appConfig: HTMLAppConfig | null,
+		scope?: HtmlPermissionScope,
+	): Promise<void> {
+		try {
+			const legacyIdentity = await this.buildLegacyGrantIdentity(mode, appConfig)
+			if (legacyIdentity.appFingerprint) {
+				await this.cfg.grantStore.remove(legacyIdentity, scope)
+			}
+		} catch (error) {
+			htmlMicroAppPreviewLogger.warn("Failed to remove legacy permission grants", {
+				error: error instanceof Error ? error.message : String(error),
+			})
 		}
 	}
 
 	private canPersistGrant(identity: HtmlPermissionGrantIdentity): boolean {
+		// Without a stable id the grant cannot be tied to one app, so only one-time consent is offered.
 		return Boolean(
-			identity.userId && identity.projectId && identity.entryPath && identity.appFingerprint,
+			identity.userId && identity.projectId && (identity.appId || identity.entryFileId),
 		)
 	}
 
@@ -482,4 +588,16 @@ async function shortHash(value: string): Promise<string> {
 			.join("")
 	}
 	return ""
+}
+
+// Per store instance so tests and independent stores do not share migration state.
+const migratedAppKeysByStore = new WeakMap<HtmlPermissionGrantStore, Set<string>>()
+
+function getMigratedAppKeys(store: HtmlPermissionGrantStore): Set<string> {
+	let keys = migratedAppKeysByStore.get(store)
+	if (!keys) {
+		keys = new Set()
+		migratedAppKeysByStore.set(store, keys)
+	}
+	return keys
 }
