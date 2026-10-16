@@ -53,6 +53,7 @@ export const BaseRequestUrl = {
 		"/api/v1/admin/service-providers/connectivity-tests/config-based",
 	providerModelStatus: "/api/v1/admin/service-providers/models/${id}/status",
 	providerModelGroupList: "/api/v1/admin/provider-models/groups/queries",
+	modelIdentifierMappingCreate: "/api/v1/admin/model-identifier-mappings",
 	modelIdentifierMappingList: "/api/v1/admin/model-identifier-mappings/queries",
 	modelIdentifierMappingDetail: "/api/v1/admin/model-identifier-mappings/${id}",
 	modelIdentifierMappingStatus: "/api/v1/admin/model-identifier-mappings/${id}/status",
