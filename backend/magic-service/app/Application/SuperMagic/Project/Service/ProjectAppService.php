@@ -106,6 +106,7 @@ use App\Interfaces\SuperMagic\Project\DTO\Response\ProjectListResponseDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Request\GetSidebarTopicsRequestDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Response\SidebarTopicListResponseDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Response\TopicItemDTO;
+use Closure;
 use DirectoryIterator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\Amqp\Producer;
@@ -1991,11 +1992,16 @@ class ProjectAppService extends AbstractAppService
     // ========================================
     // Agent Project Methods
     // ========================================
+    /**
+     * Prepare conversation identities before opening the business transaction.
+     * @param null|Closure(ProjectEntity): void $beforeCommit bind the owning resource atomically with its project
+     */
     public function createAgentProject(
         RequestContext $requestContext,
         CreateAgentProjectRequestDTO $requestDTO,
         ProjectMode $projectMode = ProjectMode::CUSTOM_AGENT,
-        bool $setDefaultTopic = true
+        bool $setDefaultTopic = true,
+        ?Closure $beforeCommit = null
     ) {
         $this->logger->info('Starting agent project creation');
 
@@ -2051,6 +2057,9 @@ class ProjectAppService extends AbstractAppService
                 $projectMode,
                 $requestDTO->getInitTemplateFiles()
             );
+
+            // Resource creation/binding shares this transaction; no event escapes a failed binding.
+            $beforeCommit?->__invoke($projectEntity);
 
             // A background skill draft must not redirect the conversation that requested it.
             if ($setDefaultTopic) {

@@ -85,6 +85,7 @@ use App\Interfaces\SuperMagic\Skill\DTO\Response\ParseFileImportResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillDetailResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillFileUrlItemDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillPublishPrefillResponseDTO;
+use Closure;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
 use Hyperf\Codec\Json;
@@ -360,13 +361,16 @@ class SkillAppService extends AbstractSkillAppService
             if ($request->existingSkillCode !== null && $code !== $request->existingSkillCode) {
                 ExceptionBuilder::throw(SkillErrorCode::PROJECT_BINDING_CONFLICT);
             }
-            return Db::transaction(function () use ($context, $request, $isolation, $code) {
+            if ($request->existingSkillCode !== null && $this->skillDomainService->findOptionalSkillByCode($isolation, $code) === null) {
+                ExceptionBuilder::throw(SkillErrorCode::SKILL_NOT_FOUND);
+            }
+            $project = $this->createSkillProject($context, $request->name, $code, false, function () use ($request, $isolation, $code): void {
                 $skill = $this->skillDomainService->findOptionalSkillByCode($isolation, $code);
                 if ($skill === null) {
                     if ($request->existingSkillCode !== null) {
                         ExceptionBuilder::throw(SkillErrorCode::SKILL_NOT_FOUND);
                     }
-                    $skill = $this->createSkillInternal(
+                    $this->createSkillInternal(
                         $isolation,
                         $isolation->getCurrentUserId(),
                         $isolation->getCurrentOrganizationCode(),
@@ -380,12 +384,12 @@ class SkillAppService extends AbstractSkillAppService
                         null
                     );
                 }
-                $project = $this->createAndBindProject($context, $request->name, $code, false);
-                return [
-                    'id' => (string) $skill->getId(), 'skill_code' => $code, 'project_id' => (string) $project['project']['id'],
-                    'name' => $skill->getI18nName(CoContext::getLanguage()), 'description' => $skill->getI18nDescription(CoContext::getLanguage()),
-                ];
             });
+            $skill = $this->skillDomainService->findUserSkillByCode($isolation, $code);
+            return [
+                'id' => (string) $skill->getId(), 'skill_code' => $code, 'project_id' => (string) $project['project']['id'],
+                'name' => $skill->getI18nName(CoContext::getLanguage()), 'description' => $skill->getI18nDescription(CoContext::getLanguage()),
+            ];
         } finally {
             $this->releaseImportLock($key, $owner);
         }
@@ -394,27 +398,7 @@ class SkillAppService extends AbstractSkillAppService
     /** Shared by Web creation and conversation creation. Never replace an existing binding. */
     public function createAndBindProject(RequestContext $context, string $name, string $code, bool $setDefaultTopic = true): array
     {
-        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
-        $this->assertSkillEditable($isolation, $code);
-        $key = 'skill:bind:' . $code;
-        $owner = $this->acquireImportLock($key);
-        try {
-            return Db::transaction(function () use ($context, $isolation, $name, $code, $setDefaultTopic) {
-                $this->skillDomainService->lockSkill($isolation, $code);
-                $skill = $this->skillDomainService->findUserSkillByCode($isolation, $code);
-                if ($skill->getProjectId()) {
-                    return ['project' => ['id' => (string) $skill->getProjectId()]];
-                }
-                $dto = new CreateAgentProjectRequestDTO();
-                $dto->setProjectName($name);
-                $dto->setInitTemplateFiles(false);
-                $project = $this->projectAppService->createAgentProject($context, $dto, ProjectMode::SKILL_CREATOR, $setDefaultTopic);
-                $this->bindProject($context, $code, (int) $project['project']['id']);
-                return $project;
-            });
-        } finally {
-            $this->releaseImportLock($key, $owner);
-        }
+        return $this->createSkillProject($context, $name, $code, $setDefaultTopic);
     }
 
     public function getSkillByProject(RequestContext $context, int $projectId): SkillDetailResponseDTO
@@ -1616,6 +1600,47 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         return array_values(array_unique(array_merge($skillCodes, $builtinSkillCodes)));
+    }
+
+    /** Keep identity preparation outside transactions and resource binding inside the project owner's transaction. */
+    private function createSkillProject(RequestContext $context, string $name, string $code, bool $setDefaultTopic, ?Closure $createDraft = null): array
+    {
+        $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
+        $key = 'skill:bind:' . $code;
+        $owner = $this->acquireImportLock($key);
+        try {
+            $skill = $this->skillDomainService->findOptionalSkillByCode($isolation, $code);
+            if ($skill !== null) {
+                $this->assertSkillEditable($isolation, $code);
+                $skill = $this->skillDomainService->findUserSkillByCode($isolation, $code);
+                if ($skill->getProjectId()) {
+                    return ['project' => ['id' => (string) $skill->getProjectId()]];
+                }
+            } elseif ($createDraft === null) {
+                ExceptionBuilder::throw(SkillErrorCode::SKILL_NOT_FOUND);
+            }
+            $dto = new CreateAgentProjectRequestDTO();
+            $dto->setProjectName($name);
+            $dto->setInitTemplateFiles(false);
+            return $this->projectAppService->createAgentProject(
+                $context,
+                $dto,
+                ProjectMode::SKILL_CREATOR,
+                $setDefaultTopic,
+                function (ProjectEntity $project) use ($context, $isolation, $code, $createDraft): void {
+                    $createDraft?->__invoke();
+                    $this->assertSkillEditable($isolation, $code);
+                    $this->skillDomainService->lockSkill($isolation, $code);
+                    $skill = $this->skillDomainService->findUserSkillByCode($isolation, $code);
+                    if ($skill->getProjectId()) {
+                        ExceptionBuilder::throw(SkillErrorCode::PROJECT_BINDING_CONFLICT);
+                    }
+                    $this->bindProject($context, $code, $project->getId());
+                }
+            );
+        } finally {
+            $this->releaseImportLock($key, $owner);
+        }
     }
 
     private function advanceSkillPreparation(RequestContext $context, string $code, string $token): array

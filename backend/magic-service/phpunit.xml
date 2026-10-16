@@ -47,6 +47,7 @@
     <testsuite name="超级麦吉文件测试">
       <file>test/Cases/Application/SuperMagic/Skill/SkillPreparedPublishTest.php</file>
       <file>test/Cases/Application/SuperMagic/Skill/SkillPackageParserTest.php</file>
+      <file>test/Cases/Application/SuperMagic/Project/Service/ProjectCreationTransactionTest.php</file>
       <directory suffix="Test.php">test/Cases/Domain/SuperMagic</directory>
       <directory suffix="Test.php">test/Cases/Interfaces/SuperMagic/File</directory>
       <!--
