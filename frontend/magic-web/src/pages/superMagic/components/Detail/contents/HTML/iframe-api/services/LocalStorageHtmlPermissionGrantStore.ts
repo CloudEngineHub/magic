@@ -39,8 +39,7 @@ export interface HtmlPermissionGrantFallbackSnapshot {
 }
 
 export type HtmlPermissionAuthorityLockResult<T> =
-	| { acquired: true; value: T }
-	| { acquired: false }
+	{ acquired: true; value: T } | { acquired: false }
 
 const EMPTY_FALLBACK_DATA: HtmlPermissionGrantFallbackSnapshot = {
 	version: 1,
@@ -107,6 +106,7 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 				scope: grant.scope,
 				grantedAt: grant.grantedAt,
 				expiresAt: grant.expiresAt,
+				...(grant.codeFingerprint ? { codeFingerprint: grant.codeFingerprint } : {}),
 				epoch: data.epoch,
 				revision,
 			}

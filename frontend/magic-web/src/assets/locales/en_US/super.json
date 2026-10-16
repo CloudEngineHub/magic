@@ -3180,6 +3180,13 @@
 		"sloganTitle": "What do you need help with today?"
 	},
 	"htmlEditor": {
+		"codeChangeConfirm": {
+			"content": "The code of \"{{appName}}\" changed after you authorized it. It now wants to use: {{scope}}. Continue?",
+			"deny": "Deny",
+			"once": "Just this once",
+			"remember": "Allow and remember",
+			"title": "App code was modified"
+		},
 		"designStyle": {
 			"apply": "Add to chat",
 			"browseCategories": "Browse categories",
@@ -3400,6 +3407,18 @@
 			"authorize": "Authorize",
 			"authorizeFailed": "Failed to authorize",
 			"authorizeSuccess": "Authorized",
+			"codeBanner": {
+				"acknowledge": "Confirm current code",
+				"acknowledgeFailed": "Failed to confirm",
+				"acknowledgeSuccess": "Current code confirmed",
+				"descriptionReadOnly": "These grants are still valid. Revoke them if you are not comfortable.",
+				"descriptionWithReconfirm": "Read-only grants stay valid. {{count}} grant(s) that write, send or use quota will ask again on next use.",
+				"revokeAll": "Revoke all grants",
+				"title": "The app code changed after you authorized it"
+			},
+			"codeChanged": "Code modified",
+			"codeChangedDot": "App code was modified; review its grants",
+			"codeChangedHint": "The app code changed after authorization. This grant is still valid.",
 			"currentTab": "Saved in this browser",
 			"declared": "Declared",
 			"declaredCount": "{{count}} declared",
@@ -3429,6 +3448,8 @@
 			"notGranted": "Not granted",
 			"open": "Authorization",
 			"permissionsTitle": "Permissions",
+			"reconfirmNext": "Asks again on next use",
+			"reconfirmNextHint": "This permission writes data, sends content out or uses quota, so it asks again after the code changes.",
 			"remainingDays": "{{count}} days remaining",
 			"remainingExpired": "Expired",
 			"remainingHours": "{{count}} hours remaining",

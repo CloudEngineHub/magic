@@ -3180,6 +3180,13 @@
 		"sloganTitle": "今天需要我帮你做些什么？"
 	},
 	"htmlEditor": {
+		"codeChangeConfirm": {
+			"content": "「{{appName}}」在你授权之后修改了代码，现在要使用：{{scope}}。请确认是否继续。",
+			"deny": "拒绝",
+			"once": "仅这一次",
+			"remember": "允许并记住",
+			"title": "应用代码已修改"
+		},
 		"designStyle": {
 			"apply": "添加到对话",
 			"browseCategories": "按分类浏览",
@@ -3400,6 +3407,18 @@
 			"authorize": "授权",
 			"authorizeFailed": "授权失败",
 			"authorizeSuccess": "已授权",
+			"codeBanner": {
+				"acknowledge": "确认当前代码",
+				"acknowledgeFailed": "确认失败",
+				"acknowledgeSuccess": "已确认当前代码",
+				"descriptionReadOnly": "这些授权仍然有效。如果不放心，可以撤销。",
+				"descriptionWithReconfirm": "读取类授权仍然有效；{{count}} 项写入、发送或消耗额度类授权会在下次使用时重新确认。",
+				"revokeAll": "撤销全部授权",
+				"title": "应用代码在你授权之后已修改"
+			},
+			"codeChanged": "代码已修改",
+			"codeChangedDot": "应用代码已修改，授权需要留意",
+			"codeChangedHint": "应用代码在授权后已修改，这项授权仍然有效。",
 			"currentTab": "保存在当前浏览器",
 			"declared": "已声明",
 			"declaredCount": "已声明 {{count}} 项",
@@ -3429,6 +3448,8 @@
 			"notGranted": "未授权",
 			"open": "授权管理",
 			"permissionsTitle": "权限列表",
+			"reconfirmNext": "下次使用需重新确认",
+			"reconfirmNextHint": "这项权限会写入数据、对外发送内容或消耗额度，代码修改后会再次确认。",
 			"remainingDays": "剩余 {{count}} 天",
 			"remainingExpired": "已过期",
 			"remainingHours": "剩余 {{count}} 小时",

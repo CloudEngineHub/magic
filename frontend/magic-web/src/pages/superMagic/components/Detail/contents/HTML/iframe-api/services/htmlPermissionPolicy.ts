@@ -77,15 +77,30 @@ const MANIFEST_DEFAULT_TTL_BY_SCOPE: Record<HtmlPermissionScope, HtmlPermissionT
 
 const LEGACY_DEFAULT_TTL_BY_SCOPE: Record<HtmlPermissionScope, HtmlPermissionTtl> = {
 	"llm.use": HOUR_MS,
-	// Writing is still confirmed by default but can be remembered, so dev-time edits do not re-prompt.
-	"project.message.write": HOUR_MS,
+	"project.message.write": 0,
 	"project.files.upload": HOUR_MS,
 	"project.files.download": HOUR_MS,
 	"fs.project.read": HOUR_MS,
-	"fs.project.write": HOUR_MS,
+	"fs.project.write": 0,
 	"user.profile.name": HOUR_MS,
 	"user.profile.identity": HOUR_MS,
 	"user.profile.organization": HOUR_MS,
+}
+
+/**
+ * Scopes that write data, send content outwards or spend quota. Their grants are re-confirmed
+ * after the app's executable files change, because edits (including agent edits) could otherwise
+ * reuse the grant for behavior the user never saw. Read-only scopes keep silent reuse.
+ */
+const HIGH_RISK_SCOPE_SET = new Set<HtmlPermissionScope>([
+	"fs.project.write",
+	"project.message.write",
+	"project.files.upload",
+	"llm.use",
+])
+
+export function isHighRiskHtmlPermissionScope(scope: HtmlPermissionScope): boolean {
+	return HIGH_RISK_SCOPE_SET.has(scope)
 }
 
 export function isSupportedHtmlPermissionScope(scope: string): scope is HtmlPermissionScope {

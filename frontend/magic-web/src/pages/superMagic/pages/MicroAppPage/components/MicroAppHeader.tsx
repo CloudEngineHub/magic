@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
+import { HTML_PERMISSION_ANCHOR_ATTRIBUTE } from "@/pages/superMagic/components/Detail/contents/HTML/components/PermissionManager/CodeChangeConfirmPopover"
+import { useSharedHtmlAppPermissions } from "@/pages/superMagic/components/Detail/contents/HTML/hooks/HtmlAppPermissionContext"
 import MicroAppModeSwitcher, { type MicroAppPageMode } from "./MicroAppModeSwitcher"
 
 interface MicroAppHeaderProps {
@@ -47,6 +49,11 @@ export default function MicroAppHeader({
 	)
 	const showCollaboratorAction = Boolean(canManageCollaborators && onManageCollaborators)
 	const showHtmlPermissionAction = Boolean(canManageHtmlPermissions && onManageHtmlPermissions)
+	// The micro app permission controller is shared through context; a dot flags grants whose app
+	// code changed after the user confirmed them.
+	const htmlPermissionCodeChanged = Boolean(
+		useSharedHtmlAppPermissions()?.htmlPermissionCodeChanged,
+	)
 	return (
 		<header
 			className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background px-3"
@@ -102,9 +109,22 @@ export default function MicroAppHeader({
 							className="h-7 shrink-0 gap-2"
 							aria-label={t("htmlEditor.permissionManager.open")}
 							data-testid="micro-app-permission-manager"
+							{...{ [HTML_PERMISSION_ANCHOR_ATTRIBUTE]: "" }}
 							onClick={() => onManageHtmlPermissions?.()}
 						>
-							<ShieldCheck size={14} />
+							<span className="relative inline-flex">
+								<ShieldCheck size={14} />
+								{htmlPermissionCodeChanged ? (
+									<span
+										role="img"
+										aria-label={t(
+											"htmlEditor.permissionManager.codeChangedDot",
+										)}
+										className="absolute -right-1 -top-1 size-2 rounded-full bg-amber-500 ring-2 ring-background"
+										data-testid="micro-app-permission-code-changed-dot"
+									/>
+								) : null}
+							</span>
 							{t("htmlEditor.permissionManager.open")}
 						</Button>
 					</TooltipTrigger>

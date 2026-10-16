@@ -1,9 +1,12 @@
 import { vi } from "vitest"
 import {
 	IframePermissionService,
+	type HtmlPermissionCodeChangeConfirmRequest,
+	type HtmlPermissionCodeChangeDecision,
 	type HtmlPermissionConfirmRequest,
 	type IframePermissionServiceConfig,
 } from "../IframePermissionService"
+import type { HtmlPermissionLegacyMigrationMarker } from "../HtmlPermissionLegacyMigrationMarker"
 import {
 	createHtmlPermissionAppKey,
 	isHtmlPermissionGrantActive,
@@ -89,6 +92,12 @@ function matchesIdentity(grant: HtmlPermissionGrant, identity: HtmlPermissionGra
 	return createHtmlPermissionAppKey(grant) === createHtmlPermissionAppKey(identity)
 }
 
+/** Fresh in-memory marker so tests do not share the persisted one in jsdom localStorage. */
+export function createMemoryLegacyMigrationMarker(): HtmlPermissionLegacyMigrationMarker {
+	const keys = new Set<string>()
+	return { has: (key) => keys.has(key), add: (key) => void keys.add(key) }
+}
+
 export function createService(overrides: Partial<IframePermissionServiceConfig> = {}) {
 	const getNow = overrides.getNow || (() => 1_000_000)
 	const grantStore = overrides.grantStore || new MemoryGrantStore(getNow)
@@ -99,7 +108,14 @@ export function createService(overrides: Partial<IframePermissionServiceConfig> 
 				ttlMs: request.defaultTtlMs,
 			})),
 	)
+	const confirmCodeChange = vi.fn(
+		overrides.confirmCodeChange ||
+			(async (
+				_request: HtmlPermissionCodeChangeConfirmRequest,
+			): Promise<HtmlPermissionCodeChangeDecision> => "remember"),
+	)
 	const service = new IframePermissionService({
+		legacyMigrationMarker: createMemoryLegacyMigrationMarker(),
 		appConfigState: {
 			status: "loaded",
 			config: {
@@ -122,7 +138,8 @@ export function createService(overrides: Partial<IframePermissionServiceConfig> 
 		...overrides,
 		grantStore,
 		confirmPermission,
+		confirmCodeChange,
 		getNow,
 	})
-	return { service, grantStore, confirmPermission }
+	return { service, grantStore, confirmPermission, confirmCodeChange }
 }

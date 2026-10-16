@@ -6,7 +6,11 @@ import type {
 	IframePermissionService,
 } from "../IframePermissionService"
 import type { HtmlPermissionGrantIdentity } from "../HtmlPermissionGrantStore"
-import { createService, MemoryGrantStore } from "./IframePermissionService.testUtils"
+import {
+	createMemoryLegacyMigrationMarker,
+	createService,
+	MemoryGrantStore,
+} from "./IframePermissionService.testUtils"
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -70,23 +74,29 @@ describe("IframePermissionService stable app identity", () => {
 		expect(confirmPermission).toHaveBeenCalledOnce()
 	})
 
-	it("keeps grants when sibling executable files change", async () => {
+	it("keeps read-only grants when sibling executable files change", async () => {
 		const store = new MemoryGrantStore()
 		const confirmPermission = allowAll()
+		const config = manifest({
+			permissions: { scopes: ["fs.project.read"] },
+		})
 		await createService({
 			grantStore: store,
 			confirmPermission,
+			appConfigState: config,
 			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v1" },
-		}).service.authorize("llm.use")
+		}).service.authorize("fs.project.read")
 
 		const edited = createService({
 			grantStore: store,
 			confirmPermission,
+			appConfigState: config,
 			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
 		})
 
-		expect(await edited.service.authorize("llm.use")).toBe(true)
+		expect(await edited.service.authorize("fs.project.read")).toBe(true)
 		expect(confirmPermission).toHaveBeenCalledOnce()
+		expect(edited.confirmCodeChange).not.toHaveBeenCalled()
 	})
 
 	it("keeps legacy-mode grants across content edits", async () => {
@@ -304,6 +314,55 @@ describe("IframePermissionService legacy grant migration", () => {
 		expect(store.grants).toHaveLength(1)
 	})
 
+	it("records the current code version on adopted grants", async () => {
+		const store = new MemoryGrantStore()
+		const confirmPermission = allowAll()
+		const config = manifest()
+		const instance = { ...baseInstance, runtimeFingerprint: "runtime-v1" }
+		const { service, confirmCodeChange } = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: config,
+			appInstance: instance,
+		})
+		const legacyIdentity = await legacyIdentityOf(service, "manifest", config.config)
+		await store.save({ ...legacyIdentity, scope: "llm.use", grantedAt: 500, expiresAt: null })
+
+		expect(await service.authorize("llm.use")).toBe(true)
+
+		// The old key only matches when the code is unchanged, so no code-change prompt follows.
+		expect(confirmCodeChange).not.toHaveBeenCalled()
+		expect(store.grants[0].codeFingerprint).toBeTruthy()
+	})
+
+	it("does not adopt old grants again after a revoke, even for an earlier version of the file", async () => {
+		const store = new MemoryGrantStore()
+		const confirmPermission = allowAll()
+		const marker = createMemoryLegacyMigrationMarker()
+		const config = manifest()
+		const original = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: config,
+			legacyMigrationMarker: marker,
+		})
+		const legacyIdentity = await legacyIdentityOf(original.service, "manifest", config.config)
+		await store.save({ ...legacyIdentity, scope: "llm.use", grantedAt: 500, expiresAt: null })
+		await original.service.revoke("llm.use")
+		// An older grant for this content version is still stored under the legacy key.
+		await store.save({ ...legacyIdentity, scope: "llm.use", grantedAt: 600, expiresAt: null })
+
+		const reloaded = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: config,
+			legacyMigrationMarker: marker,
+		})
+		await reloaded.service.authorize("llm.use")
+
+		expect(confirmPermission).toHaveBeenCalledOnce()
+	})
+
 	it("does not bring back a revoked grant through migration", async () => {
 		const store = new MemoryGrantStore()
 		const confirmPermission = allowAll()
@@ -326,5 +385,188 @@ describe("IframePermissionService legacy grant migration", () => {
 
 		expect(store.grants.filter((grant) => grant.scope === "llm.use")).toHaveLength(1)
 		expect(confirmPermission).toHaveBeenCalledOnce()
+	})
+})
+
+describe("IframePermissionService code change re-confirmation", () => {
+	const manifestScopes = manifest({
+		permissions: { scopes: ["llm.use", "fs.project.read"] },
+	})
+
+	async function grantWithRuntime(runtimeFingerprint: string) {
+		const store = new MemoryGrantStore()
+		const confirmPermission = allowAll()
+		const first = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint },
+		})
+		await first.service.authorizeMany(["llm.use", "fs.project.read"])
+		return { store, confirmPermission }
+	}
+
+	it("asks again for high-risk scopes after the code changed, once per code version", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+		})
+
+		expect(await later.service.authorize("llm.use")).toBe(true)
+		expect(later.confirmCodeChange).toHaveBeenCalledOnce()
+		expect(later.confirmCodeChange.mock.calls[0][0].scopes).toEqual(["llm.use"])
+
+		// "remember" recorded the new version, so the same code does not ask again.
+		await later.service.authorize("llm.use")
+		expect(later.confirmCodeChange).toHaveBeenCalledOnce()
+		expect(confirmPermission).toHaveBeenCalledOnce()
+	})
+
+	it("never asks about read-only scopes after the code changed", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+		})
+
+		expect(await later.service.authorize("fs.project.read")).toBe(true)
+		expect(later.confirmCodeChange).not.toHaveBeenCalled()
+	})
+
+	it("keeps the old confirmed version when the user allows only once", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+			confirmCodeChange: async () => "once",
+		})
+
+		expect(await later.service.authorize("llm.use")).toBe(true)
+		expect(await later.service.authorize("llm.use")).toBe(true)
+		expect(later.confirmCodeChange).toHaveBeenCalledTimes(2)
+	})
+
+	it("rejects the call when the user denies the code change", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+			confirmCodeChange: async () => "deny",
+		})
+
+		expect(await later.service.authorize("llm.use")).toBe(false)
+	})
+
+	it("denies instead of silently reusing a stale grant when no confirmation hook exists", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+		})
+		;(
+			later.service as unknown as { cfg: { confirmCodeChange?: unknown } }
+		).cfg.confirmCodeChange = undefined
+
+		expect(await later.service.authorize("llm.use")).toBe(false)
+	})
+
+	it("cannot judge changes before the project file list is loaded", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const notLoaded = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "[]" },
+		})
+
+		expect(await notLoaded.service.authorize("llm.use")).toBe(true)
+		expect(notLoaded.confirmCodeChange).not.toHaveBeenCalled()
+	})
+
+	it("treats a grant saved before code tracking as unconfirmed for high-risk scopes", async () => {
+		const store = new MemoryGrantStore()
+		const confirmPermission = allowAll()
+		const seeded = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v1" },
+		})
+		await seeded.service.authorizeMany(["llm.use", "fs.project.read"])
+		store.grants = store.grants.map(({ codeFingerprint: _omit, ...grant }) => grant)
+
+		const snapshot = await seeded.service.getPermissionSnapshot()
+		const byScope = Object.fromEntries(snapshot.permissions.map((item) => [item.scope, item]))
+		expect(byScope["llm.use"]).toMatchObject({ codeStatus: "unknown", needsReconfirm: true })
+		expect(byScope["fs.project.read"]).toMatchObject({
+			codeStatus: "unknown",
+			needsReconfirm: false,
+		})
+	})
+
+	it("reports changed grants in the snapshot and clears them when acknowledged", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+		})
+
+		const before = await later.service.getPermissionSnapshot()
+		expect(before.codeChangedGrantCount).toBe(2)
+		expect(before.needsReconfirmCount).toBe(1)
+		const read = before.permissions.find((item) => item.scope === "fs.project.read")
+		expect(read).toMatchObject({
+			codeStatus: "changed",
+			highRisk: false,
+			needsReconfirm: false,
+		})
+
+		const after = await later.service.acknowledgeCodeChanges()
+		expect(after.codeChangedGrantCount).toBe(0)
+		expect(after.needsReconfirmCount).toBe(0)
+		expect(after.activeGrantCount).toBe(2)
+	})
+
+	it("does not treat a duplicated file list entry as a code change", async () => {
+		const entry = { fileId: "f1", path: "app/index.html", updatedAt: "2026-10-16 10:00:00" }
+		const { store, confirmPermission } = await grantWithRuntime(JSON.stringify([entry]))
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: JSON.stringify([entry, entry]) },
+		})
+
+		expect(await later.service.authorize("llm.use")).toBe(true)
+		expect(later.confirmCodeChange).not.toHaveBeenCalled()
+	})
+
+	it("keeps the confirmed version when only the duration is changed", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+		})
+
+		const snapshot = await later.service.updateGrantTtl("fs.project.read", 7 * DAY)
+
+		expect(
+			snapshot.permissions.find((item) => item.scope === "fs.project.read")?.codeStatus,
+		).toBe("changed")
 	})
 })
