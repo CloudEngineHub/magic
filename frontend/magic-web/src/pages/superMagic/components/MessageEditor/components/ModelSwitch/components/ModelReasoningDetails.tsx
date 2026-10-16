@@ -255,11 +255,10 @@ export function ModelReasoningDetails({
 			</PopoverAnchor>
 			<PopoverContent
 				ref={detailRef}
-				// 桌面端把详情放在模型列表左侧，形成“详情 | 列表”的主次层级；空间不足时由 Radix 自动翻转。
-				side={mobile ? "top" : "left"}
+				// 桌面端详情继续放在模型列表右侧；参考图只用于卡片层级与视觉样式。
+				side={mobile ? "top" : "right"}
 				align="start"
-				// 负间距让两张卡片的边缘相接，避免浮层之间出现视觉断层。
-				sideOffset={mobile ? 8 : -8}
+				sideOffset={8}
 				collisionPadding={12}
 				className="w-64 max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl border-border/80 bg-card p-0 shadow-[0_12px_32px_rgba(15,23,42,0.14)] duration-100"
 				onPointerEnter={keepOpen}
@@ -356,7 +355,7 @@ export function ModelReasoningDetails({
 										<PopoverTrigger asChild>{strengthButton}</PopoverTrigger>
 										<PopoverContent
 											ref={levelsRef}
-											side="left"
+											side="right"
 											align="start"
 											sideOffset={4}
 											className="w-36 p-0 duration-100"
