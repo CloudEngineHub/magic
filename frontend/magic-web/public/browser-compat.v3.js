@@ -57,6 +57,7 @@
 	var MODAL_ID = "__browser_compat_modal__"
 	var CONTINUE_BUTTON_ID = "__btn_browser_continue__"
 	var SUPPRESS_CHECKBOX_ID = "__chk_browser_14d__"
+	var DINGTALK_TIP_ID = "__dingtalk_browser_tip__"
 
 	/**
 	 * Whether the warning has already been rendered in this document.
@@ -98,6 +99,17 @@
 
 	if (isSuppressedByStorage()) {
 		return
+	}
+
+	/**
+	 * Detects DingTalk on Android. Its webview offers no way to switch browsers on its
+	 * own, so the warning needs to point at DingTalk's own top-right menu.
+	 *
+	 * @returns {boolean} True when the page is opened inside DingTalk on Android
+	 */
+	function isDingTalkAndroid() {
+		var ua = navigator.userAgent || ""
+		return /dingtalk/i.test(ua) && /android/i.test(ua)
 	}
 
 	/**
@@ -239,15 +251,46 @@
 		var lang = (navigator.language || navigator.userLanguage || "").toLowerCase()
 		var isZh = lang.indexOf("zh") !== -1
 
-		var downloadInfo = isZh
-			? {
-					url: "https://www.microsoft.com/zh-cn/edge/download",
-					btnText: "下载 Microsoft Edge 官方版",
-			  }
-			: {
-					url: "https://www.google.com/chrome/",
-					btnText: "Download Google Chrome",
-			  }
+		/**
+		 * Download recommendations for both supported browsers, ordered by what the
+		 * user's region can actually reach: mainland China promotes Edge first and
+		 * points Chrome at the mirror domain, other regions promote Chrome first.
+		 */
+		var downloadLinks = isZh
+			? [
+					{
+						url: "https://www.microsoft.com/zh-cn/edge/download",
+						text: "下载 Microsoft Edge 官方版",
+					},
+					{
+						url: "https://www.google.cn/chrome/",
+						text: "下载 Google Chrome 官方版",
+					},
+			  ]
+			: [
+					{
+						url: "https://www.google.com/chrome/",
+						text: "Download Google Chrome",
+					},
+					{
+						url: "https://www.microsoft.com/edge/download",
+						text: "Download Microsoft Edge",
+					},
+			  ]
+
+		/** Builds the stacked download links while keeping the recommended order. */
+		var downloadLinksHtml = ""
+		for (var linkIndex = 0; linkIndex < downloadLinks.length; linkIndex++) {
+			downloadLinksHtml +=
+				'<a href="' +
+				downloadLinks[linkIndex].url +
+				'" target="_blank" rel="noopener noreferrer" ' +
+				'style="display:block;color:#2563eb;font-size:14px;font-weight:600;text-decoration:none;' +
+				(linkIndex > 0 ? "margin-top:8px;" : "") +
+				'">' +
+				downloadLinks[linkIndex].text +
+				" &rarr;</a>"
+		}
 
 		var tips = isZh
 			? [
@@ -276,6 +319,8 @@
 					warn: "继续使用旧版浏览器可能导致页面白屏、样式错乱或部分功能异常。",
 					ignore14d: "最近 14 天不再提示",
 					btnContinue: "继续使用（可能存在兼容性问题）",
+					dingtalkTip:
+						"当前在钉钉内打开：点击右上角「···」并选择「在浏览器中打开」，可获得完整体验。",
 			  }
 			: {
 					title: "Browser Outdated",
@@ -284,7 +329,19 @@
 					warn: "Using an outdated browser may lead to unexpected errors or blank screens.",
 					ignore14d: "Don't remind me again for 14 days",
 					btnContinue: "Continue anyway",
+					dingtalkTip:
+						'Opened inside DingTalk: tap "···" at the top-right and choose "Open in browser" for the full experience.',
 			  }
+
+		/** Guidance block rendered only when the page runs inside DingTalk on Android. */
+		var dingtalkTipHtml = isDingTalkAndroid()
+			? '<div id="' +
+			  DINGTALK_TIP_ID +
+			  '" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;' +
+			  'font-size:13px;color:#1d4ed8;line-height:1.5;margin-bottom:14px;">' +
+			  text.dingtalkTip +
+			  "</div>"
+			: ""
 
 		var modalContainer = document.createElement("div")
 		modalContainer.id = MODAL_ID
@@ -303,6 +360,7 @@
 			'<div style="font-size:14px;color:#4b5563;line-height:1.5;margin-bottom:10px;">' +
 			text.desc +
 			"</div>" +
+			dingtalkTipHtml +
 			'<ul style="font-size:13px;color:#6b7280;margin:0 0 14px 20px;padding:0;line-height:1.6;">' +
 			tipListHtml +
 			"</ul>" +
@@ -310,12 +368,7 @@
 			'<div style="font-size:12px;color:#6b7280;margin-bottom:6px;font-weight:500;">' +
 			text.recommendTitle +
 			"</div>" +
-			'<a href="' +
-			downloadInfo.url +
-			'" target="_blank" rel="noopener noreferrer" ' +
-			'style="display:inline-block;color:#2563eb;font-size:14px;font-weight:600;text-decoration:none;">' +
-			downloadInfo.btnText +
-			" &rarr;</a>" +
+			downloadLinksHtml +
 			"</div>" +
 			'<div style="font-size:12px;color:#dc2626;margin-bottom:18px;line-height:1.4;">' +
 			text.warn +
