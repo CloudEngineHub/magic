@@ -197,7 +197,7 @@
 	"editor.reasoning.medium": "中",
 	"editor.reasoning.minimal": "最低",
 	"editor.reasoning.none": "关闭",
-	"editor.reasoning.providerDefault": "跟随服务商默认",
+	"editor.reasoning.providerDefault": "默认",
 	"editor.reasoning.xhigh": "超高",
 	"editor.removeProviderDescription": "保存修改后，该服务商下的模型配置将被删除。",
 	"editor.removeProviderTitle": "移除服务商配置？",

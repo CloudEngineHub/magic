@@ -197,7 +197,7 @@
 	"editor.reasoning.medium": "Medium",
 	"editor.reasoning.minimal": "Minimal",
 	"editor.reasoning.none": "Off",
-	"editor.reasoning.providerDefault": "Use provider default",
+	"editor.reasoning.providerDefault": "Default",
 	"editor.reasoning.xhigh": "Extra high",
 	"editor.removeProviderDescription": "Saving changes will delete this model configuration from the provider.",
 	"editor.removeProviderTitle": "Remove this provider configuration?",
