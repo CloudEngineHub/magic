@@ -1058,11 +1058,11 @@
 			"groupNotice": "Group announcement",
 			"groupType": "Group type",
 			"leaveGroup": "Exit group chat",
-			"leaveGroupConfirm": "",
+			"leaveGroupConfirm": "Are you sure you want to leave this group?",
 			"leaveGroupSuccess": "Exited group chat",
 			"ownerLeaveGroupTip": "The group owner cannot exit the group chat. Please transfer the group and then exit.",
 			"remove": "Remove",
-			"removeGroupConfirm": "",
+			"removeGroupConfirm": "Are you sure you want to disband this group?",
 			"removeGroupSuccess": "Disbanded successfully",
 			"removeMember": "Remove group members",
 			"title": "Group settings",
@@ -1419,7 +1419,7 @@
 		"unsupportedFileType": "Unsupported file type",
 		"untitledFile": "Untitled File",
 		"upload": "Upload",
-		"upload_max_count_placeholder": "",
+		"upload_max_count_placeholder": "File upload limit: {{maxCount}}",
 		"upload_max_size_placeholder": "Maximum {{size}}MB per file"
 	},
 	"completeInformationModal": {
