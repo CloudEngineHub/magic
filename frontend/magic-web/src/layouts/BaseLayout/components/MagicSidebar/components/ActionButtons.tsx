@@ -9,6 +9,7 @@ import { IS_DARK_MODE_DISABLED } from "@/constants/theme"
 import { isDev } from "@/utils/env"
 import { MagicTooltip } from "@/components/base"
 import { useActionButtonsMenu } from "./useActionButtonsMenu"
+import InboxSidebarEntry from "./InboxSidebarEntry"
 interface ActionButtonsProps {
 	collapsed: boolean
 }
@@ -44,71 +45,62 @@ function ActionButtons({ collapsed }: ActionButtonsProps) {
 
 	return (
 		<div
-			className="flex w-full shrink-0 flex-col px-0 py-1"
+			className="flex w-full shrink-0 flex-col items-center gap-1 px-0 py-1"
 			data-testid="sidebar-action-buttons"
 		>
-			{/* 按入口的实际文字宽度换行；长语言保留完整名称，不依赖侧栏断点。 */}
+			{/* 展开时均匀分布三个图标入口，收起时沿侧栏纵向排列。 */}
 			<div
 				className={cn(
-					"flex w-full shrink-0 gap-1",
-					collapsed ? "flex-col items-center" : "flex-wrap",
+					"flex w-full shrink-0 items-center gap-1",
+					collapsed ? "flex-col" : "justify-around",
 				)}
 			>
+				<InboxSidebarEntry collapsed={collapsed} />
 				{actionItems.map((item) => {
 					const Icon = item.icon
 					return (
 						<MagicTooltip
 							key={item.id}
-							title={collapsed ? t(item.label) : undefined}
-							placement="right"
+							title={item.tooltip}
+							placement={collapsed ? "right" : "top"}
 						>
 							<Button
-								aria-label={t(item.label)}
+								aria-label={item.label}
 								variant="ghost"
-								size={collapsed ? "icon" : "sm"}
+								size="icon-sm"
 								data-testid={`sidebar-action-${item.id}`}
-								className={cn(
-									"h-8 shrink-0 gap-2 text-[13px] font-normal leading-5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-									collapsed
-										? "w-8"
-										: "min-w-max flex-[1_0_auto] justify-start px-2",
-								)}
+								className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
 								onClick={item.onClick}
 							>
-								<Icon className="h-4 w-4 text-sidebar-foreground" />
-								{!collapsed && (
-									<span className="text-[13px] text-sidebar-foreground">
-										{t(item.label)}
-									</span>
-								)}
+								<Icon className="size-4" />
 							</Button>
 						</MagicTooltip>
 					)
 				})}
-
-				{isDev && (
-					<MagicTooltip title="当前仅在开发环境开启" placement="right">
-						<Button
-							variant="ghost"
-							size={collapsed ? "icon" : "sm"}
-							data-testid="sidebar-action-theme"
-							aria-label={themeLabel}
-							className={cn(
-								"h-8 shrink-0 gap-2 text-[13px] font-normal leading-5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-								collapsed ? "w-8" : "w-full basis-full justify-start px-2",
-							)}
-							onClick={handleThemeToggle}
-						>
-							<ThemeIcon className="h-4 w-4 text-sidebar-foreground" />
-							{!collapsed && (
-								<span className="text-[13px] text-sidebar-foreground">
-									{themeLabel}
-								</span>
-							)}
-						</Button>
-					</MagicTooltip>
-				)}
 			</div>
+
+			{isDev && (
+				<MagicTooltip title="当前仅在开发环境开启" placement="right">
+					<Button
+						variant="ghost"
+						size={collapsed ? "icon" : "sm"}
+						data-testid="sidebar-action-theme"
+						aria-label={themeLabel}
+						className={cn(
+							"h-8 shrink-0 gap-2 text-[13px] font-normal leading-5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+							collapsed ? "w-8" : "w-full justify-start px-2",
+						)}
+						onClick={handleThemeToggle}
+					>
+						<ThemeIcon className="h-4 w-4 text-sidebar-foreground" />
+						{!collapsed && (
+							<span className="text-[13px] text-sidebar-foreground">
+								{themeLabel}
+							</span>
+						)}
+					</Button>
+				</MagicTooltip>
+			)}
 		</div>
 	)
 }
