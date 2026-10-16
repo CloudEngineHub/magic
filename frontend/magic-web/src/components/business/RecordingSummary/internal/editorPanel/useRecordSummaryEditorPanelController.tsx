@@ -170,7 +170,7 @@ export function useRecordSummaryEditorPanelController({
 		validateFileCount,
 	})
 
-	const { cancelRecord } = useCancelRecord({
+	const { cancelRecordFromUI: cancelRecord } = useCancelRecord({
 		onSummarizeSuccess: (result) => {
 			onSummarizeSuccessDefaultCallback(result)
 		},

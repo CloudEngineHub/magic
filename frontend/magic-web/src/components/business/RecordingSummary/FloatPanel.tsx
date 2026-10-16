@@ -306,7 +306,7 @@ export function RecordingSummaryFloatPanel() {
 		})
 	}, [])
 
-	const { cancelRecord } = useCancelRecord({
+	const { cancelRecordFromUI: cancelRecord } = useCancelRecord({
 		onSummarizeSuccess: (res) => {
 			// onWorkspaceStateChange({
 			// 	workspaceId: res.workspace_id,
