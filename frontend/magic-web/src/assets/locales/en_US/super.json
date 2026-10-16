@@ -5650,7 +5650,6 @@
 		"actions": {
 			"cancelRecording": "Cancel Recording",
 			"finishAndSummarize": "Finish & Summarize",
-			"goToProject": "Go to Project",
 			"retry": "Retry",
 			"retryTip": "If text recognition is unresponsive for a long time, please click to retry manually",
 			"retryVoiceService": "Network connection exception, please click retry",
@@ -5713,6 +5712,7 @@
 			"durationExceededMessage": "Your current recording has exceeded the {{duration}} hour limit and has been stopped. Please go to the project to view the summary",
 			"endRecording": "End Recording",
 			"finishAndSummarize": "Finish Recording and Summarize",
+			"goToProject": "Go to Project",
 			"message": "You are about to cancel the recording. You can choose the following actions:",
 			"messageWithContinue": "You are about to cancel the recording. You can choose the following actions:",
 			"noNeed": "Discard",
