@@ -179,6 +179,14 @@ export function isMagicAppVersionAtLeast(targetVersion: string): boolean {
  * Returns the browser fingerprint, device name, operating system and version.
  */
 export async function getDeviceInfo(i18n: i18n): Promise<Common.DeviceInfo> {
+	// Device identity and fallback names must not depend on a locale chunk loading.
+	const ua = new UAParser()
+	const { userAgent } = window.navigator
+	const { device, browser, os } = ua.getResult()
+	const hardwareInfo = [device.vendor, device.model].filter(Boolean).join(" ")
+	const browserInfo = [browser.name, browser.version].filter(Boolean).join(" ")
+	const runtimeFallback = hardwareInfo || browserInfo || userAgent
+
 	// Login services and settings can reach this helper before their locale is ready.
 	if (!i18n.isInitialized) {
 		await new Promise<void>((resolve) => {
@@ -190,48 +198,42 @@ export async function getDeviceInfo(i18n: i18n): Promise<Common.DeviceInfo> {
 		})
 	}
 
-	// The i18next promise resolves on backend errors; its callback preserves failures.
-	await new Promise<void>((resolve, reject) => {
-		void i18n.loadNamespaces("login", (error) => {
-			if (error) {
-				reject(error)
-				return
-			}
-			resolve()
+	try {
+		await new Promise<void>((resolve, reject) => {
+			void i18n.loadNamespaces("login", (error) => {
+				if (error) {
+					reject(error)
+					return
+				}
+				resolve()
+			})
 		})
-	})
+	} catch {
+		// Display translations are optional; preserve device identity on chunk failures.
+	}
 	const t = i18n.getFixedT(i18n.language, "login")
+	const appLabel = t("device.app", { defaultValue: "" })
 
 	// Keep platform labels in the login namespace for every caller.
 	const platformMapping = {
-		DingTalk: t("device.dingTalk"),
-		DingTalkAvoid: t("device.dingTalk"),
-		TeamshareWebAPP: `Teamshare {${t("device.app")}}`,
+		DingTalk: t("device.dingTalk", { defaultValue: runtimeFallback }),
+		DingTalkAvoid: t("device.dingTalk", { defaultValue: runtimeFallback }),
+		TeamshareWebAPP: appLabel ? `Teamshare {${appLabel}}` : runtimeFallback,
 	}
 
-	// Parse browser and device signals from the current user agent.
-	const ua = new UAParser()
-	const { userAgent } = window.navigator
 	const currentPlatform = Object.keys(platformMapping).find(
 		(platform) => userAgent.indexOf(platform) > -1,
 	)
-	const { device, browser, os } = ua.getResult()
+	const platformLabel = currentPlatform
+		? platformMapping[currentPlatform as keyof typeof platformMapping]
+		: ""
 
-	// Prefer hardware details with the current embedded platform label.
-	let deviceInfo = [
-		device.vendor,
-		device.model,
-		`${
-			currentPlatform ? platformMapping[currentPlatform as keyof typeof platformMapping] : ""
-		}`,
-	]
+	// A failed translation may already contain the hardware name, so do not repeat it.
+	let deviceInfo = [hardwareInfo, platformLabel === hardwareInfo ? "" : platformLabel]
 		.filter((attr) => !!attr)
 		.join(" ")
 
 	if (currentPlatform === "TeamshareWebAPP") deviceInfo = platformMapping[currentPlatform]
-
-	// Desktop browsers use their browser name and version.
-	const browserInfo = `${browser.name} ${browser.version}`
 
 	if (magic?.os?.getSystemInfo) {
 		const systemInfo = await magic?.os?.getSystemInfo?.()
@@ -249,8 +251,8 @@ export async function getDeviceInfo(i18n: i18n): Promise<Common.DeviceInfo> {
 		// Mobile devices and embedded platforms prefer device details over browser details.
 		name:
 			device.type === "mobile" || device.type === "tablet" || currentPlatform
-				? deviceInfo || t("device.unknown")
-				: browserInfo,
+				? deviceInfo || t("device.unknown", { defaultValue: runtimeFallback })
+				: browserInfo || runtimeFallback,
 		os: os.name || "",
 		os_version: os.version || "",
 	}

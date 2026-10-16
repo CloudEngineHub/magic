@@ -4,6 +4,13 @@ import zhCN from "@/assets/locales/zh_CN/login.json"
 import enUS from "@/assets/locales/en_US/login.json"
 import { getDeviceInfo } from "../devices"
 
+const parsedSignals = vi.hoisted(() => ({
+	vendor: "",
+	model: "",
+	browserName: "Test Browser",
+	browserVersion: "1",
+}))
+
 vi.mock("@/enhance/magicElectron", () => ({ magic: undefined }))
 vi.mock("@/platform/native", () => ({ getNativePort: vi.fn() }))
 vi.mock("@/utils/crypto", () => ({ default: { MD5encryption: () => "device-id" } }))
@@ -11,8 +18,12 @@ vi.mock("ua-parser-js", () => ({
 	default: class {
 		getResult() {
 			return {
-				device: { type: "mobile" },
-				browser: { name: "Test Browser", version: "1" },
+				device: {
+					type: "mobile",
+					vendor: parsedSignals.vendor,
+					model: parsedSignals.model,
+				},
+				browser: { name: parsedSignals.browserName, version: parsedSignals.browserVersion },
 				os: { name: "Test OS", version: "1" },
 			}
 		}
@@ -27,6 +38,12 @@ function setUserAgent(userAgent: string) {
 
 afterEach(() => {
 	vi.stubGlobal("navigator", originalNavigator)
+	Object.assign(parsedSignals, {
+		vendor: "",
+		model: "",
+		browserName: "Test Browser",
+		browserVersion: "1",
+	})
 })
 
 describe("getDeviceInfo translations", () => {
@@ -100,27 +117,53 @@ describe("getDeviceInfo translations", () => {
 		await expect(result).resolves.toMatchObject({ name: "钉钉" })
 	})
 
-	it("propagates namespace failures instead of returning untranslated device labels", async () => {
-		const loadError = new Error("login resource unavailable")
-		const backend: BackendModule = {
-			type: "backend",
-			init() {
-				return undefined
-			},
-			read(_language, _namespace, callback) {
-				callback(loadError, false)
-			},
-		}
-		const i18n = createInstance().use(backend)
-		await i18n.init({
-			lng: "en_US",
-			fallbackLng: false,
-			defaultNS: "common",
-			ns: ["common"],
-			partialBundledLanguages: true,
-			resources: { en_US: { common: {} } },
-		})
+	it.each([
+		{ userAgent: "DingTalk", expectedName: "Test Browser 1" },
+		{ userAgent: "TeamshareWebAPP", expectedName: "Test Browser 1" },
+		{ userAgent: "UnknownMobile", expectedName: "Test Browser 1" },
+		{
+			userAgent: "DingTalk",
+			expectedName: "PhoneCo Model1",
+			vendor: "PhoneCo",
+			model: "Model1",
+		},
+		{
+			userAgent: "UnknownMobile/1.0",
+			expectedName: "UnknownMobile/1.0",
+			browserName: "",
+			browserVersion: "",
+		},
+	])(
+		"preserves device information on namespace failure for $expectedName",
+		async ({ userAgent, expectedName, ...signals }) => {
+			setUserAgent(userAgent)
+			Object.assign(parsedSignals, signals)
+			const loadError = new Error("login resource unavailable")
+			const backend: BackendModule = {
+				type: "backend",
+				init() {
+					return undefined
+				},
+				read(_language, _namespace, callback) {
+					callback(loadError, false)
+				},
+			}
+			const i18n = createInstance().use(backend)
+			await i18n.init({
+				lng: "en_US",
+				fallbackLng: false,
+				defaultNS: "common",
+				ns: ["common"],
+				partialBundledLanguages: true,
+				resources: { en_US: { common: {} } },
+			})
 
-		await expect(getDeviceInfo(i18n)).rejects.toEqual(expect.arrayContaining([loadError]))
-	})
+			await expect(getDeviceInfo(i18n)).resolves.toMatchObject({
+				id: "device-id",
+				name: expectedName,
+				os: "Test OS",
+				os_version: "1",
+			})
+		},
+	)
 })
