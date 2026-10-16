@@ -72,7 +72,7 @@ def build_memory_runtime_context(agent_context: "AgentContext") -> str:
     The memory skill is available independently of the automatic-memory setting.
     User-global memory: /home/user/.magic/memory/global
     Current ordinary-project memory: /home/user/.magic/memory/projects/p_demo
-    Each user-global or ordinary-project MEMORY.md has a target of 10,000 and a maximum of 16,000 estimated tokens. These are per-file values, not a combined limit.
+    Each user-global, ordinary-project, or Claw workspace MEMORY.md has a target of 10,000 and a maximum of 16,000 estimated source tokens. These are per-file values, not a combined limit.
     这些是完整目录，不是 MEMORY.md 文件名。相同项目切换话题时，仍使用 p_demo。
     关闭自动记忆会将首行改为 disabled 并追加手动操作说明，目录行仍保留。
     """
@@ -101,8 +101,8 @@ def build_memory_runtime_context(agent_context: "AgentContext") -> str:
     budget = get_memory_md_budget()
     if budget is not None:
         lines.append(
-            f"Each user-global or ordinary-project MEMORY.md has a target of {budget.target_tokens:,} "
-            f"and a maximum of {budget.max_tokens:,} estimated tokens. These are per-file values, not a combined limit."
+            f"Each user-global, ordinary-project, or Claw workspace MEMORY.md has a target of {budget.target_tokens:,} "
+            f"and a maximum of {budget.max_tokens:,} estimated source tokens. These are per-file values, not a combined limit."
         )
     else:
         lines.append("The MEMORY.md token budget is unavailable; no budget-driven automatic operation is enabled.")

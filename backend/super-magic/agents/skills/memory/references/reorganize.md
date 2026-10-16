@@ -2,6 +2,8 @@
 
 The objective is an immediately useful core plus retrievable explanations and summaries of important decisions and events. A tiny MEMORY.md, a high compression ratio, or a file within budget is not evidence of successful preservation.
 
+For Claw, apply this preservation workflow and the runtime's per-file source-text budget to its workspace MEMORY.md. Use its inherited workspace rules and existing memory layout for destinations instead of imposing the ordinary-project notes tree or creating a project-memory copy. Save and check destinations before shortening the source, and retain exact retrieval paths and reading conditions.
+
 ## Work in bounded sections
 
 1. Use the actual paths, scopes, and per-file budgets supplied by the runtime. Inspect the source structure and relevant existing notes. Read the relevant content before choosing destinations; do not classify or move it solely by filenames or headings. Read large sources in manageable sections; track which sections are read and processed in the current task. Do not assume the whole source fits in one model context.

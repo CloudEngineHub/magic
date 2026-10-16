@@ -396,8 +396,15 @@ class AutoReadFileService:
             if await agent_context.horizon.has_complete_file_read(candidate.absolute_path):
                 continue
 
-            max_tokens = None
-            if candidate.rule_id in {AutoReadRuleId.GLOBAL_MEMORY, AutoReadRuleId.PROJECT_MEMORY}:
+            version_before = await agent_context.horizon.get_current_file_version(candidate.absolute_path)
+            delivery_source = f"{source}:version:{version_before}"
+            # 自动交付一次截断前缀也能避免重复读取，但不赋予全文凭据或限制手动续读。
+            # source 随当前聊天窗口保存；文件变化或窗口重置后自然允许重新交付。
+            if version_before is not None and cls._has_source(chat_history, delivery_source):
+                continue
+
+            source_max_tokens = None
+            if candidate.rule_id in {AutoReadRuleId.GLOBAL_MEMORY, AutoReadRuleId.PROJECT_MEMORY, AutoReadRuleId.CLAW_MEMORY}:
                 """
                 每份主文件独立给额度；这里限制本次自动交付，不删除或截短磁盘上的记忆。
                 超限内容如何保留到 notes，由后续维护 Skill 决定，不由读取服务做摘要。
@@ -405,7 +412,7 @@ class AutoReadFileService:
                 budget = get_memory_md_budget()
                 if budget is None:
                     continue
-                max_tokens = budget.max_tokens
+                source_max_tokens = budget.max_tokens
             result = await read_file.execute(
                 tool_context,
                 ReadFileParams(
@@ -413,7 +420,7 @@ class AutoReadFileService:
                     offset=0,
                     limit=-1,
                 ),
-                max_tokens=max_tokens,
+                source_max_tokens=source_max_tokens,
                 allow_fuzzy_match=False,
                 record_read=False,
             )
@@ -426,13 +433,21 @@ class AutoReadFileService:
             info = result.extra_info or {}
             truncated = bool(info.get("was_truncated"))
             source_content = info.get("source_content")
-            complete = result.ok and not truncated and isinstance(source_content, str)
-            # 同一失败或截断前缀不反复塞入上下文；这不是完整阅读凭据，不阻止后续全文。
-            result_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:20]
-            delivery_source = f"{source}:{result_hash}"
-            if not complete and cls._has_source(chat_history, delivery_source):
+            version_after = await agent_context.horizon.get_current_file_version(candidate.absolute_path)
+            stable_version = version_before is not None and version_before == version_after
+            complete = result.ok and stable_version and not truncated and isinstance(source_content, str)
+            if not result.ok or not stable_version:
+                # 失败可以重试；通知去重与成功交付分开，不把读到 A 的正文登记到新版本 B。
+                status = "failed" if not result.ok else "unstable"
+                result_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:20] if not result.ok else ""
+                delivery_source = f"{source}:{status}:{version_before}:{version_after}:{result_hash}"
+            if cls._has_source(chat_history, delivery_source):
                 continue
             state = "current" if complete else "incomplete"
+            version_notice = (
+                " The file version could not be confirmed stable during reading; this result is incomplete."
+                if result.ok and not stable_version else ""
+            )
 
             content = "\n".join(
                 (
@@ -446,6 +461,7 @@ class AutoReadFileService:
                         "The runtime called read_file for this file. Use the delivered content and respect any "
                         "failure or truncation notice; an incomplete result is not a full read. "
                         "The shared file-loading mechanism does not change the file's ownership or authority."
+                        + version_notice
                     ),
                     "<read_file_result>",
                     html.escape(result.content, quote=False),
@@ -455,11 +471,12 @@ class AutoReadFileService:
                 )
             )
             await chat_history.append_user_message(content, show_in_ui=False, source=delivery_source)
-            await read_file.record_read_result(
-                tool_context,
-                ReadFileParams(file_path=str(candidate.absolute_path), offset=0, limit=-1),
-                result,
-            )
+            if stable_version:
+                await read_file.record_read_result(
+                    tool_context,
+                    ReadFileParams(file_path=str(candidate.absolute_path), offset=0, limit=-1),
+                    result,
+                )
 
     @staticmethod
     async def read_changed_file(file_path: str, max_tokens: int) -> ToolResult:
