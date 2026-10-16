@@ -1,9 +1,13 @@
 import { z } from "zod"
+import {
+	buildIdentityWatermarkPreviewText,
+	identityWatermarkDepthTextColors,
+	identityWatermarkDepths,
+	identityWatermarkFields,
+} from "@magic-admin-v2/components/identity-watermark/watermark-utils"
 import type {
 	PlatformInfoFormState,
 	PlatformLocale,
-	PlatformWatermarkDepth,
-	PlatformWatermarkField,
 } from "@magic-admin-v2/features/platform-info/types"
 import { Language } from "@magic-admin-v2/i18n/resources"
 import type { ApiError } from "@magic-admin-v2/api/types"
@@ -12,34 +16,14 @@ export const platformLocales: PlatformLocale[] = [Language.ZhCN, Language.EnUS]
 export const GLOBAL_SYSTEM_PROMPT_MAX_LENGTH = 5000
 
 /**
- * 水印可选内容与展示顺序。这个 `as const` 元组同时作为类型约束、zod 枚举
- * 和界面渲染顺序的唯一来源，避免多处维护同一份字段清单。
+ * 水印字段顺序、深浅档位、预览文字色和预览文案构造都来自跨 feature 的
+ * 身份水印共享模块（企业水印也在用）。这里保留平台侧的历史命名，
+ * 避免大范围重命名；语义与取值以共享模块为准。
  */
-export const platformWatermarkFields = [
-	"real_name",
-	"employee_no",
-	"visit_time",
-	"department",
-	"phone",
-	"email",
-] as const satisfies readonly PlatformWatermarkField[]
-
-/** 水印深浅档位顺序，与后端 `watermark.depth` 一致。 */
-export const platformWatermarkDepths = [
-	"light",
-	"standard",
-	"strong",
-] as const satisfies readonly PlatformWatermarkDepth[]
-
-/**
- * 预览层文字色需要与前台水印渲染保持一致，属于渲染参数而不是语义色，
- * 因此不能替换成主题 token。
- */
-export const platformWatermarkDepthTextColors: Record<PlatformWatermarkDepth, string> = {
-	light: "rgba(0, 0, 0, 0.03)",
-	standard: "rgba(0, 0, 0, 0.045)",
-	strong: "rgba(0, 0, 0, 0.06)",
-}
+export const platformWatermarkFields = identityWatermarkFields
+export const platformWatermarkDepths = identityWatermarkDepths
+export const platformWatermarkDepthTextColors = identityWatermarkDepthTextColors
+export const buildPlatformWatermarkPreviewText = buildIdentityWatermarkPreviewText
 
 export const formSetValueOptions = {
 	shouldDirty: true,
@@ -121,20 +105,6 @@ export function getContentLocaleCompletion(value: PlatformInfoFormState): Locale
 		zh_CN: isContentLocaleComplete(value, Language.ZhCN),
 		en_US: isContentLocaleComplete(value, Language.EnUS),
 	}
-}
-
-/**
- * 按固定顺序把已选水印内容拼成预览文案。
- * 未选择任何内容时返回空串，由调用方决定兜底文案。
- */
-export function buildPlatformWatermarkPreviewText(
-	fields: readonly PlatformWatermarkField[],
-	samples: Record<PlatformWatermarkField, string>,
-) {
-	return fields
-		.map((field) => samples[field].trim())
-		.filter(Boolean)
-		.join(" · ")
 }
 
 export function createPlatformInfoSchema(

@@ -1,18 +1,13 @@
 import { RequestUrl } from "@magic-admin-v2/api/constants";
 import type { HttpClient, RequestOptions } from "@magic-admin-v2/api/types";
+import { normalizeIdentityWatermark } from "@magic-admin-v2/components/identity-watermark/watermark-utils";
 import type {
   PlatformInfoDetails,
   PlatformInfoFormState,
   PlatformInfoWatermark,
   PlatformLocale,
-  PlatformWatermarkDepth,
-  PlatformWatermarkField,
   UpdatePlatformInfoParams,
 } from "@magic-admin-v2/features/platform-info/types";
-import {
-  platformWatermarkDepths,
-  platformWatermarkFields,
-} from "@magic-admin-v2/features/platform-info/utils";
 import { Language } from "@magic-admin-v2/i18n/resources";
 
 const emptyLocalizedText: Record<PlatformLocale, string> = {
@@ -20,45 +15,18 @@ const emptyLocalizedText: Record<PlatformLocale, string> = {
   en_US: "",
 };
 
-/** 与后端 platform_settings 的默认水印配置保持一致。 */
-const defaultWatermark: PlatformInfoWatermark = {
-  enabled: false,
-  fields: ["real_name"],
-  depth: "light",
-};
-
 function normalizeLocale(value: unknown): PlatformLocale {
   return value === Language.EnUS ? Language.EnUS : Language.ZhCN;
 }
 
-function normalizeWatermarkDepth(value?: string): PlatformWatermarkDepth {
-  return platformWatermarkDepths.find((depth) => depth === value) ?? defaultWatermark.depth;
-}
-
-function normalizeWatermarkFields(value?: readonly string[]): PlatformWatermarkField[] {
-  const selected = new Set(value ?? []);
-
-  // 只保留前端能渲染的字段并按固定顺序输出，避免后端返回未知字段或乱序时
-  // 复选框组出现无法取消的脏数据。
-  return platformWatermarkFields.filter((field) => selected.has(field));
-}
-
 /**
- * 归一化服务端水印配置。缺省字段回退到后端默认值，
- * 保证预览态、编辑态与提交参数使用同一份结构。
+ * 归一化服务端水印配置。规则（默认值、未知字段/档位、保留显式空数组）
+ * 由跨 feature 的身份水印共享模块统一维护，企业水印走同一份实现。
  */
 export function normalizePlatformWatermark(
   value?: Partial<PlatformInfoWatermark> | null,
 ): PlatformInfoWatermark {
-  if (!value) {
-    return { ...defaultWatermark, fields: [...defaultWatermark.fields] };
-  }
-
-  return {
-    enabled: value.enabled ?? defaultWatermark.enabled,
-    fields: normalizeWatermarkFields(value.fields),
-    depth: normalizeWatermarkDepth(value.depth),
-  };
+  return normalizeIdentityWatermark(value);
 }
 
 function normalizeLocalizedText(value?: Partial<Record<PlatformLocale, string>>) {

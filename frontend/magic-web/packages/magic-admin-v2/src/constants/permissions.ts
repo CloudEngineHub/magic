@@ -133,6 +133,15 @@ export const PERMISSION_KEY_MAP = {
 	/** 用户组管理。 */
 	USER_GROUP_ALL: "TeamshareOS_user_group.all",
 
+	/* ---------- 企业管理：组织身份水印 ---------- */
+
+	/**
+	 * 组织身份水印的读取与保存（资源 admin.setting.identity_watermark、操作 edit）。
+	 * 与旧版 admin 的取值保持一致；后端权限目录尚未下发该 key，
+	 * 因此当前由「企业信息」路由权限 + 服务端 42003 共同兜底。
+	 */
+	IDENTITY_WATERMARK_EDIT: "admin.setting.identity_watermark.edit",
+
 	/* ---------- AI 管理：模型与用量管控 ---------- */
 
 	/** 用量管控策略-查询。 */

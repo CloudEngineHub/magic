@@ -1,3 +1,8 @@
+import type {
+  IdentityWatermarkDepth,
+  IdentityWatermarkField,
+  IdentityWatermarkValue,
+} from "@magic-admin-v2/components/identity-watermark/watermark-utils";
 import type { Language } from "@magic-admin-v2/i18n/resources";
 
 export type PlatformLocale = Language;
@@ -15,24 +20,14 @@ export type PlatformInfoFooter = {
   filing: PlatformInfoFooterFiling;
 };
 
-/** 组织水印中可展示的用户信息字段。 */
-export type PlatformWatermarkField =
-  | "real_name"
-  | "employee_no"
-  | "visit_time"
-  | "department"
-  | "phone"
-  | "email";
+/** 组织水印中可展示的用户信息字段；复用跨 feature 的身份水印共享类型。 */
+export type PlatformWatermarkField = IdentityWatermarkField;
 
 /** 组织水印的深浅档位，与后端 `watermark.depth` 的取值保持一致。 */
-export type PlatformWatermarkDepth = "light" | "standard" | "strong";
+export type PlatformWatermarkDepth = IdentityWatermarkDepth;
 
 /** 组织水印配置；后端只返回 enabled、fields、depth 三个字段。 */
-export type PlatformInfoWatermark = {
-  enabled: boolean;
-  fields: PlatformWatermarkField[];
-  depth: PlatformWatermarkDepth;
-};
+export type PlatformInfoWatermark = IdentityWatermarkValue;
 
 export type PlatformInfoDetails = {
   logo: PlatformLocalizedText;
