@@ -117,28 +117,45 @@ const InboxMessageCard = observer(function InboxMessageCard({
 					</div>
 				) : null}
 				<p className="mt-[5px] break-words text-[13px] leading-[1.55] text-[#7a8394] dark:text-muted-foreground">
-					{copy.body}
+					{copy.bodyParts?.map((part) => {
+						// Match template fields, not text: a sender/file can have the same name as a project.
+						const isProjectName =
+							part.field === "project_name" ||
+							(part.field === "resource_name" &&
+								(message.type === "project_invitation" ||
+									message.type === "project_shared"))
+						if (
+							!projectPath ||
+							!isProjectName ||
+							!part.field ||
+							copy.payload[part.field] == null ||
+							copy.payload[part.field] === ""
+						) {
+							return part.text
+						}
+						return (
+							<Link
+								key={part.offset}
+								to={projectPath}
+								className="rounded-sm text-blue-600 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-blue-400"
+								onClick={(event) => {
+									// Keep this panel open when the link opens in another tab/window.
+									if (
+										event.button === 0 &&
+										!event.metaKey &&
+										!event.ctrlKey &&
+										!event.shiftKey &&
+										!event.altKey
+									) {
+										inboxStore.close()
+									}
+								}}
+							>
+								{part.text}
+							</Link>
+						)
+					}) ?? copy.body}
 				</p>
-				{projectPath && (
-					<Link
-						to={projectPath}
-						className="mt-1.5 inline-block rounded-sm text-[13px] text-primary underline underline-offset-4 hover:text-primary/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-						onClick={(event) => {
-							// Keep the inbox open in this tab when a modifier opens another tab/window.
-							if (
-								event.button === 0 &&
-								!event.metaKey &&
-								!event.ctrlKey &&
-								!event.shiftKey &&
-								!event.altKey
-							) {
-								inboxStore.close()
-							}
-						}}
-					>
-						{t("inbox.viewProject")}
-					</Link>
-				)}
 				{message.category === "auth" && (organization || permission) ? (
 					<div
 						className={cn(

@@ -1,7 +1,11 @@
 import i18next from "i18next"
 import { logger as Logger } from "@/infrastructure/logger"
 import { inboxIconForType } from "./mapNotification"
-import { renderTemplate, templateCatalogKey } from "./renderNotificationTemplate"
+import {
+	renderTemplate,
+	renderTemplateParts,
+	templateCatalogKey,
+} from "./renderNotificationTemplate"
 import type { InboxMessage } from "./types"
 
 const logger = Logger.createLogger("InboxCopy")
@@ -61,14 +65,17 @@ export function resolveInboxCopy(
 		return {
 			title: message.type,
 			body: i18next.t("inbox.templateUnavailable", { ns: "sidebar" }),
+			bodyParts: undefined,
 			unavailable: true,
 			icon: inboxIconForType(message.type),
 			payload,
 		}
 	}
+	const bodyParts = renderTemplateParts(template.body_template, payload)
 	return {
 		title: renderTemplate(template.title_template, payload),
-		body: renderTemplate(template.body_template, payload),
+		body: bodyParts.map((part) => part.text).join(""),
+		bodyParts,
 		unavailable: false,
 		icon: inboxIconForType(message.type),
 		payload,
