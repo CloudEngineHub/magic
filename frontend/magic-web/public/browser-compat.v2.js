@@ -53,6 +53,17 @@
 	var STORAGE_KEY_TEMP = "MAGIC_BROWSER_WARN_TEMP_UNTIL"
 	var STORAGE_KEY_SESSION = "MAGIC_BROWSER_WARN_SESSION_IGNORED"
 
+	/** DOM ids of the parts this script owns, used for container-scoped lookups. */
+	var MODAL_ID = "__browser_compat_modal__"
+	var CONTINUE_BUTTON_ID = "__btn_browser_continue__"
+	var SUPPRESS_CHECKBOX_ID = "__chk_browser_14d__"
+
+	/**
+	 * Whether the warning has already been rendered in this document.
+	 * Guards the modal against a duplicated `DOMContentLoaded` (see renderWarningModal).
+	 */
+	var hasRenderedWarning = false
+
 	/**
 	 * Verifies if user has previously opted to suppress the warning or has already confirmed in this session.
 	 * Prevents duplicate prompts when navigating across pages (e.g. login page -> home page).
@@ -209,8 +220,19 @@
 
 	/**
 	 * Constructs and mounts the warning modal on the document body.
+	 *
+	 * Renders at most once per document. Legacy browsers get the page in es-module-shims
+	 * shim mode (server/middleware/seoMiddleware/getHtmlTemplate.js), and es-module-shims
+	 * re-dispatches `DOMContentLoaded` after the import map is ready, so this listener does
+	 * fire twice. A second render used to stack a duplicate overlay and, because both
+	 * renders shared one element id, the visible button ended up without a click handler.
 	 */
 	function renderWarningModal() {
+		if (hasRenderedWarning || document.getElementById(MODAL_ID)) {
+			return
+		}
+		hasRenderedWarning = true
+
 		if (isWarningDisabled() || isSuppressedByStorage()) {
 			return
 		}
@@ -265,7 +287,7 @@
 			  }
 
 		var modalContainer = document.createElement("div")
-		modalContainer.id = "__browser_compat_modal__"
+		modalContainer.id = MODAL_ID
 		modalContainer.style.cssText =
 			"position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);" +
 			"z-index:2147483647;display:flex;align-items:center;justify-content:center;" +
@@ -299,12 +321,18 @@
 			text.warn +
 			"</div>" +
 			'<div style="margin-bottom:16px;display:flex;align-items:center;">' +
-			'<input type="checkbox" id="__chk_browser_14d__" style="width:16px;height:16px;margin:0 8px 0 0;cursor:pointer;vertical-align:middle;" />' +
-			'<label for="__chk_browser_14d__" style="font-size:13px;color:#4b5563;cursor:pointer;user-select:none;">' +
+			'<input type="checkbox" id="' +
+			SUPPRESS_CHECKBOX_ID +
+			'" style="width:16px;height:16px;margin:0 8px 0 0;cursor:pointer;vertical-align:middle;" />' +
+			'<label for="' +
+			SUPPRESS_CHECKBOX_ID +
+			'" style="font-size:13px;color:#4b5563;cursor:pointer;user-select:none;">' +
 			text.ignore14d +
 			"</label>" +
 			"</div>" +
-			'<button id="__btn_browser_continue__" style="width:100%;height:38px;background:#111827;color:#ffffff;' +
+			'<button id="' +
+			CONTINUE_BUTTON_ID +
+			'" style="width:100%;height:38px;background:#111827;color:#ffffff;' +
 			'border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:500;outline:none;">' +
 			text.btnContinue +
 			"</button>" +
@@ -314,7 +342,8 @@
 		 * Handles click on continue button, saving user choice to avoid duplicate popups.
 		 */
 		function onContinue() {
-			var chk = document.getElementById("__chk_browser_14d__")
+			// Container-scoped lookup: a document-wide one could read another overlay's checkbox.
+			var chk = modalContainer.querySelector("#" + SUPPRESS_CHECKBOX_ID)
 			var is14DaysChecked = chk && chk.checked
 			try {
 				if (is14DaysChecked && window.localStorage) {
@@ -338,7 +367,9 @@
 
 		if (document.body) {
 			document.body.appendChild(modalContainer)
-			var btn = document.getElementById("__btn_browser_continue__")
+			// Bind through the container: `document.getElementById` would return the first
+			// matching button in the document, leaving this modal's button inert.
+			var btn = modalContainer.querySelector("#" + CONTINUE_BUTTON_ID)
 			if (btn) {
 				btn.onclick = onContinue
 			}
