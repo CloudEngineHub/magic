@@ -8,14 +8,14 @@ import {
 } from "./largeMarkdown"
 
 describe("large markdown utilities", () => {
-	it("pins the boundary at 0.8 MiB", () => {
+	it("pins the boundary at 200 KiB", () => {
 		// Every other case below is expressed relative to the constant, so it would keep
 		// passing for any threshold. This one pins the product decision itself.
-		expect(LARGE_MARKDOWN_THRESHOLD_BYTES).toBe(838_861)
-		expect(LARGE_MARKDOWN_THRESHOLD_BYTES).toBe(Math.ceil(0.8 * 1024 * 1024))
+		expect(LARGE_MARKDOWN_THRESHOLD_BYTES).toBe(204_800)
+		expect(LARGE_MARKDOWN_THRESHOLD_BYTES).toBe(200 * 1024)
 	})
 
-	it("uses UTF-8 byte size and treats the 0.8 MB boundary as large", () => {
+	it("uses UTF-8 byte size and treats the 200 KB boundary as large", () => {
 		expect(isLargeMarkdownContent("a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES - 1))).toBe(false)
 		expect(isLargeMarkdownContent("a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES))).toBe(true)
 		expect(isLargeMarkdownContent("a".repeat(LARGE_MARKDOWN_THRESHOLD_BYTES + 1))).toBe(true)
@@ -24,15 +24,22 @@ describe("large markdown utilities", () => {
 	})
 
 	it("measures multi-byte content in bytes instead of characters", () => {
-		// The threshold minus one divides evenly by 3, so this is exactly one byte below it.
-		const charsBelowLimit = (LARGE_MARKDOWN_THRESHOLD_BYTES - 1) / 3
-		expect(charsBelowLimit * 3).toBe(LARGE_MARKDOWN_THRESHOLD_BYTES - 1)
-		expect(isLargeMarkdownContent("中".repeat(charsBelowLimit))).toBe(false)
-		expect(isLargeMarkdownContent("中".repeat(charsBelowLimit + 1))).toBe(true)
+		// "中" is 3 UTF-8 bytes and the limit minus one is not divisible by 3, so pad with
+		// ASCII to land exactly one byte below the limit instead of relying on `repeat`
+		// truncating a fractional count.
+		const cjkCount = Math.floor((LARGE_MARKDOWN_THRESHOLD_BYTES - 1) / 3)
+		const asciiPadding = LARGE_MARKDOWN_THRESHOLD_BYTES - 1 - cjkCount * 3
+		const justBelowLimit = `${"中".repeat(cjkCount)}${"a".repeat(asciiPadding)}`
 
-		// A 4-byte emoji occupies two UTF-16 code units: 300k emoji are only 600k characters
-		// (far below the limit) but 1.14 MiB of UTF-8.
-		expect(isLargeMarkdownContent("😀".repeat(300_000))).toBe(true)
+		expect(cjkCount * 3 + asciiPadding).toBe(LARGE_MARKDOWN_THRESHOLD_BYTES - 1)
+		expect(isLargeMarkdownContent(justBelowLimit)).toBe(false)
+		expect(isLargeMarkdownContent(`${justBelowLimit}a`)).toBe(true)
+
+		// A 4-byte emoji occupies two UTF-16 code units, so this document is only half the
+		// threshold in characters while already reaching it in bytes.
+		const emojiOnly = "😀".repeat(Math.ceil(LARGE_MARKDOWN_THRESHOLD_BYTES / 4))
+		expect(emojiOnly.length).toBeLessThan(LARGE_MARKDOWN_THRESHOLD_BYTES)
+		expect(isLargeMarkdownContent(emojiOnly)).toBe(true)
 
 		// This mixed string is long enough to skip the O(1) short-circuits, so it covers
 		// the exact byte scan. Adding one more character crosses the inclusive limit.

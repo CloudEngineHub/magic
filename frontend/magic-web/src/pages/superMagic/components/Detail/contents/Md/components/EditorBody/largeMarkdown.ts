@@ -1,8 +1,8 @@
 import { slugify } from "@/utils/slug"
 
-// 0.8 MiB. `Math.ceil` because the threshold is inclusive: 0.8 MiB is 838,860.8 bytes, so
-// 838,861 is the smallest whole byte size that already reaches it.
-export const LARGE_MARKDOWN_THRESHOLD_BYTES = Math.ceil(0.8 * 1024 * 1024)
+// 200 KiB = 204,800 bytes. The threshold is inclusive, so a document whose UTF-8 size is
+// exactly this already counts as large.
+export const LARGE_MARKDOWN_THRESHOLD_BYTES = 200 * 1024
 
 // The threshold is inclusive: a document whose UTF-8 size is exactly
 // LARGE_MARKDOWN_THRESHOLD_BYTES already counts as large. Every comparison below is
