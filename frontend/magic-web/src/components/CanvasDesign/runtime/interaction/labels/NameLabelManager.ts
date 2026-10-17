@@ -6,11 +6,19 @@ import {
 	isImageElementContent,
 } from "../../document/elementContent"
 import { GenerationStatus } from "../../../public/magic-types"
-import { BaseLabelManager, type BaseLabelManagerConfig, type LabelLayoutSyncContext, type LabelSize } from "./BaseLabelManager"
 import {
+	BaseLabelManager,
+	type BaseLabelManagerConfig,
+	type LabelLayoutSyncContext,
+	type LabelSize,
+} from "./BaseLabelManager"
+import {
+	NAME_LABEL_COMPLIANCE_HIT_NAME,
 	NAME_LABEL_GROUP_PREFIX,
 	NAME_LABEL_HIT_NAME,
 	NAME_LABEL_ICON_NAME,
+	NAME_LABEL_RENAME_HIT_NAME,
+	NAME_LABEL_RENAME_ICON_NAME,
 	NAME_LABEL_SUFFIX_NAME,
 	NAME_LABEL_TEXT_NAME,
 } from "./nameLabelNodeUtils"
@@ -62,6 +70,18 @@ const NAME_LABEL_CONFIG = {
 	STATUS_PADDING_Y: 2,
 	/** 省略后仍保留的最小文本宽度，避免标签节点宽度为 0 */
 	MIN_TEXT_WIDTH: 1,
+	/** 图片重命名按钮的固定局部宽度，屏幕宽度由媒体行比例统一控制 */
+	RENAME_BUTTON_WIDTH: 24,
+	/** 名称内容与重命名按钮之间的局部间距，与左侧 icon 使用同一视觉尺度 */
+	RENAME_GAP: 2,
+	/** 按钮总预算包含名称与按钮之间的间距 */
+	RENAME_OPERATION_WIDTH: 26,
+	/** 铅笔图标的可见尺寸，命中区仍保持 24px */
+	RENAME_ICON_SIZE: 14,
+	/** hover 时显示的轻量按钮底色；未 hover 时按钮保持透明但仍接收命中 */
+	RENAME_BUTTON_HOVER_FILL: "#F2F2F2",
+	RENAME_BUTTON_TRANSPARENT_FILL: "rgba(0, 0, 0, 0.001)",
+	RENAME_BUTTON_RADIUS: 4,
 } as const
 
 interface NameLabelLayoutState {
@@ -87,35 +107,6 @@ interface NameLabelLayoutState {
 	canRenderText: boolean
 }
 
-export interface NameLabelScreenLayout {
-	x: number
-	y: number
-	width: number
-	height: number
-	text: string
-	fontSize: number
-	fontFamily: string
-	color: string
-}
-
-export interface ImageNameLabelLayout extends NameLabelScreenLayout {
-	rowWidth: number
-	canRename: boolean
-	showRenameButton: boolean
-	renameButtonGap: number
-	hitPadding: number
-	/** Screen-space hit region for a failed-compliance icon, when one is visible. */
-	complianceIcon?: {
-		x: number
-		y: number
-		width: number
-		height: number
-		failedReason: string
-	}
-}
-
-export type NameLabelIconRefreshListener = (elementIds?: readonly string[]) => void
-
 /**
  * 名称标签管理器
  * 职责：
@@ -123,19 +114,17 @@ export type NameLabelIconRefreshListener = (elementIds?: readonly string[]) => v
  * 2. 监听元素变化，同步更新名称标签
  * 3. 管理名称标签的可见性（媒体标签默认按 hover/选中显示，可通过画布设置常驻）
  * 4. 处理名称标签的位置和缩放
- * 5. 选择工具下命中名称：hover 手势、单击选中、双击重命名（不从名称拖动元素）
+ * 5. 选择工具下命中名称：hover 手势、单击选中；通过 Konva 铅笔按钮进入重命名
  */
 export class NameLabelManager extends BaseLabelManager {
 	private renamingElementId: string | null = null
 	private interactionUnsubscribers: Array<() => void> = []
 	private pointerHoverElementId: string | null = null
-	private iconHoverElementId: string | null = null
+	private canvasHoverElementId: string | null = null
 	private readonly iconResolver?: NameLabelIconResolver
-	private readonly iconRefreshListeners = new Set<NameLabelIconRefreshListener>()
 	private readonly labelLayoutStates = new WeakMap<Konva.Group, NameLabelLayoutState>()
 	private readonly tooltipController: NameLabelTooltipController
-	private domLabelElementId: string | null = null
-	private renameButtonElementId: string | null = null
+	private renameHoverElementId: string | null = null
 
 	constructor(options: { canvas: Canvas; iconResolver?: NameLabelIconResolver }) {
 		const { canvas } = options
@@ -150,15 +139,10 @@ export class NameLabelManager extends BaseLabelManager {
 				offsetLeft: NAME_LABEL_CONFIG.OFFSET_LEFT,
 			},
 			visibilityConfig: {
-				// 只有业务容器与媒体元素显示名称标签
-				elementTypes: new Set([
-					ElementTypeEnum.Frame,
-					ElementTypeEnum.Image,
-					ElementTypeEnum.Video,
-					ElementTypeEnum.Audio,
-					ElementTypeEnum.Storyboard,
-					ElementTypeEnum.VideoEdit,
-				]),
+				// 菜单允许重命名的元素都提供同一套名称标签入口。常驻标签仍只保留在
+				// 原有容器/音频/生成节点上，其余类型只在 hover 或选中时挂载，避免扩大
+				// 10k 元素场景下的常驻 Overlay 工作集。
+				elementTypes: new Set(Object.values(ElementTypeEnum)),
 				// Frame、Audio 和函数型分镜节点始终显示名称。
 				alwaysVisibleTypes: new Set([
 					ElementTypeEnum.Frame,
@@ -166,8 +150,22 @@ export class NameLabelManager extends BaseLabelManager {
 					ElementTypeEnum.Storyboard,
 					ElementTypeEnum.VideoEdit,
 				]),
-				// 图片和视频在选中或 hover 时显示
-				hoverOrSelectTypes: new Set([ElementTypeEnum.Image, ElementTypeEnum.Video]),
+				// 图片、视频和普通元素在选中或 hover 时显示。
+				hoverOrSelectTypes: new Set([
+					ElementTypeEnum.Image,
+					ElementTypeEnum.Video,
+					ElementTypeEnum.Group,
+					ElementTypeEnum.Text,
+					ElementTypeEnum.Rectangle,
+					ElementTypeEnum.Ellipse,
+					ElementTypeEnum.Triangle,
+					ElementTypeEnum.Star,
+				]),
+				// “媒体标签常驻”只影响图片和视频，普通元素不会因该设置批量挂载标签。
+				alwaysVisibleWhenMediaLabelsEnabledTypes: new Set([
+					ElementTypeEnum.Image,
+					ElementTypeEnum.Video,
+				]),
 			},
 		}
 
@@ -175,148 +173,6 @@ export class NameLabelManager extends BaseLabelManager {
 		this.iconResolver = options.iconResolver
 		this.tooltipController = new NameLabelTooltipController(canvas)
 		this.setupInteractionListeners()
-	}
-
-	public canStartRename(elementId: string): boolean {
-		return this.shouldShowLabel(elementId)
-	}
-
-	/** 铅笔使用名称的屏幕坐标；沿用同一权限和工具条件，不为 DOM 入口绕过限制。 */
-	public getRenameButtonLayout(elementId: string): { x: number; y: number } | null {
-		// This is an explicit, cold-path API. The DOM overlay uses the cached variant below during
-		// motion so callers that request the button on demand retain the previous lazy-create behavior.
-		const layout = this.getImageNameLabelLayout(elementId)
-		if (!layout?.showRenameButton) return null
-		return {
-			x: layout.x + layout.width + layout.renameButtonGap,
-			y: layout.y,
-		}
-	}
-
-	/** 只把当前可交互图片的名称交给 DOM；布局和其它元素标签仍由原管理器维护。 */
-	public getImageNameLabelLayout(elementId: string): ImageNameLabelLayout | null {
-		if (
-			this.renamingElementId ||
-			!this.areNameLabelsInteractive() ||
-			this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
-		)
-			return null
-		this.createOrUpdateLabel(elementId, { forceCreate: true })
-		return this.getCachedImageNameLabelLayout(elementId)
-	}
-
-	/**
-	 * Reads the already reconciled Konva label without triggering geometry, spatial, or text layout.
-	 * Viewport and transform hot paths use this method after BaseLabelManager has updated the label.
-	 */
-	public getCachedImageNameLabelLayout(elementId: string): ImageNameLabelLayout | null {
-		const labelGroup = this.labelMap.get(elementId)
-		const state = labelGroup ? this.labelLayoutStates.get(labelGroup) : undefined
-		if (this.renamingElementId || !labelGroup?.visible() || !labelGroup.listening() || !state)
-			return null
-		const layout = this.readDisplayLabelLayout(elementId)
-		if (!layout) return null
-		const viewportScale = this.canvas.stage.scaleX()
-		const labelSize = this.getLabelSize(labelGroup)
-		const labelScreenRight =
-			labelGroup.x() * viewportScale +
-			this.canvas.stage.position().x +
-			(labelSize?.width ?? 0) * labelGroup.scaleX() * viewportScale
-		const iconNode = this.getIconNode(labelGroup)
-		const iconScaleX = labelGroup.scaleX() * viewportScale
-		const iconScaleY = labelGroup.scaleY() * viewportScale
-		const stagePosition = this.canvas.stage.position()
-		const complianceIcon =
-			state.complianceFailed && state.iconVisible && iconNode?.visible()
-				? {
-						x:
-							labelGroup.x() * viewportScale +
-							stagePosition.x +
-							iconNode.x() * iconScaleX,
-						y:
-							labelGroup.y() * viewportScale +
-							stagePosition.y +
-							iconNode.y() * iconScaleY,
-						width: state.iconWidth * iconScaleX,
-						height: state.iconHeight * iconScaleY,
-						failedReason: state.complianceFailedReason ?? "",
-					}
-				: undefined
-		return {
-			...layout,
-			rowWidth: Math.max(layout.width, labelScreenRight - layout.x),
-			canRename: state.canRename,
-			showRenameButton: state.canRename && state.showOperation,
-			renameButtonGap:
-				Math.max(0, labelScreenRight - layout.x - layout.width) +
-				(state.showOperation
-					? NAME_LABEL_CONFIG.ICON_GAP * labelGroup.scaleX() * viewportScale
-					: 0),
-			hitPadding: NAME_LABEL_CONFIG.HIT_PADDING * labelGroup.scaleX() * viewportScale,
-			...(complianceIcon ? { complianceIcon } : {}),
-		}
-	}
-
-	/** DOM 标题悬浮或键盘聚焦期间，名称与分辨率沿用同一个交互目标。 */
-	public isDOMLabelInteracting(elementId: string): boolean {
-		return this.domLabelElementId === elementId && this.renameButtonElementId === elementId
-	}
-
-	/** 只有标题悬浮或键盘聚焦才占用铅笔宽度；图片选中本身不挤压标题。 */
-	public setRenameButtonElementId(elementId: string | null): void {
-		if (this.renameButtonElementId === elementId) return
-		const previous = this.renameButtonElementId
-		this.renameButtonElementId = elementId
-		for (const id of [previous, elementId]) {
-			if (!id) continue
-			// 名称与尺寸共用操作区预算；释放按钮空间后，两者必须一起恢复布局。
-			this.refreshLabelLayout(id)
-			this.canvas.sizeLabelManager.refreshLabelLayout(id)
-		}
-	}
-
-	public setDOMLabelElementId(elementId: string | null): void {
-		if (this.domLabelElementId === elementId) return
-		const previous = this.domLabelElementId
-		this.domLabelElementId = elementId
-		// DOM 文字支持原生选中复制，只隐藏同一标签的 Konva 文字，避免双份文字重叠。
-		// 文字和命中一起交接，避免 DOM 文字光标与下方透明区域的手形光标竞争。
-		if (previous) {
-			const group = this.labelMap.get(previous)
-			this.getTextNode(group)?.opacity(1)
-			group?.findOne<Konva.Rect>(`.${NAME_LABEL_HIT_NAME}`)?.listening(true)
-		}
-		if (elementId) {
-			const group = this.labelMap.get(elementId)
-			this.getTextNode(group)?.opacity(0)
-			group?.findOne<Konva.Rect>(`.${NAME_LABEL_HIT_NAME}`)?.listening(false)
-			if (this.pointerHoverElementId === elementId) this.clearPointerHover()
-		}
-		this.canvas.runtimeScheduler.requestLayerDraw("overlay", {
-			source: "NameLabelManager",
-			reason: "dom-name-label",
-			priority: "input",
-		})
-	}
-
-	/** 浏览文字使用最终屏幕比例；编辑入口继续通过 getRenameInputLayout 读取全文。 */
-	public getDisplayLabelLayout(elementId: string): NameLabelScreenLayout | null {
-		this.createOrUpdateLabel(elementId, { forceCreate: true })
-		return this.readDisplayLabelLayout(elementId)
-	}
-
-	private readDisplayLabelLayout(elementId: string): NameLabelScreenLayout | null {
-		const layout = this.readRenameInputLayout(elementId)
-		const group = this.labelMap.get(elementId)
-		const textNode = group ? this.getTextNode(group) : null
-		if (!layout || !group?.visible() || !textNode) return null
-		const screenRatio = group.scaleX() * this.canvas.stage.scaleX()
-		return {
-			...layout,
-			width: textNode.width() * screenRatio,
-			height: textNode.height() * screenRatio,
-			fontSize: textNode.fontSize() * screenRatio,
-		}
 	}
 
 	public setRenamingElementId(elementId: string | null): void {
@@ -329,56 +185,6 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 		if (elementId) {
 			this.updateLabelVisibility(elementId)
-		}
-	}
-
-	public getRenameInputLayout(elementId: string): {
-		x: number
-		y: number
-		width: number
-		height: number
-		text: string
-		fontSize: number
-		fontFamily: string
-		color: string
-	} | null {
-		this.createOrUpdateLabel(elementId, { forceCreate: true })
-		return this.readRenameInputLayout(elementId)
-	}
-
-	private readRenameInputLayout(elementId: string): NameLabelScreenLayout | null {
-		const labelGroup = this.labelMap.get(elementId)
-		if (!labelGroup) {
-			return null
-		}
-
-		const textNode = this.getTextNode(labelGroup)
-		if (!textNode) {
-			return null
-		}
-
-		const scale = this.canvas.stage.scaleX()
-		const stagePosition = this.canvas.stage.position()
-		const layoutState = this.labelLayoutStates.get(labelGroup)
-		const textOffsetX = layoutState?.textOffsetX ?? 0
-		const textWidth = Math.max(
-			layoutState?.naturalTextWidth ?? this.measureNaturalTextWidth(textNode),
-			NAME_LABEL_CONFIG.MIN_TEXT_WIDTH,
-		)
-
-		return {
-			x: labelGroup.x() * scale + stagePosition.x + textOffsetX * labelGroup.scaleX() * scale,
-			y:
-				labelGroup.y() * scale +
-				stagePosition.y +
-				textNode.y() * labelGroup.scaleY() * scale,
-			// Rename input uses the full name; the canvas label may be ellipsized.
-			width: Math.ceil(textWidth),
-			height: Math.ceil(textNode.height()),
-			text: textNode.text(),
-			fontSize: this.labelConfig.fontSize,
-			fontFamily: this.labelConfig.fontFamily,
-			color: this.labelConfig.textColor,
 		}
 	}
 
@@ -435,10 +241,8 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	protected override getLabelOperationScreenWidth(elementId: string): number {
-		return this.canvas.elementManager.getElementData(elementId)?.type ===
-			ElementTypeEnum.Image &&
-			(this.canvas.elementRenameManager?.canRename(elementId) ?? false)
-			? 24
+		return (this.canvas.elementRenameManager?.canRename(elementId) ?? false)
+			? NAME_LABEL_CONFIG.RENAME_OPERATION_WIDTH
 			: 0
 	}
 
@@ -457,12 +261,11 @@ export class NameLabelManager extends BaseLabelManager {
 			wrap: "none",
 			ellipsis: true,
 			listening: false,
-			opacity: this.domLabelElementId === elementId ? 0 : 1,
 		})
 		const hitRect = new Konva.Rect({
 			name: NAME_LABEL_HIT_NAME,
 			fill: "rgba(0, 0, 0, 0.001)",
-			listening: this.domLabelElementId !== elementId,
+			listening: this.areNameLabelsInteractive(),
 		})
 		labelGroup.add(hitRect)
 		labelGroup.add(textNode)
@@ -622,15 +425,18 @@ export class NameLabelManager extends BaseLabelManager {
 		const previousSizeLabelSuppression = state.sizeLabelSuppressedByName
 		const safeInverseScale = Math.max(inverseScale, Number.EPSILON)
 		const resolvedMediaLayout = mediaLayout ?? this.getMediaRowLayout(elementId)
-		const canRename =
-			element?.getData().type === ElementTypeEnum.Image &&
-			(this.canvas.permissionManager?.canRename(element.getData()) ?? false)
+		const canRename = this.canvas.elementRenameManager?.canRename(elementId) ?? false
 		state.canRename = canRename
-		state.showOperation = resolvedMediaLayout?.showOperation === true
+		const operationScreenWidth = canRename ? NAME_LABEL_CONFIG.RENAME_OPERATION_WIDTH : 0
+		const minimumVisibleTextWidth =
+			naturalTextWidth > 0
+				? Math.min(naturalTextWidth, NAME_LABEL_CONFIG.FONT_SIZE)
+				: NAME_LABEL_CONFIG.MIN_TEXT_WIDTH
 		let sizeLabelSuppressionChanged = false
 		let availableLabelWidth: number
 		if (resolvedMediaLayout) {
 			availableLabelWidth = Math.max(0, resolvedMediaLayout.nameWidth)
+			state.showOperation = resolvedMediaLayout.showOperation
 			if (state.sizeLabelSuppressedByName) {
 				state.sizeLabelSuppressedByName = false
 				sizeLabelSuppressionChanged = true
@@ -652,13 +458,21 @@ export class NameLabelManager extends BaseLabelManager {
 				? 0
 				: sizeLabelDecision.reservation
 			availableLabelWidth = Math.max(0, elementLabelWidth - sizeLabelReservation)
+			// Rename capability is independent from the text budget. Keep the operation area
+			// available even when the element is too narrow; the name then ellipsizes and the
+			// lower-priority size label yields first. This keeps the label entry consistent with
+			// the context menu for every element that can be renamed.
+			state.showOperation = operationScreenWidth > 0
+			if (state.showOperation) {
+				availableLabelWidth = Math.max(
+					availableLabelWidth,
+					operationScreenWidth + minimumVisibleTextWidth + suffixReservation,
+				)
+				availableLabelWidth = Math.max(0, availableLabelWidth - operationScreenWidth)
+			}
 		}
 		const hasIcon = state.iconKey !== null
 		const fullIconWidth = hasIcon ? state.iconWidth + state.iconGap : 0
-		const minimumVisibleTextWidth =
-			naturalTextWidth > 0
-				? Math.min(naturalTextWidth, NAME_LABEL_CONFIG.FONT_SIZE)
-				: NAME_LABEL_CONFIG.MIN_TEXT_WIDTH
 		const iconCanFit =
 			hasIcon &&
 			availableLabelWidth - fullIconWidth - suffixReservation >= minimumVisibleTextWidth
@@ -669,8 +483,6 @@ export class NameLabelManager extends BaseLabelManager {
 		)
 		const canRenderText = availableTextWidth >= NAME_LABEL_CONFIG.MIN_TEXT_WIDTH
 		const targetTextWidth = this.getRenderedTextWidth(naturalTextWidth, availableTextWidth)
-		const suffixOffsetX =
-			textOffsetX + targetTextWidth + (state.suffixText ? NAME_LABEL_CONFIG.SUFFIX_GAP : 0)
 		let changed = false
 
 		if (state.textOffsetX !== textOffsetX) {
@@ -761,10 +573,19 @@ export class NameLabelManager extends BaseLabelManager {
 				changed = true
 			}
 		}
+		const interactiveNodesChanged = this.syncInteractiveNodes(
+			elementId,
+			labelGroup,
+			labelHeight,
+			iconY,
+		)
+		changed = interactiveNodesChanged || changed
 		if (sizeLabelSuppressionChanged) {
-			const sizeVisibilityChanged =
-				this.canvas.sizeLabelManager?.refreshVisibilityForNamePriority?.(elementId, true) ??
-				false
+			const refreshSizeVisibility =
+				this.canvas.sizeLabelManager?.refreshVisibilityForNamePriority
+			const sizeVisibilityChanged = context
+				? (refreshSizeVisibility?.(elementId, true, context) ?? false)
+				: (refreshSizeVisibility?.(elementId, true) ?? false)
 			changed = sizeVisibilityChanged || changed
 		}
 		if (changed) this.syncHitRect(labelGroup)
@@ -776,13 +597,14 @@ export class NameLabelManager extends BaseLabelManager {
 		if (!textNode) return null
 
 		const state = this.labelLayoutStates.get(labelGroup)
+		const operationWidth =
+			state?.showOperation && state.canRename ? NAME_LABEL_CONFIG.RENAME_OPERATION_WIDTH : 0
+		// The constrained text width is only a layout budget for ellipsis. Once Konva has
+		// truncated the text, use the actual drawn content width for the label bounds as well;
+		// otherwise the invisible tail would keep the hit area and trailing space wide.
+		const contentWidth = state ? this.getLabelContentWidth(textNode, state) : textNode.width()
 		return {
-			width:
-				(state?.textOffsetX ?? 0) +
-				textNode.width() +
-				(state?.suffixText
-					? NAME_LABEL_CONFIG.SUFFIX_GAP + (state.suffixNaturalTextWidth ?? 0)
-					: 0),
+			width: contentWidth + operationWidth,
 			height: Math.max(
 				textNode.height(),
 				state?.suffixText ? (state.suffixHeight ?? 0) : 0,
@@ -841,6 +663,182 @@ export class NameLabelManager extends BaseLabelManager {
 
 	private getIconNode(labelGroup: Konva.Group): Konva.Shape | Konva.Group | null {
 		return labelGroup.findOne(`.${NAME_LABEL_ICON_NAME}`) as Konva.Shape | Konva.Group | null
+	}
+
+	private getComplianceHitNode(labelGroup: Konva.Group): Konva.Rect | null {
+		return labelGroup.findOne(`.${NAME_LABEL_COMPLIANCE_HIT_NAME}`) as Konva.Rect | null
+	}
+
+	private getRenameIconNode(labelGroup: Konva.Group): Konva.Path | null {
+		return labelGroup.findOne(`.${NAME_LABEL_RENAME_ICON_NAME}`) as Konva.Path | null
+	}
+
+	private getRenameHitNode(labelGroup: Konva.Group): Konva.Rect | null {
+		return labelGroup.findOne(`.${NAME_LABEL_RENAME_HIT_NAME}`) as Konva.Rect | null
+	}
+
+	private getLabelContentWidth(textNode: Konva.Text, state: NameLabelLayoutState): number {
+		return (
+			state.textOffsetX +
+			(state.renderedTextWidth || textNode.width()) +
+			(state.suffixText ? NAME_LABEL_CONFIG.SUFFIX_GAP + state.suffixNaturalTextWidth : 0)
+		)
+	}
+
+	private syncInteractiveNodes(
+		elementId: string,
+		labelGroup: Konva.Group,
+		labelHeight: number,
+		iconY: number,
+	): boolean {
+		const state = this.labelLayoutStates.get(labelGroup)
+		const textNode = this.getTextNode(labelGroup)
+		if (!state || !textNode) return false
+
+		let changed = false
+		const showComplianceHit = state.complianceFailed && state.iconVisible && state.iconWidth > 0
+		let complianceHit = this.getComplianceHitNode(labelGroup)
+		if (showComplianceHit) {
+			if (!complianceHit) {
+				complianceHit = new Konva.Rect({
+					name: NAME_LABEL_COMPLIANCE_HIT_NAME,
+					fill: "rgba(0, 0, 0, 0.001)",
+					listening: true,
+				})
+				labelGroup.add(complianceHit)
+				this.bindComplianceInteraction(complianceHit, elementId)
+				changed = true
+			}
+			const nextComplianceAttrs = {
+				x: 0,
+				y: iconY,
+				width: state.iconWidth,
+				height: state.iconHeight,
+			}
+			if (
+				complianceHit.x() !== nextComplianceAttrs.x ||
+				complianceHit.y() !== nextComplianceAttrs.y ||
+				complianceHit.width() !== nextComplianceAttrs.width ||
+				complianceHit.height() !== nextComplianceAttrs.height
+			) {
+				complianceHit.setAttrs(nextComplianceAttrs)
+				changed = true
+			}
+			if (!complianceHit.visible() || !complianceHit.listening()) {
+				complianceHit.visible(true)
+				complianceHit.listening(true)
+				changed = true
+			}
+		} else if (complianceHit) {
+			complianceHit.destroy()
+			changed = true
+		}
+
+		const showRename = state.canRename && state.showOperation
+		const isRenameButtonHovered = this.renameHoverElementId === elementId
+		const shouldShowRenameIcon =
+			isRenameButtonHovered ||
+			this.pointerHoverElementId === elementId ||
+			this.canvasHoverElementId === elementId
+		let renameHit = this.getRenameHitNode(labelGroup)
+		let renameIcon = this.getRenameIconNode(labelGroup)
+		if (showRename) {
+			if (!renameHit) {
+				renameHit = new Konva.Rect({
+					name: NAME_LABEL_RENAME_HIT_NAME,
+					fill: NAME_LABEL_CONFIG.RENAME_BUTTON_TRANSPARENT_FILL,
+					cornerRadius: NAME_LABEL_CONFIG.RENAME_BUTTON_RADIUS,
+					listening: true,
+				})
+				labelGroup.add(renameHit)
+				// The button is added after the full-size label hit area, so it remains
+				// the topmost listening node in its own operation region.
+				this.bindRenameInteraction(renameHit, elementId)
+				changed = true
+			}
+			if (!renameIcon) {
+				renameIcon = new Konva.Path({
+					name: NAME_LABEL_RENAME_ICON_NAME,
+					data: "M12 20h9 M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z",
+					scaleX: NAME_LABEL_CONFIG.RENAME_ICON_SIZE / 24,
+					scaleY: NAME_LABEL_CONFIG.RENAME_ICON_SIZE / 24,
+					stroke: "#737373",
+					strokeWidth: 2,
+					lineCap: "round",
+					lineJoin: "round",
+					fillEnabled: false,
+					listening: false,
+				})
+				labelGroup.add(renameIcon)
+				changed = true
+			}
+
+			const buttonX =
+				this.getLabelContentWidth(textNode, state) + NAME_LABEL_CONFIG.RENAME_GAP
+			const buttonHeight = labelHeight
+			const nextButtonFill = isRenameButtonHovered
+				? NAME_LABEL_CONFIG.RENAME_BUTTON_HOVER_FILL
+				: NAME_LABEL_CONFIG.RENAME_BUTTON_TRANSPARENT_FILL
+			const nextRenameHitAttrs = {
+				x: buttonX,
+				y: 0,
+				width: NAME_LABEL_CONFIG.RENAME_BUTTON_WIDTH,
+				height: buttonHeight,
+				cornerRadius: NAME_LABEL_CONFIG.RENAME_BUTTON_RADIUS,
+			}
+			if (
+				renameHit.x() !== nextRenameHitAttrs.x ||
+				renameHit.y() !== nextRenameHitAttrs.y ||
+				renameHit.width() !== nextRenameHitAttrs.width ||
+				renameHit.height() !== nextRenameHitAttrs.height ||
+				renameHit.cornerRadius() !== nextRenameHitAttrs.cornerRadius
+			) {
+				renameHit.setAttrs(nextRenameHitAttrs)
+				changed = true
+			}
+			if (renameHit.fill() !== nextButtonFill || !renameHit.visible()) {
+				renameHit.fill(nextButtonFill)
+				renameHit.visible(true)
+				changed = true
+			}
+			const iconX =
+				buttonX +
+				(NAME_LABEL_CONFIG.RENAME_BUTTON_WIDTH - NAME_LABEL_CONFIG.RENAME_ICON_SIZE) / 2
+			const iconYPosition = Math.max(
+				0,
+				(labelHeight - NAME_LABEL_CONFIG.RENAME_ICON_SIZE) / 2,
+			)
+			if (renameIcon.x() !== iconX || renameIcon.y() !== iconYPosition) {
+				renameIcon.position({ x: iconX, y: iconYPosition })
+				changed = true
+			}
+			const renameColor = isRenameButtonHovered ? "#262626" : "#737373"
+			if (renameIcon.stroke() !== renameColor) {
+				renameIcon.stroke(renameColor)
+				changed = true
+			}
+			if (renameIcon.visible() !== shouldShowRenameIcon) {
+				renameIcon.visible(shouldShowRenameIcon)
+				changed = true
+			}
+			if (!renameHit.visible() || !renameHit.listening()) {
+				renameHit.visible(true)
+				renameHit.listening(true)
+				changed = true
+			}
+		} else {
+			if (renameHit) {
+				renameHit.destroy()
+				changed = true
+			}
+			if (renameIcon) {
+				renameIcon.destroy()
+				changed = true
+			}
+			if (this.renameHoverElementId === elementId) this.renameHoverElementId = null
+		}
+
+		return changed
 	}
 
 	private getRenderedTextWidth(naturalWidth: number, availableWidth: number): number {
@@ -915,7 +913,8 @@ export class NameLabelManager extends BaseLabelManager {
 		const availableWithSize = Math.max(0, availableElementWidth - reservation)
 		const requiredNameWidth =
 			state.naturalTextWidth +
-			(state.suffixText ? state.suffixNaturalTextWidth + NAME_LABEL_CONFIG.SUFFIX_GAP : 0)
+			(state.suffixText ? state.suffixNaturalTextWidth + NAME_LABEL_CONFIG.SUFFIX_GAP : 0) +
+			this.getLabelOperationScreenWidth(elementId)
 		// The icon is optional; it can yield before the mandatory name and suffix.
 		// Use the cached natural width so Konva's ellipsis does not hide the fact
 		// that the size label consumed the name's available space.
@@ -1058,7 +1057,7 @@ export class NameLabelManager extends BaseLabelManager {
 		return Number.isFinite(value) ? Math.max(0, value) : 0
 	}
 
-	/** Konva returns the transformed rect in Stage coordinates, which the DOM tooltip host consumes. */
+	/** Konva returns the transformed rect in Stage coordinates, which is the DOM tooltip host's space. */
 	private getStageAnchor(node: Konva.Node): {
 		x: number
 		y: number
@@ -1119,6 +1118,109 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 	}
 
+	private getComplianceTooltipContent(elementId: string): NameLabelTooltipContent | null {
+		const labelGroup = this.labelMap.get(elementId)
+		const state = labelGroup ? this.labelLayoutStates.get(labelGroup) : undefined
+		if (!state?.complianceFailed) return null
+		const reason = state.complianceFailedReason
+		const text = reason
+			? (this.canvas.t?.("seedanceCompliance.failedWithReason", {
+					defaultValue: "合规校验未通过：{{reason}}",
+					reason,
+				}) ?? `合规校验未通过：${reason}`)
+			: (this.canvas.t?.("seedanceCompliance.failed", "合规校验未通过") ?? "合规校验未通过")
+		return {
+			key: `compliance:${elementId}:${reason ?? ""}`,
+			text,
+		}
+	}
+
+	private getRenameTooltipContent(): NameLabelTooltipContent {
+		return {
+			key: "rename-action",
+			text: this.canvas.t?.("contextMenu.rename", "重命名") ?? "重命名",
+		}
+	}
+
+	private bindComplianceInteraction(hitNode: Konva.Rect, elementId: string): void {
+		const stopPointerEvent = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+			event.cancelBubble = true
+			event.evt?.stopPropagation()
+		}
+		hitNode.on("mousedown touchstart", (event) => {
+			stopPointerEvent(event)
+			this.selectElementFromLabel(elementId, false)
+		})
+		hitNode.on("click tap", (event) => stopPointerEvent(event))
+		hitNode.on("mouseenter", () => {
+			this.scheduleTooltip(this.getComplianceTooltipContent(elementId), hitNode)
+		})
+		hitNode.on("mouseleave", () => this.hideTooltip())
+	}
+
+	private bindRenameInteraction(hitNode: Konva.Rect, elementId: string): void {
+		const stopPointerEvent = (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+			event.cancelBubble = true
+			event.evt?.stopPropagation()
+		}
+		hitNode.on("mousedown touchstart", (event) => {
+			stopPointerEvent(event)
+			this.selectElementFromLabel(elementId, false)
+		})
+		hitNode.on("click tap", (event) => {
+			stopPointerEvent(event)
+			this.hideTooltip()
+			this.canvas.elementRenameManager.startRename(elementId)
+		})
+		hitNode.on("mouseenter", () => {
+			this.renameHoverElementId = elementId
+			this.canvas.cursorManager.setTemporary("pointer")
+			this.syncInteractiveNodesForElement(elementId)
+			this.scheduleTooltip(this.getRenameTooltipContent(), hitNode)
+		})
+		hitNode.on("mouseleave", () => {
+			if (this.renameHoverElementId === elementId) this.renameHoverElementId = null
+			this.canvas.cursorManager.restoreToolCursor()
+			this.syncInteractiveNodesForElement(elementId)
+			this.hideTooltip()
+		})
+	}
+
+	private syncInteractiveNodesForElement(elementId: string): void {
+		this.syncInteractiveNodesForElements([elementId])
+	}
+
+	private syncInteractiveNodesForElements(
+		elementIds: readonly (string | null | undefined)[],
+	): void {
+		let changed = false
+		const uniqueElementIds = new Set(
+			elementIds.filter((elementId): elementId is string => Boolean(elementId)),
+		)
+
+		for (const elementId of uniqueElementIds) {
+			const labelGroup = this.labelMap.get(elementId)
+			if (!labelGroup) continue
+			const state = this.labelLayoutStates.get(labelGroup)
+			const textNode = this.getTextNode(labelGroup)
+			if (!state || !textNode) continue
+			const labelHeight = this.getLabelSize(labelGroup)?.height ?? textNode.height()
+			const iconY = state.iconVisible ? Math.max(0, (labelHeight - state.iconHeight) / 2) : 0
+			const elementChanged = this.syncInteractiveNodes(
+				elementId,
+				labelGroup,
+				labelHeight,
+				iconY,
+			)
+			if (elementChanged) {
+				this.syncHitRect(labelGroup)
+				changed = true
+			}
+		}
+
+		if (changed) this.requestOverlayDraw("name-label-interaction")
+	}
+
 	/** Refreshes cached icon and runtime text state for discrete label changes. */
 	public refreshIcons(elementIds?: readonly string[]): void {
 		const ids = elementIds ? Array.from(new Set(elementIds)) : Array.from(this.labelMap.keys())
@@ -1145,19 +1247,6 @@ export class NameLabelManager extends BaseLabelManager {
 				reason: "name-label-icons",
 				priority: "input",
 			})
-
-		// React overlays cannot observe Konva's cached state directly. Notify them after
-		// the cache and geometry are reconciled so a visible compliance tooltip reads the
-		// same failure reason as the shield icon.
-		for (const listener of this.iconRefreshListeners) listener(elementIds)
-	}
-
-	/** Subscribe to discrete icon/compliance refreshes without adding another Canvas event. */
-	public subscribeIconRefresh(listener: NameLabelIconRefreshListener): () => void {
-		this.iconRefreshListeners.add(listener)
-		return () => {
-			this.iconRefreshListeners.delete(listener)
-		}
 	}
 
 	public override refreshAfterLocaleChange(): void {
@@ -1173,16 +1262,14 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	public override destroy(): void {
-		this.clearPointerHover()
+		this.clearPointerHover(false)
+		this.canvasHoverElementId = null
+		this.renameHoverElementId = null
 		this.tooltipController.destroy()
-		this.iconHoverElementId = null
-		this.domLabelElementId = null
-		this.renameButtonElementId = null
 		for (const unsubscribe of this.interactionUnsubscribers) {
 			unsubscribe()
 		}
 		this.interactionUnsubscribers = []
-		this.iconRefreshListeners.clear()
 		super.destroy()
 	}
 
@@ -1274,9 +1361,12 @@ export class NameLabelManager extends BaseLabelManager {
 		this.listenInteraction("eraser:enter")
 		this.listenInteraction("eraser:exit")
 		this.listenInteraction("text:editing-state-change")
-		this.listenInteraction("permission:changed")
 
 		this.interactionUnsubscribers.push(
+			this.canvas.eventEmitter.on("permission:changed", () => {
+				this.syncLabelListening()
+				this.refreshRenameActions()
+			}),
 			this.canvas.eventEmitter.on("element:select", ({ data }) => {
 				this.refreshIcons(data.elementIds)
 			}),
@@ -1284,11 +1374,12 @@ export class NameLabelManager extends BaseLabelManager {
 				this.refreshIcons(data?.elementIds)
 			}),
 			this.canvas.eventEmitter.on("element:hover", ({ data }) => {
-				const previousHoveredElementId = this.iconHoverElementId
-				this.iconHoverElementId = data.elementId
+				const previousHoveredElementId = this.canvasHoverElementId
+				this.canvasHoverElementId = data.elementId
 				this.refreshIcons(
 					[previousHoveredElementId, data.elementId].filter(Boolean) as string[],
 				)
+				this.syncInteractiveNodesForElements([previousHoveredElementId, data.elementId])
 			}),
 			this.canvas.eventEmitter.on("element:updated", ({ data }) => {
 				this.refreshIcons([data.elementId])
@@ -1345,6 +1436,16 @@ export class NameLabelManager extends BaseLabelManager {
 		if (!listening) this.hideTooltip()
 	}
 
+	/** Permission changes can add or remove the rename action without changing label content. */
+	private refreshRenameActions(): void {
+		const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
+		let requiresDraw = false
+		for (const elementId of this.labelMap.keys()) {
+			requiresDraw = this.updateLabelPosition(elementId, true, layoutContext) || requiresDraw
+		}
+		if (requiresDraw) this.requestOverlayDraw("name-label-permission")
+	}
+
 	private syncHitRect(labelGroup: Konva.Group): void {
 		const labelSize = this.getLabelSize(labelGroup)
 		const hitRect = labelGroup.findOne(`.${NAME_LABEL_HIT_NAME}`) as Konva.Rect | null
@@ -1389,13 +1490,6 @@ export class NameLabelManager extends BaseLabelManager {
 			this.scheduleTooltip(this.getImageNameTooltipContent(elementId), hitRect)
 		})
 		hitRect?.on("mouseleave", () => this.hideTooltip())
-		labelGroup.on("dblclick dbltap", (e) => {
-			stopPointerEvent(e)
-			if (
-				this.canvas.elementManager.getElementData(elementId)?.type !== ElementTypeEnum.Image
-			)
-				this.canvas.elementRenameManager?.startRename(elementId)
-		})
 		labelGroup.on("contextmenu", (e) => {
 			e.evt.preventDefault()
 			stopPointerEvent(e)
@@ -1410,16 +1504,22 @@ export class NameLabelManager extends BaseLabelManager {
 			})
 		})
 		labelGroup.on("mouseenter", () => {
+			const previousElementId = this.pointerHoverElementId
 			this.pointerHoverElementId = elementId
 			if (this.canvas.elementRenameManager?.canRename(elementId)) {
 				this.canvas.cursorManager.setTemporary("pointer")
 			}
+			this.syncInteractiveNodesForElements([previousElementId, elementId])
 		})
 		labelGroup.on("mouseleave", () => {
 			if (this.pointerHoverElementId === elementId) {
 				this.clearPointerHover()
 			}
 		})
+	}
+
+	public isLabelPointerHovered(elementId: string): boolean {
+		return this.pointerHoverElementId === elementId
 	}
 
 	public selectElementFromLabel(elementId: string, autoFocus = true): void {
@@ -1437,13 +1537,14 @@ export class NameLabelManager extends BaseLabelManager {
 		this.canvas.selectionManager.replaceSelection([elementId], autoFocus)
 	}
 
-	private clearPointerHover(): void {
-		if (!this.pointerHoverElementId) {
-			this.hideTooltip()
-			return
-		}
+	private clearPointerHover(refreshVisibility = true): void {
+		const previousElementId = this.pointerHoverElementId
 		this.pointerHoverElementId = null
 		this.canvas.cursorManager?.restoreToolCursor()
 		this.hideTooltip()
+		this.syncInteractiveNodesForElements([previousElementId])
+		if (refreshVisibility && previousElementId) {
+			this.updateLabelVisibility(previousElementId)
+		}
 	}
 }

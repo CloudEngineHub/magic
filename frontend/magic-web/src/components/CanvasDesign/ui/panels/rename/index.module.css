@@ -1,10 +1,3 @@
-.renameOverlayRoot {
-	position: absolute;
-	top: 0;
-	left: 0;
-	z-index: 20;
-}
-
 /* Rename uses the same compact floating surface as crop/extend/eraser; positioning is handled by the canvas layout hook. */
 .renamePanel {
 	position: absolute;
@@ -32,8 +25,9 @@
 
 .renameHeader {
 	display: flex;
-	gap: var(--spacing-2, 8px);
 	align-items: center;
+	justify-content: space-between;
+	width: 100%;
 	min-width: 0;
 }
 
@@ -43,18 +37,22 @@
 	margin: 0;
 	font-weight: var(--font-weight-semibold, 600);
 	font-size: var(--text-sm-font-size, 14px);
-}
-
-.renameTitleIcon {
-	flex-shrink: 0;
-	color: var(--base-muted-foreground, #737373);
+	line-height: var(--text-sm-line-height, 20px);
 }
 
 .renameCloseButton {
 	flex-shrink: 0;
-	width: 28px;
-	height: 28px;
+	width: var(--width-w-5, 20px);
+	height: var(--width-w-5, 20px);
+	padding: var(--spacing-1, 4px);
 	border: none;
+	border-radius: var(--border-radius-rounded-md, 8px);
+}
+
+.renameDivider {
+	width: 100%;
+	height: 1px;
+	background: var(--base-border, #e5e5e5);
 }
 
 .renameBody {
@@ -116,7 +114,15 @@
 
 .renameField:focus-within {
 	border-color: var(--base-ring, #a3a3a3);
-	box-shadow: 0 0 0 1px var(--base-ring, #a3a3a3);
+	/* Keep the 1px focus ring visible inside ScrollArea and panel clipping boundaries. */
+	box-shadow: inset 0 0 0 1px var(--base-ring, #a3a3a3);
+}
+
+.renameTitleInput:focus-visible {
+	border-color: var(--base-ring, #a3a3a3);
+	/* The title input sits directly in ScrollArea, so its ring must stay inside the field. */
+	box-shadow: inset 0 0 0 1px var(--base-ring, #a3a3a3);
+	outline: none;
 }
 
 .renameVersionHeader {
@@ -171,7 +177,6 @@
 	flex: 1;
 	align-items: center;
 	min-width: 0;
-	overflow: hidden;
 	background: var(--base-background, #fff);
 	border: var(--border-width-border, 1px) solid var(--base-border, #e5e5e5);
 	border-radius: var(--border-radius-rounded-md, 8px);
@@ -179,7 +184,17 @@
 
 .renameBatchInput:focus-within {
 	border-color: var(--base-ring, #a3a3a3);
-	box-shadow: 0 0 0 1px var(--base-ring, #a3a3a3);
+	/* Keep the 1px focus ring visible inside the rounded input wrapper. */
+	box-shadow: inset 0 0 0 1px var(--base-ring, #a3a3a3);
+}
+
+.renameBatchInputContent {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	min-width: 0;
+	overflow: hidden;
+	border-radius: inherit;
 }
 
 .renameBatchSuffix {
@@ -205,7 +220,6 @@
 	min-height: 0;
 	overflow: hidden;
 	border-top: var(--border-width-border, 1px) solid var(--base-border, #e5e5e5);
-	border-bottom: var(--border-width-border, 1px) solid var(--base-border, #e5e5e5);
 }
 
 .renameFileRows {
@@ -218,6 +232,9 @@
 	display: flex;
 	flex-direction: column;
 	gap: var(--spacing-2, 8px);
+	align-self: stretch;
+	box-sizing: border-box;
+	width: 100%;
 	min-width: 0;
 }
 
@@ -245,6 +262,14 @@
 	gap: var(--spacing-2, 8px);
 	align-items: center;
 	margin-left: auto;
+}
+
+.renameSingleFooter {
+	align-self: stretch;
+	box-sizing: border-box;
+	width: 100%;
+	justify-content: flex-end;
+	margin-left: 0;
 }
 
 .renamePanel button {

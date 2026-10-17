@@ -1,17 +1,16 @@
 import { useCanvasRenameUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvasElement } from "../../../app/hooks/canvas"
-import ElementRenameOverlayRender from "./ElementRenameOverlayRender"
 import ImageRenamePanel from "./ImageRenamePanel"
 import { isImageElementContent } from "../../../runtime/document/elementContent"
-import NameLabelRenameButton from "./NameLabelRenameButton"
 import SingleImageRenamePanel from "./SingleImageRenamePanel"
+import ElementRenamePanel from "./ElementRenamePanel"
 
 export default function ElementRenameOverlay() {
 	const { canvasRenamingElementId } = useCanvasRenameUI()
 	const element = useCanvasElement(canvasRenamingElementId)
 
 	if (!canvasRenamingElementId || !element || element.id !== canvasRenamingElementId) {
-		return <NameLabelRenameButton />
+		return null
 	}
 
 	if (isImageElementContent(element)) {
@@ -21,5 +20,5 @@ export default function ElementRenameOverlay() {
 			<SingleImageRenamePanel key={element.id} element={element} />
 		)
 	}
-	return <ElementRenameOverlayRender key={element.id} elementId={canvasRenamingElementId} />
+	return <ElementRenamePanel key={element.id} element={element} />
 }

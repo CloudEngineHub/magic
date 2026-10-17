@@ -3,6 +3,8 @@ import Konva from "konva"
 import { ElementTypeEnum, type ElementType } from "../../../document/types"
 import { NameLabelManager } from "../NameLabelManager"
 import { SizeLabelManager } from "../SizeLabelManager"
+import { BaseLabelManager, type LabelLayoutSyncContext } from "../BaseLabelManager"
+import { invalidateMediaLabelLayouts } from "../mediaLabelLayout"
 import type { NameLabelIconResolver } from "../nameLabelTypes"
 import type { NameLabelContent } from "../../../elements/core/BaseElement"
 
@@ -72,11 +74,30 @@ class TestNameLabelManager extends NameLabelManager {
 	}
 
 	public getRenderedTextWidthForTest(elementId: string): number | undefined {
-		return this.getTextNodeForTest(elementId)?.width()
+		const textNode = this.getTextNodeForTest(elementId)
+		return textNode?.textArr.reduce((maxWidth, line) => Math.max(maxWidth, line.width), 0)
 	}
 
 	public getIconNodeForTest(elementId: string): Konva.Node | null {
 		return this.labelMap.get(elementId)?.findOne(".name-label-icon") as Konva.Node | null
+	}
+
+	public getRenameHitNodeForTest(elementId: string): Konva.Rect | null {
+		return this.labelMap.get(elementId)?.findOne(".name-label-rename-hit") as Konva.Rect | null
+	}
+
+	public getLabelHitNodeForTest(elementId: string): Konva.Rect | null {
+		return this.labelMap.get(elementId)?.findOne(".name-label-hit") as Konva.Rect | null
+	}
+
+	public getRenameIconNodeForTest(elementId: string): Konva.Path | null {
+		return this.labelMap.get(elementId)?.findOne(".name-label-rename-icon") as Konva.Path | null
+	}
+
+	public getComplianceHitNodeForTest(elementId: string): Konva.Rect | null {
+		return this.labelMap
+			.get(elementId)
+			?.findOne(".name-label-compliance-hit") as Konva.Rect | null
 	}
 
 	public getSuffixNodeForTest(elementId: string): Konva.Text | null {
@@ -88,6 +109,13 @@ class TestNameLabelManager extends NameLabelManager {
 
 	public updateLabelPositionForTest(elementId: string): boolean {
 		return this.updateLabelPosition(elementId, true)
+	}
+
+	public updateLabelPositionWithContextForTest(
+		elementId: string,
+		context: LabelLayoutSyncContext,
+	): boolean {
+		return this.updateLabelPosition(elementId, true, context)
 	}
 
 	public shouldSuppressSizeLabelForTest(elementId: string): boolean {
@@ -126,6 +154,13 @@ class TestSizeLabelManager extends SizeLabelManager {
 
 	public visibleForTest(id: string): boolean {
 		return this.labelMap.get(id)?.visible() ?? false
+	}
+
+	public updateLabelPositionWithContextForTest(
+		elementId: string,
+		context: LabelLayoutSyncContext,
+	): boolean {
+		return this.updateLabelPosition(elementId, true, context)
 	}
 }
 
@@ -169,12 +204,34 @@ function createManager(
 		runtimeElements.set(elementId, { source, element })
 		return element
 	}
+	const eventHandlers = new Map<string, Set<(event: { data?: unknown }) => void>>()
+	const eventEmitter = {
+		on: vi.fn((eventType: string, handler: (event: { data?: unknown }) => void) => {
+			const handlers = eventHandlers.get(eventType) ?? new Set()
+			handlers.add(handler)
+			eventHandlers.set(eventType, handlers)
+			return () => {
+				handlers.delete(handler)
+				if (handlers.size === 0) eventHandlers.delete(eventType)
+			}
+		}),
+		emit: vi.fn((event: { type: string; data?: unknown }) => {
+			eventHandlers.get(event.type)?.forEach((handler) => handler(event))
+		}),
+	}
 
 	const manager = new TestNameLabelManager({
 		iconResolver: options.iconResolver,
 		canvas: {
 			cropManager: { getCroppingElementId: () => null },
-			elementRenameManager: { canRename: () => options.canRename ?? true },
+			cursorManager: {
+				restoreToolCursor: vi.fn(),
+				setTemporary: vi.fn(),
+			},
+			elementRenameManager: {
+				canRename: () => options.canRename ?? true,
+				startRename: vi.fn(),
+			},
 			elementManager: {
 				getElementData: (elementId: string) => elements.get(elementId)?.getData(),
 				getElementInstance: getRuntimeElement,
@@ -189,7 +246,7 @@ function createManager(
 				queryElementIdsByExpandedRect: () => options.candidateIds ?? [],
 			},
 			eraserManager: { getErasingElementId: () => null },
-			eventEmitter: { on: vi.fn(() => vi.fn()) },
+			eventEmitter,
 			extendManager: { getExtendingElementId: () => null },
 			hoverManager: {
 				getHoveredElementId: () => options.hoveredElementId ?? null,
@@ -342,7 +399,12 @@ describe("NameLabelManager visibility", () => {
 		expect(primaryNode?.text()).toBe(labelContent.primaryText)
 		expect(primaryNode?.textArr[0]?.text.endsWith("…")).toBe(true)
 		expect(suffixNode?.text()).toBe("(生成中)")
-		expect(suffixNode?.x()).toBe(primaryNode?.width())
+		const renderedTextWidth = primaryNode?.textArr.reduce(
+			(maxWidth, line) => Math.max(maxWidth, line.width),
+			0,
+		)
+		expect(renderedTextWidth).toBeLessThan(primaryNode?.width() ?? 0)
+		expect(suffixNode?.x()).toBe(renderedTextWidth)
 		expect((primaryNode?.width() ?? 0) + (suffixNode?.width() ?? 0)).toBeLessThanOrEqual(100)
 
 		manager.destroy()
@@ -460,7 +522,7 @@ describe("NameLabelManager visibility", () => {
 		manager.destroy()
 	})
 
-	it("uses only the primary text for rename and offsets the DOM label after an icon", () => {
+	it("renders the primary name, suffix and rename action inside Konva", () => {
 		const primaryText = "Image title"
 		const elements = new Map<string, TestElement>([
 			[
@@ -486,20 +548,95 @@ describe("NameLabelManager visibility", () => {
 			}),
 		})
 
-		const renameLayout = manager.getRenameInputLayout("image-1")
-		const displayLayout = manager.getImageNameLabelLayout("image-1")
-		const buttonLayout = manager.getRenameButtonLayout("image-1")
+		manager.createOrUpdateLabelForTest("image-1")
 
-		expect(renameLayout?.text).toBe(primaryText)
-		expect(renameLayout?.width).toBe(primaryText.length * 8)
-		expect(displayLayout?.x).toBe(24)
-		expect(displayLayout?.text).toBe(primaryText)
-		expect(buttonLayout?.x).toBe(162)
+		expect(manager.getTextNodeForTest("image-1")?.text()).toBe(primaryText)
+		expect(manager.getSuffixNodeForTest("image-1")?.text()).toBe("(生成中)")
+		expect(manager.getRenameHitNodeForTest("image-1")).toBeInstanceOf(Konva.Rect)
+		expect(manager.getRenameHitNodeForTest("image-1")?.listening()).toBe(true)
+		expect(manager.getRenameIconNodeForTest("image-1")?.visible()).toBe(false)
+		expect(manager.getIconNodeForTest("image-1")?.x()).toBe(0)
 
 		manager.destroy()
 	})
 
-	it("exposes the failed compliance icon geometry and reason to the DOM overlay", () => {
+	it("reveals the rename icon as a button only while hovering its hit area", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 160, height: 80 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "Image name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, {
+			canRename: true,
+			selectedElementId: "image-1",
+		})
+		manager.createOrUpdateLabelForTest("image-1")
+
+		const text = manager.getTextNodeForTest("image-1")
+		const renameHit = manager.getRenameHitNodeForTest("image-1")
+		const renameIcon = manager.getRenameIconNodeForTest("image-1")
+		const renderedTextWidth = text?.textArr.reduce(
+			(maxWidth, line) => Math.max(maxWidth, line.width),
+			0,
+		)
+		expect(renameHit?.x()).toBe((text?.x() ?? 0) + (renderedTextWidth ?? 0) + 2)
+		expect(renameHit?.fill()).toBe("rgba(0, 0, 0, 0.001)")
+		expect(renameIcon?.visible()).toBe(false)
+
+		renameHit?.fire("mouseenter")
+		expect(renameHit?.fill()).toBe("#F2F2F2")
+		expect(renameIcon?.visible()).toBe(true)
+
+		renameHit?.fire("mouseleave")
+		expect(renameHit?.fill()).toBe("rgba(0, 0, 0, 0.001)")
+		expect(renameIcon?.visible()).toBe(false)
+
+		manager.destroy()
+	})
+
+	it("reveals the rename icon while hovering the canvas element", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 160, height: 80 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "Image name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, { canRename: true })
+		manager.createOrUpdateLabelForTest("image-1")
+
+		const canvas = manager.getCanvasForTest()
+		const renameHit = manager.getRenameHitNodeForTest("image-1")
+		const renameIcon = manager.getRenameIconNodeForTest("image-1")
+		expect(renameIcon?.visible()).toBe(false)
+
+		canvas.eventEmitter.emit({
+			type: "element:hover",
+			data: { elementId: "image-1" },
+		})
+		expect(renameIcon?.visible()).toBe(true)
+		expect(renameHit?.fill()).toBe("rgba(0, 0, 0, 0.001)")
+
+		canvas.eventEmitter.emit({
+			type: "element:hover",
+			data: { elementId: null },
+		})
+		expect(renameIcon?.visible()).toBe(false)
+
+		manager.destroy()
+	})
+
+	it("renders a Konva compliance hit area without a DOM overlay", () => {
 		const elements = new Map<string, TestElement>([
 			[
 				"image-1",
@@ -535,51 +672,11 @@ describe("NameLabelManager visibility", () => {
 					: null,
 		})
 
-		const layout = manager.getImageNameLabelLayout("image-1")
-		expect(layout?.complianceIcon).toMatchObject({
-			failedReason: "素材审核未通过",
-			width: 16,
-			height: 16,
-		})
+		manager.createOrUpdateLabelForTest("image-1")
 
-		manager.destroy()
-	})
-
-	it("retains a hidden media label only while renaming", () => {
-		const options: { selectedElementId?: string } = {}
-		const elements = new Map<string, TestElement>([
-			[
-				"image-1",
-				{
-					getBoundingRect: () => ({ x: 10, y: 20, width: 100, height: 80 }),
-					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
-					getNameLabelText: () => "Image 1",
-					getNode: () => ({}),
-				},
-			],
-		])
-		const manager = createManager(elements, options)
-		manager.setMediaLabelsAlwaysVisible(false)
-
-		expect(manager.createOrUpdateLabelForTest("image-1")).toBe(false)
-		expect(manager.hasLabel("image-1")).toBe(false)
-
-		manager.setRenamingElementId("image-1")
-		expect(manager.getRenameInputLayout("image-1")).toMatchObject({ text: "Image 1" })
-		expect(manager.hasLabel("image-1")).toBe(true)
-		expect(manager.isLabelVisible("image-1")).toBe(false)
-
-		manager.setRenamingElementId(null)
-		expect(manager.hasLabel("image-1")).toBe(false)
-
-		options.selectedElementId = "image-1"
-		manager.setRenamingElementId("image-1")
-		expect(manager.getRenameInputLayout("image-1")).not.toBeNull()
-		expect(manager.isLabelVisible("image-1")).toBe(false)
-
-		manager.setRenamingElementId(null)
-		expect(manager.hasLabel("image-1")).toBe(true)
-		expect(manager.isLabelVisible("image-1")).toBe(true)
+		expect(manager.getComplianceHitNodeForTest("image-1")).toBeInstanceOf(Konva.Rect)
+		expect(manager.getComplianceHitNodeForTest("image-1")?.width()).toBe(16)
+		expect(manager.getComplianceHitNodeForTest("image-1")?.height()).toBe(16)
 
 		manager.destroy()
 	})
@@ -607,7 +704,44 @@ describe("NameLabelManager visibility", () => {
 		manager.destroy()
 	})
 
-	it("limits inverse scale by the available element width at tiny viewport scales", () => {
+	it("shares one media layout between name and size updates in a transaction", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 160, height: 80 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "Image 1",
+					getSizeLabelText: () => "160 x 80",
+					getNode: () => ({}),
+					supportsSizeEditing: () => true,
+				},
+			],
+		])
+		const manager = createManager(elements)
+		const canvas = manager.getCanvasForTest()
+		const queryElementIdsByExpandedRect = vi.fn(() => ["image-1"])
+		canvas.geometryCacheManager.queryElementIdsByExpandedRect = queryElementIdsByExpandedRect
+		const sizeManager = new TestSizeLabelManager({ canvas })
+		canvas.nameLabelManager = manager
+		canvas.sizeLabelManager = sizeManager
+
+		manager.createOrUpdateLabelForTest("image-1")
+		sizeManager.createForTest("image-1")
+		queryElementIdsByExpandedRect.mockClear()
+		invalidateMediaLabelLayouts(canvas, ["image-1"])
+
+		const context = BaseLabelManager.createLabelLayoutSyncContext()
+		manager.updateLabelPositionWithContextForTest("image-1", context)
+		sizeManager.updateLabelPositionWithContextForTest("image-1", context)
+
+		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(1)
+
+		sizeManager.destroy()
+		manager.destroy()
+	})
+
+	it("keeps the shared screen scale at tiny viewport scales", () => {
 		const elements = new Map<string, TestElement>([
 			[
 				"image-1",
@@ -623,7 +757,7 @@ describe("NameLabelManager visibility", () => {
 
 		manager.createOrUpdateLabelForTest("image-1")
 
-		expect(manager.getLabelScale("image-1")).toBeLessThan(10)
+		expect(manager.getLabelScale("image-1")).toBeCloseTo(10)
 		expect(manager.getLabelScale("image-1")).toBeGreaterThan(0)
 		manager.destroy()
 	})
@@ -702,90 +836,156 @@ describe("NameLabelManager visibility", () => {
 		manager.destroy()
 	})
 
-	it("notifies subscribed overlays with the scoped icon refresh", () => {
+	it("starts rename from the Konva pencil hit area", () => {
 		const elements = new Map<string, TestElement>([
 			[
 				"image-1",
 				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 160, height: 80 }),
 					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
-				},
-			],
-		])
-		const manager = createManager(elements)
-		const listener = vi.fn()
-		const unsubscribe = manager.subscribeIconRefresh(listener)
-
-		manager.refreshIcons(["image-1"])
-		expect(listener).toHaveBeenCalledWith(["image-1"])
-
-		unsubscribe()
-		manager.refreshIcons()
-		expect(listener).toHaveBeenCalledTimes(1)
-
-		manager.destroy()
-	})
-
-	it("uses the complete primary text width for rename input when the label is truncated", () => {
-		const labelText = "A long name for rename that is definitely wider than the element"
-		const elements = new Map<string, TestElement>([
-			[
-				"audio-1",
-				{
-					getBoundingRect: () => ({ x: 10, y: 20, width: 40, height: 80 }),
-					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
-					getNameLabelContent: () => ({
-						primaryText: labelText,
-						suffix: { text: "(生成中)" },
-					}),
-					getNode: () => ({}),
-				},
-			],
-		])
-		const manager = createManager(elements)
-
-		const layout = manager.getRenameInputLayout("audio-1")
-		expect(layout?.text).toBe(labelText)
-		expect(layout?.width).toBeGreaterThan(40)
-		expect(layout?.width).toBeLessThan((labelText + "(生成中)").length * 8)
-
-		manager.destroy()
-	})
-
-	it("reads the cached DOM label layout without recomputing element geometry", () => {
-		const viewportPosition = { x: 0, y: 0 }
-		const getBoundingRect = vi.fn(() => ({ x: 10, y: 20, width: 160, height: 80 }))
-		const elements = new Map<string, TestElement>([
-			[
-				"image-1",
-				{
-					getBoundingRect,
-					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
-					getNameLabelText: () => "Cached image name",
+					getNameLabelText: () => "Image name",
 					getNode: () => ({}),
 				},
 			],
 		])
 		const manager = createManager(elements, {
+			canRename: true,
 			selectedElementId: "image-1",
-			viewportPosition,
+		})
+		manager.createOrUpdateLabelForTest("image-1")
+
+		const renameHit = manager.getRenameHitNodeForTest("image-1")
+		expect(renameHit).toBeInstanceOf(Konva.Rect)
+		expect(renameHit?.zIndex()).toBeGreaterThan(
+			manager.getLabelHitNodeForTest("image-1")?.zIndex() ?? -1,
+		)
+		renameHit?.fire("click")
+
+		expect(
+			manager.getCanvasForTest().elementRenameManager.startRename as ReturnType<typeof vi.fn>,
+		).toHaveBeenCalledWith("image-1")
+
+		manager.destroy()
+	})
+
+	it("anchors the rename button to the rendered ellipsis width", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"image-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 100, height: 80 }),
+					getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					getNameLabelText: () => "A deliberately long image title",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, {
+			canRename: true,
+			selectedElementId: "image-1",
 		})
 
-		expect(manager.getCachedImageNameLabelLayout("image-1")).toBeNull()
-		expect(getBoundingRect).not.toHaveBeenCalled()
+		manager.createOrUpdateLabelForTest("image-1")
 
-		const initialLayout = manager.getImageNameLabelLayout("image-1")
-		expect(initialLayout).not.toBeNull()
-		const geometryCallCount = getBoundingRect.mock.calls.length
+		const textNode = manager.getTextNodeForTest("image-1")
+		const renameHit = manager.getRenameHitNodeForTest("image-1")
+		const renderedTextWidth = textNode?.textArr.reduce(
+			(maxWidth, line) => Math.max(maxWidth, line.width),
+			0,
+		)
 
-		viewportPosition.x = 32
-		viewportPosition.y = -12
-		const movedLayout = manager.getCachedImageNameLabelLayout("image-1")
+		expect(textNode?.textArr[0]?.text.endsWith("…")).toBe(true)
+		expect(renderedTextWidth).toBeLessThan(textNode?.width() ?? 0)
+		expect(renameHit?.x()).toBe((textNode?.x() ?? 0) + (renderedTextWidth ?? 0) + 2)
+		// The button must not inherit the unused tail of the constrained text box.
+		expect(renameHit?.x()).toBeLessThan((textNode?.x() ?? 0) + (textNode?.width() ?? 0) + 2)
+		const labelSize = manager.getLabelSizeForElement("image-1")
+		expect(labelSize?.width).toBe(
+			(textNode?.x() ?? 0) + (renderedTextWidth ?? 0) + 2 + (renameHit?.width() ?? 0),
+		)
+		expect(labelSize?.width).toBeLessThan(
+			(textNode?.x() ?? 0) + (textNode?.width() ?? 0) + 2 + (renameHit?.width() ?? 0),
+		)
 
-		expect(getBoundingRect).toHaveBeenCalledTimes(geometryCallCount)
-		expect(movedLayout?.x).toBe((initialLayout?.x ?? 0) + 32)
-		expect(movedLayout?.y).toBe((initialLayout?.y ?? 0) - 12)
-		expect(movedLayout?.text).toBe("Cached image name")
+		manager.destroy()
+	})
 
+	it.each([
+		ElementTypeEnum.Video,
+		ElementTypeEnum.Audio,
+		ElementTypeEnum.Frame,
+		ElementTypeEnum.Storyboard,
+		ElementTypeEnum.VideoEdit,
+		ElementTypeEnum.Group,
+		ElementTypeEnum.Text,
+		ElementTypeEnum.Rectangle,
+		ElementTypeEnum.Ellipse,
+		ElementTypeEnum.Triangle,
+		ElementTypeEnum.Star,
+	])("uses the menu rename capability for %s labels", (type) => {
+		const elementId = `${type}-1`
+		const elements = new Map<string, TestElement>([
+			[
+				elementId,
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 160, height: 80 }),
+					getData: () => ({ id: elementId, type }),
+					getNameLabelText: () => `${type} name`,
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, {
+			selectedElementId: elementId,
+		})
+
+		manager.createOrUpdateLabelForTest(elementId)
+
+		expect(manager.getRenameHitNodeForTest(elementId)).toBeInstanceOf(Konva.Rect)
+		manager.destroy()
+	})
+
+	it("keeps the rename action when a narrow element cannot fit the full label", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"rectangle-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 10, height: 80 }),
+					getData: () => ({ id: "rectangle-1", type: ElementTypeEnum.Rectangle }),
+					getNameLabelText: () => "A long rectangle name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, {
+			canRename: true,
+			selectedElementId: "rectangle-1",
+		})
+
+		manager.createOrUpdateLabelForTest("rectangle-1")
+
+		expect(manager.isLabelVisible("rectangle-1")).toBe(true)
+		expect(manager.getRenameHitNodeForTest("rectangle-1")).toBeInstanceOf(Konva.Rect)
+		manager.destroy()
+	})
+
+	it("does not render the rename action when the shared rename capability is denied", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"audio-1",
+				{
+					getBoundingRect: () => ({ x: 0, y: 20, width: 160, height: 80 }),
+					getData: () => ({ id: "audio-1", type: ElementTypeEnum.Audio }),
+					getNameLabelText: () => "Audio name",
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements, { canRename: false })
+
+		manager.createOrUpdateLabelForTest("audio-1")
+
+		expect(manager.getRenameHitNodeForTest("audio-1")).toBeUndefined()
 		manager.destroy()
 	})
 
@@ -814,7 +1014,9 @@ describe("NameLabelManager visibility", () => {
 			"audio-1",
 			true,
 		)
-		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(100)
+		expect(manager.getRenderedTextWidthForTest("audio-1")).toBeLessThan(
+			manager.getTextNodeForTest("audio-1")?.width() ?? 0,
+		)
 		expect(manager.getTextNodeForTest("audio-1")?.textArr[0]?.text.endsWith("…")).toBe(true)
 
 		manager.destroy()
@@ -870,7 +1072,7 @@ describe("NameLabelManager visibility", () => {
 		manager.createOrUpdateLabelForTest("audio-1")
 		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(true)
 
-		elementWidth = 110
+		elementWidth = 134
 		manager.updateLabelPositionForTest("audio-1")
 		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(false)
 		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(72)
@@ -898,7 +1100,9 @@ describe("NameLabelManager visibility", () => {
 
 		manager.createOrUpdateLabelForTest("audio-1")
 		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(false)
-		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(100)
+		expect(manager.getRenderedTextWidthForTest("audio-1")).toBeLessThan(
+			manager.getTextNodeForTest("audio-1")?.width() ?? 0,
+		)
 
 		manager.destroy()
 	})
@@ -931,7 +1135,6 @@ describe("NameLabelManager visibility", () => {
 		expect(manager.getLabelTextMetrics("image-1")?.width).toBe(fullWidth)
 		width = 80
 		manager.createOrUpdateLabelForTest("image-1")
-		expect(manager.getRenameInputLayout("image-1")?.width).toBe(title.length * 8)
 		title = "Changed title"
 		width = 320
 		manager.createOrUpdateLabelForTest("image-1")
@@ -1023,8 +1226,8 @@ describe("NameLabelManager visibility", () => {
 		size.setMediaLabelsAlwaysVisible(true)
 		name.createOrUpdateLabelForTest("lower")
 		size.createForTest("lower")
-		// The resolution yields first; the remaining 24px belongs to the rename operation.
-		expect(name.getLabelTextMetrics("lower")?.width).toBe(296)
+		// The resolution yields first; the remaining 26px includes the rename gap and button.
+		expect(name.getLabelTextMetrics("lower")?.width).toBe(294)
 		expect(size.visibleForTest("lower")).toBe(false)
 		options.viewportScale = 0.25
 		name.createOrUpdateLabelForTest("lower")
@@ -1032,7 +1235,7 @@ describe("NameLabelManager visibility", () => {
 		options.viewportScale = 1
 		name.createOrUpdateLabelForTest("lower")
 		size.createForTest("lower")
-		expect(name.getLabelTextMetrics("lower")?.width).toBe(296)
+		expect(name.getLabelTextMetrics("lower")?.width).toBe(294)
 		expect(size.visibleForTest("lower")).toBe(false)
 		upperX = 260
 		name.refreshVisibility()

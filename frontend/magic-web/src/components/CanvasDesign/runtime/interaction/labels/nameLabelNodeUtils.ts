@@ -5,6 +5,9 @@ export const NAME_LABEL_HIT_NAME = "name-label-hit"
 export const NAME_LABEL_TEXT_NAME = "name-label-text"
 export const NAME_LABEL_SUFFIX_NAME = "name-label-suffix"
 export const NAME_LABEL_ICON_NAME = "name-label-icon"
+export const NAME_LABEL_COMPLIANCE_HIT_NAME = "name-label-compliance-hit"
+export const NAME_LABEL_RENAME_ICON_NAME = "name-label-rename-icon"
+export const NAME_LABEL_RENAME_HIT_NAME = "name-label-rename-hit"
 
 /**
  * 从 Konva 命中节点沿父链解析名称标签对应的元素 ID。

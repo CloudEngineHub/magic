@@ -1,18 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { ListOrdered, Loader2, Pencil, X } from "lucide-react"
+import { useCallback, useRef, useState } from "react"
+import { ListOrdered, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
-import { useCanvasEvent } from "../../../app/hooks/canvas"
 import type { ImageElement } from "../../../runtime/document/types"
-import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
-import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import styles from "./index.module.css"
 import { useImageRename } from "./useImageRename"
 import RenameNameField from "./RenameNameField"
 import ImageRenameFileRow from "./ImageRenameFileRow"
+import RenamePanelShell from "./RenamePanelShell"
 
 export default function ImageRenamePanel({ element }: { element: ImageElement }) {
 	const { canvas } = useCanvas()
@@ -20,81 +18,97 @@ export default function ImageRenamePanel({ element }: { element: ImageElement })
 	const form = useImageRename(element)
 	const [batchOpen, setBatchOpen] = useState(false)
 	const baseBeforeFocus = useRef(form.baseName)
-	const panelRef = useRef<HTMLDivElement | null>(null)
 	const readyCount = new Set(form.rows.flatMap((row) => (row.file ? [row.file.fileId] : []))).size
 	const pendingCount = form.rows.filter((row) => row.processing).length
-	const titleChanged = form.elementName.trim() !== (element.name || "")
+	const titleChanged = form.elementName.trim() !== form.originalName.trim()
 	const close = useCallback(() => {
 		if (!form.saving) canvas?.elementRenameManager.cancelRename()
 	}, [canvas, form.saving])
-	const { containerRef: positionRef } = useElementPositionEffect({
-		position: "right",
-		offset: 8,
-		verticalAlign: "top",
-		trackedElementId: element.id,
-		shouldShow: () => true,
-		stickyTopRight: {
-			gap: 8,
-			headerSelector: "[data-canvas-design-header-actions]",
-		},
-	})
-	const { containerRef: floatingRef } = useFloatingComponent({
-		id: "element-rename-overlay",
-		interactive: true,
-		enableWheelForwarding: true,
-	})
-	const setRefs = useCallback(
-		(node: HTMLDivElement | null) => {
-			panelRef.current = node
-			positionRef.current = node
-			floatingRef.current = node
-		},
-		[floatingRef, positionRef],
-	)
-	useCanvasEvent(
-		"element:deleted",
-		({ data }) => {
-			if (data.elementId === element.id) close()
-		},
-		[element.id, close],
-	)
-	useEffect(() => {
-		const handlePointerDown = (event: PointerEvent) => {
-			if (event.target instanceof Node && !panelRef.current?.contains(event.target)) close()
-		}
-		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") close()
-		}
-		document.addEventListener("pointerdown", handlePointerDown, true)
-		document.addEventListener("keydown", handleKeyDown)
-		return () => {
-			document.removeEventListener("pointerdown", handlePointerDown, true)
-			document.removeEventListener("keydown", handleKeyDown)
-		}
-	}, [close])
 	return (
-		<div
-			ref={setRefs}
-			className={styles.renamePanel}
-			data-canvas-ui-component
-			role="dialog"
-			aria-label={t("rename.title", "重命名图片")}
+		<RenamePanelShell
+			elementId={element.id}
+			onClose={close}
+			isCloseBlocked={form.saving}
+			footer={
+				<div className={styles.renameFooter}>
+					{form.error && (
+						<p role="alert" className="m-0 text-xs text-destructive">
+							{form.error}
+						</p>
+					)}
+					<div className={styles.renameFooterRow}>
+						<div className={styles.renameStatus} aria-live="polite">
+							{form.titleSaved && (
+								<span className="text-success">
+									{t("rename.titleSaved", "元素名称已保存")}
+								</span>
+							)}
+							{form.successCount > 0 && (
+								<span className="text-success">
+									{t("rename.succeeded", {
+										defaultValue: "{{count}} 个文件已改名",
+										count: form.successCount,
+									})}
+								</span>
+							)}
+							{form.failedCount > 0 && (
+								<span className="text-destructive">
+									{t("rename.failedCount", {
+										defaultValue: "{{count}} 个文件未改名",
+										count: form.failedCount,
+									})}
+								</span>
+							)}
+							{!form.successCount &&
+								!form.failedCount &&
+								!form.titleSaved &&
+								(form.changes.length > 0 ? (
+									<span>
+										{t("rename.changesCount", {
+											defaultValue: "{{count}} 个文件待重命名",
+											count: form.changes.length,
+										})}
+										{titleChanged && (
+											<> · {t("rename.titleChanged", "标题待修改")}</>
+										)}
+									</span>
+								) : (
+									<span>
+										{titleChanged
+											? t("rename.titleChanged", "标题待修改")
+											: t("rename.unchanged", "名称尚未修改")}
+									</span>
+								))}
+						</div>
+						<div className={styles.renameActions}>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								onClick={form.saving ? form.requestStop : close}
+							>
+								{form.saving
+									? t("rename.stop", "停止后续操作")
+									: form.titleSaved || form.successCount > 0
+										? t("rename.close", "关闭")
+										: t("rename.cancel", "取消")}
+							</Button>
+							<Button
+								type="button"
+								size="sm"
+								disabled={form.saving || !form.dirty || !form.elementName.trim()}
+								onClick={() => void form.save()}
+							>
+								{form.saving && <Loader2 size={16} className="animate-spin" />}
+								{form.failedCount
+									? t("rename.retry", "重试未完成项")
+									: t("rename.save", "确认重命名")}
+							</Button>
+						</div>
+					</div>
+				</div>
+			}
 		>
-			<div className={styles.renameHeader}>
-				<Pencil size={16} className={styles.renameTitleIcon} />
-				<h2 className={styles.renameTitle}>{t("rename.title", "重命名图片")}</h2>
-				<Button
-					type="button"
-					size="icon"
-					variant="ghost"
-					className={styles.renameCloseButton}
-					disabled={form.saving}
-					aria-label={t("rename.close", "关闭")}
-					onClick={close}
-				>
-					<X size={16} />
-				</Button>
-			</div>
 			<p className="sr-only">
 				{t("rename.description", "修改图片标题和各版本文件名，确认后生效。")}
 			</p>
@@ -168,34 +182,38 @@ export default function ImageRenamePanel({ element }: { element: ImageElement })
 							</div>
 							<div className={styles.renameBatchInputRow}>
 								<div className={styles.renameBatchInput}>
-									<Input
-										aria-label={t("rename.baseName", "批量命名基础名称")}
-										className="h-9 min-w-0 border-0 text-sm shadow-none focus-visible:ring-0"
-										value={form.baseName}
-										disabled={form.saving}
-										onFocus={() => {
-											baseBeforeFocus.current = form.baseName
-										}}
-										onKeyDown={(event) => {
-											if (
-												event.nativeEvent.isComposing ||
-												event.nativeEvent.keyCode === 229
-											)
-												return
-											if (event.key === "Enter") {
-												event.preventDefault()
-												event.currentTarget.blur()
+									<div className={styles.renameBatchInputContent}>
+										<Input
+											aria-label={t("rename.baseName", "批量命名基础名称")}
+											className="h-9 min-w-0 border-0 text-sm shadow-none focus-visible:ring-0"
+											value={form.baseName}
+											disabled={form.saving}
+											onFocus={() => {
+												baseBeforeFocus.current = form.baseName
+											}}
+											onKeyDown={(event) => {
+												if (
+													event.nativeEvent.isComposing ||
+													event.nativeEvent.keyCode === 229
+												)
+													return
+												if (event.key === "Enter") {
+													event.preventDefault()
+													event.currentTarget.blur()
+												}
+												if (event.key === "Escape") {
+													event.preventDefault()
+													event.stopPropagation()
+													form.setBaseName(baseBeforeFocus.current)
+													event.currentTarget.blur()
+												}
+											}}
+											onChange={(event) =>
+												form.setBaseName(event.target.value)
 											}
-											if (event.key === "Escape") {
-												event.preventDefault()
-												event.stopPropagation()
-												form.setBaseName(baseBeforeFocus.current)
-												event.currentTarget.blur()
-											}
-										}}
-										onChange={(event) => form.setBaseName(event.target.value)}
-									/>
-									<span className={styles.renameBatchSuffix}>_v1、_v2…</span>
+										/>
+										<span className={styles.renameBatchSuffix}>_v1、_v2…</span>
+									</div>
 								</div>
 								<Button
 									type="button"
@@ -247,83 +265,6 @@ export default function ImageRenamePanel({ element }: { element: ImageElement })
 					</ul>
 				</ScrollArea>
 			</div>
-			<div className={styles.renameFooter}>
-				{form.error && (
-					<p role="alert" className="m-0 text-xs text-destructive">
-						{form.error}
-					</p>
-				)}
-				<div className={styles.renameFooterRow}>
-					<div className={styles.renameStatus} aria-live="polite">
-						{form.titleSaved && (
-							<span className="text-success">
-								{t("rename.titleSaved", "元素名称已保存")}
-							</span>
-						)}
-						{form.successCount > 0 && (
-							<span className="text-success">
-								{t("rename.succeeded", {
-									defaultValue: "{{count}} 个文件已改名",
-									count: form.successCount,
-								})}
-							</span>
-						)}
-						{form.failedCount > 0 && (
-							<span className="text-destructive">
-								{t("rename.failedCount", {
-									defaultValue: "{{count}} 个文件未改名",
-									count: form.failedCount,
-								})}
-							</span>
-						)}
-						{!form.successCount &&
-							!form.failedCount &&
-							!form.titleSaved &&
-							(form.changes.length > 0 ? (
-								<span>
-									{t("rename.changesCount", {
-										defaultValue: "{{count}} 个文件待重命名",
-										count: form.changes.length,
-									})}
-									{titleChanged && (
-										<> · {t("rename.titleChanged", "标题待修改")}</>
-									)}
-								</span>
-							) : (
-								<span>
-									{titleChanged
-										? t("rename.titleChanged", "标题待修改")
-										: t("rename.unchanged", "名称尚未修改")}
-								</span>
-							))}
-					</div>
-					<div className={styles.renameActions}>
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							onClick={form.saving ? form.requestStop : close}
-						>
-							{form.saving
-								? t("rename.stop", "停止后续操作")
-								: form.titleSaved || form.successCount > 0
-									? t("rename.close", "关闭")
-									: t("rename.cancel", "取消")}
-						</Button>
-						<Button
-							type="button"
-							size="sm"
-							disabled={form.saving || !form.dirty || !form.elementName.trim()}
-							onClick={() => void form.save()}
-						>
-							{form.saving && <Loader2 size={16} className="animate-spin" />}
-							{form.failedCount
-								? t("rename.retry", "重试未完成项")
-								: t("rename.save", "确认重命名")}
-						</Button>
-					</div>
-				</div>
-			</div>
-		</div>
+		</RenamePanelShell>
 	)
 }

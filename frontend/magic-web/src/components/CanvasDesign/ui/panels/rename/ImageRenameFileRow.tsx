@@ -96,48 +96,50 @@ export default function ImageRenameFileRow({
 				{file ? (
 					<div
 						className={cn(
-							"overflow-hidden rounded-lg border focus-within:border-ring focus-within:ring-1 focus-within:ring-ring",
+							"rounded-lg border focus-within:border-ring focus-within:ring-1 focus-within:ring-ring",
 							row.error && "border-destructive/50",
 						)}
 					>
-						{edited && (
-							<div className={cn(nameRowClass, "bg-muted/35")}>
+						<div className="overflow-hidden rounded-[inherit]">
+							{edited && (
+								<div className={cn(nameRowClass, "bg-muted/35")}>
+									<span className={labelClass}>
+										{t("rename.originalFileName", "原文件名")}
+									</span>
+									<span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
+										{file.fileName}
+									</span>
+								</div>
+							)}
+							{/* 固定 key 保留输入 DOM：首次改动插入原名行时，光标仍在同一字段。 */}
+							<div
+								key="file-input"
+								className={cn(nameRowClass, "bg-background", edited && "border-t")}
+							>
 								<span className={labelClass}>
-									{t("rename.originalFileName", "原文件名")}
+									{row.status === "success"
+										? t("rename.savedFileName", "现文件名")
+										: edited
+											? t("rename.newFileName", "新文件名")
+											: t("rename.fileNameLabel", "文件名")}
 								</span>
-								<span className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
-									{file.fileName}
-								</span>
+								<RenameNameField
+									value={parts.base}
+									extension={splitRenameFileName(file.fileName).extension}
+									label={t("rename.fileName", {
+										defaultValue: "第 {{number}} 版文件名",
+										number: row.version,
+									})}
+									disabled={saving}
+									invalid={Boolean(row.error)}
+									onChange={(name) =>
+										onChange(
+											file.fileId,
+											`${name}${splitRenameFileName(file.fileName).extension}`,
+										)
+									}
+								/>
 							</div>
-						)}
-						{/* 固定 key 保留输入 DOM：首次改动插入原名行时，光标仍在同一字段。 */}
-						<div
-							key="file-input"
-							className={cn(nameRowClass, "bg-background", edited && "border-t")}
-						>
-							<span className={labelClass}>
-								{row.status === "success"
-									? t("rename.savedFileName", "现文件名")
-									: edited
-										? t("rename.newFileName", "新文件名")
-										: t("rename.fileNameLabel", "文件名")}
-							</span>
-							<RenameNameField
-								value={parts.base}
-								extension={splitRenameFileName(file.fileName).extension}
-								label={t("rename.fileName", {
-									defaultValue: "第 {{number}} 版文件名",
-									number: row.version,
-								})}
-								disabled={saving}
-								invalid={Boolean(row.error)}
-								onChange={(name) =>
-									onChange(
-										file.fileId,
-										`${name}${splitRenameFileName(file.fileName).extension}`,
-									)
-								}
-							/>
 						</div>
 					</div>
 				) : row.processing ? (

@@ -1,5 +1,4 @@
 import { getActiveImageContent, isImageElementContent } from "../../document/elementContent"
-import { GenerationStatus } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
 import type { CanvasImageFileRename } from "../../../public/magic-types"
 import { getEditableElementName, normalizeElementName } from "./renameUtils"
@@ -29,7 +28,7 @@ export class ElementRenameManager {
 		return true
 	}
 
-	public startRename(elementId: string, _fromLayers = false): boolean {
+	public startRename(elementId: string): boolean {
 		if (!this.canRename(elementId)) {
 			return false
 		}
@@ -47,7 +46,6 @@ export class ElementRenameManager {
 		})
 		return true
 	}
-
 
 	/**
 	 * 提交图层列表等轻量入口的元素名称修改。
@@ -111,33 +109,6 @@ export class ElementRenameManager {
 			this.canvas.historyManager.recordHistoryImmediate()
 			await methods.renameImageFile(change)
 			affectsFile = true
-		} else if (
-			!options &&
-			element &&
-			isImageElementContent(element) &&
-			element.contents.length === 1 &&
-			methods
-		) {
-			const content = getActiveImageContent(element)
-			const processing =
-				content.status === GenerationStatus.Pending ||
-				content.status === GenerationStatus.Processing
-			const file =
-				!processing && content.src ? methods.resolveImageRenameFile(content.src) : undefined
-			if (file) {
-				const extension = file.fileName.match(/\.[^/.]+$/)?.[0] || ""
-				this.canvas.historyManager.recordHistoryImmediate()
-				await methods.renameImageFile({
-					elementId,
-					contentId: content.contentId,
-					fileId: file.fileId,
-					expectedName: file.fileName,
-					targetName: name.toLowerCase().endsWith(extension.toLowerCase())
-						? name
-						: `${name}${extension}`,
-				})
-				affectsFile = true
-			}
 		}
 		// 文件已改名时标题不能形成单独的撤销记录；普通元素命名继续沿用画布历史。
 		this.updateElementName(
@@ -159,11 +130,10 @@ export class ElementRenameManager {
 		this.cancelRename()
 	}
 
-
 	private updateElementName(
 		elementId: string,
 		name: string,
-		options?: { historyPolicy: "include" | "exclude" },
+		options?: { historyPolicy?: "include" | "exclude" },
 	): boolean {
 		const element = this.canvas.elementManager.getElementData(elementId)
 		if (!this.canvas.permissionManager.canRename(element)) return false

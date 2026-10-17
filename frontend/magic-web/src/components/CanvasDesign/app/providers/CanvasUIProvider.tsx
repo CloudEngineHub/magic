@@ -33,8 +33,6 @@ interface CanvasUIContextValue {
 
 	// 当前正在画布中重命名的元素 ID
 	canvasRenamingElementId: string | null
-	/** @deprecated Use openCanvasRename/closeCanvasRename for mutually exclusive panels. */
-	setCanvasRenamingElementId: (id: string | null) => void
 	openCanvasRename: (elementId: string) => void
 	closeCanvasRename: () => void
 
@@ -53,8 +51,6 @@ interface CanvasUIContextValue {
 	// 当前查看历史记录的图片元素 ID（null 表示不显示）
 	messageHistoryElementId: string | null
 	messageHistoryContentId?: string
-	/** @deprecated Use openMessageHistory/closeMessageHistory for panel lifecycle. */
-	setMessageHistoryElementId: (id: string | null, contentId?: string) => void
 	openMessageHistory: (elementId: string, contentId?: string) => void
 	closeMessageHistory: () => void
 
@@ -89,8 +85,6 @@ interface CanvasRenameUIContextValue {
 	layerRenamingElementId: string | null
 	setLayerRenamingElementId: (id: string | null) => void
 	canvasRenamingElementId: string | null
-	/** @deprecated Use openCanvasRename/closeCanvasRename for mutually exclusive panels. */
-	setCanvasRenamingElementId: (id: string | null) => void
 	openCanvasRename: (elementId: string) => void
 	closeCanvasRename: () => void
 }
@@ -107,8 +101,6 @@ interface CanvasSelectionUIContextValue {
 interface CanvasPanelUIContextValue {
 	messageHistoryElementId: string | null
 	messageHistoryContentId?: string
-	/** @deprecated Use openMessageHistory/closeMessageHistory for panel lifecycle. */
-	setMessageHistoryElementId: (id: string | null, contentId?: string) => void
 	openMessageHistory: (elementId: string, contentId?: string) => void
 	closeMessageHistory: () => void
 	fullscreenMediaElement: FullscreenMediaElement | null
@@ -182,16 +174,6 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			setMessageHistory({ elementId, contentId })
 		},
 		[closeCanvasRename],
-	)
-	const setMessageHistoryElementId = useCallback(
-		(id: string | null, contentId?: string) => {
-			if (id) {
-				openMessageHistory(id, contentId)
-				return
-			}
-			closeMessageHistory()
-		},
-		[closeMessageHistory, openMessageHistory],
 	)
 	const [fullscreenMediaElement, setFullscreenMediaElement] =
 		useState<FullscreenMediaElement | null>(null)
@@ -413,7 +395,6 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			layerRenamingElementId,
 			setLayerRenamingElementId,
 			canvasRenamingElementId,
-			setCanvasRenamingElementId,
 			openCanvasRename,
 			closeCanvasRename,
 		}
@@ -434,7 +415,6 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		return {
 			messageHistoryElementId,
 			messageHistoryContentId,
-			setMessageHistoryElementId,
 			openMessageHistory,
 			closeMessageHistory,
 			fullscreenMediaElement,
@@ -445,7 +425,6 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 	}, [
 		messageHistoryElementId,
 		messageHistoryContentId,
-		setMessageHistoryElementId,
 		openMessageHistory,
 		closeMessageHistory,
 		fullscreenMediaElement,

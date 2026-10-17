@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
@@ -6,6 +6,8 @@ import type { ImageElement, ImageElementContent } from "../../../runtime/documen
 import type { CanvasImageFileRename, CanvasImageRenameFile } from "../../../public/magic-types"
 import { GenerationStatus } from "../../../public/magic-types"
 import { useGenerationRuntimeRevision } from "../../../app/hooks/canvas/useGenerationRuntime"
+import { getEditableElementName } from "../../../runtime/interaction/rename/renameUtils"
+import { useRenameOperationState } from "./useRenameOperationState"
 
 export interface ImageRenameRow {
 	content: ImageElementContent
@@ -30,7 +32,10 @@ export function useImageRename(element: ImageElement) {
 	const { t } = useCanvasDesignI18n()
 	const rename = methods?.imageRename
 	useGenerationRuntimeRevision(element.id)
-	const [elementName, setElementName] = useState(element.name || "")
+	const originalNameRef = useRef(
+		getEditableElementName(element, canvas?.elementManager.getElementInstance(element.id)),
+	)
+	const [elementName, setElementName] = useState(originalNameRef.current)
 	const [customBaseName, setBaseName] = useState<string>()
 	const baseName = customBaseName ?? elementName
 	const [appliedBaseName, setAppliedBaseName] = useState<string>()
@@ -39,18 +44,19 @@ export function useImageRename(element: ImageElement) {
 	const [results, setResults] = useState<
 		Record<string, { status: "saving" | "success" | "error"; error?: string }>
 	>({})
-	const [saving, setSaving] = useState(false)
-	const [error, setError] = useState("")
 	const [titleSaved, setTitleSaved] = useState(false)
-	const savingRef = useRef(false)
-	const stop = useRef(false)
 	const bindings = useRef(new Map<string, string>())
-	useEffect(
-		() => () => {
-			stop.current = true
-		},
-		[],
-	)
+	const {
+		saving,
+		error,
+		isSaving,
+		begin,
+		finish,
+		shouldStop,
+		requestStop,
+		setError,
+		clearError,
+	} = useRenameOperationState()
 
 	const runtimes = element.contents.map((content) =>
 		canvas?.generationRuntimeManager.getTargetState(element.id, content.contentId),
@@ -118,7 +124,7 @@ export function useImageRename(element: ImageElement) {
 			delete next[fileId]
 			return next
 		})
-		setError("")
+		clearError()
 	}
 	const applyUniformNames = () => {
 		const base = baseName.trim()
@@ -135,10 +141,10 @@ export function useImageRename(element: ImageElement) {
 		setAppliedBaseName(base)
 		setAppliedFileCount(seen.size)
 		setResults({})
-		setError("")
+		clearError()
 	}
 	const save = async () => {
-		if (savingRef.current || !canvas || !elementName.trim()) return
+		if (isSaving() || !canvas || !elementName.trim()) return
 		const current = canvas.elementManager.getElementData(element.id)
 		if (!canvas.permissionManager.canRename(current)) return
 		const errors = rename?.validateImageFileRenames(changes) ?? {}
@@ -154,23 +160,19 @@ export function useImageRename(element: ImageElement) {
 			setError(t("rename.correctErrors", "请先修改标出的文件名错误。"))
 			return
 		}
-		savingRef.current = true
-		stop.current = false
-		setSaving(true)
-		setError("")
+		if (!begin()) return
 		try {
 			// 元素标题独立保存；批量文件逐项记录实际结果，不假装是服务端原子事务。
 			if (changes.length) canvas.historyManager.recordHistoryImmediate()
 			const name = elementName.trim()
-			if (current?.name !== name)
-				canvas.elementManager.update(
-					element.id,
-					{ name },
-					changes.length ? { historyPolicy: "exclude" } : undefined,
-				)
-			if (current?.name !== name) setTitleSaved(true)
+			const titleUpdated = canvas.elementRenameManager.commitElementName(
+				element.id,
+				name,
+				changes.length ? { historyPolicy: "exclude" } : undefined,
+			)
+			if (titleUpdated) setTitleSaved(true)
 			for (const change of changes) {
-				if (stop.current) break
+				if (shouldStop()) break
 				setResults((previous) => ({ ...previous, [change.fileId]: { status: "saving" } }))
 				try {
 					if (!rename) throw new Error(t("rename.fileUnavailable", "当前文件不可重命名"))
@@ -196,8 +198,7 @@ export function useImageRename(element: ImageElement) {
 		} catch (failure) {
 			setError(failure instanceof Error ? failure.message : t("rename.failed", "重命名失败"))
 		} finally {
-			savingRef.current = false
-			setSaving(false)
+			finish()
 		}
 	}
 	const successCount = Object.values(results).filter(
@@ -209,6 +210,7 @@ export function useImageRename(element: ImageElement) {
 		setElementName: (name: string) => {
 			setElementName(name)
 			setTitleSaved(false)
+			clearError()
 		},
 		titleSaved,
 		baseName,
@@ -224,9 +226,8 @@ export function useImageRename(element: ImageElement) {
 		error,
 		successCount,
 		failedCount,
-		requestStop: () => {
-			stop.current = true
-		},
-		dirty: changes.length > 0 || elementName.trim() !== (element.name || ""),
+		requestStop,
+		originalName: originalNameRef.current,
+		dirty: changes.length > 0 || elementName.trim() !== originalNameRef.current.trim(),
 	}
 }
