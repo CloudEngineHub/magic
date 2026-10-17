@@ -322,6 +322,7 @@ export default function LayersDrawer() {
 		(node: TreeNode<LayerTreeData>, context: RenderNodeContext) => {
 			const isLocked = node.data?.locked ?? false
 			const isVisible = node.data?.visible ?? true
+			const editableName = node.data?.editableName ?? node.label
 			const isDiscarded =
 				node.data?.type === ElementTypeEnum.Image &&
 				canvas?.getEffectiveContent<ImageElementContent>(node.id)?.discarded === true
@@ -395,6 +396,8 @@ export default function LayersDrawer() {
 					break
 			}
 
+			// Escape should discard the draft even if unmounting the focused input emits blur.
+			let cancelledByEscape = false
 			const renderMainContent = (thumbnail?: React.ReactNode) => (
 				<div className={styles.layerNodeMain}>
 					<div className={styles.layerNodeIcon}>{thumbnail ?? iconContent}</div>
@@ -406,14 +409,17 @@ export default function LayersDrawer() {
 									context.noHoverClassName,
 									context.noActiveClassName,
 								)}
-								defaultValue={node.label}
+								defaultValue={editableName}
 								autoFocus
 								onFocus={(event) => event.currentTarget.select()}
 								onClick={stopPropagation}
 								onBlur={(e) => {
 									const newName = e.target.value.trim()
-									if (newName && newName !== node.label) {
-										canvas?.elementManager.update(node.id, { name: newName })
+									if (!cancelledByEscape && newName && newName !== editableName) {
+										canvas?.elementRenameManager.commitElementName(
+											node.id,
+											newName,
+										)
 									}
 									setLayerRenamingElementId(null)
 								}}
@@ -426,6 +432,8 @@ export default function LayersDrawer() {
 									) {
 										e.currentTarget.blur()
 									} else if (e.key === "Escape") {
+										cancelledByEscape = true
+										e.currentTarget.value = editableName
 										setLayerRenamingElementId(null)
 									}
 								}}
@@ -435,14 +443,7 @@ export default function LayersDrawer() {
 								className={styles.layerNodeLabelText}
 								onDoubleClick={(event) => {
 									event.stopPropagation()
-									if (!canWrite) return
-									if (
-										canvas?.elementManager.getElementData(node.id)?.type ===
-										"image"
-									) {
-										canvas.elementRenameManager.startRename(node.id, true)
-										return
-									}
+									if (!canvas?.elementRenameManager.canRename(node.id)) return
 									setLayerRenamingElementId(node.id)
 								}}
 							>
@@ -457,7 +458,6 @@ export default function LayersDrawer() {
 					</div>
 				</div>
 			)
-			const isLayerSelected = selectedElementIds.includes(node.id)
 			const renderActions = () => {
 				if (isEditing || isSelectMode) return null
 				return (
