@@ -1,6 +1,11 @@
 import Konva from "konva"
 import { ElementTypeEnum } from "../../document/types"
-import { getActiveContent } from "../../document/elementContent"
+import {
+	getActiveContent,
+	getActiveImageContent,
+	isImageElementContent,
+} from "../../document/elementContent"
+import { GenerationStatus } from "../../../public/magic-types"
 import { BaseLabelManager, type BaseLabelManagerConfig, type LabelLayoutSyncContext, type LabelSize } from "./BaseLabelManager"
 import {
 	NAME_LABEL_GROUP_PREFIX,
@@ -14,11 +19,16 @@ import type { CanvasEventMap } from "../../core/EventEmitter"
 import type { NameLabelContent } from "../../elements/core/BaseElement"
 import type { NameLabelIconContext, NameLabelIconResolver } from "./nameLabelTypes"
 import {
+	NameLabelTooltipController,
+	type NameLabelTooltipContent,
+} from "./NameLabelTooltipController"
+import {
 	getMediaAssetId,
 	resolveMediaComplianceFailedReason,
 	resolveMediaComplianceStatus,
 	type MediaComplianceContentLike,
 } from "../../resources/asset/assetComplianceState"
+import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import type { MediaLabelLayout } from "./mediaLabelLayout"
 
 /**
@@ -123,6 +133,7 @@ export class NameLabelManager extends BaseLabelManager {
 	private readonly iconResolver?: NameLabelIconResolver
 	private readonly iconRefreshListeners = new Set<NameLabelIconRefreshListener>()
 	private readonly labelLayoutStates = new WeakMap<Konva.Group, NameLabelLayoutState>()
+	private readonly tooltipController: NameLabelTooltipController
 	private domLabelElementId: string | null = null
 	private renameButtonElementId: string | null = null
 
@@ -162,6 +173,7 @@ export class NameLabelManager extends BaseLabelManager {
 
 		super(baseConfig)
 		this.iconResolver = options.iconResolver
+		this.tooltipController = new NameLabelTooltipController(canvas)
 		this.setupInteractionListeners()
 	}
 
@@ -310,6 +322,7 @@ export class NameLabelManager extends BaseLabelManager {
 	public setRenamingElementId(elementId: string | null): void {
 		const previousElementId = this.renamingElementId
 		this.renamingElementId = elementId
+		this.hideTooltip()
 
 		if (previousElementId) {
 			this.updateLabelVisibility(previousElementId)
@@ -1045,6 +1058,67 @@ export class NameLabelManager extends BaseLabelManager {
 		return Number.isFinite(value) ? Math.max(0, value) : 0
 	}
 
+	/** Konva returns the transformed rect in Stage coordinates, which the DOM tooltip host consumes. */
+	private getStageAnchor(node: Konva.Node): {
+		x: number
+		y: number
+		width: number
+		height: number
+	} {
+		const rect = node.getClientRect({ skipShadow: true })
+		return {
+			x: rect.x,
+			y: rect.y,
+			width: rect.width,
+			height: rect.height,
+		}
+	}
+
+	private scheduleTooltip(content: NameLabelTooltipContent | null, node: Konva.Node): void {
+		if (!content || !node.getParent()?.visible() || !this.areNameLabelsInteractive()) {
+			this.hideTooltip()
+			return
+		}
+		this.tooltipController.schedule(content, this.getStageAnchor(node))
+	}
+
+	private hideTooltip(): void {
+		this.tooltipController.hide()
+	}
+
+	private getImageNameTooltipContent(elementId: string): NameLabelTooltipContent | null {
+		const data = this.canvas.elementManager.getElementData(elementId)
+		if (!isImageElementContent(data)) return null
+
+		const content = getActiveImageContent(data)
+		const runtime = this.canvas.generationRuntimeManager?.getTargetState(
+			elementId,
+			content.contentId,
+		)
+		const expectedName =
+			runtime?.generateImageRequest?.name || content.generateImageRequest?.name
+		const processing =
+			Boolean(runtime) ||
+			content.status === GenerationStatus.Pending ||
+			content.status === GenerationStatus.Processing
+		const methods = this.canvas.magicConfigManager.config?.methods?.imageRename
+		const fileName =
+			!processing && content.src
+				? methods?.resolveImageRenameFile(content.src)?.fileName ||
+					getCanvasResourceFileName(content.src)
+				: undefined
+		const text = fileName || expectedName
+		if (!text) return null
+
+		return {
+			key: `name:${elementId}:${content.contentId}:${text}`,
+			title: fileName
+				? this.canvas.t?.("rename.fileNameLabel", "文件名")
+				: this.canvas.t?.("rename.expectedFile", "预计文件名"),
+			text,
+		}
+	}
+
 	/** Refreshes cached icon and runtime text state for discrete label changes. */
 	public refreshIcons(elementIds?: readonly string[]): void {
 		const ids = elementIds ? Array.from(new Set(elementIds)) : Array.from(this.labelMap.keys())
@@ -1087,6 +1161,7 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	public override refreshAfterLocaleChange(): void {
+		this.hideTooltip()
 		for (const [elementId, labelGroup] of this.labelMap) {
 			this.syncLabelContent(elementId, labelGroup)
 		}
@@ -1099,6 +1174,7 @@ export class NameLabelManager extends BaseLabelManager {
 
 	public override destroy(): void {
 		this.clearPointerHover()
+		this.tooltipController.destroy()
 		this.iconHoverElementId = null
 		this.domLabelElementId = null
 		this.renameButtonElementId = null
@@ -1220,6 +1296,14 @@ export class NameLabelManager extends BaseLabelManager {
 			this.canvas.eventEmitter.on("document:restored", () => {
 				this.refreshIcons()
 			}),
+			this.canvas.eventEmitter.on("canvas:resize", () => this.hideTooltip()),
+			this.canvas.eventEmitter.on("viewport:scale", () => this.hideTooltip()),
+			this.canvas.eventEmitter.on("viewport:pan", () => this.hideTooltip()),
+			this.canvas.eventEmitter.on("viewport:changed", () => this.hideTooltip()),
+			this.canvas.eventEmitter.on("elements:transform:dragmove", () => this.hideTooltip()),
+			this.canvas.eventEmitter.on("elements:transform:anchorDragmove", () =>
+				this.hideTooltip(),
+			),
 		)
 	}
 
@@ -1258,6 +1342,7 @@ export class NameLabelManager extends BaseLabelManager {
 		) {
 			this.clearPointerHover()
 		}
+		if (!listening) this.hideTooltip()
 	}
 
 	private syncHitRect(labelGroup: Konva.Group): void {
@@ -1299,6 +1384,11 @@ export class NameLabelManager extends BaseLabelManager {
 		labelGroup.on("click tap", (e) => {
 			stopPointerEvent(e)
 		})
+		const hitRect = labelGroup.findOne(`.${NAME_LABEL_HIT_NAME}`) as Konva.Rect | null
+		hitRect?.on("mouseenter", () => {
+			this.scheduleTooltip(this.getImageNameTooltipContent(elementId), hitRect)
+		})
+		hitRect?.on("mouseleave", () => this.hideTooltip())
 		labelGroup.on("dblclick dbltap", (e) => {
 			stopPointerEvent(e)
 			if (
@@ -1348,8 +1438,12 @@ export class NameLabelManager extends BaseLabelManager {
 	}
 
 	private clearPointerHover(): void {
-		if (!this.pointerHoverElementId) return
+		if (!this.pointerHoverElementId) {
+			this.hideTooltip()
+			return
+		}
 		this.pointerHoverElementId = null
 		this.canvas.cursorManager?.restoreToolCursor()
+		this.hideTooltip()
 	}
 }
