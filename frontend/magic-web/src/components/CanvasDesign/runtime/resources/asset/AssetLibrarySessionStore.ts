@@ -1,5 +1,6 @@
 import {
 	AssetsApi,
+	type AssetComplianceStatus,
 	type AssetItem,
 	type AssetMediaType,
 	type AssetOwnerItem,
@@ -338,6 +339,68 @@ export class AssetLibrarySessionStore {
 			}
 		}
 		this.markScopeStale(scope)
+		this.scheduleMutationBroadcast(scope)
+	}
+
+	/**
+	 * Apply a completed compliance result without reloading unrelated list queries.
+	 * PASS-filtered queries still revalidate because a newly passed asset may need
+	 * to enter a snapshot that did not previously contain it.
+	 */
+	public applyAssetComplianceState(
+		assetId: string,
+		status: AssetComplianceStatus,
+		failedReason: string | null,
+		scope = getSharedMediaResourceScope(),
+	): void {
+		this.ensureScope(scope)
+		const normalizedAssetId = assetId.trim()
+		if (!normalizedAssetId) return
+
+		const cachedAsset = assetDetailStore.getCached(normalizedAssetId, scope)
+		if (cachedAsset) {
+			assetDetailStore.upsert(
+				{
+					...cachedAsset,
+					compliance_status: status,
+					compliance_failed_reason: failedReason,
+				},
+				scope,
+			)
+		}
+
+		const filteredEntries: AssetQueryCacheEntry[] = []
+		let changed = false
+		for (const entry of this.assetQueryCache.values()) {
+			if (entry.scope !== scope) continue
+			if (entry.query.requiresCompliance) {
+				filteredEntries.push(entry)
+				continue
+			}
+			const index = entry.snapshot.assets.findIndex(
+				(asset) => asset.asset_id === normalizedAssetId,
+			)
+			if (index === -1) continue
+			const assets = [...entry.snapshot.assets]
+			assets[index] = {
+				...assets[index],
+				compliance_status: status,
+				compliance_failed_reason: failedReason,
+			}
+			entry.snapshot = { ...entry.snapshot, assets }
+			changed = true
+		}
+
+		let filteredChanged = false
+		for (const entry of filteredEntries) {
+			entry.snapshot = {
+				...entry.snapshot,
+				stale: true,
+				revision: entry.snapshot.revision + 1,
+			}
+			filteredChanged = true
+		}
+		if (changed || filteredChanged) this.notify()
 		this.scheduleMutationBroadcast(scope)
 	}
 

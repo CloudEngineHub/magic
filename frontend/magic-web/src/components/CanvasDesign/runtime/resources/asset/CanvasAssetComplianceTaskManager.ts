@@ -105,9 +105,13 @@ export class CanvasAssetComplianceTaskManager {
 					this.persistState(persistTargets, state, normalizedId)
 				}
 				// Compliance can be started from the Canvas menu while the library
-				// dialog is already open.  Invalidate that shared list/detail snapshot
-				// before notifying UI listeners so PASS/FAILED is visible there too.
-				assetLibrarySessionStore.invalidateAsset(normalizedId)
+				// dialog is already open. Patch the shared snapshot and revalidate only
+				// PASS-filtered queries that may need membership changes.
+				assetLibrarySessionStore.applyAssetComplianceState(
+					normalizedId,
+					state.status,
+					state.failedReason,
+				)
 				options.onSettled?.(state)
 				this.host.refreshNameLabelIcons?.()
 				this.host.refreshMediaComplianceFailedTags?.()

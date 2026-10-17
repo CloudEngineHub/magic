@@ -22,7 +22,11 @@ const query: AssetLibraryQuery = {
 	requiresCompliance: false,
 }
 
-function asset(id: string, mediaType: "IMAGE" | "VIDEO" | "AUDIO" = "IMAGE") {
+function asset(
+	id: string,
+	mediaType: "IMAGE" | "VIDEO" | "AUDIO" = "IMAGE",
+	complianceStatus: "UNVERIFIED" | "PASS" = "UNVERIFIED",
+) {
 	return {
 		asset_id: id,
 		asset_kind: "ASSET" as const,
@@ -32,7 +36,7 @@ function asset(id: string, mediaType: "IMAGE" | "VIDEO" | "AUDIO" = "IMAGE") {
 		name: id,
 		description: "",
 		file_url: `https://example.com/${id}`,
-		compliance_status: "UNVERIFIED" as const,
+		compliance_status: complianceStatus,
 		compliance_failed_reason: null,
 		owner: { id: "owner-1", name: "Owner" },
 		owner_uid: "owner-1",
@@ -199,6 +203,44 @@ describe("AssetLibrarySessionStore", () => {
 		)
 		expect(snapshot.assets).toEqual([updated])
 		expect(snapshot.stale).toBe(true)
+	})
+
+	it("patches ordinary lists and only stales compliance-filtered lists", async () => {
+		const filteredQuery = { ...query, requiresCompliance: true }
+		mocks.queryAssets
+			.mockResolvedValueOnce(response(asset("asset-1")))
+			.mockResolvedValueOnce(response(asset("asset-1", "IMAGE", "PASS")))
+
+		await assetLibrarySessionStore.queryAssets(query, "scope-a")
+		await assetLibrarySessionStore.queryAssets(filteredQuery, "scope-a")
+
+		assetLibrarySessionStore.applyAssetComplianceState(
+			"asset-1",
+			"FAILED",
+			"包含不允许的内容",
+			"scope-a",
+		)
+
+		const normalSnapshot = assetLibrarySessionStore.getSnapshotByKey(
+			assetLibrarySessionStore.getQueryKey(query, "scope-a"),
+			"scope-a",
+		)
+		const filteredSnapshot = assetLibrarySessionStore.getSnapshotByKey(
+			assetLibrarySessionStore.getQueryKey(filteredQuery, "scope-a"),
+			"scope-a",
+		)
+
+		expect(normalSnapshot).toMatchObject({
+			stale: false,
+			assets: [
+				expect.objectContaining({
+					compliance_status: "FAILED",
+					compliance_failed_reason: "包含不允许的内容",
+				}),
+			],
+		})
+		expect(filteredSnapshot.stale).toBe(true)
+		expect(filteredSnapshot.assets[0].compliance_status).toBe("PASS")
 	})
 
 	it("does not seed an in-flight stale list over a newer mutation detail", async () => {

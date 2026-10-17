@@ -269,7 +269,6 @@ export default function AssetsModal({
 			next.delete(assetId)
 			return next
 		})
-		assetLibrarySessionStore.invalidateCurrentScope()
 	}, [])
 
 	const { startCompliance } = useAssetLibraryComplianceAction({
@@ -319,7 +318,6 @@ export default function AssetsModal({
 					.refreshResources([assetId], { forceRefresh: true })
 					.catch(() => undefined)
 			}
-			assetLibrarySessionStore.invalidateCurrentScope()
 		},
 		[canvas],
 	)
@@ -391,7 +389,6 @@ export default function AssetsModal({
 		},
 		mode: AssetLibraryUploadMode,
 	) => {
-		assetLibrarySessionStore.invalidateCurrentScope()
 		const uploadedMediaType = asset.asset_media_type
 		const shouldSwitchFilter =
 			showMediaFilter &&
@@ -409,10 +406,12 @@ export default function AssetsModal({
 		}
 	}
 
-	const refreshLibrary = (assetId?: string) => {
+	const refreshLibrary = (assetId?: string, refreshOwners = false) => {
 		if (assetId) assetLibrarySessionStore.invalidateAsset(assetId)
 		else assetLibrarySessionStore.invalidateCurrentScope()
-		void assetLibrarySessionStore.refreshOwners().catch(() => undefined)
+		if (refreshOwners) {
+			void assetLibrarySessionStore.refreshOwners().catch(() => undefined)
+		}
 	}
 
 	const handleEditAsset = async (asset: AssetItem) => {
@@ -474,7 +473,9 @@ export default function AssetsModal({
 				...baseTarget,
 				...visibility,
 			},
-			onUpdated: () => refreshLibrary(asset.asset_id),
+			// The host update handler upserts the PUT response into the shared store.
+			// Avoid reloading the full list after a complete mutation response.
+			onUpdated: () => undefined,
 			onClosed: () => setHostDialogOpen(false),
 		})
 	}
@@ -539,7 +540,7 @@ export default function AssetsModal({
 			setSelectedAssetIds((currentIds) =>
 				currentIds.filter((assetId) => !deletedIdSet.has(assetId)),
 			)
-			refreshLibrary()
+			refreshLibrary(undefined, true)
 			toast.success(
 				t("assets.batchDeleteSuccess", {
 					defaultValue: "已删除 {{count}} 个素材",
