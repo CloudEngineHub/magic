@@ -809,6 +809,30 @@ class ModelGatewayMapper extends ModelMapper
         );
     }
 
+    /**
+     * 套餐模型白名单只约束官方组织提供的 LLM。
+     *
+     * 这样组织自有服务商模型不会因为平台套餐只列出官方模型而被误判为不可用。
+     */
+    private function isModelAvailableForSubscription(
+        ModelGatewayDataIsolation $dataIsolation,
+        ProviderModelEntity $providerModelEntity,
+        ?ModelType $modelType
+    ): bool {
+        if ($dataIsolation->isOfficialOrganization()) {
+            return true;
+        }
+
+        if ($providerModelEntity->getOrganizationCode() === $dataIsolation->getCurrentOrganizationCode()) {
+            return true;
+        }
+
+        return $dataIsolation->getSubscriptionManager()->isValidModelAvailable(
+            $providerModelEntity->getModelId(),
+            $modelType
+        );
+    }
+
     private function getByAdmin(ModelGatewayDataIsolation $dataIsolation, string $model, ?ModelType $modelType = null): ?ModelEntry
     {
         $providerDataIsolation = ProviderDataIsolation::createByBaseDataIsolation($dataIsolation);
@@ -831,7 +855,7 @@ class ModelGatewayMapper extends ModelMapper
         }
         // 检查当前套餐是否有这个模型的使用权限 - 目前只有 LLM 模型有这个限制
         if ($providerModelEntity->getModelType()->isLLM()) {
-            if (! $dataIsolation->isOfficialOrganization() && ! $dataIsolation->getSubscriptionManager()->isValidModelAvailable($providerModelEntity->getModelId(), $modelType)) {
+            if (! $this->isModelAvailableForSubscription($dataIsolation, $providerModelEntity, $modelType)) {
                 $this->logger->info('模型不在可用名单', ['model' => $providerModelEntity->getModelId(), 'model_type' => $modelType?->value]);
                 return null;
             }
