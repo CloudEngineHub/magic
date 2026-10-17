@@ -1,0 +1,93 @@
+import { CircleAlert, CircleCheck, CirclePause, MessageCircleQuestion } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { cn } from "@/utils/cn"
+import type { StudyStatus } from "../services/studyStatus"
+
+/** Compact status pill with a live dot while the agent works; used in list rows and the header. */
+export function StudyStatusBadge({
+	status,
+	className,
+}: {
+	status: StudyStatus
+	className?: string
+}) {
+	const { t } = useTranslation("personaResearch")
+	const config = {
+		running: {
+			label: t("status.running"),
+			className: "bg-primary/10 text-primary",
+			icon: (
+				<span className="relative flex size-2">
+					{/* Ping ring signals live work; reduced-motion users get a static dot. */}
+					<span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60 motion-reduce:animate-none" />
+					<span className="relative inline-flex size-2 rounded-full bg-primary" />
+				</span>
+			),
+		},
+		waiting_user: {
+			label: t("status.waitingUser"),
+			className: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+			icon: <MessageCircleQuestion className="size-3.5" />,
+		},
+		done: {
+			label: t("status.done"),
+			className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+			icon: <CircleCheck className="size-3.5" />,
+		},
+		failed: {
+			label: t("status.failed"),
+			className: "bg-destructive/10 text-destructive",
+			icon: <CircleAlert className="size-3.5" />,
+		},
+		idle: {
+			label: t("status.idle"),
+			className: "bg-muted text-muted-foreground",
+			icon: <CirclePause className="size-3.5" />,
+		},
+	}[status.kind]
+
+	return (
+		<span
+			className={cn(
+				"inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
+				config.className,
+				className,
+			)}
+		>
+			{config.icon}
+			{config.label}
+		</span>
+	)
+}
+
+/** Segmented 6-step progress bar; reads as "how far along" without labels. */
+export function StudyProgressSegments({
+	status,
+	className,
+}: {
+	status: StudyStatus
+	className?: string
+}) {
+	const { t } = useTranslation("personaResearch")
+	return (
+		<span
+			className={cn("flex items-center gap-0.5", className)}
+			role="img"
+			aria-label={t("study.progress", { done: status.completed, total: status.total })}
+		>
+			{Array.from({ length: status.total }, (_, index) => (
+				<span
+					key={index}
+					className={cn(
+						"h-1 flex-1 rounded-full transition-colors duration-500",
+						index < status.completed
+							? "bg-primary"
+							: index === status.completed && status.kind === "running"
+								? "animate-pulse bg-primary/40 motion-reduce:animate-none"
+								: "bg-border",
+					)}
+				/>
+			))}
+		</span>
+	)
+}

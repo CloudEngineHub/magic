@@ -135,9 +135,10 @@ export class PersonaResearchStore {
 		return cached?.title || topic.topic_name || ""
 	}
 
-	studyPhaseOf(topic: Topic): StudyFile["phase"] | null {
+	/** Parsed study.json of any topic, for list rows; null until it has been read. */
+	studyFileOf(topic: Topic): StudyFile | null {
 		const dir = findStudyDir(this.attachmentList, topic.id)
-		return dir ? (this.peekStudy(`${dir}study.json`)?.phase ?? null) : null
+		return dir ? this.peekStudy(`${dir}study.json`) : null
 	}
 
 	personaById(personaId: string): PersonaFile | null {

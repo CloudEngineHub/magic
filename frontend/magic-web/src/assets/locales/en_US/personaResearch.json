@@ -13,14 +13,23 @@
 		"discussionN": "Discussion {{index}}",
 		"discussions": "Discussions",
 		"discussionsEmpty": "No focus group is planned for this study, or it has not started yet.",
+		"discussionsEmptyTitle": "No focus groups yet",
 		"files": "Report & files",
 		"interviews": "Interviews",
 		"interviewsEmpty": "Transcripts appear here once interviews start.",
+		"interviewsEmptyTitle": "Interviews haven't started",
+		"newContent": "New content",
+		"next": "Next",
+		"participants": "{{count}} participants",
 		"personas": "Personas",
 		"personasEmpty": "Personas appear here once the AI builds them.",
+		"personasEmptyTitle": "No personas yet",
+		"previous": "Previous",
+		"reportGenerating": "Generating report…",
 		"studyFileInvalid": "The study progress file is still being written or is incomplete. The conversation is not affected.",
 		"validation": "Validation",
-		"validationEmpty": "When the study finishes, a questionnaire for real users appears here so you can retest the findings."
+		"validationEmpty": "When the study finishes, a questionnaire for real users appears here so you can retest the findings.",
+		"validationEmptyTitle": "No questionnaire yet"
 	},
 	"home": {
 		"delete": "Delete",
@@ -28,26 +37,47 @@
 		"deleteFailed": "Delete failed. Please try again.",
 		"deleteTitle": "Delete this study?",
 		"deleted": "Deleted",
+		"emptyTitle": "Start your first study",
+		"eyebrow": "AI consumer research",
 		"moreActions": "More actions",
 		"myStudies": "My studies",
 		"noStudies": "No studies yet. Ask a business question or start from a template above.",
 		"personaLibrary": "Persona library {{count}}",
+		"samplePrompt": "Is there an opportunity for AI voice recorders among owners of traditional businesses? Using community and Jobs-to-be-Done lenses, research their pain points, willingness to pay and where a small team could start.",
+		"studiesCount": "{{count}} total",
 		"subtitle": "The AI researcher clarifies your question, designs the study, builds AI personas, interviews them one by one and delivers an evidence-backed report",
 		"templates": "Study templates",
-		"title": "Hear from your customers before you decide"
+		"templatesHint": "Pick one to start; you can edit it",
+		"title": "Hear from your customers before you decide",
+		"trySample": "Try a sample study",
+		"value": {
+			"evidence": "Every claim sourced",
+			"evidenceText": "Trace each finding to interview quotes and web sources",
+			"process": "Fully transparent",
+			"processText": "See every step from clarifying the question to the report",
+			"validate": "Retest with real people",
+			"validateText": "Get a questionnaire to ask real customers"
+		}
 	},
 	"library": {
 		"clearSelection": "Clear",
 		"empty": "The library is empty. Run a study and the personas the AI builds are saved here.",
+		"emptyTitle": "Your persona library is empty",
+		"goStudy": "Start a study",
 		"noMatch": "No personas match.",
+		"noMatchTitle": "No personas found",
+		"panelSize": "{{count}} people",
 		"panels": "Panels",
 		"panelsEmpty": "No saved panels yet.",
+		"panelsEmptyTitle": "No panels yet",
 		"personas": "Personas",
+		"resetFilters": "Clear filters",
 		"search": "Search names or tags",
 		"selected": "{{count}} selected",
 		"startPrompt": "Use these personas from the library for this study:\n{{paths}}\n\nResearch question: ",
 		"startWithPanel": "Start a study",
 		"startWithSelected": "Start a study with these",
+		"subtitle": "Personas built during studies are saved here and can be reused in new studies",
 		"tierAll": "All",
 		"title": "Persona library"
 	},
@@ -80,10 +110,20 @@
 			"layers": "Evidence layers"
 		},
 		"select": "Select {{name}}",
+		"stat": {
+			"rounds": "Answers",
+			"sources": "Sources",
+			"tier": "Tier"
+		},
 		"tier": {
 			"evidenceBased": "Evidence-based",
 			"generated": "Generated",
 			"imported": "Imported"
+		},
+		"tierHint": {
+			"evidenceBased": "Key traits are backed by traceable sources, so confidence is higher.",
+			"generated": "Inferred from common knowledge and the study goal. Good for exploring; treat conclusions with care.",
+			"imported": "Built from materials you uploaded, so it is closest to your real customers."
 		},
 		"viewInterview": "View interview"
 	},
@@ -96,6 +136,14 @@
 		"plan": "Design",
 		"report": "Outputs",
 		"validation": "Validation"
+	},
+	"phaseHint": {
+		"clarify": "The AI asks a few key questions to pin down the decision the study supports",
+		"deskResearch": "Searches and reads public sources into sourced market insights",
+		"interview": "Builds or reuses AI personas and runs interviews and focus groups in parallel",
+		"plan": "Proposes a study plan that is locked once you confirm it",
+		"report": "Combines interviews and sources into a report where every claim is sourced",
+		"validation": "Creates a questionnaire to retest key findings with real people"
 	},
 	"scenario": {
 		"brand": "Brand positioning",
@@ -117,16 +165,34 @@
 		"loadFailed": "AI Research failed to load",
 		"retry": "Retry"
 	},
+	"status": {
+		"done": "Done",
+		"failed": "Error",
+		"idle": "Paused",
+		"running": "Researching",
+		"waitingUser": "Waiting for you"
+	},
 	"study": {
+		"aiDisclaimer": "Respondents are AI-simulated, not real users",
 		"backHome": "Back to my studies",
 		"conversation": "Conversation",
 		"notFound": "This study was not found. It may have been deleted.",
+		"notFoundTitle": "Study not found",
 		"outputs": "Outputs",
 		"outputsCount": "Outputs {{count}}",
 		"personasCount": "Personas {{count}}",
 		"progress": "Progress {{done}}/{{total}}",
+		"resizePanels": "Resize conversation and outputs",
+		"scale": "{{personas}} people × {{rounds}} rounds",
 		"share": "Share",
 		"untitled": "Untitled study"
+	},
+	"studyType": {
+		"conceptTest": "Concept test",
+		"fastInsight": "Fast insight",
+		"panelOnly": "Personas only",
+		"productRnd": "Product R&D",
+		"userResearch": "User research"
 	},
 	"template": {
 		"churn": {
@@ -157,6 +223,7 @@
 	},
 	"transcript": {
 		"failed": "This interview did not finish",
+		"inProgress": "Interview in progress…",
 		"keyFindings": "Key findings",
 		"moderator": "Moderator",
 		"quotes": "Quotes",

@@ -13,14 +13,23 @@
 		"discussionN": "讨论 {{index}}",
 		"discussions": "讨论",
 		"discussionsEmpty": "这项研究没有安排焦点小组，或讨论还没开始。",
+		"discussionsEmptyTitle": "还没有焦点小组",
 		"files": "报告与文件",
 		"interviews": "访谈",
 		"interviewsEmpty": "访谈开始后，逐字稿会显示在这里。",
+		"interviewsEmptyTitle": "访谈还没开始",
+		"newContent": "有新内容",
+		"next": "下一位",
+		"participants": "{{count}} 位参与者",
 		"personas": "人设",
 		"personasEmpty": "AI 构建人设后会显示在这里。",
+		"personasEmptyTitle": "还没有人设",
+		"previous": "上一位",
+		"reportGenerating": "报告生成中…",
 		"studyFileInvalid": "研究进度文件还在生成或格式不完整，左侧对话不受影响。",
 		"validation": "真人验证",
-		"validationEmpty": "研究完成后，这里会生成一份真人验证问卷，可以直接发给真实用户复测。"
+		"validationEmpty": "研究完成后，这里会生成一份真人验证问卷，可以直接发给真实用户复测。",
+		"validationEmptyTitle": "问卷还没生成"
 	},
 	"home": {
 		"delete": "删除",
@@ -28,26 +37,47 @@
 		"deleteFailed": "删除失败，请重试",
 		"deleteTitle": "删除这项研究？",
 		"deleted": "已删除",
+		"emptyTitle": "开始你的第一项研究",
+		"eyebrow": "AI 消费者研究",
 		"moreActions": "更多操作",
 		"myStudies": "我的研究",
 		"noStudies": "还没有研究。输入一个商业问题，或从上面的模板开始。",
 		"personaLibrary": "人设库 {{count}}",
+		"samplePrompt": "AI 录音硬件在传统行业老板（“老登”）人群里有没有机会？请从圈层和 JTBD 角度，研究他们的痛点、付费意愿和小团队的切入点。",
+		"studiesCount": "共 {{count}} 项",
 		"subtitle": "AI 研究员会澄清问题、设计研究、构建 AI 人设并逐一访谈，最后给出有证据的报告",
 		"templates": "研究模板",
-		"title": "在做决定之前，先听听你的客户怎么说"
+		"templatesHint": "选一个开始，内容可以再改",
+		"title": "在做决定之前，先听听你的客户怎么说",
+		"trySample": "试试示例研究",
+		"value": {
+			"evidence": "结论有出处",
+			"evidenceText": "每条结论都能追溯到访谈原话和网页来源",
+			"process": "过程全透明",
+			"processText": "从澄清问题到出报告，每一步都看得见",
+			"validate": "可用真人复测",
+			"validateText": "自动生成问卷，拿去问真实用户"
+		}
 	},
 	"library": {
 		"clearSelection": "清除选择",
 		"empty": "人设库还是空的。做一次研究，AI 构建的人设会自动存到这里。",
+		"emptyTitle": "人设库还是空的",
+		"goStudy": "去做一项研究",
 		"noMatch": "没有符合条件的人设。",
+		"noMatchTitle": "没有找到人设",
+		"panelSize": "{{count}} 人",
 		"panels": "研究小组",
 		"panelsEmpty": "还没有保存的研究小组。",
+		"panelsEmptyTitle": "还没有研究小组",
 		"personas": "人设",
+		"resetFilters": "清除筛选",
 		"search": "搜索名字、标签",
 		"selected": "已选 {{count}} 个人设",
 		"startPrompt": "请使用人设库中的以下人设做这次研究：\n{{paths}}\n\n研究问题：",
 		"startWithPanel": "用这组发起研究",
 		"startWithSelected": "用这些人设发起研究",
+		"subtitle": "研究中构建的 AI 人设会自动保存在这里，可以在新研究中复用",
 		"tierAll": "全部",
 		"title": "人设库"
 	},
@@ -80,10 +110,20 @@
 			"layers": "证据层"
 		},
 		"select": "选择 {{name}}",
+		"stat": {
+			"rounds": "已答轮数",
+			"sources": "来源",
+			"tier": "来源级别"
+		},
 		"tier": {
 			"evidenceBased": "有证据",
 			"generated": "现场生成",
 			"imported": "资料导入"
+		},
+		"tierHint": {
+			"evidenceBased": "关键特征有可追溯的来源支撑，可信度较高。",
+			"generated": "根据常识和研究目标推测生成，适合探索，结论需谨慎。",
+			"imported": "根据你上传的资料构建，最贴近你的真实用户。"
 		},
 		"viewInterview": "查看访谈"
 	},
@@ -96,6 +136,14 @@
 		"plan": "研究设计",
 		"report": "研究产出",
 		"validation": "真人验证"
+	},
+	"phaseHint": {
+		"clarify": "AI 先问几个关键问题，明确研究要支持什么决定",
+		"deskResearch": "搜索并阅读公开资料，形成带来源的市场洞察",
+		"interview": "构建或复用 AI 人设，并行开展一对一访谈和焦点小组",
+		"plan": "给出研究计划，经你确认后锁定",
+		"report": "汇总访谈和资料，生成每条结论都有出处的报告",
+		"validation": "生成问卷，用真实用户复测关键结论"
 	},
 	"scenario": {
 		"brand": "品牌定位",
@@ -117,16 +165,34 @@
 		"loadFailed": "AI 研究加载失败",
 		"retry": "重试"
 	},
+	"status": {
+		"done": "已完成",
+		"failed": "出错了",
+		"idle": "已暂停",
+		"running": "研究中",
+		"waitingUser": "等你回复"
+	},
 	"study": {
+		"aiDisclaimer": "受访者由 AI 模拟，不代表真实用户",
 		"backHome": "返回我的研究",
 		"conversation": "对话",
 		"notFound": "没有找到这项研究，它可能已被删除。",
+		"notFoundTitle": "没有找到这项研究",
 		"outputs": "研究产出",
 		"outputsCount": "研究产出 {{count}}",
 		"personasCount": "人设 {{count}}",
 		"progress": "进度 {{done}}/{{total}}",
+		"resizePanels": "调整对话与产出区宽度",
+		"scale": "{{personas}} 人 × {{rounds}} 轮",
 		"share": "分享",
 		"untitled": "未命名研究"
+	},
+	"studyType": {
+		"conceptTest": "概念测试",
+		"fastInsight": "快速洞察",
+		"panelOnly": "仅构建人设",
+		"productRnd": "产品研发",
+		"userResearch": "用户研究"
 	},
 	"template": {
 		"churn": {
@@ -157,6 +223,7 @@
 	},
 	"transcript": {
 		"failed": "这场访谈没有完成",
+		"inProgress": "访谈进行中…",
 		"keyFindings": "关键发现",
 		"moderator": "主持人",
 		"quotes": "金句",

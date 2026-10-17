@@ -1,17 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
-import { ArrowLeft, Share2 } from "lucide-react"
+import { ArrowLeft, FileSearch, Share2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import { Button } from "@/components/shadcn-ui/button"
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@/components/shadcn-ui/empty"
+import {
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "@/components/shadcn-ui/resizable"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import type { DetailRef } from "@/pages/superMagic/components/Detail"
 import TopicSharePopover from "@/pages/superMagic/components/TopicSharePopover"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
+import { platformKey } from "@/utils/storage"
 import { usePersonaResearchStore } from "../context"
 import ResearchConsole, { type ResearchConsoleTab } from "../components/ResearchConsole"
 import ResearchConversationPanel, {
@@ -20,7 +36,17 @@ import ResearchConversationPanel, {
 import ResearchFilesPane from "../components/ResearchFilesPane"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
 import StudyStepper from "../components/StudyStepper"
-import { STUDY_PHASE_KEYS, type PersonaFile } from "../types"
+import { StudyProgressSegments, StudyStatusBadge } from "../components/StudyStatusBadge"
+import { resolveStudyStatus } from "../services/studyStatus"
+import type { PersonaFile, StudyFile, StudyPhaseKey } from "../types"
+
+/** Which output tab follows each phase while the study runs (clarify stays in the conversation). */
+const PHASE_TAB: Partial<Record<StudyFile["phase"], ResearchConsoleTab>> = {
+	interview: "personas",
+	report: "files",
+	validation: "validation",
+	done: "files",
+}
 
 /** Research studio: stepper, conversation on the left, study outputs on the right. */
 function ResearchStudioPage() {
@@ -40,15 +66,18 @@ function ResearchStudioPage() {
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const [shareOpen, setShareOpen] = useState(false)
 	const openedReportVersionRef = useRef<string | null>(null)
+	const followedPhaseRef = useRef<string | null>(null)
 
 	useEffect(() => {
 		store.selectStudy(topicId)
+		followedPhaseRef.current = null
 	}, [store, topicId])
 
 	const selectedTopic = store.selectedTopic
 	const study = store.study
 	const studyAttachments = store.studyAttachments
 	const report = studyAttachments?.report ?? null
+	const status = resolveStudyStatus(selectedTopic, study)
 
 	const showOutputs = useMemoizedFn((tab: ResearchConsoleTab) => {
 		setConsoleTab(tab)
@@ -56,7 +85,7 @@ function ResearchStudioPage() {
 	})
 
 	/** Files from the conversation open in the shared preview tab. */
-	const handleFileClick = useMemoizedFn((fileItem?: unknown) => {
+	const openFile = useMemoizedFn((fileItem?: unknown) => {
 		showOutputs("files")
 		setUserSelectDetail(undefined)
 		// The preview tab is force-mounted; wait one frame so a hidden panel has layout.
@@ -69,16 +98,45 @@ function ResearchStudioPage() {
 		setUserSelectDetail(detail)
 	})
 
+	/**
+	 * The output panel follows the study once per phase change (personas when interviews start,
+	 * report when it is written). A user's later manual tab choice is kept until the next phase.
+	 * On first load the panel jumps to the current phase without replaying earlier ones.
+	 */
+	useEffect(() => {
+		const phase = study?.phase
+		if (!phase || followedPhaseRef.current === phase) return
+		followedPhaseRef.current = phase
+		const tab = PHASE_TAB[phase]
+		if (tab && !isMobile) setConsoleTab(tab)
+	}, [isMobile, study?.phase])
+
 	// Open the report once when it first appears (or is rewritten), without stealing focus later.
 	useEffect(() => {
 		if (!report?.file_id) return
 		const key = `${report.file_id}:${report.updated_at ?? ""}`
 		if (openedReportVersionRef.current === key) return
-		const isFirstAppearance = openedReportVersionRef.current === null
 		openedReportVersionRef.current = key
-		if (isFirstAppearance && study?.phase !== "report") return
 		setTimeout(() => detailRef.current?.openFileTab?.(report), 100)
-	}, [report, study?.phase])
+	}, [report])
+
+	/** Stepper shortcuts: each finished or running phase opens its own output. */
+	const handleStepClick = useMemoizedFn((key: StudyPhaseKey) => {
+		const fileByStep: Partial<Record<StudyPhaseKey, AttachmentItem | null | undefined>> = {
+			plan: studyAttachments?.plan,
+			desk_research: studyAttachments?.deskResearch,
+			report: studyAttachments?.report,
+		}
+		if (key === "clarify") {
+			if (isMobile) setMobileView("conversation")
+			return
+		}
+		if (key === "interview") return showOutputs("interviews")
+		if (key === "validation") return showOutputs("validation")
+		const file = fileByStep[key]
+		if (file) openFile(file)
+		else showOutputs("files")
+	})
 
 	const handleAskPersona = useMemoizedFn((persona: PersonaFile) => {
 		setOpenedPersona(null)
@@ -99,55 +157,106 @@ function ResearchStudioPage() {
 		showOutputs("interviews")
 	})
 
-	const progress = useMemo(() => {
-		if (!study) return 0
-		return study.phases.filter((phase) => phase.status === "done" || phase.status === "skipped")
-			.length
-	}, [study])
-	const outputsCount = [report, studyAttachments?.validation].filter(Boolean).length
-
 	const title = (selectedTopic && store.studyTitleOf(selectedTopic)) || t("study.untitled")
+	const outputsCount = [report, studyAttachments?.validation].filter(Boolean).length
 
 	if (!selectedTopic) {
 		return (
-			<div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-				<p className="text-sm text-muted-foreground">{t("study.notFound")}</p>
-				<Button
-					variant="outline"
-					onClick={() => navigate({ name: RouteName.PersonaResearch })}
-				>
-					{t("study.backHome")}
-				</Button>
-			</div>
+			<Empty className="h-full">
+				<EmptyHeader>
+					<EmptyMedia variant="icon">
+						<FileSearch />
+					</EmptyMedia>
+					<EmptyTitle>{t("study.notFoundTitle")}</EmptyTitle>
+					<EmptyDescription>{t("study.notFound")}</EmptyDescription>
+				</EmptyHeader>
+				<EmptyContent>
+					<Button
+						variant="outline"
+						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+					>
+						{t("study.backHome")}
+					</Button>
+				</EmptyContent>
+			</Empty>
 		)
 	}
 
+	const studyTypeLabel = study?.study_type
+		? {
+				user_research: t("studyType.userResearch"),
+				product_rnd: t("studyType.productRnd"),
+				concept_test: t("studyType.conceptTest"),
+				fast_insight: t("studyType.fastInsight"),
+				panel_only: t("studyType.panelOnly"),
+			}[study.study_type]
+		: null
+	const metaChips = [
+		studyTypeLabel,
+		study?.framework?.length ? study.framework.join(" · ") : null,
+		study?.limits?.personas
+			? t("study.scale", {
+					personas: study.limits.personas,
+					rounds: study.limits.interview_rounds ?? 5,
+				})
+			: null,
+	].filter((chip): chip is string => Boolean(chip))
+
 	const header = (
-		<div className="flex shrink-0 flex-col gap-3 border-b border-border px-4 py-3">
+		<div className="flex shrink-0 flex-col gap-3 border-b border-border px-4 pb-3 pt-3">
 			<div className="flex items-center gap-2">
-				<Button
-					variant="ghost"
-					size="icon"
-					className="size-8"
-					aria-label={t("study.backHome")}
-					onClick={() => navigate({ name: RouteName.PersonaResearch })}
-				>
-					<ArrowLeft className="size-4" />
-				</Button>
-				<h1 className="min-w-0 flex-1 truncate text-sm font-medium">{title}</h1>
+				<MagicTooltip title={t("study.backHome")}>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-8 shrink-0"
+						aria-label={t("study.backHome")}
+						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+					>
+						<ArrowLeft className="size-4" />
+					</Button>
+				</MagicTooltip>
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
+					<div className="flex min-w-0 items-center gap-2">
+						<h1 className="truncate text-sm font-semibold">{title}</h1>
+						<StudyStatusBadge status={status} />
+					</div>
+					{metaChips.length && !isMobile ? (
+						<div className="flex flex-wrap items-center gap-1.5">
+							{metaChips.map((chip) => (
+								<span
+									key={chip}
+									className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+								>
+									{chip}
+								</span>
+							))}
+						</div>
+					) : null}
+				</div>
 				<TopicSharePopover
 					open={shareOpen}
 					onOpenChange={setShareOpen}
 					topicId={selectedTopic.id}
 					topicTitle={title}
 				>
-					<Button variant="outline" size="sm">
+					<Button
+						variant="outline"
+						size={isMobile ? "icon" : "sm"}
+						className={cn(isMobile && "size-8")}
+						aria-label={t("study.share")}
+					>
 						<Share2 className="size-4" />
 						{isMobile ? null : t("study.share")}
 					</Button>
 				</TopicSharePopover>
 			</div>
-			<StudyStepper study={study} compact={isMobile} />
+			<StudyStepper
+				study={study}
+				compact={isMobile}
+				waitingForUser={status.kind === "waiting_user"}
+				onStepClick={handleStepClick}
+			/>
 		</div>
 	)
 
@@ -175,7 +284,7 @@ function ResearchStudioPage() {
 		<ResearchConversationPanel
 			ref={conversationRef}
 			variant={isMobile ? "mobile" : "desktop"}
-			onFileClick={handleFileClick}
+			onFileClick={openFile}
 			onSelectDetail={handleSelectDetail}
 		/>
 	)
@@ -212,8 +321,13 @@ function ResearchStudioPage() {
 							<TabsTrigger value="conversation" className="flex-1">
 								{t("study.conversation")}
 							</TabsTrigger>
-							<TabsTrigger value="outputs" className="flex-1">
+							<TabsTrigger value="outputs" className="flex-1 gap-1.5">
 								{t("study.outputs")}
+								{outputsCount + store.studyPersonas.length > 0 ? (
+									<span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+										{outputsCount + store.studyPersonas.length}
+									</span>
+								) : null}
 							</TabsTrigger>
 						</TabsList>
 					</Tabs>
@@ -236,31 +350,52 @@ function ResearchStudioPage() {
 			data-testid="persona-research-studio"
 		>
 			{header}
-			<div className="flex min-h-0 flex-1">
-				{/* Fixed conversation width keeps the composer usable while outputs take the rest. */}
-				<div className="flex w-[440px] min-w-[360px] shrink-0 flex-col border-r border-border">
-					{conversationNode}
-				</div>
-				<div className="min-w-0 flex-1">{consoleNode}</div>
-			</div>
-			<div className="flex shrink-0 items-center gap-4 border-t border-border px-4 py-1.5 text-xs text-muted-foreground">
-				<span>
-					{t("study.progress", { done: progress, total: STUDY_PHASE_KEYS.length })}
+			<ResizablePanelGroup
+				direction="horizontal"
+				autoSaveId={platformKey("persona-research-studio-layout")}
+				className="min-h-0 flex-1"
+			>
+				<ResizablePanel
+					id="conversation"
+					order={1}
+					defaultSize={36}
+					minSize={26}
+					maxSize={55}
+				>
+					<div className="flex h-full min-h-0 flex-col bg-background">
+						{conversationNode}
+					</div>
+				</ResizablePanel>
+				{/* Wide transparent hit area with a hairline; highlights while hovered or dragged. */}
+				<ResizableHandle
+					aria-label={t("study.resizePanels")}
+					className="w-1.5 bg-transparent after:w-px after:bg-border hover:after:bg-primary/40 focus-visible:after:bg-primary data-[resize-handle-state=drag]:after:bg-primary"
+				/>
+				<ResizablePanel id="outputs" order={2} defaultSize={64} minSize={40}>
+					{consoleNode}
+				</ResizablePanel>
+			</ResizablePanelGroup>
+			<div className="flex shrink-0 items-center gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+				<StudyProgressSegments status={status} className="w-32" />
+				<span className="tabular-nums">
+					{t("study.progress", { done: status.completed, total: status.total })}
 				</span>
+				<span className="h-3 w-px bg-border" aria-hidden />
 				<button
 					type="button"
-					className="hover:text-foreground"
+					className="rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					onClick={() => showOutputs("files")}
 				>
 					{t("study.outputsCount", { count: outputsCount })}
 				</button>
 				<button
 					type="button"
-					className="hover:text-foreground"
+					className="rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					onClick={() => showOutputs("personas")}
 				>
 					{t("study.personasCount", { count: store.studyPersonas.length })}
 				</button>
+				<span className="ml-auto">{t("study.aiDisclaimer")}</span>
 			</div>
 			{sheet}
 		</div>
