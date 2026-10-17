@@ -12,6 +12,7 @@ import {
 	withFlowNamespaces,
 } from "@/routes/helpers"
 import { superMagicCrewRoutes } from "@/routes/modules/superMagicCrewRoutes"
+import { superMagicPersonaResearchRoutes } from "@/routes/modules/superMagicPersonaResearchRoutes"
 import {
 	microAppPublicRoutes,
 	superMagicMicroAppRoutes,
@@ -479,6 +480,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						element: <WorkspacePage />,
 					},
 					...superMagicMicroAppRoutes,
+					...superMagicPersonaResearchRoutes,
 					{
 						name: RouteName.SuperChatHome,
 						path: `/:clusterCode${RoutePath.SuperChatHome}`,

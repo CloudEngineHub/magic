@@ -48,6 +48,12 @@ export enum RouteName {
 	MicroApp = "MicroApp",
 	/** 微应用发布访问页 */
 	MicroAppShare = "MicroAppShare",
+	/** AI 研究首页 */
+	PersonaResearch = "PersonaResearch",
+	/** AI 研究人设库 */
+	PersonaResearchPersonas = "PersonaResearchPersonas",
+	/** AI 研究工作台（一次研究对应一个话题） */
+	PersonaResearchStudy = "PersonaResearchStudy",
 	/** 协作邀请 */
 	CollaborationInvite = "CollaborationInvite",
 	/** 用户 - 个人中心（移动端） */

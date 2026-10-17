@@ -7,6 +7,7 @@ import { hasOrganizationAppsShortcuts } from "@/layouts/BaseLayoutMobile/compone
 import { userStore } from "@/models/user"
 import { getClawBrandTranslationValues } from "@/pages/superMagic/utils/clawBrand"
 import { isMicroAppEnabled } from "@/services/microAppFeature"
+import { isPersonaResearchEnabled } from "@/services/personaResearchFeature"
 import { isPrivateDeployment } from "@/utils/env"
 
 import { BASE_SUPER_MOBILE_SHELL_NAV_ITEMS } from "./baseSuperMobileShellNavItems"
@@ -19,6 +20,7 @@ export function useSuperMobileShellNavItems(): SuperMobileShellResolvedNavItem[]
 		useFunctionPermission(FUNCTION_PERMISSION_CODE.MagicClawAccess)
 	const isPrivateDeploymentEnv = isPrivateDeployment()
 	const microAppEnabled = isMicroAppEnabled()
+	const personaResearchEnabled = isPersonaResearchEnabled()
 	const clawBrandValues = getClawBrandTranslationValues()
 	const shouldShowAppsEntry = hasOrganizationAppsShortcuts({
 		isPersonalOrganization: userStore.user.isPersonalOrganization,
@@ -29,6 +31,7 @@ export function useSuperMobileShellNavItems(): SuperMobileShellResolvedNavItem[]
 			if (item.key === "apps" && !shouldShowAppsEntry) return false
 			if (item.key === "recording" && isPrivateDeploymentEnv) return false
 			if (item.key === "microApps" && !microAppEnabled) return false
+			if (item.key === "personaResearch" && !personaResearchEnabled) return false
 			if (item.requiredPermissionCode === FUNCTION_PERMISSION_CODE.MagicClawAccess) {
 				// Keep permission-gated entries fail-closed while loading to match desktop and legacy mobile entry policy.
 				return !isMagicClawAccessLoading && canAccessMagicClaw
@@ -44,6 +47,7 @@ export function useSuperMobileShellNavItems(): SuperMobileShellResolvedNavItem[]
 		isMagicClawAccessLoading,
 		isPrivateDeploymentEnv,
 		microAppEnabled,
+		personaResearchEnabled,
 		shouldShowAppsEntry,
 		clawBrandValues,
 		t,

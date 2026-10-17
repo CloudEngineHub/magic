@@ -2431,11 +2431,21 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	/**
 	 * @description 获取特殊项目（不存在时自动创建）
 	 * @param key 项目标识
+	 * @param project_mode 首次创建时写入的项目模式；已存在的项目不受影响
+	 * @param topic_mode 首次创建时默认话题的模式；已存在的项目不受影响
 	 */
-	getSpecialProject({ key }: { key: string }) {
+	getSpecialProject({
+		key,
+		project_mode,
+		topic_mode,
+	}: {
+		key: string
+		project_mode?: string
+		topic_mode?: string
+	}) {
 		return fetch.post<{ project: ProjectListItem; is_existing: boolean }>(
 			"/api/v1/super-agent/user/special-projects",
-			{ key },
+			{ key, project_mode, topic_mode },
 		)
 	},
 

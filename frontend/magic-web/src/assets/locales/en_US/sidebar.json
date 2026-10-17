@@ -61,6 +61,9 @@
 		"personalVersion": "Personal Edition",
 		"saasPlatform": "SaaS"
 	},
+	"personaResearch": {
+		"title": "AI Research"
+	},
 	"project": {
 		"empty": "No projects",
 		"enterName": "Enter new project name",

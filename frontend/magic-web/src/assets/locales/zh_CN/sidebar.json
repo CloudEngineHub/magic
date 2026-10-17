@@ -61,6 +61,9 @@
 		"personalVersion": "个人版",
 		"saasPlatform": "SaaS 平台"
 	},
+	"personaResearch": {
+		"title": "AI 研究"
+	},
 	"project": {
 		"empty": "暂无项目",
 		"enterName": "输入新项目名称",

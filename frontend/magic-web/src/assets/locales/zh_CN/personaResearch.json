@@ -1,0 +1,169 @@
+{
+	"common": {
+		"cancel": "取消",
+		"copied": "已复制",
+		"copyFailed": "复制失败，请重试"
+	},
+	"composer": {
+		"followUpPlaceholder": "继续追问，或告诉 AI 需要调整什么",
+		"newStudyPlaceholder": "你想研究什么商业问题？例如：试用用户为什么在第二周流失？ Enter 发送，Shift + Enter 换行"
+	},
+	"console": {
+		"backToList": "返回访谈列表",
+		"discussionN": "讨论 {{index}}",
+		"discussions": "讨论",
+		"discussionsEmpty": "这项研究没有安排焦点小组，或讨论还没开始。",
+		"files": "报告与文件",
+		"interviews": "访谈",
+		"interviewsEmpty": "访谈开始后，逐字稿会显示在这里。",
+		"personas": "人设",
+		"personasEmpty": "AI 构建人设后会显示在这里。",
+		"studyFileInvalid": "研究进度文件还在生成或格式不完整，左侧对话不受影响。",
+		"validation": "真人验证",
+		"validationEmpty": "研究完成后，这里会生成一份真人验证问卷，可以直接发给真实用户复测。"
+	},
+	"home": {
+		"delete": "删除",
+		"deleteDescription": "研究对话和本次研究产出的文件会一起删除，人设库中的人设会保留。",
+		"deleteFailed": "删除失败，请重试",
+		"deleteTitle": "删除这项研究？",
+		"deleted": "已删除",
+		"moreActions": "更多操作",
+		"myStudies": "我的研究",
+		"noStudies": "还没有研究。输入一个商业问题，或从上面的模板开始。",
+		"personaLibrary": "人设库 {{count}}",
+		"subtitle": "AI 研究员会澄清问题、设计研究、构建 AI 人设并逐一访谈，最后给出有证据的报告",
+		"templates": "研究模板",
+		"title": "在做决定之前，先听听你的客户怎么说"
+	},
+	"library": {
+		"clearSelection": "清除选择",
+		"empty": "人设库还是空的。做一次研究，AI 构建的人设会自动存到这里。",
+		"noMatch": "没有符合条件的人设。",
+		"panels": "研究小组",
+		"panelsEmpty": "还没有保存的研究小组。",
+		"personas": "人设",
+		"search": "搜索名字、标签",
+		"selected": "已选 {{count}} 个人设",
+		"startPrompt": "请使用人设库中的以下人设做这次研究：\n{{paths}}\n\n研究问题：",
+		"startWithPanel": "用这组发起研究",
+		"startWithSelected": "用这些人设发起研究",
+		"tierAll": "全部",
+		"title": "人设库"
+	},
+	"persona": {
+		"ask": "追问 TA",
+		"askPrompt": "请继续追问 {{name}}：",
+		"dimension": {
+			"behavior": "行为",
+			"demographics": "人口特征",
+			"geography": "地域",
+			"needsPains": "需求与痛点",
+			"psychographics": "心理特征",
+			"social": "社交关系",
+			"techAdoption": "技术接受度"
+		},
+		"interviewDone": "已访谈",
+		"interviewFailed": "访谈失败",
+		"interviewRunning": "访谈中",
+		"layer": {
+			"behavior": "实际行动",
+			"cognition": "决策权重",
+			"expression": "怎么表达",
+			"story": "经历"
+		},
+		"noEvidence": "这个人设没有记录来源，属于推测生成，结论请谨慎使用。",
+		"openSource": "打开来源",
+		"section": {
+			"dimensions": "画像",
+			"evidence": "来源",
+			"layers": "证据层"
+		},
+		"select": "选择 {{name}}",
+		"tier": {
+			"evidenceBased": "有证据",
+			"generated": "现场生成",
+			"imported": "资料导入"
+		},
+		"viewInterview": "查看访谈"
+	},
+	"phase": {
+		"clarify": "需求澄清",
+		"deskResearch": "市场洞察",
+		"done": "已完成",
+		"interview": "人设访谈",
+		"notStarted": "未开始",
+		"plan": "研究设计",
+		"report": "研究产出",
+		"validation": "真人验证"
+	},
+	"scenario": {
+		"brand": "品牌定位",
+		"brandPrompt": "帮我研究【品牌】在【目标人群】心中的认知，以及更适合的定位方向。",
+		"competitor": "竞品分析",
+		"competitorPrompt": "帮我研究【竞品】的用户为什么选择它、又为什么离开，我们有哪些错位竞争的机会？",
+		"concept": "概念测试",
+		"conceptPrompt": "帮我测试这个产品概念：【一句话描述】。看看目标用户是否买账、顾虑是什么。",
+		"consumer": "消费者洞察",
+		"consumerPrompt": "我想了解【目标人群】在【场景】下的真实需求和痛点，帮我做一次消费者洞察研究。",
+		"content": "内容策略",
+		"contentPrompt": "帮我研究【目标人群】喜欢什么样的内容、在哪些平台获取信息，给出内容策略建议。",
+		"product": "产品研发",
+		"productPrompt": "我们计划做【产品方向】，帮我研究目标用户的需求，并提出几个值得验证的产品概念。"
+	},
+	"state": {
+		"fileLoadFailed": "文件读取失败，请稍后重试",
+		"fileLoading": "正在读取文件…",
+		"loadFailed": "AI 研究加载失败",
+		"retry": "重试"
+	},
+	"study": {
+		"backHome": "返回我的研究",
+		"conversation": "对话",
+		"notFound": "没有找到这项研究，它可能已被删除。",
+		"outputs": "研究产出",
+		"outputsCount": "研究产出 {{count}}",
+		"personasCount": "人设 {{count}}",
+		"progress": "进度 {{done}}/{{total}}",
+		"share": "分享",
+		"untitled": "未命名研究"
+	},
+	"template": {
+		"churn": {
+			"description": "找出用户第一次购买后不再回来的真实原因",
+			"prompt": "我们的首购用户 90 天复购率偏低。帮我研究首购用户为什么不再回来，哪些人群最容易流失，以及可以怎么改进。",
+			"title": "首购用户流失诊断"
+		},
+		"conceptTest": {
+			"description": "上线前先听听目标用户的反馈",
+			"prompt": "我们准备推出一款新品：【一句话描述】。帮我做概念测试：目标用户是否感兴趣、最大的顾虑是什么、愿意为它付多少钱。",
+			"title": "新品概念测试"
+		},
+		"import": {
+			"description": "上传访谈记录、问卷或客户资料，生成专属人设",
+			"prompt": "我上传了一些用户资料（访谈记录 / 问卷 / 客户数据）。请基于这些资料构建 AI 人设，存入人设库，并告诉我每个人设的关键特征。",
+			"title": "从我的资料构建人设"
+		},
+		"pricing": {
+			"description": "不同人群愿意为什么付费、付多少",
+			"prompt": "帮我研究【产品】的定价：不同用户群体的付费意愿、价格敏感点，以及推荐的价格方案。",
+			"title": "定价与付费意愿"
+		},
+		"segment": {
+			"description": "从圈层和 JTBD 角度找错位竞争机会",
+			"prompt": "作为一个小团队，我们想做【产品方向】。请从圈层和用户 JTBD 的角度，帮我找出最值得切入的细分人群和机会点。",
+			"title": "细分人群机会"
+		}
+	},
+	"transcript": {
+		"failed": "这场访谈没有完成",
+		"keyFindings": "关键发现",
+		"moderator": "主持人",
+		"quotes": "金句",
+		"respondent": "受访者",
+		"summary": "摘要"
+	},
+	"validation": {
+		"copy": "复制问卷"
+	}
+}

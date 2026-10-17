@@ -961,6 +961,8 @@ class SuperMagicModeService {
 				TopicMode.MagiClaw,
 				// Micro-app topics use an internal agent and are not returned by the crew list.
 				TopicMode.MicroApp,
+				// AI research topics use an internal agent and are only reachable from its own page.
+				TopicMode.PersonaResearch,
 			].includes(mode as TopicMode)
 		if (interfaceStore.isMobile) {
 			return isValid && mode !== TopicMode.Chat

@@ -1,0 +1,169 @@
+{
+	"common": {
+		"cancel": "Cancel",
+		"copied": "Copied",
+		"copyFailed": "Copy failed. Please try again."
+	},
+	"composer": {
+		"followUpPlaceholder": "Ask a follow-up or tell the AI what to change",
+		"newStudyPlaceholder": "What business question do you want to research? e.g. Why do trial users churn in week two? Enter to send; Shift + Enter for a new line"
+	},
+	"console": {
+		"backToList": "Back to interviews",
+		"discussionN": "Discussion {{index}}",
+		"discussions": "Discussions",
+		"discussionsEmpty": "No focus group is planned for this study, or it has not started yet.",
+		"files": "Report & files",
+		"interviews": "Interviews",
+		"interviewsEmpty": "Transcripts appear here once interviews start.",
+		"personas": "Personas",
+		"personasEmpty": "Personas appear here once the AI builds them.",
+		"studyFileInvalid": "The study progress file is still being written or is incomplete. The conversation is not affected.",
+		"validation": "Validation",
+		"validationEmpty": "When the study finishes, a questionnaire for real users appears here so you can retest the findings."
+	},
+	"home": {
+		"delete": "Delete",
+		"deleteDescription": "The conversation and this study's output files will be deleted. Personas in the library are kept.",
+		"deleteFailed": "Delete failed. Please try again.",
+		"deleteTitle": "Delete this study?",
+		"deleted": "Deleted",
+		"moreActions": "More actions",
+		"myStudies": "My studies",
+		"noStudies": "No studies yet. Ask a business question or start from a template above.",
+		"personaLibrary": "Persona library {{count}}",
+		"subtitle": "The AI researcher clarifies your question, designs the study, builds AI personas, interviews them one by one and delivers an evidence-backed report",
+		"templates": "Study templates",
+		"title": "Hear from your customers before you decide"
+	},
+	"library": {
+		"clearSelection": "Clear",
+		"empty": "The library is empty. Run a study and the personas the AI builds are saved here.",
+		"noMatch": "No personas match.",
+		"panels": "Panels",
+		"panelsEmpty": "No saved panels yet.",
+		"personas": "Personas",
+		"search": "Search names or tags",
+		"selected": "{{count}} selected",
+		"startPrompt": "Use these personas from the library for this study:\n{{paths}}\n\nResearch question: ",
+		"startWithPanel": "Start a study",
+		"startWithSelected": "Start a study with these",
+		"tierAll": "All",
+		"title": "Persona library"
+	},
+	"persona": {
+		"ask": "Ask a follow-up",
+		"askPrompt": "Please ask {{name}} a follow-up: ",
+		"dimension": {
+			"behavior": "Behavior",
+			"demographics": "Demographics",
+			"geography": "Geography",
+			"needsPains": "Needs & pains",
+			"psychographics": "Psychographics",
+			"social": "Social ties",
+			"techAdoption": "Tech adoption"
+		},
+		"interviewDone": "Interviewed",
+		"interviewFailed": "Failed",
+		"interviewRunning": "In progress",
+		"layer": {
+			"behavior": "Actions",
+			"cognition": "Decision weights",
+			"expression": "Expression",
+			"story": "Story"
+		},
+		"noEvidence": "No sources were recorded for this persona; it is inferred. Use its answers with care.",
+		"openSource": "Open source",
+		"section": {
+			"dimensions": "Profile",
+			"evidence": "Sources",
+			"layers": "Evidence layers"
+		},
+		"select": "Select {{name}}",
+		"tier": {
+			"evidenceBased": "Evidence-based",
+			"generated": "Generated",
+			"imported": "Imported"
+		},
+		"viewInterview": "View interview"
+	},
+	"phase": {
+		"clarify": "Clarify",
+		"deskResearch": "Market insights",
+		"done": "Done",
+		"interview": "Interviews",
+		"notStarted": "Not started",
+		"plan": "Design",
+		"report": "Outputs",
+		"validation": "Validation"
+	},
+	"scenario": {
+		"brand": "Brand positioning",
+		"brandPrompt": "Research how [target audience] perceive [brand] and which positioning would fit better.",
+		"competitor": "Competitor analysis",
+		"competitorPrompt": "Research why users choose [competitor] and why they leave. Where are our differentiation opportunities?",
+		"concept": "Concept test",
+		"conceptPrompt": "Test this product concept: [one-line description]. Find out whether target users want it and what concerns them.",
+		"consumer": "Consumer insights",
+		"consumerPrompt": "I want to understand the real needs and pain points of [target audience] in [scenario]. Run a consumer insight study for me.",
+		"content": "Content strategy",
+		"contentPrompt": "Research what content [target audience] like and where they get information, then suggest a content strategy.",
+		"product": "Product R&D",
+		"productPrompt": "We plan to build [product direction]. Research the target users' needs and propose a few product concepts worth validating."
+	},
+	"state": {
+		"fileLoadFailed": "Could not read the file. Please try again later.",
+		"fileLoading": "Loading file…",
+		"loadFailed": "AI Research failed to load",
+		"retry": "Retry"
+	},
+	"study": {
+		"backHome": "Back to my studies",
+		"conversation": "Conversation",
+		"notFound": "This study was not found. It may have been deleted.",
+		"outputs": "Outputs",
+		"outputsCount": "Outputs {{count}}",
+		"personasCount": "Personas {{count}}",
+		"progress": "Progress {{done}}/{{total}}",
+		"share": "Share",
+		"untitled": "Untitled study"
+	},
+	"template": {
+		"churn": {
+			"description": "Find out why first-time buyers never come back",
+			"prompt": "Our 90-day repurchase rate for first-time buyers is low. Research why they do not come back, which segments churn most, and what we can improve.",
+			"title": "First-purchase churn"
+		},
+		"conceptTest": {
+			"description": "Hear from target users before launch",
+			"prompt": "We are about to launch: [one-line description]. Run a concept test: are target users interested, what are their biggest concerns, and how much would they pay?",
+			"title": "New product concept test"
+		},
+		"import": {
+			"description": "Upload interviews, surveys or customer data to generate your own personas",
+			"prompt": "I uploaded user materials (interview notes / surveys / customer data). Build AI personas from them, save them to the persona library, and summarize each persona's key traits.",
+			"title": "Build personas from my data"
+		},
+		"pricing": {
+			"description": "What different segments would pay for, and how much",
+			"prompt": "Research pricing for [product]: willingness to pay by segment, price sensitivities and a recommended pricing plan.",
+			"title": "Pricing and willingness to pay"
+		},
+		"segment": {
+			"description": "Find differentiation through communities and JTBD",
+			"prompt": "As a small team we want to build [product direction]. Using community and Jobs-to-be-Done lenses, find the segments and opportunities most worth entering.",
+			"title": "Niche segment opportunities"
+		}
+	},
+	"transcript": {
+		"failed": "This interview did not finish",
+		"keyFindings": "Key findings",
+		"moderator": "Moderator",
+		"quotes": "Quotes",
+		"respondent": "Respondent",
+		"summary": "Summary"
+	},
+	"validation": {
+		"copy": "Copy questionnaire"
+	}
+}

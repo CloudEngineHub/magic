@@ -7,6 +7,8 @@ interface ImportMetaEnv {
 	readonly MAGIC_IS_PRIVATE_DEPLOY?: "true" | "false"
 	/** 微应用开关；未配置时沿用部署默认值 */
 	readonly MAGIC_MICRO_APP_ENABLED?: "true" | "false"
+	/** AI 研究开关；未配置时沿用部署默认值 */
+	readonly MAGIC_PERSONA_RESEARCH_ENABLED?: "true" | "false"
 	/** WebSocket连接地址 */
 	readonly MAGIC_SOCKET_BASE_URL?: string
 	/** SSO登录地址 */
