@@ -128,7 +128,8 @@ class LLMAppService extends AbstractLLMAppService
         bool $withInfo = false,
         ModelListType $type = ModelListType::ALL,
         array $businessParams = [],
-        bool $withDynamicModels = false
+        bool $withDynamicModels = false,
+        bool $withOrganizationModels = false,
     ): array {
         $dataIsolation = $this->createModelGatewayDataIsolationByAccessToken($accessToken, $businessParams);
         $accessContext = $withDynamicModels
@@ -136,11 +137,11 @@ class LLMAppService extends AbstractLLMAppService
             : null;
 
         $models = match ($type) {
-            ModelListType::CHAT => $this->modelGatewayMapper->getChatModels($dataIsolation, $withDynamicModels, $accessContext),
-            ModelListType::EMBEDDING => $this->modelGatewayMapper->getEmbeddingModels($dataIsolation, $withDynamicModels, $accessContext),
-            ModelListType::IMAGE => $this->modelGatewayMapper->getImageModels($dataIsolation, $withDynamicModels, $accessContext),
-            ModelListType::VIDEO => $this->modelGatewayMapper->getVideoModels($dataIsolation, $withDynamicModels, $accessContext),
-            default => $this->modelGatewayMapper->getAllModels($dataIsolation, $withDynamicModels, $accessContext),
+            ModelListType::CHAT => $this->modelGatewayMapper->getChatModels($dataIsolation, $withDynamicModels, $accessContext, $withOrganizationModels),
+            ModelListType::EMBEDDING => $this->modelGatewayMapper->getEmbeddingModels($dataIsolation, $withDynamicModels, $accessContext, $withOrganizationModels),
+            ModelListType::IMAGE => $this->modelGatewayMapper->getImageModels($dataIsolation, $withDynamicModels, $accessContext, $withOrganizationModels),
+            ModelListType::VIDEO => $this->modelGatewayMapper->getVideoModels($dataIsolation, $withDynamicModels, $accessContext, $withOrganizationModels),
+            default => $this->modelGatewayMapper->getAllModels($dataIsolation, $withDynamicModels, $accessContext, $withOrganizationModels),
         };
 
         if ($withInfo) {

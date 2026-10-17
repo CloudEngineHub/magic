@@ -178,10 +178,11 @@ class ModelGatewayMapper extends ModelMapper
     public function getChatModels(
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
-        ?ModelAccessContext $accessContext = null
+        ?ModelAccessContext $accessContext = null,
+        bool $withOrganizationModels = false,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
-        return $this->getModelsByType($dataIsolation, [ModelType::LLM], $withDynamicModels, $accessContext);
+        return $this->getModelsByType($dataIsolation, [ModelType::LLM], $withDynamicModels, $accessContext, $withOrganizationModels);
     }
 
     /**
@@ -191,10 +192,11 @@ class ModelGatewayMapper extends ModelMapper
     public function getEmbeddingModels(
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
-        ?ModelAccessContext $accessContext = null
+        ?ModelAccessContext $accessContext = null,
+        bool $withOrganizationModels = false,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
-        return $this->getModelsByType($dataIsolation, [ModelType::EMBEDDING], $withDynamicModels, $accessContext);
+        return $this->getModelsByType($dataIsolation, [ModelType::EMBEDDING], $withDynamicModels, $accessContext, $withOrganizationModels);
     }
 
     /**
@@ -204,14 +206,16 @@ class ModelGatewayMapper extends ModelMapper
     public function getImageModels(
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
-        ?ModelAccessContext $accessContext = null
+        ?ModelAccessContext $accessContext = null,
+        bool $withOrganizationModels = false,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
         return $this->getModelsByType(
             $dataIsolation,
             [ModelType::TEXT_TO_IMAGE, ModelType::IMAGE_TO_IMAGE],
             $withDynamicModels,
-            $accessContext
+            $accessContext,
+            $withOrganizationModels,
         );
     }
 
@@ -222,10 +226,11 @@ class ModelGatewayMapper extends ModelMapper
     public function getVideoModels(
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
-        ?ModelAccessContext $accessContext = null
+        ?ModelAccessContext $accessContext = null,
+        bool $withOrganizationModels = false,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
-        return $this->getModelsByType($dataIsolation, [ModelType::TEXT_TO_VIDEO], $withDynamicModels, $accessContext);
+        return $this->getModelsByType($dataIsolation, [ModelType::TEXT_TO_VIDEO], $withDynamicModels, $accessContext, $withOrganizationModels);
     }
 
     /**
@@ -235,14 +240,16 @@ class ModelGatewayMapper extends ModelMapper
     public function getAllModels(
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
-        ?ModelAccessContext $accessContext = null
+        ?ModelAccessContext $accessContext = null,
+        bool $withOrganizationModels = false,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
         return $this->getModelsByType(
             $dataIsolation,
             [ModelType::LLM, ModelType::EMBEDDING, ModelType::TEXT_TO_IMAGE, ModelType::IMAGE_TO_IMAGE, ModelType::TEXT_TO_VIDEO],
             $withDynamicModels,
-            $accessContext
+            $accessContext,
+            $withOrganizationModels,
         );
     }
 
@@ -305,7 +312,8 @@ class ModelGatewayMapper extends ModelMapper
         ModelGatewayDataIsolation $dataIsolation,
         array $modelTypes,
         bool $withDynamicModels = false,
-        ?ModelAccessContext $accessContext = null
+        ?ModelAccessContext $accessContext = null,
+        bool $withOrganizationModels = false,
     ): array {
         $list = [];
 
@@ -350,6 +358,24 @@ class ModelGatewayMapper extends ModelMapper
             }
         }
         if (is_array($availableModelIds)) {
+            $availableModelIds = array_keys($availableModelIds);
+        }
+
+        // 默认只按订阅可用模型 ID 查询，保持既有 /v1/models 行为。
+        // 开启 with_organization_models 后，追加当前组织和官方组织的启用模型，确保两类模型都能返回。
+        if ($withOrganizationModels && is_array($availableModelIds)) {
+            $organizationDataIsolation = ProviderDataIsolation::createByBaseDataIsolation($dataIsolation);
+            $organizationDataIsolation->setContainOfficialOrganization(true);
+            $organizationModelIdsByType = $this->providerManager->getModelIdsGroupByType($organizationDataIsolation, $modelTypes);
+            foreach ($modelTypes as $modelType) {
+                $organizationModelIds = $organizationModelIdsByType[$modelType->value] ?? null;
+                if (! is_array($organizationModelIds)) {
+                    continue;
+                }
+                foreach ($organizationModelIds as $modelId) {
+                    $availableModelIds[$modelId] = true;
+                }
+            }
             $availableModelIds = array_keys($availableModelIds);
         }
 

@@ -17,6 +17,7 @@ from app.api.routes.models import _to_debug_panel_model
 
 class _FakeAsyncClient:
     last_url: str = ""
+    last_params: dict = {}
 
     def __init__(self, response_payload: dict):
         self.response_payload = response_payload
@@ -29,6 +30,7 @@ class _FakeAsyncClient:
 
     async def get(self, url: str, params: dict, headers: dict):
         type(self).last_url = url
+        type(self).last_params = params
         return httpx.Response(
             200,
             json=self.response_payload,
@@ -82,6 +84,7 @@ def _patch_credentials(monkeypatch: pytest.MonkeyPatch, provider: MagicServicePr
 
 def _patch_response(monkeypatch: pytest.MonkeyPatch, payload: dict) -> None:
     _FakeAsyncClient.last_url = ""
+    _FakeAsyncClient.last_params = {}
     monkeypatch.setattr(
         "app.core.model_providers.magic_service_provider.httpx.AsyncClient",
         lambda timeout: _FakeAsyncClient(payload),
@@ -231,6 +234,23 @@ async def test_magic_service_provider_normalizes_v1_host_for_model_list(
     await provider.load()
 
     assert _FakeAsyncClient.last_url == "https://i-magic-service.letsmagic.cn/v1/models"
+
+
+@pytest.mark.asyncio
+async def test_magic_service_provider_requests_current_organization_models(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    provider = MagicServiceProvider()
+    _patch_credentials(monkeypatch, provider)
+    _patch_response(monkeypatch, {"code": 1000, "message": "ok", "data": []})
+
+    await provider.load()
+
+    assert _FakeAsyncClient.last_params == {
+        "with_info": "1",
+        "with_dynamic_models": "1",
+        "with_organization_models": "1",
+    }
 
 
 @pytest.mark.asyncio
