@@ -9,6 +9,15 @@ import {
 	type MediaLabelRect,
 } from "./mediaLabelLayout"
 
+/**
+ * One label synchronization transaction shares media-row layouts between the name and size
+ * managers. The context is intentionally short-lived so geometry or content changes cannot leak
+ * a layout into a later frame.
+ */
+export interface LabelLayoutSyncContext {
+	readonly mediaLayouts: Map<string, MediaLabelLayout | null>
+}
+
 interface VisibleLabelQueryCache {
 	viewportGeneration: number
 	candidateIds: string[]
@@ -56,6 +65,8 @@ export interface LabelVisibilityConfig {
 	alwaysVisibleTypes: Set<string>
 	/** 哪些元素类型在选中或 hover 时显示（如 Image） */
 	hoverOrSelectTypes: Set<string>
+	/** 哪些交互标签受“媒体标签常驻”设置影响；未配置时兼容旧行为 */
+	alwaysVisibleWhenMediaLabelsEnabledTypes?: Set<string>
 }
 
 export interface LabelSize {
@@ -231,6 +242,10 @@ export abstract class BaseLabelManager {
 		{ index: LabelCandidateIndex; refCount: number }
 	>()
 
+	public static createLabelLayoutSyncContext(): LabelLayoutSyncContext {
+		return { mediaLayouts: new Map() }
+	}
+
 	constructor(options: BaseLabelManagerConfig) {
 		const { canvas } = options
 		this.canvas = canvas
@@ -293,19 +308,26 @@ export abstract class BaseLabelManager {
 			state.rafId = null
 			state.modes.clear()
 			state.reason = "unknown"
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
 
 			const managers = BaseLabelManager.labelManagers.filter(
 				(manager) => manager.canvas === canvas && !manager.destroyed,
 			)
 			if (pendingModes.has("full")) {
-				managers.forEach((manager) => manager.syncVisibleLabels(pendingReason))
+				managers.forEach((manager) =>
+					manager.syncVisibleLabels(pendingReason, layoutContext),
+				)
 				return
 			}
 			if (pendingModes.has("window")) {
-				managers.forEach((manager) => manager.syncLabelWindow(pendingReason))
+				managers.forEach((manager) =>
+					manager.syncLabelWindow(pendingReason, true, layoutContext),
+				)
 			}
 			if (pendingModes.has("existing")) {
-				managers.forEach((manager) => manager.syncExistingLabels(pendingReason))
+				managers.forEach((manager) =>
+					manager.syncExistingLabels(pendingReason, layoutContext),
+				)
 			}
 		})
 	}
@@ -344,12 +366,13 @@ export abstract class BaseLabelManager {
 		})
 	}
 
-	private scheduleVisibleLabelSync(reason: string, mode: VisibleLabelSyncMode): void {
-		if (reason === "media-geometry") {
-			// A moved media element can change the available label row of every sibling in
-			// the same parent. Dropping the weak cache is O(1); only the active label workset
-			// will rebuild entries during the next incremental sync.
-			invalidateMediaLabelLayouts(this.canvas)
+	private scheduleVisibleLabelSync(
+		reason: string,
+		mode: VisibleLabelSyncMode,
+		invalidatedElementIds?: Iterable<string>,
+	): void {
+		if (invalidatedElementIds) {
+			invalidateMediaLabelLayouts(this.canvas, invalidatedElementIds)
 		}
 		this.pendingVisibleLabelSyncModes.add(mode)
 		this.pendingVisibleLabelSyncReason = reason
@@ -368,15 +391,16 @@ export abstract class BaseLabelManager {
 			this.visibleLabelSyncRafId = null
 			this.pendingVisibleLabelSyncModes.clear()
 			this.pendingVisibleLabelSyncReason = "unknown"
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
 			if (pendingModes.has("full")) {
-				this.syncVisibleLabels(pendingReason)
+				this.syncVisibleLabels(pendingReason, layoutContext)
 				return
 			}
 			if (pendingModes.has("window")) {
-				this.syncLabelWindow(pendingReason)
+				this.syncLabelWindow(pendingReason, true, layoutContext)
 			}
 			if (pendingModes.has("existing")) {
-				this.syncExistingLabels(pendingReason)
+				this.syncExistingLabels(pendingReason, layoutContext)
 			}
 		})
 	}
@@ -454,13 +478,12 @@ export abstract class BaseLabelManager {
 	}
 
 	/** Recomputes one label after a sibling manager changes its available width. */
-	public refreshLabelLayout(elementId: string, skipBatchDraw = false): boolean {
-		if (
-			!this.labelMap.has(elementId) &&
-			this.canvas.nameLabelManager?.isDOMLabelInteracting(elementId)
-		)
-			return this.createOrUpdateLabel(elementId, { skipBatchDraw })
-		return this.updateLabelPosition(elementId, skipBatchDraw)
+	public refreshLabelLayout(
+		elementId: string,
+		skipBatchDraw = false,
+		context?: LabelLayoutSyncContext,
+	): boolean {
+		return this.updateLabelPosition(elementId, skipBatchDraw, context)
 	}
 
 	/**
@@ -469,11 +492,14 @@ export abstract class BaseLabelManager {
 	 * use this method to keep already-rendered labels attached to their elements
 	 * and schedule a single overlay draw for the whole transaction.
 	 */
-	public refreshLabelLayouts(elementIds: readonly string[]): void {
-		invalidateMediaLabelLayouts(this.canvas)
+	public refreshLabelLayouts(
+		elementIds: readonly string[],
+		context = BaseLabelManager.createLabelLayoutSyncContext(),
+	): void {
+		invalidateMediaLabelLayouts(this.canvas, elementIds)
 		let requiresDraw = false
 		for (const elementId of new Set(elementIds)) {
-			requiresDraw = this.refreshLabelLayout(elementId, true) || requiresDraw
+			requiresDraw = this.refreshLabelLayout(elementId, true, context) || requiresDraw
 		}
 		if (requiresDraw) this.requestOverlayDraw("batch-geometry")
 		this.scheduleVisibleLabelSync("element-window", "window")
@@ -495,7 +521,7 @@ export abstract class BaseLabelManager {
 		return size
 	}
 
-	/** 默认无附加操作；已有 DOM 改名入口可在名称管理器中提供屏幕操作区。 */
+	/** 默认无附加操作；名称管理器可在标签内部提供固定宽度的 Konva 操作区。 */
 	protected getLabelOperationScreenWidth(elementId: string): number {
 		void elementId
 		return 0
@@ -517,7 +543,11 @@ export abstract class BaseLabelManager {
 	protected getMediaRowLayout(
 		elementId: string,
 		boundsOverride?: MediaLabelRect,
+		context?: LabelLayoutSyncContext,
 	): MediaLabelLayout | null {
+		if (context?.mediaLayouts.has(elementId)) {
+			return context.mediaLayouts.get(elementId) ?? null
+		}
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		const type = element?.getData().type
 		if (type !== ElementTypeEnum.Image && type !== ElementTypeEnum.Video) return null
@@ -525,7 +555,7 @@ export abstract class BaseLabelManager {
 		const sizeManager: BaseLabelManager = this.canvas.sizeLabelManager
 		if (!nameManager || !sizeManager) return null
 		const nameLeadingSize = nameManager.getLabelLeadingSize(elementId)
-		return getMediaLabelLayout(this.canvas, elementId, {
+		const layout = getMediaLabelLayout(this.canvas, elementId, {
 			name: nameManager.getIntrinsicLabelSize(elementId),
 			size: element?.supportsSizeEditing()
 				? sizeManager.getIntrinsicLabelSize(elementId)
@@ -541,6 +571,8 @@ export abstract class BaseLabelManager {
 			nameLeadingHeight: nameLeadingSize.height,
 			boundsOverride,
 		})
+		context?.mediaLayouts.set(elementId, layout)
+		return layout
 	}
 
 	/**
@@ -554,6 +586,7 @@ export abstract class BaseLabelManager {
 		boundingRect: { x: number; y: number; width: number; height: number },
 		inverseScale: number,
 		mediaLayout?: MediaLabelLayout | null,
+		context?: LabelLayoutSyncContext,
 	): boolean {
 		void elementId
 		void element
@@ -561,6 +594,7 @@ export abstract class BaseLabelManager {
 		void boundingRect
 		void inverseScale
 		void mediaLayout
+		void context
 		return false
 	}
 
@@ -569,10 +603,12 @@ export abstract class BaseLabelManager {
 		elementId: string,
 		viewportScale: number,
 		mediaLayout?: MediaLabelLayout | null,
+		context?: LabelLayoutSyncContext,
 	): number {
 		const safeViewportScale =
 			Number.isFinite(viewportScale) && viewportScale > 0 ? viewportScale : 1
-		const resolvedMediaLayout = mediaLayout ?? this.getMediaRowLayout(elementId)
+		const resolvedMediaLayout =
+			mediaLayout ?? this.getMediaRowLayout(elementId, undefined, context)
 		if (resolvedMediaLayout) return resolvedMediaLayout.inverseScale
 
 		// Keep media labels readable without letting a tiny thumbnail receive a
@@ -613,10 +649,12 @@ export abstract class BaseLabelManager {
 	}
 
 	protected shouldTreatAsAlwaysVisible(elementType: string): boolean {
+		const mediaAlwaysVisibleTypes =
+			this.visibilityConfig.alwaysVisibleWhenMediaLabelsEnabledTypes ??
+			this.visibilityConfig.hoverOrSelectTypes
 		return (
 			this.visibilityConfig.alwaysVisibleTypes.has(elementType) ||
-			(this.mediaLabelsAlwaysVisible &&
-				this.visibilityConfig.hoverOrSelectTypes.has(elementType))
+			(this.mediaLabelsAlwaysVisible && mediaAlwaysVisibleTypes.has(elementType))
 		)
 	}
 
@@ -627,20 +665,21 @@ export abstract class BaseLabelManager {
 		// 监听元素创建
 		this.listen("element:created", (event) => {
 			this.syncLabelCandidateForElement(event.data.elementId)
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
 			if (
 				this.labelMap.has(event.data.elementId) ||
 				this.shouldCreateLabelImmediately(event.data.elementId)
 			) {
-				this.createOrUpdateLabel(event.data.elementId)
+				this.createOrUpdateLabel(event.data.elementId, undefined, layoutContext)
 			}
-			this.scheduleVisibleLabelSync("media-geometry", "window")
+			this.scheduleVisibleLabelSync("media-geometry", "window", [event.data.elementId])
 		})
 
 		// 监听元素删除
 		this.listen("element:deleted", (event) => {
 			this.labelCandidateIndex.removeElement(event.data.elementId)
 			this.removeLabel(event.data.elementId)
-			this.scheduleVisibleLabelSync("media-geometry", "window")
+			this.scheduleVisibleLabelSync("media-geometry", "window", [event.data.elementId])
 		})
 
 		// 处理拖拽移动事件
@@ -700,39 +739,65 @@ export abstract class BaseLabelManager {
 
 		// 监听选择变化
 		this.listen("element:select", (event) => {
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
 			let createdLabel = false
 			event.data.elementIds.forEach((elementId) => {
 				createdLabel =
-					this.createOrUpdateLabel(elementId, {
-						skipReorder: true,
-						skipNotify: true,
-					}) || createdLabel
+					this.createOrUpdateLabel(
+						elementId,
+						{
+							skipReorder: true,
+							skipNotify: true,
+						},
+						layoutContext,
+					) || createdLabel
 			})
 			if (createdLabel) {
 				this.reorderAllLabels()
 			}
-			this.updateAllLabelsVisibility()
+			this.updateLabelsVisibilityForElements(
+				event.data.elementIds,
+				"selection",
+				layoutContext,
+			)
 		})
 
-		this.listen("element:deselect", () => {
-			this.updateAllLabelsVisibility()
+		this.listen("element:deselect", (event) => {
+			const elementIds = event.data?.elementIds
+			// Older integrations can emit a payload-less deselect as a recovery signal. It is
+			// outside the normal SelectionManager path, so keep the explicit full fallback there.
+			if (!elementIds?.length) {
+				this.updateAllLabelsVisibility()
+				return
+			}
+			this.updateLabelsVisibilityForElements(elementIds, "deselection")
 		})
 
 		// 监听 hover 变化
 		this.listen("element:hover", (event) => {
 			const newHoveredId = event.data.elementId
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
 
 			// 如果有之前 hover 的元素，更新其可见性
 			if (this.lastHoveredElementId) {
-				this.updateLabelVisibility(this.lastHoveredElementId)
+				this.updateLabelVisibility(
+					this.lastHoveredElementId,
+					false,
+					undefined,
+					layoutContext,
+				)
 			}
 
 			// 如果有新 hover 的元素，更新其可见性
 			if (newHoveredId) {
-				const createdLabel = this.createOrUpdateLabel(newHoveredId, {
-					skipReorder: true,
-					skipNotify: true,
-				})
+				const createdLabel = this.createOrUpdateLabel(
+					newHoveredId,
+					{
+						skipReorder: true,
+						skipNotify: true,
+					},
+					layoutContext,
+				)
 				if (createdLabel) {
 					this.reorderAllLabels()
 				}
@@ -766,33 +831,63 @@ export abstract class BaseLabelManager {
 
 		// 监听裁剪模式进入/退出事件，更新标签可见性
 		this.listen("crop:enter", ({ data }) => {
-			this.createOrUpdateLabel(data.elementId)
-			this.updateAllLabelsVisibility()
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
+			this.createOrUpdateLabel(data.elementId, undefined, layoutContext)
+			this.updateLabelsVisibilityForElements(
+				this.getInteractionAffectedElementIds(data.elementId),
+				"crop-enter",
+				layoutContext,
+			)
 		})
 
 		this.listen("crop:exit", ({ data }) => {
-			this.createOrUpdateLabel(data.elementId)
-			this.updateAllLabelsVisibility()
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
+			this.createOrUpdateLabel(data.elementId, undefined, layoutContext)
+			this.updateLabelsVisibilityForElements(
+				this.getInteractionAffectedElementIds(data.elementId),
+				"crop-exit",
+				layoutContext,
+			)
 		})
 
 		this.listen("extend:enter", ({ data }) => {
-			this.createOrUpdateLabel(data.elementId)
-			this.updateAllLabelsVisibility()
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
+			this.createOrUpdateLabel(data.elementId, undefined, layoutContext)
+			this.updateLabelsVisibilityForElements(
+				this.getInteractionAffectedElementIds(data.elementId),
+				"extend-enter",
+				layoutContext,
+			)
 		})
 
 		this.listen("extend:exit", ({ data }) => {
-			this.createOrUpdateLabel(data.elementId)
-			this.updateAllLabelsVisibility()
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
+			this.createOrUpdateLabel(data.elementId, undefined, layoutContext)
+			this.updateLabelsVisibilityForElements(
+				this.getInteractionAffectedElementIds(data.elementId),
+				"extend-exit",
+				layoutContext,
+			)
 		})
 
 		this.listen("eraser:enter", ({ data }) => {
-			this.createOrUpdateLabel(data.elementId)
-			this.updateAllLabelsVisibility()
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
+			this.createOrUpdateLabel(data.elementId, undefined, layoutContext)
+			this.updateLabelsVisibilityForElements(
+				this.getInteractionAffectedElementIds(data.elementId),
+				"eraser-enter",
+				layoutContext,
+			)
 		})
 
 		this.listen("eraser:exit", ({ data }) => {
-			this.createOrUpdateLabel(data.elementId)
-			this.updateAllLabelsVisibility()
+			const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
+			this.createOrUpdateLabel(data.elementId, undefined, layoutContext)
+			this.updateLabelsVisibilityForElements(
+				this.getInteractionAffectedElementIds(data.elementId),
+				"eraser-exit",
+				layoutContext,
+			)
 		})
 	}
 
@@ -807,6 +902,7 @@ export abstract class BaseLabelManager {
 			skipBatchDraw?: boolean
 			forceCreate?: boolean
 		},
+		context?: LabelLayoutSyncContext,
 	): boolean {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) {
@@ -855,17 +951,17 @@ export abstract class BaseLabelManager {
 		}
 
 		// 更新标签位置（内部会调用 updateLabelVisibility）
-		this.updateLabelPosition(elementId, options?.skipBatchDraw)
+		this.updateLabelPosition(elementId, options?.skipBatchDraw, context)
 		// Both managers receive the same element event. A newly mounted sibling needs one
 		// relayout, but an existing always-visible media label must not relayout its sibling
 		// on every update; the shared transform/scale pass handles that case.
 		if (createdLabel) {
-			this.updateOtherLabelPositions(elementId, options?.skipBatchDraw)
+			this.updateOtherLabelPositions(elementId, options?.skipBatchDraw, context)
 		}
 
 		// 通知其他 LabelManager 也更新该元素的可见性（单个更新，需要立即 batchDraw）
 		if (!options?.skipNotify) {
-			this.notifyOtherManagersUpdateVisibility(elementId)
+			this.notifyOtherManagersUpdateVisibility(elementId, false, context)
 		}
 
 		return createdLabel
@@ -875,11 +971,15 @@ export abstract class BaseLabelManager {
 	 * 当第二种标签刚创建时，重新布局同一元素上已经存在的其它标签，
 	 * 让名称和尺寸标签从首次渲染开始就共享同一个自适应比例。
 	 */
-	private updateOtherLabelPositions(elementId: string, skipBatchDraw = false): void {
+	private updateOtherLabelPositions(
+		elementId: string,
+		skipBatchDraw = false,
+		context?: LabelLayoutSyncContext,
+	): void {
 		for (const manager of BaseLabelManager.labelManagers) {
 			if (manager === this || manager.canvas !== this.canvas) continue
 			if (!manager.labelMap.has(elementId)) continue
-			manager.updateLabelPosition(elementId, skipBatchDraw)
+			manager.updateLabelPosition(elementId, skipBatchDraw, context)
 		}
 	}
 
@@ -933,14 +1033,18 @@ export abstract class BaseLabelManager {
 	 * @param children - 子元素列表
 	 * @param skipBatchDraw - 是否跳过 batchDraw（用于递归调用时统一在最外层调用）
 	 */
-	protected updateLabelsForFrameChildren(children: LayerElement[], skipBatchDraw = false): void {
+	protected updateLabelsForFrameChildren(
+		children: LayerElement[],
+		skipBatchDraw = false,
+		context?: LabelLayoutSyncContext,
+	): void {
 		children.forEach((child) => {
 			// 更新当前子元素的标签位置（批量更新模式）
-			this.updateLabelPosition(child.id, true)
+			this.updateLabelPosition(child.id, true, context)
 
 			// 如果子元素也是 Frame 或 Group，递归更新其子元素（递归时跳过 batchDraw）
 			if ("children" in child && child.children && child.children.length > 0) {
-				this.updateLabelsForFrameChildren(child.children, true)
+				this.updateLabelsForFrameChildren(child.children, true, context)
 			}
 		})
 		// 只在最外层调用时执行 batchDraw
@@ -954,7 +1058,11 @@ export abstract class BaseLabelManager {
 	 * @param elementId - 元素 ID
 	 * @param skipBatchDraw - 是否跳过 batchDraw（用于批量更新时统一调用）
 	 */
-	protected updateLabelPosition(elementId: string, skipBatchDraw = false): boolean {
+	protected updateLabelPosition(
+		elementId: string,
+		skipBatchDraw = false,
+		context?: LabelLayoutSyncContext,
+	): boolean {
 		const labelGroup = this.labelMap.get(elementId)
 		if (!labelGroup) {
 			return false
@@ -997,7 +1105,7 @@ export abstract class BaseLabelManager {
 		const desiredInverseScale = 1 / safeViewportScale
 		// Resolve the shared media row once for this label update. Name and size managers
 		// otherwise ask the spatial layout cache for the same element several times.
-		const mediaLayout = this.getMediaRowLayout(elementId, boundingRect)
+		const mediaLayout = this.getMediaRowLayout(elementId, boundingRect, context)
 
 		// 先按常规字号收窄名称文本，避免正常缩放时为了容纳长标题而缩小整行文字。
 		layoutChanged =
@@ -1008,9 +1116,15 @@ export abstract class BaseLabelManager {
 				boundingRect,
 				desiredInverseScale,
 				mediaLayout,
+				context,
 			) || layoutChanged
 
-		const inverseScale = this.getEffectiveInverseScale(elementId, viewportScale, mediaLayout)
+		const inverseScale = this.getEffectiveInverseScale(
+			elementId,
+			viewportScale,
+			mediaLayout,
+			context,
+		)
 
 		// 应用反向缩放
 		if (labelGroup.scaleX() !== inverseScale || labelGroup.scaleY() !== inverseScale) {
@@ -1027,6 +1141,7 @@ export abstract class BaseLabelManager {
 				boundingRect,
 				inverseScale,
 				mediaLayout,
+				context,
 			) || layoutChanged
 
 		// 获取文本节点以计算标签尺寸
@@ -1047,7 +1162,7 @@ export abstract class BaseLabelManager {
 		}
 
 		// 位置更新后，立即更新可见性（因为位置变化可能影响可见性判断）
-		const visibilityChanged = this.updateLabelVisibility(elementId, true, mediaLayout)
+		const visibilityChanged = this.updateLabelVisibility(elementId, true, mediaLayout, context)
 		const requiresDraw = visibilityChanged || (layoutChanged && labelGroup.visible())
 		if (requiresDraw && !skipBatchDraw) {
 			this.requestOverlayDraw("label-layout")
@@ -1132,10 +1247,10 @@ export abstract class BaseLabelManager {
 		if (this.visibilityConfig.hoverOrSelectTypes.has(elementType)) {
 			const isSelected = this.canvas.selectionManager.isSelected(elementId)
 			const hoveredId = this.canvas.hoverManager.getHoveredElementId()
-			// 指针进入 DOM 标题后会离开 Konva；仍按同一媒体行的悬浮处理，避免闪隐。
+			// 指针进入 Konva 名称标签后，仍按同一媒体行的悬浮处理，避免标签闪隐。
 			const isHovered =
 				hoveredId === elementId ||
-				this.canvas.nameLabelManager?.isDOMLabelInteracting(elementId) === true
+				this.canvas.nameLabelManager?.isLabelPointerHovered(elementId) === true
 
 			// 如果有元素正在裁剪，且当前元素不是正在裁剪的元素，则hover时不显示标签
 			if (croppingElementId && croppingElementId !== elementId && isHovered && !isSelected) {
@@ -1186,6 +1301,7 @@ export abstract class BaseLabelManager {
 		elementId: string,
 		skipBatchDraw = false,
 		mediaLayout?: MediaLabelLayout | null,
+		context?: LabelLayoutSyncContext,
 	): boolean {
 		const labelGroup = this.labelMap.get(elementId)
 		if (!labelGroup) {
@@ -1207,6 +1323,8 @@ export abstract class BaseLabelManager {
 		}
 
 		let shouldShow = false
+		const resolvedMediaLayout =
+			mediaLayout ?? this.getMediaRowLayout(elementId, undefined, context)
 		if (baseVisibility) {
 			// 计算自定义可见性（子类可以重写以添加特殊逻辑）
 			const customVisibility = this.calculateCustomVisibility(
@@ -1214,14 +1332,14 @@ export abstract class BaseLabelManager {
 				element,
 				labelGroup,
 				baseVisibility,
-				mediaLayout,
+				resolvedMediaLayout,
 			)
 			shouldShow = customVisibility !== null ? customVisibility : baseVisibility
 		}
 
-		if (shouldShow && this.isMediaLabelRowCovered(elementId, mediaLayout)) shouldShow = false
-		if (shouldShow && (mediaLayout ?? this.getMediaRowLayout(elementId))?.hasSpace === false)
+		if (shouldShow && this.isMediaLabelRowCovered(elementId, resolvedMediaLayout, context))
 			shouldShow = false
+		if (shouldShow && resolvedMediaLayout?.hasSpace === false) shouldShow = false
 
 		if (labelGroup.visible() === shouldShow) return false
 		labelGroup.visible(shouldShow)
@@ -1271,6 +1389,7 @@ export abstract class BaseLabelManager {
 	private isMediaLabelRowCovered(
 		elementId: string,
 		mediaLayout?: MediaLabelLayout | null,
+		context?: LabelLayoutSyncContext,
 	): boolean {
 		const element = this.canvas.elementManager.getElementInstance(elementId)
 		if (!element) return false
@@ -1282,7 +1401,7 @@ export abstract class BaseLabelManager {
 			// 尺寸已让位给标题时，其隐藏节点不参与整行遮挡判断。
 			if (
 				manager === this.canvas.sizeLabelManager &&
-				!(mediaLayout ?? this.getMediaRowLayout(elementId))?.showSize
+				!(mediaLayout ?? this.getMediaRowLayout(elementId, undefined, context))?.showSize
 			)
 				continue
 			const group = manager.labelMap.get(elementId)
@@ -1422,6 +1541,24 @@ export abstract class BaseLabelManager {
 	}
 
 	/**
+	 * Re-evaluates only labels whose interaction state can change. Selection and edit-mode events do
+	 * not change every element's visibility rule, so scanning the entire mounted label map here only
+	 * adds work to the input path. The full method above remains an explicit recovery fallback.
+	 */
+	protected updateLabelsVisibilityForElements(
+		elementIds: Iterable<string>,
+		reason: string,
+		context = BaseLabelManager.createLabelLayoutSyncContext(),
+	): void {
+		let visibilityChanged = false
+		for (const elementId of this.collectActiveLabelElementIds(elementIds)) {
+			visibilityChanged =
+				this.updateLabelVisibility(elementId, true, undefined, context) || visibilityChanged
+		}
+		if (visibilityChanged) this.requestOverlayDraw(`${reason}-labels-visibility`)
+	}
+
+	/**
 	 * Labels that are always eligible by type are created from the spatial window instead of from
 	 * every element lifecycle event. Interaction labels still need an immediate creation path so a
 	 * freshly selected or hovered element never waits for a viewport drain.
@@ -1446,6 +1583,14 @@ export abstract class BaseLabelManager {
 		if (this.canvas.cropManager?.getCroppingElementId() === elementId) return true
 		if (this.canvas.extendManager?.getExtendingElementId() === elementId) return true
 		return this.canvas.eraserManager?.getErasingElementId() === elementId
+	}
+
+	private getInteractionAffectedElementIds(elementId: string): string[] {
+		return [
+			elementId,
+			this.lastHoveredElementId,
+			this.canvas.hoverManager?.getHoveredElementId(),
+		].filter((id): id is string => Boolean(id))
 	}
 
 	/**
@@ -1497,7 +1642,11 @@ export abstract class BaseLabelManager {
 	}
 
 	/** Reconciles the bounded label workset without touching the local geometry of retained labels. */
-	private syncLabelWindow(reason: string, requestDraw = true): boolean {
+	private syncLabelWindow(
+		reason: string,
+		requestDraw = true,
+		context = BaseLabelManager.createLabelLayoutSyncContext(),
+	): boolean {
 		const candidateIds = new Set(this.getVisibleLabelCandidateIds())
 		let changed = false
 
@@ -1510,11 +1659,15 @@ export abstract class BaseLabelManager {
 
 		for (const elementId of candidateIds) {
 			if (this.labelMap.has(elementId)) continue
-			const created = this.createOrUpdateLabel(elementId, {
-				skipReorder: true,
-				skipNotify: true,
-				skipBatchDraw: true,
-			})
+			const created = this.createOrUpdateLabel(
+				elementId,
+				{
+					skipReorder: true,
+					skipNotify: true,
+					skipBatchDraw: true,
+				},
+				context,
+			)
 			changed = created || changed
 		}
 
@@ -1539,10 +1692,21 @@ export abstract class BaseLabelManager {
 		if (BaseLabelManager.processedDirtySyncEvents.has(event)) return
 		BaseLabelManager.processedDirtySyncEvents.add(event)
 		const ids = Array.from(new Set(elementIds))
-		if (mode !== "position-only") invalidateMediaLabelLayouts(this.canvas)
+		if (mode !== "position-only") {
+			const affectedElementIds = new Set(ids)
+			for (const manager of BaseLabelManager.labelManagers) {
+				if (manager.canvas !== this.canvas) continue
+				manager
+					.collectActiveLabelElementIds(ids)
+					.forEach((elementId) => affectedElementIds.add(elementId))
+			}
+			invalidateMediaLabelLayouts(this.canvas, affectedElementIds)
+		}
+		const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
 
 		for (const manager of BaseLabelManager.labelManagers) {
-			if (manager.canvas === this.canvas) manager.syncDirtyLabels(ids, reason, mode)
+			if (manager.canvas === this.canvas)
+				manager.syncDirtyLabels(ids, reason, mode, layoutContext)
 		}
 	}
 
@@ -1554,6 +1718,7 @@ export abstract class BaseLabelManager {
 		elementIds: readonly string[],
 		reason: string,
 		mode: DirtyLabelSyncMode,
+		context: LabelLayoutSyncContext,
 	): void {
 		const rootElementIds = new Set(elementIds)
 		const relatedElementIds = this.collectActiveLabelElementIds(elementIds)
@@ -1569,11 +1734,15 @@ export abstract class BaseLabelManager {
 			}
 			if (!this.labelMap.has(elementId)) {
 				if (this.shouldCreateLabelImmediately(elementId)) {
-					const created = this.createOrUpdateLabel(elementId, {
-						skipReorder: true,
-						skipNotify: true,
-						skipBatchDraw: true,
-					})
+					const created = this.createOrUpdateLabel(
+						elementId,
+						{
+							skipReorder: true,
+							skipNotify: true,
+							skipBatchDraw: true,
+						},
+						context,
+					)
 					createdLabel = created || createdLabel
 					requiresDraw = created || requiresDraw
 				}
@@ -1590,7 +1759,7 @@ export abstract class BaseLabelManager {
 			requiresDraw =
 				(positionOnly
 					? this.updateLabelPositionOnly(elementId, true)
-					: this.updateLabelPosition(elementId, true)) || requiresDraw
+					: this.updateLabelPosition(elementId, true, context)) || requiresDraw
 		}
 
 		if (createdLabel || zOrderChanged) this.reorderAllLabels(true)
@@ -1624,35 +1793,46 @@ export abstract class BaseLabelManager {
 	private getLabelCandidateElementIds(): ReadonlySet<string> {
 		const candidateTypes = new Set(this.visibilityConfig.alwaysVisibleTypes)
 		if (this.mediaLabelsAlwaysVisible) {
-			this.visibilityConfig.hoverOrSelectTypes.forEach((elementType) =>
-				candidateTypes.add(elementType),
-			)
+			const mediaAlwaysVisibleTypes =
+				this.visibilityConfig.alwaysVisibleWhenMediaLabelsEnabledTypes ??
+				this.visibilityConfig.hoverOrSelectTypes
+			mediaAlwaysVisibleTypes.forEach((elementType) => candidateTypes.add(elementType))
 		}
 		return this.labelCandidateIndex.getCandidateIds(candidateTypes)
 	}
 
-	private updateExistingLabels(skipBatchDraw = true): boolean {
+	private updateExistingLabels(
+		skipBatchDraw = true,
+		context = BaseLabelManager.createLabelLayoutSyncContext(),
+	): boolean {
 		const elementIds = Array.from(this.labelMap.keys())
 		let requiresDraw = false
 
 		for (const elementId of elementIds) {
-			requiresDraw = this.updateLabelPosition(elementId, skipBatchDraw) || requiresDraw
+			requiresDraw =
+				this.updateLabelPosition(elementId, skipBatchDraw, context) || requiresDraw
 		}
 
 		return requiresDraw
 	}
 
-	private syncExistingLabels(reason: string): void {
+	private syncExistingLabels(
+		reason: string,
+		context = BaseLabelManager.createLabelLayoutSyncContext(),
+	): void {
 		const currentViewportScale = this.canvas.stage.scaleX()
 		if (this.lastSyncedViewportScale === currentViewportScale) return
-		if (this.updateExistingLabels(true)) {
+		if (this.updateExistingLabels(true, context)) {
 			this.requestOverlayDraw(`visible-labels:${reason}`)
 		}
 		this.lastSyncedViewportScale = currentViewportScale
 	}
 
-	private syncVisibleLabels(reason: string): void {
-		let requiresDraw = this.syncLabelWindow(reason, false)
+	private syncVisibleLabels(
+		reason: string,
+		context = BaseLabelManager.createLabelLayoutSyncContext(),
+	): void {
+		let requiresDraw = this.syncLabelWindow(reason, false, context)
 		const currentViewportScale = this.canvas.stage.scaleX()
 		const shouldUpdateExistingLabels =
 			this.lastSyncedViewportScale === null ||
@@ -1663,7 +1843,7 @@ export abstract class BaseLabelManager {
 			reason === "transform-end"
 
 		if (shouldUpdateExistingLabels) {
-			requiresDraw = this.updateExistingLabels(true) || requiresDraw
+			requiresDraw = this.updateExistingLabels(true, context) || requiresDraw
 		}
 
 		if (reason === "document-restored") {
@@ -1690,12 +1870,17 @@ export abstract class BaseLabelManager {
 	 * @param elementId - 元素 ID
 	 * @param skipBatchDraw - 是否跳过 batchDraw（用于批量更新时统一调用）
 	 */
-	private notifyOtherManagersUpdateVisibility(elementId: string, skipBatchDraw = false): boolean {
+	private notifyOtherManagersUpdateVisibility(
+		elementId: string,
+		skipBatchDraw = false,
+		context?: LabelLayoutSyncContext,
+	): boolean {
 		let visibilityChanged = false
 		for (const manager of BaseLabelManager.labelManagers) {
 			if (manager !== this && manager.labelMap.has(elementId)) {
 				visibilityChanged =
-					manager.updateLabelVisibility(elementId, skipBatchDraw) || visibilityChanged
+					manager.updateLabelVisibility(elementId, skipBatchDraw, undefined, context) ||
+					visibilityChanged
 			}
 		}
 		return visibilityChanged
