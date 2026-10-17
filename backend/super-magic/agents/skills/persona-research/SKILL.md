@@ -88,7 +88,7 @@ When a step stops (unanswered question, user interruption, failure), leave `stud
 ### Phase 3: Desk Research (`desk_research`)
 
 1. Drive `web_search` rounds from the plan's open questions; read the most relevant pages in full with `read_webpages_as_markdown`. Search results are snippets, not evidence.
-2. Social media content is available only through search engines (for example site-restricted queries). Do not claim platform-wide coverage; record this as a limitation.
+2. Social media evidence: if platform data skills are in your available skills, use them as described in "Platform Data Skills" below. Otherwise social content is available only through search engines (for example site-restricted queries); do not claim platform-wide coverage, and record this as a limitation.
 3. Write `studies/<slug>/desk-research.md`: findings grouped by plan question, each with a numbered source `[S1]` (title, URL, publish date when known), plus a "Limitations" section.
 4. Uploaded user materials count as sources too; convert them with the document-converter skill when needed and cite them by file path.
 
@@ -141,6 +141,17 @@ session_id = result.data["session_id"]
 - Before answering, read the existing study files (`study.json`, `plan.md`, transcripts, report) instead of relying on memory.
 - "Ask @persona ..." / "追问 @persona": run additional rounds for that persona with `persona_chat` (directly, or through one interviewer sub-agent for several rounds), append them to the existing transcript within the remaining round limit, and update the report section the new answers affect. Say which answers are new.
 - A follow-up that changes the locked plan's scope, audience, or method needs a new study.
+
+## Platform Data Skills (When Available)
+
+Some deployments add social-platform data skills (searching posts or videos, reading comments and creator profiles) to your available skills. Check your skills list; never assume one exists.
+
+- Prefer them over site-restricted web search for social evidence in desk research and persona building. Read each platform skill's own SKILL.md before the first call and follow its calling rules.
+- Budget per study: at most 6 search calls and 10 comment-page reads across all platforms. Pick the most relevant and highest-engagement items; process large results in code and keep only aggregated findings and short quotes in context.
+- Privacy: never copy commenter or creator nicknames, user IDs, avatars, or profile links into personas, transcripts, or the report. Quote short anonymized snippets and cite the post by title and URL.
+- Errors: on balance, plan, or permission errors (HTTP 401, 402, 403) or rate limits (429), do not retry. Fall back to web search and record the limitation.
+- Evidence records: use `evidence[].type = "web"`, put the post URL in `url`, and start `title` with the platform name, for example `Xiaohongshu: <post title>`.
+- In the report's limitations, state which platforms were sampled and how many posts and comments were read.
 
 ## Uploaded Materials
 
