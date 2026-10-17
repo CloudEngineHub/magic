@@ -4,6 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
+use App\Interfaces\Contact\Facade\Open\MagicContactSandboxApi;
 use App\Interfaces\MCP\Facade\OpenApi\MCPAuthorizationCredentialApi;
 use App\Interfaces\Middleware\Auth\ApiKeyMiddleware;
 use App\Interfaces\Middleware\Auth\SandboxUserAuthMiddleware;
@@ -60,6 +61,9 @@ Router::addGroup(
         // 检查沙箱镜像版本（当前版本 vs 最新版本）
         Router::get('/version-check', [InternalSandboxApi::class, 'checkSandboxVersion']);
         Router::post('/follow-up-suggestions', [FollowUpSuggestionApi::class, 'report']);
+
+        Router::get('/contact/users/search', [MagicContactSandboxApi::class, 'searchUsers']);
+        Router::get('/contact/departments/search', [MagicContactSandboxApi::class, 'searchDepartments']);
 
         // 文件管理相关
         Router::addGroup('/file', static function () {
