@@ -9,16 +9,12 @@ import {
 	type ReactNode,
 } from "react"
 import { useUpdateEffect } from "ahooks"
-import type { CropConfig, LayerElement } from "../../runtime/document/types"
+import { type CropConfig, type LayerElement } from "../../runtime/document/types"
 import { useCanvasEvent } from "../hooks/canvas/useCanvasEvent"
 import { useCanvasElements } from "../hooks/canvas/useCanvasElement"
+import { isOnlySelectedElement } from "../hooks/canvas/canvasSelectionUtils"
 import { useCanvas } from "./CanvasProvider"
 import type { ElementToolSession } from "../../runtime/element-tools"
-import { ElementTypeEnum } from "../../runtime/document/types"
-import {
-	pickContentElementIdAtStagePointer,
-	resolveManagedElementIdFromKonvaNode,
-} from "../../runtime/interaction/transform/elementNodeUtils"
 
 export interface FullscreenMediaElement {
 	elementId: string
@@ -37,7 +33,10 @@ interface CanvasUIContextValue {
 
 	// 当前正在画布中重命名的元素 ID
 	canvasRenamingElementId: string | null
+	/** @deprecated Use openCanvasRename/closeCanvasRename for mutually exclusive panels. */
 	setCanvasRenamingElementId: (id: string | null) => void
+	openCanvasRename: (elementId: string) => void
+	closeCanvasRename: () => void
 
 	// 选中的元素 ID 列表（从 Canvas.selectionManager 同步）
 	selectedElementIds: string[]
@@ -54,7 +53,10 @@ interface CanvasUIContextValue {
 	// 当前查看历史记录的图片元素 ID（null 表示不显示）
 	messageHistoryElementId: string | null
 	messageHistoryContentId?: string
+	/** @deprecated Use openMessageHistory/closeMessageHistory for panel lifecycle. */
 	setMessageHistoryElementId: (id: string | null, contentId?: string) => void
+	openMessageHistory: (elementId: string, contentId?: string) => void
+	closeMessageHistory: () => void
 
 	// 当前全屏预览的媒体元素（null 表示不显示）
 	fullscreenMediaElement: FullscreenMediaElement | null
@@ -87,7 +89,10 @@ interface CanvasRenameUIContextValue {
 	layerRenamingElementId: string | null
 	setLayerRenamingElementId: (id: string | null) => void
 	canvasRenamingElementId: string | null
+	/** @deprecated Use openCanvasRename/closeCanvasRename for mutually exclusive panels. */
 	setCanvasRenamingElementId: (id: string | null) => void
+	openCanvasRename: (elementId: string) => void
+	closeCanvasRename: () => void
 }
 
 interface CanvasSelectionUIContextValue {
@@ -102,7 +107,10 @@ interface CanvasSelectionUIContextValue {
 interface CanvasPanelUIContextValue {
 	messageHistoryElementId: string | null
 	messageHistoryContentId?: string
+	/** @deprecated Use openMessageHistory/closeMessageHistory for panel lifecycle. */
 	setMessageHistoryElementId: (id: string | null, contentId?: string) => void
+	openMessageHistory: (elementId: string, contentId?: string) => void
+	closeMessageHistory: () => void
 	fullscreenMediaElement: FullscreenMediaElement | null
 	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
 	storyboardReferenceImagePreview: StoryboardReferenceImagePreview | null
@@ -147,10 +155,44 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 	}>({ elementId: null })
 	const messageHistoryElementId = messageHistory.elementId
 	const messageHistoryContentId = messageHistory.contentId
-	// 元素和版本作为一次查看一起更新，关闭时同时清除，避免下一次复用旧版本。
-	const setMessageHistoryElementId = useCallback((id: string | null, contentId?: string) => {
-		setMessageHistory({ elementId: id, contentId: id ? contentId : undefined })
+	const closeCanvasRename = useCallback(() => {
+		// History and rename are mutually exclusive surfaces. Clear the React state and
+		// the runtime rename session together so the label does not remain editable
+		// after the rename panel is unmounted.
+		setCanvasRenamingElementId(null)
+		canvas?.elementRenameManager.cancelRename()
+	}, [canvas])
+
+	const closeMessageHistory = useCallback(() => {
+		setMessageHistory({ elementId: null })
 	}, [])
+
+	const openCanvasRename = useCallback(
+		(elementId: string) => {
+			closeMessageHistory()
+			setCanvasRenamingElementId(elementId)
+		},
+		[closeMessageHistory],
+	)
+
+	// 元素和版本作为一次查看一起更新，打开历史前同时关闭画布重命名，避免两个面板重叠。
+	const openMessageHistory = useCallback(
+		(elementId: string, contentId?: string) => {
+			closeCanvasRename()
+			setMessageHistory({ elementId, contentId })
+		},
+		[closeCanvasRename],
+	)
+	const setMessageHistoryElementId = useCallback(
+		(id: string | null, contentId?: string) => {
+			if (id) {
+				openMessageHistory(id, contentId)
+				return
+			}
+			closeMessageHistory()
+		},
+		[closeMessageHistory, openMessageHistory],
+	)
 	const [fullscreenMediaElement, setFullscreenMediaElement] =
 		useState<FullscreenMediaElement | null>(null)
 	const [storyboardReferenceImagePreview, setStoryboardReferenceImagePreview] =
@@ -197,43 +239,21 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		setIsSelecting(false)
 	})
 
-	const openMessageHistory = useCallback(
-		(elementId: string, contentId?: string) => {
-			setMessageHistoryElementId(elementId, contentId)
+	useCanvasEvent(
+		"element:image:infoButtonClick",
+		({ data }) => {
+			openMessageHistory(data.elementId, data.contentId)
 		},
-		[setMessageHistoryElementId],
+		[openMessageHistory],
 	)
 
-	useEffect(() => {
-		if (!canvas || !messageHistoryElementId) return
-		if (
-			canvas.elementManager.getElementData(messageHistoryElementId)?.type !==
-			ElementTypeEnum.Image
-		)
-			return
-		// 同一图片再次点击不会改变选区；直接消费已有输入事件，切回编辑器。
-		return canvas.inputManager.on("down", (input) => {
-			if (input.button !== 0 || input.activePointerCount > 1) return
-			if (Object.values(input.modifiers).some(Boolean)) return
-			let node: typeof input.target | null = input.target
-			while (node && node !== canvas.stage) {
-				if (node.name().startsWith("decorator-")) return
-				node = node.getParent()
-			}
-			const elementId =
-				resolveManagedElementIdFromKonvaNode(input.target, canvas) ??
-				pickContentElementIdAtStagePointer(canvas, input.stage)
-			if (elementId === messageHistoryElementId) setMessageHistoryElementId(null)
-		})
-	}, [canvas, messageHistoryElementId, setMessageHistoryElementId])
-
-	useCanvasEvent("element:image:infoButtonClick", ({ data }) => {
-		openMessageHistory(data.elementId, data.contentId)
-	})
-
-	useCanvasEvent("element:video:infoButtonClick", ({ data }) => {
-		openMessageHistory(data.elementId)
-	})
+	useCanvasEvent(
+		"element:video:infoButtonClick",
+		({ data }) => {
+			openMessageHistory(data.elementId)
+		},
+		[openMessageHistory],
+	)
 
 	useCanvasEvent(
 		"element:image:fullscreenClick",
@@ -319,25 +339,59 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		setErasingElementId(null)
 	})
 
-	useCanvasEvent("element:rename-start", ({ data }) => {
-		setLayerRenamingElementId(null)
-		setCanvasRenamingElementId(data.elementId)
-	})
+	useCanvasEvent(
+		"element:rename-start",
+		({ data }) => {
+			setLayerRenamingElementId(null)
+			openCanvasRename(data.elementId)
+		},
+		[openCanvasRename],
+	)
 
-	useCanvasEvent("element:rename-end", () => {
-		setCanvasRenamingElementId(null)
-	})
+	useCanvasEvent(
+		"element:rename-end",
+		() => {
+			closeCanvasRename()
+		},
+		[closeCanvasRename],
+	)
+
+	useCanvasEvent(
+		"element:deleted",
+		({ data }) => {
+			// Deletion can be emitted before SelectionManager publishes deselect (and some
+			// runtime-only removals do not have a usable selection at all). Clear both
+			// selection-owned surfaces here so they cannot retain a deleted element ID.
+			if (messageHistoryElementId === data.elementId) closeMessageHistory()
+			if (
+				canvasRenamingElementId === data.elementId ||
+				canvas?.elementRenameManager.getRenamingElementId() === data.elementId
+			) {
+				closeCanvasRename()
+			}
+		},
+		[
+			canvas,
+			canvasRenamingElementId,
+			closeCanvasRename,
+			closeMessageHistory,
+			messageHistoryElementId,
+		],
+	)
 
 	useUpdateEffect(() => {
-		if (selectedElementIds.length !== 1 || selectedElementIds[0] !== messageHistoryElementId) {
-			setMessageHistoryElementId(null)
+		if (
+			messageHistoryElementId &&
+			!isOnlySelectedElement(selectedElementIds, messageHistoryElementId)
+		) {
+			closeMessageHistory()
 		}
-	}, [selectedElementIds])
+	}, [canvas, closeMessageHistory, messageHistoryElementId, selectedElementIds])
 
 	useEffect(() => {
 		if (canWrite && canGenerate) return
 		setLayerRenamingElementId(null)
-		setCanvasRenamingElementId(null)
+		closeCanvasRename()
 		setActiveToolSession(null)
 		setEditingElementId(null)
 		if (!canWrite) {
@@ -347,7 +401,7 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			setExtendingElementId(null)
 			setErasingElementId(null)
 		}
-	}, [canGenerate, canWrite])
+	}, [canGenerate, canWrite, closeCanvasRename])
 
 	useCanvasEvent("permission:changed", () => forceAccessUpdate(), [])
 
@@ -360,8 +414,10 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			setLayerRenamingElementId,
 			canvasRenamingElementId,
 			setCanvasRenamingElementId,
+			openCanvasRename,
+			closeCanvasRename,
 		}
-	}, [layerRenamingElementId, canvasRenamingElementId])
+	}, [layerRenamingElementId, canvasRenamingElementId, openCanvasRename, closeCanvasRename])
 
 	const selectionValue = useMemo<CanvasSelectionUIContextValue>(() => {
 		return {
@@ -379,6 +435,8 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			messageHistoryElementId,
 			messageHistoryContentId,
 			setMessageHistoryElementId,
+			openMessageHistory,
+			closeMessageHistory,
 			fullscreenMediaElement,
 			setFullscreenMediaElement,
 			storyboardReferenceImagePreview,
@@ -388,6 +446,8 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		messageHistoryElementId,
 		messageHistoryContentId,
 		setMessageHistoryElementId,
+		openMessageHistory,
+		closeMessageHistory,
 		fullscreenMediaElement,
 		storyboardReferenceImagePreview,
 	])
