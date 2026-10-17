@@ -379,8 +379,8 @@ class ModelGatewayMapper extends ModelMapper
             $availableModelIds = array_keys($availableModelIds);
         }
 
-        // 需要包含官方组织的数据
-        $providerDataIsolation = $this->createProviderDataIsolationWithOfficial($dataIsolation);
+        // 默认只返回官方组织模型；开启 with_organization_models 后才追加当前组织模型。
+        $providerDataIsolation = $this->createProviderDataIsolationForModelList($dataIsolation, $withOrganizationModels);
 
         // availableModelIds 不为 null（有限制）且需要动态模型时，额外追加 DYNAMIC 模型 ID
         // DYNAMIC 模型不在 subscription 里，不能依赖 getAvailableModelIds 拿到
@@ -554,12 +554,20 @@ class ModelGatewayMapper extends ModelMapper
     }
 
     /**
-     * 创建包含官方组织的 ProviderDataIsolation.
+     * 创建模型列表查询使用的 ProviderDataIsolation.
+     *
+     * 非官方组织默认只查询官方组织，避免未开启 with_organization_models 时泄漏当前组织模型。
      */
-    private function createProviderDataIsolationWithOfficial(BaseDataIsolation $dataIsolation): ProviderDataIsolation
-    {
+    private function createProviderDataIsolationForModelList(
+        BaseDataIsolation $dataIsolation,
+        bool $withOrganizationModels
+    ): ProviderDataIsolation {
         $providerDataIsolation = ProviderDataIsolation::createByBaseDataIsolation($dataIsolation);
-        $providerDataIsolation->setContainOfficialOrganization(true);
+        if ($withOrganizationModels || $dataIsolation->isOfficialOrganization()) {
+            $providerDataIsolation->setContainOfficialOrganization(true);
+        } else {
+            $providerDataIsolation->setOnlyOfficialOrganization(true);
+        }
         return $providerDataIsolation;
     }
 

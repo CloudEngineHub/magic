@@ -13,6 +13,7 @@ use App\Domain\Permission\Entity\ValueObject\ModelAccessContext;
 use App\Domain\Permission\Entity\ValueObject\PermissionControlStatus;
 use App\Domain\Provider\Entity\ProviderModelEntity;
 use App\Domain\Provider\Entity\ValueObject\ModelType;
+use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
 use Hyperf\Contract\ConfigInterface;
@@ -136,6 +137,30 @@ class ModelGatewayMapperAccessTest extends TestCase
     }
 
     /**
+     * 未开启组织模型参数时，模型列表只查询官方组织，避免返回当前组织模型。
+     */
+    public function testModelListIsolationExcludesCurrentOrganizationByDefault(): void
+    {
+        $dataIsolation = ModelGatewayDataIsolation::create('tenant-org', 'user-test');
+        $providerDataIsolation = $this->invokeCreateProviderDataIsolationForModelList($dataIsolation, false);
+
+        $this->assertTrue($providerDataIsolation->isOnlyOfficialOrganization());
+        $this->assertFalse($providerDataIsolation->isContainOfficialOrganization());
+    }
+
+    /**
+     * 开启组织模型参数时，模型列表同时查询当前组织和官方组织。
+     */
+    public function testModelListIsolationIncludesCurrentAndOfficialOrganizationsWhenRequested(): void
+    {
+        $dataIsolation = ModelGatewayDataIsolation::create('tenant-org', 'user-test');
+        $providerDataIsolation = $this->invokeCreateProviderDataIsolationForModelList($dataIsolation, true);
+
+        $this->assertFalse($providerDataIsolation->isOnlyOfficialOrganization());
+        $this->assertTrue($providerDataIsolation->isContainOfficialOrganization());
+    }
+
+    /**
      * 通过反射调用 mapper 内部的模型可见性策略，避免初始化外部服务依赖。
      */
     private function invokeIsModelAccessible(?ModelAccessContext $context, string $modelId): bool
@@ -158,6 +183,17 @@ class ModelGatewayMapperAccessTest extends TestCase
         return $method->invoke($mapper, $dataIsolation, $model, ModelType::LLM);
     }
 
+    private function invokeCreateProviderDataIsolationForModelList(
+        ModelGatewayDataIsolation $dataIsolation,
+        bool $withOrganizationModels
+    ): ProviderDataIsolation {
+        $mapper = (new ReflectionClass(ModelGatewayMapper::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionClass(ModelGatewayMapper::class)->getMethod('createProviderDataIsolationForModelList');
+        $method->setAccessible(true);
+
+        return $method->invoke($mapper, $dataIsolation, $withOrganizationModels);
+    }
+
     /**
      * @param list<string> $availableModelIds
      */
@@ -169,7 +205,7 @@ class ModelGatewayMapperAccessTest extends TestCase
             {
             }
 
-            public function getAvailableModelIds(?ModelType $modelType): ?array
+            public function getAvailableModelIds(?ModelType $modelType): array
             {
                 return $this->availableModelIds;
             }
