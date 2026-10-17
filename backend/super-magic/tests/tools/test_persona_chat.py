@@ -95,6 +95,18 @@ async def test_interview_answer_uses_auto_model_and_token_limit(tool, tmp_path, 
     assert "one-on-one interview" in fake_llm.calls[0]["messages"][0]["content"]
 
 
+async def test_persona_prompt_sets_cautious_baseline(tool, tmp_path, fake_llm):
+    """受访者默认对新产品谨慎，不买、不换、不关心都是正常回答，避免讨好式夸赞。"""
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+
+    await tool.execute(ToolContext(), PersonaChatParams(persona_paths=[path], question="Would you buy it?"))
+
+    system_prompt = fake_llm.calls[0]["messages"][0]["content"]
+    assert "skeptical by default" in system_prompt
+    assert "Not buying, not switching, or not caring is a normal answer" in system_prompt
+    assert "Do not praise an idea to be polite" in system_prompt
+
+
 @pytest.mark.parametrize("bad_path", ["../outside.json", "/etc/passwd"])
 async def test_paths_outside_workspace_are_rejected(tool, tmp_path, fake_llm, bad_path):
     result = await tool.execute(ToolContext(), PersonaChatParams(persona_paths=[bad_path], question="q"))
