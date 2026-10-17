@@ -17,6 +17,7 @@ interface ModelListContentProps {
 	searchKeyword: string
 	size: MessageEditorSize
 	onModelClick: (model: ModelItem) => void
+	onReasoningEffortChange?: (model: ModelItem) => void
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
 	modelKey?: ModelListKey
@@ -29,6 +30,7 @@ export const ModelListContent = observer(function ModelListContent({
 	searchKeyword,
 	size,
 	onModelClick,
+	onReasoningEffortChange,
 	selectedItemRef,
 	getModelDescription,
 	modelKey = "models",
@@ -45,6 +47,11 @@ export const ModelListContent = observer(function ModelListContent({
 	const handleModelClick = useMemoizedFn((model: ModelItem) => {
 		if (!isModelDisabled(model)) {
 			onModelClick(model)
+		}
+	})
+	const handleReasoningEffortChange = useMemoizedFn((model: ModelItem) => {
+		if (!isModelDisabled(model)) {
+			onReasoningEffortChange?.(model)
 		}
 	})
 
@@ -77,6 +84,9 @@ export const ModelListContent = observer(function ModelListContent({
 					selectedModel={selectedModel}
 					size={size}
 					onModelClick={handleModelClick}
+					onReasoningEffortChange={
+						onReasoningEffortChange ? handleReasoningEffortChange : undefined
+					}
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
 					isLanguageModel={modelKey === "models"}

@@ -1,4 +1,5 @@
-import { ModelItem, ModelStatusEnum, ModelTagEnum } from "./types"
+import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
+import { ModelItem, ModelStatusEnum, ModelTagEnum, ReasoningEffort } from "./types"
 
 interface ResolveShowSelectedModelNameOptions {
 	showSelectedModelName: boolean
@@ -33,6 +34,16 @@ export function isGemini3FlashModel(model?: ModelItem): boolean {
 	if (!model) return false
 	return model.model_id.toLocaleLowerCase() === "gemini-3-flash-preview"
 }
+
+/** Resolve the visible reasoning preference without replacing an explicit default with a stale cache value. */
+export function getModelReasoningEffort(model?: ModelItem | null): ReasoningEffort | undefined {
+	if (!model?.reasoning_effort_levels?.length) return undefined
+	if (Object.prototype.hasOwnProperty.call(model, "reasoning_effort")) {
+		return model.reasoning_effort ?? undefined
+	}
+	return modelCache.getReasoningEffort(model)
+}
+
 /**
  * Check if a model has a specific tag
  * @param model - The model to check

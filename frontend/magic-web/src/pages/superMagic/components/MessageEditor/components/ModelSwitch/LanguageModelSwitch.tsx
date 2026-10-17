@@ -55,6 +55,10 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 	}, [selectedModelProp, internalSelectedModel?.model_id])
 
 	const selectedModel = internalSelectedModel
+	const handleModelChange = (model: ModelItem) => {
+		setInternalSelectedModel(model)
+		onModelChange?.(model)
+	}
 
 	const addModelStore = useMemo(() => new AddModelStore(), [])
 
@@ -71,10 +75,7 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 		handleOpenChange,
 		getModelDescription,
 	} = useModelSwitchLogic({
-		onModelClick: (model) => {
-			setInternalSelectedModel(model)
-			onModelChange?.(model)
-		},
+		onModelClick: handleModelChange,
 		shouldCloseOnSelect: true,
 	})
 
@@ -120,6 +121,7 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 			size={size}
 			canManageModels={canManageModels}
 			onModelClick={baseHandleModelClick}
+			onReasoningEffortChange={handleModelChange}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
 			modelKey="models"
@@ -171,6 +173,7 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 							</div>
 							<div
 								ref={mobileScrollContainerRef}
+								data-model-switch-scroll-container
 								className="scrollbar-y-thin flex max-h-[60vh] flex-col overflow-y-auto rounded-lg p-3"
 							>
 								{mainContent}
@@ -204,10 +207,21 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 						align="start"
 						className="z-dropdown w-80 overflow-visible pl-3 pr-2"
 						sideOffset={4}
+						onInteractOutside={(event) => {
+							const target = event.target
+							// Keep the parent menu open while a portaled detail or reasoning menu is active.
+							if (
+								target instanceof Element &&
+								target.closest("[data-model-switch-details-overlay]")
+							) {
+								event.preventDefault()
+							}
+						}}
 					>
 						<div className="flex flex-col">
 							<div
 								ref={desktopScrollContainerRef}
+								data-model-switch-scroll-container
 								className="scrollbar-y-thin flex max-h-[340px] flex-col overflow-y-auto"
 							>
 								{mainContent}

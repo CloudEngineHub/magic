@@ -12,7 +12,11 @@ interface UseModelSwitchLogicProps {
 	onBeforeOpen?: () => Promise<void> | void
 }
 
-export function useModelSwitchLogic({ onModelClick, onBeforeOpen }: UseModelSwitchLogicProps) {
+export function useModelSwitchLogic({
+	onModelClick,
+	shouldCloseOnSelect = false,
+	onBeforeOpen,
+}: UseModelSwitchLogicProps) {
 	const [isOpen, setIsOpen] = useState(false)
 	const [searchKeyword, setSearchKeyword] = useState("")
 	const isMobile = useIsMobile()
@@ -23,7 +27,7 @@ export function useModelSwitchLogic({ onModelClick, onBeforeOpen }: UseModelSwit
 	const { isOpeningModal, handleModelClick, resetIsOpeningModal } = useModelSwitchSelection({
 		onModelClick,
 		onModelSelected: () => {
-			if (isMobile) {
+			if (isMobile || shouldCloseOnSelect) {
 				setIsOpen(false)
 			}
 			setSearchKeyword("")

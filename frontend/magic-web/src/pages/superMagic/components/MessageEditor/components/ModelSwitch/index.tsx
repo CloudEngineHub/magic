@@ -66,11 +66,23 @@ export const ModelSwitch = observer(function ModelSwitch({
 	const [activeTab, setActiveTab] = useState<ModelTabType>(defaultTab)
 	const [tooltipOpen, setTooltipOpen] = useState(false)
 	const [addMenuOpen, setAddMenuOpen] = useState(false)
-	const dropdownJustClosedRef = useRef(false)
+	// Keep the tooltip suppressed for the current pointer-hover cycle after the model menu closes.
+	// Selecting a model closes the dropdown while the pointer can still be over the trigger, so
+	// Radix's pending hover timer must wait until the pointer leaves before it can open again.
+	const tooltipSuppressedRef = useRef(false)
 	const openAddMenuTimerRef = useRef<number | null>(null)
 	// 将 t 保持在当前组件作用域内，便于 i18n Ally 正确识别默认命名空间 super。
 	const { t } = useTranslation("super")
 	const addModelStore = useOptionalAddModelStore()
+	const handleModelChange = (model: ModelItem) => {
+		if (activeTab === "image") {
+			onImageModelChange?.(model)
+		} else if (activeTab === "video") {
+			onVideoModelChange?.(model)
+		} else {
+			onModelChange?.(model)
+		}
+	}
 
 	const {
 		isOpen,
@@ -85,17 +97,19 @@ export const ModelSwitch = observer(function ModelSwitch({
 		handleOpenChange,
 		getModelDescription,
 	} = useModelSwitchLogic({
-		onModelClick: (model) => {
-			if (activeTab === "image") {
-				onImageModelChange?.(model)
-			} else if (activeTab === "video") {
-				onVideoModelChange?.(model)
-			} else {
-				onModelChange?.(model)
-			}
-		},
+		onModelClick: handleModelChange,
+		shouldCloseOnSelect: true,
 		onBeforeOpen,
 	})
+	const previousIsOpenRef = useRef(isOpen)
+
+	useEffect(() => {
+		if (previousIsOpenRef.current !== isOpen) {
+			tooltipSuppressedRef.current = true
+			setTooltipOpen(false)
+		}
+		previousIsOpenRef.current = isOpen
+	}, [isOpen])
 
 	const { isPersonalOrganization } = userStore.user
 	const canManageModels = isPersonalOrganization
@@ -334,6 +348,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 			searchKeyword={searchKeyword}
 			size={size}
 			onModelClick={baseHandleModelClick}
+			onReasoningEffortChange={handleModelChange}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
 			modelKey={currentModelKey}
@@ -382,6 +397,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 						<div className="shrink-0 pt-2.5">{tabSwitcher}</div>
 						<div
 							ref={mobileScrollContainerRef}
+							data-model-switch-scroll-container
 							className="scrollbar-y-thin flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-lg p-3"
 						>
 							{mainContent}
@@ -437,12 +453,8 @@ export const ModelSwitch = observer(function ModelSwitch({
 			<TooltipPrimitive.Root
 				open={isOpen ? false : tooltipOpen}
 				onOpenChange={(open) => {
-					if (isOpen) {
+					if (isOpen || (open && tooltipSuppressedRef.current)) {
 						setTooltipOpen(false)
-						return
-					}
-					// Prevent tooltip from opening immediately after dropdown closes
-					if (dropdownJustClosedRef.current && open) {
 						return
 					}
 					setTooltipOpen(open)
@@ -452,21 +464,25 @@ export const ModelSwitch = observer(function ModelSwitch({
 				<DropdownMenu
 					open={isOpen}
 					onOpenChange={(open) => {
-						if (open) {
-							setTooltipOpen(false)
-						} else {
+						tooltipSuppressedRef.current = true
+						setTooltipOpen(false)
+						if (!open) {
 							setAddMenuOpen(false)
-							// Mark that dropdown just closed to prevent immediate tooltip
-							dropdownJustClosedRef.current = true
-							setTimeout(() => {
-								dropdownJustClosedRef.current = false
-							}, 500)
 						}
 						void handleOpenChange(open)
 					}}
 				>
 					<TooltipTrigger asChild>
-						<span className="inline-flex">
+						<span
+							className="inline-flex"
+							onPointerEnter={() => {
+								// A new pointer entry after the menu has closed starts a fresh tooltip cycle.
+								if (!isOpen) tooltipSuppressedRef.current = false
+							}}
+							onPointerLeave={() => {
+								tooltipSuppressedRef.current = false
+							}}
+						>
 							<DropdownMenuTrigger asChild>
 								<button
 									type="button"
@@ -508,7 +524,12 @@ export const ModelSwitch = observer(function ModelSwitch({
 						collisionPadding={12}
 						onInteractOutside={(event) => {
 							const target = event.target
-							if (!(target instanceof HTMLElement)) return
+							if (!(target instanceof Element)) return
+							// Detail and reasoning menus are Portals; interacting with them must not dismiss the model list.
+							if (target.closest("[data-model-switch-details-overlay]")) {
+								event.preventDefault()
+								return
+							}
 
 							if (
 								target.closest(`.${ADD_MODEL_DROPDOWN_CONTENT_CLASS}`) ||
@@ -523,6 +544,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 							{tabSwitcher}
 							<div
 								ref={desktopScrollContainerRef}
+								data-model-switch-scroll-container
 								className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
 							>
 								{mainContent}

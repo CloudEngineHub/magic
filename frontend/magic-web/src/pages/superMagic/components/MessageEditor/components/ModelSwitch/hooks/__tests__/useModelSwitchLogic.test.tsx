@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useModelSwitchLogic } from "../useModelSwitchLogic"
+import type { ModelItem } from "../../types"
 
 vi.mock("@/hooks/useIsMobile", () => ({
 	useIsMobile: () => false,
@@ -55,6 +56,22 @@ describe("useModelSwitchLogic", () => {
 		})
 
 		expect(onBeforeOpen).toHaveBeenCalledTimes(1)
+		expect(result.current.isOpen).toBe(false)
+	})
+
+	it("should close after selecting a model when configured", async () => {
+		const { result } = renderHook(() =>
+			useModelSwitchLogic({
+				onModelClick: vi.fn(),
+				shouldCloseOnSelect: true,
+			}),
+		)
+
+		await act(async () => {
+			await result.current.handleOpenChange(true)
+		})
+		act(() => result.current.handleModelClick({ model_id: "selected-model" } as ModelItem))
+
 		expect(result.current.isOpen).toBe(false)
 	})
 })

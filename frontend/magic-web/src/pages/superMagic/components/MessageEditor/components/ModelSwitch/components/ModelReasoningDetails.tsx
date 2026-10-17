@@ -11,7 +11,10 @@ import {
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { reasoningEffortLevels, type ModelItem, type ReasoningEffort } from "../types"
-import { useModelDetailsHover } from "../hooks/useModelDetailsHover"
+import {
+	MODEL_DETAILS_HOVER_OPEN_DELAY_MS,
+	useModelDetailsHover,
+} from "../hooks/useModelDetailsHover"
 import { CollapsibleDescription } from "./CollapsibleDescription"
 import { ModelBillingMultiplier } from "./ModelBillingMultiplier"
 import { cn } from "@/utils/cn"
@@ -28,7 +31,7 @@ interface ModelReasoningDetailsProps {
 	description?: string
 	mobile: boolean
 	disabled: boolean
-	onSelect: (model: ModelItem) => void
+	onReasoningEffortChange: (model: ModelItem) => void
 	children: ReactElement
 }
 
@@ -38,12 +41,13 @@ export function ModelReasoningDetails({
 	description = model.model_description,
 	mobile,
 	disabled,
-	onSelect,
+	onReasoningEffortChange,
 	children,
 }: ModelReasoningDetailsProps) {
 	const { t } = useTranslation("super")
 	const id = useId()
 	const hover = useModelDetailsHover()
+	const { requestClose } = hover
 	const open = hover.activeId === id
 	const [levelsOpen, setLevelsOpen] = useState(false)
 	const [descriptionExpanded, setDescriptionExpanded] = useState(false)
@@ -84,16 +88,29 @@ export function ModelReasoningDetails({
 		hover.keepOpen()
 	}
 
-	/** 离开某一级时等待跨越 Portal 间隙，不因子菜单曾打开而永久固定父层。 */
-	function scheduleClose() {
+	/** 一级行离开时保留 Portal 过渡时间；详情和三级卡片离开菜单则立即关闭。 */
+	function scheduleClose(
+		event?: { relatedTarget: EventTarget | null },
+		allowPortalBridge = true,
+	) {
 		clearTimeout(levelTimer.current)
-		// 键盘仍在详情中操作时，鼠标移出不能使焦点所在面板消失。
-		if (
-			detailRef.current?.contains(document.activeElement) ||
-			levelsRef.current?.contains(document.activeElement)
-		)
-			return
-		if (!mobile) hover.requestClose(id)
+		// 鼠标离开时即使焦点仍留在卡片内也要关闭；键盘焦点转移由 blur 事件单独保护。
+		if (mobile) return
+		const relatedTarget = event?.relatedTarget
+		const target =
+			relatedTarget && typeof (relatedTarget as Node).nodeType === "number"
+				? (relatedTarget as Node)
+				: null
+		const remainsInMenu =
+			target &&
+			(anchorRef.current?.contains(target) ||
+				detailRef.current?.contains(target) ||
+				levelsRef.current?.contains(target))
+		// The first-level row needs a grace period for every exit: browsers can
+		// report the portaled card's transition target as an unrelated element.
+		// Nested cards still close immediately when they leave the whole menu.
+		const isPortalTransition = allowPortalBridge || Boolean(remainsInMenu)
+		hover.requestClose(id, !isPortalTransition)
 	}
 
 	/** 手动点击与键盘可以立即打开；鼠标悬停经过短暂等待。 */
@@ -103,12 +120,12 @@ export function ModelReasoningDetails({
 		hover.requestOpen(id, immediate)
 	}
 
-	/** 先固定强度，再触发既有模型选择与浮层关闭流程。 */
+	/** 先固定强度，再通知外层更新模型参数；外层模型选择菜单保持打开。 */
 	function selectEffort(effort?: ReasoningEffort) {
 		modelCache.setReasoningEffort(model, effort)
 		hover.requestClose(id, true)
 		setLevelsOpen(false)
-		onSelect({ ...model, reasoning_effort: effort ?? null })
+		onReasoningEffortChange({ ...model, reasoning_effort: effort ?? null })
 	}
 
 	/** 子菜单入口支持悬停与点击，离开前取消尚未执行的打开任务。 */
@@ -118,7 +135,7 @@ export function ModelReasoningDetails({
 		levelTimer.current = setTimeout(() => {
 			levelsHoverOpened.current = true
 			setLevelsOpen(true)
-		}, 140)
+		}, MODEL_DETAILS_HOVER_OPEN_DELAY_MS)
 	}
 
 	/** 关闭或切换模型后恢复折叠详情，键盘右箭头将焦点移到思考入口。 */
@@ -133,7 +150,18 @@ export function ModelReasoningDetails({
 		}
 	}, [open])
 	useEffect(() => () => clearTimeout(levelTimer.current), [])
+	useEffect(() => {
+		const scrollContainer = anchorRef.current?.closest<HTMLElement>(
+			"[data-model-switch-scroll-container]",
+		)
+		if (!scrollContainer) return
 
+		// The detail card is portaled, so close it when its model row leaves the scrolling viewport.
+		// Keeping the card open would let it visually drift away from the model that opened it.
+		const handleScroll = () => requestClose(id, true)
+		scrollContainer.addEventListener("scroll", handleScroll, { passive: true })
+		return () => scrollContainer.removeEventListener("scroll", handleScroll)
+	}, [id, requestClose])
 	const choices = (
 		<ScrollArea viewportClassName="max-h-80">
 			<div
@@ -255,14 +283,17 @@ export function ModelReasoningDetails({
 			</PopoverAnchor>
 			<PopoverContent
 				ref={detailRef}
+				data-model-switch-details-overlay
 				// 桌面端详情继续放在模型列表右侧；参考图只用于卡片层级与视觉样式。
 				side={mobile ? "top" : "right"}
 				align="start"
-				sideOffset={8}
+				// The anchor is the compact model row, so leave enough room for the
+				// detail card to sit beside the full model-list panel without overlap.
+				sideOffset={mobile ? 8 : 20}
 				collisionPadding={12}
 				className="w-64 max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl border-border/80 bg-card p-0 shadow-[0_12px_32px_rgba(15,23,42,0.14)] duration-100"
 				onPointerEnter={keepOpen}
-				onPointerLeave={scheduleClose}
+				onPointerLeave={(event) => scheduleClose(event, false)}
 				onFocusCapture={keepOpen}
 				onBlurCapture={(event) => {
 					const target = event.relatedTarget as Node | null
@@ -355,12 +386,15 @@ export function ModelReasoningDetails({
 										<PopoverTrigger asChild>{strengthButton}</PopoverTrigger>
 										<PopoverContent
 											ref={levelsRef}
+											data-model-switch-details-overlay
 											side="right"
 											align="start"
-											sideOffset={4}
+											// This popover is anchored to an inner row; the larger offset
+											// keeps it parallel with the complete detail card.
+											sideOffset={16}
 											className="w-36 p-0 duration-100"
 											onPointerEnter={keepOpen}
-											onPointerLeave={scheduleClose}
+											onPointerLeave={(event) => scheduleClose(event, false)}
 											onFocusCapture={keepOpen}
 											onOpenAutoFocus={(event) => {
 												if (levelsHoverOpened.current)

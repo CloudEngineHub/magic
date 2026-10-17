@@ -1,6 +1,12 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { ModelDetailsHoverProvider, useModelDetailsHover } from "../useModelDetailsHover"
+import {
+	MODEL_DETAILS_HOVER_OPEN_DELAY_MS,
+	MODEL_DETAILS_HOVER_CLOSE_DELAY_MS,
+	MODEL_DETAILS_HOVER_SWITCH_DELAY_MS,
+	ModelDetailsHoverProvider,
+	useModelDetailsHover,
+} from "../useModelDetailsHover"
 
 /** 用两行 mock 控件验证共享控制器，不依赖真实模型或接口。 */
 function MockRow({ id }: { id: string }) {
@@ -33,10 +39,19 @@ afterEach(() => {
 })
 
 describe("模型详情悬停", () => {
+	it("悬停进入模型行后快速打开详情", () => {
+		setup()
+		fireEvent.click(screen.getByText("a-enter"))
+		act(() => vi.advanceTimersByTime(MODEL_DETAILS_HOVER_OPEN_DELAY_MS - 1))
+		expect(screen.getByTestId("a").textContent).toBe("closed")
+		act(() => vi.advanceTimersByTime(1))
+		expect(screen.getByTestId("a").textContent).toBe("open")
+	})
+
 	it("显式关闭会取消其他行的待打开任务", () => {
 		setup()
 		fireEvent.click(screen.getByText("a-enter"))
-		act(() => vi.advanceTimersByTime(140))
+		act(() => vi.advanceTimersByTime(MODEL_DETAILS_HOVER_OPEN_DELAY_MS))
 		fireEvent.click(screen.getByText("b-enter"))
 		fireEvent.click(screen.getByText("a-close"))
 		act(() => vi.advanceTimersByTime(500))
@@ -50,9 +65,9 @@ describe("模型详情悬停", () => {
 		act(() => vi.advanceTimersByTime(200))
 		expect(screen.getByTestId("a").textContent).toBe("closed")
 		fireEvent.click(screen.getByText("a-enter"))
-		act(() => vi.advanceTimersByTime(140))
+		act(() => vi.advanceTimersByTime(MODEL_DETAILS_HOVER_OPEN_DELAY_MS))
 		fireEvent.click(screen.getByText("b-enter"))
-		act(() => vi.advanceTimersByTime(260))
+		act(() => vi.advanceTimersByTime(MODEL_DETAILS_HOVER_SWITCH_DELAY_MS))
 		expect(screen.getByTestId("a").textContent).toBe("closed")
 		expect(screen.getByTestId("b").textContent).toBe("open")
 	})
@@ -60,7 +75,7 @@ describe("模型详情悬停", () => {
 	it("斜向经过其他行再进入详情，取消待切换和待关闭任务", () => {
 		setup()
 		fireEvent.click(screen.getByText("a-enter"))
-		act(() => vi.advanceTimersByTime(140))
+		act(() => vi.advanceTimersByTime(MODEL_DETAILS_HOVER_OPEN_DELAY_MS))
 		fireEvent.click(screen.getByText("a-leave"))
 		fireEvent.click(screen.getByText("b-enter"))
 		fireEvent.click(screen.getByText("a-detail"))
@@ -68,16 +83,16 @@ describe("模型详情悬停", () => {
 		expect(screen.getByTestId("a").textContent).toBe("open")
 		expect(screen.getByTestId("b").textContent).toBe("closed")
 		fireEvent.click(screen.getByText("a-leave"))
-		act(() => vi.advanceTimersByTime(320))
+		act(() => vi.advanceTimersByTime(MODEL_DETAILS_HOVER_CLOSE_DELAY_MS))
 		expect(screen.getByTestId("a").textContent).toBe("closed")
 	})
 
 	it("旧行的退出不会关闭已打开的新模型", () => {
 		setup()
 		fireEvent.click(screen.getByText("a-enter"))
-		act(() => vi.advanceTimersByTime(140))
+		act(() => vi.advanceTimersByTime(MODEL_DETAILS_HOVER_OPEN_DELAY_MS))
 		fireEvent.click(screen.getByText("b-enter"))
-		act(() => vi.advanceTimersByTime(260))
+		act(() => vi.advanceTimersByTime(MODEL_DETAILS_HOVER_SWITCH_DELAY_MS))
 		fireEvent.click(screen.getByText("a-leave"))
 		act(() => vi.advanceTimersByTime(500))
 		expect(screen.getByTestId("b").textContent).toBe("open")

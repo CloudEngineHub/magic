@@ -8,6 +8,10 @@ import {
 	type ReactNode,
 } from "react"
 
+export const MODEL_DETAILS_HOVER_OPEN_DELAY_MS = 80
+export const MODEL_DETAILS_HOVER_SWITCH_DELAY_MS = 140
+export const MODEL_DETAILS_HOVER_CLOSE_DELAY_MS = 240
+
 /** 同一模型列表只展开一份详情，统一取消跨行及跨 Portal 的悬停计时。 */
 function useModelDetailsController() {
 	const [activeId, setActiveId] = useState<string | null>(null)
@@ -23,7 +27,7 @@ function useModelDetailsController() {
 		pending.current = null
 	}, [])
 
-	/** 首次打开短暂等待；跨行切换多等待一点，给进入右侧详情留出时间。 */
+	/** 首次打开快速响应；跨行切换略留缓冲，避免斜向移动误切换。 */
 	const requestOpen = useCallback(
 		(id: string, immediate = false) => {
 			keepOpen()
@@ -35,7 +39,13 @@ function useModelDetailsController() {
 				setActiveId(id)
 			}
 			if (immediate) apply()
-			else openTimer.current = setTimeout(apply, active.current ? 260 : 140)
+			else
+				openTimer.current = setTimeout(
+					apply,
+					active.current
+						? MODEL_DETAILS_HOVER_SWITCH_DELAY_MS
+						: MODEL_DETAILS_HOVER_OPEN_DELAY_MS,
+				)
 		},
 		[keepOpen],
 	)
@@ -59,7 +69,7 @@ function useModelDetailsController() {
 			setActiveId(null)
 		}
 		if (immediate) apply()
-		else closeTimer.current = setTimeout(apply, 320)
+		else closeTimer.current = setTimeout(apply, MODEL_DETAILS_HOVER_CLOSE_DELAY_MS)
 	}, [])
 
 	useEffect(() => keepOpen, [keepOpen])

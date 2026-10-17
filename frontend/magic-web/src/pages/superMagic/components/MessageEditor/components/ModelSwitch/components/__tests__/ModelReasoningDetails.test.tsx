@@ -20,6 +20,7 @@ function setup(
 	levels: ModelItem["reasoning_effort_levels"] = ["none", "high"],
 	multiplier?: number | null,
 	maxContextTokens?: number | null,
+	withScrollContainer = false,
 ) {
 	const model: ModelItem = {
 		id: "mock-model",
@@ -35,18 +36,32 @@ function setup(
 		billing_multiplier: multiplier,
 		max_context_tokens: maxContextTokens,
 	}
-	const onSelect = vi.fn()
-	render(
-		<ModelReasoningDetails model={model} mobile={mobile} disabled={false} onSelect={onSelect}>
+	const onReasoningEffortChange = vi.fn()
+	const details = (
+		<ModelReasoningDetails
+			model={model}
+			mobile={mobile}
+			disabled={false}
+			onReasoningEffortChange={onReasoningEffortChange}
+		>
 			<button data-testid="model-switch-item">Mock row</button>
-		</ModelReasoningDetails>,
+		</ModelReasoningDetails>
+	)
+	render(
+		withScrollContainer ? (
+			<div data-model-switch-scroll-container data-testid="model-switch-scroll-container">
+				{details}
+			</div>
+		) : (
+			details
+		),
 	)
 	if (mobile)
 		fireEvent.click(
 			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.details" }),
 		)
 	else fireEvent.focus(screen.getByTestId("model-switch-item"))
-	return { model, onSelect }
+	return { model, onReasoningEffortChange }
 }
 
 describe("模型详情思考强度", () => {
@@ -78,8 +93,37 @@ describe("模型详情思考强度", () => {
 		)
 		expect(screen.queryByText("Mock description")).toBeNull()
 	})
+	it("鼠标离开详情卡片时关闭，即使卡片仍保留焦点", () => {
+		setup(false)
+		const strength = screen.getByRole("button", {
+			name: /messageEditor.modelSwitch.reasoning.label/,
+		})
+		strength.focus()
+		const outside = document.createElement("div")
+		document.body.appendChild(outside)
+		fireEvent.pointerLeave(screen.getByRole("dialog"), { relatedTarget: outside })
+		expect(screen.queryByRole("dialog")).toBeNull()
+		outside.remove()
+	})
+	it("从一级模型行经过 Portal 间隙进入二级详情时保持打开", () => {
+		setup(false)
+		const modelRow = screen.getByTestId("model-switch-item")
+		const detail = screen.getByRole("dialog")
+
+		// The empty space between the anchor and its portaled card resolves to body.
+		fireEvent.pointerLeave(modelRow, { relatedTarget: document.body })
+		expect(screen.getByRole("dialog")).toBe(detail)
+
+		fireEvent.pointerEnter(detail)
+		expect(screen.getByRole("dialog")).toBe(detail)
+	})
+	it("滚动模型列表时关闭详情卡片", () => {
+		setup(false, ["none", "high"], undefined, undefined, true)
+		fireEvent.scroll(screen.getByTestId("model-switch-scroll-container"))
+		expect(screen.queryByRole("dialog")).toBeNull()
+	})
 	it("键盘右箭头进入详情，默认选择保留可见焦点", () => {
-		const { onSelect } = setup()
+		const { onReasoningEffortChange } = setup()
 		const strength = screen.getByRole("button", {
 			name: /messageEditor.modelSwitch.reasoning.label/,
 		})
@@ -92,11 +136,13 @@ describe("模型详情思考强度", () => {
 		choice.focus()
 		expect(document.activeElement).toBe(choice)
 		fireEvent.click(choice)
-		expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ reasoning_effort: null }))
+		expect(onReasoningEffortChange).toHaveBeenCalledWith(
+			expect.objectContaining({ reasoning_effort: null }),
+		)
 	})
 
 	it("桌面详情打开子菜单，关闭思考保持明确枚举并选择模型", () => {
-		const { model, onSelect } = setup()
+		const { model, onReasoningEffortChange } = setup()
 		fireEvent.click(
 			screen.getByRole("button", { name: /messageEditor.modelSwitch.reasoning.label/ }),
 		)
@@ -107,12 +153,15 @@ describe("模型详情思考强度", () => {
 			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.none" }),
 		)
 		expect(modelCache.setReasoningEffort).toHaveBeenCalledWith(model, "none")
-		expect(onSelect).toHaveBeenCalledWith({ ...model, reasoning_effort: "none" })
+		expect(onReasoningEffortChange).toHaveBeenCalledWith({
+			...model,
+			reasoning_effort: "none",
+		})
 		expect(model).not.toHaveProperty("reasoning_effort")
 	})
 
 	it("移动端在同一面板选择默认，清除覆盖并关闭详情", () => {
-		const { model, onSelect } = setup(true)
+		const { model, onReasoningEffortChange } = setup(true)
 		fireEvent.click(
 			screen.getByRole("button", { name: /messageEditor.modelSwitch.reasoning.label/ }),
 		)
@@ -120,7 +169,10 @@ describe("模型详情思考强度", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.default" }),
 		)
-		expect(onSelect).toHaveBeenCalledWith({ ...model, reasoning_effort: null })
+		expect(onReasoningEffortChange).toHaveBeenCalledWith({
+			...model,
+			reasoning_effort: null,
+		})
 		expect(screen.queryByText("Mock description")).toBeNull()
 	})
 
