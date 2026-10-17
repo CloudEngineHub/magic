@@ -161,6 +161,18 @@ class ModelGatewayMapperAccessTest extends TestCase
     }
 
     /**
+     * 内部调用未传组织模型参数时，保持历史的当前组织 + 官方组织查询范围。
+     */
+    public function testModelListIsolationPreservesLegacyScopeWhenOptionIsOmitted(): void
+    {
+        $dataIsolation = ModelGatewayDataIsolation::create('tenant-org', 'user-test');
+        $providerDataIsolation = $this->invokeCreateProviderDataIsolationForModelList($dataIsolation, null);
+
+        $this->assertFalse($providerDataIsolation->isOnlyOfficialOrganization());
+        $this->assertTrue($providerDataIsolation->isContainOfficialOrganization());
+    }
+
+    /**
      * 通过反射调用 mapper 内部的模型可见性策略，避免初始化外部服务依赖。
      */
     private function invokeIsModelAccessible(?ModelAccessContext $context, string $modelId): bool
@@ -185,7 +197,7 @@ class ModelGatewayMapperAccessTest extends TestCase
 
     private function invokeCreateProviderDataIsolationForModelList(
         ModelGatewayDataIsolation $dataIsolation,
-        bool $withOrganizationModels
+        ?bool $withOrganizationModels
     ): ProviderDataIsolation {
         $mapper = (new ReflectionClass(ModelGatewayMapper::class))->newInstanceWithoutConstructor();
         $method = new ReflectionClass(ModelGatewayMapper::class)->getMethod('createProviderDataIsolationForModelList');

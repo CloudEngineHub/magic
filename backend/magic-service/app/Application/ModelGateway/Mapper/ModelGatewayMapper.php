@@ -179,7 +179,7 @@ class ModelGatewayMapper extends ModelMapper
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
         ?ModelAccessContext $accessContext = null,
-        bool $withOrganizationModels = false,
+        ?bool $withOrganizationModels = null,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
         return $this->getModelsByType($dataIsolation, [ModelType::LLM], $withDynamicModels, $accessContext, $withOrganizationModels);
@@ -193,7 +193,7 @@ class ModelGatewayMapper extends ModelMapper
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
         ?ModelAccessContext $accessContext = null,
-        bool $withOrganizationModels = false,
+        ?bool $withOrganizationModels = null,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
         return $this->getModelsByType($dataIsolation, [ModelType::EMBEDDING], $withDynamicModels, $accessContext, $withOrganizationModels);
@@ -207,7 +207,7 @@ class ModelGatewayMapper extends ModelMapper
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
         ?ModelAccessContext $accessContext = null,
-        bool $withOrganizationModels = false,
+        ?bool $withOrganizationModels = null,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
         return $this->getModelsByType(
@@ -227,7 +227,7 @@ class ModelGatewayMapper extends ModelMapper
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
         ?ModelAccessContext $accessContext = null,
-        bool $withOrganizationModels = false,
+        ?bool $withOrganizationModels = null,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
         return $this->getModelsByType($dataIsolation, [ModelType::TEXT_TO_VIDEO], $withDynamicModels, $accessContext, $withOrganizationModels);
@@ -241,7 +241,7 @@ class ModelGatewayMapper extends ModelMapper
         BaseDataIsolation $dataIsolation,
         bool $withDynamicModels = false,
         ?ModelAccessContext $accessContext = null,
-        bool $withOrganizationModels = false,
+        ?bool $withOrganizationModels = null,
     ): array {
         $dataIsolation = ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
         return $this->getModelsByType(
@@ -313,7 +313,7 @@ class ModelGatewayMapper extends ModelMapper
         array $modelTypes,
         bool $withDynamicModels = false,
         ?ModelAccessContext $accessContext = null,
-        bool $withOrganizationModels = false,
+        ?bool $withOrganizationModels = null,
     ): array {
         $list = [];
 
@@ -556,14 +556,14 @@ class ModelGatewayMapper extends ModelMapper
     /**
      * 创建模型列表查询使用的 ProviderDataIsolation.
      *
-     * 非官方组织默认只查询官方组织，避免未开启 with_organization_models 时泄漏当前组织模型。
+     * API 显式传 false 时只查询官方组织；未传参数的内部调用保持当前组织 + 官方组织的历史行为。
      */
     private function createProviderDataIsolationForModelList(
         BaseDataIsolation $dataIsolation,
-        bool $withOrganizationModels
+        ?bool $withOrganizationModels
     ): ProviderDataIsolation {
         $providerDataIsolation = ProviderDataIsolation::createByBaseDataIsolation($dataIsolation);
-        if ($withOrganizationModels || $dataIsolation->isOfficialOrganization()) {
+        if ($withOrganizationModels !== false || $dataIsolation->isOfficialOrganization()) {
             $providerDataIsolation->setContainOfficialOrganization(true);
         } else {
             $providerDataIsolation->setOnlyOfficialOrganization(true);
