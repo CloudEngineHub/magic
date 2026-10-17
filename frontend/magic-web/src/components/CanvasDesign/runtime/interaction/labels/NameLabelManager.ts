@@ -1,7 +1,7 @@
 import Konva from "konva"
 import { ElementTypeEnum } from "../../document/types"
 import { getActiveContent } from "../../document/elementContent"
-import { BaseLabelManager, type BaseLabelManagerConfig, type LabelSize } from "./BaseLabelManager"
+import { BaseLabelManager, type BaseLabelManagerConfig, type LabelLayoutSyncContext, type LabelSize } from "./BaseLabelManager"
 import {
 	NAME_LABEL_GROUP_PREFIX,
 	NAME_LABEL_HIT_NAME,
@@ -65,6 +65,8 @@ interface NameLabelLayoutState {
 	textOffsetX: number
 	naturalTextWidth: number
 	textWidth: number
+	/** Width of the text that Konva actually draws after applying ellipsis. */
+	renderedTextWidth: number
 	complianceFailed: boolean
 	complianceFailedReason: string | null
 	suffixText: string
@@ -392,12 +394,13 @@ export class NameLabelManager extends BaseLabelManager {
 			skipBatchDraw?: boolean
 			forceCreate?: boolean
 		},
+		context?: LabelLayoutSyncContext,
 	): boolean {
 		const labelGroup = this.labelMap.get(elementId)
 		if (labelGroup) {
 			this.syncLabelContent(elementId, labelGroup)
 		}
-		return super.createOrUpdateLabel(elementId, options)
+		return super.createOrUpdateLabel(elementId, options, context)
 	}
 
 	protected override getLabelGap(): number {
@@ -461,6 +464,7 @@ export class NameLabelManager extends BaseLabelManager {
 			textOffsetX: 0,
 			naturalTextWidth: 0,
 			textWidth: NAME_LABEL_CONFIG.MIN_TEXT_WIDTH,
+			renderedTextWidth: NAME_LABEL_CONFIG.MIN_TEXT_WIDTH,
 			complianceFailed: false,
 			complianceFailedReason: null,
 			suffixText: "",
@@ -491,6 +495,7 @@ export class NameLabelManager extends BaseLabelManager {
 			textNode.text(primaryText)
 			state.naturalTextWidth = this.measureNaturalTextWidth(textNode)
 			state.textWidth = 0
+			state.renderedTextWidth = 0
 			changed = true
 		}
 
@@ -560,6 +565,7 @@ export class NameLabelManager extends BaseLabelManager {
 		if (state.suffixText !== suffixText) {
 			state.suffixText = suffixText
 			state.textWidth = 0
+			state.renderedTextWidth = 0
 			changed = true
 		}
 
@@ -586,6 +592,7 @@ export class NameLabelManager extends BaseLabelManager {
 		boundingRect: { x: number; y: number; width: number; height: number },
 		inverseScale: number,
 		mediaLayout?: MediaLabelLayout | null,
+		context?: LabelLayoutSyncContext,
 	): boolean {
 		void boundingRect.x
 		void boundingRect.y
@@ -670,13 +677,20 @@ export class NameLabelManager extends BaseLabelManager {
 			state.textWidth = targetTextWidth
 			changed = true
 		}
+
+		textNode.wrap("none")
+		textNode.ellipsis(true)
+		const renderedTextWidth = this.getRenderedTextWidthFromNode(textNode, targetTextWidth)
+		if (state.renderedTextWidth !== renderedTextWidth) {
+			state.renderedTextWidth = renderedTextWidth
+			changed = true
+		}
+		const suffixOffsetX =
+			textOffsetX + renderedTextWidth + (state.suffixText ? NAME_LABEL_CONFIG.SUFFIX_GAP : 0)
 		if (state.suffixOffsetX !== suffixOffsetX) {
 			state.suffixOffsetX = suffixOffsetX
 			changed = true
 		}
-
-		textNode.wrap("none")
-		textNode.ellipsis(true)
 		const iconNode = this.getIconNode(labelGroup)
 		const suffixNode = this.getSuffixNode(labelGroup)
 		const labelHeight = Math.max(
@@ -795,6 +809,23 @@ export class NameLabelManager extends BaseLabelManager {
 		return Number.isFinite(naturalWidth) ? Math.max(0, naturalWidth) : 0
 	}
 
+	/**
+	 * Konva keeps the constrained node width separate from the width of each rendered line.
+	 * Use the latter for the following suffix and rename action so an ellipsis does not leave
+	 * an invisible gap, while retaining the constrained width for the text layout budget.
+	 */
+	private getRenderedTextWidthFromNode(textNode: Konva.Text, fallbackWidth: number): number {
+		const renderedWidth = textNode.textArr.reduce(
+			(maxWidth, line) => Math.max(maxWidth, line.width),
+			0,
+		)
+		if (!Number.isFinite(renderedWidth)) return fallbackWidth
+		return Math.min(
+			Math.max(renderedWidth, NAME_LABEL_CONFIG.MIN_TEXT_WIDTH),
+			Math.max(fallbackWidth, NAME_LABEL_CONFIG.MIN_TEXT_WIDTH),
+		)
+	}
+
 	private getIconNode(labelGroup: Konva.Group): Konva.Shape | Konva.Group | null {
 		return labelGroup.findOne(`.${NAME_LABEL_ICON_NAME}`) as Konva.Shape | Konva.Group | null
 	}
@@ -907,7 +938,9 @@ export class NameLabelManager extends BaseLabelManager {
 			element,
 			data,
 			selected: this.canvas.selectionManager.isSelected(elementId),
-			hovered: this.canvas.hoverManager.getHoveredElementId() === elementId,
+			hovered:
+				this.canvas.hoverManager.getHoveredElementId() === elementId ||
+				this.pointerHoverElementId === elementId,
 			isAssetLibrary: Boolean(getMediaAssetId(complianceContent)),
 			complianceStatus,
 			complianceFailedReason:
@@ -1015,6 +1048,7 @@ export class NameLabelManager extends BaseLabelManager {
 	/** Refreshes cached icon and runtime text state for discrete label changes. */
 	public refreshIcons(elementIds?: readonly string[]): void {
 		const ids = elementIds ? Array.from(new Set(elementIds)) : Array.from(this.labelMap.keys())
+		const layoutContext = BaseLabelManager.createLabelLayoutSyncContext()
 		let requiresDraw = false
 
 		for (const elementId of ids) {
@@ -1026,7 +1060,8 @@ export class NameLabelManager extends BaseLabelManager {
 			// Compliance text can change while the shield icon keeps the same shape;
 			// only changed content needs a layout pass.
 			if (contentChanged || iconChanged) {
-				requiresDraw = this.updateLabelPosition(elementId, true) || requiresDraw
+				requiresDraw =
+					this.updateLabelPosition(elementId, true, layoutContext) || requiresDraw
 			}
 		}
 
