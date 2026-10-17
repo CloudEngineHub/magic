@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<!--
+  Persona research report template.
+  Structure and interaction spec only: replace every sample value with real study content.
+  - Keep section ids, the citation classes, and the two <script> blocks.
+  - Every finding cites evidence: interview quotes link to #q<N>, web sources link to #s<N>.
+  - Write all visible text in the user's language; set <html lang> accordingly.
+  - Remove a section only when it truly does not apply (for example no focus group was run).
+-->
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- CUSTOMIZE: "<Study title> — Persona Research <Year>" -->
+    <title>Why Trial Users Churn in Week Two — Persona Research 2026</title>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'Noto Sans SC', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'] },
+                    colors: { ink: '#1d1d1f', muted: '#6e6e73', accent: '#0071e3', paper: '#fbfbfd' },
+                    boxShadow: { soft: '0 4px 20px rgba(0,0,0,0.04)' },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #fbfbfd; color: #1d1d1f; -webkit-font-smoothing: antialiased; }
+        .glass-nav { background: rgba(255,255,255,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(0,0,0,0.05); }
+        .meta-pill { background: #fff; border: 1px solid rgba(0,0,0,0.06); padding: 6px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 500; color: #555; display: inline-flex; align-items: center; gap: 6px; }
+        .card { background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); }
+        .citation-ref { color: #0071e3; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.75em; vertical-align: super; margin-left: 1px; padding: 0 2px; border-radius: 4px; }
+        .citation-ref:hover { background-color: rgba(0,113,227,0.1); }
+        .quote-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #1d1d1f; background: #f5f5f7; border-radius: 999px; padding: 4px 10px; text-decoration: none; }
+        .quote-chip:hover { background: #e8e8ed; }
+        .confidence-high { color: #1a7f37; background: #e6f4ea; }
+        .confidence-medium { color: #9a6700; background: #fff4d6; }
+        .confidence-low { color: #b42318; background: #fde8e7; }
+        blockquote.persona-quote { border-left: 3px solid #0071e3; padding-left: 14px; }
+        :target { scroll-margin-top: 96px; }
+        .citation-tooltip { position: absolute; z-index: 1000; background: rgba(255,255,255,0.97); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 10px 40px rgba(0,0,0,0.15); padding: 16px; border-radius: 16px; font-size: 0.85rem; max-width: 320px; opacity: 0; transform: translateY(10px); transition: opacity 0.2s ease, transform 0.2s ease; pointer-events: auto; display: none; }
+        .citation-tooltip.visible { opacity: 1; transform: translateY(0); display: block; }
+        .citation-tooltip .source-name { font-weight: 600; color: #86868b; font-size: 0.75rem; margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em; }
+        .citation-tooltip .source-title { color: #1d1d1f; font-weight: 500; line-height: 1.4; display: block; margin-bottom: 8px; }
+        .citation-tooltip .source-link { font-size: 0.75rem; color: #0071e3; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+        .citation-tooltip .source-link:hover { text-decoration: underline; }
+        @media print { .glass-nav { position: static; } .citation-tooltip { display: none !important; } }
+    </style>
+</head>
+<body class="font-sans">
+    <!-- CUSTOMIZE: topic icon (fa-solid fa-*) and a short nav label (max 15 chars) -->
+    <nav class="glass-nav sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-2 font-semibold text-sm"><i class="fa-solid fa-users text-accent"></i><span>Trial Churn</span></div>
+            <div class="hidden md:flex items-center gap-5 text-xs text-muted">
+                <a href="#summary" class="hover:text-ink">Summary</a>
+                <a href="#findings" class="hover:text-ink">Findings</a>
+                <a href="#personas" class="hover:text-ink">Personas</a>
+                <a href="#voices" class="hover:text-ink">Quotes</a>
+                <a href="#limitations" class="hover:text-ink">Limitations</a>
+                <a href="#sources" class="hover:text-ink">Sources</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-16">
+        <!-- Header -->
+        <header class="space-y-5">
+            <p class="text-xs font-semibold tracking-widest text-accent uppercase">Persona Research</p>
+            <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">Why trial users churn in week two</h1>
+            <p class="text-muted max-w-3xl">Research question: Why do our trial users stop using the app in the second week?</p>
+            <div class="flex flex-wrap gap-2">
+                <span class="meta-pill"><i class="fa-solid fa-flask"></i>User research · JTBD</span>
+                <!-- Effective sample = interviews with status "done" / personas planned -->
+                <span class="meta-pill"><i class="fa-solid fa-user-check"></i>7 of 8 interviews completed</span>
+                <span class="meta-pill"><i class="fa-solid fa-comments"></i>1 focus group</span>
+                <span class="meta-pill"><i class="fa-solid fa-link"></i>12 web sources</span>
+                <span class="meta-pill"><i class="fa-regular fa-calendar"></i>2026-10-18</span>
+            </div>
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex gap-3">
+                <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                <p>Respondents in this study are AI-simulated personas built from public sources and stated assumptions, not real users. Treat findings as hypotheses to validate with the attached questionnaire.</p>
+            </div>
+        </header>
+
+        <!-- Executive summary and recommendations -->
+        <section id="summary" class="space-y-6">
+            <h2 class="text-2xl font-bold">Executive summary</h2>
+            <div class="card p-6 space-y-4">
+                <p class="text-lg leading-relaxed">Week-two churn is driven less by missing features than by the absence of a first "win" in week one: users who never connect the product to a recurring task stop opening it once the novelty fades.<a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a></p>
+            </div>
+            <h3 class="text-lg font-semibold">Recommendations</h3>
+            <!-- Order by impact; each has priority, rationale with evidence, and what to validate -->
+            <ol class="space-y-3">
+                <li class="card p-5">
+                    <div class="flex items-center gap-2 mb-1"><span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent text-white">P1</span><span class="font-semibold">Guide every trial user to one recurring task in the first three days</span></div>
+                    <p class="text-sm text-muted">Why: 5 of 7 personas described the product as "nice but not part of my routine".<a href="#q2" class="citation-ref">[Q2]</a> Validate: ask real trial users which task they tried first.</p>
+                </li>
+            </ol>
+        </section>
+
+        <!-- Scope and method -->
+        <section id="method" class="space-y-4">
+            <h2 class="text-2xl font-bold">Scope and method</h2>
+            <div class="grid sm:grid-cols-3 gap-4">
+                <div class="card p-5"><p class="text-xs text-muted mb-1">Audience</p><p class="font-medium">Trial users of SMB productivity apps, tier 1-3 cities</p></div>
+                <div class="card p-5"><p class="text-xs text-muted mb-1">Methods</p><p class="font-medium">Desk research, 8 one-on-one interviews (max 5 rounds), 1 focus group</p></div>
+                <div class="card p-5"><p class="text-xs text-muted mb-1">Framework</p><p class="font-medium">JTBD: trigger, job, workaround, switching anxiety</p></div>
+            </div>
+        </section>
+
+        <!-- Findings by segment -->
+        <section id="findings" class="space-y-6">
+            <h2 class="text-2xl font-bold">Findings by segment</h2>
+            <!-- One block per segment; one card per finding -->
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold">Owner-operators (3 personas)</h3>
+                <article class="card p-6 space-y-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <h4 class="font-semibold">Trust comes from peers, not features</h4>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full confidence-medium">Medium confidence</span>
+                    </div>
+                    <p class="text-sm leading-relaxed">Owner-operators delay adoption until someone they know uses the product; feature lists did not move them in any interview.<a href="#s2" class="citation-ref">[S2]</a></p>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="#q3" class="quote-chip"><i class="fa-solid fa-quote-left text-accent"></i>Zhang Wei · "Not before I see a friend using it."</a>
+                    </div>
+                    <p class="text-xs text-muted">Counter-evidence: one efficiency-driven owner adopted after a free trial without peer proof.<a href="#q4" class="citation-ref">[Q4]</a></p>
+                </article>
+            </div>
+        </section>
+
+        <!-- Disagreements -->
+        <section id="tensions" class="space-y-4">
+            <h2 class="text-2xl font-bold">Disagreements and open questions</h2>
+            <div class="card p-6 text-sm leading-relaxed space-y-2">
+                <p><span class="font-semibold">Value vs. trust:</span> in the focus group, efficiency-driven owners accepted the price immediately, while relationship-driven owners rejected recording customers at any price.<a href="#q5" class="citation-ref">[Q5]</a></p>
+            </div>
+        </section>
+
+        <!-- Persona panel -->
+        <section id="personas" class="space-y-4">
+            <h2 class="text-2xl font-bold">Persona panel</h2>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- One card per persona; show tier and interview status -->
+                <div class="card p-5 space-y-2">
+                    <div class="flex items-center justify-between"><p class="font-semibold">Zhang Wei, 52</p><span class="text-xs text-muted">evidence_based</span></div>
+                    <p class="text-sm text-muted">Building-materials wholesaler, closes deals by phone</p>
+                    <div class="flex flex-wrap gap-1 text-xs"><span class="px-2 py-0.5 rounded-full bg-gray-100">skeptical of AI</span><span class="px-2 py-0.5 rounded-full bg-gray-100">relationship-driven</span></div>
+                    <p class="text-xs text-muted">Interview: done, 5 rounds · interviews/p_zhangwei_7f3a.json</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Persona quotes: every [Q#] target lives here -->
+        <section id="voices" class="space-y-4">
+            <h2 class="text-2xl font-bold">Interview quotes</h2>
+            <div class="space-y-3">
+                <!-- id="q<N>"; data-source-name = persona name; data-source-title = quote; href = transcript path -->
+                <a id="q1" href="interviews/p_zhangwei_7f3a.json" class="card p-5 block hover:shadow-md transition-shadow">
+                    <blockquote class="persona-quote">
+                        <p data-source-title class="leading-relaxed">"I tried it twice the first week, then forgot it existed."</p>
+                    </blockquote>
+                    <p class="text-xs text-muted mt-2">[Q1] <span data-source-name>Zhang Wei</span> · interview, round 2 · theme: no routine</p>
+                </a>
+            </div>
+        </section>
+
+        <!-- Assumptions and limitations -->
+        <section id="limitations" class="space-y-4">
+            <h2 class="text-2xl font-bold">Assumptions and limitations</h2>
+            <ul class="card p-6 text-sm leading-relaxed list-disc pl-10 space-y-2">
+                <li>Respondents are AI-simulated personas, not real users. Their answers reflect the profiles and the model's general knowledge.</li>
+                <li>Effective sample: 7 completed interviews out of 8 planned; 1 interview failed (persona profile incomplete).</li>
+                <li>Social media evidence was collected through search engines only and does not represent full platform coverage.</li>
+                <li>Persona traits marked "(inferred)" in transcripts are model assumptions, not sourced facts.</li>
+            </ul>
+        </section>
+
+        <!-- Validation -->
+        <section id="validation" class="space-y-4">
+            <h2 class="text-2xl font-bold">Validate with real people</h2>
+            <div class="card p-6 text-sm leading-relaxed space-y-2">
+                <p>Run <a class="text-accent underline" href="validation-questionnaire.md">validation-questionnaire.md</a> with 5-8 real trial users per segment. Validate the P1 recommendation first.</p>
+            </div>
+        </section>
+
+        <!-- Sources: every [S#] target lives here -->
+        <section id="sources" class="space-y-4 pt-4 border-t border-gray-200">
+            <h2 class="text-lg font-bold">Web sources</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <a href="https://example.com/trial-retention-benchmarks" target="_blank" id="s1" class="block p-4 rounded-xl bg-white border border-gray-100 shadow-sm hover:shadow-md group">
+                    <div class="text-xs text-gray-400 mb-1">[S1] Example Research</div>
+                    <div class="text-sm font-medium text-accent group-hover:underline truncate">SaaS Trial Retention Benchmarks</div>
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Citation hover tooltip for [S#] sources and [Q#] quotes — keep this block unchanged -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'citation-tooltip';
+            document.body.appendChild(tooltip);
+
+            let hideTimeout;
+
+            tooltip.addEventListener('mouseenter', () => { clearTimeout(hideTimeout); });
+            tooltip.addEventListener('mouseleave', () => {
+                hideTimeout = setTimeout(() => tooltip.classList.remove('visible'), 300);
+            });
+
+            document.querySelectorAll('.citation-ref').forEach(ref => {
+                ref.addEventListener('mouseenter', () => {
+                    clearTimeout(hideTimeout);
+                    const targetId = ref.getAttribute('href').replace('#', '');
+                    const targetEl = document.getElementById(targetId);
+                    if (!targetEl) return;
+
+                    const sourceName = (targetEl.querySelector('[data-source-name]') || targetEl.querySelector('.text-xs') || {}).textContent || '';
+                    const sourceTitle = (targetEl.querySelector('[data-source-title]') || targetEl.querySelector('.text-sm') || {}).textContent || '';
+                    const sourceUrl = targetEl.getAttribute('href') || '#';
+
+                    tooltip.innerHTML = `
+                        <span class="source-name">${sourceName}</span>
+                        <span class="source-title">${sourceTitle}</span>
+                        <div class="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
+                            <a href="${sourceUrl}" target="_blank" class="source-link">
+                                <i class="fa-solid fa-up-right-from-square"></i> Open
+                            </a>
+                            <div class="w-px h-3 bg-gray-200"></div>
+                            <a href="#${targetId}" class="source-link" style="color:#86868b">
+                                <i class="fa-solid fa-arrow-down"></i> Jump
+                            </a>
+                        </div>`;
+
+                    const rect = ref.getBoundingClientRect();
+                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+                    // IMPORTANT: top uses scrollTop, left uses scrollLeft — never mix them
+                    let leftPos = rect.left + scrollLeft;
+                    if (leftPos + 320 > window.innerWidth) leftPos = window.innerWidth - 340;
+                    tooltip.style.top = (rect.bottom + scrollTop + 8) + 'px';
+                    tooltip.style.left = Math.max(8, leftPos) + 'px';
+                    tooltip.classList.add('visible');
+                });
+
+                ref.addEventListener('mouseleave', () => {
+                    hideTimeout = setTimeout(() => tooltip.classList.remove('visible'), 300);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

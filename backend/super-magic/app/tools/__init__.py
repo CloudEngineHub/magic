@@ -64,6 +64,7 @@ from app.tools.run_python_snippet import RunPythonSnippet
 from app.tools.shell_exec import ShellExec
 from app.tools.shell_await import ShellAwait
 from app.tools.summarize import Summarize
+from app.tools.persona_chat import PersonaChat
 from app.tools.thinking import Thinking
 from app.tools.todo_read import TodoRead
 from app.tools.todo_create import TodoCreate
@@ -449,6 +450,7 @@ __all__ = [
     "ShellExec",
     "ShellAwait",
     "Summarize",
+    "PersonaChat",
     "Thinking",
     "TodoRead",
     "TodoCreate",

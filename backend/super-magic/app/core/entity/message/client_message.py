@@ -163,6 +163,7 @@ class AgentMode(str, Enum):
     CREW_CREATOR = "crew-creator"  # Crew管理模式，使用crew-creator.agent
     SKILL_CREATOR = "skill-creator"  # Skill 创作模式，使用skill-creator.agent
     MICRO_APP = "micro-app"  # 微应用开发模式，使用micro-app.agent
+    PERSONA_RESEARCH = "persona_research"  # AI 消费者研究模式，使用persona-research.agent
     CUSTOM_AGENT = "custom_agent"  # 自定义 Agent 运行模式，需配合 agent_code
     MAGICLAW = "magiclaw"  # Magic Claw 模式，从 agents/claws/<claw_code>/ 编译运行
 
@@ -183,6 +184,7 @@ class AgentMode(str, Enum):
             AgentMode.CREW_CREATOR: "crew-creator",
             AgentMode.SKILL_CREATOR: "skill-creator",
             AgentMode.MICRO_APP: "micro-app",  # 微应用开发模式
+            AgentMode.PERSONA_RESEARCH: "persona-research",  # AI 消费者研究模式
             AgentMode.CUSTOM_AGENT: "custom_agent",
             AgentMode.MAGICLAW: "magiclaw",
         }

@@ -1206,5 +1206,9 @@
     "search_project_files": {
         "zh_CN": "搜索项目文件",
         "en_US": "Search project files"
+    },
+    "persona_chat": {
+        "zh_CN": "人设访谈",
+        "en_US": "Persona interview"
     }
 }

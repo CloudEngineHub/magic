@@ -7248,5 +7248,57 @@
     "update_slide_transitions.direction_up": {"zh_CN": "向上", "en_US": "Up"},
     "update_slide_transitions.direction_down": {"zh_CN": "向下", "en_US": "Down"},
     "update_slide_transitions.easing_linear": {"zh_CN": "匀速", "en_US": "Linear"},
-    "update_slide_transitions.easing_ease-in-out": {"zh_CN": "平滑", "en_US": "Smooth"}
+    "update_slide_transitions.easing_ease-in-out": {"zh_CN": "平滑", "en_US": "Smooth"},
+    "persona_chat.before_interview": {
+        "zh_CN": "正在向受访者提问",
+        "en_US": "Asking the participant"
+    },
+    "persona_chat.before_group": {
+        "zh_CN": "正在主持 {{count}} 人小组讨论",
+        "en_US": "Moderating a {{count}}-person group discussion"
+    },
+    "persona_chat.success": {
+        "zh_CN": "已收到 {{count}} 位受访者的回答",
+        "en_US": "Received answers from {{count}} participants"
+    },
+    "persona_chat.partial": {
+        "zh_CN": "{{ok}} 位受访者已回答，{{failed}} 位未能回答",
+        "en_US": "{{ok}} participants answered, {{failed}} could not answer"
+    },
+    "persona_chat.error": {
+        "zh_CN": "受访者暂时没能回答，AI 正在调整",
+        "en_US": "The participant could not answer yet; the AI is adjusting"
+    },
+    "persona_chat.detail_title": {
+        "zh_CN": "访谈问答",
+        "en_US": "Interview Q&A"
+    },
+    "persona_chat.detail_failed_title": {
+        "zh_CN": "访谈未完成",
+        "en_US": "Interview not completed"
+    },
+    "persona_chat.detail_question": {
+        "zh_CN": "主持人提问",
+        "en_US": "Moderator question"
+    },
+    "persona_chat.detail_failed_list": {
+        "zh_CN": "未能回答的受访者",
+        "en_US": "Participants who could not answer"
+    },
+    "persona_chat.reason.invalid_request": {
+        "zh_CN": "访谈参数不正确，AI 会修正后重试",
+        "en_US": "The interview request was invalid; the AI will correct it and retry"
+    },
+    "persona_chat.reason.profile_unavailable": {
+        "zh_CN": "人设档案缺失或格式不完整",
+        "en_US": "The persona profile is missing or incomplete"
+    },
+    "persona_chat.reason.model_error": {
+        "zh_CN": "回答生成服务暂时不可用",
+        "en_US": "The answer service is temporarily unavailable"
+    },
+    "persona_chat.reason.empty_answer": {
+        "zh_CN": "没有生成有效回答",
+        "en_US": "No valid answer was generated"
+    }
 }

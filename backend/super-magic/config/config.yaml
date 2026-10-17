@@ -799,6 +799,10 @@ ai_abilities:
   memory:
     model_id: "${MEMORY_MODEL_ID:-deepseek-v4-flash}"
 
+  # 人设访谈能力：persona_chat 工具扮演 AI 受访者回答访谈问题
+  persona_chat:
+    model_id: "${PERSONA_CHAT_MODEL_ID:-auto}"
+
 # =====================================================
 # Web Scraping 网页爬取配置
 # =====================================================
