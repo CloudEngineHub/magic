@@ -1,8 +1,21 @@
-import { CircleAlert, Lightbulb, Mic, Quote, Sparkles } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import {
+	BookOpen,
+	CircleAlert,
+	Lightbulb,
+	Mic,
+	Quote,
+	Sparkles,
+	ThumbsUp,
+	TriangleAlert,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
+import { resolveTranscriptQuality, splitInferredSegments } from "../services/researchAnalysis"
 import type { DiscussionFile, InterviewFile, PersonaFile } from "../types"
 import PersonaAvatar from "./PersonaAvatar"
+import { AiSimulatedNote } from "./ResearchBadges"
 
 interface TranscriptViewProps {
 	transcript: InterviewFile | DiscussionFile
@@ -10,26 +23,79 @@ interface TranscriptViewProps {
 	resolvePersona: (personaId: string) => PersonaFile | null
 	/** Interviews have one respondent; their rounds use role "persona". */
 	respondentId?: string
+	/**
+	 * Round to scroll to and briefly highlight (index into rounds[]). The nonce re-triggers the
+	 * highlight when the same round is opened twice.
+	 */
+	focusRound?: { roundIndex: number; nonce: number } | null
 }
 
 /**
- * Insight card (summary, findings, quotes) above a chat-style transcript.
- * Moderator questions are numbered so a quote in the report can be traced back to its round.
+ * Quality strip and insight card above a chat-style transcript.
+ * Moderator questions are numbered so a quote in the report can be traced back to its round;
+ * inferred details (persona_chat's "(inferred)" marker) are underlined and explained on hover.
  */
 export default function TranscriptView({
 	transcript,
 	resolvePersona,
 	respondentId,
+	focusRound = null,
 }: TranscriptViewProps) {
 	const { t } = useTranslation("personaResearch")
+	const listRef = useRef<HTMLOListElement>(null)
+	const [flashIndex, setFlashIndex] = useState<number | null>(null)
 	const hasInsights =
 		Boolean(transcript.summary) ||
 		Boolean(transcript.key_findings?.length) ||
 		Boolean(transcript.quotes?.length)
+	const { quality, inferredRatio, isHighInferred } = resolveTranscriptQuality(transcript)
 	let questionIndex = 0
+
+	useEffect(() => {
+		if (!focusRound) return
+		const node = listRef.current?.querySelector(`[data-round="${focusRound.roundIndex}"]`)
+		node?.scrollIntoView({ behavior: "smooth", block: "center" })
+		setFlashIndex(focusRound.roundIndex)
+		const timer = window.setTimeout(() => setFlashIndex(null), 2400)
+		return () => window.clearTimeout(timer)
+	}, [focusRound])
 
 	return (
 		<div className="flex flex-col gap-5" data-testid="persona-research-transcript">
+			<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-border px-3 py-2 text-[11px] text-muted-foreground">
+				{quality?.concrete_stories !== undefined ? (
+					<span className="inline-flex items-center gap-1">
+						<BookOpen className="size-3.5" />
+						{t("quality.stories", { count: quality.concrete_stories })}
+					</span>
+				) : null}
+				<span
+					className={cn(
+						"inline-flex items-center gap-1",
+						isHighInferred && "font-medium text-amber-600 dark:text-amber-400",
+					)}
+				>
+					{isHighInferred ? (
+						<TriangleAlert className="size-3.5" />
+					) : (
+						<Sparkles className="size-3.5" />
+					)}
+					{t("quality.inferred", { percent: Math.round(inferredRatio * 100) })}
+				</span>
+				{quality?.agreement_flags !== undefined ? (
+					<span className="inline-flex items-center gap-1">
+						<ThumbsUp className="size-3.5" />
+						{t("quality.agreement", { count: quality.agreement_flags })}
+					</span>
+				) : null}
+				<AiSimulatedNote className="ml-auto" />
+				{isHighInferred ? (
+					<p className="w-full text-amber-700 dark:text-amber-400">
+						{t("quality.highInferred")}
+					</p>
+				) : null}
+			</div>
+
 			{transcript.status === "failed" ? (
 				<p className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
 					<CircleAlert className="mt-0.5 size-4 shrink-0" />
@@ -92,7 +158,7 @@ export default function TranscriptView({
 				</div>
 			) : null}
 
-			<ol className="flex flex-col gap-4">
+			<ol ref={listRef} className="flex flex-col gap-4">
 				{transcript.rounds.map((round, index) => {
 					const speakerId = round.speaker ?? round.role ?? ""
 					const isModerator = speakerId === "moderator"
@@ -109,9 +175,13 @@ export default function TranscriptView({
 					return (
 						<li
 							key={index}
+							data-round={index}
 							className={cn(
-								"flex gap-2.5 duration-300 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none",
+								"flex gap-2.5 rounded-2xl duration-300 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none",
 								isModerator ? "flex-row-reverse" : "flex-row",
+								// Brief ring when a quote elsewhere jumps to this round.
+								flashIndex === index &&
+									"ring-2 ring-primary/50 ring-offset-4 ring-offset-background transition-shadow",
 							)}
 						>
 							{isModerator ? (
@@ -142,7 +212,7 @@ export default function TranscriptView({
 											: "rounded-tl-sm bg-muted text-foreground",
 									)}
 								>
-									{round.text}
+									{isModerator ? round.text : <AnswerText text={round.text} />}
 								</p>
 							</div>
 						</li>
@@ -168,6 +238,34 @@ export default function TranscriptView({
 				) : null}
 			</ol>
 		</div>
+	)
+}
+
+/** Respondent text with inferred spans underlined; the "(inferred)" marker itself is hidden. */
+function AnswerText({ text }: { text: string }) {
+	const { t } = useTranslation("personaResearch")
+	return (
+		<>
+			{splitInferredSegments(text).map((segment, index) =>
+				segment.inferred ? (
+					<Tooltip key={index}>
+						<TooltipTrigger asChild>
+							<span
+								tabIndex={0}
+								className="cursor-help rounded-sm text-foreground/70 underline decoration-amber-500/70 decoration-dashed underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							>
+								{segment.text}
+							</span>
+						</TooltipTrigger>
+						<TooltipContent className="max-w-56">
+							{t("transcript.inferredHint")}
+						</TooltipContent>
+					</Tooltip>
+				) : (
+					<span key={index}>{segment.text}</span>
+				),
+			)}
+		</>
 	)
 }
 

@@ -4,6 +4,7 @@ import { ArrowLeft, FileSearch, Share2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
+import { toast } from "sonner"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	Empty,
@@ -42,10 +43,12 @@ import type { PersonaFile, StudyFile, StudyPhaseKey } from "../types"
 
 /** Which output tab follows each phase while the study runs (clarify stays in the conversation). */
 const PHASE_TAB: Partial<Record<StudyFile["phase"], ResearchConsoleTab>> = {
+	plan: "hypotheses",
 	interview: "personas",
 	report: "files",
 	validation: "validation",
-	done: "files",
+	// Finished studies open on conclusions by hypothesis, the first thing a decision maker reads.
+	done: "hypotheses",
 }
 
 /** Research studio: stepper, conversation on the left, study outputs on the right. */
@@ -58,7 +61,7 @@ function ResearchStudioPage() {
 	const conversationRef = useRef<ResearchConversationPanelRef>(null)
 	const detailRef = useRef<DetailRef>(null)
 
-	const [consoleTab, setConsoleTab] = useState<ResearchConsoleTab>("personas")
+	const [consoleTab, setConsoleTab] = useState<ResearchConsoleTab>("hypotheses")
 	const [mobileView, setMobileView] = useState<"conversation" | "outputs">("conversation")
 	const [focusedInterviewId, setFocusedInterviewId] = useState<string | null>(null)
 	const [openedPersona, setOpenedPersona] = useState<PersonaFile | null>(null)
@@ -136,6 +139,13 @@ function ResearchStudioPage() {
 		const file = fileByStep[key]
 		if (file) openFile(file)
 		else showOutputs("files")
+	})
+
+	/** Real answers are uploaded as conversation attachments; the agent does the comparison. */
+	const handleRequestValidationUpload = useMemoizedFn(() => {
+		if (isMobile) setMobileView("conversation")
+		setTimeout(() => conversationRef.current?.fillComposer(t("validation.uploadPrompt")), 50)
+		toast.info(t("validation.uploadHint"))
 	})
 
 	const handleAskPersona = useMemoizedFn((persona: PersonaFile) => {
@@ -267,6 +277,8 @@ function ResearchStudioPage() {
 			focusedInterviewPersonaId={focusedInterviewId}
 			onFocusInterview={setFocusedInterviewId}
 			onOpenPersona={setOpenedPersona}
+			onOpenFile={openFile}
+			onRequestValidationUpload={handleRequestValidationUpload}
 			variant={isMobile ? "mobile" : "desktop"}
 			filesPane={
 				<ResearchFilesPane

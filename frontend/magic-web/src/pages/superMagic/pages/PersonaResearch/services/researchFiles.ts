@@ -8,6 +8,8 @@ import type {
 	ParsedResearchFile,
 	PersonaFile,
 	StudyFile,
+	SynthesisFile,
+	ValidationResultsFile,
 } from "../types"
 
 /**
@@ -75,6 +77,9 @@ export interface StudyAttachments {
 	plan: AttachmentItem | null
 	deskResearch: AttachmentItem | null
 	validation: AttachmentItem | null
+	validationCsv: AttachmentItem | null
+	synthesis: AttachmentItem | null
+	validationResults: AttachmentItem | null
 	/** Every file in the study directory, used for delete and file-count chips. */
 	all: AttachmentItem[]
 }
@@ -106,6 +111,9 @@ export function collectStudyAttachments(list: AttachmentItem[], dir: string): St
 		plan: byName("plan.md"),
 		deskResearch: byName("desk-research.md"),
 		validation: byName("validation-questionnaire.md"),
+		validationCsv: byName("validation-questionnaire.csv"),
+		synthesis: byName("synthesis.json"),
+		validationResults: byName("validation-results.json"),
 		all: files,
 	}
 }
@@ -127,11 +135,69 @@ export function getAttachmentPath(item: AttachmentItem): string {
 
 // ---------------------------------------------------------------------------
 // Schemas. Required fields are the ones the UI cannot render without; everything else is
-// optional so the agent can add detail without breaking the page.
+// optional so the agent can add detail without breaking the page. Fields added after the
+// first release (hypotheses, quota, synthesis …) are all optional: older files lack them.
 // ---------------------------------------------------------------------------
 
 const schemaVersion = z.literal(1)
 const looseRecord = z.record(z.string(), z.unknown())
+
+/**
+ * Keeps the valid items of a list and drops the rest.
+ * Example: 4 hypotheses where one lacks "statement" → the page shows the other 3.
+ */
+function validItems<T>(item: z.ZodType<T>) {
+	return z.array(z.unknown()).transform((items) =>
+		items.flatMap((value) => {
+			const parsed = item.safeParse(value)
+			return parsed.success ? [parsed.data] : []
+		}),
+	)
+}
+
+/** Optional list that keeps valid items; a non-array value is treated as absent. */
+function lenientArray<T>(item: z.ZodType<T>) {
+	return validItems(item).optional().catch(undefined)
+}
+
+const verdictSchema = z.enum(["pending", "supported", "refuted", "mixed", "insufficient"])
+const agreementSchema = z.enum(["agree", "partial", "disagree"])
+const levelSchema = z.enum(["high", "medium", "low"])
+const optionalString = z.string().optional().catch(undefined)
+const optionalIndex = z.number().int().nonnegative().optional().catch(undefined)
+
+const evidenceRefSchema = z.union([
+	z.object({
+		kind: z.literal("quote"),
+		persona_id: z.string(),
+		round_index: optionalIndex,
+		text: z.string(),
+		file: optionalString,
+	}),
+	z.object({ kind: z.literal("source"), ref: z.string() }),
+])
+
+const quoteRefSchema = z.object({
+	persona_id: z.string(),
+	source: z.enum(["interview", "discussion"]).optional().catch(undefined),
+	file: optionalString,
+	round_index: optionalIndex,
+	text: z.string(),
+})
+
+const hypothesisSchema = z.object({
+	id: z.string().min(1),
+	statement: z.string().min(1),
+	support_criteria: optionalString,
+	refute_criteria: optionalString,
+	verdict: verdictSchema.catch("pending"),
+	verdict_reason: optionalString,
+	evidence_refs: lenientArray(evidenceRefSchema),
+	validation: z
+		.object({ verdict: agreementSchema, summary: z.string().optional() })
+		.optional()
+		.catch(undefined),
+})
 
 const studySchema = z.object({
 	schema_version: schemaVersion,
@@ -161,13 +227,35 @@ const studySchema = z.object({
 		})
 		.optional()
 		.catch(undefined),
+	decision: optionalString,
+	hypotheses: lenientArray(hypothesisSchema),
+	quota: lenientArray(
+		z.object({
+			segment: z.string(),
+			criteria: optionalString,
+			count: z.number().int().nonnegative(),
+		}),
+	),
+	guide_review: z
+		.object({
+			items: validItems(
+				z.object({
+					issue: z.enum(["leading", "double_barreled", "hypothesis_reveal", "jargon"]),
+					before: z.string(),
+					after: z.string(),
+				}),
+			).catch([]),
+		})
+		.optional()
+		.catch(undefined),
+	validated_count: z.number().int().nonnegative().optional().catch(undefined),
 })
 
 const personaSchema = z.object({
 	schema_version: schemaVersion,
 	id: z.string().min(1),
 	name: z.string().min(1),
-	tagline: z.string().optional().catch(undefined),
+	tagline: optionalString,
 	tags: z.array(z.string()).optional().catch(undefined),
 	tier: z.enum(["generated", "evidence_based", "imported"]).catch("generated"),
 	dimensions: z
@@ -186,7 +274,18 @@ const personaSchema = z.object({
 		.object({
 			expression: z.array(z.unknown()).optional(),
 			story: z.string().optional(),
-			cognition: z.object({ decision_weights: looseRecord.optional() }).optional(),
+			cognition: z
+				.object({
+					// New files rank factors qualitatively; early files used a numeric map.
+					decision_weights: z
+						.union([
+							z.array(z.object({ factor: z.string(), level: levelSchema })),
+							looseRecord,
+						])
+						.optional()
+						.catch(undefined),
+				})
+				.optional(),
 			behavior: z.array(z.unknown()).optional(),
 		})
 		.optional()
@@ -195,7 +294,8 @@ const personaSchema = z.object({
 		.array(
 			z.object({
 				id: z.string(),
-				type: z.enum(["web", "upload", "interview"]).catch("web"),
+				type: z.enum(["web", "social", "upload", "interview"]).catch("web"),
+				platform: z.string().optional(),
 				title: z.string().optional(),
 				url: z.string().optional(),
 				file: z.string().optional(),
@@ -204,8 +304,13 @@ const personaSchema = z.object({
 		)
 		.optional()
 		.catch(undefined),
-	created_in: z.string().optional().catch(undefined),
-	updated_at: z.string().optional().catch(undefined),
+	field_sources: z
+		.record(z.string(), z.union([z.array(z.string()), z.literal("inferred")]))
+		.optional()
+		.catch(undefined),
+	consistency_notes: z.array(z.string()).optional().catch(undefined),
+	created_in: optionalString,
+	updated_at: optionalString,
 })
 
 const panelSchema = z.object({
@@ -213,13 +318,21 @@ const panelSchema = z.object({
 	id: z.string().min(1),
 	name: z.string().min(1),
 	persona_ids: z.array(z.string()),
-	criteria: z.string().optional().catch(undefined),
+	criteria: optionalString,
+	selection: lenientArray(
+		z.object({
+			persona_id: z.string(),
+			reason: optionalString,
+			reused: z.boolean().optional().catch(undefined),
+			segment: optionalString,
+		}),
+	),
 })
 
 const transcriptBase = {
 	schema_version: schemaVersion,
 	status: z.enum(["done", "running", "failed"]).catch("running"),
-	error: z.string().optional().catch(undefined),
+	error: optionalString,
 	rounds: z.array(
 		z.object({
 			role: z.string().optional(),
@@ -227,10 +340,19 @@ const transcriptBase = {
 			text: z.string(),
 		}),
 	),
-	summary: z.string().optional().catch(undefined),
+	summary: optionalString,
 	key_findings: z.array(z.string()).optional().catch(undefined),
 	quotes: z
 		.array(z.object({ text: z.string(), theme: z.string().optional() }))
+		.optional()
+		.catch(undefined),
+	quality: z
+		.object({
+			concrete_stories: z.number().nonnegative().optional().catch(undefined),
+			inferred_ratio: z.number().min(0).max(1).optional().catch(undefined),
+			agreement_flags: z.number().nonnegative().optional().catch(undefined),
+			notes: optionalString,
+		})
 		.optional()
 		.catch(undefined),
 }
@@ -238,8 +360,74 @@ const transcriptBase = {
 const interviewSchema = z.object({ ...transcriptBase, persona_id: z.string().min(1) })
 const discussionSchema = z.object({
 	...transcriptBase,
-	id: z.string().optional().catch(undefined),
+	id: optionalString,
 	participants: z.array(z.string()),
+})
+
+const synthesisSchema = z.object({
+	schema_version: schemaVersion,
+	segments: validItems(
+		z.object({ id: z.string(), name: z.string(), persona_ids: z.array(z.string()) }),
+	).catch([]),
+	themes: validItems(
+		z.object({
+			id: z.string(),
+			name: z.string(),
+			description: optionalString,
+			stance_by_persona: z
+				.record(
+					z.string(),
+					z.enum(["support", "oppose", "mixed", "not_mentioned"]).catch("not_mentioned"),
+				)
+				.catch({}),
+			quote_refs: lenientArray(quoteRefSchema),
+			source_refs: z.array(z.string()).optional().catch(undefined),
+			hypothesis_ids: z.array(z.string()).optional().catch(undefined),
+			confidence: z.enum(["high", "medium", "low", "to_validate"]).catch("to_validate"),
+			confidence_reason: optionalString,
+		}),
+	),
+	dimensions: lenientArray(
+		z.object({
+			id: z.string(),
+			name: z.string(),
+			level_by_segment: z.record(z.string(), levelSchema.catch("low")),
+			quote_refs: lenientArray(quoteRefSchema),
+		}),
+	),
+	saturation: z
+		.object({
+			new_themes_per_interview: z.array(z.number().nonnegative()),
+			saturated: z.boolean(),
+		})
+		.optional()
+		.catch(undefined),
+})
+
+const validationResultsSchema = z.object({
+	schema_version: schemaVersion,
+	respondent_count: z.number().int().nonnegative(),
+	source_files: z.array(z.string()).optional().catch(undefined),
+	by_hypothesis: validItems(
+		z.object({
+			hypothesis_id: z.string(),
+			ai_verdict: verdictSchema.optional().catch(undefined),
+			human_verdict: verdictSchema.optional().catch(undefined),
+			agreement: agreementSchema,
+			summary: optionalString,
+			human_quotes: z.array(z.string()).optional().catch(undefined),
+		}),
+	),
+	by_question: lenientArray(
+		z.object({
+			question_id: z.string(),
+			hypothesis_id: optionalString,
+			ai_summary: optionalString,
+			human_summary: optionalString,
+			agreement: agreementSchema,
+		}),
+	),
+	summary: optionalString,
 })
 
 function parseWith<T>(schema: z.ZodType<T>, raw: unknown): ParsedResearchFile<T> {
@@ -266,17 +454,10 @@ export const parseInterviewFile = (raw: unknown) =>
 	parseWith(interviewSchema, raw) as ParsedResearchFile<InterviewFile>
 export const parseDiscussionFile = (raw: unknown) =>
 	parseWith(discussionSchema, raw) as ParsedResearchFile<DiscussionFile>
-
-/**
- * Stepper position: index of the running phase, else the first pending phase after the last done.
- * Example: clarify=done, plan=done, desk_research=running → 2 (0-based).
- */
-export function resolveCurrentPhaseIndex(study: StudyFile | null): number {
-	if (!study) return -1
-	if (study.phase === "done") return STUDY_PHASE_KEYS.length
-	const index = STUDY_PHASE_KEYS.indexOf(study.phase)
-	return index
-}
+export const parseSynthesisFile = (raw: unknown) =>
+	parseWith(synthesisSchema, raw) as ParsedResearchFile<SynthesisFile>
+export const parseValidationResultsFile = (raw: unknown) =>
+	parseWith(validationResultsSchema, raw) as ParsedResearchFile<ValidationResultsFile>
 
 /** Status for each stepper slot, falling back to "pending" for phases the agent has not written. */
 export function resolvePhaseStatuses(study: StudyFile | null) {

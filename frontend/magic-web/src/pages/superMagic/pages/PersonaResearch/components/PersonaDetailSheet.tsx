@@ -10,6 +10,8 @@ import {
 	MessagesSquare,
 	Quote,
 	ShieldAlert,
+	Smartphone,
+	Split,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -23,7 +25,9 @@ import {
 } from "@/components/shadcn-ui/sheet"
 import { cn } from "@/utils/cn"
 import type { InterviewFile, PersonaEvidence, PersonaFile } from "../types"
+import { normalizeDecisionWeights } from "../services/researchAnalysis"
 import { formatResearchValue } from "./formatValue"
+import { AiSimulatedNote } from "./ResearchBadges"
 import PersonaAvatar from "./PersonaAvatar"
 import { PERSONA_TIER_RING } from "./PersonaCard"
 
@@ -49,6 +53,7 @@ export default function PersonaDetailSheet({
 	const { t } = useTranslation("personaResearch")
 	const dimensions = persona?.dimensions
 	const layers = persona?.layers
+	const fieldSources = persona?.field_sources
 	const tierCopy = persona
 		? {
 				generated: {
@@ -122,6 +127,7 @@ export default function PersonaDetailSheet({
 							<p className="text-xs leading-5 text-muted-foreground">
 								{tierCopy.hint}
 							</p>
+							<AiSimulatedNote />
 						</SheetHeader>
 						<ScrollArea className="min-h-0 flex-1">
 							<div className="flex flex-col gap-6 p-5 text-sm">
@@ -138,30 +144,37 @@ export default function PersonaDetailSheet({
 									<Field
 										label={t("persona.dimension.demographics")}
 										value={dimensions?.demographics}
+										source={fieldSources?.demographics}
 									/>
 									<Field
 										label={t("persona.dimension.geography")}
 										value={dimensions?.geography}
+										source={fieldSources?.geography}
 									/>
 									<Field
 										label={t("persona.dimension.psychographics")}
 										value={dimensions?.psychographics}
+										source={fieldSources?.psychographics}
 									/>
 									<Field
 										label={t("persona.dimension.behavior")}
 										value={dimensions?.behavior}
+										source={fieldSources?.behavior}
 									/>
 									<Field
 										label={t("persona.dimension.needsPains")}
 										value={dimensions?.needs_pains}
+										source={fieldSources?.needs_pains}
 									/>
 									<Field
 										label={t("persona.dimension.techAdoption")}
 										value={dimensions?.tech_adoption}
+										source={fieldSources?.tech_adoption}
 									/>
 									<Field
 										label={t("persona.dimension.social")}
 										value={dimensions?.social}
+										source={fieldSources?.social}
 									/>
 								</Section>
 								<Section
@@ -173,15 +186,32 @@ export default function PersonaDetailSheet({
 										value={layers?.expression}
 									/>
 									<Field label={t("persona.layer.story")} value={layers?.story} />
-									<Field
-										label={t("persona.layer.cognition")}
-										value={layers?.cognition?.decision_weights}
-									/>
+									<DecisionWeights value={layers?.cognition?.decision_weights} />
 									<Field
 										label={t("persona.layer.behavior")}
 										value={layers?.behavior}
 									/>
 								</Section>
+								{persona.consistency_notes?.length ? (
+									<Section
+										icon={<Split className="size-4" />}
+										title={t("persona.section.contradictions")}
+									>
+										<ul className="flex flex-col gap-1.5">
+											{persona.consistency_notes.map((note, index) => (
+												<li
+													key={index}
+													className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs leading-5"
+												>
+													{note}
+												</li>
+											))}
+										</ul>
+										<p className="text-[11px] text-muted-foreground">
+											{t("persona.contradictionsHint")}
+										</p>
+									</Section>
+								) : null}
 								<Section
 									icon={<Brain className="size-4" />}
 									title={t("persona.section.evidence")}
@@ -260,12 +290,38 @@ function Section({
 	)
 }
 
-function Field({ label, value }: { label: string; value: unknown }) {
+function Field({
+	label,
+	value,
+	source,
+}: {
+	label: string
+	value: unknown
+	/** Evidence ids backing this field, or "inferred"; absent on older persona files. */
+	source?: string[] | "inferred"
+}) {
+	const { t } = useTranslation("personaResearch")
 	const text = formatResearchValue(value)
 	if (!text) return null
 	return (
 		<div className="grid grid-cols-[88px_1fr] gap-2">
-			<span className="text-xs leading-5 text-muted-foreground">{label}</span>
+			<span className="flex flex-col gap-1 text-xs leading-5 text-muted-foreground">
+				{label}
+				{source ? (
+					<span
+						className={cn(
+							"w-fit rounded px-1 text-[10px] leading-4",
+							source === "inferred"
+								? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+								: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+						)}
+					>
+						{source === "inferred"
+							? t("persona.fieldInferred")
+							: t("persona.fieldSourced", { ids: source.join("、") })}
+					</span>
+				) : null}
+			</span>
 			<span className="whitespace-pre-wrap break-words leading-5 text-foreground">
 				{text}
 			</span>
@@ -276,7 +332,14 @@ function Field({ label, value }: { label: string; value: unknown }) {
 /** Source card: type icon, title, domain for web sources and the quoted snippet. */
 function EvidenceItem({ item }: { item: PersonaEvidence }) {
 	const { t } = useTranslation("personaResearch")
-	const Icon = item.type === "web" ? Globe : item.type === "upload" ? FileText : MessagesSquare
+	const Icon =
+		item.type === "web"
+			? Globe
+			: item.type === "social"
+				? Smartphone
+				: item.type === "upload"
+					? FileText
+					: MessagesSquare
 	let domain = ""
 	if (item.url) {
 		try {
@@ -290,6 +353,7 @@ function EvidenceItem({ item }: { item: PersonaEvidence }) {
 			<div className="flex items-center gap-2 text-xs">
 				<Icon className="size-3.5 shrink-0 text-muted-foreground" />
 				<span className="min-w-0 flex-1 truncate font-medium text-foreground">
+					{item.platform ? `${item.platform} · ` : ""}
 					{item.title || item.file || domain || item.url}
 				</span>
 				{item.url ? (
@@ -311,5 +375,36 @@ function EvidenceItem({ item }: { item: PersonaEvidence }) {
 				</p>
 			) : null}
 		</li>
+	)
+}
+
+/** Decision factors as high / medium / low chips; legacy numeric weights are ranked, never shown. */
+function DecisionWeights({ value }: { value: unknown }) {
+	const { t } = useTranslation("personaResearch")
+	const weights = normalizeDecisionWeights(value)
+	if (weights.length === 0) return null
+	const levelLabel = { high: t("level.high"), medium: t("level.medium"), low: t("level.low") }
+	return (
+		<div className="grid grid-cols-[88px_1fr] gap-2">
+			<span className="text-xs leading-5 text-muted-foreground">
+				{t("persona.layer.cognition")}
+			</span>
+			<span className="flex flex-wrap gap-1.5">
+				{weights.map((weight) => (
+					<span
+						key={weight.factor}
+						className={cn(
+							"inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs",
+							weight.level === "high"
+								? "border-primary/40 bg-primary/10 text-primary"
+								: "border-border text-foreground",
+						)}
+					>
+						{weight.factor}
+						<span className="text-[10px] opacity-70">{levelLabel[weight.level]}</span>
+					</span>
+				))}
+			</span>
+		</div>
 	)
 }

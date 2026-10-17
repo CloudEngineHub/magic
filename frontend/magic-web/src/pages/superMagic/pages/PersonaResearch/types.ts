@@ -9,7 +9,11 @@
  * studies/<slug>/panel.json             personas used by this study
  * studies/<slug>/interviews/<id>.json   one-on-one transcripts
  * studies/<slug>/discussions/<id>.json  focus-group transcripts
- * studies/<slug>/report.html, plan.md, desk-research.md, validation-questionnaire.md
+ * studies/<slug>/synthesis.json        theme coding, dimensions and saturation (analysis board)
+ * studies/<slug>/validation-results.json  real-person answers compared with AI verdicts
+ * studies/<slug>/report.html, plan.md, desk-research.md, validation-questionnaire.md(.csv)
+ *
+ * Fields added after the first release are optional; older study files simply lack them.
  */
 
 export const STUDY_PHASE_KEYS = [
@@ -33,6 +37,33 @@ export interface StudyPhaseState {
 	status: StudyPhaseStatus
 }
 
+export type HypothesisVerdict = "pending" | "supported" | "refuted" | "mixed" | "insufficient"
+export type AgreementLevel = "agree" | "partial" | "disagree"
+
+/** Points to one transcript round or one desk-research source ("S3"). */
+export type EvidenceRef =
+	| { kind: "quote"; persona_id: string; round_index?: number; text: string; file?: string }
+	| { kind: "source"; ref: string }
+
+export interface StudyHypothesis {
+	id: string
+	statement: string
+	support_criteria?: string
+	refute_criteria?: string
+	verdict: HypothesisVerdict
+	verdict_reason?: string
+	evidence_refs?: EvidenceRef[]
+	validation?: { verdict: AgreementLevel; summary?: string }
+}
+
+export interface StudyQuota {
+	segment: string
+	criteria?: string
+	count: number
+}
+
+export type GuideIssue = "leading" | "double_barreled" | "hypothesis_reveal" | "jargon"
+
 export interface StudyFile {
 	schema_version: 1
 	title: string
@@ -43,13 +74,28 @@ export interface StudyFile {
 	phases: StudyPhaseState[]
 	limits?: { personas?: number; interview_rounds?: number }
 	outputs?: { plan?: string; report?: string; validation?: string }
+	/** The business decision this study informs. */
+	decision?: string
+	hypotheses?: StudyHypothesis[]
+	quota?: StudyQuota[]
+	guide_review?: { items: { issue: GuideIssue; before: string; after: string }[] }
+	/** Real respondents compared so far; drives the "validated N people" stepper label. */
+	validated_count?: number
 }
 
 export type PersonaTier = "generated" | "evidence_based" | "imported"
+export type QualitativeLevel = "high" | "medium" | "low"
+
+export interface DecisionWeight {
+	factor: string
+	level: QualitativeLevel
+}
 
 export interface PersonaEvidence {
 	id: string
-	type: "web" | "upload" | "interview"
+	type: "web" | "social" | "upload" | "interview"
+	/** Social platform for type "social", e.g. "xiaohongshu". */
+	platform?: string
 	title?: string
 	url?: string
 	file?: string
@@ -75,12 +121,27 @@ export interface PersonaFile {
 	layers?: {
 		expression?: unknown[]
 		story?: string
-		cognition?: { decision_weights?: Record<string, unknown> }
+		/**
+		 * Qualitative ranking [{factor, level}]. Early files used numeric weights
+		 * ({factor: 0.3}); the UI maps those to levels and never shows decimals.
+		 */
+		cognition?: { decision_weights?: DecisionWeight[] | Record<string, unknown> }
 		behavior?: unknown[]
 	}
 	evidence?: PersonaEvidence[]
+	/** Evidence ids backing each dimension, or "inferred" when nothing backs it. */
+	field_sources?: Record<string, string[] | "inferred">
+	/** Cross-layer contradictions kept on purpose, e.g. says X but does Y. */
+	consistency_notes?: string[]
 	created_in?: string
 	updated_at?: string
+}
+
+export interface PanelSelection {
+	persona_id: string
+	reason?: string
+	reused?: boolean
+	segment?: string
 }
 
 export interface PanelFile {
@@ -89,6 +150,8 @@ export interface PanelFile {
 	name: string
 	persona_ids: string[]
 	criteria?: string
+	/** Study panel only: why each persona was chosen. */
+	selection?: PanelSelection[]
 }
 
 export interface TranscriptRound {
@@ -112,11 +175,81 @@ export interface InterviewFile {
 	summary?: string
 	key_findings?: string[]
 	quotes?: TranscriptQuote[]
+	quality?: TranscriptQuality
+}
+
+export interface TranscriptQuality {
+	concrete_stories?: number
+	/** 0–1 share of persona sentences marked "(inferred)". */
+	inferred_ratio?: number
+	agreement_flags?: number
+	notes?: string
 }
 
 export interface DiscussionFile extends Omit<InterviewFile, "persona_id"> {
 	id?: string
 	participants: string[]
+}
+
+export type ThemeStance = "support" | "oppose" | "mixed" | "not_mentioned"
+export type ThemeConfidence = "high" | "medium" | "low" | "to_validate"
+
+export interface QuoteRef {
+	persona_id: string
+	source?: "interview" | "discussion"
+	/** Path relative to the study directory, e.g. "interviews/p_x.json". */
+	file?: string
+	round_index?: number
+	text: string
+}
+
+export interface SynthesisTheme {
+	id: string
+	name: string
+	description?: string
+	stance_by_persona: Record<string, ThemeStance>
+	quote_refs?: QuoteRef[]
+	source_refs?: string[]
+	hypothesis_ids?: string[]
+	confidence: ThemeConfidence
+	confidence_reason?: string
+}
+
+export interface SynthesisDimension {
+	id: string
+	name: string
+	level_by_segment: Record<string, QualitativeLevel>
+	quote_refs?: QuoteRef[]
+}
+
+export interface SynthesisFile {
+	schema_version: 1
+	segments: { id: string; name: string; persona_ids: string[] }[]
+	themes: SynthesisTheme[]
+	dimensions?: SynthesisDimension[]
+	saturation?: { new_themes_per_interview: number[]; saturated: boolean }
+}
+
+export interface ValidationResultsFile {
+	schema_version: 1
+	respondent_count: number
+	source_files?: string[]
+	by_hypothesis: {
+		hypothesis_id: string
+		ai_verdict?: HypothesisVerdict
+		human_verdict?: HypothesisVerdict
+		agreement: AgreementLevel
+		summary?: string
+		human_quotes?: string[]
+	}[]
+	by_question?: {
+		question_id: string
+		hypothesis_id?: string
+		ai_summary?: string
+		human_summary?: string
+		agreement: AgreementLevel
+	}[]
+	summary?: string
 }
 
 /** A parsed research file together with the attachment it was read from. */

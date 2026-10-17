@@ -31,7 +31,13 @@ export default function StudyStepper({
 		desk_research: { title: t("phase.deskResearch"), hint: t("phaseHint.deskResearch") },
 		interview: { title: t("phase.interview"), hint: t("phaseHint.interview") },
 		report: { title: t("phase.report"), hint: t("phaseHint.report") },
-		validation: { title: t("phase.validation"), hint: t("phaseHint.validation") },
+		validation: {
+			// After real answers are compared, the last step reports how many people confirmed it.
+			title: study?.validated_count
+				? t("phase.validatedCount", { count: study.validated_count })
+				: t("phase.validation"),
+			hint: t("phaseHint.validation"),
+		},
 	}
 	const steps = resolvePhaseStatuses(study)
 

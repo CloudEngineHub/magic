@@ -146,3 +146,81 @@ describe("parsers", () => {
 		expect(parseInterviewFile({ schema_version: 1, status: "done", rounds: [] }).ok).toBe(false)
 	})
 })
+
+describe("Top 5 contract fields", () => {
+	it("keeps valid hypotheses and drops malformed ones", async () => {
+		const { parseStudyFile } = await import("../services/researchFiles")
+		const parsed = parseStudyFile({
+			...validStudy,
+			decision: "是否立项",
+			hypotheses: [
+				{
+					id: "H1",
+					statement: "口头约定没留痕是第一痛点",
+					verdict: "mixed",
+					evidence_refs: [
+						{ kind: "quote", persona_id: "p_a", round_index: 1, text: "原话" },
+						{ kind: "source", ref: "S3" },
+						{ kind: "unknown" },
+					],
+				},
+				{ id: "H2" },
+			],
+			quota: [{ segment: "建材", count: 3 }],
+			validated_count: 12,
+		})
+		expect(parsed.ok).toBe(true)
+		if (!parsed.ok) return
+		expect(parsed.data.hypotheses).toHaveLength(1)
+		expect(parsed.data.hypotheses?.[0].evidence_refs).toHaveLength(2)
+		expect(parsed.data.validated_count).toBe(12)
+	})
+
+	it("parses synthesis and validation results", async () => {
+		const { parseSynthesisFile, parseValidationResultsFile } =
+			await import("../services/researchFiles")
+		const synthesis = parseSynthesisFile({
+			schema_version: 1,
+			segments: [{ id: "s1", name: "建材", persona_ids: ["p_a"] }],
+			themes: [
+				{
+					id: "T1",
+					name: "留痕",
+					stance_by_persona: { p_a: "support", p_b: "weird" },
+					confidence: "nonsense",
+				},
+				{ name: "missing id" },
+			],
+			dimensions: [{ id: "D1", name: "价格", level_by_segment: { s1: "high" } }],
+			saturation: { new_themes_per_interview: [3, 1, 0, 0], saturated: true },
+		})
+		expect(synthesis.ok).toBe(true)
+		if (!synthesis.ok) return
+		expect(synthesis.data.themes).toHaveLength(1)
+		expect(synthesis.data.themes[0].stance_by_persona.p_b).toBe("not_mentioned")
+		expect(synthesis.data.themes[0].confidence).toBe("to_validate")
+
+		const results = parseValidationResultsFile({
+			schema_version: 1,
+			respondent_count: 12,
+			by_hypothesis: [{ hypothesis_id: "H1", agreement: "agree" }, { hypothesis_id: "H2" }],
+		})
+		expect(results.ok).toBe(true)
+		if (results.ok) expect(results.data.by_hypothesis).toHaveLength(1)
+	})
+
+	it("accepts legacy numeric decision weights and social evidence", async () => {
+		const { parsePersonaFile } = await import("../services/researchFiles")
+		const parsed = parsePersonaFile({
+			schema_version: 1,
+			id: "p_a",
+			name: "王建国",
+			tier: "evidence_based",
+			layers: { cognition: { decision_weights: { 价格: 0.3 } } },
+			evidence: [{ id: "e1", type: "social", platform: "xiaohongshu" }],
+			field_sources: { needs_pains: ["e1"], tech_adoption: "inferred" },
+		})
+		expect(parsed.ok).toBe(true)
+		if (parsed.ok) expect(parsed.data.evidence?.[0].type).toBe("social")
+	})
+})

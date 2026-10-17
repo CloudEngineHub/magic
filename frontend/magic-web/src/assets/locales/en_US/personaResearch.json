@@ -1,4 +1,29 @@
 {
+	"agreement": {
+		"agree": "Agree",
+		"disagree": "Disagree",
+		"partial": "Partly agree"
+	},
+	"analysis": {
+		"aiInterviews": "AI interviews: {{count}} people",
+		"chartCaption": "Qualitative estimates from AI interviews (high / medium / low), not statistics",
+		"confidence": "Confidence",
+		"dimensionsTitle": "Key dimensions",
+		"empty": "Once the study reaches the output phase, the theme matrix, dimension chart and evidence per theme appear here.",
+		"emptyLegacy": "This study was created before the analysis board and has no structured analysis.",
+		"emptyTitle": "No analysis yet",
+		"matrixHint": "Click a cell or theme to see quotes",
+		"matrixTitle": "Themes × personas",
+		"newThemesTrend": "New themes per respondent",
+		"notSaturated": "New themes are still appearing; consider more interviews",
+		"notValidated": "Real-person validation: not done",
+		"otherSegment": "Other",
+		"relatedHypotheses": "Related hypotheses: {{ids}}",
+		"saturated": "The last respondents added no new themes; themes are saturated",
+		"theme": "Theme",
+		"themesTitle": "Themes and evidence",
+		"webSources": "Web sources: {{count}}"
+	},
 	"common": {
 		"cancel": "Cancel",
 		"copied": "Copied",
@@ -8,13 +33,21 @@
 		"followUpPlaceholder": "Ask a follow-up or tell the AI what to change",
 		"newStudyPlaceholder": "What business question do you want to research? e.g. Why do trial users churn in week two? Enter to send; Shift + Enter for a new line"
 	},
+	"confidence": {
+		"high": "High",
+		"low": "Low",
+		"medium": "Medium",
+		"toValidate": "Needs real-person validation"
+	},
 	"console": {
+		"analysis": "Analysis",
 		"backToList": "Back to interviews",
 		"discussionN": "Discussion {{index}}",
 		"discussions": "Discussions",
 		"discussionsEmpty": "No focus group is planned for this study, or it has not started yet.",
 		"discussionsEmptyTitle": "No focus groups yet",
 		"files": "Report & files",
+		"hypotheses": "Hypotheses",
 		"interviews": "Interviews",
 		"interviewsEmpty": "Transcripts appear here once interviews start.",
 		"interviewsEmptyTitle": "Interviews haven't started",
@@ -30,6 +63,25 @@
 		"validation": "Validation",
 		"validationEmpty": "When the study finishes, a questionnaire for real users appears here so you can retest the findings.",
 		"validationEmptyTitle": "No questionnaire yet"
+	},
+	"design": {
+		"actual": "Actual",
+		"criteria": "Criteria",
+		"guideFixed": "{{count}} guide questions fixed",
+		"guideReview": "Guide self-check (before → after)",
+		"planned": "Planned",
+		"quota": "Sample quota",
+		"segment": "Segment",
+		"title": "Study design"
+	},
+	"evidence": {
+		"round": "Round {{index}}"
+	},
+	"guide": {
+		"doubleBarreled": "Double-barreled",
+		"hypothesisReveal": "Reveals hypothesis",
+		"jargon": "Too much jargon",
+		"leading": "Leading question"
 	},
 	"home": {
 		"delete": "Delete",
@@ -59,6 +111,24 @@
 			"validateText": "Get a questionnaire to ask real customers"
 		}
 	},
+	"hypothesis": {
+		"decision": "Decision this study informs",
+		"empty": "Once the plan is confirmed, the hypotheses and their criteria appear here.",
+		"emptyLegacy": "This study was created before hypotheses were tracked.",
+		"emptyTitle": "No hypotheses yet",
+		"progress": "{{decided}}/{{total}} judged",
+		"realPeople": "Real people",
+		"reason": "Why: ",
+		"refuteIf": "Refuted if",
+		"ruleHint": "AI-only evidence can at most be “partly supported”",
+		"supportIf": "Supported if",
+		"validationSummary": "Real-person check: "
+	},
+	"level": {
+		"high": "High",
+		"low": "Low",
+		"medium": "Medium"
+	},
 	"library": {
 		"clearSelection": "Clear",
 		"empty": "The library is empty. Run a study and the personas the AI builds are saved here.",
@@ -82,8 +152,10 @@
 		"title": "Persona library"
 	},
 	"persona": {
+		"aiSimulated": "AI-simulated",
 		"ask": "Ask a follow-up",
 		"askPrompt": "Please ask {{name}} a follow-up: ",
+		"contradictionsHint": "People rarely act exactly as they say; keeping contradictions makes answers more realistic.",
 		"dimension": {
 			"behavior": "Behavior",
 			"demographics": "Demographics",
@@ -93,6 +165,9 @@
 			"social": "Social ties",
 			"techAdoption": "Tech adoption"
 		},
+		"distribution": "Evidence-backed personas {{sourced}}/{{total}}",
+		"fieldInferred": "Inferred",
+		"fieldSourced": "Based on {{ids}}",
 		"interviewDone": "Interviewed",
 		"interviewFailed": "Failed",
 		"interviewRunning": "In progress",
@@ -105,6 +180,7 @@
 		"noEvidence": "No sources were recorded for this persona; it is inferred. Use its answers with care.",
 		"openSource": "Open source",
 		"section": {
+			"contradictions": "Contradictions",
 			"dimensions": "Profile",
 			"evidence": "Sources",
 			"layers": "Evidence layers"
@@ -135,6 +211,7 @@
 		"notStarted": "Not started",
 		"plan": "Design",
 		"report": "Outputs",
+		"validatedCount": "{{count}} people validated",
 		"validation": "Validation"
 	},
 	"phaseHint": {
@@ -144,6 +221,13 @@
 		"plan": "Proposes a study plan that is locked once you confirm it",
 		"report": "Combines interviews and sources into a report where every claim is sourced",
 		"validation": "Creates a questionnaire to retest key findings with real people"
+	},
+	"quality": {
+		"agreement": "{{count}} agreeable answers",
+		"highInferred": "Much of this interview is inferred, so it carries less weight in the report.",
+		"highInferredShort": "Inferred",
+		"inferred": "Inferred content {{percent}}%",
+		"stories": "{{count}} concrete stories"
 	},
 	"scenario": {
 		"brand": "Brand positioning",
@@ -158,6 +242,12 @@
 		"contentPrompt": "Research what content [target audience] like and where they get information, then suggest a content strategy.",
 		"product": "Product R&D",
 		"productPrompt": "We plan to build [product direction]. Research the target users' needs and propose a few product concepts worth validating."
+	},
+	"stance": {
+		"mixed": "Mixed",
+		"notMentioned": "Not mentioned",
+		"oppose": "Oppose",
+		"support": "Support"
 	},
 	"state": {
 		"fileLoadFailed": "Could not read the file. Please try again later.",
@@ -224,6 +314,7 @@
 	"transcript": {
 		"failed": "This interview did not finish",
 		"inProgress": "Interview in progress…",
+		"inferredHint": "Inferred by the AI from the persona, not from sources",
 		"keyFindings": "Key findings",
 		"moderator": "Moderator",
 		"quotes": "Quotes",
@@ -231,6 +322,26 @@
 		"summary": "Summary"
 	},
 	"validation": {
-		"copy": "Copy questionnaire"
+		"agreement": "Agreement",
+		"ai": "AI finding",
+		"byHypothesis": "By hypothesis",
+		"byQuestion": "By question",
+		"copy": "Copy questionnaire",
+		"csv": "Questionnaire sheet",
+		"human": "Real people",
+		"hypothesis": "Hypothesis",
+		"notYet": "No real answers yet. Send the questionnaire to 8–15 real customers, then upload the answers to compare.",
+		"questionnaire": "Validation questionnaire",
+		"upload": "Upload real answers",
+		"uploadHint": "Attach the answers in the composer (Excel, CSV, survey export, notes or screenshots), then send",
+		"uploadPrompt": "I uploaded answers from real people. Compare them with the AI findings point by point and tell me what is confirmed and what needs correcting.",
+		"validatedCount": "Answers from {{count}} real people"
+	},
+	"verdict": {
+		"insufficient": "Insufficient",
+		"mixed": "Partly supported",
+		"pending": "Pending",
+		"refuted": "Refuted",
+		"supported": "Supported"
 	}
 }

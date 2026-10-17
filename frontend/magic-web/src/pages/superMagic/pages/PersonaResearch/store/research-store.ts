@@ -20,6 +20,8 @@ import {
 	getAttachmentPath,
 	listLibraryFiles,
 	parseDiscussionFile,
+	parseSynthesisFile,
+	parseValidationResultsFile,
 	parseInterviewFile,
 	parsePanelFile,
 	parsePersonaFile,
@@ -34,6 +36,8 @@ import type {
 	PersonaFile,
 	ResearchFileRef,
 	StudyFile,
+	SynthesisFile,
+	ValidationResultsFile,
 } from "../types"
 
 /** One special project per user holds every study (topic) and the shared persona library. */
@@ -68,6 +72,10 @@ export class PersonaResearchStore {
 	studyPanel: PanelFile | null = null
 	interviews: ResearchFileRef<InterviewFile>[] = []
 	discussions: ResearchFileRef<DiscussionFile>[] = []
+	/** Theme coding and dimensions behind the analysis board; null before the report phase. */
+	synthesis: SynthesisFile | null = null
+	/** Real-person answers compared with the AI verdicts; null until the user uploads answers. */
+	validationResults: ValidationResultsFile | null = null
 	/** True when study.json exists but could not be parsed (half-written or wrong schema). */
 	studyFileInvalid = false
 	/** Bumped after each content reload so list rows re-read titles from the parse cache. */
@@ -139,6 +147,11 @@ export class PersonaResearchStore {
 	studyFileOf(topic: Topic): StudyFile | null {
 		const dir = findStudyDir(this.attachmentList, topic.id)
 		return dir ? this.peekStudy(`${dir}study.json`) : null
+	}
+
+	/** Why the study picked this persona (study panel.json selection), if recorded. */
+	selectionReasonOf(personaId: string): string | undefined {
+		return this.studyPanel?.selection?.find((item) => item.persona_id === personaId)?.reason
 	}
 
 	personaById(personaId: string): PersonaFile | null {
@@ -364,9 +377,14 @@ export class PersonaResearchStore {
 		const panelItems = listLibraryFiles(this.attachmentList, PANELS_DIR)
 		const study = this.studyAttachments
 		const studyItems = study
-			? [study.study, study.panel, ...study.interviews, ...study.discussions].filter(
-					(item): item is AttachmentItem => item !== null,
-				)
+			? [
+					study.study,
+					study.panel,
+					study.synthesis,
+					study.validationResults,
+					...study.interviews,
+					...study.discussions,
+				].filter((item): item is AttachmentItem => item !== null)
 			: []
 		// Study titles for the list come from every study.json, not only the selected one.
 		const studyFileItems = this.topicStore.topics
@@ -388,6 +406,14 @@ export class PersonaResearchStore {
 			this.studyPanel = panelResult?.ok ? panelResult.data : null
 			this.interviews = study ? this.collectRefs(study.interviews, parseInterviewFile) : []
 			this.discussions = study ? this.collectRefs(study.discussions, parseDiscussionFile) : []
+			const synthesisResult = study?.synthesis
+				? this.getParsed(study.synthesis, parseSynthesisFile)
+				: null
+			this.synthesis = synthesisResult?.ok ? synthesisResult.data : null
+			const validationResult = study?.validationResults
+				? this.getParsed(study.validationResults, parseValidationResultsFile)
+				: null
+			this.validationResults = validationResult?.ok ? validationResult.data : null
 			this.contentVersion += 1
 		})
 	}

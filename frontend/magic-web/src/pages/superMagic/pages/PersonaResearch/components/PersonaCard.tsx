@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, Loader2, Quote } from "lucide-react"
+import { CircleAlert, CircleCheck, Loader2, Quote, Target } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/utils/cn"
@@ -10,6 +10,8 @@ interface PersonaCardProps {
 	interviewStatus?: InterviewFile["status"]
 	/** First quote from this persona's interview, shown as a teaser once available. */
 	quote?: string
+	/** Why the current study picked this persona (study panel selection). */
+	reason?: string
 	selectable?: boolean
 	selected?: boolean
 	onSelectedChange?: (selected: boolean) => void
@@ -28,6 +30,7 @@ export default function PersonaCard({
 	persona,
 	interviewStatus,
 	quote,
+	reason,
 	selectable = false,
 	selected = false,
 	onSelectedChange,
@@ -85,6 +88,12 @@ export default function PersonaCard({
 						) : null}
 					</span>
 				</span>
+				{reason ? (
+					<span className="flex gap-1.5 text-xs leading-5 text-muted-foreground">
+						<Target className="mt-0.5 size-3 shrink-0" />
+						<span className="line-clamp-2">{reason}</span>
+					</span>
+				) : null}
 				{quote ? (
 					<span className="flex gap-1.5 rounded-lg bg-muted/60 px-2.5 py-2 text-xs leading-5 text-foreground/80">
 						<Quote className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
@@ -105,7 +114,9 @@ export default function PersonaCard({
 				) : null}
 			</button>
 			<div className="mt-auto flex items-center justify-between border-t border-border pt-2 text-[11px] text-muted-foreground">
-				<span>{tierLabel}</span>
+				<span>
+					{tierLabel} · {t("persona.aiSimulated")}
+				</span>
 				{interviewStatus ? <InterviewStatusChip status={interviewStatus} /> : null}
 			</div>
 		</div>

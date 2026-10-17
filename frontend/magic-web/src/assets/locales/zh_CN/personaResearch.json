@@ -1,4 +1,29 @@
 {
+	"agreement": {
+		"agree": "一致",
+		"disagree": "不一致",
+		"partial": "部分一致"
+	},
+	"analysis": {
+		"aiInterviews": "AI 访谈 {{count}} 人",
+		"chartCaption": "基于 AI 访谈的定性估计（高 / 中 / 低），非统计结果",
+		"confidence": "置信度",
+		"dimensionsTitle": "关键维度对比",
+		"empty": "研究进入产出阶段后，这里会出现主题矩阵、维度图和每个主题的证据。",
+		"emptyLegacy": "这项研究创建于分析看板之前，没有结构化分析数据。",
+		"emptyTitle": "还没有分析结果",
+		"matrixHint": "点击色块或主题查看原话",
+		"matrixTitle": "主题 × 人设矩阵",
+		"newThemesTrend": "每位受访者带来的新主题数",
+		"notSaturated": "仍有新主题出现，建议扩大样本或补充访谈",
+		"notValidated": "真人验证：未做",
+		"otherSegment": "其他",
+		"relatedHypotheses": "关联假设：{{ids}}",
+		"saturated": "最后几位受访者没有带来新主题，主题已饱和",
+		"theme": "主题",
+		"themesTitle": "主题与证据",
+		"webSources": "网页来源 {{count}} 条"
+	},
 	"common": {
 		"cancel": "取消",
 		"copied": "已复制",
@@ -8,13 +33,21 @@
 		"followUpPlaceholder": "继续追问，或告诉 AI 需要调整什么",
 		"newStudyPlaceholder": "你想研究什么商业问题？例如：试用用户为什么在第二周流失？ Enter 发送，Shift + Enter 换行"
 	},
+	"confidence": {
+		"high": "高",
+		"low": "低",
+		"medium": "中",
+		"toValidate": "待真人验证"
+	},
 	"console": {
+		"analysis": "分析",
 		"backToList": "返回访谈列表",
 		"discussionN": "讨论 {{index}}",
 		"discussions": "讨论",
 		"discussionsEmpty": "这项研究没有安排焦点小组，或讨论还没开始。",
 		"discussionsEmptyTitle": "还没有焦点小组",
 		"files": "报告与文件",
+		"hypotheses": "假设",
 		"interviews": "访谈",
 		"interviewsEmpty": "访谈开始后，逐字稿会显示在这里。",
 		"interviewsEmptyTitle": "访谈还没开始",
@@ -30,6 +63,25 @@
 		"validation": "真人验证",
 		"validationEmpty": "研究完成后，这里会生成一份真人验证问卷，可以直接发给真实用户复测。",
 		"validationEmptyTitle": "问卷还没生成"
+	},
+	"design": {
+		"actual": "实际",
+		"criteria": "条件",
+		"guideFixed": "提纲自检改掉 {{count}} 处",
+		"guideReview": "提纲自检（改前 → 改后）",
+		"planned": "计划",
+		"quota": "样本配额",
+		"segment": "人群",
+		"title": "研究设计"
+	},
+	"evidence": {
+		"round": "第 {{index}} 轮"
+	},
+	"guide": {
+		"doubleBarreled": "一问两事",
+		"hypothesisReveal": "暴露假设",
+		"jargon": "术语太多",
+		"leading": "诱导性提问"
 	},
 	"home": {
 		"delete": "删除",
@@ -59,6 +111,24 @@
 			"validateText": "自动生成问卷，拿去问真实用户"
 		}
 	},
+	"hypothesis": {
+		"decision": "这项研究要支持的决定",
+		"empty": "研究计划确认后，这里会列出要验证的假设和判定标准。",
+		"emptyLegacy": "这项研究创建于假设功能之前，没有记录假设。",
+		"emptyTitle": "还没有假设",
+		"progress": "已判定 {{decided}}/{{total}} 条",
+		"realPeople": "真人验证",
+		"reason": "判定理由：",
+		"refuteIf": "什么情况算推翻",
+		"ruleHint": "只有 AI 访谈支持的结论，最高判“部分支持”",
+		"supportIf": "什么情况算支持",
+		"validationSummary": "真人验证："
+	},
+	"level": {
+		"high": "高",
+		"low": "低",
+		"medium": "中"
+	},
 	"library": {
 		"clearSelection": "清除选择",
 		"empty": "人设库还是空的。做一次研究，AI 构建的人设会自动存到这里。",
@@ -82,8 +152,10 @@
 		"title": "人设库"
 	},
 	"persona": {
+		"aiSimulated": "AI 模拟",
 		"ask": "追问 TA",
 		"askPrompt": "请继续追问 {{name}}：",
+		"contradictionsHint": "人本来就会言行不一，保留这些矛盾能让回答更真实。",
 		"dimension": {
 			"behavior": "行为",
 			"demographics": "人口特征",
@@ -93,6 +165,9 @@
 			"social": "社交关系",
 			"techAdoption": "技术接受度"
 		},
+		"distribution": "有依据的人设 {{sourced}}/{{total}}",
+		"fieldInferred": "推测",
+		"fieldSourced": "依据 {{ids}}",
 		"interviewDone": "已访谈",
 		"interviewFailed": "访谈失败",
 		"interviewRunning": "访谈中",
@@ -105,6 +180,7 @@
 		"noEvidence": "这个人设没有记录来源，属于推测生成，结论请谨慎使用。",
 		"openSource": "打开来源",
 		"section": {
+			"contradictions": "矛盾点",
 			"dimensions": "画像",
 			"evidence": "来源",
 			"layers": "证据层"
@@ -135,6 +211,7 @@
 		"notStarted": "未开始",
 		"plan": "研究设计",
 		"report": "研究产出",
+		"validatedCount": "已验证 {{count}} 人",
 		"validation": "真人验证"
 	},
 	"phaseHint": {
@@ -144,6 +221,13 @@
 		"plan": "给出研究计划，经你确认后锁定",
 		"report": "汇总访谈和资料，生成每条结论都有出处的报告",
 		"validation": "生成问卷，用真实用户复测关键结论"
+	},
+	"quality": {
+		"agreement": "附和 {{count}} 次",
+		"highInferred": "这场访谈推测内容较多，报告中已降低它的权重。",
+		"highInferredShort": "推测多",
+		"inferred": "推测内容 {{percent}}%",
+		"stories": "具体经历 {{count}} 个"
 	},
 	"scenario": {
 		"brand": "品牌定位",
@@ -158,6 +242,12 @@
 		"contentPrompt": "帮我研究【目标人群】喜欢什么样的内容、在哪些平台获取信息，给出内容策略建议。",
 		"product": "产品研发",
 		"productPrompt": "我们计划做【产品方向】，帮我研究目标用户的需求，并提出几个值得验证的产品概念。"
+	},
+	"stance": {
+		"mixed": "混合",
+		"notMentioned": "未提及",
+		"oppose": "反对",
+		"support": "支持"
 	},
 	"state": {
 		"fileLoadFailed": "文件读取失败，请稍后重试",
@@ -224,6 +314,7 @@
 	"transcript": {
 		"failed": "这场访谈没有完成",
 		"inProgress": "访谈进行中…",
+		"inferredHint": "这部分是 AI 根据人设推测的，不来自资料",
 		"keyFindings": "关键发现",
 		"moderator": "主持人",
 		"quotes": "金句",
@@ -231,6 +322,26 @@
 		"summary": "摘要"
 	},
 	"validation": {
-		"copy": "复制问卷"
+		"agreement": "一致性",
+		"ai": "AI 结论",
+		"byHypothesis": "按假设对照",
+		"byQuestion": "按题目对照",
+		"copy": "复制问卷",
+		"csv": "问卷表格",
+		"human": "真人结论",
+		"hypothesis": "假设",
+		"notYet": "还没有真人回答。把问卷发给 8–15 位真实用户，收回后上传即可对照。",
+		"questionnaire": "真人验证问卷",
+		"upload": "上传真人回答",
+		"uploadHint": "在输入框中添加附件（Excel、CSV、问卷导出、访谈笔记或截图都可以），然后发送",
+		"uploadPrompt": "我上传了真人回答，请和 AI 研究结论逐条对照，告诉我哪些被证实、哪些需要修正。",
+		"validatedCount": "已收回 {{count}} 位真人的回答"
+	},
+	"verdict": {
+		"insufficient": "证据不足",
+		"mixed": "部分支持",
+		"pending": "待验证",
+		"refuted": "推翻",
+		"supported": "支持"
 	}
 }
