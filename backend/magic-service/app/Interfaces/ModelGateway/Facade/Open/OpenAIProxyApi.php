@@ -72,10 +72,18 @@ class OpenAIProxyApi extends AbstractOpenApi
         $accessToken = $this->getAccessToken();
         $withInfo = (bool) $this->request->input('with_info', false);
         $withDynamicModels = (bool) $this->request->input('with_dynamic_models', false);
+        $withOrganizationModels = (bool) $this->request->input('with_organization_models', false);
         $type = ModelListType::fromRequest($this->request->input('type', ''));
         $businessParams = $this->getBusinessParamsFromContext();
 
-        $list = $this->llmAppService->models($accessToken, $withInfo, $type, $businessParams, withDynamicModels: $withDynamicModels);
+        $list = $this->llmAppService->models(
+            $accessToken,
+            $withInfo,
+            $type,
+            $businessParams,
+            withDynamicModels: $withDynamicModels,
+            withOrganizationModels: $withOrganizationModels,
+        );
         return LLMAssembler::createModels($list, $withInfo);
     }
 
