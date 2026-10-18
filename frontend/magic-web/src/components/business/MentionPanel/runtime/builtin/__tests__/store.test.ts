@@ -307,6 +307,7 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 		mentionPanelStore.setCurrentTabs([])
 		mentionPanelStore.clearActiveCanvasElementsContext()
 		mentionPanelStore.setPinnedCurrentMicroApp(null)
+		mentionPanelStore.setPinnedSceneCatalog(null)
 
 		vi.mocked(CrewApi.getMentionSkills).mockResolvedValue([])
 
@@ -367,6 +368,104 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 				name: "Todo App",
 				data: { app_id: "app-1", app_name: "Todo App" },
 			})
+		})
+	})
+
+	describe("scene catalog", () => {
+		const reportItem: MentionItem = {
+			id: "f-report",
+			type: MentionItemType.PROJECT_FILE,
+			name: "report.html",
+			icon: "html",
+			data: {
+				file_id: "f-report",
+				file_name: "report.html",
+				file_path: "studies/s1/report.html",
+				file_extension: "html",
+			},
+		}
+		const personaItem: MentionItem = {
+			id: "f-wang",
+			type: MentionItemType.PROJECT_FILE,
+			name: "王浩",
+			description: "通勤咖啡重度用户",
+			icon: "json",
+			data: {
+				file_id: "f-wang",
+				file_name: "王浩",
+				file_path: "personas/p-wang.json",
+				file_extension: "json",
+			},
+		}
+
+		function pinStudy(groups: { personas?: MentionItem[]; outputs?: MentionItem[] }) {
+			mentionPanelStore.setPinnedSceneCatalog({
+				name: "本次研究",
+				groups: [
+					{ id: "personas", title: "受访人设", items: groups.personas ?? [] },
+					{ id: "outputs", title: "研究产物", items: groups.outputs ?? [] },
+				],
+			})
+		}
+
+		it("pins the entry first, above the pinned micro app", async () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+			mentionPanelStore.setPinnedCurrentMicroApp({ appId: "app-1", appName: "Todo App" })
+			pinStudy({ personas: [personaItem] })
+
+			const items = await getDefaultItems()
+			expect(items[0]).toMatchObject({
+				id: "scene-catalog",
+				type: "scene_catalog",
+				name: "本次研究",
+				hasChildren: true,
+			})
+			expect(items[1]).toMatchObject({ id: "app-1" })
+		})
+
+		it("hides the entry when every group is empty", async () => {
+			pinStudy({})
+
+			const items = await getDefaultItems()
+			expect(items.some((item) => item.id === "scene-catalog")).toBe(false)
+		})
+
+		it("lists a title row per non-empty group", async () => {
+			pinStudy({ outputs: [reportItem] })
+
+			const result = await mentionPanelStore.dispatch({
+				kind: "catalog",
+				catalogId: MentionPanelCatalogId.SCENE_CATALOG,
+			})
+			expect(result.items?.map((item) => [item.type, item.name])).toEqual([
+				[MentionItemType.TITLE, "研究产物"],
+				[MentionItemType.PROJECT_FILE, "report.html"],
+			])
+			expect(result.items?.[1]?.tags).toContain("scene-catalog")
+		})
+
+		it("searches names and taglines, keeping one row per file", async () => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+			projectFilesStore.setWorkspaceFileTree([
+				{
+					type: "file",
+					file_id: "f-report",
+					file_name: "report.html",
+					file_extension: "html",
+					relative_file_path: "/studies/s1/report.html",
+					project_id: "test-project",
+					source: AttachmentSource.PROJECT_DIRECTORY,
+					children: [],
+				},
+			])
+			pinStudy({ personas: [personaItem], outputs: [reportItem] })
+
+			const reports = (await searchItems("report")).filter((item) => item.id === "f-report")
+			expect(reports).toHaveLength(1)
+			expect(reports[0]?.tags).toContain("scene-catalog")
+
+			expect((await searchItems("王浩")).map((item) => item.id)).toContain("f-wang")
+			expect((await searchItems("通勤咖啡")).map((item) => item.id)).toContain("f-wang")
 		})
 	})
 

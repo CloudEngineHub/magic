@@ -29,6 +29,7 @@ const DEFAULT_STATE_TRANSITIONS: Record<PanelState, Record<string, StateTransiti
 		[BuiltinItemId.SKILLS]: buildCatalogTransition(MentionPanelCatalogId.SKILLS),
 		[BuiltinItemId.TOOLS]: buildCatalogTransition(MentionPanelCatalogId.TOOLS),
 		[BuiltinItemId.UPLOAD_FILES]: buildCatalogTransition(MentionPanelCatalogId.UPLOAD_FILES),
+		[BuiltinItemId.SCENE_CATALOG]: buildCatalogTransition(MentionPanelCatalogId.SCENE_CATALOG),
 	},
 	[PanelState.SEARCH]: {},
 	[PanelState.FOLDER]: {},

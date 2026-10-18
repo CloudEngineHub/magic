@@ -455,6 +455,23 @@ export interface MentionItem<T extends MentionPanelItemTypeValue = MentionPanelI
 	package_name?: string // Package name
 }
 
+/** One labelled group inside a scene catalog, e.g. "Interviewed personas". */
+export interface MentionSceneCatalogGroup {
+	id: string
+	title: string
+	items: MentionItem[]
+}
+
+/**
+ * Entry a page pins at the top of its own @ panel, e.g. "This study" on the research page.
+ * Items are ordinary mention items (usually project_file), so sending needs no new type.
+ */
+export interface MentionSceneCatalog {
+	name: string
+	icon?: ReactNode
+	groups: MentionSceneCatalogGroup[]
+}
+
 export interface MentionCoreItem<
 	T extends MentionCoreItemType = MentionCoreItemType,
 > extends MentionItem<T> {}

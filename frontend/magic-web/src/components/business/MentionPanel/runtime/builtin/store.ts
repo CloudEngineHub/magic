@@ -2,7 +2,7 @@ import { makeAutoObservable } from "mobx"
 import { createDefaultItems } from "./default-items"
 import { MentionItemType, PanelState } from "../../types"
 import { MentionPanelBuiltinItemId as BuiltinItemId } from "./catalog-ids"
-import type { MentionData, MentionItem, McpMentionData } from "../../types"
+import type { MentionData, MentionItem, McpMentionData, MentionSceneCatalog } from "../../types"
 import type {
 	CatalogRequest,
 	EffectRequest,
@@ -31,6 +31,7 @@ import { MentionPanelSkillsStore } from "./domains/skills"
 import { MentionPanelTabsStore } from "./domains/tabs"
 import { MentionPanelToolsStore } from "./domains/tools"
 import { MentionPanelMicroAppsStore, createMicroAppMentionItem } from "./domains/micro-apps"
+import { MentionPanelSceneCatalogStore } from "./domains/scene-catalog"
 import { MentionPanelUploadFilesStore } from "./domains/upload-files"
 import { MentionPanelWorkspaceFilesStore } from "./domains/workspace-files"
 import projectFilesStore from "@/stores/projectFiles"
@@ -59,6 +60,7 @@ export class MentionPanelStore {
 	private readonly tabsStore: MentionPanelTabsStore
 	private readonly historyStore: MentionPanelHistoryStore
 	private readonly canvasElementsStore: MentionPanelCanvasElementsStore
+	private readonly sceneCatalogStore: MentionPanelSceneCatalogStore
 	pinnedRootItems: MentionItem[] = []
 
 	constructor(projectFilesStore: ProjectFilesStore) {
@@ -81,6 +83,7 @@ export class MentionPanelStore {
 			getCurrentTabs: () => this.tabsStore.currentTabs,
 		})
 		this.canvasElementsStore = new MentionPanelCanvasElementsStore()
+		this.sceneCatalogStore = new MentionPanelSceneCatalogStore()
 		makeAutoObservable<MentionPanelStore, "projectFilesStore">(
 			this,
 			{ projectFilesStore: false },
@@ -159,6 +162,14 @@ export class MentionPanelStore {
 	setPinnedCurrentMicroApp(app: { appId: string; appName?: string } | null) {
 		const item = app ? createMicroAppMentionItem(app) : null
 		this.pinnedRootItems = item ? [item] : []
+	}
+
+	/**
+	 * Pins a scene's own entry (e.g. "This study") above the root list of this store instance;
+	 * null removes it. Selections stay ordinary mentions such as project_file.
+	 */
+	setPinnedSceneCatalog(catalog: MentionSceneCatalog | null) {
+		this.sceneCatalogStore.setCatalog(catalog)
 	}
 
 	setSkillQueryContext(topicMode?: string, agentCode?: string) {
@@ -292,6 +303,7 @@ export class MentionPanelStore {
 			tabsStore: this.tabsStore,
 			toolsStore: this.toolsStore,
 			microAppsStore: this.microAppsStore,
+			sceneCatalogStore: this.sceneCatalogStore,
 			uploadFilesStore: this.uploadFilesStore,
 			workspaceFilesStore: this.workspaceFilesStore,
 		}
@@ -339,7 +351,11 @@ export class MentionPanelStore {
 	}
 
 	private prependPinnedRootItems(items: MentionItem[]): MentionItem[] {
-		return prependPinnedRootItems(items, this.pinnedRootItems)
+		const sceneRootItem = this.sceneCatalogStore.getRootItem()
+		return prependPinnedRootItems(
+			items,
+			sceneRootItem ? [sceneRootItem, ...this.pinnedRootItems] : this.pinnedRootItems,
+		)
 	}
 
 	private injectCanvasElementsRootItem(items: MentionItem[], t: I18nTexts): MentionItem[] {

@@ -165,6 +165,7 @@ When the user uploads real respondents' answers (spreadsheet, CSV, survey export
 
 - Before answering, read the existing study files (`study.json`, `plan.md`, transcripts, report) instead of relying on memory.
 - "Ask @persona ..." / "追问 @persona": run additional rounds for that persona with `persona_chat` (directly with the transcript's `transcript_path` and next `round_number`, or through one interviewer sub-agent for several rounds) within the remaining round limit, close the transcript again with `finish_persona_transcript`, and update the report section the new answers affect. Say which answers are new.
+- When the user mentions a persona file (`personas/<id>.json`) or that persona's transcript (`interviews/<id>.json`) and asks what the persona would think, say, or do, treat it as the follow-up above and get the answer from `persona_chat`. Never answer in the persona's voice yourself; questions about the file itself (summarize, compare, quote) are answered from the file.
 - A follow-up that changes the locked plan's scope, audience, or method needs a new study.
 
 ## Platform Data Skills (When Available)

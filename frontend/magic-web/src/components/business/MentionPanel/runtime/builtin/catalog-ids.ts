@@ -15,6 +15,8 @@ export const MentionPanelBuiltinItemId = {
 	CANVAS_ELEMENTS: "canvas-elements",
 	HISTORIES: "histories",
 	TABS: "tabs",
+	/** Entry a page pins for its own context, e.g. "This study" on the research page. */
+	SCENE_CATALOG: "scene-catalog",
 } as const
 
 export type MentionPanelBuiltinItemId =
@@ -31,6 +33,7 @@ export const MentionPanelCatalogId = {
 	UPLOAD_FILES: MentionPanelBuiltinItemId.UPLOAD_FILES,
 	HISTORIES: MentionPanelBuiltinItemId.HISTORIES,
 	TABS: MentionPanelBuiltinItemId.TABS,
+	SCENE_CATALOG: MentionPanelBuiltinItemId.SCENE_CATALOG,
 } as const
 
 export type MentionPanelCatalogId =

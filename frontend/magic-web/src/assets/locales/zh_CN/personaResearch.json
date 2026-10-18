@@ -341,6 +341,13 @@
 		"tierAll": "全部",
 		"title": "人设库"
 	},
+	"mention": {
+		"interviewOf": "{{name}} · 访谈记录",
+		"interviews": "访谈记录",
+		"outputs": "研究产物",
+		"personas": "受访人设",
+		"study": "本次研究"
+	},
 	"persona": {
 		"aiSimulated": "AI 模拟",
 		"ask": "追问 TA",

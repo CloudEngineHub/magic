@@ -23,6 +23,7 @@ import {
 import { userStore } from "@/models/user"
 import { usePersonaResearchStore } from "../context"
 import { withResearchTopicFields } from "../store/research-store"
+import { useResearchMentionCatalog } from "./useResearchMentionCatalog"
 
 interface UseResearchEditorOptions {
 	variant: "desktop" | "mobile"
@@ -84,6 +85,8 @@ export function useResearchEditor({
 		topicMode: TopicMode.Default,
 		topicModelStore: store.topicModelStore,
 	})
+
+	useResearchMentionCatalog(selectedTopic)
 
 	const { handleInterrupt } = useTaskInterrupt({
 		selectedTopic: selectedTopic ?? null,

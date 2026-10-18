@@ -343,6 +343,13 @@
 		"tierAll": "All",
 		"title": "Persona library"
 	},
+	"mention": {
+		"interviewOf": "{{name}} · interview",
+		"interviews": "Interview transcripts",
+		"outputs": "Study outputs",
+		"personas": "Interviewed personas",
+		"study": "This study"
+	},
 	"persona": {
 		"aiSimulated": "AI-simulated",
 		"ask": "Ask a follow-up",
