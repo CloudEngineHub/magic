@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { collectStudyAttachments } from "../services/researchFiles"
-import { buildResearchMentionCatalog } from "../services/researchMentionCatalog"
+import {
+	buildReportTemplateCatalog,
+	buildResearchMentionCatalog,
+} from "../services/researchMentionCatalog"
 import type { PersonaFile } from "../types"
 
 const file = (path: string): AttachmentItem => ({
@@ -122,6 +125,43 @@ describe("buildResearchMentionCatalog", () => {
 			name: "研究报告",
 			description: "report.html",
 			data: { file_name: "研究报告", file_path: "studies/x/report.html" },
+		})
+	})
+})
+
+describe("report template mentions", () => {
+	const templates = {
+		files: [file("templates/voices.html"), file("templates/brand.html")],
+		title: "报告模板",
+		nameOf: (item: AttachmentItem) =>
+			item.file_name === "voices.html" ? "人声（默认）" : "brand",
+	}
+
+	it("adds a templates group to a study when passed", () => {
+		const study = collectStudyAttachments([file("studies/x/report.html")], "studies/x/")
+		const catalog = buildResearchMentionCatalog({
+			study,
+			reportTemplates: templates,
+			personas: [],
+			interviewPersonaIdByFileId: new Map(),
+			personaNameById: () => undefined,
+			labels,
+			renderPersonaIcon: () => null,
+		})
+		const group = catalog.groups.find((item) => item.id === "reportTemplates")
+		expect(group?.items.map((item) => [item.name, item.description])).toEqual([
+			["人声（默认）", "voices.html"],
+			["brand", "brand.html"],
+		])
+	})
+
+	it("builds a templates-only entry for composers without a study", () => {
+		const catalog = buildReportTemplateCatalog(templates, { projectId: "project-1" })
+		expect(catalog.name).toBe("报告模板")
+		expect(catalog.groups).toHaveLength(1)
+		expect(catalog.groups[0].items[1]).toMatchObject({
+			type: "project_file",
+			data: { file_path: "templates/brand.html", project_id: "project-1" },
 		})
 	})
 })

@@ -3,6 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import {
 	ArrowRight,
 	ClipboardCheck,
+	LayoutTemplate,
 	ListChecks,
 	MessageSquareQuote,
 	Quote,
@@ -42,14 +43,23 @@ import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
 import { useResearchTemplates } from "../hooks/useResearchTemplates"
 import PersonaAvatar from "../components/PersonaAvatar"
-import ResearchComposerOptions from "../components/ResearchComposerOptions"
+import ResearchComposerOptions, {
+	type ReportTemplateOption,
+} from "../components/ResearchComposerOptions"
 import ResearchVoiceCard from "../components/ResearchVoiceCard"
 import {
 	DEFAULT_RESEARCH_OPTIONS,
 	parseResearchOptions,
+	readSavedReportTemplate,
 	researchSettingsLine,
+	saveReportTemplateChoice,
 	type ResearchOptions,
 } from "../services/researchOptions"
+import {
+	DEFAULT_REPORT_TEMPLATE_PATH,
+	getAttachmentPath,
+	reportTemplateName,
+} from "../services/researchFiles"
 import StudyListItem from "../components/StudyListItem"
 import { PRESSABLE } from "../components/surface"
 
@@ -82,6 +92,29 @@ function ResearchHomePage() {
 		}
 	})
 
+	// Report template for new studies. The default (null) is left to the agent; a remembered
+	// template that has since been deleted falls back to it.
+	const [savedTemplate, setSavedTemplate] = useState(readSavedReportTemplate)
+	const templateChoices = store.reportTemplates
+		.map((item) => getAttachmentPath(item))
+		.filter((path) => path !== DEFAULT_REPORT_TEMPLATE_PATH)
+		.map((path) => ({ path, label: reportTemplateName(path) }))
+	const reportTemplate = templateChoices.some((item) => item.path === savedTemplate)
+		? savedTemplate
+		: null
+	const openTemplates = useMemoizedFn(() =>
+		navigate({ name: RouteName.PersonaResearchTemplates }),
+	)
+	const reportTemplateOption: ReportTemplateOption = {
+		value: reportTemplate,
+		templates: templateChoices,
+		onChange: (path) => {
+			setSavedTemplate(path)
+			saveReportTemplateChoice(path)
+		},
+		onManage: openTemplates,
+	}
+
 	const { editorContext, editorNodes, fillComposer } = useResearchEditor({
 		variant: isMobile ? "mobile" : "desktop",
 		selectedTopic: null,
@@ -89,7 +122,7 @@ function ResearchHomePage() {
 		messagesLength: 0,
 		onStudyStarted: openStudy,
 		// Fixed settings travel as one 【研究设置】 line at the end of the first message.
-		appendToMessage: useMemoizedFn(() => researchSettingsLine(options)),
+		appendToMessage: useMemoizedFn(() => researchSettingsLine(options, reportTemplate)),
 		bareContainer: true,
 		onEditorReady: useMemoizedFn(() => {
 			const text = store.consumePendingComposerText()
@@ -157,6 +190,21 @@ function ResearchHomePage() {
 						{libraryPersonas.length}
 					</span>
 				</button>
+				<button
+					type="button"
+					className={cn(
+						"flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 text-[13px] text-foreground outline-none ring-1 ring-border transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+						PRESSABLE,
+					)}
+					aria-label={t("home.reportTemplatesLabel")}
+					onClick={openTemplates}
+				>
+					<LayoutTemplate className="size-4" />
+					{isMobile ? null : t("home.reportTemplatesLabel")}
+					<span className="font-mono text-xs text-muted-foreground">
+						{store.reportTemplates.length}
+					</span>
+				</button>
 			</div>
 			<div
 				className={cn(
@@ -202,6 +250,7 @@ function ResearchHomePage() {
 							<ResearchComposerOptions
 								value={options}
 								onChange={updateOptions}
+								reportTemplate={reportTemplateOption}
 								className="px-2.5 pb-3 pt-1.5"
 								trailing={
 									<button

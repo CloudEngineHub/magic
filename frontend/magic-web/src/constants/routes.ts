@@ -111,6 +111,7 @@ export const enum RoutePath {
 	MicroAppShare = "/micro-app/:appId",
 	PersonaResearch = "/super/research",
 	PersonaResearchPersonas = "/super/research/personas",
+	PersonaResearchTemplates = "/super/research/templates",
 	PersonaResearchStudy = "/super/research/:topicId",
 	SuperAssistant = "/super/assistant",
 	CrewMarket = "/market",

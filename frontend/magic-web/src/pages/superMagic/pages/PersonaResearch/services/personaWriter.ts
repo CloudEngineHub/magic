@@ -2,15 +2,16 @@ import { MagicFSApi, SuperMagicApi } from "@/apis"
 import { getFileContentsByIds } from "@/pages/superMagic/utils/api"
 import type { PersonaResearchStore } from "../store/research-store"
 import type { PersonaFile, ResearchFileRef } from "../types"
-import { PERSONAS_DIR, getAttachmentPath, parsePersonaFile } from "./researchFiles"
+import { createProjectTextFile, deleteProjectFile } from "./projectFileWriter"
+import { PERSONAS_DIR, parsePersonaFile } from "./researchFiles"
 
 /**
  * Writes personas the user creates or edits in the persona library.
  *
  * The agent remains the main writer of personas/. The page writes only whole persona files it
  * created or that the user is editing, using the same file APIs as other editors:
- * create file → save content → confirm success_files, then re-read the project file list so
- * the library shows the server's state instead of a local copy.
+ * new files go through projectFileWriter (create → save → confirm → refresh); edits check the
+ * revision first so an agent write in between is never overwritten.
  *
  * | Outcome   | Meaning                                                                 |
  * | saved     | the server confirmed the content                                         |
@@ -22,69 +23,19 @@ export type PersonaWriteOutcome = "saved" | "conflict" | "failed"
 /** Server error code for a stale expected_revision (same as the PPT editor). */
 const REVISION_CONFLICT_CODE = 51152
 
-interface CreatedFile {
-	file_id?: string | number
-	id?: string | number
-}
-
-const createdId = (file: CreatedFile | undefined) => {
-	const id = file?.file_id ?? file?.id
-	return id === undefined || id === null ? null : String(id)
-}
-
 const serialize = (persona: PersonaFile) => `${JSON.stringify(persona, null, 2)}\n`
-
-/** personas/ directory id, created at the project root the first time a user persona is saved. */
-async function ensurePersonasDir(store: PersonaResearchStore, projectId: string) {
-	const dirName = PERSONAS_DIR.replace(/\/$/, "")
-	const existing = store.attachmentList.find(
-		(item) => item.is_directory && getAttachmentPath(item).replace(/\/$/, "") === dirName,
-	)
-	if (existing?.file_id) return String(existing.file_id)
-	const created = (await SuperMagicApi.createFile({
-		project_id: projectId,
-		file_name: dirName,
-		is_directory: true,
-	})) as CreatedFile
-	return createdId(created)
-}
 
 export async function createPersonaFile(
 	store: PersonaResearchStore,
 	persona: PersonaFile,
 ): Promise<PersonaWriteOutcome> {
-	const projectId = store.selectedProject?.id
-	if (!projectId || store.isReadOnly) return "failed"
-	let fileId: string | null = null
-	try {
-		const dirId = await ensurePersonasDir(store, projectId)
-		if (!dirId) return "failed"
-		fileId = createdId(
-			(await SuperMagicApi.createFile({
-				project_id: projectId,
-				parent_id: dirId,
-				file_name: `${persona.id}.json`,
-				is_directory: false,
-			})) as CreatedFile,
-		)
-		if (!fileId) return "failed"
-		const response = await SuperMagicApi.saveFileContent([
-			{ file_id: fileId, content: serialize(persona) },
-		])
-		if (!response?.success_files?.some((file) => String(file.file_id) === fileId)) {
-			throw new Error("persona_save_unconfirmed")
-		}
-	} catch {
-		// An empty file would sit in personas/ as "not ready"; remove it best-effort.
-		if (fileId) {
-			void SuperMagicApi.deleteFiles({ file_ids: [fileId], project_id: projectId }).catch(
-				() => undefined,
-			)
-		}
-		return "failed"
-	}
-	await store.refreshAttachments().catch(() => undefined)
-	return "saved"
+	const saved = await createProjectTextFile(
+		store,
+		PERSONAS_DIR,
+		`${persona.id}.json`,
+		serialize(persona),
+	)
+	return saved ? "saved" : "failed"
 }
 
 /**
@@ -125,17 +76,9 @@ export async function updatePersonaFile(
 }
 
 /** Deletes the persona file; studies that already used it keep their transcripts. */
-export async function deletePersonaFile(
+export function deletePersonaFile(
 	store: PersonaResearchStore,
 	ref: ResearchFileRef<PersonaFile>,
 ): Promise<boolean> {
-	const projectId = store.selectedProject?.id
-	if (!projectId || store.isReadOnly) return false
-	try {
-		await SuperMagicApi.deleteFiles({ file_ids: [ref.fileId], project_id: projectId })
-	} catch {
-		return false
-	}
-	store.removeAttachmentsLocally([ref.fileId])
-	return true
+	return deleteProjectFile(store, ref.fileId)
 }

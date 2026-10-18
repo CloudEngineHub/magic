@@ -1,21 +1,31 @@
 import { useEffect } from "react"
 import { autorun } from "mobx"
 import { useTranslation } from "react-i18next"
-import { FlaskConical } from "lucide-react"
+import { FlaskConical, LayoutTemplate } from "lucide-react"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import PersonaAvatar from "../components/PersonaAvatar"
 import { usePersonaResearchStore } from "../context"
-import { buildResearchMentionCatalog } from "../services/researchMentionCatalog"
+import {
+	DEFAULT_REPORT_TEMPLATE_PATH,
+	getAttachmentPath,
+	reportTemplateName,
+} from "../services/researchFiles"
+import {
+	buildReportTemplateCatalog,
+	buildResearchMentionCatalog,
+} from "../services/researchMentionCatalog"
 
 /**
- * Pins "This study" (personas, outputs, transcripts) in the @ panel of a study conversation.
+ * Pins research files in the @ panel of a research composer.
  *
- * | Composer                                  | Effect                                  |
- * | study conversation (selectedTopic set)    | pins the study, follows file changes    |
- * | home / persona build (selectedTopic null) | leaves the panel alone                  |
+ * | Composer                                        | Pinned entry                              |
+ * | study conversation, study files ready           | "This study" + its report templates group |
+ * | no study yet (home, library sheets, a template  | "Report templates" only, when any exist   |
+ * | conversation) or a study still loading          |                                           |
  *
- * The entry is cleared on unmount, and while a newly selected study is still loading so the
- * previous study's personas never show under the next one.
+ * The entry follows file changes and is cleared on unmount; while a newly selected study is
+ * still loading the previous study's personas never show under the next one.
  */
 export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 	const { t } = useTranslation("personaResearch")
@@ -23,8 +33,17 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 	const topicId = selectedTopic?.id
 
 	useEffect(() => {
-		if (!topicId) return
 		const mentionPanelStore = store.mentionPanelStore
+		const templatesInput = () => ({
+			files: store.reportTemplates,
+			title: t("mention.reportTemplates"),
+			nameOf: (file: AttachmentItem) => {
+				const path = getAttachmentPath(file)
+				return path === DEFAULT_REPORT_TEMPLATE_PATH
+					? t("reportTemplates.defaultName")
+					: reportTemplateName(path)
+			},
+		})
 		const labels = {
 			study: t("mention.study"),
 			personas: t("mention.personas"),
@@ -40,9 +59,17 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 			interviewOf: (name: string) => t("mention.interviewOf", { name }),
 		}
 		const dispose = autorun(() => {
-			const study = store.studyAttachments
+			const study = topicId ? store.studyAttachments : null
 			if (!study || store.selectedTopic?.id !== topicId || store.isStudyContentLoading) {
-				mentionPanelStore.setPinnedSceneCatalog(null)
+				const templates = templatesInput()
+				mentionPanelStore.setPinnedSceneCatalog(
+					templates.files.length
+						? buildReportTemplateCatalog(templates, {
+								projectId: store.selectedProject?.id,
+								icon: <LayoutTemplate size={16} />,
+							})
+						: null,
+				)
 				return
 			}
 			const personaFiles = new Map(
@@ -55,6 +82,7 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 			mentionPanelStore.setPinnedSceneCatalog(
 				buildResearchMentionCatalog({
 					study,
+					reportTemplates: templatesInput(),
 					projectId: store.selectedProject?.id,
 					personas,
 					interviewPersonaIdByFileId: new Map(

@@ -22,6 +22,20 @@ describe("researchSettingsLine", () => {
 	})
 })
 
+describe("researchSettingsLine with a report template", () => {
+	it("adds the chosen template and leaves the default out", () => {
+		expect(
+			researchSettingsLine(
+				{ method: "auto", panelSize: "auto", rounds: "auto" },
+				"templates/brand.html",
+			),
+		).toBe("【研究设置】报告模板: templates/brand.html")
+		expect(researchSettingsLine({ method: "auto", panelSize: 6, rounds: "auto" }, null)).toBe(
+			"【研究设置】访谈人数: 6",
+		)
+	})
+})
+
 describe("appendParagraph", () => {
 	it("adds a paragraph after the existing content without mutating it", () => {
 		const doc = {

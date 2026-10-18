@@ -1,0 +1,385 @@
+import { useMemo, useRef, useState } from "react"
+import { useMemoizedFn } from "ahooks"
+import {
+	ArrowLeft,
+	ArrowRight,
+	Eye,
+	LayoutTemplate,
+	Palette,
+	Sparkles,
+	SwatchBook,
+	Upload,
+} from "lucide-react"
+import { observer } from "mobx-react-lite"
+import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/shadcn-ui/alert-dialog"
+import { Button } from "@/components/shadcn-ui/button"
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/shadcn-ui/dialog"
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@/components/shadcn-ui/empty"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import MagicTooltip from "@/components/base/MagicTooltip"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { useIsMobile } from "@/hooks/useIsMobile"
+import { useNavigate } from "@/routes/hooks/useNavigate"
+import { RouteName } from "@/routes/constants"
+import { usePersonaResearchStore } from "../context"
+import ReportTemplateCard, { ReportTemplateFrame } from "../components/ReportTemplateCard"
+import ResearchChatSheet from "../components/ResearchChatSheet"
+import { useReportTemplateHtml } from "../hooks/useReportTemplateHtml"
+import { useResearchFileDownload } from "../hooks/useResearchFileDownload"
+import { deleteProjectFile } from "../services/projectFileWriter"
+import {
+	DEFAULT_REPORT_TEMPLATE_PATH,
+	attachmentVersionKey,
+	getAttachmentPath,
+	reportTemplateName,
+} from "../services/researchFiles"
+import { saveReportTemplateChoice } from "../services/researchOptions"
+import { MAX_TEMPLATE_BYTES, uploadReportTemplate } from "../services/reportTemplates"
+
+/** What the AI conversation sheet is doing: a new template, or restyling one file. */
+type TemplateChat = { mode: "create" } | { mode: "edit"; path: string }
+
+/**
+ * Report template library: every templates/*.html in the research project.
+ * A template sets only how reports look; studies pick one on the research home, and the agent
+ * seeds the built-in "Voices" template into an empty library with the first study.
+ */
+function ReportTemplatesPage() {
+	const { t } = useTranslation("personaResearch")
+	const store = usePersonaResearchStore()
+	const navigate = useNavigate()
+	const isMobile = useIsMobile()
+	const download = useResearchFileDownload()
+	const uploadRef = useRef<HTMLInputElement>(null)
+	const [uploading, setUploading] = useState(false)
+	const [previewing, setPreviewing] = useState<AttachmentItem | null>(null)
+	const [pendingDelete, setPendingDelete] = useState<AttachmentItem | null>(null)
+	const [chat, setChat] = useState<TemplateChat | null>(null)
+	/** Template versions when the AI sheet opened; anything new or changed since is its work. */
+	const [chatBaseline, setChatBaseline] = useState<Map<string, string>>(new Map())
+	const canEdit = !store.isReadOnly
+	const templates = store.reportTemplates
+
+	const displayName = (item: AttachmentItem) => {
+		const path = getAttachmentPath(item)
+		return path === DEFAULT_REPORT_TEMPLATE_PATH
+			? t("reportTemplates.defaultName")
+			: reportTemplateName(path)
+	}
+
+	const openChat = useMemoizedFn((next: TemplateChat) => {
+		setChatBaseline(
+			new Map(templates.map((item) => [getAttachmentPath(item), attachmentVersionKey(item)])),
+		)
+		setChat(next)
+	})
+
+	const chatResults = useMemo(
+		() =>
+			chat
+				? templates.filter(
+						(item) =>
+							chatBaseline.get(getAttachmentPath(item)) !==
+							attachmentVersionKey(item),
+					)
+				: [],
+		[chat, chatBaseline, templates],
+	)
+
+	const startWithTemplate = useMemoizedFn((item: AttachmentItem) => {
+		saveReportTemplateChoice(getAttachmentPath(item))
+		navigate({ name: RouteName.PersonaResearch })
+	})
+
+	const onUpload = useMemoizedFn(async (file: File | undefined) => {
+		if (!file) return
+		setUploading(true)
+		const result = await uploadReportTemplate(store, file)
+		setUploading(false)
+		if (result.ok) {
+			toast.success(
+				t("reportTemplates.uploaded", { name: result.fileName.replace(/\.html$/, "") }),
+			)
+			return
+		}
+		toast.error(
+			t(`reportTemplates.uploadProblem.${result.problem}`, {
+				size: Math.round(MAX_TEMPLATE_BYTES / 1024),
+			}),
+		)
+	})
+
+	const confirmDelete = useMemoizedFn(async () => {
+		const item = pendingDelete
+		setPendingDelete(null)
+		if (!item?.file_id) return
+		const deleted = await deleteProjectFile(store, String(item.file_id))
+		if (deleted) toast.success(t("reportTemplates.deleted"))
+		else toast.error(t("reportTemplates.deleteFailed"))
+	})
+
+	const headerActions = canEdit ? (
+		<>
+			<Button
+				variant="outline"
+				size="sm"
+				disabled={uploading}
+				onClick={() => uploadRef.current?.click()}
+			>
+				<Upload className="size-3.5" />
+				{uploading ? t("reportTemplates.uploading") : t("reportTemplates.upload")}
+			</Button>
+			<Button size="sm" onClick={() => openChat({ mode: "create" })}>
+				<Sparkles className="size-3.5" />
+				{t("reportTemplates.createWithAi")}
+			</Button>
+		</>
+	) : null
+
+	return (
+		<div
+			className="relative flex h-full min-h-0 flex-col bg-background"
+			data-testid="persona-research-templates"
+		>
+			<div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
+				<MagicTooltip title={t("study.backHome")}>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-8"
+						aria-label={t("study.backHome")}
+						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+					>
+						<ArrowLeft className="size-4" />
+					</Button>
+				</MagicTooltip>
+				<div className="flex min-w-0 flex-1 flex-col">
+					<h1 className="text-sm font-semibold">{t("reportTemplates.title")}</h1>
+					<p className="truncate text-xs text-muted-foreground">
+						{t("reportTemplates.subtitle")}
+					</p>
+				</div>
+				{isMobile ? null : headerActions}
+				<input
+					ref={uploadRef}
+					type="file"
+					accept=".html,.htm,text/html"
+					className="hidden"
+					onChange={(event) => {
+						void onUpload(event.target.files?.[0])
+						event.target.value = ""
+					}}
+				/>
+			</div>
+			{isMobile && canEdit ? (
+				<div className="flex shrink-0 gap-2 border-b border-border px-4 py-2">
+					{headerActions}
+				</div>
+			) : null}
+
+			<ScrollArea className="min-h-0 flex-1">
+				<div className="mx-auto w-full max-w-6xl p-4">
+					{templates.length === 0 ? (
+						<Empty className="py-16">
+							<EmptyHeader>
+								<EmptyMedia variant="icon">
+									<LayoutTemplate className="size-5" />
+								</EmptyMedia>
+								<EmptyTitle>{t("reportTemplates.emptyTitle")}</EmptyTitle>
+								<EmptyDescription>{t("reportTemplates.empty")}</EmptyDescription>
+							</EmptyHeader>
+							{headerActions ? (
+								<EmptyContent className="flex-row justify-center">
+									{headerActions}
+								</EmptyContent>
+							) : null}
+						</Empty>
+					) : (
+						<div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+							{templates.map((item) => {
+								const path = getAttachmentPath(item)
+								return (
+									<ReportTemplateCard
+										key={path}
+										item={item}
+										name={reportTemplateName(path)}
+										isDefault={path === DEFAULT_REPORT_TEMPLATE_PATH}
+										onPreview={() => setPreviewing(item)}
+										onUse={() => startWithTemplate(item)}
+										onDownload={() =>
+											download(
+												item.file_id ? String(item.file_id) : undefined,
+												path.slice(path.lastIndexOf("/") + 1),
+											)
+										}
+										onEditWithAi={
+											canEdit
+												? () => openChat({ mode: "edit", path })
+												: undefined
+										}
+										onDelete={
+											canEdit ? () => setPendingDelete(item) : undefined
+										}
+									/>
+								)
+							})}
+						</div>
+					)}
+				</div>
+			</ScrollArea>
+
+			<TemplatePreviewDialog
+				item={previewing}
+				name={previewing ? displayName(previewing) : ""}
+				onOpenChange={(open) => !open && setPreviewing(null)}
+				onUse={startWithTemplate}
+			/>
+
+			<ResearchChatSheet
+				open={Boolean(chat)}
+				onOpenChange={(open) => !open && setChat(null)}
+				title={
+					chat?.mode === "edit"
+						? t("reportTemplates.chat.editTitle")
+						: t("reportTemplates.chat.title")
+				}
+				intro={{
+					title:
+						chat?.mode === "edit"
+							? t("reportTemplates.chat.editIntroTitle", {
+									name: reportTemplateName(chat.path),
+								})
+							: t("reportTemplates.chat.introTitle"),
+					text: t("reportTemplates.chat.introText"),
+					tips: [
+						{ icon: Upload, text: t("reportTemplates.chat.tipUpload") },
+						{ icon: Palette, text: t("reportTemplates.chat.tipDescribe") },
+						{ icon: SwatchBook, text: t("reportTemplates.chat.tipBase") },
+					],
+					prompt:
+						chat?.mode === "edit"
+							? t("reportTemplates.chat.editPrompt", { path: chat.path })
+							: t("reportTemplates.chat.createPrompt"),
+					disclaimer: t("reportTemplates.chat.disclaimer"),
+					draftSlot: "report-template",
+				}}
+				footer={
+					chatResults.length ? (
+						<div className="flex shrink-0 items-center gap-3 border-t border-border bg-emerald-500/[0.05] px-4 py-2.5 animate-in fade-in-0 motion-reduce:animate-none">
+							<span className="min-w-0 flex-1 truncate text-xs text-foreground">
+								{t("reportTemplates.chat.saved", {
+									names: chatResults.map(displayName).join(" · "),
+								})}
+							</span>
+							<Button size="sm" onClick={() => setPreviewing(chatResults[0])}>
+								<Eye className="size-3.5" />
+								{t("reportTemplates.previewAction")}
+							</Button>
+						</div>
+					) : null
+				}
+			/>
+
+			<AlertDialog
+				open={Boolean(pendingDelete)}
+				onOpenChange={(open) => !open && setPendingDelete(null)}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{t("reportTemplates.deleteTitle", {
+								name: pendingDelete ? displayName(pendingDelete) : "",
+							})}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{pendingDelete &&
+							getAttachmentPath(pendingDelete) === DEFAULT_REPORT_TEMPLATE_PATH
+								? t("reportTemplates.deleteDefaultDescription")
+								: t("reportTemplates.deleteDescription")}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("library.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-white hover:bg-destructive/90"
+							onClick={() => void confirmDelete()}
+						>
+							{t("library.deleteConfirm")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+		</div>
+	)
+}
+
+/** Full-size preview of one template, with the main next step. */
+function TemplatePreviewDialog({
+	item,
+	name,
+	onOpenChange,
+	onUse,
+}: {
+	item: AttachmentItem | null
+	name: string
+	onOpenChange: (open: boolean) => void
+	onUse: (item: AttachmentItem) => void
+}) {
+	const { t } = useTranslation("personaResearch")
+	const { html, failed } = useReportTemplateHtml(item)
+	return (
+		<Dialog open={Boolean(item)} onOpenChange={onOpenChange}>
+			<DialogContent className="flex h-[88vh] max-w-5xl flex-col gap-0 p-0 sm:max-w-5xl">
+				<DialogHeader className="flex-row items-center gap-2 space-y-0 border-b border-border py-3 pl-4 pr-12">
+					<DialogTitle className="flex-1 truncate text-sm">{name}</DialogTitle>
+					<DialogDescription className="sr-only">
+						{t("reportTemplates.subtitle")}
+					</DialogDescription>
+					{item ? (
+						<Button size="sm" onClick={() => onUse(item)}>
+							{t("reportTemplates.use")}
+							<ArrowRight className="size-3.5" />
+						</Button>
+					) : null}
+				</DialogHeader>
+				<div className="relative min-h-0 flex-1 bg-muted">
+					{html ? (
+						<ReportTemplateFrame html={html} title={name} className="h-full w-full" />
+					) : (
+						<div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+							{failed
+								? t("reportTemplates.thumbFailed")
+								: t("reportTemplates.loading")}
+						</div>
+					)}
+				</div>
+			</DialogContent>
+		</Dialog>
+	)
+}
+
+export default observer(ReportTemplatesPage)

@@ -24,6 +24,9 @@ export const PERSONAS_DIR = "personas/"
 export const PANELS_DIR = "panels/"
 export const STUDIES_DIR = "studies/"
 export const STUDY_FILE_NAME = "study.json"
+/** Report templates: one HTML file each; the agent seeds voices.html into an empty library. */
+export const TEMPLATES_DIR = "templates/"
+export const DEFAULT_REPORT_TEMPLATE_PATH = `${TEMPLATES_DIR}voices.html`
 
 /** Attachment paths may or may not start with "/"; compare without it. */
 export function normalizeResearchPath(path: string | undefined | null): string {
@@ -133,15 +136,37 @@ export function collectStudyAttachments(list: AttachmentItem[], dir: string): St
 	}
 }
 
-/** Lists top-level JSON files of a project-level library directory (personas/ or panels/). */
-export function listLibraryFiles(list: AttachmentItem[], dir: string): AttachmentItem[] {
+/** Lists top-level files of a project-level library directory (personas/, panels/, templates/). */
+export function listLibraryFiles(
+	list: AttachmentItem[],
+	dir: string,
+	extension = ".json",
+): AttachmentItem[] {
 	return list
 		.filter((item) => {
 			if (!isFile(item)) return false
 			const path = attachmentPath(item)
-			return path.startsWith(dir) && path.endsWith(".json") && path.split("/").length === 2
+			return (
+				path.startsWith(dir) &&
+				path.toLowerCase().endsWith(extension) &&
+				path.split("/").length === 2
+			)
 		})
 		.sort((a, b) => attachmentPath(a).localeCompare(attachmentPath(b)))
+}
+
+/** Report templates, the default first, e.g. [templates/voices.html, templates/brand.html]. */
+export function listReportTemplates(list: AttachmentItem[]): AttachmentItem[] {
+	const isDefault = (item: AttachmentItem) =>
+		attachmentPath(item) === DEFAULT_REPORT_TEMPLATE_PATH
+	return listLibraryFiles(list, TEMPLATES_DIR, ".html").sort(
+		(a, b) => Number(isDefault(b)) - Number(isDefault(a)),
+	)
+}
+
+/** "templates/brand.html" → "brand". */
+export function reportTemplateName(path: string): string {
+	return path.slice(path.lastIndexOf("/") + 1).replace(/\.html$/i, "")
 }
 
 export function getAttachmentPath(item: AttachmentItem): string {

@@ -1,11 +1,20 @@
 import type { ReactNode } from "react"
-import { Check, ChevronDown, FlaskConical, Repeat, UsersRound } from "lucide-react"
+import {
+	Check,
+	ChevronDown,
+	FlaskConical,
+	LayoutTemplate,
+	Repeat,
+	Settings2,
+	UsersRound,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuLabel,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { cn } from "@/utils/cn"
@@ -17,22 +26,33 @@ import {
 } from "../services/researchOptions"
 import { PRESSABLE } from "./surface"
 
+/** Report template choice; `value` null is the default template. */
+export interface ReportTemplateOption {
+	value: string | null
+	templates: { path: string; label: string }[]
+	onChange: (path: string | null) => void
+	onManage: () => void
+}
+
 interface ResearchComposerOptionsProps {
 	value: ResearchOptions
 	onChange: (value: ResearchOptions) => void
+	reportTemplate?: ReportTemplateOption
 	/** Extra controls after the three settings, e.g. "pick from the persona library". */
 	trailing?: ReactNode
 	className?: string
 }
 
 /**
- * Study settings beside the composer: method, panel size and interview rounds. "Auto" leaves
+ * Study settings beside the composer: method, panel size, interview rounds and, on the home,
+ * the report template. "Auto" leaves
  * the choice to the AI researcher; a fixed value is sent with the first message and shown in
  * solid ink so a deliberate setting is easy to spot.
  */
 export default function ResearchComposerOptions({
 	value,
 	onChange,
+	reportTemplate,
 	trailing,
 	className,
 }: ResearchComposerOptionsProps) {
@@ -97,6 +117,36 @@ export default function ResearchComposerOptions({
 					onSelect: () => onChange({ ...value, rounds }),
 				}))}
 			/>
+			{reportTemplate ? (
+				<OptionMenu
+					icon={<LayoutTemplate className="size-3.5" />}
+					label={t("options.reportTemplate")}
+					valueLabel={
+						reportTemplate.templates.find((item) => item.path === reportTemplate.value)
+							?.label ?? t("options.reportTemplateDefault")
+					}
+					active={reportTemplate.value !== null}
+					items={[
+						{
+							key: "default",
+							label: t("options.reportTemplateDefault"),
+							selected: reportTemplate.value === null,
+							onSelect: () => reportTemplate.onChange(null),
+						},
+						...reportTemplate.templates.map((item) => ({
+							key: item.path,
+							label: item.label,
+							selected: reportTemplate.value === item.path,
+							onSelect: () => reportTemplate.onChange(item.path),
+						})),
+					]}
+					footer={{
+						icon: <Settings2 className="size-4" />,
+						label: t("options.manageReportTemplates"),
+						onSelect: reportTemplate.onManage,
+					}}
+				/>
+			) : null}
 			{trailing}
 		</div>
 	)
@@ -115,12 +165,15 @@ function OptionMenu({
 	valueLabel,
 	active,
 	items,
+	footer,
 }: {
 	icon: ReactNode
 	label: string
 	valueLabel: string
 	active: boolean
 	items: OptionItem[]
+	/** A link-like action under the choices, e.g. "manage templates". */
+	footer?: { icon: ReactNode; label: string; onSelect: () => void }
 }) {
 	return (
 		<DropdownMenu>
@@ -139,7 +192,9 @@ function OptionMenu({
 				>
 					{icon}
 					<span className="text-muted-foreground">{label}</span>
-					<span className={cn(active && "font-medium")}>{valueLabel}</span>
+					<span className={cn("max-w-[10em] truncate", active && "font-medium")}>
+						{valueLabel}
+					</span>
 					<ChevronDown className="size-3.5 opacity-60" />
 				</button>
 			</DropdownMenuTrigger>
@@ -153,6 +208,18 @@ function OptionMenu({
 						{item.selected ? <Check className="size-4" /> : null}
 					</DropdownMenuItem>
 				))}
+				{footer ? (
+					<>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem
+							className="text-muted-foreground"
+							onSelect={footer.onSelect}
+						>
+							{footer.icon}
+							{footer.label}
+						</DropdownMenuItem>
+					</>
+				) : null}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	)

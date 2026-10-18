@@ -4,10 +4,12 @@ import {
 	collectStudyAttachments,
 	findStudyDir,
 	listLibraryFiles,
+	listReportTemplates,
 	parseDiscussionFile,
 	parseInterviewFile,
 	parsePersonaFile,
 	parseStudyFile,
+	reportTemplateName,
 	resolvePhaseStatuses,
 } from "../services/researchFiles"
 
@@ -269,5 +271,25 @@ describe("user-created personas", () => {
 			),
 		})
 		expect(parsed.ok && parsed.data.study_type).toBe("persona_build")
+	})
+})
+
+describe("listReportTemplates", () => {
+	it("lists top-level HTML templates with the default first", () => {
+		const list = [
+			file("templates/brand.html"),
+			file("templates/voices.html"),
+			file("templates/notes.md"),
+			file("templates/old/dark.html"),
+			file("studies/x/report.html"),
+		]
+		expect(listReportTemplates(list).map((item) => item.relative_file_path)).toEqual([
+			"templates/voices.html",
+			"templates/brand.html",
+		])
+	})
+
+	it("names a template by its file name", () => {
+		expect(reportTemplateName("templates/品牌周报.html")).toBe("品牌周报")
 	})
 })

@@ -21,8 +21,17 @@ export interface ResearchMentionCatalogLabels {
 	interviewOf: (personaName: string) => string
 }
 
+/** Report templates (templates/*.html) as one @ group, shown with or without a study. */
+export interface ReportTemplateMentionInput {
+	files: AttachmentItem[]
+	title: string
+	/** Row label, e.g. "人声（默认）" for templates/voices.html, otherwise the file name. */
+	nameOf: (file: AttachmentItem) => string
+}
+
 export interface ResearchMentionCatalogInput {
 	study: StudyAttachments
+	reportTemplates?: ReportTemplateMentionInput
 	projectId?: string
 	/** Panel personas in panel order, each with its personas/<id>.json attachment. */
 	personas: Array<{ persona: PersonaFile; file: AttachmentItem }>
@@ -87,6 +96,7 @@ function compact(items: Array<MentionItem | null>): MentionItem[] {
  * | personas   | avatar + persona name, tagline as subtitle                   |
  * | outputs    | 研究报告 / 研究方案 / 验证问卷 / 市场洞察 (existing only), file name as subtitle |
  * | interviews | interviews/<id>.json, labelled with the persona's name, file name as subtitle |
+ * | reportTemplates | templates/*.html (when passed), template name, file name as subtitle |
  *
  * Empty groups are dropped by the panel; a study without files gives no entry at all.
  */
@@ -146,6 +156,40 @@ export function buildResearchMentionCatalog(
 			{ id: "personas", title: labels.personas, items: personas },
 			{ id: "outputs", title: labels.outputs, items: outputs },
 			{ id: "interviews", title: labels.interviews, items: interviews },
+			...(input.reportTemplates
+				? [reportTemplateGroup(input.reportTemplates, projectId)]
+				: []),
 		],
+	}
+}
+
+function reportTemplateGroup(input: ReportTemplateMentionInput, projectId?: string) {
+	return {
+		id: "reportTemplates",
+		title: input.title,
+		items: compact(
+			input.files.map((file) =>
+				toFileMention(file, {
+					label: input.nameOf(file),
+					description: fileNameOf(file),
+					projectId,
+				}),
+			),
+		),
+	}
+}
+
+/**
+ * "Report templates" entry for composers without a study (research home, library sheets,
+ * template conversations), so a template can be @-mentioned to use, restyle, or copy it.
+ */
+export function buildReportTemplateCatalog(
+	input: ReportTemplateMentionInput,
+	options: { projectId?: string; icon?: ReactNode },
+): MentionSceneCatalog {
+	return {
+		name: input.title,
+		icon: options.icon,
+		groups: [reportTemplateGroup(input, options.projectId)],
 	}
 }

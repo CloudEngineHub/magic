@@ -52,6 +52,8 @@ export enum RouteName {
 	PersonaResearch = "PersonaResearch",
 	/** AI 研究人设库 */
 	PersonaResearchPersonas = "PersonaResearchPersonas",
+	/** AI 研究报告模板库 */
+	PersonaResearchTemplates = "PersonaResearchTemplates",
 	/** AI 研究工作台（一次研究对应一个话题） */
 	PersonaResearchStudy = "PersonaResearchStudy",
 	/** 协作邀请 */

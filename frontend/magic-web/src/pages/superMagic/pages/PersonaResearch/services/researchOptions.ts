@@ -31,15 +31,20 @@ export const RESEARCH_SETTINGS_PREFIX = "【研究设置】"
 
 /**
  * One line appended to the first message, e.g.
- * "【研究设置】访谈人数: 8 · 访谈轮数: 5 · 研究方式: concept_test".
- * Items left on "auto" are omitted; with nothing fixed there is no line. Labels stay in Chinese
- * whatever the UI language, because the skill matches them literally.
+ * "【研究设置】访谈人数: 8 · 访谈轮数: 5 · 研究方式: concept_test · 报告模板: templates/brand.html".
+ * Items left on "auto" (or the default report template, null) are omitted; with nothing fixed
+ * there is no line. Labels stay in Chinese whatever the UI language, because the skill matches
+ * them literally.
  */
-export function researchSettingsLine(options: ResearchOptions): string | null {
+export function researchSettingsLine(
+	options: ResearchOptions,
+	reportTemplatePath: string | null = null,
+): string | null {
 	const items = [
 		options.panelSize === "auto" ? null : `访谈人数: ${options.panelSize}`,
 		options.rounds === "auto" ? null : `访谈轮数: ${options.rounds}`,
 		options.method === "auto" ? null : `研究方式: ${options.method}`,
+		reportTemplatePath ? `报告模板: ${reportTemplatePath}` : null,
 	].filter(Boolean)
 	return items.length ? `${RESEARCH_SETTINGS_PREFIX}${items.join(" · ")}` : null
 }
@@ -60,5 +65,28 @@ export function parseResearchOptions(raw: unknown): ResearchOptions {
 		method: pickFrom(RESEARCH_METHODS, value.method, "auto"),
 		panelSize: pickFrom(PANEL_SIZES, value.panelSize, "auto"),
 		rounds: pickFrom(ROUND_COUNTS, value.rounds, "auto"),
+	}
+}
+
+const REPORT_TEMPLATE_STORAGE_KEY = "persona-research:report-template"
+
+/**
+ * The report template picked for new studies, remembered per browser as a convenience only;
+ * null means the default. The caller drops a path that no longer exists.
+ */
+export function readSavedReportTemplate(): string | null {
+	try {
+		return localStorage.getItem(REPORT_TEMPLATE_STORAGE_KEY) || null
+	} catch {
+		return null
+	}
+}
+
+export function saveReportTemplateChoice(path: string | null) {
+	try {
+		if (path) localStorage.setItem(REPORT_TEMPLATE_STORAGE_KEY, path)
+		else localStorage.removeItem(REPORT_TEMPLATE_STORAGE_KEY)
+	} catch {
+		// Storage can be unavailable (private mode); the choice still applies to this page.
 	}
 }

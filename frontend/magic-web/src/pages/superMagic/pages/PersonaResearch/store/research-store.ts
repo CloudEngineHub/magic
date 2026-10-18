@@ -21,6 +21,7 @@ import {
 	findStudyDir,
 	getAttachmentPath,
 	listLibraryFiles,
+	listReportTemplates,
 	listStudyFiles,
 	parseDiscussionFile,
 	parseSynthesisFile,
@@ -141,6 +142,11 @@ export class PersonaResearchStore {
 	get isStudyContentLoading(): boolean {
 		const topicId = this.selectedTopic?.id
 		return Boolean(topicId) && this.loadedStudyTopicId !== topicId
+	}
+
+	/** Report templates in the project, the default first. */
+	get reportTemplates(): AttachmentItem[] {
+		return listReportTemplates(this.attachmentList)
 	}
 
 	get studyAttachments(): StudyAttachments | null {
