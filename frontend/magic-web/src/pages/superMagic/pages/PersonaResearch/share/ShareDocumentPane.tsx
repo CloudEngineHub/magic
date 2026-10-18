@@ -80,6 +80,9 @@ const HtmlDocument = observer(function HtmlDocument({ file }: { file: Attachment
 				projectId={store.selectedProject?.id}
 				selectedProject={store.selectedProject}
 				allowDownload={false}
+				// Read as a document, like the in-app report pane: no file tabs or preview toolbar.
+				hideTabBar
+				showFileHeader={false}
 			/>
 		</div>
 	)

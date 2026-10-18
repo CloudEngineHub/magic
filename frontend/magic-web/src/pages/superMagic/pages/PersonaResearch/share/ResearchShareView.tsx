@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { FileSearch, Info, MessagesSquare, UsersRound } from "lucide-react"
+import { FileSearch, Info, Link2, MessagesSquare, UsersRound } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
+import { Button } from "@/components/shadcn-ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { RouteName } from "@/routes/constants"
+import { getRoutePath } from "@/routes/history/helpers"
 import { cn } from "@/utils/cn"
 import { PersonaResearchStoreProvider, usePersonaResearchStore } from "../context"
 import PersonaAvatar from "../components/PersonaAvatar"
@@ -115,6 +119,15 @@ const ResearchShareBody = observer(function ResearchShareBody({
 			: null,
 	].filter((chip): chip is string => Boolean(chip))
 
+	const copyLink = () => {
+		navigator.clipboard
+			.writeText(window.location.href)
+			.then(() => toast.success(t("share.linkCopied")))
+			.catch(() => toast.error(t("share.copyFailed")))
+	}
+	const researchHomeHref =
+		getRoutePath({ name: RouteName.PersonaResearch }) ?? window.location.origin
+
 	const openFile = (file: AttachmentItem) => {
 		setOpenedFile(file)
 		setConsoleTab("files")
@@ -166,6 +179,24 @@ const ResearchShareBody = observer(function ResearchShareBody({
 							</span>
 						</div>
 					</div>
+					<div className="flex shrink-0 items-center gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							className="h-8 gap-1.5"
+							onClick={copyLink}
+						>
+							<Link2 className="size-3.5" />
+							{isMobile ? null : t("share.copyLink")}
+						</Button>
+						<Button size="sm" className="h-8 gap-1.5" asChild>
+							{/* Visitors land on the research home (sign-in first when needed). */}
+							<a href={researchHomeHref} target="_blank" rel="noreferrer">
+								<UsersRound className="size-3.5" />
+								{t("share.makeYourOwn")}
+							</a>
+						</Button>
+					</div>
 					{hasResults ? (
 						<Tabs
 							value={activeView}
@@ -184,7 +215,8 @@ const ResearchShareBody = observer(function ResearchShareBody({
 						</Tabs>
 					) : null}
 				</div>
-				{activeView === "results" && !isPersonaBuild ? (
+				{/* A finished study needs no phase tracker; the cover facts already say what was done. */}
+				{activeView === "results" && !isPersonaBuild && study?.phase !== "done" ? (
 					isLoading ? (
 						<StudyStepperSkeleton compact={isMobile} />
 					) : (
