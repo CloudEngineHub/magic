@@ -87,6 +87,25 @@ async def test_created_study_matches_contract_and_links_topic(tmp_path):
     assert [p["status"] for p in study["phases"]] == ["running", "pending", "pending", "pending", "pending", "pending"]
 
 
+async def test_first_study_seeds_the_default_report_template_once(tmp_path):
+    await _study_at(tmp_path, [])
+    seeded = tmp_path / "templates" / "voices.html"
+    assert seeded.read_text(encoding="utf-8").lstrip().startswith("<!DOCTYPE html>")
+
+    # A user template means the library is no longer empty: deleting voices.html is respected.
+    seeded.unlink()
+    (tmp_path / "templates" / "brand.html").write_text("<html></html>", encoding="utf-8")
+    await _study_at(tmp_path, [])
+    assert not seeded.exists()
+
+
+async def test_persona_build_does_not_seed_report_templates(tmp_path):
+    await UpdateStudy(base_dir=tmp_path).execute(_context(), UpdateStudyParams(
+        event="created", title="T", question="Q?", slug_hint="tea", study_type="persona_build",
+    ))
+    assert not (tmp_path / "templates").exists()
+
+
 async def test_plan_confirmed_fills_plan_fields_and_numbers_hypotheses(tmp_path):
     study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed"])
 

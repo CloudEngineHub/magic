@@ -22,6 +22,9 @@ social_sampling 让「有没有直接采样社媒」成为必报项，而不是�
 | unavailable   | note                    | 部署里没有平台技能；或 402 余额不足            |
 | not_relevant  | note                    | 研究对象是企业内部审批流程，社媒没有公开讨论   |
 
+首次研究：created 时 templates/ 下还没有任何 .html，就把内置报告模板复制为 templates/voices.html
+（见 study_files.seed_report_template）；只构建人设不放。
+
 「只构建人设」：created 带 study_type=persona_build，limits.personas 记为 6。之后只调用
 save_personas，由它把研究直接收尾为 done；其它事件一律拒绝，避免误入计划或访谈流程。
 """
@@ -35,6 +38,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from app.core.entity.message.server_message import (
     DisplayType,
@@ -76,10 +80,13 @@ from app.tools.persona_research.study_files import (
     resolve_in_workspace,
     resolve_study_dir,
     save_study,
+    seed_report_template,
     workspace_relative,
 )
 from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_exists, async_mkdir, async_realpath
+
+logger = get_logger(__name__)
 
 
 class StudyEvent(StrEnum):
@@ -181,10 +188,13 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
         except StudyFilesError as exc:
             return ToolResult.error(f"study.json not updated: {exc}")
 
+        seeded = ""
+        if params.event == StudyEvent.CREATED and study.study_type != StudyType.PERSONA_BUILD:
+            seeded = await self._seed_report_template()
         study_dir = workspace_relative(await async_realpath(self.base_dir), study_path)
         statuses = ", ".join(f"{item.key}={item.status}" for item in study.phases)
         return ToolResult(
-            content=f"Updated {study_dir}/study.json after {params.event.value}: phase is {study.phase} ({statuses}).",
+            content=f"Updated {study_dir}/study.json after {params.event.value}: phase is {study.phase} ({statuses}).{seeded}",
             data={"study_dir": study_dir, "event": params.event.value, "phase": study.phase, "phases": [
                 {"key": item.key, "status": item.status} for item in study.phases
             ]},
@@ -221,6 +231,15 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
             # 只建人设不访谈；interview_rounds 只为满足 limits 结构，不会被使用。
             study.limits = StudyLimits(personas=MAX_BUILD_PERSONAS, interview_rounds=DEFAULT_INTERVIEW_ROUNDS)
         return study_path, study
+
+    async def _seed_report_template(self) -> str:
+        """首次研究时放入默认报告模板；失败只记日志，不影响研究创建（写报告时会回退到内置模板）。"""
+        try:
+            path = await seed_report_template(await async_realpath(self.base_dir))
+        except OSError as exc:
+            logger.warning(f"persona research: seeding the default report template failed: {exc}")
+            return ""
+        return f" Default report template copied to {path}." if path else ""
 
     async def _apply(self, study_path: Path, study: Study, params: UpdateStudyParams) -> None:
         event = params.event

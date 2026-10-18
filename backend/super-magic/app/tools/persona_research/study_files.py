@@ -18,15 +18,19 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from pydantic import ValidationError
 
+from app.core.skill_utils.skill_sources import get_system_skills_dir
 from app.tools.persona_research.contracts import (
+    DEFAULT_REPORT_TEMPLATE,
     DISCUSSIONS_DIR,
     INTERVIEWS_DIR,
     STUDIES_DIR,
+    TEMPLATES_DIR,
     Study,
     TranscriptStatus,
 )
 from app.utils.async_file_utils import (
     async_exists,
+    async_mkdir,
     async_read_text,
     async_realpath,
     async_scandir,
@@ -99,6 +103,26 @@ async def write_json_file(path: Path, data: Dict[str, Any]) -> None:
 
 async def write_text_file(path: Path, content: str, encoding: str = "utf-8") -> None:
     await async_write_text(path, content, encoding=encoding)
+
+
+async def seed_report_template(base_dir: Path) -> Optional[str]:
+    """项目里还没有任何报告模板时，把内置模板复制为 templates/voices.html，返回其工作区相对路径。
+
+    | templates/ 现状              | 结果                     |
+    | 不存在，或没有 .html         | 复制内置模板，返回路径   |
+    | 已有任意 .html（含用户自建） | 不动，返回 None          |
+
+    用户删掉 voices.html 但保留自建模板时不会被重新放入；未指定模板的研究此时直接读内置模板。
+    """
+    templates_dir = base_dir / TEMPLATES_DIR
+    if await async_exists(templates_dir):
+        entries = await async_scandir(templates_dir)
+        if any(entry.is_file() and entry.name.lower().endswith(".html") for entry in entries):
+            return None
+    source = get_system_skills_dir() / "persona-research" / "reference" / "report-template.html"
+    await async_mkdir(templates_dir, parents=True, exist_ok=True)
+    await write_text_file(templates_dir / DEFAULT_REPORT_TEMPLATE, await async_read_text(source))
+    return f"{TEMPLATES_DIR}/{DEFAULT_REPORT_TEMPLATE}"
 
 
 async def load_study(study_path: Path) -> Study:

@@ -71,11 +71,15 @@ def test_persona_research_skill_references_exist():
     for relative_path in (
         "reference/file-contracts.md",
         "reference/methods.md",
-        "reference/report-template.html",
+        "reference/report-templates.md",
         "reference/tools.md",
     ):
         assert relative_path in skill
         assert (skill_dir / relative_path).is_file()
+    # 内置报告模板由 report-templates.md 引用，update_study 也从这里复制默认模板。
+    templates_doc = (skill_dir / "reference/report-templates.md").read_text(encoding="utf-8")
+    assert "reference/report-template.html" in templates_doc
+    assert (skill_dir / "reference/report-template.html").is_file()
 
 
 def test_persona_research_code_mode_tools_are_registered_and_code_mode_only():

@@ -31,6 +31,9 @@ DISCUSSIONS_DIR = "discussions"
 STUDIES_DIR = "studies"
 PERSONAS_DIR = "personas"
 PANELS_DIR = "panels"
+# 报告模板库：一个 HTML 一个模板；没有任何模板时放入内置模板，未指定模板的研究用它。
+TEMPLATES_DIR = "templates"
+DEFAULT_REPORT_TEMPLATE = "voices.html"
 
 
 class StudyPhase(StrEnum):
