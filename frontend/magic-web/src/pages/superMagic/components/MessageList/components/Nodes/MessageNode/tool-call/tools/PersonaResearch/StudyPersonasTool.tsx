@@ -143,8 +143,12 @@ function StudyPersonasTool({
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
 		>
-			<ScrollArea viewportClassName="max-h-80">
-				<ul className="m-0 list-none divide-y divide-border px-3 py-0">
+			{/* Radix 视口内层默认 display: table，会按最宽一行撑开；改成 block 才能让行内文字截断、右侧标签完整显示 */}
+			<ScrollArea
+				className="[&_[data-radix-scroll-area-viewport]>div]:!block"
+				viewportClassName="max-h-80"
+			>
+				<ul className="m-0 list-none divide-y divide-border py-0 pl-3 pr-4">
 					{data.personas.map((persona) => (
 						<li
 							key={persona.persona_id}

@@ -148,7 +148,10 @@ function PersonaChatTool({
 			onMouseLeave={onMouseLeave}
 		>
 			{/* 小组讨论 6 人都长篇回答时限制高度，避免把消息流撑得很长 */}
-			<ScrollArea viewportClassName="max-h-96">
+			<ScrollArea
+				className="[&_[data-radix-scroll-area-viewport]>div]:!block"
+				viewportClassName="max-h-96"
+			>
 				<ol className="m-0 flex list-none flex-col gap-3 p-3">
 					{question && (
 						<Turn
