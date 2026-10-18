@@ -45,7 +45,7 @@ A persona that already holds the tested opinion turns the interview into an echo
 - Reuse a library persona only when it belongs to this study's category and quota segment. A persona built for another product category (an electrolyte-drink persona in a coffee study) is not reused; draft a new one.
 - When desk research sampled social platforms, anchor each new persona's situation in at least one real voice from the "Real Voices" section and cite it as `social` evidence.
 
-Persona self-check, before calling `save_personas`: for every persona and every hypothesis, ask "could someone predict this persona's answer to the hypothesis from its stance fields alone?" If yes, rewrite the field as a past fact (what happened, when, at what cost) and drop the attitude. [Leak] needs_pains "afraid of buying another card and leaving sessions unused again" for a hypothesis about unused sessions. [Fact] behavior "last year's 10-session card: used 6, the rest expired".
+Persona self-check, before calling `save_personas` (the tool also runs keyword and semantic leak checks): for every persona and every hypothesis, ask "could someone predict this persona's answer to the hypothesis from its stance fields alone?" If yes, rewrite the field as a past fact (what happened, when, at what cost) and drop the attitude. [Leak] needs_pains "afraid of buying another card and leaving sessions unused again" for a hypothesis about unused sessions. [Fact] behavior "last year's 10-session card: used 6, the rest expired".
 
 ## Interview Guide
 

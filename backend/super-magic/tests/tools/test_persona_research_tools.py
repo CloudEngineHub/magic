@@ -6,7 +6,9 @@ from types import SimpleNamespace
 import pytest
 
 from agentlang.context.tool_context import ToolContext
-from app.tools.persona_research.check_interviews import CheckInterviews, CheckInterviewsParams, asks_joined_questions
+from app.tools.persona_research import save_personas as save_personas_module
+from app.tools.persona_research.check_interviews import CheckInterviews, CheckInterviewsParams
+from app.tools.persona_research.semantic_checks import JudgeUnavailable, Leak, asks_joined_questions
 from app.tools.persona_research.finish_persona_transcript import (
     FinishPersonaTranscript,
     FinishPersonaTranscriptParams,
@@ -52,6 +54,16 @@ PLAN = {
     "interview_rounds": 3,
     "guide_review": [{"issue": "leading", "before": "Don't you hate it?", "after": "What happened last time?"}],
 }
+
+
+@pytest.fixture(autouse=True)
+def no_leaks(monkeypatch):
+    """默认语义判定不报泄漏；需要时在用例里覆盖。测试不发真实模型请求。"""
+
+    async def judge(tool_context, hypotheses, personas):
+        return []
+
+    monkeypatch.setattr(save_personas_module, "judge_persona_leaks", judge)
 
 
 SAMPLED = {"status": "sampled", "platforms": ["xiaohongshu"], "posts": 12, "comments": 80}
@@ -546,6 +558,85 @@ async def test_paraphrase_listed_in_outcome_terms_is_blocked_with_rewrite_advice
     assert result.ok is False
     assert "needs_pains contains '剩着' (H1)" in result.content
     assert "rewrite those fields as past facts" in result.content
+
+
+def _leak_judge(monkeypatch, leaks=(), error=None):
+    seen = {}
+
+    async def judge(tool_context, hypotheses, personas):
+        seen["hypotheses"], seen["personas"] = hypotheses, personas
+        if error:
+            raise JudgeUnavailable(error)
+        return list(leaks)
+
+    monkeypatch.setattr(save_personas_module, "judge_persona_leaks", judge)
+    return seen
+
+
+async def test_semantic_leak_check_blocks_paraphrased_conclusion(tmp_path, monkeypatch):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    seen = _leak_judge(monkeypatch, [Leak("P1", "needs_pains", "H1", "怕再办一张又剩着", "restates unused sessions")])
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[_persona("Zhang", "Owners")],
+    ))
+
+    assert result.ok is False
+    assert "Zhang needs_pains (H1)" in result.content and "leak_overrides" in result.content
+    assert not (tmp_path / study_dir / "panel.json").exists()
+    assert [h["id"] for h in seen["hypotheses"]] == ["H1", "H2"]
+    assert set(seen["personas"]["P1"]) >= {"name", "needs_pains", "decision_weights"}
+    assert "behavior" not in seen["personas"]["P1"]
+
+
+async def test_leak_override_keeps_flagged_field_and_is_recorded(tmp_path, monkeypatch):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    _leak_judge(monkeypatch, [Leak("P1", "needs_pains", "H1", "pain", "flagged")])
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[_persona("Zhang", "Owners")],
+        leak_overrides=[{"persona": "Zhang", "field": "needs_pains", "hypothesis_id": "H1", "reason": "a budget fact"}],
+    ))
+
+    assert result.ok is True, result.content
+    panel = _read(tmp_path, f"{study_dir}/panel.json")
+    assert panel["leak_check"]["status"] == "passed"
+    assert panel["leak_check"]["overrides"][0]["reason"] == "a budget fact"
+    assert "by override" in result.content
+
+
+async def test_unavailable_leak_judge_saves_and_says_so(tmp_path, monkeypatch):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    _leak_judge(monkeypatch, error="model offline")
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[_persona("Zhang", "Owners")],
+    ))
+
+    assert result.ok is True
+    assert _read(tmp_path, f"{study_dir}/panel.json")["leak_check"]["status"] == "skipped"
+    assert "did not run" in result.content
+
+
+async def test_leak_judge_drops_items_outside_its_input(monkeypatch):
+    from app.tools.persona_research import semantic_checks
+
+    async def fake_ask(tool_context, system, user, max_tokens):
+        return {"leaks": [
+            {"persona": "P1", "field": "needs_pains", "hypothesis_id": "H1", "text": "t", "why": "w"},
+            {"persona": "P9", "field": "needs_pains", "hypothesis_id": "H1"},
+            {"persona": "P1", "field": "story", "hypothesis_id": "H1"},
+            {"persona": "P1", "field": "tagline", "hypothesis_id": "H7"},
+        ]}
+
+    monkeypatch.setattr(semantic_checks, "ask_json", fake_ask)
+
+    leaks = await semantic_checks.judge_persona_leaks(
+        None, [{"id": "H1", "statement": "s", "support_criteria": "a", "refute_criteria": "b"}],
+        {"P1": {"needs_pains": ["x"]}},
+    )
+
+    assert leaks == [Leak("P1", "needs_pains", "H1", "t", "w")]
 
 
 async def _report_ready(tmp_path):

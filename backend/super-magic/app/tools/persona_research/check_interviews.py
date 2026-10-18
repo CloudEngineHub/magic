@@ -11,7 +11,8 @@
 | done              | 已完成     | 计入有效样本                              |
 | failed            | 失败       | 保留失败原因；只有原因已排除时才重跑      |
 
-疑似连问（只提醒，不拦截）：persona_chat 已拒绝多个问号，但主持人会用逗号把两个问题塞进一个问号。
+疑似连问（只提醒，不拦截）：persona_chat 拒绝多个问号，并对「一个问号、两个提问分句」做语义判定；
+判定放行或判定不可用的轮次仍在这里标出，作为综合前的复核清单。
 例：「什么样的会员你不会买，如果这条解决了你会买吗？」→ 标出来，综合时把第二问的回答当作被问到才说。
 「那次从头到尾怎么回事？比如几点、和谁」这类细节提示不算（以「比如、具体、讲讲」等开头的分句不计）。
 回测 7 项研究 76 个单问号提问：标出 12 个，其中 4 个是上例那种真连问，8 个是「谁先提的，
@@ -20,7 +21,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import Field
@@ -31,6 +31,7 @@ from app.core.entity.message.server_message import DisplayType, FileContent, Too
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.persona_research.contracts import MAX_INTERVIEW_ROUNDS, PERSONAS_DIR, TranscriptStatus
+from app.tools.persona_research.semantic_checks import asks_joined_questions
 from app.tools.persona_research.study_files import (
     StudyFilesError,
     load_study,
@@ -163,31 +164,6 @@ class CheckInterviews(WorkspaceTool[CheckInterviewsParams]):
             type=DisplayType.MD,
             data=FileContent(file_name="interview_progress.md", content="\n".join(lines) + "\n"),
         )
-
-
-_QUOTED = re.compile(r"“[^”]*”|「[^」]*」|『[^』]*』|‘[^’]*’|\"[^\"]*\"")
-_CLAUSE_BREAK = re.compile(r"[，,；;。.！!：:—]+")
-_ASKS = re.compile(
-    r"什么|怎么|为什么|为啥|哪|多少|是否|会不会|能不能|有没有|要不要|是不是|吗$|呢$"
-    r"|\b(what|how|why|which|would|will|do|does|did|is|are|can|could)\b",
-    re.IGNORECASE,
-)
-# 细节提示分句：补充同一个问题要讲什么，不算第二问。
-_ELABORATION = re.compile(
-    r"^(比如|例如|像是|具体|尽量|越具体|从头|讲讲|说说|聊聊|举个|举一个|想到什么|不用|随便"
-    r"|for example|e\.g\.|such as|tell me|walk me)",
-    re.IGNORECASE,
-)
-
-
-def asks_joined_questions(text: str) -> bool:
-    """只有一个问号、但问号前有 2 个及以上提问分句时为 True；引号里的受访者原话不计。"""
-    parts = re.split(r"[？?]", _QUOTED.sub("X", text))
-    if len(parts) != 2:
-        return False
-    clauses = [c.strip() for c in _CLAUSE_BREAK.split(parts[0]) if c.strip()]
-    asks = [c for c in clauses if _ASKS.search(c) and not _ELABORATION.match(c)]
-    return len(asks) >= 2
 
 
 async def _persona_name(base_dir, persona_id: str) -> str:

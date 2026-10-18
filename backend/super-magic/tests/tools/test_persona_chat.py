@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from agentlang.context.tool_context import ToolContext
 from app.tools import persona_chat as persona_chat_module
 from app.tools.persona_chat import PersonaChat, PersonaChatParams
+from app.tools.persona_research import semantic_checks
 
 
 def _write_persona(root, persona_id, name, demographics=None):
@@ -54,7 +55,8 @@ class _FakeLLM:
 def fake_llm(monkeypatch):
     fake = _FakeLLM()
     monkeypatch.setattr(persona_chat_module, "LLMFactory", fake)
-    monkeypatch.setattr(persona_chat_module, "get_ability_config", lambda *args, **kwargs: None)
+    monkeypatch.setattr(semantic_checks, "LLMFactory", fake)
+    monkeypatch.setattr(semantic_checks, "get_ability_config", lambda *args, **kwargs: None)
     return fake
 
 
@@ -114,7 +116,7 @@ async def test_interview_follows_current_text_model_when_unconfigured(tool, tmp_
 
 
 async def test_configured_model_wins_over_current_text_model(tool, tmp_path, fake_llm, monkeypatch):
-    monkeypatch.setattr(persona_chat_module, "get_ability_config", lambda *args, **kwargs: "persona-model")
+    monkeypatch.setattr(semantic_checks, "get_ability_config", lambda *args, **kwargs: "persona-model")
     path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
     tool_context = ToolContext()
     tool_context.register_extension(
@@ -398,4 +400,59 @@ async def test_one_question_with_a_restatement_is_allowed(tool, tmp_path, fake_l
     ))
 
     assert result.ok is True
+
+
+async def test_joined_question_judged_as_two_is_rejected_without_answer(tool, tmp_path, fake_llm, monkeypatch):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    judged = []
+
+    async def judge(tool_context, question):
+        judged.append(question)
+        return "asks what they would not buy and whether a fix changes it"
+
+    monkeypatch.setattr(persona_chat_module, "judge_joined_question", judge)
+
+    result = await tool.execute(ToolContext(), PersonaChatParams(
+        persona_paths=[path], question="什么样的会员你会明确不买，如果这条解决了你会买吗？",
+    ))
+
+    assert result.ok is False and "two different things" in result.content
+    assert len(judged) == 1 and fake_llm.calls == []
+
+
+async def test_joined_question_judged_as_one_or_unavailable_is_answered(tool, tmp_path, fake_llm, monkeypatch):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    question = "那次是谁先提的，第一步做了什么？"
+
+    async def one(tool_context, text):
+        return ""
+
+    async def broken(tool_context, text):
+        raise semantic_checks.JudgeUnavailable("model offline")
+
+    monkeypatch.setattr(persona_chat_module, "judge_joined_question", one)
+    first = await tool.execute(ToolContext(), PersonaChatParams(persona_paths=[path], question=question))
+    monkeypatch.setattr(persona_chat_module, "judge_joined_question", broken)
+    second = await tool.execute(ToolContext(), PersonaChatParams(persona_paths=[path], question=question))
+
+    assert first.ok is True and second.ok is True
+
+
+async def test_simple_question_skips_the_judge(tool, tmp_path, fake_llm, monkeypatch):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+
+    async def judge(tool_context, question):
+        raise AssertionError("the judge must not run for a single question")
+
+    monkeypatch.setattr(persona_chat_module, "judge_joined_question", judge)
+
+    result = await tool.execute(ToolContext(), PersonaChatParams(persona_paths=[path], question="上周末孩子是怎么过的？"))
+
+    assert result.ok is True
+
+
+def test_judge_output_parsing_accepts_fenced_json_and_rejects_prose():
+    assert semantic_checks._parse_json_object('```json\n{"two_questions": true}\n```') == {"two_questions": True}
+    with pytest.raises(semantic_checks.JudgeUnavailable):
+        semantic_checks._parse_json_object("Yes, two questions.")
 

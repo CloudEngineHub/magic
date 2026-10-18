@@ -16,7 +16,8 @@ ok 只在所有人设都成功回答时为 True。
 | 传入            | 读取记录作为上下文，并把本轮主持人问题和成功的回答追加到记录里         |
 
 一轮只问一件事：问题里有 2 个及以上问号，或「第一……第二……」式枚举，直接拒绝，不调用模型、
-不计轮次。真实研究里提纲 8 题塞进 5 轮，40 轮里有 37 轮一次问三五件事，受访者只能逐条
+不计轮次。只有一个问号但有 2 个提问分句时（「什么样的你不会买，如果解决了你会买吗？」），
+再用一次小模型判定是不是两件事；是则同样拒绝，判定失败则放行（semantic_checks.py）。真实研究里提纲 8 题塞进 5 轮，40 轮里有 37 轮一次问三五件事，受访者只能逐条
 简答，没有追问空间。例：「你最想弄清楚什么？哪条规则会让你觉得亏？」→ 拒绝，应拆成两轮。
 
 记录由工具追加而不是由模型手写：模型手写时曾把 role 写成 speaker、自编 round_index、
@@ -40,7 +41,6 @@ from agentlang.llms.factory import LLMFactory
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.token_estimator import truncate_text_by_token
-from app.core.ai_abilities import AIAbility, get_ability_config
 from app.core.context.run_interruption import await_with_interruption
 from app.core.entity.message.server_message import (
     DisplayType,
@@ -59,6 +59,12 @@ from app.tools.persona_research.contracts import (
     MAX_INTERVIEW_ROUNDS,
     SCHEMA_VERSION,
     TranscriptStatus,
+)
+from app.tools.persona_research.semantic_checks import (
+    JudgeUnavailable,
+    asks_joined_questions,
+    judge_joined_question,
+    resolve_model_id,
 )
 from app.tools.persona_research.study_files import (
     StudyFilesError,
@@ -82,7 +88,6 @@ MAX_PERSONAS = 6
 MAX_TRANSCRIPT_TURNS = 40
 MAX_TURN_CHARS = 1500
 MAX_PROFILE_TOKENS = 4000
-FALLBACK_MODEL_ID = "auto"
 
 
 class PersonaChatFailureReason(StrEnum):
@@ -194,6 +199,13 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
                 "when you restate the participant's words, end that part with a period, not a question mark.",
                 extra_info={"user_error_reason": INVALID_REQUEST_REASON},
             )
+        joined_reason = await _joined_question_reason(tool_context, params.question)
+        if joined_reason:
+            return ToolResult.error(
+                f"Nothing was asked or recorded: the moderator message asks two different things under one question "
+                f"mark ({joined_reason}). Ask one of them now and the other in the next round.",
+                extra_info={"user_error_reason": INVALID_REQUEST_REASON},
+            )
         try:
             persona_files = [await self._resolve_workspace_path(path) for path in params.persona_paths]
             transcript_file = (
@@ -246,7 +258,7 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         transcript_text: str,
     ) -> List[_Answer]:
         agent_context = tool_context.get_extension("agent_context") if tool_context else None
-        model_id = self._model_id(agent_context)
+        model_id = resolve_model_id(agent_context)
         interruption_event = agent_context.get_interruption_event() if agent_context else None
 
         answers: List[_Answer] = []
@@ -409,16 +421,6 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         persona_id = _text(profile.get("id")) or fallback_id
         name = _text(profile.get("name")) or persona_id
         return _Persona(persona_id=persona_id, name=name, path=raw_path, profile=profile)
-
-    @staticmethod
-    def _model_id(agent_context: Any) -> str:
-        """专属模型优先；未配置时跟随当前对话的文本模型，它一定在用户套餐内。"""
-        configured = _text(get_ability_config(AIAbility.PERSONA_CHAT, "model_id"))
-        if configured:
-            return configured
-        model_context = getattr(agent_context, "model_context", None)
-        current = _text(getattr(model_context, "current_text_model_id", None))
-        return current or FALLBACK_MODEL_ID
 
     async def _ask_persona(
         self,
@@ -591,6 +593,17 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
 _QUESTION_MARKS = re.compile(r"[?？]")
 # 「第一……第二」「首先……其次」「first… second」这类枚举，一轮里塞了多个问题。
 _ENUMERATIONS = (("第一", "第二"), ("首先", "其次"), ("first", "second"))
+
+
+async def _joined_question_reason(tool_context: ToolContext, question: str) -> str:
+    """规则初筛命中时请小模型判定；判定不可用时放行（返回空字符串）。"""
+    if not asks_joined_questions(question):
+        return ""
+    try:
+        return await judge_joined_question(tool_context, question)
+    except JudgeUnavailable as exc:
+        logger.info(f"persona_chat 连问判定未执行，放行: {exc}")
+        return ""
 
 
 def _asks_several_things(question: str) -> bool:

@@ -19,6 +19,10 @@ tier 规则（SKILL.md）：来自上传的真人资料 → imported；否则至
 例：假设 H2 的 outcome_terms 含「用不完」，人设 tagline 写「认定月卡是赌你用不完」→ 拒绝保存。
 复用人设命中同样拒绝（它已经替本研究说出了结论，不应入选）。旧研究没有 outcome_terms，不做检查。
 
+语义检查：关键词过关后，再用一次小模型判定改写式泄漏（如「怕再办一张又剩着」之于「用不完」），
+命中则拒绝。研究负责人认为误判时，用 leak_overrides 写明理由放行，理由记进 panel.json 的
+leak_check.overrides，报告局限里要写出。判定调用失败时放行，leak_check.status 记为 skipped。
+
 社媒锚定：study.social_sampling 为 sampled 时，每位新人设至少引用 1 条 social 证据，
 让人设的处境来自真实用户原话，而不是研究者的想象。
 
@@ -62,6 +66,7 @@ from app.tools.persona_research.contracts import (
     StudyPhase,
     StudyType,
 )
+from app.tools.persona_research.semantic_checks import STANCE_FIELDS, JudgeUnavailable, judge_persona_leaks
 from app.tools.persona_research.study_files import (
     StudyFilesError,
     ascii_slug,
@@ -105,12 +110,22 @@ class PersonaInput(BaseModel):
     consistency_notes: List[str] = Field(default_factory=list)
 
 
+class LeakOverride(BaseModel):
+    persona: str = Field(..., min_length=1, description="Persona name or id the leak check flagged.")
+    field: str = Field(..., min_length=1, description="The flagged field, for example needs_pains.")
+    hypothesis_id: str = Field(..., pattern=r"^H\d+$")
+    reason: str = Field(..., min_length=1, description="Why this is a situation fact rather than the tested outcome.")
+
+
 class SavePersonasParams(BaseToolParams):
     study_dir: str = Field(..., description="studies/<slug>")
     personas: List[PersonaInput] = Field(..., min_length=1, description="In interview order.")
     panel_name: str = Field(..., min_length=1)
     criteria: str = ""
     library_panel_name: str = Field(default="", description="Also save the group to panels/ under this name.")
+    leak_overrides: List[LeakOverride] = Field(
+        default_factory=list, description="Keep fields the semantic leak check flagged, each with the reason."
+    )
 
 
 # 模型使用说明：agents/skills/persona-research/reference/tools.md
@@ -175,6 +190,11 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             ids = [pid for pid, _ in files]
             if len(set(ids)) != len(ids):
                 raise StudyFilesError("the same persona appears more than once")
+            leak_check = (
+                await _semantic_leak_check(tool_context, study, files, params.leak_overrides)
+                if outcome_terms
+                else None
+            )
 
             for pid, persona in files:
                 await write_json_file(base / PERSONAS_DIR / f"{pid}.json", persona)
@@ -189,6 +209,8 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
                     for row, item in zip(summary, params.personas)
                 ],
             }
+            if leak_check is not None:
+                panel["leak_check"] = leak_check
             await write_json_file(study_path / "panel.json", panel)
             library_note = ""
             if params.library_panel_name.strip():
@@ -212,6 +234,12 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             f"- {row['persona_id']} {row['name']}: tier {row['tier']}, {'reused' if row['reused'] else 'new'}, segment {row['segment']}"
             for row in summary
         )
+        if leak_check is not None and leak_check["status"] == "skipped":
+            lines.append(f"The semantic leak check did not run ({leak_check['note']}); only the keyword check was applied.")
+        if leak_check is not None and leak_check["overrides"]:
+            lines.append(
+                f"Kept {len(leak_check['overrides'])} flagged fields by override; state them in the report limitations."
+            )
         lines.append("Use these persona file paths (personas/<persona_id>.json) in the interviewer briefs.")
         return ToolResult(
             content="\n".join(lines),
@@ -378,7 +406,7 @@ def _check_evidence(
 
 
 def _stance_texts(persona: Dict[str, Any]) -> Dict[str, List[str]]:
-    """立场性字段的文本：写进这些地方的被测结论，会被受访者当作自己的观点复述。"""
+    """立场性字段（semantic_checks.STANCE_FIELDS）的文本：写进这些地方的被测结论，会被受访者当作自己的观点复述。"""
     dimensions = persona.get("dimensions") or {}
     layers = persona.get("layers") or {}
     cognition = layers.get("cognition") if isinstance(layers.get("cognition"), dict) else {}
@@ -391,7 +419,7 @@ def _stance_texts(persona: Dict[str, Any]) -> Dict[str, List[str]]:
         "tech_adoption": dimensions.get("tech_adoption") or [],
         "decision_weights": [w.get("factor") for w in weights if isinstance(w, dict)],
     }
-    return {key: [str(v) for v in (value if isinstance(value, list) else [value]) if v] for key, value in raw.items()}
+    return {key: [str(v) for v in (raw[key] if isinstance(raw[key], list) else [raw[key]]) if v] for key in STANCE_FIELDS}
 
 
 def _check_no_outcome(persona: Dict[str, Any], outcome_terms: List[tuple[str, str]], reused: bool) -> None:
@@ -417,6 +445,53 @@ def _check_no_outcome(persona: Dict[str, Any], outcome_terms: List[tuple[str, st
         f"{label} already states the outcome being tested: {'; '.join(hits)}. "
         f"Personas describe situations, not verdicts; {action}"
     )
+
+
+async def _semantic_leak_check(
+    tool_context: ToolContext,
+    study,
+    files: List[tuple[str, Dict[str, Any]]],
+    overrides: List[LeakOverride],
+) -> Dict[str, Any]:
+    """一次调用判全部人设的改写式泄漏；命中且未被 override 时抛 StudyFilesError。
+
+    例：H1 测「低频者用不完」，人设 needs_pains 写「怕再办一张又剩着」→ 拒绝，提示改写成事实
+    或写 leak_overrides。判定不可用时返回 status=skipped，不拦截。
+    """
+    labels = {f"P{index}": persona for index, (_, persona) in enumerate(files, start=1)}
+    hypotheses = [
+        {"id": h.id, "statement": h.statement, "support_criteria": h.support_criteria, "refute_criteria": h.refute_criteria}
+        for h in study.hypotheses
+    ]
+    fields = {
+        label: {"name": [str(persona.get("name") or "")], **{k: v for k, v in _stance_texts(persona).items() if v}}
+        for label, persona in labels.items()
+    }
+    applied = [o.model_dump() for o in overrides]
+    try:
+        leaks = await judge_persona_leaks(tool_context, hypotheses, fields)
+    except JudgeUnavailable as exc:
+        return {"status": "skipped", "note": str(exc)[:200], "overrides": applied}
+
+    def overridden(leak) -> bool:
+        persona = labels[leak.persona]
+        names = {str(persona.get("name") or ""), str(persona.get("id") or "")}
+        return any(
+            o.persona in names and o.field == leak.field and o.hypothesis_id == leak.hypothesis_id for o in overrides
+        )
+
+    blocking = [leak for leak in leaks if not overridden(leak)]
+    if blocking:
+        details = "; ".join(
+            f"{labels[leak.persona].get('name')} {leak.field} ({leak.hypothesis_id}): \"{leak.text[:60]}\" - {leak.why}"
+            for leak in blocking
+        )
+        raise StudyFilesError(
+            f"the semantic leak check found stance fields that predict a hypothesis answer: {details}. Rewrite them as "
+            "past facts (what happened, when, at what cost), or, if a flag is a plain situation fact, pass "
+            "leak_overrides with persona, field, hypothesis_id, and the reason"
+        )
+    return {"status": "passed", "note": "", "overrides": applied}
 
 
 def _check_decision_weights(label: str, layers: Dict[str, Any]) -> None:

@@ -251,7 +251,7 @@ Example:
 
 ## studies/<slug>/panel.json
 
-The personas used in this study. Same fields as a panel file, plus `selection` recording why each persona was chosen, whether it was reused from the library, and which quota segment it fills. The order of `persona_ids` is the interview order used for saturation in `synthesis.json`.
+The personas used in this study. Same fields as a panel file, plus `selection` recording why each persona was chosen, whether it was reused from the library, and which quota segment it fills, and `leak_check` (`{ "status": "passed" | "skipped", "note", "overrides": [{ "persona", "field", "hypothesis_id", "reason" }] }`) when the study has hypotheses. The order of `persona_ids` is the interview order used for saturation in `synthesis.json`.
 
 | Field | Required | Values |
 |---|---|---|
