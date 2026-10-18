@@ -89,6 +89,23 @@ describe("evidence helpers", () => {
 		).toEqual({ persona_id: "b", text: "主题原话" })
 	})
 
+	it("prefers a theme quote that reads as a full sentence over a short fragment", () => {
+		expect(
+			leadQuote({ id: "H1" }, [
+				{
+					hypothesis_ids: ["H1"],
+					quote_refs: [
+						{ persona_id: "a", text: "三千个差六千" },
+						{
+							persona_id: "b",
+							text: "录是能录，录完谁给我整理？没人整理，那跟没录一样。",
+						},
+					],
+				},
+			])?.persona_id,
+		).toBe("b")
+	})
+
 	it("splits inline source tokens out of the reason", () => {
 		expect(splitSourceTokens("依据 [S8][S9]，无反对")).toEqual([
 			{ text: "依据 " },

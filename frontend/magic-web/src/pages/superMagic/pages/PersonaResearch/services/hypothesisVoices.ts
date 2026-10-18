@@ -79,12 +79,26 @@ export function leadQuote(
 		(ref): ref is QuoteEvidence => ref.kind === "quote",
 	)
 	if (own) return own
-	for (const theme of themes) {
-		if (!theme.hypothesis_ids?.includes(hypothesis.id)) continue
-		const quote = theme.quote_refs?.find((ref) => ref.text.trim())
-		if (quote) return quote
-	}
-	return null
+	const candidates = themes
+		.filter((theme) => theme.hypothesis_ids?.includes(hypothesis.id))
+		.flatMap((theme) => theme.quote_refs ?? [])
+		.filter((ref) => ref.text.trim())
+	// Theme quotes are often clipped fragments; prefer one that reads as a full sentence.
+	return (
+		candidates.find((ref) => isReadableLength(ref.text)) ??
+		candidates.reduce<LeadQuoteRef | null>(
+			(best, ref) => (!best || ref.text.length > best.text.length ? ref : best),
+			null,
+		)
+	)
+}
+
+const LEAD_MIN = 15
+const LEAD_MAX = 90
+
+function isReadableLength(text: string): boolean {
+	const length = text.trim().length
+	return length >= LEAD_MIN && length <= LEAD_MAX
 }
 
 const SOURCE_TOKEN = /\[(S\d+)\]/g
