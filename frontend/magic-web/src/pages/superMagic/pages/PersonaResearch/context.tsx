@@ -28,3 +28,8 @@ export function usePersonaResearchStore() {
 	}
 	return store
 }
+
+/** Same store, or null outside the research routes (avatars render without persona details). */
+export function useOptionalPersonaResearchStore() {
+	return useContext(PersonaResearchStoreContext)
+}
