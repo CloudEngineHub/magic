@@ -220,7 +220,14 @@ const studySchema = z.object({
 	title: z.string(),
 	question: z.string(),
 	study_type: z
-		.enum(["user_research", "product_rnd", "concept_test", "fast_insight", "panel_only"])
+		.enum([
+			"user_research",
+			"product_rnd",
+			"concept_test",
+			"fast_insight",
+			"panel_only",
+			"persona_build",
+		])
 		.optional()
 		.catch(undefined),
 	framework: z.array(z.string()).optional().catch(undefined),
@@ -273,7 +280,7 @@ const personaSchema = z.object({
 	name: z.string().min(1),
 	tagline: optionalString,
 	tags: z.array(z.string()).optional().catch(undefined),
-	tier: z.enum(["generated", "evidence_based", "imported"]).catch("generated"),
+	tier: z.enum(["generated", "evidence_based", "imported", "manual"]).catch("generated"),
 	dimensions: z
 		.object({
 			demographics: looseRecord.optional(),
@@ -321,12 +328,16 @@ const personaSchema = z.object({
 		.optional()
 		.catch(undefined),
 	field_sources: z
-		.record(z.string(), z.union([z.array(z.string()), z.literal("inferred")]))
+		.record(
+			z.string(),
+			z.union([z.array(z.string()), z.literal("inferred"), z.literal("user")]),
+		)
 		.optional()
 		.catch(undefined),
 	consistency_notes: z.array(z.string()).optional().catch(undefined),
 	created_in: optionalString,
 	updated_at: optionalString,
+	edited_at: optionalString,
 })
 
 const panelSchema = z.object({

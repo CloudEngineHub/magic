@@ -12,6 +12,11 @@ tier 规则（SKILL.md）：来自上传的真人资料 → imported；否则至
 例：3 条网页证据，但 behavior 写的是 "inferred" → generated。
 
 复用的人设只追加证据、补齐缺少的出处、追加 consistency_notes，不改身份和内容字段。
+imported 和 manual（用户手动填写）人设复用时保持原 tier。
+
+| 研究类型       | 允许的阶段     | 分层校验 | 保存后                                           |
+| 普通研究       | interview      | 按配额   | 阶段不变，等待访谈                               |
+| persona_build  | clarify、done  | 不校验   | phase=done；clarify=done，其余阶段 skipped        |
 """
 
 from __future__ import annotations
@@ -41,7 +46,9 @@ from app.tools.persona_research.contracts import (
     EvidenceType,
     Level,
     PersonaTier,
+    PhaseStatus,
     StudyPhase,
+    StudyType,
 )
 from app.tools.persona_research.study_files import (
     StudyFilesError,
@@ -52,6 +59,7 @@ from app.tools.persona_research.study_files import (
     random_hex,
     read_json_file,
     resolve_study_dir,
+    save_study,
     workspace_relative,
     write_json_file,
 )
@@ -103,7 +111,11 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             base = await async_realpath(self.base_dir)
             study_path = await resolve_study_dir(base, params.study_dir)
             study = await load_study(study_path)
-            if study.phase != StudyPhase.INTERVIEW:
+            building = study.study_type == StudyType.PERSONA_BUILD
+            if building:
+                if study.phase not in (StudyPhase.CLARIFY, StudyPhase.DONE):
+                    raise StudyFilesError(f"a persona_build study cannot save personas in phase {study.phase}")
+            elif study.phase != StudyPhase.INTERVIEW:
                 raise StudyFilesError(
                     f"personas are saved in the interview phase; the study is in {study.phase}. "
                     "Send update_study desk_research_done or desk_research_skipped first"
@@ -111,7 +123,8 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             limit = study.limits.personas if study.limits else MAX_PERSONAS
             if len(params.personas) > limit:
                 raise StudyFilesError(f"{len(params.personas)} personas exceed this study's limit of {limit}")
-            quota = {item.segment for item in study.quota}
+            # persona_build 没有配额，segment 只是展示用的人群标签。
+            quota = set() if building else {item.segment for item in study.quota}
             unknown = sorted({p.segment for p in params.personas if quota and p.segment not in quota})
             if unknown:
                 raise StudyFilesError(f"segments must be quota segments ({', '.join(sorted(quota))}); unknown: {', '.join(unknown)}")
@@ -160,6 +173,9 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
                     "criteria": params.criteria.strip(),
                 })
                 library_note = f" Also saved the group as {PANELS_DIR}/{panel_id}.json."
+            if building:
+                _finish_persona_build(study)
+                await save_study(study_path, study)
         except StudyFilesError as exc:
             return ToolResult.error(f"Personas not saved: {exc}")
 
@@ -287,10 +303,17 @@ def _merge_reused(existing: Dict[str, Any], item: PersonaInput) -> Dict[str, Any
     persona["evidence"] = evidence
     persona["field_sources"] = field_sources
     persona["consistency_notes"] = list(persona.get("consistency_notes") or []) + item.consistency_notes
-    if persona.get("tier") != PersonaTier.IMPORTED:
+    if persona.get("tier") not in (PersonaTier.IMPORTED, PersonaTier.MANUAL):
         persona["tier"] = _tier(False, evidence, field_sources).value
     persona["updated_at"] = now_iso()
     return persona
+
+
+def _finish_persona_build(study) -> None:
+    """只构建人设的研究在人设入库后结束；计划、访谈等阶段没有发生，记为 skipped。"""
+    study.phase = StudyPhase.DONE
+    for phase in study.phases:
+        phase.status = PhaseStatus.DONE if phase.key == StudyPhase.CLARIFY else PhaseStatus.SKIPPED
 
 
 def _tier(from_uploaded_people: bool, evidence: List[Dict[str, Any]], field_sources: Dict[str, Any]) -> PersonaTier:

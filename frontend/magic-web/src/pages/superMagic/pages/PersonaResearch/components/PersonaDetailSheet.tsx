@@ -8,13 +8,17 @@ import {
 	Layers,
 	MessageCircleQuestion,
 	MessagesSquare,
+	Pencil,
 	Quote,
 	ShieldAlert,
 	Smartphone,
 	Split,
+	Trash2,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import MagicTooltip from "@/components/base/MagicTooltip"
+import dayjs from "@/infrastructure/vendors/dayjs"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
 	Sheet,
@@ -24,7 +28,13 @@ import {
 	SheetTitle,
 } from "@/components/shadcn-ui/sheet"
 import { cn } from "@/utils/cn"
-import type { InterviewFile, PersonaEvidence, PersonaFile } from "../types"
+import type {
+	InterviewFile,
+	PersonaDimensionKey,
+	PersonaEvidence,
+	PersonaFieldSource,
+	PersonaFile,
+} from "../types"
 import { normalizeDecisionWeights } from "../services/researchAnalysis"
 import { formatResearchValue } from "./formatValue"
 import { AiSimulatedNote } from "./ResearchBadges"
@@ -38,6 +48,9 @@ interface PersonaDetailSheetProps {
 	/** Prefills the composer with a follow-up question for this persona. */
 	onAskPersona?: (persona: PersonaFile) => void
 	onOpenInterview?: (personaId: string) => void
+	/** Persona library only: open the edit form / ask to delete this persona. */
+	onEdit?: (persona: PersonaFile) => void
+	onDelete?: (persona: PersonaFile) => void
 	side?: "right" | "bottom"
 }
 
@@ -48,12 +61,17 @@ export default function PersonaDetailSheet({
 	onOpenChange,
 	onAskPersona,
 	onOpenInterview,
+	onEdit,
+	onDelete,
 	side = "right",
 }: PersonaDetailSheetProps) {
 	const { t } = useTranslation("personaResearch")
 	const dimensions = persona?.dimensions
 	const layers = persona?.layers
-	const fieldSources = persona?.field_sources
+	const isManual = persona?.tier === "manual"
+	// Every field of a manual persona is the user's, so per-field marks would only repeat the tier.
+	const fieldSourceOf = (key: PersonaDimensionKey) =>
+		isManual ? undefined : persona?.field_sources?.[key]
 	const tierCopy = persona
 		? {
 				generated: {
@@ -67,6 +85,10 @@ export default function PersonaDetailSheet({
 				imported: {
 					label: t("persona.tier.imported"),
 					hint: t("persona.tierHint.imported"),
+				},
+				manual: {
+					label: t("persona.tier.manual"),
+					hint: t("persona.tierHint.manual"),
 				},
 			}[persona.tier]
 		: null
@@ -94,7 +116,7 @@ export default function PersonaDetailSheet({
 										PERSONA_TIER_RING[persona.tier],
 									)}
 								/>
-								<div className="min-w-0">
+								<div className="min-w-0 flex-1">
 									<SheetTitle className="truncate text-base">
 										{persona.name}
 									</SheetTitle>
@@ -102,6 +124,35 @@ export default function PersonaDetailSheet({
 										{persona.tagline}
 									</SheetDescription>
 								</div>
+								{onEdit || onDelete ? (
+									// Right padding keeps clear of the sheet's own close button.
+									<div className="flex shrink-0 items-center gap-0.5 self-start pr-7">
+										{onEdit ? (
+											<Button
+												variant="ghost"
+												size="sm"
+												className="h-7 gap-1 px-2 text-xs"
+												onClick={() => onEdit(persona)}
+											>
+												<Pencil className="size-3.5" />
+												{t("persona.edit")}
+											</Button>
+										) : null}
+										{onDelete ? (
+											<MagicTooltip title={t("persona.delete")}>
+												<Button
+													variant="ghost"
+													size="icon"
+													className="size-7 text-muted-foreground hover:text-destructive"
+													aria-label={t("persona.delete")}
+													onClick={() => onDelete(persona)}
+												>
+													<Trash2 className="size-3.5" />
+												</Button>
+											</MagicTooltip>
+										) : null}
+									</div>
+								) : null}
 							</div>
 							<div className="flex flex-wrap gap-1">
 								{(persona.tags ?? []).map((tag) => (
@@ -117,7 +168,7 @@ export default function PersonaDetailSheet({
 								<Stat label={t("persona.stat.tier")} value={tierCopy.label} />
 								<Stat
 									label={t("persona.stat.sources")}
-									value={String(persona.evidence?.length ?? 0)}
+									value={isManual ? "—" : String(persona.evidence?.length ?? 0)}
 								/>
 								<Stat
 									label={t("persona.stat.rounds")}
@@ -127,6 +178,13 @@ export default function PersonaDetailSheet({
 							<p className="text-xs leading-5 text-muted-foreground">
 								{tierCopy.hint}
 							</p>
+							{persona.edited_at && !isManual ? (
+								<p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs leading-5 text-muted-foreground">
+									{t("persona.editedNotice", {
+										date: dayjs(persona.edited_at).format("MM-DD"),
+									})}
+								</p>
+							) : null}
 							<AiSimulatedNote />
 						</SheetHeader>
 						{/* Radix wraps content in a table that grows with long values; keep it to the sheet width. */}
@@ -145,37 +203,37 @@ export default function PersonaDetailSheet({
 									<Field
 										label={t("persona.dimension.demographics")}
 										value={dimensions?.demographics}
-										source={fieldSources?.demographics}
+										source={fieldSourceOf("demographics")}
 									/>
 									<Field
 										label={t("persona.dimension.geography")}
 										value={dimensions?.geography}
-										source={fieldSources?.geography}
+										source={fieldSourceOf("geography")}
 									/>
 									<Field
 										label={t("persona.dimension.psychographics")}
 										value={dimensions?.psychographics}
-										source={fieldSources?.psychographics}
+										source={fieldSourceOf("psychographics")}
 									/>
 									<Field
 										label={t("persona.dimension.behavior")}
 										value={dimensions?.behavior}
-										source={fieldSources?.behavior}
+										source={fieldSourceOf("behavior")}
 									/>
 									<Field
 										label={t("persona.dimension.needsPains")}
 										value={dimensions?.needs_pains}
-										source={fieldSources?.needs_pains}
+										source={fieldSourceOf("needs_pains")}
 									/>
 									<Field
 										label={t("persona.dimension.techAdoption")}
 										value={dimensions?.tech_adoption}
-										source={fieldSources?.tech_adoption}
+										source={fieldSourceOf("tech_adoption")}
 									/>
 									<Field
 										label={t("persona.dimension.social")}
 										value={dimensions?.social}
-										source={fieldSources?.social}
+										source={fieldSourceOf("social")}
 									/>
 								</Section>
 								<Section
@@ -213,23 +271,25 @@ export default function PersonaDetailSheet({
 										</p>
 									</Section>
 								) : null}
-								<Section
-									icon={<Brain className="size-4" />}
-									title={t("persona.section.evidence")}
-								>
-									{persona.evidence?.length ? (
-										<ul className="flex flex-col gap-2">
-											{persona.evidence.map((item) => (
-												<EvidenceItem key={item.id} item={item} />
-											))}
-										</ul>
-									) : (
-										<p className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-400">
-											<ShieldAlert className="mt-0.5 size-4 shrink-0" />
-											{t("persona.noEvidence")}
-										</p>
-									)}
-								</Section>
+								{isManual && !persona.evidence?.length ? null : (
+									<Section
+										icon={<Brain className="size-4" />}
+										title={t("persona.section.evidence")}
+									>
+										{persona.evidence?.length ? (
+											<ul className="flex flex-col gap-2">
+												{persona.evidence.map((item) => (
+													<EvidenceItem key={item.id} item={item} />
+												))}
+											</ul>
+										) : (
+											<p className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-400">
+												<ShieldAlert className="mt-0.5 size-4 shrink-0" />
+												{t("persona.noEvidence")}
+											</p>
+										)}
+									</Section>
+								)}
 							</div>
 						</ScrollArea>
 						{onAskPersona || (interview && onOpenInterview) ? (
@@ -298,8 +358,8 @@ function Field({
 }: {
 	label: string
 	value: unknown
-	/** Evidence ids backing this field, or "inferred"; absent on older persona files. */
-	source?: string[] | "inferred"
+	/** Evidence ids, "inferred" or "user"; absent on older persona files and manual personas. */
+	source?: PersonaFieldSource
 }) {
 	const { t, i18n } = useTranslation("personaResearch")
 	// Contract keys and values (age, city_tier, male) get names; anything else shows as written.
@@ -332,12 +392,16 @@ function Field({
 							"w-fit rounded px-1 text-[10px] leading-4",
 							source === "inferred"
 								? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-								: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+								: source === "user"
+									? "bg-slate-500/15 text-slate-700 dark:text-slate-300"
+									: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
 						)}
 					>
 						{source === "inferred"
 							? t("persona.fieldInferred")
-							: t("persona.fieldSourced", { ids: source.join("、") })}
+							: source === "user"
+								? t("persona.fieldUser")
+								: t("persona.fieldSourced", { ids: source.join("、") })}
 					</span>
 				) : null}
 			</span>

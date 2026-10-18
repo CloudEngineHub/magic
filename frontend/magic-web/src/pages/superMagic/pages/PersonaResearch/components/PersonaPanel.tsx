@@ -48,7 +48,11 @@ function PersonaPanel({
 		}
 		return counts
 	}, [store.studyPanel])
-	const evidenceBased = personas.filter((persona) => persona.tier !== "generated").length
+	// Manual personas come from the user, not from sources, so they are counted on their own.
+	const evidenceBased = personas.filter(
+		(persona) => persona.tier === "evidence_based" || persona.tier === "imported",
+	).length
+	const manualCount = personas.filter((persona) => persona.tier === "manual").length
 
 	if (personas.length === 0) {
 		if (interviewRunning) return <CardSkeletonGrid isMobile={isMobile} />
@@ -88,6 +92,9 @@ function PersonaPanel({
 				})}
 				<span className="ml-auto">
 					{t("persona.distribution", { sourced: evidenceBased, total: personas.length })}
+					{manualCount > 0
+						? ` · ${t("persona.distributionManual", { count: manualCount })}`
+						: null}
 				</span>
 			</div>
 			<div

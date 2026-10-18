@@ -17,7 +17,7 @@ Creates the study and moves `study.json` through its phases. You report what hap
 
 | `event` | Call it when | Extra arguments |
 |---|---|---|
-| `created` | After the pre-search, before clarifying questions | `title`, `question` (the user's words, verbatim), `slug_hint` (short ASCII kebab-case topic summary; use pinyin or English for non-Latin topics) |
+| `created` | After the pre-search, before clarifying questions; for a persona-building request, before reading the materials | `title`, `question` (the user's words, verbatim), `slug_hint` (short ASCII kebab-case topic summary; use pinyin or English for non-Latin topics), `study_type: "persona_build"` only for a persona-building request |
 | `clarified` | Clarification answered, or nothing needed clarifying | — |
 | `plan_confirmed` | The user chose the start option in `ask_user` | `study_type`, `framework`, `decision`, `hypotheses` (`[{statement, support_criteria, refute_criteria}]` in plan order; ids `H1`, `H2`, ... are assigned), `quota` (`[{segment, criteria, count}]`; counts add up to the persona count, at most 12), `interview_rounds` (default 5, at most 7), `guide_review` (`[{issue, before, after}]`, `issue` is `leading`, `double_barreled`, `hypothesis_reveal`, or `jargon`; `[]` when nothing changed) |
 | `desk_research_done` | `desk-research.md` is written | — |
@@ -44,8 +44,10 @@ study_dir = created.data["study_dir"]
 
 Saves the study's personas and `studies/<slug>/panel.json` in one call, in interview order. Call it in the `interview` phase, after `desk_research_done` or `desk_research_skipped`.
 
+In a `persona_build` study, call it only after the user approved the drafts; at most 6 personas, `segment` is a short audience label, and the call finishes the study (`phase=done`). No other `update_study` event is accepted for that study.
+
 - New persona: leave `id` empty and give `id_hint` (short ASCII, for example `zhangwei`), `name`, `tagline`, `tags`, all 7 `dimensions`, all 4 `layers`, `evidence` (`[{id: "e1", type, platform, title, url, file, quote}]`; `platform` only for `social`), `field_sources` for all 7 dimensions (evidence ids or `"inferred"`), and `consistency_notes`. The tool creates the id, fills `schema_version`, `created_in`, and `updated_at`, and computes `tier` by rule.
-- Reused persona: give its `id`. Identity and content fields stay unchanged; you may add new `evidence` (new ids), missing `field_sources`, and `consistency_notes`.
+- Reused persona: give its `id`. Identity and content fields stay unchanged; you may add new `evidence` (new ids), missing `field_sources`, and `consistency_notes`. `imported` and `manual` personas keep their tier.
 - Every persona also needs `segment` (a quota segment) and `reason`. Set `from_uploaded_people: true` only for personas built from uploaded materials about real people.
 - `panel_name` and `criteria` describe the group. Set `library_panel_name` only when the user asked to save the group to the library.
 

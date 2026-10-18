@@ -92,10 +92,12 @@ const ResearchShareBody = observer(function ResearchShareBody({
 	const title =
 		(sharedTopic && store.studyTitleOf(sharedTopic)) || topicName || t("study.untitled")
 
+	// Persona building has no plan, interviews or report: no phase stepper and no study scale.
+	const isPersonaBuild = study?.study_type === "persona_build"
 	const metaChips = [
 		study?.study_type ? t(`studyType.${camel(study.study_type)}`) : null,
 		study?.framework?.length ? study.framework.join(" · ") : null,
-		study?.limits?.personas
+		study?.limits?.personas && !isPersonaBuild
 			? t("study.scale", {
 					personas: study.limits.personas,
 					rounds: study.limits.interview_rounds ?? 5,
@@ -167,7 +169,7 @@ const ResearchShareBody = observer(function ResearchShareBody({
 						</Tabs>
 					) : null}
 				</div>
-				{activeView === "results" ? (
+				{activeView === "results" && !isPersonaBuild ? (
 					isLoading ? (
 						<StudyStepperSkeleton compact={isMobile} />
 					) : (

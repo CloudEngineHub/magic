@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { CircleAlert, CircleCheck, Loader2, Target } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
@@ -16,6 +17,10 @@ interface PersonaCardProps {
 	selectable?: boolean
 	selected?: boolean
 	onSelectedChange?: (selected: boolean) => void
+	/** Actions menu shown on hover next to the checkbox (persona library: edit, delete). */
+	actions?: ReactNode
+	/** Just created in this page session: green ring and a "new" label for a few seconds. */
+	isNew?: boolean
 	onOpen: () => void
 }
 
@@ -23,6 +28,7 @@ interface PersonaCardProps {
 export const PERSONA_TIER_RING: Record<PersonaTier, string> = {
 	evidence_based: "ring-emerald-500/60",
 	imported: "ring-sky-500/60",
+	manual: "ring-slate-400/70",
 	generated: "ring-border",
 }
 
@@ -35,6 +41,8 @@ export default function PersonaCard({
 	selectable = false,
 	selected = false,
 	onSelectedChange,
+	actions,
+	isNew = false,
 	onOpen,
 }: PersonaCardProps) {
 	const { t } = useTranslation("personaResearch")
@@ -42,6 +50,7 @@ export default function PersonaCard({
 		generated: t("persona.tier.generated"),
 		evidence_based: t("persona.tier.evidenceBased"),
 		imported: t("persona.tier.imported"),
+		manual: t("persona.tier.manual"),
 	}[persona.tier]
 
 	return (
@@ -51,16 +60,22 @@ export default function PersonaCard({
 				"group relative flex h-full flex-col gap-3 p-4 text-left",
 				"transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none motion-reduce:transition-none",
 				selected ? "ring-2 ring-primary" : "hover:ring-primary/30",
+				isNew && !selected && "ring-2 ring-emerald-500/60",
 			)}
 			data-testid="persona-research-persona-card"
 		>
-			{selectable ? (
-				<Checkbox
-					className="absolute right-3 top-3 z-10 bg-background"
-					checked={selected}
-					onCheckedChange={(value) => onSelectedChange?.(value === true)}
-					aria-label={t("persona.select", { name: persona.name })}
-				/>
+			{selectable || actions ? (
+				<span className="absolute right-3 top-3 z-10 flex items-center gap-1">
+					{actions}
+					{selectable ? (
+						<Checkbox
+							className="bg-background"
+							checked={selected}
+							onCheckedChange={(value) => onSelectedChange?.(value === true)}
+							aria-label={t("persona.select", { name: persona.name })}
+						/>
+					) : null}
+				</span>
 			) : null}
 			{/* The whole body opens details; the checkbox above stays a separate control. */}
 			<button
@@ -77,9 +92,16 @@ export default function PersonaCard({
 							PERSONA_TIER_RING[persona.tier],
 						)}
 					/>
-					<span className="min-w-0 flex-1 pr-6">
-						<span className="block truncate text-sm font-semibold text-foreground">
-							{persona.name}
+					<span className={cn("min-w-0 flex-1", actions ? "pr-12" : "pr-6")}>
+						<span className="flex min-w-0 items-center gap-1.5">
+							<span className="truncate text-sm font-semibold text-foreground">
+								{persona.name}
+							</span>
+							{isNew ? (
+								<span className="shrink-0 rounded bg-emerald-500/10 px-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+									{t("library.new")}
+								</span>
+							) : null}
 						</span>
 						{persona.tagline ? (
 							<span className="line-clamp-2 text-xs leading-5 text-muted-foreground">

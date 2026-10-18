@@ -178,6 +178,14 @@ Some deployments add social-platform data skills (searching posts or videos, rea
 - Evidence records: use `evidence[].type = "social"` with `platform` set to the platform key (for example `xiaohongshu`, `douyin`), put the post URL in `url`, and start `title` with the platform name, for example `Xiaohongshu: <post title>`. Social posts found through web search are also `social`.
 - In the report's limitations, state which platforms were sampled and how many posts and comments were read.
 
-## Uploaded Materials
+## Persona Building Requests
 
-When the user uploads materials and asks to build personas from them, read them first (document-converter skill for complex formats), derive personas grounded in the material with `tier=imported` and `evidence[].type=upload` pointing to the file, and cite the file in `evidence[].file`. Do not copy personal identifiers of real individuals (names, phone numbers, company names) into personas, and tell the user what was removed.
+When the user asks only to build personas (for example "只构建人设，不做研究", or uploads interviews, surveys, or customer data to turn into personas) and asks for no study, run this short flow instead of Phases 1-6. Rule 1 does not apply; the draft approval below replaces plan approval.
+
+1. `update_study` `created` with `study_type: "persona_build"`.
+2. Read uploaded materials first (document-converter skill for complex formats). Without materials, you may run up to 2 `web_search` rounds for evidence. If the input only has demographics, say the personas would be mostly inferred and ask with `ask_user` whether to continue or add material.
+3. Draft at most 6 personas: one per real person in uploaded interviews, otherwise distinct by situation and behavior. Remove personal identifiers of real individuals (names, phone numbers, company or shop names) and use pseudonyms.
+4. Show the drafts in your message: name, one-line identity, 2-3 key traits, what each is based on, and the expected tier (`imported` for uploaded material about real people, otherwise by the evidence rule). List the kinds and counts of identifiers removed. Then call `ask_user` with one `select` question and no `default`: save to the library, or adjust first. Only the save option is approval; on adjust, revise and ask again.
+5. On approval, call `save_personas` (`from_uploaded_people: true` and `upload` evidence citing `evidence[].file` for uploaded people). Reply with the saved names; do not interview them or write a report.
+
+`manual` personas are written by the user in the persona library. Reuse them like any other persona, but never change their content or tier.

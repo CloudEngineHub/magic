@@ -30,7 +30,13 @@ export type StudyPhase = StudyPhaseKey | "done"
 export type StudyPhaseStatus = "done" | "running" | "pending" | "skipped" | "failed"
 
 export type StudyType =
-	"user_research" | "product_rnd" | "concept_test" | "fast_insight" | "panel_only"
+	| "user_research"
+	| "product_rnd"
+	| "concept_test"
+	| "fast_insight"
+	| "panel_only"
+	/** Persona building only: the agent saves personas and the study ends, no interviews. */
+	| "persona_build"
 
 export interface StudyPhaseState {
 	key: StudyPhaseKey
@@ -85,7 +91,8 @@ export interface StudyFile {
 	validated_count?: number
 }
 
-export type PersonaTier = "generated" | "evidence_based" | "imported"
+/** "manual": written by the user in the persona library, never re-tiered by the agent. */
+export type PersonaTier = "generated" | "evidence_based" | "imported" | "manual"
 export type QualitativeLevel = "high" | "medium" | "low"
 
 export interface DecisionWeight {
@@ -131,13 +138,18 @@ export interface PersonaFile {
 		behavior?: unknown[]
 	}
 	evidence?: PersonaEvidence[]
-	/** Evidence ids backing each dimension, or "inferred" when nothing backs it. */
-	field_sources?: Record<string, string[] | "inferred">
+	/** Evidence ids backing each dimension, "inferred" when nothing backs it, "user" when the user wrote it. */
+	field_sources?: Record<string, PersonaFieldSource>
 	/** Cross-layer contradictions kept on purpose, e.g. says X but does Y. */
 	consistency_notes?: string[]
 	created_in?: string
 	updated_at?: string
+	/** Last edit made by the user in the persona library. */
+	edited_at?: string
 }
+
+export type PersonaFieldSource = string[] | "inferred" | "user"
+export type PersonaDimensionKey = keyof NonNullable<PersonaFile["dimensions"]>
 
 export interface PanelSelection {
 	persona_id: string
