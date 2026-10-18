@@ -7300,5 +7300,209 @@
     "persona_chat.reason.empty_answer": {
         "zh_CN": "没有生成有效回答",
         "en_US": "No valid answer was generated"
+    },
+    "persona_chat.detail_round": {
+        "zh_CN": "第 {{round}} 轮",
+        "en_US": "Round {{round}}"
+    },
+    "finish_persona_transcript.success": {
+        "zh_CN": "访谈已完成，共 {{rounds}} 轮",
+        "en_US": "Interview finished after {{rounds}} rounds"
+    },
+    "finish_persona_transcript.failed": {
+        "zh_CN": "访谈未能完成，已保留 {{rounds}} 轮记录",
+        "en_US": "Interview could not finish; {{rounds}} rounds kept"
+    },
+    "finish_persona_transcript.error": {
+        "zh_CN": "访谈收尾未通过核对，AI 正在修正",
+        "en_US": "The interview wrap-up did not pass checks; the AI is correcting it"
+    },
+    "finish_persona_transcript.detail_title": {
+        "zh_CN": "访谈小结",
+        "en_US": "Interview summary"
+    },
+    "finish_persona_transcript.detail_findings": {
+        "zh_CN": "关键发现",
+        "en_US": "Key findings"
+    },
+    "finish_persona_transcript.detail_quotes": {
+        "zh_CN": "受访者原话",
+        "en_US": "Participant quotes"
+    },
+    "update_study.created": {
+        "zh_CN": "已创建研究",
+        "en_US": "Study created"
+    },
+    "update_study.progress": {
+        "zh_CN": "进入{{phase}}",
+        "en_US": "Moved to {{phase}}"
+    },
+    "update_study.done": {
+        "zh_CN": "研究已完成",
+        "en_US": "Study completed"
+    },
+    "update_study.error": {
+        "zh_CN": "研究进度未更新，AI 正在调整",
+        "en_US": "Study progress was not updated; the AI is adjusting"
+    },
+    "update_study.detail_title": {
+        "zh_CN": "研究进度",
+        "en_US": "Study progress"
+    },
+    "save_personas.success": {
+        "zh_CN": "{{count}} 位人设：新建 {{new}} 位，复用 {{reused}} 位",
+        "en_US": "{{count}} personas: {{new}} new, {{reused}} reused"
+    },
+    "save_personas.error": {
+        "zh_CN": "人设未保存，AI 正在修正",
+        "en_US": "Personas were not saved; the AI is correcting them"
+    },
+    "save_personas.detail_title": {
+        "zh_CN": "本次研究的人设",
+        "en_US": "Personas in this study"
+    },
+    "save_personas.col_name": {
+        "zh_CN": "人设",
+        "en_US": "Persona"
+    },
+    "save_personas.col_segment": {
+        "zh_CN": "分层",
+        "en_US": "Segment"
+    },
+    "save_personas.col_tier": {
+        "zh_CN": "依据",
+        "en_US": "Basis"
+    },
+    "save_personas.col_source": {
+        "zh_CN": "来源",
+        "en_US": "Source"
+    },
+    "save_personas.new": {
+        "zh_CN": "新建",
+        "en_US": "New"
+    },
+    "save_personas.reused": {
+        "zh_CN": "复用",
+        "en_US": "Reused"
+    },
+    "save_personas.tier.generated": {
+        "zh_CN": "推断生成",
+        "en_US": "Generated"
+    },
+    "save_personas.tier.evidence_based": {
+        "zh_CN": "有证据支撑",
+        "en_US": "Evidence-based"
+    },
+    "save_personas.tier.imported": {
+        "zh_CN": "来自上传资料",
+        "en_US": "From uploads"
+    },
+    "check_interviews.success": {
+        "zh_CN": "{{done}}/{{total}} 位已完成访谈",
+        "en_US": "{{done}}/{{total}} interviews done"
+    },
+    "check_interviews.error": {
+        "zh_CN": "暂时无法检查访谈进度",
+        "en_US": "Could not check interview progress"
+    },
+    "check_interviews.detail_title": {
+        "zh_CN": "访谈进度",
+        "en_US": "Interview progress"
+    },
+    "check_interviews.col_persona": {
+        "zh_CN": "人设",
+        "en_US": "Persona"
+    },
+    "check_interviews.col_status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "check_interviews.col_rounds": {
+        "zh_CN": "轮数",
+        "en_US": "Rounds"
+    },
+    "check_interviews.status.not_started": {
+        "zh_CN": "未开始",
+        "en_US": "Not started"
+    },
+    "check_interviews.status.running": {
+        "zh_CN": "进行中",
+        "en_US": "In progress"
+    },
+    "check_interviews.status.done": {
+        "zh_CN": "已完成",
+        "en_US": "Done"
+    },
+    "check_interviews.status.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "save_study_synthesis.success": {
+        "zh_CN": "{{themes}} 个主题，引文核对 {{located}}/{{total}}",
+        "en_US": "{{themes}} themes, {{located}}/{{total}} quotes verified"
+    },
+    "save_study_synthesis.error": {
+        "zh_CN": "综合分析未保存，AI 正在修正",
+        "en_US": "The synthesis was not saved; the AI is correcting it"
+    },
+    "save_study_synthesis.detail_title": {
+        "zh_CN": "综合分析",
+        "en_US": "Synthesis"
+    },
+    "save_study_synthesis.detail_summary": {
+        "zh_CN": "共 {{themes}} 个主题；{{located}}/{{total}} 条引文已逐字核对",
+        "en_US": "{{themes}} themes; {{located}}/{{total}} quotes verified word for word"
+    },
+    "save_study_synthesis.detail_saturated": {
+        "zh_CN": "已饱和：每份访谈新增主题 {{series}}",
+        "en_US": "Saturated: new themes per interview {{series}}"
+    },
+    "save_study_synthesis.detail_not_saturated": {
+        "zh_CN": "未饱和：每份访谈新增主题 {{series}}，建议扩大样本",
+        "en_US": "Not saturated: new themes per interview {{series}}; a larger sample is recommended"
+    },
+    "save_study_synthesis.detail_adjusted": {
+        "zh_CN": "按规则调整的结论",
+        "en_US": "Conclusions adjusted by rule"
+    },
+    "save_validation_questionnaire.success": {
+        "zh_CN": "已生成 {{count}} 道题的问卷表格",
+        "en_US": "Questionnaire sheet with {{count}} questions"
+    },
+    "save_validation_questionnaire.error": {
+        "zh_CN": "问卷表格未生成，AI 正在修正",
+        "en_US": "The questionnaire sheet was not saved; the AI is correcting it"
+    },
+    "save_validation_questionnaire.detail_title": {
+        "zh_CN": "真人验证问卷",
+        "en_US": "Real-person validation questionnaire"
+    },
+    "update_study.phase.clarify": {
+        "zh_CN": "澄清需求",
+        "en_US": "Clarify"
+    },
+    "update_study.phase.plan": {
+        "zh_CN": "研究方案",
+        "en_US": "Plan"
+    },
+    "update_study.phase.desk_research": {
+        "zh_CN": "桌面研究",
+        "en_US": "Desk research"
+    },
+    "update_study.phase.interview": {
+        "zh_CN": "人设访谈",
+        "en_US": "Interviews"
+    },
+    "update_study.phase.report": {
+        "zh_CN": "研究报告",
+        "en_US": "Report"
+    },
+    "update_study.phase.validation": {
+        "zh_CN": "真人验证",
+        "en_US": "Validation"
+    },
+    "update_study.phase.done": {
+        "zh_CN": "已完成",
+        "en_US": "Done"
     }
 }

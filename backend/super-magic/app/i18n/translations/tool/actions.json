@@ -1210,5 +1210,29 @@
     "persona_chat": {
         "zh_CN": "人设访谈",
         "en_US": "Persona interview"
+    },
+    "update_study": {
+        "zh_CN": "研究进度",
+        "en_US": "Study progress"
+    },
+    "save_personas": {
+        "zh_CN": "研究人设",
+        "en_US": "Study personas"
+    },
+    "check_interviews": {
+        "zh_CN": "访谈进度",
+        "en_US": "Interview progress"
+    },
+    "save_study_synthesis": {
+        "zh_CN": "综合分析",
+        "en_US": "Synthesis"
+    },
+    "save_validation_questionnaire": {
+        "zh_CN": "验证问卷",
+        "en_US": "Validation questionnaire"
+    },
+    "finish_persona_transcript": {
+        "zh_CN": "访谈收尾",
+        "en_US": "Interview wrap-up"
     }
 }

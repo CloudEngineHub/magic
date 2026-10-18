@@ -212,32 +212,130 @@ async def test_missing_persona_file_is_reported_without_model_call(tool, tmp_pat
     assert detail is not None and detail.data.content.strip()
 
 
-async def test_transcript_is_used_as_context_and_missing_file_is_first_round(tool, tmp_path, fake_llm):
+INTERVIEW = "studies/s-1a2b/interviews/p_zhang_1a2b.json"
+DISCUSSION = "studies/s-1a2b/discussions/fg_price_9d20.json"
+
+
+def _read(root, rel):
+    return json.loads((root / rel).read_text(encoding="utf-8"))
+
+
+def _ask(path, question, round_number, transcript=INTERVIEW):
+    paths = path if isinstance(path, list) else [path]
+    return PersonaChatParams(persona_paths=paths, question=question, transcript_path=transcript, round_number=round_number)
+
+
+async def test_first_round_creates_transcript_and_reports_round_indexes(tool, tmp_path, fake_llm):
     path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
-    transcript = tmp_path / "studies" / "s-1a2b" / "interviews" / "p_zhang_1a2b.json"
-    transcript.parent.mkdir(parents=True)
 
-    first = await tool.execute(
-        ToolContext(),
-        PersonaChatParams(persona_paths=[path], question="q1", transcript_path="studies/s-1a2b/interviews/p_zhang_1a2b.json"),
-    )
-    assert first.ok is True
-    assert "does not exist yet" in first.content
+    result = await tool.execute(ToolContext(), _ask(path, "q1", 1))
 
-    transcript.write_text(
-        json.dumps({
-            "schema_version": 1, "persona_id": "p_zhang_1a2b", "status": "running", "error": "",
-            "rounds": [{"role": "moderator", "text": "Earlier question"}, {"role": "persona", "text": "Earlier answer"}],
-        }),
-        encoding="utf-8",
-    )
-    await tool.execute(
-        ToolContext(),
-        PersonaChatParams(persona_paths=[path], question="q2", transcript_path="studies/s-1a2b/interviews/p_zhang_1a2b.json"),
-    )
+    assert result.ok is True
+    assert result.data["round_indexes"] == [0, 1]
+    assert "Recorded round 1" in result.content
+    assert _read(tmp_path, INTERVIEW) == {
+        "schema_version": 1, "persona_id": "p_zhang_1a2b", "status": "running", "error": "",
+        "rounds": [{"role": "moderator", "text": "q1"}, {"role": "persona", "text": "Zhang answer"}],
+        "summary": "", "key_findings": [], "quotes": [],
+    }
+
+
+async def test_next_round_uses_transcript_as_context_and_appends(tool, tmp_path, fake_llm):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    await tool.execute(ToolContext(), _ask(path, "Earlier question", 1))
+
+    result = await tool.execute(ToolContext(), _ask(path, "q2", 2))
+
     prompt = fake_llm.calls[-1]["messages"][-1]["content"]
     assert "Moderator: Earlier question" in prompt
-    assert "Zhang: Earlier answer" in prompt
+    assert "Zhang: Zhang answer" in prompt
+    assert result.data["round_indexes"] == [2, 3]
+    assert len(_read(tmp_path, INTERVIEW)["rounds"]) == 4
+
+
+@pytest.mark.parametrize("round_number", [0, 1, 3])
+async def test_wrong_round_number_is_rejected_before_any_model_call(tool, tmp_path, fake_llm, round_number):
+    """例：记录已有 1 轮时只接受 round_number=2；重试时重复传 1 不会重复写入。"""
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    await tool.execute(ToolContext(), _ask(path, "q1", 1))
+    calls = len(fake_llm.calls)
+
+    result = await tool.execute(ToolContext(), _ask(path, "again", round_number))
+
+    assert result.ok is False
+    assert len(fake_llm.calls) == calls
+    assert len(_read(tmp_path, INTERVIEW)["rounds"]) == 2
+
+
+async def test_interview_file_must_be_named_after_the_persona(tool, tmp_path, fake_llm):
+    path = _write_persona(tmp_path, "p_li_3c4d", "Li")
+
+    result = await tool.execute(ToolContext(), _ask(path, "q1", 1))
+
+    assert result.ok is False
+    assert "interviews/p_li_3c4d.json" in result.content
+    assert fake_llm.calls == []
+
+
+async def test_round_limit_comes_from_study(tool, tmp_path, fake_llm):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    study = tmp_path / "studies" / "s-1a2b" / "study.json"
+    study.parent.mkdir(parents=True)
+    study.write_text(json.dumps({
+        "schema_version": 1, "topic_id": "1", "title": "t", "question": "q", "phase": "interview",
+        "phases": [{"key": k, "status": "pending"} for k in
+                   ["clarify", "plan", "desk_research", "interview", "report", "validation"]],
+        "limits": {"personas": 1, "interview_rounds": 1},
+    }), encoding="utf-8")
+    await tool.execute(ToolContext(), _ask(path, "q1", 1))
+
+    result = await tool.execute(ToolContext(), _ask(path, "q2", 2))
+
+    assert result.ok is False
+    assert "round limit for this study is 1" in result.content
+
+
+async def test_focus_group_records_only_successful_answers(tool, tmp_path, fake_llm):
+    fake_llm.failing_names = {"Li"}
+    paths = [
+        _write_persona(tmp_path, "p_zhang_1a2b", "Zhang"),
+        _write_persona(tmp_path, "p_li_3c4d", "Li"),
+        _write_persona(tmp_path, "p_wang_5e6f", "Wang"),
+    ]
+
+    result = await tool.execute(ToolContext(), _ask(paths, "Price?", 1, DISCUSSION))
+
+    assert result.ok is False
+    saved = _read(tmp_path, DISCUSSION)
+    assert saved["participants"] == ["p_zhang_1a2b", "p_li_3c4d", "p_wang_5e6f"]
+    assert saved["rounds"] == [
+        {"speaker": "moderator", "text": "Price?"},
+        {"speaker": "p_zhang_1a2b", "text": "Zhang answer"},
+        {"speaker": "p_wang_5e6f", "text": "Wang answer"},
+    ]
+
+
+async def test_nothing_is_recorded_when_every_answer_fails(tool, tmp_path, fake_llm):
+    fake_llm.failing_names = {"Zhang"}
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+
+    result = await tool.execute(ToolContext(), _ask(path, "q1", 1))
+
+    assert result.ok is False
+    assert "Nothing was recorded for round 1" in result.content
+    assert not (tmp_path / INTERVIEW).exists()
+
+
+async def test_follow_up_reopens_a_finished_transcript(tool, tmp_path, fake_llm):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    await tool.execute(ToolContext(), _ask(path, "q1", 1))
+    data = _read(tmp_path, INTERVIEW)
+    data["status"] = "done"
+    (tmp_path / INTERVIEW).write_text(json.dumps(data), encoding="utf-8")
+
+    await tool.execute(ToolContext(), _ask(path, "follow-up", 2))
+
+    assert _read(tmp_path, INTERVIEW)["status"] == "running"
 
 
 async def test_interruption_raises_cancelled_error(tool, tmp_path, fake_llm, monkeypatch):

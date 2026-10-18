@@ -10,6 +10,14 @@
 
 部分失败语义：例如 3 人小组中 2 人回答成功、1 人失败，保留 2 条回答并列出失败项；
 ok 只在所有人设都成功回答时为 True。
+
+| transcript_path | 行为                                                                 |
+| 不传            | 只回答，不写文件（主 Agent 试探、一次性提问）                          |
+| 传入            | 读取记录作为上下文，并把本轮主持人问题和成功的回答追加到记录里         |
+
+记录由工具追加而不是由模型手写：模型手写时曾把 role 写成 speaker、自编 round_index、
+整文件重写时写坏 JSON，引文的 round_index 也因此对不上。round_number 用来防止重复写入：
+例：记录里已有 3 轮，再传 round_number=3 会被拒绝（多半是重试），应传 4。
 """
 
 from __future__ import annotations
@@ -35,7 +43,21 @@ from app.tools.core import BaseToolParams, tool
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.tools.media_utils.constants import DISABLE_THINKING_BODY
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.async_file_utils import async_exists, async_read_json, async_realpath
+from app.tools.persona_research.contracts import (
+    DISCUSSIONS_DIR,
+    INTERVIEWS_DIR,
+    MAX_INTERVIEW_ROUNDS,
+    SCHEMA_VERSION,
+    TranscriptStatus,
+)
+from app.tools.persona_research.study_files import (
+    StudyFilesError,
+    load_study,
+    read_json_file,
+    transcript_lock,
+    write_json_file,
+)
+from app.utils.async_file_utils import async_read_json, async_realpath
 
 logger = get_logger(__name__)
 
@@ -78,8 +100,13 @@ What the moderator says in this round: the question or follow-up probe.""",
     )
     transcript_path: str = Field(
         default="",
-        description="""<!--zh: 可选：已有对话记录 JSON（interviews/ 或 discussions/ 下）的工作区路径，作为上下文；文件尚不存在时按首轮处理-->
-Optional workspace path of the existing transcript JSON (under interviews/ or discussions/) used as conversation context. A missing file is treated as the first round.""",
+        description="""<!--zh: 可选：本次访谈的记录文件，studies/<slug>/interviews/<persona_id>.json（一对一，文件名必须是该人设 ID）或 studies/<slug>/discussions/<discussion_id>.json（焦点小组）。传入后工具读取已有记录作为上下文，并自动把本轮问题和回答追加进去；文件不存在时自动创建。不传则只回答、不记录-->
+Optional transcript file for this session: studies/<slug>/interviews/<persona_id>.json for a one-on-one interview (the file name must be that persona's ID) or studies/<slug>/discussions/<discussion_id>.json for a focus group. When set, the tool uses the existing transcript as context and appends this round's question and answers to it, creating the file on the first round. Leave empty to get answers without recording them.""",
+    )
+    round_number: int = Field(
+        default=0,
+        description="""<!--zh: 使用 transcript_path 时必填：本轮是第几轮，从 1 开始（一轮 = 一个主持人问题 + 回答）。必须等于记录里已有轮数加 1，否则不调用模型并返回当前轮数-->
+Required with transcript_path: the number of this round, starting at 1 (one round = one moderator message plus the answers). It must equal the rounds already recorded plus one; otherwise no answer is generated and the tool reports the current round count.""",
     )
     max_tokens: int = Field(
         default=DEFAULT_MAX_TOKENS,
@@ -125,14 +152,25 @@ class _InvalidRequest(ValueError):
     """路径越界、重复等调用参数问题，整次调用直接失败。"""
 
 
+@dataclass
+class _Record:
+    """本次调用要追加的访谈或焦点小组记录。"""
+
+    path: Path
+    raw_path: str
+    is_discussion: bool
+    data: Dict[str, Any]
+    round_number: int
+
+
 @tool()
 class PersonaChat(WorkspaceTool[PersonaChatParams]):
     """<!--zh
     让 AI 人设以受访者身份回答主持人的一个问题，用于消费者研究的一对一访谈和焦点小组。
-    每个人设由一次独立的模型调用扮演，回答保留人设自己的语言和口吻。工具不会写文件，调用方负责把问题和回答追加到对话记录。
+    每个人设由一次独立的模型调用扮演，回答保留人设自己的语言和口吻。传入 transcript_path 和 round_number 时，工具把本轮问题和回答逐字追加到记录文件，调用方不要再手写记录。
     -->
     Have AI personas answer one moderator question as research participants, for one-on-one consumer interviews and focus groups.
-    Each persona is played by a separate model call and answers in its own voice. The tool does not write files; the caller appends the question and answers to the transcript.
+    Each persona is played by a separate model call and answers in its own voice. With transcript_path and round_number, the tool appends this round's question and the verbatim answers to the transcript file; do not write transcripts yourself.
     """
 
     async def execute(self, tool_context: ToolContext, params: PersonaChatParams) -> ToolResult:
@@ -160,9 +198,31 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
             else:
                 personas.append(loaded)
 
-        transcript_text, transcript_note = await self._load_transcript(
-            params.transcript_path, transcript_file, personas
-        )
+        if transcript_file is None:
+            answers = await self._collect_answers(tool_context, params, personas, failures, transcript_text="")
+            return self._build_result(params, answers, failures, record=None, recorded_indexes=[])
+
+        async with transcript_lock(transcript_file):
+            try:
+                record = await self._open_record(params, transcript_file, personas, failures)
+            except (_InvalidRequest, StudyFilesError) as exc:
+                return ToolResult.error(
+                    f"Nothing was asked or recorded: {exc}",
+                    extra_info={"user_error_reason": INVALID_REQUEST_REASON},
+                )
+            transcript_text = _format_transcript(record.data, {p.persona_id: p.name for p in personas})
+            answers = await self._collect_answers(tool_context, params, personas, failures, transcript_text)
+            recorded_indexes = await self._append_round(record, params.question, answers) if answers else []
+        return self._build_result(params, answers, failures, record=record, recorded_indexes=recorded_indexes)
+
+    async def _collect_answers(
+        self,
+        tool_context: ToolContext,
+        params: PersonaChatParams,
+        personas: List[_Persona],
+        failures: List[_Failure],
+        transcript_text: str,
+    ) -> List[_Answer]:
         agent_context = tool_context.get_extension("agent_context") if tool_context else None
         model_id = self._model_id(agent_context)
         interruption_event = agent_context.get_interruption_event() if agent_context else None
@@ -204,8 +264,95 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
                 answers.append(_Answer(persona.persona_id, persona.name, text))
         finally:
             stop_tool_keep_alive(keep_alive_task)
+        return answers
 
-        return self._build_result(params, answers, failures, transcript_note)
+    async def _open_record(
+        self,
+        params: PersonaChatParams,
+        transcript_file: Path,
+        personas: List[_Persona],
+        failures: List[_Failure],
+    ) -> _Record:
+        """校验记录路径、参与者和轮次，在调用模型前拒绝会写错的请求。"""
+        sub_dir = transcript_file.parent.name
+        if (
+            transcript_file.suffix != ".json"
+            or sub_dir not in (INTERVIEWS_DIR, DISCUSSIONS_DIR)
+            or transcript_file.parent.parent.parent.name != "studies"
+        ):
+            raise _InvalidRequest(
+                "transcript_path must be studies/<slug>/interviews/<persona_id>.json "
+                "or studies/<slug>/discussions/<discussion_id>.json"
+            )
+        if params.round_number < 1:
+            raise _InvalidRequest("round_number is required with transcript_path and starts at 1")
+
+        is_discussion = sub_dir == DISCUSSIONS_DIR
+        # 按 persona_paths 的顺序取 ID；读不到档案的人设用文件名兜底。
+        id_by_path = {p.path: p.persona_id for p in personas} | {f.path: f.persona_id for f in failures}
+        persona_ids = [id_by_path[path] for path in params.persona_paths]
+        data = await read_json_file(transcript_file)
+        if is_discussion:
+            if len(params.persona_paths) < 2:
+                raise _InvalidRequest("a discussion transcript needs 2-6 personas in persona_paths")
+            participants = data.get("participants") if data else persona_ids
+            outsiders = [pid for pid in persona_ids if pid not in (participants or [])]
+            if outsiders:
+                raise _InvalidRequest(f"{', '.join(outsiders)} is not a participant of this discussion")
+        else:
+            if len(params.persona_paths) != 1:
+                raise _InvalidRequest("an interview transcript takes exactly one persona; use discussions/ for a group")
+            if persona_ids[0] != transcript_file.stem:
+                raise _InvalidRequest(
+                    f"interview file name must be the persona ID: interviews/{persona_ids[0]}.json"
+                )
+
+        if data is None:
+            data = _new_transcript(transcript_file.stem, is_discussion, persona_ids)
+        elif not isinstance(data.get("rounds"), list):
+            raise _InvalidRequest(f"{params.transcript_path} has no rounds array; it was not written by persona_chat")
+
+        recorded = sum(1 for turn in data["rounds"] if _speaker(turn) == "moderator")
+        if params.round_number != recorded + 1:
+            raise _InvalidRequest(
+                f"{params.transcript_path} already has {recorded} recorded rounds, so this round is "
+                f"{recorded + 1}, not {params.round_number}. If you were retrying, the earlier attempt "
+                "was already recorded; read the transcript instead of asking again"
+            )
+        limit = await self._round_limit(transcript_file, is_discussion)
+        if params.round_number > limit:
+            raise _InvalidRequest(f"the round limit for this study is {limit}; end the transcript instead")
+        return _Record(transcript_file, params.transcript_path, is_discussion, data, params.round_number)
+
+    @staticmethod
+    async def _round_limit(transcript_file: Path, is_discussion: bool) -> int:
+        """一对一访谈按 study.json 的 limits.interview_rounds；焦点小组和读不到时用硬上限 7。"""
+        if is_discussion:
+            return MAX_INTERVIEW_ROUNDS
+        try:
+            study = await load_study(transcript_file.parent.parent)
+        except StudyFilesError:
+            return MAX_INTERVIEW_ROUNDS
+        return study.limits.interview_rounds if study.limits else MAX_INTERVIEW_ROUNDS
+
+    @staticmethod
+    async def _append_round(record: _Record, question: str, answers: List[_Answer]) -> List[int]:
+        """追加主持人问题和成功的回答，返回每条新内容的 round_index。
+
+        已结束（done/failed）的记录被追问时重新标为 running，需要再次收尾。
+        """
+        rounds: List[Dict[str, Any]] = record.data["rounds"]
+        start = len(rounds)
+        if record.is_discussion:
+            rounds.append({"speaker": "moderator", "text": question})
+            rounds.extend({"speaker": answer.persona_id, "text": answer.text} for answer in answers)
+        else:
+            rounds.append({"role": "moderator", "text": question})
+            rounds.extend({"role": "persona", "text": answer.text} for answer in answers)
+        record.data["status"] = TranscriptStatus.RUNNING.value
+        record.data["error"] = ""
+        await write_json_file(record.path, record.data)
+        return list(range(start, len(rounds)))
 
     async def _resolve_workspace_path(self, raw_path: str) -> Path:
         """解析为工作区内的真实路径；越出工作区（含 .. 和软链接）一律拒绝。"""
@@ -240,22 +387,6 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         persona_id = _text(profile.get("id")) or fallback_id
         name = _text(profile.get("name")) or persona_id
         return _Persona(persona_id=persona_id, name=name, path=raw_path, profile=profile)
-
-    async def _load_transcript(
-        self, raw_path: str, file_path: Optional[Path], personas: List[_Persona]
-    ) -> tuple[str, str]:
-        """返回 (给受访者的对话记录文本, 给模型的说明)。文件不存在视为首轮。"""
-        if file_path is None:
-            return "", ""
-        if not await async_exists(file_path):
-            return "", f"Transcript {raw_path} does not exist yet, so the personas answered without prior context."
-        try:
-            transcript = await async_read_json(file_path)
-        except Exception as exc:
-            return "", f"Transcript {raw_path} could not be read ({exc}), so the personas answered without prior context."
-        if not isinstance(transcript, dict):
-            return "", f"Transcript {raw_path} is not a JSON object, so the personas answered without prior context."
-        return _format_transcript(transcript, {p.persona_id: p.name for p in personas}), ""
 
     @staticmethod
     def _model_id(agent_context: Any) -> str:
@@ -301,31 +432,49 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         params: PersonaChatParams,
         answers: List[_Answer],
         failures: List[_Failure],
-        transcript_note: str,
+        *,
+        record: Optional[_Record],
+        recorded_indexes: List[int],
     ) -> ToolResult:
         total = len(params.persona_paths)
         lines = [f"Persona answers: {len(answers)} of {total} succeeded.", f"Moderator question: {params.question}"]
-        if transcript_note:
-            lines.append(transcript_note)
         for answer in answers:
             lines.extend(["", f"[{answer.persona_id}] {answer.name}:", answer.text])
         if failures:
             lines.extend(["", "Failed personas:"])
             lines.extend(f"- {failure.persona_id} ({failure.path}): {failure.error}" for failure in failures)
-            lines.extend(
-                [
-                    "",
-                    "Next: keep the successful answers. Fix the persona file or retry the failed personas; "
-                    "if an interview cannot continue, record status=failed with the reason in its transcript.",
-                ]
+
+        lines.append("")
+        if record is None:
+            lines.append(
+                "These answers were not recorded. To record an interview round, pass transcript_path and round_number."
+            )
+        elif recorded_indexes:
+            lines.append(
+                f"Recorded round {record.round_number} in {record.raw_path}: moderator at round_index "
+                f"{recorded_indexes[0]}, answers at round_index "
+                f"{', '.join(str(i) for i in recorded_indexes[1:])}. Do not write this transcript yourself."
+            )
+            lines.append(
+                f"Next: ask round {record.round_number + 1} with round_number={record.round_number + 1}, "
+                "or call finish_persona_transcript when the session ends."
             )
         else:
-            lines.extend(["", "Next: append the moderator question and these answers verbatim to the transcript."])
+            lines.append(
+                f"Nothing was recorded for round {record.round_number}. Retry once with the same round_number; "
+                "if it fails again, call finish_persona_transcript with status=failed and the reason."
+            )
+        if failures and recorded_indexes:
+            lines.append("Failed participants are not in the transcript for this round.")
 
-        data = {
+        data: Dict[str, Any] = {
             "answers": [{"persona_id": a.persona_id, "name": a.name, "text": a.text} for a in answers],
             "failed": [{"persona_id": f.persona_id, "path": f.path, "reason": f.reason.value} for f in failures],
         }
+        if record is not None:
+            data["transcript_path"] = record.raw_path
+            data["round_number"] = record.round_number
+            data["round_indexes"] = recorded_indexes
         return ToolResult(content="\n".join(lines), ok=not failures and bool(answers), data=data)
 
     async def get_before_tool_call_friendly_action_and_remark(
@@ -365,6 +514,9 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         question = _text((arguments or {}).get("question"))
         title_key = "persona_chat.detail_title" if answers else "persona_chat.detail_failed_title"
         lines = [f"# {_translate(title_key)}", ""]
+        round_number = result.data.get("round_number")
+        if round_number and result.data.get("round_indexes"):
+            lines.extend([_translate("persona_chat.detail_round", round=round_number), ""])
         if question:
             lines.extend([f"**{_translate('persona_chat.detail_question')}**", "", f"> {question}", ""])
         for answer in answers:
@@ -461,6 +613,23 @@ def _format_transcript(transcript: Dict[str, Any], names: Dict[str, str]) -> str
             label = names.get(speaker) or speaker or "Participant"
         lines.append(f"{label}: {text[:MAX_TURN_CHARS]}")
     return "\n".join(lines)
+
+
+def _speaker(turn: Any) -> str:
+    if not isinstance(turn, dict):
+        return ""
+    return _text(turn.get("speaker")) or _text(turn.get("role"))
+
+
+def _new_transcript(file_id: str, is_discussion: bool, persona_ids: List[str]) -> Dict[str, Any]:
+    """按文件契约新建记录；summary、quotes、quality 由 finish_persona_transcript 收尾时写入。"""
+    head: Dict[str, Any] = {"schema_version": SCHEMA_VERSION}
+    if is_discussion:
+        head.update({"id": file_id, "participants": persona_ids})
+    else:
+        head["persona_id"] = file_id
+    head.update({"status": TranscriptStatus.RUNNING.value, "error": "", "rounds": [], "summary": "", "key_findings": [], "quotes": []})
+    return head
 
 
 # ── 展示辅助 ───────────────────────────────────────────────────────────────

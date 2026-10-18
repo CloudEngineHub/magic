@@ -1,12 +1,24 @@
 # Persona Research File Contracts
 
-The research workspace UI parses these files. A file whose required fields are missing or whose `schema_version` is not `1` is shown as "not ready", so write every required field exactly as specified. Unknown extra fields are ignored by the UI.
+The research workspace UI parses these files. A file whose required fields are missing or whose `schema_version` is not `1` is shown as "not ready". Unknown extra fields are ignored by the UI.
+
+Who writes each file:
+
+| File | Written by |
+|---|---|
+| `study.json` | `update_study`; hypothesis verdicts by `save_study_synthesis` |
+| `personas/*.json`, `studies/<slug>/panel.json`, `panels/*.json` | `save_personas` |
+| `interviews/*.json`, `discussions/*.json` | `persona_chat` (rounds) and `finish_persona_transcript` (summary, quotes, quality) |
+| `synthesis.json` | `save_study_synthesis` |
+| `validation-questionnaire.csv` | `save_validation_questionnaire` |
+| `validation-results.json` | you, with `write_file`, following the contract below |
+
+Use this document to understand the fields you pass to the tools and to read the files. Never edit a tool-written file with file tools or Python.
 
 Rules for every file:
 
 - `schema_version` is the number `1`.
 - Field names and enum values are English and exactly as written below. Human-readable text (titles, summaries, answers) uses the user's language.
-- Overwrite the whole file with `write_file`; do not leave partial JSON.
 - Paths stored inside files are workspace-relative.
 - Times use ISO 8601 with an explicit offset, for example `2026-10-18T14:20:00+08:00`.
 

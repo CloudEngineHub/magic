@@ -1,0 +1,330 @@
+"""save_personas：写入本次研究的人设和 studies/<slug>/panel.json。
+
+模型使用说明：agents/skills/persona-research/reference/tools.md（code_mode_only，完整用法只维护在 Skill）。
+
+| 由模型给出                                  | 由工具完成                                          |
+| 人设内容（7 个维度、4 个层次、证据、出处）   | 生成 persona ID、补 schema_version/created_in/updated_at |
+| 是否复用已有人设、入选理由、所属分层         | 校验结构完整、出处引用的证据存在、分层在配额里       |
+| 是否来自用户上传的真人资料                  | 按规则计算 tier（不再由模型自己判断）                |
+
+tier 规则（SKILL.md）：来自上传的真人资料 → imported；否则至少 3 条 web/social/upload 证据，
+且 needs_pains 和 behavior 两项都引用了其中的证据 → evidence_based；其余 → generated。
+例：3 条网页证据，但 behavior 写的是 "inferred" → generated。
+
+复用的人设只追加证据、补齐缺少的出处、追加 consistency_notes，不改身份和内容字段。
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, Field
+
+from agentlang.context.tool_context import ToolContext
+from agentlang.tools.tool_result import ToolResult
+from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.i18n import i18n
+from app.tools.core import BaseToolParams, tool
+from app.tools.persona_research.contracts import (
+    EXTERNAL_EVIDENCE_TYPES,
+    MAX_PERSONAS,
+    PANELS_DIR,
+    PERSONA_DIMENSIONS,
+    PERSONA_LAYERS,
+    PERSONAS_DIR,
+    SCHEMA_VERSION,
+    EvidenceType,
+    Level,
+    PersonaTier,
+    StudyPhase,
+)
+from app.tools.persona_research.study_files import (
+    StudyFilesError,
+    ascii_slug,
+    load_study,
+    now_iso,
+    random_hex,
+    read_json_file,
+    resolve_study_dir,
+    workspace_relative,
+    write_json_file,
+)
+from app.tools.workspace_tool import WorkspaceTool
+from app.utils.async_file_utils import async_exists, async_realpath
+
+
+class EvidenceInput(BaseModel):
+    id: str = Field(..., min_length=1, description="Evidence id within this persona, for example e1.")
+    type: EvidenceType
+    platform: str = ""
+    title: str = ""
+    url: str = ""
+    file: str = ""
+    quote: str = ""
+
+
+class PersonaInput(BaseModel):
+    id: str = Field(default="", description="Existing persona id to reuse; empty for a new persona.")
+    id_hint: str = Field(default="", description="New persona: short ASCII slug for the id, for example zhangwei.")
+    segment: str = Field(..., min_length=1, description="The study.json quota segment this persona fills.")
+    reason: str = Field(..., min_length=1, description="Why this persona was selected.")
+    from_uploaded_people: bool = False
+    name: str = ""
+    tagline: str = ""
+    tags: List[str] = Field(default_factory=list)
+    dimensions: Dict[str, Any] = Field(default_factory=dict)
+    layers: Dict[str, Any] = Field(default_factory=dict)
+    evidence: List[EvidenceInput] = Field(default_factory=list)
+    field_sources: Dict[str, Union[List[str], Literal["inferred"]]] = Field(default_factory=dict)
+    consistency_notes: List[str] = Field(default_factory=list)
+
+
+class SavePersonasParams(BaseToolParams):
+    study_dir: str = Field(..., description="studies/<slug>")
+    personas: List[PersonaInput] = Field(..., min_length=1, description="In interview order.")
+    panel_name: str = Field(..., min_length=1)
+    criteria: str = ""
+    library_panel_name: str = Field(default="", description="Also save the group to panels/ under this name.")
+
+
+# 模型使用说明：agents/skills/persona-research/reference/tools.md
+@tool(name="save_personas", code_mode_only=True)
+class SavePersonas(WorkspaceTool[SavePersonasParams]):
+    """Save the personas of a study and its panel.json, assigning ids and tiers by rule."""
+
+    async def execute(self, tool_context: ToolContext, params: SavePersonasParams) -> ToolResult:
+        try:
+            base = await async_realpath(self.base_dir)
+            study_path = await resolve_study_dir(base, params.study_dir)
+            study = await load_study(study_path)
+            if study.phase != StudyPhase.INTERVIEW:
+                raise StudyFilesError(
+                    f"personas are saved in the interview phase; the study is in {study.phase}. "
+                    "Send update_study desk_research_done or desk_research_skipped first"
+                )
+            limit = study.limits.personas if study.limits else MAX_PERSONAS
+            if len(params.personas) > limit:
+                raise StudyFilesError(f"{len(params.personas)} personas exceed this study's limit of {limit}")
+            quota = {item.segment for item in study.quota}
+            unknown = sorted({p.segment for p in params.personas if quota and p.segment not in quota})
+            if unknown:
+                raise StudyFilesError(f"segments must be quota segments ({', '.join(sorted(quota))}); unknown: {', '.join(unknown)}")
+
+            created_in = workspace_relative(base, study_path)
+            files: List[tuple[str, Dict[str, Any]]] = []
+            summary: List[Dict[str, Any]] = []
+            for item in params.personas:
+                persona, reused = await self._prepare(base, item, created_in)
+                files.append((persona["id"], persona))
+                summary.append({
+                    "persona_id": persona["id"],
+                    "name": persona["name"],
+                    "tagline": persona.get("tagline", ""),
+                    "tier": persona["tier"],
+                    "segment": item.segment,
+                    "reused": reused,
+                })
+            ids = [pid for pid, _ in files]
+            if len(set(ids)) != len(ids):
+                raise StudyFilesError("the same persona appears more than once")
+
+            for pid, persona in files:
+                await write_json_file(base / PERSONAS_DIR / f"{pid}.json", persona)
+            panel = {
+                "schema_version": SCHEMA_VERSION,
+                "id": f"panel_{study_path.name}",
+                "name": params.panel_name.strip(),
+                "persona_ids": ids,
+                "criteria": params.criteria.strip(),
+                "selection": [
+                    {"persona_id": row["persona_id"], "reason": item.reason.strip(), "reused": row["reused"], "segment": item.segment}
+                    for row, item in zip(summary, params.personas)
+                ],
+            }
+            await write_json_file(study_path / "panel.json", panel)
+            library_note = ""
+            if params.library_panel_name.strip():
+                panel_id = f"panel_{ascii_slug(params.library_panel_name) or 'group'}_{random_hex()}"
+                await write_json_file(base / PANELS_DIR / f"{panel_id}.json", {
+                    "schema_version": SCHEMA_VERSION,
+                    "id": panel_id,
+                    "name": params.library_panel_name.strip(),
+                    "persona_ids": ids,
+                    "criteria": params.criteria.strip(),
+                })
+                library_note = f" Also saved the group as {PANELS_DIR}/{panel_id}.json."
+        except StudyFilesError as exc:
+            return ToolResult.error(f"Personas not saved: {exc}")
+
+        lines = [f"Saved {len(ids)} personas and {params.study_dir}/panel.json (interview order as listed).{library_note}"]
+        lines.extend(
+            f"- {row['persona_id']} {row['name']}: tier {row['tier']}, {'reused' if row['reused'] else 'new'}, segment {row['segment']}"
+            for row in summary
+        )
+        lines.append("Use these persona file paths (personas/<persona_id>.json) in the interviewer briefs.")
+        return ToolResult(content="\n".join(lines), data={"study_dir": params.study_dir, "personas": summary})
+
+    async def _prepare(self, base, item: PersonaInput, created_in: str) -> tuple[Dict[str, Any], bool]:
+        if item.id:
+            path = base / PERSONAS_DIR / f"{item.id}.json"
+            existing = await read_json_file(path)
+            if existing is None:
+                raise StudyFilesError(f"persona {item.id} does not exist; leave id empty to create a new persona")
+            return _merge_reused(existing, item), True
+        return await self._new_persona(base, item, created_in), False
+
+    async def _new_persona(self, base, item: PersonaInput, created_in: str) -> Dict[str, Any]:
+        label = item.name or item.id_hint or "persona"
+        if not item.name.strip():
+            raise StudyFilesError(f"a new persona needs a name ({label})")
+        missing_dims = [key for key in PERSONA_DIMENSIONS if _empty(item.dimensions.get(key))]
+        missing_layers = [key for key in PERSONA_LAYERS if _empty(item.layers.get(key))]
+        missing_sources = [key for key in PERSONA_DIMENSIONS if key not in item.field_sources]
+        if missing_dims or missing_layers or missing_sources:
+            raise StudyFilesError(
+                f"{label} is incomplete: missing dimensions {missing_dims or 'none'}, layers {missing_layers or 'none'}, "
+                f"field_sources {missing_sources or 'none'}"
+            )
+        _check_decision_weights(label, item.layers)
+        _check_evidence(label, item.evidence, item.field_sources)
+
+        slug = ascii_slug(item.id_hint or item.name, max_length=20) or "persona"
+        for _ in range(5):
+            persona_id = f"p_{slug}_{random_hex()}"
+            if not await async_exists(base / PERSONAS_DIR / f"{persona_id}.json"):
+                break
+        else:
+            raise StudyFilesError(f"could not find a free id for {label}; use a different id_hint")
+        evidence = [e.model_dump(mode="json") for e in item.evidence]
+        persona = {
+            "schema_version": SCHEMA_VERSION,
+            "id": persona_id,
+            "name": item.name.strip(),
+            "tagline": item.tagline.strip(),
+            "tags": item.tags,
+            "tier": _tier(item.from_uploaded_people, evidence, item.field_sources).value,
+            "dimensions": {key: item.dimensions[key] for key in PERSONA_DIMENSIONS},
+            "layers": {key: item.layers[key] for key in PERSONA_LAYERS},
+            "evidence": evidence,
+            "field_sources": item.field_sources,
+            "consistency_notes": item.consistency_notes,
+            "created_in": created_in,
+            "updated_at": now_iso(),
+        }
+        return persona
+
+    async def get_after_tool_call_friendly_action_and_remark(
+        self,
+        tool_name: str,
+        tool_context: ToolContext,
+        result: ToolResult,
+        execution_time: float,
+        arguments: Dict[str, Any] = None,
+    ) -> Dict:
+        # 例：「8 位人设：新建 5 位，复用 3 位」
+        if result.ok:
+            rows = result.data.get("personas") or []
+            reused = sum(1 for row in rows if row.get("reused"))
+            remark = _translate("save_personas.success", count=len(rows), new=len(rows) - reused, reused=reused)
+        else:
+            remark = _translate("save_personas.error")
+        return {"tool_name": tool_name, "action": i18n.translate("save_personas", category="tool.actions"), "remark": remark}
+
+    async def get_tool_detail(
+        self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None
+    ) -> Optional[ToolDetail]:
+        if not result.ok:
+            return None
+        lines = [
+            f"# {_translate('save_personas.detail_title')}",
+            "",
+            f"| {_translate('save_personas.col_name')} | {_translate('save_personas.col_segment')} | "
+            f"{_translate('save_personas.col_tier')} | {_translate('save_personas.col_source')} |",
+            "| --- | --- | --- | --- |",
+        ]
+        for row in result.data.get("personas") or []:
+            name = row["name"] + (f"<br>{row['tagline']}" if row.get("tagline") else "")
+            source = _translate("save_personas.reused" if row.get("reused") else "save_personas.new")
+            tier = _translate("save_personas.tier." + row["tier"])
+            lines.append(f"| {name} | {row['segment']} | {tier} | {source} |")
+        return ToolDetail(
+            type=DisplayType.MD,
+            data=FileContent(file_name="study_personas.md", content="\n".join(lines) + "\n"),
+        )
+
+
+def _merge_reused(existing: Dict[str, Any], item: PersonaInput) -> Dict[str, Any]:
+    """复用：只追加证据、补齐缺少的出处、追加矛盾记录，tier 按合并后的证据重算。"""
+    persona = dict(existing)
+    label = str(persona.get("name") or item.id)
+    evidence = list(persona.get("evidence") or [])
+    known = {str(e.get("id")) for e in evidence if isinstance(e, dict)}
+    clashes = [e.id for e in item.evidence if e.id in known]
+    if clashes:
+        raise StudyFilesError(f"{label} already has evidence ids {', '.join(clashes)}; use new ids for added evidence")
+    evidence.extend(e.model_dump(mode="json") for e in item.evidence)
+    field_sources = dict(persona.get("field_sources") or {})
+    for key, value in item.field_sources.items():
+        field_sources.setdefault(key, value)
+    _check_evidence(label, item.evidence, field_sources, known_ids=known)
+    persona["schema_version"] = SCHEMA_VERSION
+    persona["evidence"] = evidence
+    persona["field_sources"] = field_sources
+    persona["consistency_notes"] = list(persona.get("consistency_notes") or []) + item.consistency_notes
+    if persona.get("tier") != PersonaTier.IMPORTED:
+        persona["tier"] = _tier(False, evidence, field_sources).value
+    persona["updated_at"] = now_iso()
+    return persona
+
+
+def _tier(from_uploaded_people: bool, evidence: List[Dict[str, Any]], field_sources: Dict[str, Any]) -> PersonaTier:
+    if from_uploaded_people:
+        if not any(e.get("type") == EvidenceType.UPLOAD for e in evidence):
+            raise StudyFilesError("a persona built from uploaded people needs at least one upload evidence item")
+        return PersonaTier.IMPORTED
+    external = {str(e.get("id")) for e in evidence if e.get("type") in EXTERNAL_EVIDENCE_TYPES}
+    cited = all(
+        isinstance(field_sources.get(key), list) and external & set(field_sources[key])
+        for key in ("needs_pains", "behavior")
+    )
+    return PersonaTier.EVIDENCE_BASED if len(external) >= 3 and cited else PersonaTier.GENERATED
+
+
+def _check_evidence(
+    label: str, evidence: List[EvidenceInput], field_sources: Dict[str, Any], known_ids: Optional[set[str]] = None
+) -> None:
+    """检查新证据的 id 不重复、社交证据有平台、field_sources 只引用存在的证据（含复用人设已有的证据）。"""
+    new_ids = [e.id for e in evidence]
+    ids = set(new_ids) | (known_ids or set())
+    if len(set(new_ids)) != len(new_ids):
+        raise StudyFilesError(f"{label} has duplicate evidence ids")
+    missing_platform = [e.id for e in evidence if e.type == EvidenceType.SOCIAL and not e.platform]
+    if missing_platform:
+        raise StudyFilesError(f"{label}: social evidence needs platform ({', '.join(missing_platform)})")
+    for key, value in field_sources.items():
+        if key not in PERSONA_DIMENSIONS:
+            raise StudyFilesError(f"{label}: field_sources key {key!r} is not one of {', '.join(PERSONA_DIMENSIONS)}")
+        if isinstance(value, list):
+            unknown = [ref for ref in value if ref not in ids]
+            if unknown:
+                raise StudyFilesError(f"{label}: field_sources.{key} cites unknown evidence {', '.join(unknown)}")
+
+
+def _check_decision_weights(label: str, layers: Dict[str, Any]) -> None:
+    cognition = layers.get("cognition")
+    weights = cognition.get("decision_weights") if isinstance(cognition, dict) else None
+    levels = {level.value for level in Level}
+    if not isinstance(weights, list) or not weights or not all(
+        isinstance(w, dict) and w.get("factor") and w.get("level") in levels for w in weights
+    ):
+        raise StudyFilesError(
+            f'{label}: layers.cognition.decision_weights must be a list of {{"factor", "level": "high" | "medium" | "low"}}'
+        )
+
+
+def _empty(value: Any) -> bool:
+    return value is None or value == "" or value == [] or value == {}
+
+
+def _translate(key: str, **kwargs: Any) -> str:
+    return i18n.translate(key, category="tool.messages", **kwargs)

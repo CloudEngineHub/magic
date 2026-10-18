@@ -45,7 +45,8 @@ def test_persona_research_agent_definition():
 def test_persona_interviewer_agent_definition():
     agent_define, prompt = _load_agent("persona-interviewer")
 
-    assert set(agent_define.tools_config) == {"list_dir", "read_files", "write_file", "persona_chat"}
+    # 不挂 write_file：记录由 persona_chat 追加、finish_persona_transcript 收尾。
+    assert set(agent_define.tools_config) == {"list_dir", "read_files", "persona_chat", "finish_persona_transcript"}
     assert agent_define.code_execution is False
     assert agent_define.skills_config is None
     assert "persona_chat" in prompt
@@ -71,6 +72,18 @@ def test_persona_research_skill_references_exist():
         "reference/file-contracts.md",
         "reference/methods.md",
         "reference/report-template.html",
+        "reference/tools.md",
     ):
         assert relative_path in skill
         assert (skill_dir / relative_path).is_file()
+
+
+def test_persona_research_code_mode_tools_are_registered_and_code_mode_only():
+    """主 Agent 通过 run_sdk_snippet 调用这些工具，不能在 .agent 的 tools 里声明。"""
+    agent_define, _ = _load_agent("persona-research")
+    for name in ("update_study", "save_personas", "check_interviews", "save_study_synthesis", "save_validation_questionnaire"):
+        info = tool_factory.get_tool(name)
+        assert info is not None and info.code_mode_only, name
+        assert name not in agent_define.tools_config
+    interviewer_tool = tool_factory.get_tool("finish_persona_transcript")
+    assert interviewer_tool is not None and not interviewer_tool.code_mode_only

@@ -44,7 +44,7 @@ Pick one `study_type` in the plan. Types set the default mix of methods; you may
 
 ### Guide Self-Check
 
-Before showing the plan, check every guide question against this list, rewrite the ones that fail, and record each change in `plan.md` ("Guide self-check") and `study.json` `guide_review.items`.
+Before showing the plan, check every guide question against this list, rewrite the ones that fail, and record each change in `plan.md` ("Guide self-check"); pass the same changes as `guide_review` when you send `plan_confirmed`.
 
 | `issue` | Fails when | Before | After |
 |---|---|---|---|
@@ -73,7 +73,7 @@ Before showing the plan, check every guide question against this list, rewrite t
 
 ## Synthesis
 
-Write `synthesis.json` first, then the report from it. Each step below is required.
+Save the synthesis with `save_study_synthesis` first, then write the report from it. Each step below is required; the tool enforces the parts marked as checked.
 
 ### Theme Coding
 
@@ -81,17 +81,17 @@ Write `synthesis.json` first, then the report from it. Each step below is requir
 2. For each transcript, list the distinct ideas the persona expressed in their own answers. Ignore what the moderator said.
 3. Merge ideas with the same meaning into themes across transcripts; name each theme in the user's words, not a framework label.
 4. For each theme, set the stance of every interviewed persona: `support` (they affirm it with their own experience), `oppose` (they contradict it), `mixed` (both), `not_mentioned`.
-5. Attach 1-3 `quote_refs` per theme, link `source_refs` and `hypothesis_ids`, then apply the confidence rules.
+5. Attach 1-3 quotes per theme in the persona's exact words, link `source_refs` and `hypothesis_ids`, then apply the confidence rules.
 6. Use `dimensions` only for factors compared across segments (for example purchase considerations); levels are `high`, `medium`, or `low`, never numbers.
 
 ### Saturation
 
-- `new_themes_per_interview` has one integer per completed one-on-one interview, in `panel.json` `persona_ids` order: the number of themes that first appear in that interview. Focus groups are not counted.
+- Checked by the tool: `new_themes_per_interview` counts, for each completed one-on-one interview in `panel.json` order, the themes whose first non-`not_mentioned` stance is that persona. Focus groups are not counted.
 - `saturated` is `true` only when the last 2 entries are both `0`. Otherwise the report recommends a larger sample.
 
 ### Downweighting
 
-- Interviews with `quality.inferred_ratio` of 0.4 or more are downweighted: do not count them toward "most" in verdicts or confidence, do not use them as the lead quote for a claim, and mention the downweight in `confidence_reason` when it changes the result. If `quality` is missing, estimate the ratio by counting the persona's sentences that contain `(inferred)`.
+- Interviews with `quality.inferred_ratio` of 0.4 or more are downweighted: do not count them toward "most" in verdicts or confidence, and do not use them as the lead quote for a claim. The tool lists them and lowers a theme to `low` when all its quotes come from them.
 
 ### Hypothesis Verdict Rules
 
@@ -105,7 +105,7 @@ Write `synthesis.json` first, then the report from it. Each step below is requir
 | `mixed` | Evidence splits across segments, interviews and sources disagree, or the AI-only cap below applies |
 | `insufficient` | Fewer than 3 completed interviews address it and no external source covers it |
 
-AI-only cap: when the only evidence for supporting or refuting a hypothesis comes from AI interviews, the verdict is at most `mixed`, and `verdict_reason` starts with "Pending real-person validation" (in the user's language). Real-person results go into `validation`; they do not overwrite `verdict`.
+AI-only cap (checked by the tool): when the only evidence for supporting or refuting a hypothesis comes from AI interviews, the verdict is at most `mixed`, and `verdict_reason` starts with "Pending real-person validation" (in the user's language). Real-person results go into `validation`; they do not overwrite `verdict`.
 
 ### Theme Confidence Rules
 
@@ -116,41 +116,11 @@ AI-only cap: when the only evidence for supporting or refuting a hypothesis come
 | `low` | External sources and interviews conflict, or the support rests mainly on downweighted interviews |
 | `to_validate` | Supported by AI interviews only, however many personas agree |
 
-### Quote Self-Check
+The tool lowers `high` and `medium` that lack the required external sources and records the rule in `confidence_reason`.
 
-Before writing the report, verify every `quote_refs` item in `synthesis.json` and every `quote` item in `study.json` `evidence_refs`: the `text` must appear verbatim in `rounds[round_index].text` of the referenced transcript, and that round must be spoken by the persona. Run the check in code with `run_sdk_snippet`, remove each mismatch from both files, and note the removed count in the report's limitations.
+### Quote Checks
 
-```python
-import json
-from pathlib import Path
-
-study = Path("studies/<slug>")
-syn = json.loads((study / "synthesis.json").read_text(encoding="utf-8"))
-meta = json.loads((study / "study.json").read_text(encoding="utf-8"))
-
-def ok(ref, default_file):
-    try:
-        path = study / (ref.get("file") or default_file)
-        turn = json.loads(path.read_text(encoding="utf-8"))["rounds"][ref["round_index"]]
-        speaker = turn.get("speaker") or turn.get("role")
-        return speaker in ("persona", ref["persona_id"]) and ref["text"] in turn.get("text", "")
-    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
-        return False
-
-removed = []
-for item in syn.get("themes", []) + syn.get("dimensions", []):
-    kept = [r for r in item.get("quote_refs", []) if ok(r, "")]
-    removed += [r.get("text") for r in item.get("quote_refs", []) if r not in kept]
-    item["quote_refs"] = kept
-for hyp in meta.get("hypotheses", []):
-    refs = hyp.get("evidence_refs", [])
-    kept = [r for r in refs if r.get("kind") != "quote" or ok(r, f"interviews/{r.get('persona_id')}.json")]
-    removed += [r.get("text") for r in refs if r not in kept]
-    hyp["evidence_refs"] = kept
-(study / "synthesis.json").write_text(json.dumps(syn, ensure_ascii=False, indent=2), encoding="utf-8")
-(study / "study.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-print(f"Removed {len(removed)} unverifiable quotes:", removed)
-```
+Quote every claim with the persona's exact words. `save_study_synthesis` locates each quote in that persona's own answers and drops the ones it cannot find; report how many were removed in the report's limitations, and never re-add a removed quote by paraphrasing it.
 
 ### Writing Findings
 
