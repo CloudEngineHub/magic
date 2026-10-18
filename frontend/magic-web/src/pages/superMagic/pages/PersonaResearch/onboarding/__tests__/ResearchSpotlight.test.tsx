@@ -84,6 +84,12 @@ describe("ResearchSpotlight", () => {
 		// A closing dialog handing focus back to its trigger must not pull it out of the tour.
 		outside.focus()
 		expect(document.activeElement).toBe(primary)
+
+		// Tab cycles through the card's buttons (skip, next) instead of leaving the page.
+		fireEvent.keyDown(window, { key: "Tab" })
+		expect(document.activeElement?.textContent).toBe("onboarding.skip")
+		fireEvent.keyDown(window, { key: "Tab" })
+		expect(document.activeElement).toBe(primary)
 	})
 
 	it("reports an empty tour when no anchor is rendered", () => {

@@ -129,9 +129,20 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return
-			event.stopPropagation()
-			onClose("skipped")
+			if (event.key === "Escape") {
+				event.stopPropagation()
+				onClose("skipped")
+				return
+			}
+			if (event.key !== "Tab") return
+			// The card is the last thing in the document, so Tab would leave the page; cycle
+			// through the card's own buttons instead, as a modal dialog does.
+			const buttons = Array.from(cardRef.current?.querySelectorAll("button") ?? [])
+			if (buttons.length === 0) return
+			event.preventDefault()
+			const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
+			const direction = event.shiftKey ? -1 : 1
+			buttons[(current + direction + buttons.length) % buttons.length].focus()
 		}
 		window.addEventListener("keydown", handleKeyDown, true)
 		return () => window.removeEventListener("keydown", handleKeyDown, true)
