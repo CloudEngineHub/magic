@@ -261,6 +261,15 @@
 		"deleteTitle": "删除这项研究？",
 		"deleted": "已删除",
 		"emptyTitle": "开始你的第一项研究",
+		"filter": {
+			"all": "全部",
+			"clear": "清除关键词",
+			"count": "{{shown}} / {{total}} 项",
+			"noMatch": "换个关键词或状态试试。",
+			"noMatchTitle": "没有找到研究",
+			"reset": "清除筛选",
+			"search": "搜索研究标题"
+		},
 		"moreActions": "更多操作",
 		"myStudies": "我的研究",
 		"noStudies": "还没有研究。输入一个商业问题，或从上面的模板开始。",

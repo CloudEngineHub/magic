@@ -263,6 +263,15 @@
 		"deleteTitle": "Delete this study?",
 		"deleted": "Deleted",
 		"emptyTitle": "Start your first study",
+		"filter": {
+			"all": "All",
+			"clear": "Clear keyword",
+			"count": "{{shown}} / {{total}}",
+			"noMatch": "Try another keyword or status.",
+			"noMatchTitle": "No studies found",
+			"reset": "Clear filters",
+			"search": "Search study titles"
+		},
 		"moreActions": "More actions",
 		"myStudies": "My studies",
 		"noStudies": "No studies yet. Ask a business question or start from a template above.",

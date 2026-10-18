@@ -5,7 +5,6 @@ import {
 	ClipboardCheck,
 	LayoutTemplate,
 	ListChecks,
-	MessageSquareQuote,
 	Quote,
 	UsersRound,
 } from "lucide-react"
@@ -22,15 +21,6 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
-import { Button } from "@/components/shadcn-ui/button"
-import {
-	Empty,
-	EmptyContent,
-	EmptyDescription,
-	EmptyHeader,
-	EmptyMedia,
-	EmptyTitle,
-} from "@/components/shadcn-ui/empty"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
 import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/components/MobileInputContainer"
@@ -60,7 +50,8 @@ import {
 	getAttachmentPath,
 	reportTemplateName,
 } from "../services/researchFiles"
-import StudyListItem from "../components/StudyListItem"
+import SectionTitle from "../components/SectionTitle"
+import StudyListSection from "../components/StudyListSection"
 import ResearchOnboarding from "../onboarding/ResearchOnboarding"
 import ResearchHelp from "../onboarding/ResearchHelp"
 import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
@@ -154,7 +145,6 @@ function ResearchHomePage() {
 		}
 	})
 
-	const studies = store.studies
 	const libraryPersonas = store.personas.map((ref) => ref.data)
 	const openLibrary = useMemoizedFn(() => navigate({ name: RouteName.PersonaResearchPersonas }))
 	// The home tour ends on its "start a study" action: put the cursor where the question goes.
@@ -382,52 +372,11 @@ function ResearchHomePage() {
 					</div>
 				</section>
 
-				<section
-					className="flex flex-col gap-4"
-					data-guide-anchor={ResearchOnboardingAnchor.HomeStudies}
-				>
-					<div className="flex items-center justify-between gap-3">
-						<SectionTitle
-							title={t("home.myStudies")}
-							hint={
-								studies.length > 0
-									? t("home.studiesCount", { count: studies.length })
-									: undefined
-							}
-						/>
-					</div>
-					{studies.length === 0 ? (
-						<Empty className="rounded-xl border border-dashed border-border py-10">
-							<EmptyHeader>
-								<EmptyMedia variant="icon">
-									<MessageSquareQuote />
-								</EmptyMedia>
-								<EmptyTitle>{t("home.emptyTitle")}</EmptyTitle>
-								<EmptyDescription>{t("home.noStudies")}</EmptyDescription>
-							</EmptyHeader>
-							<EmptyContent>
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => applyStarter(t("home.samplePrompt"))}
-								>
-									{t("home.trySample")}
-								</Button>
-							</EmptyContent>
-						</Empty>
-					) : (
-						<ul className="flex flex-col divide-y divide-border border-y border-border">
-							{studies.map((topic) => (
-								<StudyListItem
-									key={topic.id}
-									topic={topic}
-									onOpen={openStudy}
-									onDelete={setPendingDelete}
-								/>
-							))}
-						</ul>
-					)}
-				</section>
+				<StudyListSection
+					onOpen={openStudy}
+					onDelete={setPendingDelete}
+					onTrySample={() => applyStarter(t("home.samplePrompt"))}
+				/>
 			</div>
 
 			<AlertDialog
@@ -455,15 +404,6 @@ function ResearchHomePage() {
 			{/* The page is fully rendered once the shell shows it (the store loads before). */}
 			<ResearchOnboarding page="home" ready onFinish={focusComposer} />
 		</ScrollArea>
-	)
-}
-
-function SectionTitle({ title, hint }: { title: string; hint?: string }) {
-	return (
-		<div className="flex items-baseline gap-3">
-			<h2 className="text-lg font-bold tracking-tight text-foreground">{title}</h2>
-			{hint ? <span className="text-[13px] text-muted-foreground">{hint}</span> : null}
-		</div>
 	)
 }
 
