@@ -1,4 +1,5 @@
-import { useState, type KeyboardEvent, type ReactNode } from "react"
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useSize } from "ahooks"
 import {
 	Check,
 	ChevronDown,
@@ -33,6 +34,14 @@ import {
 	type ResearchOptions,
 } from "../services/researchOptions"
 import { PRESSABLE } from "./surface"
+
+/**
+ * Row width (padding included) the four chips and the trailing action need with "· Auto" on
+ * each unset chip, measured at about 634px in Chinese;
+ * below it the suffix is dropped so the row stays on one line (measured, not the viewport,
+ * since the composer narrows with the side panels).
+ */
+const AUTO_SUFFIX_MIN_WIDTH = 640
 
 /** Report template choice; `value` null is the default template. */
 export interface ReportTemplateOption {
@@ -78,16 +87,20 @@ export default function ResearchComposerOptions({
 	const roundsLabel = (rounds: number) => t("options.roundsValue", { count: rounds })
 	const isPresetPanel = (PANEL_SIZES as readonly unknown[]).includes(value.panelSize)
 	const isPresetRounds = (ROUND_COUNTS as readonly unknown[]).includes(value.rounds)
+	const rowRef = useRef<HTMLDivElement>(null)
+	const rowSize = useSize(rowRef)
+	const showAuto = (rowSize?.width ?? AUTO_SUFFIX_MIN_WIDTH) >= AUTO_SUFFIX_MIN_WIDTH
 
 	return (
 		<div
+			ref={rowRef}
 			className={cn("flex flex-wrap items-center gap-2", className)}
 			data-guide-anchor={guideAnchor}
 		>
 			<OptionMenu
 				icon={<FlaskConical className="size-3.5" />}
 				label={t("options.method")}
-				showAuto
+				showAuto={showAuto}
 				valueLabel={
 					value.method === "custom"
 						? (value.customMethod ?? "")
@@ -115,7 +128,7 @@ export default function ResearchComposerOptions({
 			<OptionMenu
 				icon={<UsersRound className="size-3.5" />}
 				label={t("options.panel")}
-				showAuto
+				showAuto={showAuto}
 				valueLabel={
 					value.panelSize === "auto" ? t("options.auto") : panelLabel(value.panelSize)
 				}
@@ -147,7 +160,7 @@ export default function ResearchComposerOptions({
 			<OptionMenu
 				icon={<Repeat className="size-3.5" />}
 				label={t("options.rounds")}
-				showAuto
+				showAuto={showAuto}
 				title={t("options.roundsTitle")}
 				description={t("options.roundsHelp")}
 				valueLabel={value.rounds === "auto" ? t("options.auto") : roundsLabel(value.rounds)}
@@ -316,7 +329,7 @@ function OptionMenu({
 						{active ? valueLabel : label}
 					</span>
 					{!active && showAuto ? (
-						<span className="opacity-70 max-sm:hidden">· {t("options.auto")}</span>
+						<span className="opacity-70">· {t("options.auto")}</span>
 					) : null}
 					<ChevronDown className="size-3.5 opacity-60" />
 				</button>
