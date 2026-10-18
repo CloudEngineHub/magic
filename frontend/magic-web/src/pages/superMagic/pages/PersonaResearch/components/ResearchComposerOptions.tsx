@@ -87,6 +87,7 @@ export default function ResearchComposerOptions({
 			<OptionMenu
 				icon={<FlaskConical className="size-3.5" />}
 				label={t("options.method")}
+				showAuto
 				valueLabel={
 					value.method === "custom"
 						? (value.customMethod ?? "")
@@ -114,6 +115,7 @@ export default function ResearchComposerOptions({
 			<OptionMenu
 				icon={<UsersRound className="size-3.5" />}
 				label={t("options.panel")}
+				showAuto
 				valueLabel={
 					value.panelSize === "auto" ? t("options.auto") : panelLabel(value.panelSize)
 				}
@@ -145,6 +147,7 @@ export default function ResearchComposerOptions({
 			<OptionMenu
 				icon={<Repeat className="size-3.5" />}
 				label={t("options.rounds")}
+				showAuto
 				title={t("options.roundsTitle")}
 				description={t("options.roundsHelp")}
 				valueLabel={value.rounds === "auto" ? t("options.auto") : roundsLabel(value.rounds)}
@@ -233,6 +236,7 @@ function OptionMenu({
 	icon,
 	label,
 	title = label,
+	showAuto = false,
 	description,
 	valueLabel,
 	active,
@@ -248,6 +252,8 @@ function OptionMenu({
 	description?: string
 	valueLabel: string
 	active: boolean
+	/** Unset chips read "Method · Auto" so "auto" is not mistaken for a missing value. */
+	showAuto?: boolean
 	items: OptionItem[]
 	custom?: CustomEntry
 	/** A link-like action under the choices, e.g. "manage templates". */
@@ -296,7 +302,7 @@ function OptionMenu({
 					className={cn(
 						// Quiet chips inside the composer; a fixed value gets a soft fill, not solid ink.
 						// Inset focus ring so a focused chip never paints over its neighbour.
-						"inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25",
+						"inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25",
 						active
 							? "bg-muted text-foreground"
 							: "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -304,11 +310,14 @@ function OptionMenu({
 					)}
 				>
 					{icon}
-					{/* One word per chip so all settings fit one row: the value once it is set,
-					    else the setting's name; the menu header names the setting either way. */}
+					{/* Short chips so all settings fit one row: the value alone once it is set,
+					    else the setting's name, plus "· Auto" where there is room. */}
 					<span className={cn("max-w-[10em] truncate", active && "font-medium")}>
 						{active ? valueLabel : label}
 					</span>
+					{!active && showAuto ? (
+						<span className="opacity-70 max-sm:hidden">· {t("options.auto")}</span>
+					) : null}
 					<ChevronDown className="size-3.5 opacity-60" />
 				</button>
 			</DropdownMenuTrigger>
