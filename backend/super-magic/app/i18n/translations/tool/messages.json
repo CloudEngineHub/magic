@@ -7397,6 +7397,10 @@
         "zh_CN": "来自上传资料",
         "en_US": "From uploads"
     },
+    "save_personas.tier.manual": {
+        "zh_CN": "手动填写",
+        "en_US": "Filled in manually"
+    },
     "check_interviews.success": {
         "zh_CN": "{{done}}/{{total}} 位已完成访谈",
         "en_US": "{{done}}/{{total}} interviews done"

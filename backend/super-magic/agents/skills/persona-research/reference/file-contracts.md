@@ -32,7 +32,7 @@ Path: `studies/<slug>/study.json`
 | `topic_id` | yes | the current topic ID from the latest `<super_magic_product_context>`, as a string; the research workspace finds the study of a topic by this field, so keep it on every rewrite |
 | `title` | yes | short study title |
 | `question` | yes | the user's original question, verbatim |
-| `study_type` | no | `user_research` \| `product_rnd` \| `concept_test` \| `fast_insight` \| `panel_only` |
+| `study_type` | no | `user_research` \| `product_rnd` \| `concept_test` \| `fast_insight` \| `panel_only` \| `persona_build` (persona building only: no plan, interviews, or report) |
 | `framework` | no | list of framework names, for example `["JTBD"]` |
 | `phase` | yes | `clarify` \| `plan` \| `desk_research` \| `interview` \| `report` \| `validation` \| `done` |
 | `phases` | yes | all six phases in order, each `{ "key": <phase>, "status": "done" \| "running" \| "pending" \| "skipped" \| "failed" }` |
@@ -137,14 +137,15 @@ Path: `personas/<persona_id>.json` (project-level library). `id` format: `p_<sho
 | `name` | yes | display name |
 | `tagline` | no | one-line description |
 | `tags` | no | short labels |
-| `tier` | yes | `generated` \| `evidence_based` \| `imported` |
+| `tier` | yes | `generated` \| `evidence_based` \| `imported` \| `manual` (filled in by the user in the persona library) |
 | `dimensions` | no | `demographics` (object), `geography` (object), `psychographics` (object), `behavior` (object), `needs_pains` (array), `tech_adoption` (string), `social` (string) |
 | `layers` | no | `expression` (array of typical phrasings), `story` (string, life and usage story), `cognition` (`{ "decision_weights": [{ "factor", "level": "high" \| "medium" \| "low" }] }`, a qualitative ranking with no numbers), `behavior` (array of concrete actions) |
 | `evidence` | no | array of `{ "id", "type": "web" \| "social" \| "upload" \| "interview", "platform", "title", "url", "file", "quote" }`; `platform` only for `social` (for example `xiaohongshu`, `douyin`); `interview` evidence never counts toward `tier` |
-| `field_sources` | no | per dimension key (`demographics`, `geography`, `psychographics`, `behavior`, `needs_pains`, `tech_adoption`, `social`): an array of evidence ids such as `["e1", "e3"]`, or the string `"inferred"` when no evidence backs it |
+| `field_sources` | no | per dimension key (`demographics`, `geography`, `psychographics`, `behavior`, `needs_pains`, `tech_adoption`, `social`): an array of evidence ids such as `["e1", "e3"]`, the string `"inferred"` when no evidence backs it, or `"user"` when the user filled in or edited it |
 | `consistency_notes` | no | array of strings: contradictions between layers that are kept on purpose, for example "Says efficiency matters most, yet still keeps a paper ledger" |
 | `created_in` | no | `studies/<slug>` of the study that created it |
 | `updated_at` | no | ISO 8601 time with offset |
+| `edited_at` | no | ISO 8601 time with offset of the user's last edit in the persona library |
 
 Although `dimensions`, `layers`, `evidence`, and `field_sources` are optional for the UI, every persona you create fills all 7 dimensions, all 4 layers, `field_sources` for all 7 dimensions, and at least one evidence item when sources exist. `tier` follows the rule in SKILL.md, not your judgment.
 

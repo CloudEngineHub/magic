@@ -246,6 +246,62 @@ async def test_reused_persona_keeps_identity_and_appends_evidence(tmp_path):
     assert saved["tier"] == "evidence_based"
 
 
+async def test_reused_manual_persona_keeps_its_tier(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    _write(tmp_path, "personas/p_wang_9c2e.json", {
+        "schema_version": 1, "id": "p_wang_9c2e", "name": "Wang", "tier": "manual",
+        "field_sources": {"needs_pains": "user"},
+    })
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p",
+        personas=[{"id": "p_wang_9c2e", "segment": "Owners", "reason": "reuse",
+                   "evidence": [{"id": "e1", "type": "web"}, {"id": "e2", "type": "web"}, {"id": "e3", "type": "web"}],
+                   "field_sources": {"behavior": ["e1"]}}],
+    ))
+
+    saved = _read(tmp_path, "personas/p_wang_9c2e.json")
+    assert result.ok is True, result.content
+    assert saved["tier"] == "manual"
+    assert saved["field_sources"] == {"needs_pains": "user", "behavior": ["e1"]}
+
+
+async def test_persona_build_study_finishes_when_personas_are_saved(tmp_path):
+    tool = UpdateStudy(base_dir=tmp_path)
+    created = await tool.execute(_context(), UpdateStudyParams(
+        event="created", title="T", question="Q?", slug_hint="tea owners", study_type="persona_build",
+    ))
+    study_dir = created.data["study_dir"]
+    assert _read(tmp_path, f"{study_dir}/study.json")["limits"]["personas"] == 6
+
+    refused = await tool.execute(_context(), UpdateStudyParams(event="clarified", study_dir=study_dir))
+    saved = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="Tea shop owners",
+        personas=[_persona("He", "Franchise owners", evidence_types=("upload",), behavior_sources=["e1"])
+                  | {"from_uploaded_people": True}],
+    ))
+
+    study = _read(tmp_path, f"{study_dir}/study.json")
+    assert refused.ok is False and "persona_build" in refused.content
+    assert saved.ok is True, saved.content
+    assert saved.data["personas"][0]["tier"] == "imported"
+    assert study["study_type"] == "persona_build" and study["phase"] == "done"
+    assert [p["status"] for p in study["phases"]] == ["done", "skipped", "skipped", "skipped", "skipped", "skipped"]
+
+
+async def test_persona_build_respects_its_persona_limit(tmp_path):
+    created = await UpdateStudy(base_dir=tmp_path).execute(_context(), UpdateStudyParams(
+        event="created", title="T", question="Q?", slug_hint="many", study_type="persona_build",
+    ))
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=created.data["study_dir"], panel_name="p",
+        personas=[_persona(f"P{i}", "Any") for i in range(7)],
+    ))
+
+    assert result.ok is False and "limit of 6" in result.content
+
+
 # ── finish_persona_transcript ──────────────────────────────────────────────
 
 INTERVIEW = {

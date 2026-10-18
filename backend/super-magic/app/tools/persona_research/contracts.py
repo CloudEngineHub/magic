@@ -18,6 +18,8 @@ SCHEMA_VERSION = 1
 
 # 成本上限，与 SKILL.md「Cost Limits」一致。
 MAX_PERSONAS = 12
+# 「只构建人设」的对话每次最多保存的人设数（SKILL.md「Persona Building Requests」）。
+MAX_BUILD_PERSONAS = 6
 MAX_INTERVIEW_ROUNDS = 7
 DEFAULT_INTERVIEW_ROUNDS = 5
 
@@ -65,6 +67,8 @@ class StudyType(StrEnum):
     CONCEPT_TEST = "concept_test"
     FAST_INSIGHT = "fast_insight"
     PANEL_ONLY = "panel_only"
+    # 只构建人设、不做研究：人设保存后研究直接结束，不经过计划、访谈和报告。
+    PERSONA_BUILD = "persona_build"
 
 
 class Verdict(StrEnum):
@@ -112,6 +116,8 @@ class PersonaTier(StrEnum):
     GENERATED = "generated"
     EVIDENCE_BASED = "evidence_based"
     IMPORTED = "imported"
+    # 用户在人设库手动填写；Agent 复用时不重算、不改写 tier。
+    MANUAL = "manual"
 
 
 class EvidenceType(StrEnum):

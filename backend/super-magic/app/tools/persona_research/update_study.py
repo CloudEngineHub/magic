@@ -15,6 +15,9 @@
 | report_written        | report、validation、done | 首次进入 validation；之后重写报告不改变阶段           |
 | questionnaire_written | validation、done        | phase=done                                            |
 | validation_compared   | done                    | 写入真人验证结果和 validated_count                    |
+
+「只构建人设」：created 带 study_type=persona_build，limits.personas 记为 6。之后只调用
+save_personas，由它把研究直接收尾为 done；其它事件一律拒绝，避免误入计划或访谈流程。
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from app.tools.core import BaseToolParams, tool
 from app.tools.persona_research.contracts import (
     DEFAULT_INTERVIEW_ROUNDS,
     MAX_INTERVIEW_ROUNDS,
+    MAX_BUILD_PERSONAS,
     MAX_PERSONAS,
     PHASE_ORDER,
     SCHEMA_VERSION,
@@ -113,7 +117,10 @@ class UpdateStudyParams(BaseToolParams):
     title: str = Field(default="", description="created: short study title.")
     question: str = Field(default="", description="created: the user's original question, verbatim.")
     slug_hint: str = Field(default="", description="created: short ASCII kebab-case summary of the topic.")
-    study_type: Optional[StudyType] = Field(default=None, description="plan_confirmed: study type.")
+    study_type: Optional[StudyType] = Field(
+        default=None,
+        description="plan_confirmed: study type. created: persona_build only, for a persona-building request.",
+    )
     framework: List[str] = Field(default_factory=list, description="plan_confirmed: framework names.")
     decision: str = Field(default="", description="plan_confirmed: the decision the study informs.")
     hypotheses: List[HypothesisDraft] = Field(default_factory=list, description="plan_confirmed: in plan order.")
@@ -138,6 +145,10 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
             else:
                 study_path = await resolve_study_dir(self.base_dir, params.study_dir)
                 study = await load_study(study_path)
+                if study.study_type == StudyType.PERSONA_BUILD:
+                    raise StudyFilesError(
+                        "this is a persona_build study; call save_personas to finish it. Nothing was changed."
+                    )
                 allowed = _ALLOWED_FROM[params.event]
                 if StudyPhase(study.phase) not in allowed:
                     raise StudyFilesError(
@@ -161,6 +172,9 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
     async def _create(self, tool_context: ToolContext, params: UpdateStudyParams) -> tuple[Path, Study]:
         if not params.title.strip() or not params.question.strip():
             raise StudyFilesError("created needs title and question")
+        if params.study_type not in (None, StudyType.PERSONA_BUILD):
+            raise StudyFilesError("created only accepts study_type persona_build; set other types at plan_confirmed")
+        building = params.study_type == StudyType.PERSONA_BUILD
         topic_id = _current_topic_id(tool_context)
         if not topic_id:
             raise StudyFilesError("the current topic ID is unavailable, so the study cannot be linked to this topic")
@@ -181,6 +195,10 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
             phase=StudyPhase.CLARIFY,
             phases=initial_phases(),
         )
+        if building:
+            study.study_type = StudyType.PERSONA_BUILD
+            # 只建人设不访谈；interview_rounds 只为满足 limits 结构，不会被使用。
+            study.limits = StudyLimits(personas=MAX_BUILD_PERSONAS, interview_rounds=DEFAULT_INTERVIEW_ROUNDS)
         return study_path, study
 
     async def _apply(self, study_path: Path, study: Study, params: UpdateStudyParams) -> None:
