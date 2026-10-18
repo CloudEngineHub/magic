@@ -252,7 +252,8 @@ function ResearchConsole({
 					))}
 				</TabsList>
 				{activeTab === "report" && reportActions ? (
-					<div className="ml-auto flex shrink-0 items-center gap-1 pb-1.5">
+					// Same height as a tab (h-8) so showing the actions never changes the bar height.
+					<div className="ml-auto flex h-8 shrink-0 items-center gap-1 [&_button]:h-6">
 						{reportActions}
 					</div>
 				) : null}
