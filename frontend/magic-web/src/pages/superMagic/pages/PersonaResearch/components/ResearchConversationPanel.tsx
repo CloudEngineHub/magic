@@ -56,12 +56,15 @@ const ResearchConversationPanel = forwardRef<
 	/** Same selection as the topic page: the last non-revoked tool step that opens in the preview. */
 	const reportLatestToolDetail = useMemoizedFn((topicMessages: SuperMagicMessageItem[]) => {
 		if (!onAutoDetailChange) return
-		const lastDetailMessage = topicMessages.findLast((message) =>
-			filterPanelMessageWithoutRevoked(
-				superMagicStore.getMessageNode(message?.super_message_id),
-				message,
-			),
-		)
+		// Copy before reversing: the store owns this array.
+		const lastDetailMessage = [...topicMessages]
+			.reverse()
+			.find((message) =>
+				filterPanelMessageWithoutRevoked(
+					superMagicStore.getMessageNode(message?.super_message_id),
+					message,
+				),
+			)
 		const tool = (
 			superMagicStore.getMessageNode(lastDetailMessage?.super_message_id) as
 				| { tool?: { detail?: Record<string, unknown>; id?: string; name?: string } }

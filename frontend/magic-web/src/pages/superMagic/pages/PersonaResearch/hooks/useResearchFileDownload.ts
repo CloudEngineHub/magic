@@ -12,7 +12,10 @@ export function useResearchFileDownload() {
 		if (!fileId) return
 		void fileApi
 			.getTemporaryDownloadUrl({ file_ids: [fileId], is_download: true })
-			.then((res: Array<{ url?: string }>) => downloadFileWithAnchor(res[0]?.url))
+			.then((res: Array<{ url?: string }>) => {
+				const url = res[0]?.url
+				if (url) downloadFileWithAnchor(url)
+			})
 			.catch((error: unknown) => console.error("Failed to download research file:", error))
 	})
 }
