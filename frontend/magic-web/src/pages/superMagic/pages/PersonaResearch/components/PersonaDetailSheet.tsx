@@ -129,7 +129,8 @@ export default function PersonaDetailSheet({
 							</p>
 							<AiSimulatedNote />
 						</SheetHeader>
-						<ScrollArea className="min-h-0 flex-1">
+						{/* Radix wraps content in a table that grows with long values; keep it to the sheet width. */}
+						<ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
 							<div className="flex flex-col gap-6 p-5 text-sm">
 								{interview?.quotes?.[0] ? (
 									<blockquote className="flex gap-2 rounded-xl bg-primary/5 p-3 text-sm leading-6">
@@ -300,11 +301,19 @@ function Field({
 	/** Evidence ids backing this field, or "inferred"; absent on older persona files. */
 	source?: string[] | "inferred"
 }) {
-	const { t } = useTranslation("personaResearch")
-	const text = formatResearchValue(value)
+	const { t, i18n } = useTranslation("personaResearch")
+	// Contract keys and values (age, city_tier, male) get names; anything else shows as written.
+	const labelOf = (text: string) =>
+		i18n.exists(`personaResearch:persona.field.${text}`)
+			? t(`persona.field.${text}`)
+			: text.replaceAll("_", " ")
+	const text = formatResearchValue(value, {
+		labelOf,
+		keySeparator: i18n.language.toLowerCase().startsWith("zh") ? "：" : ": ",
+	})
 	if (!text) return null
 	return (
-		<div className="grid grid-cols-[88px_1fr] gap-2">
+		<div className="grid grid-cols-[88px_minmax(0,1fr)] gap-2">
 			<span className="flex flex-col gap-1 text-xs leading-5 text-muted-foreground">
 				{label}
 				{source ? (
@@ -322,7 +331,7 @@ function Field({
 					</span>
 				) : null}
 			</span>
-			<span className="whitespace-pre-wrap break-words leading-5 text-foreground">
+			<span className="min-w-0 whitespace-pre-wrap break-words leading-5 text-foreground">
 				{text}
 			</span>
 		</div>
@@ -385,7 +394,7 @@ function DecisionWeights({ value }: { value: unknown }) {
 	if (weights.length === 0) return null
 	const levelLabel = { high: t("level.high"), medium: t("level.medium"), low: t("level.low") }
 	return (
-		<div className="grid grid-cols-[88px_1fr] gap-2">
+		<div className="grid grid-cols-[88px_minmax(0,1fr)] gap-2">
 			<span className="text-xs leading-5 text-muted-foreground">
 				{t("persona.layer.cognition")}
 			</span>

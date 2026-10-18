@@ -226,8 +226,9 @@ function ResearchConsole({
 							key={value}
 							value={value}
 							className={cn(
-								"relative gap-1.5 rounded-none border-b-2 border-transparent px-2.5 pb-2 pt-1.5 text-xs text-muted-foreground shadow-none",
-								"data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none",
+								// Underline tabs: only the bottom edge marks the active tab, never a full box.
+								"relative gap-1.5 rounded-none border-0 border-b-2 border-transparent px-2.5 pb-2 pt-1.5 text-xs text-muted-foreground shadow-none",
+								"data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:border-b-primary dark:data-[state=active]:bg-transparent",
 							)}
 						>
 							<Icon className="size-3.5" />

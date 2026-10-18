@@ -170,6 +170,23 @@
 			"techAdoption": "Tech adoption"
 		},
 		"distribution": "Evidence-backed personas {{sourced}}/{{total}}",
+		"field": {
+			"age": "Age",
+			"city": "City",
+			"city_tier": "City tier",
+			"device": "Devices",
+			"education": "Education",
+			"female": "Female",
+			"gender": "Gender",
+			"income": "Income",
+			"lifestyle": "Lifestyle",
+			"male": "Male",
+			"occupation": "Occupation",
+			"purchase_channel": "Purchase channel",
+			"region": "Region",
+			"risk_attitude": "Risk attitude",
+			"values": "Values"
+		},
 		"fieldInferred": "Inferred",
 		"fieldSourced": "Based on {{ids}}",
 		"interviewDone": "Interviewed",

@@ -170,6 +170,23 @@
 			"techAdoption": "技术接受度"
 		},
 		"distribution": "有依据的人设 {{sourced}}/{{total}}",
+		"field": {
+			"age": "年龄",
+			"city": "城市",
+			"city_tier": "城市级别",
+			"device": "常用设备",
+			"education": "学历",
+			"female": "女",
+			"gender": "性别",
+			"income": "收入",
+			"lifestyle": "生活方式",
+			"male": "男",
+			"occupation": "职业",
+			"purchase_channel": "购买渠道",
+			"region": "地区",
+			"risk_attitude": "风险态度",
+			"values": "价值观"
+		},
 		"fieldInferred": "推测",
 		"fieldSourced": "依据 {{ids}}",
 		"interviewDone": "已访谈",
