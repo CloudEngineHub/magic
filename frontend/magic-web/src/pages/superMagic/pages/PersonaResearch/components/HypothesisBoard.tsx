@@ -66,6 +66,10 @@ function HypothesisBoard({ onOpenQuote, onOpenSources }: HypothesisBoardProps) {
 	const boardRef = useRef<HTMLDivElement>(null)
 	const wide = (useSize(boardRef)?.width ?? 0) >= 720
 
+	// "Made before hypotheses existed" only fits a study past planning; a new study in clarify or
+	// plan simply has not written its hypotheses yet.
+	const isLegacyStudy = Boolean(study && study.phase !== "clarify" && study.phase !== "plan")
+
 	if (!study || hypotheses.length === 0) {
 		return (
 			<Empty className="h-full border-0 py-12">
@@ -75,7 +79,7 @@ function HypothesisBoard({ onOpenQuote, onOpenSources }: HypothesisBoardProps) {
 					</EmptyMedia>
 					<EmptyTitle className="text-sm">{t("hypothesis.emptyTitle")}</EmptyTitle>
 					<EmptyDescription className="text-xs">
-						{study ? t("hypothesis.emptyLegacy") : t("hypothesis.empty")}
+						{isLegacyStudy ? t("hypothesis.emptyLegacy") : t("hypothesis.empty")}
 					</EmptyDescription>
 				</EmptyHeader>
 			</Empty>
