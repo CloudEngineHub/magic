@@ -189,7 +189,12 @@ const ResearchShareBody = observer(function ResearchShareBody({
 				</TooltipTrigger>
 				<TooltipContent>{t("share.copyLink")}</TooltipContent>
 			</Tooltip>
-			<Button size="sm" className="h-8 gap-1.5 rounded-full px-3" asChild>
+			{/* The global link hover colour would turn the label blue on the dark fill; pin it. */}
+			<Button
+				size="sm"
+				className="h-8 gap-1.5 rounded-full px-3 text-primary-foreground hover:text-primary-foreground"
+				asChild
+			>
 				{/* Visitors land on the research home (sign-in first when needed). */}
 				<a href={researchHomeHref} target="_blank" rel="noreferrer">
 					<UsersRound className="size-3.5" />
