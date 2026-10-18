@@ -22,6 +22,8 @@ import { useResearchFileDownload } from "../hooks/useResearchFileDownload"
 import type { StudyDeliverables } from "../services/researchDeliverables"
 import type { ResearchConsoleTab } from "./ResearchConsole"
 
+const INVALID_FILE_NAME = /[\\/:*?"<>|\r\n]+/g
+
 interface ResearchDeliverablesProps {
 	deliverables: StudyDeliverables
 	className?: string
@@ -50,6 +52,14 @@ function ResearchDeliverables({
 
 	const hypotheses = store.study?.hypotheses ?? []
 	const decided = hypotheses.filter((item) => item.verdict !== "pending").length
+	const studyTitle = store.selectedTopic ? store.studyTitleOf(store.selectedTopic) : ""
+	/** Saves a deliverable as "<study title>[-<label>].<ext>"; undefined keeps the stored name. */
+	const downloadName = (file: AttachmentItem, label?: string) => {
+		const base = [studyTitle, label].filter(Boolean).join("-").replace(INVALID_FILE_NAME, " ")
+		if (!base.trim()) return undefined
+		const ext = file.file_extension || file.file_name?.split(".").pop()
+		return ext ? `${base.trim()}.${ext}` : base.trim()
+	}
 	const documentLabels = {
 		plan: t("console.docPlan"),
 		deskResearch: t("console.docDeskResearch"),
@@ -128,7 +138,7 @@ function ResearchDeliverables({
 					{permissions.download ? (
 						<DownloadButton
 							label={t("deliverables.download")}
-							onClick={() => downloadFile(report.file_id)}
+							onClick={() => downloadFile(report.file_id, downloadName(report))}
 						/>
 					) : null}
 					{canOpen ? (
@@ -156,9 +166,13 @@ function ResearchDeliverables({
 										? t("deliverables.downloadCsv")
 										: t("deliverables.download")
 								}
-								onClick={() =>
-									downloadFile((validationCsv ?? questionnaire).file_id)
-								}
+								onClick={() => {
+									const file = validationCsv ?? questionnaire
+									downloadFile(
+										file.file_id,
+										downloadName(file, t("console.docValidation")),
+									)
+								}}
 							/>
 						) : null
 					}
@@ -178,7 +192,9 @@ function ResearchDeliverables({
 						permissions.download ? (
 							<DownloadButton
 								label={t("deliverables.download")}
-								onClick={() => downloadFile(file.file_id)}
+								onClick={() =>
+									downloadFile(file.file_id, downloadName(file, title))
+								}
 							/>
 						) : null
 					}
