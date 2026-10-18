@@ -369,6 +369,84 @@
 		"reportTemplates": "Report templates",
 		"study": "This study"
 	},
+	"onboarding": {
+		"help": {
+			"articleTitle": "How AI research works",
+			"intro": "AI research tests a business judgement with AI-simulated respondents. You write the question; the AI clarifies the goal with you, reads public sources, designs the study, interviews each persona and writes a report in which every finding cites its quotes.",
+			"label": "Guide",
+			"more": "Type @ in the conversation to cite this study's report, personas and interviews. Report templates (top right of the research home) set the report layout; new studies use the selected template.",
+			"moreTitle": "@ mentions and report templates",
+			"outputs": "Report holds the findings; Hypotheses shows how well each claim is supported; Personas, Interviews and Discussion hold what the AI-simulated respondents said; Analysis and Files are supporting material. Share sends the study to your team, and the share page also states that respondents are AI-simulated.",
+			"outputsTitle": "Outputs and sharing",
+			"personas": "A persona is the profile an AI-simulated respondent plays. Build one in the persona library by chatting, filling in a form, or uploading interview notes or survey data, then reuse it in new studies with \"Pick from library\". Personas do not represent real customers.",
+			"personasTitle": "Persona library",
+			"phasesTitle": "How a study runs",
+			"replayHome": "Replay the home tour",
+			"replayStudio": "Replay the workspace tour",
+			"settings": "The method sets the question framework: JTBD asks which job users hire a product for, KANO separates must-haves from delighters. More respondents and rounds cover more ground and dig deeper, but take longer. When unsure, leave them on Auto and the AI will choose.",
+			"settingsTitle": "Method, respondents and rounds",
+			"simulated": "All respondents are simulated by AI from personas; they are not real users. Use AI research to narrow the field and find hypotheses worth testing before real research, not to replace it. Reports say \"most / some / few\" and make no statistical claims.",
+			"subtitle": "The flow, outputs and limits of AI research",
+			"summary": "Test business judgements with AI-simulated respondents. Click for the full guide.",
+			"title": "AI research guide",
+			"validation": "AI findings need real people to check them. Validation holds a questionnaire for real customers (exportable as CSV for survey tools). Upload the answers to the conversation and the AI compares them with the simulated findings, marking where they agree and conflict.",
+			"validationTitle": "Real-person validation"
+		},
+		"home": {
+			"composer": {
+				"text": "Describe the business question in one sentence, e.g. \"Why do trial users drop off in week two?\" The AI first confirms which decision the study should support, then starts interviewing.",
+				"title": "Write the judgement to test"
+			},
+			"finish": "Start a study",
+			"library": {
+				"text": "Personas are the profiles AI-simulated respondents play. Create them by chatting, filling in a form or uploading interview notes. Personas do not represent real customers.",
+				"title": "Persona library: where respondents come from"
+			},
+			"settings": {
+				"text": "The method sets the question framework (e.g. JTBD, KANO). Respondents are virtual users simulated by AI from personas. More rounds dig deeper but take longer. You can also pick respondents from the persona library.",
+				"title": "Choose method and scale"
+			},
+			"studies": {
+				"text": "Running and finished studies live here. Open one to ask follow-ups or read the report.",
+				"title": "Your studies stay here"
+			},
+			"templates": {
+				"text": "Each template presets a method, panel size and rounds. Pick one and adapt it to your business.",
+				"title": "Not sure where to start? Use a template"
+			}
+		},
+		"next": "Next",
+		"previous": "Back",
+		"skip": "Skip",
+		"stepLabel": "{{current}} / {{total}}",
+		"studio": {
+			"conversation": {
+				"text": "Ask about a finding, add respondents or change the interview guide. Type @ to cite this study's report, personas and interviews.",
+				"title": "Follow up and steer at any time"
+			},
+			"finish": "Got it",
+			"progress": {
+				"text": "A study moves through clarifying, market insight, design, persona interviews, outputs and real-person validation. While it runs, the left panel follows the current phase.",
+				"title": "Studies run in phases"
+			},
+			"respondents": {
+				"text": "These avatars are respondents simulated by AI from personas; click to see their profiles and interviews. Reports say \"most / some / few\" and make no statistical claims.",
+				"title": "Respondents are AI-simulated"
+			},
+			"share": {
+				"text": "The share page includes the report and quoted evidence, and states that respondents are AI-simulated.",
+				"title": "Share with your team"
+			},
+			"tabs": {
+				"text": "Report holds the findings, Hypotheses how well each claim is supported, Personas, Interviews and Discussion what the AI-simulated respondents said, Analysis and Files the supporting material.",
+				"title": "Outputs, by type"
+			},
+			"validation": {
+				"text": "AI simulation only narrows the field. Here is a questionnaire for real customers; upload their answers and the AI compares them with the simulated findings point by point.",
+				"title": "Check findings with real customers"
+			}
+		}
+	},
 	"options": {
 		"auto": "Auto",
 		"autoPanel": "Auto (AI decides from the quota)",

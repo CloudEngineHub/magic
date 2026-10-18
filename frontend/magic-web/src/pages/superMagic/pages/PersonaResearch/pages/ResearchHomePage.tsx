@@ -61,6 +61,9 @@ import {
 	reportTemplateName,
 } from "../services/researchFiles"
 import StudyListItem from "../components/StudyListItem"
+import ResearchOnboarding from "../onboarding/ResearchOnboarding"
+import ResearchHelp from "../onboarding/ResearchHelp"
+import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
 import { PRESSABLE } from "../components/surface"
 
 /** Research home: ask a business question, pick a template, or reopen a study. */
@@ -154,6 +157,14 @@ function ResearchHomePage() {
 	const studies = store.studies
 	const libraryPersonas = store.personas.map((ref) => ref.data)
 	const openLibrary = useMemoizedFn(() => navigate({ name: RouteName.PersonaResearchPersonas }))
+	// The home tour ends on its "start a study" action: put the cursor where the question goes.
+	const focusComposer = useMemoizedFn(() => {
+		document
+			.querySelector<HTMLElement>(
+				'[data-testid="persona-research-composer"] [contenteditable="true"]',
+			)
+			?.focus()
+	})
 
 	return (
 		<ScrollArea className="h-full bg-background" data-testid="persona-research-home">
@@ -166,10 +177,12 @@ function ResearchHomePage() {
 			>
 				<span className="font-bold text-foreground">{t("home.barTitle")}</span>
 				<span className="truncate text-muted-foreground">{t("home.barSubtitle")}</span>
+				<ResearchHelp page="home" className="ml-auto" />
 				<button
 					type="button"
+					data-guide-anchor={ResearchOnboardingAnchor.HomePersonaLibrary}
 					className={cn(
-						"group ml-auto flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 text-[13px] text-foreground outline-none ring-1 ring-border transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+						"group flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 text-[13px] text-foreground outline-none ring-1 ring-border transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
 						PRESSABLE,
 					)}
 					onClick={openLibrary}
@@ -234,6 +247,7 @@ function ResearchHomePage() {
 						<div
 							className="mt-7 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/30"
 							data-testid="persona-research-composer"
+							data-guide-anchor={ResearchOnboardingAnchor.HomeComposer}
 						>
 							{isMobile ? (
 								<MobileInputContainer
@@ -251,6 +265,7 @@ function ResearchHomePage() {
 								value={options}
 								onChange={updateOptions}
 								reportTemplate={reportTemplateOption}
+								guideAnchor={ResearchOnboardingAnchor.HomeSettings}
 								className="px-2.5 pb-3 pt-1.5"
 								trailing={
 									<button
@@ -285,7 +300,10 @@ function ResearchHomePage() {
 					)}
 				</section>
 
-				<section className="flex flex-col gap-4">
+				<section
+					className="flex flex-col gap-4"
+					data-guide-anchor={ResearchOnboardingAnchor.HomeTemplates}
+				>
 					<SectionTitle title={t("home.templatesTitle")} hint={t("home.templatesHint")} />
 					<div
 						className={cn(
@@ -364,7 +382,10 @@ function ResearchHomePage() {
 					</div>
 				</section>
 
-				<section className="flex flex-col gap-4">
+				<section
+					className="flex flex-col gap-4"
+					data-guide-anchor={ResearchOnboardingAnchor.HomeStudies}
+				>
 					<div className="flex items-center justify-between gap-3">
 						<SectionTitle
 							title={t("home.myStudies")}
@@ -431,6 +452,8 @@ function ResearchHomePage() {
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
+			{/* The page is fully rendered once the shell shows it (the store loads before). */}
+			<ResearchOnboarding page="home" ready onFinish={focusComposer} />
 		</ScrollArea>
 	)
 }

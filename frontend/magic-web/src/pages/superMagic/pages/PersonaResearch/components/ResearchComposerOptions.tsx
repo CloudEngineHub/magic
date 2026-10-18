@@ -41,6 +41,8 @@ interface ResearchComposerOptionsProps {
 	/** Extra controls after the three settings, e.g. "pick from the persona library". */
 	trailing?: ReactNode
 	className?: string
+	/** `data-guide-anchor` for the research onboarding; only the home composer passes one. */
+	guideAnchor?: string
 }
 
 /**
@@ -55,6 +57,7 @@ export default function ResearchComposerOptions({
 	reportTemplate,
 	trailing,
 	className,
+	guideAnchor,
 }: ResearchComposerOptionsProps) {
 	const { t } = useTranslation("personaResearch")
 	const methodLabel: Record<(typeof RESEARCH_METHODS)[number], string> = {
@@ -66,7 +69,10 @@ export default function ResearchComposerOptions({
 	}
 
 	return (
-		<div className={cn("flex flex-wrap items-center gap-2", className)}>
+		<div
+			className={cn("flex flex-wrap items-center gap-2", className)}
+			data-guide-anchor={guideAnchor}
+		>
 			<OptionMenu
 				icon={<FlaskConical className="size-3.5" />}
 				label={t("options.method")}
@@ -180,6 +186,7 @@ function OptionMenu({
 			<DropdownMenuTrigger asChild>
 				<button
 					type="button"
+					aria-label={`${label}: ${valueLabel}`}
 					className={cn(
 						// Quiet chips inside the composer; a fixed value gets a soft fill, not solid ink.
 						// Inset focus ring so a focused chip never paints over its neighbour.

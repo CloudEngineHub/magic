@@ -61,6 +61,9 @@ import {
 	StudyStatusBadge,
 	StudyStatusBadgeSkeleton,
 } from "../components/StudyStatusBadge"
+import ResearchOnboarding from "../onboarding/ResearchOnboarding"
+import ResearchHelp from "../onboarding/ResearchHelp"
+import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
 import { resolveStudyStatus } from "../services/studyStatus"
 import type { PersonaFile, StudyFile, StudyPhaseKey } from "../types"
 
@@ -308,7 +311,10 @@ function ResearchStudioPage() {
 						topicId={selectedTopic.id}
 						title={store.studyTitleOf(selectedTopic)}
 					/>
-					<div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+					<div
+						className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+						data-guide-anchor={ResearchOnboardingAnchor.StudioProgress}
+					>
 						{isContentLoading ? (
 							<StudyStatusBadgeSkeleton />
 						) : (
@@ -349,6 +355,7 @@ function ResearchStudioPage() {
 					// Who was interviewed, at a glance; the note keeps the AI-simulation context visible.
 					<button
 						type="button"
+						data-guide-anchor={ResearchOnboardingAnchor.StudioRespondents}
 						className="hidden shrink-0 items-center gap-2 rounded-full py-0.5 pl-0.5 pr-2 text-[11.5px] text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring lg:flex"
 						onClick={() => showOutputs("personas")}
 					>
@@ -368,6 +375,7 @@ function ResearchStudioPage() {
 						</span>
 					</button>
 				)}
+				<ResearchHelp page="studio" />
 				{isMobile ? null : (
 					<Button
 						variant="outline"
@@ -397,6 +405,7 @@ function ResearchStudioPage() {
 						size={isMobile ? "icon" : "sm"}
 						className={cn("h-8", isMobile && "size-8")}
 						aria-label={t("study.share")}
+						data-guide-anchor={ResearchOnboardingAnchor.StudioShare}
 					>
 						<Share2 className="size-4" />
 						{isMobile ? null : t("study.share")}
@@ -565,7 +574,10 @@ function ResearchStudioPage() {
 					onCollapse={() => setConversationCollapsed(true)}
 					onExpand={() => setConversationCollapsed(false)}
 				>
-					<div className="flex h-full min-h-0 flex-col bg-background">
+					<div
+						className="flex h-full min-h-0 flex-col bg-background"
+						data-guide-anchor={ResearchOnboardingAnchor.StudioConversation}
+					>
 						{conversationNode}
 					</div>
 				</ResizablePanel>
@@ -602,6 +614,8 @@ function ResearchStudioPage() {
 				<span className="ml-auto">{t("study.aiDisclaimer")}</span>
 			</div>
 			{sheet}
+			{/* Keyed by study so opening another one re-checks once its content has loaded. */}
+			<ResearchOnboarding key={selectedTopic.id} page="studio" ready={!isContentLoading} />
 		</div>
 	)
 }

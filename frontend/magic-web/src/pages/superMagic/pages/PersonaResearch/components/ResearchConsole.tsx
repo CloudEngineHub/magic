@@ -28,6 +28,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import { useSlidingThumb } from "../hooks/useSlidingThumb"
+import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
 import type { PersonaFile, QuoteRef } from "../types"
 import AnalysisBoard from "./AnalysisBoard"
 import HypothesisBoard from "./HypothesisBoard"
@@ -255,11 +256,19 @@ function ResearchConsole({
 								}}
 							/>
 						) : null}
-						<TabsList className="relative h-auto gap-0.5 bg-transparent p-0">
+						<TabsList
+							className="relative h-auto gap-0.5 bg-transparent p-0"
+							data-guide-anchor={ResearchOnboardingAnchor.StudioTabs}
+						>
 							{tabs.map(({ value, icon: Icon, label, badge }) => (
 								<TabsTrigger
 									key={value}
 									value={value}
+									data-guide-anchor={
+										value === "validation"
+											? ResearchOnboardingAnchor.StudioValidation
+											: undefined
+									}
 									className={cn(
 										"relative h-8 gap-1.5 rounded-full border-0 bg-transparent px-3 text-[13px] text-muted-foreground shadow-none transition-colors duration-200 hover:text-foreground",
 										"data-[state=active]:bg-transparent data-[state=active]:text-background data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-transparent",
