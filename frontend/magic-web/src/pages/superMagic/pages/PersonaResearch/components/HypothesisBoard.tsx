@@ -34,11 +34,14 @@ import {
 	leadQuote,
 	quotedPersonaIds,
 	sourceRefs,
+	splitSourceTokens,
+	type LeadQuoteRef,
 	type QuoteEvidence,
 	type StanceGroup,
 	type VoiceStance,
 } from "../services/hypothesisVoices"
 import type { GuideIssue, HypothesisVerdict, QuoteRef, StudyHypothesis } from "../types"
+import HangingQuote from "./HangingQuote"
 import PersonaAvatar from "./PersonaAvatar"
 import { personaTone } from "./personaPortrait"
 import { AgreementBadge, QuoteItem, VerdictBadge } from "./ResearchBadges"
@@ -156,20 +159,17 @@ const HypothesisCard = observer(function HypothesisCard({
 	const stanceLabels = useStanceLabels()
 	// The first card opens with its criteria so readers see how verdicts are judged.
 	const [expanded, setExpanded] = useState(defaultOpen)
-	const lead = leadQuote(hypothesis)
+	const themes = store.synthesis?.themes ?? []
+	const lead = leadQuote(hypothesis, themes)
 	const sources = sourceRefs(hypothesis)
 	const moreQuotes = (hypothesis.evidence_refs ?? []).filter(
 		(ref): ref is QuoteEvidence => ref.kind === "quote" && ref !== lead,
 	)
 	const panelIds = store.studyPersonas.map((persona) => persona.id)
-	const groups: StanceGroup[] = hypothesisStanceGroups(
-		hypothesis,
-		store.synthesis?.themes ?? [],
-		panelIds,
-	) ?? [{ stance: "support", personaIds: quotedPersonaIds(hypothesis) }]
-	const hasStance = Boolean(
-		store.synthesis?.themes.some((theme) => theme.hypothesis_ids?.includes(hypothesis.id)),
-	)
+	const groups: StanceGroup[] = hypothesisStanceGroups(hypothesis, themes, panelIds) ?? [
+		{ stance: "support", personaIds: quotedPersonaIds(hypothesis) },
+	]
+	const hasStance = Boolean(themes.some((theme) => theme.hypothesis_ids?.includes(hypothesis.id)))
 	const hasDetails = Boolean(
 		hypothesis.support_criteria ||
 		hypothesis.refute_criteria ||
@@ -231,18 +231,36 @@ const HypothesisCard = observer(function HypothesisCard({
 				</h3>
 				{hypothesis.verdict_reason ? (
 					<p className="text-[13.5px] leading-7 text-muted-foreground">
-						{hypothesis.verdict_reason}
-						{sources.map((ref) => (
-							<button
-								key={ref}
-								type="button"
-								disabled={!onOpenSources}
-								onClick={onOpenSources}
-								className="ml-0.5 align-super font-mono text-[10.5px] leading-none text-sky-700 underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:text-sky-900 dark:text-sky-400"
-							>
-								[{ref}]
-							</button>
-						))}
+						{/* Inline "[S8]" ids become links to the desk-research sources. */}
+						{splitSourceTokens(hypothesis.verdict_reason).map((segment, index) =>
+							"source" in segment ? (
+								<button
+									key={index}
+									type="button"
+									disabled={!onOpenSources}
+									onClick={onOpenSources}
+									className="mx-px font-mono text-[11px] text-sky-700 underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:text-sky-900 dark:text-sky-400"
+								>
+									[{segment.source}]
+								</button>
+							) : (
+								<span key={index}>{segment.text}</span>
+							),
+						)}
+						{/* Structured source refs the reason text does not mention inline. */}
+						{sources
+							.filter((ref) => !hypothesis.verdict_reason?.includes(`[${ref}]`))
+							.map((ref) => (
+								<button
+									key={ref}
+									type="button"
+									disabled={!onOpenSources}
+									onClick={onOpenSources}
+									className="mx-px font-mono text-[11px] text-sky-700 underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:text-sky-900 dark:text-sky-400"
+								>
+									[{ref}]
+								</button>
+							))}
 					</p>
 				) : null}
 				{groups.some((group) => group.personaIds.length) ? (
@@ -362,7 +380,7 @@ const LeadQuote = observer(function LeadQuote({
 	quote,
 	onOpen,
 }: {
-	quote: QuoteEvidence
+	quote: LeadQuoteRef
 	onOpen: () => void
 }) {
 	const { t } = useTranslation("personaResearch")
@@ -379,10 +397,10 @@ const LeadQuote = observer(function LeadQuote({
 				<Quote className="size-3.5" />
 				{t("hypothesis.leadQuote")}
 			</span>
-			{/* Opening mark hangs outside the text block, as in print pull quotes. */}
-			<p className="relative flex-1 text-pretty text-[17px] font-black leading-relaxed before:absolute before:right-full before:content-['“'] after:content-['”']">
-				{quote.text}
-			</p>
+			<HangingQuote
+				text={quote.text}
+				className="flex-1 text-pretty text-[17px] font-black leading-relaxed"
+			/>
 			<span className="flex items-center gap-2 text-[12.5px]">
 				<PersonaAvatar
 					id={quote.persona_id}

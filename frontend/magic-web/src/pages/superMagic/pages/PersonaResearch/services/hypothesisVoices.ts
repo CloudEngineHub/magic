@@ -1,4 +1,4 @@
-import type { EvidenceRef, StudyHypothesis, SynthesisTheme, ThemeStance } from "../types"
+import type { EvidenceRef, QuoteRef, StudyHypothesis, SynthesisTheme, ThemeStance } from "../types"
 
 export type VoiceStance = "support" | "partial" | "oppose" | "none"
 
@@ -64,20 +64,59 @@ export function quotedPersonaIds(hypothesis: Pick<StudyHypothesis, "evidence_ref
 	return ids
 }
 
-/** The quote that represents a hypothesis: the first quoted evidence, usually the strongest. */
+export type LeadQuoteRef = Pick<QuoteRef, "persona_id" | "text" | "round_index" | "file">
+
+/**
+ * The quote that represents a hypothesis: its first quoted evidence, else the first quote of a
+ * synthesis theme linked to it. Many studies cite interviews only through themes, so without
+ * the fallback their hypotheses would show no voice at all.
+ */
 export function leadQuote(
-	hypothesis: Pick<StudyHypothesis, "evidence_refs">,
-): QuoteEvidence | null {
-	return (
-		(hypothesis.evidence_refs ?? []).find(
-			(ref): ref is QuoteEvidence => ref.kind === "quote",
-		) ?? null
+	hypothesis: Pick<StudyHypothesis, "id" | "evidence_refs">,
+	themes: Pick<SynthesisTheme, "hypothesis_ids" | "quote_refs">[] = [],
+): LeadQuoteRef | null {
+	const own = (hypothesis.evidence_refs ?? []).find(
+		(ref): ref is QuoteEvidence => ref.kind === "quote",
 	)
+	if (own) return own
+	for (const theme of themes) {
+		if (!theme.hypothesis_ids?.includes(hypothesis.id)) continue
+		const quote = theme.quote_refs?.find((ref) => ref.text.trim())
+		if (quote) return quote
+	}
+	return null
 }
 
-/** Desk-research source ids ("S8") cited by a hypothesis. */
-export function sourceRefs(hypothesis: Pick<StudyHypothesis, "evidence_refs">): string[] {
-	return (hypothesis.evidence_refs ?? []).flatMap((ref) =>
+const SOURCE_TOKEN = /\[(S\d+)\]/g
+
+/**
+ * Desk-research source ids ("S8") cited by a hypothesis: structured refs first, then ids
+ * written inline in the verdict reason, which is how most agent-written studies cite them.
+ */
+export function sourceRefs(
+	hypothesis: Pick<StudyHypothesis, "evidence_refs" | "verdict_reason">,
+): string[] {
+	const ids = (hypothesis.evidence_refs ?? []).flatMap((ref) =>
 		ref.kind === "source" ? [ref.ref] : [],
 	)
+	for (const match of (hypothesis.verdict_reason ?? "").matchAll(SOURCE_TOKEN)) {
+		if (!ids.includes(match[1])) ids.push(match[1])
+	}
+	return ids
+}
+
+export type ReasonSegment = { text: string } | { source: string }
+
+/** Splits a verdict reason so inline "[S8]" tokens can render as source links. */
+export function splitSourceTokens(text: string): ReasonSegment[] {
+	const segments: ReasonSegment[] = []
+	let cursor = 0
+	for (const match of text.matchAll(SOURCE_TOKEN)) {
+		const start = match.index ?? 0
+		if (start > cursor) segments.push({ text: text.slice(cursor, start) })
+		segments.push({ source: match[1] })
+		cursor = start + match[0].length
+	}
+	if (cursor < text.length) segments.push({ text: text.slice(cursor) })
+	return segments
 }

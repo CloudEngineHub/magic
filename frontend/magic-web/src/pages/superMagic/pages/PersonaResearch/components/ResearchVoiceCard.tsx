@@ -3,6 +3,7 @@ import { AudioLines, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { PersonaFile } from "../types"
+import HangingQuote from "./HangingQuote"
 import PersonaAvatar from "./PersonaAvatar"
 import { EASE_OUT } from "./surface"
 import { personaTone } from "./personaPortrait"
@@ -76,18 +77,11 @@ export default function ResearchVoiceCard({
 	const voice = voices[index % voices.length]
 	const { persona } = voice
 	const { tone } = personaTone(persona.name || persona.id)
-	const demographics = persona.dimensions?.demographics
-	const meta = [
-		demographics?.age ? t("voice.age", { age: String(demographics.age) }) : null,
-		persona.tagline,
-	]
-		.filter(Boolean)
-		.join(" · ")
 
 	return (
 		<aside
 			className={cn(
-				"relative flex min-h-[360px] flex-col overflow-hidden rounded-[22px] py-6 pl-11 pr-7 text-white transition-colors duration-500",
+				"relative flex min-h-[360px] flex-col overflow-hidden rounded-[22px] px-7 py-6 text-white transition-colors duration-500",
 				className,
 			)}
 			style={{ backgroundColor: tone }}
@@ -108,10 +102,11 @@ export default function ResearchVoiceCard({
 						: "translate-y-1 opacity-0 blur-[2px]",
 				)}
 			>
-				{/* Opening mark hangs outside the text block so the quote's left edge stays clean. */}
-				<p className="relative line-clamp-5 text-balance text-2xl font-black leading-normal tracking-tight before:absolute before:right-full before:content-['“'] after:content-['”']">
-					{voice.text}
-				</p>
+				<HangingQuote
+					text={voice.text}
+					clampClassName="line-clamp-5"
+					className="text-2xl font-black leading-normal tracking-tight"
+				/>
 				<span className="flex items-center gap-2.5 text-[13px]">
 					<PersonaAvatar
 						id={persona.id}
@@ -121,7 +116,7 @@ export default function ResearchVoiceCard({
 					<span className="flex min-w-0 flex-col">
 						<span className="font-medium">{persona.name}</span>
 						<span className="line-clamp-1 text-xs text-white/70">
-							{meta ? `${meta} · ` : ""}
+							{persona.tagline ? `${persona.tagline} · ` : ""}
 							{t("persona.aiSimulated")}
 						</span>
 					</span>

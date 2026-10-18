@@ -4,6 +4,7 @@ import {
 	leadQuote,
 	quotedPersonaIds,
 	sourceRefs,
+	splitSourceTokens,
 } from "../services/hypothesisVoices"
 
 describe("hypothesisStanceGroups", () => {
@@ -67,11 +68,33 @@ describe("evidence helpers", () => {
 	})
 
 	it("picks the first quote as the lead quote", () => {
-		expect(leadQuote(hypothesis)?.text).toBe("第一句")
-		expect(leadQuote({ evidence_refs: [] })).toBeNull()
+		expect(leadQuote({ id: "H1", ...hypothesis })?.text).toBe("第一句")
+		expect(leadQuote({ id: "H9", evidence_refs: [] })).toBeNull()
 	})
 
-	it("collects source ids", () => {
-		expect(sourceRefs(hypothesis)).toEqual(["S8", "S9"])
+	it("collects structured source ids, then ids written in the reason", () => {
+		expect(sourceRefs({ ...hypothesis, verdict_reason: "外部来源 [S9][S12] 一致" })).toEqual([
+			"S8",
+			"S9",
+			"S12",
+		])
+	})
+
+	it("falls back to a linked theme's quote when the hypothesis cites none", () => {
+		expect(
+			leadQuote({ id: "H2", evidence_refs: [] }, [
+				{ hypothesis_ids: ["H1"], quote_refs: [{ persona_id: "x", text: "别的" }] },
+				{ hypothesis_ids: ["H2"], quote_refs: [{ persona_id: "b", text: "主题原话" }] },
+			]),
+		).toEqual({ persona_id: "b", text: "主题原话" })
+	})
+
+	it("splits inline source tokens out of the reason", () => {
+		expect(splitSourceTokens("依据 [S8][S9]，无反对")).toEqual([
+			{ text: "依据 " },
+			{ source: "S8" },
+			{ source: "S9" },
+			{ text: "，无反对" },
+		])
 	})
 })

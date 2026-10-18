@@ -6,6 +6,7 @@ import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/utils/cn"
 import type { VoiceStance } from "../services/hypothesisVoices"
 import type { InterviewFile, PersonaFile } from "../types"
+import HangingQuote from "./HangingQuote"
 import PersonaAvatar from "./PersonaAvatar"
 import { personaTone } from "./personaPortrait"
 
@@ -117,10 +118,11 @@ export default function PersonaCard({
 				</span>
 				<span className="flex flex-1 flex-col gap-3 px-4 pt-3.5">
 					{quote ? (
-						// Opening mark hangs into the left padding so the quote text keeps a clean edge.
-						<span className="relative ml-2 line-clamp-3 text-[14.5px] font-bold leading-relaxed text-foreground before:absolute before:right-full before:content-['“'] after:content-['”']">
-							{quote}
-						</span>
+						<HangingQuote
+							text={quote}
+							clampClassName="line-clamp-3"
+							className="text-[14.5px] font-bold leading-relaxed text-foreground"
+						/>
 					) : null}
 					{reason ? (
 						<span className="flex gap-1.5 text-xs leading-5 text-muted-foreground">

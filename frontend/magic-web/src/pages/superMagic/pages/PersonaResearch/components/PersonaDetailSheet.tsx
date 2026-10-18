@@ -38,6 +38,7 @@ import type {
 import { normalizeDecisionWeights } from "../services/researchAnalysis"
 import { formatResearchValue } from "./formatValue"
 import { AiSimulatedNote } from "./ResearchBadges"
+import HangingQuote from "./HangingQuote"
 import PersonaAvatar from "./PersonaAvatar"
 import { personaTone } from "./personaPortrait"
 
@@ -160,9 +161,10 @@ export default function PersonaDetailSheet({
 								) : null}
 							</div>
 							{leadQuote ? (
-								<p className="relative ml-2 text-[15px] font-bold leading-relaxed text-foreground before:absolute before:right-full before:content-['“'] after:content-['”']">
-									{leadQuote}
-								</p>
+								<HangingQuote
+									text={leadQuote}
+									className="text-[15px] font-bold leading-relaxed text-foreground"
+								/>
 							) : null}
 							<div className="flex flex-wrap gap-1">
 								{(persona.tags ?? []).map((tag) => (
