@@ -58,6 +58,9 @@
         .confidence-medium { color: var(--mid); background: var(--mid-bg); }
         .confidence-low { color: var(--neg); background: var(--neg-bg); }
         .confidence-to_validate { color: #555; background: #f0eeeb; }
+        .voices-agree { color: var(--pos); background: var(--pos-bg); }
+        .voices-differ { color: var(--neg); background: var(--neg-bg); }
+        .voices-silent { color: #555; background: #f0eeeb; }
         .citation-ref { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--link); vertical-align: super; line-height: 0; margin-left: 1px; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
         .evidence-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--faint); padding-top: 10px; border-top: 1px dashed var(--rule); }
         .evidence-bar span { display: inline-flex; align-items: center; gap: 5px; }
@@ -70,7 +73,7 @@
         .persona-portrait.square { border-radius: 30%; }
         .persona-portrait svg { display: block; width: 100%; height: 100%; }
         .persona-head { background: var(--persona-tint, var(--sunken)); }
-        :target { scroll-margin-top: 80px; }
+        section[id], :target { scroll-margin-top: 72px; }
         .citation-tooltip { position: absolute; z-index: 1000; background: #17140f; color: #fff; box-shadow: 0 12px 32px -8px rgba(23,20,15,0.35); padding: 12px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; max-width: 320px; opacity: 0; transform: translateY(6px); transition: opacity 0.15s ease, transform 0.15s ease; pointer-events: auto; display: none; }
         .citation-tooltip.visible { opacity: 1; transform: translateY(0); display: block; }
         .citation-tooltip .source-name { color: rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 4px; display: block; }
@@ -97,6 +100,7 @@
             <a href="#business">Recommendations</a>
             <a href="#summary">Summary</a>
             <a href="#findings">Findings</a>
+            <a href="#real-voices">Real voices</a>
             <a href="#personas">Personas</a>
             <a href="#voices">Quotes</a>
             <a href="#limitations">Limitations</a>
@@ -262,6 +266,33 @@
                         <p class="hang font-bold text-ink">Not before I see a friend using it.</p>
                         <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>Zhang Wei · <a href="#q3" class="text-link">Q3</a></p>
                     </aside>
+                </article>
+            </section>
+
+            <!-- Real voices vs. AI voices: one row per main theme, comparing desk-research "Real Voices" with the interviews.
+                 Badge class: voices-agree (same thing), voices-differ (the opposite), voices-silent (real voices say nothing).
+                 Platform quotes are short, anonymized, and cite their post as [S#]; leave this section out when no platform was sampled. -->
+            <section id="real-voices" class="space-y-2">
+                <h2 class="section-title">Real voices vs. AI voices</h2>
+                <p class="text-[13px] text-faint">Sampled from public posts and comments (2 platforms, 40 posts, 310 comments). Real voices check whether the AI interviews drifted.</p>
+                <article class="py-6 border-b border-rule space-y-4">
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-[17px] font-bold">Trust comes from peers, not features</h3>
+                        <span class="chip voices-agree">Same as the interviews</span>
+                    </div>
+                    <div class="grid sm:grid-cols-2 gap-6">
+                        <div class="space-y-2">
+                            <p class="text-xs text-faint"><i class="fa-solid fa-comment-dots mr-1"></i>Real voice · public post</p>
+                            <p class="hang text-[14.5px] font-bold leading-7">Only bought it after the shop next door had used it for a month.</p>
+                            <p class="font-mono text-[11px] text-faint"><a href="#s3" class="text-link">[S3]</a> Owner forum thread, 2026</p>
+                        </div>
+                        <div class="margin-note space-y-2" data-persona-tone="Zhang Wei">
+                            <p class="text-xs text-faint"><i class="fa-solid fa-robot mr-1"></i>AI interview</p>
+                            <p class="hang text-[14.5px] font-bold leading-7">Not before I see a friend using it.</p>
+                            <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>Zhang Wei · <a href="#q3" class="text-link">Q3</a></p>
+                        </div>
+                    </div>
+                    <!-- For voices-differ rows, add one line on what the gap means for the conclusion and which hypothesis it weakens. -->
                 </article>
             </section>
 
