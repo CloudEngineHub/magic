@@ -3,7 +3,7 @@ import {
 	Brain,
 	ExternalLink,
 	FileText,
-	Fingerprint,
+	FingerprintPattern,
 	Globe,
 	Layers,
 	MessageCircleQuestion,
@@ -138,7 +138,7 @@ export default function PersonaDetailSheet({
 									</blockquote>
 								) : null}
 								<Section
-									icon={<Fingerprint className="size-4" />}
+									icon={<FingerprintPattern className="size-4" />}
 									title={t("persona.section.dimensions")}
 								>
 									<Field
