@@ -264,6 +264,15 @@
 		"product": "产品研发",
 		"productPrompt": "我们计划做【产品方向】，帮我研究目标用户的需求，并提出几个值得验证的产品概念。"
 	},
+	"share": {
+		"eyebrow": "AI 研究成果",
+		"fileListOffHint": "关闭后，对方只能看到对话，看不到研究成果。",
+		"noDocument": "研究完成后，研究报告和方案会出现在这里。",
+		"noDocumentTitle": "还没有可查看的文档",
+		"noStudyFiles": "分享者没有开放研究文件，这里只能查看对话回放。",
+		"replay": "对话回放",
+		"results": "研究成果"
+	},
 	"stance": {
 		"mixed": "混合",
 		"notMentioned": "未提及",

@@ -264,6 +264,15 @@
 		"product": "Product R&D",
 		"productPrompt": "We plan to build [product direction]. Research the target users' needs and propose a few product concepts worth validating."
 	},
+	"share": {
+		"eyebrow": "AI research results",
+		"fileListOffHint": "When off, viewers only see the conversation, not the research results.",
+		"noDocument": "The report and plan appear here once the study is done.",
+		"noDocumentTitle": "No document yet",
+		"noStudyFiles": "The sharer did not include the study files, so only the conversation is available.",
+		"replay": "Conversation",
+		"results": "Results"
+	},
 	"stance": {
 		"mixed": "Mixed",
 		"notMentioned": "Not mentioned",

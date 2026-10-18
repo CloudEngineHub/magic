@@ -36,6 +36,8 @@ interface TopicSharePopoverProps {
 	topicTitle?: string
 	children?: React.ReactNode
 	onSaveSuccess?: () => void // 保存成功回调
+	/** Warning under "show file list" while it is off, for topics whose value lives in files. */
+	fileListOffHint?: string
 }
 
 interface TopicShareSettings {
@@ -75,12 +77,14 @@ function TopicSharePopoverContent({
 	onSaveSuccess,
 	className,
 	onDataChanged,
+	fileListOffHint,
 }: {
 	topicId: string
 	topicTitle?: string
 	onSaveSuccess?: () => void
 	className?: string
 	onDataChanged?: () => void
+	fileListOffHint?: string
 }) {
 	const { t } = useTranslation("super")
 	const { styles } = useStyles()
@@ -732,6 +736,11 @@ function TopicSharePopoverContent({
 										<div className={styles.switchDescription}>
 											{t("share.showFileListDescription")}
 										</div>
+										{fileListOffHint && !settings.showFileList ? (
+											<div className="text-xs text-amber-600 dark:text-amber-400">
+												{fileListOffHint}
+											</div>
+										) : null}
 									</div>
 								</div>
 							</div>
@@ -750,6 +759,7 @@ function TopicSharePopover({
 	topicTitle,
 	children,
 	onSaveSuccess,
+	fileListOffHint,
 }: TopicSharePopoverProps) {
 	const isMobile = useIsMobile()
 	const hasDataChangedRef = useRef(false)
@@ -787,6 +797,7 @@ function TopicSharePopover({
 					}}
 				>
 					<TopicSharePopoverContent
+						fileListOffHint={fileListOffHint}
 						className="p-3.5"
 						topicId={topicId}
 						topicTitle={topicTitle}
@@ -806,6 +817,7 @@ function TopicSharePopover({
 						</DialogHeader>
 					)}
 					<TopicSharePopoverContent
+						fileListOffHint={fileListOffHint}
 						topicId={topicId}
 						topicTitle={topicTitle}
 						onSaveSuccess={onSaveSuccess}
@@ -832,6 +844,7 @@ function TopicSharePopover({
 					}}
 				>
 					<TopicSharePopoverContent
+						fileListOffHint={fileListOffHint}
 						topicId={topicId}
 						topicTitle={topicTitle}
 						onSaveSuccess={onSaveSuccess}
@@ -867,6 +880,7 @@ function TopicSharePopover({
 				}}
 			>
 				<TopicSharePopoverContent
+					fileListOffHint={fileListOffHint}
 					topicId={topicId}
 					topicTitle={topicTitle}
 					onSaveSuccess={onSaveSuccess}

@@ -3,15 +3,23 @@ import { PersonaResearchStore } from "./store/research-store"
 
 const PersonaResearchStoreContext = createContext<PersonaResearchStore | null>(null)
 
-/** Owns one store for the research home, studio and persona library routes. */
-export function PersonaResearchStoreProvider({ children }: PropsWithChildren) {
+/**
+ * Owns one store for the research home, studio and persona library routes. The share page
+ * passes `bootstrap={false}` and feeds the store itself through `initShare`.
+ */
+export function PersonaResearchStoreProvider({
+	children,
+	bootstrap = true,
+}: PropsWithChildren<{ bootstrap?: boolean }>) {
 	const [store] = useState(() => new PersonaResearchStore())
 
 	useEffect(() => {
-		void store.bootstrap()
+		if (bootstrap) void store.bootstrap()
 		return () => {
 			store.dispose()
 		}
+		// The store is created once; later prop changes must not re-bootstrap it.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [store])
 
 	return (

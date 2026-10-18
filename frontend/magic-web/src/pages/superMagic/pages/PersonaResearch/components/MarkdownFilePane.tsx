@@ -8,6 +8,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { getFileContentById } from "@/pages/superMagic/utils/api"
 import { clipboard } from "@/utils/clipboard-helpers"
+import { useOptionalPersonaResearchStore } from "../context"
 import { attachmentVersionKey } from "../services/researchFiles"
 
 // The app has no Tailwind typography plugin, so Markdown elements get explicit compact styles.
@@ -68,6 +69,8 @@ export default function MarkdownFilePane({ file, copyable = false }: MarkdownFil
 	const versionKey = attachmentVersionKey(file)
 	const [content, setContent] = useState<string | null>(null)
 	const [failed, setFailed] = useState(false)
+	// Share pages read files with the share token instead of the signed-in session.
+	const access = useOptionalPersonaResearchStore()?.fileAccess
 
 	useEffect(() => {
 		const controller = new AbortController()
@@ -76,6 +79,7 @@ export default function MarkdownFilePane({ file, copyable = false }: MarkdownFil
 			responseType: "text",
 			forceRefresh: true,
 			signal: controller.signal,
+			access,
 		})
 			.then((value) => {
 				if (!controller.signal.aborted && typeof value === "string") setContent(value)

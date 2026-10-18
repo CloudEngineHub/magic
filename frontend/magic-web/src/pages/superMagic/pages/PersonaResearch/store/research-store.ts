@@ -11,6 +11,7 @@ import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages
 import { TaskStatus, WorkspaceStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import {
 	PANELS_DIR,
 	PERSONAS_DIR,
@@ -87,6 +88,10 @@ export class PersonaResearchStore {
 	studyFilesReady = false
 	/** Topic whose study files finished their first read; differs while a study is loading. */
 	loadedStudyTopicId: string | null = null
+	/** Share view: no composer, uploads or edits; files are read with the share token. */
+	isReadOnly = false
+	/** Credentials for reading file contents; undefined uses the signed-in session. */
+	fileAccess: FileAccessContext | undefined = undefined
 
 	private bootstrapGeneration = 0
 	private contentGeneration = 0
@@ -232,6 +237,35 @@ export class PersonaResearchStore {
 				this.error = error
 			})
 		}
+	}
+
+	/**
+	 * Read-only study opened from a share link: one topic, the project files the share exposes,
+	 * and the share token for reading contents. Parsing and topic matching are the same as in app.
+	 */
+	initShare({
+		topic,
+		project,
+		tree,
+		list,
+		access,
+	}: {
+		topic: Topic
+		project: ProjectListItem
+		tree: AttachmentItem[]
+		list: AttachmentItem[]
+		access: FileAccessContext
+	}) {
+		this.isReadOnly = true
+		this.fileAccess = access
+		this.selectedProject = project
+		const sharedTopic = withResearchTopicFields(topic)
+		this.topicStore.setTopics([sharedTopic])
+		this.topicStore.setSelectedTopic(sharedTopic)
+		const processed = AttachmentDataProcessor.processAttachmentData({ tree, list })
+		this.applyAttachments(processed.tree, processed.list)
+		this.status = "ready"
+		void this.reloadParsedContent()
 	}
 
 	/** Selects the study for a route param; unknown ids leave the selection empty. */
@@ -454,6 +488,7 @@ export class PersonaResearchStore {
 		const { successes } = await getFileContentsByIds(ids, {
 			responseType: "text",
 			forceRefresh: true,
+			access: this.fileAccess,
 		})
 		for (const item of stale) {
 			const content = successes.get(String(item.file_id))

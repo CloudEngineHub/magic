@@ -76,10 +76,12 @@ function ValidationPane({ onRequestUpload, onOpenFile }: ValidationPaneProps) {
 							{t("validation.csv")}
 						</Button>
 					) : null}
-					<Button size="sm" onClick={onRequestUpload}>
-						<Upload className="size-4" />
-						{t("validation.upload")}
-					</Button>
+					{store.isReadOnly ? null : (
+						<Button size="sm" onClick={onRequestUpload}>
+							<Upload className="size-4" />
+							{t("validation.upload")}
+						</Button>
+					)}
 				</div>
 
 				{results ? (
