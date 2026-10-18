@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import { resolveStudyStatus } from "../services/studyStatus"
+import type { StudyFile } from "../types"
 import {
 	StudyProgressSegments,
 	StudyStatusBadge,
@@ -44,7 +45,7 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 	return (
 		<li
 			className={cn(
-				"group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/40",
+				"group flex items-center gap-4 px-1 py-3.5 transition-colors hover:bg-muted/40",
 				status.kind === "waiting_user" && "bg-amber-500/[0.06]",
 			)}
 		>
@@ -54,7 +55,9 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 				onClick={() => onOpen(topic)}
 			>
 				<span className="flex min-w-0 items-center gap-2">
-					<span className="truncate text-sm font-medium text-foreground">{title}</span>
+					<span className="truncate text-[14.5px] font-medium text-foreground">
+						{title}
+					</span>
 					{store.studyFilesReady ? (
 						<StudyStatusBadge status={status} />
 					) : (
@@ -93,6 +96,7 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 					)}
 				</span>
 			</button>
+			{study?.hypotheses?.length ? <VerdictSummary study={study} /> : null}
 			<DropdownMenu>
 				<MagicTooltip title={t("home.moreActions")}>
 					<DropdownMenuTrigger asChild>
@@ -118,6 +122,37 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 				className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
 			/>
 		</li>
+	)
+}
+
+/** Verdict mix of a study's hypotheses: what the study concluded, readable from the list. */
+function VerdictSummary({ study }: { study: StudyFile }) {
+	const { t } = useTranslation("personaResearch")
+	const hypotheses = study.hypotheses ?? []
+	const supported = hypotheses.filter((item) => item.verdict === "supported").length
+	const mixed = hypotheses.filter((item) => item.verdict === "mixed").length
+	const refuted = hypotheses.filter((item) => item.verdict === "refuted").length
+	if (supported + mixed + refuted === 0) return null
+	const parts = [
+		{ count: supported, className: "bg-emerald-600", label: t("verdict.supported") },
+		{ count: mixed, className: "bg-amber-500", label: t("verdict.mixed") },
+		{ count: refuted, className: "bg-rose-500", label: t("verdict.refuted") },
+	].filter((part) => part.count > 0)
+	return (
+		<span className="hidden w-40 shrink-0 flex-col gap-1.5 md:flex">
+			<span className="flex h-1.5 gap-0.5 overflow-hidden rounded-full">
+				{parts.map((part) => (
+					<span
+						key={part.label}
+						className={part.className}
+						style={{ flexGrow: part.count }}
+					/>
+				))}
+			</span>
+			<span className="truncate text-xs text-muted-foreground">
+				{parts.map((part) => `${part.count} ${part.label}`).join(" · ")}
+			</span>
+		</span>
 	)
 }
 

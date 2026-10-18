@@ -258,37 +258,45 @@
 		"deleteTitle": "Delete this study?",
 		"deleted": "Deleted",
 		"emptyTitle": "Start your first study",
-		"eyebrow": "AI consumer research",
+		"eyebrow": "AI research · simulated consumer interviews",
 		"moreActions": "More actions",
 		"myStudies": "My studies",
 		"noStudies": "No studies yet. Ask a business question or start from a template above.",
 		"personaLibrary": "Persona library {{count}}",
 		"samplePrompt": "Is there an opportunity for AI voice recorders among owners of traditional businesses? Using community and Jobs-to-be-Done lenses, research their pain points, willingness to pay and where a small team could start.",
 		"studiesCount": "{{count}} total",
-		"subtitle": "The AI researcher clarifies your question, designs the study, builds AI personas, interviews them one by one and delivers an evidence-backed report",
+		"subtitle": "Write down the business call you want to test. AI finds the right interviewees, talks to each of them, and turns what they said into conclusions you can take to a meeting.",
 		"templates": "Study templates",
 		"templatesHint": "Pick one to start; you can edit it",
-		"title": "Hear from your customers before you decide",
+		"title": "Ask them.",
 		"trySample": "Try a sample study",
-		"value": {
-			"evidence": "Every claim sourced",
-			"evidenceText": "Trace each finding to interview quotes and web sources",
-			"process": "Fully transparent",
-			"processText": "See every step from clarifying the question to the report",
-			"validate": "Retest with real people",
-			"validateText": "Get a questionnaire to ask real customers"
-		}
+		"useTemplate": "Start with this"
 	},
 	"hypothesis": {
+		"aiOnly": "AI interviews only, no external check",
 		"decision": "Decision this study informs",
 		"empty": "Once the plan is confirmed, the hypotheses and their criteria appear here.",
 		"emptyLegacy": "This study was created before hypotheses were tracked.",
 		"emptyTitle": "No hypotheses yet",
+		"hideDetails": "Hide",
+		"leadQuote": "Representative quote",
+		"moreQuotes": "{{count}} more quotes",
+		"openRound": "Round {{index}} · see context",
+		"openTranscript": "See interview context",
 		"progress": "{{decided}}/{{total}} judged",
+		"quotedFrom": "Quotes from {{count}} interviewees",
 		"realPeople": "Real people",
 		"reason": "Why: ",
 		"refuteIf": "Refuted if",
 		"ruleHint": "AI-only evidence can at most be “partly supported”",
+		"showDetails": "Criteria and more quotes",
+		"sourceCount": "{{count}} external sources",
+		"stance": {
+			"none": "Not mentioned",
+			"oppose": "Disagree",
+			"partial": "Partly agree",
+			"support": "Agree"
+		},
 		"supportIf": "Supported if",
 		"validationSummary": "Real-person check: "
 	},
@@ -488,6 +496,7 @@
 	},
 	"study": {
 		"aiDisclaimer": "Respondents are AI-simulated, not real users",
+		"aiPanel": "{{count}} AI-simulated interviewees",
 		"backHome": "Back to my studies",
 		"collapseConversation": "Hide conversation",
 		"conversation": "Conversation",
@@ -527,6 +536,7 @@
 		},
 		"import": {
 			"description": "Upload interviews, surveys or customer data to generate your own personas",
+			"kicker": "Upload",
 			"prompt": "Build personas only, no study: I uploaded user materials (interview notes / surveys / customer data). Build personas from the real people in them and save them to the persona library after I confirm.",
 			"title": "Build personas from my data"
 		},
@@ -582,5 +592,10 @@
 		"pending": "Pending",
 		"refuted": "Refuted",
 		"supported": "Supported"
+	},
+	"voice": {
+		"age": "{{age}} yrs",
+		"fromLibrary": "Open persona library",
+		"label": "A line from your persona library"
 	}
 }

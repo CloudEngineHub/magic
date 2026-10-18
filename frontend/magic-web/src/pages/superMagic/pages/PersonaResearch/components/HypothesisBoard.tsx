@@ -1,7 +1,19 @@
-import { useState } from "react"
-import { ChevronDown, ClipboardList, Flag, ListChecks, Target } from "lucide-react"
+import { useRef, useState } from "react"
+import { useSize } from "ahooks"
+import {
+	ArrowRight,
+	ChevronDown,
+	ClipboardList,
+	Flag,
+	Link2,
+	ListChecks,
+	Quote,
+	Target,
+	TriangleAlert,
+} from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -17,9 +29,20 @@ import {
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
+import {
+	hypothesisStanceGroups,
+	leadQuote,
+	quotedPersonaIds,
+	sourceRefs,
+	type QuoteEvidence,
+	type StanceGroup,
+	type VoiceStance,
+} from "../services/hypothesisVoices"
 import type { GuideIssue, HypothesisVerdict, QuoteRef, StudyHypothesis } from "../types"
-import { AgreementBadge, QuoteItem, SourceChip, VerdictBadge } from "./ResearchBadges"
-import { CARD_SURFACE, VERDICT_ACCENT } from "./surface"
+import PersonaAvatar from "./PersonaAvatar"
+import { personaTone } from "./personaPortrait"
+import { AgreementBadge, QuoteItem, VerdictBadge } from "./ResearchBadges"
+import { VERDICT_ACCENT } from "./surface"
 
 interface HypothesisBoardProps {
 	onOpenQuote: (quote: Pick<QuoteRef, "persona_id" | "round_index" | "file">) => void
@@ -35,6 +58,10 @@ function HypothesisBoard({ onOpenQuote, onOpenSources }: HypothesisBoardProps) {
 	const store = usePersonaResearchStore()
 	const study = store.study
 	const hypotheses = study?.hypotheses ?? []
+	// Width decides whether lead quotes sit beside conclusions; the console panel is resizable,
+	// so this follows the board's own width (container queries need Chrome 105+).
+	const boardRef = useRef<HTMLDivElement>(null)
+	const wide = (useSize(boardRef)?.width ?? 0) >= 720
 
 	if (!study || hypotheses.length === 0) {
 		return (
@@ -54,28 +81,36 @@ function HypothesisBoard({ onOpenQuote, onOpenSources }: HypothesisBoardProps) {
 
 	return (
 		<ScrollArea className="h-full">
-			<div className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
-				{study.decision ? (
-					<div className={cn(CARD_SURFACE, "flex items-start gap-3 p-4")}>
-						<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-							<Flag className="size-4" />
-						</span>
-						<div className="flex flex-col gap-0.5">
-							<span className="text-[11px] font-medium text-muted-foreground">
+			<div ref={boardRef} className="mx-auto flex max-w-5xl flex-col gap-3.5 px-6 pb-12 pt-6">
+				<section
+					className={cn(
+						"grid gap-6 rounded-xl bg-muted/40 p-5 ring-1 ring-border",
+						wide && study.decision && "grid-cols-[minmax(0,1fr)_240px] gap-7",
+					)}
+				>
+					{study.decision ? (
+						<div className="flex flex-col gap-1.5">
+							<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<Flag className="size-3.5" />
 								{t("hypothesis.decision")}
 							</span>
-							<span className="text-[15px] font-medium leading-6 text-foreground">
+							<p className="text-pretty text-base font-medium leading-7 text-foreground">
 								{study.decision}
-							</span>
+							</p>
 						</div>
-					</div>
-				) : null}
-				<VerdictOverview hypotheses={hypotheses} />
-				<ol className="flex flex-col gap-3">
-					{hypotheses.map((hypothesis) => (
+					) : null}
+					<VerdictOverview
+						hypotheses={hypotheses}
+						className={cn(wide && study.decision && "border-l border-border pl-6")}
+					/>
+				</section>
+				<ol className="flex flex-col gap-3.5">
+					{hypotheses.map((hypothesis, index) => (
 						<HypothesisCard
 							key={hypothesis.id}
 							hypothesis={hypothesis}
+							wide={wide}
+							defaultOpen={index === 0}
 							onOpenQuote={onOpenQuote}
 							onOpenSources={onOpenSources}
 						/>
@@ -87,68 +122,179 @@ function HypothesisBoard({ onOpenQuote, onOpenSources }: HypothesisBoardProps) {
 	)
 }
 
+/** Labels and dot colours for stance groups; semantic colours stay separate from persona tones. */
+function useStanceLabels() {
+	const { t } = useTranslation("personaResearch")
+	return {
+		support: { label: t("hypothesis.stance.support"), dot: "bg-emerald-600" },
+		partial: { label: t("hypothesis.stance.partial"), dot: "bg-amber-500" },
+		oppose: { label: t("hypothesis.stance.oppose"), dot: "bg-rose-500" },
+		none: { label: t("hypothesis.stance.none"), dot: "bg-muted-foreground/40" },
+	} satisfies Record<VoiceStance, { label: string; dot: string }>
+}
+
 const HypothesisCard = observer(function HypothesisCard({
 	hypothesis,
+	wide,
+	defaultOpen,
 	onOpenQuote,
 	onOpenSources,
 }: {
 	hypothesis: StudyHypothesis
+	/** Board is wide enough to put the lead quote beside the conclusion instead of below it. */
+	wide: boolean
+	defaultOpen: boolean
 	onOpenQuote: HypothesisBoardProps["onOpenQuote"]
 	onOpenSources?: () => void
 }) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
-	// Collapsed by default: the verdict colour and a one-line reason are enough to scan.
-	const [expanded, setExpanded] = useState(false)
-	const quotes = (hypothesis.evidence_refs ?? []).filter((ref) => ref.kind === "quote")
-	const sources = (hypothesis.evidence_refs ?? []).filter((ref) => ref.kind === "source")
+	const stanceLabels = useStanceLabels()
+	// The first card opens with its criteria so readers see how verdicts are judged.
+	const [expanded, setExpanded] = useState(defaultOpen)
+	const lead = leadQuote(hypothesis)
+	const sources = sourceRefs(hypothesis)
+	const moreQuotes = (hypothesis.evidence_refs ?? []).filter(
+		(ref): ref is QuoteEvidence => ref.kind === "quote" && ref !== lead,
+	)
+	const panelIds = store.studyPersonas.map((persona) => persona.id)
+	const groups: StanceGroup[] = hypothesisStanceGroups(
+		hypothesis,
+		store.synthesis?.themes ?? [],
+		panelIds,
+	) ?? [{ stance: "support", personaIds: quotedPersonaIds(hypothesis) }]
+	const hasStance = Boolean(
+		store.synthesis?.themes.some((theme) => theme.hypothesis_ids?.includes(hypothesis.id)),
+	)
+	const hasDetails = Boolean(
+		hypothesis.support_criteria ||
+		hypothesis.refute_criteria ||
+		hypothesis.validation?.summary ||
+		moreQuotes.length,
+	)
 
 	return (
-		<li className={cn(CARD_SURFACE, "relative overflow-hidden")}>
-			<span
-				aria-hidden
-				className={cn("absolute inset-y-0 left-0 w-1", VERDICT_ACCENT[hypothesis.verdict])}
-			/>
-			<Collapsible open={expanded} onOpenChange={setExpanded}>
-				<CollapsibleTrigger asChild>
-					<button
-						type="button"
-						className="flex w-full items-start gap-3 rounded-xl py-4 pl-5 pr-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					>
-						<span className="mt-0.5 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground">
-							{hypothesis.id}
+		<li
+			className={cn(
+				"grid overflow-hidden rounded-2xl bg-card ring-1 ring-border",
+				lead && wide && "grid-cols-[minmax(0,1fr)_300px]",
+			)}
+		>
+			<div className="flex min-w-0 flex-col gap-3 px-[22px] pb-[18px] pt-5">
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="font-mono text-xs text-muted-foreground">{hypothesis.id}</span>
+					<VerdictBadge verdict={hypothesis.verdict} />
+					{hypothesis.validation ? (
+						<span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+							{t("hypothesis.realPeople")}
+							<AgreementBadge agreement={hypothesis.validation.verdict} />
 						</span>
-						<span className="flex min-w-0 flex-1 flex-col gap-2">
-							<span className="text-sm font-medium leading-6 text-foreground">
-								{hypothesis.statement}
-							</span>
-							<span className="flex flex-wrap items-center gap-1.5">
-								<VerdictBadge verdict={hypothesis.verdict} />
-								{hypothesis.validation ? (
-									<span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-										{t("hypothesis.realPeople")}
-										<AgreementBadge agreement={hypothesis.validation.verdict} />
-									</span>
-								) : null}
-							</span>
-							{!expanded && hypothesis.verdict_reason ? (
-								<span className="line-clamp-2 text-xs leading-5 text-muted-foreground">
-									{hypothesis.verdict_reason}
+					) : null}
+					<span className="inline-flex items-center gap-1 text-[11.5px] text-muted-foreground">
+						{sources.length ? (
+							<>
+								<Link2 className="size-3.5" />
+								{t("hypothesis.sourceCount", { count: sources.length })}
+							</>
+						) : (
+							<>
+								<TriangleAlert className="size-3.5" />
+								{t("hypothesis.aiOnly")}
+							</>
+						)}
+					</span>
+					{hasDetails ? (
+						<button
+							type="button"
+							className="ml-auto inline-flex items-center gap-1 rounded text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+							aria-expanded={expanded}
+							onClick={() => setExpanded((open) => !open)}
+						>
+							{expanded ? t("hypothesis.hideDetails") : t("hypothesis.showDetails")}
+							<ChevronDown
+								className={cn(
+									"size-3.5 transition-transform",
+									expanded && "rotate-180",
+								)}
+							/>
+						</button>
+					) : null}
+				</div>
+				<h3 className="text-pretty text-base font-bold leading-7 tracking-tight text-foreground">
+					{hypothesis.statement}
+				</h3>
+				{hypothesis.verdict_reason ? (
+					<p className="text-[13.5px] leading-7 text-muted-foreground">
+						{hypothesis.verdict_reason}
+						{sources.map((ref) => (
+							<button
+								key={ref}
+								type="button"
+								disabled={!onOpenSources}
+								onClick={onOpenSources}
+								className="ml-0.5 align-super font-mono text-[10.5px] leading-none text-sky-700 underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:text-sky-900 dark:text-sky-400"
+							>
+								[{ref}]
+							</button>
+						))}
+					</p>
+				) : null}
+				{groups.some((group) => group.personaIds.length) ? (
+					<div className="flex flex-wrap gap-x-5 gap-y-3 pt-0.5">
+						{groups.map((group) => (
+							<div key={group.stance} className="flex flex-col gap-1.5">
+								<span
+									className={cn(
+										"flex -space-x-1.5",
+										(group.stance === "oppose" || group.stance === "none") &&
+											"opacity-55 grayscale-[0.6]",
+									)}
+								>
+									{group.personaIds.map((personaId) => {
+										const persona = store.personaById(personaId)
+										return (
+											<MagicTooltip
+												key={personaId}
+												title={
+													persona?.tagline
+														? `${persona.name} · ${persona.tagline}`
+														: (persona?.name ?? personaId)
+												}
+											>
+												<span className="rounded-full ring-2 ring-card transition-transform hover:z-10 hover:-translate-y-0.5">
+													<PersonaAvatar
+														id={personaId}
+														name={persona?.name ?? personaId}
+														className="size-7"
+													/>
+												</span>
+											</MagicTooltip>
+										)
+									})}
 								</span>
-							) : null}
-						</span>
-						<ChevronDown
-							className={cn(
-								"mt-1 size-4 shrink-0 text-muted-foreground transition-transform",
-								expanded && "rotate-180",
-							)}
-						/>
-					</button>
-				</CollapsibleTrigger>
-				<CollapsibleContent>
-					<div className="flex flex-col gap-3 border-t border-border/60 pb-4 pl-5 pr-4 pt-3 text-xs">
+								<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+									{hasStance ? (
+										<span
+											className={cn(
+												"size-1.5 rounded-full",
+												stanceLabels[group.stance].dot,
+											)}
+										/>
+									) : null}
+									{hasStance
+										? `${stanceLabels[group.stance].label} ${group.personaIds.length}`
+										: t("hypothesis.quotedFrom", {
+												count: group.personaIds.length,
+											})}
+								</span>
+							</div>
+						))}
+					</div>
+				) : null}
+				{expanded && hasDetails ? (
+					<div className="flex flex-col gap-3 text-xs">
 						{hypothesis.support_criteria || hypothesis.refute_criteria ? (
-							<div className="grid gap-2 sm:grid-cols-2">
+							<div className="grid gap-px overflow-hidden rounded-lg bg-border ring-1 ring-border sm:grid-cols-2">
 								{hypothesis.support_criteria ? (
 									<Criteria
 										tone="support"
@@ -165,12 +311,6 @@ const HypothesisCard = observer(function HypothesisCard({
 								) : null}
 							</div>
 						) : null}
-						{hypothesis.verdict_reason ? (
-							<p className="leading-5 text-foreground">
-								<span className="font-medium">{t("hypothesis.reason")}</span>
-								{hypothesis.verdict_reason}
-							</p>
-						) : null}
 						{hypothesis.validation?.summary ? (
 							<p className="leading-5 text-foreground">
 								<span className="font-medium">
@@ -179,40 +319,83 @@ const HypothesisCard = observer(function HypothesisCard({
 								{hypothesis.validation.summary}
 							</p>
 						) : null}
-						{quotes.length ? (
+						{moreQuotes.length ? (
 							<div className="flex flex-col gap-1.5">
-								{quotes.map((ref, index) =>
-									ref.kind === "quote" ? (
-										<QuoteItem
-											key={index}
-											quote={ref}
-											personaName={
-												store.personaById(ref.persona_id)?.name ??
-												ref.persona_id
-											}
-											onOpen={() => onOpenQuote(ref)}
-										/>
-									) : null,
-								)}
-							</div>
-						) : null}
-						{sources.length ? (
-							<div className="flex flex-wrap gap-1.5">
-								{sources.map((ref, index) =>
-									ref.kind === "source" ? (
-										<SourceChip
-											key={index}
-											sourceRef={ref.ref}
-											onOpen={onOpenSources}
-										/>
-									) : null,
-								)}
+								<span className="text-muted-foreground">
+									{t("hypothesis.moreQuotes", { count: moreQuotes.length })}
+								</span>
+								{moreQuotes.map((ref, index) => (
+									<QuoteItem
+										key={index}
+										quote={ref}
+										personaName={
+											store.personaById(ref.persona_id)?.name ??
+											ref.persona_id
+										}
+										onOpen={() => onOpenQuote(ref)}
+									/>
+								))}
 							</div>
 						) : null}
 					</div>
-				</CollapsibleContent>
-			</Collapsible>
+				) : null}
+			</div>
+			{lead ? <LeadQuote quote={lead} onOpen={() => onOpenQuote(lead)} /> : null}
 		</li>
+	)
+})
+
+/** The representative quote on its speaker's colour, linking back to the transcript round. */
+const LeadQuote = observer(function LeadQuote({
+	quote,
+	onOpen,
+}: {
+	quote: QuoteEvidence
+	onOpen: () => void
+}) {
+	const { t } = useTranslation("personaResearch")
+	const store = usePersonaResearchStore()
+	const persona = store.personaById(quote.persona_id)
+	const name = persona?.name ?? quote.persona_id
+	const { tone } = personaTone(name)
+	return (
+		<div
+			className="flex flex-col gap-3.5 py-5 pl-[34px] pr-[22px] text-white"
+			style={{ backgroundColor: tone }}
+		>
+			<span className="flex items-center gap-1.5 text-[11.5px] text-white/75">
+				<Quote className="size-3.5" />
+				{t("hypothesis.leadQuote")}
+			</span>
+			{/* Opening mark hangs outside the text block, as in print pull quotes. */}
+			<p className="relative flex-1 text-pretty text-[17px] font-black leading-relaxed before:absolute before:right-full before:content-['“'] after:content-['”']">
+				{quote.text}
+			</p>
+			<span className="flex items-center gap-2 text-[12.5px]">
+				<PersonaAvatar
+					id={quote.persona_id}
+					name={name}
+					className="size-[30px] ring-2 ring-white/35"
+				/>
+				<span className="flex min-w-0 flex-col leading-snug">
+					<span className="font-medium">{name}</span>
+					<span className="line-clamp-1 text-[11.5px] text-white/70">
+						{persona?.tagline ? `${persona.tagline} · ` : ""}
+						{t("persona.aiSimulated")}
+					</span>
+				</span>
+			</span>
+			<button
+				type="button"
+				className="inline-flex items-center gap-1 rounded border-t border-white/20 pt-2.5 text-left text-xs text-white/85 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"
+				onClick={onOpen}
+			>
+				{quote.round_index !== undefined
+					? t("hypothesis.openRound", { index: quote.round_index + 1 })
+					: t("hypothesis.openTranscript")}
+				<ArrowRight className="size-3.5" />
+			</button>
+		</div>
 	)
 })
 
@@ -225,10 +408,15 @@ const VERDICT_ORDER: HypothesisVerdict[] = [
 	"pending",
 ]
 
-/** One glance at the outcome: a stacked bar of verdicts with counts, before any card is read. */
-function VerdictOverview({ hypotheses }: { hypotheses: StudyHypothesis[] }) {
+/** One glance at the outcome: big counts and a stacked bar, before any card is read. */
+function VerdictOverview({
+	hypotheses,
+	className,
+}: {
+	hypotheses: StudyHypothesis[]
+	className?: string
+}) {
 	const { t } = useTranslation("personaResearch")
-	const decided = hypotheses.filter((item) => item.verdict !== "pending").length
 	const counts = VERDICT_ORDER.map((verdict) => ({
 		verdict,
 		count: hypotheses.filter((item) => item.verdict === verdict).length,
@@ -240,18 +428,32 @@ function VerdictOverview({ hypotheses }: { hypotheses: StudyHypothesis[] }) {
 		insufficient: t("verdict.insufficient"),
 		pending: t("verdict.pending"),
 	}
+	const numberTone: Record<HypothesisVerdict, string> = {
+		supported: "text-emerald-700 dark:text-emerald-400",
+		mixed: "text-amber-700 dark:text-amber-400",
+		refuted: "text-rose-600 dark:text-rose-400",
+		insufficient: "text-muted-foreground",
+		pending: "text-muted-foreground",
+	}
 
 	return (
-		<div className={cn(CARD_SURFACE, "flex flex-col gap-3 p-4")}>
-			<div className="flex items-baseline justify-between gap-3">
-				<span className="text-sm font-semibold text-foreground">
-					{t("hypothesis.progress", { decided, total: hypotheses.length })}
-				</span>
-				<span className="text-[11px] text-muted-foreground">
-					{t("hypothesis.ruleHint")}
-				</span>
+		<div className={cn("flex flex-col justify-center gap-2", className)}>
+			<div className="flex flex-wrap gap-x-5 gap-y-1">
+				{counts.map(({ verdict, count }) => (
+					<span key={verdict} className="flex flex-col">
+						<span
+							className={cn(
+								"font-mono text-2xl font-medium tabular-nums leading-tight",
+								numberTone[verdict],
+							)}
+						>
+							{count}
+						</span>
+						<span className="text-xs text-muted-foreground">{label[verdict]}</span>
+					</span>
+				))}
 			</div>
-			<div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
+			<div className="flex h-1.5 gap-0.5 overflow-hidden rounded-full">
 				{counts.map(({ verdict, count }) => (
 					<span
 						key={verdict}
@@ -260,15 +462,9 @@ function VerdictOverview({ hypotheses }: { hypotheses: StudyHypothesis[] }) {
 					/>
 				))}
 			</div>
-			<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-				{counts.map(({ verdict, count }) => (
-					<span key={verdict} className="inline-flex items-center gap-1.5">
-						<span className={cn("size-2 rounded-full", VERDICT_ACCENT[verdict])} />
-						{label[verdict]}
-						<span className="font-medium tabular-nums text-foreground">{count}</span>
-					</span>
-				))}
-			</div>
+			<span className="text-[11.5px] leading-5 text-muted-foreground">
+				{t("hypothesis.ruleHint")}
+			</span>
 		</div>
 	)
 }
@@ -283,12 +479,7 @@ function Criteria({
 	text: string
 }) {
 	return (
-		<div
-			className={cn(
-				"rounded-lg p-2.5 leading-5",
-				tone === "support" ? "bg-emerald-500/[0.07]" : "bg-destructive/[0.06]",
-			)}
-		>
+		<div className="bg-card p-3 leading-5">
 			<div
 				className={cn(
 					"mb-0.5 text-[11px] font-medium",
@@ -299,7 +490,7 @@ function Criteria({
 			>
 				{label}
 			</div>
-			<div className="text-foreground">{text}</div>
+			<div className="text-muted-foreground">{text}</div>
 		</div>
 	)
 }

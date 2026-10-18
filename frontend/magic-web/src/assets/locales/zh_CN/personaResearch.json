@@ -256,37 +256,45 @@
 		"deleteTitle": "删除这项研究？",
 		"deleted": "已删除",
 		"emptyTitle": "开始你的第一项研究",
-		"eyebrow": "AI 消费者研究",
+		"eyebrow": "AI 研究 · 虚拟消费者调研",
 		"moreActions": "更多操作",
 		"myStudies": "我的研究",
 		"noStudies": "还没有研究。输入一个商业问题，或从上面的模板开始。",
 		"personaLibrary": "人设库 {{count}}",
 		"samplePrompt": "AI 录音硬件在传统行业老板（“老登”）人群里有没有机会？请从圈层和 JTBD 角度，研究他们的痛点、付费意愿和小团队的切入点。",
 		"studiesCount": "共 {{count}} 项",
-		"subtitle": "AI 研究员会澄清问题、设计研究、构建 AI 人设并逐一访谈，最后给出有证据的报告",
+		"subtitle": "写下你想验证的商业判断。AI 会找来合适的受访者，一个个聊完，把他们的原话整理成可以拿去开会的结论。",
 		"templates": "研究模板",
 		"templatesHint": "选一个开始，内容可以再改",
-		"title": "在做决定之前，先听听你的客户怎么说",
+		"title": "问问他们。",
 		"trySample": "试试示例研究",
-		"value": {
-			"evidence": "结论有出处",
-			"evidenceText": "每条结论都能追溯到访谈原话和网页来源",
-			"process": "过程全透明",
-			"processText": "从澄清问题到出报告，每一步都看得见",
-			"validate": "可用真人复测",
-			"validateText": "自动生成问卷，拿去问真实用户"
-		}
+		"useTemplate": "用这个开始"
 	},
 	"hypothesis": {
+		"aiOnly": "仅 AI 访谈，无外部对照",
 		"decision": "这项研究要支持的决定",
 		"empty": "研究计划确认后，这里会列出要验证的假设和判定标准。",
 		"emptyLegacy": "这项研究创建于假设功能之前，没有记录假设。",
 		"emptyTitle": "还没有假设",
+		"hideDetails": "收起",
+		"leadQuote": "代表原话",
+		"moreQuotes": "更多原话 {{count}} 条",
+		"openRound": "第 {{index}} 轮 · 看上下文",
+		"openTranscript": "看访谈上下文",
 		"progress": "已判定 {{decided}}/{{total}} 条",
+		"quotedFrom": "引用了 {{count}} 位受访者",
 		"realPeople": "真人验证",
 		"reason": "判定理由：",
 		"refuteIf": "什么情况算推翻",
 		"ruleHint": "只有 AI 访谈支持的结论，最高判“部分支持”",
+		"showDetails": "判据与更多原话",
+		"sourceCount": "{{count}} 条外部来源",
+		"stance": {
+			"none": "未提及",
+			"oppose": "不认同",
+			"partial": "部分认同",
+			"support": "认同"
+		},
 		"supportIf": "什么情况算支持",
 		"validationSummary": "真人验证："
 	},
@@ -486,6 +494,7 @@
 	},
 	"study": {
 		"aiDisclaimer": "受访者由 AI 模拟，不代表真实用户",
+		"aiPanel": "{{count}} 位 AI 模拟受访者",
 		"backHome": "返回我的研究",
 		"collapseConversation": "收起对话",
 		"conversation": "对话",
@@ -525,6 +534,7 @@
 		},
 		"import": {
 			"description": "上传访谈记录、问卷或客户资料，生成专属人设",
+			"kicker": "上传资料",
 			"prompt": "帮我构建人设（只构建人设，不做研究）：我上传了一些用户资料（访谈记录 / 问卷 / 客户数据），请按资料里的真实用户构建人设，确认后存入人设库。",
 			"title": "从我的资料构建人设"
 		},
@@ -580,5 +590,10 @@
 		"pending": "待验证",
 		"refuted": "推翻",
 		"supported": "支持"
+	},
+	"voice": {
+		"age": "{{age}} 岁",
+		"fromLibrary": "打开人设库",
+		"label": "人设库里的一句话"
 	}
 }

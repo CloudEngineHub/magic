@@ -72,7 +72,7 @@ function StudyTitleEditor({ topicId, title }: StudyTitleEditorProps) {
 				disabled={isSaving}
 				placeholder={t("study.untitled")}
 				aria-label={t("study.rename")}
-				className="h-7 min-w-0 flex-1 px-2 text-sm font-semibold"
+				className="h-7 min-w-0 flex-1 px-2 text-base font-bold"
 				onChange={(event) => setDraft(event.target.value)}
 				onBlur={() => void commit()}
 				onKeyDown={handleKeyDown}
@@ -81,10 +81,11 @@ function StudyTitleEditor({ topicId, title }: StudyTitleEditorProps) {
 		)
 	}
 
-	if (!editable) return <h1 className="truncate text-sm font-semibold">{displayTitle}</h1>
+	if (!editable)
+		return <h1 className="truncate text-base font-bold tracking-tight">{displayTitle}</h1>
 
 	return (
-		<h1 className="min-w-0 text-sm font-semibold">
+		<h1 className="min-w-0 text-base font-bold tracking-tight">
 			<MagicTooltip title={t("study.rename")}>
 				<button
 					type="button"

@@ -76,6 +76,25 @@ export function resolvePortrait(seed: string, gender: PortraitGender, age?: numb
 	}
 }
 
+export interface PersonaTone {
+	/** Deep clothing colour: quote blocks carry white text on it. */
+	tone: string
+	/** Translucent wash for headers and selected rows; readable in light and dark themes. */
+	tint: string
+	/** Stronger wash for highlighter marks in transcripts. */
+	mark: string
+}
+
+/**
+ * Persona colour, taken from the portrait's clothing so a person's quotes, cards and highlights
+ * match their avatar. Uses the same seed as the portrait (name, then id). Alpha hex instead of
+ * color-mix keeps the Chrome 100 baseline.
+ */
+export function personaTone(seed: string): PersonaTone {
+	const tone = pick(CLOTHES, hashOf(seed), 3)
+	return { tone, tint: `${tone}1f`, mark: `${tone}33` }
+}
+
 /** Reads "male" / "男" / "female" / "女" from a persona's demographics. */
 export function genderOf(demographics: Record<string, unknown> | undefined): PortraitGender {
 	const value = String(demographics?.gender ?? "").toLowerCase()

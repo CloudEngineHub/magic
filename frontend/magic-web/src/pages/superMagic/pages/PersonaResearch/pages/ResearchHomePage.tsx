@@ -1,14 +1,6 @@
 import { useEffect, useState } from "react"
 import { useMemoizedFn } from "ahooks"
-import {
-	ArrowUpRight,
-	ChevronRight,
-	Quote,
-	Sparkles,
-	UserCheck,
-	UsersRound,
-	Workflow,
-} from "lucide-react"
+import { ArrowRight, ChevronRight, MessageSquareQuote, UsersRound } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -43,7 +35,7 @@ import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
 import { useResearchTemplates } from "../hooks/useResearchTemplates"
 import PersonaAvatar from "../components/PersonaAvatar"
-import ResearchHeroBackdrop from "../components/ResearchHeroBackdrop"
+import ResearchVoiceCard from "../components/ResearchVoiceCard"
 import StudyListItem from "../components/StudyListItem"
 
 /** Research home: ask a business question, pick a template, or reopen a study. */
@@ -97,43 +89,41 @@ function ResearchHomePage() {
 	})
 
 	const studies = store.studies
-	const valueProps = [
-		{ icon: Workflow, title: t("home.value.process"), text: t("home.value.processText") },
-		{ icon: Quote, title: t("home.value.evidence"), text: t("home.value.evidenceText") },
-		{ icon: UserCheck, title: t("home.value.validate"), text: t("home.value.validateText") },
-	]
+	const libraryPersonas = store.personas.map((ref) => ref.data)
+	const openLibrary = useMemoizedFn(() => navigate({ name: RouteName.PersonaResearchPersonas }))
 
 	return (
 		<ScrollArea className="h-full bg-background" data-testid="persona-research-home">
-			<div className="relative">
-				<ResearchHeroBackdrop />
-				<div
+			<div
+				className={cn(
+					"mx-auto flex w-full max-w-6xl flex-col",
+					isMobile ? "gap-8 px-4 py-6" : "gap-14 px-10 pb-16 pt-12",
+				)}
+			>
+				{/* Hero: the question on the left, a real persona voice on the right. */}
+				<section
 					className={cn(
-						"relative mx-auto flex w-full max-w-4xl flex-col",
-						isMobile ? "gap-6 px-4 py-6" : "gap-10 px-6 pb-14 pt-14",
+						"grid items-stretch",
+						isMobile ? "grid-cols-1 gap-6" : "grid-cols-[minmax(0,1fr)_380px] gap-12",
 					)}
 				>
-					<header className="flex flex-col items-center gap-3 text-center">
-						<span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/80 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
-							<Sparkles className="size-3.5 text-primary" />
+					<div className="flex min-w-0 flex-col">
+						<span className="text-xs tracking-wide text-muted-foreground">
 							{t("home.eyebrow")}
 						</span>
 						<h1
 							className={cn(
-								"text-balance font-semibold tracking-tight text-foreground",
-								isMobile ? "text-2xl" : "text-4xl",
+								"mt-3 font-black leading-[1.05] tracking-[-0.035em] text-foreground",
+								isMobile ? "text-4xl" : "text-[64px]",
 							)}
 						>
 							{t("home.title")}
 						</h1>
-						<p className="max-w-2xl text-balance text-sm leading-6 text-muted-foreground">
+						<p className="mt-4 max-w-[30em] text-[15px] leading-7 text-muted-foreground">
 							{t("home.subtitle")}
 						</p>
-					</header>
-
-					<section className="flex flex-col gap-4">
 						<div
-							className="rounded-xl bg-background shadow-sm transition-shadow focus-within:shadow-md"
+							className="mt-7 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/70"
 							data-testid="persona-research-composer"
 						>
 							{isMobile ? (
@@ -148,146 +138,127 @@ function ResearchHomePage() {
 								/>
 							)}
 						</div>
-						<div className="flex flex-wrap justify-center gap-2">
-							{scenarios.map(({ id, icon: Icon, title, prompt }) => (
-								<Button
-									key={id}
-									variant="outline"
-									size="sm"
-									className="h-8 rounded-full bg-background/80 text-xs text-muted-foreground hover:text-foreground"
-									onClick={() => applyStarter(prompt)}
-								>
-									<Icon className="size-3.5" />
-									{title}
-								</Button>
-							))}
-						</div>
-						{isMobile ? null : (
-							<ul className="grid grid-cols-3 gap-3 pt-2">
-								{valueProps.map(({ icon: Icon, title, text }) => (
-									<li key={title} className="flex items-start gap-2.5">
-										<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-											<Icon className="size-4" />
-										</span>
-										<span className="flex flex-col gap-0.5">
-											<span className="text-sm font-medium text-foreground">
-												{title}
-											</span>
-											<span className="text-xs leading-5 text-muted-foreground">
-												{text}
-											</span>
-										</span>
-									</li>
-								))}
-							</ul>
-						)}
-					</section>
-
-					<section className="flex flex-col gap-3">
-						<SectionTitle title={t("home.templates")} hint={t("home.templatesHint")} />
-						<div
-							className={cn(
-								"grid gap-3",
-								isMobile
-									? "grid-cols-1"
-									: "grid-cols-[repeat(auto-fill,minmax(220px,1fr))]",
-							)}
-						>
-							{templates.map(({ id, icon: Icon, title, description, prompt }) => (
+						<div className="mt-3 flex flex-wrap gap-1.5">
+							{scenarios.map(({ id, title, prompt }) => (
 								<button
 									key={id}
 									type="button"
-									className={cn(
-										"group flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-left outline-none",
-										"transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
-										"focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
-									)}
+									className="rounded-full px-2.5 py-1 text-xs text-muted-foreground outline-none ring-1 ring-border transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
 									onClick={() => applyStarter(prompt)}
 								>
-									<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-										<Icon className="size-4" />
-									</span>
-									<span className="flex min-w-0 flex-1 flex-col gap-1">
-										<span className="flex items-center gap-1 text-sm font-medium text-foreground">
-											{title}
-											<ArrowUpRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
-										</span>
-										<span className="line-clamp-2 text-xs leading-5 text-muted-foreground">
-											{description}
-										</span>
-									</span>
+									{title}
 								</button>
 							))}
 						</div>
-					</section>
+					</div>
+					{isMobile ? null : (
+						<ResearchVoiceCard personas={libraryPersonas} onOpenLibrary={openLibrary} />
+					)}
+				</section>
 
-					<section className="flex flex-col gap-3">
-						<div className="flex items-center justify-between gap-3">
-							<SectionTitle
-								title={t("home.myStudies")}
-								hint={
-									studies.length > 0
-										? t("home.studiesCount", { count: studies.length })
-										: undefined
-								}
-							/>
+				<section className="flex flex-col gap-4">
+					<SectionTitle title={t("home.templates")} hint={t("home.templatesHint")} />
+					<div
+						className={cn(
+							"grid gap-3",
+							isMobile
+								? "grid-cols-1"
+								: "grid-cols-[repeat(auto-fill,minmax(260px,1fr))]",
+						)}
+					>
+						{templates.map(({ id, kicker, title, description, prompt }) => (
 							<button
+								key={id}
 								type="button"
-								className="group flex items-center gap-2 rounded-full border border-border px-2 py-1 text-xs text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-								onClick={() =>
-									navigate({ name: RouteName.PersonaResearchPersonas })
-								}
+								className={cn(
+									"group flex flex-col gap-1.5 rounded-xl bg-card p-[18px] text-left outline-none ring-1 ring-border",
+									"transition-all duration-150 hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgb(0_0_0/0.3)]",
+									"focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
+								)}
+								onClick={() => applyStarter(prompt)}
 							>
-								<span className="flex -space-x-1.5">
-									{store.personas.slice(0, 3).map((ref) => (
-										<PersonaAvatar
-											key={ref.data.id}
-											id={ref.data.id}
-											name={ref.data.name}
-											className="size-5 border-2 border-background text-[9px]"
-										/>
-									))}
-									{store.personas.length === 0 ? (
-										<UsersRound className="size-4" />
-									) : null}
+								<span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+									{kicker}
 								</span>
-								{t("home.personaLibrary", { count: store.personas.length })}
-								<ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+								<span className="text-[15px] font-bold text-foreground">
+									{title}
+								</span>
+								<span className="line-clamp-2 text-[13px] leading-6 text-muted-foreground">
+									{description}
+								</span>
+								<span className="mt-2 flex items-center gap-1 border-t border-dashed border-border pt-3 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+									{t("home.useTemplate")}
+									<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+								</span>
 							</button>
-						</div>
-						{studies.length === 0 ? (
-							<Empty className="rounded-xl border border-dashed border-border py-10">
-								<EmptyHeader>
-									<EmptyMedia variant="icon">
-										<Sparkles />
-									</EmptyMedia>
-									<EmptyTitle>{t("home.emptyTitle")}</EmptyTitle>
-									<EmptyDescription>{t("home.noStudies")}</EmptyDescription>
-								</EmptyHeader>
-								<EmptyContent>
-									<Button
-										variant="outline"
-										size="sm"
-										onClick={() => applyStarter(t("home.samplePrompt"))}
-									>
-										{t("home.trySample")}
-									</Button>
-								</EmptyContent>
-							</Empty>
-						) : (
-							<ul className="flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-								{studies.map((topic) => (
-									<StudyListItem
-										key={topic.id}
-										topic={topic}
-										onOpen={openStudy}
-										onDelete={setPendingDelete}
+						))}
+					</div>
+				</section>
+
+				<section className="flex flex-col gap-4">
+					<div className="flex items-center justify-between gap-3">
+						<SectionTitle
+							title={t("home.myStudies")}
+							hint={
+								studies.length > 0
+									? t("home.studiesCount", { count: studies.length })
+									: undefined
+							}
+						/>
+						<button
+							type="button"
+							className="group flex items-center gap-2 rounded-full px-2 py-1 text-xs text-muted-foreground outline-none ring-1 ring-border transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+							onClick={openLibrary}
+						>
+							<span className="flex -space-x-1.5">
+								{libraryPersonas.slice(0, 3).map((persona) => (
+									<PersonaAvatar
+										key={persona.id}
+										id={persona.id}
+										name={persona.name}
+										className="size-5 ring-2 ring-background"
 									/>
 								))}
-							</ul>
-						)}
-					</section>
-				</div>
+								{libraryPersonas.length === 0 ? (
+									<UsersRound className="size-4" />
+								) : null}
+							</span>
+							{t("home.personaLibrary", { count: libraryPersonas.length })}
+							<ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+						</button>
+					</div>
+					{studies.length === 0 ? (
+						<Empty className="rounded-xl border border-dashed border-border py-10">
+							<EmptyHeader>
+								<EmptyMedia variant="icon">
+									<MessageSquareQuote />
+								</EmptyMedia>
+								<EmptyTitle>{t("home.emptyTitle")}</EmptyTitle>
+								<EmptyDescription>{t("home.noStudies")}</EmptyDescription>
+							</EmptyHeader>
+							<EmptyContent>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => applyStarter(t("home.samplePrompt"))}
+								>
+									{t("home.trySample")}
+								</Button>
+							</EmptyContent>
+						</Empty>
+					) : (
+						<ul className="flex flex-col divide-y divide-border border-y border-border">
+							{studies.map((topic) => (
+								<StudyListItem
+									key={topic.id}
+									topic={topic}
+									onOpen={openStudy}
+									onDelete={setPendingDelete}
+								/>
+							))}
+						</ul>
+					)}
+				</section>
 			</div>
 
 			<AlertDialog
@@ -318,9 +289,9 @@ function ResearchHomePage() {
 
 function SectionTitle({ title, hint }: { title: string; hint?: string }) {
 	return (
-		<div className="flex items-baseline gap-2">
-			<h2 className="text-sm font-semibold text-foreground">{title}</h2>
-			{hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+		<div className="flex items-baseline gap-3">
+			<h2 className="text-lg font-bold tracking-tight text-foreground">{title}</h2>
+			{hint ? <span className="text-[13px] text-muted-foreground">{hint}</span> : null}
 		</div>
 	)
 }

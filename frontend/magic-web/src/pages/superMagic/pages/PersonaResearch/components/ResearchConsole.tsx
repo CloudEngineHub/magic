@@ -223,28 +223,29 @@ function ResearchConsole({
 			className="flex h-full min-h-0 flex-col"
 			data-testid="persona-research-console"
 		>
-			<div className="flex shrink-0 items-end gap-2 overflow-x-auto border-b border-border px-3 pt-2">
-				<TabsList className="h-auto gap-1 bg-transparent p-0">
+			<div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-2">
+				<TabsList className="h-auto gap-0.5 bg-transparent p-0">
 					{tabs.map(({ value, icon: Icon, label, badge }) => (
 						<TabsTrigger
 							key={value}
 							value={value}
 							className={cn(
-								// Underline tabs: only the bottom edge marks the active tab, never a full box.
-								"relative gap-1.5 rounded-none border-0 border-b-2 border-transparent px-2.5 pb-2 pt-1.5 text-xs text-muted-foreground shadow-none",
-								"data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:border-b-primary dark:data-[state=active]:bg-transparent",
+								// Pill tabs: the active study view is a solid ink pill, the rest stay quiet text.
+								"relative h-8 gap-1.5 rounded-full border-0 px-3 text-[13px] text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
+								"data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-foreground",
 							)}
 						>
-							<Icon className="size-3.5" />
+							{/* Desktop labels are enough; mobile keeps icons because inactive labels are hidden. */}
+							{isMobile ? <Icon className="size-3.5" /> : null}
 							{isMobile && value !== activeTab ? null : label}
 							{badge ? (
-								<span className="rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+								<span className="font-mono text-[11px] tabular-nums opacity-60">
 									{badge}
 								</span>
 							) : null}
 							{hasNew(value) ? (
 								<span
-									className="absolute right-0.5 top-1 size-1.5 rounded-full bg-primary"
+									className="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
 									aria-label={t("console.newContent")}
 								/>
 							) : null}
@@ -273,11 +274,11 @@ function ResearchConsole({
 				{reportPane}
 			</TabsContent>
 
-			<TabsContent value="hypotheses" className="mt-0 min-h-0 flex-1 bg-muted/40">
+			<TabsContent value="hypotheses" className="mt-0 min-h-0 flex-1">
 				<HypothesisBoard onOpenQuote={openQuote} onOpenSources={openSources} />
 			</TabsContent>
 
-			<TabsContent value="personas" className="mt-0 min-h-0 flex-1 bg-muted/40">
+			<TabsContent value="personas" className="mt-0 min-h-0 flex-1">
 				<PersonaPanel variant={variant} onOpenPersona={onOpenPersona} />
 			</TabsContent>
 

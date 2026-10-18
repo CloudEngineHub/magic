@@ -13,13 +13,21 @@ interface PersonaAvatarProps {
 	 * persona file is not loaded in a research store, so the portrait matches the research page.
 	 */
 	demographics?: Record<string, unknown>
+	/** Square portraits (rounded 30%) lead persona cards and headers; circles are for lists. */
+	shape?: "circle" | "square"
 }
 
 /**
  * Flat portrait for an AI persona, drawn from built-in templates. The name picks colours and
  * hairstyle so a persona always looks the same; gender and age come from its file when known.
  */
-function PersonaAvatar({ id, name, className, demographics: fallback }: PersonaAvatarProps) {
+function PersonaAvatar({
+	id,
+	name,
+	className,
+	demographics: fallback,
+	shape = "circle",
+}: PersonaAvatarProps) {
 	const store = useOptionalPersonaResearchStore()
 	const demographics = store?.personaById(id)?.dimensions?.demographics ?? fallback
 	const spec = resolvePortrait(name || id, genderOf(demographics), ageOf(demographics))
@@ -30,14 +38,19 @@ function PersonaAvatar({ id, name, className, demographics: fallback }: PersonaA
 		<span
 			aria-hidden
 			className={cn(
-				"flex size-9 shrink-0 select-none overflow-hidden rounded-full",
+				"flex size-9 shrink-0 select-none overflow-hidden",
+				shape === "square" ? "rounded-[30%]" : "rounded-full",
 				className,
 			)}
 		>
 			<svg viewBox="0 0 64 64" className="size-full">
 				<defs>
 					<clipPath id={clipId}>
-						<circle cx="32" cy="32" r="32" />
+						{shape === "square" ? (
+							<rect width="64" height="64" />
+						) : (
+							<circle cx="32" cy="32" r="32" />
+						)}
 					</clipPath>
 				</defs>
 				<g clipPath={`url(#${clipId})`}>

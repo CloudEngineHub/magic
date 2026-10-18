@@ -51,6 +51,7 @@ import ResearchConversationPanel, {
 } from "../components/ResearchConversationPanel"
 import ResearchFilesPane from "../components/ResearchFilesPane"
 import ResearchReportPane, { type ResearchReportPaneRef } from "../components/ResearchReportPane"
+import PersonaAvatar from "../components/PersonaAvatar"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
 import StudyStepper, { StudyStepperSkeleton } from "../components/StudyStepper"
 import StudyTitleEditor from "../components/StudyTitleEditor"
@@ -283,7 +284,7 @@ function ResearchStudioPage() {
 	].filter((chip): chip is string => Boolean(chip))
 
 	const header = (
-		<div className="flex shrink-0 flex-col gap-3 border-b border-border px-4 pb-3 pt-3">
+		<div className="flex shrink-0 flex-col gap-3 border-b border-border px-5 pb-3 pt-3">
 			<div className="flex items-center gap-2">
 				<MagicTooltip title={t("study.backHome")}>
 					<Button
@@ -341,6 +342,26 @@ function ResearchStudioPage() {
 						</div>
 					) : null}
 				</div>
+				{isMobile || store.studyPersonas.length === 0 ? null : (
+					// Who was interviewed, at a glance; the note keeps the AI-simulation context visible.
+					<button
+						type="button"
+						className="hidden shrink-0 items-center gap-2 rounded-full py-0.5 pl-0.5 pr-2 text-[11.5px] text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring lg:flex"
+						onClick={() => showOutputs("personas")}
+					>
+						<span className="flex -space-x-1.5">
+							{store.studyPersonas.slice(0, 8).map((persona) => (
+								<PersonaAvatar
+									key={persona.id}
+									id={persona.id}
+									name={persona.name}
+									className="size-6 ring-2 ring-background"
+								/>
+							))}
+						</span>
+						{t("study.aiPanel", { count: store.studyPersonas.length })}
+					</button>
+				)}
 				{isMobile ? null : (
 					<MagicTooltip
 						title={
