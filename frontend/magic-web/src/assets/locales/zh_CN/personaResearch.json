@@ -250,25 +250,30 @@
 		"leading": "诱导性提问"
 	},
 	"home": {
+		"barSubtitle": "虚拟消费者调研",
+		"barTitle": "AI 研究",
 		"delete": "删除",
 		"deleteDescription": "研究对话和本次研究产出的文件会一起删除，人设库中的人设会保留。",
 		"deleteFailed": "删除失败，请重试",
 		"deleteTitle": "删除这项研究？",
 		"deleted": "已删除",
 		"emptyTitle": "开始你的第一项研究",
-		"eyebrow": "AI 研究 · 虚拟消费者调研",
 		"moreActions": "更多操作",
 		"myStudies": "我的研究",
 		"noStudies": "还没有研究。输入一个商业问题，或从上面的模板开始。",
-		"personaLibrary": "人设库 {{count}}",
+		"personaLibraryLabel": "人设库",
+		"promise": {
+			"clarify": "先澄清目标，再开始访谈",
+			"quotes": "每条结论都附原话",
+			"validate": "附真人验证问卷"
+		},
 		"samplePrompt": "AI 录音硬件在传统行业老板（“老登”）人群里有没有机会？请从圈层和 JTBD 角度，研究他们的痛点、付费意愿和小团队的切入点。",
 		"studiesCount": "共 {{count}} 项",
 		"subtitle": "写下你想验证的商业判断。AI 会找来合适的受访者，一个个聊完，把他们的原话整理成可以拿去开会的结论。",
-		"templates": "研究模板",
-		"templatesHint": "选一个开始，内容可以再改",
+		"templatesHint": "选一个研究方法，内容可以再改",
+		"templatesTitle": "从一个问题开始",
 		"title": "问问他们。",
-		"trySample": "试试示例研究",
-		"useTemplate": "用这个开始"
+		"trySample": "试试示例研究"
 	},
 	"hypothesis": {
 		"aiOnly": "仅 AI 访谈，无外部对照",
@@ -347,6 +352,16 @@
 		"outputs": "研究产物",
 		"personas": "受访人设",
 		"study": "本次研究"
+	},
+	"options": {
+		"auto": "自动",
+		"autoPanel": "自动（AI 按配额决定）",
+		"autoRounds": "自动（AI 按提纲决定）",
+		"method": "方法",
+		"panel": "受访者",
+		"panelValue": "{{count}} 人",
+		"rounds": "轮次",
+		"roundsValue": "{{count}} 轮"
 	},
 	"persona": {
 		"aiSimulated": "AI 模拟",
@@ -458,20 +473,6 @@
 		"fullscreen": "全屏",
 		"generatingTitle": "报告生成中"
 	},
-	"scenario": {
-		"brand": "品牌定位",
-		"brandPrompt": "帮我研究【品牌】在【目标人群】心中的认知，以及更适合的定位方向。",
-		"competitor": "竞品分析",
-		"competitorPrompt": "帮我研究【竞品】的用户为什么选择它、又为什么离开，我们有哪些错位竞争的机会？",
-		"concept": "概念测试",
-		"conceptPrompt": "帮我测试这个产品概念：【一句话描述】。看看目标用户是否买账、顾虑是什么。",
-		"consumer": "消费者洞察",
-		"consumerPrompt": "我想了解【目标人群】在【场景】下的真实需求和痛点，帮我做一次消费者洞察研究。",
-		"content": "内容策略",
-		"contentPrompt": "帮我研究【目标人群】喜欢什么样的内容、在哪些平台获取信息，给出内容策略建议。",
-		"product": "产品研发",
-		"productPrompt": "我们计划做【产品方向】，帮我研究目标用户的需求，并提出几个值得验证的产品概念。"
-	},
 	"share": {
 		"eyebrow": "AI 研究成果",
 		"fileListOffHint": "关闭后，对方只能看到对话，看不到研究成果。",
@@ -534,6 +535,11 @@
 			"description": "找出用户第一次购买后不再回来的真实原因",
 			"prompt": "我们的首购用户 90 天复购率偏低。帮我研究首购用户为什么不再回来，哪些人群最容易流失，以及可以怎么改进。",
 			"title": "首购用户流失诊断"
+		},
+		"competitor": {
+			"description": "用户现在用什么凑合，换过来的门槛在哪",
+			"prompt": "帮我研究【竞品 / 现有替代方案】的用户为什么选择它、又为什么离开，换到我们的门槛在哪里，有哪些错位竞争的机会？",
+			"title": "竞品与替代方案"
 		},
 		"conceptTest": {
 			"description": "上线前先听听目标用户的反馈",

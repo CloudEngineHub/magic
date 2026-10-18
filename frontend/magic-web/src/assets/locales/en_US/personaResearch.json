@@ -252,25 +252,30 @@
 		"leading": "Leading question"
 	},
 	"home": {
+		"barSubtitle": "Simulated consumer interviews",
+		"barTitle": "AI research",
 		"delete": "Delete",
 		"deleteDescription": "The conversation and this study's output files will be deleted. Personas in the library are kept.",
 		"deleteFailed": "Delete failed. Please try again.",
 		"deleteTitle": "Delete this study?",
 		"deleted": "Deleted",
 		"emptyTitle": "Start your first study",
-		"eyebrow": "AI research · simulated consumer interviews",
 		"moreActions": "More actions",
 		"myStudies": "My studies",
 		"noStudies": "No studies yet. Ask a business question or start from a template above.",
-		"personaLibrary": "Persona library {{count}}",
+		"personaLibraryLabel": "Persona library",
+		"promise": {
+			"clarify": "Clarifies the goal before interviewing",
+			"quotes": "Every conclusion comes with quotes",
+			"validate": "Includes a real-people survey"
+		},
 		"samplePrompt": "Is there an opportunity for AI voice recorders among owners of traditional businesses? Using community and Jobs-to-be-Done lenses, research their pain points, willingness to pay and where a small team could start.",
 		"studiesCount": "{{count}} total",
 		"subtitle": "Write down the business call you want to test. AI finds the right interviewees, talks to each of them, and turns what they said into conclusions you can take to a meeting.",
-		"templates": "Study templates",
-		"templatesHint": "Pick one to start; you can edit it",
+		"templatesHint": "Pick a research method; you can edit it",
+		"templatesTitle": "Start from a question",
 		"title": "Ask them.",
-		"trySample": "Try a sample study",
-		"useTemplate": "Start with this"
+		"trySample": "Try a sample study"
 	},
 	"hypothesis": {
 		"aiOnly": "AI interviews only, no external check",
@@ -349,6 +354,16 @@
 		"outputs": "Study outputs",
 		"personas": "Interviewed personas",
 		"study": "This study"
+	},
+	"options": {
+		"auto": "Auto",
+		"autoPanel": "Auto (AI decides from the quota)",
+		"autoRounds": "Auto (AI decides from the guide)",
+		"method": "Method",
+		"panel": "Interviewees",
+		"panelValue": "{{count}} people",
+		"rounds": "Rounds",
+		"roundsValue": "{{count}} rounds"
 	},
 	"persona": {
 		"aiSimulated": "AI-simulated",
@@ -460,20 +475,6 @@
 		"fullscreen": "Full screen",
 		"generatingTitle": "Writing the report"
 	},
-	"scenario": {
-		"brand": "Brand positioning",
-		"brandPrompt": "Research how [target audience] perceive [brand] and which positioning would fit better.",
-		"competitor": "Competitor analysis",
-		"competitorPrompt": "Research why users choose [competitor] and why they leave. Where are our differentiation opportunities?",
-		"concept": "Concept test",
-		"conceptPrompt": "Test this product concept: [one-line description]. Find out whether target users want it and what concerns them.",
-		"consumer": "Consumer insights",
-		"consumerPrompt": "I want to understand the real needs and pain points of [target audience] in [scenario]. Run a consumer insight study for me.",
-		"content": "Content strategy",
-		"contentPrompt": "Research what content [target audience] like and where they get information, then suggest a content strategy.",
-		"product": "Product R&D",
-		"productPrompt": "We plan to build [product direction]. Research the target users' needs and propose a few product concepts worth validating."
-	},
 	"share": {
 		"eyebrow": "AI research results",
 		"fileListOffHint": "When off, viewers only see the conversation, not the research results.",
@@ -536,6 +537,11 @@
 			"description": "Find out why first-time buyers never come back",
 			"prompt": "Our 90-day repurchase rate for first-time buyers is low. Research why they do not come back, which segments churn most, and what we can improve.",
 			"title": "First-purchase churn"
+		},
+		"competitor": {
+			"description": "What users make do with today, and what it takes to switch",
+			"prompt": "Research why users choose [competitor / current alternative], why they leave, what it would take to switch to us, and where we can differentiate.",
+			"title": "Competitors and alternatives"
 		},
 		"conceptTest": {
 			"description": "Hear from target users before launch",
