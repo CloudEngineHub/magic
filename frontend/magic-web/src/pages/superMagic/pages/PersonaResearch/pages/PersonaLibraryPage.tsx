@@ -44,6 +44,7 @@ import {
 } from "@/components/shadcn-ui/empty"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -84,6 +85,11 @@ function PersonaLibraryPage() {
 	const [highlightIds, setHighlightIds] = useState<Set<string>>(new Set())
 	const [pendingDelete, setPendingDelete] = useState<PersonaFile | null>(null)
 	const canEdit = !store.isReadOnly
+
+	// Other research pages read only the personas they show; this page needs the whole library.
+	useEffect(() => {
+		store.requestLibrary()
+	}, [store])
 
 	const pathById = useMemo(
 		() => new Map(store.personas.map((ref) => [ref.data.id, ref.path])),
@@ -252,12 +258,12 @@ function PersonaLibraryPage() {
 							<TabsTrigger value="personas" className="gap-1.5">
 								<UsersRound className="size-3.5" />
 								{t("library.personas")}
-								<CountBadge value={store.personas.length} />
+								<CountBadge value={store.personaFileCount} />
 							</TabsTrigger>
 							<TabsTrigger value="panels" className="gap-1.5">
 								<LibraryBig className="size-3.5" />
 								{t("library.panels")}
-								<CountBadge value={store.panels.length} />
+								<CountBadge value={store.panelFileCount} />
 							</TabsTrigger>
 						</TabsList>
 					</Tabs>
@@ -299,7 +305,9 @@ function PersonaLibraryPage() {
 			</div>
 
 			<ScrollArea className="min-h-0 flex-1">
-				{view === "personas" ? (
+				{!store.libraryLoaded ? (
+					<LibrarySkeleton />
+				) : view === "personas" ? (
 					filtered.length === 0 ? (
 						store.personas.length === 0 ? (
 							<LibraryEmpty
@@ -546,6 +554,23 @@ function PersonaLibraryPage() {
 }
 
 /** Edit / delete on a persona card; appears on hover so the grid stays calm. */
+/** First read of the library; without it an unread library would flash the empty state. */
+function LibrarySkeleton() {
+	const isMobile = useIsMobile()
+	return (
+		<div
+			className={cn(
+				"grid gap-3 p-4",
+				isMobile ? "grid-cols-1" : "grid-cols-[repeat(auto-fill,minmax(210px,1fr))]",
+			)}
+		>
+			{Array.from({ length: 8 }, (_, index) => (
+				<Skeleton key={index} className="h-40 rounded-xl" />
+			))}
+		</div>
+	)
+}
+
 function PersonaCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
 	const { t } = useTranslation("personaResearch")
 	return (

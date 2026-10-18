@@ -72,17 +72,48 @@ export function findStudyDir(
 	studyTopicIdOf?: (item: AttachmentItem) => string | undefined,
 ): string | null {
 	if (!topicId) return null
-	const candidates = listStudyFiles(list).filter(
-		(item) =>
-			studyTopicIdOf?.(item) === String(topicId) ||
-			String(item.topic_id ?? "") === String(topicId),
-	)
-	if (candidates.length === 0) return null
-	const latest = [...candidates].sort((a, b) =>
-		String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")),
-	)[0]
-	const path = attachmentPath(latest)
-	return path.slice(0, path.length - STUDY_FILE_NAME.length)
+	return indexStudyDirs(list, studyTopicIdOf).get(String(topicId)) ?? null
+}
+
+/**
+ * Study directory of every topic in one pass over the attachment list, with the same matching
+ * rules as `findStudyDir`. List rows look up their study here instead of scanning the whole
+ * list per row, which grows as studies × files.
+ * Example: two study.json files recording topic "t1" → { "t1" → the more recently updated dir }.
+ */
+export function indexStudyDirs(
+	list: AttachmentItem[],
+	studyTopicIdOf?: (item: AttachmentItem) => string | undefined,
+): Map<string, string> {
+	const latest = new Map<string, AttachmentItem>()
+	const claim = (topicId: string | undefined, item: AttachmentItem) => {
+		if (!topicId) return
+		const current = latest.get(topicId)
+		// Ties keep the earlier file, as the stable sort in the per-topic lookup did.
+		if (
+			!current ||
+			String(item.updated_at ?? "").localeCompare(String(current.updated_at ?? "")) > 0
+		) {
+			latest.set(topicId, item)
+		}
+	}
+	for (const item of listStudyFiles(list)) {
+		const recorded = studyTopicIdOf?.(item)
+		claim(recorded, item)
+		const own = String(item.topic_id ?? "")
+		if (own !== recorded) claim(own, item)
+	}
+	const dirs = new Map<string, string>()
+	for (const [topicId, item] of latest) {
+		const path = attachmentPath(item)
+		dirs.set(topicId, path.slice(0, path.length - STUDY_FILE_NAME.length))
+	}
+	return dirs
+}
+
+/** Library path of a persona, e.g. "p_chen_1a2b" → "personas/p_chen_1a2b.json". */
+export function personaFilePath(personaId: string): string {
+	return `${PERSONAS_DIR}${personaId}.json`
 }
 
 export interface StudyAttachments {

@@ -189,8 +189,9 @@ function ResearchHomePage() {
 						{libraryPersonas.length === 0 ? <UsersRound className="size-4" /> : null}
 					</span>
 					{t("home.personaLibraryLabel")}
+					{/* Counted from the file list: the home reads only a few preview personas. */}
 					<span className="font-mono text-xs text-muted-foreground">
-						{libraryPersonas.length}
+						{store.personaFileCount}
 					</span>
 				</button>
 				<button

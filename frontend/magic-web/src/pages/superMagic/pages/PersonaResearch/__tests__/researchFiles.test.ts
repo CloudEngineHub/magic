@@ -3,6 +3,7 @@ import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesBut
 import {
 	collectStudyAttachments,
 	findStudyDir,
+	indexStudyDirs,
 	listLibraryFiles,
 	listReportTemplates,
 	parseDiscussionFile,
@@ -66,6 +67,33 @@ describe("findStudyDir", () => {
 		expect(findStudyDir(list, "t2", studyTopicIdOf)).toBe("studies/b-2222/")
 		expect(findStudyDir(list, "t3", studyTopicIdOf)).toBeNull()
 		expect(findStudyDir(list, "t1")).toBeNull()
+	})
+})
+
+describe("indexStudyDirs", () => {
+	it("maps every topic in one pass with the same rules as findStudyDir", () => {
+		const list = [
+			file("studies/a/study.json", { topic_id: "0" }),
+			file("studies/old/study.json", { topic_id: "0", updated_at: "2026-10-17 10:00:00" }),
+			file("studies/new/study.json", { topic_id: "0", updated_at: "2026-10-18 10:00:00" }),
+			file("studies/legacy/study.json", { topic_id: "t3" }),
+			file("studies/a/inner/study.json", { topic_id: "t4" }),
+		]
+		const recorded: Record<string, string> = {
+			"studies/a/study.json": "t1",
+			"studies/old/study.json": "t2",
+			"studies/new/study.json": "t2",
+		}
+		const index = indexStudyDirs(list, (item) => recorded[String(item.relative_file_path)])
+		expect(index.get("t1")).toBe("studies/a/")
+		expect(index.get("t2")).toBe("studies/new/")
+		expect(index.get("t3")).toBe("studies/legacy/")
+		expect(index.has("t4")).toBe(false)
+		for (const topicId of ["t1", "t2", "t3", "t4"]) {
+			expect(index.get(topicId) ?? null).toBe(
+				findStudyDir(list, topicId, (item) => recorded[String(item.relative_file_path)]),
+			)
+		}
 	})
 })
 

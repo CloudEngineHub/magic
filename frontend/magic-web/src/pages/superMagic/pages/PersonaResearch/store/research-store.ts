@@ -1,4 +1,4 @@
-import { makeAutoObservable, runInAction } from "mobx"
+import { makeAutoObservable, observable, runInAction } from "mobx"
 import { SuperMagicApi } from "@/apis"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
@@ -18,8 +18,8 @@ import {
 	PERSONAS_DIR,
 	attachmentVersionKey,
 	collectStudyAttachments,
-	findStudyDir,
 	getAttachmentPath,
+	indexStudyDirs,
 	listLibraryFiles,
 	listReportTemplates,
 	listStudyFiles,
@@ -30,6 +30,7 @@ import {
 	parsePanelFile,
 	parsePersonaFile,
 	parseStudyFile,
+	personaFilePath,
 	type StudyAttachments,
 } from "../services/researchFiles"
 import type {
@@ -49,9 +50,24 @@ export const PERSONA_RESEARCH_PROJECT_KEY = "persona_research"
 
 export type ResearchStoreStatus = "idle" | "loading" | "ready" | "error"
 
+/**
+ * Library personas read for the home before the library page is opened: the avatars on the
+ * library button (3) and the voice card (up to 4 quotable personas, some may have no line).
+ */
+const LIBRARY_PREVIEW_COUNT = 6
+/** A file read that hangs must not keep the study on its loading skeleton forever. */
+const FILE_READ_TIMEOUT_MS = 30_000
+
+type FileParser = (raw: unknown) => ParsedResearchFile<unknown>
+
 interface ParsedCacheEntry {
 	versionKey: string
-	result: ParsedResearchFile<unknown>
+	/** Parsed JSON, or the raw string when it is not JSON (the parser reports invalid_json). */
+	raw: unknown
+	/** Schema result of `raw`, reused while the file version is unchanged. */
+	parsed?: { parser: FileParser; result: ParsedResearchFile<unknown> }
+	/** Ref handed to the UI; reusing it keeps unchanged files from re-rendering their rows. */
+	ref?: ResearchFileRef<unknown>
 }
 
 /**
@@ -69,8 +85,13 @@ export class PersonaResearchStore {
 	isCreatingStudy = false
 	isConversationGenerating = false
 
-	/** Parsed library and current-study files, refreshed whenever attachments change. */
+	/**
+	 * Parsed personas, refreshed whenever attachments change. Until the library page asks for
+	 * the whole library (`requestLibrary`) this holds only the home preview and the personas the
+	 * selected study uses, so opening a study does not download every persona first.
+	 */
 	personas: ResearchFileRef<PersonaFile>[] = []
+	/** Panels; read only once the library is requested. */
 	panels: ResearchFileRef<PanelFile>[] = []
 	study: StudyFile | null = null
 	studyPanel: PanelFile | null = null
@@ -95,8 +116,18 @@ export class PersonaResearchStore {
 	/** Credentials for reading file contents; undefined uses the signed-in session. */
 	fileAccess: FileAccessContext | undefined = undefined
 
+	/** Set by the persona library page; from then on every persona and panel is kept current. */
+	libraryRequested = false
+	/** The whole library has been read at least once since it was requested. */
+	libraryLoaded = false
+
 	private bootstrapGeneration = 0
+	/** Bumped by dispose so a read still in flight never commits into a reset store. */
 	private contentGeneration = 0
+	/** The running content read; later reload requests wait for it and run once after it. */
+	private reloadTask: Promise<void> | null = null
+	private reloadDirty = false
+	private readAbort: AbortController | null = null
 	private readonly parsedCache = new Map<string, ParsedCacheEntry>()
 	/** Topics whose name was already copied from study.json in this page session. */
 	private readonly topicNameSyncs = new Set<string>()
@@ -109,12 +140,34 @@ export class PersonaResearchStore {
 	constructor() {
 		makeAutoObservable<
 			PersonaResearchStore,
-			"bootstrapGeneration" | "contentGeneration" | "parsedCache" | "topicNameSyncs"
+			| "bootstrapGeneration"
+			| "contentGeneration"
+			| "reloadTask"
+			| "reloadDirty"
+			| "readAbort"
+			| "parsedCache"
+			| "topicNameSyncs"
 		>(
 			this,
 			{
+				// Attachment lists and parsed files are replaced as a whole, never mutated in
+				// place. Deep observables would copy thousands of items on every file event and
+				// make each read through a proxy (see AGENTS.md, 10k files baseline).
+				attachments: observable.ref,
+				attachmentList: observable.ref,
+				personas: observable.ref,
+				panels: observable.ref,
+				study: observable.ref,
+				studyPanel: observable.ref,
+				interviews: observable.ref,
+				discussions: observable.ref,
+				synthesis: observable.ref,
+				validationResults: observable.ref,
 				bootstrapGeneration: false,
 				contentGeneration: false,
+				reloadTask: false,
+				reloadDirty: false,
+				readAbort: false,
 				parsedCache: false,
 				topicNameSyncs: false,
 				topicStore: false,
@@ -207,8 +260,33 @@ export class PersonaResearchStore {
 		return this.attachmentList.filter((item) => fileIds.has(String(item.file_id)))
 	}
 
+	/** Persona files in the library, whether or not their content has been read. */
+	get personaFiles(): AttachmentItem[] {
+		return listLibraryFiles(this.attachmentList, PERSONAS_DIR)
+	}
+
+	/** Library counts come from the file list, so they are right before the library is read. */
+	get personaFileCount(): number {
+		return this.personaFiles.length
+	}
+
+	get panelFileCount(): number {
+		return listLibraryFiles(this.attachmentList, PANELS_DIR).length
+	}
+
+	/** Persona refs by id; transcripts and quotes resolve names here once per quote. */
+	private get personaRefIndex(): Map<string, ResearchFileRef<PersonaFile>> {
+		return new Map(this.personas.map((ref) => [ref.data.id, ref]))
+	}
+
+	/** Study directory per topic, rebuilt once per attachment or study.json change. */
+	private get studyDirByTopicId(): Map<string, string> {
+		void this.contentVersion
+		return indexStudyDirs(this.attachmentList, this.studyTopicIdOf)
+	}
+
 	personaById(personaId: string): PersonaFile | null {
-		return this.personas.find((ref) => ref.data.id === personaId)?.data ?? null
+		return this.personaRefIndex.get(personaId)?.data ?? null
 	}
 
 	/** Personas used by the current study, in panel order; falls back to interviewed personas. */
@@ -383,7 +461,14 @@ export class PersonaResearchStore {
 	}
 
 	personaRefById(personaId: string): ResearchFileRef<PersonaFile> | null {
-		return this.personas.find((ref) => ref.data.id === personaId) ?? null
+		return this.personaRefIndex.get(personaId) ?? null
+	}
+
+	/** Called by the persona library page: read every persona and panel from now on. */
+	requestLibrary() {
+		if (this.libraryRequested) return
+		this.libraryRequested = true
+		void this.reloadParsedContent()
 	}
 
 	/** Re-reads attachments from the server; used after page visibility returns. */
@@ -455,10 +540,15 @@ export class PersonaResearchStore {
 	dispose() {
 		this.bootstrapGeneration += 1
 		this.contentGeneration += 1
+		this.readAbort?.abort()
+		this.readAbort = null
+		this.reloadDirty = false
 		this.parsedCache.clear()
 		this.topicNameSyncs.clear()
 		this.studyFilesReady = false
 		this.loadedStudyTopicId = null
+		this.libraryRequested = false
+		this.libraryLoaded = false
 		this.topicStore.reset()
 		this.projectFilesStore.setSelectedProject(null)
 		this.projectFilesStore.setWorkspaceFileTree([])
@@ -466,65 +556,150 @@ export class PersonaResearchStore {
 	}
 
 	/**
-	 * Reads library files and the selected study's files, reusing parsed results whose
-	 * attachment version is unchanged. Older runs are discarded when a newer one starts,
-	 * and already-rendered data is kept until the new read succeeds.
+	 * Reads what the open page needs, reusing parsed files whose attachment version is
+	 * unchanged. A request that arrives during a read is merged into one more read after it, so
+	 * a burst of file events cannot starve the read a loading page is waiting for.
+	 *
+	 * | Stage | Files                                                                         |
+	 * | 1     | every study.json (topic → directory, list rows), the home persona preview;   |
+	 * |       | the whole persona and panel library once the library page asked for it      |
+	 * | 2     | the selected study's files                                                    |
+	 * | 3     | the personas that study uses, e.g. personas/p_chen_1a2b.json                  |
+	 *
+	 * Already-rendered data is kept until the new read is committed.
 	 */
-	async reloadParsedContent(): Promise<void> {
-		const generation = ++this.contentGeneration
-		const personaItems = listLibraryFiles(this.attachmentList, PERSONAS_DIR)
-		const panelItems = listLibraryFiles(this.attachmentList, PANELS_DIR)
-		// Every study.json first: its topic_id decides which directory belongs to which topic,
-		// and list rows read their titles from it.
-		await this.ensureParsed([
-			...personaItems,
-			...panelItems,
-			...listStudyFiles(this.attachmentList),
-		])
-		if (generation !== this.contentGeneration) return
-		// parsedCache is not observable: bump the version so studyDir (a computed that may be
-		// cached by the UI) re-reads the topic_id values that were just parsed.
-		runInAction(() => {
-			this.contentVersion += 1
-		})
-		this.syncTopicNamesFromStudies()
-		const study = this.studyAttachments
-		const studyItems = study
-			? [
-					study.study,
-					study.panel,
-					study.synthesis,
-					study.validationResults,
-					...study.interviews,
-					...study.discussions,
-				].filter((item): item is AttachmentItem => item !== null)
-			: []
+	reloadParsedContent(): Promise<void> {
+		this.reloadDirty = true
+		if (!this.reloadTask) {
+			this.reloadTask = this.drainReloads().finally(() => {
+				this.reloadTask = null
+				// A request that came in after the last loop check still needs its read.
+				if (this.reloadDirty) void this.reloadParsedContent()
+			})
+		}
+		return this.reloadTask
+	}
 
-		await this.ensureParsed(studyItems)
-		if (generation !== this.contentGeneration) return
+	private async drainReloads() {
+		const generation = this.contentGeneration
+		while (this.reloadDirty && generation === this.contentGeneration) {
+			this.reloadDirty = false
+			await this.readContent(generation)
+		}
+	}
 
-		runInAction(() => {
-			this.personas = this.collectRefs(personaItems, parsePersonaFile)
-			this.panels = this.collectRefs(panelItems, parsePanelFile)
-			const studyResult = study?.study ? this.getParsed(study.study, parseStudyFile) : null
-			this.study = studyResult?.ok ? studyResult.data : null
-			this.studyFileInvalid = Boolean(studyResult && !studyResult.ok)
-			const panelResult = study?.panel ? this.getParsed(study.panel, parsePanelFile) : null
-			this.studyPanel = panelResult?.ok ? panelResult.data : null
-			this.interviews = study ? this.collectRefs(study.interviews, parseInterviewFile) : []
-			this.discussions = study ? this.collectRefs(study.discussions, parseDiscussionFile) : []
-			const synthesisResult = study?.synthesis
-				? this.getParsed(study.synthesis, parseSynthesisFile)
-				: null
-			this.synthesis = synthesisResult?.ok ? synthesisResult.data : null
-			const validationResult = study?.validationResults
-				? this.getParsed(study.validationResults, parseValidationResultsFile)
-				: null
-			this.validationResults = validationResult?.ok ? validationResult.data : null
-			this.studyFilesReady = true
-			this.loadedStudyTopicId = this.selectedTopic?.id ?? null
-			this.contentVersion += 1
-		})
+	private async readContent(generation: number) {
+		const controller = new AbortController()
+		this.readAbort = controller
+		// Aborting only fails the downloads still pending; the read then commits what it has, so
+		// a hung request ends the loading state instead of keeping the skeleton up forever.
+		const timer = setTimeout(() => controller.abort(), FILE_READ_TIMEOUT_MS)
+		const isCurrent = () => generation === this.contentGeneration
+		try {
+			const libraryRequested = this.libraryRequested
+			const personaFiles = this.personaFiles
+			const panelItems = libraryRequested
+				? listLibraryFiles(this.attachmentList, PANELS_DIR)
+				: []
+			await this.ensureParsed(
+				[
+					...listStudyFiles(this.attachmentList),
+					...(libraryRequested
+						? personaFiles
+						: personaFiles.slice(0, LIBRARY_PREVIEW_COUNT)),
+					...panelItems,
+				],
+				controller.signal,
+			)
+			if (!isCurrent()) return
+			// parsedCache is not observable: bump the version so the topic → directory index
+			// re-reads the topic_id values that were just parsed.
+			runInAction(() => {
+				this.contentVersion += 1
+			})
+			this.syncTopicNamesFromStudies()
+
+			const topicId = this.selectedTopic?.id ?? null
+			const study = this.studyAttachments
+			await this.ensureParsed(studyFileItems(study), controller.signal)
+			if (!isCurrent()) return
+
+			const personaItems = libraryRequested
+				? personaFiles
+				: this.studyPersonaItems(study, personaFiles)
+			await this.ensureParsed(personaItems, controller.signal)
+			if (!isCurrent()) return
+
+			runInAction(() => {
+				this.personas = this.collectRefs(personaItems, parsePersonaFile, this.personas)
+				if (libraryRequested) {
+					this.panels = this.collectRefs(panelItems, parsePanelFile, this.panels)
+					this.libraryLoaded = true
+				}
+				this.studyFilesReady = true
+				this.contentVersion += 1
+				// The user opened another study during the read; the queued read loads that one.
+				// Committing now would show this study's files under the other study's title.
+				if ((this.selectedTopic?.id ?? null) !== topicId) return
+				this.commitStudy(study)
+				this.loadedStudyTopicId = topicId
+			})
+		} finally {
+			clearTimeout(timer)
+			if (this.readAbort === controller) this.readAbort = null
+		}
+	}
+
+	/** Copies the selected study's parsed files into the observable fields. */
+	private commitStudy(study: StudyAttachments | null) {
+		const studyResult = study?.study ? this.getParsed(study.study, parseStudyFile) : null
+		this.study = studyResult?.ok ? studyResult.data : null
+		this.studyFileInvalid = Boolean(studyResult && !studyResult.ok)
+		const panelResult = study?.panel ? this.getParsed(study.panel, parsePanelFile) : null
+		this.studyPanel = panelResult?.ok ? panelResult.data : null
+		this.interviews = this.collectRefs(
+			study?.interviews ?? [],
+			parseInterviewFile,
+			this.interviews,
+		)
+		this.discussions = this.collectRefs(
+			study?.discussions ?? [],
+			parseDiscussionFile,
+			this.discussions,
+		)
+		const synthesisResult = study?.synthesis
+			? this.getParsed(study.synthesis, parseSynthesisFile)
+			: null
+		this.synthesis = synthesisResult?.ok ? synthesisResult.data : null
+		const validationResult = study?.validationResults
+			? this.getParsed(study.validationResults, parseValidationResultsFile)
+			: null
+		this.validationResults = validationResult?.ok ? validationResult.data : null
+	}
+
+	/**
+	 * The home preview personas plus the ones the study uses (panel, interviews, discussion
+	 * participants), found by their contract path. A persona deleted from the library simply
+	 * stays unresolved, as it did when the whole library was read.
+	 * Example: panel ["p_chen_1a2b"] → the preview files + personas/p_chen_1a2b.json.
+	 */
+	private studyPersonaItems(
+		study: StudyAttachments | null,
+		personaFiles: AttachmentItem[],
+	): AttachmentItem[] {
+		const wanted = new Set(personaFiles.slice(0, LIBRARY_PREVIEW_COUNT).map(getAttachmentPath))
+		const add = (personaId: string) => wanted.add(personaFilePath(personaId))
+		const panel = study?.panel ? this.getParsed(study.panel, parsePanelFile) : null
+		if (panel?.ok) panel.data.persona_ids.forEach(add)
+		for (const item of study?.interviews ?? []) {
+			const parsed = this.getParsed(item, parseInterviewFile)
+			if (parsed?.ok) add(parsed.data.persona_id)
+		}
+		for (const item of study?.discussions ?? []) {
+			const parsed = this.getParsed(item, parseDiscussionFile)
+			if (parsed?.ok) parsed.data.participants.forEach(add)
+		}
+		return personaFiles.filter((item) => wanted.has(getAttachmentPath(item)))
 	}
 
 	/**
@@ -545,21 +720,25 @@ export class PersonaResearchStore {
 		}
 	}
 
-	private async ensureParsed(items: AttachmentItem[]) {
-		const stale = items.filter((item) => {
-			const cached = this.parsedCache.get(getAttachmentPath(item))
-			return !cached || cached.versionKey !== attachmentVersionKey(item)
-		})
+	private async ensureParsed(items: AttachmentItem[], signal?: AbortSignal) {
+		const stale = items.filter(
+			(item) =>
+				this.parsedCache.get(getAttachmentPath(item))?.versionKey !==
+				attachmentVersionKey(item),
+		)
 		if (stale.length === 0) return
 		const ids = stale.map((item) => String(item.file_id))
 		// forceRefresh: the agent overwrites these files in place; never serve a stale copy.
+		// Only files whose version changed get here, so unchanged files are never re-downloaded.
 		const { successes } = await getFileContentsByIds(ids, {
 			responseType: "text",
 			forceRefresh: true,
 			access: this.fileAccess,
+			signal,
 		})
 		for (const item of stale) {
 			const content = successes.get(String(item.file_id))
+			// A failed download keeps the previous version, which retries on the next read.
 			if (typeof content !== "string") continue
 			let raw: unknown = content
 			try {
@@ -569,7 +748,7 @@ export class PersonaResearchStore {
 			}
 			this.parsedCache.set(getAttachmentPath(item), {
 				versionKey: attachmentVersionKey(item),
-				result: { ok: true, data: raw },
+				raw,
 			})
 		}
 	}
@@ -579,21 +758,18 @@ export class PersonaResearchStore {
 		parser: (raw: unknown) => ParsedResearchFile<T>,
 	): ParsedResearchFile<T> | null {
 		const cached = this.parsedCache.get(getAttachmentPath(item))
-		if (!cached || !cached.result.ok) return null
-		return parser(cached.result.data)
+		return cached ? parseEntry(cached, parser) : null
 	}
 
 	/** Study directory of a topic, matched through the topic_id recorded in each study.json. */
 	private studyDirOf(topicId: string | undefined): string | null {
-		void this.contentVersion
-		return findStudyDir(this.attachmentList, topicId, this.studyTopicIdOf)
+		return topicId ? (this.studyDirByTopicId.get(String(topicId)) ?? null) : null
 	}
 
 	private studyTopicIdOf(item: AttachmentItem): string | undefined {
-		const cached = this.parsedCache.get(getAttachmentPath(item))
-		const data = cached?.result.ok ? cached.result.data : null
+		const raw = this.parsedCache.get(getAttachmentPath(item))?.raw
 		const topicId =
-			data && typeof data === "object" ? (data as { topic_id?: unknown }).topic_id : null
+			raw && typeof raw === "object" ? (raw as { topic_id?: unknown }).topic_id : null
 		return typeof topicId === "string" || typeof topicId === "number"
 			? String(topicId)
 			: undefined
@@ -603,27 +779,38 @@ export class PersonaResearchStore {
 	private peekStudy(path: string): StudyFile | null {
 		void this.contentVersion
 		const cached = this.parsedCache.get(path)
-		if (!cached?.result.ok) return null
-		const parsed = parseStudyFile(cached.result.data)
+		if (!cached) return null
+		const parsed = parseEntry(cached, parseStudyFile)
 		return parsed.ok ? parsed.data : null
 	}
 
+	/**
+	 * Refs of the parsed files, reusing the ref of every unchanged file. When nothing changed
+	 * the previous array is returned, so a file event elsewhere does not re-render these lists.
+	 */
 	private collectRefs<T>(
 		items: AttachmentItem[],
 		parser: (raw: unknown) => ParsedResearchFile<T>,
+		previous: ResearchFileRef<T>[],
 	): ResearchFileRef<T>[] {
-		return items.flatMap((item) => {
-			const parsed = this.getParsed(item, parser)
-			return parsed?.ok
-				? [
-						{
-							fileId: String(item.file_id),
-							path: getAttachmentPath(item),
-							data: parsed.data,
-						},
-					]
-				: []
+		const refs = items.flatMap((item) => {
+			const path = getAttachmentPath(item)
+			const cached = this.parsedCache.get(path)
+			if (!cached) return []
+			const parsed = parseEntry(cached, parser)
+			if (!parsed.ok) return []
+			const fileId = String(item.file_id)
+			const ref = cached.ref as ResearchFileRef<T> | undefined
+			if (ref && ref.data === parsed.data && ref.fileId === fileId && ref.path === path) {
+				return [ref]
+			}
+			const next: ResearchFileRef<T> = { fileId, path, data: parsed.data }
+			cached.ref = next
+			return [next]
 		})
+		const unchanged =
+			refs.length === previous.length && refs.every((ref, index) => ref === previous[index])
+		return unchanged ? previous : refs
 	}
 
 	private collectDirectoryFileIds(dir: string): string[] {
@@ -668,4 +855,30 @@ export class PersonaResearchStore {
 /** Research topics always run the persona-research agent, whatever the server echoes back. */
 export function withResearchTopicFields(topic: Topic): Topic {
 	return { ...topic, topic_mode: TopicMode.PersonaResearch }
+}
+
+/** Contract files of the selected study that the store parses (documents load in their panes). */
+function studyFileItems(study: StudyAttachments | null): AttachmentItem[] {
+	if (!study) return []
+	return [
+		study.study,
+		study.panel,
+		study.synthesis,
+		study.validationResults,
+		...study.interviews,
+		...study.discussions,
+	].filter((item): item is AttachmentItem => item !== null)
+}
+
+/** Schema result of a cached file, computed once per file version and parser. */
+function parseEntry<T>(
+	entry: ParsedCacheEntry,
+	parser: (raw: unknown) => ParsedResearchFile<T>,
+): ParsedResearchFile<T> {
+	let parsed = entry.parsed
+	if (!parsed || parsed.parser !== parser) {
+		parsed = { parser: parser as FileParser, result: parser(entry.raw) }
+		entry.parsed = parsed
+	}
+	return parsed.result as ParsedResearchFile<T>
 }
