@@ -197,6 +197,20 @@ function ResearchConsole({
 		study?.phases.some((phase) => phase.key === "report" && phase.status === "running") ?? false
 	const activeDiscussion = discussions[activeDiscussionIndex]
 
+	/** Study documents in reading order; the files tab lists them so they stay reachable. */
+	const studyDocuments = [
+		{ key: "plan", label: t("console.docPlan"), file: studyAttachments?.plan },
+		{ key: "desk", label: t("console.docDeskResearch"), file: studyAttachments?.deskResearch },
+		{ key: "report", label: t("console.docReport"), file: studyAttachments?.report },
+		{
+			key: "validation",
+			label: t("console.docValidation"),
+			file: studyAttachments?.validation,
+		},
+	].filter((doc): doc is { key: string; label: string; file: AttachmentItem } =>
+		Boolean(doc.file),
+	)
+
 	return (
 		<Tabs
 			value={activeTab}
@@ -335,9 +349,28 @@ function ResearchConsole({
 			<TabsContent
 				value="files"
 				forceMount
-				className={cn("relative mt-0 min-h-0 flex-1", activeTab !== "files" && "hidden")}
+				className={cn(
+					"relative mt-0 flex min-h-0 flex-1 flex-col",
+					activeTab !== "files" && "hidden",
+				)}
 			>
-				{filesPane}
+				{studyDocuments.length > 0 ? (
+					<div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
+						{studyDocuments.map((doc) => (
+							<Button
+								key={doc.key}
+								variant="outline"
+								size="sm"
+								className="h-7 gap-1.5 px-2.5 text-xs"
+								onClick={() => onOpenFile(doc.file)}
+							>
+								<FileText className="size-3.5" />
+								{doc.label}
+							</Button>
+						))}
+					</div>
+				) : null}
+				<div className="relative min-h-0 flex-1">{filesPane}</div>
 				{!studyAttachments?.report && reportRunning ? (
 					<div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-3">
 						<span className="flex items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
