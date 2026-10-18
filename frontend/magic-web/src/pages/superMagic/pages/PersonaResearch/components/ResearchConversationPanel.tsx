@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo } from "react"
+import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
 import { isEmpty } from "lodash-es"
@@ -11,9 +11,14 @@ import type { SuperMagicMessageItem } from "@/pages/superMagic/components/Messag
 import type { SendMessageOptions } from "@/pages/superMagic/components/MessagePanel/types"
 import type { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
 import { useInterruptAndUndoMessage } from "@/pages/superMagic/hooks/useInterruptAndUndoMessage"
+import { useMessagesWithOptimisticMeta } from "@/pages/superMagic/hooks/useMessagesWithOptimisticMeta"
+import { useRetryOptimisticMessage } from "@/pages/superMagic/hooks/useRetryOptimisticMessage"
 import { useTopicConversationLoading } from "@/pages/superMagic/hooks/useTopicConversationLoading"
 import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
-import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
+import {
+	createMessageSendService,
+	type HandleSendParams,
+} from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import type { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { superMagicStore } from "@/pages/superMagic/stores"
@@ -99,6 +104,10 @@ const ResearchConversationPanel = forwardRef<
 		selectedTopic,
 	})
 
+	// The composer registers its send entry here; retrying a failed message re-sends through it.
+	const sendRetryMessageRef = useRef<(params: HandleSendParams) => Promise<boolean>>()
+	const shouldScrollAfterRetryRef = useRef(false)
+
 	const { editorContext, editorNodes, topicModelStore, fillComposer } = useResearchEditor({
 		variant,
 		selectedTopic,
@@ -107,6 +116,32 @@ const ResearchConversationPanel = forwardRef<
 		isMessagesInitialLoading,
 		size: isMobile ? "mobile" : "small",
 		onFileClick,
+		onMessageSendReady: (sendMessage, prevSendMessage) => {
+			// Ignore a stale cleanup so it cannot clear a newly registered send entry.
+			if (prevSendMessage === undefined || sendRetryMessageRef.current === prevSendMessage) {
+				sendRetryMessageRef.current = sendMessage
+			}
+		},
+	})
+
+	const messagesWithOptimisticMeta = useMessagesWithOptimisticMeta(
+		selectedTopic?.chat_topic_id,
+		messages,
+	)
+
+	const handleRetryOptimisticMessage = useRetryOptimisticMessage({
+		chatTopicId: selectedTopic?.chat_topic_id,
+		getSendMessage: () => sendRetryMessageRef.current,
+		onRetryStarted: () => {
+			shouldScrollAfterRetryRef.current = true
+		},
+	})
+
+	useLayoutEffect(() => {
+		if (!shouldScrollAfterRetryRef.current) return
+		shouldScrollAfterRetryRef.current = false
+		// Retry swaps the failed node for a sending one, so the count may not change; scroll after this commit.
+		pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom, { behavior: "auto", time: 1000 })
 	})
 
 	useImperativeHandle(ref, () => ({ fillComposer }), [fillComposer])
@@ -166,10 +201,16 @@ const ResearchConversationPanel = forwardRef<
 			// A new study starts from the research home, not from inside the conversation.
 			allowCreateNewTopic: false,
 			onTopicSwitch: store.setSelectedTopic,
+			onRetryOptimisticMessage: handleRetryOptimisticMessage,
 			projectFilesStore: store.projectFilesStore,
 			renderAttachments,
 		}),
-		[renderAttachments, store.projectFilesStore, store.setSelectedTopic],
+		[
+			handleRetryOptimisticMessage,
+			renderAttachments,
+			store.projectFilesStore,
+			store.setSelectedTopic,
+		],
 	)
 
 	if (!selectedTopic) return null
@@ -183,7 +224,7 @@ const ResearchConversationPanel = forwardRef<
 				<MessageList
 					className="[--message-list-surface:rgb(var(--background-rgb))]"
 					classNames={{ content: "pl-2 pt-[10px]" }}
-					data={messages as SuperMagicMessageItem[]}
+					data={messagesWithOptimisticMeta as SuperMagicMessageItem[]}
 					setSelectedDetail={onSelectDetail ?? onFileClick}
 					selectedTopic={selectedTopic}
 					handlePullMoreMessage={handlePullMoreMessage}

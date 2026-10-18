@@ -46,6 +46,8 @@ interface UseResearchEditorOptions {
 	appendToMessage?: () => string | null
 	/** The page draws the composer frame (home); the editor drops its own border to avoid a double line. */
 	bareContainer?: boolean
+	/** Receives the composer's send entry so a failed message can be retried through the normal send flow. */
+	onMessageSendReady?: SceneEditorContext["onMessageSendReady"]
 }
 
 /**
@@ -69,6 +71,7 @@ export function useResearchEditor({
 	onEditorReady,
 	appendToMessage,
 	bareContainer = false,
+	onMessageSendReady,
 }: UseResearchEditorOptions) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
@@ -163,6 +166,7 @@ export function useResearchEditor({
 			handleInterrupt,
 			onFileClick,
 			onReady: onEditorReady,
+			onMessageSendReady,
 			mentionPanelStore: store.mentionPanelStore,
 			projectFilesStore: store.projectFilesStore,
 			topicModelStore,
@@ -205,6 +209,7 @@ export function useResearchEditor({
 			messagesLength,
 			onEditorReady,
 			onFileClick,
+			onMessageSendReady,
 			selectedProject,
 			selectedTopic,
 			showLoading,

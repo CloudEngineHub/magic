@@ -15,9 +15,9 @@ import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/use
 import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
-import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useRetryOptimisticMessage } from "@/pages/superMagic/hooks/useRetryOptimisticMessage"
+import { useMessagesWithOptimisticMeta } from "@/pages/superMagic/hooks/useMessagesWithOptimisticMeta"
 import type { SendMessageOptions } from "@/pages/superMagic/components/MessagePanel/types"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
 import projectFilesStore from "@/stores/projectFiles"
@@ -193,24 +193,7 @@ function TopicMessagePanel({
 	])
 
 	const currentTopicId = selectedTopic?.chat_topic_id
-	const topicOptimisticMessages = currentTopicId
-		? optimisticMessageStore.topicOptimisticMap[currentTopicId]
-		: undefined
-	const messagesWithOptimisticMeta = useMemo(() => {
-		return messages.map((message) => {
-			const optimisticStatus = currentTopicId
-				? topicOptimisticMessages?.[message?.app_message_id || ""]?.status
-				: undefined
-			if (!optimisticStatus) return message
-
-			return {
-				...message,
-				optimisticMeta: {
-					status: optimisticStatus,
-				},
-			}
-		})
-	}, [currentTopicId, messages, topicOptimisticMessages])
+	const messagesWithOptimisticMeta = useMessagesWithOptimisticMeta(currentTopicId, messages)
 
 	useLayoutEffect(() => {
 		if (!shouldScrollAfterRetryRef.current) return
