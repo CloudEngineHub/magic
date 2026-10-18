@@ -47,7 +47,7 @@ A persona that already holds the tested opinion turns the interview into an echo
 
 ## Interview Guide
 
-- Core questions = interview rounds minus 1 or 2, so every interview has room to probe: 3-4 core questions for 5 rounds, 2 for 3 rounds. Order them from broad to specific: recent behavior, the problem, current solutions, reaction to the concept, then price or switching. Cut the least decision-relevant question instead of merging two.
+- Core questions = interview rounds minus 1 or 2, so every interview has room to probe: 3-4 core questions for 5 rounds, 2 for 3 rounds, 1 for 1-2 rounds (never fewer than 1). Order them from broad to specific: recent behavior, the problem, current solutions, reaction to the concept, then price or switching. Cut the least decision-relevant question instead of merging two.
 - One question per round. `persona_chat` rejects a message with several question marks or a numbered list.
 - Open questions only; never ask two things in one question.
 - Do not reveal the hypothesis before the participant has described their own behavior.
