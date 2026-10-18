@@ -46,7 +46,7 @@ export default function ResearchComposerOptions({
 	}
 
 	return (
-		<div className={cn("flex flex-wrap items-center gap-1", className)}>
+		<div className={cn("flex flex-wrap items-center gap-2", className)}>
 			<OptionMenu
 				icon={<FlaskConical className="size-3.5" />}
 				label={t("options.method")}
@@ -129,7 +129,8 @@ function OptionMenu({
 					type="button"
 					className={cn(
 						// Quiet chips inside the composer; a fixed value gets a soft fill, not solid ink.
-						"inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring",
+						// Inset focus ring so a focused chip never paints over its neighbour.
+						"inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25",
 						active
 							? "bg-muted text-foreground"
 							: "text-muted-foreground hover:bg-muted hover:text-foreground",

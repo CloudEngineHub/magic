@@ -184,7 +184,7 @@ function ResearchHomePage() {
 							{t("home.subtitle")}
 						</p>
 						<div
-							className="mt-7 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/70"
+							className="mt-7 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/30"
 							data-testid="persona-research-composer"
 						>
 							{isMobile ? (
@@ -202,11 +202,11 @@ function ResearchHomePage() {
 							<ResearchComposerOptions
 								value={options}
 								onChange={updateOptions}
-								className="px-3 pb-3"
+								className="px-2.5 pb-3 pt-1.5"
 								trailing={
 									<button
 										type="button"
-										className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+										className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25"
 										onClick={openLibrary}
 									>
 										<UsersRound className="size-3.5" />
