@@ -52,11 +52,13 @@ function StudyListSection({ onOpen, onDelete, onTrySample }: StudyListSectionPro
 	}
 
 	return (
-		<section
-			className="flex flex-col gap-4"
-			data-guide-anchor={ResearchOnboardingAnchor.HomeStudies}
-		>
-			<div className="flex flex-wrap items-center justify-between gap-3">
+		<section className="flex flex-col gap-4">
+			{/* The onboarding frames the heading row only: the list can be taller than the window,
+			    which would leave no room for the step card beside it. */}
+			<div
+				className="flex flex-wrap items-center justify-between gap-3"
+				data-guide-anchor={ResearchOnboardingAnchor.HomeStudies}
+			>
 				<SectionTitle
 					title={t("home.myStudies")}
 					hint={

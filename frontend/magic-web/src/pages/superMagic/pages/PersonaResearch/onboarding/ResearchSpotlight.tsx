@@ -60,7 +60,8 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 	}, [])
 
 	// Follow the anchor while the step is up: scrolling, resizing and layout shifts (a study
-	// streaming in) all move it, and the ring must stay on it frame for frame.
+	// streaming in) all move it. autoUpdate listens to those events instead of polling every
+	// frame, and unchanged measurements skip the re-render, so a busy page stays responsive.
 	useLayoutEffect(() => {
 		const card = cardRef.current
 		const anchor = step ? findResearchOnboardingAnchor(step.anchor) : null
@@ -69,17 +70,36 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 		let cancelled = false
 		const update = () => {
 			const rect = anchor.getBoundingClientRect()
-			setRing({ left: rect.left, top: rect.top, width: rect.width, height: rect.height })
+			setRing((current) =>
+				current &&
+				current.left === rect.left &&
+				current.top === rect.top &&
+				current.width === rect.width &&
+				current.height === rect.height
+					? current
+					: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+			)
 			void computePosition(anchor, card, {
 				strategy: "fixed",
 				placement: step.placement ?? "bottom",
 				// 14px clears the ring's 4px padding plus its 2px border with room to breathe.
-				middleware: [offset(14), flip({ padding: 12 }), shift({ padding: 12 })],
+				// crossAxis shift keeps the card on screen when the anchor is taller than the
+				// window and neither side has room; it may then overlap the anchor's edge.
+				middleware: [
+					offset(14),
+					flip({ padding: 12 }),
+					shift({ padding: 12, crossAxis: true }),
+				],
 			}).then(({ x, y }) => {
-				if (!cancelled) setPlaced({ anchor: step.anchor, left: x, top: y })
+				if (cancelled) return
+				setPlaced((current) =>
+					current?.anchor === step.anchor && current.left === x && current.top === y
+						? current
+						: { anchor: step.anchor, left: x, top: y },
+				)
 			})
 		}
-		const stop = autoUpdate(anchor, card, update, { animationFrame: true })
+		const stop = autoUpdate(anchor, card, update)
 		return () => {
 			cancelled = true
 			stop()
@@ -128,11 +148,11 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 			) : null}
 			<section
 				ref={cardRef}
-				key={index}
 				className={cn(
-					"fixed z-[1202] w-[min(380px,calc(100vw-32px))] rounded-[14px] border border-border bg-background px-5 pb-4 pt-[18px] shadow-[0_18px_48px_rgba(17,24,39,0.24)] duration-200 animate-in fade-in-0 slide-in-from-bottom-1 motion-reduce:animate-none",
-					// Hidden until floating-ui has placed it, so it never flashes at the corner.
-					!cardPosition && "invisible",
+					"fixed z-[1202] w-[min(380px,calc(100vw-32px))] rounded-[14px] border border-border bg-background px-5 pb-4 pt-[18px] shadow-[0_18px_48px_rgba(17,24,39,0.24)] transition-opacity duration-200 motion-reduce:transition-none",
+					// Hidden until floating-ui has placed it for this step, so it never flashes at
+					// the previous step's spot; the opacity fade is the step-change feedback.
+					cardPosition ? "opacity-100" : "invisible opacity-0",
 				)}
 				style={cardPosition ?? { left: 0, top: 0 }}
 			>
