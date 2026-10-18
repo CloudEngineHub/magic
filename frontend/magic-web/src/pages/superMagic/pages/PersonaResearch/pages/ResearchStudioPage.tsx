@@ -4,6 +4,7 @@ import {
 	ArrowLeft,
 	ChevronDown,
 	FileSearch,
+	Info,
 	Maximize2,
 	PanelRightClose,
 	PanelRightOpen,
@@ -288,7 +289,7 @@ function ResearchStudioPage() {
 			<div className="flex items-center gap-2">
 				<MagicTooltip title={t("study.backHome")}>
 					<Button
-						variant="ghost"
+						variant="outline"
 						size="icon"
 						className="size-8 shrink-0"
 						aria-label={t("study.backHome")}
@@ -297,50 +298,48 @@ function ResearchStudioPage() {
 						<ArrowLeft className="size-4" />
 					</Button>
 				</MagicTooltip>
+				{/* Prototype layout: title on top; status, step bar and method/scale as one quiet line. */}
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
-					<div className="flex min-w-0 items-center gap-2">
-						<StudyTitleEditor
-							topicId={selectedTopic.id}
-							title={store.studyTitleOf(selectedTopic)}
-						/>
+					<StudyTitleEditor
+						topicId={selectedTopic.id}
+						title={store.studyTitleOf(selectedTopic)}
+					/>
+					<div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
 						{isContentLoading ? (
 							<StudyStatusBadgeSkeleton />
 						) : (
 							<StudyStatusBadge status={status} />
 						)}
-						{status.kind === "done" && !isPersonaBuild && !isContentLoading ? (
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
-								aria-expanded={stepperOpen}
-								onClick={() => setStepperOpen((open) => !open)}
-							>
-								{t("study.progressToggle", {
+						{!isPersonaBuild && !isContentLoading ? (
+							// The step bar doubles as the toggle for the full stepper once a study is done.
+							<button
+								type="button"
+								className={cn(
+									"flex shrink-0 items-center gap-1.5 rounded px-1 py-0.5 outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+									status.kind !== "done" && "pointer-events-none",
+								)}
+								aria-expanded={status.kind === "done" ? stepperOpen : undefined}
+								aria-label={t("study.progressToggle", {
 									done: status.completed,
 									total: status.total,
 								})}
-								<ChevronDown
-									className={cn(
-										"size-3.5 transition-transform",
-										stepperOpen && "rotate-180",
-									)}
-								/>
-							</Button>
+								onClick={() => setStepperOpen((open) => !open)}
+							>
+								<StudyProgressSegments status={status} className="w-16" />
+								{status.kind === "done" ? (
+									<ChevronDown
+										className={cn(
+											"size-3.5 transition-transform",
+											stepperOpen && "rotate-180",
+										)}
+									/>
+								) : null}
+							</button>
+						) : null}
+						{metaChips.length && !isMobile ? (
+							<span className="truncate">{metaChips.join(" · ")}</span>
 						) : null}
 					</div>
-					{metaChips.length && !isMobile ? (
-						<div className="flex flex-wrap items-center gap-1.5">
-							{metaChips.map((chip) => (
-								<span
-									key={chip}
-									className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
-								>
-									{chip}
-								</span>
-							))}
-						</div>
-					) : null}
 				</div>
 				{isMobile || store.studyPersonas.length === 0 ? null : (
 					// Who was interviewed, at a glance; the note keeps the AI-simulation context visible.
@@ -359,35 +358,28 @@ function ResearchStudioPage() {
 								/>
 							))}
 						</span>
-						{t("study.aiPanel", { count: store.studyPersonas.length })}
+						<span className="inline-flex items-center gap-1">
+							<Info className="size-3.5" />
+							{t("study.aiPanel", { count: store.studyPersonas.length })}
+						</span>
 					</button>
 				)}
 				{isMobile ? null : (
-					<MagicTooltip
-						title={
-							conversationCollapsed
-								? t("study.expandConversation")
-								: t("study.collapseConversation")
-						}
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-8 shrink-0 gap-1.5"
+						onClick={toggleConversation}
 					>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-8 shrink-0"
-							aria-label={
-								conversationCollapsed
-									? t("study.expandConversation")
-									: t("study.collapseConversation")
-							}
-							onClick={toggleConversation}
-						>
-							{conversationCollapsed ? (
-								<PanelRightOpen className="size-4" />
-							) : (
-								<PanelRightClose className="size-4" />
-							)}
-						</Button>
-					</MagicTooltip>
+						{conversationCollapsed ? (
+							<PanelRightOpen className="size-4" />
+						) : (
+							<PanelRightClose className="size-4" />
+						)}
+						{conversationCollapsed
+							? t("study.expandConversation")
+							: t("study.collapseConversation")}
+					</Button>
 				)}
 				<TopicSharePopover
 					// Shared research shows its results from study files; warn before hiding them.
@@ -398,9 +390,8 @@ function ResearchStudioPage() {
 					topicTitle={title}
 				>
 					<Button
-						variant="outline"
 						size={isMobile ? "icon" : "sm"}
-						className={cn(isMobile && "size-8")}
+						className={cn("h-8", isMobile && "size-8")}
 						aria-label={t("study.share")}
 					>
 						<Share2 className="size-4" />
