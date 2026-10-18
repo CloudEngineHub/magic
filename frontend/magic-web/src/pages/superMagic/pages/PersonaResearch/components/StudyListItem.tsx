@@ -29,7 +29,8 @@ interface StudyListItemProps {
 }
 
 /**
- * One study row: title, live status, 6-step progress and relative update time.
+ * One study row: title with method and scale, outcome (verdict mix or progress), status and
+ * relative update time.
  * Studies waiting for the user's answer get a subtle highlight so they are found first.
  */
 function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
@@ -42,61 +43,81 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 	const title = store.studyTitleOf(topic) || t("study.untitled")
 	const isPersonaBuild = study?.study_type === "persona_build"
 
+	const studyTypeLabel = study?.study_type
+		? {
+				user_research: t("studyType.userResearch"),
+				product_rnd: t("studyType.productRnd"),
+				concept_test: t("studyType.conceptTest"),
+				fast_insight: t("studyType.fastInsight"),
+				panel_only: t("studyType.panelOnly"),
+				persona_build: t("studyType.personaBuild"),
+			}[study.study_type]
+		: null
+	const meta = [
+		studyTypeLabel,
+		study?.limits?.personas && !isPersonaBuild
+			? t("study.scale", {
+					personas: study.limits.personas,
+					rounds: study.limits.interview_rounds ?? 5,
+				})
+			: null,
+	]
+		.filter(Boolean)
+		.join(" · ")
+	const hasVerdicts = Boolean(
+		study?.hypotheses?.some(
+			(item) => item.verdict !== "pending" && item.verdict !== "insufficient",
+		),
+	)
+
 	return (
 		<li
 			className={cn(
-				"group flex items-center gap-4 px-1 py-3.5 transition-colors hover:bg-muted/40",
+				// Columns as in the prototype: study, outcome, status, time, actions.
+				"group flex items-center gap-5 px-1 py-3.5 transition-colors hover:bg-muted/40",
 				status.kind === "waiting_user" && "bg-amber-500/[0.06]",
 			)}
 		>
 			<button
 				type="button"
-				className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				className="flex min-w-0 flex-1 flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				onClick={() => onOpen(topic)}
 			>
-				<span className="flex min-w-0 items-center gap-2">
-					<span className="truncate text-[14.5px] font-medium text-foreground">
-						{title}
+				<span className="truncate text-[14.5px] font-medium text-foreground">{title}</span>
+				{store.studyFilesReady ? (
+					<span className="truncate text-xs text-muted-foreground">
+						{meta ||
+							t("study.progress", { done: status.completed, total: status.total })}
 					</span>
-					{store.studyFilesReady ? (
-						<StudyStatusBadge status={status} />
-					) : (
-						<StudyStatusBadgeSkeleton />
-					)}
-				</span>
-				<span className="flex items-center gap-3">
-					{store.studyFilesReady ? (
-						<>
-							{/* Persona building has no research phases; its type replaces the 6-step progress. */}
-							{isPersonaBuild ? (
-								<span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-									{t("studyType.personaBuild")}
-								</span>
-							) : (
-								<StudyProgressSegments status={status} className="w-28" />
-							)}
-							<span className="text-xs text-muted-foreground">
-								{[
-									isPersonaBuild
-										? null
-										: t("study.progress", {
-												done: status.completed,
-												total: status.total,
-											}),
-									topic.updated_at
-										? dayjs(topic.updated_at).locale(dayjsLocale).fromNow()
-										: null,
-								]
-									.filter(Boolean)
-									.join(" · ")}
-							</span>
-						</>
-					) : (
-						<Skeleton className="h-3 w-48" />
-					)}
-				</span>
+				) : (
+					<Skeleton className="h-3 w-40" />
+				)}
 			</button>
-			{study?.hypotheses?.length ? <VerdictSummary study={study} /> : null}
+			{/* Outcome column: verdict mix once concluded, otherwise how far the study got. */}
+			<span className="hidden w-44 shrink-0 md:block">
+				{!store.studyFilesReady ? (
+					<Skeleton className="h-1.5 w-full" />
+				) : hasVerdicts && study ? (
+					<VerdictSummary study={study} />
+				) : isPersonaBuild ? null : (
+					<span className="flex flex-col gap-1.5">
+						<StudyProgressSegments status={status} className="w-full" />
+						<span className="text-xs tabular-nums text-muted-foreground">
+							{t("study.progress", { done: status.completed, total: status.total })}
+						</span>
+					</span>
+				)}
+			</span>
+			<span className="hidden w-20 shrink-0 sm:block">
+				{store.studyFilesReady ? (
+					<StudyStatusBadge status={status} />
+				) : (
+					<StudyStatusBadgeSkeleton />
+				)}
+			</span>
+			<span className="hidden w-16 shrink-0 text-right text-xs text-muted-foreground sm:block">
+				{topic.updated_at ? dayjs(topic.updated_at).locale(dayjsLocale).fromNow() : null}
+			</span>
 			<DropdownMenu>
 				<MagicTooltip title={t("home.moreActions")}>
 					<DropdownMenuTrigger asChild>
@@ -139,7 +160,7 @@ function VerdictSummary({ study }: { study: StudyFile }) {
 		{ count: refuted, className: "bg-rose-500", label: t("verdict.refuted") },
 	].filter((part) => part.count > 0)
 	return (
-		<span className="hidden w-40 shrink-0 flex-col gap-1.5 md:flex">
+		<span className="flex flex-col gap-1.5">
 			<span className="flex h-1.5 gap-0.5 overflow-hidden rounded-full">
 				{parts.map((part) => (
 					<span
