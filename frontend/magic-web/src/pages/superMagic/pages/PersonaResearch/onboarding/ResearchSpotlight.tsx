@@ -50,6 +50,7 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 	const [placed, setPlaced] = useState<{ anchor: string; left: number; top: number } | null>(null)
 	const cardRef = useRef<HTMLElement>(null)
 	const primaryRef = useRef<HTMLButtonElement>(null)
+	const rootRef = useRef<HTMLDivElement>(null)
 	const step = available[index]
 	const isLast = index === available.length - 1
 
@@ -106,9 +107,25 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 		}
 	}, [step])
 
+	// The card stays `invisible` until it is placed, and an invisible button cannot take focus, so
+	// focus moves in once the current step's card is shown rather than when the index changes.
+	const isPlaced = Boolean(step && placed?.anchor === step.anchor)
 	useEffect(() => {
-		primaryRef.current?.focus({ preventScroll: true })
-	}, [index])
+		if (isPlaced) primaryRef.current?.focus({ preventScroll: true })
+	}, [index, isPlaced])
+
+	// Keep keyboard focus inside the tour (it is a modal dialog). This also catches focus handed
+	// back late by a closing dialog — replaying from the help dialog restores focus to its trigger
+	// after the tour has already opened.
+	useEffect(() => {
+		const handleFocusIn = (event: FocusEvent) => {
+			const root = rootRef.current
+			if (!root || root.contains(event.target as Node)) return
+			primaryRef.current?.focus({ preventScroll: true })
+		}
+		document.addEventListener("focusin", handleFocusIn)
+		return () => document.removeEventListener("focusin", handleFocusIn)
+	}, [])
 
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
@@ -121,13 +138,13 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 	}, [onClose])
 
 	if (!step) return null
-	const cardPosition =
-		placed?.anchor === step.anchor ? { left: placed.left, top: placed.top } : null
+	const cardPosition = isPlaced && placed ? { left: placed.left, top: placed.top } : null
 
 	return createPortal(
 		// Full-screen layer: the page underneath is not clickable while the tour is up, so a
 		// stray click cannot start a study or navigate away mid-explanation.
 		<div
+			ref={rootRef}
 			className="fixed inset-0 z-[1200] text-foreground"
 			role="dialog"
 			aria-modal="true"

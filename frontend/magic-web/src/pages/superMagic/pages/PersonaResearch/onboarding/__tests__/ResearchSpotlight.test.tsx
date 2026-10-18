@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import ResearchSpotlight from "../ResearchSpotlight"
 
@@ -72,6 +72,18 @@ describe("ResearchSpotlight", () => {
 
 		fireEvent.keyDown(window, { key: "Escape" })
 		expect(onClose).toHaveBeenCalledWith("skipped")
+	})
+
+	it("moves focus to the card once shown and keeps it there", async () => {
+		const outside = document.createElement("button")
+		document.body.appendChild(outside)
+		render(<ResearchSpotlight steps={steps} finishLabel="Start" onClose={vi.fn()} />)
+		const primary = screen.getByTestId("research-onboarding-primary")
+		await waitFor(() => expect(document.activeElement).toBe(primary))
+
+		// A closing dialog handing focus back to its trigger must not pull it out of the tour.
+		outside.focus()
+		expect(document.activeElement).toBe(primary)
 	})
 
 	it("reports an empty tour when no anchor is rendered", () => {
