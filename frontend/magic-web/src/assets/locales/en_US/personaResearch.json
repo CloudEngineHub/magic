@@ -12,6 +12,8 @@
 		"empty": "Once the study reaches the output phase, the theme matrix, dimension chart and evidence per theme appear here.",
 		"emptyLegacy": "This study was created before the analysis board and has no structured analysis.",
 		"emptyTitle": "No analysis yet",
+		"homogeneityText": "Every respondent agreed on {{count}} themes, which may be model homogeneity rather than strong evidence. Validate these themes with real people first.",
+		"homogeneityTitle": "AI respondents answered almost alike",
 		"matrixHint": "Click a cell or theme to see quotes",
 		"matrixTitle": "Themes × personas",
 		"newThemesTrend": "New themes per respondent",
@@ -249,7 +251,8 @@
 		"doubleBarreled": "Double-barreled",
 		"hypothesisReveal": "Reveals hypothesis",
 		"jargon": "Too much jargon",
-		"leading": "Leading question"
+		"leading": "Leading question",
+		"sequencePriming": "Question order primes answers"
 	},
 	"home": {
 		"barSubtitle": "Simulated consumer interviews",
@@ -279,6 +282,8 @@
 	},
 	"hypothesis": {
 		"aiOnly": "AI interviews only, no external check",
+		"coversContext": "Background",
+		"coversCore": "Core claim",
 		"decision": "Decision this study informs",
 		"empty": "Once the plan is confirmed, the hypotheses and their criteria appear here.",
 		"emptyLegacy": "This study was created before hypotheses were tracked.",
@@ -289,12 +294,16 @@
 		"openRound": "Round {{index}} · see context",
 		"openTranscript": "See interview context",
 		"progress": "{{decided}}/{{total}} judged",
+		"prompted": "Prompted",
+		"promptedBy": "The moderator raised this first: \"{{question}}\"",
+		"promptedHint": "The moderator raised this idea before the persona said it, so it is weaker evidence",
 		"quotedFrom": "Quotes from {{count}} interviewees",
 		"realPeople": "Real people",
 		"reason": "Why: ",
 		"refuteIf": "Refuted if",
 		"ruleHint": "AI-only evidence can at most be “partly supported”",
 		"showDetails": "Criteria and more quotes",
+		"sourceClaims": "What the sources say",
 		"sourceCount": "{{count}} external sources",
 		"stance": {
 			"none": "Not mentioned",
@@ -528,6 +537,7 @@
 		"resizePanels": "Resize conversation and outputs",
 		"scale": "{{personas}} people × {{rounds}} rounds",
 		"share": "Share",
+		"socialSampled": "Social sampled: {{platforms}}",
 		"untitled": "Untitled study"
 	},
 	"studyType": {

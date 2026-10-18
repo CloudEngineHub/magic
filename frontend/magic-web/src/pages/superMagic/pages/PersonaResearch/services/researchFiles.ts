@@ -188,8 +188,14 @@ const evidenceRefSchema = z.union([
 		round_index: optionalIndex,
 		text: z.string(),
 		file: optionalString,
+		prompted: z.boolean().optional().catch(undefined),
 	}),
-	z.object({ kind: z.literal("source"), ref: z.string() }),
+	z.object({
+		kind: z.literal("source"),
+		ref: z.string(),
+		claim: optionalString,
+		covers: z.enum(["core", "context"]).optional().catch(undefined),
+	}),
 ])
 
 const quoteRefSchema = z.object({
@@ -198,6 +204,8 @@ const quoteRefSchema = z.object({
 	file: optionalString,
 	round_index: optionalIndex,
 	text: z.string(),
+	prompted: z.boolean().optional().catch(undefined),
+	question: optionalString,
 })
 
 const hypothesisSchema = z.object({
@@ -263,7 +271,13 @@ const studySchema = z.object({
 		.object({
 			items: validItems(
 				z.object({
-					issue: z.enum(["leading", "double_barreled", "hypothesis_reveal", "jargon"]),
+					issue: z.enum([
+						"leading",
+						"double_barreled",
+						"hypothesis_reveal",
+						"jargon",
+						"sequence_priming",
+					]),
 					before: z.string(),
 					after: z.string(),
 				}),
@@ -272,6 +286,16 @@ const studySchema = z.object({
 		.optional()
 		.catch(undefined),
 	validated_count: z.number().int().nonnegative().optional().catch(undefined),
+	social_sampling: z
+		.object({
+			status: z.enum(["sampled", "unavailable", "not_relevant"]).catch("unavailable"),
+			platforms: z.array(z.string()).catch([]),
+			posts: z.number().int().nonnegative().catch(0),
+			comments: z.number().int().nonnegative().catch(0),
+			note: optionalString,
+		})
+		.optional()
+		.catch(undefined),
 })
 
 const personaSchema = z.object({
@@ -426,6 +450,13 @@ const synthesisSchema = z.object({
 		.object({
 			new_themes_per_interview: z.array(z.number().nonnegative()),
 			saturated: z.boolean(),
+		})
+		.optional()
+		.catch(undefined),
+	homogeneity: z
+		.object({
+			unanimous_theme_ids: z.array(z.string()).catch([]),
+			warning: z.boolean().catch(false),
 		})
 		.optional()
 		.catch(undefined),

@@ -64,32 +64,47 @@ export function quotedPersonaIds(hypothesis: Pick<StudyHypothesis, "evidence_ref
 	return ids
 }
 
-export type LeadQuoteRef = Pick<QuoteRef, "persona_id" | "text" | "round_index" | "file">
+export type LeadQuoteRef = Pick<
+	QuoteRef,
+	"persona_id" | "text" | "round_index" | "file" | "prompted" | "question"
+>
 
 /**
- * The quote that represents a hypothesis: its first quoted evidence, else the first quote of a
- * synthesis theme linked to it. Many studies cite interviews only through themes, so without
- * the fallback their hypotheses would show no voice at all.
+ * The quote that represents a hypothesis: its own quoted evidence first, else a quote from a
+ * synthesis theme linked to it (many studies cite interviews only through themes).
+ * Preference order: said unprompted, then a full sentence (theme quotes are often clipped).
+ * Example: an unprompted "录完谁给我整理？" beats a longer quote the moderator's question led to.
  */
 export function leadQuote(
 	hypothesis: Pick<StudyHypothesis, "id" | "evidence_refs">,
 	themes: Pick<SynthesisTheme, "hypothesis_ids" | "quote_refs">[] = [],
 ): LeadQuoteRef | null {
-	const own = (hypothesis.evidence_refs ?? []).find(
+	const own = (hypothesis.evidence_refs ?? []).filter(
 		(ref): ref is QuoteEvidence => ref.kind === "quote",
 	)
-	if (own) return own
+	if (own.length) return own.find((ref) => !ref.prompted) ?? own[0]
 	const candidates = themes
 		.filter((theme) => theme.hypothesis_ids?.includes(hypothesis.id))
 		.flatMap((theme) => theme.quote_refs ?? [])
 		.filter((ref) => ref.text.trim())
-	// Theme quotes are often clipped fragments; prefer one that reads as a full sentence.
 	return (
+		candidates.find((ref) => !ref.prompted && isReadableLength(ref.text)) ??
 		candidates.find((ref) => isReadableLength(ref.text)) ??
 		candidates.reduce<LeadQuoteRef | null>(
 			(best, ref) => (!best || ref.text.length > best.text.length ? ref : best),
 			null,
 		)
+	)
+}
+
+/** Desk-research sources cited with what they say, for the hypothesis details. */
+export function sourceClaims(
+	hypothesis: Pick<StudyHypothesis, "evidence_refs">,
+): { ref: string; claim: string; covers?: "core" | "context" }[] {
+	return (hypothesis.evidence_refs ?? []).flatMap((ref) =>
+		ref.kind === "source" && ref.claim?.trim()
+			? [{ ref: ref.ref, claim: ref.claim.trim(), covers: ref.covers }]
+			: [],
 	)
 }
 

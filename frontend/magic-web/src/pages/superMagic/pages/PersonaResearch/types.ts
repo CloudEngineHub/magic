@@ -48,8 +48,23 @@ export type AgreementLevel = "agree" | "partial" | "disagree"
 
 /** Points to one transcript round or one desk-research source ("S3"). */
 export type EvidenceRef =
-	| { kind: "quote"; persona_id: string; round_index?: number; text: string; file?: string }
-	| { kind: "source"; ref: string }
+	| {
+			kind: "quote"
+			persona_id: string
+			round_index?: number
+			text: string
+			file?: string
+			/** The moderator's question already named this idea before the persona said it. */
+			prompted?: boolean
+	  }
+	| {
+			kind: "source"
+			ref: string
+			/** What the source says about this hypothesis, in one sentence. */
+			claim?: string
+			/** core: states the hypothesis' core claim; context: background only. */
+			covers?: "core" | "context"
+	  }
 
 export interface StudyHypothesis {
 	id: string
@@ -68,7 +83,8 @@ export interface StudyQuota {
 	count: number
 }
 
-export type GuideIssue = "leading" | "double_barreled" | "hypothesis_reveal" | "jargon"
+export type GuideIssue =
+	"leading" | "double_barreled" | "hypothesis_reveal" | "jargon" | "sequence_priming"
 
 export interface StudyFile {
 	schema_version: 1
@@ -89,6 +105,14 @@ export interface StudyFile {
 	guide_review?: { items: { issue: GuideIssue; before: string; after: string }[] }
 	/** Real respondents compared so far; drives the "validated N people" stepper label. */
 	validated_count?: number
+	/** Whether desk research sampled social platforms directly (methods.md "Real Voices"). */
+	social_sampling?: {
+		status: "sampled" | "unavailable" | "not_relevant"
+		platforms: string[]
+		posts: number
+		comments: number
+		note?: string
+	}
 }
 
 /** "manual": written by the user in the persona library, never re-tiered by the agent. */
@@ -215,6 +239,10 @@ export interface QuoteRef {
 	file?: string
 	round_index?: number
 	text: string
+	/** The moderator's question already named this idea before the persona said it. */
+	prompted?: boolean
+	/** The moderator question this quote answered. */
+	question?: string
 }
 
 export interface SynthesisTheme {
@@ -242,6 +270,8 @@ export interface SynthesisFile {
 	themes: SynthesisTheme[]
 	dimensions?: SynthesisDimension[]
 	saturation?: { new_themes_per_interview: number[]; saturated: boolean }
+	/** Themes every interviewee agreed on; warning means the panel may be answering alike. */
+	homogeneity?: { unanimous_theme_ids: string[]; warning: boolean }
 }
 
 export interface ValidationResultsFile {

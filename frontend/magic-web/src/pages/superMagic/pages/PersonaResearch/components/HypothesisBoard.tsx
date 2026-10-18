@@ -33,6 +33,7 @@ import {
 	hypothesisStanceGroups,
 	leadQuote,
 	quotedPersonaIds,
+	sourceClaims,
 	sourceRefs,
 	splitSourceTokens,
 	type LeadQuoteRef,
@@ -166,6 +167,7 @@ const HypothesisCard = observer(function HypothesisCard({
 	const themes = store.synthesis?.themes ?? []
 	const lead = leadQuote(hypothesis, themes)
 	const sources = sourceRefs(hypothesis)
+	const claims = sourceClaims(hypothesis)
 	const moreQuotes = (hypothesis.evidence_refs ?? []).filter(
 		(ref): ref is QuoteEvidence => ref.kind === "quote" && ref !== lead,
 	)
@@ -178,6 +180,7 @@ const HypothesisCard = observer(function HypothesisCard({
 		hypothesis.support_criteria ||
 		hypothesis.refute_criteria ||
 		hypothesis.validation?.summary ||
+		claims.length ||
 		moreQuotes.length,
 	)
 
@@ -353,6 +356,45 @@ const HypothesisCard = observer(function HypothesisCard({
 								{hypothesis.validation.summary}
 							</p>
 						) : null}
+						{claims.length ? (
+							// What each cited source actually says; only "core" sources can carry a verdict.
+							<div className="flex flex-col gap-1.5">
+								<span className="text-muted-foreground">
+									{t("hypothesis.sourceClaims")}
+								</span>
+								<ul className="flex flex-col gap-1">
+									{claims.map((item) => (
+										<li key={item.ref} className="flex gap-2 leading-5">
+											<button
+												type="button"
+												disabled={!onOpenSources}
+												onClick={onOpenSources}
+												className="shrink-0 font-mono text-[11px] text-sky-700 underline decoration-dotted underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring enabled:hover:text-sky-900 dark:text-sky-400"
+											>
+												[{item.ref}]
+											</button>
+											<span className="min-w-0 flex-1 text-foreground">
+												{item.claim}
+											</span>
+											{item.covers ? (
+												<span
+													className={cn(
+														"shrink-0 rounded px-1.5 text-[11px]",
+														item.covers === "core"
+															? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+															: "bg-muted text-muted-foreground",
+													)}
+												>
+													{item.covers === "core"
+														? t("hypothesis.coversCore")
+														: t("hypothesis.coversContext")}
+												</span>
+											) : null}
+										</li>
+									))}
+								</ul>
+							</div>
+						) : null}
 						{moreQuotes.length ? (
 							<div className="flex flex-col gap-1.5">
 								<span className="text-muted-foreground">
@@ -400,6 +442,20 @@ const LeadQuote = observer(function LeadQuote({
 			<span className="flex items-center gap-1.5 text-[11.5px] text-white/75">
 				<Quote className="size-3.5" />
 				{t("hypothesis.leadQuote")}
+				{quote.prompted ? (
+					// Said only after the moderator raised the idea: weaker evidence, so say so.
+					<MagicTooltip
+						title={
+							quote.question
+								? t("hypothesis.promptedBy", { question: quote.question })
+								: t("hypothesis.promptedHint")
+						}
+					>
+						<span className="ml-auto rounded-full bg-white/15 px-2 py-0.5 text-[11px] text-white/90">
+							{t("hypothesis.prompted")}
+						</span>
+					</MagicTooltip>
+				) : null}
 			</span>
 			<HangingQuote
 				text={quote.text}
@@ -561,6 +617,7 @@ const StudyDesign = observer(function StudyDesign() {
 		double_barreled: t("guide.doubleBarreled"),
 		hypothesis_reveal: t("guide.hypothesisReveal"),
 		jargon: t("guide.jargon"),
+		sequence_priming: t("guide.sequencePriming"),
 	}
 	// Actual personas per segment come from the study panel's selection.
 	const actualBySegment = new Map<string, number>()

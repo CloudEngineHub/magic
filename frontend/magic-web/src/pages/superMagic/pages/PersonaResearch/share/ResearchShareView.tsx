@@ -117,6 +117,10 @@ const ResearchShareBody = observer(function ResearchShareBody({
 					rounds: study.limits.interview_rounds ?? 5,
 				})
 			: null,
+		// Only platforms that desk research actually sampled; unavailable or skipped sampling shows nothing.
+		study?.social_sampling?.status === "sampled" && study.social_sampling.platforms.length
+			? t("study.socialSampled", { platforms: study.social_sampling.platforms.join(" / ") })
+			: null,
 	].filter((chip): chip is string => Boolean(chip))
 
 	const copyLink = () => {

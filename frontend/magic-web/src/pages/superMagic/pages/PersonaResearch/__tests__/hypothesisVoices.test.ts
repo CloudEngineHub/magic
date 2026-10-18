@@ -3,6 +3,7 @@ import {
 	hypothesisStanceGroups,
 	leadQuote,
 	quotedPersonaIds,
+	sourceClaims,
 	sourceRefs,
 	splitSourceTokens,
 } from "../services/hypothesisVoices"
@@ -104,6 +105,45 @@ describe("evidence helpers", () => {
 				},
 			])?.persona_id,
 		).toBe("b")
+	})
+
+	it("prefers an unprompted quote, from the hypothesis or its themes", () => {
+		expect(
+			leadQuote({
+				id: "H1",
+				evidence_refs: [
+					{
+						kind: "quote",
+						persona_id: "a",
+						text: "被问到才这么说的一句话",
+						prompted: true,
+					},
+					{ kind: "quote", persona_id: "b", text: "自己主动说出来的一句话" },
+				],
+			})?.persona_id,
+		).toBe("b")
+		expect(
+			leadQuote({ id: "H1" }, [
+				{
+					hypothesis_ids: ["H1"],
+					quote_refs: [
+						{ persona_id: "a", text: "主持人提到之后才说的完整一句话", prompted: true },
+						{ persona_id: "b", text: "没人提起时自己说出的完整一句话" },
+					],
+				},
+			])?.persona_id,
+		).toBe("b")
+	})
+
+	it("lists source claims with their coverage", () => {
+		expect(
+			sourceClaims({
+				evidence_refs: [
+					{ kind: "source", ref: "S1", claim: "多数用户因自动续费放弃", covers: "core" },
+					{ kind: "source", ref: "S2" },
+				],
+			}),
+		).toEqual([{ ref: "S1", claim: "多数用户因自动续费放弃", covers: "core" }])
 	})
 
 	it("splits inline source tokens out of the reason", () => {

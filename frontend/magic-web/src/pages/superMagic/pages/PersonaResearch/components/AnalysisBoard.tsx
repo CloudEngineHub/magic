@@ -1,4 +1,4 @@
-import { ChartColumn, Globe, Layers3, Mic, UserCheck, Waves } from "lucide-react"
+import { ChartColumn, Globe, Layers3, Mic, TriangleAlert, UserCheck, Waves } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import {
@@ -68,6 +68,22 @@ function AnalysisBoard({ onOpenQuote, onOpenSources }: AnalysisBoardProps) {
 	return (
 		<ScrollArea className="h-full">
 			<div className="mx-auto flex max-w-5xl flex-col gap-6 p-4">
+				{synthesis.homogeneity?.warning ? (
+					// Unanimous AI answers read as strong evidence but often mean the model answered alike.
+					<div className="flex items-start gap-2.5 rounded-xl bg-amber-500/10 p-3 text-xs leading-5">
+						<TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+						<div className="flex flex-col gap-0.5">
+							<span className="font-medium text-foreground">
+								{t("analysis.homogeneityTitle")}
+							</span>
+							<span className="text-muted-foreground">
+								{t("analysis.homogeneityText", {
+									count: synthesis.homogeneity.unanimous_theme_ids.length,
+								})}
+							</span>
+						</div>
+					</div>
+				) : null}
 				{saturation ? (
 					<div
 						className={cn(

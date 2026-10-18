@@ -12,6 +12,8 @@
 		"empty": "研究进入产出阶段后，这里会出现主题矩阵、维度图和每个主题的证据。",
 		"emptyLegacy": "这项研究创建于分析看板之前，没有结构化分析数据。",
 		"emptyTitle": "还没有分析结果",
+		"homogeneityText": "有 {{count}} 个主题所有受访者都同意，可能是模型同质化，而不是强证据。请优先用真人问卷验证这些主题。",
+		"homogeneityTitle": "AI 受访者答得高度一致",
 		"matrixHint": "点击色块或主题查看原话",
 		"matrixTitle": "主题 × 人设矩阵",
 		"newThemesTrend": "每位受访者带来的新主题数",
@@ -247,7 +249,8 @@
 		"doubleBarreled": "一问两事",
 		"hypothesisReveal": "暴露假设",
 		"jargon": "术语太多",
-		"leading": "诱导性提问"
+		"leading": "诱导性提问",
+		"sequencePriming": "问题顺序引导"
 	},
 	"home": {
 		"barSubtitle": "虚拟消费者调研",
@@ -277,6 +280,8 @@
 	},
 	"hypothesis": {
 		"aiOnly": "仅 AI 访谈，无外部对照",
+		"coversContext": "背景",
+		"coversCore": "核心主张",
 		"decision": "这项研究要支持的决定",
 		"empty": "研究计划确认后，这里会列出要验证的假设和判定标准。",
 		"emptyLegacy": "这项研究创建于假设功能之前，没有记录假设。",
@@ -287,12 +292,16 @@
 		"openRound": "第 {{index}} 轮 · 看上下文",
 		"openTranscript": "看访谈上下文",
 		"progress": "已判定 {{decided}}/{{total}} 条",
+		"prompted": "被问到才说",
+		"promptedBy": "主持人先提到了这个意思：「{{question}}」",
+		"promptedHint": "主持人先提到了这个意思，受访者才这样说，证据较弱",
 		"quotedFrom": "引用了 {{count}} 位受访者",
 		"realPeople": "真人验证",
 		"reason": "判定理由：",
 		"refuteIf": "什么情况算推翻",
 		"ruleHint": "只有 AI 访谈支持的结论，最高判“部分支持”",
 		"showDetails": "判据与更多原话",
+		"sourceClaims": "来源说了什么",
 		"sourceCount": "{{count}} 条外部来源",
 		"stance": {
 			"none": "未提及",
@@ -526,6 +535,7 @@
 		"resizePanels": "调整对话与产出区宽度",
 		"scale": "{{personas}} 人 × {{rounds}} 轮",
 		"share": "分享",
+		"socialSampled": "社媒采样：{{platforms}}",
 		"untitled": "未命名研究"
 	},
 	"studyType": {
