@@ -15,6 +15,8 @@ export interface ResearchMentionCatalogLabels {
 	personas: string
 	outputs: string
 	interviews: string
+	/** Readable names of the study outputs; the file name becomes the subtitle. */
+	outputNames: { report: string; plan: string; validation: string; deskResearch: string }
 	/** Transcript label for one persona, e.g. "王浩 · 访谈记录". */
 	interviewOf: (personaName: string) => string
 }
@@ -43,7 +45,7 @@ function toFileMention(
 ): MentionItem | null {
 	const fileId = file.file_id ? String(file.file_id) : ""
 	if (!fileId) return null
-	const realName = String(file.file_name ?? file.filename ?? "")
+	const realName = fileNameOf(file)
 	const extension = String(file.file_extension ?? realName.split(".").pop() ?? "")
 	const name = options.label || realName
 	const path = normalizeProjectReferencePath(file.relative_file_path ?? getAttachmentPath(file))
@@ -70,6 +72,10 @@ function toFileMention(
 	}
 }
 
+function fileNameOf(file: AttachmentItem): string {
+	return String(file.file_name ?? file.filename ?? "")
+}
+
 function compact(items: Array<MentionItem | null>): MentionItem[] {
 	return items.filter((item): item is MentionItem => item !== null)
 }
@@ -79,8 +85,8 @@ function compact(items: Array<MentionItem | null>): MentionItem[] {
  *
  * | Group      | Rows                                                         |
  * | personas   | avatar + persona name, tagline as subtitle                   |
- * | outputs    | report.html, plan.md, validation-questionnaire.md, desk-research.md (existing only) |
- * | interviews | interviews/<id>.json, labelled with the persona's name       |
+ * | outputs    | 研究报告 / 研究方案 / 验证问卷 / 市场洞察 (existing only), file name as subtitle |
+ * | interviews | interviews/<id>.json, labelled with the persona's name, file name as subtitle |
  *
  * Empty groups are dropped by the panel; a study without files gives no entry at all.
  */
@@ -98,9 +104,17 @@ export function buildResearchMentionCatalog(
 			}),
 		),
 	)
+	const { outputNames } = labels
 	const outputs = compact(
-		[study.report, study.plan, study.validation, study.deskResearch].map((file) =>
-			file ? toFileMention(file, { projectId }) : null,
+		(
+			[
+				[study.report, outputNames.report],
+				[study.plan, outputNames.plan],
+				[study.validation, outputNames.validation],
+				[study.deskResearch, outputNames.deskResearch],
+			] as const
+		).map(([file, label]) =>
+			file ? toFileMention(file, { label, description: fileNameOf(file), projectId }) : null,
 		),
 	)
 	// Transcripts follow the persona order above instead of their file names.
@@ -119,6 +133,7 @@ export function buildResearchMentionCatalog(
 				const personaName = personaId ? input.personaNameById(personaId) : undefined
 				return toFileMention(file, {
 					label: personaName ? labels.interviewOf(personaName) : undefined,
+					description: personaName ? fileNameOf(file) : undefined,
 					projectId,
 				})
 			}),

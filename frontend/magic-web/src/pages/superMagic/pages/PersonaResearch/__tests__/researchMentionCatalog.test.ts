@@ -18,6 +18,12 @@ const labels = {
 	personas: "受访人设",
 	outputs: "研究产物",
 	interviews: "访谈记录",
+	outputNames: {
+		report: "研究报告",
+		plan: "研究方案",
+		validation: "验证问卷",
+		deskResearch: "市场洞察",
+	},
 	interviewOf: (name: string) => `${name} · 访谈记录`,
 }
 
@@ -51,7 +57,7 @@ describe("buildResearchMentionCatalog", () => {
 		)
 		expect(byGroup).toEqual({
 			personas: ["王浩"],
-			outputs: ["report.html", "plan.md", "desk-research.md"],
+			outputs: ["研究报告", "研究方案", "市场洞察"],
 			// An unparsed transcript keeps its file name.
 			interviews: ["王浩 · 访谈记录", "p_b.json"],
 		})
@@ -75,6 +81,7 @@ describe("buildResearchMentionCatalog", () => {
 				project_id: "project-1",
 			},
 		})
+		expect(transcriptRow?.description).toBe("p_a.json")
 		expect(transcriptRow?.data).toMatchObject({
 			file_name: "王浩 · 访谈记录",
 			file_path: "studies/x/interviews/p_a.json",
@@ -106,5 +113,15 @@ describe("buildResearchMentionCatalog", () => {
 			"刘燕 · 访谈记录",
 			"王浩 · 访谈记录",
 		])
+	})
+
+	it("labels outputs by role and keeps the file name as the subtitle", () => {
+		const [report] = build(["studies/x/report.html"]).groups[1].items
+
+		expect(report).toMatchObject({
+			name: "研究报告",
+			description: "report.html",
+			data: { file_name: "研究报告", file_path: "studies/x/report.html" },
+		})
 	})
 })

@@ -30,6 +30,13 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 			personas: t("mention.personas"),
 			outputs: t("mention.outputs"),
 			interviews: t("mention.interviews"),
+			// Same names as the workspace tabs, so a file reads the same everywhere.
+			outputNames: {
+				report: t("console.docReport"),
+				plan: t("console.docPlan"),
+				validation: t("console.docValidation"),
+				deskResearch: t("console.docDeskResearch"),
+			},
 			interviewOf: (name: string) => t("mention.interviewOf", { name }),
 		}
 		const dispose = autorun(() => {
