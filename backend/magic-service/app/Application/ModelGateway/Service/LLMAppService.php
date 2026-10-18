@@ -129,7 +129,7 @@ class LLMAppService extends AbstractLLMAppService
         ModelListType $type = ModelListType::ALL,
         array $businessParams = [],
         bool $withDynamicModels = false,
-        bool $withOrganizationModels = false,
+        ?bool $withOrganizationModels = null,
     ): array {
         $dataIsolation = $this->createModelGatewayDataIsolationByAccessToken($accessToken, $businessParams);
         $accessContext = $withDynamicModels
