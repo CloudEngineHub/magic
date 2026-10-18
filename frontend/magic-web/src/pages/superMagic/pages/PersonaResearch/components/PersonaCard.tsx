@@ -1,9 +1,10 @@
-import { CircleAlert, CircleCheck, Loader2, Quote, Target } from "lucide-react"
+import { CircleAlert, CircleCheck, Loader2, Target } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/utils/cn"
 import type { InterviewFile, PersonaFile, PersonaTier } from "../types"
 import PersonaAvatar from "./PersonaAvatar"
+import { CARD_SURFACE } from "./surface"
 
 interface PersonaCardProps {
 	persona: PersonaFile
@@ -46,11 +47,10 @@ export default function PersonaCard({
 	return (
 		<div
 			className={cn(
-				"group relative flex h-full flex-col gap-3 rounded-xl border bg-card p-3.5 text-left",
+				CARD_SURFACE,
+				"group relative flex h-full flex-col gap-3 p-4 text-left",
 				"transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none motion-reduce:transition-none",
-				selected
-					? "border-primary ring-1 ring-primary"
-					: "border-border hover:border-primary/30",
+				selected ? "ring-2 ring-primary" : "hover:ring-primary/30",
 			)}
 			data-testid="persona-research-persona-card"
 		>
@@ -91,18 +91,17 @@ export default function PersonaCard({
 				{reason ? (
 					<span className="flex gap-1.5 text-xs leading-5 text-muted-foreground">
 						<Target className="mt-0.5 size-3 shrink-0" />
-						<span className="line-clamp-2">{reason}</span>
+						<span className="line-clamp-1">{reason}</span>
 					</span>
 				) : null}
 				{quote ? (
-					<span className="flex gap-1.5 rounded-lg bg-muted/60 px-2.5 py-2 text-xs leading-5 text-foreground/80">
-						<Quote className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
-						<span className="line-clamp-2">{quote}</span>
+					<span className="relative rounded-lg bg-muted/60 py-2 pl-3 pr-2.5 text-[13px] leading-5 text-foreground before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-primary/30">
+						<span className="line-clamp-2">“{quote}”</span>
 					</span>
 				) : null}
 				{persona.tags?.length ? (
 					<span className="flex flex-wrap gap-1">
-						{persona.tags.slice(0, 3).map((tag) => (
+						{persona.tags.slice(0, 2).map((tag) => (
 							<span
 								key={tag}
 								className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
@@ -113,8 +112,8 @@ export default function PersonaCard({
 					</span>
 				) : null}
 			</button>
-			<div className="mt-auto flex items-center justify-between border-t border-border pt-2 text-[11px] text-muted-foreground">
-				<span>
+			<div className="mt-auto flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
+				<span className="rounded-full bg-muted px-2 py-0.5">
 					{tierLabel} · {t("persona.aiSimulated")}
 				</span>
 				{interviewStatus ? <InterviewStatusChip status={interviewStatus} /> : null}

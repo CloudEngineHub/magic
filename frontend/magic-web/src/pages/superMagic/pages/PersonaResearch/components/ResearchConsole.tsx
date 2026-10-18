@@ -254,11 +254,11 @@ function ResearchConsole({
 				</p>
 			) : null}
 
-			<TabsContent value="hypotheses" className="mt-0 min-h-0 flex-1">
+			<TabsContent value="hypotheses" className="mt-0 min-h-0 flex-1 bg-muted/40">
 				<HypothesisBoard onOpenQuote={openQuote} onOpenSources={openSources} />
 			</TabsContent>
 
-			<TabsContent value="personas" className="mt-0 min-h-0 flex-1">
+			<TabsContent value="personas" className="mt-0 min-h-0 flex-1 bg-muted/40">
 				<PersonaPanel variant={variant} onOpenPersona={onOpenPersona} />
 			</TabsContent>
 
@@ -343,7 +343,7 @@ function ResearchConsole({
 				)}
 			</TabsContent>
 
-			<TabsContent value="analysis" className="mt-0 min-h-0 flex-1">
+			<TabsContent value="analysis" className="mt-0 min-h-0 flex-1 bg-muted/40">
 				<AnalysisBoard onOpenQuote={openQuote} onOpenSources={openSources} />
 			</TabsContent>
 
@@ -383,7 +383,7 @@ function ResearchConsole({
 				) : null}
 			</TabsContent>
 
-			<TabsContent value="validation" className="mt-0 min-h-0 flex-1">
+			<TabsContent value="validation" className="mt-0 min-h-0 flex-1 bg-muted/40">
 				<ValidationPane
 					onRequestUpload={onRequestValidationUpload}
 					onOpenFile={onOpenFile}

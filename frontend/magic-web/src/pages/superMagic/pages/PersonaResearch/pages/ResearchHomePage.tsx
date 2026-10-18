@@ -43,6 +43,7 @@ import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
 import { useResearchTemplates } from "../hooks/useResearchTemplates"
 import PersonaAvatar from "../components/PersonaAvatar"
+import ResearchHeroBackdrop from "../components/ResearchHeroBackdrop"
 import StudyListItem from "../components/StudyListItem"
 
 /** Research home: ask a business question, pick a template, or reopen a study. */
@@ -105,11 +106,7 @@ function ResearchHomePage() {
 	return (
 		<ScrollArea className="h-full bg-background" data-testid="persona-research-home">
 			<div className="relative">
-				{/* Soft ambient glow behind the hero; decorative only and kept behind content. */}
-				<div
-					aria-hidden
-					className="pointer-events-none absolute inset-x-0 top-0 -z-0 mx-auto h-64 max-w-3xl rounded-full bg-primary/10 blur-3xl"
-				/>
+				<ResearchHeroBackdrop />
 				<div
 					className={cn(
 						"relative mx-auto flex w-full max-w-4xl flex-col",

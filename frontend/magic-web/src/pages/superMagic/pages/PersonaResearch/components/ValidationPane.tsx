@@ -16,6 +16,7 @@ import { usePersonaResearchStore } from "../context"
 import type { AgreementLevel } from "../types"
 import MarkdownFilePane from "./MarkdownFilePane"
 import { AgreementBadge, VerdictBadge } from "./ResearchBadges"
+import { CARD_SURFACE } from "./surface"
 
 interface ValidationPaneProps {
 	/** Switches to the conversation and prefills the "compare real answers" request. */
@@ -62,7 +63,7 @@ function ValidationPane({ onRequestUpload, onOpenFile }: ValidationPaneProps) {
 	return (
 		<ScrollArea className="h-full">
 			<div className="mx-auto flex max-w-3xl flex-col gap-5 p-4">
-				<div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
+				<div className={cn(CARD_SURFACE, "flex flex-wrap items-center gap-2 p-3")}>
 					<Users className="size-4 text-muted-foreground" />
 					<span className="flex-1 text-sm">
 						{results
@@ -84,12 +85,12 @@ function ValidationPane({ onRequestUpload, onOpenFile }: ValidationPaneProps) {
 				{results ? (
 					<section className="flex flex-col gap-3">
 						{results.summary ? (
-							<p className="rounded-xl bg-primary/5 p-3.5 text-sm leading-6">
+							<p className={cn(CARD_SURFACE, "p-3.5 text-sm leading-6")}>
 								{results.summary}
 							</p>
 						) : null}
 						<h3 className="text-sm font-semibold">{t("validation.byHypothesis")}</h3>
-						<div className="overflow-x-auto rounded-xl border border-border">
+						<div className={cn(CARD_SURFACE, "overflow-x-auto")}>
 							<table className="w-full border-collapse text-xs">
 								<thead className="bg-muted/40 text-left text-muted-foreground">
 									<tr>
@@ -175,7 +176,8 @@ function ValidationPane({ onRequestUpload, onOpenFile }: ValidationPaneProps) {
 										<li
 											key={row.question_id}
 											className={cn(
-												"rounded-xl border border-border p-3 text-xs",
+												CARD_SURFACE,
+												"p-3 text-xs",
 												ROW_TONE[row.agreement],
 											)}
 										>
@@ -216,7 +218,7 @@ function ValidationPane({ onRequestUpload, onOpenFile }: ValidationPaneProps) {
 				{questionnaire ? (
 					<section className="flex flex-col gap-2">
 						<h3 className="text-sm font-semibold">{t("validation.questionnaire")}</h3>
-						<div className="rounded-xl border border-border p-4">
+						<div className={cn(CARD_SURFACE, "p-4")}>
 							<MarkdownFilePane file={questionnaire} copyable />
 						</div>
 					</section>

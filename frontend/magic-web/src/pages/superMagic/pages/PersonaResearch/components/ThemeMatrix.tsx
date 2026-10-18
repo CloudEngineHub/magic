@@ -6,6 +6,7 @@ import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import type { QuoteRef, SynthesisFile, SynthesisTheme, ThemeStance } from "../types"
 import PersonaAvatar from "./PersonaAvatar"
+import { CARD_SURFACE } from "./surface"
 import { ConfidenceBadge, QuoteItem, SourceChip } from "./ResearchBadges"
 
 export type OpenQuote = (quote: Pick<QuoteRef, "persona_id" | "round_index" | "file">) => void
@@ -64,7 +65,7 @@ function ThemeMatrix({
 
 	return (
 		<div className="flex flex-col gap-2">
-			<div className="overflow-x-auto rounded-xl border border-border">
+			<div className={cn(CARD_SURFACE, "overflow-x-auto")}>
 				<table className="w-full border-collapse text-xs">
 					<thead>
 						<tr>

@@ -76,7 +76,9 @@ function InterviewsPanel({ variant, focusedPersonaId, onFocus, focusRound }: Int
 	return (
 		<div className={cn("flex h-full min-h-0", isMobile && "flex-col")}>
 			{isMobile ? null : (
-				<ScrollArea className="w-56 shrink-0 border-r border-border">{list}</ScrollArea>
+				<ScrollArea className="w-56 shrink-0 border-r border-border bg-muted/40">
+					{list}
+				</ScrollArea>
 			)}
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 				{selected ? (
@@ -178,8 +180,9 @@ function InterviewList({
 							type="button"
 							className={cn(
 								"flex w-full flex-col gap-1.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors",
-								"hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring",
-								selectedId === id && "bg-accent",
+								"hover:bg-background/70 focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-ring",
+								selectedId === id &&
+									"bg-background shadow-sm ring-1 ring-border/60",
 							)}
 							onClick={() => onSelect(id)}
 						>
@@ -198,24 +201,26 @@ function InterviewList({
 									</span>
 								) : null}
 							</span>
-							<span className="flex items-center gap-2 pl-8">
-								<span className="h-1 flex-1 overflow-hidden rounded-full bg-border">
-									<span
-										className={cn(
-											"block h-full rounded-full transition-[width] duration-500",
-											interview?.status === "failed"
-												? "bg-destructive"
-												: "bg-primary",
-										)}
-										style={{ width: `${Math.round(ratio * 100)}%` }}
-									/>
+							{interview?.status === "done" || interview?.status === "failed" ? (
+								<span className="pl-8 text-[11px]">
+									<InterviewStatusChip status={interview.status} />
 								</span>
-								{interview ? (
-									<span className="text-[11px]">
-										<InterviewStatusChip status={interview.status} />
+							) : (
+								// Round progress is only informative while the interview runs.
+								<span className="flex items-center gap-2 pl-8">
+									<span className="h-1 flex-1 overflow-hidden rounded-full bg-border">
+										<span
+											className="block h-full rounded-full bg-primary transition-[width] duration-500"
+											style={{ width: `${Math.round(ratio * 100)}%` }}
+										/>
 									</span>
-								) : null}
-							</span>
+									{interview ? (
+										<span className="text-[11px]">
+											<InterviewStatusChip status={interview.status} />
+										</span>
+									) : null}
+								</span>
+							)}
 						</button>
 					</li>
 				)

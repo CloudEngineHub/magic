@@ -14,6 +14,7 @@ import { usePersonaResearchStore } from "../context"
 import type { AgreementLevel, SynthesisTheme } from "../types"
 import DimensionChart from "./DimensionChart"
 import { AgreementBadge, ConfidenceBadge } from "./ResearchBadges"
+import { CARD_SURFACE, CONFIDENCE_ACCENT } from "./surface"
 import ThemeMatrix, { ThemePopover, type OpenQuote } from "./ThemeMatrix"
 
 interface AnalysisBoardProps {
@@ -144,8 +145,18 @@ function AnalysisBoard({ onOpenQuote, onOpenSources }: AnalysisBoardProps) {
 							return (
 								<li
 									key={theme.id}
-									className="rounded-xl border border-border bg-card p-3.5"
+									className={cn(
+										CARD_SURFACE,
+										"relative overflow-hidden py-3.5 pl-5 pr-4",
+									)}
 								>
+									<span
+										aria-hidden
+										className={cn(
+											"absolute inset-y-0 left-0 w-1",
+											CONFIDENCE_ACCENT[theme.confidence],
+										)}
+									/>
 									<div className="flex items-start justify-between gap-3">
 										<ThemePopover
 											theme={theme}
@@ -154,7 +165,7 @@ function AnalysisBoard({ onOpenQuote, onOpenSources }: AnalysisBoardProps) {
 										>
 											<button
 												type="button"
-												className="text-left text-sm font-medium text-foreground underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+												className="text-left text-sm font-semibold text-foreground underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
 											>
 												{theme.name}
 											</button>
@@ -167,7 +178,7 @@ function AnalysisBoard({ onOpenQuote, onOpenSources }: AnalysisBoardProps) {
 										</p>
 									) : null}
 									{/* Evidence bar: where the theme's support comes from, in one line. */}
-									<div className="mt-2.5 flex flex-wrap items-center gap-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
+									<div className="mt-2.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
 										<span className="inline-flex items-center gap-1">
 											<Globe className="size-3.5" />
 											{t("analysis.webSources", {

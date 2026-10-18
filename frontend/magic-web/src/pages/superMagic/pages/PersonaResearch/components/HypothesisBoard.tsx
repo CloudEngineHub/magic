@@ -17,8 +17,9 @@ import {
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
-import type { GuideIssue, QuoteRef, StudyHypothesis } from "../types"
+import type { GuideIssue, HypothesisVerdict, QuoteRef, StudyHypothesis } from "../types"
 import { AgreementBadge, QuoteItem, SourceChip, VerdictBadge } from "./ResearchBadges"
+import { CARD_SURFACE, VERDICT_ACCENT } from "./surface"
 
 interface HypothesisBoardProps {
 	onOpenQuote: (quote: Pick<QuoteRef, "persona_id" | "round_index" | "file">) => void
@@ -51,28 +52,25 @@ function HypothesisBoard({ onOpenQuote, onOpenSources }: HypothesisBoardProps) {
 		)
 	}
 
-	const decided = hypotheses.filter((item) => item.verdict !== "pending").length
-
 	return (
 		<ScrollArea className="h-full">
 			<div className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
 				{study.decision ? (
-					<div className="flex items-start gap-2.5 rounded-xl bg-primary/5 p-3.5">
-						<Flag className="mt-0.5 size-4 shrink-0 text-primary" />
+					<div className={cn(CARD_SURFACE, "flex items-start gap-3 p-4")}>
+						<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+							<Flag className="size-4" />
+						</span>
 						<div className="flex flex-col gap-0.5">
-							<span className="text-[11px] font-medium text-primary">
+							<span className="text-[11px] font-medium text-muted-foreground">
 								{t("hypothesis.decision")}
 							</span>
-							<span className="text-sm leading-6 text-foreground">
+							<span className="text-[15px] font-medium leading-6 text-foreground">
 								{study.decision}
 							</span>
 						</div>
 					</div>
 				) : null}
-				<div className="flex items-center justify-between text-xs text-muted-foreground">
-					<span>{t("hypothesis.progress", { decided, total: hypotheses.length })}</span>
-					<span>{t("hypothesis.ruleHint")}</span>
-				</div>
+				<VerdictOverview hypotheses={hypotheses} />
 				<ol className="flex flex-col gap-3">
 					{hypotheses.map((hypothesis) => (
 						<HypothesisCard
@@ -100,17 +98,22 @@ const HypothesisCard = observer(function HypothesisCard({
 }) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
-	const [expanded, setExpanded] = useState(hypothesis.verdict !== "pending")
+	// Collapsed by default: the verdict colour and a one-line reason are enough to scan.
+	const [expanded, setExpanded] = useState(false)
 	const quotes = (hypothesis.evidence_refs ?? []).filter((ref) => ref.kind === "quote")
 	const sources = (hypothesis.evidence_refs ?? []).filter((ref) => ref.kind === "source")
 
 	return (
-		<li className="rounded-xl border border-border bg-card">
+		<li className={cn(CARD_SURFACE, "relative overflow-hidden")}>
+			<span
+				aria-hidden
+				className={cn("absolute inset-y-0 left-0 w-1", VERDICT_ACCENT[hypothesis.verdict])}
+			/>
 			<Collapsible open={expanded} onOpenChange={setExpanded}>
 				<CollapsibleTrigger asChild>
 					<button
 						type="button"
-						className="flex w-full items-start gap-3 rounded-xl p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className="flex w-full items-start gap-3 rounded-xl py-4 pl-5 pr-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						<span className="mt-0.5 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground">
 							{hypothesis.id}
@@ -128,6 +131,11 @@ const HypothesisCard = observer(function HypothesisCard({
 									</span>
 								) : null}
 							</span>
+							{!expanded && hypothesis.verdict_reason ? (
+								<span className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+									{hypothesis.verdict_reason}
+								</span>
+							) : null}
 						</span>
 						<ChevronDown
 							className={cn(
@@ -138,7 +146,7 @@ const HypothesisCard = observer(function HypothesisCard({
 					</button>
 				</CollapsibleTrigger>
 				<CollapsibleContent>
-					<div className="flex flex-col gap-3 border-t border-border px-4 pb-4 pt-3 text-xs">
+					<div className="flex flex-col gap-3 border-t border-border/60 pb-4 pl-5 pr-4 pt-3 text-xs">
 						{hypothesis.support_criteria || hypothesis.refute_criteria ? (
 							<div className="grid gap-2 sm:grid-cols-2">
 								{hypothesis.support_criteria ? (
@@ -208,6 +216,63 @@ const HypothesisCard = observer(function HypothesisCard({
 	)
 })
 
+/** Verdicts in reading order: conclusions first, open questions last. */
+const VERDICT_ORDER: HypothesisVerdict[] = [
+	"supported",
+	"mixed",
+	"refuted",
+	"insufficient",
+	"pending",
+]
+
+/** One glance at the outcome: a stacked bar of verdicts with counts, before any card is read. */
+function VerdictOverview({ hypotheses }: { hypotheses: StudyHypothesis[] }) {
+	const { t } = useTranslation("personaResearch")
+	const decided = hypotheses.filter((item) => item.verdict !== "pending").length
+	const counts = VERDICT_ORDER.map((verdict) => ({
+		verdict,
+		count: hypotheses.filter((item) => item.verdict === verdict).length,
+	})).filter((item) => item.count > 0)
+	const label: Record<HypothesisVerdict, string> = {
+		supported: t("verdict.supported"),
+		mixed: t("verdict.mixed"),
+		refuted: t("verdict.refuted"),
+		insufficient: t("verdict.insufficient"),
+		pending: t("verdict.pending"),
+	}
+
+	return (
+		<div className={cn(CARD_SURFACE, "flex flex-col gap-3 p-4")}>
+			<div className="flex items-baseline justify-between gap-3">
+				<span className="text-sm font-semibold text-foreground">
+					{t("hypothesis.progress", { decided, total: hypotheses.length })}
+				</span>
+				<span className="text-[11px] text-muted-foreground">
+					{t("hypothesis.ruleHint")}
+				</span>
+			</div>
+			<div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
+				{counts.map(({ verdict, count }) => (
+					<span
+						key={verdict}
+						className={cn("h-full", VERDICT_ACCENT[verdict])}
+						style={{ flexGrow: count }}
+					/>
+				))}
+			</div>
+			<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+				{counts.map(({ verdict, count }) => (
+					<span key={verdict} className="inline-flex items-center gap-1.5">
+						<span className={cn("size-2 rounded-full", VERDICT_ACCENT[verdict])} />
+						{label[verdict]}
+						<span className="font-medium tabular-nums text-foreground">{count}</span>
+					</span>
+				))}
+			</div>
+		</div>
+	)
+}
+
 function Criteria({
 	tone,
 	label,
@@ -261,7 +326,7 @@ const StudyDesign = observer(function StudyDesign() {
 	}
 
 	return (
-		<Collapsible className="rounded-xl border border-dashed border-border">
+		<Collapsible className="rounded-xl border border-dashed border-border bg-card/60">
 			<CollapsibleTrigger asChild>
 				<button
 					type="button"
