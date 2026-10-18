@@ -3812,6 +3812,7 @@
 		"retry": "重试",
 		"title": "这条消息暂时无法显示"
 	},
+	"messageSendFailed": "消息未发送，请检查网络后点击消息旁的感叹号重试",
 	"microAppPage": {
 		"conversation": {
 			"collapse": "收起消息面板",

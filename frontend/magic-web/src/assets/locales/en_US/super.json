@@ -3813,6 +3813,7 @@
 		"retry": "Retry",
 		"title": "This message is temporarily unavailable"
 	},
+	"messageSendFailed": "Message not sent. Check your network, then tap the warning icon next to it to retry.",
 	"microAppPage": {
 		"conversation": {
 			"collapse": "Collapse message panel",

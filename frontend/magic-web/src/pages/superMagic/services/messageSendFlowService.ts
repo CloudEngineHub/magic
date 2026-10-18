@@ -48,6 +48,8 @@ import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
 import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSendRenameTask"
 import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
 import { analyticsService } from "@/services/analytics"
+import i18next from "i18next"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { getConversationTopicModeOverride } from "./conversationTopicModeOverride"
 
 const logger = Logger.createLogger("messageSendService")
@@ -337,6 +339,7 @@ class MessageSendService {
 			if (getNetworkMonitor().isNetworkOffline()) {
 				markLocalExecutionFailed()
 				optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
+				this.reportSendFailure("network_offline", chat_topic_id)
 				return
 			}
 			this.deps.chatApi
@@ -347,6 +350,12 @@ class MessageSendService {
 							?.seq ?? (res as { seq?: SeqResponse<ConversationQueryMessage> })?.seq
 					if (!responseSeq?.message) {
 						markLocalExecutionFailed()
+						// Keep the sidecar consistent with the rolled-back topic status instead of waiting for the ACK timer.
+						optimisticMessageStore.markFailed({
+							chat_topic_id,
+							app_message_id: messageId,
+						})
+						this.reportSendFailure("ack_without_seq", chat_topic_id)
 						return
 					}
 					// 响应成功后替换 superMagicStore 中对应数据
@@ -354,9 +363,9 @@ class MessageSendService {
 					optimisticMessageStore.confirm({ chat_topic_id, app_message_id: messageId })
 				})
 				.catch((error) => {
-					console.log("error", error)
 					markLocalExecutionFailed()
 					optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
+					this.reportSendFailure("chat_request_rejected", chat_topic_id, error)
 				})
 		}
 
@@ -485,6 +494,22 @@ class MessageSendService {
 		} finally {
 			setIsSending(false)
 		}
+	}
+
+	/**
+	 * Surfaces a failed send. The failed sidecar only renders a small icon next to the bubble, which users
+	 * overlook when the chat WebSocket cannot connect; a toast plus a log record makes the loss visible
+	 * and traceable (previously the rejection was only written to the console).
+	 */
+	private reportSendFailure(reason: string, chatTopicId: string, error?: unknown) {
+		this.deps.logger.error({
+			eventKey: "message_send_failed",
+			errorKind: "network",
+			error,
+			message: "message send failed",
+			context: { reason, chatTopicId },
+		})
+		magicToast.error(i18next.t("messageSendFailed", { ns: "super" }))
 	}
 
 	private buildSendOptions({

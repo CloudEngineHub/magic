@@ -7,10 +7,14 @@ import {
 	resetConversationTopicModeOverridesForTests,
 } from "@/pages/superMagic/services/conversationTopicModeOverride"
 
-const { track } = vi.hoisted(() => ({ track: vi.fn() }))
+const { track, toastError } = vi.hoisted(() => ({ track: vi.fn(), toastError: vi.fn() }))
 
 // This unit owns outbound request construction only; isolate UI/router/store singletons so the
 // assertion exercises MessageSendService's real option merge without unrelated application boot.
+vi.mock("@/components/base/MagicToaster/utils", () => ({ default: { error: toastError } }))
+
+vi.mock("i18next", () => ({ default: { t: (key: string) => key } }))
+
 vi.mock("@/apis", () => ({ ChatApi: {}, SuperMagicApi: {} }))
 
 vi.mock("@/models/user", () => ({
@@ -358,7 +362,10 @@ describe("MessageSendService / conversation_message_send_attempted", () => {
 		resetConversationTopicModeOverridesForTests()
 	})
 
-	function createService(chat: ReturnType<typeof vi.fn>) {
+	function createService(
+		chat: ReturnType<typeof vi.fn>,
+		logger: { error: ReturnType<typeof vi.fn> } = { error: vi.fn() },
+	) {
 		return createMessageSendService({
 			chatApi: { chat } as unknown as MessageSendServiceDeps["chatApi"],
 			superMagicApi: {} as unknown as MessageSendServiceDeps["superMagicApi"],
@@ -375,7 +382,7 @@ describe("MessageSendService / conversation_message_send_attempted", () => {
 				addUserMessage: vi.fn(),
 				replaceUserMessage: vi.fn(),
 			} as unknown as MessageSendServiceDeps["superMagicStore"],
-			logger: { error: vi.fn() } as unknown as MessageSendServiceDeps["logger"],
+			logger: logger as unknown as MessageSendServiceDeps["logger"],
 		})
 	}
 
@@ -437,6 +444,31 @@ describe("MessageSendService / conversation_message_send_attempted", () => {
 
 		await vi.waitFor(() => expect(chat).toHaveBeenCalledTimes(1))
 		expect(track).toHaveBeenCalledTimes(1)
+	})
+
+	it("logs and toasts when the chat request is rejected (e.g. WebSocket cannot connect)", async () => {
+		toastError.mockClear()
+		const logger = { error: vi.fn() }
+		const chat = vi.fn().mockRejectedValue("websocket 连接超时")
+		const service = createService(chat, logger)
+
+		await service.dispatchMessage({
+			content: "hello",
+			showLoading: false,
+			selectedTopic: {
+				id: "topic-1",
+				chat_topic_id: "chat-topic-1",
+				chat_conversation_id: "conversation-1",
+			} as Topic,
+		})
+
+		await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith("messageSendFailed"))
+		expect(logger.error).toHaveBeenCalledWith(
+			expect.objectContaining({
+				eventKey: "message_send_failed",
+				context: { reason: "chat_request_rejected", chatTopicId: "chat-topic-1" },
+			}),
+		)
 	})
 
 	it("tracks the attempt when chat returns no message payload", async () => {
