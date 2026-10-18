@@ -11,9 +11,25 @@ import { personaTone } from "./personaPortrait"
 const ROTATE_MS = 5200
 const MAX_VOICES = 4
 
+/** One line on the card, from a library persona or a built-in sample. */
 interface Voice {
-	persona: PersonaFile
+	id: string
+	name: string
+	demographics?: Record<string, unknown>
+	/** "Name · 45 岁 · City" */
+	byline: string
+	tags: string[]
 	text: string
+}
+
+/** Built-in sample shown while the library is empty; copy lives in the locale files. */
+interface SampleVoice {
+	name: string
+	age: string
+	gender: string
+	city: string
+	tags: string[]
+	line: string
 }
 
 /** First quotable line of a persona: how they talk (expression layer), else an evidence quote. */
@@ -42,8 +58,9 @@ interface ResearchVoiceCardProps {
 }
 
 /**
- * Home hero visual: real lines from the user's persona library, one at a time on the speaker's
- * colour. It replaces drawn illustration; with no quotable persona the card is not rendered.
+ * Home hero visual: lines from the user's persona library, one at a time on the speaker's colour.
+ * It replaces drawn illustration. With no quotable persona it rotates built-in samples, labelled
+ * as samples, until the first study fills the library.
  */
 export default function ResearchVoiceCard({
 	personas,
@@ -51,14 +68,50 @@ export default function ResearchVoiceCard({
 	className,
 }: ResearchVoiceCardProps) {
 	const { t } = useTranslation("personaResearch")
-	const voices = useMemo<Voice[]>(
+	const libraryVoices = useMemo<Voice[]>(
 		() =>
 			personas
-				.map((persona) => ({ persona, text: personaVoiceLine(persona) }))
-				.filter((voice): voice is Voice => Boolean(voice.text))
+				.map((persona) => {
+					const text = personaVoiceLine(persona)
+					if (!text) return null
+					// Ages arrive as "45" or "45岁"; the label adds its own unit.
+					const age = textOf(persona.dimensions?.demographics?.age)?.replace(
+						/\s*(岁|yrs?|years?)$/i,
+						"",
+					)
+					const geography = persona.dimensions?.geography
+					const place = textOf(
+						geography?.city ?? geography?.region ?? geography?.location,
+					)
+					return {
+						id: persona.id,
+						name: persona.name,
+						demographics: persona.dimensions?.demographics,
+						byline: [persona.name, age ? t("voice.age", { age }) : null, place]
+							.filter(Boolean)
+							.join(" · "),
+						tags: [...(persona.tags ?? []).slice(0, 2), t("persona.aiSimulated")],
+						text,
+					}
+				})
+				.filter((voice): voice is Voice => voice !== null)
 				.slice(0, MAX_VOICES),
-		[personas],
+		[personas, t],
 	)
+	const sampleVoices = useMemo<Voice[]>(() => {
+		const samples = t("voice.samples", { returnObjects: true })
+		if (!Array.isArray(samples)) return []
+		return (samples as SampleVoice[]).map((sample, i) => ({
+			id: `sample-${i}`,
+			name: sample.name,
+			demographics: { age: sample.age, gender: sample.gender },
+			byline: [sample.name, t("voice.age", { age: sample.age }), sample.city].join(" · "),
+			tags: [...sample.tags, t("voice.sampleBadge")],
+			text: sample.line,
+		}))
+	}, [t])
+	const isSample = libraryVoices.length === 0
+	const voices = isSample ? sampleVoices : libraryVoices
 	const [index, setIndex] = useState(0)
 	const [visible, setVisible] = useState(true)
 
@@ -82,12 +135,7 @@ export default function ResearchVoiceCard({
 
 	if (voices.length === 0) return null
 	const voice = voices[index % voices.length]
-	const { persona } = voice
-	const { tone } = personaTone(persona.name || persona.id)
-	// Ages arrive as "45" or "45岁"; the label adds its own unit.
-	const age = textOf(persona.dimensions?.demographics?.age)?.replace(/\s*(岁|yrs?|years?)$/i, "")
-	const geography = persona.dimensions?.geography
-	const place = textOf(geography?.city ?? geography?.region ?? geography?.location)
+	const { tone } = personaTone(voice.name || voice.id)
 
 	return (
 		<aside
@@ -101,7 +149,7 @@ export default function ResearchVoiceCard({
 		>
 			<span className="flex items-center gap-1.5 text-xs text-white/75">
 				<AudioLines className="size-4" />
-				{t("voice.label")}
+				{t(isSample ? "voice.sampleLabel" : "voice.label")}
 			</span>
 			<div
 				className={cn(
@@ -120,39 +168,39 @@ export default function ResearchVoiceCard({
 				/>
 				<span className="flex items-center gap-2.5 text-[13px]">
 					<PersonaAvatar
-						id={persona.id}
-						name={persona.name}
+						id={voice.id}
+						name={voice.name}
+						demographics={voice.demographics}
 						className="size-10 ring-2 ring-white/35"
 					/>
 					{/* Name, age and place first; tags (not the long tagline) as the quiet second line. */}
 					<span className="flex min-w-0 flex-col">
-						<span className="truncate font-medium">
-							{[persona.name, age ? t("voice.age", { age }) : null, place]
-								.filter(Boolean)
-								.join(" · ")}
-						</span>
+						<span className="truncate font-medium">{voice.byline}</span>
 						<span className="line-clamp-1 text-xs text-white/70">
-							{[...(persona.tags ?? []).slice(0, 2), t("persona.aiSimulated")].join(
-								" · ",
-							)}
+							{voice.tags.join(" · ")}
 						</span>
 					</span>
 				</span>
 			</div>
 			<div className="mt-5 flex items-center justify-between border-t border-white/20 pt-3.5 text-[12.5px]">
-				<button
-					type="button"
-					className="inline-flex items-center gap-1 rounded text-white/90 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"
-					onClick={onOpenLibrary}
-				>
-					{t("voice.fromLibrary")}
-					<ChevronRight className="size-3.5" />
-				</button>
+				{/* An empty library has nothing to open; say where real voices will come from instead. */}
+				{isSample ? (
+					<span className="text-white/80">{t("voice.sampleHint")}</span>
+				) : (
+					<button
+						type="button"
+						className="inline-flex items-center gap-1 rounded text-white/90 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"
+						onClick={onOpenLibrary}
+					>
+						{t("voice.fromLibrary")}
+						<ChevronRight className="size-3.5" />
+					</button>
+				)}
 				{voices.length > 1 ? (
 					<span className="flex items-center gap-1.5" aria-hidden>
 						{voices.map((item, dot) => (
 							<span
-								key={item.persona.id}
+								key={item.id}
 								className={cn(
 									"h-1.5 rounded-full transition-all duration-300",
 									dot === index % voices.length

@@ -682,6 +682,43 @@
 	"voice": {
 		"age": "{{age}} yrs",
 		"fromLibrary": "Open persona library",
-		"label": "A line from your persona library"
+		"label": "A line from your persona library",
+		"sampleBadge": "Sample · AI-simulated",
+		"sampleHint": "After your first study, your own personas appear here",
+		"sampleLabel": "A line from a sample persona",
+		"samples": [
+			{
+				"age": "32",
+				"city": "Chengdu",
+				"gender": "female",
+				"line": "Before I buy, I search for the bad reviews first. The good ones I barely read.",
+				"name": "Lin Xiao",
+				"tags": ["Mother of two", "Baby products"]
+			},
+			{
+				"age": "46",
+				"city": "Foshan",
+				"gender": "male",
+				"line": "I don't mind paying for software. I mind installing it, nobody showing me how, and going back to my notebook.",
+				"name": "Zhou Jianguo",
+				"tags": ["Hardware store owner", "Keeps his own books"]
+			},
+			{
+				"age": "24",
+				"city": "Hangzhou",
+				"gender": "male",
+				"line": "The auto-renewal at the end of the month is the worst part. I'd rather tap pay myself every time.",
+				"name": "Chen Yiming",
+				"tags": ["Growth marketer", "Shares a flat"]
+			},
+			{
+				"age": "58",
+				"city": "Jinan",
+				"gender": "female",
+				"line": "Two yuan cheaper doesn't matter. What matters is whether I can find someone when it breaks.",
+				"name": "He Jing",
+				"tags": ["Retired teacher", "Runs a neighbourhood group-buy"]
+			}
+		]
 	}
 }
