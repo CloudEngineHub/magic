@@ -228,7 +228,9 @@ function ResearchConsole({
 			className="flex h-full min-h-0 flex-col"
 			data-testid="persona-research-console"
 		>
-			<div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-2">
+			{/* Narrow consoles scroll the tabs sideways; the scrollbar is hidden because an
+			    always-visible one draws a second line and a gap under the tab bar. */}
+			<div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 				{/* The ink pill is one thumb that slides to the active tab (falls back to a per-tab
 				    background until it has been measured). */}
 				<div ref={thumbContainerRef} className="relative shrink-0">
