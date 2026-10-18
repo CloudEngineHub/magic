@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { FileText } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -11,13 +11,14 @@ import {
 } from "@/components/shadcn-ui/empty"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { getFileContentById } from "@/pages/superMagic/utils/api"
+import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { usePersonaResearchStore } from "../context"
 import MarkdownFilePane from "../components/MarkdownFilePane"
 import { attachmentVersionKey, getAttachmentPath } from "../services/researchFiles"
 
 /**
- * Read-only document view for the share page: the HTML report in a sandboxed frame,
+ * Read-only document view for the share page: the HTML report in the standard file preview,
  * Markdown documents (plan, desk research, questionnaire) as formatted text.
  */
 function ShareDocumentPane({ file }: { file: AttachmentItem | null }) {
@@ -45,47 +46,42 @@ function ShareDocumentPane({ file }: { file: AttachmentItem | null }) {
 	)
 }
 
-/** Report HTML runs in a sandbox without same-origin access, so it cannot touch the page. */
+/**
+ * The report opens in the same file preview the topic share uses, so its runtime (scripts,
+ * styles, citations) behaves exactly as in the app; the share page provides the file access.
+ */
 const HtmlDocument = observer(function HtmlDocument({ file }: { file: AttachmentItem }) {
-	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
+	const detailRef = useRef<DetailRef>(null)
+	const [userSelectDetail, setUserSelectDetail] = useState<unknown>()
 	const versionKey = attachmentVersionKey(file)
-	const [html, setHtml] = useState<string | null>(null)
-	const [failed, setFailed] = useState(false)
 
 	useEffect(() => {
-		const controller = new AbortController()
-		setFailed(false)
-		getFileContentById(String(file.file_id), {
-			responseType: "text",
-			signal: controller.signal,
-			access: store.fileAccess,
-		})
-			.then((value) => {
-				if (!controller.signal.aborted && typeof value === "string") setHtml(value)
-			})
-			.catch(() => {
-				if (!controller.signal.aborted) setFailed(true)
-			})
-		return () => controller.abort()
+		// Wait one frame so the preview has mounted before a tab is opened in it.
+		const timer = setTimeout(() => detailRef.current?.openFileTab?.(file), 100)
+		return () => clearTimeout(timer)
 		// versionKey covers file_id and rewrites.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [versionKey, store.fileAccess])
+	}, [versionKey])
 
-	if (html === null) {
-		return (
-			<p className="p-4 text-sm text-muted-foreground">
-				{failed ? t("state.fileLoadFailed") : t("state.fileLoading")}
-			</p>
-		)
-	}
 	return (
-		<iframe
-			title={file.file_name ?? "report"}
-			srcDoc={html}
-			sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-			className="size-full border-0 bg-white"
-		/>
+		<div className="h-full min-h-0">
+			<Detail
+				ref={detailRef}
+				disPlayDetail={userSelectDetail}
+				userSelectDetail={userSelectDetail}
+				setUserSelectDetail={setUserSelectDetail}
+				attachments={store.attachments}
+				attachmentList={store.attachmentList}
+				topicId={store.selectedTopic?.id}
+				currentTopicStatus={TaskStatus.FINISHED}
+				messages={[]}
+				showPlaybackControl={false}
+				projectId={store.selectedProject?.id}
+				selectedProject={store.selectedProject}
+				allowDownload={false}
+			/>
+		</div>
 	)
 })
 
