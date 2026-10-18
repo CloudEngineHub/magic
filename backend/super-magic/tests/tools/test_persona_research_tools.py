@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from agentlang.context.tool_context import ToolContext
-from app.tools.persona_research.check_interviews import CheckInterviews, CheckInterviewsParams
+from app.tools.persona_research.check_interviews import CheckInterviews, CheckInterviewsParams, asks_joined_questions
 from app.tools.persona_research.finish_persona_transcript import (
     FinishPersonaTranscript,
     FinishPersonaTranscriptParams,
@@ -489,6 +489,63 @@ async def test_check_interviews_lists_what_to_continue(tmp_path):
 
 
 # ── save_study_synthesis ───────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("text, joined", [
+    ("什么样的会员你会明确不买，如果这条解决了你会买吗？", True),
+    ("What would make you skip it, and would you buy it if that changed?", True),
+    ("那次从头到尾是怎么回事？比如几点、和谁、怎么决定的。", False),
+    ("你说“哪个都行，怎么都好”，具体是指什么？", False),
+    ("上周末孩子是怎么过的？", False),
+    ("你最想先弄清楚什么？哪条规则会让你觉得亏？", False),  # 多个问号由 persona_chat 直接拒绝
+])
+def test_joined_question_detection(text, joined):
+    assert asks_joined_questions(text) is joined
+
+
+async def test_check_interviews_flags_two_questions_under_one_mark(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    _write(tmp_path, f"{study_dir}/panel.json", {"schema_version": 1, "id": "p", "name": "p", "persona_ids": ["p_a_0001"]})
+    _write(tmp_path, f"{study_dir}/interviews/p_a_0001.json", {
+        **INTERVIEW, "status": "done",
+        "rounds": [
+            {"role": "moderator", "text": "上周末孩子是怎么过的？"},
+            {"role": "persona", "text": "去了公园。"},
+            {"role": "moderator", "text": "什么样的会员你会明确不买，如果这条解决了你会买吗？"},
+            {"role": "persona", "text": "要全程陪着就不买。"},
+        ],
+    })
+
+    result = await CheckInterviews(base_dir=tmp_path).execute(ToolContext(), CheckInterviewsParams(study_dir=study_dir))
+
+    assert result.ok is True
+    assert result.data["joined_questions"] == [
+        {"file": "interviews/p_a_0001.json", "round": 2, "text": "什么样的会员你会明确不买，如果这条解决了你会买吗？"}
+    ]
+    assert "interviews/p_a_0001.json round 2" in result.content
+
+
+async def test_paraphrase_listed_in_outcome_terms_is_blocked_with_rewrite_advice(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified"])
+    plan = {**PLAN, "hypotheses": [
+        {"statement": "Low-frequency buyers will not use up a card", "support_criteria": "s", "refute_criteria": "r",
+         "outcome_terms": ["用不完", "剩着", "白交钱"]},
+    ]}
+    await UpdateStudy(base_dir=tmp_path).execute(_context(), UpdateStudyParams(event="plan_confirmed", study_dir=study_dir, **plan))
+    _write(tmp_path, f"{study_dir}/desk-research.md", "[S1]")
+    await UpdateStudy(base_dir=tmp_path).execute(_context(), UpdateStudyParams(
+        event="desk_research_done", study_dir=study_dir, social_sampling=SAMPLED,
+    ))
+    persona = _persona("Zhang", "Owners")
+    persona["dimensions"]["needs_pains"] = ["之前办的次卡还剩着几次，怕再办一张"]
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[persona],
+    ))
+
+    assert result.ok is False
+    assert "needs_pains contains '剩着' (H1)" in result.content
+    assert "rewrite those fields as past facts" in result.content
 
 
 async def _report_ready(tmp_path):

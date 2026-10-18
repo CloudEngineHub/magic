@@ -120,7 +120,7 @@ class HypothesisDraft(BaseModel):
     outcome_terms: List[str] = Field(
         ...,
         min_length=1,
-        description="2-6 short phrases naming the tested outcome; personas must not contain them.",
+        description="4-12 short phrases, including everyday paraphrases, that state the tested outcome; personas must not contain them.",
     )
 
 

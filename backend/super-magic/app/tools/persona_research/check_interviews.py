@@ -10,10 +10,17 @@
 | running           | 进行中     | 续跑，从「已记录轮数 + 1」开始            |
 | done              | 已完成     | 计入有效样本                              |
 | failed            | 失败       | 保留失败原因；只有原因已排除时才重跑      |
+
+疑似连问（只提醒，不拦截）：persona_chat 已拒绝多个问号，但主持人会用逗号把两个问题塞进一个问号。
+例：「什么样的会员你不会买，如果这条解决了你会买吗？」→ 标出来，综合时把第二问的回答当作被问到才说。
+「那次从头到尾怎么回事？比如几点、和谁」这类细节提示不算（以「比如、具体、讲讲」等开头的分句不计）。
+回测 7 项研究 76 个单问号提问：标出 12 个，其中 4 个是上例那种真连问，8 个是「谁先提的，
+第一步做了什么，最后结论是什么」这种一句三问的经过追问；误拦成本只是一行提醒。
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import Field
@@ -75,6 +82,12 @@ class CheckInterviews(WorkspaceTool[CheckInterviewsParams]):
             for t in transcripts
             if t.is_discussion
         ]
+        joined = [
+            {"file": t.file, "round": index, "text": text}
+            for t in transcripts
+            for index, text in enumerate(t.moderator_texts(), start=1)
+            if asks_joined_questions(text)
+        ]
         done = [row for row in rows if row["status"] == TranscriptStatus.DONE]
         unfinished = [row for row in rows if row["status"] in (TranscriptStatus.RUNNING, NOT_STARTED)]
         failed = [row for row in rows if row["status"] == TranscriptStatus.FAILED]
@@ -85,6 +98,12 @@ class CheckInterviews(WorkspaceTool[CheckInterviewsParams]):
             for row in rows
         )
         lines.extend(f"- discussion {d['file']}: {d['status']}, {d['rounds']} rounds" for d in discussions)
+        if joined:
+            lines.append(
+                "Possible two questions under one question mark (review; in synthesis, mark answers to the second "
+                "part as prompted, and ask one question per round in any continuation):"
+            )
+            lines.extend(f"- {item['file']} round {item['round']}: {item['text'][:80]}" for item in joined)
         if unfinished:
             lines.append(
                 "Next: dispatch interviewer sub-agents to continue these transcripts with persona_chat, starting at round "
@@ -100,7 +119,14 @@ class CheckInterviews(WorkspaceTool[CheckInterviewsParams]):
             )
         return ToolResult(
             content="\n".join(lines),
-            data={"study_dir": params.study_dir, "limit": limit, "interviews": rows, "discussions": discussions, "effective_sample": len(done)},
+            data={
+                "study_dir": params.study_dir,
+                "limit": limit,
+                "interviews": rows,
+                "discussions": discussions,
+                "effective_sample": len(done),
+                "joined_questions": joined,
+            },
         )
 
     async def get_after_tool_call_friendly_action_and_remark(
@@ -137,6 +163,31 @@ class CheckInterviews(WorkspaceTool[CheckInterviewsParams]):
             type=DisplayType.MD,
             data=FileContent(file_name="interview_progress.md", content="\n".join(lines) + "\n"),
         )
+
+
+_QUOTED = re.compile(r"“[^”]*”|「[^」]*」|『[^』]*』|‘[^’]*’|\"[^\"]*\"")
+_CLAUSE_BREAK = re.compile(r"[，,；;。.！!：:—]+")
+_ASKS = re.compile(
+    r"什么|怎么|为什么|为啥|哪|多少|是否|会不会|能不能|有没有|要不要|是不是|吗$|呢$"
+    r"|\b(what|how|why|which|would|will|do|does|did|is|are|can|could)\b",
+    re.IGNORECASE,
+)
+# 细节提示分句：补充同一个问题要讲什么，不算第二问。
+_ELABORATION = re.compile(
+    r"^(比如|例如|像是|具体|尽量|越具体|从头|讲讲|说说|聊聊|举个|举一个|想到什么|不用|随便"
+    r"|for example|e\.g\.|such as|tell me|walk me)",
+    re.IGNORECASE,
+)
+
+
+def asks_joined_questions(text: str) -> bool:
+    """只有一个问号、但问号前有 2 个及以上提问分句时为 True；引号里的受访者原话不计。"""
+    parts = re.split(r"[？?]", _QUOTED.sub("X", text))
+    if len(parts) != 2:
+        return False
+    clauses = [c.strip() for c in _CLAUSE_BREAK.split(parts[0]) if c.strip()]
+    asks = [c for c in clauses if _ASKS.search(c) and not _ELABORATION.match(c)]
+    return len(asks) >= 2
 
 
 async def _persona_name(base_dir, persona_id: str) -> str:

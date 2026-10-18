@@ -194,6 +194,9 @@ class Transcript:
                 speaker = self.persona_id
             yield index, speaker, str(turn.get("text") or "")
 
+    def moderator_texts(self) -> List[str]:
+        return [text for _, speaker, text in self.utterances() if speaker == "moderator"]
+
     def persona_texts(self) -> List[str]:
         return [text for _, speaker, text in self.utterances() if speaker and speaker != "moderator"]
 

@@ -19,7 +19,7 @@ Creates the study and moves `study.json` through its phases. You report what hap
 |---|---|---|
 | `created` | After the pre-search, before clarifying questions; for a persona-building request, before reading the materials | `title`, `question` (the user's words, verbatim), `slug_hint` (short ASCII kebab-case topic summary; use pinyin or English for non-Latin topics), `study_type: "persona_build"` only for a persona-building request |
 | `clarified` | Clarification answered, or nothing needed clarifying | — |
-| `plan_confirmed` | The user chose the start option in `ask_user` | `study_type`, `framework`, `decision`, `hypotheses` (`[{statement, support_criteria, refute_criteria, outcome_terms}]` in plan order; ids `H1`, `H2`, ... are assigned; `outcome_terms` are 2-6 short phrases a persona would use to state the tested outcome, for example `["用不完", "规则"]`, each at least 2 characters), `quota` (`[{segment, criteria, count}]`; counts add up to the persona count, at most 12), `interview_rounds` (default 5, at most 7), `guide_review` (`[{issue, before, after}]`, `issue` is `leading`, `double_barreled`, `hypothesis_reveal`, `jargon`, or `sequence_priming`; `[]` when nothing changed) |
+| `plan_confirmed` | The user chose the start option in `ask_user` | `study_type`, `framework`, `decision`, `hypotheses` (`[{statement, support_criteria, refute_criteria, outcome_terms}]` in plan order; ids `H1`, `H2`, ... are assigned; `outcome_terms` are 4-12 short phrases a persona would use to state the tested outcome, including everyday paraphrases, for example `["用不完", "剩着", "白交钱", "规则"]`, each at least 2 characters), `quota` (`[{segment, criteria, count}]`; counts add up to the persona count, at most 12), `interview_rounds` (default 5, at most 7), `guide_review` (`[{issue, before, after}]`, `issue` is `leading`, `double_barreled`, `hypothesis_reveal`, `jargon`, or `sequence_priming`; `[]` when nothing changed) |
 | `desk_research_done` | `desk-research.md` is written | `social_sampling`: `{status: "sampled", platforms, posts, comments}`, or `{status: "unavailable" or "not_relevant", note}` with the reason |
 | `desk_research_skipped` | A `panel_only` study skips desk research | — |
 | `interviews_finished` | `check_interviews` shows no unfinished transcript | — (the tool marks the interview phase failed when no interview succeeded) |
@@ -81,7 +81,7 @@ The content lists each persona id; use `personas/<persona_id>.json` in the inter
 
 ## check_interviews
 
-Read-only. Lists every panel persona with its transcript status (`not_started`, `running`, `done`, `failed`), recorded rounds, and the round to continue from, plus focus groups and the effective sample. Call it after `wait_for_subagents`, and again after any interruption, before deciding what to re-dispatch.
+Read-only. Lists every panel persona with its transcript status (`not_started`, `running`, `done`, `failed`), recorded rounds, and the round to continue from, plus focus groups and the effective sample. It also flags rounds that may join two questions under one question mark; in synthesis, mark answers to the second part of a flagged round as `prompted`. Call it after `wait_for_subagents`, and again after any interruption, before deciding what to re-dispatch.
 
 ```python
 print(tool.call("check_interviews", {"study_dir": study_dir}).content)

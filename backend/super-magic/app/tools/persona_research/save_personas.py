@@ -410,7 +410,8 @@ def _check_no_outcome(persona: Dict[str, Any], outcome_terms: List[tuple[str, st
     action = (
         "do not select this reused persona for this study"
         if reused
-        else "rewrite those fields as situation and behavior facts without the tested outcome"
+        else "rewrite those fields as past facts (what happened, when, at what cost) and drop the attitude, "
+        "for example 'afraid the card goes unused' becomes 'last year's 10-session card: used 6, the rest expired'"
     )
     raise StudyFilesError(
         f"{label} already states the outcome being tested: {'; '.join(hits)}. "

@@ -24,7 +24,7 @@ Pick one `study_type` in the plan. Types set the default mix of methods; you may
 - Write 3-5 hypotheses that the decision depends on. Each is one falsifiable sentence with `support_criteria` and `refute_criteria` stated as observable answers or source findings, not as feelings.
 - [Good] "Owners' biggest pain is unrecorded verbal agreements, not meeting notes." Support: most participants describe a specific dispute over an unrecorded deal. Refute: most only mention meeting notes.
 - [Bad] "Owners like AI tools." It cannot be refuted and does not inform a decision.
-- Give each hypothesis `outcome_terms`: the 2-6 short phrases a respondent would use to state the tested outcome in the user's language (for "low-frequency buyers will not use up a monthly card": "用不完", "回不了本"). Pick phrases specific to the outcome, not generic words every persona needs ("咖啡", "老板"). `save_personas` uses them to block personas that already state the outcome.
+- Give each hypothesis `outcome_terms`: 4-12 short phrases a respondent would use to state the tested outcome in the user's language, including the everyday paraphrases, because personas leak conclusions in other words. For "low-frequency buyers will not use up a monthly card": "用不完", "回不了本", "剩着", "白交钱", "去不了几次", "浪费". Pick phrases specific to the outcome, not generic words every persona needs ("咖啡", "老板"). `save_personas` blocks personas whose stance fields contain any of them.
 
 ## Sample Quota and Anti-Homogenization
 
@@ -44,6 +44,8 @@ A persona that already holds the tested opinion turns the interview into an echo
 - `expression` lines are voice samples about everyday life, not about the study topic.
 - Reuse a library persona only when it belongs to this study's category and quota segment. A persona built for another product category (an electrolyte-drink persona in a coffee study) is not reused; draft a new one.
 - When desk research sampled social platforms, anchor each new persona's situation in at least one real voice from the "Real Voices" section and cite it as `social` evidence.
+
+Persona self-check, before calling `save_personas`: for every persona and every hypothesis, ask "could someone predict this persona's answer to the hypothesis from its stance fields alone?" If yes, rewrite the field as a past fact (what happened, when, at what cost) and drop the attitude. [Leak] needs_pains "afraid of buying another card and leaving sessions unused again" for a hypothesis about unused sessions. [Fact] behavior "last year's 10-session card: used 6, the rest expired".
 
 ## Interview Guide
 
@@ -65,6 +67,7 @@ Before showing the plan, check every guide question against this list, rewrite t
 | `double_barreled` | One question asks two things | "How do you choose and pay for software?" | "How did you choose the last tool you bought?" (ask about paying separately) |
 | `hypothesis_reveal` | The question states the hypothesis before the participant describes their behavior | "Would a recorder that stops customers backing out of deals help you?" | "Tell me about a deal where the customer later remembered it differently." |
 | `jargon` | The question uses terms the audience does not use | "How do you manage your private-domain retention?" | "How do you get past customers to come back?" |
+| `double_barreled` (one question mark) | Two questions are joined by a comma under one question mark | "What kind of membership would you not buy, and if that were fixed would you buy it?" | Ask "What would make you decide not to buy it?" now and "If that changed, what would you do?" next round |
 | `sequence_priming` | An earlier question's wording steers a later answer, or a question presupposes the hypothesis's situation | "What would you want to know first?" followed by "Which rules would make it a bad deal?" | "What would you want to know first?" followed by "What would make you decide not to buy it?" |
 
 Also check the guide as a whole: if a hypothesis says X matters more than Y, the guide must ask about X and Y with equal weight, or neither by name.
@@ -114,7 +117,7 @@ Save the synthesis with `save_study_synthesis` first, then write the report from
 
 ### Prompted Answers
 
-Mark a quote `prompted` when the moderator's question already named the idea before the persona said it (asked "which rules bother you", persona answers about rules). Volunteered ideas are stronger evidence. The tool records the question each quote answered and caps a theme whose quotes are all prompted at `low`.
+Mark a quote `prompted` when the moderator's question already named the idea before the persona said it, including answers to the second part of a round `check_interviews` flagged as two questions in one (asked "which rules bother you", persona answers about rules). Volunteered ideas are stronger evidence. The tool records the question each quote answered and caps a theme whose quotes are all prompted at `low`.
 
 ### Homogeneity
 

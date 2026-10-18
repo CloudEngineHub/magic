@@ -104,7 +104,8 @@ Steps:
 
 1. Reuse first: `list_dir personas/`, read candidate files, and keep those that match a quota segment and pass the rules above.
 2. Draft only the missing personas to fill the quota. Each new persona has all 7 dimensions, all 4 layers, `field_sources`, and evidence linking to desk-research sources. Within a segment, make personas differ in behavior and circumstances, not just demographics.
-3. Save reused and new personas together with one `save_personas` call, in interview order, each with its quota `segment` and selection reason. Set `library_panel_name` only if the user asked to save the group.
+3. Run the persona self-check in methods.md: no stance field may let a reader predict the persona's answer to any hypothesis.
+4. Save reused and new personas together with one `save_personas` call, in interview order, each with its quota `segment` and selection reason. Set `library_panel_name` only if the user asked to save the group.
 
 ### Phase 5: Interviews (`interview`)
 
