@@ -659,7 +659,7 @@
 		"failed": "Error",
 		"idle": "Paused",
 		"running": "Researching",
-		"waitingUser": "Waiting for you"
+		"waitingUser": "Your turn"
 	},
 	"study": {
 		"aiDisclaimer": "Respondents are AI-simulated, not real users",

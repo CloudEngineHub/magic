@@ -145,7 +145,8 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 					</span>
 				)}
 			</span>
-			<span className="hidden w-20 shrink-0 sm:block">
+			{/* Fits the longest status ("等你回复", "Researching") on one line; keeps rows aligned. */}
+			<span className="hidden w-[6.5rem] shrink-0 items-center sm:flex">
 				{store.studyFilesReady ? (
 					<StudyStatusBadge status={status} />
 				) : (
