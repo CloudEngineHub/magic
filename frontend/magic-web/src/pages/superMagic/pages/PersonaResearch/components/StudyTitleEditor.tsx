@@ -1,13 +1,9 @@
-import { useEffect, useState, type KeyboardEvent } from "react"
-import { useMemoizedFn } from "ahooks"
 import { PencilLine } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { toast } from "sonner"
 import { Input } from "@/components/shadcn-ui/input"
 import MagicTooltip from "@/components/base/MagicTooltip"
-import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
-import { usePersonaResearchStore } from "../context"
+import { useStudyRename } from "../hooks/useStudyRename"
 
 interface StudyTitleEditorProps {
 	topicId: string
@@ -21,48 +17,11 @@ interface StudyTitleEditorProps {
  */
 function StudyTitleEditor({ topicId, title }: StudyTitleEditorProps) {
 	const { t } = useTranslation("personaResearch")
-	const store = usePersonaResearchStore()
-	// null while showing the title; a string while the input is open.
-	const [draft, setDraft] = useState<string | null>(null)
-	const [isSaving, setIsSaving] = useState(false)
-	const editable = !store.isReadOnly && !isReadOnlyProject(store.selectedProject?.user_role)
+	const { draft, setDraft, isSaving, editable, start, commit, onKeyDown } = useStudyRename(
+		topicId,
+		title,
+	)
 	const displayTitle = title || t("study.untitled")
-
-	// Switching studies discards an unsaved draft of the previous one.
-	useEffect(() => setDraft(null), [topicId])
-
-	const commit = useMemoizedFn(async () => {
-		if (draft === null || isSaving) return
-		const nextTitle = draft.trim()
-		// An empty or unchanged name keeps the current title instead of failing.
-		if (!nextTitle || nextTitle === title) {
-			setDraft(null)
-			return
-		}
-		setIsSaving(true)
-		try {
-			await store.renameStudy(topicId, nextTitle)
-			setDraft(null)
-		} catch (error) {
-			console.error("Failed to rename research study:", error)
-			// Keep the input open with the draft so the user can retry or press Escape.
-			toast.error(t("study.renameFailed"))
-		} finally {
-			setIsSaving(false)
-		}
-	})
-
-	const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-		// Enter that confirms an IME candidate must not submit the name.
-		if (event.nativeEvent.isComposing) return
-		if (event.key === "Enter") {
-			event.preventDefault()
-			void commit()
-		} else if (event.key === "Escape") {
-			event.preventDefault()
-			setDraft(null)
-		}
-	}
 
 	if (draft !== null) {
 		return (
@@ -75,7 +34,7 @@ function StudyTitleEditor({ topicId, title }: StudyTitleEditorProps) {
 				className="h-7 min-w-0 flex-1 px-2 text-base font-bold"
 				onChange={(event) => setDraft(event.target.value)}
 				onBlur={() => void commit()}
-				onKeyDown={handleKeyDown}
+				onKeyDown={onKeyDown}
 				onFocus={(event) => event.target.select()}
 			/>
 		)
@@ -90,7 +49,7 @@ function StudyTitleEditor({ topicId, title }: StudyTitleEditorProps) {
 				<button
 					type="button"
 					className="group flex max-w-full items-center gap-1.5 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					onClick={() => setDraft(title)}
+					onClick={start}
 				>
 					<span className="truncate">{displayTitle}</span>
 					{/* The pencil appears on hover or keyboard focus so the heading stays quiet. */}

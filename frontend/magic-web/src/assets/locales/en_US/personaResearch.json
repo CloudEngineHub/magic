@@ -272,8 +272,11 @@
 			"quotes": "Every conclusion comes with quotes",
 			"validate": "Includes a real-people survey"
 		},
+		"rename": "Rename",
 		"reportTemplatesLabel": "Report templates",
 		"samplePrompt": "Is there an opportunity for AI voice recorders among owners of traditional businesses? Using community and Jobs-to-be-Done lenses, research their pain points, willingness to pay and where a small team could start.",
+		"share": "Share",
+		"shareUnavailable": "Available once the study finishes",
 		"studiesCount": "{{count}} total",
 		"subtitle": "Write down the business call you want to test. AI finds the right interviewees, talks to each of them, and turns what they said into conclusions you can take to a meeting.",
 		"templatesHint": "Pick a research method; you can edit it",

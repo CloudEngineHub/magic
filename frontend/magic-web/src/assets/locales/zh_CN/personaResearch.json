@@ -270,8 +270,11 @@
 			"quotes": "每条结论都附原话",
 			"validate": "附真人验证问卷"
 		},
+		"rename": "重命名",
 		"reportTemplatesLabel": "报告模板",
 		"samplePrompt": "AI 录音硬件在传统行业老板（“老登”）人群里有没有机会？请从圈层和 JTBD 角度，研究他们的痛点、付费意愿和小团队的切入点。",
+		"share": "分享",
+		"shareUnavailable": "研究完成后可分享",
 		"studiesCount": "共 {{count}} 项",
 		"subtitle": "写下你想验证的商业判断。AI 会找来合适的受访者，一个个聊完，把他们的原话整理成可以拿去开会的结论。",
 		"templatesHint": "选一个研究方法，内容可以再改",

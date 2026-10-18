@@ -1,4 +1,5 @@
-import { ChevronRight, Ellipsis, Trash2 } from "lucide-react"
+import { useRef, useState } from "react"
+import { ChevronRight, Ellipsis, PencilLine, Share2, Trash2 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -6,14 +7,18 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
+import { Input } from "@/components/shadcn-ui/input"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import dayjs from "@/infrastructure/vendors/dayjs"
+import TopicSharePopover from "@/pages/superMagic/components/TopicSharePopover"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
+import { useStudyRename } from "../hooks/useStudyRename"
 import { resolveStudyStatus } from "../services/studyStatus"
 import type { StudyFile } from "../types"
 import {
@@ -41,6 +46,12 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 	const study = store.studyFileOf(topic)
 	const status = resolveStudyStatus(topic, study)
 	const title = store.studyTitleOf(topic) || t("study.untitled")
+	const rename = useStudyRename(topic.id, store.studyTitleOf(topic))
+	const [shareOpen, setShareOpen] = useState(false)
+	// Sharing a study before it finishes would publish a half-written result.
+	const shareable = status.kind === "done"
+	// Rename and share take focus themselves; returning it to "…" would close them at once.
+	const keepFocusAwayRef = useRef(false)
 	const isPersonaBuild = study?.study_type === "persona_build"
 
 	const studyTypeLabel = study?.study_type
@@ -74,25 +85,47 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 		<li
 			className={cn(
 				// Columns as in the prototype: study, outcome, status, time, actions.
-				"group flex items-center gap-5 px-1 py-3.5 transition-colors hover:bg-muted/40",
+				"group relative flex items-center gap-5 px-1 py-3.5 transition-colors hover:bg-muted/40",
 				status.kind === "waiting_user" && "bg-amber-500/[0.06]",
 			)}
 		>
-			<button
-				type="button"
-				className="flex min-w-0 flex-1 flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				onClick={() => onOpen(topic)}
-			>
-				<span className="truncate text-[14.5px] font-medium text-foreground">{title}</span>
-				{store.studyFilesReady ? (
-					<span className="truncate text-xs text-muted-foreground">
-						{meta ||
-							t("study.progress", { done: status.completed, total: status.total })}
+			{rename.draft !== null ? (
+				<div className="min-w-0 flex-1">
+					<Input
+						autoFocus
+						value={rename.draft}
+						disabled={rename.isSaving}
+						placeholder={t("study.untitled")}
+						aria-label={t("study.rename")}
+						className="h-8 text-[14.5px] font-medium"
+						onChange={(event) => rename.setDraft(event.target.value)}
+						onBlur={() => void rename.commit()}
+						onKeyDown={rename.onKeyDown}
+						onFocus={(event) => event.target.select()}
+					/>
+				</div>
+			) : (
+				<button
+					type="button"
+					className="flex min-w-0 flex-1 flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					onClick={() => onOpen(topic)}
+				>
+					<span className="truncate text-[14.5px] font-medium text-foreground">
+						{title}
 					</span>
-				) : (
-					<Skeleton className="h-3 w-40" />
-				)}
-			</button>
+					{store.studyFilesReady ? (
+						<span className="truncate text-xs text-muted-foreground">
+							{meta ||
+								t("study.progress", {
+									done: status.completed,
+									total: status.total,
+								})}
+						</span>
+					) : (
+						<Skeleton className="h-3 w-40" />
+					)}
+				</button>
+			)}
 			{/* Outcome column: verdict mix once concluded, otherwise how far the study got. */}
 			<span className="hidden w-44 shrink-0 md:block">
 				{!store.studyFilesReady ? (
@@ -131,13 +164,64 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 						</Button>
 					</DropdownMenuTrigger>
 				</MagicTooltip>
-				<DropdownMenuContent align="end">
+				<DropdownMenuContent
+					align="end"
+					className="min-w-40"
+					onCloseAutoFocus={(event) => {
+						if (!keepFocusAwayRef.current) return
+						keepFocusAwayRef.current = false
+						event.preventDefault()
+					}}
+				>
+					{rename.editable ? (
+						<DropdownMenuItem
+							onSelect={() => {
+								keepFocusAwayRef.current = true
+								rename.start()
+							}}
+						>
+							<PencilLine className="size-4" />
+							{t("home.rename")}
+						</DropdownMenuItem>
+					) : null}
+					<DropdownMenuItem
+						disabled={!shareable}
+						onSelect={() => {
+							keepFocusAwayRef.current = true
+							// Open after the menu has closed so the popover is not dismissed by it.
+							window.setTimeout(() => setShareOpen(true), 0)
+						}}
+					>
+						<Share2 className="size-4" />
+						<span className="flex flex-col">
+							{t("home.share")}
+							{shareable ? null : (
+								<span className="text-xs text-muted-foreground">
+									{t("home.shareUnavailable")}
+								</span>
+							)}
+						</span>
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
 					<DropdownMenuItem className="text-destructive" onSelect={() => onDelete(topic)}>
 						<Trash2 className="size-4" />
 						{t("home.delete")}
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
+			{/* The share panel anchors to an invisible point under "…", the same panel as the studio. */}
+			<TopicSharePopover
+				open={shareOpen}
+				onOpenChange={setShareOpen}
+				topicId={topic.id}
+				topicTitle={title}
+				fileListOffHint={t("share.fileListOffHint")}
+			>
+				<span
+					aria-hidden
+					className="pointer-events-none absolute right-12 top-full size-0"
+				/>
+			</TopicSharePopover>
 			<ChevronRight
 				aria-hidden
 				className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
