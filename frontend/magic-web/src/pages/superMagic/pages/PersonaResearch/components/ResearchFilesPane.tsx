@@ -25,7 +25,9 @@ const ResearchFilesPane = forwardRef<DetailRef, ResearchFilesPaneProps>(function
 
 	return (
 		<div className="h-full min-h-0" data-testid="persona-research-files">
+			{/* Every study shares one project: keep preview tabs per study, never project-wide. */}
 			<Detail
+				key={selectedTopic?.id}
 				ref={ref}
 				disPlayDetail={userSelectDetail}
 				userSelectDetail={userSelectDetail}
@@ -44,6 +46,7 @@ const ResearchFilesPane = forwardRef<DetailRef, ResearchFilesPaneProps>(function
 				projectId={selectedProject.id}
 				showFallbackWhenEmpty
 				allowDownload
+				persistFileTabs={false}
 			/>
 		</div>
 	)
