@@ -80,4 +80,31 @@ describe("buildResearchMentionCatalog", () => {
 			file_path: "studies/x/interviews/p_a.json",
 		})
 	})
+
+	it("orders transcripts by the persona order", () => {
+		const study = collectStudyAttachments(
+			["studies/x/interviews/p_a.json", "studies/x/interviews/p_b.json"].map(file),
+			"studies/x/",
+		)
+		const second = { id: "p_b", name: "刘燕" } as PersonaFile
+		const catalog = buildResearchMentionCatalog({
+			study,
+			personas: [
+				{ persona: second, file: file("personas/p_b.json") },
+				{ persona, file: file("personas/p_a.json") },
+			],
+			interviewPersonaIdByFileId: new Map([
+				["id:studies/x/interviews/p_a.json", "p_a"],
+				["id:studies/x/interviews/p_b.json", "p_b"],
+			]),
+			personaNameById: (id) => (id === "p_a" ? "王浩" : "刘燕"),
+			labels,
+			renderPersonaIcon: () => null,
+		})
+
+		expect(catalog.groups[2].items.map((item) => item.name)).toEqual([
+			"刘燕 · 访谈记录",
+			"王浩 · 访谈记录",
+		])
+	})
 })

@@ -103,15 +103,25 @@ export function buildResearchMentionCatalog(
 			file ? toFileMention(file, { projectId }) : null,
 		),
 	)
+	// Transcripts follow the persona order above instead of their file names.
+	const personaOrder = new Map(input.personas.map(({ persona }, index) => [persona.id, index]))
+	const orderOf = (file: AttachmentItem) => {
+		const personaId = input.interviewPersonaIdByFileId.get(String(file.file_id ?? ""))
+		return personaId === undefined
+			? Number.MAX_SAFE_INTEGER
+			: (personaOrder.get(personaId) ?? Number.MAX_SAFE_INTEGER)
+	}
 	const interviews = compact(
-		study.interviews.map((file) => {
-			const personaId = input.interviewPersonaIdByFileId.get(String(file.file_id ?? ""))
-			const personaName = personaId ? input.personaNameById(personaId) : undefined
-			return toFileMention(file, {
-				label: personaName ? labels.interviewOf(personaName) : undefined,
-				projectId,
-			})
-		}),
+		[...study.interviews]
+			.sort((a, b) => orderOf(a) - orderOf(b))
+			.map((file) => {
+				const personaId = input.interviewPersonaIdByFileId.get(String(file.file_id ?? ""))
+				const personaName = personaId ? input.personaNameById(personaId) : undefined
+				return toFileMention(file, {
+					label: personaName ? labels.interviewOf(personaName) : undefined,
+					projectId,
+				})
+			}),
 	)
 
 	return {
