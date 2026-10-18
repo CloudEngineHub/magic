@@ -276,10 +276,10 @@
 		"share": "分享",
 		"shareUnavailable": "研究完成后可分享",
 		"studiesCount": "共 {{count}} 项",
-		"subtitle": "写下你想验证的商业判断。AI 会找来合适的受访者，一个个聊完，把他们的原话整理成可以拿去开会的结论。",
+		"subtitle": "方案、定价、新功能，先让一组 AI 模拟用户聊一遍。",
 		"templatesHint": "选一个研究方法，内容可以再改",
 		"templatesTitle": "从一个问题开始",
-		"title": "问问他们。",
+		"title": "拍板之前，\n先听听他们怎么说。",
 		"trySample": "试试示例研究"
 	},
 	"hypothesis": {

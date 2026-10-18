@@ -278,10 +278,10 @@
 		"share": "Share",
 		"shareUnavailable": "Available once the study finishes",
 		"studiesCount": "{{count}} total",
-		"subtitle": "Write down the business call you want to test. AI finds the right interviewees, talks to each of them, and turns what they said into conclusions you can take to a meeting.",
+		"subtitle": "Plans, pricing, new features: run them past a panel of AI-simulated users first.",
 		"templatesHint": "Pick a research method; you can edit it",
 		"templatesTitle": "Start from a question",
-		"title": "Ask them.",
+		"title": "Before you sign off,\nhear what they'd say.",
 		"trySample": "Try a sample study"
 	},
 	"hypothesis": {

@@ -222,7 +222,7 @@ function ResearchHomePage() {
 					<div className="flex min-w-0 flex-col">
 						<h1
 							className={cn(
-								"font-black leading-[1.05] tracking-[-0.035em] text-foreground",
+								"whitespace-pre-line font-black leading-[1.1] tracking-[-0.035em] text-foreground",
 								isMobile ? "text-4xl" : "text-[64px]",
 							)}
 						>
