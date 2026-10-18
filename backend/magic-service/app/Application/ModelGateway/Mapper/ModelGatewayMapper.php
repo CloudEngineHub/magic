@@ -362,10 +362,9 @@ class ModelGatewayMapper extends ModelMapper
         }
 
         // 默认只按订阅可用模型 ID 查询，保持既有 /v1/models 行为。
-        // 开启 with_organization_models 后，追加当前组织和官方组织的启用模型，确保两类模型都能返回。
+        // 开启 with_organization_models 后，只追加当前组织的启用模型；官方模型仍受订阅白名单约束。
         if ($withOrganizationModels && is_array($availableModelIds)) {
             $organizationDataIsolation = ProviderDataIsolation::createByBaseDataIsolation($dataIsolation);
-            $organizationDataIsolation->setContainOfficialOrganization(true);
             $organizationModelIdsByType = $this->providerManager->getModelIdsGroupByType($organizationDataIsolation, $modelTypes);
             $availableModelIds = $this->mergeOrganizationModelIds(
                 $availableModelIds,
