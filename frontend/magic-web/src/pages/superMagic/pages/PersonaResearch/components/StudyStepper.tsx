@@ -114,14 +114,20 @@ export default function StudyStepper({
 	)
 }
 
-function StepDot({
+/**
+ * One step marker. `still` drops the spinner and ping on the running step, for snapshots such as
+ * chat tool cards where the step was current at that moment but nothing is happening now.
+ */
+export function StepDot({
 	status,
 	waiting,
 	index,
+	still = false,
 }: {
 	status: StudyPhaseStatus
 	waiting: boolean
 	index: number
+	still?: boolean
 }) {
 	const base =
 		"flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium transition-colors"
@@ -136,6 +142,13 @@ function StepDot({
 		return (
 			<span className={cn(base, "bg-primary text-primary-foreground")}>
 				<Check className="size-3" />
+			</span>
+		)
+	}
+	if (status === "running" && still) {
+		return (
+			<span className={cn(base, "border border-primary bg-primary/10 text-primary")}>
+				{index + 1}
 			</span>
 		)
 	}

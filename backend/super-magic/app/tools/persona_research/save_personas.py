@@ -22,7 +22,12 @@ from pydantic import BaseModel, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import (
+    DisplayType,
+    StudyPersonaItemContent,
+    StudyPersonasContent,
+    ToolDetail,
+)
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.persona_research.contracts import (
@@ -43,6 +48,7 @@ from app.tools.persona_research.study_files import (
     ascii_slug,
     load_study,
     now_iso,
+    portrait_hint,
     random_hex,
     read_json_file,
     resolve_study_dir,
@@ -123,6 +129,7 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
                     "tier": persona["tier"],
                     "segment": item.segment,
                     "reused": reused,
+                    **portrait_hint(persona),
                 })
             ids = [pid for pid, _ in files]
             if len(set(ids)) != len(ids):
@@ -162,7 +169,10 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             for row in summary
         )
         lines.append("Use these persona file paths (personas/<persona_id>.json) in the interviewer briefs.")
-        return ToolResult(content="\n".join(lines), data={"study_dir": params.study_dir, "personas": summary})
+        return ToolResult(
+            content="\n".join(lines),
+            data={"study_dir": params.study_dir, "panel_name": params.panel_name.strip(), "personas": summary},
+        )
 
     async def _prepare(self, base, item: PersonaInput, created_in: str) -> tuple[Dict[str, Any], bool]:
         if item.id:
@@ -235,21 +245,27 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
     ) -> Optional[ToolDetail]:
         if not result.ok:
             return None
-        lines = [
-            f"# {_translate('save_personas.detail_title')}",
-            "",
-            f"| {_translate('save_personas.col_name')} | {_translate('save_personas.col_segment')} | "
-            f"{_translate('save_personas.col_tier')} | {_translate('save_personas.col_source')} |",
-            "| --- | --- | --- | --- |",
-        ]
-        for row in result.data.get("personas") or []:
-            name = row["name"] + (f"<br>{row['tagline']}" if row.get("tagline") else "")
-            source = _translate("save_personas.reused" if row.get("reused") else "save_personas.new")
-            tier = _translate("save_personas.tier." + row["tier"])
-            lines.append(f"| {name} | {row['segment']} | {tier} | {source} |")
+        rows = result.data.get("personas") or []
+        reused = sum(1 for row in rows if row["reused"])
         return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name="study_personas.md", content="\n".join(lines) + "\n"),
+            type=DisplayType.STUDY_PERSONAS,
+            data=StudyPersonasContent(
+                panel_name=result.data.get("panel_name", ""),
+                new_count=len(rows) - reused,
+                reused_count=reused,
+                personas=[
+                    StudyPersonaItemContent(
+                        persona_id=row["persona_id"],
+                        name=row["name"],
+                        tagline=row.get("tagline", ""),
+                        segment=row["segment"],
+                        reused=row["reused"],
+                        gender=row.get("gender", ""),
+                        age=row.get("age", ""),
+                    )
+                    for row in rows
+                ],
+            ),
         )
 
 

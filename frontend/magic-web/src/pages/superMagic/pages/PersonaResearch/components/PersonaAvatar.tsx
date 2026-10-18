@@ -4,13 +4,24 @@ import { cn } from "@/utils/cn"
 import { useOptionalPersonaResearchStore } from "../context"
 import { BACK_HAIR, FRONT_HAIR, ageOf, genderOf, resolvePortrait } from "./personaPortrait"
 
+interface PersonaAvatarProps {
+	id: string
+	name: string
+	className?: string
+	/**
+	 * Gender and age from outside the research page (for example a chat tool card), used when the
+	 * persona file is not loaded in a research store, so the portrait matches the research page.
+	 */
+	demographics?: Record<string, unknown>
+}
+
 /**
  * Flat portrait for an AI persona, drawn from built-in templates. The name picks colours and
  * hairstyle so a persona always looks the same; gender and age come from its file when known.
  */
-function PersonaAvatar({ id, name, className }: { id: string; name: string; className?: string }) {
+function PersonaAvatar({ id, name, className, demographics: fallback }: PersonaAvatarProps) {
 	const store = useOptionalPersonaResearchStore()
-	const demographics = store?.personaById(id)?.dimensions?.demographics
+	const demographics = store?.personaById(id)?.dimensions?.demographics ?? fallback
 	const spec = resolvePortrait(name || id, genderOf(demographics), ageOf(demographics))
 	const clipId = useId()
 	const backHair = BACK_HAIR[spec.hairStyle]

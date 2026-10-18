@@ -7269,22 +7269,6 @@
         "zh_CN": "受访者暂时没能回答，AI 正在调整",
         "en_US": "The participant could not answer yet; the AI is adjusting"
     },
-    "persona_chat.detail_title": {
-        "zh_CN": "访谈问答",
-        "en_US": "Interview Q&A"
-    },
-    "persona_chat.detail_failed_title": {
-        "zh_CN": "访谈未完成",
-        "en_US": "Interview not completed"
-    },
-    "persona_chat.detail_question": {
-        "zh_CN": "主持人提问",
-        "en_US": "Moderator question"
-    },
-    "persona_chat.detail_failed_list": {
-        "zh_CN": "未能回答的受访者",
-        "en_US": "Participants who could not answer"
-    },
     "persona_chat.reason.invalid_request": {
         "zh_CN": "访谈参数不正确，AI 会修正后重试",
         "en_US": "The interview request was invalid; the AI will correct it and retry"
@@ -7300,10 +7284,6 @@
     "persona_chat.reason.empty_answer": {
         "zh_CN": "没有生成有效回答",
         "en_US": "No valid answer was generated"
-    },
-    "persona_chat.detail_round": {
-        "zh_CN": "第 {{round}} 轮",
-        "en_US": "Round {{round}}"
     },
     "finish_persona_transcript.success": {
         "zh_CN": "访谈已完成，共 {{rounds}} 轮",
@@ -7345,10 +7325,6 @@
         "zh_CN": "研究进度未更新，AI 正在调整",
         "en_US": "Study progress was not updated; the AI is adjusting"
     },
-    "update_study.detail_title": {
-        "zh_CN": "研究进度",
-        "en_US": "Study progress"
-    },
     "save_personas.success": {
         "zh_CN": "{{count}} 位人设：新建 {{new}} 位，复用 {{reused}} 位",
         "en_US": "{{count}} personas: {{new}} new, {{reused}} reused"
@@ -7356,46 +7332,6 @@
     "save_personas.error": {
         "zh_CN": "人设未保存，AI 正在修正",
         "en_US": "Personas were not saved; the AI is correcting them"
-    },
-    "save_personas.detail_title": {
-        "zh_CN": "本次研究的人设",
-        "en_US": "Personas in this study"
-    },
-    "save_personas.col_name": {
-        "zh_CN": "人设",
-        "en_US": "Persona"
-    },
-    "save_personas.col_segment": {
-        "zh_CN": "分层",
-        "en_US": "Segment"
-    },
-    "save_personas.col_tier": {
-        "zh_CN": "依据",
-        "en_US": "Basis"
-    },
-    "save_personas.col_source": {
-        "zh_CN": "来源",
-        "en_US": "Source"
-    },
-    "save_personas.new": {
-        "zh_CN": "新建",
-        "en_US": "New"
-    },
-    "save_personas.reused": {
-        "zh_CN": "复用",
-        "en_US": "Reused"
-    },
-    "save_personas.tier.generated": {
-        "zh_CN": "推断生成",
-        "en_US": "Generated"
-    },
-    "save_personas.tier.evidence_based": {
-        "zh_CN": "有证据支撑",
-        "en_US": "Evidence-based"
-    },
-    "save_personas.tier.imported": {
-        "zh_CN": "来自上传资料",
-        "en_US": "From uploads"
     },
     "check_interviews.success": {
         "zh_CN": "{{done}}/{{total}} 位已完成访谈",
@@ -7478,24 +7414,24 @@
         "en_US": "Real-person validation questionnaire"
     },
     "update_study.phase.clarify": {
-        "zh_CN": "澄清需求",
+        "zh_CN": "需求澄清",
         "en_US": "Clarify"
     },
     "update_study.phase.plan": {
-        "zh_CN": "研究方案",
-        "en_US": "Plan"
+        "zh_CN": "研究设计",
+        "en_US": "Design"
     },
     "update_study.phase.desk_research": {
-        "zh_CN": "桌面研究",
-        "en_US": "Desk research"
+        "zh_CN": "市场洞察",
+        "en_US": "Market insights"
     },
     "update_study.phase.interview": {
         "zh_CN": "人设访谈",
         "en_US": "Interviews"
     },
     "update_study.phase.report": {
-        "zh_CN": "研究报告",
-        "en_US": "Report"
+        "zh_CN": "研究产出",
+        "en_US": "Outputs"
     },
     "update_study.phase.validation": {
         "zh_CN": "真人验证",

@@ -10,13 +10,13 @@ from app.tools import persona_chat as persona_chat_module
 from app.tools.persona_chat import PersonaChat, PersonaChatParams
 
 
-def _write_persona(root, persona_id, name):
+def _write_persona(root, persona_id, name, demographics=None):
     path = root / "personas" / f"{persona_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({"schema_version": 1, "id": persona_id, "name": name, "tier": "generated"}),
-        encoding="utf-8",
-    )
+    profile = {"schema_version": 1, "id": persona_id, "name": name, "tier": "generated"}
+    if demographics:
+        profile["dimensions"] = {"demographics": demographics}
+    path.write_text(json.dumps(profile), encoding="utf-8")
     return f"personas/{persona_id}.json"
 
 
@@ -85,7 +85,7 @@ async def test_interview_answer_falls_back_to_auto_model_and_token_limit(tool, t
 
     assert result.ok is True
     assert result.data == {
-        "answers": [{"persona_id": "p_zhang_1a2b", "name": "Zhang", "text": "Zhang answer"}],
+        "answers": [{"persona_id": "p_zhang_1a2b", "name": "Zhang", "text": "Zhang answer", "gender": "", "age": ""}],
         "failed": [],
     }
     assert "1 of 1 succeeded" in result.content
@@ -151,7 +151,8 @@ async def test_paths_outside_workspace_are_rejected(tool, tmp_path, fake_llm, ba
     assert fake_llm.calls == []
     detail = await tool.get_tool_detail(ToolContext(), result, {"question": "q"})
     assert detail is not None
-    assert "outside" not in detail.data.content
+    assert detail.data.question == "q"
+    assert detail.data.error and "outside" not in detail.data.error
 
 
 async def test_transcript_path_outside_workspace_is_rejected(tool, tmp_path, fake_llm):
@@ -169,7 +170,7 @@ async def test_transcript_path_outside_workspace_is_rejected(tool, tmp_path, fak
 async def test_focus_group_partial_failure_keeps_successful_answers(tool, tmp_path, fake_llm):
     fake_llm.failing_names = {"Li"}
     paths = [
-        _write_persona(tmp_path, "p_zhang_1a2b", "Zhang"),
+        _write_persona(tmp_path, "p_zhang_1a2b", "Zhang", {"gender": "女", "age": 32}),
         _write_persona(tmp_path, "p_li_3c4d", "Li"),
         _write_persona(tmp_path, "p_wang_5e6f", "Wang"),
     ]
@@ -178,9 +179,10 @@ async def test_focus_group_partial_failure_keeps_successful_answers(tool, tmp_pa
 
     assert result.ok is False
     assert [answer["persona_id"] for answer in result.data["answers"]] == ["p_zhang_1a2b", "p_wang_5e6f"]
-    assert result.data["failed"] == [
-        {"persona_id": "p_li_3c4d", "path": "personas/p_li_3c4d.json", "reason": "model_error"}
-    ]
+    assert result.data["failed"] == [{
+        "persona_id": "p_li_3c4d", "name": "Li", "path": "personas/p_li_3c4d.json", "reason": "model_error",
+        "gender": "", "age": "",
+    }]
     assert "2 of 3 succeeded" in result.content
     assert "p_li_3c4d" in result.content and "upstream provider 500" in result.content
     # 焦点小组按顺序回答：后发言者能看到本轮前面的回答。
@@ -189,9 +191,16 @@ async def test_focus_group_partial_failure_keeps_successful_answers(tool, tmp_pa
     assert "focus group" in fake_llm.calls[2]["messages"][0]["content"]
 
     detail = await tool.get_tool_detail(ToolContext(), result, {"question": "Price?"})
-    assert "Zhang answer" in detail.data.content
-    assert "upstream" not in detail.data.content
-    assert "internal-host" not in detail.data.content
+    assert detail.type == "persona_chat"
+    assert detail.data.question == "Price?"
+    assert [(a.name, a.text, a.gender, a.age) for a in detail.data.answers] == [
+        ("Zhang", "Zhang answer", "女", "32"),
+        ("Wang", "Wang answer", "", ""),
+    ]
+    # 失败原因展示给用户：已翻译、脱敏，不带上游报错原文。
+    assert [f.name for f in detail.data.failed] == ["Li"]
+    assert "upstream" not in detail.data.failed[0].reason
+    assert detail.data.round_number is None and not detail.data.error
     remark = await tool.get_after_tool_call_friendly_action_and_remark("persona_chat", ToolContext(), result, 0)
     assert remark["remark"]
     assert "upstream" not in remark["remark"]
@@ -209,7 +218,8 @@ async def test_missing_persona_file_is_reported_without_model_call(tool, tmp_pat
     assert result.data["failed"][0]["reason"] == "profile_unavailable"
     assert fake_llm.calls == []
     detail = await tool.get_tool_detail(ToolContext(), result, {"question": "q"})
-    assert detail is not None and detail.data.content.strip()
+    assert [(f.persona_id, f.name) for f in detail.data.failed] == [("p_none_0000", "p_none_0000")]
+    assert detail.data.failed[0].reason
 
 
 INTERVIEW = "studies/s-1a2b/interviews/p_zhang_1a2b.json"
@@ -233,6 +243,8 @@ async def test_first_round_creates_transcript_and_reports_round_indexes(tool, tm
     assert result.ok is True
     assert result.data["round_indexes"] == [0, 1]
     assert "Recorded round 1" in result.content
+    detail = await tool.get_tool_detail(ToolContext(), result, {"question": "q1"})
+    assert (detail.data.round_number, detail.data.round_limit) == (1, 7)
     assert _read(tmp_path, INTERVIEW) == {
         "schema_version": 1, "persona_id": "p_zhang_1a2b", "status": "running", "error": "",
         "rounds": [{"role": "moderator", "text": "q1"}, {"role": "persona", "text": "Zhang answer"}],
@@ -324,6 +336,9 @@ async def test_nothing_is_recorded_when_every_answer_fails(tool, tmp_path, fake_
     assert result.ok is False
     assert "Nothing was recorded for round 1" in result.content
     assert not (tmp_path / INTERVIEW).exists()
+    # 没写进记录的一轮不显示「第 N 轮」。
+    detail = await tool.get_tool_detail(ToolContext(), result, {"question": "q1"})
+    assert detail.data.round_number is None and detail.data.answers == []
 
 
 async def test_follow_up_reopens_a_finished_transcript(tool, tmp_path, fake_llm):

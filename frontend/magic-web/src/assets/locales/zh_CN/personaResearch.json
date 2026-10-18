@@ -356,6 +356,15 @@
 			"title": "细分人群机会"
 		}
 	},
+	"toolCard": {
+		"answering": "正在作答…",
+		"newAndReused": "新建 {{new}} · 复用 {{reused}}",
+		"notAnswered": "未能回答",
+		"round": "第 {{round}} 轮",
+		"roundOf": "第 {{round}}/{{limit}} 轮",
+		"sourceNew": "新建",
+		"sourceReused": "复用"
+	},
 	"transcript": {
 		"failed": "这场访谈没有完成",
 		"inProgress": "访谈进行中…",

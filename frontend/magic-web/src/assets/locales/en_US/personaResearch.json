@@ -358,6 +358,15 @@
 			"title": "Niche segment opportunities"
 		}
 	},
+	"toolCard": {
+		"answering": "Answering…",
+		"newAndReused": "{{new}} new · {{reused}} reused",
+		"notAnswered": "Could not answer",
+		"round": "Round {{round}}",
+		"roundOf": "Round {{round}}/{{limit}}",
+		"sourceNew": "New",
+		"sourceReused": "Reused"
+	},
 	"transcript": {
 		"failed": "This interview did not finish",
 		"inProgress": "Interview in progress…",

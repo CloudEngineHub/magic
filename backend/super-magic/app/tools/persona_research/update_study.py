@@ -27,7 +27,12 @@ from pydantic import BaseModel, Field
 
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import (
+    DisplayType,
+    StudyPhaseItemContent,
+    StudyProgressContent,
+    ToolDetail,
+)
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.persona_research.contracts import (
@@ -245,15 +250,14 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
     ) -> Optional[ToolDetail]:
         if not result.ok:
             return None
-        marks = {"done": "✓", "running": "…", "pending": "·", "skipped": "–", "failed": "✗"}
-        lines = [f"# {_translate('update_study.detail_title')}", ""]
-        lines.extend(
-            f"- {marks.get(item['status'], '')} {_phase_label(item['key'])}" for item in result.data.get("phases", [])
-        )
         return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name="study_progress.md", content="\n".join(lines) + "\n"),
+            type=DisplayType.STUDY_PROGRESS,
+            data=StudyProgressContent(
+                phase=result.data["phase"],
+                phases=[StudyPhaseItemContent(**item) for item in result.data["phases"]],
+            ),
         )
+
 
 def _advance(study: Study, target: StudyPhase, current_status: PhaseStatus = PhaseStatus.DONE) -> None:
     """把 target 之前仍在进行或等待的阶段收尾，target 设为 running。"""

@@ -257,6 +257,19 @@ def ascii_slug(text: str, max_length: int = 40) -> str:
     return slug[:max_length].strip("-")
 
 
+def portrait_hint(profile: Dict[str, Any]) -> Dict[str, str]:
+    """人设头像需要的性别和年龄原文，供卡片画出和研究页一样的头像。
+
+    例：dimensions.demographics = {"gender": "女", "age": 32} → {"gender": "女", "age": "32"}；
+    缺字段或类型不对时给空字符串，由前端按「未知」处理。
+    """
+    dimensions = profile.get("dimensions")
+    demographics = dimensions.get("demographics") if isinstance(dimensions, dict) else None
+    if not isinstance(demographics, dict):
+        return {"gender": "", "age": ""}
+    return {key: str(demographics.get(key) or "").strip() for key in ("gender", "age")}
+
+
 _TRANSCRIPT_LOCKS: Dict[str, asyncio.Lock] = {}
 
 

@@ -95,6 +95,20 @@ async def test_plan_confirmed_fills_plan_fields_and_numbers_hypotheses(tmp_path)
     assert study["guide_review"]["items"][0]["issue"] == "leading"
 
 
+async def test_update_study_detail_is_a_phase_snapshot(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified"])
+    tool = UpdateStudy(base_dir=tmp_path)
+    result = await tool.execute(_context(), UpdateStudyParams(event="plan_confirmed", study_dir=study_dir, **PLAN))
+
+    detail = await tool.get_tool_detail(_context(), result)
+
+    assert detail.type == "study_progress"
+    assert detail.data.phase == "desk_research"
+    assert [(p.key, p.status) for p in detail.data.phases][:4] == [
+        ("clarify", "done"), ("plan", "done"), ("desk_research", "running"), ("interview", "pending"),
+    ]
+
+
 async def test_out_of_order_event_is_rejected_and_file_untouched(tmp_path):
     study_dir = await _study_at(tmp_path, [])
     before = _read(tmp_path, f"{study_dir}/study.json")
@@ -206,6 +220,12 @@ async def test_save_personas_assigns_ids_tiers_and_panel(tmp_path):
     panel = _read(tmp_path, f"{study_dir}/panel.json")
     assert panel["persona_ids"] == [row["persona_id"] for row in rows]
     assert panel["selection"][1] == {"persona_id": rows[1]["persona_id"], "reason": "fills the quota", "reused": False, "segment": "Skeptics"}
+
+    detail = await SavePersonas(base_dir=tmp_path).get_tool_detail(ToolContext(), result)
+    assert detail.type == "study_personas"
+    assert (detail.data.panel_name, detail.data.new_count, detail.data.reused_count) == ("Study panel", 2, 0)
+    # 卡片头像按人设的性别和年龄画，与研究页一致。
+    assert [(p.name, p.segment, p.age) for p in detail.data.personas] == [("Zhang", "Owners", "40"), ("Li", "Skeptics", "40")]
 
 
 async def test_save_personas_rejects_incomplete_persona_and_unknown_segment(tmp_path):

@@ -54,6 +54,9 @@ class DisplayType(str, Enum):
     GENERATION_PROGRESS = "generation_progress"  # 生成进度：只带预期完成时间，百分比由前端换算
     OPERATION_RESULT_LIST = "operation_result_list"  # 简短操作结果，在消息卡片内展开
     FILE_DOWNLOAD = "file_download"
+    STUDY_PROGRESS = "study_progress"  # AI 研究的阶段进度（update_study）
+    PERSONA_CHAT = "persona_chat"  # AI 研究访谈的一轮问答（persona_chat）
+    STUDY_PERSONAS = "study_personas"  # AI 研究保存的人设名单（save_personas）
 
 
 class BrowserDetailStatus(str, Enum):
@@ -221,6 +224,75 @@ class SubagentsContent(BaseModel):
     elapsed_seconds: int
     phase: SubagentsPhase
     agents: List[SubagentItemContent]
+
+
+class StudyPhaseItemContent(BaseModel):
+    """研究阶段的一格。key 取 clarify / plan / desk_research / interview / report / validation。"""
+
+    key: str
+    # done / running / pending / skipped / failed
+    status: str
+
+
+class StudyProgressContent(BaseModel):
+    """update_study 卡片：本次事件后的 6 个阶段快照。阶段名由前端按研究页文案显示。"""
+
+    phase: str  # 当前阶段；全部完成时为 done
+    phases: List[StudyPhaseItemContent]
+
+
+class PersonaPortraitHint(BaseModel):
+    """前端画人设头像用的性别和年龄原文，与研究页读 demographics 的口径一致；缺失时为空。"""
+
+    gender: str = ""
+    age: str = ""
+
+
+class PersonaChatAnswerContent(PersonaPortraitHint):
+    persona_id: str
+    name: str
+    text: str
+
+
+class PersonaChatFailureContent(PersonaPortraitHint):
+    persona_id: str
+    name: str
+    reason: str  # 已按用户语言翻译、脱敏的原因
+
+
+class PersonaChatContent(BaseModel):
+    """persona_chat 卡片：主持人问题和受访者回答。
+
+    | 情况 | answers | failed | error |
+    | 全部回答 | 有 | 空 | 空 |
+    | 小组部分失败 | 有 | 有 | 空 |
+    | 整次请求被拒（路径、轮次不对） | 空 | 空 | 有 |
+    round_number 只在写入访谈记录时有值；round_limit 是这份记录允许的最多轮数。
+    """
+
+    question: str
+    round_number: Optional[int] = None
+    round_limit: Optional[int] = None
+    answers: List[PersonaChatAnswerContent]
+    failed: List[PersonaChatFailureContent]
+    error: str = ""
+
+
+class StudyPersonaItemContent(PersonaPortraitHint):
+    persona_id: str
+    name: str
+    tagline: str
+    segment: str
+    reused: bool
+
+
+class StudyPersonasContent(BaseModel):
+    """save_personas 卡片：头像组加「新建 X · 复用 Y」，名单按访谈顺序。"""
+
+    panel_name: str
+    new_count: int
+    reused_count: int
+    personas: List[StudyPersonaItemContent]
 
 
 class ScriptExecutionContent(BaseModel):
@@ -528,7 +600,8 @@ class ToolDetail(BaseModel):
     data: Union[
         OperationResultListReportContent, FileDownloadContent, FileContent, FileTreeContent, TerminalContent, BrowserContent, SearchContent,
         ScriptExecutionContent, DeepWriteContent, TodoContent, DesignCanvasContent, DesignElementContent,
-        AskUserQuestionContent, AskUserResultContent, PlanToolContent, SubagentsContent, OperationResultListContent, Dict[str, Any]
+        AskUserQuestionContent, AskUserResultContent, PlanToolContent, SubagentsContent, OperationResultListContent,
+        StudyProgressContent, PersonaChatContent, StudyPersonasContent, Dict[str, Any]
     ]  # 展示内容，根据type动态展示
 
     model_config = ConfigDict(use_enum_values=True)

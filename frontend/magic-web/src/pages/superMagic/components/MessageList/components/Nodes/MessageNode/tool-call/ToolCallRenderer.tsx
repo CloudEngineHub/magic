@@ -12,6 +12,16 @@ import FileDownloadCard from "../../shared/FileDownloadCard"
 const AskUserToolCall = lazy(() => import("./tools/AskUser"))
 const MicroAppPlanToolCall = lazy(() => import("./tools/MicroAppPlan"))
 const SubagentsTool = lazy(() => import("./tools/Subagents"))
+const StudyProgressTool = lazy(() => import("./tools/PersonaResearch/StudyProgressTool"))
+const PersonaChatTool = lazy(() => import("./tools/PersonaResearch/PersonaChatTool"))
+const StudyPersonasTool = lazy(() => import("./tools/PersonaResearch/StudyPersonasTool"))
+
+/** AI 研究的专用卡片；三者都能在老消息（Markdown detail）上退回默认卡片 */
+const PERSONA_RESEARCH_TOOLS = new Map([
+	["update_study", StudyProgressTool],
+	["persona_chat", PersonaChatTool],
+	["save_personas", StudyPersonasTool],
+])
 
 export function ToolCallRenderer({
 	toolCall,
@@ -140,6 +150,22 @@ export function ToolCallRenderer({
 		return (
 			<Suspense fallback={null}>
 				<SubagentsTool
+					onClick={onClick}
+					toolData={toolData}
+					loading={loading}
+					classNames={classNames}
+					onMouseEnter={onMouseEnter}
+					onMouseLeave={onMouseLeave}
+				/>
+			</Suspense>
+		)
+	}
+
+	const ResearchTool = PERSONA_RESEARCH_TOOLS.get(toolCall.function.name)
+	if (ResearchTool) {
+		return (
+			<Suspense fallback={null}>
+				<ResearchTool
 					onClick={onClick}
 					toolData={toolData}
 					loading={loading}

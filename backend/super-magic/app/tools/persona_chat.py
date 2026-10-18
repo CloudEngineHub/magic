@@ -37,7 +37,13 @@ from agentlang.tools.tool_result import ToolResult
 from agentlang.utils.token_estimator import truncate_text_by_token
 from app.core.ai_abilities import AIAbility, get_ability_config
 from app.core.context.run_interruption import await_with_interruption
-from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
+from app.core.entity.message.server_message import (
+    DisplayType,
+    PersonaChatAnswerContent,
+    PersonaChatContent,
+    PersonaChatFailureContent,
+    ToolDetail,
+)
 from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
@@ -53,6 +59,7 @@ from app.tools.persona_research.contracts import (
 from app.tools.persona_research.study_files import (
     StudyFilesError,
     load_study,
+    portrait_hint,
     read_json_file,
     transcript_lock,
     write_json_file,
@@ -161,6 +168,7 @@ class _Record:
     is_discussion: bool
     data: Dict[str, Any]
     round_number: int
+    round_limit: int
 
 
 @tool()
@@ -200,7 +208,7 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
 
         if transcript_file is None:
             answers = await self._collect_answers(tool_context, params, personas, failures, transcript_text="")
-            return self._build_result(params, answers, failures, record=None, recorded_indexes=[])
+            return self._build_result(params, personas, answers, failures, record=None, recorded_indexes=[])
 
         async with transcript_lock(transcript_file):
             try:
@@ -213,7 +221,9 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
             transcript_text = _format_transcript(record.data, {p.persona_id: p.name for p in personas})
             answers = await self._collect_answers(tool_context, params, personas, failures, transcript_text)
             recorded_indexes = await self._append_round(record, params.question, answers) if answers else []
-        return self._build_result(params, answers, failures, record=record, recorded_indexes=recorded_indexes)
+        return self._build_result(
+            params, personas, answers, failures, record=record, recorded_indexes=recorded_indexes
+        )
 
     async def _collect_answers(
         self,
@@ -322,7 +332,7 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         limit = await self._round_limit(transcript_file, is_discussion)
         if params.round_number > limit:
             raise _InvalidRequest(f"the round limit for this study is {limit}; end the transcript instead")
-        return _Record(transcript_file, params.transcript_path, is_discussion, data, params.round_number)
+        return _Record(transcript_file, params.transcript_path, is_discussion, data, params.round_number, limit)
 
     @staticmethod
     async def _round_limit(transcript_file: Path, is_discussion: bool) -> int:
@@ -430,6 +440,7 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
     @staticmethod
     def _build_result(
         params: PersonaChatParams,
+        personas: List[_Persona],
         answers: List[_Answer],
         failures: List[_Failure],
         *,
@@ -467,13 +478,32 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         if failures and recorded_indexes:
             lines.append("Failed participants are not in the transcript for this round.")
 
+        # 头像提示只给卡片用；读不到档案的人设没有名字和头像提示，用 ID 兜底。
+        by_id = {p.persona_id: p for p in personas}
+
+        def hint(persona_id: str) -> Dict[str, str]:
+            persona = by_id.get(persona_id)
+            return portrait_hint(persona.profile) if persona else {"gender": "", "age": ""}
+
         data: Dict[str, Any] = {
-            "answers": [{"persona_id": a.persona_id, "name": a.name, "text": a.text} for a in answers],
-            "failed": [{"persona_id": f.persona_id, "path": f.path, "reason": f.reason.value} for f in failures],
+            "answers": [
+                {"persona_id": a.persona_id, "name": a.name, "text": a.text, **hint(a.persona_id)} for a in answers
+            ],
+            "failed": [
+                {
+                    "persona_id": f.persona_id,
+                    "name": by_id[f.persona_id].name if f.persona_id in by_id else f.persona_id,
+                    "path": f.path,
+                    "reason": f.reason.value,
+                    **hint(f.persona_id),
+                }
+                for f in failures
+            ],
         }
         if record is not None:
             data["transcript_path"] = record.raw_path
             data["round_number"] = record.round_number
+            data["round_limit"] = record.round_limit
             data["round_indexes"] = recorded_indexes
         return ToolResult(content="\n".join(lines), ok=not failures and bool(answers), data=data)
 
@@ -509,28 +539,38 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
     async def get_tool_detail(
         self, tool_context: ToolContext, result: ToolResult, arguments: Dict[str, Any] = None
     ) -> Optional[ToolDetail]:
-        answers = result.data.get("answers") or []
-        failed = result.data.get("failed") or []
-        question = _text((arguments or {}).get("question"))
-        title_key = "persona_chat.detail_title" if answers else "persona_chat.detail_failed_title"
-        lines = [f"# {_translate(title_key)}", ""]
-        round_number = result.data.get("round_number")
-        if round_number and result.data.get("round_indexes"):
-            lines.extend([_translate("persona_chat.detail_round", round=round_number), ""])
-        if question:
-            lines.extend([f"**{_translate('persona_chat.detail_question')}**", "", f"> {question}", ""])
-        for answer in answers:
-            lines.extend([f"**{answer.get('name') or answer.get('persona_id')}**", "", str(answer.get("text") or ""), ""])
-        if failed:
-            lines.extend([f"**{_translate('persona_chat.detail_failed_list')}**", ""])
-            lines.extend(f"- {item.get('persona_id')}: {_reason_text(item.get('reason'))}" for item in failed)
-        if not answers and not failed:
-            # 整次调用失败（如路径越界）：只展示脱敏后的原因，不展示给模型的原始错误。
-            reason = (result.extra_info or {}).get("user_error_reason") or PersonaChatFailureReason.MODEL_ERROR.value
-            lines.append(_reason_text(reason))
+        data = result.data or {}
+        failed = data.get("failed") or []
+        error = ""
+        if not data.get("answers") and not failed:
+            # 整次调用被拒（如路径越界、轮次不对）：只展示脱敏后的原因，不展示给模型的原始错误。
+            error = _reason_text(
+                (result.extra_info or {}).get("user_error_reason") or PersonaChatFailureReason.MODEL_ERROR.value
+            )
+        # 只有真正写进记录的一轮才显示轮次；整轮失败时没有写入，不显示「第 N 轮」。
+        recorded = bool(data.get("round_indexes"))
         return ToolDetail(
-            type=DisplayType.MD,
-            data=FileContent(file_name="persona_chat.md", content="\n".join(lines).rstrip() + "\n"),
+            type=DisplayType.PERSONA_CHAT,
+            data=PersonaChatContent(
+                question=_text((arguments or {}).get("question")),
+                round_number=data.get("round_number") if recorded else None,
+                round_limit=data.get("round_limit") if recorded else None,
+                answers=[
+                    PersonaChatAnswerContent(**{k: item[k] for k in ("persona_id", "name", "text", "gender", "age")})
+                    for item in data.get("answers") or []
+                ],
+                failed=[
+                    PersonaChatFailureContent(
+                        persona_id=item["persona_id"],
+                        name=item["name"],
+                        reason=_reason_text(item["reason"]),
+                        gender=item["gender"],
+                        age=item["age"],
+                    )
+                    for item in failed
+                ],
+                error=error,
+            ),
         )
 
 
