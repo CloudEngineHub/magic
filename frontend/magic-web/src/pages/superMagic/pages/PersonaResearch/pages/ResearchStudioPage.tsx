@@ -31,6 +31,7 @@ import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { platformKey } from "@/utils/storage"
 import { usePersonaResearchStore } from "../context"
+import { useResearchDetailEvents } from "../hooks/useResearchDetailEvents"
 import ResearchConsole, {
 	ResearchConsoleSkeleton,
 	type ResearchConsoleTab,
@@ -74,6 +75,7 @@ function ResearchStudioPage() {
 	const [focusedInterviewId, setFocusedInterviewId] = useState<string | null>(null)
 	const [openedPersona, setOpenedPersona] = useState<PersonaFile | null>(null)
 	const [userSelectDetail, setUserSelectDetail] = useState<unknown>()
+	const [autoDetail, setAutoDetail] = useState<unknown>()
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const [shareOpen, setShareOpen] = useState(false)
 	const openedReportVersionRef = useRef<string | null>(null)
@@ -82,6 +84,9 @@ function ResearchStudioPage() {
 	useEffect(() => {
 		store.selectStudy(topicId)
 		followedPhaseRef.current = null
+		// Tool steps belong to one study's conversation; never carry them into another study.
+		setUserSelectDetail(undefined)
+		setAutoDetail(undefined)
 	}, [store, topicId])
 
 	const selectedTopic = store.selectedTopic
@@ -108,6 +113,15 @@ function ResearchStudioPage() {
 	const handleSelectDetail = useMemoizedFn((detail?: unknown) => {
 		showOutputs("files")
 		setUserSelectDetail(detail)
+	})
+
+	// Message cards open previews through pubsub (tool playback, file mentions, citations).
+	useResearchDetailEvents({
+		detailRef,
+		attachmentList: store.attachmentList,
+		revealFiles: () => showOutputs("files"),
+		setActiveFileId,
+		setAutoDetail,
 	})
 
 	/**
@@ -303,6 +317,7 @@ function ResearchStudioPage() {
 				<ResearchFilesPane
 					ref={detailRef}
 					userSelectDetail={userSelectDetail}
+					autoDetail={autoDetail}
 					setUserSelectDetail={setUserSelectDetail}
 					activeFileId={activeFileId}
 					onActiveFileChange={setActiveFileId}
@@ -317,6 +332,7 @@ function ResearchStudioPage() {
 			variant={isMobile ? "mobile" : "desktop"}
 			onFileClick={openFile}
 			onSelectDetail={handleSelectDetail}
+			onAutoDetailChange={setAutoDetail}
 		/>
 	)
 

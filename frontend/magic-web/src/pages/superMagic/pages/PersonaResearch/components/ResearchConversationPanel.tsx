@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo } from "react"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { useMemoizedFn } from "ahooks"
+import { isEmpty } from "lodash-es"
 import { observer } from "mobx-react-lite"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
@@ -15,6 +16,8 @@ import { useTopicMessages } from "@/pages/superMagic/hooks/useTopicMessages"
 import { createMessageSendService } from "@/pages/superMagic/services/messageSendFlowService"
 import { resolveMessageSendContext } from "@/pages/superMagic/services/messageSendPreparation"
 import type { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { superMagicStore } from "@/pages/superMagic/stores"
+import { filterPanelMessageWithoutRevoked } from "@/pages/superMagic/utils/handleMessage"
 import { userStore } from "@/models/user"
 import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
@@ -29,16 +32,40 @@ interface ResearchConversationPanelProps {
 	onFileClick?: (fileItem?: unknown) => void
 	/** Tool-result details (search results, browser steps) clicked in the message list. */
 	onSelectDetail?: (detail?: unknown) => void
+	/** Latest tool step of the conversation, shown live by the preview's playback tab. */
+	onAutoDetailChange?: (detail: unknown) => void
 }
 
 /** Conversation of the selected study: reused message list, ask_user cards and composer. */
 const ResearchConversationPanel = forwardRef<
 	ResearchConversationPanelRef,
 	ResearchConversationPanelProps
->(function ResearchConversationPanel({ variant, onFileClick, onSelectDetail }, ref) {
+>(function ResearchConversationPanel(
+	{ variant, onFileClick, onSelectDetail, onAutoDetailChange },
+	ref,
+) {
 	const store = usePersonaResearchStore()
 	const selectedTopic = store.selectedTopic
 	const isMobile = variant === "mobile"
+
+	/** Same selection as the topic page: the last non-revoked tool step that opens in the preview. */
+	const reportLatestToolDetail = useMemoizedFn((topicMessages: SuperMagicMessageItem[]) => {
+		if (!onAutoDetailChange) return
+		const lastDetailMessage = topicMessages.findLast((message) =>
+			filterPanelMessageWithoutRevoked(
+				superMagicStore.getMessageNode(message?.super_message_id),
+				message,
+			),
+		)
+		const tool = (
+			superMagicStore.getMessageNode(lastDetailMessage?.super_message_id) as
+				| { tool?: { detail?: Record<string, unknown>; id?: string; name?: string } }
+				| undefined
+		)?.tool
+		// The panel filter only passes tools with a preview detail; keep the last one otherwise.
+		if (!tool?.detail || isEmpty(tool.detail)) return
+		onAutoDetailChange({ ...tool.detail, id: tool.id, name: tool.name })
+	})
 
 	const messageSendService = useMemo(
 		() => createMessageSendService({ mentionPanelStore: store.mentionPanelStore }),
@@ -48,10 +75,15 @@ const ResearchConversationPanel = forwardRef<
 	const { messages, showLoading } = useTopicConversationLoading<TaskStatus>({
 		selectedTopic,
 		onConversationGeneratingChange: store.setConversationGenerating,
-		onTopicMessagesChange: ({ lastMessageNode, selectedTopic: currentTopic }) => {
+		onTopicMessagesChange: ({
+			lastMessageNode,
+			selectedTopic: currentTopic,
+			topicMessages,
+		}) => {
 			if (currentTopic?.id && lastMessageNode?.status) {
 				store.updateTopicStatus(currentTopic.id, lastMessageNode.status)
 			}
+			reportLatestToolDetail(topicMessages)
 		},
 	})
 

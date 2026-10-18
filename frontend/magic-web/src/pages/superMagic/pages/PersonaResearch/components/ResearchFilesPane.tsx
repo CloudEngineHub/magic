@@ -5,6 +5,8 @@ import { usePersonaResearchStore } from "../context"
 
 interface ResearchFilesPaneProps {
 	userSelectDetail: unknown
+	/** Latest tool step of the conversation; the playback tab falls back to it. */
+	autoDetail: unknown
 	setUserSelectDetail: (detail: unknown) => void
 	activeFileId: string | null
 	onActiveFileChange: (fileId: string | null) => void
@@ -13,9 +15,10 @@ interface ResearchFilesPaneProps {
 /**
  * Hosts the standard file preview for the research studio. The HTML report, plan, desk
  * research and any file or tool result clicked in the conversation open here as tabs.
+ * Tool steps open in the playback tab, which follows the latest step until one is picked.
  */
 const ResearchFilesPane = forwardRef<DetailRef, ResearchFilesPaneProps>(function ResearchFilesPane(
-	{ userSelectDetail, setUserSelectDetail, activeFileId, onActiveFileChange },
+	{ userSelectDetail, autoDetail, setUserSelectDetail, activeFileId, onActiveFileChange },
 	ref,
 ) {
 	const store = usePersonaResearchStore()
@@ -29,8 +32,13 @@ const ResearchFilesPane = forwardRef<DetailRef, ResearchFilesPaneProps>(function
 			<Detail
 				key={selectedTopic?.id}
 				ref={ref}
-				disPlayDetail={userSelectDetail}
+				// The research store owns a separate files store; pass it so the file manager tab and
+				// attachment loading state follow the research project, not the global workspace.
+				projectFilesStore={store.projectFilesStore}
+				attachmentLoadState={store.projectFilesStore.attachmentLoadState}
+				disPlayDetail={userSelectDetail || autoDetail}
 				userSelectDetail={userSelectDetail}
+				autoDetail={autoDetail}
 				setUserSelectDetail={setUserSelectDetail}
 				attachments={store.attachments}
 				attachmentList={store.attachmentList}
