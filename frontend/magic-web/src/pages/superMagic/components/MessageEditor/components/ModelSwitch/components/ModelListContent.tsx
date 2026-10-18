@@ -6,6 +6,7 @@ import { MyModelsList } from "./MyModelsList"
 import type { ModelItem, ModelListGroup, MessageEditorSize, ModelListKey } from "../types"
 import type React from "react"
 import { useTranslation } from "react-i18next"
+import { useEffect, useState } from "react"
 import { isModelDisabled } from "../utils"
 import { ModelEmptyState } from "./ModelEmptyState"
 import { ModelGroupSection, type RenderableModelGroup } from "./ModelGroupSection"
@@ -37,6 +38,11 @@ export const ModelListContent = observer(function ModelListContent({
 	onModelsLoaded,
 }: ModelListContentProps) {
 	const { t } = useTranslation("super")
+	const [expandedModelId, setExpandedModelId] = useState<string | null>(null)
+	// Keep one inline detail section open across provider groups and tab changes.
+	useEffect(() => {
+		setExpandedModelId(null)
+	}, [modelKey, selectedModel?.model_id])
 	const visibleGroups = getVisibleGroups({ modelList, modelKey, searchKeyword })
 	const isSearchResultEmpty = !!searchKeyword && visibleGroups.length === 0
 	const EmptyStateIcon = isSearchResultEmpty ? SearchX : Sparkles
@@ -90,6 +96,10 @@ export const ModelListContent = observer(function ModelListContent({
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
 					isLanguageModel={modelKey === "models"}
+					expandedMobileModelId={expandedModelId}
+					onToggleMobileModel={(modelId) =>
+						setExpandedModelId((current) => (current === modelId ? null : modelId))
+					}
 				/>
 			))}
 		</ModelDetailsHoverProvider>

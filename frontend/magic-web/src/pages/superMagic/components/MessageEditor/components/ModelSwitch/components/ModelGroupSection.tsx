@@ -5,14 +5,15 @@ import { useTranslation } from "react-i18next"
 import FlexBox from "@/components/base/FlexBox"
 import { cn } from "@/utils/cn"
 import type React from "react"
-import type { ModelItem, ModelListGroup, MessageEditorSize, ReasoningEffort } from "../types"
-import { getModelReasoningEffort, isModelDisabled } from "../utils"
+import type { ModelItem, ModelListGroup, MessageEditorSize } from "../types"
+import { isModelDisabled } from "../utils"
 import { CollapsibleDescription } from "./CollapsibleDescription"
 import ModelIcon from "./ModelIcon"
 import ModelName from "./ModelName"
 import ModelTags from "./ModelTags"
 import ProviderName from "./ProviderName"
 import { ModelBillingMultiplier } from "./ModelBillingMultiplier"
+import { MobileModelRow } from "./MobileModelRow"
 
 export interface RenderableModelGroup extends ModelListGroup {
 	displayModels: ModelItem[]
@@ -27,6 +28,8 @@ interface ModelGroupSectionProps {
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
 	isLanguageModel?: boolean
+	expandedMobileModelId: string | null
+	onToggleMobileModel: (modelId: string) => void
 }
 
 export function ModelGroupSection({
@@ -38,20 +41,13 @@ export function ModelGroupSection({
 	selectedItemRef,
 	getModelDescription,
 	isLanguageModel = true,
+	expandedMobileModelId,
+	onToggleMobileModel,
 }: ModelGroupSectionProps) {
 	const { t } = useTranslation("super")
 	const isMobile = size === "mobile"
 	const iconSize = size === "small" ? 24 : 28
 	const [expandedDescriptions, setExpandedDescriptions] = useState<Record<string, boolean>>({})
-	const reasoningLabels: Record<ReasoningEffort, string> = {
-		none: t("messageEditor.modelSwitch.reasoning.none"),
-		minimal: t("messageEditor.modelSwitch.reasoning.minimal"),
-		low: t("messageEditor.modelSwitch.reasoning.low"),
-		medium: t("messageEditor.modelSwitch.reasoning.medium"),
-		high: t("messageEditor.modelSwitch.reasoning.high"),
-		xhigh: t("messageEditor.modelSwitch.reasoning.xhigh"),
-		max: t("messageEditor.modelSwitch.reasoning.max"),
-	}
 
 	function toggleDescription(modelId: string, event: React.MouseEvent<HTMLButtonElement>) {
 		event.stopPropagation()
@@ -69,22 +65,23 @@ export function ModelGroupSection({
 					const isSelected = selectedModel?.model_id === model.model_id
 					const isDisabled = isModelDisabled(model)
 					const description = getModelDescription(model)
-					const reasoningEffort =
-						isLanguageModel && isSelected ? getModelReasoningEffort(model) : undefined
-					const reasoningValue =
-						isLanguageModel && isSelected && model.reasoning_effort_levels?.length
-							? reasoningEffort
-								? reasoningLabels[reasoningEffort]
-								: t("messageEditor.modelSwitch.reasoning.default")
-							: null
-					const reasoningBadge = reasoningValue ? (
-						<span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-background/80 px-1.5 py-0.5 text-[11px] leading-4 text-muted-foreground ring-1 ring-inset ring-border/70">
-							<span className="text-muted-foreground/70">
-								{t("messageEditor.modelSwitch.reasoning.label")}
-							</span>
-							<span className="font-medium text-foreground/80">{reasoningValue}</span>
-						</span>
-					) : null
+					if (isLanguageModel && (isMobile || isSelected)) {
+						return (
+							<MobileModelRow
+								key={model.model_id}
+								model={model}
+								description={description}
+								selected={isSelected}
+								variant={isMobile ? "mobile" : "desktop"}
+								disabled={isDisabled}
+								expanded={expandedMobileModelId === model.model_id}
+								selectedItemRef={selectedItemRef}
+								onToggle={() => onToggleMobileModel(model.model_id)}
+								onSelect={onModelClick}
+								onReasoningEffortChange={onReasoningEffortChange}
+							/>
+						)
+					}
 					const ariaLabel = description
 						? `${model.model_name || model.model_id}，${description}`
 						: model.model_name || model.model_id
@@ -140,7 +137,6 @@ export function ModelGroupSection({
 										)}
 									/>
 									<ModelTags model={model} />
-									{reasoningBadge}
 								</FlexBox>
 								{!isLanguageModel && (
 									<CollapsibleDescription
@@ -229,7 +225,6 @@ export function ModelGroupSection({
 										)}
 									/>
 									<ModelTags model={model} />
-									{reasoningBadge}
 								</FlexBox>
 							</FlexBox>
 							{isSelected ? (

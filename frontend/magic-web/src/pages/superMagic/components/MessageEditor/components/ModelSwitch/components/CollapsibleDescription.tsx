@@ -10,6 +10,7 @@ interface CollapsibleDescriptionProps {
 	collapseLabel: string
 	onToggle: (event: React.MouseEvent<HTMLButtonElement>) => void
 	className?: string
+	variant?: "compact" | "mobile"
 }
 
 export function CollapsibleDescription({
@@ -20,6 +21,7 @@ export function CollapsibleDescription({
 	collapseLabel,
 	onToggle,
 	className,
+	variant = "compact",
 }: CollapsibleDescriptionProps) {
 	const descriptionRef = useRef<HTMLDivElement>(null)
 	const [canToggle, setCanToggle] = useState(false)
@@ -62,14 +64,19 @@ export function CollapsibleDescription({
 	return (
 		<div
 			className={cn(
-				"relative text-xs font-normal leading-4 text-muted-foreground",
+				"relative font-normal text-muted-foreground",
+				variant === "mobile" ? "text-sm leading-6" : "text-xs leading-4",
 				className,
 				isDisabled && "opacity-50",
 			)}
 		>
 			<div
 				ref={descriptionRef}
-				className={cn(canToggle && "pr-6", !isExpanded && "line-clamp-2")}
+				className={cn(
+					canToggle && variant === "compact" && "pr-6",
+					!isExpanded && "line-clamp-2",
+					variant === "mobile" && "break-words",
+				)}
 			>
 				{description}
 			</div>
@@ -77,8 +84,10 @@ export function CollapsibleDescription({
 				<button
 					type="button"
 					className={cn(
-						"absolute bottom-0 right-0 flex size-4 items-center justify-center",
-						"rounded-sm bg-background text-muted-foreground transition-colors",
+						"flex items-center justify-center rounded-sm transition-colors",
+						variant === "mobile"
+							? "mt-1 min-h-11 gap-1 text-primary"
+							: "absolute bottom-0 right-0 size-4 bg-background text-muted-foreground",
 						"hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 					)}
 					aria-label={toggleLabel}
@@ -90,6 +99,7 @@ export function CollapsibleDescription({
 					onKeyDown={(event) => event.stopPropagation()}
 					data-testid="collapsible-description-toggle"
 				>
+					{variant === "mobile" && <span>{toggleLabel}</span>}
 					<ToggleIcon className="size-3" strokeWidth={2} />
 				</button>
 			) : null}
