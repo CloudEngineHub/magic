@@ -477,12 +477,13 @@
 		"generatingTitle": "Writing the report"
 	},
 	"share": {
+		"aiShort": "AI-simulated",
 		"copyFailed": "Copy failed. Copy the address bar link instead.",
 		"copyLink": "Copy link",
-		"eyebrow": "AI research results",
 		"fileListOffHint": "When off, viewers only see the conversation, not the research results.",
 		"linkCopied": "Link copied",
 		"makeYourOwn": "Make your own in Super Magic",
+		"makeYourOwnShort": "Make one",
 		"noDocument": "The report and plan appear here once the study is done.",
 		"noDocumentTitle": "No document yet",
 		"noStudyFiles": "The sharer did not include the study files, so only the conversation is available.",

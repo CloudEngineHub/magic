@@ -56,6 +56,10 @@ interface ResearchConsoleProps {
 	reportPane: ReactNode
 	/** Report actions (full screen, edit and download) shown in the tab bar on the report tab. */
 	reportActions?: ReactNode
+	/** Content before the tabs in the same bar (share page: study title), so no extra header row is needed. */
+	toolbarStart?: ReactNode
+	/** Content at the right end of the tab bar (share page: share actions and view switch). */
+	toolbarEnd?: ReactNode
 	/** The shared file preview (any study file or tool result clicked in the conversation). */
 	filesPane: ReactNode
 	/** File open in the preview, highlighted in the files list. */
@@ -83,6 +87,8 @@ function ResearchConsole({
 	onTabChange,
 	reportPane,
 	reportActions,
+	toolbarStart,
+	toolbarEnd,
 	filesPane,
 	activeFileId,
 	focusedInterviewPersonaId,
@@ -228,57 +234,68 @@ function ResearchConsole({
 			className="flex h-full min-h-0 flex-col"
 			data-testid="persona-research-console"
 		>
-			{/* Narrow consoles scroll the tabs sideways; the scrollbar is hidden because an
-			    always-visible one draws a second line and a gap under the tab bar. */}
-			<div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-				{/* The ink pill is one thumb that slides to the active tab (falls back to a per-tab
+			<div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
+				{toolbarStart}
+				{/* Narrow consoles scroll the tabs sideways; the scrollbar is hidden because an
+				    always-visible one draws a second line and a gap under the tab bar. */}
+				<div className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					{/* The ink pill is one thumb that slides to the active tab (falls back to a per-tab
 				    background until it has been measured). */}
-				<div ref={thumbContainerRef} className="relative shrink-0">
-					{thumb ? (
-						<span
-							aria-hidden
-							className={cn(
-								"absolute inset-y-0 left-0 rounded-full bg-foreground transition-[transform,width] duration-200 motion-reduce:transition-none",
-								EASE_OUT,
-							)}
-							style={{ width: thumb.width, transform: `translateX(${thumb.left}px)` }}
-						/>
-					) : null}
-					<TabsList className="relative h-auto gap-0.5 bg-transparent p-0">
-						{tabs.map(({ value, icon: Icon, label, badge }) => (
-							<TabsTrigger
-								key={value}
-								value={value}
+					<div ref={thumbContainerRef} className="relative w-max">
+						{thumb ? (
+							<span
+								aria-hidden
 								className={cn(
-									"relative h-8 gap-1.5 rounded-full border-0 bg-transparent px-3 text-[13px] text-muted-foreground shadow-none transition-colors duration-200 hover:text-foreground",
-									"data-[state=active]:bg-transparent data-[state=active]:text-background data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-transparent",
-									!thumb &&
-										"data-[state=active]:bg-foreground dark:data-[state=active]:bg-foreground",
-									PRESSABLE,
+									"absolute inset-y-0 left-0 rounded-full bg-foreground transition-[transform,width] duration-200 motion-reduce:transition-none",
+									EASE_OUT,
 								)}
-							>
-								{/* Desktop labels are enough; mobile keeps icons because inactive labels are hidden. */}
-								{isMobile ? <Icon className="size-3.5" /> : null}
-								{isMobile && value !== activeTab ? null : label}
-								{badge ? (
-									<span className="font-mono text-[11px] tabular-nums opacity-60">
-										{badge}
-									</span>
-								) : null}
-								{hasNew(value) ? (
-									<span
-										className="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
-										aria-label={t("console.newContent")}
-									/>
-								) : null}
-							</TabsTrigger>
-						))}
-					</TabsList>
+								style={{
+									width: thumb.width,
+									transform: `translateX(${thumb.left}px)`,
+								}}
+							/>
+						) : null}
+						<TabsList className="relative h-auto gap-0.5 bg-transparent p-0">
+							{tabs.map(({ value, icon: Icon, label, badge }) => (
+								<TabsTrigger
+									key={value}
+									value={value}
+									className={cn(
+										"relative h-8 gap-1.5 rounded-full border-0 bg-transparent px-3 text-[13px] text-muted-foreground shadow-none transition-colors duration-200 hover:text-foreground",
+										"data-[state=active]:bg-transparent data-[state=active]:text-background data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-transparent",
+										!thumb &&
+											"data-[state=active]:bg-foreground dark:data-[state=active]:bg-foreground",
+										PRESSABLE,
+									)}
+								>
+									{/* Desktop labels are enough; mobile keeps icons because inactive labels are hidden. */}
+									{isMobile ? <Icon className="size-3.5" /> : null}
+									{isMobile && value !== activeTab ? null : label}
+									{badge ? (
+										<span className="font-mono text-[11px] tabular-nums opacity-60">
+											{badge}
+										</span>
+									) : null}
+									{hasNew(value) ? (
+										<span
+											className="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
+											aria-label={t("console.newContent")}
+										/>
+									) : null}
+								</TabsTrigger>
+							))}
+						</TabsList>
+					</div>
 				</div>
-				{activeTab === "report" && reportActions ? (
+				{(activeTab === "report" && reportActions) || toolbarEnd ? (
 					// Same height as a tab (h-8) so showing the actions never changes the bar height.
-					<div className="ml-auto flex h-8 shrink-0 items-center gap-1 [&_button]:h-6">
-						{reportActions}
+					<div className="ml-auto flex h-8 shrink-0 items-center gap-1.5">
+						{activeTab === "report" && reportActions ? (
+							<div className="flex items-center gap-1 [&_button]:h-6">
+								{reportActions}
+							</div>
+						) : null}
+						{toolbarEnd}
 					</div>
 				) : null}
 			</div>

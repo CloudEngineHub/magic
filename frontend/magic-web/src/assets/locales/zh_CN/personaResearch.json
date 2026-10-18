@@ -475,12 +475,13 @@
 		"generatingTitle": "报告生成中"
 	},
 	"share": {
+		"aiShort": "AI 模拟",
 		"copyFailed": "复制失败，请手动复制地址栏链接",
 		"copyLink": "复制链接",
-		"eyebrow": "AI 研究成果",
 		"fileListOffHint": "关闭后，对方只能看到对话，看不到研究成果。",
 		"linkCopied": "链接已复制",
 		"makeYourOwn": "在超级麦吉中做一份",
+		"makeYourOwnShort": "做一份",
 		"noDocument": "研究完成后，研究报告和方案会出现在这里。",
 		"noDocumentTitle": "还没有可查看的文档",
 		"noStudyFiles": "分享者没有开放研究文件，这里只能查看对话回放。",

@@ -5,13 +5,13 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/shadcn-ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { RouteName } from "@/routes/constants"
 import { getRoutePath } from "@/routes/history/helpers"
-import { cn } from "@/utils/cn"
 import { PersonaResearchStoreProvider, usePersonaResearchStore } from "../context"
 import PersonaAvatar from "../components/PersonaAvatar"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
@@ -19,7 +19,7 @@ import ResearchConsole, {
 	ResearchConsoleSkeleton,
 	type ResearchConsoleTab,
 } from "../components/ResearchConsole"
-import StudyStepper, { StudyStepperSkeleton } from "../components/StudyStepper"
+import StudyStepper from "../components/StudyStepper"
 import type { PersonaFile } from "../types"
 import ShareDocumentPane from "./ShareDocumentPane"
 
@@ -128,6 +128,94 @@ const ResearchShareBody = observer(function ResearchShareBody({
 	const researchHomeHref =
 		getRoutePath({ name: RouteName.PersonaResearch }) ?? window.location.origin
 
+	const showStandaloneBar = isMobile || activeView === "replay" || isLoading
+
+	const titleBlock = (
+		<div className="flex min-w-0 shrink items-center gap-2.5">
+			<h1
+				className="min-w-0 max-w-[22rem] truncate text-[15px] font-bold tracking-tight text-foreground"
+				title={title}
+			>
+				{title}
+			</h1>
+			{store.studyPersonas.length && !isMobile ? (
+				<span className="flex shrink-0 -space-x-1.5">
+					{store.studyPersonas.slice(0, 6).map((persona) => (
+						<PersonaAvatar
+							key={persona.id}
+							id={persona.id}
+							name={persona.name}
+							className="size-5 ring-2 ring-background"
+						/>
+					))}
+				</span>
+			) : null}
+			{/* Method, scale and the AI-sample note sit behind one short label instead of a meta row. */}
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<span
+						tabIndex={0}
+						className="inline-flex shrink-0 cursor-help items-center gap-1 rounded text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						<Info className="size-3.5" />
+						{t("share.aiShort")}
+					</span>
+				</TooltipTrigger>
+				<TooltipContent className="max-w-72 text-xs leading-5">
+					{metaChips.length ? <p>{metaChips.join(" · ")}</p> : null}
+					<p>{t("study.aiDisclaimer")}</p>
+				</TooltipContent>
+			</Tooltip>
+		</div>
+	)
+
+	const actions = (
+		<div className="flex items-center gap-1.5">
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-8"
+						aria-label={t("share.copyLink")}
+						onClick={copyLink}
+					>
+						<Link2 className="size-4" />
+					</Button>
+				</TooltipTrigger>
+				<TooltipContent>{t("share.copyLink")}</TooltipContent>
+			</Tooltip>
+			<Button size="sm" className="h-8 gap-1.5 rounded-full px-3" asChild>
+				{/* Visitors land on the research home (sign-in first when needed). */}
+				<a href={researchHomeHref} target="_blank" rel="noreferrer">
+					<UsersRound className="size-3.5" />
+					{isMobile ? t("share.makeYourOwnShort") : t("share.makeYourOwn")}
+				</a>
+			</Button>
+			{hasResults ? (
+				// Results / replay as a small segmented switch at the end of the row.
+				<Tabs value={activeView} onValueChange={(value) => setView(value as typeof view)}>
+					<TabsList className="h-8 rounded-full p-0.5">
+						<TabsTrigger
+							value="results"
+							className="h-7 gap-1 rounded-full px-2.5 text-xs"
+						>
+							<FileSearch className="size-3.5" />
+							{isMobile ? null : t("share.results")}
+						</TabsTrigger>
+						<TabsTrigger
+							value="replay"
+							className="h-7 gap-1 rounded-full px-2.5 text-xs"
+						>
+							<MessagesSquare className="size-3.5" />
+							{isMobile ? null : t("share.replay")}
+						</TabsTrigger>
+					</TabsList>
+				</Tabs>
+			) : null}
+		</div>
+	)
+
 	const openFile = (file: AttachmentItem) => {
 		setOpenedFile(file)
 		setConsoleTab("files")
@@ -138,92 +226,20 @@ const ResearchShareBody = observer(function ResearchShareBody({
 			className="flex h-full min-h-0 flex-col bg-background"
 			data-testid="persona-research-share"
 		>
-			<header
-				className={cn(
-					"flex shrink-0 flex-col gap-3 border-b border-border",
-					isMobile ? "px-4 py-3" : "px-6 pb-3 pt-5",
-				)}
-			>
-				<div className="flex flex-wrap items-start gap-3">
-					<div className="flex min-w-0 flex-1 flex-col gap-2">
-						<span className="inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground">
-							<UsersRound className="size-3.5" />
-							{t("share.eyebrow")}
-						</span>
-						<h1
-							className={cn(
-								"text-balance font-black tracking-tight text-foreground",
-								isMobile ? "text-xl" : "text-[30px] leading-tight",
-							)}
-						>
-							{title}
-						</h1>
-						<div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-							{store.studyPersonas.length ? (
-								<span className="flex -space-x-1.5">
-									{store.studyPersonas.slice(0, 8).map((persona) => (
-										<PersonaAvatar
-											key={persona.id}
-											id={persona.id}
-											name={persona.name}
-											className="size-6 ring-2 ring-background"
-										/>
-									))}
-								</span>
-							) : null}
-							{metaChips.length ? <span>{metaChips.join(" · ")}</span> : null}
-							{/* The sample note stays on the cover so screenshots keep the AI context. */}
-							<span className="inline-flex items-center gap-1">
-								<Info className="size-3.5" />
-								{t("study.aiDisclaimer")}
-							</span>
-						</div>
-					</div>
-					<div className="flex shrink-0 items-center gap-2">
-						<Button
-							variant="outline"
-							size="sm"
-							className="h-8 gap-1.5"
-							onClick={copyLink}
-						>
-							<Link2 className="size-3.5" />
-							{isMobile ? null : t("share.copyLink")}
-						</Button>
-						<Button size="sm" className="h-8 gap-1.5" asChild>
-							{/* Visitors land on the research home (sign-in first when needed). */}
-							<a href={researchHomeHref} target="_blank" rel="noreferrer">
-								<UsersRound className="size-3.5" />
-								{t("share.makeYourOwn")}
-							</a>
-						</Button>
-					</div>
-					{hasResults ? (
-						<Tabs
-							value={activeView}
-							onValueChange={(value) => setView(value as typeof view)}
-						>
-							<TabsList>
-								<TabsTrigger value="results" className="gap-1.5">
-									<FileSearch className="size-3.5" />
-									{t("share.results")}
-								</TabsTrigger>
-								<TabsTrigger value="replay" className="gap-1.5">
-									<MessagesSquare className="size-3.5" />
-									{t("share.replay")}
-								</TabsTrigger>
-							</TabsList>
-						</Tabs>
-					) : null}
+			{/* One compact row instead of a cover: in the results view it lives inside the tab bar
+			    (toolbarStart / toolbarEnd), so the report gets nearly the whole height. */}
+			{showStandaloneBar ? (
+				<header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
+					{titleBlock}
+					<div className="ml-auto shrink-0">{actions}</div>
+				</header>
+			) : null}
+			{activeView === "results" && !isPersonaBuild && study && study.phase !== "done" ? (
+				// Only an unfinished study shows its phases; a finished one goes straight to results.
+				<div className="shrink-0 border-b border-border px-4 py-2">
+					<StudyStepper study={study} compact />
 				</div>
-				{/* A finished study needs no phase tracker; the cover facts already say what was done. */}
-				{activeView === "results" && !isPersonaBuild && study?.phase !== "done" ? (
-					isLoading ? (
-						<StudyStepperSkeleton compact={isMobile} />
-					) : (
-						<StudyStepper study={study} compact={isMobile} />
-					)
-				) : null}
-			</header>
+			) : null}
 
 			{!isLoading && !hasResults ? (
 				<p className="shrink-0 border-b border-border bg-muted/40 px-6 py-2 text-xs text-muted-foreground">
@@ -246,6 +262,8 @@ const ResearchShareBody = observer(function ResearchShareBody({
 						onOpenFile={openFile}
 						onRequestValidationUpload={() => undefined}
 						variant={isMobile ? "mobile" : "desktop"}
+						toolbarStart={isMobile ? undefined : titleBlock}
+						toolbarEnd={isMobile ? undefined : actions}
 						reportPane={<ShareDocumentPane file={report} />}
 						filesPane={<ShareDocumentPane file={documentFile} />}
 						activeFileId={documentFile ? String(documentFile.file_id) : null}
