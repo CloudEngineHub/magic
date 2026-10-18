@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
-import { ArrowLeft, FileSearch, Share2 } from "lucide-react"
+import {
+	ArrowLeft,
+	ChevronDown,
+	FileSearch,
+	Maximize2,
+	PanelRightClose,
+	PanelRightOpen,
+	PencilLine,
+	Share2,
+} from "lucide-react"
+import type { ImperativePanelHandle } from "react-resizable-panels"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
@@ -40,6 +50,7 @@ import ResearchConversationPanel, {
 	type ResearchConversationPanelRef,
 } from "../components/ResearchConversationPanel"
 import ResearchFilesPane from "../components/ResearchFilesPane"
+import ResearchReportPane, { type ResearchReportPaneRef } from "../components/ResearchReportPane"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
 import StudyStepper, { StudyStepperSkeleton } from "../components/StudyStepper"
 import StudyTitleEditor from "../components/StudyTitleEditor"
@@ -55,10 +66,10 @@ import type { PersonaFile, StudyFile, StudyPhaseKey } from "../types"
 const PHASE_TAB: Partial<Record<StudyFile["phase"], ResearchConsoleTab>> = {
 	plan: "hypotheses",
 	interview: "personas",
-	report: "files",
-	validation: "validation",
-	// Finished studies open on conclusions by hypothesis, the first thing a decision maker reads.
-	done: "hypotheses",
+	report: "report",
+	validation: "report",
+	// Finished studies open on the report, the deliverable a decision maker reads first.
+	done: "report",
 }
 
 /** Research studio: stepper, conversation on the left, study outputs on the right. */
@@ -79,8 +90,12 @@ function ResearchStudioPage() {
 	const [autoDetail, setAutoDetail] = useState<unknown>()
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const [shareOpen, setShareOpen] = useState(false)
-	const openedReportVersionRef = useRef<string | null>(null)
 	const followedPhaseRef = useRef<string | null>(null)
+	const reportPaneRef = useRef<ResearchReportPaneRef>(null)
+	const conversationPanelRef = useRef<ImperativePanelHandle>(null)
+	const [conversationCollapsed, setConversationCollapsed] = useState(false)
+	// Finished studies fold the six-step stepper into a small toggle to give the report room.
+	const [stepperOpen, setStepperOpen] = useState(false)
 
 	useEffect(() => {
 		store.selectStudy(topicId)
@@ -96,6 +111,10 @@ function ResearchStudioPage() {
 	const report = studyAttachments?.report ?? null
 	const status = resolveStudyStatus(selectedTopic, study)
 	const isContentLoading = store.isStudyContentLoading
+	// Persona building has no plan, interviews or report: no phase stepper and no study scale.
+	const isPersonaBuild = study?.study_type === "persona_build"
+	const reportWriting =
+		study?.phases.some((phase) => phase.key === "report" && phase.status === "running") ?? false
 
 	const showOutputs = useMemoizedFn((tab: ResearchConsoleTab) => {
 		setConsoleTab(tab)
@@ -134,18 +153,24 @@ function ResearchStudioPage() {
 		const phase = study?.phase
 		if (!phase || followedPhaseRef.current === phase) return
 		followedPhaseRef.current = phase
-		const tab = PHASE_TAB[phase]
+		// A finished study without a report (persona building) opens on what it did produce.
+		const tab =
+			phase === "done" && !report
+				? isPersonaBuild
+					? "personas"
+					: "hypotheses"
+				: PHASE_TAB[phase]
 		if (tab && !isMobile) setConsoleTab(tab)
+		// Only phase changes move the panel; the report arriving later must not steal focus.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isMobile, study?.phase])
 
-	// Open the report once when it first appears (or is rewritten), without stealing focus later.
-	useEffect(() => {
-		if (!report?.file_id) return
-		const key = `${report.file_id}:${report.updated_at ?? ""}`
-		if (openedReportVersionRef.current === key) return
-		openedReportVersionRef.current = key
-		setTimeout(() => detailRef.current?.openFileTab?.(report), 100)
-	}, [report])
+	const toggleConversation = useMemoizedFn(() => {
+		const panel = conversationPanelRef.current
+		if (!panel) return
+		if (panel.isCollapsed()) panel.expand()
+		else panel.collapse()
+	})
 
 	/** Stepper shortcuts: each finished or running phase opens its own output. */
 	const handleStepClick = useMemoizedFn((key: StudyPhaseKey) => {
@@ -160,6 +185,7 @@ function ResearchStudioPage() {
 		}
 		if (key === "interview") return showOutputs("interviews")
 		if (key === "validation") return showOutputs("validation")
+		if (key === "report") return showOutputs("report")
 		const file = fileByStep[key]
 		if (file) openFile(file)
 		else showOutputs("files")
@@ -226,8 +252,6 @@ function ResearchStudioPage() {
 				persona_build: t("studyType.personaBuild"),
 			}[study.study_type]
 		: null
-	// Persona building has no plan, interviews or report: no phase stepper and no study scale.
-	const isPersonaBuild = study?.study_type === "persona_build"
 	const metaChips = [
 		studyTypeLabel,
 		study?.framework?.length ? study.framework.join(" · ") : null,
@@ -264,6 +288,26 @@ function ResearchStudioPage() {
 						) : (
 							<StudyStatusBadge status={status} />
 						)}
+						{status.kind === "done" && !isPersonaBuild && !isContentLoading ? (
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-6 gap-1 px-1.5 text-[11px] text-muted-foreground"
+								aria-expanded={stepperOpen}
+								onClick={() => setStepperOpen((open) => !open)}
+							>
+								{t("study.progressToggle", {
+									done: status.completed,
+									total: status.total,
+								})}
+								<ChevronDown
+									className={cn(
+										"size-3.5 transition-transform",
+										stepperOpen && "rotate-180",
+									)}
+								/>
+							</Button>
+						) : null}
 					</div>
 					{metaChips.length && !isMobile ? (
 						<div className="flex flex-wrap items-center gap-1.5">
@@ -278,6 +322,33 @@ function ResearchStudioPage() {
 						</div>
 					) : null}
 				</div>
+				{isMobile ? null : (
+					<MagicTooltip
+						title={
+							conversationCollapsed
+								? t("study.expandConversation")
+								: t("study.collapseConversation")
+						}
+					>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-8 shrink-0"
+							aria-label={
+								conversationCollapsed
+									? t("study.expandConversation")
+									: t("study.collapseConversation")
+							}
+							onClick={toggleConversation}
+						>
+							{conversationCollapsed ? (
+								<PanelRightOpen className="size-4" />
+							) : (
+								<PanelRightClose className="size-4" />
+							)}
+						</Button>
+					</MagicTooltip>
+				)}
 				<TopicSharePopover
 					// Shared research shows its results from study files; warn before hiding them.
 					fileListOffHint={t("share.fileListOffHint")}
@@ -299,7 +370,7 @@ function ResearchStudioPage() {
 			</div>
 			{isContentLoading ? (
 				<StudyStepperSkeleton compact={isMobile} />
-			) : isPersonaBuild ? null : (
+			) : isPersonaBuild || (status.kind === "done" && !stepperOpen) ? null : (
 				<StudyStepper
 					study={study}
 					compact={isMobile}
@@ -322,6 +393,32 @@ function ResearchStudioPage() {
 			onOpenFile={openFile}
 			onRequestValidationUpload={handleRequestValidationUpload}
 			variant={isMobile ? "mobile" : "desktop"}
+			activeFileId={activeFileId}
+			reportPane={<ResearchReportPane ref={reportPaneRef} generating={reportWriting} />}
+			reportActions={
+				report ? (
+					<>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-7 gap-1.5 px-2 text-xs"
+							onClick={() => reportPaneRef.current?.enterFullscreen()}
+						>
+							<Maximize2 className="size-3.5" />
+							{t("report.fullscreen")}
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-7 gap-1.5 px-2 text-xs"
+							onClick={() => openFile(report)}
+						>
+							<PencilLine className="size-3.5" />
+							{t("report.editDownload")}
+						</Button>
+					</>
+				) : null
+			}
 			filesPane={
 				<ResearchFilesPane
 					ref={detailRef}
@@ -422,11 +519,16 @@ function ResearchStudioPage() {
 					className="w-1.5 bg-transparent after:w-px after:bg-border hover:after:bg-primary/40 focus-visible:after:bg-primary data-[resize-handle-state=drag]:after:bg-primary"
 				/>
 				<ResizablePanel
+					ref={conversationPanelRef}
 					id="conversation"
 					order={2}
 					defaultSize={36}
 					minSize={26}
 					maxSize={55}
+					collapsible
+					collapsedSize={0}
+					onCollapse={() => setConversationCollapsed(true)}
+					onExpand={() => setConversationCollapsed(false)}
 				>
 					<div className="flex h-full min-h-0 flex-col bg-background">
 						{conversationNode}

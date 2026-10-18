@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { FileSearch, MessagesSquare, Sparkles } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -86,7 +86,16 @@ const ResearchShareBody = observer(function ResearchShareBody({
 	// Without study files (the sharer hid the file list) only the replay is meaningful.
 	const hasResults = Boolean(study || studyAttachments)
 	const activeView = !isLoading && !hasResults ? "replay" : view
-	const documentFile = openedFile ?? studyAttachments?.report ?? studyAttachments?.plan ?? null
+	const report = studyAttachments?.report ?? null
+	const documentFile = openedFile ?? report ?? studyAttachments?.plan ?? null
+
+	// Land on the report once it is known; later tab choices are the viewer's.
+	const landedOnReportRef = useRef(false)
+	useEffect(() => {
+		if (!report || landedOnReportRef.current) return
+		landedOnReportRef.current = true
+		setConsoleTab("report")
+	}, [report])
 
 	const sharedTopic = store.selectedTopic
 	const title =
@@ -199,7 +208,9 @@ const ResearchShareBody = observer(function ResearchShareBody({
 						onOpenFile={openFile}
 						onRequestValidationUpload={() => undefined}
 						variant={isMobile ? "mobile" : "desktop"}
+						reportPane={<ShareDocumentPane file={report} />}
 						filesPane={<ShareDocumentPane file={documentFile} />}
+						activeFileId={documentFile ? String(documentFile.file_id) : null}
 					/>
 				)}
 			</div>

@@ -192,6 +192,15 @@ export class PersonaResearchStore {
 		return this.studyPanel?.selection?.find((item) => item.persona_id === personaId)?.reason
 	}
 
+	/** Persona files behind the current study's panel, for the files tab. */
+	get studyPersonaFiles(): AttachmentItem[] {
+		const ids = new Set(this.studyPersonas.map((persona) => persona.id))
+		const fileIds = new Set(
+			this.personas.filter((ref) => ids.has(ref.data.id)).map((ref) => ref.fileId),
+		)
+		return this.attachmentList.filter((item) => fileIds.has(String(item.file_id)))
+	}
+
 	personaById(personaId: string): PersonaFile | null {
 		return this.personas.find((ref) => ref.data.id === personaId)?.data ?? null
 	}

@@ -63,7 +63,7 @@
 		"docPlan": "研究方案",
 		"docReport": "研究报告",
 		"docValidation": "验证问卷",
-		"files": "报告与文件",
+		"files": "文件",
 		"hypotheses": "假设",
 		"interviews": "访谈",
 		"interviewsEmpty": "访谈开始后，逐字稿会显示在这里。",
@@ -75,6 +75,7 @@
 		"personasEmpty": "AI 构建人设后会显示在这里。",
 		"personasEmptyTitle": "还没有人设",
 		"previous": "上一位",
+		"report": "报告",
 		"reportGenerating": "报告生成中…",
 		"studyFileInvalid": "研究进度文件还在生成或格式不完整，左侧对话不受影响。",
 		"validation": "真人验证",
@@ -106,6 +107,26 @@
 	},
 	"evidence": {
 		"round": "第 {{index}} 轮"
+	},
+	"files": {
+		"data": "数据文件",
+		"deliverables": "交付物",
+		"empty": "研究开始后，这里会列出本次研究的全部文件。",
+		"process": "研究过程",
+		"role": {
+			"deskResearch": "市场洞察",
+			"discussion": "小组讨论记录",
+			"interview": "访谈记录 · {{name}}",
+			"panel": "受访者面板",
+			"persona": "人设 · {{name}}",
+			"plan": "研究方案",
+			"report": "研究报告",
+			"study": "研究状态",
+			"synthesis": "综合分析",
+			"validation": "真人验证问卷",
+			"validationCsv": "问卷表格（可导入问卷工具）",
+			"validationResults": "真人对照结果"
+		}
 	},
 	"form": {
 		"actions": "典型行动",
@@ -414,6 +435,13 @@
 		"inferred": "推测内容 {{percent}}%",
 		"stories": "具体经历 {{count}} 个"
 	},
+	"report": {
+		"editDownload": "编辑与下载",
+		"empty": "研究完成后，报告会显示在这里。",
+		"emptyTitle": "报告还没生成",
+		"fullscreen": "全屏",
+		"generatingTitle": "报告生成中"
+	},
 	"scenario": {
 		"brand": "品牌定位",
 		"brandPrompt": "帮我研究【品牌】在【目标人群】心中的认知，以及更适合的定位方向。",
@@ -459,13 +487,16 @@
 	"study": {
 		"aiDisclaimer": "受访者由 AI 模拟，不代表真实用户",
 		"backHome": "返回我的研究",
+		"collapseConversation": "收起对话",
 		"conversation": "对话",
+		"expandConversation": "展开对话",
 		"notFound": "没有找到这项研究，它可能已被删除。",
 		"notFoundTitle": "没有找到这项研究",
 		"outputs": "研究产出",
 		"outputsCount": "研究产出 {{count}}",
 		"personasCount": "人设 {{count}}",
 		"progress": "进度 {{done}}/{{total}}",
+		"progressToggle": "进度 {{done}}/{{total}}",
 		"rename": "重命名研究",
 		"renameFailed": "重命名失败，请重试",
 		"resizePanels": "调整对话与产出区宽度",

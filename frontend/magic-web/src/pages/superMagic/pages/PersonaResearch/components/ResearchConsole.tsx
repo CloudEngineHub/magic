@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
+	BookOpenText,
 	ChartColumn,
 	ClipboardCheck,
-	FileText,
+	FolderOpen,
 	MessagesSquare,
 	Mic,
 	Target,
@@ -32,17 +33,31 @@ import HypothesisBoard from "./HypothesisBoard"
 import InterviewsPanel from "./InterviewsPanel"
 import PersonaAvatar from "./PersonaAvatar"
 import PersonaPanel from "./PersonaPanel"
+import StudyFileList from "./StudyFileList"
 import TranscriptView from "./TranscriptView"
 import ValidationPane from "./ValidationPane"
 
 export type ResearchConsoleTab =
-	"hypotheses" | "personas" | "interviews" | "discussions" | "analysis" | "files" | "validation"
+	| "report"
+	| "hypotheses"
+	| "personas"
+	| "interviews"
+	| "discussions"
+	| "analysis"
+	| "files"
+	| "validation"
 
 interface ResearchConsoleProps {
 	activeTab: ResearchConsoleTab
 	onTabChange: (tab: ResearchConsoleTab) => void
-	/** The shared file preview (report and any file clicked in the conversation). */
+	/** The report on its own, the first thing a finished study shows. */
+	reportPane: ReactNode
+	/** Report actions (full screen, edit and download) shown in the tab bar on the report tab. */
+	reportActions?: ReactNode
+	/** The shared file preview (any study file or tool result clicked in the conversation). */
 	filesPane: ReactNode
+	/** File open in the preview, highlighted in the files list. */
+	activeFileId?: string | null
 	/** Interview to show when the tab opens from a persona card. */
 	focusedInterviewPersonaId: string | null
 	onFocusInterview: (personaId: string | null) => void
@@ -64,7 +79,10 @@ type RoundHighlight = { key: string; roundIndex: number; nonce: number }
 function ResearchConsole({
 	activeTab,
 	onTabChange,
+	reportPane,
+	reportActions,
 	filesPane,
+	activeFileId,
 	focusedInterviewPersonaId,
 	onFocusInterview,
 	onOpenPersona,
@@ -132,12 +150,13 @@ function ResearchConsole({
 	 * Example: on the personas tab while interviews 3→5 finish, the interviews tab gets a dot.
 	 */
 	const counts: Record<ResearchConsoleTab, number> = {
+		report: studyAttachments?.report ? 1 : 0,
 		hypotheses: hypotheses.length + decidedCount,
 		personas: store.studyPersonas.length,
 		interviews: doneInterviews,
 		discussions: discussions.length,
 		analysis: store.synthesis?.themes.length ?? 0,
-		files: studyAttachments?.report ? 1 : 0,
+		files: studyAttachments?.all.length ?? 0,
 		validation: (studyAttachments?.validation ? 1 : 0) + (store.validationResults ? 1 : 0),
 	}
 	const seenCountsRef = useRef<Record<ResearchConsoleTab, number> | null>(null)
@@ -149,6 +168,7 @@ function ResearchConsole({
 		tab !== activeTab && counts[tab] > (seenCountsRef.current?.[tab] ?? 0)
 
 	const tabs: { value: ResearchConsoleTab; icon: LucideIcon; label: string; badge?: string }[] = [
+		{ value: "report", icon: BookOpenText, label: t("console.report") },
 		{
 			value: "hypotheses",
 			icon: Target,
@@ -183,7 +203,7 @@ function ResearchConsole({
 				? String(store.synthesis.themes.length)
 				: undefined,
 		},
-		{ value: "files", icon: FileText, label: t("console.files") },
+		{ value: "files", icon: FolderOpen, label: t("console.files") },
 		{
 			value: "validation",
 			icon: ClipboardCheck,
@@ -194,23 +214,7 @@ function ResearchConsole({
 		},
 	]
 
-	const reportRunning =
-		study?.phases.some((phase) => phase.key === "report" && phase.status === "running") ?? false
 	const activeDiscussion = discussions[activeDiscussionIndex]
-
-	/** Study documents in reading order; the files tab lists them so they stay reachable. */
-	const studyDocuments = [
-		{ key: "plan", label: t("console.docPlan"), file: studyAttachments?.plan },
-		{ key: "desk", label: t("console.docDeskResearch"), file: studyAttachments?.deskResearch },
-		{ key: "report", label: t("console.docReport"), file: studyAttachments?.report },
-		{
-			key: "validation",
-			label: t("console.docValidation"),
-			file: studyAttachments?.validation,
-		},
-	].filter((doc): doc is { key: string; label: string; file: AttachmentItem } =>
-		Boolean(doc.file),
-	)
 
 	return (
 		<Tabs
@@ -219,7 +223,7 @@ function ResearchConsole({
 			className="flex h-full min-h-0 flex-col"
 			data-testid="persona-research-console"
 		>
-			<div className="shrink-0 overflow-x-auto border-b border-border px-3 pt-2">
+			<div className="flex shrink-0 items-end gap-2 overflow-x-auto border-b border-border px-3 pt-2">
 				<TabsList className="h-auto gap-1 bg-transparent p-0">
 					{tabs.map(({ value, icon: Icon, label, badge }) => (
 						<TabsTrigger
@@ -247,12 +251,26 @@ function ResearchConsole({
 						</TabsTrigger>
 					))}
 				</TabsList>
+				{activeTab === "report" && reportActions ? (
+					<div className="ml-auto flex shrink-0 items-center gap-1 pb-1.5">
+						{reportActions}
+					</div>
+				) : null}
 			</div>
 			{store.studyFileInvalid ? (
 				<p className="mx-3 mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
 					{t("console.studyFileInvalid")}
 				</p>
 			) : null}
+
+			{/* Kept mounted so the report preview is not reloaded on every tab switch. */}
+			<TabsContent
+				value="report"
+				forceMount
+				className={cn("relative mt-0 min-h-0 flex-1", activeTab !== "report" && "hidden")}
+			>
+				{reportPane}
+			</TabsContent>
 
 			<TabsContent value="hypotheses" className="mt-0 min-h-0 flex-1 bg-muted/40">
 				<HypothesisBoard onOpenQuote={openQuote} onOpenSources={openSources} />
@@ -356,31 +374,23 @@ function ResearchConsole({
 					activeTab !== "files" && "hidden",
 				)}
 			>
-				{studyDocuments.length > 0 ? (
-					<div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
-						{studyDocuments.map((doc) => (
-							<Button
-								key={doc.key}
-								variant="outline"
-								size="sm"
-								className="h-7 gap-1.5 px-2.5 text-xs"
-								onClick={() => onOpenFile(doc.file)}
-							>
-								<FileText className="size-3.5" />
-								{doc.label}
-							</Button>
-						))}
+				<div className={cn("flex min-h-0 flex-1", isMobile && "flex-col")}>
+					<div
+						className={cn(
+							"shrink-0 bg-muted/40",
+							isMobile
+								? "max-h-44 border-b border-border"
+								: "w-60 border-r border-border",
+						)}
+					>
+						<StudyFileList
+							activeFileId={activeFileId}
+							onOpenFile={onOpenFile}
+							variant={isMobile ? "mobile" : "desktop"}
+						/>
 					</div>
-				) : null}
-				<div className="relative min-h-0 flex-1">{filesPane}</div>
-				{!studyAttachments?.report && reportRunning ? (
-					<div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-3">
-						<span className="flex items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur">
-							<span className="size-1.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
-							{t("console.reportGenerating")}
-						</span>
-					</div>
-				) : null}
+					<div className="relative min-h-0 min-w-0 flex-1">{filesPane}</div>
+				</div>
 			</TabsContent>
 
 			<TabsContent value="validation" className="mt-0 min-h-0 flex-1 bg-muted/40">

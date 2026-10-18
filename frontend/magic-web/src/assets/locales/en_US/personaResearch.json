@@ -63,7 +63,7 @@
 		"docPlan": "Research plan",
 		"docReport": "Report",
 		"docValidation": "Validation questionnaire",
-		"files": "Report & files",
+		"files": "Files",
 		"hypotheses": "Hypotheses",
 		"interviews": "Interviews",
 		"interviewsEmpty": "Transcripts appear here once interviews start.",
@@ -75,6 +75,7 @@
 		"personasEmpty": "Personas appear here once the AI builds them.",
 		"personasEmptyTitle": "No personas yet",
 		"previous": "Previous",
+		"report": "Report",
 		"reportGenerating": "Generating report…",
 		"studyFileInvalid": "The study progress file is still being written or is incomplete. The conversation is not affected.",
 		"validation": "Validation",
@@ -108,6 +109,26 @@
 	},
 	"evidence": {
 		"round": "Round {{index}}"
+	},
+	"files": {
+		"data": "Data files",
+		"deliverables": "Deliverables",
+		"empty": "Once the study starts, all its files are listed here.",
+		"process": "Research process",
+		"role": {
+			"deskResearch": "Market insight",
+			"discussion": "Focus group transcript",
+			"interview": "Interview · {{name}}",
+			"panel": "Respondent panel",
+			"persona": "Persona · {{name}}",
+			"plan": "Research plan",
+			"report": "Research report",
+			"study": "Study state",
+			"synthesis": "Synthesis",
+			"validation": "Validation questionnaire",
+			"validationCsv": "Questionnaire table (for survey tools)",
+			"validationResults": "Real-person comparison"
+		}
 	},
 	"form": {
 		"actions": "Typical actions",
@@ -416,6 +437,13 @@
 		"inferred": "Inferred content {{percent}}%",
 		"stories": "{{count}} concrete stories"
 	},
+	"report": {
+		"editDownload": "Edit & download",
+		"empty": "The report appears here when the study is done.",
+		"emptyTitle": "No report yet",
+		"fullscreen": "Full screen",
+		"generatingTitle": "Writing the report"
+	},
 	"scenario": {
 		"brand": "Brand positioning",
 		"brandPrompt": "Research how [target audience] perceive [brand] and which positioning would fit better.",
@@ -461,13 +489,16 @@
 	"study": {
 		"aiDisclaimer": "Respondents are AI-simulated, not real users",
 		"backHome": "Back to my studies",
+		"collapseConversation": "Hide conversation",
 		"conversation": "Conversation",
+		"expandConversation": "Show conversation",
 		"notFound": "This study was not found. It may have been deleted.",
 		"notFoundTitle": "Study not found",
 		"outputs": "Outputs",
 		"outputsCount": "Outputs {{count}}",
 		"personasCount": "Personas {{count}}",
 		"progress": "Progress {{done}}/{{total}}",
+		"progressToggle": "Progress {{done}}/{{total}}",
 		"rename": "Rename study",
 		"renameFailed": "Couldn't rename the study. Try again.",
 		"resizePanels": "Resize conversation and outputs",
