@@ -272,6 +272,8 @@ function ResearchStudioPage() {
 					) : null}
 				</div>
 				<TopicSharePopover
+					// Shared research shows its results from study files; warn before hiding them.
+					fileListOffHint={t("share.fileListOffHint")}
 					open={shareOpen}
 					onOpenChange={setShareOpen}
 					topicId={selectedTopic.id}
