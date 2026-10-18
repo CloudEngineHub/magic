@@ -21,6 +21,7 @@ import {
 	EmptyTitle,
 } from "@/components/shadcn-ui/empty"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { cn } from "@/utils/cn"
@@ -388,6 +389,25 @@ function ResearchConsole({
 				/>
 			</TabsContent>
 		</Tabs>
+	)
+}
+
+/** Tab bar and card placeholders while the study's files load. */
+export function ResearchConsoleSkeleton() {
+	return (
+		<div className="flex h-full min-h-0 flex-col" aria-busy>
+			<div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
+				{Array.from({ length: 7 }, (_, index) => (
+					<Skeleton key={index} className="h-6 w-16" />
+				))}
+			</div>
+			<div className="flex flex-col gap-3 p-4">
+				<Skeleton className="h-16 w-full rounded-xl" />
+				{Array.from({ length: 3 }, (_, index) => (
+					<Skeleton key={index} className="h-24 w-full rounded-xl" />
+				))}
+			</div>
+		</div>
 	)
 }
 

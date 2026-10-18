@@ -83,6 +83,10 @@ export class PersonaResearchStore {
 	contentVersion = 0
 	/** Text the home composer fills once it is ready, e.g. "start a study with these personas". */
 	pendingComposerText: string | null = null
+	/** True once every study.json has been read, so list rows can show real statuses. */
+	studyFilesReady = false
+	/** Topic whose study files finished their first read; differs while a study is loading. */
+	loadedStudyTopicId: string | null = null
 
 	private bootstrapGeneration = 0
 	private contentGeneration = 0
@@ -119,6 +123,15 @@ export class PersonaResearchStore {
 	/** Study directory of the selected topic, e.g. "studies/ai-recorder-7f3a/". */
 	get studyDir(): string | null {
 		return this.studyDirOf(this.selectedTopic?.id)
+	}
+
+	/**
+	 * The selected study's files have not been read yet. Status and progress derived from a
+	 * missing study.json would read as "paused · 0/6", so pages show skeletons instead.
+	 */
+	get isStudyContentLoading(): boolean {
+		const topicId = this.selectedTopic?.id
+		return Boolean(topicId) && this.loadedStudyTopicId !== topicId
 	}
 
 	get studyAttachments(): StudyAttachments | null {
@@ -361,6 +374,8 @@ export class PersonaResearchStore {
 		this.bootstrapGeneration += 1
 		this.contentGeneration += 1
 		this.parsedCache.clear()
+		this.studyFilesReady = false
+		this.loadedStudyTopicId = null
 		this.topicStore.reset()
 		this.projectFilesStore.setSelectedProject(null)
 		this.projectFilesStore.setWorkspaceFileTree([])
@@ -422,6 +437,8 @@ export class PersonaResearchStore {
 				? this.getParsed(study.validationResults, parseValidationResultsFile)
 				: null
 			this.validationResults = validationResult?.ok ? validationResult.data : null
+			this.studyFilesReady = true
+			this.loadedStudyTopicId = this.selectedTopic?.id ?? null
 			this.contentVersion += 1
 		})
 	}

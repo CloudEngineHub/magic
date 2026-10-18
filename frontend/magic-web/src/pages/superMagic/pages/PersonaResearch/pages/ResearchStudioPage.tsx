@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { Button } from "@/components/shadcn-ui/button"
+import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import {
 	Empty,
 	EmptyContent,
@@ -30,14 +31,21 @@ import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { platformKey } from "@/utils/storage"
 import { usePersonaResearchStore } from "../context"
-import ResearchConsole, { type ResearchConsoleTab } from "../components/ResearchConsole"
+import ResearchConsole, {
+	ResearchConsoleSkeleton,
+	type ResearchConsoleTab,
+} from "../components/ResearchConsole"
 import ResearchConversationPanel, {
 	type ResearchConversationPanelRef,
 } from "../components/ResearchConversationPanel"
 import ResearchFilesPane from "../components/ResearchFilesPane"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
-import StudyStepper from "../components/StudyStepper"
-import { StudyProgressSegments, StudyStatusBadge } from "../components/StudyStatusBadge"
+import StudyStepper, { StudyStepperSkeleton } from "../components/StudyStepper"
+import {
+	StudyProgressSegments,
+	StudyStatusBadge,
+	StudyStatusBadgeSkeleton,
+} from "../components/StudyStatusBadge"
 import { resolveStudyStatus } from "../services/studyStatus"
 import type { PersonaFile, StudyFile, StudyPhaseKey } from "../types"
 
@@ -81,6 +89,7 @@ function ResearchStudioPage() {
 	const studyAttachments = store.studyAttachments
 	const report = studyAttachments?.report ?? null
 	const status = resolveStudyStatus(selectedTopic, study)
+	const isContentLoading = store.isStudyContentLoading
 
 	const showOutputs = useMemoizedFn((tab: ResearchConsoleTab) => {
 		setConsoleTab(tab)
@@ -229,7 +238,11 @@ function ResearchStudioPage() {
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<div className="flex min-w-0 items-center gap-2">
 						<h1 className="truncate text-sm font-semibold">{title}</h1>
-						<StudyStatusBadge status={status} />
+						{isContentLoading ? (
+							<StudyStatusBadgeSkeleton />
+						) : (
+							<StudyStatusBadge status={status} />
+						)}
 					</div>
 					{metaChips.length && !isMobile ? (
 						<div className="flex flex-wrap items-center gap-1.5">
@@ -261,16 +274,22 @@ function ResearchStudioPage() {
 					</Button>
 				</TopicSharePopover>
 			</div>
-			<StudyStepper
-				study={study}
-				compact={isMobile}
-				waitingForUser={status.kind === "waiting_user"}
-				onStepClick={handleStepClick}
-			/>
+			{isContentLoading ? (
+				<StudyStepperSkeleton compact={isMobile} />
+			) : (
+				<StudyStepper
+					study={study}
+					compact={isMobile}
+					waitingForUser={status.kind === "waiting_user"}
+					onStepClick={handleStepClick}
+				/>
+			)}
 		</div>
 	)
 
-	const consoleNode = (
+	const consoleNode = isContentLoading ? (
+		<ResearchConsoleSkeleton />
+	) : (
 		<ResearchConsole
 			activeTab={consoleTab}
 			onTabChange={setConsoleTab}
@@ -388,10 +407,19 @@ function ResearchStudioPage() {
 				</ResizablePanel>
 			</ResizablePanelGroup>
 			<div className="flex shrink-0 items-center gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
-				<StudyProgressSegments status={status} className="w-32" />
-				<span className="tabular-nums">
-					{t("study.progress", { done: status.completed, total: status.total })}
-				</span>
+				{isContentLoading ? (
+					<>
+						<Skeleton className="h-1 w-32" />
+						<Skeleton className="h-3 w-14" />
+					</>
+				) : (
+					<>
+						<StudyProgressSegments status={status} className="w-32" />
+						<span className="tabular-nums">
+							{t("study.progress", { done: status.completed, total: status.total })}
+						</span>
+					</>
+				)}
 				<span className="h-3 w-px bg-border" aria-hidden />
 				<button
 					type="button"

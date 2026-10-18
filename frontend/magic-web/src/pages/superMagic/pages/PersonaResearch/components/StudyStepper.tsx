@@ -1,5 +1,6 @@
 import { Check, Loader2, MessageCircleQuestion, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { cn } from "@/utils/cn"
 import { resolvePhaseStatuses } from "../services/researchFiles"
@@ -163,5 +164,20 @@ function StepDot({
 		>
 			{index + 1}
 		</span>
+	)
+}
+
+/** Six placeholder steps while study.json loads, so unfinished steps never flash as "0/6". */
+export function StudyStepperSkeleton({ compact = false }: { compact?: boolean }) {
+	return (
+		<div className="flex items-center gap-3" aria-busy>
+			{Array.from({ length: 6 }, (_, index) => (
+				<div key={index} className="flex flex-1 items-center gap-2">
+					<Skeleton className="size-5 shrink-0 rounded-full" />
+					{compact ? null : <Skeleton className="h-3 w-14" />}
+					{index < 5 ? <Skeleton className="h-px flex-1" /> : null}
+				</div>
+			))}
+		</div>
 	)
 }

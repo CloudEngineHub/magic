@@ -11,10 +11,15 @@ import {
 import MagicTooltip from "@/components/base/MagicTooltip"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import { resolveStudyStatus } from "../services/studyStatus"
-import { StudyProgressSegments, StudyStatusBadge } from "./StudyStatusBadge"
+import {
+	StudyProgressSegments,
+	StudyStatusBadge,
+	StudyStatusBadgeSkeleton,
+} from "./StudyStatusBadge"
 
 interface StudyListItemProps {
 	topic: Topic
@@ -49,16 +54,29 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 			>
 				<span className="flex min-w-0 items-center gap-2">
 					<span className="truncate text-sm font-medium text-foreground">{title}</span>
-					<StudyStatusBadge status={status} />
+					{store.studyFilesReady ? (
+						<StudyStatusBadge status={status} />
+					) : (
+						<StudyStatusBadgeSkeleton />
+					)}
 				</span>
 				<span className="flex items-center gap-3">
-					<StudyProgressSegments status={status} className="w-28" />
-					<span className="text-xs text-muted-foreground">
-						{t("study.progress", { done: status.completed, total: status.total })}
-						{topic.updated_at
-							? ` · ${dayjs(topic.updated_at).locale(dayjsLocale).fromNow()}`
-							: ""}
-					</span>
+					{store.studyFilesReady ? (
+						<>
+							<StudyProgressSegments status={status} className="w-28" />
+							<span className="text-xs text-muted-foreground">
+								{t("study.progress", {
+									done: status.completed,
+									total: status.total,
+								})}
+								{topic.updated_at
+									? ` · ${dayjs(topic.updated_at).locale(dayjsLocale).fromNow()}`
+									: ""}
+							</span>
+						</>
+					) : (
+						<Skeleton className="h-3 w-48" />
+					)}
 				</span>
 			</button>
 			<DropdownMenu>

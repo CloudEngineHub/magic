@@ -1,5 +1,6 @@
 import { CircleAlert, CircleCheck, CirclePause, MessageCircleQuestion } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/utils/cn"
 import type { StudyStatus } from "../services/studyStatus"
 
@@ -90,4 +91,9 @@ export function StudyProgressSegments({
 			))}
 		</span>
 	)
+}
+
+/** Placeholder for the status pill while study files load, instead of a misleading "paused". */
+export function StudyStatusBadgeSkeleton({ className }: { className?: string }) {
+	return <Skeleton className={cn("h-5 w-14 shrink-0 rounded-full", className)} />
 }
