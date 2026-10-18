@@ -317,6 +317,8 @@
 		"outputsCount": "Outputs {{count}}",
 		"personasCount": "Personas {{count}}",
 		"progress": "Progress {{done}}/{{total}}",
+		"rename": "Rename study",
+		"renameFailed": "Couldn't rename the study. Try again.",
 		"resizePanels": "Resize conversation and outputs",
 		"scale": "{{personas}} people × {{rounds}} rounds",
 		"share": "Share",

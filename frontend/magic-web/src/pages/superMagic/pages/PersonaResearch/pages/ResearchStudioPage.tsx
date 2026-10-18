@@ -42,6 +42,7 @@ import ResearchConversationPanel, {
 import ResearchFilesPane from "../components/ResearchFilesPane"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
 import StudyStepper, { StudyStepperSkeleton } from "../components/StudyStepper"
+import StudyTitleEditor from "../components/StudyTitleEditor"
 import {
 	StudyProgressSegments,
 	StudyStatusBadge,
@@ -251,7 +252,10 @@ function ResearchStudioPage() {
 				</MagicTooltip>
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<div className="flex min-w-0 items-center gap-2">
-						<h1 className="truncate text-sm font-semibold">{title}</h1>
+						<StudyTitleEditor
+							topicId={selectedTopic.id}
+							title={store.studyTitleOf(selectedTopic)}
+						/>
 						{isContentLoading ? (
 							<StudyStatusBadgeSkeleton />
 						) : (

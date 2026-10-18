@@ -315,6 +315,8 @@
 		"outputsCount": "研究产出 {{count}}",
 		"personasCount": "人设 {{count}}",
 		"progress": "进度 {{done}}/{{total}}",
+		"rename": "重命名研究",
+		"renameFailed": "重命名失败，请重试",
 		"resizePanels": "调整对话与产出区宽度",
 		"scale": "{{personas}} 人 × {{rounds}} 轮",
 		"share": "分享",

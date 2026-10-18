@@ -7,6 +7,7 @@ import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelS
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { AttachmentDataProcessor } from "@/pages/superMagic/utils/attachmentDataProcessor"
 import { getFileContentsByIds } from "@/pages/superMagic/utils/api"
+import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { TaskStatus, WorkspaceStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -96,6 +97,8 @@ export class PersonaResearchStore {
 	private bootstrapGeneration = 0
 	private contentGeneration = 0
 	private readonly parsedCache = new Map<string, ParsedCacheEntry>()
+	/** Topics whose name was already copied from study.json in this page session. */
+	private readonly topicNameSyncs = new Set<string>()
 
 	readonly topicStore = new TopicStore()
 	readonly projectFilesStore = new ProjectFilesStore()
@@ -105,13 +108,14 @@ export class PersonaResearchStore {
 	constructor() {
 		makeAutoObservable<
 			PersonaResearchStore,
-			"bootstrapGeneration" | "contentGeneration" | "parsedCache"
+			"bootstrapGeneration" | "contentGeneration" | "parsedCache" | "topicNameSyncs"
 		>(
 			this,
 			{
 				bootstrapGeneration: false,
 				contentGeneration: false,
 				parsedCache: false,
+				topicNameSyncs: false,
 				topicStore: false,
 				projectFilesStore: false,
 				topicModelStore: false,
@@ -155,11 +159,26 @@ export class PersonaResearchStore {
 			.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")))
 	}
 
-	/** Title from study.json when available; otherwise the topic name. */
+	/**
+	 * The topic name is the study title on every page (home list, studio, share, other topic
+	 * lists) and the only one users rename. study.json's title covers a topic not named yet.
+	 */
 	studyTitleOf(topic: Topic): string {
-		const dir = this.studyDirOf(topic.id)
-		const cached = dir ? this.peekStudy(`${dir}study.json`) : null
-		return cached?.title || topic.topic_name || ""
+		if (topic.topic_name) return topic.topic_name
+		return this.studyFileOf(topic)?.title || ""
+	}
+
+	/** Renames a study through its topic name. */
+	async renameStudy(topicId: string, name: string): Promise<void> {
+		const topicName = name.trim()
+		const projectId = this.selectedProject?.id
+		if (!topicName || !projectId || this.isReadOnly) return
+		const topic = this.topicStore.topics.find((item) => item.id === topicId)
+		if (topic?.topic_name === topicName) return
+		await SuperMagicApi.editTopic({ id: topicId, topic_name: topicName, project_id: projectId })
+		runInAction(() => {
+			this.topicStore.updateTopicName(topicId, topicName)
+		})
 	}
 
 	/** Parsed study.json of any topic, for list rows; null until it has been read. */
@@ -408,6 +427,7 @@ export class PersonaResearchStore {
 		this.bootstrapGeneration += 1
 		this.contentGeneration += 1
 		this.parsedCache.clear()
+		this.topicNameSyncs.clear()
 		this.studyFilesReady = false
 		this.loadedStudyTopicId = null
 		this.topicStore.reset()
@@ -438,6 +458,7 @@ export class PersonaResearchStore {
 		runInAction(() => {
 			this.contentVersion += 1
 		})
+		this.syncTopicNamesFromStudies()
 		const study = this.studyAttachments
 		const studyItems = study
 			? [
@@ -475,6 +496,24 @@ export class PersonaResearchStore {
 			this.loadedStudyTopicId = this.selectedTopic?.id ?? null
 			this.contentVersion += 1
 		})
+	}
+
+	/**
+	 * Copies the agent's first study title into topics that have no name, so new studies get a
+	 * readable name everywhere. Runs once per topic; a user rename always wins because only empty
+	 * names are filled. Example: topic "" + study.json title "AI 录音硬件" → topic "AI 录音硬件".
+	 */
+	private syncTopicNamesFromStudies() {
+		if (this.isReadOnly || isReadOnlyProject(this.selectedProject?.user_role)) return
+		for (const topic of this.topicStore.topics) {
+			if (topic.topic_name || this.topicNameSyncs.has(topic.id)) continue
+			const title = this.studyFileOf(topic)?.title?.trim()
+			if (!title) continue
+			this.topicNameSyncs.add(topic.id)
+			void this.renameStudy(topic.id, title).catch((error: unknown) => {
+				console.error("Failed to name research topic from study.json:", error)
+			})
+		}
 	}
 
 	private async ensureParsed(items: AttachmentItem[]) {
