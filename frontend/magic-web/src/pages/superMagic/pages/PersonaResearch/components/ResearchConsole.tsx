@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn-ui
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
+import { useScrollFade } from "../hooks/useScrollFade"
 import { useSlidingThumb } from "../hooks/useSlidingThumb"
 import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
 import type { PersonaFile, QuoteRef } from "../types"
@@ -228,6 +229,10 @@ function ResearchConsole({
 		`${activeTab}:${isMobile}`,
 	)
 
+	const { ref: tabsScrollRef, maskStyle: tabsFadeStyle } = useScrollFade<HTMLDivElement>(
+		`${activeTab}:${isMobile}`,
+	)
+
 	return (
 		<Tabs
 			value={activeTab}
@@ -239,7 +244,11 @@ function ResearchConsole({
 				{toolbarStart}
 				{/* Narrow consoles scroll the tabs sideways; the scrollbar is hidden because an
 				    always-visible one draws a second line and a gap under the tab bar. */}
-				<div className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+				<div
+					ref={tabsScrollRef}
+					style={tabsFadeStyle}
+					className="min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+				>
 					{/* The ink pill is one thumb that slides to the active tab (falls back to a per-tab
 				    background until it has been measured). */}
 					<div ref={thumbContainerRef} className="relative w-max">
