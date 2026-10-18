@@ -212,7 +212,7 @@ function ResearchHomePage() {
 			<div
 				className={cn(
 					"mx-auto flex w-full max-w-6xl flex-col",
-					isMobile ? "gap-8 px-4 py-6" : "gap-14 px-10 pb-16 pt-12",
+					isMobile ? "gap-8 px-4 py-6" : "gap-14 px-10 pb-16 pt-9",
 				)}
 			>
 				{/* Hero: the question on the left, a real persona voice on the right. */}
@@ -225,17 +225,18 @@ function ResearchHomePage() {
 					<div className="flex min-w-0 flex-col">
 						<h1
 							className={cn(
-								"whitespace-pre-line font-black leading-[1.1] tracking-[-0.035em] text-foreground",
-								isMobile ? "text-4xl" : "text-[64px]",
+								"whitespace-pre-line font-black tracking-[-0.035em] text-foreground",
+								// Leading goes with the size: cn() drops a leading class placed before a text size.
+								isMobile ? "text-4xl leading-[1.15]" : "text-[64px] leading-[1.08]",
 							)}
 						>
 							{t("home.title")}
 						</h1>
-						<p className="mt-4 max-w-[30em] text-[15px] leading-7 text-muted-foreground">
+						<p className="mt-3 max-w-[30em] text-[15px] leading-7 text-muted-foreground">
 							{t("home.subtitle")}
 						</p>
 						<div
-							className="mt-7 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/30"
+							className="mt-6 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/30"
 							data-testid="persona-research-composer"
 							data-guide-anchor={ResearchOnboardingAnchor.HomeComposer}
 						>

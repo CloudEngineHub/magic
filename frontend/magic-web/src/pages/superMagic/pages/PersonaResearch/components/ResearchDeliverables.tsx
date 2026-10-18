@@ -29,7 +29,7 @@ interface ResearchDeliverablesProps {
 	className?: string
 	/** Opens a file in the files tab preview. */
 	onOpenFile?: (file: AttachmentItem) => void
-	/** Switches the outputs panel to a tab, e.g. validation or interviews. */
+	/** Switches the outputs panel to a tab, e.g. report, validation or interviews. */
 	onShowOutputs?: (tab: ResearchConsoleTab) => void
 }
 
@@ -142,7 +142,11 @@ function ResearchDeliverables({
 						/>
 					) : null}
 					{canOpen ? (
-						<Button size="sm" className="shrink-0" onClick={() => onOpenFile?.(report)}>
+						<Button
+							size="sm"
+							className="shrink-0"
+							onClick={() => onShowOutputs?.("report")}
+						>
 							{t("deliverables.openReport")}
 						</Button>
 					) : null}
