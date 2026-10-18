@@ -17,6 +17,7 @@ Path: `studies/<slug>/study.json`
 | Field | Required | Values |
 |---|---|---|
 | `schema_version` | yes | `1` |
+| `topic_id` | yes | the current topic ID from the latest `<super_magic_product_context>`, as a string; the research workspace finds the study of a topic by this field, so keep it on every rewrite |
 | `title` | yes | short study title |
 | `question` | yes | the user's original question, verbatim |
 | `study_type` | no | `user_research` \| `product_rnd` \| `concept_test` \| `fast_insight` \| `panel_only` |
@@ -54,6 +55,7 @@ Example (report written, real-person answers compared):
 ```json
 {
   "schema_version": 1,
+  "topic_id": "912345678901234567",
   "title": "AI call recorder for SMB owners",
   "question": "Would owners of small traditional businesses pay for an AI call recorder?",
   "study_type": "concept_test",

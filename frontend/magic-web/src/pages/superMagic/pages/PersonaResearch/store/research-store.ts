@@ -19,6 +19,7 @@ import {
 	findStudyDir,
 	getAttachmentPath,
 	listLibraryFiles,
+	listStudyFiles,
 	parseDiscussionFile,
 	parseSynthesisFile,
 	parseValidationResultsFile,
@@ -117,7 +118,7 @@ export class PersonaResearchStore {
 
 	/** Study directory of the selected topic, e.g. "studies/ai-recorder-7f3a/". */
 	get studyDir(): string | null {
-		return findStudyDir(this.attachmentList, this.selectedTopic?.id)
+		return this.studyDirOf(this.selectedTopic?.id)
 	}
 
 	get studyAttachments(): StudyAttachments | null {
@@ -138,14 +139,14 @@ export class PersonaResearchStore {
 
 	/** Title from study.json when available; otherwise the topic name. */
 	studyTitleOf(topic: Topic): string {
-		const dir = findStudyDir(this.attachmentList, topic.id)
+		const dir = this.studyDirOf(topic.id)
 		const cached = dir ? this.peekStudy(`${dir}study.json`) : null
 		return cached?.title || topic.topic_name || ""
 	}
 
 	/** Parsed study.json of any topic, for list rows; null until it has been read. */
 	studyFileOf(topic: Topic): StudyFile | null {
-		const dir = findStudyDir(this.attachmentList, topic.id)
+		const dir = this.studyDirOf(topic.id)
 		return dir ? this.peekStudy(`${dir}study.json`) : null
 	}
 
@@ -262,7 +263,7 @@ export class PersonaResearchStore {
 
 	/** Deletes the topic and its study directory; persona library files are kept. */
 	async deleteStudy(topicId: string): Promise<void> {
-		const dir = findStudyDir(this.attachmentList, topicId)
+		const dir = this.studyDirOf(topicId)
 		const fileIds = dir ? this.collectDirectoryFileIds(dir) : []
 		await SuperMagicApi.deleteTopic({ id: topicId })
 		if (fileIds.length > 0 && this.selectedProject?.id) {
@@ -375,6 +376,14 @@ export class PersonaResearchStore {
 		const generation = ++this.contentGeneration
 		const personaItems = listLibraryFiles(this.attachmentList, PERSONAS_DIR)
 		const panelItems = listLibraryFiles(this.attachmentList, PANELS_DIR)
+		// Every study.json first: its topic_id decides which directory belongs to which topic,
+		// and list rows read their titles from it.
+		await this.ensureParsed([
+			...personaItems,
+			...panelItems,
+			...listStudyFiles(this.attachmentList),
+		])
+		if (generation !== this.contentGeneration) return
 		const study = this.studyAttachments
 		const studyItems = study
 			? [
@@ -386,14 +395,8 @@ export class PersonaResearchStore {
 					...study.discussions,
 				].filter((item): item is AttachmentItem => item !== null)
 			: []
-		// Study titles for the list come from every study.json, not only the selected one.
-		const studyFileItems = this.topicStore.topics
-			.map((topic) => findStudyDir(this.attachmentList, topic.id))
-			.filter((dir): dir is string => Boolean(dir))
-			.map((dir) => collectStudyAttachments(this.attachmentList, dir).study)
-			.filter((item): item is AttachmentItem => item !== null)
 
-		await this.ensureParsed([...personaItems, ...panelItems, ...studyItems, ...studyFileItems])
+		await this.ensureParsed(studyItems)
 		if (generation !== this.contentGeneration) return
 
 		runInAction(() => {
@@ -455,6 +458,22 @@ export class PersonaResearchStore {
 		return parser(cached.result.data)
 	}
 
+	/** Study directory of a topic, matched through the topic_id recorded in each study.json. */
+	private studyDirOf(topicId: string | undefined): string | null {
+		void this.contentVersion
+		return findStudyDir(this.attachmentList, topicId, this.studyTopicIdOf)
+	}
+
+	private studyTopicIdOf(item: AttachmentItem): string | undefined {
+		const cached = this.parsedCache.get(getAttachmentPath(item))
+		const data = cached?.result.ok ? cached.result.data : null
+		const topicId =
+			data && typeof data === "object" ? (data as { topic_id?: unknown }).topic_id : null
+		return typeof topicId === "string" || typeof topicId === "number"
+			? String(topicId)
+			: undefined
+	}
+
 	/** Reads an already-fetched study.json for list rows; never triggers a request. */
 	private peekStudy(path: string): StudyFile | null {
 		void this.contentVersion
@@ -495,7 +514,7 @@ export class PersonaResearchStore {
 
 	private isBlankTopic(topic: Topic): boolean {
 		const neverRan = !topic.task_status || topic.task_status === TaskStatus.WAITING
-		return neverRan && !topic.topic_name && !findStudyDir(this.attachmentList, topic.id)
+		return neverRan && !topic.topic_name && !this.studyDirOf(topic.id)
 	}
 
 	private applyAttachments(tree: AttachmentItem[], list: AttachmentItem[]) {

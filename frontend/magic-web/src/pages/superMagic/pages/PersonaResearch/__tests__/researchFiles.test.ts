@@ -50,6 +50,21 @@ describe("findStudyDir", () => {
 		]
 		expect(findStudyDir(list, "t1")).toBe("studies/new/")
 	})
+
+	it("matches the topic_id recorded in study.json when attachments carry topic 0", () => {
+		const list = [
+			file("studies/a-1111/study.json", { topic_id: "0" }),
+			file("studies/b-2222/study.json", { topic_id: "0" }),
+		]
+		const recorded: Record<string, string> = {
+			"studies/a-1111/study.json": "t1",
+			"studies/b-2222/study.json": "t2",
+		}
+		const studyTopicIdOf = (item: AttachmentItem) => recorded[String(item.relative_file_path)]
+		expect(findStudyDir(list, "t2", studyTopicIdOf)).toBe("studies/b-2222/")
+		expect(findStudyDir(list, "t3", studyTopicIdOf)).toBeNull()
+		expect(findStudyDir(list, "t1")).toBeNull()
+	})
 })
 
 describe("collectStudyAttachments", () => {

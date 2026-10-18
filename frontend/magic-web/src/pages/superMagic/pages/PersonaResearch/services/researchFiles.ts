@@ -43,15 +43,10 @@ export function attachmentVersionKey(item: AttachmentItem): string {
 	return `${item.file_id ?? ""}:${item.updated_at ?? ""}:${item.file_size ?? ""}`
 }
 
-/**
- * Finds the study directory that belongs to one topic.
- * Example: topic "123" wrote "studies/ai-recorder-7f3a/study.json" → "studies/ai-recorder-7f3a/".
- * When several study files carry the topic id (a renamed study), the most recently updated wins.
- */
-export function findStudyDir(list: AttachmentItem[], topicId: string | undefined): string | null {
-	if (!topicId) return null
-	const candidates = list.filter((item) => {
-		if (!isFile(item) || String(item.topic_id ?? "") !== String(topicId)) return false
+/** Every study state file, e.g. "studies/ai-recorder-7f3a/study.json". */
+export function listStudyFiles(list: AttachmentItem[]): AttachmentItem[] {
+	return list.filter((item) => {
+		if (!isFile(item)) return false
 		const path = attachmentPath(item)
 		return (
 			path.startsWith(STUDIES_DIR) &&
@@ -59,6 +54,26 @@ export function findStudyDir(list: AttachmentItem[], topicId: string | undefined
 			path.split("/").length === 3
 		)
 	})
+}
+
+/**
+ * Finds the study directory that belongs to one topic.
+ * The agent records the topic in study.json `topic_id`, read through `studyTopicIdOf`; the
+ * attachment's own topic_id is only a fallback because agent-written files may carry 0.
+ * Example: study.json of "studies/ai-recorder-7f3a/" has topic_id "123" → "studies/ai-recorder-7f3a/".
+ * When several study files match (a renamed study), the most recently updated wins.
+ */
+export function findStudyDir(
+	list: AttachmentItem[],
+	topicId: string | undefined,
+	studyTopicIdOf?: (item: AttachmentItem) => string | undefined,
+): string | null {
+	if (!topicId) return null
+	const candidates = listStudyFiles(list).filter(
+		(item) =>
+			studyTopicIdOf?.(item) === String(topicId) ||
+			String(item.topic_id ?? "") === String(topicId),
+	)
 	if (candidates.length === 0) return null
 	const latest = [...candidates].sort((a, b) =>
 		String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")),
@@ -201,6 +216,7 @@ const hypothesisSchema = z.object({
 
 const studySchema = z.object({
 	schema_version: schemaVersion,
+	topic_id: z.coerce.string().optional().catch(undefined),
 	title: z.string(),
 	question: z.string(),
 	study_type: z

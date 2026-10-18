@@ -66,6 +66,8 @@ export type GuideIssue = "leading" | "double_barreled" | "hypothesis_reveal" | "
 
 export interface StudyFile {
 	schema_version: 1
+	/** Topic that runs this study; the workspace finds a topic's study directory by it. */
+	topic_id?: string
 	title: string
 	question: string
 	study_type?: StudyType

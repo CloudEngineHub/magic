@@ -79,7 +79,7 @@ When a step stops (unanswered question, user interruption, failure), leave `stud
 ### Phase 1: Clarify (`clarify`)
 
 1. Run one quick `web_search` with 2-3 differentiated queries to understand the topic's shape. No deep reading yet.
-2. Choose the slug, create `studies/<slug>/study.json` with the first state from the table above.
+2. Choose the slug, create `studies/<slug>/study.json` with the first state from the table above and `topic_id` set to the current topic ID from `<super_magic_product_context>`. Keep `topic_id` unchanged on every later rewrite.
 3. If the request leaves material choices open, send at most 3 `select` questions in one direct `ask_user` call: the decision the study should inform, target audience, and study type (see methods.md). Skip questions the user already answered. Write questions and options in plain business language a shop owner understands, not research jargon, in the user's language and customized from the pre-search. Put the recommended option first, mark it as recommended, and set it as the `default`.
 4. Clarifying answers obey the deep-research interaction rules: on timeout or skip, state the open question, keep `phase=clarify`, and stop.
 
