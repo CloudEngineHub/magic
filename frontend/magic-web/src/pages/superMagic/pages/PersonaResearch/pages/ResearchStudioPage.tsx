@@ -381,14 +381,23 @@ function ResearchStudioPage() {
 			data-testid="persona-research-studio"
 		>
 			{header}
+			{/* Outputs on the left, conversation on the right; v2 key drops layouts saved in the old order. */}
 			<ResizablePanelGroup
 				direction="horizontal"
-				autoSaveId={platformKey("persona-research-studio-layout")}
+				autoSaveId={platformKey("persona-research-studio-layout-v2")}
 				className="min-h-0 flex-1"
 			>
+				<ResizablePanel id="outputs" order={1} defaultSize={64} minSize={40}>
+					{consoleNode}
+				</ResizablePanel>
+				{/* Wide transparent hit area with a hairline; highlights while hovered or dragged. */}
+				<ResizableHandle
+					aria-label={t("study.resizePanels")}
+					className="w-1.5 bg-transparent after:w-px after:bg-border hover:after:bg-primary/40 focus-visible:after:bg-primary data-[resize-handle-state=drag]:after:bg-primary"
+				/>
 				<ResizablePanel
 					id="conversation"
-					order={1}
+					order={2}
 					defaultSize={36}
 					minSize={26}
 					maxSize={55}
@@ -396,14 +405,6 @@ function ResearchStudioPage() {
 					<div className="flex h-full min-h-0 flex-col bg-background">
 						{conversationNode}
 					</div>
-				</ResizablePanel>
-				{/* Wide transparent hit area with a hairline; highlights while hovered or dragged. */}
-				<ResizableHandle
-					aria-label={t("study.resizePanels")}
-					className="w-1.5 bg-transparent after:w-px after:bg-border hover:after:bg-primary/40 focus-visible:after:bg-primary data-[resize-handle-state=drag]:after:bg-primary"
-				/>
-				<ResizablePanel id="outputs" order={2} defaultSize={64} minSize={40}>
-					{consoleNode}
 				</ResizablePanel>
 			</ResizablePanelGroup>
 			<div className="flex shrink-0 items-center gap-4 border-t border-border px-4 py-2 text-xs text-muted-foreground">
