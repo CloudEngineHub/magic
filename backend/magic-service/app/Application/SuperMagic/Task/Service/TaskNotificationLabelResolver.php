@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Task\Service;
 
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Event\RunTaskCallbackEvent;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
@@ -31,6 +33,7 @@ final class TaskNotificationLabelResolver
         private readonly ProjectDomainService $projectDomainService,
         private readonly WorkspaceDomainService $workspaceDomainService,
         LoggerFactory $loggerFactory,
+        private readonly ?MagicClawDomainService $magicClawDomainService = null,
     ) {
         $this->logger = $loggerFactory->get(static::class);
     }
@@ -41,7 +44,9 @@ final class TaskNotificationLabelResolver
      *     workspace_id:string,
      *     workspace_name:string,
      *     project_id:string,
-     *     project_name:string
+     *     project_name:string,
+     *     project_mode:string,
+     *     resource_code:string
      * }
      */
     public function resolve(
@@ -56,6 +61,8 @@ final class TaskNotificationLabelResolver
             'workspace_name' => trim($event?->getWorkspaceName() ?? ''),
             'project_id' => trim($event?->getProjectId() ?? ''),
             'project_name' => trim($event?->getProjectName() ?? ''),
+            'project_mode' => '',
+            'resource_code' => '',
         ];
 
         if ($topic === null && $event !== null) {
@@ -97,9 +104,11 @@ final class TaskNotificationLabelResolver
             if ((int) $labels['workspace_id'] <= 0 && ($project->getWorkspaceId() ?? 0) > 0) {
                 $labels['workspace_id'] = (string) $project->getWorkspaceId();
             }
+            $labels['project_mode'] = trim((string) ($project->getProjectMode() ?? ''));
         }
 
-        if ((int) $labels['project_id'] > 0 && ($labels['project_name'] === '' || (int) $labels['workspace_id'] <= 0)) {
+        $resolvedProject = null;
+        if ($project === null && (int) $labels['project_id'] > 0 && ($labels['project_name'] === '' || (int) $labels['workspace_id'] <= 0 || $labels['project_mode'] === '')) {
             try {
                 $resolvedProject = $this->projectDomainService->getProjectNotUserId((int) $labels['project_id']);
                 if ($labels['project_name'] === '') {
@@ -108,8 +117,20 @@ final class TaskNotificationLabelResolver
                 if ((int) $labels['workspace_id'] <= 0 && ($resolvedProject?->getWorkspaceId() ?? 0) > 0) {
                     $labels['workspace_id'] = (string) $resolvedProject->getWorkspaceId();
                 }
+                if ($labels['project_mode'] === '') {
+                    $labels['project_mode'] = trim((string) ($resolvedProject?->getProjectMode() ?? ''));
+                }
             } catch (Throwable $throwable) {
                 $this->logResolutionFailure($event, $task, $topic, 'project', $throwable);
+            }
+        }
+
+        if ($labels['project_mode'] === ProjectMode::MAGICLAW->value && $this->magicClawDomainService !== null) {
+            try {
+                $claw = $this->magicClawDomainService->getByProjectId((int) $labels['project_id']);
+                $labels['resource_code'] = trim($claw?->getCode() ?? '');
+            } catch (Throwable $throwable) {
+                $this->logResolutionFailure($event, $task, $topic, 'claw', $throwable);
             }
         }
 
