@@ -3,6 +3,13 @@ import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { createContext, type PropsWithChildren, type ReactNode, useContext } from "react"
 import defaultProjectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
 import type { FileBundleDownloadCapability } from "@/pages/superMagic/hooks/useFileBundleDownload"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+
+/** Final attachments of one assistant message, resolved to workspace files. */
+export interface MessageAttachmentsRenderProps {
+	files: AttachmentItem[]
+	className?: string
+}
 
 export interface MessageListContextState {
 	/** 打开当前话题的文件管理器，并显示一次性整理引导。 */
@@ -35,6 +42,11 @@ export interface MessageListContextState {
 	onRetryOptimisticMessage?: (message: { app_message_id?: string }) => void
 	/** Optional assistant avatar renderer for scoped scenes */
 	renderAssistantAvatar?: (props?: { className?: string }) => ReactNode
+	/**
+	 * Scoped scenes may present a message's final attachments themselves, e.g. research studies
+	 * group their deliverables. Return null or undefined to keep the default attachment list.
+	 */
+	renderAttachments?: (props: MessageAttachmentsRenderProps) => ReactNode
 	/** When false, hide the assistant "task completed" status badge */
 	showTaskCompletedBadge?: boolean
 	/** 当前上下文的 projectFilesStore。每个 MessageListProvider 都必须传入对应场景实例。 */

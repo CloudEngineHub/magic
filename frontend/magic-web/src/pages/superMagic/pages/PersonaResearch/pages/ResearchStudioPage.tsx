@@ -333,6 +333,7 @@ function ResearchStudioPage() {
 			onFileClick={openFile}
 			onSelectDetail={handleSelectDetail}
 			onAutoDetailChange={setAutoDetail}
+			onShowOutputs={showOutputs}
 		/>
 	)
 

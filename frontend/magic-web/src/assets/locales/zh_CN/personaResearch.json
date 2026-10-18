@@ -68,6 +68,19 @@
 		"validationEmpty": "研究完成后，这里会生成一份真人验证问卷，可以直接发给真实用户复测。",
 		"validationEmptyTitle": "问卷还没生成"
 	},
+	"deliverables": {
+		"analysis": "分析结果",
+		"discussions": "讨论 {{count}} 场",
+		"download": "下载",
+		"downloadCsv": "下载 CSV",
+		"interviews": "访谈 {{count}} 份",
+		"openReport": "打开报告",
+		"panel": "人设组",
+		"questionnaireFormats": "问卷 · CSV",
+		"reportSummary": "{{decided}}/{{total}} 条假设已有结论",
+		"title": "研究产物",
+		"validationResults": "真人验证结果"
+	},
 	"design": {
 		"actual": "实际",
 		"criteria": "条件",

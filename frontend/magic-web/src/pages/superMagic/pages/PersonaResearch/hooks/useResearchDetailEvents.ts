@@ -10,8 +10,7 @@ import type {
 	SuperMagicOpenMicroAppTabPayload,
 } from "@/pages/superMagic/events/openFileTab"
 import type { SuperMagicOpenPlaybackTabPayload } from "@/pages/superMagic/events/openPlaybackTab"
-import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
-import { downloadFileWithAnchor } from "@/pages/superMagic/utils/handleFIle"
+import { useResearchFileDownload } from "./useResearchFileDownload"
 
 /** The preview tab is force-mounted; wait one frame so a hidden panel has layout before opening. */
 const DETAIL_OPEN_DELAY_MS = 100
@@ -39,7 +38,7 @@ export function useResearchDetailEvents({
 	setActiveFileId,
 	setAutoDetail,
 }: UseResearchDetailEventsOptions) {
-	const fileApi = useFileApi()
+	const downloadFile = useResearchFileDownload()
 
 	const openInPreview = useMemoizedFn((open: (detail: DetailRef) => void) => {
 		revealFiles()
@@ -68,13 +67,7 @@ export function useResearchDetailEvents({
 			(item) => normalizePath(item.relative_file_path || "") === targetPath,
 		)
 		if (payload.action === "download") {
-			if (!matched?.file_id) return
-			void fileApi
-				.getTemporaryDownloadUrl({ file_ids: [matched.file_id], is_download: true })
-				.then((res: Array<{ url?: string }>) => downloadFileWithAnchor(res[0]?.url))
-				.catch((error: unknown) =>
-					console.error("Failed to download research file:", error),
-				)
+			downloadFile(matched?.file_id)
 			return
 		}
 		openInPreview((detail) =>

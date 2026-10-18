@@ -68,6 +68,21 @@
 		"validationEmpty": "When the study finishes, a questionnaire for real users appears here so you can retest the findings.",
 		"validationEmptyTitle": "No questionnaire yet"
 	},
+	"deliverables": {
+		"analysis": "Analysis",
+		"discussions_one": "{{count}} discussion",
+		"discussions_other": "{{count}} discussions",
+		"download": "Download",
+		"downloadCsv": "Download CSV",
+		"interviews_one": "{{count}} interview",
+		"interviews_other": "{{count}} interviews",
+		"openReport": "Open report",
+		"panel": "Persona panel",
+		"questionnaireFormats": "Questionnaire · CSV",
+		"reportSummary": "{{decided}} of {{total}} hypotheses concluded",
+		"title": "Research deliverables",
+		"validationResults": "Validation results"
+	},
 	"design": {
 		"actual": "Actual",
 		"criteria": "Criteria",

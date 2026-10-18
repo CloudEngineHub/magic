@@ -21,6 +21,9 @@ import { filterPanelMessageWithoutRevoked } from "@/pages/superMagic/utils/handl
 import { userStore } from "@/models/user"
 import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
+import { classifyStudyDeliverables } from "../services/researchDeliverables"
+import type { ResearchConsoleTab } from "./ResearchConsole"
+import ResearchDeliverables from "./ResearchDeliverables"
 
 export interface ResearchConversationPanelRef {
 	/** Replaces the composer text and focuses it, e.g. "ask this persona". */
@@ -34,6 +37,8 @@ interface ResearchConversationPanelProps {
 	onSelectDetail?: (detail?: unknown) => void
 	/** Latest tool step of the conversation, shown live by the preview's playback tab. */
 	onAutoDetailChange?: (detail: unknown) => void
+	/** Opens an output tab from the deliverables card, e.g. validation or interviews. */
+	onShowOutputs?: (tab: ResearchConsoleTab) => void
 }
 
 /** Conversation of the selected study: reused message list, ask_user cards and composer. */
@@ -41,7 +46,7 @@ const ResearchConversationPanel = forwardRef<
 	ResearchConversationPanelRef,
 	ResearchConversationPanelProps
 >(function ResearchConversationPanel(
-	{ variant, onFileClick, onSelectDetail, onAutoDetailChange },
+	{ variant, onFileClick, onSelectDetail, onAutoDetailChange, onShowOutputs },
 	ref,
 ) {
 	const store = usePersonaResearchStore()
@@ -130,6 +135,25 @@ const ResearchConversationPanel = forwardRef<
 		userInfo: userStore.user.userInfo,
 	})
 
+	/**
+	 * Study files under a message render as research deliverables; anything else keeps the default
+	 * list. Called while the message renders, so its observer tracks the study attachments read here.
+	 */
+	const renderAttachments = useMemoizedFn<
+		NonNullable<MessageListContextState["renderAttachments"]>
+	>(({ files, className }) => {
+		const deliverables = classifyStudyDeliverables(files, store.studyAttachments)
+		if (!deliverables) return null
+		return (
+			<ResearchDeliverables
+				deliverables={deliverables}
+				className={className}
+				onOpenFile={onFileClick}
+				onShowOutputs={onShowOutputs}
+			/>
+		)
+	})
+
 	const messageListProviderValue = useMemo<MessageListContextState>(
 		() => ({
 			allowRevoke: true,
@@ -140,8 +164,9 @@ const ResearchConversationPanel = forwardRef<
 			allowCreateNewTopic: false,
 			onTopicSwitch: store.setSelectedTopic,
 			projectFilesStore: store.projectFilesStore,
+			renderAttachments,
 		}),
-		[store.projectFilesStore, store.setSelectedTopic],
+		[renderAttachments, store.projectFilesStore, store.setSelectedTopic],
 	)
 
 	if (!selectedTopic) return null
