@@ -384,6 +384,11 @@ export class PersonaResearchStore {
 			...listStudyFiles(this.attachmentList),
 		])
 		if (generation !== this.contentGeneration) return
+		// parsedCache is not observable: bump the version so studyDir (a computed that may be
+		// cached by the UI) re-reads the topic_id values that were just parsed.
+		runInAction(() => {
+			this.contentVersion += 1
+		})
 		const study = this.studyAttachments
 		const studyItems = study
 			? [
