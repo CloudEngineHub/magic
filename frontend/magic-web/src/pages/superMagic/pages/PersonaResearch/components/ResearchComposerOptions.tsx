@@ -198,9 +198,10 @@ function OptionMenu({
 					)}
 				>
 					{icon}
-					<span className="text-muted-foreground">{label}</span>
+					{/* One word per chip so all settings fit one row: the value once it is set,
+					    else the setting's name; the menu header names the setting either way. */}
 					<span className={cn("max-w-[10em] truncate", active && "font-medium")}>
-						{valueLabel}
+						{active ? valueLabel : label}
 					</span>
 					<ChevronDown className="size-3.5 opacity-60" />
 				</button>
