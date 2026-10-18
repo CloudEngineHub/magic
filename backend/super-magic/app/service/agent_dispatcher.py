@@ -49,7 +49,7 @@ from app.infrastructure.observability import install_tool_monitoring_listener
 from app.service.mcp_service import MCPService
 from app.path_manager import PathManager
 from app.service.agent_event.channel_startup_listener_service import ChannelStartupListenerService
-from app.core.entity.message.client_message import InitClientMessage, ChatClientMessage, AgentMode
+from app.core.entity.message.client_message import InitClientMessage, ChatClientMessage, AgentMode, ContextType
 from app.service.cli_manager import CliManagerService
 from app.service.home_persistence_service import HomePersistenceService
 from app.service.startup_task import StartupTaskService
@@ -505,6 +505,9 @@ class AgentDispatcher(Base):
         last_dc = dict(last.get("dynamic_config") or {})
         last_dc.pop("image_model", None)
         last_dc.pop("video_model", None)
+        # 新消息缺省时不要继承上一条 false；显式继续运行可沿用快照中的状态。
+        if message.context_type != ContextType.CONTINUE:
+            last_dc.pop("enable_web_search", None)
         last_dc = remove_execution_source_from_dynamic_config(last_dc)
         current_dc = message.dynamic_config or {}
         if last_dc:
@@ -527,7 +530,10 @@ class AgentDispatcher(Base):
         # dynamic_config 做深合并：第三方 IM 消息只携带 agent_code 等部分字段，
         # 避免整个 key 覆盖导致 message_version / agent_code 等配置丢失。
         # 模型续传不依赖此快照，统一由 session_config + ModelSelectionPolicy 处理。
-        existing_dc = existing.get("dynamic_config") or {}
+        existing_dc = dict(existing.get("dynamic_config") or {})
+        # 保存本次有效搜索偏好；旧协议的新消息缺省时必须清掉旧值，
+        # 否则下一次 resume 会从快照重新拾起上一个请求的开关。
+        existing_dc.pop("enable_web_search", None)
         new_dc = new_data.get("dynamic_config") or {}
         if existing_dc or new_dc:
             merged["dynamic_config"] = {**existing_dc, **new_dc}

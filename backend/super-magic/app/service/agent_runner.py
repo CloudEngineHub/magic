@@ -304,6 +304,8 @@ def _inherit_parent_context(
     child.set_subagent_parent_agent_name(parent.agent_name)
     child.set_subagent_parent_agent_id(parent.get_agent_id())
     child.set_user_context_request_config(parent.get_user_context_host(), parent.get_user_context_auth())
+    # 普通和 fork 子 Agent 都继承本次搜索偏好，不复制父消息或依赖历史摘要。
+    child.set_web_search_enabled(parent.get_web_search_enabled())
     # 不继承 streams、task_id、streaming_sinks，保持子 Agent 事件完全隔离
 
 

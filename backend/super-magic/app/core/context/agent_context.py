@@ -343,6 +343,8 @@ class AgentContext(BaseAgentContext):
             "streams": ({}, Dict[str, Stream]),
             "attachments": ({}, Dict[str, Attachment]),
             "chat_client_message": (None, Optional[ChatClientMessage]),
+            # None 表示旧消息未提供结构化开关，不用默认开启覆盖旧 prompt 的约束。
+            "web_search_enabled": (None, Optional[bool]),
             "super_magic_product_context": (None, Optional[SuperMagicProductContext]),
             # None 表示任务尚未建立平台提示词快照；空字符串表示已建立快照但平台未配置内容。
             "global_system_prompt": (None, Optional[str]),
@@ -737,15 +739,17 @@ class AgentContext(BaseAgentContext):
         return None
 
     def set_chat_client_message(self, chat_client_message: ChatClientMessage) -> None:
-        """设置聊天客户端消息，并从 dynamic_config 中提取 message_version。
+        """设置聊天消息，刷新本次搜索偏好，并提取 message_version。
 
         仅当 dynamic_config 中明确提供了 message_version 时才更新，
         否则保持 shared_context 中已有的值（如从 session.json 回落设置的值）。
+        搜索偏好缺失则清空，不让旧客户端的新消息沿用上一条请求的开关。
 
         Args:
             chat_client_message: 聊天客户端消息
         """
         self.shared_context.update_field("chat_client_message", chat_client_message)
+        self.set_web_search_enabled(chat_client_message.web_search_enabled)
         from app.service.user_context_service import UserContextService
         UserContextService.apply_chat_config(self, chat_client_message.metadata)
 
@@ -765,6 +769,13 @@ class AgentContext(BaseAgentContext):
             Optional[ChatClientMessage]: 聊天客户端消息
         """
         return self.shared_context.get_field("chat_client_message")
+
+    def set_web_search_enabled(self, enabled: Optional[bool]) -> None:
+        """记录本次运行的搜索偏好；这是模型行为提示，不是网络或工具权限。"""
+        self.shared_context.update_field("web_search_enabled", enabled)
+
+    def get_web_search_enabled(self) -> Optional[bool]:
+        return self.shared_context.get_field("web_search_enabled")
 
     def get_project_id(self) -> Optional[str]:
         """优先从当前聊天消息获取项目 ID，缺失时回退到初始化消息。"""

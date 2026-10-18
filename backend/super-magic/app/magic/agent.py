@@ -1261,6 +1261,18 @@ class Agent(BaseAgent):
             self.agent_context.set_resumption_context(None, None)
             self._release_run(run_task)
 
+    def _push_web_search_runtime_context(self) -> None:
+        """每次运行及压缩后提供当前搜索偏好；旧协议未声明时不生成相反的默认提示。"""
+        enabled = self.agent_context.get_web_search_enabled()
+        if enabled is None:
+            return
+        content = (
+            "Web search is enabled for this run. Use internet search tools when needed; searching is not required."
+            if enabled else
+            "Web search is disabled for this run. Use workspace content and do not call internet search tools."
+        )
+        self.agent_context.horizon.push_notification("web_search", content)
+
     async def _run_once(self, request: AgentRunRequest):
         """执行单轮 Agent 业务逻辑；run() 统一管理执行身份。"""
         query = request.query
@@ -1284,6 +1296,7 @@ class Agent(BaseAgent):
         例：上一条 CHAT 自动开启，这条关闭；重新发当前事实即可，不必重建 Agent 或删 Skill。
         """
         self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
+        self._push_web_search_runtime_context()
 
         # 注入点1：用户消息入库后、第一次 LLM 调用前，注入 system_injected_context
         # 若历史末尾存在未完成的 tool call 序列，跳过注入避免破坏序列完整性
@@ -2530,6 +2543,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             await self._rehydrate_media_models_after_context_reset()
             # 后台压缩替换了旧窗口中的通知，按当前状态重新提供记忆模式和准确路径。
             self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
+            self._push_web_search_runtime_context()
             await self.agent_context.horizon.suggest_skills(
                 result.skill_suggestions,
                 source="context_compaction",
@@ -3746,6 +3760,7 @@ Since your subsequent output will be merged with pre-interruption content and di
             await self._rehydrate_media_models_after_context_reset()
             # 主动压缩同样需要恢复当前记忆事实，不能指望摘要完整保留旧开关通知。
             self.agent_context.horizon.push_notification("memory", build_memory_runtime_context(self.agent_context))
+            self._push_web_search_runtime_context()
             await self.agent_context.horizon.suggest_skills(
                 result.skill_suggestions,
                 source="context_compaction",

@@ -250,6 +250,12 @@ class ChatClientMessage(ClientMessage):
         description="是否在处理完本条消息后更新 session 配置（model_id/image_model 等）。仅前端 chat 消息设为 True，第三方 IM 渠道消息保持默认 False，避免覆盖已有配置。",
     )
 
+    @property
+    def web_search_enabled(self) -> Optional[bool]:
+        """只解析显式布尔状态；旧消息不注入默认开启，以免抵消 prompt 中的关闭约束。"""
+        value = (self.dynamic_config or {}).get("enable_web_search")
+        return value if isinstance(value, bool) else None
+
     @validator("mcp_config", pre=True)
     def validate_mcp_config(cls, v):
         """安全地处理 mcp_config 字段"""

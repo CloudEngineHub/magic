@@ -725,6 +725,9 @@ class AgentDomainService
         // 在发送聊天消息时桥接到 dynamic_config。这样沙箱内的工具只需要读取
         // dynamic_config.image_model / dynamic_config.video_model，就能和用户本轮选择保持一致。
         $extra = $taskContext->getExtra();
+        // Always send both states: omitting true would leave the previous false in
+        // the sandbox's dynamic-config snapshot. The message extra is authoritative.
+        $taskDynamicConfig['enable_web_search'] = $extra?->getEnableWebSearch() ?? true;
         if ($extra !== null) {
             $imageModelId = $extra->getImageModelId();
             if (! empty($imageModelId)) {
@@ -795,7 +798,8 @@ class AgentDomainService
         // Get original prompt
         $userRequest = $taskContext->getTask()->getPrompt();
 
-        // Get constraint text if needed
+        // Keep the legacy constraint until all sandboxes consume enable_web_search.
+        // New runtimes also inject the current state through Horizon, including on resume.
         $constraintText = $this->getPromptConstraint($taskContext);
         $prompt = $userRequest . $constraintText;
 
