@@ -144,14 +144,15 @@ function ResearchStudioPage() {
 	}, [topicId])
 	useEffect(() => {
 		if (consoleTab !== "files" || filesOpenedRef.current) return
-		if (activeFileId || userSelectDetail || autoDetail) {
+		// autoDetail is the conversation's latest tool step, pushed on load even when no tab shows it.
+		if (activeFileId || userSelectDetail) {
 			filesOpenedRef.current = true
 			return
 		}
 		if (!defaultFile) return
 		filesOpenedRef.current = true
 		openFile(defaultFile)
-	}, [activeFileId, autoDetail, consoleTab, defaultFile, openFile, userSelectDetail])
+	}, [activeFileId, consoleTab, defaultFile, openFile, userSelectDetail])
 
 	// Message cards open previews through pubsub (tool playback, file mentions, citations).
 	useResearchDetailEvents({
