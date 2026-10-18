@@ -307,11 +307,21 @@ function Field({
 		i18n.exists(`personaResearch:persona.field.${text}`)
 			? t(`persona.field.${text}`)
 			: text.replaceAll("_", " ")
-	const text = formatResearchValue(value, {
-		labelOf,
-		keySeparator: i18n.language.toLowerCase().startsWith("zh") ? "：" : ": ",
-	})
-	if (!text) return null
+	const format = (item: unknown) =>
+		formatResearchValue(item, {
+			labelOf,
+			keySeparator: i18n.language.toLowerCase().startsWith("zh") ? "：" : ": ",
+		})
+	// Objects become a small key/value grid and lists one item per line; text stays as written.
+	const entries =
+		value && typeof value === "object" && !Array.isArray(value)
+			? Object.entries(value as Record<string, unknown>)
+					.map(([key, item]) => ({ key, label: labelOf(key), text: format(item) }))
+					.filter((entry) => entry.text)
+			: null
+	const items = Array.isArray(value) ? value.map(format).filter(Boolean) : null
+	const text = entries || items ? "" : format(value)
+	if (!entries?.length && !items?.length && !text) return null
 	return (
 		<div className="grid grid-cols-[88px_minmax(0,1fr)] gap-2">
 			<span className="flex flex-col gap-1 text-xs leading-5 text-muted-foreground">
@@ -331,9 +341,31 @@ function Field({
 					</span>
 				) : null}
 			</span>
-			<span className="min-w-0 whitespace-pre-wrap break-words leading-5 text-foreground">
-				{text}
-			</span>
+			{entries?.length ? (
+				<dl className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-x-4 gap-y-2.5">
+					{entries.map((entry) => (
+						<div key={entry.key} className="flex min-w-0 flex-col gap-0.5">
+							<dt className="text-[11px] leading-4 text-muted-foreground">
+								{entry.label}
+							</dt>
+							<dd className="break-words leading-5 text-foreground">{entry.text}</dd>
+						</div>
+					))}
+				</dl>
+			) : items?.length ? (
+				<ul className="flex min-w-0 flex-col gap-1.5">
+					{items.map((item, index) => (
+						<li key={index} className="flex gap-2 leading-5 text-foreground">
+							<span className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground/60" />
+							<span className="min-w-0 break-words">{item}</span>
+						</li>
+					))}
+				</ul>
+			) : (
+				<span className="min-w-0 whitespace-pre-wrap break-words leading-5 text-foreground">
+					{text}
+				</span>
+			)}
 		</div>
 	)
 }
