@@ -1207,6 +1207,14 @@
         "zh_CN": "搜索项目文件",
         "en_US": "Search project files"
     },
+    "search_users": {
+        "zh_CN": "搜索用户",
+        "en_US": "Search users"
+    },
+    "search_departments": {
+        "zh_CN": "搜索部门",
+        "en_US": "Search departments"
+    },
     "list_skills": {
         "zh_CN": "查找技能",
         "en_US": "Find skills"

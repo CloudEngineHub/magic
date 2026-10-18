@@ -48,6 +48,8 @@ TOOL_SUBJECTS = {
     "get_file_batch_status": "batch",
     "get_topic_task": "task", "cancel_topic_task": "task",
     "delete_topic_queued_message": "queue",
+    "search_users": "person",
+    "search_departments": "department",
 }
 
 
@@ -204,6 +206,15 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
         lines.extend(["", _label(key, count=len(records)), ""])
         if not records:
             lines.append(_label("empty"))
+        elif tool_name in {"search_users", "search_departments"}:
+            for item in records[:20]:
+                if not isinstance(item, dict):
+                    continue
+                name = (item.get("nickname") or item.get("real_name")) if tool_name == "search_users" else item.get("name")
+                visible_name = _visible_text(name or "-", 200).replace("\n", " ")
+                lines.append(f"- {visible_name}")
+            if len(records) > 20:
+                lines.extend(["", _label("truncated")])
         else:
             lines.extend([f"| {_label('field.name')} | {_label('field.status')} | {_label('field.location')} | {_label('field.updated_at')} |", "| --- | --- | --- | --- |"])
             for index, item in enumerate(records[:100], 1):
@@ -261,6 +272,8 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
         lines.extend(["", _label("more")])
     elif data.get("has_more") is False:
         lines.extend(["", _label("no_more")])
+    if tool_name == "search_departments" and data.get("coverage") == "bounded":
+        lines.extend(["", _label("contact.bounded")])
     if len(lines) == 2:
         lines.append(_label(f"subject.{TOOL_SUBJECTS[tool_name]}"))
         lines.append(_label("completed"))

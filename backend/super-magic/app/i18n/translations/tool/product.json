@@ -427,6 +427,18 @@
         "zh_CN": "技能",
         "en_US": "Skill"
     },
+    "subject.person": {
+        "zh_CN": "用户",
+        "en_US": "Person"
+    },
+    "subject.department": {
+        "zh_CN": "部门",
+        "en_US": "Department"
+    },
+    "contact.bounded": {
+        "zh_CN": "部门搜索最多检查 100 条匹配记录，结果可能不完整。",
+        "en_US": "Department search checks at most 100 matches; results may be incomplete."
+    },
     "status.published": {
         "zh_CN": "已发布",
         "en_US": "Published"

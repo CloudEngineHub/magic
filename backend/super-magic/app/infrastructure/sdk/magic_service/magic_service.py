@@ -10,9 +10,10 @@ from app.infrastructure.sdk.base import SdkBase, SdkContext
 
 from .api.agent_api import AgentApi
 from .api.ai_ability_api import AiAbilityApi
+from .api.contact_api import ContactApi
 from .api.file_api import FileApi  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
-from .api.html_design_style_api import HtmlDesignStyleApi
 from .api.follow_up_suggestion_api import FollowUpSuggestionApi
+from .api.html_design_style_api import HtmlDesignStyleApi
 from .api.magicbase_api import MagicBaseApi
 from .api.mcp_authorization_credential_api import MCPAuthorizationCredentialApi
 from .api.message_api import MessageApi
@@ -53,6 +54,7 @@ class MagicService:
         # Initialize API routes
         self._routes = {
             'user': UserApi,
+            'contact': ContactApi,
             'ai_ability': AiAbilityApi,
             'agent': AgentApi,
             'file': FileApi,  # TEMP: scan-wav workaround, remove when MagicFS auto-refreshes
@@ -97,6 +99,10 @@ class MagicService:
     @property
     def user(self) -> UserApi:
         return self._fetched_definitions['user']
+
+    @property
+    def contact(self) -> ContactApi:
+        return self._fetched_definitions['contact']
 
     @property
     def agent(self) -> 'AgentApi':

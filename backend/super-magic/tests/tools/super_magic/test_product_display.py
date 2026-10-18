@@ -55,7 +55,7 @@ async def test_each_tool_has_running_success_and_failure_display(tool_class, lan
 
 
 def test_display_covers_the_actual_registered_tools():
-    assert len(TOOLS) == 41
+    assert len(TOOLS) == 43
     assert set(TOOL_SUBJECTS) == {cls.name for cls in TOOLS}
 
 

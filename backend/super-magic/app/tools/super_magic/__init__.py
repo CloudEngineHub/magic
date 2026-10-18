@@ -14,6 +14,7 @@ from .skills import ListSkills, GetSkill, CreateSkill, PrepareSkillPublish, Publ
 from .messages import ReadTopicMessages
 from .prepare_files import PrepareProjectFiles
 from .search_files import SearchProjectFiles
+from .contacts import SearchUsers, SearchDepartments
 from .projects import (
     CreateProject,
     DeleteProject,
@@ -79,6 +80,8 @@ __all__ = [
     "ReadTopicMessages",
     "RenameProjectFile",
     "SearchProjectFiles",
+    "SearchUsers",
+    "SearchDepartments",
     "SendTopicMessage",
     "StartTopicTask",
     "UpdateProject",
