@@ -172,7 +172,8 @@ export function useResearchEditor({
 			containerClassName: isMobile
 				? undefined
 				: bareContainer
-					? "rounded-xl bg-background"
+					? // "!" is needed: the shared container appends its own border class after ours.
+						"rounded-xl bg-background !border-0"
 					: "rounded-xl border border-border bg-background",
 			messagesLength,
 			createTopic: createStudyTopic,
