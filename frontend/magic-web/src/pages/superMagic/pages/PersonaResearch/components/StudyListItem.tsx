@@ -27,7 +27,9 @@ interface StudyListItemProps {
  * Studies waiting for the user's answer get a subtle highlight so they are found first.
  */
 function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
-	const { t } = useTranslation("personaResearch")
+	const { t, i18n } = useTranslation("personaResearch")
+	// Instance locale, so the row does not inherit another component's global dayjs locale.
+	const dayjsLocale = i18n.language.toLowerCase().startsWith("zh") ? "zh-cn" : "en"
 	const store = usePersonaResearchStore()
 	const study = store.studyFileOf(topic)
 	const status = resolveStudyStatus(topic, study)
@@ -53,7 +55,9 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 					<StudyProgressSegments status={status} className="w-28" />
 					<span className="text-xs text-muted-foreground">
 						{t("study.progress", { done: status.completed, total: status.total })}
-						{topic.updated_at ? ` · ${dayjs(topic.updated_at).fromNow()}` : ""}
+						{topic.updated_at
+							? ` · ${dayjs(topic.updated_at).locale(dayjsLocale).fromNow()}`
+							: ""}
 					</span>
 				</span>
 			</button>
