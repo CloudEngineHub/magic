@@ -801,7 +801,7 @@ ai_abilities:
 
   # 人设访谈能力：persona_chat 工具扮演 AI 受访者回答访谈问题
   persona_chat:
-    model_id: "${PERSONA_CHAT_MODEL_ID:-auto}"
+    model_id: "${PERSONA_CHAT_MODEL_ID:-}"
 
 # =====================================================
 # Web Scraping 网页爬取配置

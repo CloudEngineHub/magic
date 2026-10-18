@@ -149,9 +149,9 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
     },
 
     # 人设访谈能力：persona_chat 工具让 AI 人设回答访谈问题。
-    # 未配置专属模型时使用 auto，保证研究模式在任何部署下都有可用模型。
+    # 未配置专属模型时跟随当前对话的文本模型（auto 等模型可能不在用户套餐内）。
     AIAbility.PERSONA_CHAT: {
-        "model_id": "auto",
+        "model_id": "",
     },
 }
 

@@ -76,7 +76,7 @@ def test_persona_count_must_be_between_one_and_six():
         PersonaChatParams(persona_paths=[f"p{i}.json" for i in range(7)], question="q")
 
 
-async def test_interview_answer_uses_auto_model_and_token_limit(tool, tmp_path, fake_llm):
+async def test_interview_answer_falls_back_to_auto_model_and_token_limit(tool, tmp_path, fake_llm):
     path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
 
     result = await tool.execute(
@@ -93,6 +93,41 @@ async def test_interview_answer_uses_auto_model_and_token_limit(tool, tmp_path, 
     assert fake_llm.calls[0]["model_id"] == "auto"
     assert fake_llm.configs[0].max_output_tokens == 600
     assert "one-on-one interview" in fake_llm.calls[0]["messages"][0]["content"]
+
+
+async def test_interview_follows_current_text_model_when_unconfigured(tool, tmp_path, fake_llm):
+    """未配置专属模型时用当前对话模型，避免 auto 不在用户套餐内导致访谈全部失败。"""
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    tool_context = ToolContext()
+    tool_context.register_extension(
+        "agent_context",
+        SimpleNamespace(
+            model_context=SimpleNamespace(current_text_model_id="user-chosen-model"),
+            get_interruption_event=lambda: None,
+        ),
+    )
+
+    result = await tool.execute(tool_context, PersonaChatParams(persona_paths=[path], question="Why?"))
+
+    assert result.ok is True
+    assert fake_llm.calls[0]["model_id"] == "user-chosen-model"
+
+
+async def test_configured_model_wins_over_current_text_model(tool, tmp_path, fake_llm, monkeypatch):
+    monkeypatch.setattr(persona_chat_module, "get_ability_config", lambda *args, **kwargs: "persona-model")
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    tool_context = ToolContext()
+    tool_context.register_extension(
+        "agent_context",
+        SimpleNamespace(
+            model_context=SimpleNamespace(current_text_model_id="user-chosen-model"),
+            get_interruption_event=lambda: None,
+        ),
+    )
+
+    await tool.execute(tool_context, PersonaChatParams(persona_paths=[path], question="Why?"))
+
+    assert fake_llm.calls[0]["model_id"] == "persona-model"
 
 
 async def test_persona_prompt_sets_cautious_baseline(tool, tmp_path, fake_llm):

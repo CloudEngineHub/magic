@@ -163,8 +163,8 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         transcript_text, transcript_note = await self._load_transcript(
             params.transcript_path, transcript_file, personas
         )
-        model_id = self._model_id()
         agent_context = tool_context.get_extension("agent_context") if tool_context else None
+        model_id = self._model_id(agent_context)
         interruption_event = agent_context.get_interruption_event() if agent_context else None
 
         answers: List[_Answer] = []
@@ -258,9 +258,14 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         return _format_transcript(transcript, {p.persona_id: p.name for p in personas}), ""
 
     @staticmethod
-    def _model_id() -> str:
-        configured = get_ability_config(AIAbility.PERSONA_CHAT, "model_id")
-        return _text(configured) or FALLBACK_MODEL_ID
+    def _model_id(agent_context: Any) -> str:
+        """专属模型优先；未配置时跟随当前对话的文本模型，它一定在用户套餐内。"""
+        configured = _text(get_ability_config(AIAbility.PERSONA_CHAT, "model_id"))
+        if configured:
+            return configured
+        model_context = getattr(agent_context, "model_context", None)
+        current = _text(getattr(model_context, "current_text_model_id", None))
+        return current or FALLBACK_MODEL_ID
 
     async def _ask_persona(
         self,
