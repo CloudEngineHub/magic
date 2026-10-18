@@ -51,6 +51,11 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 	const cardRef = useRef<HTMLElement>(null)
 	const primaryRef = useRef<HTMLButtonElement>(null)
 	const rootRef = useRef<HTMLDivElement>(null)
+	// Where focus goes back to when the tour closes, however it closes (finished, skipped, or
+	// unmounted by the page). Updated below when focus is handed back late by a closing dialog.
+	const restoreFocusRef = useRef<Element | null>(
+		typeof document === "undefined" ? null : document.activeElement,
+	)
 	const step = available[index]
 	const isLast = index === available.length - 1
 
@@ -121,10 +126,17 @@ export default function ResearchSpotlight({ steps, finishLabel, onClose }: Resea
 		const handleFocusIn = (event: FocusEvent) => {
 			const root = rootRef.current
 			if (!root || root.contains(event.target as Node)) return
+			// That element is where focus meant to be; return it there once the tour is over.
+			restoreFocusRef.current = event.target as Element
 			primaryRef.current?.focus({ preventScroll: true })
 		}
 		document.addEventListener("focusin", handleFocusIn)
-		return () => document.removeEventListener("focusin", handleFocusIn)
+		return () => {
+			document.removeEventListener("focusin", handleFocusIn)
+			const target = restoreFocusRef.current
+			if (target instanceof HTMLElement && target.isConnected && target !== document.body)
+				target.focus({ preventScroll: true })
+		}
 	}, [])
 
 	useEffect(() => {

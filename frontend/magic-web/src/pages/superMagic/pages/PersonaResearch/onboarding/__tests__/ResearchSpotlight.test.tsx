@@ -92,6 +92,17 @@ describe("ResearchSpotlight", () => {
 		expect(document.activeElement).toBe(primary)
 	})
 
+	it("returns focus to where it was once the tour closes", () => {
+		const trigger = document.createElement("button")
+		document.body.appendChild(trigger)
+		trigger.focus()
+		const { unmount } = render(
+			<ResearchSpotlight steps={steps} finishLabel="Start" onClose={vi.fn()} />,
+		)
+		unmount()
+		expect(document.activeElement).toBe(trigger)
+	})
+
 	it("reports an empty tour when no anchor is rendered", () => {
 		const onClose = vi.fn()
 		render(
