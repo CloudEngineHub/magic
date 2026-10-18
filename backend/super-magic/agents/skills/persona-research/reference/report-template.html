@@ -11,6 +11,8 @@
   - Persona portraits and colours are drawn by the script from data-persona (the persona name, exactly as in the persona file);
     data-gender is male / female / unknown, data-age is a number. Never draw faces or hard-code colours yourself.
   - Margin notes (.margin-note) sit in the same row as the paragraph they support; put the strongest quote first.
+  - Image slots (figure[data-image-slot]): fill each with one image or delete the whole figure, following
+    report-templates.md "Images". A finished report never contains .image-placeholder.
   - Write all visible text in the user's language; set <html lang> accordingly.
   - Remove a section only when it truly does not apply (for example no focus group was run).
 -->
@@ -80,6 +82,11 @@
         .citation-tooltip .source-title { color: #fff; font-weight: 500; display: block; margin-bottom: 8px; }
         .citation-tooltip .source-link { font-size: 12px; color: #fff; opacity: 0.85; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
         .citation-tooltip .source-link:hover { opacity: 1; text-decoration: underline; }
+        .report-figure img { display: block; width: 100%; object-fit: cover; border-radius: 16px; background: var(--sunken); }
+        .report-figure figcaption { margin-top: 8px; font-size: 12px; color: var(--faint); }
+        .report-figure figcaption a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+        .image-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1px dashed #d9d4ce; border-radius: 16px; background: var(--sunken); color: var(--faint); font-size: 13px; text-align: center; padding: 16px; }
+        .image-placeholder i { font-size: 20px; }
         @media print { .top-bar, .toc { display: none; } .citation-tooltip { display: none !important; } }
     </style>
 </head>
@@ -113,6 +120,12 @@
                 <p class="text-xs text-faint tracking-wide"><i class="fa-solid fa-users mr-1.5"></i>AI persona research · User research</p>
                 <h1 class="text-[34px] sm:text-[40px] leading-tight font-black tracking-tight">Why do trial users churn in week two?</h1>
                 <p class="text-[15px] leading-7 text-muted max-w-3xl">Research question: why do our trial users stop opening the app in the second week, and what would bring them back?</p>
+                <!-- Image slot. Filled: <img src="…" alt="…" class="aspect-[21/9]"> plus <figcaption>, no placeholder -->
+                <figure class="report-figure" data-image-slot="cover" data-image-source="search" data-image-ratio="21:9"
+                        data-image-hint="The target users in their real setting, for example a small-shop owner at the counter">
+                    <div class="image-placeholder aspect-[21/9]"><i class="fa-regular fa-image"></i>Cover image: the target users in their real setting</div>
+                    <figcaption>Photo: source site</figcaption>
+                </figure>
                 <!-- Key facts: method, effective sample (completed interviews, planned in brackets), web sources, quote self-check -->
                 <div class="fact grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 border-y border-rule text-xs text-faint">
                     <span><b>JTBD</b>Method</span>
@@ -167,6 +180,11 @@
             <!-- Business recommendations: fixed five items, in this order -->
             <section id="business" class="space-y-5">
                 <h2 class="section-title">Business recommendations</h2>
+                <figure class="report-figure" data-image-slot="concept" data-image-source="generate" data-image-ratio="16:9"
+                        data-image-hint="The recommended positioning as a product-in-use scene, illustrative only">
+                    <div class="image-placeholder aspect-[16/9]"><i class="fa-regular fa-image"></i>Concept image: the recommended positioning in use</div>
+                    <figcaption>AI-generated illustration, not research evidence</figcaption>
+                </figure>
                 <div class="divide-y divide-rule border-y border-rule">
                     <!-- Each row: label, recommendation, related hypotheses, evidence, and what to validate first -->
                     <div class="grid sm:grid-cols-[160px_minmax(0,1fr)] gap-x-6 gap-y-1 py-4">
@@ -242,6 +260,11 @@
                 <h2 class="section-title">Findings by theme</h2>
                 <!-- Saturation from synthesis.json -->
                 <p class="text-[13px] text-faint">Saturation: the last 2 interviews added no new themes, so the main themes are saturated for this AI sample.</p>
+                <figure class="report-figure pt-4" data-image-slot="finding" data-image-source="any" data-image-ratio="3:1"
+                        data-image-hint="The situation behind the strongest theme, for example a phone left unopened beside a busy work desk">
+                    <div class="image-placeholder aspect-[3/1]"><i class="fa-regular fa-image"></i>Scene image: the situation behind the strongest theme</div>
+                    <figcaption>Photo or AI-generated illustration, with its source</figcaption>
+                </figure>
                 <article class="grid lg:grid-cols-[minmax(0,1fr)_240px] gap-x-10 gap-y-4 py-6 border-b border-rule">
                     <div class="space-y-2.5">
                         <div class="flex items-center gap-2">

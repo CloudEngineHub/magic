@@ -3,6 +3,7 @@ tools:
   - web_search
   - read_webpages_as_markdown
   - image_search
+  - generate_images
   - visual_understanding
   - list_dir
   - read_files
