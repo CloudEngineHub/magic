@@ -1,21 +1,19 @@
 /*
- * Research home backdrop: a panel of AI respondents listening and taking turns to speak.
- * Warm paper tone with film grain (instead of a generic gradient), faint sound waves behind
- * the headline, and two loose clusters of persona avatars that light up one after another.
- * Low contrast keeps the composer in focus; motion stops for reduced-motion users.
+ * Research home backdrop: a warm paper tone with fine film grain that fades into the page,
+ * the restrained base editorial research sites use instead of gradients or drawn decoration.
  */
 
 .prh-root {
 	position: absolute;
 	inset: 0 0 auto 0;
-	height: 600px;
+	height: 560px;
 	overflow: hidden;
 	pointer-events: none;
 	background:
-		radial-gradient(ellipse 70% 60% at 50% 0%, oklch(0.975 0.012 75), transparent 70%),
-		oklch(0.99 0.004 80);
-	-webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
-	mask-image: linear-gradient(to bottom, #000 60%, transparent);
+		radial-gradient(ellipse 70% 60% at 50% 0%, oklch(0.972 0.012 78), transparent 70%),
+		oklch(0.988 0.005 80);
+	-webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+	mask-image: linear-gradient(to bottom, #000 55%, transparent);
 }
 
 /* Film grain: a tiny fractal-noise tile, multiplied so it only darkens slightly. */
@@ -27,128 +25,6 @@
 	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.42 0 0 0 0 0.38 0 0 0 0.35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
-/* Sound waves centred behind the headline. */
-.prh-waves {
-	position: absolute;
-	left: 50%;
-	top: 130px;
-	width: 0;
-	height: 0;
-}
-.prh-wave {
-	position: absolute;
-	left: -280px;
-	top: -110px;
-	width: 560px;
-	height: 220px;
-	border-radius: 50%;
-	border: 1px solid oklch(0.55 0.02 70 / 0.16);
-	opacity: 0;
-	animation: prh-wave 12s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
-}
-.prh-wave:nth-child(2) {
-	animation-delay: 4s;
-}
-.prh-wave:nth-child(3) {
-	animation-delay: 8s;
-}
-
-/* Respondents: muted by default, each lights up in its turn within one shared cycle. */
-.prh-person {
-	position: absolute;
-	left: var(--prh-x);
-	top: var(--prh-y);
-	width: var(--prh-size);
-	height: var(--prh-size);
-	margin-left: calc(var(--prh-size) / -2);
-	animation: prh-float 7s ease-in-out infinite alternate;
-	animation-delay: var(--prh-float-delay, 0s);
-}
-.prh-avatar {
-	position: relative;
-	display: flex;
-	width: 100%;
-	height: 100%;
-	align-items: center;
-	justify-content: center;
-	border-radius: 9999px;
-	font-size: calc(var(--prh-size) * 0.4);
-	font-weight: 600;
-	color: oklch(0.6 0.01 70);
-	background: oklch(0.955 0.006 75);
-	box-shadow:
-		0 0 0 1px oklch(0.88 0.01 75),
-		0 1px 2px oklch(0 0 0 / 0.04);
-	animation: prh-speak var(--prh-cycle, 24s) ease-in-out infinite;
-	animation-delay: var(--prh-turn, 0s);
-}
-/* The ring that spreads while a respondent speaks. */
-.prh-avatar::after {
-	content: "";
-	position: absolute;
-	inset: -1px;
-	border-radius: 9999px;
-	border: 1.5px solid var(--prh-color);
-	opacity: 0;
-	animation: prh-ripple var(--prh-cycle, 24s) ease-out infinite;
-	animation-delay: var(--prh-turn, 0s);
-}
-
-@keyframes prh-wave {
-	0% {
-		transform: scale(0.4);
-		opacity: 0;
-	}
-	15% {
-		opacity: 1;
-	}
-	100% {
-		transform: scale(1.9);
-		opacity: 0;
-	}
-}
-
-@keyframes prh-float {
-	from {
-		transform: translateY(-3px);
-	}
-	to {
-		transform: translateY(4px);
-	}
-}
-
-/* About 2s of a 24s cycle: colour in, hold, fade back to paper. */
-@keyframes prh-speak {
-	0%,
-	9%,
-	100% {
-		color: oklch(0.6 0.01 70);
-		background: oklch(0.955 0.006 75);
-		transform: scale(1);
-	}
-	2%,
-	6% {
-		color: #fff;
-		background: var(--prh-color);
-		transform: scale(1.08);
-	}
-}
-
-@keyframes prh-ripple {
-	0% {
-		transform: scale(1);
-		opacity: 0;
-	}
-	2% {
-		opacity: 0.7;
-	}
-	8%,
-	100% {
-		transform: scale(1.9);
-		opacity: 0;
-	}
-}
-
 .dark .prh-root {
 	background:
 		radial-gradient(ellipse 70% 60% at 50% 0%, oklch(0.26 0.01 70), transparent 70%),
@@ -157,46 +33,4 @@
 .dark .prh-grain {
 	mix-blend-mode: screen;
 	opacity: 0.12;
-}
-.dark .prh-avatar {
-	color: oklch(0.6 0.01 70);
-	background: oklch(0.27 0.006 70);
-	box-shadow: 0 0 0 1px oklch(0.34 0.01 70);
-	animation-name: prh-speak-dark;
-}
-
-@keyframes prh-speak-dark {
-	0%,
-	9%,
-	100% {
-		color: oklch(0.6 0.01 70);
-		background: oklch(0.27 0.006 70);
-		transform: scale(1);
-	}
-	2%,
-	6% {
-		color: #fff;
-		background: var(--prh-color);
-		transform: scale(1.08);
-	}
-}
-
-/* Narrow windows have no room beside the content column; respondents would sit on it. */
-@media (max-width: 1279px) {
-	.prh-person {
-		display: none;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.prh-wave,
-	.prh-person,
-	.prh-avatar,
-	.prh-avatar::after {
-		animation: none;
-	}
-	.prh-wave:first-child {
-		opacity: 0.6;
-		transform: scale(1);
-	}
 }
