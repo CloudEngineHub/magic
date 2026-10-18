@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
+import { hypothesisStanceGroups, type VoiceStance } from "../services/hypothesisVoices"
 import type { PersonaFile } from "../types"
 import PersonaCard from "./PersonaCard"
 
@@ -36,6 +37,24 @@ function PersonaPanel({
 		[store.interviews],
 	)
 	const quota = store.study?.quota ?? []
+	// Per-persona stance on each hypothesis, only where synthesis themes link to hypotheses.
+	const stancesByPersona = useMemo(() => {
+		const map = new Map<string, { id: string; stance: VoiceStance }[]>()
+		const themes = store.synthesis?.themes ?? []
+		const panelIds = personas.map((persona) => persona.id)
+		for (const hypothesis of store.study?.hypotheses ?? []) {
+			const groups = hypothesisStanceGroups(hypothesis, themes, panelIds)
+			if (!groups) continue
+			for (const group of groups) {
+				for (const personaId of group.personaIds) {
+					const list = map.get(personaId) ?? []
+					list.push({ id: hypothesis.id, stance: group.stance })
+					map.set(personaId, list)
+				}
+			}
+		}
+		return map
+	}, [store.synthesis, store.study, personas])
 	const interviewRunning =
 		store.study?.phases.some(
 			(phase) => phase.key === "interview" && phase.status === "running",
@@ -73,7 +92,7 @@ function PersonaPanel({
 
 	return (
 		<ScrollArea className="h-full">
-			<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-border px-4 py-2.5 text-[11px] text-muted-foreground">
+			<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-border px-5 py-2.5 text-xs text-muted-foreground">
 				{quota.map((row) => {
 					const actual = segmentCounts.get(row.segment) ?? 0
 					return (
@@ -99,8 +118,10 @@ function PersonaPanel({
 			</div>
 			<div
 				className={cn(
-					"grid gap-3 p-4",
-					isMobile ? "grid-cols-1" : "grid-cols-[repeat(auto-fill,minmax(200px,1fr))]",
+					"grid gap-3.5",
+					isMobile
+						? "grid-cols-1 p-4"
+						: "grid-cols-[repeat(auto-fill,minmax(250px,1fr))] p-5",
 				)}
 			>
 				{personas.map((persona) => {
@@ -112,6 +133,7 @@ function PersonaPanel({
 							interviewStatus={interview?.status}
 							quote={interview?.quotes?.[0]?.text}
 							reason={store.selectionReasonOf(persona.id)}
+							stances={stancesByPersona.get(persona.id)}
 							onOpen={() => onOpenPersona(persona)}
 						/>
 					)
@@ -127,7 +149,7 @@ function CardSkeletonGrid({ isMobile }: { isMobile: boolean }) {
 		<div
 			className={cn(
 				"grid gap-3 p-4",
-				isMobile ? "grid-cols-1" : "grid-cols-[repeat(auto-fill,minmax(200px,1fr))]",
+				isMobile ? "grid-cols-1" : "grid-cols-[repeat(auto-fill,minmax(250px,1fr))]",
 			)}
 			aria-busy
 		>

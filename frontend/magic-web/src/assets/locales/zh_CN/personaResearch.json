@@ -398,6 +398,7 @@
 			"layers": "证据层"
 		},
 		"select": "选择 {{name}}",
+		"stanceHint": "对 H1–H5 的立场：绿色认同、黄色部分认同、红色不认同、灰色未提及",
 		"stat": {
 			"rounds": "已答轮数",
 			"sources": "来源",

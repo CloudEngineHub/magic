@@ -39,7 +39,7 @@ import { normalizeDecisionWeights } from "../services/researchAnalysis"
 import { formatResearchValue } from "./formatValue"
 import { AiSimulatedNote } from "./ResearchBadges"
 import PersonaAvatar from "./PersonaAvatar"
-import { PERSONA_TIER_RING } from "./PersonaCard"
+import { personaTone } from "./personaPortrait"
 
 interface PersonaDetailSheetProps {
 	persona: PersonaFile | null
@@ -93,6 +93,7 @@ export default function PersonaDetailSheet({
 			}[persona.tier]
 		: null
 	const answeredRounds = interview?.rounds.filter((round) => round.role === "persona").length ?? 0
+	const leadQuote = interview?.quotes?.[0]?.text
 
 	return (
 		<Sheet open={Boolean(persona)} onOpenChange={onOpenChange}>
@@ -106,18 +107,22 @@ export default function PersonaDetailSheet({
 			>
 				{persona && tierCopy ? (
 					<>
-						<SheetHeader className="gap-3 border-b border-border p-5">
-							<div className="flex items-center gap-3">
+						{/* Persona-coloured header, matching their card, quotes and transcript highlights. */}
+						<SheetHeader
+							className="gap-3 border-b border-border p-5"
+							style={{
+								backgroundColor: personaTone(persona.name || persona.id).tint,
+							}}
+						>
+							<div className="flex items-center gap-3.5">
 								<PersonaAvatar
 									id={persona.id}
 									name={persona.name}
-									className={cn(
-										"size-12 text-base ring-2 ring-offset-2 ring-offset-background",
-										PERSONA_TIER_RING[persona.tier],
-									)}
+									shape="square"
+									className="size-16"
 								/>
 								<div className="min-w-0 flex-1">
-									<SheetTitle className="truncate text-base">
+									<SheetTitle className="truncate text-xl font-black tracking-tight">
 										{persona.name}
 									</SheetTitle>
 									<SheetDescription className="line-clamp-2">
@@ -154,6 +159,11 @@ export default function PersonaDetailSheet({
 									</div>
 								) : null}
 							</div>
+							{leadQuote ? (
+								<p className="relative ml-2 text-[15px] font-bold leading-relaxed text-foreground before:absolute before:right-full before:content-['“'] after:content-['”']">
+									{leadQuote}
+								</p>
+							) : null}
 							<div className="flex flex-wrap gap-1">
 								{(persona.tags ?? []).map((tag) => (
 									<span

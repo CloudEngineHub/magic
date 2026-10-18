@@ -143,7 +143,7 @@ function ResearchHomePage() {
 								<button
 									key={id}
 									type="button"
-									className="rounded-full px-2.5 py-1 text-xs text-muted-foreground outline-none ring-1 ring-border transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+									className="rounded-full px-2.5 py-1 text-xs text-muted-foreground outline-none ring-1 ring-border transition-[color,background-color,transform] duration-150 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96] motion-reduce:transform-none"
 									onClick={() => applyStarter(prompt)}
 								>
 									{title}
@@ -172,7 +172,7 @@ function ResearchHomePage() {
 								type="button"
 								className={cn(
 									"group flex flex-col gap-1.5 rounded-xl bg-card p-[18px] text-left outline-none ring-1 ring-border",
-									"transition-all duration-150 hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgb(0_0_0/0.3)]",
+									"transition-all duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgb(0_0_0/0.3)] active:scale-[0.98]",
 									"focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
 								)}
 								onClick={() => applyStarter(prompt)}

@@ -1,4 +1,5 @@
-import { useMemo } from "react"
+import { useMemo, useRef } from "react"
+import { useSize } from "ahooks"
 import { ArrowLeft, ChevronLeft, ChevronRight, Mic } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -18,7 +19,8 @@ import { resolveTranscriptQuality } from "../services/researchAnalysis"
 import type { InterviewFile, PersonaFile } from "../types"
 import PersonaAvatar from "./PersonaAvatar"
 import { InterviewStatusChip } from "./PersonaCard"
-import TranscriptView from "./TranscriptView"
+import { personaTone } from "./personaPortrait"
+import TranscriptView, { TranscriptInsights } from "./TranscriptView"
 
 interface InterviewsPanelProps {
 	variant: "desktop" | "mobile"
@@ -44,6 +46,26 @@ function InterviewsPanel({ variant, focusedPersonaId, onFocus, focusRound }: Int
 	const selectedId = focusedPersonaId ?? (isMobile ? null : (ids[0] ?? null))
 	const selected = selectedId ? (byPersona.get(selectedId) ?? null) : null
 	const selectedIndex = selectedId ? ids.indexOf(selectedId) : -1
+	// Wide panels put summary and findings in a third column beside the transcript.
+	const rootRef = useRef<HTMLDivElement>(null)
+	const rootSize = useSize(rootRef)
+	const wide = !isMobile && (rootSize?.width ?? 0) >= 1000
+	// Quotes cited by hypotheses (tagged with their id) and the interview's own quote list.
+	const highlights = useMemo(() => {
+		if (!selected) return []
+		const cited = (store.study?.hypotheses ?? []).flatMap((hypothesis) =>
+			(hypothesis.evidence_refs ?? []).flatMap((ref) =>
+				ref.kind === "quote" && ref.persona_id === selected.persona_id
+					? [{ personaId: ref.persona_id, text: ref.text, tag: hypothesis.id }]
+					: [],
+			),
+		)
+		const own = (selected.quotes ?? []).map((quote) => ({
+			personaId: selected.persona_id,
+			text: quote.text,
+		}))
+		return [...cited, ...own]
+	}, [selected, store.study])
 
 	if (interviews.length === 0) {
 		return (
@@ -74,11 +96,9 @@ function InterviewsPanel({ variant, focusedPersonaId, onFocus, focusRound }: Int
 	if (isMobile && !selected) return <ScrollArea className="h-full">{list}</ScrollArea>
 
 	return (
-		<div className={cn("flex h-full min-h-0", isMobile && "flex-col")}>
+		<div ref={rootRef} className={cn("flex h-full min-h-0", isMobile && "flex-col")}>
 			{isMobile ? null : (
-				<ScrollArea className="w-56 shrink-0 border-r border-border bg-muted/40">
-					{list}
-				</ScrollArea>
+				<ScrollArea className="w-56 shrink-0 border-r border-border">{list}</ScrollArea>
 			)}
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 				{selected ? (
@@ -94,10 +114,8 @@ function InterviewsPanel({ variant, focusedPersonaId, onFocus, focusRound }: Int
 								{t("console.backToList")}
 							</Button>
 						) : (
-							<span className="min-w-0 flex-1 truncate text-sm font-medium">
-								{store.personaById(selected.persona_id)?.name ??
-									selected.persona_id}
-							</span>
+							// The respondent header below names the person; the bar only navigates.
+							<span className="flex-1" />
 						)}
 						<span className="ml-auto flex items-center gap-1">
 							<span className="text-xs tabular-nums text-muted-foreground">
@@ -130,18 +148,32 @@ function InterviewsPanel({ variant, focusedPersonaId, onFocus, focusRound }: Int
 						</span>
 					</div>
 				) : null}
-				<ScrollArea className="min-h-0 flex-1">
-					<div className="mx-auto max-w-3xl p-4">
-						{selected ? (
-							<TranscriptView
-								transcript={selected}
-								respondentId={selected.persona_id}
-								resolvePersona={store.personaById}
-								focusRound={focusRound}
-							/>
-						) : null}
-					</div>
-				</ScrollArea>
+				<div className="flex min-h-0 flex-1">
+					<ScrollArea className="min-h-0 min-w-0 flex-1">
+						<div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 pb-14 pt-6">
+							{selected ? (
+								<>
+									<RespondentHeader
+										persona={store.personaById(selected.persona_id)}
+									/>
+									<TranscriptView
+										transcript={selected}
+										respondentId={selected.persona_id}
+										resolvePersona={store.personaById}
+										focusRound={focusRound}
+										highlights={highlights}
+										insightsPlacement={wide ? "side" : "inline"}
+									/>
+								</>
+							) : null}
+						</div>
+					</ScrollArea>
+					{wide && selected ? (
+						<ScrollArea className="w-80 shrink-0 border-l border-border bg-muted/30">
+							<TranscriptInsights transcript={selected} className="p-5" />
+						</ScrollArea>
+					) : null}
+				</div>
 			</div>
 		</div>
 	)
@@ -180,17 +212,22 @@ function InterviewList({
 							type="button"
 							className={cn(
 								"flex w-full flex-col gap-1.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors",
-								"hover:bg-background/70 focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-ring",
-								selectedId === id &&
-									"bg-background shadow-sm ring-1 ring-border/60",
+								"hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring",
+								selectedId === id && "font-medium",
 							)}
+							// The selected respondent takes their own colour, as on their card.
+							style={
+								selectedId === id
+									? { backgroundColor: personaTone(persona?.name ?? id).tint }
+									: undefined
+							}
 							onClick={() => onSelect(id)}
 						>
 							<span className="flex items-center gap-2">
 								<PersonaAvatar
 									id={id}
 									name={persona?.name ?? id}
-									className="size-6 text-[10px]"
+									className="size-7"
 								/>
 								<span className="min-w-0 flex-1 truncate text-sm">
 									{persona?.name ?? id}
@@ -202,12 +239,12 @@ function InterviewList({
 								) : null}
 							</span>
 							{interview?.status === "done" || interview?.status === "failed" ? (
-								<span className="pl-8 text-[11px]">
+								<span className="pl-9 text-[11px]">
 									<InterviewStatusChip status={interview.status} />
 								</span>
 							) : (
 								// Round progress is only informative while the interview runs.
-								<span className="flex items-center gap-2 pl-8">
+								<span className="flex items-center gap-2 pl-9">
 									<span className="h-1 flex-1 overflow-hidden rounded-full bg-border">
 										<span
 											className="block h-full rounded-full bg-primary transition-[width] duration-500"
@@ -226,6 +263,31 @@ function InterviewList({
 				)
 			})}
 		</ul>
+	)
+}
+
+/** Who is speaking: square portrait, name and the one-line profile above the transcript. */
+function RespondentHeader({ persona }: { persona: PersonaFile | null }) {
+	if (!persona) return null
+	return (
+		<header className="flex items-center gap-4">
+			<PersonaAvatar
+				id={persona.id}
+				name={persona.name}
+				shape="square"
+				className="size-[60px]"
+			/>
+			<div className="flex min-w-0 flex-col gap-0.5">
+				<h3 className="truncate text-xl font-bold tracking-tight text-foreground">
+					{persona.name}
+				</h3>
+				{persona.tagline ? (
+					<p className="line-clamp-2 text-[13px] leading-6 text-muted-foreground">
+						{persona.tagline}
+					</p>
+				) : null}
+			</div>
+		</header>
 	)
 }
 

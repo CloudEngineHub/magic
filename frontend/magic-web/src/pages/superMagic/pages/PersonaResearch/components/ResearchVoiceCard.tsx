@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { PersonaFile } from "../types"
 import PersonaAvatar from "./PersonaAvatar"
+import { EASE_OUT } from "./surface"
 import { personaTone } from "./personaPortrait"
 
 const ROTATE_MS = 5200
@@ -99,8 +100,12 @@ export default function ResearchVoiceCard({
 			</span>
 			<div
 				className={cn(
-					"flex flex-1 flex-col justify-center gap-5 transition-opacity duration-300",
-					visible ? "opacity-100" : "opacity-0",
+					// The quote leaves and returns through a slight blur and lift, not a hard cut.
+					"flex flex-1 flex-col justify-center gap-5 transition-[opacity,filter,transform] duration-300",
+					EASE_OUT,
+					visible
+						? "translate-y-0 opacity-100 blur-0"
+						: "translate-y-1 opacity-0 blur-[2px]",
 				)}
 			>
 				{/* Opening mark hangs outside the text block so the quote's left edge stays clean. */}

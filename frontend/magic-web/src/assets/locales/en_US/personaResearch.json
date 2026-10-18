@@ -400,6 +400,7 @@
 			"layers": "Evidence layers"
 		},
 		"select": "Select {{name}}",
+		"stanceHint": "Stance on each hypothesis: green agrees, amber partly, red disagrees, grey not mentioned",
 		"stat": {
 			"rounds": "Answers",
 			"sources": "Sources",

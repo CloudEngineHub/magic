@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSize } from "ahooks"
 import {
 	ArrowRight,
@@ -42,7 +42,7 @@ import type { GuideIssue, HypothesisVerdict, QuoteRef, StudyHypothesis } from ".
 import PersonaAvatar from "./PersonaAvatar"
 import { personaTone } from "./personaPortrait"
 import { AgreementBadge, QuoteItem, VerdictBadge } from "./ResearchBadges"
-import { VERDICT_ACCENT } from "./surface"
+import { EASE_OUT, VERDICT_ACCENT } from "./surface"
 
 interface HypothesisBoardProps {
 	onOpenQuote: (quote: Pick<QuoteRef, "persona_id" | "round_index" | "file">) => void
@@ -108,6 +108,7 @@ function HypothesisBoard({ onOpenQuote, onOpenSources }: HypothesisBoardProps) {
 					{hypotheses.map((hypothesis, index) => (
 						<HypothesisCard
 							key={hypothesis.id}
+							index={index}
 							hypothesis={hypothesis}
 							wide={wide}
 							defaultOpen={index === 0}
@@ -135,12 +136,15 @@ function useStanceLabels() {
 
 const HypothesisCard = observer(function HypothesisCard({
 	hypothesis,
+	index,
 	wide,
 	defaultOpen,
 	onOpenQuote,
 	onOpenSources,
 }: {
 	hypothesis: StudyHypothesis
+	/** Position in the list, staggering the entrance. */
+	index: number
 	/** Board is wide enough to put the lead quote beside the conclusion instead of below it. */
 	wide: boolean
 	defaultOpen: boolean
@@ -175,8 +179,10 @@ const HypothesisCard = observer(function HypothesisCard({
 
 	return (
 		<li
+			style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
 			className={cn(
-				"grid overflow-hidden rounded-2xl bg-card ring-1 ring-border",
+				"grid overflow-hidden rounded-2xl bg-card ring-1 ring-border duration-500 animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both motion-reduce:animate-none",
+				EASE_OUT,
 				lead && wide && "grid-cols-[minmax(0,1fr)_300px]",
 			)}
 		>
@@ -240,7 +246,8 @@ const HypothesisCard = observer(function HypothesisCard({
 					</p>
 				) : null}
 				{groups.some((group) => group.personaIds.length) ? (
-					<div className="flex flex-wrap gap-x-5 gap-y-3 pt-0.5">
+					// Hovering one face dims the rest of the panel, so the person in focus stands out.
+					<div className="group/stance flex flex-wrap gap-x-5 gap-y-3 pt-0.5">
 						{groups.map((group) => (
 							<div key={group.stance} className="flex flex-col gap-1.5">
 								<span
@@ -261,7 +268,12 @@ const HypothesisCard = observer(function HypothesisCard({
 														: (persona?.name ?? personaId)
 												}
 											>
-												<span className="rounded-full ring-2 ring-card transition-transform hover:z-10 hover:-translate-y-0.5">
+												<span
+													className={cn(
+														"rounded-full ring-2 ring-card transition-[transform,opacity] duration-200 hover:z-10 hover:-translate-y-0.5 hover:!opacity-100 group-hover/stance:opacity-40",
+														EASE_OUT,
+													)}
+												>
 													<PersonaAvatar
 														id={personaId}
 														name={persona?.name ?? personaId}
@@ -387,13 +399,13 @@ const LeadQuote = observer(function LeadQuote({
 			</span>
 			<button
 				type="button"
-				className="inline-flex items-center gap-1 rounded border-t border-white/20 pt-2.5 text-left text-xs text-white/85 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"
+				className="group/open inline-flex items-center gap-1 rounded border-t border-white/20 pt-2.5 text-left text-xs text-white/85 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"
 				onClick={onOpen}
 			>
 				{quote.round_index !== undefined
 					? t("hypothesis.openRound", { index: quote.round_index + 1 })
 					: t("hypothesis.openTranscript")}
-				<ArrowRight className="size-3.5" />
+				<ArrowRight className="size-3.5 transition-transform duration-200 group-hover/open:translate-x-0.5" />
 			</button>
 		</div>
 	)
@@ -428,6 +440,11 @@ function VerdictOverview({
 		insufficient: t("verdict.insufficient"),
 		pending: t("verdict.pending"),
 	}
+	const [grown, setGrown] = useState(false)
+	useEffect(() => {
+		const frame = requestAnimationFrame(() => setGrown(true))
+		return () => cancelAnimationFrame(frame)
+	}, [])
 	const numberTone: Record<HypothesisVerdict, string> = {
 		supported: "text-emerald-700 dark:text-emerald-400",
 		mixed: "text-amber-700 dark:text-amber-400",
@@ -439,8 +456,13 @@ function VerdictOverview({
 	return (
 		<div className={cn("flex flex-col justify-center gap-2", className)}>
 			<div className="flex flex-wrap gap-x-5 gap-y-1">
-				{counts.map(({ verdict, count }) => (
-					<span key={verdict} className="flex flex-col">
+				{counts.map(({ verdict, count }, index) => (
+					// Counts rise in left to right, a hair past their mark, so the outcome reads first.
+					<span
+						key={verdict}
+						className="flex flex-col duration-500 animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both [animation-timing-function:cubic-bezier(0.34,1.45,0.64,1)] motion-reduce:animate-none"
+						style={{ animationDelay: `${index * 70}ms` }}
+					>
 						<span
 							className={cn(
 								"font-mono text-2xl font-medium tabular-nums leading-tight",
@@ -454,11 +476,20 @@ function VerdictOverview({
 				))}
 			</div>
 			<div className="flex h-1.5 gap-0.5 overflow-hidden rounded-full">
-				{counts.map(({ verdict, count }) => (
+				{counts.map(({ verdict, count }, index) => (
+					// Segments grow from the left one after another once mounted.
 					<span
 						key={verdict}
-						className={cn("h-full", VERDICT_ACCENT[verdict])}
-						style={{ flexGrow: count }}
+						className={cn(
+							"h-full origin-left transition-transform [transition-duration:600ms] motion-reduce:transition-none",
+							EASE_OUT,
+							VERDICT_ACCENT[verdict],
+						)}
+						style={{
+							flexGrow: count,
+							transform: `scaleX(${grown ? 1 : 0})`,
+							transitionDelay: `${index * 80}ms`,
+						}}
 					/>
 				))}
 			</div>

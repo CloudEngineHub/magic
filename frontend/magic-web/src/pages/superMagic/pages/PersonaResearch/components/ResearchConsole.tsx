@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn-ui
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
+import { useSlidingThumb } from "../hooks/useSlidingThumb"
 import type { PersonaFile, QuoteRef } from "../types"
 import AnalysisBoard from "./AnalysisBoard"
 import HypothesisBoard from "./HypothesisBoard"
@@ -34,6 +35,7 @@ import InterviewsPanel from "./InterviewsPanel"
 import PersonaAvatar from "./PersonaAvatar"
 import PersonaPanel from "./PersonaPanel"
 import StudyFileList from "./StudyFileList"
+import { EASE_OUT, PRESSABLE } from "./surface"
 import TranscriptView from "./TranscriptView"
 import ValidationPane from "./ValidationPane"
 
@@ -215,6 +217,9 @@ function ResearchConsole({
 	]
 
 	const activeDiscussion = discussions[activeDiscussionIndex]
+	const { containerRef: thumbContainerRef, rect: thumb } = useSlidingThumb<HTMLDivElement>(
+		`${activeTab}:${isMobile}`,
+	)
 
 	return (
 		<Tabs
@@ -224,34 +229,50 @@ function ResearchConsole({
 			data-testid="persona-research-console"
 		>
 			<div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-2">
-				<TabsList className="h-auto gap-0.5 bg-transparent p-0">
-					{tabs.map(({ value, icon: Icon, label, badge }) => (
-						<TabsTrigger
-							key={value}
-							value={value}
+				{/* The ink pill is one thumb that slides to the active tab (falls back to a per-tab
+				    background until it has been measured). */}
+				<div ref={thumbContainerRef} className="relative shrink-0">
+					{thumb ? (
+						<span
+							aria-hidden
 							className={cn(
-								// Pill tabs: the active study view is a solid ink pill, the rest stay quiet text.
-								"relative h-8 gap-1.5 rounded-full border-0 px-3 text-[13px] text-muted-foreground shadow-none hover:bg-muted hover:text-foreground",
-								"data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-foreground",
+								"absolute inset-y-0 left-0 rounded-full bg-foreground transition-[transform,width] duration-200 motion-reduce:transition-none",
+								EASE_OUT,
 							)}
-						>
-							{/* Desktop labels are enough; mobile keeps icons because inactive labels are hidden. */}
-							{isMobile ? <Icon className="size-3.5" /> : null}
-							{isMobile && value !== activeTab ? null : label}
-							{badge ? (
-								<span className="font-mono text-[11px] tabular-nums opacity-60">
-									{badge}
-								</span>
-							) : null}
-							{hasNew(value) ? (
-								<span
-									className="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
-									aria-label={t("console.newContent")}
-								/>
-							) : null}
-						</TabsTrigger>
-					))}
-				</TabsList>
+							style={{ width: thumb.width, transform: `translateX(${thumb.left}px)` }}
+						/>
+					) : null}
+					<TabsList className="relative h-auto gap-0.5 bg-transparent p-0">
+						{tabs.map(({ value, icon: Icon, label, badge }) => (
+							<TabsTrigger
+								key={value}
+								value={value}
+								className={cn(
+									"relative h-8 gap-1.5 rounded-full border-0 bg-transparent px-3 text-[13px] text-muted-foreground shadow-none transition-colors duration-200 hover:text-foreground",
+									"data-[state=active]:bg-transparent data-[state=active]:text-background data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-transparent",
+									!thumb &&
+										"data-[state=active]:bg-foreground dark:data-[state=active]:bg-foreground",
+									PRESSABLE,
+								)}
+							>
+								{/* Desktop labels are enough; mobile keeps icons because inactive labels are hidden. */}
+								{isMobile ? <Icon className="size-3.5" /> : null}
+								{isMobile && value !== activeTab ? null : label}
+								{badge ? (
+									<span className="font-mono text-[11px] tabular-nums opacity-60">
+										{badge}
+									</span>
+								) : null}
+								{hasNew(value) ? (
+									<span
+										className="absolute right-1 top-1 size-1.5 rounded-full bg-primary"
+										aria-label={t("console.newContent")}
+									/>
+								) : null}
+							</TabsTrigger>
+						))}
+					</TabsList>
+				</div>
 				{activeTab === "report" && reportActions ? (
 					// Same height as a tab (h-8) so showing the actions never changes the bar height.
 					<div className="ml-auto flex h-8 shrink-0 items-center gap-1 [&_button]:h-6">

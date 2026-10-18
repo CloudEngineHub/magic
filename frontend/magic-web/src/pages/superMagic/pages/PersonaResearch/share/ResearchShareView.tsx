@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { FileSearch, MessagesSquare, Sparkles } from "lucide-react"
+import { FileSearch, Info, MessagesSquare, UsersRound } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn-ui/tabs"
@@ -9,6 +9,7 @@ import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import { cn } from "@/utils/cn"
 import { PersonaResearchStoreProvider, usePersonaResearchStore } from "../context"
+import PersonaAvatar from "../components/PersonaAvatar"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
 import ResearchConsole, {
 	ResearchConsoleSkeleton,
@@ -131,34 +132,39 @@ const ResearchShareBody = observer(function ResearchShareBody({
 				)}
 			>
 				<div className="flex flex-wrap items-start gap-3">
-					<div className="flex min-w-0 flex-1 flex-col gap-1.5">
-						<span className="inline-flex w-fit items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-							<Sparkles className="size-3.5" />
+					<div className="flex min-w-0 flex-1 flex-col gap-2">
+						<span className="inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground">
+							<UsersRound className="size-3.5" />
 							{t("share.eyebrow")}
 						</span>
 						<h1
 							className={cn(
-								"text-balance font-semibold tracking-tight text-foreground",
-								isMobile ? "text-lg" : "text-2xl",
+								"text-balance font-black tracking-tight text-foreground",
+								isMobile ? "text-xl" : "text-[30px] leading-tight",
 							)}
 						>
 							{title}
 						</h1>
-						{metaChips.length ? (
-							<div className="flex flex-wrap items-center gap-1.5">
-								{metaChips.map((chip) => (
-									<span
-										key={chip}
-										className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
-									>
-										{chip}
-									</span>
-								))}
-								<span className="text-[11px] text-muted-foreground">
-									{t("study.aiDisclaimer")}
+						<div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+							{store.studyPersonas.length ? (
+								<span className="flex -space-x-1.5">
+									{store.studyPersonas.slice(0, 8).map((persona) => (
+										<PersonaAvatar
+											key={persona.id}
+											id={persona.id}
+											name={persona.name}
+											className="size-6 ring-2 ring-background"
+										/>
+									))}
 								</span>
-							</div>
-						) : null}
+							) : null}
+							{metaChips.length ? <span>{metaChips.join(" · ")}</span> : null}
+							{/* The sample note stays on the cover so screenshots keep the AI context. */}
+							<span className="inline-flex items-center gap-1">
+								<Info className="size-3.5" />
+								{t("study.aiDisclaimer")}
+							</span>
+						</div>
 					</div>
 					{hasResults ? (
 						<Tabs

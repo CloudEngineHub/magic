@@ -23,3 +23,13 @@ export const CONFIDENCE_ACCENT: Record<ThemeConfidence, string> = {
 	low: "bg-slate-300 dark:bg-slate-600",
 	to_validate: "bg-amber-400",
 }
+
+/**
+ * Motion vocabulary for the research pages: one ease-out curve for anything that moves or
+ * resizes, a short press scale for anything clickable. Durations follow the role: 160ms for
+ * press and colour, 220ms for fades and sliding thumbs, 500–600ms for bars and counts that grow.
+ * Transform-based so it works on the Chrome 100 baseline (no individual `scale` property).
+ */
+export const EASE_OUT = "[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
+export const PRESSABLE =
+	"transition-transform duration-150 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97] motion-reduce:transform-none"

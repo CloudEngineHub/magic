@@ -2,10 +2,12 @@ import type { ReactNode } from "react"
 import { CircleAlert, CircleCheck, Loader2, Target } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/utils/cn"
-import type { InterviewFile, PersonaFile, PersonaTier } from "../types"
+import type { VoiceStance } from "../services/hypothesisVoices"
+import type { InterviewFile, PersonaFile } from "../types"
 import PersonaAvatar from "./PersonaAvatar"
-import { CARD_SURFACE } from "./surface"
+import { personaTone } from "./personaPortrait"
 
 interface PersonaCardProps {
 	persona: PersonaFile
@@ -21,15 +23,9 @@ interface PersonaCardProps {
 	actions?: ReactNode
 	/** Just created in this page session: green ring and a "new" label for a few seconds. */
 	isNew?: boolean
+	/** Stance on each hypothesis of the current study, when the synthesis links themes to them. */
+	stances?: { id: string; stance: VoiceStance }[]
 	onOpen: () => void
-}
-
-/** Ring colour encodes evidence strength so users can judge a persona at a glance. */
-export const PERSONA_TIER_RING: Record<PersonaTier, string> = {
-	evidence_based: "ring-emerald-500/60",
-	imported: "ring-sky-500/60",
-	manual: "ring-slate-400/70",
-	generated: "ring-border",
 }
 
 /** Persona summary card used by the study panel and the persona library. */
@@ -43,6 +39,7 @@ export default function PersonaCard({
 	onSelectedChange,
 	actions,
 	isNew = false,
+	stances,
 	onOpen,
 }: PersonaCardProps) {
 	const { t } = useTranslation("personaResearch")
@@ -53,13 +50,14 @@ export default function PersonaCard({
 		manual: t("persona.tier.manual"),
 	}[persona.tier]
 
+	const { tint } = personaTone(persona.name || persona.id)
+
 	return (
 		<div
 			className={cn(
-				CARD_SURFACE,
-				"group relative flex h-full flex-col gap-3 p-4 text-left",
-				"transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none motion-reduce:transition-none",
-				selected ? "ring-2 ring-primary" : "hover:ring-primary/30",
+				"group relative flex h-full flex-col overflow-hidden rounded-2xl bg-card text-left ring-1 ring-border",
+				"transition-all duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-18px_rgb(0_0_0/0.35)] active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none",
+				selected && "ring-2 ring-foreground",
 				isNew && !selected && "ring-2 ring-emerald-500/60",
 			)}
 			data-testid="persona-research-persona-card"
@@ -80,21 +78,28 @@ export default function PersonaCard({
 			{/* The whole body opens details; the checkbox above stays a separate control. */}
 			<button
 				type="button"
-				className="flex flex-1 flex-col gap-3 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				className="flex flex-1 flex-col text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
 				onClick={onOpen}
 			>
-				<span className="flex items-start gap-2.5">
+				{/* Persona-coloured header: the same tone as their quotes and transcript highlights. */}
+				<span
+					className="flex items-center gap-3.5 px-4 pb-3.5 pt-4"
+					style={{ backgroundColor: tint }}
+				>
 					<PersonaAvatar
 						id={persona.id}
 						name={persona.name}
-						className={cn(
-							"size-10 ring-2 ring-offset-2 ring-offset-card",
-							PERSONA_TIER_RING[persona.tier],
-						)}
+						shape="square"
+						className="size-14"
 					/>
-					<span className={cn("min-w-0 flex-1", actions ? "pr-12" : "pr-6")}>
+					<span
+						className={cn(
+							"flex min-w-0 flex-1 flex-col gap-0.5",
+							actions ? "pr-12" : "pr-6",
+						)}
+					>
 						<span className="flex min-w-0 items-center gap-1.5">
-							<span className="truncate text-sm font-semibold text-foreground">
+							<span className="truncate text-base font-bold text-foreground">
 								{persona.name}
 							</span>
 							{isNew ? (
@@ -110,38 +115,71 @@ export default function PersonaCard({
 						) : null}
 					</span>
 				</span>
-				{reason ? (
-					<span className="flex gap-1.5 text-xs leading-5 text-muted-foreground">
-						<Target className="mt-0.5 size-3 shrink-0" />
-						<span className="line-clamp-1">{reason}</span>
-					</span>
-				) : null}
-				{quote ? (
-					<span className="relative rounded-lg bg-muted/60 py-2 pl-3 pr-2.5 text-[13px] leading-5 text-foreground before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-primary/30">
-						<span className="line-clamp-2">“{quote}”</span>
-					</span>
-				) : null}
-				{persona.tags?.length ? (
-					<span className="flex flex-wrap gap-1">
-						{persona.tags.slice(0, 2).map((tag) => (
-							<span
-								key={tag}
-								className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
-							>
-								{tag}
-							</span>
-						))}
-					</span>
-				) : null}
-			</button>
-			<div className="mt-auto flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
-				<span className="rounded-full bg-muted px-2 py-0.5">
-					{tierLabel} · {t("persona.aiSimulated")}
+				<span className="flex flex-1 flex-col gap-3 px-4 pt-3.5">
+					{quote ? (
+						// Opening mark hangs into the left padding so the quote text keeps a clean edge.
+						<span className="relative ml-2 line-clamp-3 text-[14.5px] font-bold leading-relaxed text-foreground before:absolute before:right-full before:content-['“'] after:content-['”']">
+							{quote}
+						</span>
+					) : null}
+					{reason ? (
+						<span className="flex gap-1.5 text-xs leading-5 text-muted-foreground">
+							<Target className="mt-0.5 size-3 shrink-0" />
+							<span className="line-clamp-2">{reason}</span>
+						</span>
+					) : null}
+					{persona.tags?.length ? (
+						<span className="flex flex-wrap gap-1">
+							{persona.tags.slice(0, 3).map((tag) => (
+								<span
+									key={tag}
+									className="rounded-md bg-muted/60 px-1.5 py-px text-xs text-muted-foreground ring-1 ring-border"
+								>
+									{tag}
+								</span>
+							))}
+						</span>
+					) : null}
 				</span>
-				{interviewStatus ? <InterviewStatusChip status={interviewStatus} /> : null}
+			</button>
+			<div className="mt-3.5 flex items-center gap-2.5 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+				{stances?.length ? (
+					<MagicTooltip title={t("persona.stanceHint")}>
+						<span className="flex items-center gap-1">
+							{stances.map(({ id, stance }) => (
+								<span
+									key={id}
+									className={cn(
+										"flex h-4 min-w-4 items-center justify-center rounded px-0.5 font-mono text-[9px] text-white",
+										STANCE_CELL[stance],
+									)}
+								>
+									{id.replace(/^H/i, "")}
+								</span>
+							))}
+						</span>
+					</MagicTooltip>
+				) : (
+					<span className="truncate">
+						{tierLabel} · {t("persona.aiSimulated")}
+					</span>
+				)}
+				{interviewStatus ? (
+					<span className="ml-auto shrink-0">
+						<InterviewStatusChip status={interviewStatus} />
+					</span>
+				) : null}
 			</div>
 		</div>
 	)
+}
+
+/** One cell per hypothesis in the card footer; semantic colours match the hypothesis board. */
+const STANCE_CELL: Record<VoiceStance, string> = {
+	support: "bg-emerald-600",
+	partial: "bg-amber-500",
+	oppose: "bg-rose-500",
+	none: "bg-muted-foreground/35",
 }
 
 /** Interview progress chip shared by persona cards and the interview list. */
