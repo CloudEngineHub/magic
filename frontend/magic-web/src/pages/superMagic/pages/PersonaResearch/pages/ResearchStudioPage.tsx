@@ -135,6 +135,24 @@ function ResearchStudioPage() {
 		setUserSelectDetail(detail)
 	})
 
+	// An empty files tab is a dead end: the first visit per study opens the report (or the plan
+	// before it exists). Later, closing every tab is the user's choice and stays empty.
+	const defaultFile = report ?? studyAttachments?.plan ?? null
+	const filesOpenedRef = useRef(false)
+	useEffect(() => {
+		filesOpenedRef.current = false
+	}, [topicId])
+	useEffect(() => {
+		if (consoleTab !== "files" || filesOpenedRef.current) return
+		if (activeFileId || userSelectDetail || autoDetail) {
+			filesOpenedRef.current = true
+			return
+		}
+		if (!defaultFile) return
+		filesOpenedRef.current = true
+		openFile(defaultFile)
+	}, [activeFileId, autoDetail, consoleTab, defaultFile, openFile, userSelectDetail])
+
 	// Message cards open previews through pubsub (tool playback, file mentions, citations).
 	useResearchDetailEvents({
 		detailRef,
