@@ -28,6 +28,13 @@ export function personaVoiceLine(persona: PersonaFile): string | null {
 	return persona.evidence?.find((item) => item.quote?.trim())?.quote?.trim() ?? null
 }
 
+/** Short display text for a free-form persona field; objects and long text are skipped. */
+function textOf(value: unknown): string | null {
+	if (typeof value !== "string" && typeof value !== "number") return null
+	const text = String(value).trim()
+	return text && text.length <= 12 ? text : null
+}
+
 interface ResearchVoiceCardProps {
 	personas: PersonaFile[]
 	onOpenLibrary: () => void
@@ -77,11 +84,15 @@ export default function ResearchVoiceCard({
 	const voice = voices[index % voices.length]
 	const { persona } = voice
 	const { tone } = personaTone(persona.name || persona.id)
+	// Ages arrive as "45" or "45岁"; the label adds its own unit.
+	const age = textOf(persona.dimensions?.demographics?.age)?.replace(/\s*(岁|yrs?|years?)$/i, "")
+	const geography = persona.dimensions?.geography
+	const place = textOf(geography?.city ?? geography?.region ?? geography?.location)
 
 	return (
 		<aside
 			className={cn(
-				"relative flex min-h-[360px] flex-col overflow-hidden rounded-[22px] px-7 py-6 text-white transition-colors duration-500",
+				"relative flex min-h-[380px] flex-col overflow-hidden rounded-[22px] px-7 pb-[22px] pt-7 text-white transition-colors duration-500",
 				className,
 			)}
 			style={{ backgroundColor: tone }}
@@ -105,7 +116,7 @@ export default function ResearchVoiceCard({
 				<HangingQuote
 					text={voice.text}
 					clampClassName="line-clamp-5"
-					className="text-2xl font-black leading-normal tracking-tight"
+					className="text-[26px] font-black leading-normal tracking-tight"
 				/>
 				<span className="flex items-center gap-2.5 text-[13px]">
 					<PersonaAvatar
@@ -113,11 +124,17 @@ export default function ResearchVoiceCard({
 						name={persona.name}
 						className="size-10 ring-2 ring-white/35"
 					/>
+					{/* Name, age and place first; tags (not the long tagline) as the quiet second line. */}
 					<span className="flex min-w-0 flex-col">
-						<span className="font-medium">{persona.name}</span>
+						<span className="truncate font-medium">
+							{[persona.name, age ? t("voice.age", { age }) : null, place]
+								.filter(Boolean)
+								.join(" · ")}
+						</span>
 						<span className="line-clamp-1 text-xs text-white/70">
-							{persona.tagline ? `${persona.tagline} · ` : ""}
-							{t("persona.aiSimulated")}
+							{[...(persona.tags ?? []).slice(0, 2), t("persona.aiSimulated")].join(
+								" · ",
+							)}
 						</span>
 					</span>
 				</span>
