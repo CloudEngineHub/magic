@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/utils/cn"
 import type { StudyStatus } from "../services/studyStatus"
+import styles from "./StudyStatusBadge.module.css"
 
 /** Compact status pill with a live dot while the agent works; used in list rows and the header. */
 export function StudyStatusBadge({
@@ -91,14 +92,19 @@ export function StudyProgressSegments({
 				<span
 					key={index}
 					className={cn(
-						"h-1 flex-1 rounded-full transition-colors duration-500",
-						index < status.completed
-							? "bg-primary"
-							: index === status.completed && status.kind === "running"
-								? "animate-pulse bg-primary/40 motion-reduce:animate-none"
-								: "bg-border",
+						"relative h-1 flex-1 overflow-hidden rounded-full transition-colors duration-500",
+						index < status.completed ? "bg-primary" : "bg-border",
 					)}
-				/>
+				>
+					{index === status.completed && status.kind === "running" ? (
+						<span
+							className={cn(
+								"absolute inset-y-0 left-0 rounded-full bg-primary",
+								styles.runningFill,
+							)}
+						/>
+					) : null}
+				</span>
 			))}
 		</span>
 	)
