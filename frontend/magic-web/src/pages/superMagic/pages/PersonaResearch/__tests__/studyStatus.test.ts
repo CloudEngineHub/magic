@@ -36,8 +36,20 @@ describe("resolveStudyStatus", () => {
 		expect(status).toEqual({ kind: "done", completed: 6, total: 6 })
 	})
 
+	it("shows a finished topic without a study file as a plain conversation", () => {
+		expect(resolveStudyStatus({ task_status: TaskStatus.FINISHED }, null)).toEqual({
+			kind: "conversation",
+			completed: 0,
+			total: 6,
+		})
+	})
+
+	it("keeps a running topic without a study file looking like a study starting", () => {
+		expect(resolveStudyStatus({ task_status: TaskStatus.RUNNING }, null).kind).toBe("running")
+	})
+
 	it("falls back to idle or failed without a study file", () => {
-		expect(resolveStudyStatus({ task_status: TaskStatus.FINISHED }, null).kind).toBe("idle")
+		expect(resolveStudyStatus({ task_status: TaskStatus.SUSPENDED }, null).kind).toBe("idle")
 		expect(resolveStudyStatus({ task_status: TaskStatus.ERROR }, null).kind).toBe("failed")
 		expect(resolveStudyStatus(null, null)).toEqual({ kind: "idle", completed: 0, total: 6 })
 	})

@@ -9,11 +9,13 @@ import { STUDY_PHASE_KEYS, type StudyFile } from "../types"
  * | running       | the topic task is running                         |
  * | done          | study.json phase is "done"                        |
  * | failed        | the topic task errored                            |
+ * | conversation  | finished with no study.json (e.g. a template chat) |
  * | idle          | anything else (stopped midway, not started yet)   |
  *
  * Topic status wins over study.json so "waiting for you" shows even before the file updates.
  */
-export type StudyStatusKind = "waiting_user" | "running" | "done" | "failed" | "idle"
+export type StudyStatusKind =
+	"waiting_user" | "running" | "done" | "failed" | "conversation" | "idle"
 
 export interface StudyStatus {
 	kind: StudyStatusKind
@@ -37,5 +39,8 @@ export function resolveStudyStatus(
 	else if (taskStatus === TaskStatus.RUNNING) kind = "running"
 	else if (study?.phase === "done") kind = "done"
 	else if (taskStatus === TaskStatus.ERROR) kind = "failed"
+	// Topics that never created a study (report template chats) are plain conversations; a running
+	// one stays "running" above so a study that is just starting still looks like one.
+	else if (!study && taskStatus === TaskStatus.FINISHED) kind = "conversation"
 	return { kind, completed: study?.phase === "done" ? total : completed, total }
 }

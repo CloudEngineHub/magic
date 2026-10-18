@@ -53,6 +53,8 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 	// Rename and share take focus themselves; returning it to "…" would close them at once.
 	const keepFocusAwayRef = useRef(false)
 	const isPersonaBuild = study?.study_type === "persona_build"
+	// No phase progress for plain conversations (topics without a study file).
+	const isConversation = status.kind === "conversation"
 
 	const studyTypeLabel = study?.study_type
 		? {
@@ -116,10 +118,12 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 					{store.studyFilesReady ? (
 						<span className="truncate text-xs text-muted-foreground">
 							{meta ||
-								t("study.progress", {
-									done: status.completed,
-									total: status.total,
-								})}
+								(isConversation
+									? null
+									: t("study.progress", {
+											done: status.completed,
+											total: status.total,
+										}))}
 						</span>
 					) : (
 						<Skeleton className="h-3 w-40" />
@@ -132,7 +136,7 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 					<Skeleton className="h-1.5 w-full" />
 				) : hasVerdicts && study ? (
 					<VerdictSummary study={study} />
-				) : isPersonaBuild ? null : (
+				) : isPersonaBuild || isConversation ? null : (
 					<span className="flex flex-col gap-1.5">
 						<StudyProgressSegments status={status} className="w-full" />
 						<span className="text-xs tabular-nums text-muted-foreground">

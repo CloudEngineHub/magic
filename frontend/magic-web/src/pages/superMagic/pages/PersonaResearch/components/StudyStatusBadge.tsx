@@ -1,4 +1,10 @@
-import { CircleAlert, CircleCheck, CirclePause, MessageCircleQuestion } from "lucide-react"
+import {
+	CircleAlert,
+	CircleCheck,
+	CirclePause,
+	MessageCircle,
+	MessageCircleQuestion,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
 import { cn } from "@/utils/cn"
@@ -39,6 +45,11 @@ export function StudyStatusBadge({
 			label: t("status.failed"),
 			className: "bg-destructive/10 text-destructive",
 			icon: <CircleAlert className="size-3.5" />,
+		},
+		conversation: {
+			label: t("status.conversation"),
+			className: "bg-muted text-muted-foreground",
+			icon: <MessageCircle className="size-3.5" />,
 		},
 		idle: {
 			label: t("status.idle"),

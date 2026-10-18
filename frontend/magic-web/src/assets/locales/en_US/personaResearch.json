@@ -567,6 +567,7 @@
 		"retry": "Retry"
 	},
 	"status": {
+		"conversation": "Chat",
 		"done": "Done",
 		"failed": "Error",
 		"idle": "Paused",

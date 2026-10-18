@@ -565,6 +565,7 @@
 		"retry": "重试"
 	},
 	"status": {
+		"conversation": "对话",
 		"done": "已完成",
 		"failed": "出错了",
 		"idle": "已暂停",
