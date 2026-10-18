@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
-import { useMemoizedFn } from "ahooks"
+import { useEffect, useRef, useState } from "react"
+import { useMemoizedFn, useSize } from "ahooks"
 import {
 	ArrowRight,
 	ClipboardCheck,
@@ -63,6 +63,12 @@ function ResearchHomePage() {
 	const store = usePersonaResearchStore()
 	const navigate = useNavigate()
 	const isMobile = useIsMobile()
+	// The voice card sits beside the composer only when both fit: the composer's settings row
+	// needs about 540px next to the 380px card. Measured on the hero, not the viewport, because
+	// side panels narrow the page; below it the hero is one column and the card is left out.
+	const heroRef = useRef<HTMLElement>(null)
+	const heroWidth = useSize(heroRef)?.width
+	const heroSplit = !isMobile && (heroWidth === undefined || heroWidth >= HERO_SPLIT_MIN_WIDTH)
 	const templates = useResearchTemplates()
 	const [pendingDelete, setPendingDelete] = useState<Topic | null>(null)
 
@@ -216,11 +222,12 @@ function ResearchHomePage() {
 					isMobile ? "gap-8 px-4 py-6" : "gap-14 px-10 pb-16 pt-9",
 				)}
 			>
-				{/* Hero: the question on the left, a real persona voice on the right. */}
+				{/* Hero: the question on the left, a persona voice on the right when there is room. */}
 				<section
+					ref={heroRef}
 					className={cn(
 						"grid items-stretch",
-						isMobile ? "grid-cols-1 gap-6" : "grid-cols-[minmax(0,1fr)_380px] gap-12",
+						heroSplit ? "grid-cols-[minmax(0,1fr)_380px] gap-12" : "grid-cols-1 gap-6",
 					)}
 				>
 					<div className="flex min-w-0 flex-col">
@@ -287,9 +294,9 @@ function ResearchHomePage() {
 							</span>
 						</div>
 					</div>
-					{isMobile ? null : (
+					{heroSplit ? (
 						<ResearchVoiceCard personas={libraryPersonas} onOpenLibrary={openLibrary} />
-					)}
+					) : null}
 				</section>
 
 				<section
@@ -408,6 +415,9 @@ function ResearchHomePage() {
 		</ScrollArea>
 	)
 }
+
+/** Hero width that fits the 380px voice card, a 48px gap and a ~540px composer. */
+const HERO_SPLIT_MIN_WIDTH = 968
 
 const OPTIONS_STORAGE_KEY = "persona-research:composer-options"
 
