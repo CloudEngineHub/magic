@@ -530,3 +530,26 @@ async def test_questionnaire_rejects_invalid_questions(tmp_path, question, messa
     )
 
     assert result.ok is False and message in result.content
+
+
+def test_every_persona_research_tool_is_statically_imported():
+    """The image is built with PyInstaller, which only bundles statically imported modules.
+
+    Each tool module in app/tools/persona_research must be exported by app.tools, or the
+    sandbox reports "No module named app.tools.persona_research.<tool>" at call time.
+    """
+    import pkgutil
+
+    import app.tools
+    import app.tools.persona_research as persona_research
+
+    tool_modules = []
+    for module_info in pkgutil.iter_modules(persona_research.__path__):
+        module = __import__(f"app.tools.persona_research.{module_info.name}", fromlist=["*"])
+        for value in vars(module).values():
+            if isinstance(value, type) and getattr(value, "_is_tool", False) and value.__module__ == module.__name__:
+                tool_modules.append(value)
+
+    assert tool_modules
+    for tool_class in tool_modules:
+        assert getattr(app.tools, tool_class.__name__, None) is tool_class, tool_class.__name__

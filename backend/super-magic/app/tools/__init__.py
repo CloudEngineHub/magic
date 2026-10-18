@@ -65,6 +65,15 @@ from app.tools.shell_exec import ShellExec
 from app.tools.shell_await import ShellAwait
 from app.tools.summarize import Summarize
 from app.tools.persona_chat import PersonaChat
+# Persona research file tools (Code Mode only); imported here so the image bundles them.
+from app.tools.persona_research import (
+    CheckInterviews,
+    FinishPersonaTranscript,
+    SavePersonas,
+    SaveStudySynthesis,
+    SaveValidationQuestionnaire,
+    UpdateStudy,
+)
 from app.tools.thinking import Thinking
 from app.tools.todo_read import TodoRead
 from app.tools.todo_create import TodoCreate
@@ -451,6 +460,12 @@ __all__ = [
     "ShellAwait",
     "Summarize",
     "PersonaChat",
+    "CheckInterviews",
+    "FinishPersonaTranscript",
+    "SavePersonas",
+    "SaveStudySynthesis",
+    "SaveValidationQuestionnaire",
+    "UpdateStudy",
     "Thinking",
     "TodoRead",
     "TodoCreate",
