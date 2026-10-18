@@ -173,6 +173,25 @@ class ModelGatewayMapperAccessTest extends TestCase
     }
 
     /**
+     * 有限订阅模型列表追加组织模型时，不能把原有 model_id 变成数组索引。
+     */
+    public function testOrganizationModelMergePreservesFiniteSubscriptionModelIds(): void
+    {
+        $mapper = (new ReflectionClass(ModelGatewayMapper::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionClass(ModelGatewayMapper::class)->getMethod('mergeOrganizationModelIds');
+        $method->setAccessible(true);
+
+        $modelIds = $method->invoke(
+            $mapper,
+            ['official-model-a', 'official-model-b'],
+            [ModelType::LLM->value => ['organization-model']],
+            [ModelType::LLM],
+        );
+
+        $this->assertSame(['official-model-a', 'official-model-b', 'organization-model'], $modelIds);
+    }
+
+    /**
      * 通过反射调用 mapper 内部的模型可见性策略，避免初始化外部服务依赖。
      */
     private function invokeIsModelAccessible(?ModelAccessContext $context, string $modelId): bool

@@ -367,16 +367,11 @@ class ModelGatewayMapper extends ModelMapper
             $organizationDataIsolation = ProviderDataIsolation::createByBaseDataIsolation($dataIsolation);
             $organizationDataIsolation->setContainOfficialOrganization(true);
             $organizationModelIdsByType = $this->providerManager->getModelIdsGroupByType($organizationDataIsolation, $modelTypes);
-            foreach ($modelTypes as $modelType) {
-                $organizationModelIds = $organizationModelIdsByType[$modelType->value] ?? null;
-                if (! is_array($organizationModelIds)) {
-                    continue;
-                }
-                foreach ($organizationModelIds as $modelId) {
-                    $availableModelIds[$modelId] = true;
-                }
-            }
-            $availableModelIds = array_keys($availableModelIds);
+            $availableModelIds = $this->mergeOrganizationModelIds(
+                $availableModelIds,
+                $organizationModelIdsByType,
+                $modelTypes,
+            );
         }
 
         // 默认只返回官方组织模型；开启 with_organization_models 后才追加当前组织模型。
@@ -569,6 +564,36 @@ class ModelGatewayMapper extends ModelMapper
             $providerDataIsolation->setOnlyOfficialOrganization(true);
         }
         return $providerDataIsolation;
+    }
+
+    /**
+     * 将组织模型追加到有限订阅模型列表，保持所有 model_id 的值而不是索引下标。
+     *
+     * @param string[] $availableModelIds
+     * @param array<string, string[]> $organizationModelIdsByType
+     * @param ModelType[] $modelTypes
+     * @return string[]
+     */
+    private function mergeOrganizationModelIds(
+        array $availableModelIds,
+        array $organizationModelIdsByType,
+        array $modelTypes,
+    ): array {
+        $availableModelIdMap = array_fill_keys($availableModelIds, true);
+        foreach ($modelTypes as $modelType) {
+            $organizationModelIds = $organizationModelIdsByType[$modelType->value] ?? null;
+            if (! is_array($organizationModelIds)) {
+                continue;
+            }
+            foreach ($organizationModelIds as $modelId) {
+                $availableModelIdMap[$modelId] = true;
+            }
+        }
+
+        return array_map(
+            static fn (int|string $modelId): string => (string) $modelId,
+            array_keys($availableModelIdMap),
+        );
     }
 
     /**
