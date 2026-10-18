@@ -90,6 +90,7 @@ function ResearchHomePage() {
 		onStudyStarted: openStudy,
 		// Fixed settings travel as one 【研究设置】 line at the end of the first message.
 		appendToMessage: useMemoizedFn(() => researchSettingsLine(options)),
+		bareContainer: true,
 		onEditorReady: useMemoizedFn(() => {
 			const text = store.consumePendingComposerText()
 			if (text) fillComposer(text)
@@ -201,11 +202,11 @@ function ResearchHomePage() {
 							<ResearchComposerOptions
 								value={options}
 								onChange={updateOptions}
-								className="border-t border-border px-3 py-2.5"
+								className="px-3 pb-3"
 								trailing={
 									<button
 										type="button"
-										className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+										className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
 										onClick={openLibrary}
 									>
 										<UsersRound className="size-3.5" />

@@ -46,7 +46,7 @@ export default function ResearchComposerOptions({
 	}
 
 	return (
-		<div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+		<div className={cn("flex flex-wrap items-center gap-1", className)}>
 			<OptionMenu
 				icon={<FlaskConical className="size-3.5" />}
 				label={t("options.method")}
@@ -128,16 +128,17 @@ function OptionMenu({
 				<button
 					type="button"
 					className={cn(
-						"inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs outline-none ring-1 transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring",
+						// Quiet chips inside the composer; a fixed value gets a soft fill, not solid ink.
+						"inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring",
 						active
-							? "bg-foreground text-background ring-foreground"
-							: "bg-background text-muted-foreground ring-border hover:bg-muted hover:text-foreground",
+							? "bg-muted text-foreground"
+							: "text-muted-foreground hover:bg-muted hover:text-foreground",
 						PRESSABLE,
 					)}
 				>
 					{icon}
-					<span className={cn(!active && "text-muted-foreground/80")}>{label}</span>
-					<span className="font-medium">{valueLabel}</span>
+					<span className="text-muted-foreground">{label}</span>
+					<span className={cn(active && "font-medium")}>{valueLabel}</span>
 					<ChevronDown className="size-3.5 opacity-60" />
 				</button>
 			</DropdownMenuTrigger>

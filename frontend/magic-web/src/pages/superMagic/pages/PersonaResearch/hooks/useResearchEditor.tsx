@@ -44,6 +44,8 @@ interface UseResearchEditorOptions {
 	 * composer uses it for the 【研究设置】 line. Null or empty sends the message unchanged.
 	 */
 	appendToMessage?: () => string | null
+	/** The page draws the composer frame (home); the editor drops its own border to avoid a double line. */
+	bareContainer?: boolean
 }
 
 /**
@@ -66,6 +68,7 @@ export function useResearchEditor({
 	onStudyStarted,
 	onEditorReady,
 	appendToMessage,
+	bareContainer = false,
 }: UseResearchEditorOptions) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
@@ -168,7 +171,9 @@ export function useResearchEditor({
 			allowChangeMode: false,
 			containerClassName: isMobile
 				? undefined
-				: "rounded-xl border border-border bg-background",
+				: bareContainer
+					? "rounded-xl bg-background"
+					: "rounded-xl border border-border bg-background",
 			messagesLength,
 			createTopic: createStudyTopic,
 			onSendSuccess: handleSendSuccess,
@@ -188,6 +193,7 @@ export function useResearchEditor({
 		}),
 		[
 			appendToMessage,
+			bareContainer,
 			canInterruptTask,
 			createStudyTopic,
 			handleInterrupt,
