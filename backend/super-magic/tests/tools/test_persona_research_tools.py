@@ -45,13 +45,16 @@ PLAN = {
     "framework": ["JTBD"],
     "decision": "Whether to build X",
     "hypotheses": [
-        {"statement": "H one", "support_criteria": "s1", "refute_criteria": "r1"},
-        {"statement": "H two", "support_criteria": "s2", "refute_criteria": "r2"},
+        {"statement": "H one", "support_criteria": "s1", "refute_criteria": "r1", "outcome_terms": ["switching cost"]},
+        {"statement": "H two", "support_criteria": "s2", "refute_criteria": "r2", "outcome_terms": ["friend referral"]},
     ],
     "quota": [{"segment": "Owners", "criteria": "c", "count": 1}, {"segment": "Skeptics", "criteria": "c", "count": 1}],
     "interview_rounds": 3,
     "guide_review": [{"issue": "leading", "before": "Don't you hate it?", "after": "What happened last time?"}],
 }
+
+
+SAMPLED = {"status": "sampled", "platforms": ["xiaohongshu"], "posts": 12, "comments": 80}
 
 
 async def _study_at(tmp_path, phase_events):
@@ -64,6 +67,7 @@ async def _study_at(tmp_path, phase_events):
         extra = PLAN if event == "plan_confirmed" else {}
         if event == "desk_research_done":
             _write(tmp_path, f"{study_dir}/desk-research.md", "Finding [S1] and [S2].")
+            extra = {"social_sampling": SAMPLED}
         result = await tool.execute(_context(), UpdateStudyParams(event=event, study_dir=study_dir, **extra))
         assert result.ok, result.content
     return study_dir
@@ -243,6 +247,72 @@ async def test_save_personas_rejects_incomplete_persona_and_unknown_segment(tmp_
     assert missing.ok is False and "layers ['story']" in missing.content
     assert segment.ok is False and "unknown: Nobody" in segment.content
     assert not (tmp_path / study_dir / "panel.json").exists()
+
+
+async def test_persona_stating_the_tested_outcome_is_rejected(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    leaky = _persona("Zhang", "Owners") | {"tagline": "Hates the Switching Cost of new tools"}
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[leaky],
+    ))
+
+    assert result.ok is False
+    assert "tagline contains 'switching cost' (H1)" in result.content
+    assert not (tmp_path / study_dir / "panel.json").exists()
+
+
+async def test_reused_persona_stating_the_outcome_is_not_selected(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    _write(tmp_path, "personas/p_old_1a2b.json", {
+        "schema_version": 1, "id": "p_old_1a2b", "name": "Old", "tier": "generated",
+        "layers": {"cognition": {"decision_weights": [{"factor": "friend referral", "level": "high"}]}},
+    })
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[{"id": "p_old_1a2b", "segment": "Owners", "reason": "reuse"}],
+    ))
+
+    assert result.ok is False
+    assert "decision_weights contains 'friend referral' (H2)" in result.content
+    assert "do not select this reused persona" in result.content
+
+
+async def test_new_persona_needs_a_real_voice_when_platforms_were_sampled(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[_persona("Zhang", "Owners", evidence_types=("web", "web"))],
+    ))
+
+    assert result.ok is False and "cites no social evidence" in result.content
+
+
+async def test_plan_and_desk_research_require_new_fields(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified"])
+    tool = UpdateStudy(base_dir=tmp_path)
+    short = {**PLAN, "hypotheses": [{"statement": "H", "support_criteria": "s", "refute_criteria": "r", "outcome_terms": ["价"]}]}
+
+    rejected_plan = await tool.execute(_context(), UpdateStudyParams(event="plan_confirmed", study_dir=study_dir, **short))
+    confirmed = await tool.execute(_context(), UpdateStudyParams(event="plan_confirmed", study_dir=study_dir, **PLAN))
+    _write(tmp_path, f"{study_dir}/desk-research.md", "[S1]")
+    missing = await tool.execute(_context(), UpdateStudyParams(event="desk_research_done", study_dir=study_dir))
+    no_note = await tool.execute(_context(), UpdateStudyParams(
+        event="desk_research_done", study_dir=study_dir, social_sampling={"status": "unavailable"},
+    ))
+    done = await tool.execute(_context(), UpdateStudyParams(
+        event="desk_research_done", study_dir=study_dir,
+        social_sampling={"status": "unavailable", "note": "no platform skills in this deployment"},
+    ))
+
+    assert rejected_plan.ok is False and "too short: 价" in rejected_plan.content
+    assert confirmed.ok is True
+    assert missing.ok is False and "needs social_sampling" in missing.content
+    assert no_note.ok is False and "needs a note" in no_note.content
+    assert done.ok is True
+    study = _read(tmp_path, f"{study_dir}/study.json")
+    assert study["hypotheses"][0]["outcome_terms"] == ["switching cost"]
+    assert study["social_sampling"]["status"] == "unavailable"
 
 
 async def test_reused_persona_keeps_identity_and_appends_evidence(tmp_path):
@@ -439,7 +509,8 @@ async def test_synthesis_locates_quotes_caps_rules_and_counts_saturation(tmp_pat
         hypotheses=[
             {"id": "H1", "verdict": "supported", "verdict_reason": "Most agree.",
              "quotes": [{"persona_id": "p_a_0001", "text": "Arguing costs more than the discount."}]},
-            {"id": "H2", "verdict": "refuted", "verdict_reason": "S2 contradicts it.", "source_refs": ["S2"],
+            {"id": "H2", "verdict": "refuted", "verdict_reason": "S2 contradicts it.",
+             "sources": [{"ref": "S2", "claim": "Most buyers wait for a friend's verdict.", "covers": "core"}],
              "quotes": [{"persona_id": "p_b_0002", "text": "Not before a friend uses it."}]},
         ],
     ))
@@ -447,10 +518,14 @@ async def test_synthesis_locates_quotes_caps_rules_and_counts_saturation(tmp_pat
     assert result.ok is True, result.content
     synthesis = _read(tmp_path, f"{study_dir}/synthesis.json")
     t1, t2 = synthesis["themes"]
-    assert t1["quote_refs"] == [{"persona_id": "p_a_0001", "source": "interview", "file": "interviews/p_a_0001.json", "round_index": 3, "text": "Arguing costs more than the discount."}]
+    assert t1["quote_refs"] == [{
+        "persona_id": "p_a_0001", "source": "interview", "file": "interviews/p_a_0001.json", "round_index": 3,
+        "text": "Arguing costs more than the discount.", "prompted": False, "question": "Why?",
+    }]
     assert t1["source_refs"] == ["S1"]
     assert t1["confidence"] == "medium"  # high 需要 2 个外部来源
     assert t2["quote_refs"][0]["file"] == "discussions/fg_1.json"
+    assert t2["quote_refs"][0]["question"] == "Price?"
     assert t2["confidence"] == "to_validate"
     assert t2["stance_by_persona"] == {"p_a_0001": "not_mentioned", "p_b_0002": "oppose"}
     assert synthesis["dimensions"][0]["level_by_segment"] == {"seg_1": "low", "seg_2": "high"}
@@ -462,10 +537,10 @@ async def test_synthesis_locates_quotes_caps_rules_and_counts_saturation(tmp_pat
     hypotheses = {h["id"]: h for h in _read(tmp_path, f"{study_dir}/study.json")["hypotheses"]}
     assert hypotheses["H1"]["verdict"] == "mixed"
     assert hypotheses["H1"]["verdict_reason"].startswith("Pending real-person validation")
-    assert hypotheses["H1"]["evidence_refs"] == [{"kind": "quote", "persona_id": "p_a_0001", "round_index": 3, "text": "Arguing costs more than the discount."}]
+    assert hypotheses["H1"]["evidence_refs"] == [{"kind": "quote", "persona_id": "p_a_0001", "round_index": 3, "text": "Arguing costs more than the discount.", "prompted": False}]
     assert hypotheses["H2"]["verdict"] == "refuted"
     assert hypotheses["H2"]["evidence_refs"][0]["file"] == "discussions/fg_1.json"
-    assert hypotheses["H2"]["evidence_refs"][1] == {"kind": "source", "ref": "S2"}
+    assert hypotheses["H2"]["evidence_refs"][1] == {"kind": "source", "ref": "S2", "claim": "Most buyers wait for a friend's verdict.", "covers": "core"}
 
 
 async def test_synthesis_lowers_confidence_resting_on_downweighted_interviews(tmp_path):
@@ -482,6 +557,80 @@ async def test_synthesis_lowers_confidence_resting_on_downweighted_interviews(tm
     theme = _read(tmp_path, f"{study_dir}/synthesis.json")["themes"][0]
     assert theme["confidence"] == "low"
     assert "按规则调整" in theme["confidence_reason"]
+
+
+async def test_verdict_needs_a_source_that_states_the_core_claim(tmp_path):
+    study_dir = await _report_ready(tmp_path)
+
+    result = await SaveStudySynthesis(base_dir=tmp_path).execute(ToolContext(), SaveStudySynthesisParams(
+        study_dir=study_dir,
+        segments=[{"name": "Owners", "persona_ids": ["p_a_0001"]}],
+        themes=[{"name": "x", "confidence": "low"}],
+        hypotheses=[
+            {"id": "H1", "verdict": "supported", "verdict_reason": "规则比价格重要。",
+             "sources": [{"ref": "S1", "claim": "有人投诉自动续费。", "covers": "context"}]},
+            {"id": "H2", "verdict": "supported", "verdict_reason": "Legacy refs only.", "source_refs": ["S2"]},
+        ],
+    ))
+
+    assert result.ok is True, result.content
+    hypotheses = {h["id"]: h for h in _read(tmp_path, f"{study_dir}/study.json")["hypotheses"]}
+    assert hypotheses["H1"]["verdict"] == "mixed"
+    assert hypotheses["H1"]["verdict_reason"].startswith("待真人验证")
+    assert hypotheses["H1"]["evidence_refs"] == [{"kind": "source", "ref": "S1", "claim": "有人投诉自动续费。", "covers": "context"}]
+    assert hypotheses["H2"]["verdict"] == "mixed"
+    assert "no source states the core claim" in result.content
+
+
+async def test_prompted_and_price_themes_are_capped(tmp_path):
+    study_dir = await _report_ready(tmp_path)
+
+    await SaveStudySynthesis(base_dir=tmp_path).execute(ToolContext(), SaveStudySynthesisParams(
+        study_dir=study_dir,
+        segments=[{"name": "Owners", "persona_ids": ["p_a_0001"]}],
+        themes=[
+            {"name": "Only when asked", "stance_by_persona": {"p_a_0001": "support"},
+             "quotes": [{"persona_id": "p_a_0001", "text": "Arguing costs more than the discount.", "prompted": True}],
+             "source_refs": ["S1", "S2"], "confidence": "high"},
+            {"name": "Would pay 300", "stance_by_persona": {"p_a_0001": "support"},
+             "quotes": [{"persona_id": "p_a_0001", "text": "Arguing costs more than the discount."}],
+             "source_refs": ["S1", "S2"], "confidence": "high", "about_willingness_to_pay": True},
+        ],
+    ))
+
+    asked, price = _read(tmp_path, f"{study_dir}/synthesis.json")["themes"]
+    assert asked["confidence"] == "low" and "only when asked" in asked["confidence_reason"]
+    assert asked["quote_refs"][0]["prompted"] is True
+    assert price["confidence"] == "to_validate"
+
+
+async def test_unanimous_themes_trigger_homogeneity_warning(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    ids = ["p_a_0001", "p_b_0002", "p_c_0003"]
+    for pid in ids:
+        _write(tmp_path, f"{study_dir}/interviews/{pid}.json", {
+            **INTERVIEW, "persona_id": pid, "status": "done",
+            "rounds": [{"role": "moderator", "text": "Q"}, {"role": "persona", "text": "Same answer."}],
+        })
+    await UpdateStudy(base_dir=tmp_path).execute(_context(), UpdateStudyParams(event="interviews_finished", study_dir=study_dir))
+    everyone = {pid: "support" for pid in ids}
+
+    result = await SaveStudySynthesis(base_dir=tmp_path).execute(ToolContext(), SaveStudySynthesisParams(
+        study_dir=study_dir,
+        segments=[{"name": "Owners", "persona_ids": ids}],
+        themes=[
+            {"name": "A", "stance_by_persona": everyone, "source_refs": ["S1", "S2"], "confidence": "high"},
+            {"name": "B", "stance_by_persona": everyone, "source_refs": ["S1"], "confidence": "medium"},
+            {"name": "C", "stance_by_persona": {"p_a_0001": "support", "p_b_0002": "oppose"}, "source_refs": ["S1", "S2"], "confidence": "high"},
+        ],
+    ))
+
+    synthesis = _read(tmp_path, f"{study_dir}/synthesis.json")
+    assert synthesis["homogeneity"] == {"unanimous_theme_ids": ["T1", "T2"], "warning": True}
+    assert [t["confidence"] for t in synthesis["themes"]] == ["medium", "medium", "high"]
+    assert "Homogeneity warning" in result.content
+    detail = await SaveStudySynthesis(base_dir=tmp_path).get_tool_detail(ToolContext(), result)
+    assert "2" in detail.data.content
 
 
 async def test_synthesis_is_rejected_before_report_phase(tmp_path):

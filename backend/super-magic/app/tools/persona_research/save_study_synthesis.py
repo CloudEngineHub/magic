@@ -13,6 +13,14 @@
 | 可信度上限                 | Theme Confidence Rules         | 外部来源不够时下调，并在 confidence_reason 写明         |
 | 结论上限                   | Hypothesis Verdict Rules       | 只有 AI 访谈支撑的 supported/refuted 改为 mixed         |
 | 降权访谈                   | Downweighting                  | inferred_ratio ≥ 0.4 的访谈不能单独撑起 high/medium     |
+| 被问到才说                 | Prompted Answers               | 引文全是 prompted 的主题最高 low；引文旁记录所答的问题 |
+| 支付意愿                   | Theme Confidence Rules         | about_willingness_to_pay 的主题未经真人验证 → to_validate |
+| 来源要说同一件事           | Hypothesis Verdict Rules       | supported/refuted 需要至少 1 条 covers=core 的来源     |
+| 同质化                     | Homogeneity                    | 全员一致的主题过半时警告，并把这些主题 high 降为 medium |
+
+为什么加后四条（2026-10 对 6 项真实研究的复盘）：录音卡研究 12 个主题零反对、第一位受访者
+就「贡献」了全部主题却记为已饱和；咖啡研究「规则比价格重要」只因提纲先问了规则；
+「老板愿意为录音卡付费」的外部来源只说明老板会算回本账，并没有说他们会买。
 
 「多数相关访谈是否支持」需要判断哪些访谈相关，仍由模型决定；工具只执行确定的上限。
 """
@@ -21,6 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -60,11 +69,16 @@ from app.tools.persona_research.study_files import (
 from app.tools.workspace_tool import WorkspaceTool
 
 _CJK = re.compile(r"[぀-ヿ㐀-鿿가-힯]")
+# 引文旁记录它回答的问题，供报告和研究页展示「这句话是被怎么问出来的」；截断避免 synthesis.json 膨胀。
+MAX_QUESTION_CHARS = 300
 
 
 class QuoteInput(BaseModel):
     persona_id: str = Field(..., min_length=1)
     text: str = Field(..., min_length=1, description="The persona's exact words; the tool finds file and round_index.")
+    prompted: bool = Field(
+        default=False, description="True when the moderator's question already named this idea before the persona said it."
+    )
 
 
 class SegmentInput(BaseModel):
@@ -81,6 +95,9 @@ class ThemeInput(BaseModel):
     hypothesis_ids: List[str] = Field(default_factory=list)
     confidence: Confidence
     confidence_reason: str = ""
+    about_willingness_to_pay: bool = Field(
+        default=False, description="True for themes about price acceptance or willingness to pay."
+    )
 
 
 class DimensionInput(BaseModel):
@@ -89,11 +106,26 @@ class DimensionInput(BaseModel):
     quotes: List[QuoteInput] = Field(default_factory=list)
 
 
+class SourceCoverage(StrEnum):
+    # 来源直接说明了假设的核心主张，例如「多数用户因自动续费放弃月卡」之于「规则比价格更阻碍办卡」。
+    CORE = "core"
+    # 来源只提供背景，例如「有人投诉自动续费」：说明问题存在，不说明它比价格更重要。
+    CONTEXT = "context"
+
+
+class HypothesisSourceInput(BaseModel):
+    ref: str = Field(..., min_length=1, description="A desk-research source id such as S3.")
+    claim: str = Field(..., min_length=1, description="What this source says about this hypothesis, in one sentence.")
+    covers: SourceCoverage
+
+
 class HypothesisVerdictInput(BaseModel):
     id: str = Field(..., pattern=r"^H\d+$")
     verdict: Verdict
     verdict_reason: str = Field(..., min_length=1)
     quotes: List[QuoteInput] = Field(default_factory=list)
+    sources: List[HypothesisSourceInput] = Field(default_factory=list)
+    # 旧写法：只有编号、没有说法，按 context 处理，不能单独撑起 supported/refuted。
     source_refs: List[str] = Field(default_factory=list)
 
 
@@ -115,6 +147,8 @@ class _Outcome:
     dropped_stances: List[str] = field(default_factory=list)
     adjustments: List[str] = field(default_factory=list)
     downweighted: List[str] = field(default_factory=list)
+    unanimous: List[str] = field(default_factory=list)
+    homogeneity_warning: bool = False
     saturation: List[int] = field(default_factory=list)
     saturated: bool = False
 
@@ -158,6 +192,13 @@ class SaveStudySynthesis(WorkspaceTool[SaveStudySynthesisParams]):
         lines.append(
             f"Saturation: {outcome.saturation}, {'saturated' if outcome.saturated else 'not saturated; recommend a larger sample in the report'}."
         )
+        if outcome.homogeneity_warning:
+            lines.append(
+                f"Homogeneity warning: {len(outcome.unanimous)} of {len(synthesis['themes'])} themes have unanimous AI "
+                f"agreement ({', '.join(outcome.unanimous)}). State in the report limitations that the AI respondents "
+                "answered alike, which signals model homogeneity rather than strong evidence, and do not present "
+                "saturation as a strength."
+            )
         if outcome.dropped_quotes:
             lines.append("Mention the removed quote count in the report limitations.")
         return ToolResult(
@@ -170,6 +211,8 @@ class SaveStudySynthesis(WorkspaceTool[SaveStudySynthesisParams]):
                 "adjustments": outcome.adjustments,
                 "saturation": outcome.saturation,
                 "saturated": outcome.saturated,
+                "homogeneity_warning": outcome.homogeneity_warning,
+                "unanimous": len(outcome.unanimous),
             },
         )
 
@@ -215,6 +258,8 @@ class SaveStudySynthesis(WorkspaceTool[SaveStudySynthesisParams]):
                 series=" → ".join(str(n) for n in saturation),
             ),
         ]
+        if data.get("homogeneity_warning"):
+            lines.extend(["", _translate("save_study_synthesis.detail_homogeneity", count=data.get("unanimous", 0))])
         adjustments = data.get("adjustments") or []
         if adjustments:
             lines.extend(["", f"**{_translate('save_study_synthesis.detail_adjusted')}**", ""])
@@ -223,6 +268,16 @@ class SaveStudySynthesis(WorkspaceTool[SaveStudySynthesisParams]):
             type=DisplayType.MD,
             data=FileContent(file_name="synthesis_summary.md", content="\n".join(lines) + "\n"),
         )
+
+
+@dataclass(frozen=True)
+class _Located:
+    """核对通过的引文：说话人、位置、是否被问到才说，以及它回答的主持人问题。"""
+
+    persona_id: str
+    location: QuoteLocation
+    prompted: bool
+    question: str
 
 
 async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParams, outcome: _Outcome) -> Dict[str, Any]:
@@ -236,8 +291,9 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
     downweighted = {pid for pid, t in interviews.items() if _inferred_ratio(t) >= DOWNWEIGHT_INFERRED_RATIO}
     outcome.downweighted = sorted(downweighted)
     source_ids = await read_source_ids(study_path)
+    by_file = {t.file: t for t in transcripts}
 
-    def quotes(items: List[QuoteInput]) -> List[tuple[str, QuoteLocation]]:
+    def quotes(items: List[QuoteInput]) -> List[_Located]:
         found = []
         for item in items:
             outcome.quotes_total += 1
@@ -245,13 +301,18 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
             if location is None:
                 outcome.dropped_quotes.append(f"{item.persona_id}: {item.text[:60]}")
             else:
-                found.append((item.persona_id, location))
+                question = _question_before(by_file[location.file], location.round_index)
+                found.append(_Located(item.persona_id, location, item.prompted, question))
         return found
 
+    def known_source(ref: str) -> bool:
+        if ref.strip() in source_ids:
+            return True
+        outcome.dropped_sources.append(ref)
+        return False
+
     def sources(refs: List[str]) -> List[str]:
-        kept = [ref.strip() for ref in refs if ref.strip() in source_ids]
-        outcome.dropped_sources.extend(ref for ref in refs if ref.strip() not in source_ids)
-        return kept
+        return [ref.strip() for ref in refs if known_source(ref)]
 
     segments = _segments(study, params.segments)
     segment_ids = {segment["name"]: segment["id"] for segment in segments}
@@ -276,12 +337,13 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
             "name": theme.name.strip(),
             "description": theme.description.strip(),
             "stance_by_persona": stance,
-            "quote_refs": [_quote_ref(pid, location) for pid, location in located],
+            "quote_refs": [_quote_ref(item) for item in located],
             "source_refs": refs,
             "hypothesis_ids": theme.hypothesis_ids,
             "confidence": confidence,
             "confidence_reason": reason,
         })
+    _apply_homogeneity(themes, len(interviewed), outcome)
 
     dimensions = []
     for index, dimension in enumerate(params.dimensions, start=1):
@@ -292,10 +354,10 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
             "id": f"D{index}",
             "name": dimension.name.strip(),
             "level_by_segment": {segment_ids[name]: level.value for name, level in dimension.level_by_segment.items()},
-            "quote_refs": [_quote_ref(pid, location) for pid, location in quotes(dimension.quotes)],
+            "quote_refs": [_quote_ref(item) for item in quotes(dimension.quotes)],
         })
 
-    _apply_verdicts(study, params.hypotheses, quotes, sources, outcome)
+    _apply_verdicts(study, params.hypotheses, quotes, known_source, outcome)
     outcome.saturation, outcome.saturated = await _saturation(study_path, interviews, params.themes)
     return {
         "schema_version": SCHEMA_VERSION,
@@ -303,7 +365,19 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
         "themes": themes,
         "dimensions": dimensions,
         "saturation": {"new_themes_per_interview": outcome.saturation, "saturated": outcome.saturated},
+        "homogeneity": {"unanimous_theme_ids": outcome.unanimous, "warning": outcome.homogeneity_warning},
     }
+
+
+def _question_before(transcript: Transcript, round_index: int) -> str:
+    """引文所在发言之前最近的一条主持人发言，即受访者回答的那个问题。"""
+    question = ""
+    for index, speaker, text in transcript.utterances():
+        if index >= round_index:
+            break
+        if speaker == "moderator":
+            question = text
+    return question[:MAX_QUESTION_CHARS]
 
 
 def _segments(study: Study, items: List[SegmentInput]) -> List[Dict[str, Any]]:
@@ -323,32 +397,82 @@ def _cap_confidence(
     theme: ThemeInput,
     theme_id: str,
     refs: List[str],
-    located: List[tuple[str, QuoteLocation]],
+    located: List[_Located],
     downweighted: set[str],
     validated: bool,
     outcome: _Outcome,
 ) -> tuple[str, str]:
-    """按 methods.md 的可信度规则给出上限；只下调，不上调。"""
+    """按 methods.md 的可信度规则给出上限；只下调，不上调。规则按下表顺序取第一条命中的。
+
+    | 条件                                   | 上限        |
+    | 引文全部来自降权访谈                   | low         |
+    | 引文全部是被问到才说（prompted）       | low         |
+    | 关于支付意愿，且未经真人验证           | to_validate |
+    | 没有外部来源，且未经真人验证           | to_validate |
+    | 要 high 但只有 1 个外部来源            | medium      |
+    """
     requested = theme.confidence
     allowed = requested
     rule_zh, rule_en = "", ""
     if requested in (Confidence.HIGH, Confidence.MEDIUM):
-        if located and all(location.source == "interview" and pid in downweighted for pid, location in located):
+        if located and all(item.location.source == "interview" and item.persona_id in downweighted for item in located):
             allowed, rule_zh, rule_en = Confidence.LOW, "主要依据是降权访谈", "the support rests on downweighted interviews"
-        else:
-            if not refs and not validated:
-                allowed, rule_zh, rule_en = Confidence.TO_VALIDATE, "只有 AI 访谈支持，没有外部来源", "supported by AI interviews only"
-            elif requested == Confidence.HIGH and len(refs) < 2 and not validated:
-                allowed, rule_zh, rule_en = Confidence.MEDIUM, "只有 1 个外部来源", "only one external source agrees"
+        elif located and all(item.prompted for item in located):
+            allowed, rule_zh, rule_en = Confidence.LOW, "受访者只在被问到时才提到", "participants raised it only when asked about it"
+        elif theme.about_willingness_to_pay and not validated:
+            allowed, rule_zh, rule_en = (
+                Confidence.TO_VALIDATE, "AI 受访者的支付意愿必须由真人验证", "AI willingness to pay needs real-person validation"
+            )
+        elif not refs and not validated:
+            allowed, rule_zh, rule_en = Confidence.TO_VALIDATE, "只有 AI 访谈支持，没有外部来源", "supported by AI interviews only"
+        elif requested == Confidence.HIGH and len(refs) < 2 and not validated:
+            allowed, rule_zh, rule_en = Confidence.MEDIUM, "只有 1 个外部来源", "only one external source agrees"
     reason = theme.confidence_reason.strip()
     if allowed != requested:
         outcome.adjustments.append(f"{theme_id} confidence {requested.value} -> {allowed.value}: {rule_en}")
-        note = f"（按规则调整：{rule_zh}）" if _CJK.search(theme.name + reason) else f"(Adjusted by rule: {rule_en}.)"
-        reason = f"{reason} {note}".strip()
+        reason = _with_note(reason, theme.name + reason, rule_zh, rule_en)
     return allowed.value, reason
 
 
-def _apply_verdicts(study: Study, items: List[HypothesisVerdictInput], quotes, sources, outcome: _Outcome) -> None:
+def _with_note(reason: str, sample: str, rule_zh: str, rule_en: str) -> str:
+    note = f"（按规则调整：{rule_zh}）" if _CJK.search(sample) else f"(Adjusted by rule: {rule_en}.)"
+    return f"{reason} {note}".strip()
+
+
+def _apply_homogeneity(themes: List[Dict[str, Any]], interviewed: int, outcome: _Outcome) -> None:
+    """全员一致的主题过半时，把这些主题的 high 降为 medium，并要求报告写明同质化。
+
+    「全员一致」：至少 3 人支持，没有 oppose/mixed，未提及的最多 1 人。
+    例：8 人研究里 12 个主题有 7 个是 8 人全部 support → 警告，这 7 个主题最高 medium。
+    真人样本几乎不会这样一致；AI 受访者这样一致，更可能是同一个模型的「平均答案」。
+    """
+    unanimous = []
+    for theme in themes:
+        stances = list(theme["stance_by_persona"].values())
+        support = stances.count(Stance.SUPPORT.value)
+        dissent = stances.count(Stance.OPPOSE.value) + stances.count(Stance.MIXED.value)
+        silent = stances.count(Stance.NOT_MENTIONED.value)
+        if interviewed >= 3 and support >= 3 and dissent == 0 and silent <= 1:
+            unanimous.append(theme)
+    outcome.unanimous = [theme["id"] for theme in unanimous]
+    outcome.homogeneity_warning = len(unanimous) * 2 > len(themes)
+    if not outcome.homogeneity_warning:
+        return
+    for theme in unanimous:
+        if theme["confidence"] == Confidence.HIGH.value:
+            theme["confidence"] = Confidence.MEDIUM.value
+            outcome.adjustments.append(f"{theme['id']} confidence high -> medium: unanimous AI agreement")
+            theme["confidence_reason"] = _with_note(
+                theme["confidence_reason"], theme["name"], "AI 受访者全员一致，可能是同质化", "AI respondents agreed unanimously"
+            )
+
+
+def _apply_verdicts(study: Study, items: List[HypothesisVerdictInput], quotes, known_source, outcome: _Outcome) -> None:
+    """写入假设结论。supported/refuted 需要至少 1 条 covers=core 的外部来源，否则降为 mixed。
+
+    例：H「规则比价格更阻碍办卡」，来源 S1 只记录了自动续费投诉（context）→ mixed，
+    原因前加「待真人验证：」；若 S7 的调查直接显示多数人因规则放弃（core）→ 保留 supported。
+    """
     by_id = {hypothesis.id: hypothesis for hypothesis in study.hypotheses}
     unknown = [item.id for item in items if item.id not in by_id]
     if unknown:
@@ -356,21 +480,23 @@ def _apply_verdicts(study: Study, items: List[HypothesisVerdictInput], quotes, s
     for item in items:
         hypothesis = by_id[item.id]
         located = quotes(item.quotes)
-        refs = sources(item.source_refs)
+        cited = [source for source in item.sources if known_source(source.ref)]
+        legacy = [ref.strip() for ref in item.source_refs if known_source(ref)]
         verdict, reason = item.verdict, item.verdict_reason.strip()
-        # AI-only 上限：没有外部来源时，supported / refuted 最多是 mixed，原因以「待真人验证」开头。
-        if verdict in (Verdict.SUPPORTED, Verdict.REFUTED) and not refs:
-            outcome.adjustments.append(f"{item.id} verdict {verdict.value} -> mixed: supported by AI interviews only")
+        if verdict in (Verdict.SUPPORTED, Verdict.REFUTED) and not any(s.covers == SourceCoverage.CORE for s in cited):
+            rule = "supported by AI interviews only" if not cited and not legacy else "no source states the core claim"
+            outcome.adjustments.append(f"{item.id} verdict {verdict.value} -> mixed: {rule}")
             verdict = Verdict.MIXED
             prefix = "待真人验证：" if _CJK.search(reason) else "Pending real-person validation: "
             if not reason.startswith(prefix.strip(": ：")):
                 reason = prefix + reason
         hypothesis.verdict = verdict
         hypothesis.verdict_reason = reason
-        hypothesis.evidence_refs = [_evidence_ref(pid, location) for pid, location in located] + [
-            {"kind": "source", "ref": ref} for ref in refs
-        ]
-
+        hypothesis.evidence_refs = (
+            [_evidence_ref(entry) for entry in located]
+            + [{"kind": "source", "ref": s.ref.strip(), "claim": s.claim.strip(), "covers": s.covers.value} for s in cited]
+            + [{"kind": "source", "ref": ref} for ref in legacy]
+        )
 
 async def _saturation(study_path: Path, interviews: Dict[str, Transcript], themes: List[ThemeInput]) -> tuple[List[int], bool]:
     """按 panel.json 顺序，数每份完成的一对一访谈里首次出现的主题数；最后两项都是 0 才算饱和。
@@ -394,20 +520,28 @@ def _inferred_ratio(transcript: Transcript) -> float:
     return ratio if ratio is not None else compute_inferred_ratio(transcript.persona_texts())
 
 
-def _quote_ref(persona_id: str, location: QuoteLocation) -> Dict[str, Any]:
+def _quote_ref(item: _Located) -> Dict[str, Any]:
     return {
-        "persona_id": persona_id,
-        "source": location.source,
-        "file": location.file,
-        "round_index": location.round_index,
-        "text": location.text,
+        "persona_id": item.persona_id,
+        "source": item.location.source,
+        "file": item.location.file,
+        "round_index": item.location.round_index,
+        "text": item.location.text,
+        "prompted": item.prompted,
+        "question": item.question,
     }
 
 
-def _evidence_ref(persona_id: str, location: QuoteLocation) -> Dict[str, Any]:
-    ref: Dict[str, Any] = {"kind": "quote", "persona_id": persona_id, "round_index": location.round_index, "text": location.text}
-    if location.source == "discussion":
-        ref["file"] = location.file
+def _evidence_ref(item: _Located) -> Dict[str, Any]:
+    ref: Dict[str, Any] = {
+        "kind": "quote",
+        "persona_id": item.persona_id,
+        "round_index": item.location.round_index,
+        "text": item.location.text,
+        "prompted": item.prompted,
+    }
+    if item.location.source == "discussion":
+        ref["file"] = item.location.file
     return ref
 
 

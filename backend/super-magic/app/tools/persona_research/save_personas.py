@@ -11,6 +11,17 @@ tier 规则（SKILL.md）：来自上传的真人资料 → imported；否则至
 且 needs_pains 和 behavior 两项都引用了其中的证据 → evidence_based；其余 → generated。
 例：3 条网页证据，但 behavior 写的是 "inferred" → generated。
 
+盲写检查（methods.md「Personas Describe Situations, Not Verdicts」）：人设只写处境和行为，
+不写被测结论。工具用 study.json 假设里的 outcome_terms 检查「立场性」字段：
+| 检查的字段                                   | 不检查                     |
+| tagline、tags、expression、needs_pains、     | demographics、geography、  |
+| tech_adoption、decision_weights 的 factor    | behavior、story 等事实字段 |
+例：假设 H2 的 outcome_terms 含「用不完」，人设 tagline 写「认定月卡是赌你用不完」→ 拒绝保存。
+复用人设命中同样拒绝（它已经替本研究说出了结论，不应入选）。旧研究没有 outcome_terms，不做检查。
+
+社媒锚定：study.social_sampling 为 sampled 时，每位新人设至少引用 1 条 social 证据，
+让人设的处境来自真实用户原话，而不是研究者的想象。
+
 复用的人设只追加证据、补齐缺少的出处、追加 consistency_notes，不改身份和内容字段。
 imported 和 manual（用户手动填写）人设复用时保持原 tier。
 
@@ -47,6 +58,7 @@ from app.tools.persona_research.contracts import (
     Level,
     PersonaTier,
     PhaseStatus,
+    SocialSampling,
     StudyPhase,
     StudyType,
 )
@@ -129,11 +141,27 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             if unknown:
                 raise StudyFilesError(f"segments must be quota segments ({', '.join(sorted(quota))}); unknown: {', '.join(unknown)}")
 
+            outcome_terms = [] if building else [
+                (h.id, term) for h in study.hypotheses for term in h.outcome_terms
+            ]
+            needs_social = (
+                not building
+                and study.social_sampling is not None
+                and study.social_sampling.status == SocialSampling.SAMPLED
+            )
             created_in = workspace_relative(base, study_path)
             files: List[tuple[str, Dict[str, Any]]] = []
             summary: List[Dict[str, Any]] = []
             for item in params.personas:
                 persona, reused = await self._prepare(base, item, created_in)
+                _check_no_outcome(persona, outcome_terms, reused)
+                if needs_social and not reused and not any(
+                    e.get("type") == EvidenceType.SOCIAL for e in persona["evidence"]
+                ):
+                    raise StudyFilesError(
+                        f"{persona['name']} cites no social evidence; this study sampled social platforms, "
+                        "so anchor each new persona's situation in at least one real voice from desk-research.md"
+                    )
                 files.append((persona["id"], persona))
                 summary.append({
                     "persona_id": persona["id"],
@@ -347,6 +375,47 @@ def _check_evidence(
             unknown = [ref for ref in value if ref not in ids]
             if unknown:
                 raise StudyFilesError(f"{label}: field_sources.{key} cites unknown evidence {', '.join(unknown)}")
+
+
+def _stance_texts(persona: Dict[str, Any]) -> Dict[str, List[str]]:
+    """立场性字段的文本：写进这些地方的被测结论，会被受访者当作自己的观点复述。"""
+    dimensions = persona.get("dimensions") or {}
+    layers = persona.get("layers") or {}
+    cognition = layers.get("cognition") if isinstance(layers.get("cognition"), dict) else {}
+    weights = cognition.get("decision_weights") or []
+    raw = {
+        "tagline": [persona.get("tagline")],
+        "tags": persona.get("tags") or [],
+        "expression": layers.get("expression") or [],
+        "needs_pains": dimensions.get("needs_pains") or [],
+        "tech_adoption": dimensions.get("tech_adoption") or [],
+        "decision_weights": [w.get("factor") for w in weights if isinstance(w, dict)],
+    }
+    return {key: [str(v) for v in (value if isinstance(value, list) else [value]) if v] for key, value in raw.items()}
+
+
+def _check_no_outcome(persona: Dict[str, Any], outcome_terms: List[tuple[str, str]], reused: bool) -> None:
+    """人设立场性字段里出现被测结论的关键词时拒绝保存，并指出字段和假设。"""
+    if not outcome_terms:
+        return
+    hits = []
+    for field_name, texts in _stance_texts(persona).items():
+        lowered = [text.lower() for text in texts]
+        for hypothesis_id, term in outcome_terms:
+            if any(term.lower() in text for text in lowered):
+                hits.append(f"{field_name} contains {term!r} ({hypothesis_id})")
+    if not hits:
+        return
+    label = persona.get("name") or persona.get("id")
+    action = (
+        "do not select this reused persona for this study"
+        if reused
+        else "rewrite those fields as situation and behavior facts without the tested outcome"
+    )
+    raise StudyFilesError(
+        f"{label} already states the outcome being tested: {'; '.join(hits)}. "
+        f"Personas describe situations, not verdicts; {action}"
+    )
 
 
 def _check_decision_weights(label: str, layers: Dict[str, Any]) -> None:

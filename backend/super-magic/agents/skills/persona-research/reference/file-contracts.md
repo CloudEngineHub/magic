@@ -41,7 +41,8 @@ Path: `studies/<slug>/study.json`
 | `decision` | no | the business decision this study informs, one sentence |
 | `hypotheses` | no | array of hypothesis objects, see below |
 | `quota` | no | sample quota: array of `{ "segment", "criteria", "count" }`; `segment` is a short label reused in `panel.json` `selection[].segment` and `synthesis.json` `segments[].name`; `count` is an integer and all counts add up to `limits.personas` |
-| `guide_review` | no | interview-guide self-check: `{ "items": [{ "issue", "before", "after" }] }`; `issue` is `leading` \| `double_barreled` \| `hypothesis_reveal` \| `jargon`; `items` is `[]` when no question needed a change |
+| `guide_review` | no | interview-guide self-check: `{ "items": [{ "issue", "before", "after" }] }`; `issue` is `leading` \| `double_barreled` \| `hypothesis_reveal` \| `jargon` \| `sequence_priming`; `items` is `[]` when no question needed a change |
+| `social_sampling` | no | set at `desk_research_done`: `{ "status": "sampled" \| "unavailable" \| "not_relevant", "platforms": [<platform key>], "posts": <int>, "comments": <int>, "note" }` |
 | `validated_count` | no | number of real respondents compared so far (equals `respondent_count` in `validation-results.json`); omit before any real-person answers arrive |
 
 Hypothesis object:
@@ -52,6 +53,7 @@ Hypothesis object:
 | `statement` | yes | one falsifiable sentence |
 | `support_criteria` | yes | what answers or sources count as support |
 | `refute_criteria` | yes | what answers or sources count as refutation |
+| `outcome_terms` | no | short phrases naming the tested outcome; `save_personas` rejects personas whose stance fields contain them |
 | `verdict` | yes | `pending` \| `supported` \| `refuted` \| `mixed` \| `insufficient`; `pending` until the report phase applies the verdict rules in methods.md |
 | `verdict_reason` | no | one or two sentences explaining the verdict under the rules; `""` while pending |
 | `evidence_refs` | no | array of evidence references, see below |
@@ -60,7 +62,8 @@ Hypothesis object:
 Evidence reference, one of two kinds:
 
 - `{ "kind": "quote", "persona_id", "round_index", "text" }`: a persona's exact words. `round_index` is the 0-based index into the transcript's `rounds` array (each array item is one utterance, so it is not the question number) and must point to an item spoken by that persona. The transcript is `interviews/<persona_id>.json`; for a focus-group quote add `"file": "discussions/<discussion_id>.json"` (path relative to the study directory). `text` must appear verbatim in that item's `text`.
-- `{ "kind": "source", "ref": "S3" }`: a numbered source from `desk-research.md`.
+  `"prompted": true` marks a quote the persona gave only after the moderator's question named the idea.
+- `{ "kind": "source", "ref": "S3", "claim", "covers": "core" | "context" }`: a numbered source from `desk-research.md`, what it says about this hypothesis, and whether it states the hypothesis's core claim or only gives context. Older studies have only `ref`.
 
 Example (report written, real-person answers compared):
 
@@ -362,6 +365,7 @@ The structured analysis behind the report and the analysis board. Write it in th
 | `themes` | yes | array of theme objects, see below |
 | `dimensions` | no | array of `{ "id", "name", "level_by_segment", "quote_refs" }`: `id` is `D1`, `D2`, ...; `level_by_segment` maps segment id to `high` \| `medium` \| `low`; `quote_refs` as in themes |
 | `saturation` | yes | `{ "new_themes_per_interview": [<int>, ...], "saturated": true \| false }`, see methods.md |
+| `homogeneity` | no | `{ "unanimous_theme_ids": ["T1", ...], "warning": true \| false }`, see methods.md |
 
 Theme object:
 
@@ -371,7 +375,7 @@ Theme object:
 | `name` | yes | short theme name |
 | `description` | no | one or two sentences |
 | `stance_by_persona` | yes | maps every interviewed persona id to `support` \| `oppose` \| `mixed` \| `not_mentioned` |
-| `quote_refs` | no | array of `{ "persona_id", "source": "interview" \| "discussion", "file", "round_index", "text" }`; `file` is relative to the study directory (`interviews/<persona_id>.json` or `discussions/<discussion_id>.json`); `round_index` and `text` follow the evidence-reference rules in study.json |
+| `quote_refs` | no | array of `{ "persona_id", "source": "interview" \| "discussion", "file", "round_index", "text", "prompted", "question" }`; `question` is the moderator message the quote answered; `file` is relative to the study directory (`interviews/<persona_id>.json` or `discussions/<discussion_id>.json`); `round_index` and `text` follow the evidence-reference rules in study.json |
 | `source_refs` | no | desk-research source numbers, for example `["S3"]` |
 | `hypothesis_ids` | no | related hypotheses, for example `["H1"]` |
 | `confidence` | yes | `high` \| `medium` \| `low` \| `to_validate`, set by the confidence rules in methods.md |

@@ -7397,6 +7397,10 @@
         "zh_CN": "未饱和：每份访谈新增主题 {{series}}，建议扩大样本",
         "en_US": "Not saturated: new themes per interview {{series}}; a larger sample is recommended"
     },
+    "save_study_synthesis.detail_homogeneity": {
+        "zh_CN": "同质化提醒：{{count}} 个主题 AI 受访者全员一致，更可能是模型的「平均答案」，不能当作强证据",
+        "en_US": "Homogeneity warning: {{count}} themes drew unanimous AI agreement, which more likely reflects the model's average answer than strong evidence"
+    },
     "save_study_synthesis.detail_adjusted": {
         "zh_CN": "按规则调整的结论",
         "en_US": "Conclusions adjusted by rule"

@@ -9,12 +9,18 @@
 | created               | （新建）                | phase=clarify；clarify=running，其余 pending          |
 | clarified             | clarify                 | phase=plan；clarify=done，plan=running                |
 | plan_confirmed        | clarify、plan           | phase=desk_research；写入方案字段，假设全部 pending   |
-| desk_research_done    | desk_research           | phase=interview                                       |
+| desk_research_done    | desk_research           | phase=interview；必须带 social_sampling（见下）        |
 | desk_research_skipped | desk_research           | phase=interview；desk_research=skipped                |
 | interviews_finished   | interview、report       | phase=report；没有一份访谈完成时 interview=failed     |
 | report_written        | report、validation、done | 首次进入 validation；之后重写报告不改变阶段           |
 | questionnaire_written | validation、done        | phase=done                                            |
 | validation_compared   | done                    | 写入真人验证结果和 validated_count                    |
+
+social_sampling 让「有没有直接采样社媒」成为必报项，而不是可选建议（此前 6 项研究只有 1 项用过平台技能）：
+| status        | 必填                    | 例                                             |
+| sampled       | platforms、posts ≥ 1    | xiaohongshu + douyin，24 帖、180 条评论        |
+| unavailable   | note                    | 部署里没有平台技能；或 402 余额不足            |
+| not_relevant  | note                    | 研究对象是企业内部审批流程，社媒没有公开讨论   |
 
 「只构建人设」：created 带 study_type=persona_build，limits.personas 记为 6。之后只调用
 save_personas，由它把研究直接收尾为 done；其它事件一律拒绝，避免误入计划或访谈流程。
@@ -40,8 +46,8 @@ from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.persona_research.contracts import (
     DEFAULT_INTERVIEW_ROUNDS,
-    MAX_INTERVIEW_ROUNDS,
     MAX_BUILD_PERSONAS,
+    MAX_INTERVIEW_ROUNDS,
     MAX_PERSONAS,
     PHASE_ORDER,
     SCHEMA_VERSION,
@@ -52,6 +58,8 @@ from app.tools.persona_research.contracts import (
     HypothesisValidation,
     PhaseStatus,
     QuotaItem,
+    SocialSampling,
+    SocialSamplingRecord,
     Study,
     StudyLimits,
     StudyPhase,
@@ -102,6 +110,11 @@ class HypothesisDraft(BaseModel):
     statement: str = Field(..., min_length=1)
     support_criteria: str = Field(..., min_length=1)
     refute_criteria: str = Field(..., min_length=1)
+    outcome_terms: List[str] = Field(
+        ...,
+        min_length=1,
+        description="2-6 short phrases naming the tested outcome; personas must not contain them.",
+    )
 
 
 class GuideReviewItem(BaseModel):
@@ -132,6 +145,9 @@ class UpdateStudyParams(BaseToolParams):
     quota: List[QuotaItem] = Field(default_factory=list, description="plan_confirmed: sample quota.")
     interview_rounds: int = Field(default=DEFAULT_INTERVIEW_ROUNDS, description="plan_confirmed: rounds per persona.")
     guide_review: List[GuideReviewItem] = Field(default_factory=list, description="plan_confirmed: rewritten questions.")
+    social_sampling: Optional[SocialSamplingRecord] = Field(
+        default=None, description="desk_research_done: whether social platforms were sampled directly."
+    )
     validated_count: int = Field(default=0, description="validation_compared: real respondents compared.")
     validations: List[HypothesisValidationInput] = Field(
         default_factory=list, description="validation_compared: real-person result per hypothesis."
@@ -216,6 +232,7 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
         elif event == StudyEvent.DESK_RESEARCH_DONE:
             if not await async_exists(study_path / "desk-research.md"):
                 raise StudyFilesError("desk-research.md has not been written yet")
+            study.social_sampling = _social_sampling(params.social_sampling)
             _advance(study, StudyPhase.INTERVIEW)
         elif event == StudyEvent.DESK_RESEARCH_SKIPPED:
             _advance(study, StudyPhase.INTERVIEW, current_status=PhaseStatus.SKIPPED)
@@ -304,9 +321,36 @@ def _confirm_plan(study: Study, params: UpdateStudyParams) -> None:
     study.outputs = {"plan": "plan.md", "report": "report.html", "validation": "validation-questionnaire.md"}
     study.quota = params.quota
     study.hypotheses = [
-        Hypothesis(id=f"H{index}", **draft.model_dump()) for index, draft in enumerate(params.hypotheses, start=1)
+        Hypothesis(id=f"H{index}", **{**draft.model_dump(), "outcome_terms": _outcome_terms(draft)})
+        for index, draft in enumerate(params.hypotheses, start=1)
     ]
     study.guide_review = {"items": [item.model_dump(mode="json") for item in params.guide_review]}
+
+
+def _outcome_terms(draft: HypothesisDraft) -> List[str]:
+    """去空、去重；单字词（如「价」）几乎会命中所有人设，拒绝而不是静默丢弃，让模型换成具体说法。"""
+    terms = list(dict.fromkeys(term.strip() for term in draft.outcome_terms if term.strip()))
+    short = [term for term in terms if len(term) < 2]
+    if short or not terms:
+        raise StudyFilesError(
+            f"outcome_terms for {draft.statement[:40]!r} need at least one phrase of 2+ characters"
+            + (f"; too short: {', '.join(short)}" if short else "")
+        )
+    return terms
+
+
+def _social_sampling(record: Optional[SocialSamplingRecord]) -> SocialSamplingRecord:
+    if record is None:
+        raise StudyFilesError(
+            "desk_research_done needs social_sampling: status sampled (platforms, posts), "
+            "unavailable (note: why), or not_relevant (note: why)"
+        )
+    status = SocialSampling(record.status)
+    if status == SocialSampling.SAMPLED and (not record.platforms or record.posts < 1):
+        raise StudyFilesError("social_sampling status sampled needs platforms and at least 1 post")
+    if status != SocialSampling.SAMPLED and not record.note.strip():
+        raise StudyFilesError(f"social_sampling status {status.value} needs a note explaining why")
+    return record
 
 
 def _record_validation(study: Study, params: UpdateStudyParams) -> None:

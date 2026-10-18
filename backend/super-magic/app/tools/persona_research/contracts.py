@@ -110,6 +110,9 @@ class GuideIssue(StrEnum):
     DOUBLE_BARRELED = "double_barreled"
     HYPOTHESIS_REVEAL = "hypothesis_reveal"
     JARGON = "jargon"
+    # 单句没问题，但前一题的措辞把后一题引向某个答案。
+    # 例：先问「最想弄清楚什么」，紧接着问「哪条规则会让你觉得亏」，受访者自然都先谈规则。
+    SEQUENCE_PRIMING = "sequence_priming"
 
 
 class PersonaTier(StrEnum):
@@ -118,6 +121,16 @@ class PersonaTier(StrEnum):
     IMPORTED = "imported"
     # 用户在人设库手动填写；Agent 复用时不重算、不改写 tier。
     MANUAL = "manual"
+
+
+class SocialSampling(StrEnum):
+    """桌面研究阶段是否从社媒平台直接采样（methods.md「Real Voices」）。"""
+
+    SAMPLED = "sampled"
+    # 部署里没有平台数据技能，或调用失败（余额、权限、限流）。
+    UNAVAILABLE = "unavailable"
+    # 研究对象在社媒上没有可用的公开讨论，例如企业内部流程。
+    NOT_RELEVANT = "not_relevant"
 
 
 class EvidenceType(StrEnum):
@@ -174,6 +187,14 @@ class StudyLimits(_Lenient):
     interview_rounds: int = Field(..., ge=1, le=MAX_INTERVIEW_ROUNDS)
 
 
+class SocialSamplingRecord(_Lenient):
+    status: SocialSampling
+    platforms: List[str] = Field(default_factory=list)
+    posts: int = Field(default=0, ge=0)
+    comments: int = Field(default=0, ge=0)
+    note: str = ""
+
+
 class HypothesisValidation(_Lenient):
     verdict: Agreement
     summary: str = ""
@@ -184,6 +205,8 @@ class Hypothesis(_Lenient):
     statement: str = Field(..., min_length=1)
     support_criteria: str = Field(..., min_length=1)
     refute_criteria: str = Field(..., min_length=1)
+    # 被测结果的关键词，save_personas 用它拦截「人设里预先写好结论」。旧研究没有这个字段，不做拦截。
+    outcome_terms: List[str] = Field(default_factory=list)
     verdict: Verdict = Verdict.PENDING
     verdict_reason: str = ""
     evidence_refs: List[Dict[str, Any]] = Field(default_factory=list)
@@ -207,6 +230,7 @@ class Study(_Lenient):
     hypotheses: List[Hypothesis] = Field(default_factory=list)
     quota: List[QuotaItem] = Field(default_factory=list)
     guide_review: Optional[Dict[str, Any]] = None
+    social_sampling: Optional[SocialSamplingRecord] = None
     validated_count: Optional[int] = None
 
     @field_validator("topic_id", mode="before")

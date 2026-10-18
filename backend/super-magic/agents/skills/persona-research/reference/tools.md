@@ -19,8 +19,8 @@ Creates the study and moves `study.json` through its phases. You report what hap
 |---|---|---|
 | `created` | After the pre-search, before clarifying questions; for a persona-building request, before reading the materials | `title`, `question` (the user's words, verbatim), `slug_hint` (short ASCII kebab-case topic summary; use pinyin or English for non-Latin topics), `study_type: "persona_build"` only for a persona-building request |
 | `clarified` | Clarification answered, or nothing needed clarifying | — |
-| `plan_confirmed` | The user chose the start option in `ask_user` | `study_type`, `framework`, `decision`, `hypotheses` (`[{statement, support_criteria, refute_criteria}]` in plan order; ids `H1`, `H2`, ... are assigned), `quota` (`[{segment, criteria, count}]`; counts add up to the persona count, at most 12), `interview_rounds` (default 5, at most 7), `guide_review` (`[{issue, before, after}]`, `issue` is `leading`, `double_barreled`, `hypothesis_reveal`, or `jargon`; `[]` when nothing changed) |
-| `desk_research_done` | `desk-research.md` is written | — |
+| `plan_confirmed` | The user chose the start option in `ask_user` | `study_type`, `framework`, `decision`, `hypotheses` (`[{statement, support_criteria, refute_criteria, outcome_terms}]` in plan order; ids `H1`, `H2`, ... are assigned; `outcome_terms` are 2-6 short phrases a persona would use to state the tested outcome, for example `["用不完", "规则"]`, each at least 2 characters), `quota` (`[{segment, criteria, count}]`; counts add up to the persona count, at most 12), `interview_rounds` (default 5, at most 7), `guide_review` (`[{issue, before, after}]`, `issue` is `leading`, `double_barreled`, `hypothesis_reveal`, `jargon`, or `sequence_priming`; `[]` when nothing changed) |
+| `desk_research_done` | `desk-research.md` is written | `social_sampling`: `{status: "sampled", platforms, posts, comments}`, or `{status: "unavailable" or "not_relevant", note}` with the reason |
 | `desk_research_skipped` | A `panel_only` study skips desk research | — |
 | `interviews_finished` | `check_interviews` shows no unfinished transcript | — (the tool marks the interview phase failed when no interview succeeded) |
 | `report_written` | `synthesis.json` and `report.html` are written | — |
@@ -48,6 +48,7 @@ In a `persona_build` study, call it only after the user approved the drafts; at 
 
 - New persona: leave `id` empty and give `id_hint` (short ASCII, for example `zhangwei`), `name`, `tagline`, `tags`, all 7 `dimensions`, all 4 `layers`, `evidence` (`[{id: "e1", type, platform, title, url, file, quote}]`; `platform` only for `social`), `field_sources` for all 7 dimensions (evidence ids or `"inferred"`), and `consistency_notes`. The tool creates the id, fills `schema_version`, `created_in`, and `updated_at`, and computes `tier` by rule.
 - Reused persona: give its `id`. Identity and content fields stay unchanged; you may add new `evidence` (new ids), missing `field_sources`, and `consistency_notes`. `imported` and `manual` personas keep their tier.
+- The tool rejects a persona, new or reused, whose `tagline`, `tags`, `expression`, `needs_pains`, `tech_adoption`, or `decision_weights` factors contain a hypothesis's `outcome_terms`; rewrite those fields as situation and behavior facts, or do not select the reused persona. When `social_sampling` is `sampled`, every new persona needs at least one `social` evidence item.
 - Every persona also needs `segment` (a quota segment) and `reason`. Set `from_uploaded_people: true` only for personas built from uploaded materials about real people.
 - `panel_name` and `criteria` describe the group. Set `library_panel_name` only when the user asked to save the group to the library.
 
@@ -91,11 +92,11 @@ print(tool.call("check_interviews", {"study_dir": study_dir}).content)
 Writes `synthesis.json` and the hypothesis verdicts in `study.json` together. Call it in the `report` phase after reading the completed transcripts. Give only judgments and exact words:
 
 - `segments`: `[{name, persona_ids}]`, names equal to quota segments. Ids are assigned.
-- `themes`: `[{name, description, stance_by_persona, quotes, source_refs, hypothesis_ids, confidence, confidence_reason}]`. `quotes` are `[{persona_id, text}]` with the persona's exact words; the tool finds the transcript file and `round_index`. Personas you leave out of `stance_by_persona` become `not_mentioned`.
+- `themes`: `[{name, description, stance_by_persona, quotes, source_refs, hypothesis_ids, confidence, confidence_reason, about_willingness_to_pay}]`. `quotes` are `[{persona_id, text, prompted}]` with the persona's exact words; set `prompted: true` when the moderator's question already named the idea. The tool finds the transcript file, `round_index`, and the question it answered. Personas you leave out of `stance_by_persona` become `not_mentioned`. Set `about_willingness_to_pay: true` for themes about price acceptance.
 - `dimensions` (optional): `[{name, level_by_segment, quotes}]`, `level_by_segment` keyed by segment name.
-- `hypotheses`: `[{id, verdict, verdict_reason, quotes, source_refs}]` for every examined hypothesis.
+- `hypotheses`: `[{id, verdict, verdict_reason, quotes, sources}]` for every examined hypothesis. `sources` are `[{ref, claim, covers}]`: the source id, one sentence on what it says about this hypothesis, and `covers: "core"` only when it states the hypothesis's core claim itself, otherwise `"context"`.
 
-The tool drops quotes that are not that persona's exact words and source refs that are not in `desk-research.md`, lowers confidence and verdicts that break the rules in methods.md (and says why in the reason fields), and computes saturation. Read `result.content`: report the removed quote count and any adjustments in the report, and use the adjusted verdicts and confidence.
+The tool drops quotes that are not that persona's exact words and source refs that are not in `desk-research.md`, lowers confidence and verdicts that break the rules in methods.md (and says why in the reason fields), and computes saturation and homogeneity. Read `result.content`: report the removed quote count and any adjustments in the report, and use the adjusted verdicts and confidence.
 
 ```python
 result = tool.call("save_study_synthesis", {
@@ -104,13 +105,14 @@ result = tool.call("save_study_synthesis", {
     "themes": [{
         "name": "<theme in the user's words>",
         "stance_by_persona": {"p_zhangwei_7f3a": "support", "p_liumin_0b9e": "oppose"},
-        "quotes": [{"persona_id": "p_zhangwei_7f3a", "text": "<exact words>"}],
+        "quotes": [{"persona_id": "p_zhangwei_7f3a", "text": "<exact words>", "prompted": False}],
         "source_refs": ["S3"], "hypothesis_ids": ["H1"],
         "confidence": "medium", "confidence_reason": "<rule that applied>",
     }],
     "hypotheses": [{
         "id": "H1", "verdict": "supported", "verdict_reason": "<one or two sentences>",
-        "quotes": [{"persona_id": "p_zhangwei_7f3a", "text": "<exact words>"}], "source_refs": ["S3"],
+        "quotes": [{"persona_id": "p_zhangwei_7f3a", "text": "<exact words>"}],
+        "sources": [{"ref": "S3", "claim": "<what S3 says about H1>", "covers": "core"}],
     }],
 })
 print(result.content)

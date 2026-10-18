@@ -374,3 +374,28 @@ async def test_interruption_raises_cancelled_error(tool, tmp_path, fake_llm, mon
         await asyncio.wait_for(pending, 1)
     await asyncio.sleep(0)
     assert keepalive.cancelled()
+
+
+@pytest.mark.parametrize("question", [
+    "你最想先弄清楚什么？哪条规则会让你觉得亏？",
+    "第一，你多久买一次；第二，花多少钱",
+    "What do you buy first, and second what do you skip",
+])
+async def test_several_questions_in_one_round_are_rejected_without_model_call(tool, tmp_path, fake_llm, question):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+
+    result = await tool.execute(ToolContext(), PersonaChatParams(persona_paths=[path], question=question))
+
+    assert result.ok is False and "more than one thing" in result.content
+    assert fake_llm.calls == []
+
+
+async def test_one_question_with_a_restatement_is_allowed(tool, tmp_path, fake_llm):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+
+    result = await tool.execute(ToolContext(), PersonaChatParams(
+        persona_paths=[path], question="你说上次觉得有风险。具体是哪种风险？",
+    ))
+
+    assert result.ok is True
+

@@ -15,6 +15,10 @@ ok 只在所有人设都成功回答时为 True。
 | 不传            | 只回答，不写文件（主 Agent 试探、一次性提问）                          |
 | 传入            | 读取记录作为上下文，并把本轮主持人问题和成功的回答追加到记录里         |
 
+一轮只问一件事：问题里有 2 个及以上问号，或「第一……第二……」式枚举，直接拒绝，不调用模型、
+不计轮次。真实研究里提纲 8 题塞进 5 轮，40 轮里有 37 轮一次问三五件事，受访者只能逐条
+简答，没有追问空间。例：「你最想弄清楚什么？哪条规则会让你觉得亏？」→ 拒绝，应拆成两轮。
+
 记录由工具追加而不是由模型手写：模型手写时曾把 role 写成 speaker、自编 round_index、
 整文件重写时写坏 JSON，引文的 round_index 也因此对不上。round_number 用来防止重复写入：
 例：记录里已有 3 轮，再传 round_number=3 会被拒绝（多半是重试），应传 4。
@@ -23,6 +27,7 @@ ok 只在所有人设都成功回答时为 True。
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -48,7 +53,6 @@ from app.i18n import i18n
 from app.tools.core import BaseToolParams, tool
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.tools.media_utils.constants import DISABLE_THINKING_BODY
-from app.tools.workspace_tool import WorkspaceTool
 from app.tools.persona_research.contracts import (
     DISCUSSIONS_DIR,
     INTERVIEWS_DIR,
@@ -64,6 +68,7 @@ from app.tools.persona_research.study_files import (
     transcript_lock,
     write_json_file,
 )
+from app.tools.workspace_tool import WorkspaceTool
 from app.utils.async_file_utils import async_read_json, async_realpath
 
 logger = get_logger(__name__)
@@ -102,8 +107,8 @@ Workspace paths of 1-6 persona JSON files (for example personas/p_xxx_1a2b.json)
     question: str = Field(
         ...,
         min_length=1,
-        description="""<!--zh: 主持人这一轮要说的话（问题或追问）-->
-What the moderator says in this round: the question or follow-up probe.""",
+        description="""<!--zh: 主持人这一轮要说的话：只问一个开放式问题或一个追问。多个问号或「第一…第二…」枚举会被拒绝-->
+What the moderator says in this round: exactly one open question or follow-up probe. A message with several question marks or a numbered list of questions is rejected.""",
     )
     transcript_path: str = Field(
         default="",
@@ -182,6 +187,13 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
     """
 
     async def execute(self, tool_context: ToolContext, params: PersonaChatParams) -> ToolResult:
+        if _asks_several_things(params.question):
+            return ToolResult.error(
+                "Nothing was asked or recorded: the moderator message asks more than one thing (several question "
+                "marks or a numbered list). Ask one open question per round and keep the rest for later rounds; "
+                "when you restate the participant's words, end that part with a period, not a question mark.",
+                extra_info={"user_error_reason": INVALID_REQUEST_REASON},
+            )
         try:
             persona_files = [await self._resolve_workspace_path(path) for path in params.persona_paths]
             transcript_file = (
@@ -574,6 +586,20 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         )
 
 
+# ── 提问检查 ───────────────────────────────────────────────────────────────
+
+_QUESTION_MARKS = re.compile(r"[?？]")
+# 「第一……第二」「首先……其次」「first… second」这类枚举，一轮里塞了多个问题。
+_ENUMERATIONS = (("第一", "第二"), ("首先", "其次"), ("first", "second"))
+
+
+def _asks_several_things(question: str) -> bool:
+    if len(_QUESTION_MARKS.findall(question)) >= 2:
+        return True
+    lowered = question.lower()
+    return any(a in lowered and b in lowered for a, b in _ENUMERATIONS)
+
+
 # ── prompt 构建 ────────────────────────────────────────────────────────────
 
 
@@ -585,6 +611,7 @@ You are taking part in a qualitative consumer research {session_kind} as the per
 
 How to answer:
 - Speak in the first person the way this person really talks: their vocabulary, tone, attitudes, habits, and life circumstances. Do not sound like an assistant, a consultant, or a marketer.
+- The profile's "expression" lines only show how this person talks. Do not repeat them or treat them as your answer; answer the actual question from your situation and past behavior.
 - Base the answer on the profile and on common sense about people like this. When the profile does not cover something, answer in a way that stays consistent with the persona and put "(inferred)" right after each made-up detail.
 - Be true to the persona rather than agreeable: disagree, hesitate, admit you do not know, or say something does not fit you when that is what this person would do.
 - Start from a cautious baseline toward new products and services: like most real people, you are skeptical by default. Not buying, not switching, or not caring is a normal answer. Do not praise an idea to be polite.
