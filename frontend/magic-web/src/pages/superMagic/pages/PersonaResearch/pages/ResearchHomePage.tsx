@@ -304,45 +304,59 @@ function ResearchHomePage() {
 								description,
 								prompt,
 								options: preset,
+								image,
 							}) => (
 								<button
 									key={id}
 									type="button"
 									className={cn(
-										"group flex flex-col gap-1.5 rounded-xl bg-card p-[18px] text-left outline-none ring-1 ring-border",
+										"group flex flex-col overflow-hidden rounded-xl bg-card text-left outline-none ring-1 ring-border",
 										"transition-all duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgb(0_0_0/0.3)] active:scale-[0.98]",
 										"focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
 									)}
 									onClick={() => applyStarter(prompt, preset)}
 								>
-									<span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-										{kicker}
+									{/* Scene photo: what the study is about. It fades into the card so the text below
+									    stays the focus; a slow zoom on hover is the only motion. */}
+									<span className="relative block h-28 overflow-hidden bg-muted">
+										<img
+											src={image}
+											alt=""
+											loading="lazy"
+											className="size-full object-cover saturate-[0.88] transition-transform duration-700 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] motion-reduce:transition-none"
+										/>
+										<span className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
 									</span>
-									<span className="text-[15px] font-bold text-foreground">
-										{title}
-									</span>
-									<span className="line-clamp-2 text-[13px] leading-6 text-muted-foreground">
-										{description}
-									</span>
-									<span className="mt-2 flex items-center gap-1 border-t border-dashed border-border pt-3 text-xs text-muted-foreground">
-										<span className="truncate">
-											{[
-												preset?.panelSize && preset.panelSize !== "auto"
-													? t("options.panelValue", {
-															count: preset.panelSize,
-														})
-													: null,
-												preset?.rounds && preset.rounds !== "auto"
-													? t("options.roundsValue", {
-															count: preset.rounds,
-														})
-													: null,
-												method,
-											]
-												.filter(Boolean)
-												.join(" · ")}
+									<span className="flex flex-1 flex-col gap-1.5 px-[18px] pb-[18px] pt-2">
+										<span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+											{kicker}
 										</span>
-										<ArrowRight className="ml-auto size-3.5 shrink-0 opacity-0 transition-[opacity,transform] group-hover:translate-x-0.5 group-hover:opacity-100" />
+										<span className="text-[15px] font-bold text-foreground">
+											{title}
+										</span>
+										<span className="line-clamp-2 text-[13px] leading-6 text-muted-foreground">
+											{description}
+										</span>
+										<span className="mt-auto flex items-center gap-1 border-t border-dashed border-border pt-3 text-xs text-muted-foreground">
+											<span className="truncate">
+												{[
+													preset?.panelSize && preset.panelSize !== "auto"
+														? t("options.panelValue", {
+																count: preset.panelSize,
+															})
+														: null,
+													preset?.rounds && preset.rounds !== "auto"
+														? t("options.roundsValue", {
+																count: preset.rounds,
+															})
+														: null,
+													method,
+												]
+													.filter(Boolean)
+													.join(" · ")}
+											</span>
+											<ArrowRight className="ml-auto size-3.5 shrink-0 opacity-0 transition-[opacity,transform] group-hover:translate-x-0.5 group-hover:opacity-100" />
+										</span>
 									</span>
 								</button>
 							),

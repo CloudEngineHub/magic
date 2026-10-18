@@ -1,5 +1,11 @@
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
+import churnImage from "@/assets/resources/persona-research/template-churn.webp"
+import competitorImage from "@/assets/resources/persona-research/template-competitor.webp"
+import conceptImage from "@/assets/resources/persona-research/template-concept-test.webp"
+import importImage from "@/assets/resources/persona-research/template-import.webp"
+import pricingImage from "@/assets/resources/persona-research/template-pricing.webp"
+import segmentImage from "@/assets/resources/persona-research/template-segment.webp"
 import type { ResearchOptions } from "../services/researchOptions"
 
 export interface ResearchTemplate {
@@ -9,6 +15,8 @@ export interface ResearchTemplate {
 	title: string
 	description: string
 	prompt: string
+	/** Scene photo (Unsplash License) shown as the card header: what the study is about, not who answers. */
+	image: string
 	/** Method shown in the card footer; method names are not translated. */
 	method: string
 	/** Study settings applied with the prompt; undefined leaves the current settings alone. */
@@ -26,6 +34,7 @@ export function useResearchTemplates() {
 		() => [
 			{
 				id: "churn",
+				image: churnImage,
 				kicker: "CHURN",
 				method: "JTBD",
 				title: t("template.churn.title"),
@@ -35,6 +44,7 @@ export function useResearchTemplates() {
 			},
 			{
 				id: "concept-test",
+				image: conceptImage,
 				kicker: "CONCEPT",
 				method: "KANO",
 				title: t("template.conceptTest.title"),
@@ -44,6 +54,7 @@ export function useResearchTemplates() {
 			},
 			{
 				id: "pricing",
+				image: pricingImage,
 				kicker: "PRICING",
 				method: "Van Westendorp",
 				title: t("template.pricing.title"),
@@ -53,6 +64,7 @@ export function useResearchTemplates() {
 			},
 			{
 				id: "segment",
+				image: segmentImage,
 				kicker: "SEGMENT",
 				method: "JTBD",
 				title: t("template.segment.title"),
@@ -62,6 +74,7 @@ export function useResearchTemplates() {
 			},
 			{
 				id: "competitor",
+				image: competitorImage,
 				kicker: "COMPETE",
 				method: "JTBD",
 				title: t("template.competitor.title"),
@@ -71,6 +84,7 @@ export function useResearchTemplates() {
 			},
 			{
 				id: "import",
+				image: importImage,
 				kicker: "UPLOAD",
 				method: t("template.import.kicker"),
 				title: t("template.import.title"),
