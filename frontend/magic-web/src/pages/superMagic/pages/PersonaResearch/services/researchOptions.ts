@@ -11,10 +11,22 @@ export const RESEARCH_METHODS = [
 export const PANEL_SIZES = ["auto", 4, 6, 8, 10, 12] as const
 export const ROUND_COUNTS = ["auto", 3, 5, 7] as const
 
+/** Bounds for typed-in values; the agent caps a panel at 12 people and interviews at 7 rounds. */
+export const PANEL_SIZE_RANGE = { min: 1, max: 12 } as const
+export const ROUND_COUNT_RANGE = { min: 1, max: 7 } as const
+/** A custom method is one short sentence, e.g. "price sensitivity, Van Westendorp". */
+export const CUSTOM_METHOD_MAX_LENGTH = 60
+
+export type ResearchMethod = (typeof RESEARCH_METHODS)[number] | "custom"
+
 export interface ResearchOptions {
-	method: (typeof RESEARCH_METHODS)[number]
-	panelSize: (typeof PANEL_SIZES)[number]
-	rounds: (typeof ROUND_COUNTS)[number]
+	/** A preset study type, or "custom" with the user's own description in `customMethod`. */
+	method: ResearchMethod
+	customMethod?: string
+	/** "auto" or any whole number in PANEL_SIZE_RANGE, not only the presets. */
+	panelSize: "auto" | number
+	/** "auto" or any whole number in ROUND_COUNT_RANGE. */
+	rounds: "auto" | number
 }
 
 export const DEFAULT_RESEARCH_OPTIONS: ResearchOptions = {
@@ -32,6 +44,7 @@ export const RESEARCH_SETTINGS_PREFIX = "【研究设置】"
 /**
  * One line appended to the first message, e.g.
  * "【研究设置】访谈人数: 8 · 访谈轮数: 5 · 研究方式: concept_test · 报告模板: templates/brand.html".
+ * A custom method is sent as "研究方式: 自定义：<description>".
  * Items left on "auto" (or the default report template, null) are omitted; with nothing fixed
  * there is no line. Labels stay in Chinese whatever the UI language, because the skill matches
  * them literally.
@@ -43,7 +56,11 @@ export function researchSettingsLine(
 	const items = [
 		options.panelSize === "auto" ? null : `访谈人数: ${options.panelSize}`,
 		options.rounds === "auto" ? null : `访谈轮数: ${options.rounds}`,
-		options.method === "auto" ? null : `研究方式: ${options.method}`,
+		options.method === "auto"
+			? null
+			: options.method === "custom"
+				? `研究方式: 自定义：${options.customMethod}`
+				: `研究方式: ${options.method}`,
 		reportTemplatePath ? `报告模板: ${reportTemplatePath}` : null,
 	].filter(Boolean)
 	return items.length ? `${RESEARCH_SETTINGS_PREFIX}${items.join(" · ")}` : null
@@ -56,15 +73,40 @@ export function appendParagraph(value: JSONContent | undefined, text: string): J
 	return { ...value, content: [...(value.content ?? []), paragraph] }
 }
 
-/** Restores saved settings, dropping values that are no longer offered. */
+/** A whole number within the range, else null; used for typed-in and saved values. */
+export function parseWholeNumber(
+	candidate: unknown,
+	range: { min: number; max: number },
+): number | null {
+	const value = typeof candidate === "string" ? Number(candidate.trim()) : candidate
+	if (typeof value !== "number" || !Number.isInteger(value)) return null
+	return value >= range.min && value <= range.max ? value : null
+}
+
+/** A custom method description trimmed and capped, else null when blank. */
+export function normalizeCustomMethod(candidate: unknown): string | null {
+	if (typeof candidate !== "string") return null
+	const text = candidate.replace(/\s+/g, " ").trim().slice(0, CUSTOM_METHOD_MAX_LENGTH)
+	return text || null
+}
+
+/** Restores saved settings, dropping values that are no longer allowed. */
 export function parseResearchOptions(raw: unknown): ResearchOptions {
 	const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
-	const pickFrom = <T>(list: readonly T[], candidate: unknown, fallback: T): T =>
-		list.includes(candidate as T) ? (candidate as T) : fallback
+	const customMethod = normalizeCustomMethod(value.customMethod)
+	const method: ResearchMethod =
+		value.method === "custom"
+			? customMethod
+				? "custom"
+				: "auto"
+			: RESEARCH_METHODS.includes(value.method as (typeof RESEARCH_METHODS)[number])
+				? (value.method as ResearchMethod)
+				: "auto"
 	return {
-		method: pickFrom(RESEARCH_METHODS, value.method, "auto"),
-		panelSize: pickFrom(PANEL_SIZES, value.panelSize, "auto"),
-		rounds: pickFrom(ROUND_COUNTS, value.rounds, "auto"),
+		method,
+		...(method === "custom" && customMethod ? { customMethod } : {}),
+		panelSize: parseWholeNumber(value.panelSize, PANEL_SIZE_RANGE) ?? "auto",
+		rounds: parseWholeNumber(value.rounds, ROUND_COUNT_RANGE) ?? "auto",
 	}
 }
 

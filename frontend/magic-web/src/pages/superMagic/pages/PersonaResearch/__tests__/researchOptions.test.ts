@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
 	appendParagraph,
+	normalizeCustomMethod,
 	parseResearchOptions,
+	parseWholeNumber,
 	researchSettingsLine,
 } from "../services/researchOptions"
 
@@ -13,6 +15,17 @@ describe("researchSettingsLine", () => {
 		expect(researchSettingsLine({ method: "auto", panelSize: 6, rounds: "auto" })).toBe(
 			"【研究设置】访谈人数: 6",
 		)
+	})
+
+	it("sends a custom method with its description", () => {
+		expect(
+			researchSettingsLine({
+				method: "custom",
+				customMethod: "价格敏感度测试，用 Van Westendorp",
+				panelSize: 9,
+				rounds: "auto",
+			}),
+		).toBe("【研究设置】访谈人数: 9 · 研究方式: 自定义：价格敏感度测试，用 Van Westendorp")
 	})
 
 	it("returns null when nothing is fixed", () => {
@@ -57,16 +70,55 @@ describe("appendParagraph", () => {
 })
 
 describe("parseResearchOptions", () => {
-	it("keeps offered values and resets the rest to auto", () => {
+	it("keeps values in range and resets the rest to auto", () => {
 		expect(parseResearchOptions({ method: "concept_test", panelSize: 9, rounds: 5 })).toEqual({
 			method: "concept_test",
-			panelSize: "auto",
+			panelSize: 9,
 			rounds: 5,
+		})
+		expect(parseResearchOptions({ method: "nope", panelSize: 13, rounds: 8 })).toEqual({
+			method: "auto",
+			panelSize: "auto",
+			rounds: "auto",
 		})
 		expect(parseResearchOptions(null)).toEqual({
 			method: "auto",
 			panelSize: "auto",
 			rounds: "auto",
 		})
+	})
+
+	it("keeps a custom method only with a description", () => {
+		expect(
+			parseResearchOptions({ method: "custom", customMethod: "  卡片分类  ", rounds: 2 }),
+		).toEqual({ method: "custom", customMethod: "卡片分类", panelSize: "auto", rounds: 2 })
+		expect(parseResearchOptions({ method: "custom", customMethod: " " }).method).toBe("auto")
+		expect(
+			parseResearchOptions({ method: "concept_test", customMethod: "x" }),
+		).not.toHaveProperty("customMethod")
+	})
+})
+
+describe("parseWholeNumber", () => {
+	const range = { min: 1, max: 7 }
+
+	it("accepts whole numbers in range, typed or stored", () => {
+		expect(parseWholeNumber("3", range)).toBe(3)
+		expect(parseWholeNumber(7, range)).toBe(7)
+	})
+
+	it("rejects decimals, blanks and values out of range", () => {
+		expect(parseWholeNumber("2.5", range)).toBeNull()
+		expect(parseWholeNumber("", range)).toBeNull()
+		expect(parseWholeNumber(0, range)).toBeNull()
+		expect(parseWholeNumber(8, range)).toBeNull()
+	})
+})
+
+describe("normalizeCustomMethod", () => {
+	it("collapses spaces, caps the length and drops blanks", () => {
+		expect(normalizeCustomMethod(" a \n b ")).toBe("a b")
+		expect(normalizeCustomMethod("x".repeat(80))).toHaveLength(60)
+		expect(normalizeCustomMethod("   ")).toBeNull()
 	})
 })
