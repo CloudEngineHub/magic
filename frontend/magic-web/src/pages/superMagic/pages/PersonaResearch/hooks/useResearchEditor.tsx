@@ -22,6 +22,7 @@ import {
 } from "@/pages/superMagic/pages/Workspace/types"
 import { userStore } from "@/models/user"
 import { usePersonaResearchStore } from "../context"
+import { appendParagraph } from "../services/researchOptions"
 import { withResearchTopicFields } from "../store/research-store"
 import { useResearchMentionCatalog } from "./useResearchMentionCatalog"
 
@@ -38,6 +39,11 @@ interface UseResearchEditorOptions {
 	onStudyStarted?: (topic: Topic) => void
 	/** Called when the editor subscriptions and draft restoration are complete. */
 	onEditorReady?: () => void
+	/**
+	 * Text appended as the last paragraph of each sent message, read at send time; the home
+	 * composer uses it for the 【研究设置】 line. Null or empty sends the message unchanged.
+	 */
+	appendToMessage?: () => string | null
 }
 
 /**
@@ -59,6 +65,7 @@ export function useResearchEditor({
 	onFileClick,
 	onStudyStarted,
 	onEditorReady,
+	appendToMessage,
 }: UseResearchEditorOptions) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
@@ -165,16 +172,22 @@ export function useResearchEditor({
 			messagesLength,
 			createTopic: createStudyTopic,
 			onSendSuccess: handleSendSuccess,
-			mergeSendParams: ({ defaultParams }) =>
-				merge({}, defaultParams, {
+			mergeSendParams: ({ defaultParams }) => {
+				const params = merge({}, defaultParams, {
 					topicMode: TopicMode.PersonaResearch,
 					extra: { super_agent: { topic_pattern: TopicMode.PersonaResearch } },
-				}),
+				})
+				const appended = appendToMessage?.()?.trim()
+				// Assigned after merge: lodash merge would combine paragraph arrays index by index.
+				if (appended) params.value = appendParagraph(defaultParams.value, appended)
+				return params
+			},
 			editorRef: messageQueue.editorRef,
 			queueContext: messageQueue,
 			size: size ?? (isMobile ? "mobile" : "default"),
 		}),
 		[
+			appendToMessage,
 			canInterruptTask,
 			createStudyTopic,
 			handleInterrupt,

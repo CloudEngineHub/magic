@@ -42,7 +42,14 @@ import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
 import { useResearchTemplates } from "../hooks/useResearchTemplates"
 import PersonaAvatar from "../components/PersonaAvatar"
+import ResearchComposerOptions from "../components/ResearchComposerOptions"
 import ResearchVoiceCard from "../components/ResearchVoiceCard"
+import {
+	DEFAULT_RESEARCH_OPTIONS,
+	parseResearchOptions,
+	researchSettingsLine,
+	type ResearchOptions,
+} from "../services/researchOptions"
 import StudyListItem from "../components/StudyListItem"
 import { PRESSABLE } from "../components/surface"
 
@@ -64,12 +71,25 @@ function ResearchHomePage() {
 		navigate({ name: RouteName.PersonaResearchStudy, params: { topicId: topic.id } })
 	})
 
+	// Study settings beside the composer; remembered per browser as a convenience only.
+	const [options, setOptions] = useState<ResearchOptions>(readSavedOptions)
+	const updateOptions = useMemoizedFn((next: ResearchOptions) => {
+		setOptions(next)
+		try {
+			localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(next))
+		} catch {
+			// Storage can be unavailable (private mode); the settings still apply to this send.
+		}
+	})
+
 	const { editorContext, editorNodes, fillComposer } = useResearchEditor({
 		variant: isMobile ? "mobile" : "desktop",
 		selectedTopic: null,
 		showLoading: false,
 		messagesLength: 0,
 		onStudyStarted: openStudy,
+		// Fixed settings travel as one 【研究设置】 line at the end of the first message.
+		appendToMessage: useMemoizedFn(() => researchSettingsLine(options)),
 		onEditorReady: useMemoizedFn(() => {
 			const text = store.consumePendingComposerText()
 			if (text) fillComposer(text)
@@ -77,8 +97,9 @@ function ResearchHomePage() {
 	})
 
 	/** Templates sit below the fold on small screens; bring the composer back into view. */
-	const applyStarter = useMemoizedFn((prompt: string) => {
+	const applyStarter = useMemoizedFn((prompt: string, preset?: ResearchOptions) => {
 		fillComposer(prompt)
+		if (preset) updateOptions(preset)
 		document
 			.querySelector('[data-testid="persona-research-composer"]')
 			?.scrollIntoView({ behavior: "smooth", block: "center" })
@@ -176,6 +197,22 @@ function ResearchHomePage() {
 									editorNodes={editorNodes}
 								/>
 							)}
+							{/* Settings strip inside the composer box, as in the prototype's bottom bar. */}
+							<ResearchComposerOptions
+								value={options}
+								onChange={updateOptions}
+								className="border-t border-border px-3 py-2.5"
+								trailing={
+									<button
+										type="button"
+										className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+										onClick={openLibrary}
+									>
+										<UsersRound className="size-3.5" />
+										{t("options.pickFromLibrary")}
+									</button>
+								}
+							/>
 						</div>
 						{/* What every study promises, in place of decorative value-prop tiles. */}
 						<div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-muted-foreground">
@@ -209,7 +246,15 @@ function ResearchHomePage() {
 						)}
 					>
 						{templates.map(
-							({ id, kicker, method, title, description, prompt, options }) => (
+							({
+								id,
+								kicker,
+								method,
+								title,
+								description,
+								prompt,
+								options: preset,
+							}) => (
 								<button
 									key={id}
 									type="button"
@@ -218,7 +263,7 @@ function ResearchHomePage() {
 										"transition-all duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgb(0_0_0/0.3)] active:scale-[0.98]",
 										"focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
 									)}
-									onClick={() => applyStarter(prompt)}
+									onClick={() => applyStarter(prompt, preset)}
 								>
 									<span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
 										{kicker}
@@ -232,14 +277,14 @@ function ResearchHomePage() {
 									<span className="mt-2 flex items-center gap-1 border-t border-dashed border-border pt-3 text-xs text-muted-foreground">
 										<span className="truncate">
 											{[
-												options?.panelSize && options.panelSize !== "auto"
+												preset?.panelSize && preset.panelSize !== "auto"
 													? t("options.panelValue", {
-															count: options.panelSize,
+															count: preset.panelSize,
 														})
 													: null,
-												options?.rounds && options.rounds !== "auto"
+												preset?.rounds && preset.rounds !== "auto"
 													? t("options.roundsValue", {
-															count: options.rounds,
+															count: preset.rounds,
 														})
 													: null,
 												method,
@@ -333,6 +378,17 @@ function SectionTitle({ title, hint }: { title: string; hint?: string }) {
 			{hint ? <span className="text-[13px] text-muted-foreground">{hint}</span> : null}
 		</div>
 	)
+}
+
+const OPTIONS_STORAGE_KEY = "persona-research:composer-options"
+
+function readSavedOptions(): ResearchOptions {
+	try {
+		const raw = localStorage.getItem(OPTIONS_STORAGE_KEY)
+		return raw ? parseResearchOptions(JSON.parse(raw)) : DEFAULT_RESEARCH_OPTIONS
+	} catch {
+		return DEFAULT_RESEARCH_OPTIONS
+	}
 }
 
 export default observer(ResearchHomePage)

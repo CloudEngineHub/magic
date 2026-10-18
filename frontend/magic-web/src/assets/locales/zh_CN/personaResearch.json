@@ -360,6 +360,7 @@
 		"method": "方法",
 		"panel": "受访者",
 		"panelValue": "{{count}} 人",
+		"pickFromLibrary": "从人设库挑人",
 		"rounds": "轮次",
 		"roundsValue": "{{count}} 轮"
 	},

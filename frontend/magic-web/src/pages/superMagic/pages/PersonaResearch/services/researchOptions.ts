@@ -1,3 +1,4 @@
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import type { StudyType } from "../types"
 
 export const RESEARCH_METHODS = [
@@ -8,7 +9,7 @@ export const RESEARCH_METHODS = [
 	"fast_insight",
 ] as const satisfies readonly ("auto" | StudyType)[]
 export const PANEL_SIZES = ["auto", 4, 6, 8, 10, 12] as const
-export const ROUND_COUNTS = ["auto", 3, 5, 8] as const
+export const ROUND_COUNTS = ["auto", 3, 5, 7] as const
 
 export interface ResearchOptions {
 	method: (typeof RESEARCH_METHODS)[number]
@@ -22,17 +23,32 @@ export const DEFAULT_RESEARCH_OPTIONS: ResearchOptions = {
 	rounds: "auto",
 }
 
-/** Settings the user fixed; "auto" ones are left out so the agent decides them. */
-export function fixedResearchOptions(options: ResearchOptions): {
-	study_type?: StudyType
-	persona_count?: number
-	interview_rounds?: number
-} {
-	return {
-		...(options.method === "auto" ? {} : { study_type: options.method }),
-		...(options.panelSize === "auto" ? {} : { persona_count: options.panelSize }),
-		...(options.rounds === "auto" ? {} : { interview_rounds: options.rounds }),
-	}
+/**
+ * Fixed prefix of the settings line. The agent's skill reads the line as the user's answers to
+ * scale and study type, and the conversation can match it to render a tag; keep it unchanged.
+ */
+export const RESEARCH_SETTINGS_PREFIX = "【研究设置】"
+
+/**
+ * One line appended to the first message, e.g.
+ * "【研究设置】访谈人数: 8 · 访谈轮数: 5 · 研究方式: concept_test".
+ * Items left on "auto" are omitted; with nothing fixed there is no line. Labels stay in Chinese
+ * whatever the UI language, because the skill matches them literally.
+ */
+export function researchSettingsLine(options: ResearchOptions): string | null {
+	const items = [
+		options.panelSize === "auto" ? null : `访谈人数: ${options.panelSize}`,
+		options.rounds === "auto" ? null : `访谈轮数: ${options.rounds}`,
+		options.method === "auto" ? null : `研究方式: ${options.method}`,
+	].filter(Boolean)
+	return items.length ? `${RESEARCH_SETTINGS_PREFIX}${items.join(" · ")}` : null
+}
+
+/** Appends a plain paragraph to an editor document without mutating it. */
+export function appendParagraph(value: JSONContent | undefined, text: string): JSONContent {
+	const paragraph: JSONContent = { type: "paragraph", content: [{ type: "text", text }] }
+	if (!value) return { type: "doc", content: [paragraph] }
+	return { ...value, content: [...(value.content ?? []), paragraph] }
 }
 
 /** Restores saved settings, dropping values that are no longer offered. */

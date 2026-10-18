@@ -362,6 +362,7 @@
 		"method": "Method",
 		"panel": "Interviewees",
 		"panelValue": "{{count}} people",
+		"pickFromLibrary": "Pick from library",
 		"rounds": "Rounds",
 		"roundsValue": "{{count}} rounds"
 	},
