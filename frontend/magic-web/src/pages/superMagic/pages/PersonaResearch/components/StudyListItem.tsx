@@ -39,6 +39,7 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 	const study = store.studyFileOf(topic)
 	const status = resolveStudyStatus(topic, study)
 	const title = store.studyTitleOf(topic) || t("study.untitled")
+	const isPersonaBuild = study?.study_type === "persona_build"
 
 	return (
 		<li
@@ -63,15 +64,28 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 				<span className="flex items-center gap-3">
 					{store.studyFilesReady ? (
 						<>
-							<StudyProgressSegments status={status} className="w-28" />
+							{/* Persona building has no research phases; its type replaces the 6-step progress. */}
+							{isPersonaBuild ? (
+								<span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+									{t("studyType.personaBuild")}
+								</span>
+							) : (
+								<StudyProgressSegments status={status} className="w-28" />
+							)}
 							<span className="text-xs text-muted-foreground">
-								{t("study.progress", {
-									done: status.completed,
-									total: status.total,
-								})}
-								{topic.updated_at
-									? ` · ${dayjs(topic.updated_at).locale(dayjsLocale).fromNow()}`
-									: ""}
+								{[
+									isPersonaBuild
+										? null
+										: t("study.progress", {
+												done: status.completed,
+												total: status.total,
+											}),
+									topic.updated_at
+										? dayjs(topic.updated_at).locale(dayjsLocale).fromNow()
+										: null,
+								]
+									.filter(Boolean)
+									.join(" · ")}
 							</span>
 						</>
 					) : (

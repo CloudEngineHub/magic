@@ -357,6 +357,20 @@ export class PersonaResearchStore {
 		void this.reloadParsedContent()
 	}
 
+	/** Drops deleted files from the lists at once instead of waiting for the next file event. */
+	removeAttachmentsLocally(fileIds: string[]) {
+		const removed = new Set(fileIds)
+		this.applyAttachments(
+			this.attachments,
+			this.attachmentList.filter((item) => !removed.has(String(item.file_id))),
+		)
+		void this.reloadParsedContent()
+	}
+
+	personaRefById(personaId: string): ResearchFileRef<PersonaFile> | null {
+		return this.personas.find((ref) => ref.data.id === personaId) ?? null
+	}
+
 	/** Re-reads attachments from the server; used after page visibility returns. */
 	async refreshAttachments(): Promise<void> {
 		const projectId = this.selectedProject?.id

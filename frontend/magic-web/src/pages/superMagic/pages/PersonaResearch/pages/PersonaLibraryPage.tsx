@@ -1,9 +1,39 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
-import { ArrowLeft, ArrowRight, LibraryBig, Search, SearchX, UsersRound, X } from "lucide-react"
+import {
+	ArrowLeft,
+	ArrowRight,
+	Ellipsis,
+	LibraryBig,
+	MessagesSquare,
+	Pencil,
+	Search,
+	SearchX,
+	SquarePen,
+	Trash2,
+	UsersRound,
+	X,
+} from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/shadcn-ui/alert-dialog"
 import { Button } from "@/components/shadcn-ui/button"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
 import {
 	Empty,
 	EmptyContent,
@@ -21,12 +51,19 @@ import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
+import CreatePersonaMenu from "../components/CreatePersonaMenu"
 import PersonaAvatar from "../components/PersonaAvatar"
+import PersonaBuildSheet from "../components/PersonaBuildSheet"
 import PersonaCard from "../components/PersonaCard"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
-import type { PersonaFile, PersonaTier } from "../types"
+import PersonaFormDialog from "../components/PersonaForm"
+import { deletePersonaFile } from "../services/personaWriter"
+import type { PersonaFile, PersonaTier, ResearchFileRef } from "../types"
 
 type TierFilter = "all" | PersonaTier
+
+/** How long a newly saved persona keeps its green "new" highlight after the last arrival. */
+const NEW_HIGHLIGHT_MS = 6000
 
 /** Persona library: browse reusable personas and panels, then start a study with them. */
 function PersonaLibraryPage() {
@@ -39,6 +76,14 @@ function PersonaLibraryPage() {
 	const [keyword, setKeyword] = useState("")
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 	const [openedPersona, setOpenedPersona] = useState<PersonaFile | null>(null)
+	const [formOpen, setFormOpen] = useState(false)
+	const [editing, setEditing] = useState<ResearchFileRef<PersonaFile> | null>(null)
+	const [buildOpen, setBuildOpen] = useState(false)
+	/** Persona ids already in the library when the build sheet opened; anything else is new. */
+	const [buildBaseline, setBuildBaseline] = useState<Set<string>>(new Set())
+	const [highlightIds, setHighlightIds] = useState<Set<string>>(new Set())
+	const [pendingDelete, setPendingDelete] = useState<PersonaFile | null>(null)
+	const canEdit = !store.isReadOnly
 
 	const pathById = useMemo(
 		() => new Map(store.personas.map((ref) => [ref.data.id, ref.path])),
@@ -50,6 +95,7 @@ function PersonaLibraryPage() {
 			all: store.personas.length,
 			evidence_based: 0,
 			imported: 0,
+			manual: 0,
 			generated: 0,
 		}
 		for (const ref of store.personas) counts[ref.data.tier] += 1
@@ -82,6 +128,71 @@ function PersonaLibraryPage() {
 		navigate({ name: RouteName.PersonaResearch })
 	})
 
+	const highlight = useMemoizedFn((ids: string[]) => {
+		if (ids.length === 0) return
+		setHighlightIds((current) => new Set([...current, ...ids]))
+	})
+
+	// Fade the "new" marks out a while after the last persona arrived.
+	useEffect(() => {
+		if (highlightIds.size === 0) return
+		const timer = window.setTimeout(() => setHighlightIds(new Set()), NEW_HIGHLIGHT_MS)
+		return () => window.clearTimeout(timer)
+	}, [highlightIds])
+
+	/** Personas the agent saved during the open build conversation, newest first. */
+	const builtPersonas = useMemo(
+		() =>
+			buildOpen
+				? store.personas
+						.map((ref) => ref.data)
+						.filter((persona) => !buildBaseline.has(persona.id))
+				: [],
+		[buildBaseline, buildOpen, store.personas],
+	)
+	const builtIdsKey = builtPersonas.map((persona) => persona.id).join(",")
+	useEffect(() => {
+		if (builtIdsKey) highlight(builtIdsKey.split(","))
+	}, [builtIdsKey, highlight])
+
+	const openBuild = useMemoizedFn(() => {
+		setFormOpen(false)
+		setBuildBaseline(new Set(store.personas.map((ref) => ref.data.id)))
+		setBuildOpen(true)
+	})
+
+	const openCreateForm = useMemoizedFn(() => {
+		setEditing(null)
+		setFormOpen(true)
+	})
+
+	const openEditForm = useMemoizedFn((persona: PersonaFile) => {
+		const ref = store.personaRefById(persona.id)
+		if (!ref) return
+		setOpenedPersona(null)
+		setEditing(ref)
+		setFormOpen(true)
+	})
+
+	const requestDelete = useMemoizedFn((persona: PersonaFile) => {
+		setOpenedPersona(null)
+		setPendingDelete(persona)
+	})
+
+	const confirmDelete = useMemoizedFn(async () => {
+		const persona = pendingDelete
+		setPendingDelete(null)
+		const ref = persona ? store.personaRefById(persona.id) : null
+		if (!ref) return
+		const deleted = await deletePersonaFile(store, ref)
+		if (deleted) {
+			toggleSelected(ref.data.id, false)
+			toast.success(t("library.deleted"))
+		} else {
+			toast.error(t("library.deleteFailed"))
+		}
+	})
+
 	const toggleSelected = useMemoizedFn((id: string, selected: boolean) => {
 		setSelectedIds((current) => {
 			const next = new Set(current)
@@ -91,12 +202,17 @@ function PersonaLibraryPage() {
 		})
 	})
 
-	const tierTabs: { value: TierFilter; label: string }[] = [
+	const allTierTabs: { value: TierFilter; label: string }[] = [
 		{ value: "all", label: t("library.tierAll") },
 		{ value: "evidence_based", label: t("persona.tier.evidenceBased") },
 		{ value: "imported", label: t("persona.tier.imported") },
+		{ value: "manual", label: t("persona.tier.manual") },
 		{ value: "generated", label: t("persona.tier.generated") },
 	]
+	// Tiers with no persona stay hidden unless selected, e.g. "Manual" before the first one.
+	const tierTabs = allTierTabs.filter(
+		({ value }) => value === "all" || tierCounts[value] > 0 || tier === value,
+	)
 	const selectedPersonas = [...selectedIds]
 		.map((id) => store.personaById(id))
 		.filter((persona): persona is PersonaFile => persona !== null)
@@ -123,6 +239,12 @@ function PersonaLibraryPage() {
 						<h1 className="text-sm font-semibold">{t("library.title")}</h1>
 						<p className="text-xs text-muted-foreground">{t("library.subtitle")}</p>
 					</div>
+					{canEdit ? (
+						<CreatePersonaMenu
+							onCreateWithChat={openBuild}
+							onCreateManually={openCreateForm}
+						/>
+					) : null}
 				</div>
 				<div className={cn("flex gap-2", isMobile ? "flex-col" : "items-center")}>
 					<Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
@@ -185,15 +307,34 @@ function PersonaLibraryPage() {
 								title={t("library.emptyTitle")}
 								text={t("library.empty")}
 								action={
-									<Button
-										variant="outline"
-										size="sm"
-										onClick={() =>
-											navigate({ name: RouteName.PersonaResearch })
-										}
-									>
-										{t("library.goStudy")}
-									</Button>
+									<div className="flex flex-col items-center gap-3">
+										{canEdit ? (
+											<div className="flex flex-wrap justify-center gap-2">
+												<Button size="sm" onClick={openBuild}>
+													<MessagesSquare className="size-4" />
+													{t("library.createChat")}
+												</Button>
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={openCreateForm}
+												>
+													<SquarePen className="size-4" />
+													{t("library.createManual")}
+												</Button>
+											</div>
+										) : null}
+										<Button
+											variant="link"
+											size="sm"
+											className="h-auto p-0 text-xs text-muted-foreground"
+											onClick={() =>
+												navigate({ name: RouteName.PersonaResearch })
+											}
+										>
+											{t("library.goStudy")}
+										</Button>
+									</div>
 								}
 							/>
 						) : (
@@ -234,6 +375,15 @@ function PersonaLibraryPage() {
 									selected={selectedIds.has(persona.id)}
 									onSelectedChange={(selected) =>
 										toggleSelected(persona.id, selected)
+									}
+									isNew={highlightIds.has(persona.id)}
+									actions={
+										canEdit ? (
+											<PersonaCardMenu
+												onEdit={() => openEditForm(persona)}
+												onDelete={() => requestDelete(persona)}
+											/>
+										) : undefined
 									}
 									onOpen={() => setOpenedPersona(persona)}
 								/>
@@ -347,9 +497,82 @@ function PersonaLibraryPage() {
 			<PersonaDetailSheet
 				persona={openedPersona}
 				onOpenChange={(open) => !open && setOpenedPersona(null)}
+				onEdit={canEdit ? openEditForm : undefined}
+				onDelete={canEdit ? requestDelete : undefined}
 				side={isMobile ? "bottom" : "right"}
 			/>
+
+			<PersonaFormDialog
+				open={formOpen}
+				editing={editing}
+				onOpenChange={setFormOpen}
+				onSaved={(personaId) => highlight([personaId])}
+				onSwitchToChat={openBuild}
+			/>
+
+			<PersonaBuildSheet
+				open={buildOpen}
+				onOpenChange={setBuildOpen}
+				savedPersonas={builtPersonas}
+				onStartStudy={startStudyWith}
+			/>
+
+			<AlertDialog
+				open={Boolean(pendingDelete)}
+				onOpenChange={(open) => !open && setPendingDelete(null)}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{t("library.deleteTitle", { name: pendingDelete?.name ?? "" })}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("library.deleteDescription")}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("library.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-white hover:bg-destructive/90"
+							onClick={() => void confirmDelete()}
+						>
+							{t("library.deleteConfirm")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
+	)
+}
+
+/** Edit / delete on a persona card; appears on hover so the grid stays calm. */
+function PersonaCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+	const { t } = useTranslation("personaResearch")
+	return (
+		<DropdownMenu>
+			<MagicTooltip title={t("library.moreActions")}>
+				<DropdownMenuTrigger asChild>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-6 text-muted-foreground opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+						aria-label={t("library.moreActions")}
+					>
+						<Ellipsis className="size-4" />
+					</Button>
+				</DropdownMenuTrigger>
+			</MagicTooltip>
+			<DropdownMenuContent align="end">
+				<DropdownMenuItem onSelect={onEdit}>
+					<Pencil className="size-4" />
+					{t("library.edit")}
+				</DropdownMenuItem>
+				<DropdownMenuItem className="text-destructive" onSelect={onDelete}>
+					<Trash2 className="size-4" />
+					{t("library.delete")}
+				</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	)
 }
 

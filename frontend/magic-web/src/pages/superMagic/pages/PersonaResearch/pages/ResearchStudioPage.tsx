@@ -223,12 +223,15 @@ function ResearchStudioPage() {
 				concept_test: t("studyType.conceptTest"),
 				fast_insight: t("studyType.fastInsight"),
 				panel_only: t("studyType.panelOnly"),
+				persona_build: t("studyType.personaBuild"),
 			}[study.study_type]
 		: null
+	// Persona building has no plan, interviews or report: no phase stepper and no study scale.
+	const isPersonaBuild = study?.study_type === "persona_build"
 	const metaChips = [
 		studyTypeLabel,
 		study?.framework?.length ? study.framework.join(" · ") : null,
-		study?.limits?.personas
+		study?.limits?.personas && !isPersonaBuild
 			? t("study.scale", {
 					personas: study.limits.personas,
 					rounds: study.limits.interview_rounds ?? 5,
@@ -296,7 +299,7 @@ function ResearchStudioPage() {
 			</div>
 			{isContentLoading ? (
 				<StudyStepperSkeleton compact={isMobile} />
-			) : (
+			) : isPersonaBuild ? null : (
 				<StudyStepper
 					study={study}
 					compact={isMobile}

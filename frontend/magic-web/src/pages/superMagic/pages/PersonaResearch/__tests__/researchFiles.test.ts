@@ -239,3 +239,35 @@ describe("Top 5 contract fields", () => {
 		if (parsed.ok) expect(parsed.data.evidence?.[0].type).toBe("social")
 	})
 })
+
+describe("user-created personas", () => {
+	it("keeps the manual tier, user field sources and edited_at", async () => {
+		const { parsePersonaFile } = await import("../services/researchFiles")
+		const parsed = parsePersonaFile({
+			schema_version: 1,
+			id: "p_user_1a2b",
+			name: "王芳",
+			tier: "manual",
+			field_sources: { needs_pains: "user", behavior: ["e1"] },
+			edited_at: "2026-10-18T15:02:00+08:00",
+		})
+		expect(parsed.ok && parsed.data.tier).toBe("manual")
+		expect(parsed.ok && parsed.data.field_sources?.needs_pains).toBe("user")
+		expect(parsed.ok && parsed.data.edited_at).toBe("2026-10-18T15:02:00+08:00")
+	})
+
+	it("reads persona_build studies", async () => {
+		const { parseStudyFile } = await import("../services/researchFiles")
+		const parsed = parseStudyFile({
+			schema_version: 1,
+			title: "奶茶店老板",
+			question: "帮我构建人设",
+			study_type: "persona_build",
+			phase: "done",
+			phases: ["clarify", "plan", "desk_research", "interview", "report", "validation"].map(
+				(key, index) => ({ key, status: index === 0 ? "done" : "skipped" }),
+			),
+		})
+		expect(parsed.ok && parsed.data.study_type).toBe("persona_build")
+	})
+})
