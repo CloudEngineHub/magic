@@ -241,6 +241,8 @@ export interface TranscriptQuality {
 export interface DiscussionFile extends Omit<InterviewFile, "persona_id"> {
 	id?: string
 	participants: string[]
+	/** One line in the user's language, e.g. "家里有洗衣机，为什么还会下楼洗"; older files lack it. */
+	topic?: string
 }
 
 export type ThemeStance = "support" | "oppose" | "mixed" | "not_mentioned"

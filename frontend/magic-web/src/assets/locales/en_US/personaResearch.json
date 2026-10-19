@@ -58,6 +58,7 @@
 		"analysis": "Analysis",
 		"backToList": "Back to interviews",
 		"discussionN": "Discussion {{index}}",
+		"discussionTopic": "Topic: {{topic}}",
 		"discussions": "Discussions",
 		"discussionsEmpty": "No focus group is planned for this study, or it has not started yet.",
 		"discussionsEmptyTitle": "No focus groups yet",
@@ -814,6 +815,9 @@
 		"sourceReused": "Reused"
 	},
 	"transcript": {
+		"collapse": "Show less",
+		"expand": "Show more",
+		"expandRound": "Expand all",
 		"failed": "This interview did not finish",
 		"inProgress": "Interview in progress…",
 		"inferredHint": "Inferred by the AI from the persona, not from sources",

@@ -382,7 +382,11 @@ function ResearchConsole({
 											className="h-7"
 											onClick={() => setActiveDiscussionIndex(index)}
 										>
-											{t("console.discussionN", { index: index + 1 })}
+											{/* The topic tells discussions apart; older files fall back to a number. */}
+											<span className="max-w-[16em] truncate">
+												{ref.data.topic?.trim() ||
+													t("console.discussionN", { index: index + 1 })}
+											</span>
 										</Button>
 									))
 								: null}
@@ -404,6 +408,13 @@ function ResearchConsole({
 						</div>
 						<ScrollArea className="min-h-0 flex-1">
 							<div className="mx-auto max-w-3xl p-4">
+								{activeDiscussion?.data.topic?.trim() ? (
+									<h3 className="mb-3 text-[15px] font-semibold leading-6 text-foreground">
+										{t("console.discussionTopic", {
+											topic: activeDiscussion.data.topic.trim(),
+										})}
+									</h3>
+								) : null}
 								{activeDiscussion ? (
 									<TranscriptView
 										transcript={activeDiscussion.data}

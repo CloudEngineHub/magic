@@ -58,6 +58,7 @@
 		"analysis": "分析",
 		"backToList": "返回访谈列表",
 		"discussionN": "讨论 {{index}}",
+		"discussionTopic": "讨论主题：{{topic}}",
 		"discussions": "讨论",
 		"discussionsEmpty": "这项研究没有安排焦点小组，或讨论还没开始。",
 		"discussionsEmptyTitle": "还没有焦点小组",
@@ -812,6 +813,9 @@
 		"sourceReused": "复用"
 	},
 	"transcript": {
+		"collapse": "收起",
+		"expand": "展开",
+		"expandRound": "展开全部",
 		"failed": "这场访谈没有完成",
 		"inProgress": "访谈进行中…",
 		"inferredHint": "这部分是 AI 根据人设推测的，不来自资料",

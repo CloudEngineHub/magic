@@ -45,6 +45,9 @@ function ResearchDeliverables({
 }: ResearchDeliverablesProps) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
+	const discussionTopics = store.discussions
+		.map((ref) => ref.data.topic?.trim())
+		.filter((topic): topic is string => Boolean(topic))
 	const { permissions } = useFileAccess()
 	const downloadFile = useResearchFileDownload()
 	const canOpen = permissions.view && permissions.preview
@@ -207,18 +210,37 @@ function ResearchDeliverables({
 
 			{summaryChips.length ? (
 				<div className="flex flex-wrap gap-1.5">
-					{summaryChips.map(({ key, icon: Icon, label, tab }) => (
-						<Button
-							key={key}
-							variant="outline"
-							size="sm"
-							className="h-7 gap-1.5 rounded-full px-2.5 text-xs font-normal"
-							onClick={() => onShowOutputs?.(tab)}
-						>
-							<Icon className="size-4 text-muted-foreground" />
-							{label}
-						</Button>
-					))}
+					{summaryChips.map(({ key, icon: Icon, label, tab }) => {
+						const chip = (
+							<Button
+								key={key}
+								variant="outline"
+								size="sm"
+								className="h-7 gap-1.5 rounded-full px-2.5 text-xs font-normal"
+								onClick={() => onShowOutputs?.(tab)}
+							>
+								<Icon className="size-4 text-muted-foreground" />
+								{label}
+							</Button>
+						)
+						// The discussion chip names what each discussion was about.
+						return key === "discussions" && discussionTopics.length ? (
+							<MagicTooltip
+								key={key}
+								title={
+									<span className="flex flex-col gap-0.5">
+										{discussionTopics.map((topic, index) => (
+											<span key={index}>{topic}</span>
+										))}
+									</span>
+								}
+							>
+								{chip}
+							</MagicTooltip>
+						) : (
+							chip
+						)
+					})}
 				</div>
 			) : null}
 		</div>

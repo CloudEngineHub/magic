@@ -469,6 +469,7 @@ const discussionSchema = z.object({
 	...transcriptBase,
 	id: optionalString,
 	participants: z.array(z.string()),
+	topic: optionalString,
 })
 
 const synthesisSchema = z.object({

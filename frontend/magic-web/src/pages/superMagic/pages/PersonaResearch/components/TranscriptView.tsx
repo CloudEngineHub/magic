@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { BookOpen, CircleAlert, Sparkles, ThumbsUp, TriangleAlert } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
@@ -28,9 +28,10 @@ interface TranscriptViewProps {
 }
 
 /**
- * Transcript read as a document: question numbers in a narrow left column, answers set for
- * reading. Quotes used in conclusions are highlighted in the speaker's colour and tagged with
- * their hypothesis; inferred details (persona_chat's "(inferred)" marker) are underlined.
+ * Transcript read as a conversation: each question is a numbered band, each answer a bubble
+ * tinted in the speaker's colour so a group's voices are easy to tell apart. Long answers fold
+ * to five lines. Quotes used in conclusions are highlighted in the speaker's colour and tagged
+ * with their hypothesis; inferred details (persona_chat's "(inferred)" marker) are underlined.
  */
 export default function TranscriptView({
 	transcript,
@@ -43,8 +44,30 @@ export default function TranscriptView({
 	const { t } = useTranslation("personaResearch")
 	const listRef = useRef<HTMLOListElement>(null)
 	const [flashIndex, setFlashIndex] = useState<number | null>(null)
+	// Answers opened past their five-line fold, by round index.
+	const [openRounds, setOpenRounds] = useState<ReadonlySet<number>>(new Set())
 	const { quality, inferredRatio, isHighInferred } = resolveTranscriptQuality(transcript)
+	const isGroup = !respondentId
+	// The answers after each question, so one click can open the whole round.
+	const answersAfter = new Map<number, number[]>()
+	let currentQuestion = -1
+	transcript.rounds.forEach((round, index) => {
+		if ((round.speaker ?? round.role) === "moderator") {
+			currentQuestion = index
+			answersAfter.set(index, [])
+		} else if (currentQuestion >= 0) answersAfter.get(currentQuestion)?.push(index)
+	})
+	const toggleRound = (index: number) =>
+		setOpenRounds((current) => {
+			const next = new Set(current)
+			if (next.has(index)) next.delete(index)
+			else next.add(index)
+			return next
+		})
+	const openAll = (indices: number[]) =>
+		setOpenRounds((current) => new Set([...current, ...indices]))
 	let questionIndex = 0
+	let shownRespondentAvatar = false
 
 	useEffect(() => {
 		if (!focusRound) return
@@ -112,7 +135,7 @@ export default function TranscriptView({
 				/>
 			) : null}
 
-			<ol ref={listRef} className="flex flex-col border-t border-border">
+			<ol ref={listRef} className="flex flex-col gap-3">
 				{transcript.rounds.map((round, index) => {
 					const speakerId = round.speaker ?? round.role ?? ""
 					const isModerator = speakerId === "moderator"
@@ -129,51 +152,88 @@ export default function TranscriptView({
 					const marks = personaId
 						? highlights.filter((mark) => mark.personaId === personaId)
 						: []
+					// Brief ring when a quote elsewhere jumps to this round.
+					const flash =
+						flashIndex === index &&
+						"ring-2 ring-primary/50 ring-offset-4 ring-offset-background transition-shadow"
+					if (isModerator) {
+						const answers = answersAfter.get(index) ?? []
+						const foldable = answers.some(
+							(answerIndex) =>
+								!openRounds.has(answerIndex) &&
+								(transcript.rounds[answerIndex]?.text.length ?? 0) >
+									LONG_ANSWER_CHARS,
+						)
+						return (
+							<li
+								key={index}
+								data-round={index}
+								className={cn(
+									"mt-3 flex items-start gap-2.5 rounded-lg bg-muted/60 px-3 py-2 duration-300 animate-in fade-in-0 first:mt-0 motion-reduce:animate-none",
+									flash,
+								)}
+							>
+								<span className="mt-0.5 shrink-0 rounded border border-border bg-background px-1.5 font-mono text-[11px] leading-[18px] text-muted-foreground">
+									Q{questionIndex}
+								</span>
+								<p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-6 text-foreground">
+									{round.text}
+								</p>
+								{foldable ? (
+									<button
+										type="button"
+										className="mt-0.5 shrink-0 rounded text-xs leading-5 text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+										onClick={() => openAll(answers)}
+									>
+										{t("transcript.expandRound")}
+									</button>
+								) : null}
+							</li>
+						)
+					}
+					// A group shows who speaks on every answer; one respondent is named once.
+					const showSpeaker = isGroup || !shownRespondentAvatar
+					if (!isGroup) shownRespondentAvatar = true
+					const age = textAge(persona?.dimensions?.demographics?.age)
 					return (
 						<li
 							key={index}
 							data-round={index}
 							className={cn(
-								"grid grid-cols-[76px_minmax(0,1fr)] gap-x-[18px] rounded-lg duration-300 animate-in fade-in-0 motion-reduce:animate-none",
-								isModerator ? "pt-6" : "pt-3",
-								// Brief ring when a quote elsewhere jumps to this round.
-								flashIndex === index &&
-									"ring-2 ring-primary/50 ring-offset-4 ring-offset-background transition-shadow",
+								"flex gap-2.5 rounded-lg duration-300 animate-in fade-in-0 motion-reduce:animate-none",
+								flash,
 							)}
 						>
-							<span className="flex flex-col pt-0.5 text-xs leading-5 text-muted-foreground">
-								{isModerator ? (
-									<span className="font-mono text-[11.5px] font-medium text-foreground/70">
-										Q{questionIndex}
+							{showSpeaker ? (
+								<PersonaAvatar
+									id={personaId ?? "respondent"}
+									name={name}
+									className="size-8"
+								/>
+							) : (
+								<span className="w-8 shrink-0" aria-hidden />
+							)}
+							<div className="flex min-w-0 max-w-[640px] flex-col gap-1">
+								{showSpeaker ? (
+									<span className="truncate text-xs text-muted-foreground">
+										{name}
+										{age ? ` · ${t("voice.age", { age })}` : ""}
 									</span>
 								) : null}
-								<span className="flex min-w-0 items-center gap-1.5">
-									{/* Group discussions name several speakers; an avatar tells them apart. */}
-									{!isModerator && !respondentId ? (
-										<PersonaAvatar
-											id={personaId ?? "respondent"}
-											name={name}
-											className="size-4"
-										/>
-									) : null}
-									<span className="truncate">{name}</span>
-								</span>
-							</span>
-							{isModerator ? (
-								<p className="whitespace-pre-wrap text-[13.5px] leading-7 text-muted-foreground">
-									{round.text}
-								</p>
-							) : (
-								<p className="whitespace-pre-wrap text-[15px] leading-[1.95] text-foreground">
-									<AnswerText text={round.text} marks={marks} speaker={name} />
-								</p>
-							)}
+								<AnswerBubble
+									text={round.text}
+									marks={marks}
+									speaker={name}
+									open={openRounds.has(index)}
+									onToggle={() => toggleRound(index)}
+								/>
+							</div>
 						</li>
 					)
 				})}
 				{transcript.status === "running" ? (
 					<li
-						className="flex items-center gap-2 pl-[94px] pt-4 text-xs text-muted-foreground"
+						className="flex items-center gap-2 pl-[42px] pt-1 text-xs text-muted-foreground"
 						aria-live="polite"
 					>
 						<span className="flex gap-1">
@@ -190,6 +250,80 @@ export default function TranscriptView({
 					</li>
 				) : null}
 			</ol>
+		</div>
+	)
+}
+
+/** Answers longer than this get "expand all" on their question; each bubble measures itself. */
+const LONG_ANSWER_CHARS = 220
+
+/** "45", "45岁" or 45 → "45"; anything else is left out of the speaker line. */
+function textAge(value: unknown): string | null {
+	if (typeof value !== "string" && typeof value !== "number") return null
+	const age = String(value)
+		.trim()
+		.replace(/\s*(岁|yrs?|years?)$/i, "")
+	return age && age.length <= 4 ? age : null
+}
+
+/**
+ * One answer in the speaker's tint, folded to five lines until opened. Paragraphs keep a small
+ * gap however many blank lines the model left between them.
+ */
+function AnswerBubble({
+	text,
+	marks,
+	speaker,
+	open,
+	onToggle,
+}: {
+	text: string
+	marks: HighlightMark[]
+	speaker: string
+	open: boolean
+	onToggle: () => void
+}) {
+	const { t } = useTranslation("personaResearch")
+	const { tint } = personaTone(speaker)
+	const bodyRef = useRef<HTMLDivElement>(null)
+	const [overflows, setOverflows] = useState(false)
+	const paragraphs = text
+		.split(/\n\s*\n/)
+		.map((paragraph) => paragraph.trim())
+		.filter(Boolean)
+
+	useLayoutEffect(() => {
+		const body = bodyRef.current
+		if (!body || open) return
+		setOverflows(body.scrollHeight > body.clientHeight + 1)
+	}, [open, text])
+
+	return (
+		<div
+			className="rounded-[4px_16px_16px_16px] px-4 py-2.5 text-[14.5px] leading-[1.7] text-foreground"
+			style={{ backgroundColor: tint }}
+		>
+			{/* Five lines (1.7 line height) by height rather than line-clamp, which does not
+			    count lines across several paragraphs. */}
+			<div
+				ref={bodyRef}
+				className={cn("space-y-2", !open && "max-h-[8.5em] overflow-hidden")}
+			>
+				{paragraphs.map((paragraph, index) => (
+					<p key={index} className="whitespace-pre-wrap break-words">
+						<AnswerText text={paragraph} marks={marks} speaker={speaker} />
+					</p>
+				))}
+			</div>
+			{overflows || open ? (
+				<button
+					type="button"
+					className="mt-1 rounded text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+					onClick={onToggle}
+				>
+					{open ? t("transcript.collapse") : t("transcript.expand")}
+				</button>
+			) : null}
 		</div>
 	)
 }
