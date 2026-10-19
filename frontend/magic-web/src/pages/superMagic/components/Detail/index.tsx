@@ -82,6 +82,11 @@ interface DetailProps {
 	showFileFooter?: boolean
 	/** Class name for the detail container */
 	className?: string
+	/**
+	 * Claims a file opened from inside a preview (e.g. a link in an HTML report) before a tab is
+	 * created. Return true when the host handled it; the default opens a tab.
+	 */
+	interceptFileOpen?: (file: any) => boolean
 }
 
 // Forward ref type for Detail component
@@ -171,6 +176,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		setUserSelectDetail,
 		isMobile,
 		filesViewerRef,
+		interceptFileOpen: props.interceptFileOpen,
 	})
 
 	// Expose methods

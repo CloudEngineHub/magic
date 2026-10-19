@@ -10,6 +10,8 @@ interface ResearchFilesPaneProps {
 	setUserSelectDetail: (detail: unknown) => void
 	activeFileId: string | null
 	onActiveFileChange: (fileId: string | null) => void
+	/** Claims contract files opened from links inside a previewed HTML file. */
+	onInterceptFile?: (file: unknown) => boolean
 }
 
 /**
@@ -18,7 +20,14 @@ interface ResearchFilesPaneProps {
  * Tool steps open in the playback tab, which follows the latest step until one is picked.
  */
 const ResearchFilesPane = forwardRef<DetailRef, ResearchFilesPaneProps>(function ResearchFilesPane(
-	{ userSelectDetail, autoDetail, setUserSelectDetail, activeFileId, onActiveFileChange },
+	{
+		userSelectDetail,
+		autoDetail,
+		setUserSelectDetail,
+		activeFileId,
+		onActiveFileChange,
+		onInterceptFile,
+	},
 	ref,
 ) {
 	const store = usePersonaResearchStore()
@@ -55,6 +64,7 @@ const ResearchFilesPane = forwardRef<DetailRef, ResearchFilesPaneProps>(function
 				showFallbackWhenEmpty
 				allowDownload
 				persistFileTabs={false}
+				interceptFileOpen={onInterceptFile}
 			/>
 		</div>
 	)

@@ -239,7 +239,8 @@ function ResearchConsole({
 		<Tabs
 			value={activeTab}
 			onValueChange={(value) => onTabChange(value as ResearchConsoleTab)}
-			className="flex h-full min-h-0 flex-col"
+			// gap-0: the Tabs default gap-2 would leave an 8px strip between the tab bar and content.
+			className="flex h-full min-h-0 flex-col gap-0"
 			data-testid="persona-research-console"
 		>
 			<div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">

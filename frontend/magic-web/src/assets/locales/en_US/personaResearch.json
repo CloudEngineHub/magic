@@ -638,7 +638,8 @@
 		"empty": "The report appears here when the study is done.",
 		"emptyTitle": "No report yet",
 		"fullscreen": "Full screen",
-		"generatingTitle": "Writing the report"
+		"generatingTitle": "Writing the report",
+		"refresh": "Refresh"
 	},
 	"reportTemplates": {
 		"chat": {

@@ -635,7 +635,8 @@
 		"empty": "研究完成后，报告会显示在这里。",
 		"emptyTitle": "报告还没生成",
 		"fullscreen": "全屏",
-		"generatingTitle": "报告生成中"
+		"generatingTitle": "报告生成中",
+		"refresh": "刷新"
 	},
 	"reportTemplates": {
 		"chat": {

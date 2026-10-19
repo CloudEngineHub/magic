@@ -9,6 +9,7 @@ import {
 	PanelRightClose,
 	PanelRightOpen,
 	PencilLine,
+	RefreshCw,
 	Share2,
 } from "lucide-react"
 import type { ImperativePanelHandle } from "react-resizable-panels"
@@ -64,7 +65,8 @@ import {
 import ResearchOnboarding from "../onboarding/ResearchOnboarding"
 import ResearchHelp from "../onboarding/ResearchHelp"
 import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
-import { getAttachmentPath } from "../services/researchFiles"
+import { routeResearchFile } from "../services/researchFileRouting"
+import { getAttachmentPath, normalizeResearchPath } from "../services/researchFiles"
 import {
 	countVisibleStudyFiles,
 	firstOutputTab,
@@ -141,8 +143,41 @@ function ResearchStudioPage() {
 		if (isMobile) setMobileView("outputs")
 	})
 
+	/**
+	 * Contract files (persona, interview, discussion, synthesis, validation results) have their own
+	 * UI; raw JSON in the generic preview helps nobody. Every entry that opens a file (report links,
+	 * message mentions, file lists, deliverables) goes through here. Returns true when handled.
+	 */
+	const routeFile = useMemoizedFn((fileItem?: unknown): boolean => {
+		const file = fileItem as Partial<AttachmentItem> | undefined
+		const path = file
+			? getAttachmentPath(file as AttachmentItem) || normalizeResearchPath(file.file_path)
+			: ""
+		const target = routeResearchFile(path)
+		switch (target.kind) {
+			case "persona": {
+				const persona = store.personaById(target.personaId)
+				// An unreadable persona file falls back to the preview rather than doing nothing.
+				if (!persona) return false
+				setOpenedPersona(persona)
+				return true
+			}
+			case "interview":
+				setOpenedPersona(null)
+				setFocusedInterviewId(target.personaId)
+				showOutputs("interviews")
+				return true
+			case "tab":
+				showOutputs(target.tab)
+				return true
+			default:
+				return false
+		}
+	})
+
 	/** Files from the conversation open in the shared preview tab. */
 	const openFile = useMemoizedFn((fileItem?: unknown) => {
+		if (routeFile(fileItem)) return
 		showOutputs("files")
 		setUserSelectDetail(undefined)
 		// The preview tab is force-mounted; wait for the panel to mount and have layout.
@@ -181,6 +216,7 @@ function ResearchStudioPage() {
 	useResearchDetailEvents({
 		detailRef,
 		attachmentList: store.attachmentList,
+		routeFile,
 		revealFiles: () => showOutputs("files"),
 		setActiveFileId,
 		setAutoDetail,
@@ -487,10 +523,25 @@ function ResearchStudioPage() {
 			onRequestValidationUpload={handleRequestValidationUpload}
 			variant={isMobile ? "mobile" : "desktop"}
 			activeFileId={activeFileId}
-			reportPane={<ResearchReportPane ref={reportPaneRef} generating={reportWriting} />}
+			reportPane={
+				<ResearchReportPane
+					ref={reportPaneRef}
+					generating={reportWriting}
+					onInterceptFile={routeFile}
+				/>
+			}
 			reportActions={
 				report ? (
 					<>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-7 gap-1.5 px-2 text-xs"
+							onClick={() => reportPaneRef.current?.refresh()}
+						>
+							<RefreshCw className="size-3.5" />
+							{t("report.refresh")}
+						</Button>
 						<Button
 							variant="ghost"
 							size="sm"
@@ -520,6 +571,7 @@ function ResearchStudioPage() {
 					setUserSelectDetail={setUserSelectDetail}
 					activeFileId={activeFileId}
 					onActiveFileChange={setActiveFileId}
+					onInterceptFile={routeFile}
 				/>
 			}
 		/>

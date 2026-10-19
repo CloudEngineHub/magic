@@ -35,6 +35,8 @@ export function whenDetailReady(
 interface UseResearchDetailEventsOptions {
 	detailRef: RefObject<DetailRef>
 	attachmentList: AttachmentItem[]
+	/** Claims contract files that have their own UI; returns true when handled. */
+	routeFile: (file: unknown) => boolean
 	/** Brings the "report and files" output tab into view before a preview opens. */
 	revealFiles: () => void
 	setActiveFileId: (fileId: string | null) => void
@@ -51,6 +53,7 @@ const normalizePath = (path: string) => path.replace(/^\//, "")
 export function useResearchDetailEvents({
 	detailRef,
 	attachmentList,
+	routeFile,
 	revealFiles,
 	setActiveFileId,
 	setAutoDetail,
@@ -63,6 +66,8 @@ export function useResearchDetailEvents({
 	})
 
 	const handleOpenFileTab = useMemoizedFn((payload: SuperMagicOpenFileTabPayload) => {
+		const file = payload.fileData ?? attachmentList.find((i) => i.file_id === payload.fileId)
+		if (file && routeFile(file)) return
 		// Messages may pass temporary file data that is not in the attachment tree yet.
 		openInPreview((detail) =>
 			detail.openFileTab(payload.fileData ?? { file_id: payload.fileId }),
@@ -85,15 +90,13 @@ export function useResearchDetailEvents({
 			downloadFile(matched?.file_id)
 			return
 		}
-		openInPreview((detail) =>
-			detail.openFileTab(
-				matched ?? {
-					file_name: payload.fileName,
-					relative_file_path: targetPath,
-					file_path: targetPath,
-				},
-			),
-		)
+		const target = matched ?? {
+			file_name: payload.fileName,
+			relative_file_path: targetPath,
+			file_path: targetPath,
+		}
+		if (routeFile(target)) return
+		openInPreview((detail) => detail.openFileTab(target))
 	})
 
 	const handleOpenKnowledgeBaseTab = useMemoizedFn(
