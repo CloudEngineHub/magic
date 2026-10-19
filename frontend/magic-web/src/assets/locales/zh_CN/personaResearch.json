@@ -253,8 +253,6 @@
 		"sequencePriming": "问题顺序引导"
 	},
 	"home": {
-		"barSubtitle": "虚拟消费者调研",
-		"barTitle": "AI 研究",
 		"delete": "删除",
 		"deleteDescription": "研究对话和本次研究产出的文件会一起删除，人设库中的人设会保留。",
 		"deleteFailed": "删除失败，请重试",

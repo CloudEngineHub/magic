@@ -255,8 +255,6 @@
 		"sequencePriming": "Question order primes answers"
 	},
 	"home": {
-		"barSubtitle": "Simulated consumer interviews",
-		"barTitle": "AI research",
 		"delete": "Delete",
 		"deleteDescription": "The conversation and this study's output files will be deleted. Personas in the library are kept.",
 		"deleteFailed": "Delete failed. Please try again.",
