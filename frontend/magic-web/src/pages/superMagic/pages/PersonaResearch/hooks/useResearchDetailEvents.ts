@@ -14,6 +14,23 @@ import { useResearchFileDownload } from "./useResearchFileDownload"
 
 /** The preview tab is force-mounted; wait one frame so a hidden panel has layout before opening. */
 const DETAIL_OPEN_DELAY_MS = 100
+/** A study without outputs has no results panel yet; revealing it mounts the preview a moment later. */
+const DETAIL_READY_RETRY_MS = 50
+const DETAIL_READY_MAX_TRIES = 20
+
+/** Runs `open` once the preview is mounted, retrying for about a second after the panel is revealed. */
+export function whenDetailReady(
+	detailRef: RefObject<DetailRef>,
+	open: (detail: DetailRef) => void,
+	tries = 0,
+) {
+	if (detailRef.current) {
+		open(detailRef.current)
+		return
+	}
+	if (tries >= DETAIL_READY_MAX_TRIES) return
+	window.setTimeout(() => whenDetailReady(detailRef, open, tries + 1), DETAIL_READY_RETRY_MS)
+}
 
 interface UseResearchDetailEventsOptions {
 	detailRef: RefObject<DetailRef>
@@ -42,9 +59,7 @@ export function useResearchDetailEvents({
 
 	const openInPreview = useMemoizedFn((open: (detail: DetailRef) => void) => {
 		revealFiles()
-		window.setTimeout(() => {
-			if (detailRef.current) open(detailRef.current)
-		}, DETAIL_OPEN_DELAY_MS)
+		window.setTimeout(() => whenDetailReady(detailRef, open), DETAIL_OPEN_DELAY_MS)
 	})
 
 	const handleOpenFileTab = useMemoizedFn((payload: SuperMagicOpenFileTabPayload) => {

@@ -42,7 +42,7 @@ import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { platformKey } from "@/utils/storage"
 import { usePersonaResearchStore } from "../context"
-import { useResearchDetailEvents } from "../hooks/useResearchDetailEvents"
+import { useResearchDetailEvents, whenDetailReady } from "../hooks/useResearchDetailEvents"
 import ResearchConsole, {
 	ResearchConsoleSkeleton,
 	type ResearchConsoleTab,
@@ -110,12 +110,15 @@ function ResearchStudioPage() {
 	const [stepperOpen, setStepperOpen] = useState(false)
 	// Set while the results panel slides in after the study's first output appears.
 	const [outputsRevealing, setOutputsRevealing] = useState(false)
+	// A study with no outputs hides the results panel; opening a preview or file must bring it in.
+	const [outputsRequested, setOutputsRequested] = useState(false)
 	const outputsWereHiddenRef = useRef(false)
 
 	useEffect(() => {
 		store.selectStudy(topicId)
 		followedPhaseRef.current = null
 		outputsWereHiddenRef.current = false
+		setOutputsRequested(false)
 		// Tool steps belong to one study's conversation; never carry them into another study.
 		setUserSelectDetail(undefined)
 		setAutoDetail(undefined)
@@ -133,6 +136,7 @@ function ResearchStudioPage() {
 		study?.phases.some((phase) => phase.key === "report" && phase.status === "running") ?? false
 
 	const showOutputs = useMemoizedFn((tab: ResearchConsoleTab) => {
+		setOutputsRequested(true)
 		setConsoleTab(tab)
 		if (isMobile) setMobileView("outputs")
 	})
@@ -141,8 +145,11 @@ function ResearchStudioPage() {
 	const openFile = useMemoizedFn((fileItem?: unknown) => {
 		showOutputs("files")
 		setUserSelectDetail(undefined)
-		// The preview tab is force-mounted; wait one frame so a hidden panel has layout.
-		setTimeout(() => detailRef.current?.openFileTab?.(fileItem), 100)
+		// The preview tab is force-mounted; wait for the panel to mount and have layout.
+		setTimeout(
+			() => whenDetailReady(detailRef, (detail) => detail.openFileTab?.(fileItem)),
+			100,
+		)
 	})
 
 	/** Tool results (search results, browser steps) open as a detail view in the same tab. */
@@ -215,7 +222,8 @@ function ResearchStudioPage() {
 		validation: (studyAttachments?.validation ? 1 : 0) + (store.validationResults ? 1 : 0),
 		files: countVisibleStudyFiles((studyAttachments?.all ?? []).map(getAttachmentPath)),
 	}
-	const outputsHidden = !isMobile && !isContentLoading && !hasStudyOutputs(outputCounts)
+	const outputsHidden =
+		!isMobile && !isContentLoading && !outputsRequested && !hasStudyOutputs(outputCounts)
 	const revealTab = firstOutputTab(outputCounts)
 	useEffect(() => {
 		if (outputsHidden) {
