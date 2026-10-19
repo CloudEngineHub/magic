@@ -1,7 +1,7 @@
 import ModelIcon from "./ModelIcon"
 import type { ModelItem, ReasoningEffort } from "../types"
 import { useTranslation } from "react-i18next"
-import { getModelDefaultReasoningEffort, getModelReasoningEffort } from "../utils"
+import { getModelDisplayedReasoningEffort } from "../utils"
 
 interface ModelPreferenceTooltipProps {
 	selectedLanguageModel: ModelItem | null
@@ -25,14 +25,8 @@ export function ModelPreferenceTooltip({
 		xhigh: t("messageEditor.modelSwitch.reasoning.xhigh"),
 		max: t("messageEditor.modelSwitch.reasoning.max"),
 	}
-	const defaultEffort = getModelDefaultReasoningEffort(selectedLanguageModel)
-	const defaultLabel = defaultEffort
-		? t("messageEditor.modelSwitch.reasoning.defaultWithLevel", {
-				level: reasoningLabels[defaultEffort],
-			})
-		: t("messageEditor.modelSwitch.reasoning.default")
-	// 选择快照优先；继承默认值只改变显示，不写入用户偏好。
-	const selectedReasoningEffort = getModelReasoningEffort(selectedLanguageModel)
+	const defaultLabel = t("messageEditor.modelSwitch.reasoning.default")
+	const selectedReasoningEffort = getModelDisplayedReasoningEffort(selectedLanguageModel)
 	const reasoningValue = selectedLanguageModel?.reasoning_effort_levels?.length
 		? selectedReasoningEffort
 			? reasoningLabels[selectedReasoningEffort]

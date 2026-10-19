@@ -5,7 +5,12 @@ import {
 	ModelStatusEnum,
 	type ModelItem,
 } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
-import { getModelDefaultReasoningEffort } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/utils"
+import {
+	getModelDefaultReasoningEffort,
+	getModelDisplayedReasoningEffort,
+	getModelReasoningEffort,
+	getNextModelReasoningEffort,
+} from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/utils"
 import { serializeMessageContent } from "@/pages/superMagic/services/messageQueueSerialization"
 
 vi.mock("@/models/user", () => ({
@@ -58,6 +63,43 @@ beforeEach(() => {
 })
 
 describe("思考偏好和队列快照", () => {
+	it.each(["none", "low", "medium", "high"] as const)(
+		"后台默认 %s 直接作为选中展示，不写入发送",
+		(level) => {
+			const item = { ...model(), reasoning_effort_default: level }
+			expect(getModelDisplayedReasoningEffort(item)).toBe(level)
+			expect(getModelReasoningEffort(item)).toBeUndefined()
+			expect(getNextModelReasoningEffort(item, level)).toBeUndefined()
+			expect(
+				serializeMessageContent({ type: "doc" }, [], item).extra.super_agent.model,
+			).not.toHaveProperty("reasoning_effort")
+		},
+	)
+
+	it("无后台默认时无选中；个人偏好优先，恢复继承后不回读旧覆盖", () => {
+		const item = { ...model(), reasoning_effort_default: "low" as const }
+		expect(getModelDisplayedReasoningEffort(model())).toBeUndefined()
+		cache.setReasoningEffort(item, "high")
+		expect(getModelDisplayedReasoningEffort(item)).toBe("high")
+		expect(getNextModelReasoningEffort(item, "high")).toBeUndefined()
+		expect(getNextModelReasoningEffort(item, "medium")).toBe("medium")
+		const inherited = { ...item, reasoning_effort: null }
+		expect(getModelDisplayedReasoningEffort(inherited)).toBe("low")
+		expect(
+			getModelDisplayedReasoningEffort({ ...inherited, reasoning_effort_default: null }),
+		).toBeUndefined()
+		expect(
+			serializeMessageContent({ type: "doc" }, [], inherited).extra.super_agent.model,
+		).not.toHaveProperty("reasoning_effort")
+		expect(
+			getModelDisplayedReasoningEffort({
+				...item,
+				reasoning_effort: "high",
+				reasoning_effort_levels: ["low"],
+			}),
+		).toBe("low")
+	})
+
 	it("后台默认值只用于展示，发送及快照不冻结继承档位", () => {
 		const item = { ...model(), reasoning_effort_default: "medium" as const }
 		expect(getModelDefaultReasoningEffort(item)).toBe("medium")

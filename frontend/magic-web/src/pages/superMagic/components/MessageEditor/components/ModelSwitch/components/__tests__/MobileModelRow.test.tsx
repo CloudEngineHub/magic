@@ -17,12 +17,8 @@ const cache = vi.hoisted(() => ({
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, values?: { name?: string; level?: string }) =>
-			key.endsWith("detailsFor")
-				? `Details ${values?.name}`
-				: key.endsWith("defaultWithLevel")
-					? `Default (${values?.level})`
-					: key,
+		t: (key: string, values?: { name?: string }) =>
+			key.endsWith("detailsFor") ? `Details ${values?.name}` : key,
 	}),
 }))
 vi.mock("@/services/superMagic/topicModel/SuperMagicTopicModelCacheService", () => ({
@@ -103,44 +99,49 @@ function setup(overrides: Partial<Parameters<typeof MobileModelRow>[0]> = {}) {
 }
 
 describe("移动端模型行内设置", () => {
-	it("首次使用展示继承档位，后台更新后刷新展示且不保存用户偏好", () => {
+	it.each(["mobile", "desktop"] as const)(
+		"%s 直接选中后台档位，空默认不选中任何档位",
+		(variant) => {
+			const item = { ...model(), reasoning_effort_default: "high" as const }
+			const { props, rerender } = setup({ model: item, variant })
+			expect(
+				screen
+					.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.high" })
+					.getAttribute("aria-pressed"),
+			).toBe("true")
+			expect(screen.queryByRole("button", { name: /default/i })).toBeNull()
+			expect(cache.setReasoningEffort).not.toHaveBeenCalled()
+			rerender(
+				<MobileModelRow {...props} model={{ ...item, reasoning_effort_default: "none" }} />,
+			)
+			expect(
+				screen
+					.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.none" })
+					.getAttribute("aria-pressed"),
+			).toBe("true")
+			rerender(
+				<MobileModelRow {...props} model={{ ...item, reasoning_effort_default: null }} />,
+			)
+			for (const button of within(screen.getByRole("group")).getAllByRole("button"))
+				expect(button.getAttribute("aria-pressed")).toBe("false")
+		},
+	)
+
+	it("用户偏好优先，点击已选偏好后恢复后台档位而不冻结默认值", () => {
+		cache.values.set("mock-model", "none")
 		const item = { ...model(), reasoning_effort_default: "high" as const }
 		const { props, rerender } = setup({ model: item })
-		const name = "Default (messageEditor.modelSwitch.reasoning.high)"
-		expect(screen.getByRole("button", { name }).getAttribute("aria-pressed")).toBe("true")
+		const off = screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.none" })
+		expect(off.getAttribute("aria-pressed")).toBe("true")
+		fireEvent.click(off)
+		expect(cache.setReasoningEffort).toHaveBeenCalledWith(item, undefined)
+		expect(props.onSelect).toHaveBeenCalledWith({ ...item, reasoning_effort: null })
+		rerender(<MobileModelRow {...props} model={{ ...item, reasoning_effort: null }} />)
 		expect(
 			screen
 				.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.high" })
 				.getAttribute("aria-pressed"),
-		).toBe("false")
-		expect(cache.setReasoningEffort).not.toHaveBeenCalled()
-		rerender(
-			<MobileModelRow {...props} model={{ ...item, reasoning_effort_default: "none" }} />,
-		)
-		const choice = screen.getByRole("button", {
-			name: "Default (messageEditor.modelSwitch.reasoning.none)",
-		})
-		expect(choice.getAttribute("aria-pressed")).toBe("true")
-		fireEvent.click(choice)
-		expect(props.onSelect).toHaveBeenCalledWith(
-			expect.objectContaining({ reasoning_effort: null }),
-		)
-		expect(cache.setReasoningEffort).toHaveBeenCalledWith(expect.anything(), undefined)
-	})
-
-	it("用户手动偏好优先于后台默认值", () => {
-		cache.values.set("mock-model", "none")
-		setup({ model: { ...model(), reasoning_effort_default: "high" } })
-		expect(
-			screen
-				.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.none" })
-				.getAttribute("aria-pressed"),
 		).toBe("true")
-		expect(
-			screen
-				.getByRole("button", { name: "Default (messageEditor.modelSwitch.reasoning.high)" })
-				.getAttribute("aria-pressed"),
-		).toBe("false")
 	})
 
 	it("收起时显示零倍率，参考说明和描述仅在展开区域内显示", () => {
@@ -187,8 +188,9 @@ describe("移动端模型行内设置", () => {
 			...props.model,
 			reasoning_effort: "none",
 		})
+		cache.values.set(props.model.model_id, "none")
 		fireEvent.click(
-			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.default" }),
+			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.none" }),
 		)
 		expect(cache.setReasoningEffort).toHaveBeenLastCalledWith(props.model, undefined)
 		expect(props.onSelect).toHaveBeenLastCalledWith({ ...props.model, reasoning_effort: null })
@@ -225,9 +227,9 @@ describe("移动端模型行内设置", () => {
 		)
 		expect(
 			screen
-				.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.default" })
+				.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.none" })
 				.getAttribute("aria-pressed"),
-		).toBe("true")
+		).toBe("false")
 	})
 
 	it("禁用模型的名称、箭头和等级均不可操作", () => {

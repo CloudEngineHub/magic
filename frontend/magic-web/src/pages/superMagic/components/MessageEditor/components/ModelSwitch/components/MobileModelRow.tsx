@@ -2,7 +2,7 @@ import { useId, useState, type RefObject } from "react"
 import { Check, ChevronRight, ChevronUp } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { getModelDefaultReasoningEffort } from "../utils"
+import { getModelDisplayedReasoningEffort, getNextModelReasoningEffort } from "../utils"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { cn } from "@/utils/cn"
 import { reasoningEffortLevels, type ModelItem, type ReasoningEffort } from "../types"
@@ -39,7 +39,7 @@ export function MobileModelRow({
 	const { t } = useTranslation("super")
 	const detailsId = useId()
 	const [descriptionExpanded, setDescriptionExpanded] = useState(false)
-	const effort = modelCache.getReasoningEffort(model)
+	const effort = getModelDisplayedReasoningEffort(model)
 	const labels = {
 		none: t("messageEditor.modelSwitch.reasoning.none"),
 		minimal: t("messageEditor.modelSwitch.reasoning.minimal"),
@@ -49,12 +49,7 @@ export function MobileModelRow({
 		xhigh: t("messageEditor.modelSwitch.reasoning.xhigh"),
 		max: t("messageEditor.modelSwitch.reasoning.max"),
 	}
-	const defaultEffort = getModelDefaultReasoningEffort(model)
-	const defaultLabel = defaultEffort
-		? t("messageEditor.modelSwitch.reasoning.defaultWithLevel", {
-				level: labels[defaultEffort],
-			})
-		: t("messageEditor.modelSwitch.reasoning.default")
+	const defaultLabel = t("messageEditor.modelSwitch.reasoning.default")
 	const levels = reasoningEffortLevels.filter((level) =>
 		model.reasoning_effort_levels?.includes(level),
 	)
@@ -67,9 +62,10 @@ export function MobileModelRow({
 	const isDesktop = variant === "desktop"
 	const DetailsIcon = expanded ? ChevronUp : ChevronRight
 
-	/** 先固定本次选择快照，默认项清除偏好；后续队列不重新读取新偏好。 */
-	function selectEffort(value?: ReasoningEffort) {
+	/** 再次点击清除个人覆盖；继承档位只用于展示，不写入发送快照。 */
+	function selectEffort(level: ReasoningEffort) {
 		if (disabled) return
+		const value = getNextModelReasoningEffort(model, level)
 		modelCache.setReasoningEffort(model, value)
 		const handleChange = onReasoningEffortChange ?? onSelect
 		handleChange({ ...model, reasoning_effort: value ?? null })
@@ -173,15 +169,10 @@ export function MobileModelRow({
 								{t("messageEditor.modelSwitch.reasoning.mobileLabel")}
 							</legend>
 							<div className="grid grid-cols-4 gap-2">
-								{[undefined, ...levels].map((value) => (
+								{levels.map((value) => (
 									<Button
-										key={value ?? "default"}
+										key={value}
 										type="button"
-										// 默认项带具体档位时占两格，独立于按钮外观避免覆盖其他样式调整。
-										style={{
-											gridColumn:
-												!value && defaultEffort ? "span 2" : undefined,
-										}}
 										variant="ghost"
 										disabled={disabled}
 										aria-pressed={effort === value}
@@ -195,9 +186,7 @@ export function MobileModelRow({
 										{effort === value && (
 											<Check className="size-4" aria-hidden="true" />
 										)}
-										<span className="min-w-0 truncate">
-											{value ? labels[value] : defaultLabel}
-										</span>
+										<span className="min-w-0 truncate">{labels[value]}</span>
 									</Button>
 								))}
 							</div>

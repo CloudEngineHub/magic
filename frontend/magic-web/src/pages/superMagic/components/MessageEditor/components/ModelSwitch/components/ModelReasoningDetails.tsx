@@ -9,7 +9,7 @@ import {
 	PopoverTrigger,
 } from "@/components/shadcn-ui/popover"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import { getModelDefaultReasoningEffort } from "../utils"
+import { getModelDisplayedReasoningEffort, getNextModelReasoningEffort } from "../utils"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { reasoningEffortLevels, type ModelItem, type ReasoningEffort } from "../types"
 import {
@@ -74,13 +74,8 @@ export function ModelReasoningDetails({
 	const levels = reasoningEffortLevels.filter((level) =>
 		model.reasoning_effort_levels?.includes(level),
 	)
-	const selected = modelCache.getReasoningEffort(model)
-	const defaultEffort = getModelDefaultReasoningEffort(model)
-	const defaultLabel = defaultEffort
-		? t("messageEditor.modelSwitch.reasoning.defaultWithLevel", {
-				level: labels[defaultEffort],
-			})
-		: t("messageEditor.modelSwitch.reasoning.default")
+	const selected = getModelDisplayedReasoningEffort(model)
+	const defaultLabel = t("messageEditor.modelSwitch.reasoning.default")
 	const selectedLabel = selected ? labels[selected] : defaultLabel
 	const hasMultiplier =
 		typeof model.billing_multiplier === "number" &&
@@ -125,8 +120,9 @@ export function ModelReasoningDetails({
 		hover.requestOpen(id, immediate)
 	}
 
-	/** 先固定强度，再通知外层更新模型参数；外层模型选择菜单保持打开。 */
-	function selectEffort(effort?: ReasoningEffort) {
+	/** 固定用户覆盖；再次点击当前档位则清除覆盖，继续继承后台设置。 */
+	function selectEffort(level: ReasoningEffort) {
+		const effort = getNextModelReasoningEffort(model, level)
 		modelCache.setReasoningEffort(model, effort)
 		hover.requestClose(id, true)
 		setLevelsOpen(false)
@@ -177,18 +173,15 @@ export function ModelReasoningDetails({
 				<div className="px-2 py-1.5 text-xs text-muted-foreground">
 					{t("messageEditor.modelSwitch.reasoning.label")}
 				</div>
-				{[undefined, ...levels].map((level, index) => (
-					<div
-						key={level ?? "default"}
-						className={index === 0 ? "mb-1 border-b pb-1" : undefined}
-					>
+				{levels.map((level) => (
+					<div key={level}>
 						<Button
 							variant="ghost"
 							className="h-9 w-full justify-between px-2 text-sm font-normal"
 							onClick={() => selectEffort(level)}
 							aria-pressed={selected === level}
 						>
-							{level ? labels[level] : defaultLabel}
+							{labels[level]}
 							{selected === level && <Check className="size-4" aria-hidden="true" />}
 						</Button>
 					</div>

@@ -6,8 +6,7 @@ import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCac
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string, values?: { level?: string }) =>
-			key.endsWith("defaultWithLevel") ? `Default (${values?.level})` : key,
+		t: (key: string) => key,
 	}),
 }))
 vi.mock("@/services/superMagic/topicModel/SuperMagicTopicModelCacheService", () => ({
@@ -77,7 +76,7 @@ describe("模型详情思考强度", () => {
 		expect(screen.getByText("0.00x")).toBeTruthy()
 		expect(screen.getByText("messageEditor.modelSwitch.billingMultiplierHint")).toBeTruthy()
 	})
-	it("桌面详情显示后台默认档位，重新选择默认仍清除请求覆盖", () => {
+	it("桌面详情直接选中后台档位，点击继承档位仍不冻结用户覆盖", () => {
 		const { model, onReasoningEffortChange } = setup(
 			false,
 			["none", "high"],
@@ -90,7 +89,7 @@ describe("模型详情思考强度", () => {
 			screen.getByRole("button", { name: /messageEditor.modelSwitch.reasoning.label/ }),
 		)
 		const choice = screen.getByRole("button", {
-			name: "Default (messageEditor.modelSwitch.reasoning.high)",
+			name: "messageEditor.modelSwitch.reasoning.high",
 		})
 		expect(choice.getAttribute("aria-pressed")).toBe("true")
 		fireEvent.click(choice)
@@ -149,7 +148,7 @@ describe("模型详情思考强度", () => {
 		fireEvent.scroll(screen.getByTestId("model-switch-scroll-container"))
 		expect(screen.queryByRole("dialog")).toBeNull()
 	})
-	it("键盘右箭头进入详情，默认选择保留可见焦点", () => {
+	it("键盘右箭头进入详情，具体档位选择保留可见焦点", () => {
 		const { onReasoningEffortChange } = setup()
 		const strength = screen.getByRole("button", {
 			name: /messageEditor.modelSwitch.reasoning.label/,
@@ -158,13 +157,13 @@ describe("模型详情思考强度", () => {
 		expect(document.activeElement).toBe(strength)
 		fireEvent.click(strength)
 		const choice = screen.getByRole("button", {
-			name: "messageEditor.modelSwitch.reasoning.default",
+			name: "messageEditor.modelSwitch.reasoning.high",
 		})
 		choice.focus()
 		expect(document.activeElement).toBe(choice)
 		fireEvent.click(choice)
 		expect(onReasoningEffortChange).toHaveBeenCalledWith(
-			expect.objectContaining({ reasoning_effort: null }),
+			expect.objectContaining({ reasoning_effort: "high" }),
 		)
 	})
 
@@ -187,14 +186,21 @@ describe("模型详情思考强度", () => {
 		expect(model).not.toHaveProperty("reasoning_effort")
 	})
 
-	it("移动端在同一面板选择默认，清除覆盖并关闭详情", () => {
-		const { model, onReasoningEffortChange } = setup(true)
+	it("移动端点击后台选中档位保持继承并关闭详情", () => {
+		const { model, onReasoningEffortChange } = setup(
+			true,
+			["none", "high"],
+			undefined,
+			undefined,
+			false,
+			"high",
+		)
 		fireEvent.click(
 			screen.getByRole("button", { name: /messageEditor.modelSwitch.reasoning.label/ }),
 		)
 		expect(screen.queryByText("Mock description")).toBeNull()
 		fireEvent.click(
-			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.default" }),
+			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.high" }),
 		)
 		expect(onReasoningEffortChange).toHaveBeenCalledWith({
 			...model,

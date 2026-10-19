@@ -3593,7 +3593,6 @@
 			"noVideoModelsDesc": "No video models are available for the current mode",
 			"reasoning": {
 				"default": "Default",
-				"defaultWithLevel": "Default ({{level}})",
 				"details": "Model details",
 				"detailsFor": "View {{name}} details",
 				"high": "High",
