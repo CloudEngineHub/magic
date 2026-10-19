@@ -17,6 +17,7 @@ import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatus
 import ProjectTypeTag from "@/pages/superMagic/components/ProjectTypeTag"
 import { canDragSidebarProject } from "./projectDndUtils"
 import { Button } from "@/components/shadcn-ui/button"
+import { isAiCanvasProject } from "@/pages/superMagic/utils/isAiCanvasProject"
 
 type ProjectRowActionHandler = (project: ProjectListItem) => void | Promise<void>
 
@@ -140,7 +141,8 @@ function CollapsedWorkspaceProjectRow({
 		},
 		onCopyCollaborationLink,
 		onTransferProject,
-		onMoveProject,
+		// AI canvas projects must stay in their dedicated workspace, so they offer no move action.
+		onMoveProject: isAiCanvasProject(project) ? undefined : onMoveProject,
 		onAddCollaborators,
 		onCancelWorkspaceShortcut: (projectId: string, workspaceId?: string) => {
 			void onCancelWorkspaceShortcut?.({

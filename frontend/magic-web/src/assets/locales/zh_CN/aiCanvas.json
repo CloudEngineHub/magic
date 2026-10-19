@@ -1,0 +1,22 @@
+{
+	"home": {
+		"createFailed": "新建画布失败，请稍后重试",
+		"empty": "还没有画布。描述你的想法，或点击“新建画布”开始创作",
+		"loadFailed": "画布列表加载失败",
+		"loadMore": "加载更多",
+		"myCanvases": "我的画布",
+		"newCanvas": "新建画布",
+		"placeholder": "描述你想在画布上创作的内容",
+		"retry": "重试",
+		"subtitle": "在画布上和 AI 一起创作图片、视频与分镜",
+		"title": "AI 画布",
+		"untitled": "未命名画布",
+		"updatedAt": "更新于 {{time}}",
+		"workspaceFailed": "AI 画布工作区加载失败"
+	},
+	"project": {
+		"canvasCreateFailed": "画布创建失败",
+		"preparingCanvas": "正在准备画布",
+		"retry": "重试"
+	}
+}

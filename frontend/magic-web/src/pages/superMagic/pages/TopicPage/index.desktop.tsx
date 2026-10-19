@@ -59,6 +59,10 @@ import {
 } from "./hooks/useTopicHistoryLayoutState"
 import { useMessageHeaderTopicActions } from "./hooks/useMessageHeaderTopicActions"
 import { useAICardDeepLinkOpen } from "./hooks/useAICardDeepLinkOpen"
+import { useAiCanvasDocument } from "./hooks/useAiCanvasDocument"
+import { isAiCanvasProject } from "../../utils/isAiCanvasProject"
+import AiCanvasDocumentStatus from "./components/AiCanvasDocumentStatus"
+import { TopicMode } from "../Workspace/TopicMode"
 import type { AttachmentItem } from "../../components/TopicFilesButton/hooks"
 import { TaskStatus } from "../Workspace/types"
 import { resolveMessageSendContext } from "../../services/messageSendPreparation"
@@ -201,9 +205,13 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	})
 	// Calculate read-only status based on user role
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
-	const hideProjectCard = isSingleTopicChat || isAudioProjectMode(selectedProject?.project_mode)
+	// AI canvas projects show only their canvas and the conversation: no project card or file tree.
+	const isAiCanvas = !isSingleTopicChat && isAiCanvasProject(selectedProject)
+	const hideProjectCard =
+		isSingleTopicChat || isAiCanvas || isAudioProjectMode(selectedProject?.project_mode)
 	// The chat page has no project card, but still collapses its file sidebar from the files panel header.
-	const canCollapseFileSidebar = !isReadOnly && (isSingleTopicChat || !hideProjectCard)
+	const canCollapseFileSidebar =
+		!isReadOnly && !isAiCanvas && (isSingleTopicChat || !hideProjectCard)
 	const topicActions = useMessageHeaderTopicActions({
 		selectedProject,
 		selectedTopic,
@@ -287,6 +295,19 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		setUserSelectDetail(null)
 		clearActiveDetailTabType()
 	}, [selectedProject?.id])
+
+	const aiCanvasDocument = useAiCanvasDocument({
+		enabled: isAiCanvas,
+		projectId: selectedProject?.id,
+		isReadOnly,
+		attachments,
+		attachmentLoadState: projectFilesStore.attachmentLoadState,
+		projectFilesStore,
+		// Wait for restored file tabs so the cache restore cannot replace the freshly opened canvas.
+		openCanvas: (folder) => scheduleWhenTabsCacheReady(() => handleFileClickWithPanel(folder)),
+	})
+	// Read through a stable callback so the send flow always binds the canvas currently shown.
+	const getAiCanvasMentionItems = useMemoizedFn(() => aiCanvasDocument.canvasMentionItems)
 
 	useSlidesTemplateNavigation({
 		selectedProjectId: selectedProject?.id,
@@ -831,6 +852,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				onToggleHistoryPanel={onToggleHistoryPanel}
 				trailingActions={isSingleTopicChat ? <ChatConversationActionsSlot /> : undefined}
 				isChatDetail={isSingleTopicChat}
+				lockedTopicMode={isAiCanvas ? TopicMode.Design : undefined}
+				getImplicitMentionItems={isAiCanvas ? getAiCanvasMentionItems : undefined}
 			/>
 		),
 	)
@@ -842,6 +865,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				detailPanelClassName={styles.detailPanel}
 				isDetailPanelFullscreen={isDetailPanelFullscreen}
 				enableProjectCollapse={canCollapseFileSidebar}
+				showProjectSidebar={!isAiCanvas}
 				projectSiderPanelPersistence={
 					isSingleTopicChat ? CHAT_PROJECT_SIDER_PANEL_PERSISTENCE : undefined
 				}
@@ -858,36 +882,48 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						siderVariant={isSingleTopicChat ? "chat" : "default"}
 					/>
 				)}
-				detailPanel={(fileSidebarControl) => (
-					<Detail
-						fileSidebarControl={fileSidebarControl}
-						attachmentLoadState={projectFilesStore.attachmentLoadState}
-						projectFilesStore={projectFilesStore}
-						ref={detailRef}
-						disPlayDetail={disPlayDetail}
-						userSelectDetail={userSelectDetail}
-						setUserSelectDetail={setUserSelectDetail}
-						attachments={attachments}
-						attachmentList={attachmentList}
-						topicId={selectedTopic?.id}
-						baseShareUrl={`${window.location.origin}/share`}
-						currentTopicStatus={currentTopicStatus}
-						messages={messages}
-						autoDetail={autoDetail}
-						allowEdit={!isReadOnly}
-						selectedTopic={selectedTopic}
-						selectedProject={selectedProject}
-						activeFileId={activeFileId}
-						onActiveFileChange={setActiveFileId}
-						onActiveTabChange={handleActiveDetailTabChange}
-						onPreviewCollapse={isReadOnly ? undefined : collapseDetailPanel}
-						onPreviewOpen={expandDetailPanel}
-						isPreviewCollapsed={isDetailPanelCollapsed}
-						canLocateFile={!isReadOnly}
-						onFullscreenChange={setIsDetailPanelFullscreen}
-						onFileTabsCacheLoaded={onFileTabsCacheLoaded}
-					/>
-				)}
+				detailPanel={(fileSidebarControl) =>
+					isAiCanvas &&
+					!aiCanvasDocument.canvasFolder &&
+					(aiCanvasDocument.isCreating || aiCanvasDocument.creationError) ? (
+						<AiCanvasDocumentStatus
+							isCreating={aiCanvasDocument.isCreating}
+							onRetry={aiCanvasDocument.retry}
+						/>
+					) : (
+						<Detail
+							fileSidebarControl={fileSidebarControl}
+							attachmentLoadState={projectFilesStore.attachmentLoadState}
+							projectFilesStore={projectFilesStore}
+							ref={detailRef}
+							disPlayDetail={disPlayDetail}
+							userSelectDetail={userSelectDetail}
+							setUserSelectDetail={setUserSelectDetail}
+							attachments={attachments}
+							attachmentList={attachmentList}
+							topicId={selectedTopic?.id}
+							baseShareUrl={`${window.location.origin}/share`}
+							currentTopicStatus={currentTopicStatus}
+							messages={messages}
+							autoDetail={autoDetail}
+							allowEdit={!isReadOnly}
+							selectedTopic={selectedTopic}
+							selectedProject={selectedProject}
+							activeFileId={activeFileId}
+							onActiveFileChange={setActiveFileId}
+							onActiveTabChange={handleActiveDetailTabChange}
+							// AI canvas keeps its canvas visible and has no file tree to locate files in.
+							onPreviewCollapse={
+								isReadOnly || isAiCanvas ? undefined : collapseDetailPanel
+							}
+							onPreviewOpen={expandDetailPanel}
+							isPreviewCollapsed={isDetailPanelCollapsed}
+							canLocateFile={!isReadOnly && !isAiCanvas}
+							onFullscreenChange={setIsDetailPanelFullscreen}
+							onFileTabsCacheLoaded={onFileTabsCacheLoaded}
+						/>
+					)
+				}
 				isReadOnly={isReadOnly}
 				// Closing the chat preview should free its width entirely, matching the project page,
 				// rather than leave an empty strip. Sidebar collapse already implies this; kept explicit.

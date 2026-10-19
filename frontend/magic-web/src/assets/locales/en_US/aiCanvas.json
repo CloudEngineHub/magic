@@ -1,0 +1,22 @@
+{
+	"home": {
+		"createFailed": "Failed to create the canvas. Please try again later",
+		"empty": "No canvases yet. Describe your idea or click \"New canvas\" to start",
+		"loadFailed": "Failed to load canvases",
+		"loadMore": "Load more",
+		"myCanvases": "My canvases",
+		"newCanvas": "New canvas",
+		"placeholder": "Describe what you want to create on the canvas",
+		"retry": "Retry",
+		"subtitle": "Create images, videos and storyboards with AI on a canvas",
+		"title": "AI Canvas",
+		"untitled": "Untitled canvas",
+		"updatedAt": "Updated {{time}}",
+		"workspaceFailed": "Failed to load the AI canvas workspace"
+	},
+	"project": {
+		"canvasCreateFailed": "Failed to create the canvas",
+		"preparingCanvas": "Preparing the canvas",
+		"retry": "Retry"
+	}
+}
