@@ -81,6 +81,7 @@
 		"adminAIDrawing": "管理后台/智能绘图管理",
 		"adminAIModel": "管理后台/大模型管理",
 		"agentList": "AI助理管理",
+		"aiCanvas": "AI 画布",
 		"application": "应用",
 		"audioRecordingDetail": "录音详情",
 		"audioRecordings": "录音与纪要",

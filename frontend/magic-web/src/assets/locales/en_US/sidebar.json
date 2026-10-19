@@ -2,6 +2,9 @@
 	"agents": {
 		"aiChat": "AI Chat"
 	},
+	"aiCanvas": {
+		"title": "AI Canvas"
+	},
 	"appsMenu": {
 		"aiApps": "AI Apps",
 		"aiFinance": "AI Finance",

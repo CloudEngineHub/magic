@@ -108,6 +108,8 @@ export enum RouteName {
 	CrewConversation = "CrewConversation",
 	/** MagiClaw - 超级龙虾 */
 	MagiClaw = "MagiClaw",
+	/** AI Canvas - AI 画布首页 */
+	AiCanvas = "AiCanvas",
 	/** Audio Recordings - 录音与纪要列表 */
 	AudioRecordings = "AudioRecordings",
 	/** Audio Recording Detail - 录音与纪要详情 */

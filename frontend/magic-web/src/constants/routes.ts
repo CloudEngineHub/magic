@@ -109,6 +109,8 @@ export const enum RoutePath {
 	MicroAppsList = "/super/micro-apps/list",
 	MicroApp = "/super/micro-app/:appId",
 	MicroAppShare = "/micro-app/:appId",
+	/** AI 画布首页：ai-canvas 专属工作区的项目列表 */
+	AiCanvas = "/super/ai-canvas",
 	SuperAssistant = "/super/assistant",
 	CrewMarket = "/market",
 	CrewMarketCrew = "/market/crew",
