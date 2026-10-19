@@ -56,6 +56,9 @@
         .verdict-refuted { color: var(--neg); background: var(--neg-bg); }
         .verdict-mixed { color: var(--mid); background: var(--mid-bg); }
         .verdict-insufficient, .verdict-pending { color: #555; background: #f0eeeb; }
+        .decision-go { color: var(--pos); background: var(--pos-bg); }
+        .decision-conditional { color: var(--mid); background: var(--mid-bg); }
+        .decision-nogo { color: var(--neg); background: var(--neg-bg); }
         .confidence-high { color: var(--pos); background: var(--pos-bg); }
         .confidence-medium { color: var(--mid); background: var(--mid-bg); }
         .confidence-low { color: var(--neg); background: var(--neg-bg); }
@@ -103,9 +106,9 @@
         <!-- Table of contents: one link per section that exists, in page order -->
         <aside class="toc hidden lg:block sticky top-20 self-start space-y-0.5">
             <p class="text-xs text-faint mb-2 tracking-wide">Contents</p>
+            <a href="#summary">Bottom line</a>
             <a href="#hypotheses">Hypotheses</a>
             <a href="#business">Recommendations</a>
-            <a href="#summary">Summary</a>
             <a href="#findings">Findings</a>
             <a href="#real-voices">Real voices</a>
             <a href="#personas">Personas</a>
@@ -148,6 +151,35 @@
                 </div>
             </header>
 
+            <!-- Bottom line first: the decision verdict, the one-sentence answer, the reasons, then what to validate.
+                 Decision badge class: decision-go (worth doing), decision-conditional (only under the stated conditions),
+                 decision-nogo (not as currently framed). Badge text in the user's language. -->
+            <section id="summary" class="space-y-5">
+                <h2 class="section-title">Bottom line</h2>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="chip decision-conditional">Worth doing only if onboarding changes</span>
+                    <span class="text-[13px] text-faint">Decision: whether to redesign the first-week onboarding.</span>
+                </div>
+                <!-- One sentence that answers the research question directly -->
+                <p class="text-[19px] leading-9 font-bold max-w-3xl">Week-two churn is driven less by missing features than by the absence of a first "win" in week one.<a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a></p>
+                <!-- 2-3 reasons, one line each, the strongest first -->
+                <ol class="space-y-2 text-[15px] leading-7 list-decimal pl-5 max-w-3xl">
+                    <li>Users who never tie the app to a recurring task forget it once the novelty fades.<a href="#q2" class="citation-ref">[Q2]</a></li>
+                    <li>Peers, not feature lists, are what make owner-operators try again.<a href="#s2" class="citation-ref">[S2]</a></li>
+                </ol>
+                <!-- What would change this conclusion, in one line -->
+                <p class="text-[13px] text-muted">Would change if: real trial users name a missing feature as the reason they stopped.</p>
+                <h3 class="text-sm font-bold pt-2">Validate these first</h3>
+                <!-- The 3 most decision-relevant open questions, each tied to a hypothesis -->
+                <ol class="divide-y divide-rule border-y border-rule">
+                    <li class="py-4 grid grid-cols-[44px_minmax(0,1fr)] gap-3">
+                        <span class="font-mono text-xs text-faint pt-0.5">H1</span>
+                        <div><p class="font-medium">Do real trial users stop because the app never became part of a routine?</p>
+                            <p class="text-[13px] text-muted mt-1">Why: most AI interviews described the product as "nice but not part of my routine".<a href="#q2" class="citation-ref">[Q2]</a> How: questionnaire Q2-Q4.</p></div>
+                    </li>
+                </ol>
+            </section>
+
             <!-- Conclusions by hypothesis: one row per study.json hypothesis, in id order; the margin carries the lead quote -->
             <section id="hypotheses" class="space-y-2">
                 <h2 class="section-title">Conclusions by hypothesis</h2>
@@ -161,7 +193,9 @@
                         </div>
                         <h3 class="text-[17px] font-bold leading-relaxed">Users churn because they never tie the app to a recurring task</h3>
                         <p class="text-[14.5px] leading-8 text-muted">Most completed interviews describe trying the app twice and forgetting it; no external source covers week-two behaviour yet.<a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a></p>
-                        <p class="text-xs text-faint">Support if: most participants describe no recurring use. Refute if: most name a missing feature as the reason they stopped.</p>
+                        <!-- The judging criteria stay available but folded, so each hypothesis reads as verdict + reason -->
+                        <details class="text-xs text-faint"><summary class="cursor-pointer select-none">Judging criteria</summary>
+                            <p class="mt-1">Support if: most participants describe no recurring use. Refute if: most name a missing feature as the reason they stopped.</p></details>
                         <div class="evidence-bar">
                             <span><i class="fa-solid fa-link"></i>Web sources: 1</span>
                             <span><i class="fa-solid fa-robot"></i>AI interviews: 7 people</span>
@@ -177,7 +211,9 @@
                 </article>
             </section>
 
-            <!-- Business recommendations: fixed five items, in this order -->
+            <!-- Business recommendations: fixed five items, in this order. They follow the bottom line: with decision-nogo,
+                 title the section "If you still want to try" and limit it to the conditions that would have to hold and
+                 how to test them cheaply; never present a launch plan the verdict argues against. -->
             <section id="business" class="space-y-5">
                 <h2 class="section-title">Business recommendations</h2>
                 <figure class="report-figure" data-image-slot="concept" data-image-source="generate" data-image-ratio="16:9"
@@ -230,21 +266,6 @@
                 </div>
             </section>
 
-            <!-- Executive summary and what to validate first -->
-            <section id="summary" class="space-y-5">
-                <h2 class="section-title">Executive summary</h2>
-                <p class="text-[17px] leading-8 font-medium max-w-3xl">Week-two churn is driven less by missing features than by the absence of a first "win" in week one: users who never connect the product to a recurring task stop opening it once the novelty fades.<a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a></p>
-                <h3 class="text-sm font-bold pt-2">Validate these first</h3>
-                <!-- The 3 most decision-relevant open questions, each tied to a hypothesis -->
-                <ol class="divide-y divide-rule border-y border-rule">
-                    <li class="py-4 grid grid-cols-[44px_minmax(0,1fr)] gap-3">
-                        <span class="font-mono text-xs text-faint pt-0.5">H1</span>
-                        <div><p class="font-medium">Do real trial users stop because the app never became part of a routine?</p>
-                            <p class="text-[13px] text-muted mt-1">Why: most AI interviews described the product as "nice but not part of my routine".<a href="#q2" class="citation-ref">[Q2]</a> How: questionnaire Q2-Q4.</p></div>
-                    </li>
-                </ol>
-            </section>
-
             <!-- Scope and method -->
             <section id="method" class="space-y-4">
                 <h2 class="section-title">Scope and method</h2>
@@ -255,7 +276,8 @@
                 </dl>
             </section>
 
-            <!-- Findings by theme: one row per synthesis.json theme, strongest first; margin carries a quote -->
+            <!-- Findings by theme: the up-to-6 themes that matter most for the decision, strongest first, one row each with a
+                 margin quote. Any further themes go in one short "Other themes" list (title + one line + citation) at the end. -->
             <section id="findings" class="space-y-2">
                 <h2 class="section-title">Findings by theme</h2>
                 <!-- Saturation from synthesis.json -->
@@ -292,29 +314,32 @@
                 </article>
             </section>
 
-            <!-- Real voices vs. AI voices: one row per main theme, comparing desk-research "Real Voices" with the interviews.
+            <!-- Real voices vs. AI voices: full rows only for themes where real voices differ or are silent; themes where they
+                 agree share one line ("Real voices agree on: A, B, C" with their [S#]), so findings are not repeated.
                  Badge class: voices-agree (same thing), voices-differ (the opposite), voices-silent (real voices say nothing).
                  Platform quotes are short, anonymized, and cite their post as [S#]; leave this section out when no platform was sampled. -->
             <section id="real-voices" class="space-y-2">
                 <h2 class="section-title">Real voices vs. AI voices</h2>
                 <p class="text-[13px] text-faint">Sampled from public posts and comments (2 platforms, 40 posts, 310 comments). Real voices check whether the AI interviews drifted.</p>
+                <p class="text-[14px] leading-7 text-muted"><span class="chip voices-agree mr-1.5">Same as the interviews</span>Peer proof before trying, forgetting the app after week one.<a href="#s3" class="citation-ref">[S3]</a><a href="#s4" class="citation-ref">[S4]</a></p>
                 <article class="py-6 border-b border-rule space-y-4">
                     <div class="flex items-center gap-2">
-                        <h3 class="text-[17px] font-bold">Trust comes from peers, not features</h3>
-                        <span class="chip voices-agree">Same as the interviews</span>
+                        <h3 class="text-[17px] font-bold">Price is the first question, not the last</h3>
+                        <span class="chip voices-differ">Different from the interviews</span>
                     </div>
                     <div class="grid sm:grid-cols-2 gap-6">
                         <div class="space-y-2">
                             <p class="text-xs text-faint"><i class="fa-solid fa-comment-dots mr-1"></i>Real voice · public post</p>
-                            <p class="hang text-[14.5px] font-bold leading-7">Only bought it after the shop next door had used it for a month.</p>
+                            <p class="hang text-[14.5px] font-bold leading-7">First thing I check is the monthly price, then whether I can cancel.</p>
                             <p class="font-mono text-[11px] text-faint"><a href="#s3" class="text-link">[S3]</a> Owner forum thread, 2026</p>
                         </div>
                         <div class="margin-note space-y-2" data-persona-tone="Zhang Wei">
                             <p class="text-xs text-faint"><i class="fa-solid fa-robot mr-1"></i>AI interview</p>
-                            <p class="hang text-[14.5px] font-bold leading-7">Not before I see a friend using it.</p>
+                            <p class="hang text-[14.5px] font-bold leading-7">Price comes up once I already like it.</p>
                             <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>Zhang Wei · <a href="#q3" class="text-link">Q3</a></p>
                         </div>
                     </div>
+                    <p class="text-[13px] text-muted">What it means: AI respondents may underweight price; H2 needs real-person data before pricing work.</p>
                     <!-- For voices-differ rows, add one line on what the gap means for the conclusion and which hypothesis it weakens. -->
                 </article>
             </section>

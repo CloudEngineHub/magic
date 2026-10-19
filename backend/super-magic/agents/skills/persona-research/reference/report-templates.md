@@ -18,9 +18,10 @@ Use a template only if it is a readable, complete HTML document (`<html` or `<bo
 
 ## Report Contract (Every Template)
 
-- Sections in the order of Phase 6 step 4, with the built-in ids: `hypotheses`, `business`, `summary`, `method`, `findings`, `real-voices`, `tensions`, `personas`, `voices`, `limitations`, `validation`, `sources`. Drop a section only when it truly does not apply.
+- Sections in the order of Phase 6 step 4, with the built-in ids: `summary` (the bottom line, always first), `hypotheses`, `business`, `method`, `findings`, `real-voices`, `tensions`, `personas`, `voices`, `limitations`, `validation`, `sources`. Drop a section only when it truly does not apply.
 - Citations are `<a href="#q<N>" class="citation-ref">[Q<N>]</a>` and `<a href="#s<N>" class="citation-ref">[S<N>]</a>`. Each quote card has `id="q<N>"`, `data-source-name` (persona name), and `data-source-title` (the quote); each source card has `id="s<N>"`.
 - Every hypothesis, recommendation, and theme carries an evidence bar: web sources N, AI interviews N people, real-person validation status.
+- The bottom line opens with a decision badge (`decision-go`, `decision-conditional`, or `decision-nogo` in the default template) and a one-sentence answer before any detail; the rest of the report never contradicts it.
 - The limitations section says respondents are AI-simulated and states the effective sample size. Never write persona counts or ratios.
 - Replace every sample text in the template with study content, and set `<html lang>` to the user's language.
 - Keep the template's own scripts. Behaviour a template lacks (citation popovers, persona portraits) is not added; citations then work as plain anchor links.
