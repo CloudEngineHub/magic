@@ -254,6 +254,11 @@ export default function TranscriptView({
 	)
 }
 
+const FOLD_FADE = {
+	WebkitMaskImage: "linear-gradient(to bottom, #000 65%, transparent)",
+	maskImage: "linear-gradient(to bottom, #000 65%, transparent)",
+}
+
 /** Answers longer than this get "expand all" on their question; each bubble measures itself. */
 const LONG_ANSWER_CHARS = 220
 
@@ -308,6 +313,8 @@ function AnswerBubble({
 			<div
 				ref={bodyRef}
 				className={cn("space-y-2", !open && "max-h-[8.5em] overflow-hidden")}
+				// The cut line fades out instead of stopping mid-glyph; -webkit- for Chrome 100.
+				style={!open && overflows ? FOLD_FADE : undefined}
 			>
 				{paragraphs.map((paragraph, index) => (
 					<p key={index} className="whitespace-pre-wrap break-words">
