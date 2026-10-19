@@ -64,6 +64,13 @@ import {
 import ResearchOnboarding from "../onboarding/ResearchOnboarding"
 import ResearchHelp from "../onboarding/ResearchHelp"
 import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
+import { getAttachmentPath } from "../services/researchFiles"
+import {
+	countVisibleStudyFiles,
+	firstOutputTab,
+	hasStudyOutputs,
+	type StudyOutputCounts,
+} from "../services/studyOutputs"
 import { resolveStudyStatus } from "../services/studyStatus"
 import type { PersonaFile, StudyFile, StudyPhaseKey } from "../types"
 
@@ -101,10 +108,14 @@ function ResearchStudioPage() {
 	const [conversationCollapsed, setConversationCollapsed] = useState(false)
 	// Finished studies fold the six-step stepper into a small toggle to give the report room.
 	const [stepperOpen, setStepperOpen] = useState(false)
+	// Set while the results panel slides in after the study's first output appears.
+	const [outputsRevealing, setOutputsRevealing] = useState(false)
+	const outputsWereHiddenRef = useRef(false)
 
 	useEffect(() => {
 		store.selectStudy(topicId)
 		followedPhaseRef.current = null
+		outputsWereHiddenRef.current = false
 		// Tool steps belong to one study's conversation; never carry them into another study.
 		setUserSelectDetail(undefined)
 		setAutoDetail(undefined)
@@ -188,6 +199,36 @@ function ResearchStudioPage() {
 		// Only phase changes move the panel; the report arriving later must not steal focus.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isMobile, study?.phase])
+
+	/**
+	 * Until the study produces anything (clarify, waiting for the plan), the results panel would
+	 * only hold empty tabs, so the conversation takes the page. The first output brings the panel
+	 * in on its tab; the same counts as the tab badges, so no extra request.
+	 */
+	const outputCounts: StudyOutputCounts = {
+		hypotheses: study?.hypotheses?.length ?? 0,
+		personas: store.studyPersonas.length,
+		interviews: store.interviews.length,
+		discussions: store.discussions.length,
+		analysis: store.synthesis?.themes.length ?? 0,
+		report: report ? 1 : 0,
+		validation: (studyAttachments?.validation ? 1 : 0) + (store.validationResults ? 1 : 0),
+		files: countVisibleStudyFiles((studyAttachments?.all ?? []).map(getAttachmentPath)),
+	}
+	const outputsHidden = !isMobile && !isContentLoading && !hasStudyOutputs(outputCounts)
+	const revealTab = firstOutputTab(outputCounts)
+	useEffect(() => {
+		if (outputsHidden) {
+			outputsWereHiddenRef.current = true
+			return
+		}
+		if (!outputsWereHiddenRef.current) return
+		outputsWereHiddenRef.current = false
+		setOutputsRevealing(true)
+		// Only the tab changes: focus stays wherever the user is typing.
+		if (revealTab) setConsoleTab(revealTab)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [outputsHidden])
 
 	const toggleConversation = useMemoizedFn(() => {
 		const panel = conversationPanelRef.current
@@ -376,7 +417,7 @@ function ResearchStudioPage() {
 					</button>
 				)}
 				<ResearchHelp page="studio" />
-				{isMobile ? null : (
+				{isMobile || outputsHidden ? null : (
 					<Button
 						variant="outline"
 						size="sm"
@@ -554,28 +595,48 @@ function ResearchStudioPage() {
 				autoSaveId={platformKey("persona-research-studio-layout-v2")}
 				className="min-h-0 flex-1"
 			>
-				<ResizablePanel id="outputs" order={1} defaultSize={64} minSize={40}>
-					{consoleNode}
-				</ResizablePanel>
+				{/* The conversation panel keeps its place in the tree while the results panel is
+				    absent, so the composer is never remounted and keeps its text and focus. A
+				    one-panel layout is saved under its own key, leaving the two-panel ratio alone. */}
+				{outputsHidden ? null : (
+					<ResizablePanel id="outputs" order={1} defaultSize={64} minSize={40}>
+						<div
+							className={cn(
+								"h-full",
+								outputsRevealing &&
+									"duration-300 animate-in fade-in-0 slide-in-from-left-4 motion-reduce:animate-none",
+							)}
+							onAnimationEnd={() => setOutputsRevealing(false)}
+						>
+							{consoleNode}
+						</div>
+					</ResizablePanel>
+				)}
 				{/* Wide transparent hit area with a hairline; highlights while hovered or dragged. */}
-				<ResizableHandle
-					aria-label={t("study.resizePanels")}
-					className="w-1.5 bg-transparent after:w-px after:bg-border hover:after:bg-primary/40 focus-visible:after:bg-primary data-[resize-handle-state=drag]:after:bg-primary"
-				/>
+				{outputsHidden ? null : (
+					<ResizableHandle
+						aria-label={t("study.resizePanels")}
+						className="w-1.5 bg-transparent after:w-px after:bg-border hover:after:bg-primary/40 focus-visible:after:bg-primary data-[resize-handle-state=drag]:after:bg-primary"
+					/>
+				)}
 				<ResizablePanel
 					ref={conversationPanelRef}
 					id="conversation"
 					order={2}
-					defaultSize={36}
-					minSize={26}
-					maxSize={55}
-					collapsible
+					defaultSize={outputsHidden ? 100 : 36}
+					minSize={outputsHidden ? 100 : 26}
+					maxSize={outputsHidden ? 100 : 55}
+					collapsible={!outputsHidden}
 					collapsedSize={0}
 					onCollapse={() => setConversationCollapsed(true)}
 					onExpand={() => setConversationCollapsed(false)}
 				>
 					<div
-						className="flex h-full min-h-0 flex-col bg-background"
+						className={cn(
+							"flex h-full min-h-0 flex-col bg-background",
+							// Alone on the page, the conversation reads as a centred column.
+							outputsHidden && "mx-auto w-full max-w-[860px]",
+						)}
 						data-guide-anchor={ResearchOnboardingAnchor.StudioConversation}
 					>
 						{conversationNode}
@@ -596,21 +657,26 @@ function ResearchStudioPage() {
 						</span>
 					</>
 				)}
-				<span className="h-3 w-px bg-border" aria-hidden />
-				<button
-					type="button"
-					className="rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					onClick={() => showOutputs("files")}
-				>
-					{t("study.outputsCount", { count: outputsCount })}
-				</button>
-				<button
-					type="button"
-					className="rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					onClick={() => showOutputs("personas")}
-				>
-					{t("study.personasCount", { count: store.studyPersonas.length })}
-				</button>
+				{/* Shortcuts into the results panel; nothing to open while it is hidden. */}
+				{outputsHidden ? null : (
+					<>
+						<span className="h-3 w-px bg-border" aria-hidden />
+						<button
+							type="button"
+							className="rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							onClick={() => showOutputs("files")}
+						>
+							{t("study.outputsCount", { count: outputsCount })}
+						</button>
+						<button
+							type="button"
+							className="rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							onClick={() => showOutputs("personas")}
+						>
+							{t("study.personasCount", { count: store.studyPersonas.length })}
+						</button>
+					</>
+				)}
 				<span className="ml-auto">{t("study.aiDisclaimer")}</span>
 			</div>
 			{sheet}
