@@ -73,15 +73,16 @@ export function MobileModelRow({
 		<div
 			ref={selected ? selectedItemRef : null}
 			className={cn(
-				"min-w-0 transition-colors",
-				isDesktop ? "rounded-xl border border-transparent" : "rounded-3xl",
-				(expanded || selected) && "bg-card",
-				isDesktop && expanded && "shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)]",
+				"min-w-0 overflow-hidden transition-colors",
+				isDesktop
+					? "rounded-xl border border-transparent"
+					: "rounded-2xl border border-transparent",
+				(expanded || selected) && "border-border/60 bg-card shadow-sm",
 				disabled && "opacity-50",
 			)}
 			data-testid={isDesktop ? "model-switch-inline-row" : "mobile-model-row"}
 		>
-			<div className={cn("flex min-h-14 items-center", isDesktop && "px-3")}>
+			<div className={cn("flex min-h-14 items-center", isDesktop ? "px-3" : "px-1")}>
 				<button
 					type="button"
 					disabled={disabled}
@@ -124,7 +125,7 @@ export function MobileModelRow({
 							type="button"
 							variant="ghost"
 							size="icon"
-							className="size-11 rounded-full"
+							className="size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
 							disabled={disabled}
 							aria-label={t("messageEditor.modelSwitch.reasoning.detailsFor", {
 								name,
@@ -142,31 +143,39 @@ export function MobileModelRow({
 				</div>
 			</div>
 			{expanded && hasDetails && (
-				// 与行头的 8px 内边距、28px 图标及 12px 间隔共用 48px 左边界。
+				// Keep the details in the same card as the model row, using a quiet divider
+				// instead of a second raised surface so the hierarchy stays easy to scan.
 				<div
 					id={detailsId}
-					className="space-y-3 pb-4 pl-12 pr-3"
+					className={cn(
+						"space-y-3 border-t border-border/60 px-4 pb-4 pt-3",
+						isDesktop && "px-3 pb-3 pt-2.5",
+					)}
 					data-testid="mobile-model-details"
 				>
-					{hasMultiplier && (
-						<p className="text-xs leading-5 text-muted-foreground">
-							{t("messageEditor.modelSwitch.billingMultiplierHint")}
-						</p>
-					)}
 					<CollapsibleDescription
 						description={description}
 						isExpanded={descriptionExpanded}
-						variant="mobile"
+						variant={isDesktop ? "compact" : "mobile"}
+						className={cn(
+							"!text-[13px] !leading-5",
+							isDesktop && "!text-xs !leading-4",
+						)}
 						expandLabel={t("messageEditor.modelSwitch.expandDescriptionShort")}
 						collapseLabel={t("messageEditor.modelSwitch.collapseDescriptionShort")}
 						onToggle={() => setDescriptionExpanded((value) => !value)}
 					/>
+					{hasMultiplier && (
+						<p className="text-[11px] leading-4 text-muted-foreground/80">
+							{t("messageEditor.modelSwitch.billingMultiplierHint")}
+						</p>
+					)}
 					{levels.length > 0 && (
 						<fieldset className="min-w-0">
-							<legend className="mb-2 text-sm text-muted-foreground">
+							<legend className="mb-1.5 text-xs font-medium text-foreground/70">
 								{t("messageEditor.modelSwitch.reasoning.mobileLabel")}
 							</legend>
-							<div className="grid grid-cols-4 gap-2">
+							<div className="grid grid-cols-4 gap-1 rounded-xl bg-muted/60 p-1">
 								{[undefined, ...levels].map((value) => (
 									<Button
 										key={value ?? "default"}
@@ -175,9 +184,9 @@ export function MobileModelRow({
 										disabled={disabled}
 										aria-pressed={effort === value}
 										className={cn(
-											"h-11 min-w-0 gap-1 rounded-full bg-muted px-1 text-sm font-normal",
+											"h-8 min-w-0 gap-1 rounded-lg px-1.5 text-xs font-medium text-muted-foreground hover:bg-background hover:text-foreground",
 											effort === value &&
-												"bg-primary/10 text-primary hover:bg-primary/15",
+												"bg-background text-foreground shadow-sm ring-1 ring-border/70 hover:bg-background",
 										)}
 										onClick={() => selectEffort(value)}
 									>
