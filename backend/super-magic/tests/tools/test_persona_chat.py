@@ -307,6 +307,9 @@ async def test_round_limit_comes_from_study(tool, tmp_path, fake_llm):
 
     assert result.ok is False
     assert "round limit for this study is 1" in result.content
+    # 上限用完后必须让调用方收尾，而不是换 round_number 重试。
+    assert "Do not call persona_chat for this transcript again" in result.content
+    assert "finish_persona_transcript" in result.content
 
 
 async def test_focus_group_records_only_successful_answers(tool, tmp_path, fake_llm):

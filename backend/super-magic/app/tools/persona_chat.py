@@ -351,11 +351,16 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
             raise _InvalidRequest(
                 f"{params.transcript_path} already has {recorded} recorded rounds, so this round is "
                 f"{recorded + 1}, not {params.round_number}. If you were retrying, the earlier attempt "
-                "was already recorded; read the transcript instead of asking again"
+                "was already recorded; read the transcript instead of asking again. Never change round_number "
+                "to get past this check"
             )
         limit = await self._round_limit(transcript_file, is_discussion)
         if params.round_number > limit:
-            raise _InvalidRequest(f"the round limit for this study is {limit}; end the transcript instead")
+            raise _InvalidRequest(
+                f"the round limit for this study is {limit} and this transcript has used it. Do not call persona_chat "
+                "for this transcript again with any round_number; close it with finish_persona_transcript and report "
+                "any guide question that was not asked as a coverage gap"
+            )
         return _Record(transcript_file, params.transcript_path, is_discussion, data, params.round_number, limit)
 
     @staticmethod

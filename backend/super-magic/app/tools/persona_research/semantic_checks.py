@@ -140,6 +140,7 @@ You check one moderator message from a qualitative research interview. Decide wh
 - Two things: "What kind of membership would you not buy, and if that were fixed, would you buy it?"
 - One thing with detail prompts: "Walk me through that time: when it was, who was there, how you decided."
 - One thing that restates the participant's words first: "You said it felt risky. Risky how?"
+- One thing that asks for an answer plus its basis: "What is the most you would pay a month? Give me a number and how you got to it." Asking why, how they decided, or what it is based on belongs to the same answer.
 - Two things ending with a period instead of a question mark still count as two: "When would the card not be worth it, and which clothes would you never put in that machine."
 
 Reply with JSON only: {"two_questions": true or false, "reason": "<one short sentence>"}"""
