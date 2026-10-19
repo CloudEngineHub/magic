@@ -2026,6 +2026,16 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				role="dialog"
 				aria-modal="true"
 				aria-label={t("homeOnboarding.waiting")}
+				/*
+				 * The same root id as the step it is on its way to, with a phase that says which of
+				 * the two this is. A step change unmounts the whole card for as long as the anchor
+				 * takes to appear, so "the root is gone" would otherwise be ambiguous between a run
+				 * that is mid-step and one that has ended — and a run that ended is what an aborted
+				 * step looks like. Phase separates them; no step attributes are published here,
+				 * because the step being prepared is not on screen yet.
+				 */
+				data-guide-phase="preparing"
+				data-testid="guide-tour-root"
 			>
 				<div className="absolute inset-0 bg-[rgba(52,52,52,0.62)]" />
 				<section className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-background px-6 py-5 text-sm text-muted-foreground shadow-lg">
@@ -2512,6 +2522,20 @@ function HomeOnboardingTour({ userMagicId, page = "home", onComplete }: HomeOnbo
 				current: displayCurrent,
 				total: displayTotal,
 			})}
+			/*
+			 * The run's identity and its position, in a form that does not move when the copy, the
+			 * locale or the step order does. This portal also draws the in-project guides and the
+			 * prompt-ready flow, and those belong to no task, so `data-guide-task` is published only
+			 * for a task's own steps — `data-guide-flow` is what tells the two apart. The position
+			 * is 1-based and matches the "N / M" the card announces, so the label stays decorative
+			 * and a test can step on the attributes instead.
+			 */
+			data-guide-flow={flow ?? "onboarding"}
+			data-guide-phase="step"
+			data-guide-step-index={displayCurrent}
+			data-guide-step-total={displayTotal}
+			data-guide-task={flow ? undefined : entry.task}
+			data-testid="guide-tour-root"
 		>
 			<div
 				className={cn(

@@ -202,11 +202,20 @@ function NewUserBenefitsTaskRow({ row }: { row: BenefitRow }) {
 	const actionable = Boolean(row.onAction) && !row.busy
 
 	return (
+		/*
+		 * The row's identity and its state are on the row and on its button, not only in the label:
+		 * a test that reads `data-task-code` keeps working when the copy changes, and the one that
+		 * reads `data-task-action` answers "is this row re-watchable" without matching a translation.
+		 * `row.id` is the backend's code, which is what survives a renamed flow.
+		 */
 		<div
 			className={cn(
 				"grid grid-cols-[36px_minmax(0,1fr)_78px] items-center gap-3 border-b border-[#ececec] px-0 py-3 last:border-b-0",
 				row.completed && "opacity-[0.65]",
 			)}
+			data-task-action={row.action}
+			data-task-code={row.id}
+			data-testid="guide-task-row"
 		>
 			<div
 				className={cn(
@@ -251,6 +260,9 @@ function NewUserBenefitsTaskRow({ row }: { row: BenefitRow }) {
 					"h-9 rounded-[10px] px-3 text-[12px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]/30",
 					ACTION_BUTTON_CLASS[row.action],
 				)}
+				data-task-action={row.action}
+				data-task-code={row.id}
+				data-testid="guide-task-row-action"
 				disabled={!actionable}
 				onClick={actionable ? row.onAction : undefined}
 				type="button"
@@ -791,6 +803,17 @@ function NewUserBenefitsCard() {
 							? "nb-entry-fold inline-flex w-auto min-w-0 items-center gap-3 rounded-full p-[8px_10px_8px_8px] hover:border-[#5a4e33] hover:shadow-[0_4px_9px_rgba(0,0,0,0.2),0_22px_50px_rgba(15,15,18,0.34),0_0_0_3px_rgba(255,181,35,0.14)]"
 							: "nb-entry-unfold grid w-[310px] min-w-[310px] grid-cols-[1fr_auto] gap-x-3 gap-y-2 rounded-[17px] p-[13px_15px_12px] hover:border-[#4a4231]",
 					)}
+					/*
+					 * The card's state belongs on the card rather than in the counter's text: the
+					 * count is a fact the whole card carries, and the fold decides what a click
+					 * does — folded, it unfolds instead of opening the dialog. Both are read here so
+					 * a test can ask for progress and for the fold without parsing a translation,
+					 * and can find the numbers whether or not the counter is on screen.
+					 */
+					data-collapsed={collapsed ? "true" : "false"}
+					data-completed={completedCount}
+					data-total={totalTasks}
+					data-testid="guide-task-entry"
 					onClick={handleCardClick}
 					type="button"
 				>
@@ -854,7 +877,12 @@ function NewUserBenefitsCard() {
 									<span className="size-2 rounded-full bg-[#f5b817] shadow-[0_0_9px_rgba(245,184,23,0.58)]" />
 									{t("newUserBenefits.entry.badge")}
 								</span>
-								<strong className="text-[15px] font-[780] leading-none tracking-[-0.02em]">
+								<strong
+									className="text-[15px] font-[780] leading-none tracking-[-0.02em]"
+									data-completed={completedCount}
+									data-testid="guide-task-entry-progress"
+									data-total={totalTasks}
+								>
 									{completedCount}/{totalTasks}
 								</strong>
 							</span>
@@ -1076,6 +1104,7 @@ function NewUserBenefitsCard() {
 					 * side padding — so nothing re-wraps.
 					 */
 					className="!max-w-[800px] overflow-hidden rounded-[20px] border-0 bg-white p-0 text-[#171717] shadow-[0_24px_80px_rgba(0,0,0,0.22)]"
+					data-testid="guide-task-center"
 					overlayClassName="bg-black/50"
 					showCloseButton={false}
 				>
@@ -1117,6 +1146,7 @@ function NewUserBenefitsCard() {
 							<button
 								aria-label={t("newUserBenefits.dialog.close")}
 								className="grid size-10 place-items-center rounded-[12px] border border-[#dedede] text-[#4c4c4c] hover:bg-[#f7f7f7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#171717]/30"
+								data-testid="guide-task-center-close"
 								onClick={() => setOpen(false)}
 								type="button"
 							>
@@ -1148,7 +1178,12 @@ function NewUserBenefitsCard() {
 											{t("newUserBenefits.summary.description")}
 										</p>
 									</div>
-									<strong className="shrink-0 text-[14px] font-[750]">
+									<strong
+										className="shrink-0 text-[14px] font-[750]"
+										data-completed={completedCount}
+										data-testid="guide-task-summary-progress"
+										data-total={totalTasks}
+									>
 										{t("newUserBenefits.summary.progress", {
 											completed: completedCount,
 											total: totalTasks,
@@ -1157,7 +1192,7 @@ function NewUserBenefitsCard() {
 								</div>
 							</div>
 
-							<section className="py-5">
+							<section className="py-5" data-testid="guide-task-section-pending">
 								<h3 className="mb-2 flex items-center gap-3 text-[15px] font-[750]">
 									{t("newUserBenefits.section.incomplete")}
 									{/*
@@ -1180,7 +1215,10 @@ function NewUserBenefitsCard() {
 							 * divider — is dropped entirely instead of rendering an empty list.
 							 */}
 							{completedTasks.length > 0 && (
-								<section className="border-t border-[#e7e7e7] py-5">
+								<section
+									className="border-t border-[#e7e7e7] py-5"
+									data-testid="guide-task-section-completed"
+								>
 									<h3 className="mb-2 flex items-center gap-3 text-[15px] font-[750]">
 										{t("newUserBenefits.section.complete")}
 										<span className="grid size-6 place-items-center rounded-full bg-[#f0f0f0] text-[12px] text-[#666]">
