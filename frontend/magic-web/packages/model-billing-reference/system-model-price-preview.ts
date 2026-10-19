@@ -79,7 +79,8 @@ export interface ModelPriceResult {
 	bindings: { binding: PreviewBinding; amount: string | null; cny: string | null }[]
 }
 const ZERO = BigInt(0)
-const SCALE = BigInt(10) ** BigInt(36)
+// ES2015 构建会把指数运算降级为不接受 BigInt 的 Math.pow，直接从十进制构造精确比例。
+const SCALE = BigInt("1" + "0".repeat(36))
 /** 读取非负十进制，限制长度以避免异常响应耗尽计算资源。 */
 function units(value: string | null): bigint | null {
 	if (typeof value !== "string" || !/^\d{1,64}(?:\.\d{1,36})?$/.test(value)) return null

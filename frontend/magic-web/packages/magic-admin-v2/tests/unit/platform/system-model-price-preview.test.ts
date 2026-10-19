@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
+import { fileURLToPath } from "node:url"
+import { runInNewContext } from "node:vm"
 import {
 	buildModelPriceGroups,
 	getVisibleModelPriceGroups,
@@ -10,6 +12,54 @@ import {
 import { mockBinding, mockModel, mockSnapshot } from "../../fixtures/model-price-preview"
 
 describe("系统模型售价预览", () => {
+	it("生产目标编译后的模块可加载并保留精确金额与倍率", async () => {
+		// 源码执行不会暴露指数降级问题，必须用实际构建器生成并执行产物。
+		const { build } = await import("vite")
+		const built = await build({
+			configFile: false,
+			envFile: false,
+			logLevel: "silent",
+			build: {
+				write: false,
+				target: "es2015",
+				minify: true,
+				lib: {
+					entry: fileURLToPath(
+						new URL(
+							"../../../../model-billing-reference/system-model-price-preview.ts",
+							import.meta.url,
+						),
+					),
+					name: "ModelPricePreview",
+					formats: ["iife"],
+				},
+			},
+		})
+		const bundle = Array.isArray(built) ? built[0] : built
+		assert.ok(bundle && "output" in bundle)
+		const chunk = bundle.output.find((item) => item.type === "chunk")
+		assert.ok(chunk)
+		const compiled = runInNewContext(
+			`${chunk.code}\nModelPricePreview`,
+			{},
+			{ timeout: 1000 },
+		) as typeof import("../../../../model-billing-reference/system-model-price-preview")
+		assert.equal(compiled.calculateModelPrice(mockModel(), "0.015", "7").multiplier, "2.00x")
+		const mixed = mockModel([mockBinding("3", "15"), mockBinding("0.4", "2", "USD")])
+		assert.equal(compiled.calculateModelPrice(mixed, "0.015", "7").amount, "0.0435")
+		assert.equal(compiled.calculateModelPrice(mixed, "0.015", "7").multiplier, "2.90x")
+		assert.equal(
+			compiled.calculateModelPrice(mockModel([mockBinding("0", "0")]), "1", null).multiplier,
+			"0.00x",
+		)
+		const tiny = compiled.calculateModelPrice(
+			mockModel([mockBinding("0", "0.000000000001")]),
+			"1",
+			null,
+		)
+		assert.equal(tiny.amount, "0.000000000000001")
+		assert.equal(tiny.multiplier, "<0.01x")
+	})
 	it("按人民币金额平均混合币种，符合后端合成金样例", () => {
 		const normal = calculateModelPrice(mockModel(), "0.015", "7")
 		assert.equal(normal.amount, "0.03")
