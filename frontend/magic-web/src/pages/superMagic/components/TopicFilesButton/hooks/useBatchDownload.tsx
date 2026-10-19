@@ -34,6 +34,8 @@ import { isCachedChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWor
 import { normalizeMenuItems } from "../utils/menu-items"
 import { useMobileDeleteConfirmSheet } from "./useMobileDeleteConfirmSheet"
 import { downloadBlobFile } from "@/utils/file"
+import type { ExportIssue } from "@magic/html2pptx"
+import { publishPptxExportIssues } from "@/pages/superMagic/utils/pptxExportIssues"
 import {
 	collectClientBatchExportTargets,
 	getClientBatchItemType,
@@ -429,6 +431,7 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 		})
 
 		try {
+			const exportIssues: ExportIssue[] = []
 			const result = await runClientBatchDocumentExport({
 				format,
 				targets,
@@ -442,7 +445,14 @@ export function useBatchDownload(options: UseBatchDownloadOptions) {
 						duration: 0,
 					})
 				},
+				onExportIssue: (issue) => exportIssues.push(issue),
 			})
+
+			if (format === "pptx") {
+				publishPptxExportIssues(exportIssues, {
+					fileName: selectedProject?.project_name,
+				})
+			}
 
 			if (result.cancelled) {
 				magicToast.destroy(toastId)

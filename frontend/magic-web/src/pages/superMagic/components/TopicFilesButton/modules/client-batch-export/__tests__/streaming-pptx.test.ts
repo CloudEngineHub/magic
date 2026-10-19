@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 	resolvedOptions: [] as Array<Record<string, any>>,
 	activeExports: 0,
 	maxActiveExports: 0,
+	emitExportIssue: false,
 }))
 
 vi.mock("@/lib/jszip", () => ({ loadJSZip: mocks.loadJSZip }))
@@ -97,6 +98,7 @@ beforeEach(() => {
 	mocks.resolvedOptions.length = 0
 	mocks.activeExports = 0
 	mocks.maxActiveExports = 0
+	mocks.emitExportIssue = false
 	mocks.documentRuntime.mockReturnValue({ getPptFontResolver: () => undefined })
 	mocks.iterateSingleExportSlide.mockImplementation(({ fileId }: { fileId: string }) =>
 		asyncPages(fileId),
@@ -116,6 +118,15 @@ beforeEach(() => {
 					if (first.done) throw new Error("empty source")
 					const options = await resolveOptions(first.value)
 					mocks.resolvedOptions.push(options)
+					if (mocks.emitExportIssue) {
+						options.onExportIssue?.({
+							pageIndex: 3,
+							pageName: "page-04.html",
+							code: "render-error",
+							message: "Unable to inspect media resource",
+							severity: "error",
+						})
+					}
 					const destination = options.destination
 					if (destination?.kind === "sink-proxy") {
 						await destination.sink.write(Uint8Array.of(1))
@@ -161,6 +172,29 @@ describe("client batch PPTX streaming", () => {
 		expect(sink.write).toHaveBeenCalledOnce()
 		expect(sink.close).toHaveBeenCalledOnce()
 		expect(mocks.loadJSZip).not.toHaveBeenCalled()
+	})
+
+	it("forwards recoverable page issues to the batch export caller", async () => {
+		const sink = createSinkLease()
+		const issues: unknown[] = []
+		mocks.emitExportIssue = true
+		mocks.supportsFileStreaming.mockReturnValue(true)
+		mocks.openPptxDestination.mockResolvedValue(sink.lease)
+
+		await runClientBatchDocumentExport({
+			format: "pptx",
+			targets: [target("one")],
+			attachments: [],
+			onExportIssue: (issue) => issues.push(issue),
+		})
+
+		expect(issues).toEqual([
+			expect.objectContaining({
+				pageIndex: 3,
+				pageName: "page-04.html",
+				code: "render-error",
+			}),
+		])
 	})
 
 	it("writes multiple targets serially into one selected directory without Blob aggregation", async () => {

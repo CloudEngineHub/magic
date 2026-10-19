@@ -1,3 +1,5 @@
+import type { ExportIssue } from "@magic/html2pptx"
+
 export type ClientBatchExportFormat = "pdf" | "pptx"
 
 /** Minimal attachment contract kept local so the exporter is not coupled to a UI hook type. */
@@ -69,6 +71,8 @@ export interface ClientBatchExportRunOptions {
 	attachments: ClientBatchAttachment[]
 	projectName?: string
 	onProgress?: (progress: number) => void
+	/** Reports recoverable PPTX page/resource issues to the host notifier. */
+	onExportIssue?: (issue: ExportIssue) => void
 	/** Cancels the active streaming target and prevents later targets from starting. */
 	signal?: AbortSignal
 }
