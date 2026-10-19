@@ -1,5 +1,5 @@
 /**
- * Built-in flat portrait templates for AI personas. Everything is picked deterministically from
+ * Built-in SVG fallbacks for AI personas. Everything is picked deterministically from
  * the persona's name, so one person always looks the same; gender and age only choose the
  * hairstyle family and grey hair. No facial features: a drawn face reads as clip art.
  */
@@ -86,8 +86,8 @@ export interface PersonaTone {
 }
 
 /**
- * Persona colour, taken from the portrait's clothing so a person's quotes, cards and highlights
- * match their avatar. Uses the same seed as the portrait (name, then id). Alpha hex instead of
+ * Stable persona colour for quotes, cards and highlights, independent of generated photos.
+ * Uses the same seed as the fallback (name, then id). Alpha hex instead of
  * color-mix keeps the Chrome 100 baseline.
  */
 export function personaTone(seed: string): PersonaTone {

@@ -1,7 +1,10 @@
-import { useId } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { cn } from "@/utils/cn"
-import { useOptionalPersonaResearchStore } from "../context"
+import { useFileUrl } from "@/pages/superMagic/hooks/useFileUrl"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { attachmentVersionKey } from "../services/researchFiles"
+import { subscribePortraitRecovery, usePersonaPortrait } from "../hooks/usePersonaPortrait"
 import { BACK_HAIR, FRONT_HAIR, ageOf, genderOf, resolvePortrait } from "./personaPortrait"
 
 interface PersonaAvatarProps {
@@ -18,8 +21,8 @@ interface PersonaAvatarProps {
 }
 
 /**
- * Flat portrait for an AI persona, drawn from built-in templates. The name picks colours and
- * hairstyle so a persona always looks the same; gender and age come from its file when known.
+ * A bound generated image covers the original SVG only after loading. Missing or failed
+ * media retains the same deterministic fallback; the surrounding AI disclosure is unchanged.
  */
 function PersonaAvatar({
 	id,
@@ -28,8 +31,8 @@ function PersonaAvatar({
 	demographics: fallback,
 	shape = "circle",
 }: PersonaAvatarProps) {
-	const store = useOptionalPersonaResearchStore()
-	const demographics = store?.personaById(id)?.dimensions?.demographics ?? fallback
+	const { persona, image, accessKey } = usePersonaPortrait(id)
+	const demographics = persona?.dimensions?.demographics ?? fallback
 	const spec = resolvePortrait(name || id, genderOf(demographics), ageOf(demographics))
 	const clipId = useId()
 	const backHair = BACK_HAIR[spec.hairStyle]
@@ -38,7 +41,7 @@ function PersonaAvatar({
 		<span
 			aria-hidden
 			className={cn(
-				"flex size-9 shrink-0 select-none overflow-hidden",
+				"relative flex size-9 shrink-0 select-none overflow-hidden",
 				shape === "square" ? "rounded-[30%]" : "rounded-full",
 				className,
 			)}
@@ -77,7 +80,58 @@ function PersonaAvatar({
 					</g>
 				</g>
 			</svg>
+			{image?.file_id && (
+				<PortraitPhoto key={`${accessKey}:${attachmentVersionKey(image)}`} file={image} />
+			)}
 		</span>
+	)
+}
+
+/** FileApi owns scope, request coalescing and expiry checks; this consumer retries once. */
+function PortraitPhoto({ file }: { file: AttachmentItem }) {
+	const { fileUrl, refreshFileUrl } = useFileUrl({
+		file_id: file.file_id ?? "",
+		updated_at: typeof file.updated_at === "string" ? file.updated_at : undefined,
+	})
+	const [loadedSource, setLoadedSource] = useState("")
+	const [failed, setFailed] = useState(false)
+	const [attempt, setAttempt] = useState(0)
+	const retry = useRef(false)
+	const mounted = useRef(true)
+	useEffect(() => {
+		const unsubscribe = subscribePortraitRecovery(() => {
+			if (!retry.current) void refreshFileUrl()
+		})
+		mounted.current = true
+		return () => {
+			mounted.current = false
+			unsubscribe()
+		}
+	}, [refreshFileUrl])
+	if (!fileUrl || failed) return null
+	return (
+		<img
+			key={`${fileUrl}:${attempt}`}
+			src={fileUrl}
+			alt=""
+			aria-hidden
+			className="absolute inset-0 size-full object-cover"
+			style={{ visibility: loadedSource === `${fileUrl}:${attempt}` ? "visible" : "hidden" }}
+			onLoad={() => setLoadedSource(`${fileUrl}:${attempt}`)}
+			onError={() => {
+				setLoadedSource("")
+				if (retry.current) {
+					setFailed(true)
+					return
+				}
+				retry.current = true
+				void refreshFileUrl(true).then((resource) => {
+					if (!mounted.current) return
+					if (resource?.url) setAttempt(1)
+					else setFailed(true)
+				})
+			}}
+		/>
 	)
 }
 
