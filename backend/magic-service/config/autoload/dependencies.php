@@ -503,6 +503,7 @@ $dependencies = [
     // rerank
 
     // permission
+    OrganizationAdminSyncInterface::class => NullOrganizationAdminSync::class,
     OperationPermissionRepositoryInterface::class => OperationPermissionRepository::class,
     RoleRepositoryInterface::class => RoleRepository::class,
     OrganizationAdminRepositoryInterface::class => OrganizationAdminRepository::class,
@@ -705,6 +706,5 @@ foreach ($dependenciesPriority as $interface => $definition) {
 // regardless of the fallback bindings declared above or other provider order.
 $dependencies[AgentExecuteInterface::class] = SuperAgentMessageSubscriberV2::class;
 $dependencies[SuperAgentMessageInterface::class] = SuperAgentMessage::class;
-$dependencies[OrganizationAdminSyncInterface::class] = NullOrganizationAdminSync::class;
 
 return $dependencies;
