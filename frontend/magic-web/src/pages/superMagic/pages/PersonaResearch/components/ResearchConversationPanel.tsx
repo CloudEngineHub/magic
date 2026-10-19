@@ -241,10 +241,15 @@ const ResearchConversationPanel = forwardRef<
 				{isMobile ? (
 					<MobileInputContainer editorContext={editorContext} editorNodes={editorNodes} />
 				) : (
-					<DefaultMessageEditorContainer
-						editorContext={editorContext}
-						editorNodes={editorNodes}
-					/>
+					<>
+						{/* The shared desktop editor does not draw the queue itself; messages sent while the
+						    agent is running wait here, above the input. */}
+						{editorNodes.messageQueueNode}
+						<DefaultMessageEditorContainer
+							editorContext={editorContext}
+							editorNodes={editorNodes}
+						/>
+					</>
 				)}
 			</div>
 		</div>
