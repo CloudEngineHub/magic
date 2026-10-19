@@ -135,61 +135,66 @@ export default function ResearchVoiceCard({
 
 	if (voices.length === 0) return null
 	const voice = voices[index % voices.length]
-	const { tone } = personaTone(voice.name || voice.id)
+	const { tone, tint } = personaTone(voice.name || voice.id)
 
 	return (
 		<aside
 			className={cn(
-				"relative flex min-h-[380px] flex-col overflow-hidden rounded-[22px] px-7 pb-[22px] pt-7 text-white transition-colors duration-500",
+				// A light card like the rest of the page; the speaker's colour only tints it, marks
+				// the quote and the dots, so the hero reads as one piece instead of a colour block.
+				"relative flex min-h-[340px] flex-col overflow-hidden rounded-2xl px-6 pb-5 pt-6 ring-1 ring-border transition-colors duration-500",
 				className,
 			)}
-			style={{ backgroundColor: tone }}
+			style={{ backgroundColor: tint }}
 			aria-live="polite"
 			data-testid="persona-research-voice-card"
 		>
-			<span className="flex items-center gap-1.5 text-xs text-white/75">
-				<AudioLines className="size-4" />
+			<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+				<AudioLines className="size-4" style={{ color: tone }} />
 				{t(isSample ? "voice.sampleLabel" : "voice.label")}
 			</span>
 			<div
 				className={cn(
 					// The quote leaves and returns through a slight blur and lift, not a hard cut.
-					"flex flex-1 flex-col justify-center gap-5 transition-[opacity,filter,transform] duration-300",
+					"flex flex-1 flex-col justify-center gap-5 py-4 transition-[opacity,filter,transform] duration-300",
 					EASE_OUT,
 					visible
 						? "translate-y-0 opacity-100 blur-0"
 						: "translate-y-1 opacity-0 blur-[2px]",
 				)}
 			>
-				<HangingQuote
-					text={voice.text}
-					clampClassName="line-clamp-5"
-					className="text-[26px] font-black leading-normal tracking-tight"
-				/>
-				<span className="flex items-center gap-2.5 text-[13px]">
+				<span style={{ color: tone }}>
+					<HangingQuote
+						text={voice.text}
+						clampClassName="line-clamp-5 text-foreground"
+						className="text-[22px] font-bold leading-[1.5] tracking-tight"
+					/>
+				</span>
+				<span className="flex items-center gap-3 text-[13px]">
 					<PersonaAvatar
 						id={voice.id}
 						name={voice.name}
 						demographics={voice.demographics}
-						className="size-10 ring-2 ring-white/35"
+						shape="square"
+						className="size-11"
 					/>
 					{/* Name, age and place first; tags (not the long tagline) as the quiet second line. */}
 					<span className="flex min-w-0 flex-col">
-						<span className="truncate font-medium">{voice.byline}</span>
-						<span className="line-clamp-1 text-xs text-white/70">
+						<span className="truncate font-medium text-foreground">{voice.byline}</span>
+						<span className="line-clamp-1 text-xs text-muted-foreground">
 							{voice.tags.join(" · ")}
 						</span>
 					</span>
 				</span>
 			</div>
-			<div className="mt-5 flex items-center justify-between border-t border-white/20 pt-3.5 text-[12.5px]">
+			<div className="flex items-center justify-between border-t border-foreground/10 pt-3.5 text-[12.5px]">
 				{/* An empty library has nothing to open; say where real voices will come from instead. */}
 				{isSample ? (
-					<span className="text-white/80">{t("voice.sampleHint")}</span>
+					<span className="text-muted-foreground">{t("voice.sampleHint")}</span>
 				) : (
 					<button
 						type="button"
-						className="inline-flex items-center gap-1 rounded text-white/90 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-white/70"
+						className="inline-flex items-center gap-1 rounded text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
 						onClick={onOpenLibrary}
 					>
 						{t("voice.fromLibrary")}
@@ -204,9 +209,14 @@ export default function ResearchVoiceCard({
 								className={cn(
 									"h-1.5 rounded-full transition-all duration-300",
 									dot === index % voices.length
-										? "w-[18px] bg-white"
-										: "w-1.5 bg-white/35",
+										? "w-[18px]"
+										: "w-1.5 bg-foreground/15",
 								)}
+								style={
+									dot === index % voices.length
+										? { backgroundColor: tone }
+										: undefined
+								}
 							/>
 						))}
 					</span>
