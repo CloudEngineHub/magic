@@ -81,6 +81,28 @@ describe("useTopicDetailPanelController", () => {
 		expect(result.current.shouldShowDetailPanel).toBe(true)
 	})
 
+	it("restores file tab intent from an active file after topic state is cleared", () => {
+		const { result } = renderHook(() =>
+			useTopicDetailPanelController({
+				detailRef: { current: { openFileTab: vi.fn(), openPlaybackTab: vi.fn() } },
+				isReadOnly: false,
+				activeFileId: "canvas-project",
+				setActiveFileId: vi.fn(),
+				handleFileClick: vi.fn(),
+				topicFilesProps: {},
+			}),
+		)
+
+		expect(result.current.activeDetailTabType).toBe("file")
+
+		act(() => {
+			result.current.clearActiveDetailTabType({ preservePublishedMicroApp: true })
+		})
+
+		expect(result.current.activeDetailTabType).toBe("file")
+		expect(result.current.shouldShowDetailPanel).toBe(true)
+	})
+
 	it("keeps the detail panel visible for non-file preview tab types", () => {
 		const detailRef = {
 			current: {

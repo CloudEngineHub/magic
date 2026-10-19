@@ -55,13 +55,19 @@ export function useTopicDetailPanelController({
 	subscribeMicroAppTab = true,
 }: UseTopicDetailPanelControllerOptions): UseTopicDetailPanelControllerReturn {
 	const fileApi = useFileApi()
-	const [activeDetailTabType, setActiveDetailTabType] = useState<DetailTabType>(null)
+	const [activeDetailTabTypeState, setActiveDetailTabType] = useState<DetailTabType>(null)
 	// 收起只改变布局，不清空活动文件；展开继续使用原标签和编辑实例。
 	const [isDetailPanelCollapsed, setIsDetailPanelCollapsed] = useState(false)
 	const fileOpenFallbackTimerRef = useRef<number | null>(null)
 	const activeFileIdRef = useRef<string | null>(activeFileId)
 	const activeDetailTabTypeRef = useRef<DetailTabType>(null)
 
+	const activeDetailTabType = useMemo<DetailTabType>(() => {
+		if (activeDetailTabTypeState && activeDetailTabTypeState !== "file") {
+			return activeDetailTabTypeState
+		}
+		return activeFileId ? "file" : activeDetailTabTypeState
+	}, [activeDetailTabTypeState, activeFileId])
 	const hasActiveDetailTab = useMemo(
 		() => Boolean(activeFileId) || Boolean(activeDetailTabType),
 		[activeDetailTabType, activeFileId],
