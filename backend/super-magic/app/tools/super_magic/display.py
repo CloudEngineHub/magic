@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.infrastructure.sdk.base.exceptions import HttpRequestError
@@ -21,6 +22,7 @@ from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import 
     MagicServiceApiError,
     MagicServiceUnauthorizedException,
 )
+from app.service.prepared_operation_confirmation import PreparedOperationError
 from app.tools.core import BaseTool, BaseToolParams
 from app.tools.utils.time_display import format_tool_time
 
@@ -400,6 +402,8 @@ class ProductTool(BaseTool[T]):
             return ToolResult.error(message, use_custom_remark=True, data={"code": code})
         except ProductConfigurationError as exc:
             return ToolResult.error(str(exc), use_custom_remark=True, data={"code": "execution_config_unavailable"})
+        except PreparedOperationError as exc:
+            return ToolResult.error(str(exc), use_custom_remark=True, data={"code": exc.code.lower()})
         except ValueError as exc:
             return ToolResult.error(str(exc), use_custom_remark=True, data={"code": "invalid_input_or_response"})
         except (FileNotFoundError, PermissionError):

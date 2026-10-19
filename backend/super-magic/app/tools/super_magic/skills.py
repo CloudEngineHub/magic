@@ -13,7 +13,7 @@ from pydantic import Field, model_validator
 
 from app.i18n import i18n
 from app.path_manager import PathManager
-from app.service.prepared_operation_confirmation import PreparedOperationConfirmation
+from app.service.prepared_operation_confirmation import PreparedOperationConfirmation, PreparedOperationError
 from app.tools.core import tool
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.utils.agfs_mount_path import get_referenced_project_mount_base
@@ -268,7 +268,8 @@ class PrepareSkillPublish(ProductTool[PrepareSkillPublishParams]):
 
 class PublishSkillParams(ProductParams):
     prepared_tool_call_id: str = Field(..., min_length=1)
-    confirmation_tool_call_id: str = Field(..., min_length=1)
+    # 兼容旧调用；新调用从准备记录读取实际绑定的真人提问，无须模型传递第二个 ID。
+    confirmation_tool_call_id: str | None = Field(None, min_length=1)
 
 
 @tool(name="publish_skill", code_mode_only=True)
@@ -281,8 +282,18 @@ class PublishSkill(ProductTool[PublishSkillParams]):
             confirmation = PreparedOperationConfirmation.from_tool(tool_context)
             async with confirmation._locks.setdefault(str(confirmation._path(params.prepared_tool_call_id)), asyncio.Lock()):
                 record = await confirmation.read(params.prepared_tool_call_id)
-                if record.operation != "skill_publish" or record.confirmation_tool_call_id != params.confirmation_tool_call_id or record.state not in {"approved", "executing", "completed"}:
-                    raise ValueError("This exact skill snapshot requires explicit human confirmation through ask_user.")
+                if params.confirmation_tool_call_id is not None and record.confirmation_tool_call_id != params.confirmation_tool_call_id:
+                    raise PreparedOperationError(
+                        "CONFIRMATION_MISMATCH",
+                        "The supplied confirmation ID does not match the bound human question. "
+                        "Retry publish_skill with only prepared_tool_call_id; do not ask the user again.",
+                    )
+                if record.operation != "skill_publish" or not record.confirmation_tool_call_id or record.state not in {"approved", "executing", "completed"}:
+                    raise PreparedOperationError(
+                        "CONFIRMATION_REQUIRED",
+                        "This exact skill snapshot requires explicit human confirmation through its bound ask_user question. "
+                        "If the question is pending, wait for the user's answer; do not prepare or ask again.",
+                    )
                 if record.state == "completed":
                     return record.result
                 record.state = "executing"

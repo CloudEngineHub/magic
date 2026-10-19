@@ -351,12 +351,15 @@ class UserToolCallService:
             logger.error(f"user_tool_call result_builder failed: {e}", exc_info=True)
             content, extra_info = str(e), {"status": "error"}
 
-        if pending.tool_data.get("prepared_tool_call_id"):
+        if pending.tool_name == "ask_user" and pending.tool_data.get("prepared_tool_call_id"):
             from app.service.prepared_operation_confirmation import PreparedOperationConfirmation
             try:
+                # 授权服务只接受绑定问题 ID 或单题 q-0，不使用展示层宽松归一化的答案。
+                confirmation_answers = json.loads(answer) if answer else {}
                 await PreparedOperationConfirmation(pending.agent_context).answer(
                     str(pending.tool_data["prepared_tool_call_id"]), pending.tool_call_id,
-                    response_status, extra_info.get("answers", {}), remark=remark or "",
+                    response_status if extra_info.get("status") != "error" else "error",
+                    confirmation_answers, remark=remark or "",
                 )
             except Exception:
                 # 凭据落盘失败不能变成授权；普通提问和恢复流程仍继续。

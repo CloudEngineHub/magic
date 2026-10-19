@@ -103,6 +103,30 @@
         "zh_CN": "操作参数或返回内容不符合要求，请核对后重试。",
         "en_US": "The request or response was invalid. Check the information and try again."
     },
+    "error.confirmation_required": {
+        "zh_CN": "本次操作尚未取得有效确认，请检查确认卡片的状态。",
+        "en_US": "This operation has no valid approval yet. Check the confirmation card's status."
+    },
+    "error.confirmation_mismatch": {
+        "zh_CN": "确认与本次操作不匹配，请检查对应的确认记录。",
+        "en_US": "The confirmation does not match this operation. Check the corresponding confirmation."
+    },
+    "error.confirmation_expired": {
+        "zh_CN": "本次确认已过期，请重新准备并确认。",
+        "en_US": "This confirmation has expired. Prepare and confirm the operation again."
+    },
+    "error.confirmation_pending": {
+        "zh_CN": "本次操作已有关联的确认，请先处理原确认卡片。",
+        "en_US": "This operation already has a confirmation. Resolve the original card first."
+    },
+    "error.confirmation_unavailable": {
+        "zh_CN": "当前无法发起确认，请在交互话题中继续操作。",
+        "en_US": "Confirmation is unavailable here. Continue in an interactive topic."
+    },
+    "error.confirmation_stale": {
+        "zh_CN": "内容或版本已变更，请重新准备并确认。",
+        "en_US": "The content or version has changed. Prepare and confirm the operation again."
+    },
     "error.unexpected_error": {
         "zh_CN": "操作遇到问题，请稍后重试。",
         "en_US": "The operation encountered a problem. Please try again later."

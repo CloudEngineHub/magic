@@ -169,8 +169,13 @@ class PreparedOperationConfirmation:
             record = await self.read(prepared_id)
             if record.state != "waiting" or record.confirmation_tool_call_id != confirmation_id:
                 raise self.error_type("CONFIRMATION_MISMATCH", "The human response does not match this preparation.")
-            # 前端 confirm 的稳定值是「是／否」；不能把默认答案、跳过或超时当同意。
-            approved = not remark.strip() and status == "answered" and len(answers) == 1 and answers.get(record.question_id or "") == "是"
+            # 绑定提问只有一题：前端可能回传 UUID，也可能按位置回传 q-0。
+            # 只兼容这个明确的位置键；展示层按顺序归一化任意旧 ID 的逻辑不能用于授权。
+            approved = (
+                not remark.strip() and status == "answered" and bool(record.question_id)
+                and isinstance(answers, dict) and len(answers) == 1
+                and (answers.get(record.question_id) == "是" or answers.get("q-0") == "是")
+            )
             record.state = "approved" if approved else "rejected"
             await self.save(record)
             if not approved:

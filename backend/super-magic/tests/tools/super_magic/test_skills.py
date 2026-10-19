@@ -1,6 +1,7 @@
 """真人确认、固定快照、重试和跨用户隔离回归。"""
 import asyncio
 import hashlib
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -13,7 +14,8 @@ from app.infrastructure.sdk.magic_service.api.skill_api import SkillApi
 from app.infrastructure.sdk.magic_service.kernel.magic_service_parameter import MagicServiceAuthConfig
 from app.path_manager import PathManager
 from app.service.prepared_operation_confirmation import PreparedOperationConfirmation, PreparedOperationError
-from app.tools.ask_user import AskUserTool
+from app.service.user_tool_call_service import PendingToolCall, UserToolCallService
+from app.tools.ask_user import AskUserTool, build_ask_user_result_builder
 from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.super_magic.context import ProductContext
@@ -56,6 +58,92 @@ async def prepared(context):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('answers,approved', [
+    ({'q-0': '是'}, True), ({'bound-question': '是'}, True),
+    ({'q-0': ''}, False), ({'q-0': '否'}, False),
+    ({'old-question': '是'}, False), ({'q-1': '是'}, False),
+    ({'q-0': '是', 'bound-question': '是'}, False),
+    (['是'], False),
+])
+async def test_raw_confirmation_accepts_only_bound_question_or_single_frontend_position(context, answers, approved):
+    service = PreparedOperationConfirmation(context[0].agent)
+    await service.prepare('prepare-call', 'skill_publish', {}, 'hash', 'Publish?')
+    await service.bind('prepare-call', 'human-call', 'bound-question')
+    await service.answer('prepare-call', 'human-call', 'answered', answers)
+    if approved:
+        assert (await service.read('prepare-call')).state == 'approved'
+    else:
+        with pytest.raises(PreparedOperationError):
+            await service.read('prepare-call')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status,answers,remark,approved', [
+    ('answered', {'q-0': '是'}, '', True),
+    ('answered', {'bound-question-uuid': '是'}, '', True),
+    ('answered', {'old-question': '是'}, '', False),
+    ('answered', {'q-0': ''}, '', False),
+    ('answered', {'q-0': '是'}, 'Change the name first', False),
+    ('timeout', {'q-0': '是'}, '', False),
+    ('cancelled', {'q-0': '是'}, '', False),
+])
+async def test_publish_confirmation_through_frontend_callback(context, monkeypatch, status, answers, remark, approved):
+    confirmation = PreparedOperationConfirmation(context[0].agent)
+    await confirmation.prepare('prepare-call', 'skill_publish', {'skill_code': 'skill-code', 'prepare_token': 'token'}, 'hash', 'Publish?')
+    await confirmation.bind('prepare-call', 'human-call', 'bound-question-uuid')
+    agent = context[0].agent
+    agent.clear_user_tool_call_pending = lambda: None
+    agent.chat_history = SimpleNamespace(append_tool_message=AsyncMock())
+    pending = PendingToolCall(
+        tool_call_id='human-call', tool_name='ask_user', agent_context=agent, timeout_task=None,
+        tool_data={'prepared_tool_call_id': 'prepare-call'},
+        result_builder=build_ask_user_result_builder([{'sub_id': 'bound-question-uuid', 'interaction_type': 'confirm', 'title': 'Publish?'}]),
+    )
+    service = UserToolCallService()
+    monkeypatch.setattr(service, '_emit_after_tool_call', AsyncMock())
+    monkeypatch.setattr(service, '_delete_pending_file', AsyncMock())
+    monkeypatch.setattr(service, '_resume_agent', AsyncMock())
+    monkeypatch.setattr('app.service.user_tool_call_service.ToolCallEventManager.create_tool_context', lambda *_: context[1])
+    monkeypatch.setattr('app.service.user_tool_call_service.tool_result_content_manager.prepare', AsyncMock(side_effect=lambda result, **_: result))
+    await service.resume_after_user_tool_call(pending, status, json.dumps(answers), remark)
+    if approved:
+        assert (await confirmation.read('prepare-call')).state == 'approved'
+    else:
+        with pytest.raises(PreparedOperationError):
+            await confirmation.read('prepare-call')
+    result = await PublishSkill().execute(context[1], PublishSkillParams(prepared_tool_call_id='prepare-call'))
+    assert result.ok is approved
+    assert context[0].sdk.skill.publish_prepared_async.await_count == int(approved)
+
+
+@pytest.mark.asyncio
+async def test_publish_uses_stored_human_confirmation_without_model_supplied_id(context):
+    service = await prepared(context)
+    params = PublishSkillParams(prepared_tool_call_id='prepare-call')
+    assert not (await PublishSkill().execute(context[1], params)).ok
+    await service.answer('prepare-call', 'human-call', 'answered', {'q-0': '是'})
+    first = await PublishSkill().execute(context[1], params)
+    second = await PublishSkill().execute(context[1], params)
+    assert first.ok and second.ok and first.data == second.data
+    context[0].sdk.skill.publish_prepared_async.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_confirmation_failure_has_specific_user_error(context):
+    result = await PublishSkill().execute(context[1], PublishSkillParams(
+        prepared_tool_call_id='missing', confirmation_tool_call_id='human-call',
+    ))
+    assert result.data['code'] == 'confirmation_required'
+    i18n.set_language('zh_CN')
+    try:
+        detail = await PublishSkill().get_tool_detail(None, result)
+        assert '确认' in detail.data.content
+        assert '操作参数或返回内容不符合要求' not in detail.data.content
+    finally:
+        i18n.reset_language()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('status,answers,remark', [
     ('cancelled', {'q-1': '是'}, ''), ('timeout', {'q-1': '是'}, ''),
     ('answered', {'q-1': '否'}, ''), ('answered', {'q-1': '是'}, 'Change it to private first'),
@@ -75,7 +163,9 @@ async def test_confirmation_required_and_completed_retry_is_read_only(context):
     params = PublishSkillParams(prepared_tool_call_id='prepare-call', confirmation_tool_call_id='human-call')
     assert not (await PublishSkill().execute(context[1], params)).ok
     await service.answer('prepare-call', 'human-call', 'answered', {'q-1': '是'})
-    assert not (await PublishSkill().execute(context[1], params.model_copy(update={'confirmation_tool_call_id': 'invented'}))).ok
+    mismatch = await PublishSkill().execute(context[1], params.model_copy(update={'confirmation_tool_call_id': 'invented'}))
+    assert not mismatch.ok and mismatch.data['code'] == 'confirmation_mismatch'
+    assert 'do not ask the user again' in mismatch.content
     first = await PublishSkill().execute(context[1], params)
     second = await PublishSkill().execute(context[1], params)
     assert first.ok and second.ok and first.data == second.data

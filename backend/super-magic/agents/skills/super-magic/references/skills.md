@@ -26,7 +26,7 @@ For updates, read the existing config and files first. Preserve the same skill c
 2. Call `prepare_skill_publish(code, name=None, description=None, publish_target_type=None, version=None)`. First release defaults to PRIVATE; updates retain the currently effective scope. Supported explicit scopes are PRIVATE, ORGANIZATION, MARKET. An existing MEMBER release requires the user to choose a supported scope explicitly. Do not guess a version number; omit it to use the server suggestion. If status is processing, resume with the returned `publish_task_id`; other supplied fields do not alter that preparation.
 3. Read `skill-vetter` and review every file in the returned `snapshot_path`, including scripts and references. These bytes match the exported package's manifest. Resolve problems in the source project and prepare again. The runtime review snapshot is not the editable source and must not be edited to "fix" a release.
 4. Show the name, description, target scope, version, useful source-file preview, and a short account of the actual changes. Then call `ask_user(prepared_tool_call_id=...)`; omit `questions`. The runtime supplies the exact bound confirmation. Allow the user to change name, description, scope, or content: make those changes and prepare again. A remark requesting changes, refusal, timeout, or cancellation is not approval. A cancelled release leaves the private draft intact.
-5. After explicit approval, call `publish_skill(prepared_tool_call_id, confirmation_tool_call_id)`. Both IDs must come from the preparation and its actual ask_user call. Never invent confirmation IDs or call publication with a boolean approval shortcut.
+5. After explicit approval, call `publish_skill(prepared_tool_call_id=...)` using the same preparation ID. The runtime reads its bound human approval; no confirmation ID or boolean approval is needed from the model. While the confirmation card is pending, wait for its answer instead of preparing or asking again.
 6. Read the result. PRIVATE is published immediately; ORGANIZATION and MARKET are submitted for review. Report that distinction and the exact skill/project/version. Do not install automatically. Product users can find their draft in My Skills and reference its project or files through `@ → other projects/files → My Skills`.
 
 ```python
@@ -35,6 +35,15 @@ from sdk.tool import tool
 prepared = tool.call("prepare_skill_publish", {"code": "<verified-skill-code>"})
 print(prepared.content)
 # Review the fixed snapshot with skill-vetter, then ask the human in a separate step.
+```
+
+Call the direct `ask_user` tool with `prepared_tool_call_id="<ID returned by preparation>"` and omit `questions`. After that card is explicitly approved, run a new snippet:
+
+```python
+from sdk.tool import tool
+
+published = tool.call("publish_skill", {"prepared_tool_call_id": "<same preparation ID>"})
+print(published.content)
 ```
 
 If publication is interrupted or the response is lost, call `get_skill_publish_result(code, publish_task_id=<prepare-token>)` before retrying. Retrying `publish_skill` uses the same confirmed token and recovers an existing release. Without a task ID, the result tool lists recent versions; a recent version alone does not prove that an uncertain request succeeded. Preparations expire after 24 hours; expired, changed-source, changed-permission, or version-conflict results require another preparation and confirmation. Only the already confirmed package is published; later edits remain draft changes.
