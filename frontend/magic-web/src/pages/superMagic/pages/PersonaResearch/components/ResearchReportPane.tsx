@@ -27,6 +27,7 @@ const ResearchReportPane = forwardRef<ResearchReportPaneRef, { generating: boole
 		const store = usePersonaResearchStore()
 		const detailRef = useRef<DetailRef>(null)
 		const [userSelectDetail, setUserSelectDetail] = useState<unknown>()
+		const [fullscreen, setFullscreen] = useState(false)
 		const report = store.studyAttachments?.report ?? null
 		const versionKey = report ? attachmentVersionKey(report) : ""
 
@@ -83,7 +84,10 @@ const ResearchReportPane = forwardRef<ResearchReportPaneRef, { generating: boole
 					allowDownload={false}
 					persistFileTabs={false}
 					hideTabBar
-					showFileHeader={false}
+					// The inline pane hides the file header to give the report room; fullscreen shows it
+					// again because it holds the exit-fullscreen control.
+					showFileHeader={fullscreen}
+					onFullscreenChange={setFullscreen}
 				/>
 			</div>
 		)
