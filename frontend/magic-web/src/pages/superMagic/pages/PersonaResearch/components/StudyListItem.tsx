@@ -192,8 +192,8 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 					<DropdownMenuItem
 						disabled={!shareable}
 						onSelect={() => {
-							keepFocusAwayRef.current = true
-							// Open after the menu has closed so the popover is not dismissed by it.
+							// The menu hands focus back to "…" as it closes; the dialog opened next returns
+							// focus there again when it closes.
 							window.setTimeout(() => setShareOpen(true), 0)
 						}}
 					>
@@ -214,19 +214,16 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
-			{/* The share panel anchors to an invisible point under "…", the same panel as the studio. */}
+			{/* Without an anchor the share panel opens as a centred dialog titled with the study
+			    (a bottom sheet on phones): the same content as the studio's share button, and no
+			    panel hanging off the row edge or over its neighbours. */}
 			<TopicSharePopover
 				open={shareOpen}
 				onOpenChange={setShareOpen}
 				topicId={topic.id}
 				topicTitle={title}
 				fileListOffHint={t("share.fileListOffHint")}
-			>
-				<span
-					aria-hidden
-					className="pointer-events-none absolute right-12 top-full size-0"
-				/>
-			</TopicSharePopover>
+			/>
 			<ChevronRight
 				aria-hidden
 				className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
