@@ -16,6 +16,7 @@ use App\Domain\Contact\Repository\Facade\MagicUserSettingRepositoryInterface;
 use App\Domain\Kernel\Service\PlatformSettingsDomainService;
 use App\Domain\Provider\DTO\Item\ModelConfigItem;
 use App\Domain\Provider\DTO\Item\TokenPricing\BillingTierItem;
+use App\Domain\Provider\DTO\Item\TokenPricing\BillingTierMode;
 use App\Domain\Provider\DTO\Item\TokenPricing\BillingTierPriceRule;
 use App\Domain\Provider\DTO\Item\TokenPricing\BillingTiers;
 use App\Domain\Provider\Entity\ProviderModelEntity;
@@ -97,6 +98,7 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
         foreach ([[], [$invalidRule]] as $rules) {
             $tier = $this->createMock(BillingTierItem::class);
             $tier->method('getPricingRules')->willReturn($rules);
+            $tier->method('getPricingMode')->willReturn(BillingTierMode::Fixed);
             $tiers = $this->createMock(BillingTiers::class);
             $tiers->method('getBillingTier')->willReturn($tier);
             $config = $this->model([])->getConfig();

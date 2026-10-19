@@ -10,6 +10,7 @@ use App\Interfaces\Admin\Facade\Agent\AgentGlobalSettingsApi;
 use App\Interfaces\Admin\Facade\AppMenu\AppMenuAdminApi;
 use App\Interfaces\Audit\Facade\AdminOperationLogApi;
 use App\Interfaces\Contact\Facade\Admin\PlatformUserApi;
+use App\Interfaces\Kernel\Facade\ModelBillingPreviewApi;
 use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
 use App\Interfaces\OrganizationEnvironment\Facade\Admin\OrganizationApi;
 use App\Interfaces\Permission\Facade\FunctionPermissionAdminApi;
@@ -207,5 +208,6 @@ Router::addGroup('/api/v1/admin', static function () {
 // 平台设置（管理端）
 Router::addGroup('/api/v1/platform', static function () {
     Router::get('/setting', [PlatformSettingsApi::class, 'show']);
+    Router::get('/setting/model-billing-preview', [ModelBillingPreviewApi::class, 'show']);
     Router::put('/setting', [PlatformSettingsApi::class, 'update']);
 }, ['middleware' => [RequestContextMiddleware::class]]);
