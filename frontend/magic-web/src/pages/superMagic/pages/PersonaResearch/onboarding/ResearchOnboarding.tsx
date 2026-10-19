@@ -13,8 +13,18 @@ import {
 } from "./onboardingState"
 import { useResearchOnboardingSteps } from "./useResearchOnboardingSteps"
 
-/** Lets the page settle (fonts, avatars, the stepper) before the first anchor is measured. */
-const AUTO_OPEN_DELAY = 600
+/**
+ * Lets the page settle before the first anchor is measured: fonts, avatars, the stepper, and the
+ * home page's staggered entrance (~0.9s of opacity/translateY). A transform does not trigger the
+ * spotlight's resize tracking, so measuring mid-animation would leave the ring ~10px off. Without
+ * motion there is no entrance to wait for.
+ */
+function autoOpenDelay() {
+	const reducedMotion =
+		typeof window.matchMedia === "function" &&
+		window.matchMedia("(prefers-reduced-motion: reduce)").matches
+	return reducedMotion ? 600 : 1000
+}
 
 interface ResearchOnboardingProps {
 	page: ResearchOnboardingPage
@@ -62,7 +72,7 @@ export default function ResearchOnboarding({
 			if (isHomeOnboardingRunBlocking()) return
 			if (document.querySelector('[role="dialog"][data-state="open"]')) return
 			setOpen(true)
-		}, AUTO_OPEN_DELAY)
+		}, autoOpenDelay())
 		return () => window.clearTimeout(timer)
 	}, [deferred, isMobile, page, ready, userId])
 

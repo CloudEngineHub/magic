@@ -29,7 +29,7 @@ afterEach(() => {
 
 function settle() {
 	act(() => {
-		vi.advanceTimersByTime(1000)
+		vi.advanceTimersByTime(1100)
 	})
 }
 
