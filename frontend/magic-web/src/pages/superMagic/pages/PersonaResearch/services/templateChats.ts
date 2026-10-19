@@ -33,6 +33,15 @@ export function templateChatTopicIds(list: AttachmentItem[]): Set<string> {
 	)
 }
 
+/**
+ * Template conversations started before markers existed: no study.json and a topic name about a
+ * report template, as the agent names them. Example: "新建儿童涂鸦风报告模板" → true;
+ * "高校二手书付费意愿" → false. Only for topics without a study directory.
+ */
+export function isLegacyTemplateChatName(topicName: string | undefined | null): boolean {
+	return /报告模板|report template/i.test(topicName ?? "")
+}
+
 const markerSchema = z.object({
 	schema_version: z.literal(1),
 	topic_id: z.string().min(1),

@@ -3,6 +3,7 @@ import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
 import {
 	parseTemplateChatMarker,
 	resolveTemplateChatState,
+	isLegacyTemplateChatName,
 	serializeTemplateChatMarker,
 	templateChatTopicIds,
 } from "../services/templateChats"
@@ -96,5 +97,14 @@ describe("templateChatTopicIds", () => {
 				file("templates/voices.html"),
 			]),
 		).toEqual(new Set(["971"]))
+	})
+})
+
+describe("isLegacyTemplateChatName", () => {
+	it("matches report template conversations only", () => {
+		expect(isLegacyTemplateChatName("新建儿童涂鸦风报告模板")).toBe(true)
+		expect(isLegacyTemplateChatName("Create a dark report template")).toBe(true)
+		expect(isLegacyTemplateChatName("高校二手书9元订阅付费意愿测试")).toBe(false)
+		expect(isLegacyTemplateChatName(undefined)).toBe(false)
 	})
 })

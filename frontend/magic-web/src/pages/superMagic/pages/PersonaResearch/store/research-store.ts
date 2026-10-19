@@ -33,7 +33,7 @@ import {
 	personaFilePath,
 	type StudyAttachments,
 } from "../services/researchFiles"
-import { templateChatTopicIds } from "../services/templateChats"
+import { isLegacyTemplateChatName, templateChatTopicIds } from "../services/templateChats"
 import type {
 	DiscussionFile,
 	InterviewFile,
@@ -229,12 +229,16 @@ export class PersonaResearchStore {
 	/**
 	 * Topics shown as studies. Blank topics (never sent, no study files) are hidden; the special
 	 * project creates one by default and the home composer reuses it instead of creating more.
-	 * Report template conversations are not studies and are left out too.
+	 * Report template conversations are not studies and are left out too, including ones started
+	 * before markers existed (no study directory, named after a report template).
 	 */
 	get studies(): Topic[] {
 		const templateChats = this.templateChatTopicIds
+		const isTemplateChat = (topic: Topic) =>
+			templateChats.has(String(topic.id)) ||
+			(!this.studyDirOf(topic.id) && isLegacyTemplateChatName(topic.topic_name))
 		return this.topicStore.topics
-			.filter((topic) => !this.isBlankTopic(topic) && !templateChats.has(String(topic.id)))
+			.filter((topic) => !this.isBlankTopic(topic) && !isTemplateChat(topic))
 			.slice()
 			.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")))
 	}
