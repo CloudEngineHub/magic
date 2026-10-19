@@ -14,8 +14,18 @@ vi.mock("../../../renderers/context", () => ({
 }))
 
 vi.mock("../../../runtime/builtin/domains/file-preview/MentionPanelFileImageIcon", () => ({
-	MentionPanelFileImageIcon: ({ iconSize }: { iconSize?: number }) => (
-		<span data-testid="selected-item-thumbnail" data-size={iconSize} />
+	MentionPanelFileImageIcon: ({
+		iconSize,
+		imageFit,
+	}: {
+		iconSize?: number
+		imageFit?: string
+	}) => <span data-testid="selected-item-thumbnail" data-size={iconSize} data-fit={imageFit} />,
+}))
+
+vi.mock("../../MentionVideoPreview", () => ({
+	default: ({ item }: { item: MentionItem }) => (
+		<span data-testid="selected-item-video-preview">{item.name}</span>
 	),
 }))
 
@@ -33,6 +43,21 @@ const image: MentionItem = {
 
 const imageEntry: PendingMentionEntry = {
 	item: image,
+	sourceRootId: "project-files",
+}
+
+const videoEntry: PendingMentionEntry = {
+	item: {
+		...image,
+		id: "video-1",
+		name: "clip.mp4",
+		data: {
+			file_id: "video-1",
+			file_name: "clip.mp4",
+			file_path: "videos/clip.mp4",
+			file_extension: "mp4",
+		},
+	},
 	sourceRootId: "project-files",
 }
 
@@ -68,6 +93,7 @@ describe("SelectedItemsStrip", () => {
 			height: "36px",
 		})
 		expect(screen.getByTestId("selected-item-thumbnail")).toHaveAttribute("data-size", "36")
+		expect(screen.getByTestId("selected-item-thumbnail")).toHaveAttribute("data-fit", "contain")
 
 		rerender(
 			<SelectedItemsStrip entries={[imageEntry]} isGalleryMode t={zhCN} onRemove={vi.fn()} />,
@@ -82,6 +108,20 @@ describe("SelectedItemsStrip", () => {
 			height: "60px",
 		})
 		expect(screen.getByTestId("selected-item-thumbnail")).toHaveAttribute("data-size", "60")
+		expect(screen.getByTestId("selected-item-thumbnail")).toHaveAttribute("data-fit", "contain")
+	})
+
+	it("uses the full video preview for selected project videos", () => {
+		render(
+			<SelectedItemsStrip
+				entries={[videoEntry]}
+				isGalleryMode={false}
+				t={zhCN}
+				onRemove={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getByTestId("selected-item-video-preview")).toHaveTextContent("clip.mp4")
 	})
 
 	it("removes the selected item by its cross-directory selection key", () => {

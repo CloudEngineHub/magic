@@ -1,7 +1,8 @@
-import { IMAGE_EXTENSIONS } from "@/constants/file"
+import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS } from "@/constants/file"
 import { MentionItemType, type MentionItem, type ProjectFileMentionData } from "../../../../types"
 
 const imageExtSet = new Set(IMAGE_EXTENSIONS.map((ext) => ext.replace(/^\./, "").toLowerCase()))
+const videoExtSet = new Set(VIDEO_EXTENSIONS.map((ext) => ext.replace(/^\./, "").toLowerCase()))
 
 export interface MentionFilePreviewSourceRow {
 	type?: string
@@ -24,15 +25,21 @@ export interface MentionFilePreviewIndexes {
 	byPath: Map<string, string>
 }
 
-export function normalizeFileExtensionForMentionImage(ext?: string | null) {
+export function normalizeMentionFileExtension(ext?: string | null) {
 	if (!ext) return ""
 	return ext.replace(/^\./, "").toLowerCase()
 }
 
 export function isMentionPanelImageFileExtension(ext?: string | null) {
-	const normalized = normalizeFileExtensionForMentionImage(ext)
+	const normalized = normalizeMentionFileExtension(ext)
 	if (!normalized) return false
 	return imageExtSet.has(normalized)
+}
+
+export function isMentionPanelVideoFileExtension(ext?: string | null) {
+	const normalized = normalizeMentionFileExtension(ext)
+	if (!normalized) return false
+	return videoExtSet.has(normalized)
 }
 
 export function getMentionProjectFileImageExtension(item: MentionItem): string {

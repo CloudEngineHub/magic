@@ -3,8 +3,14 @@ import { X } from "lucide-react"
 import type { I18nTexts } from "../../i18n/types"
 import { useMentionItemRenderContextValue } from "../../renderers/context"
 import { MentionPanelFileImageIcon } from "../../runtime/builtin/domains/file-preview/MentionPanelFileImageIcon"
+import {
+	getMentionProjectFileImageExtension,
+	isMentionPanelVideoFileExtension,
+} from "../../runtime/builtin/domains/file-preview/preview-utils"
+import { MentionItemType } from "../../types"
 import { getMentionItemSelectionKey, type PendingMentionEntry } from "../../utils/multiSelect"
 import { SELECTED_ITEM_CARD_SIZE } from "../../utils/panelSize"
+import MentionVideoPreview from "../MentionVideoPreview"
 
 interface SelectedItemsStripProps {
 	entries: PendingMentionEntry[]
@@ -31,6 +37,16 @@ function SelectedItemCard(props: {
 		filePreviewById,
 		filePresentationOptions,
 	}
+	const isVideo =
+		item.type === MentionItemType.PROJECT_FILE &&
+		isMentionPanelVideoFileExtension(getMentionProjectFileImageExtension(item))
+	const thumbnailFallback = (
+		<MentionPanelFileImageIcon
+			context={rendererContext}
+			iconSize={cardSize}
+			imageFit="contain"
+		/>
+	)
 
 	return (
 		<div
@@ -41,7 +57,11 @@ function SelectedItemCard(props: {
 			data-size={isGalleryMode ? "gallery" : "list"}
 		>
 			<div className="flex h-full w-full items-center justify-center">
-				<MentionPanelFileImageIcon context={rendererContext} iconSize={cardSize} />
+				{isVideo ? (
+					<MentionVideoPreview item={item} fallback={thumbnailFallback} />
+				) : (
+					thumbnailFallback
+				)}
 			</div>
 			<button
 				type="button"

@@ -37,21 +37,30 @@ export function MentionPanelFileImageIcon(props: {
 	context: MentionItemRendererContext
 	/** 行内图标沿用平台默认尺寸；已选缩略图等复合入口可显式放大。 */
 	iconSize?: number
+	/** 行内预览默认裁切填满；完整缩略图场景可改为 contain。 */
+	imageFit?: "cover" | "contain"
 }) {
-	const { context, iconSize = getFileRowIconSize(context.platform) } = props
+	const { context, iconSize = getFileRowIconSize(context.platform), imageFit = "cover" } = props
 	const canvasElementPreview = getCanvasElementSourcePreview(context.item)
 	if (canvasElementPreview) {
 		return <CanvasElementResourceIcon preview={canvasElementPreview} iconSize={iconSize} />
 	}
 
-	return <ProjectMentionPanelFileImageIcon context={context} iconSize={iconSize} />
+	return (
+		<ProjectMentionPanelFileImageIcon
+			context={context}
+			iconSize={iconSize}
+			imageFit={imageFit}
+		/>
+	)
 }
 
 function ProjectMentionPanelFileImageIcon(props: {
 	context: MentionItemRendererContext
 	iconSize: number
+	imageFit: "cover" | "contain"
 }) {
-	const { context, iconSize } = props
+	const { context, iconSize, imageFit } = props
 	const { item, filePreviewById } = context
 
 	const extension =
@@ -159,7 +168,8 @@ function ProjectMentionPanelFileImageIcon(props: {
 				<img
 					src={resolvedPreviewUrl}
 					alt=""
-					className="block h-full w-full object-cover"
+					className="block h-full w-full"
+					style={{ objectFit: imageFit }}
 					loading="lazy"
 					decoding="async"
 					referrerPolicy="no-referrer"
@@ -179,7 +189,8 @@ function ProjectMentionPanelFileImageIcon(props: {
 			<img
 				src={resolvedPreviewUrl}
 				alt=""
-				className="absolute inset-0 z-[1] h-full w-full object-cover opacity-0"
+				className="absolute inset-0 z-[1] h-full w-full opacity-0"
+				style={{ objectFit: imageFit }}
 				loading="lazy"
 				decoding="async"
 				referrerPolicy="no-referrer"
