@@ -33,9 +33,12 @@ function getMagicFileIconType(context: MentionItemRendererContext): string {
 
 type ImageLoadPhase = "loading" | "loaded" | "error"
 
-export function MentionPanelFileImageIcon(props: { context: MentionItemRendererContext }) {
-	const { context } = props
-	const iconSize = getFileRowIconSize(context.platform)
+export function MentionPanelFileImageIcon(props: {
+	context: MentionItemRendererContext
+	/** 行内图标沿用平台默认尺寸；已选缩略图等复合入口可显式放大。 */
+	iconSize?: number
+}) {
+	const { context, iconSize = getFileRowIconSize(context.platform) } = props
 	const canvasElementPreview = getCanvasElementSourcePreview(context.item)
 	if (canvasElementPreview) {
 		return <CanvasElementResourceIcon preview={canvasElementPreview} iconSize={iconSize} />

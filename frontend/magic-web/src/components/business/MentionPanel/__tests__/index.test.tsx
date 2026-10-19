@@ -709,7 +709,7 @@ describe("MentionPanel", () => {
 		expect(screen.getByTestId("menu-item-checkbox")).toHaveAttribute("data-checked", "false")
 	})
 
-	it("should show live asset counts beside the breadcrumb in multi-select mode", async () => {
+	it("should show live asset counts below the list in multi-select mode", async () => {
 		const image: MentionItem = {
 			id: "image-1",
 			name: "Image 1",
@@ -748,7 +748,9 @@ describe("MentionPanel", () => {
 
 		expect(screen.queryByTestId("mention-panel-selection-summary")).not.toBeInTheDocument()
 		enterMultiSelectMode()
-		expect(screen.getByTestId("mention-panel-selection-summary")).toHaveTextContent("已选 0")
+		const selectionSummary = screen.getByTestId("mention-panel-selection-summary")
+		expect(selectionSummary).toHaveTextContent("已选 0")
+		expect(screen.getByRole("listbox").nextElementSibling).toBe(selectionSummary)
 
 		fireEvent.click(screen.getAllByTestId("menu-item")[0])
 		await waitFor(() => {
@@ -770,6 +772,15 @@ describe("MentionPanel", () => {
 				/已选 1.*图片 0\/15.*视频 1\/1/,
 			)
 		})
+		expect(screen.getByTestId("mention-panel-selected-item")).toBeInTheDocument()
+
+		fireEvent.click(screen.getByTestId("mention-panel-selected-item-remove"))
+		await waitFor(() => {
+			expect(screen.getByTestId("mention-panel-selection-summary")).toHaveTextContent(
+				"已选 0",
+			)
+		})
+		expect(screen.queryByTestId("mention-panel-selected-items")).not.toBeInTheDocument()
 	})
 
 	it("should not count a resource that is already referenced", async () => {
