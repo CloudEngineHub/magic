@@ -4,7 +4,7 @@ Use this reference when photographic avatars are requested. Generate them with t
 
 ## Choose From the Persona, Not a Fixed Look
 
-Read the saved persona's demographics, everyday situation, and explicitly stated preferences. Use known age and gender presentation; do not infer either from a name. A region does not establish ethnicity. When appearance is unspecified, keep it an acknowledged fictional design choice rather than adding it to the persona's facts. This brief covers adults; do not invent an adult age for a persona described as a minor.
+After saving the panel with `save_personas`, read each saved persona's demographics, everyday situation, and explicitly stated preferences. Use known age and gender presentation; do not infer either from a name. A region does not establish ethnicity. When appearance is unspecified, keep it an acknowledged fictional design choice rather than adding it to the persona's facts. This brief covers adults; do not invent an adult age for a persona described as a minor.
 
 All three directions below are valid in one panel. Choose the background, clothing, expression, and camera treatment to suit the person's everyday situation. Do not assign directions mechanically by age, gender, occupation, wealth, or research segment. Avoid turning all business owners into executives in suits or making older people uniformly solemn.
 
@@ -48,15 +48,32 @@ For A, describe realistic phone-camera perspective and a lightly informal compos
 
 1. Reuse a suitable portrait already delivered for the same persona ID. Changing the research question, interview round, display name, or report style alone does not require a new face. A requested appearance change may justify regeneration; do not replace an existing usable image silently.
 2. Before an initial batch, state how many portraits will be generated and the expected image cost under the deployment's normal media-generation rules. Generate only when this deliverable is authorized; research-plan approval alone is not approval for unmentioned image costs. Do not exceed the selected panel size or the study's persona limit.
-3. Use `generate_images` with one task per person, never a contact sheet. Set `prompt`, `name`, `output_path`, and a square `size` supported by the current session's image-model information. Use a descriptive localized file stem and a localized portrait directory under the study directory; include the stable persona ID in the directory to distinguish namesakes. Read the tool's current schema rather than inventing model options or a response field.
+3. Use `generate_images` with one task per person, never a contact sheet, in batches of at most 5 tasks (the tool limit). Set `prompt`, `name`, `output_path`, and a square `size` supported by the current session's image-model information. Use a descriptive localized file stem and save under a localized working directory. After inspection, bind the successful output with `attach_persona_portrait`; the tool stores a project-level 320px WebP under `personas/portraits/<persona_id>/`, so deleting a study does not remove a reused person's image. Read the tool's current schema rather than inventing model options or a response field.
 4. Send only the non-identifying visual brief. Do not send raw interviews, private customer details, evidence quotations, or hypothesis verdicts to the image tool. Use text-only generation for fictional identity; an identifiable person's photo is not needed as a face reference. If the user supplies such an image, explain the conflict rather than silently forwarding it or ignoring it.
 5. Inspect the actual returned images: one adult per file, appropriate age presentation, no malformed face or glasses, no duplicate-looking faces, a clear circular crop, readable features at roughly 32-48 CSS pixels, and natural texture. Link accepted files using the exact successful output paths reported by the tool. A successful request alone does not establish visual quality; if inspection is unavailable, say the images are unreviewed.
-6. Keep successful images when a batch partly fails. Report which personas have no accepted portrait and retain their existing fallback; do not automatically retry a paid batch. Reuse the accepted file in every output that supports it. Regenerate a rejected portrait only within the user's image-generation authorization.
+6. For every accepted image, call `attach_persona_portrait` with `persona_id` and the exact successful `image_path`. Read `result.content`; a generated file without successful attachment is not an installed avatar. Use `replace: true` only for a user-requested appearance change. Reused personas keep their existing portrait by default.
+7. Keep successful images when a batch partly fails. Report which personas have no accepted portrait and retain their existing fallback; do not automatically retry a paid batch. Reuse the accepted file in every output that supports it. Regenerate a rejected portrait only within the user's image-generation authorization.
 
-## Current Integration Boundary
+## Binding and Report Integration
 
-`save_personas` currently has no portrait-path field, and the research frontend derives its avatar from the persona's name and demographics. Do not invent an `avatar_url` field, patch persona JSON, or promise that generating a file updates list rows, tool cards, or share views. Deliver the generated images as linked files until the application has an explicit portrait-attachment contract.
+The optional `portrait` field is maintained only by `attach_persona_portrait`. Do not write it with file tools or invent an `avatar_url`. Old personas without this field keep their existing SVG fallback. The research list, interviews, tool cards, and share views resolve the same bound project image through the existing file access layer; images hidden by share permissions remain on the fallback.
 
-The current report template draws its own portraits, and `report-templates.md` prohibits generating personas for its image slots. This reference does not override that contract: keep the template's portraits and disclose the separately delivered photographic assets. Do not insert portraits into decorative image slots or change the template script. Report embedding requires a coordinated template contract change. The report's illustration budget is not an extra portrait-generation allowance.
+After writing `studies/<slug>/report.html`, send the existing `update_study` event `report_written`; it automatically synchronizes the portraits, so a separate embedding call is unnecessary. The embedding step reads the panel and bound persona files and embeds the same small WebP images as a portable snapshot; it never generates new portraits or stores signed URLs. It preserves the template SVGs underneath, along with the AI-simulation disclosure and citation scripts. Missing or failed portraits keep the SVG. Keep `data-persona` on every portrait element and set `data-persona-id` to the saved persona ID, especially for namesakes; do not infer identity from a name. Custom templates with no persona elements get no invented image slots. The embedding tool also works on older copies of the default template.
 
-Never persist a temporary download URL as the identity of a portrait. Keep the workspace file identity through the product's existing file tools; sharing and long-lived rendering must use their authorized file-resolution and expiry handling. Repository LFS rules apply if developers later check selected images into source control, not to ordinary Agent-generated user workspace files.
+If a user explicitly replaces a portrait, rerun embedding for the report they want updated; do not rewrite unrelated historical reports. Portrait generation is separate from decorative report images and does not consume or expand their four-image allowance. Keep the visible AI-simulated-persona wording, including on photo-style portraits. Generation, attachment, or embedding failure must not stop the research or hide the remaining deliverables.
+
+```python
+from sdk.tool import tool
+
+attached = tool.call("attach_persona_portrait", {
+    "persona_id": "<saved persona id>",
+    "image_path": "<exact successful generate_images output path>",
+})
+print(attached.content)
+
+# To refresh a chosen existing report after a requested portrait replacement:
+embedded = tool.call("embed_persona_portraits", {"study_dir": "studies/<slug>"})
+print(embedded.content)
+```
+
+Repository LFS rules apply if developers check images into source control, not to ordinary Agent-generated user workspace files. Never commit these runtime portraits or use their visual realism to claim a real interview occurred.

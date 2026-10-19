@@ -1234,5 +1234,13 @@
     "finish_persona_transcript": {
         "zh_CN": "访谈收尾",
         "en_US": "Interview wrap-up"
+    },
+    "attach_persona_portrait": {
+        "zh_CN": "设置人设头像",
+        "en_US": "Set persona avatar"
+    },
+    "embed_persona_portraits": {
+        "zh_CN": "同步报告头像",
+        "en_US": "Sync report avatars"
     }
 }

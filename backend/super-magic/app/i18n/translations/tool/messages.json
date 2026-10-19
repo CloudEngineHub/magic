@@ -7444,5 +7444,13 @@
     "update_study.phase.done": {
         "zh_CN": "已完成",
         "en_US": "Done"
+    },
+    "persona_portraits.updated": {
+        "zh_CN": "头像显示已更新，不可用的图片继续使用原显示。人设仍为 AI 模拟。",
+        "en_US": "Avatar display updated; unavailable images keep their fallback. Personas remain AI-simulated."
+    },
+    "persona_portraits.failed": {
+        "zh_CN": "头像未能更新，继续使用原显示。研究内容不受影响。",
+        "en_US": "Avatars could not be updated. The existing display and research content are retained."
     }
 }

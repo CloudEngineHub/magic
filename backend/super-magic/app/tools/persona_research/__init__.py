@@ -10,6 +10,8 @@ agents/skills/persona-research/reference/file-contracts.md，前端按同一契�
 from app.tools.persona_research.check_interviews import CheckInterviews
 from app.tools.persona_research.finish_persona_transcript import FinishPersonaTranscript
 from app.tools.persona_research.save_personas import SavePersonas
+from app.tools.persona_research.persona_portraits import AttachPersonaPortrait
+from app.tools.persona_research.embed_persona_portraits import EmbedPersonaPortraits
 from app.tools.persona_research.save_study_synthesis import SaveStudySynthesis
 from app.tools.persona_research.save_validation_questionnaire import SaveValidationQuestionnaire
 from app.tools.persona_research.update_study import UpdateStudy
@@ -18,6 +20,8 @@ __all__ = [
     "CheckInterviews",
     "FinishPersonaTranscript",
     "SavePersonas",
+    "AttachPersonaPortrait",
+    "EmbedPersonaPortraits",
     "SaveStudySynthesis",
     "SaveValidationQuestionnaire",
     "UpdateStudy",

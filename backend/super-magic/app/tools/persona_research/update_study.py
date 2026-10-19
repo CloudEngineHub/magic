@@ -167,6 +167,7 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
     """Create a persona research study and move study.json through its phases."""
 
     async def execute(self, tool_context: ToolContext, params: UpdateStudyParams) -> ToolResult:
+        portrait_note = ""
         try:
             if params.event == StudyEvent.CREATED:
                 study_path, study = await self._create(tool_context, params)
@@ -184,6 +185,15 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
                         f"(allowed in: {', '.join(sorted(allowed))}). Nothing was changed."
                     )
                 await self._apply(study_path, study, params)
+                if params.event == StudyEvent.REPORT_WRITTEN:
+                    # 报告完成事件统一同步头像，不依赖模型记住额外调用；失败不阻止研究交付。
+                    from app.tools.persona_research.embed_persona_portraits import (
+                        EmbedPersonaPortraits, EmbedPersonaPortraitsParams,
+                    )
+                    portraits = await EmbedPersonaPortraits(base_dir=self.base_dir).execute(
+                        tool_context, EmbedPersonaPortraitsParams(study_dir=params.study_dir),
+                    )
+                    portrait_note = " " + portraits.content
             await save_study(study_path, study)
         except StudyFilesError as exc:
             return ToolResult.error(f"study.json not updated: {exc}")
@@ -194,7 +204,7 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
         study_dir = workspace_relative(await async_realpath(self.base_dir), study_path)
         statuses = ", ".join(f"{item.key}={item.status}" for item in study.phases)
         return ToolResult(
-            content=f"Updated {study_dir}/study.json after {params.event.value}: phase is {study.phase} ({statuses}).{seeded}",
+            content=f"Updated {study_dir}/study.json after {params.event.value}: phase is {study.phase} ({statuses}).{seeded}{portrait_note}",
             data={"study_dir": study_dir, "event": params.event.value, "phase": study.phase, "phases": [
                 {"key": item.key, "status": item.status} for item in study.phases
             ]},
