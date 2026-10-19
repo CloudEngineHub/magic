@@ -187,6 +187,13 @@ Follow the retry, waiting, and version rules in SKILL.md. Image revisions defaul
 - Reference media may contain watermarks, captions, interface marks, compression artifacts, unwanted backgrounds, or accidental crops. Preserve intended subject information but explicitly exclude those defects from generated prompts unless the user requests them.
 - Use only model IDs, `input_mode`, task values, aspect ratios, resolutions, durations, FPS values, and other generation fields declared by the current `<media_model_info>`.
 
+### Facial-expression constraints
+
+- If the user says a person must have no facial expression, treat that request as a hard cross-stage visual constraint, not as a loose mood hint. Carry it from the confirmed creative direction into the saved storyboard, every shot reference-image prompt, every shot-video prompt, and any regenerated media that depends on those prompts.
+- Record the constraint explicitly in each affected storyboard shot, for example: `Facial expression: completely neutral and expressionless.` Do not leave it implicit in the scene or action description.
+- In each affected image or video prompt, use explicit appearance and exclusion language: `completely neutral, expressionless face; relaxed facial muscles; naturally closed mouth; no smile, frown, surprise, sadness, anger, laughter, eyebrow acting, or other visible emotion.`
+- Do not weaken the requirement to `calm`, `serious`, or `neutral mood`, and do not assume that a reference image is expressionless. Preserve the reference subject's identity and other requested details, but override any smile or other visible expression with the confirmed no-expression constraint.
+
 ## Detailed production stages
 
 ### 1. Set up the Canvas
@@ -259,7 +266,7 @@ The confirmation sequence is mandatory: generate the initialization candidate, w
 
 ### 5. Draft, confirm, and save the storyboard
 
-Draft about four shots when no count is specified (fewer for simple tasks). Each shot covers its name, scene, framing or camera, action, and focus. Keep the storyboard focused on creative direction.
+Draft about four shots when no count is specified (fewer for simple tasks). Each shot covers its name, scene, framing or camera, action, and focus. Keep the storyboard focused on creative direction. If the user requested no facial expression, include the confirmed facial-expression constraint in every affected shot description.
 
 Display and confirm the complete shot plan before saving. Save the confirmed shot descriptions as a storyboard Content:
 
@@ -297,7 +304,7 @@ The persisted Storyboard generation configuration must include the selected mode
 
 Do not generate a shot reference image immediately after saving. First display the opening shot's complete reference-image prompt, call `ask_user`, and wait for explicit approval or revisions. Only after approval should you generate the opening shot reference image.
 
-After the opening reference image returns, wait for its task if needed, query the exact Element, show or summarize the candidate, call `ask_user`, and wait for explicit approval. Only after the opening reference image is confirmed may you draft and confirm the remaining prompts. Every shot reference-image request must pass all confirmed initialization assets in `reference_images` (and the corresponding project paths when required by the provider), not just the asset most relevant to that shot. Generate one independent image task per shot, verify every requested shot succeeded, preserve successful images, and retry only missing or rejected shots.
+After the opening reference image returns, wait for its task if needed, query the exact Element, show or summarize the candidate, call `ask_user`, and wait for explicit approval. Only after the opening reference image is confirmed may you draft and confirm the remaining prompts. Every shot reference-image request must pass all confirmed initialization assets in `reference_images` (and the corresponding project paths when required by the provider), not just the asset most relevant to that shot. When the confirmed request includes no facial expression, repeat the exact facial-expression constraint in every affected shot reference-image prompt; do not rely on the initialization image or another reference image to convey it. Generate one independent image task per shot, verify every requested shot succeeded, preserve successful images, and retry only missing or rejected shots.
 
 Use one generated `image` Element per shot. The storyboard Element is the direct upstream source of each shot reference-image Element; reference paths are generation inputs. A shot reference-image revision defaults to a new independent Image Element; update only the affected shot's confirmed image binding. Append Content to the old Element only for an explicit same-Element version request:
 
@@ -327,7 +334,7 @@ Read the returned `element_id`, `content_id`, status, generation task ID, and me
 
 ### 7. Generate and confirm shot videos
 
-Before each shot-video call, inspect the current `<media_model_info>` and use only a declared mode. The confirmed shot reference image is a reference input: pass it in `reference_image_paths`, bind it as `[image1]`, and use `omni_reference` when declared. Do not pass it as `frame_start_path` or select `keyframe_guided` unless the user explicitly requested a start/end-frame transition. Use exactly the corresponding confirmed shot reference-image Element as the shot video's direct upstream Connection; additional initialization or product references may remain generation inputs but must not become direct Connections.
+Before each shot-video call, inspect the current `<media_model_info>` and use only a declared mode. The confirmed shot reference image is a reference input: pass it in `reference_image_paths`, bind it as `[image1]`, and use `omni_reference` when declared. Do not pass it as `frame_start_path` or select `keyframe_guided` unless the user explicitly requested a start/end-frame transition. Use exactly the corresponding confirmed shot reference-image Element as the shot video's direct upstream Connection; additional initialization or product references may remain generation inputs but must not become direct Connections. When the storyboard includes the no-facial-expression constraint, copy that exact constraint into every affected shot-video prompt so motion does not introduce smiles, frowns, eyebrow acting, or other visible emotion.
 
 Generate the first shot video as a trial; wait or query until its state is known, present the completed candidate, and confirm motion, subject consistency, camera behavior, pacing, and visual direction before generating the rest. Then generate the remaining confirmed shots in supported batches. `pending`, `processing`, `queued`, and `running` are submitted states, not failures; preserve their IDs and do not submit duplicates. Preserve successful videos and revise only affected shots. Each billed shot video still goes through the shared estimate gate in this reference unless the user's explicit current-request opt-out covers that shot generation.
 
