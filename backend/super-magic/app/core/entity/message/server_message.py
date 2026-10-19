@@ -268,6 +268,8 @@ class PersonaChatContent(BaseModel):
     | 小组部分失败 | 有 | 有 | 空 |
     | 整次请求被拒（路径、轮次不对） | 空 | 空 | 有 |
     round_number 只在写入访谈记录时有值；round_limit 是这份记录允许的最多轮数。
+    error_reason 是 error 对应的原因码（invalid_request、profile_unavailable、model_error、empty_answer），
+    没有整体错误时为空。前端据此区分「AI 自己改问法」（invalid_request，可预期）和真正的失败，不必比对翻译文案。
     """
 
     question: str
@@ -276,6 +278,7 @@ class PersonaChatContent(BaseModel):
     answers: List[PersonaChatAnswerContent]
     failed: List[PersonaChatFailureContent]
     error: str = ""
+    error_reason: str = ""
 
 
 class StudyPersonaItemContent(PersonaPortraitHint):

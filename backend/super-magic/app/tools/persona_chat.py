@@ -568,12 +568,11 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
     ) -> Optional[ToolDetail]:
         data = result.data or {}
         failed = data.get("failed") or []
-        error = ""
+        error, error_reason = "", ""
         if not data.get("answers") and not failed:
-            # 整次调用被拒（如路径越界、轮次不对）：只展示脱敏后的原因，不展示给模型的原始错误。
-            error = _reason_text(
-                (result.extra_info or {}).get("user_error_reason") or PersonaChatFailureReason.MODEL_ERROR.value
-            )
+            # 整次调用被拒（如路径越界、轮次不对、连问）：只展示脱敏后的原因，不展示给模型的原始错误。
+            error_reason = _reason_code((result.extra_info or {}).get("user_error_reason"))
+            error = _reason_text(error_reason)
         # 只有真正写进记录的一轮才显示轮次；整轮失败时没有写入，不显示「第 N 轮」。
         recorded = bool(data.get("round_indexes"))
         return ToolDetail(
@@ -597,6 +596,7 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
                     for item in failed
                 ],
                 error=error,
+                error_reason=error_reason,
             ),
         )
 
@@ -740,10 +740,14 @@ def _action() -> str:
     return i18n.translate("persona_chat", category="tool.actions")
 
 
-def _reason_text(reason: Any) -> str:
+def _reason_code(reason: Any) -> str:
+    """未知或缺失的原因按 model_error 处理，与展示文案口径一致。"""
     known = {item.value for item in PersonaChatFailureReason} | {INVALID_REQUEST_REASON}
-    key = reason if reason in known else PersonaChatFailureReason.MODEL_ERROR.value
-    return _translate(f"persona_chat.reason.{key}")
+    return reason if reason in known else PersonaChatFailureReason.MODEL_ERROR.value
+
+
+def _reason_text(reason: Any) -> str:
+    return _translate(f"persona_chat.reason.{_reason_code(reason)}")
 
 
 __all__ = ["PersonaChat", "PersonaChatParams"]

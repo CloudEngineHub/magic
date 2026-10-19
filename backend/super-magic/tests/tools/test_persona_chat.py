@@ -155,6 +155,7 @@ async def test_paths_outside_workspace_are_rejected(tool, tmp_path, fake_llm, ba
     assert detail is not None
     assert detail.data.question == "q"
     assert detail.data.error and "outside" not in detail.data.error
+    assert detail.data.error_reason == "invalid_request"
 
 
 async def test_transcript_path_outside_workspace_is_rejected(tool, tmp_path, fake_llm):
@@ -194,6 +195,7 @@ async def test_focus_group_partial_failure_keeps_successful_answers(tool, tmp_pa
 
     detail = await tool.get_tool_detail(ToolContext(), result, {"question": "Price?"})
     assert detail.type == "persona_chat"
+    assert detail.data.error == "" and detail.data.error_reason == ""
     assert detail.data.question == "Price?"
     assert [(a.name, a.text, a.gender, a.age) for a in detail.data.answers] == [
         ("Zhang", "Zhang answer", "女", "32"),
