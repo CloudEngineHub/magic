@@ -6,8 +6,6 @@ interface UseDetailHandlersProps {
 	setUserSelectDetail?: (detail: any) => void
 	isMobile?: boolean
 	filesViewerRef?: React.RefObject<any>
-	/** Lets a host claim a file open before a tab is created; return true when handled. */
-	interceptFileOpen?: (file: any) => boolean
 }
 
 interface UseDetailHandlersReturn {
@@ -19,7 +17,6 @@ function useDetailHandlers({
 	setUserSelectDetail,
 	isMobile = false,
 	filesViewerRef,
-	interceptFileOpen,
 }: UseDetailHandlersProps): UseDetailHandlersReturn {
 	// 处理回到最新进展
 	const handleBackToLatest = useMemoizedFn(() => {
@@ -27,7 +24,6 @@ function useDetailHandlers({
 	})
 
 	const openNewTab = useMemoizedFn((file: any, autoEdit?: boolean) => {
-		if (interceptFileOpen?.(file)) return
 		if (!isMobile) {
 			filesViewerRef?.current?.openFileTab(file, autoEdit)
 			pubsub.publish(PubSubEvents.Switch_Detail_Mode, "files")

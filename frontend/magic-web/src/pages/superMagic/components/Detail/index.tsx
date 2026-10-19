@@ -176,7 +176,6 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		setUserSelectDetail,
 		isMobile,
 		filesViewerRef,
-		interceptFileOpen: props.interceptFileOpen,
 	})
 
 	// Expose methods
@@ -270,6 +269,7 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				canLocateFile={canLocateFile}
 				persistFileTabs={persistFileTabs}
 				openFileTab={openNewTab}
+				interceptFileOpen={props.interceptFileOpen}
 				activeFileId={activeFileId}
 				showFileFooter={showFileFooterProp ?? (!isShareRoute && isMobile)}
 				showFileHeader={showFileHeader}

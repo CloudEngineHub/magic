@@ -675,6 +675,9 @@ export function useFilesViewer(props: FilesViewerProps) {
 	// Tab operations
 	const fileManagerAreaRequestId = useRef(0)
 	const openFileTab = useMemoizedFn((fileItem: any, autoEdit?: boolean, activate = true) => {
+		// Every tab open (preview links, refs, message cards) funnels here, so hosts such as the
+		// research studio can route their own file types before a generic tab is created.
+		if (props.interceptFileOpen?.(fileItem)) return
 		// Reset manual close flag when opening new tab
 		manuallyClosedLastTabRef.current = false
 

@@ -257,6 +257,8 @@ export interface FilesViewerProps extends BaseComponentProps {
 	documentFlowFullscreen?: boolean
 	/** When false, hides CommonHeaderV2 inside file preview (URL param still works as fallback) */
 	showFileHeader?: boolean
+	/** Claims a file before a tab opens (links inside previews); return true when handled. */
+	interceptFileOpen?: (file: any) => boolean
 	/** When true, hides the file tab bar for single-file immersive read-only views */
 	hideTabBar?: boolean
 
