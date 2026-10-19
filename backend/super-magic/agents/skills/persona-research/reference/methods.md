@@ -47,6 +47,10 @@ A persona that already holds the tested opinion turns the interview into an echo
 
 Persona self-check, before calling `save_personas` (the tool also runs keyword and semantic leak checks): for every persona and every hypothesis, ask "could someone predict this persona's answer to the hypothesis from its stance fields alone?" If yes, rewrite the field as a past fact (what happened, when, at what cost) and drop the attitude. [Leak] needs_pains "afraid of buying another card and leaving sessions unused again" for a hypothesis about unused sessions. [Fact] behavior "last year's 10-session card: used 6, the rest expired".
 
+### Optional Generated Portraits
+
+When the user requests photographic persona avatars, read [persona-portraits.md](persona-portraits.md). Choose a photographic direction from each saved persona's situation; a panel may mix everyday, outdoor, and simple editorial portraits. Generate through the product's `generate_images` tool, reuse an existing suitable portrait, and keep the AI-simulation disclosure. Portraits are presentation assets, never research evidence or a reason to change the persona.
+
 ## Interview Guide
 
 - Core questions = interview rounds minus 1 or 2, so every interview has room to probe: 3-4 core questions for 5 rounds, 2 for 3 rounds, 1 for 1-2 rounds (never fewer than 1). Order them from broad to specific: recent behavior, the problem, current solutions, reaction to the concept, then price or switching. Cut the least decision-relevant question instead of merging two.
