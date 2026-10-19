@@ -41,6 +41,7 @@
 	},
 	"common": {
 		"cancel": "Cancel",
+		"close": "Close",
 		"copied": "Copied",
 		"copyFailed": "Copy failed. Please try again."
 	},
@@ -363,12 +364,15 @@
 		"recommended": "Recommended",
 		"resetFilters": "Clear filters",
 		"search": "Search names or tags",
+		"select": "Add to selection",
 		"selected": "{{count}} selected",
 		"startWithPanel": "Start a study",
 		"startWithSelected": "Start a study with these",
 		"subtitle": "Personas built during studies and the ones you create live here and can be reused in new studies",
 		"tierAll": "All",
-		"title": "Persona library"
+		"title": "Persona library",
+		"unselect": "Remove from selection",
+		"viewDetail": "View details"
 	},
 	"mention": {
 		"interviewOf": "{{name}} · interview",

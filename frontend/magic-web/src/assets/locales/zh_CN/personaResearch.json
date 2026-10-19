@@ -41,6 +41,7 @@
 	},
 	"common": {
 		"cancel": "取消",
+		"close": "关闭",
 		"copied": "已复制",
 		"copyFailed": "复制失败，请重试"
 	},
@@ -361,12 +362,15 @@
 		"recommended": "推荐",
 		"resetFilters": "清除筛选",
 		"search": "搜索名字、标签",
+		"select": "加入已选",
 		"selected": "已选 {{count}} 个人设",
 		"startWithPanel": "用这组发起研究",
 		"startWithSelected": "用这些人设发起研究",
 		"subtitle": "研究中构建的人设和你创建的人设都在这里，可以在新研究中复用",
 		"tierAll": "全部",
-		"title": "人设库"
+		"title": "人设库",
+		"unselect": "移出已选",
+		"viewDetail": "查看详情"
 	},
 	"mention": {
 		"interviewOf": "{{name}} · 访谈记录",

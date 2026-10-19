@@ -14,6 +14,7 @@ import {
 	Smartphone,
 	Split,
 	Trash2,
+	X,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -137,14 +138,20 @@ export default function PersonaDetailSheet({
 							</Title>
 							<Description className="line-clamp-2">{persona.tagline}</Description>
 						</div>
-						{onEdit || onDelete ? (
-							// Right padding keeps clear of the sheet's own close button.
-							<div className="flex shrink-0 items-center gap-0.5 self-start pr-7">
+						{/* One button row: edit, delete, then (in the dialog) close after a divider,
+						    all 32px high on the same centre line. The sheet keeps its own close. */}
+						{onEdit || onDelete || isDialog ? (
+							<div
+								className={cn(
+									"flex shrink-0 items-center gap-1 self-start",
+									!isDialog && "pr-7",
+								)}
+							>
 								{onEdit ? (
 									<Button
 										variant="ghost"
 										size="sm"
-										className="h-7 gap-1 px-2 text-xs"
+										className="h-8 gap-1.5 px-2.5 text-xs"
 										onClick={() => onEdit(persona)}
 									>
 										<Pencil className="size-3.5" />
@@ -156,13 +163,29 @@ export default function PersonaDetailSheet({
 										<Button
 											variant="ghost"
 											size="icon"
-											className="size-7 text-muted-foreground hover:text-destructive"
+											className="size-8 text-muted-foreground hover:text-destructive"
 											aria-label={t("persona.delete")}
 											onClick={() => onDelete(persona)}
 										>
-											<Trash2 className="size-3.5" />
+											<Trash2 className="size-4" />
 										</Button>
 									</MagicTooltip>
+								) : null}
+								{isDialog ? (
+									<>
+										{onEdit || onDelete ? (
+											<span className="mx-1 h-4 w-px bg-border" aria-hidden />
+										) : null}
+										<Button
+											variant="ghost"
+											size="icon"
+											className="size-8 text-muted-foreground"
+											aria-label={t("common.close")}
+											onClick={() => onOpenChange(false)}
+										>
+											<X className="size-4" />
+										</Button>
+									</>
 								) : null}
 							</div>
 						) : null}
@@ -350,6 +373,8 @@ export default function PersonaDetailSheet({
 				<DialogContent
 					className="flex max-h-[85vh] w-[calc(100vw-2rem)] max-w-[760px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]"
 					onCloseAutoFocus={onCloseAutoFocus}
+					// The close button sits in the header's button row instead.
+					showCloseButton={false}
 				>
 					{content}
 				</DialogContent>

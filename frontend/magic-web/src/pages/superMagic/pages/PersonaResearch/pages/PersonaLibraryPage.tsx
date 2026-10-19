@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import { useMemoizedFn } from "ahooks"
 import {
 	ArrowLeft,
 	ArrowRight,
+	CircleCheck,
+	CircleMinus,
 	Ellipsis,
+	Eye,
 	LibraryBig,
 	MessagesSquare,
 	Pencil,
@@ -13,6 +16,7 @@ import {
 	Trash2,
 	UsersRound,
 	X,
+	type LucideIcon,
 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -29,9 +33,17 @@ import {
 } from "@/components/shadcn-ui/alert-dialog"
 import { Button } from "@/components/shadcn-ui/button"
 import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuTrigger,
+} from "@/components/shadcn-ui/context-menu"
+import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import {
@@ -384,32 +396,84 @@ function PersonaLibraryPage() {
 								"grid gap-3 p-4",
 								isMobile
 									? "grid-cols-1"
-									: "grid-cols-[repeat(auto-fill,minmax(210px,1fr))]",
+									: "grid-cols-[repeat(auto-fill,minmax(280px,1fr))]",
 								// Leave room for the floating selection bar.
 								selectedIds.size > 0 && "pb-24",
 							)}
 						>
-							{filtered.map((persona) => (
-								<PersonaCard
-									key={persona.id}
-									persona={persona}
-									selectable
-									selected={selectedIds.has(persona.id)}
-									onSelectedChange={(selected) =>
-										toggleSelected(persona.id, selected)
-									}
-									isNew={highlightIds.has(persona.id)}
-									actions={
-										canEdit ? (
-											<PersonaCardMenu
-												onEdit={() => openEditForm(persona)}
-												onDelete={() => requestDelete(persona)}
-											/>
-										) : undefined
-									}
-									onOpen={() => setOpenedPersona(persona)}
-								/>
-							))}
+							{filtered.map((persona) => {
+								const selected = selectedIds.has(persona.id)
+								// One action list for the hover "…" menu and the right-click menu.
+								const actions: CardAction[] = [
+									{
+										key: "open",
+										icon: Eye,
+										label: t("library.viewDetail"),
+										onSelect: () => setOpenedPersona(persona),
+									},
+									{
+										key: "select",
+										icon: selected ? CircleMinus : CircleCheck,
+										label: t(selected ? "library.unselect" : "library.select"),
+										onSelect: () => toggleSelected(persona.id, !selected),
+									},
+									...(canEdit
+										? [
+												{
+													key: "edit",
+													icon: Pencil,
+													label: t("library.edit"),
+													onSelect: () => openEditForm(persona),
+												},
+												{
+													key: "delete",
+													icon: Trash2,
+													label: t("library.delete"),
+													onSelect: () => requestDelete(persona),
+													destructive: true,
+												},
+											]
+										: []),
+								]
+								return (
+									<ContextMenu key={persona.id}>
+										<ContextMenuTrigger asChild>
+											<div className="h-full">
+												<PersonaCard
+													persona={persona}
+													selectable
+													selected={selected}
+													onSelectedChange={(next) =>
+														toggleSelected(persona.id, next)
+													}
+													isNew={highlightIds.has(persona.id)}
+													actions={<PersonaCardMenu actions={actions} />}
+													onOpen={() => setOpenedPersona(persona)}
+												/>
+											</div>
+										</ContextMenuTrigger>
+										<ContextMenuContent className="w-44">
+											{actions.map((action) => (
+												<Fragment key={action.key}>
+													{action.destructive ? (
+														<ContextMenuSeparator />
+													) : null}
+													<ContextMenuItem
+														className={cn(
+															action.destructive &&
+																"text-destructive",
+														)}
+														onSelect={action.onSelect}
+													>
+														<action.icon className="size-4" />
+														{action.label}
+													</ContextMenuItem>
+												</Fragment>
+											))}
+										</ContextMenuContent>
+									</ContextMenu>
+								)
+							})}
 						</div>
 					)
 				) : store.panels.length === 0 ? (
@@ -567,7 +631,6 @@ function PersonaLibraryPage() {
 	)
 }
 
-/** Edit / delete on a persona card; appears on hover so the grid stays calm. */
 /** First read of the library; without it an unread library would flash the empty state. */
 function LibrarySkeleton() {
 	const isMobile = useIsMobile()
@@ -575,7 +638,7 @@ function LibrarySkeleton() {
 		<div
 			className={cn(
 				"grid gap-3 p-4",
-				isMobile ? "grid-cols-1" : "grid-cols-[repeat(auto-fill,minmax(210px,1fr))]",
+				isMobile ? "grid-cols-1" : "grid-cols-[repeat(auto-fill,minmax(280px,1fr))]",
 			)}
 		>
 			{Array.from({ length: 8 }, (_, index) => (
@@ -585,7 +648,16 @@ function LibrarySkeleton() {
 	)
 }
 
-function PersonaCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+interface CardAction {
+	key: string
+	icon: LucideIcon
+	label: string
+	onSelect: () => void
+	destructive?: boolean
+}
+
+/** The hover "…" menu on a persona card; the same actions open on right-click. */
+function PersonaCardMenu({ actions }: { actions: CardAction[] }) {
 	const { t } = useTranslation("personaResearch")
 	return (
 		<DropdownMenu>
@@ -601,15 +673,19 @@ function PersonaCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: (
 					</Button>
 				</DropdownMenuTrigger>
 			</MagicTooltip>
-			<DropdownMenuContent align="end">
-				<DropdownMenuItem onSelect={onEdit}>
-					<Pencil className="size-4" />
-					{t("library.edit")}
-				</DropdownMenuItem>
-				<DropdownMenuItem className="text-destructive" onSelect={onDelete}>
-					<Trash2 className="size-4" />
-					{t("library.delete")}
-				</DropdownMenuItem>
+			<DropdownMenuContent align="end" className="w-44">
+				{actions.map((action) => (
+					<Fragment key={action.key}>
+						{action.destructive ? <DropdownMenuSeparator /> : null}
+						<DropdownMenuItem
+							className={cn(action.destructive && "text-destructive")}
+							onSelect={action.onSelect}
+						>
+							<action.icon className="size-4" />
+							{action.label}
+						</DropdownMenuItem>
+					</Fragment>
+				))}
 			</DropdownMenuContent>
 		</DropdownMenu>
 	)

@@ -324,6 +324,7 @@ function VoiceSection({ values, setField }: SectionProps) {
 									updateWeight(index, { factor: event.target.value })
 								}
 							/>
+							{/* One row at any width: the level control never wraps or shrinks. */}
 							<Segmented
 								value={weight.level}
 								options={levels}
@@ -331,6 +332,7 @@ function VoiceSection({ values, setField }: SectionProps) {
 									updateWeight(index, { level: value as QualitativeLevel })
 								}
 								allowClear={false}
+								className="h-9 shrink-0 flex-nowrap items-center"
 							/>
 							{weights.length > 1 ? (
 								<RemoveButton
@@ -456,14 +458,21 @@ function Segmented({
 	options,
 	onChange,
 	allowClear = true,
+	className,
 }: {
 	value: string
 	options: { value: string; label: string }[]
 	onChange: (value: string) => void
 	allowClear?: boolean
+	className?: string
 }) {
 	return (
-		<div className="inline-flex w-fit max-w-full flex-wrap rounded-lg bg-muted p-[3px] text-xs">
+		<div
+			className={cn(
+				"inline-flex w-fit max-w-full flex-wrap rounded-lg bg-muted p-[3px] text-xs",
+				className,
+			)}
+		>
 			{options.map((option) => {
 				const active = value === option.value
 				return (
@@ -506,7 +515,7 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 			type="button"
 			aria-label={label}
 			onClick={onClick}
-			className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+			className="flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			<X className="size-3.5" />
 		</button>

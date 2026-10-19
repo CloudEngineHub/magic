@@ -68,7 +68,9 @@ export default function PersonaCard({
 					{actions}
 					{selectable ? (
 						<Checkbox
-							className="bg-background"
+							// A white fill only while unchecked: on a checked box it would hide the
+							// white tick against the primary background.
+							className={cn(!selected && "bg-background")}
 							checked={selected}
 							onCheckedChange={(value) => onSelectedChange?.(value === true)}
 							aria-label={t("persona.select", { name: persona.name })}
@@ -110,7 +112,7 @@ export default function PersonaCard({
 							) : null}
 						</span>
 						{persona.tagline ? (
-							<span className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+							<span className="line-clamp-3 text-[13px] leading-5 text-muted-foreground">
 								{persona.tagline}
 							</span>
 						) : null}
@@ -132,7 +134,7 @@ export default function PersonaCard({
 					) : null}
 					{persona.tags?.length ? (
 						<span className="flex flex-wrap gap-1">
-							{persona.tags.slice(0, 3).map((tag) => (
+							{persona.tags.slice(0, 4).map((tag) => (
 								<span
 									key={tag}
 									className="rounded-md bg-muted/60 px-1.5 py-px text-xs text-muted-foreground ring-1 ring-border"
