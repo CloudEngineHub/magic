@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { useInViewport } from "ahooks"
 import { ArrowRight, Download, Ellipsis, FileWarning, Sparkles, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -49,6 +49,7 @@ export default function ReportTemplateCard({
 	const thumbRef = useRef<HTMLButtonElement>(null)
 	const [inViewport] = useInViewport(thumbRef)
 	const { html, failed } = useReportTemplateHtml(item, Boolean(inViewport))
+	const [rendered, onRendered] = useFrameRendered(html)
 	const dayjsLocale = i18n.language.toLowerCase().startsWith("zh") ? "zh-cn" : "en"
 
 	return (
@@ -65,12 +66,18 @@ export default function ReportTemplateCard({
 			>
 				{html ? (
 					// 4x larger page scaled to 25%: the card shows a desktop-width first screen.
-					<ReportTemplateFrame
-						html={html}
-						title={name}
-						inert
-						className="pointer-events-none absolute left-0 top-0 h-[400%] w-[400%] origin-top-left scale-[0.25]"
-					/>
+					<>
+						<ReportTemplateFrame
+							html={html}
+							title={name}
+							inert
+							onLoad={onRendered}
+							className="pointer-events-none absolute left-0 top-0 h-[400%] w-[400%] origin-top-left scale-[0.25]"
+						/>
+						{rendered ? null : (
+							<Skeleton className="absolute inset-0 h-full w-full rounded-none" />
+						)}
+					</>
 				) : failed ? (
 					<span className="flex h-full flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground">
 						<FileWarning className="size-4" />
@@ -155,12 +162,15 @@ export function ReportTemplateFrame({
 	html,
 	title,
 	inert = false,
+	onLoad,
 	className,
 }: {
 	html: string
 	title: string
 	/** Thumbnails: not reachable by keyboard or pointer. */
 	inert?: boolean
+	/** Fires once the template's own styles and scripts (often from a CDN) have loaded. */
+	onLoad?: () => void
 	className?: string
 }) {
 	return (
@@ -168,9 +178,21 @@ export function ReportTemplateFrame({
 			srcDoc={html}
 			title={title}
 			sandbox="allow-scripts"
+			onLoad={onLoad}
 			tabIndex={inert ? -1 : undefined}
 			aria-hidden={inert || undefined}
 			className={cn("border-0 bg-white", className)}
 		/>
 	)
+}
+
+/**
+ * Whether a template frame has finished loading. Templates usually pull Tailwind and web fonts
+ * from a CDN, so a frame can stay blank for seconds after its HTML arrives; callers show a
+ * placeholder until then. Resets when the HTML changes.
+ */
+export function useFrameRendered(html: string | null): [boolean, () => void] {
+	const [renderedHtml, setRenderedHtml] = useState<string | null>(null)
+	// The frame's onLoad prop is replaced on every render, so it always reports the current HTML.
+	return [Boolean(html) && renderedHtml === html, () => setRenderedHtml(html)]
 }

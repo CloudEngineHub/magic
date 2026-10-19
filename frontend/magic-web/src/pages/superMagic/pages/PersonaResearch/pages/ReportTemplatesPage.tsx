@@ -1,14 +1,17 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useMemoizedFn } from "ahooks"
 import {
 	ArrowLeft,
 	ArrowRight,
+	CircleAlert,
 	Eye,
 	LayoutTemplate,
+	Loader2,
 	Palette,
 	Sparkles,
 	SwatchBook,
 	Upload,
+	X,
 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -26,6 +29,7 @@ import {
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	Dialog,
+	DialogClose,
 	DialogContent,
 	DialogDescription,
 	DialogHeader,
@@ -52,7 +56,10 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { usePersonaResearchStore } from "../context"
-import ReportTemplateCard, { ReportTemplateFrame } from "../components/ReportTemplateCard"
+import ReportTemplateCard, {
+	ReportTemplateFrame,
+	useFrameRendered,
+} from "../components/ReportTemplateCard"
 import ResearchChatSheet from "../components/ResearchChatSheet"
 import TemplateChatCard from "../components/TemplateChatCard"
 import { useReportTemplateHtml } from "../hooks/useReportTemplateHtml"
@@ -268,8 +275,10 @@ function ReportTemplatesPage() {
 					</Button>
 				</MagicTooltip>
 				<div className="flex min-w-0 flex-1 flex-col">
-					<h1 className="text-sm font-semibold">{t("reportTemplates.title")}</h1>
-					<p className="truncate text-xs text-muted-foreground">
+					<h1 className="text-sm font-semibold leading-5">
+						{t("reportTemplates.title")}
+					</h1>
+					<p className="truncate text-xs leading-4 text-muted-foreground">
 						{t("reportTemplates.subtitle")}
 					</p>
 				</div>
@@ -484,11 +493,26 @@ function TemplatePreviewDialog({
 }) {
 	const { t } = useTranslation("personaResearch")
 	const { html, failed } = useReportTemplateHtml(item)
+	const [rendered, onRendered] = useFrameRendered(html)
+	// Templates load their fonts and styles from CDNs; say so if that takes a while.
+	const [slow, setSlow] = useState(false)
+	useEffect(() => {
+		setSlow(false)
+		if (!html || rendered) return
+		const timer = window.setTimeout(() => setSlow(true), SLOW_PREVIEW_MS)
+		return () => window.clearTimeout(timer)
+	}, [html, rendered])
 	return (
 		<Dialog open={Boolean(item)} onOpenChange={onOpenChange}>
-			<DialogContent className="flex h-[88vh] max-w-5xl flex-col gap-0 p-0 sm:max-w-5xl">
-				<DialogHeader className="flex-row items-center gap-2 space-y-0 border-b border-border py-3 pl-4 pr-12">
-					<DialogTitle className="flex-1 truncate text-sm">{name}</DialogTitle>
+			<DialogContent
+				showCloseButton={false}
+				className="flex h-[88vh] max-w-5xl flex-col gap-0 p-0 sm:max-w-5xl"
+			>
+				{/* One row, one centre line: title, main action and close share the 32px height. */}
+				<DialogHeader className="h-14 shrink-0 flex-row items-center gap-2 space-y-0 border-b border-border px-4">
+					<DialogTitle className="min-w-0 flex-1 truncate text-sm leading-5">
+						{name}
+					</DialogTitle>
 					<DialogDescription className="sr-only">
 						{t("reportTemplates.subtitle")}
 					</DialogDescription>
@@ -498,21 +522,64 @@ function TemplatePreviewDialog({
 							<ArrowRight className="size-3.5" />
 						</Button>
 					) : null}
+					<DialogClose asChild>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-8 text-muted-foreground"
+							aria-label={t("reportTemplates.close")}
+						>
+							<X className="size-4" />
+						</Button>
+					</DialogClose>
 				</DialogHeader>
 				<div className="relative min-h-0 flex-1 bg-muted">
 					{html ? (
-						<ReportTemplateFrame html={html} title={name} className="h-full w-full" />
-					) : (
-						<div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-							{failed
-								? t("reportTemplates.thumbFailed")
-								: t("reportTemplates.loading")}
-						</div>
-					)}
+						<ReportTemplateFrame
+							html={html}
+							title={name}
+							onLoad={onRendered}
+							className="h-full w-full"
+						/>
+					) : null}
+					{failed ? (
+						<PreviewState icon={<CircleAlert className="size-5 text-destructive" />}>
+							{t("reportTemplates.previewFailed")}
+						</PreviewState>
+					) : !rendered ? (
+						<PreviewState
+							icon={
+								<Loader2 className="size-5 animate-spin motion-reduce:animate-none" />
+							}
+						>
+							{html ? t("reportTemplates.rendering") : t("reportTemplates.loading")}
+							{slow ? (
+								<span className="max-w-xs text-center text-muted-foreground">
+									{t("reportTemplates.renderingSlow")}
+								</span>
+							) : null}
+						</PreviewState>
+					) : null}
 				</div>
 			</DialogContent>
 		</Dialog>
 	)
 }
+
+/** Centred status over the preview area while the frame loads or after it failed. */
+function PreviewState({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+	return (
+		<div
+			className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted text-xs text-foreground"
+			role="status"
+		>
+			{icon}
+			{children}
+		</div>
+	)
+}
+
+/** After this long without a rendered preview, explain that external resources are slow. */
+const SLOW_PREVIEW_MS = 8000
 
 export default observer(ReportTemplatesPage)

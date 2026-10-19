@@ -675,6 +675,7 @@
 			"waiting": "Waiting for you",
 			"waitingHint": "The AI has a question for you"
 		},
+		"close": "Close",
 		"createWithAi": "Create with AI",
 		"defaultBadge": "Default",
 		"defaultName": "Voices (default)",
@@ -692,6 +693,9 @@
 		"moreActions": "More actions",
 		"preview": "Preview template {{name}}",
 		"previewAction": "Preview",
+		"previewFailed": "The preview could not load. Close and try again, or download the HTML",
+		"rendering": "Rendering preview…",
+		"renderingSlow": "This template loads fonts or styles from other sites, which can take a moment",
 		"subtitle": "A template only sets how reports look; sections, citations, and evidence rules stay the same",
 		"thumbFailed": "Preview unavailable",
 		"title": "Report templates",

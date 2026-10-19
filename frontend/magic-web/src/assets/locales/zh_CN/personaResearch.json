@@ -673,6 +673,7 @@
 			"waiting": "等你回复",
 			"waitingHint": "AI 有问题需要你确认"
 		},
+		"close": "关闭",
 		"createWithAi": "让 AI 新建模板",
 		"defaultBadge": "默认",
 		"defaultName": "人声（默认）",
@@ -690,6 +691,9 @@
 		"moreActions": "更多操作",
 		"preview": "预览模板 {{name}}",
 		"previewAction": "预览",
+		"previewFailed": "预览加载失败，请关闭后重试，或下载 HTML 查看",
+		"rendering": "正在渲染预览…",
+		"renderingSlow": "模板用到的字体或样式来自外部网站，加载较慢，请稍候",
 		"subtitle": "模板只决定报告长什么样；章节、引用和证据规则保持不变",
 		"thumbFailed": "无法加载预览",
 		"title": "报告模板",
