@@ -58,6 +58,7 @@ from app.tools.persona_research.contracts import (
     PERSONA_LAYERS,
     PERSONAS_DIR,
     SCHEMA_VERSION,
+    STANDARD_FIELD_KEYS,
     EvidenceType,
     Level,
     PersonaTier,
@@ -108,6 +109,10 @@ class PersonaInput(BaseModel):
     evidence: List[EvidenceInput] = Field(default_factory=list)
     field_sources: Dict[str, Union[List[str], Literal["inferred"]]] = Field(default_factory=dict)
     consistency_notes: List[str] = Field(default_factory=list)
+    field_labels: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Display name in the user's language for every non-standard key in dimensions and layers.",
+    )
 
 
 class LeakOverride(BaseModel):
@@ -269,6 +274,7 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             )
         _check_decision_weights(label, item.layers)
         _check_evidence(label, item.evidence, item.field_sources)
+        field_labels = _field_labels(label, item.dimensions, item.layers, item.field_labels)
 
         slug = ascii_slug(item.id_hint or item.name, max_length=20) or "persona"
         for _ in range(5):
@@ -290,6 +296,7 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             "evidence": evidence,
             "field_sources": item.field_sources,
             "consistency_notes": item.consistency_notes,
+            **({"field_labels": field_labels} if field_labels else {}),
             "created_in": created_in,
             "updated_at": now_iso(),
         }
@@ -359,6 +366,13 @@ def _merge_reused(existing: Dict[str, Any], item: PersonaInput) -> Dict[str, Any
     persona["evidence"] = evidence
     persona["field_sources"] = field_sources
     persona["consistency_notes"] = list(persona.get("consistency_notes") or []) + item.consistency_notes
+    # 复用人设内容不变，但允许补上缺少的显示名（旧人设里的自造 key 也能显示成中文）。
+    labels = dict(persona.get("field_labels") or {})
+    for key, text in item.field_labels.items():
+        if text.strip():
+            labels.setdefault(key, text.strip())
+    if labels:
+        persona["field_labels"] = labels
     if persona.get("tier") not in (PersonaTier.IMPORTED, PersonaTier.MANUAL):
         persona["tier"] = _tier(False, evidence, field_sources).value
     persona["updated_at"] = now_iso()
@@ -492,6 +506,34 @@ async def _semantic_leak_check(
             "leak_overrides with persona, field, hypothesis_id, and the reason"
         )
     return {"status": "passed", "note": "", "overrides": applied}
+
+
+def _custom_keys(value: Any) -> set[str]:
+    """dimensions / layers 里所有层级的对象 key（列表里的对象除外，如 decision_weights 的 factor/level）。"""
+    keys: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            keys.add(str(key))
+            keys |= _custom_keys(child)
+    return keys
+
+
+def _field_labels(label: str, dimensions: Dict[str, Any], layers: Dict[str, Any], given: Dict[str, str]) -> Dict[str, str]:
+    """新人设的自造字段 key 必须有显示名；返回只含实际出现 key 的显示名。
+
+    例：demographics 里写了 monthly_allowance_cny，就要给 {"monthly_allowance_cny": "月生活费（元）"}。
+    age、city_tier 等前端已有显示名的 key 不需要。
+    """
+    present = (_custom_keys(dimensions) | _custom_keys(layers)) - set(PERSONA_DIMENSIONS) - set(PERSONA_LAYERS)
+    custom = sorted(present - STANDARD_FIELD_KEYS)
+    labels = {key: text.strip() for key, text in given.items() if key in present and text.strip()}
+    missing = [key for key in custom if key not in labels]
+    if missing:
+        raise StudyFilesError(
+            f"{label}: give field_labels with a display name in the user's language for {', '.join(missing)} "
+            '(for example {"monthly_allowance_cny": "月生活费（元）"}); standard keys such as age or city_tier need none'
+        )
+    return labels
 
 
 def _check_decision_weights(label: str, layers: Dict[str, Any]) -> None:

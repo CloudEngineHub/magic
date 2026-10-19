@@ -146,6 +146,7 @@ Path: `personas/<persona_id>.json` (project-level library). `id` format: `p_<sho
 | `evidence` | no | array of `{ "id", "type": "web" \| "social" \| "upload" \| "interview", "platform", "title", "url", "file", "quote" }`; `platform` only for `social` (for example `xiaohongshu`, `douyin`); `interview` evidence never counts toward `tier` |
 | `field_sources` | no | per dimension key (`demographics`, `geography`, `psychographics`, `behavior`, `needs_pains`, `tech_adoption`, `social`): an array of evidence ids such as `["e1", "e3"]`, the string `"inferred"` when no evidence backs it, or `"user"` when the user filled in or edited it |
 | `consistency_notes` | no | array of strings: contradictions between layers that are kept on purpose, for example "Says efficiency matters most, yet still keeps a paper ledger" |
+| `field_labels` | no | object mapping each non-standard key used in `dimensions` or `layers` to its display name in the user's language, for example `{ "monthly_allowance_cny": "月生活费（元）" }`; required by `save_personas` for new personas |
 | `created_in` | no | `studies/<slug>` of the study that created it |
 | `updated_at` | no | ISO 8601 time with offset |
 | `edited_at` | no | ISO 8601 time with offset of the user's last edit in the persona library |

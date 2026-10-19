@@ -229,6 +229,7 @@ def _persona(name, segment, evidence_types=("web", "web", "social"), behavior_so
             "cognition": {"decision_weights": [{"factor": "price", "level": "high"}]}, "behavior": ["acts"],
         },
         "evidence": evidence,
+        "field_labels": {"channel": "购买渠道"},
         "field_sources": {
             "demographics": "inferred", "geography": "inferred", "psychographics": "inferred",
             "behavior": behavior_sources if behavior_sources is not None else ids[:1],
@@ -344,6 +345,43 @@ async def test_plan_and_desk_research_require_new_fields(tmp_path):
     study = _read(tmp_path, f"{study_dir}/study.json")
     assert study["hypotheses"][0]["outcome_terms"] == ["switching cost"]
     assert study["social_sampling"]["status"] == "unavailable"
+
+
+async def test_new_persona_needs_display_names_for_custom_keys(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    persona = _persona("Zhang", "Owners")
+    persona["dimensions"]["demographics"]["monthly_allowance_cny"] = 1500
+    persona["field_labels"] = {"channel": "购买渠道", "unused_key": "不会写入"}
+
+    missing = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[persona],
+    ))
+    persona["field_labels"]["monthly_allowance_cny"] = "月生活费（元）"
+    saved = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[persona],
+    ))
+
+    assert missing.ok is False and "for monthly_allowance_cny (" in missing.content
+    assert saved.ok is True, saved.content
+    profile = _read(tmp_path, f"personas/{saved.data['personas'][0]['persona_id']}.json")
+    assert profile["field_labels"] == {"channel": "购买渠道", "monthly_allowance_cny": "月生活费（元）"}
+
+
+async def test_reused_persona_can_gain_missing_display_names(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    _write(tmp_path, "personas/p_old_1a2b.json", {
+        "schema_version": 1, "id": "p_old_1a2b", "name": "Old", "tier": "generated",
+        "dimensions": {"behavior": {"textbook_sourcing": "二手群"}}, "field_labels": {"resale": "转卖"},
+    })
+
+    result = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p",
+        personas=[{"id": "p_old_1a2b", "segment": "Owners", "reason": "reuse",
+                   "field_labels": {"textbook_sourcing": "教材来源", "resale": "不覆盖已有"}}],
+    ))
+
+    assert result.ok is True, result.content
+    assert _read(tmp_path, "personas/p_old_1a2b.json")["field_labels"] == {"resale": "转卖", "textbook_sourcing": "教材来源"}
 
 
 async def test_reused_persona_keeps_identity_and_appends_evidence(tmp_path):

@@ -157,6 +157,13 @@ PERSONA_DIMENSIONS = (
 )
 PERSONA_LAYERS = ("expression", "story", "cognition", "behavior")
 
+# 前端已有显示名的字段 key（personaResearch.json 的 persona.field.*）。人设里出现其它 key 时，
+# 新人设必须在 field_labels 里给出用户语言的显示名，否则研究页会直接露出 monthly_allowance_cny 这类英文 key。
+STANDARD_FIELD_KEYS = frozenset({
+    "age", "city", "city_tier", "device", "education", "gender", "income", "lifestyle",
+    "occupation", "purchase_channel", "region", "risk_attitude", "values", "decision_weights",
+})
+
 
 class TranscriptStatus(StrEnum):
     RUNNING = "running"
