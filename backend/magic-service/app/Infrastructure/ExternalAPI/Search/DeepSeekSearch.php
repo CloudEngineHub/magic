@@ -10,6 +10,7 @@ namespace App\Infrastructure\ExternalAPI\Search;
 use App\Infrastructure\Core\Traits\HasLogger;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\TransferException;
 use Hyperf\Codec\Json;
 use Hyperf\Contract\ConfigInterface;
 use RuntimeException;
@@ -76,9 +77,11 @@ class DeepSeekSearch
                 }
 
                 return $decoded;
-            } catch (RequestException $exception) {
+            } catch (TransferException $exception) {
                 $lastException = $exception;
-                $statusCode = $exception->getResponse()?->getStatusCode();
+                $statusCode = $exception instanceof RequestException
+                    ? $exception->getResponse()?->getStatusCode()
+                    : null;
                 $retryable = $this->isRetryableStatus($statusCode);
                 $this->logger->warning('DeepSeek search request failed.', [
                     'status_code' => $statusCode,
@@ -97,12 +100,7 @@ class DeepSeekSearch
                     'attempt' => $attempt + 1,
                     'exception' => $exception::class,
                 ]);
-
-                if ($attempt + 1 >= self::MAX_ATTEMPTS) {
-                    break;
-                }
-
-                usleep(200_000);
+                break;
             }
         }
 
