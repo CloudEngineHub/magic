@@ -1,6 +1,6 @@
 # Report Templates
 
-A report template sets only the visual style of `report.html`: colours, fonts, layout, decoration, and scripts. The report contract below applies whatever the template looks like.
+A report template sets only the visual style of `report.html`: colours, fonts, layout, decoration, and scripts. The report contract below applies whatever the template looks like, section order included: when a template's sample sections come in another order (older copies of `templates/voices.html` too), follow the contract order, not the template's.
 
 ## Where Templates Live
 
