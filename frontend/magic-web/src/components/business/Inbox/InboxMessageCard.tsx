@@ -124,6 +124,7 @@ const InboxMessageCard = observer(function InboxMessageCard({
 							<Link
 								key={part.offset}
 								to={resourceRoute.path}
+								state={{ restoreSuperMagicState: true }}
 								className="rounded-sm text-blue-600 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-blue-400"
 								onClick={(event) => {
 									// Keep this panel open when the link opens in another tab/window.
