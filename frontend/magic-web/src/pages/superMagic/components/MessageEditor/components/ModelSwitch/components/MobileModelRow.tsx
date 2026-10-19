@@ -177,13 +177,16 @@ export function MobileModelRow({
 									<Button
 										key={value ?? "default"}
 										type="button"
+										// 默认项带具体档位时占两格，独立于按钮外观避免覆盖其他样式调整。
+										style={{
+											gridColumn:
+												!value && defaultEffort ? "span 2" : undefined,
+										}}
 										variant="ghost"
 										disabled={disabled}
 										aria-pressed={effort === value}
 										className={cn(
 											"h-11 min-w-0 gap-1 rounded-full bg-muted px-1 text-sm font-normal",
-											// 默认值带具体档位时占两格，避免移动端截断继承信息。
-											!value && defaultEffort && "col-span-2",
 											effort === value &&
 												"bg-primary/10 text-primary hover:bg-primary/15",
 										)}
