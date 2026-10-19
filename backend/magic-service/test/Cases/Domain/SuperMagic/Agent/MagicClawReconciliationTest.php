@@ -7,10 +7,12 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Domain\SuperMagic\Agent;
 
+use App\Application\SuperMagic\Agent\Event\Subscribe\ClawFunctionPermissionChangedListener;
 use App\Application\SuperMagic\Agent\Service\MagicClawReconciliationAppService;
 use App\Domain\Contact\Event\DepartmentMembershipChanged;
 use App\Domain\Contact\Repository\Persistence\MagicDepartmentUserRepository;
 use App\Domain\Contact\Repository\Persistence\Model\DepartmentUserModel;
+use App\Domain\Permission\Event\FunctionPermissionChanged;
 use App\Domain\SuperMagic\Agent\Event\ClawPermissionReconciliationRequestedEvent;
 use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
 use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawRepository;
@@ -39,7 +41,6 @@ use PDO;
 use PHPUnit\Framework\TestCase;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\NullLogger;
-use Psr\SimpleCache\CacheInterface;
 use ReflectionObject;
 use RuntimeException;
 
@@ -59,8 +60,6 @@ final class MagicClawReconciliationTest extends TestCase
     private LockerInterface $locker;
 
     private MagicClawRuntimePolicyDomainService $policy;
-
-    private CacheInterface $cache;
 
     private bool $allowed = false;
 
@@ -123,8 +122,7 @@ final class MagicClawReconciliationTest extends TestCase
         $locker->method('spinLock')->willReturn(true);
         $locker->method('mutexLock')->willReturn(true);
         $locker->method('release')->willReturn(true);
-        $this->cache = $this->createMock(CacheInterface::class);
-        $this->service = new MagicClawReconciliationAppService($this->repository, new MagicClawRepository(new MagicClawModel()), $policy, $this->agent, $this->createMock(TaskDomainService::class), $lock, $locker, $this->cache);
+        $this->service = new MagicClawReconciliationAppService($this->repository, new MagicClawRepository(new MagicClawModel()), $policy, $this->agent, $this->createMock(TaskDomainService::class), $lock, $locker);
         $this->service->logger = new NullLogger();
     }
 
@@ -134,11 +132,16 @@ final class MagicClawReconciliationTest extends TestCase
         Register::unsetConnectionResolver();
     }
 
-    public function testMigrationAndPolicyWorkRecordRollbackAtomically(): void
+    public function testPermissionEventRecordsWorkAtomicallyWithoutStoppingResources(): void
     {
+        $listener = new ClawFunctionPermissionChangedListener($this->service);
+        $event = new FunctionPermissionChanged('org', 'admin', ['magic_claw.access']);
+        $this->agent->expects(self::never())->method('stopSandboxIfExists');
         try {
-            $this->service->savePolicy('org', 'admin', function () {
+            $this->db->transaction(function () use ($listener, $event): void {
                 $this->db->table('policy_test')->insert(['value' => 'deny']);
+                $listener->process($event);
+                self::assertNotNull($this->repository->latest('org'));
                 throw new RuntimeException('save failed');
             });
             self::fail('Expected rollback');
@@ -147,9 +150,12 @@ final class MagicClawReconciliationTest extends TestCase
         }
         self::assertSame(0, $this->db->table('policy_test')->count());
         self::assertNull($this->repository->latest('org'));
-        $this->service->savePolicy('org', 'admin', fn () => $this->db->table('policy_test')->insert(['value' => 'deny']));
+        $this->db->transaction(function () use ($listener, $event): void {
+            $this->db->table('policy_test')->insert(['value' => 'deny']);
+            $listener->process($event);
+        });
         self::assertSame(1, $this->db->table('policy_test')->count());
-        self::assertNotNull($this->repository->latest('org'));
+        self::assertSame('admin', $this->repository->latest('org')['actor']);
     }
 
     public function testDirectoryRollbackDoesNotCreateOrRunAReconciliation(): void
@@ -288,7 +294,7 @@ final class MagicClawReconciliationTest extends TestCase
     {
         $locker = $this->createMock(LockerInterface::class);
         $locker->expects(self::exactly(2))->method('mutexLock')->willReturn(false);
-        $service = new MagicClawReconciliationAppService($this->repository, new MagicClawRepository(new MagicClawModel()), $this->policy, $this->agent, $this->createMock(TaskDomainService::class), $this->createMock(SandboxLifecycleLock::class), $locker, $this->cache);
+        $service = new MagicClawReconciliationAppService($this->repository, new MagicClawRepository(new MagicClawModel()), $this->policy, $this->agent, $this->createMock(TaskDomainService::class), $this->createMock(SandboxLifecycleLock::class), $locker);
         $this->repository->create('org', 'admin', 'policy_changed');
         $this->agent->expects(self::never())->method('stopSandboxIfExists');
         self::assertFalse($service->executeForOrganization('org'));
@@ -310,19 +316,6 @@ final class MagicClawReconciliationTest extends TestCase
         // Replayed events do not scan or stop completed resources again.
         self::assertFalse($this->service->executeForOrganization('org'));
         self::assertSame([], $this->repository->claws('org', 0));
-    }
-
-    public function testDiscoveryOnlyChecksRecordedBindingsAndReusesOwnerDecision(): void
-    {
-        $this->db->table('magic_super_magic_claw')->insert([
-            ['id' => 2, 'organization_code' => 'org', 'user_id' => 'owner', 'project_id' => 11, 'file_converter_sandbox_id' => 'converter'],
-            ['id' => 3, 'organization_code' => 'org', 'user_id' => 'unused', 'project_id' => 12, 'file_converter_sandbox_id' => ''],
-        ]);
-        self::assertSame([1, 2], array_column($this->repository->discoveryPage(0), 'id'));
-        $this->policy->expects(self::once())->method('isAllowed')->with('org', 'owner');
-        $this->cache->expects(self::once())->method('set')->with('magic_claw_permission_discovery_cursor', '0');
-        $this->service->discover();
-        self::assertSame('runtime_check', $this->repository->latest('org')['reason']);
     }
 
     public function testMembershipBatchNotifiesOncePerOrganizationInTheRequest(): void

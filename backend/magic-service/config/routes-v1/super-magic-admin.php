@@ -5,6 +5,7 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 use App\Infrastructure\Util\Middleware\RequestContextMiddleware;
+use App\Interfaces\Admin\SuperMagic\Agent\AdminMagicClawRuntimeApi;
 use App\Interfaces\Admin\SuperMagic\Agent\AdminSuperMagicAgentApi;
 use App\Interfaces\Admin\SuperMagic\Agent\AdminSuperMagicCategoryApi;
 use App\Interfaces\Admin\SuperMagic\Skill\AdminOfficialSkillApi;
@@ -40,6 +41,13 @@ Router::addGroup('/api/v2/admin', static function () {
 }, ['middleware' => [RequestContextMiddleware::class]]);
 
 Router::addGroup('/api/v1/admin', static function () {
+    Router::addGroup('/super-magic/claws/runtime-reconciliation', static function () {
+        Router::get('', [AdminMagicClawRuntimeApi::class, 'show']);
+        Router::post('/retry', [AdminMagicClawRuntimeApi::class, 'retry']);
+    });
+    // Preserve the earlier retry URL while keeping its implementation in the owning module.
+    Router::post('/function-permissions/magic_claw.access/runtime-reconciliation/retry', [AdminMagicClawRuntimeApi::class, 'retry']);
+
     // Admin 路由组
     Router::addGroup('/skills', static function () {
         Router::addGroup('/categories', static function () {

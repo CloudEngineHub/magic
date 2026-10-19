@@ -16,16 +16,10 @@ class MagicClawPermissionCrontab
     {
     }
 
-    // Events handle normal changes. These schedules only recover missed work.
+    // Events handle normal changes. This schedule only resumes recorded, due work.
     #[Crontab(rule: '0 */10 * * * *', name: 'MagicClawPermissionReconcile', singleton: true, mutexExpires: 600, onOneServer: true)]
     public function execute(): void
     {
         $this->service->execute();
-    }
-
-    #[Crontab(rule: '0 17 * * * *', name: 'MagicClawPermissionDiscovery', singleton: true, mutexExpires: 600, onOneServer: true)]
-    public function discover(): void
-    {
-        $this->service->discover();
     }
 }

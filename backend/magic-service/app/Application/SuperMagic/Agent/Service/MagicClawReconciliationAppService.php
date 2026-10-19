@@ -21,7 +21,6 @@ use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\DbConnection\Db;
-use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 use Throwable;
 
@@ -37,20 +36,7 @@ class MagicClawReconciliationAppService
         private readonly TaskDomainService $tasks,
         private readonly SandboxLifecycleLock $lifecycle,
         private readonly LockerInterface $locker,
-        private readonly CacheInterface $cache,
     ) {
-    }
-
-    /** The policy write and durable work record commit together. No network I/O in this transaction. */
-    public function savePolicy(string $organization, string $actor, callable $save): mixed
-    {
-        $result = $this->withOrganizationLock($organization, fn () => Db::transaction(function () use ($organization, $actor, $save) {
-            $result = $save();
-            $this->repository->create($organization, $actor, 'policy_changed');
-            return $result;
-        }));
-        $this->notify($organization);
-        return $result;
     }
 
     public function status(string $organization): ?array
@@ -165,43 +151,14 @@ class MagicClawReconciliationAppService
         }
     }
 
-    /** Hourly, bounded repair inventory. Only recorded runtime bindings participate. */
-    public function discover(): void
+    public function requestReconciliation(string $organization, string $reason, bool $force = false, bool $notify = true, string $actor = ''): void
     {
-        $cursorKey = 'magic_claw_permission_discovery_cursor';
-        $cursor = (int) $this->cache->get($cursorKey, 0);
-        $deadline = microtime(true) + 10;
-        $decisions = [];
-        $organizations = [];
-        for ($page = 0; $page < 10 && microtime(true) < $deadline; ++$page) {
-            $rows = $this->repository->discoveryPage($cursor);
-            foreach ($rows as $claw) {
-                $organization = $claw['organization_code'];
-                $decisions[$organization][$claw['user_id']] ??= $this->policy->isAllowed($organization, $claw['user_id']);
-                if (! empty($claw['deleted_at']) || ! $decisions[$organization][$claw['user_id']]) {
-                    $organizations[$organization] = $organization;
-                }
-                $cursor = (int) $claw['id'];
-            }
-            if (count($rows) < 100) {
-                $cursor = 0;
-                break;
-            }
-        }
-        $this->cache->set($cursorKey, (string) $cursor);
-        foreach ($organizations as $organization) {
-            $this->requestReconciliation($organization, 'runtime_check');
-        }
-    }
-
-    public function requestReconciliation(string $organization, string $reason, bool $force = false, bool $notify = true): void
-    {
-        $this->withOrganizationLock($organization, function () use ($organization, $reason, $force): void {
+        $this->withOrganizationLock($organization, function () use ($organization, $reason, $force, $actor): void {
             $latest = $this->repository->latest($organization);
             if (! $force && $latest !== null && in_array($latest['status'], ['pending', 'running', 'partial_failed'], true)) {
                 return;
             }
-            Db::transaction(fn () => $this->repository->create($organization, '', $reason));
+            Db::transaction(fn () => $this->repository->create($organization, $actor, $reason));
         });
         if ($notify) {
             $this->notify($organization);

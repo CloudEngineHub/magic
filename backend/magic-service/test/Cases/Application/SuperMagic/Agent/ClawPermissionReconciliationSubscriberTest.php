@@ -7,9 +7,11 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\SuperMagic\Agent;
 
+use App\Application\SuperMagic\Agent\Event\Subscribe\ClawFunctionPermissionChangedListener;
 use App\Application\SuperMagic\Agent\Event\Subscribe\ClawPermissionReconciliationSubscriber;
 use App\Application\SuperMagic\Agent\Service\MagicClawReconciliationAppService;
 use App\Domain\Contact\Event\DepartmentMembershipChanged;
+use App\Domain\Permission\Event\FunctionPermissionChanged;
 use App\Domain\SuperMagic\Agent\Event\ClawPermissionReconciliationRequestedEvent;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Dtyq\AsyncEvent\Kernel\Driver\CoroutineListenerAsyncDriver;
@@ -70,6 +72,26 @@ final class ClawPermissionReconciliationSubscriberTest extends TestCase
         self::assertTrue($result, 'originEnded=' . (int) $originEnded . '; calls=' . $calls . '; result=' . var_export($result, true));
         self::assertSame(1, $calls);
         $done->close();
+    }
+
+    public function testUnrelatedFunctionChangesDoNotCreateClawWork(): void
+    {
+        $service = $this->createMock(MagicClawReconciliationAppService::class);
+        $service->expects(self::never())->method('requestReconciliation');
+        $service->expects(self::never())->method('executeForOrganization');
+        $listener = new ClawFunctionPermissionChangedListener($service);
+        $listener->process(new FunctionPermissionChanged('org', 'admin', ['skill.create', 'magic_claw.create']));
+        $listener->process(new FunctionPermissionChanged('org', 'admin', []));
+    }
+
+    public function testGlobalAndAccessChangesRecordWorkButDoNotScanInTheRequest(): void
+    {
+        $service = $this->createMock(MagicClawReconciliationAppService::class);
+        $service->expects(self::exactly(2))->method('requestReconciliation')->with('org', 'policy_changed', true, true, 'admin');
+        $service->expects(self::never())->method('executeForOrganization');
+        $listener = new ClawFunctionPermissionChangedListener($service);
+        $listener->process(new FunctionPermissionChanged('org', 'admin', null));
+        $listener->process(new FunctionPermissionChanged('org', 'admin', ['magic_claw.access', 'skill.create']));
     }
 
     public function testMembershipEventPreparesOnceWithoutPublishingNestedNotifications(): void

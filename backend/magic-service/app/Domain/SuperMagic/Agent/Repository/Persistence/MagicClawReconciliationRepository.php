@@ -94,13 +94,6 @@ class MagicClawReconciliationRepository
             })->where('id', '>', $after)->orderBy('id')->limit($limit)->get()->toArray();
     }
 
-    public function discoveryPage(int $after, int $limit = 100): array
-    {
-        return MagicClawModel::withTrashed()->where('id', '>', $after)->where(function ($query): void {
-            $this->withRuntimeBindings($query);
-        })->orderBy('id')->limit($limit)->get()->toArray();
-    }
-
     /** @return iterable<array> */
     public function topics(array $claw): iterable
     {

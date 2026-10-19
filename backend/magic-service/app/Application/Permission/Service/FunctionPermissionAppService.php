@@ -8,19 +8,20 @@ declare(strict_types=1);
 namespace App\Application\Permission\Service;
 
 use App\Application\Chat\Service\MagicUserInfoAppService;
-use App\Application\SuperMagic\Agent\Service\MagicClawReconciliationAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Permission\Entity\FunctionPermissionPolicyEntity;
 use App\Domain\Permission\Entity\ValueObject\BindingScopeType;
 use App\Domain\Permission\Entity\ValueObject\PermissionControlStatus;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Event\FunctionPermissionChanged;
 use App\Domain\Permission\Service\FunctionPermissionCatalog;
 use App\Domain\Permission\Service\FunctionPermissionDomainService;
-use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\ErrorCode\PermissionErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
+use Dtyq\AsyncEvent\AsyncEventUtil;
+use Hyperf\DbConnection\Db;
 
 use function Hyperf\Translation\__;
 
@@ -47,7 +48,7 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
         foreach (FunctionPermissionCatalog::list() as $item) {
             $item = $this->resolveCatalogItem($item);
             $policy = $policyMap[$item['function_code']] ?? null;
-            $list[] = $this->withRuntimeStatus($dataIsolation, $this->buildItem($item, $policy, $settingsStatus));
+            $list[] = $this->buildItem($item, $policy, $settingsStatus);
         }
 
         return [
@@ -76,7 +77,7 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
 
         return [
             'permission_control_status' => $settingStatus->value,
-            'function' => $this->withRuntimeStatus($dataIsolation, $this->buildDetailItem($catalog, $policy)),
+            'function' => $this->buildDetailItem($catalog, $policy),
         ];
     }
 
@@ -99,13 +100,13 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
         $entity->setBindingScope($bindingScope);
         $entity->setRemark($remark);
 
-        $savedEntity = $this->saveWithRuntimeReconciliation(
+        $savedEntity = $this->saveAndDispatchChange(
             $dataIsolation,
-            $functionCode === MagicClawRuntimePolicyDomainService::ACCESS,
+            [$functionCode],
             fn () => $this->domainService->savePolicy($dataIsolation, $entity)
         );
 
-        return $this->withRuntimeStatus($dataIsolation, $this->buildDetailItem($catalog, $savedEntity));
+        return $this->buildDetailItem($catalog, $savedEntity);
     }
 
     public function updateEnabled(
@@ -119,14 +120,14 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
         }
         $catalog = $this->resolveCatalogItem($catalog);
 
-        $savedEntity = $this->saveWithRuntimeReconciliation($dataIsolation, $functionCode === MagicClawRuntimePolicyDomainService::ACCESS, fn () => $this->domainService->updatePolicyEnabled(
+        $savedEntity = $this->saveAndDispatchChange($dataIsolation, [$functionCode], fn () => $this->domainService->updatePolicyEnabled(
             $dataIsolation,
             $functionCode,
             $enabled,
             is_array($catalog['default_binding_scope'] ?? null) ? $catalog['default_binding_scope'] : []
         ));
 
-        return $this->withRuntimeStatus($dataIsolation, $this->buildDetailItem($catalog, $savedEntity));
+        return $this->buildDetailItem($catalog, $savedEntity);
     }
 
     /**
@@ -151,10 +152,9 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
             $entities[] = $entity;
         }
 
-        $affectsClaw = array_filter($entities, static fn (FunctionPermissionPolicyEntity $entity) => $entity->getFunctionCode() === MagicClawRuntimePolicyDomainService::ACCESS) !== [];
-        $savedEntities = $this->saveWithRuntimeReconciliation(
+        $savedEntities = $this->saveAndDispatchChange(
             $dataIsolation,
-            $affectsClaw,
+            array_values(array_unique(array_map(static fn (FunctionPermissionPolicyEntity $entity) => $entity->getFunctionCode(), $entities))),
             fn () => $this->domainService->saveBatch($dataIsolation, $entities)
         );
         $policyMap = $this->domainService->listPolicies($dataIsolation);
@@ -164,28 +164,26 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
         foreach (FunctionPermissionCatalog::list() as $item) {
             $item = $this->resolveCatalogItem($item);
             $policy = $policyMap[$item['function_code']] ?? null;
-            $list[] = $this->withRuntimeStatus($dataIsolation, $this->buildItem($item, $policy, $settingsStatus));
+            $list[] = $this->buildItem($item, $policy, $settingsStatus);
         }
 
         return [
             'permission_control_status' => $settingsStatus->value,
             'list' => $list,
             'saved_count' => count($savedEntities),
-            'runtime_reconciliation' => $affectsClaw ? di(MagicClawReconciliationAppService::class)->status($dataIsolation->getCurrentOrganizationCode()) : null,
         ];
     }
 
     public function updateSettings(PermissionDataIsolation $dataIsolation, PermissionControlStatus $status): array
     {
-        $savedStatus = $this->saveWithRuntimeReconciliation(
+        $savedStatus = $this->saveAndDispatchChange(
             $dataIsolation,
-            true,
+            null,
             fn () => $this->domainService->updatePermissionControlStatus($dataIsolation, $status)
         );
 
         return [
             'permission_control_status' => $savedStatus->value,
-            'runtime_reconciliation' => di(MagicClawReconciliationAppService::class)->status($dataIsolation->getCurrentOrganizationCode()),
         ];
     }
 
@@ -214,19 +212,18 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
         return $this->domainService->checkPermission($dataIsolation, $authorization->getId(), $functionCode);
     }
 
-    private function saveWithRuntimeReconciliation(PermissionDataIsolation $isolation, bool $affected, callable $save): mixed
+    /** A null function list denotes a global control change affecting every function. */
+    private function saveAndDispatchChange(PermissionDataIsolation $isolation, ?array $functionCodes, callable $save): mixed
     {
-        return $affected
-            ? di(MagicClawReconciliationAppService::class)->savePolicy($isolation->getCurrentOrganizationCode(), $isolation->getCurrentUserId(), $save)
-            : $save();
-    }
-
-    private function withRuntimeStatus(PermissionDataIsolation $isolation, array $item): array
-    {
-        if ($item['function_code'] === MagicClawRuntimePolicyDomainService::ACCESS) {
-            $item['runtime_reconciliation'] = di(MagicClawReconciliationAppService::class)->status($isolation->getCurrentOrganizationCode());
-        }
-        return $item;
+        return Db::transaction(function () use ($isolation, $functionCodes, $save): mixed {
+            $result = $save();
+            AsyncEventUtil::dispatch(new FunctionPermissionChanged(
+                $isolation->getCurrentOrganizationCode(),
+                $isolation->getCurrentUserId(),
+                $functionCodes
+            ));
+            return $result;
+        });
     }
 
     private function buildItem(array $catalog, ?FunctionPermissionPolicyEntity $policy, PermissionControlStatus $status): array

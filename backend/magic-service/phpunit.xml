@@ -60,6 +60,8 @@
         Magic Claw 沙箱重启命令与网关清单解析：同样按文件精确登记（原因见上）。
       -->
       <file>test/Cases/Application/SuperMagic/Agent/Command/RestartAllMagicClawSandboxCommandTest.php</file>
+      <file>test/Cases/Application/SuperMagic/Agent/AgentAppServiceLifecycleTest.php</file>
+      <file>test/Cases/Application/SuperMagic/Agent/ClawPermissionReconciliationSubscriberTest.php</file>
       <file>test/Cases/Interfaces/SuperMagic/Task/DTO/Request/CreateOpenTaskRequestDTOTest.php</file>
       <file>test/Cases/Application/SuperMagic/Message/Assembler/UserMessageDTOAssemblerTest.php</file>
       <file>test/Cases/Application/SuperMagic/Message/Service/HandleUserMessageDispatchTest.php</file>
