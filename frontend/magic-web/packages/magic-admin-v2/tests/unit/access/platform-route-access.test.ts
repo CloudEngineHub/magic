@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { PERMISSION_KEY_MAP } from "../../../src/constants/permissions.ts"
-import { RouteName, RouteSection } from "../../../src/constants/routes.ts"
+import { RouteGroup, RouteName, RouteSection } from "../../../src/constants/routes.ts"
 import { RuntimeMode } from "../../../src/constants/runtime.ts"
 import type { AccessContext } from "../../../src/runtime/types.ts"
 import { createNavigation } from "../../../src/routes/menu.ts"
@@ -72,11 +72,13 @@ describe("platform route access", () => {
 		assert.deepEqual(platformMenuItems(access, embeddedRoutes), [
 			"nav.item.platformInfo",
 			"nav.item.customServiceProviderLicense",
+			"nav.item.modelMultiplier",
 		])
 		assert.deepEqual(platformMenuItems(access, standaloneRoutes), [
 			"nav.item.platformInfo",
 			"nav.item.aiWatermark",
 			"nav.item.customServiceProviderLicense",
+			"nav.item.modelMultiplier",
 		])
 	})
 
@@ -96,7 +98,21 @@ describe("platform route access", () => {
 		assert.deepEqual(platformMenuItems(access), [
 			"nav.item.platformInfo",
 			"nav.item.customServiceProviderLicense",
+			"nav.item.modelMultiplier",
 		])
+	})
+
+	it("places model multiplier under the model management navigation group", () => {
+		const access = createAccess({
+			isOfficialOrganization: true,
+			magicPermissionKeys: [PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_QUERY],
+		})
+
+		assert.equal(canAccess(RouteName.PlatformModelMultiplier, access), true)
+		assert.equal(
+			getRoute(RouteName.PlatformModelMultiplier)?.meta?.group,
+			RouteGroup.ModelManagement,
+		)
 	})
 
 	it("does not expose unrelated platform menus for a page-specific permission", () => {

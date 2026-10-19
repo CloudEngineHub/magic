@@ -12,17 +12,10 @@ export function MultiplierReferencePreview({
 	const { t } = useTranslation()
 	return (
 		<aside
-			className="min-w-0 rounded-md bg-muted/30 p-5"
+			className="min-w-0 rounded-lg border bg-muted/20 p-5"
 			aria-label={t("platformInfo.multiplier.referenceAmount")}
 		>
-			<p className="text-xs text-muted-foreground">
-				{editing
-					? t("platformInfo.multiplier.livePreview")
-					: t("platformInfo.multiplier.savedResult")}
-			</p>
-			<h4 className="mt-2 text-sm font-medium">
-				{t("platformInfo.multiplier.referenceAmount")}
-			</h4>
+			<h4 className="text-sm font-medium">{t("platformInfo.multiplier.referenceAmount")}</h4>
 			<div className="mt-2 flex flex-wrap items-baseline gap-2">
 				<output
 					data-testid="multiplier-reference-amount"
@@ -80,7 +73,7 @@ export function MultiplierReferenceExamples({
 	}
 	return (
 		<section
-			className="space-y-4 border-t pt-6"
+			className="space-y-4 rounded-lg border bg-card p-5"
 			aria-label={t("platformInfo.multiplier.examplesTitle")}
 		>
 			<div>
@@ -187,7 +180,7 @@ export function MultiplierReferenceRules() {
 	]
 	return (
 		<section
-			className="border-t pt-6"
+			className="rounded-lg border bg-muted/20 p-5"
 			data-testid="model-multiplier-explanation"
 			aria-label={t("platformInfo.multiplier.rulesTitle")}
 		>

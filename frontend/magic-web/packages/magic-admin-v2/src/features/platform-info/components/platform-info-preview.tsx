@@ -17,7 +17,6 @@ import {
 	type PlatformInfoSectionId,
 } from "@magic-admin-v2/features/platform-info/utils"
 import { PlatformInfoContentLanguageBar, PlatformInfoContentSection } from "./platform-info-shared"
-import { PlatformInfoModelMultiplier } from "./platform-info-model-multiplier"
 import { PlatformInfoWatermarkPreview } from "./platform-info-watermark"
 
 export function PlatformInfoPreview({
@@ -49,11 +48,7 @@ export function PlatformInfoPreview({
 					/>
 				) : null}
 
-				{activeSection === "modelMultiplier" ? (
-                        <PlatformInfoModelMultiplier value={value.model_billing_multiplier}  />
-                    ) : null}
-
-                    {activeSection === "basic" ? (
+				{activeSection === "basic" ? (
 					<div className="space-y-6">
 						<div className="grid gap-3 sm:grid-cols-2">
 							<ImagePreview

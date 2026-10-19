@@ -42,6 +42,8 @@ export const RouteName = {
 	PlatformModelList: "platform-model-list",
 	/** 平台模型服务商列表。 */
 	PlatformProviderList: "platform-provider-list",
+	/** 模型参考倍率。 */
+	PlatformModelMultiplier: "platform-model-multiplier",
 	/** 系统能力管理。 */
 	PlatformSystemCapabilities: "platform-system-capabilities",
 	/** PPT 模板管理。 */
@@ -320,6 +322,8 @@ export const RoutePath = {
 	PlatformModelList: "platform/models/model-list",
 	/** 平台模型服务商列表。 */
 	PlatformProviderList: "platform/models/provider-list",
+	/** 模型参考倍率。 */
+	PlatformModelMultiplier: "platform/models/model-multiplier",
 	/** 系统能力管理。 */
 	PlatformSystemCapabilities: "platform/agents/system-capabilities",
 	/** PPT 模板管理。 */
