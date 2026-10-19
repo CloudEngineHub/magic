@@ -635,6 +635,7 @@
 			"editTitle": "Edit a template with AI",
 			"introText": "The AI writes an HTML template into your library; later studies can pick it for their report.",
 			"introTitle": "Describe the report style you want",
+			"placeholder": "Describe the report style you want, e.g. dark, magazine-like, big headlines",
 			"saved": "Template saved: {{names}}",
 			"tipBase": "Or say which existing template to start from",
 			"tipDescribe": "Describe brand colours, fonts, and layout, e.g. \"dark, magazine-like, big headlines\"",

@@ -60,10 +60,11 @@ export function serializeTemplateChatMarker(marker: TemplateChatMarker): string 
  * Where a template conversation stands, from its topic status and the template library.
  *
  * | State      | When                                                         |
- * | generating | the task is running (or queued right after sending)          |
+ * | generating | the task is running, or queued for at most 2 minutes after sending |
  * | waiting    | the AI asked a question                                      |
  * | failed     | the task errored                                             |
- * | stopped    | finished or stopped without any template added or changed    |
+ * | stopped    | finished, stopped, or never started (the first message did not  |
+ * |            | go out), without any template added or changed                |
  * | done       | finished and a template was added or changed: the card goes, |
  * |            | the template card in the grid takes its place                |
  *
@@ -71,14 +72,20 @@ export function serializeTemplateChatMarker(marker: TemplateChatMarker): string 
  */
 export type TemplateChatState = "generating" | "waiting" | "failed" | "stopped" | "done"
 
+/** A queued task normally starts within seconds; past this it never got the message. */
+const QUEUED_GRACE_MS = 2 * 60 * 1000
+
 export function resolveTemplateChatState(
-	marker: Pick<TemplateChatMarker, "templates_before">,
+	marker: Pick<TemplateChatMarker, "templates_before" | "started_at">,
 	topic: Pick<Topic, "task_status" | "status">,
 	templates: { path: string; version: string }[],
+	now = Date.now(),
 ): TemplateChatState {
 	const status = topic.task_status || topic.status
-	if (status === TaskStatus.RUNNING || status === TaskStatus.WAITING || !status) {
-		return "generating"
+	if (status === TaskStatus.RUNNING) return "generating"
+	if (status === TaskStatus.WAITING || !status) {
+		const startedAt = Date.parse(marker.started_at)
+		if (Number.isNaN(startedAt) || now - startedAt < QUEUED_GRACE_MS) return "generating"
 	}
 	if (status === TaskStatus.WAITING_FOR_USER) return "waiting"
 	if (status === TaskStatus.ERROR) return "failed"

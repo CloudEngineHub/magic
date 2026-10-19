@@ -633,6 +633,7 @@
 			"editTitle": "让 AI 修改模板",
 			"introText": "AI 会生成一个 HTML 模板放进模板库；之后的研究可以选它来出报告。",
 			"introTitle": "描述你想要的报告样式",
+			"placeholder": "描述你想要的报告样式，例如：深色、杂志感、大标题",
 			"saved": "模板已保存：{{names}}",
 			"tipBase": "或说明基于哪个现有模板改",
 			"tipDescribe": "描述品牌色、字体和版式，例如“深色、杂志感、大标题”",

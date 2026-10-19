@@ -363,6 +363,7 @@ function ReportTemplatesPage() {
 							? t("reportTemplates.chat.editPrompt", { path: chat.path })
 							: t("reportTemplates.chat.createPrompt"),
 					disclaimer: t("reportTemplates.chat.disclaimer"),
+					placeholder: t("reportTemplates.chat.placeholder"),
 					draftSlot: "report-template",
 				}}
 				footer={

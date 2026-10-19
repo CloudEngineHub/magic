@@ -7,16 +7,29 @@ import {
 	templateChatTopicIds,
 } from "../services/templateChats"
 
-const before = { templates_before: { "templates/voices.html": "v1" } }
+const startedAt = "2026-10-19T10:00:00.000Z"
+const before = { templates_before: { "templates/voices.html": "v1" }, started_at: startedAt }
 const unchanged = [{ path: "templates/voices.html", version: "v1" }]
 
 describe("resolveTemplateChatState", () => {
+	it("treats a task still queued long after sending as stopped", () => {
+		const queued = { task_status: TaskStatus.WAITING }
+		const at = (minutes: number) => Date.parse(startedAt) + minutes * 60 * 1000
+		expect(resolveTemplateChatState(before, queued, unchanged, at(1))).toBe("generating")
+		expect(resolveTemplateChatState(before, queued, unchanged, at(5))).toBe("stopped")
+	})
+
 	it("follows the topic while the conversation is open", () => {
 		expect(
 			resolveTemplateChatState(before, { task_status: TaskStatus.RUNNING }, unchanged),
 		).toBe("generating")
 		expect(
-			resolveTemplateChatState(before, { task_status: TaskStatus.WAITING }, unchanged),
+			resolveTemplateChatState(
+				before,
+				{ task_status: TaskStatus.WAITING },
+				unchanged,
+				Date.parse(startedAt),
+			),
 		).toBe("generating")
 		expect(
 			resolveTemplateChatState(

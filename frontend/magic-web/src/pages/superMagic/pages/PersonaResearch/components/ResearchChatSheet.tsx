@@ -25,6 +25,8 @@ export interface ResearchChatIntro {
 	/** Composer text when the sheet opens, e.g. "Build personas only from …". */
 	prompt: string
 	disclaimer: string
+	/** Composer placeholder; defaults to the research question prompt. */
+	placeholder?: string
 	/** Own draft slot, so text typed here never shows up in another research composer. */
 	draftSlot: string
 }
@@ -125,11 +127,12 @@ const ChatIntro = observer(function ChatIntro({
 	const context = useMemo(
 		() => ({
 			...editorContext,
+			placeholder: intro.placeholder ?? editorContext.placeholder,
 			draftKey: editorContext.draftKey
 				? { ...editorContext.draftKey, topicId: intro.draftSlot }
 				: undefined,
 		}),
-		[editorContext, intro.draftSlot],
+		[editorContext, intro.draftSlot, intro.placeholder],
 	)
 
 	return (
