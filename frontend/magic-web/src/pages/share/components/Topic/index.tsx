@@ -1023,11 +1023,12 @@ function Topic({
 
 	return (
 		<>
+			{/* Anchor the absolute resize dividers to this share viewport. */}
 			<div
 				className={cn(
 					documentFlowFullscreen
-						? "flex min-h-dvh w-full flex-row justify-center overflow-visible bg-transparent"
-						: "flex h-full w-full flex-row justify-center overflow-hidden bg-transparent",
+						? "relative flex min-h-dvh w-full flex-row justify-center overflow-visible bg-transparent"
+						: "relative flex h-full w-full flex-row justify-center overflow-hidden bg-transparent",
 				)}
 			>
 				{isMobile ? (
@@ -1148,6 +1149,7 @@ function Topic({
 								/>
 							</>
 						) : null}
+						{/* Clip detail content so the rounded shell keeps clean bottom corners. */}
 						{(isEmpty(autoDetail) &&
 							isEmpty(userDetail) &&
 							!showAllProjectFiles &&
@@ -1159,7 +1161,7 @@ function Topic({
 										? "min-h-dvh w-full flex-1 overflow-visible bg-transparent"
 										: shouldRenderFullscreenFileOnly
 											? "h-full min-h-0 w-full flex-1 overflow-hidden bg-transparent"
-											: "mr-2 flex-1 overflow-y-hidden rounded-lg transition-all duration-300 ease-in-out",
+											: "mr-2 flex-1 overflow-hidden rounded-lg transition-all duration-300 ease-in-out",
 									!isFullscreenMode &&
 										!shouldRenderFullscreenFileOnly &&
 										"my-2 border border-border bg-card",
@@ -1206,7 +1208,7 @@ function Topic({
 					<>
 						<ResizableDivider
 							position="left"
-							offsetLeft={messagePanelWidth + 5}
+							offsetLeft={messagePanelWidth + 2}
 							onResizeStart={handleMessagePanelResizeStart}
 							onHoverChange={setIsMessagePanelHovering}
 						/>

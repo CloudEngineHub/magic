@@ -3,6 +3,6 @@ export interface ResizableDividerProps {
 	position?: "left" | "right"
 	isDragging?: boolean
 	onHoverChange?: (isHovering: boolean) => void
-	// Offset from left edge when position="right", used to position divider at dynamic width
+	// Distance from the panel boundary used to position the divider at a dynamic width.
 	offsetLeft?: number
 }
