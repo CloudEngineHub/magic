@@ -255,9 +255,11 @@ class MagicClawReconciliationRepository
         $pending = 0;
         $failed = 0;
         foreach ($counts as $row) {
-            $claws[(string) $row->claw_id][(string) $row->status] = (int) $row->total;
-            $pending += $row->status === 'pending' ? (int) $row->total : 0;
-            $failed += $row->status === 'failed' ? (int) $row->total : 0;
+            // FetchModeListener returns arrays; also support the default object fetch mode.
+            $row = (array) $row;
+            $claws[(string) $row['claw_id']][(string) $row['status']] = (int) $row['total'];
+            $pending += $row['status'] === 'pending' ? (int) $row['total'] : 0;
+            $failed += $row['status'] === 'failed' ? (int) $row['total'] : 0;
         }
         $status = $operation['status'];
         if ($status !== 'superseded') {

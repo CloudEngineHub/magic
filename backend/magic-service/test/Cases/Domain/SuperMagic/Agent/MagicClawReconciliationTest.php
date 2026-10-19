@@ -24,6 +24,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\Respons
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
 use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use App\Infrastructure\Util\Locker\LockerInterface;
+use App\Listener\FetchModeListener;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Context\Context;
 use Hyperf\Coroutine\Coroutine;
@@ -37,6 +38,7 @@ use Hyperf\DbConnection\Db;
 use Hyperf\Snowflake\IdGeneratorInterface;
 use HyperfTest\Support\MagicClawTestEnvironment;
 use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\NullLogger;
@@ -157,6 +159,55 @@ final class MagicClawReconciliationTest extends TestCase
         $this->repository->bindConverter(1, 'replacement-converter');
         $this->repository->clearConverter(1, 'actual-converter');
         self::assertSame('replacement-converter', $this->repository->converterSandbox(1));
+    }
+
+    #[DataProvider('fetchModes')]
+    public function testProgressSupportsBothFetchModes(bool $associative): void
+    {
+        if ($associative) {
+            $listener = new FetchModeListener();
+            $events = $this->createMock(EventDispatcherInterface::class);
+            $events->method('dispatch')->willReturnCallback(static function (object $event) use ($listener): object {
+                $listener->process($event);
+                return $event;
+            });
+            $this->db->setEventDispatcher($events);
+        }
+
+        $operation = $this->repository->create('org', 'admin', 'policy_changed');
+        foreach ([1 => ['stopped', 'stopped'], 2 => ['failed', 'stopped'], 3 => ['pending'], 4 => ['skipped'], 5 => ['stopped', 'pending']] as $clawId => $states) {
+            foreach ($states as $topicId => $state) {
+                $this->db->table('magic_claw_permission_reconciliation_items')->insert([
+                    'operation_id' => $operation['id'], 'claw_id' => $clawId, 'topic_id' => $topicId, 'status' => $state,
+                ]);
+            }
+        }
+        self::assertNull($this->repository->summarize($operation)['affected_count']);
+        $operation['scan_completed'] = true;
+        self::assertSame([
+            'operation_id' => (string) $operation['id'], 'policy_revision' => (string) $operation['id'],
+            'status' => 'running', 'affected_count' => 5, 'stopped_count' => 1, 'failed_count' => 1, 'skipped_count' => 1,
+        ], $this->repository->summarize($operation));
+
+        $this->db->table('magic_claw_permission_reconciliation_items')->where('status', 'pending')->update(['status' => 'stopped']);
+        $progress = $this->repository->summarize($operation);
+        self::assertSame('partial_failed', $progress['status']);
+        self::assertSame(3, $progress['stopped_count']);
+        self::assertSame(1, $progress['failed_count']);
+
+        $this->db->table('magic_claw_permission_reconciliation_items')->where('status', 'failed')->update(['status' => 'stopped']);
+        $progress = $this->repository->summarize($operation);
+        self::assertSame('completed', $progress['status']);
+        self::assertSame(4, $progress['stopped_count']);
+        self::assertSame(0, $progress['failed_count']);
+        self::assertSame(1, $progress['skipped_count']);
+        $operation['status'] = 'superseded';
+        self::assertSame('superseded', $this->repository->summarize($operation)['status']);
+    }
+
+    public static function fetchModes(): array
+    {
+        return ['default objects' => [false], 'production associative arrays' => [true]];
     }
 
     public function testResumeKeepsNewerPausesAndPreservesStopHistory(): void
