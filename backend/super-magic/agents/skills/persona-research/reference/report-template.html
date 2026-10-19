@@ -10,6 +10,8 @@
   - Every hypothesis, recommendation, and theme carries an evidence bar (.evidence-bar).
   - Persona portraits and colours are drawn by the script from data-persona (the persona name, exactly as in the persona file);
     data-gender is male / female / unknown, data-age is a number. Never draw faces or hard-code colours yourself.
+  - This is illustrative sample content, not a completed study or real interview evidence.
+  - Open with a short title and #summary before images, method facts or portraits.
   - Margin notes (.margin-note) sit in the same row as the paragraph they support; put the strongest quote first.
   - Image slots (figure[data-image-slot]): fill each with one image or delete the whole figure, following
     report-templates.md "Images". A finished report never contains .image-placeholder.
@@ -21,7 +23,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- CUSTOMIZE: "<Study title> — Persona Research <Year>" -->
-    <title>Why Trial Users Churn in Week Two — Persona Research 2026</title>
+    <title>Test a First Weekly Task — Persona Research 2026</title>
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -44,14 +46,25 @@
         /* Theme tokens: a custom template may change these values but should keep the names. */
         :root { --paper: #ffffff; --ink: #17140f; --muted: #5e5852; --faint: #9a938c; --rule: #ece9e5; --sunken: #faf9f7; --link: #2f4a7a;
                 --pos: #2e7a57; --pos-bg: #e7f2ec; --mid: #a8741a; --mid-bg: #f7efdf; --neg: #b24a44; --neg-bg: #f8e9e7; }
-        body { background: var(--paper); color: var(--ink); -webkit-font-smoothing: antialiased; }
+        body { background: var(--paper); color: var(--ink); font-size: 16px; line-height: 1.7; -webkit-font-smoothing: antialiased; }
+        main { overflow-wrap: anywhere; }
+        h1, h2, h3 { text-wrap: balance; }
+        main > header h1 { max-width: 24ch; }
+        .opening { border-top: 3px solid var(--link); padding-top: 20px; }
+        .opening-answer { max-width: 34em; font-size: clamp(20px, 2.4vw, 26px); line-height: 1.55; font-weight: 700; }
+        .opening-reasons { max-width: 42em; }
+        .opening-limit { max-width: 48em; color: var(--muted); font-size: 14px; line-height: 1.7; }
+        .validation-priorities { display: grid; gap: 12px; }
+        .validation-priorities li { padding-inline-start: 14px; border-inline-start: 2px solid var(--rule); }
+        .validation-priorities p { margin-top: 3px; font-size: 14px; color: var(--muted); }
+        @media (min-width: 760px) { .validation-priorities { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
         .top-bar { background: rgba(255,255,255,0.92); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--rule); }
         .toc a { display: block; padding: 4px 0 4px 12px; border-left: 1px solid #e2ded9; color: var(--faint); text-decoration: none; font-size: 13px; }
         .toc a:hover, .toc a.is-active { color: var(--ink); border-left: 2px solid var(--ink); padding-left: 11px; font-weight: 500; }
         .section-title { font-size: 22px; font-weight: 900; letter-spacing: -0.02em; }
         .fact b { display: block; font-size: 15px; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
-        .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
-        .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+        .chip { display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 2px 9px; max-width: 100%; line-height: 1.5; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: normal; }
+        .chip::before { content: ""; flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
         .verdict-supported { color: var(--pos); background: var(--pos-bg); }
         .verdict-refuted { color: var(--neg); background: var(--neg-bg); }
         .verdict-mixed { color: var(--mid); background: var(--mid-bg); }
@@ -67,7 +80,7 @@
         .voices-differ { color: var(--neg); background: var(--neg-bg); }
         .voices-silent { color: #555; background: #f0eeeb; }
         .citation-ref { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--link); vertical-align: super; line-height: 0; margin-left: 1px; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
-        .evidence-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--faint); padding-top: 10px; border-top: 1px dashed var(--rule); }
+        .evidence-bar { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); padding-top: 10px; border-top: 1px dashed var(--rule); }
         .evidence-bar span { display: inline-flex; align-items: center; gap: 5px; }
         /* Opening mark hangs outside the text so every line starts on the same edge. */
         .hang { position: relative; }
@@ -98,92 +111,66 @@
     <nav class="top-bar sticky top-0 z-50">
         <div class="max-w-6xl mx-auto px-5 h-12 flex items-center gap-3 text-[13px]">
             <span class="font-bold">Trial Churn</span>
-            <span class="text-faint">AI persona research</span>
+            <span class="text-muted">AI persona research · Template preview</span>
         </div>
     </nav>
 
-    <div class="max-w-6xl mx-auto px-5 lg:grid lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-12 py-12">
+    <div class="max-w-6xl mx-auto px-5 lg:grid lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-12 py-7 sm:py-10">
         <!-- Table of contents: one link per section that exists, in page order -->
         <aside class="toc hidden lg:block sticky top-20 self-start space-y-0.5">
             <p class="text-xs text-faint mb-2 tracking-wide">Contents</p>
             <a href="#summary">Bottom line</a>
             <a href="#hypotheses">Hypotheses</a>
             <a href="#business">Recommendations</a>
+            <a href="#method">Scope and method</a>
             <a href="#findings">Findings</a>
             <a href="#real-voices">Real voices</a>
+            <a href="#tensions">Disagreements</a>
             <a href="#personas">Personas</a>
             <a href="#voices">Quotes</a>
             <a href="#limitations">Limitations</a>
+            <a href="#validation">Real-person validation</a>
             <a href="#sources">Sources</a>
         </aside>
 
-        <main class="min-w-0 space-y-16">
-            <!-- Cover -->
-            <header class="space-y-5">
-                <p class="text-xs text-faint tracking-wide"><i class="fa-solid fa-users mr-1.5"></i>AI persona research · User research</p>
-                <h1 class="text-[34px] sm:text-[40px] leading-tight font-black tracking-tight">Why do trial users churn in week two?</h1>
-                <p class="text-[15px] leading-7 text-muted max-w-3xl">Research question: why do our trial users stop opening the app in the second week, and what would bring them back?</p>
-                <!-- Image slot. Filled: <img src="…" alt="…" class="aspect-[21/9]"> plus <figcaption>, no placeholder -->
-                <figure class="report-figure" data-image-slot="cover" data-image-source="search" data-image-ratio="21:9"
-                        data-image-hint="The target users in their real setting, for example a small-shop owner at the counter">
-                    <div class="image-placeholder aspect-[21/9]"><i class="fa-regular fa-image"></i>Cover image: the target users in their real setting</div>
-                    <figcaption>Photo: source site</figcaption>
-                </figure>
-                <!-- Key facts: method, effective sample (completed interviews, planned in brackets), web sources, quote self-check -->
-                <div class="fact grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 border-y border-rule text-xs text-faint">
-                    <span><b>JTBD</b>Method</span>
-                    <span><b>7 of 8 planned · 5 rounds</b>AI-simulated interviews</span>
-                    <span><b>12</b>Web sources</span>
-                    <span><b>All quotes checked</b>Quote self-check</span>
-                </div>
-                <!-- Panel: one entry per persona in panel order; the script draws portraits from data-persona -->
-                <div class="flex flex-wrap gap-4">
-                    <a href="#personas" class="flex flex-col items-center gap-1 text-xs text-muted w-16 text-center no-underline">
-                        <span class="persona-portrait w-11 h-11" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>Zhang Wei
-                    </a>
-                    <a href="#personas" class="flex flex-col items-center gap-1 text-xs text-muted w-16 text-center no-underline">
-                        <span class="persona-portrait w-11 h-11" data-persona="Li Na" data-gender="female" data-age="34"></span>Li Na
-                    </a>
-                </div>
-                <div class="flex gap-3 rounded-xl bg-sunken border border-rule px-4 py-3 text-[13px] leading-6 text-muted">
-                    <i class="fa-solid fa-circle-info mt-1 text-faint"></i>
-                    <p>Respondents are AI-simulated personas built from public sources and stated assumptions, <b class="text-ink font-medium">not real users</b>. Treat findings as hypotheses to validate with the attached questionnaire. AI samples do not support statistical inference, so this report says "most", "some", and "a few" instead of counts.</p>
-                </div>
+        <main class="min-w-0 space-y-12">
+            <!-- Short title only; the decision immediately follows. No decorative cover before #summary. -->
+            <header class="space-y-2">
+                <p class="text-xs text-muted">Trial retention · Illustrative sample, not research results</p>
+                <h1 class="text-[28px] sm:text-[34px] leading-snug font-bold tracking-tight">Test a first weekly task before adding features</h1>
             </header>
 
             <!-- Bottom line first: the decision verdict, the one-sentence answer, the reasons, then what to validate.
                  Decision badge class: decision-go (worth doing), decision-conditional (only under the stated conditions),
                  decision-nogo (not as currently framed). Badge text in the user's language. -->
-            <section id="summary" class="space-y-5">
-                <h2 class="section-title">Bottom line</h2>
+            <section id="summary" class="opening space-y-4" aria-labelledby="summary-title">
+                <h2 id="summary-title" class="section-title">What to do next</h2>
                 <div class="flex flex-wrap items-center gap-2">
-                    <span class="chip decision-conditional">Worth doing only if onboarding changes</span>
-                    <span class="text-[13px] text-faint">Decision: whether to redesign the first-week onboarding.</span>
+                    <span class="chip decision-conditional">Test first · pending real-person validation</span>
+                    <span class="text-[13px] text-muted">Decision: whether to redesign first-week onboarding.</span>
                 </div>
-                <!-- One sentence that answers the research question directly -->
-                <p class="text-[19px] leading-9 font-bold max-w-3xl">Week-two churn is driven less by missing features than by the absence of a first "win" in week one.<a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a></p>
-                <!-- 2-3 reasons, one line each, the strongest first -->
-                <ol class="space-y-2 text-[15px] leading-7 list-decimal pl-5 max-w-3xl">
-                    <li>Users who never tie the app to a recurring task forget it once the novelty fades.<a href="#q2" class="citation-ref">[Q2]</a></li>
-                    <li>Peers, not feature lists, are what make owner-operators try again.<a href="#s2" class="citation-ref">[S2]</a></li>
+                <!-- Recommendation, not an established cause: no source yet covers this study's core claim. -->
+                <p class="opening-answer">First test whether helping trial users finish one weekly task makes them return; the AI interviews suggest this may matter, but do not establish why users leave.<a href="#q1" class="citation-ref">[Q1]</a></p>
+                <ol class="opening-reasons space-y-2 list-decimal pl-5">
+                    <li><b>Trying did not become a habit.</b> Some AI interviewees described using the app and then forgetting it.<a href="#q1" class="citation-ref">[Q1]</a></li>
+                    <li><b>The reason is still uncertain.</b> External benchmarks describe retention in general, not why this app's users stopped.<a href="#s1" class="citation-ref">[S1]</a></li>
                 </ol>
-                <!-- Evidence base of the verdict; homogeneity warnings and skipped or overridden leak checks go here too -->
+                <!-- Use completed sample size, never counts per stance. Keep material warnings here, not only in limitations. -->
                 <div class="evidence-bar">
-                    <span><i class="fa-solid fa-link"></i>Web sources: 12</span>
-                    <span><i class="fa-solid fa-robot"></i>AI interviews: 7 people</span>
-                    <span><i class="fa-solid fa-user-check"></i>Real-person validation: not done</span>
+                    <span>External sources: 4</span>
+                    <span>AI-simulated interviews: 7 completed</span>
+                    <span>Real-person validation: not done</span>
                 </div>
-                <!-- What would change this conclusion, in one line -->
-                <p class="text-[13px] text-muted">Would change if: real trial users name a missing feature as the reason they stopped.</p>
-                <h3 class="text-sm font-bold pt-2">Validate these first</h3>
-                <!-- The 3 most decision-relevant open questions, each tied to a hypothesis -->
-                <ol class="divide-y divide-rule border-y border-rule">
-                    <li class="py-4 grid grid-cols-[44px_minmax(0,1fr)] gap-3">
-                        <span class="font-mono text-xs text-faint pt-0.5">H1</span>
-                        <div><p class="font-medium">Do real trial users stop because the app never became part of a routine?</p>
-                            <p class="text-[13px] text-muted mt-1">Why: most AI interviews described the product as "nice but not part of my routine".<a href="#q2" class="citation-ref">[Q2]</a> How: questionnaire Q2-Q4.</p></div>
-                    </li>
-                </ol>
+                <p class="opening-limit">These are AI-simulated personas, not real users. Treat their answers as leads for testing; this sample cannot estimate how common a problem is.</p>
+                <p class="opening-limit"><b>Reconsider if:</b> real trial users name a missing feature or price as the reason they stopped.</p>
+                <div class="space-y-3 pt-2">
+                    <h3 class="text-base font-bold">Validate these first</h3>
+                    <ol class="validation-priorities">
+                        <li><span class="font-mono text-xs text-muted">H1 · Routine</span><br><b>Find where the task stops</b><p>Ask real trial users to show their latest weekly task and where they gave up. Use Q2-Q4.</p></li>
+                        <li><span class="font-mono text-xs text-muted">H2 · Price</span><br><b>Check the cost barrier</b><p>Ask what they paid for the last alternative they tried. Use Q5; do not set a price from AI answers.</p></li>
+                        <li><span class="font-mono text-xs text-muted">H3 · Trust</span><br><b>Check what prompted a trial</b><p>Ask who or what led them to try their last tool. Use Q6 before choosing a referral channel.</p></li>
+                    </ol>
+                </div>
             </section>
 
             <!-- Conclusions by hypothesis: one row per study.json hypothesis, in id order; the margin carries the lead quote -->
@@ -197,14 +184,14 @@
                             <!-- Badge text in the user's language; AI-only evidence caps the verdict at "mixed" -->
                             <span class="chip verdict-mixed">Mixed · pending real-person validation</span>
                         </div>
-                        <h3 class="text-[17px] font-bold leading-relaxed">Users churn because they never tie the app to a recurring task</h3>
-                        <p class="text-[14.5px] leading-8 text-muted">Most completed interviews describe trying the app twice and forgetting it; no external source covers week-two behaviour yet.<a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a></p>
+                        <h3 class="text-[17px] font-bold leading-relaxed">AI interviews suggest a missing routine; the cause of churn is unconfirmed</h3>
+                        <p class="text-[14.5px] leading-8 text-muted">Some completed AI interviews describe trying the app and forgetting it; no external source covers week-two behaviour yet.<a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a></p>
                         <!-- The judging criteria stay available but folded, so each hypothesis reads as verdict + reason -->
                         <details class="text-xs text-faint"><summary class="cursor-pointer select-none">Judging criteria</summary>
                             <p class="mt-1">Support if: most participants describe no recurring use. Refute if: most name a missing feature as the reason they stopped.</p></details>
                         <div class="evidence-bar">
                             <span><i class="fa-solid fa-link"></i>Web sources: 1</span>
-                            <span><i class="fa-solid fa-robot"></i>AI interviews: 7 people</span>
+                            <span><i class="fa-solid fa-robot"></i>AI interviews: 7 completed</span>
                             <span><i class="fa-solid fa-user-check"></i>Real-person validation: not done</span>
                         </div>
                     </div>
@@ -222,11 +209,7 @@
                  how to test them cheaply; never present a launch plan the verdict argues against. -->
             <section id="business" class="space-y-5">
                 <h2 class="section-title">Business recommendations</h2>
-                <figure class="report-figure" data-image-slot="concept" data-image-source="generate" data-image-ratio="16:9"
-                        data-image-hint="The recommended positioning as a product-in-use scene, illustrative only">
-                    <div class="image-placeholder aspect-[16/9]"><i class="fa-regular fa-image"></i>Concept image: the recommended positioning in use</div>
-                    <figcaption>AI-generated illustration, not research evidence</figcaption>
-                </figure>
+
                 <div class="divide-y divide-rule border-y border-rule">
                     <!-- Each row: label, recommendation, related hypotheses, evidence, and what to validate first -->
                     <div class="grid sm:grid-cols-[160px_minmax(0,1fr)] gap-x-6 gap-y-1 py-4">
@@ -235,22 +218,25 @@
                             <p class="font-medium">Start with owner-operators who already run one recurring weekly task on paper.</p>
                             <p class="text-xs text-faint">Hypotheses: H1 · Evidence: <a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a> · Validate first: which weekly task they would move first.</p>
                         </div>
+                        <div class="evidence-bar sm:col-span-2"><span>External sources: 1</span><span>AI interviews: 7 completed</span><span>Real-person validation: not done</span></div>
                     </div>
                     <div class="grid sm:grid-cols-[160px_minmax(0,1fr)] gap-x-6 gap-y-1 py-4">
                         <p class="text-xs text-faint pt-1">One-line positioning</p>
                         <div class="space-y-1">
                             <p class="font-medium">"Your weekly routine, done in five minutes."</p>
-                            <p class="text-xs text-faint">Hypotheses: H1 · Validate first: whether real users describe the job in these words.</p>
+                            <p class="text-xs text-faint">Hypotheses: H1 · Evidence: <a href="#q2" class="citation-ref">[Q2]</a> · Validate first: whether real users describe the job in these words.</p>
                         </div>
+                        <div class="evidence-bar sm:col-span-2"><span>External sources: 0</span><span>AI interviews: 7 completed</span><span>Real-person validation: not done</span></div>
                     </div>
                     <div class="grid sm:grid-cols-[160px_minmax(0,1fr)] gap-x-6 gap-y-1 py-4">
                         <p class="text-xs text-faint pt-1">Pricing direction</p>
                         <div class="space-y-2">
-                            <p class="font-medium">A low monthly tier in the range of 30-60 per month, with annual billing as an option.</p>
+                            <p class="font-medium">No pricing range is justified yet. Collect actual spending and willingness-to-pay evidence before proposing a range.</p>
                             <!-- Mandatory warning: ranges only, never a single price point -->
                             <p class="text-xs rounded-lg px-3 py-2" style="background: var(--mid-bg); color: var(--mid)">AI respondents are optimistic about price. Use this as a direction only, not to set a price, until real customers confirm it.</p>
-                            <p class="text-xs text-faint">Hypotheses: H2 · Validate first: willingness to pay after a two-week trial.</p>
+                            <p class="text-xs text-faint">Hypotheses: H2 · Evidence: pricing evidence not collected. Validate first: willingness to pay after a two-week trial.</p>
                         </div>
+                        <div class="evidence-bar sm:col-span-2"><span>External sources: 0</span><span>AI interviews: 7 completed</span><span>Real-person validation: not done</span></div>
                     </div>
                     <div class="grid sm:grid-cols-[160px_minmax(0,1fr)] gap-x-6 gap-y-1 py-4">
                         <p class="text-xs text-faint pt-1">Channels and reach</p>
@@ -258,6 +244,7 @@
                             <p class="font-medium">Referrals from existing users in the same trade, plus supplier partnerships.</p>
                             <p class="text-xs text-faint">Hypotheses: H3 · Evidence: <a href="#s2" class="citation-ref">[S2]</a> · Validate first: who they asked last time they adopted a tool.</p>
                         </div>
+                        <div class="evidence-bar sm:col-span-2"><span>External sources: 1</span><span>AI interviews: 7 completed</span><span>Real-person validation: not done</span></div>
                     </div>
                     <div class="grid sm:grid-cols-[160px_minmax(0,1fr)] gap-x-6 gap-y-1 py-4">
                         <p class="text-xs text-faint pt-1">First 30 days</p>
@@ -266,18 +253,35 @@
                                 <li>Run the validation questionnaire with 8-15 current trial users.</li>
                                 <li>Prototype a three-day onboarding that ends with one recurring task set up.</li>
                             </ol>
-                            <p class="text-xs text-faint">Hypotheses: H1, H2 · Validate first: H1 with real trial users.</p>
+                            <p class="text-xs text-faint">Hypotheses: H1, H2 · Evidence: <a href="#q1" class="citation-ref">[Q1]</a> · Validate first: H1 with real trial users.</p>
                         </div>
+                        <div class="evidence-bar sm:col-span-2"><span>External sources: 0</span><span>AI interviews: 7 completed</span><span>Real-person validation: not done</span></div>
                     </div>
                 </div>
+                <figure class="report-figure" data-image-slot="concept" data-image-source="generate" data-image-ratio="16:9"
+                        data-image-hint="The recommended positioning as a product-in-use scene, illustrative only">
+                    <div class="image-placeholder aspect-[16/9]"><i class="fa-regular fa-image"></i>Concept image: the recommended positioning in use</div>
+                    <figcaption>AI-generated illustration, not research evidence</figcaption>
+                </figure>
             </section>
 
             <!-- Scope and method -->
             <section id="method" class="space-y-4">
                 <h2 class="section-title">Scope and method</h2>
+                <div class="fact grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 border-y border-rule text-xs text-faint">
+                    <span><b>JTBD</b>Method</span>
+                    <span><b>7 completed · 8 planned</b>AI-simulated interviews</span>
+                    <span><b>4</b>External sources</span>
+                    <span><b>All quotes checked</b>Quote self-check</span>
+                </div>
+                <figure class="report-figure" data-image-slot="cover" data-image-source="search" data-image-ratio="21:9"
+                        data-image-hint="The target users in their real setting, for example a small-shop owner at the counter">
+                    <div class="image-placeholder aspect-[21/9]"><i class="fa-regular fa-image"></i>Cover image: the target users in their real setting</div>
+                    <figcaption>Photo: source site</figcaption>
+                </figure>
                 <dl class="grid sm:grid-cols-3 gap-x-6 gap-y-3 text-sm">
                     <div><dt class="text-xs text-faint mb-1">Audience</dt><dd class="font-medium">Trial users of SMB productivity apps, tier 1-3 cities</dd></div>
-                    <div><dt class="text-xs text-faint mb-1">Methods</dt><dd class="font-medium">Desk research, 8 one-on-one interviews (max 5 rounds), 1 focus group</dd></div>
+                    <div><dt class="text-xs text-faint mb-1">Methods</dt><dd class="font-medium">Desk research, 7 completed AI interviews (8 planned, max 5 rounds), 1 focus group</dd></div>
                     <div><dt class="text-xs text-faint mb-1">Framework</dt><dd class="font-medium">JTBD: trigger, job, workaround, switching anxiety</dd></div>
                 </dl>
             </section>
@@ -299,11 +303,11 @@
                 <article class="grid lg:grid-cols-[minmax(0,1fr)_240px] gap-x-10 gap-y-4 py-6 border-b border-rule">
                     <div class="space-y-2.5">
                         <div class="flex items-center gap-2">
-                            <h3 class="text-[17px] font-bold">Trust comes from peers, not features</h3>
+                            <h3 class="text-[17px] font-bold">AI interviews suggest peer examples may prompt a trial</h3>
                             <!-- Class confidence-<synthesis confidence>; badge text in the user's language -->
-                            <span class="chip confidence-medium">Medium confidence</span>
+                            <span class="chip confidence-to_validate">Pending real-person validation</span>
                         </div>
-                        <p class="text-[14.5px] leading-8 text-muted">Most owner-operators delay adoption until someone they know uses the product; feature lists did not move them.<a href="#s2" class="citation-ref">[S2]</a></p>
+                        <p class="text-[14.5px] leading-8 text-muted">Some simulated owner-operators wanted to see a peer using the product before trying it. The external adoption guide is background, not confirmation for this audience.<a href="#s2" class="citation-ref">[S2]</a></p>
                         <!-- Segment differences from stance_by_persona -->
                         <ul class="text-sm list-disc pl-5 space-y-1 text-muted">
                             <li><span class="font-medium text-ink">Owner-operators:</span> most support; peer proof is the trigger to try.</li>
@@ -312,7 +316,7 @@
                         <p class="text-xs text-faint">Counter-evidence: one efficiency-driven owner adopted after a free trial without peer proof.<a href="#q4" class="citation-ref">[Q4]</a> Related: H3.</p>
                         <div class="evidence-bar">
                             <span><i class="fa-solid fa-link"></i>Web sources: 1</span>
-                            <span><i class="fa-solid fa-robot"></i>AI interviews: 5 people</span>
+                            <span><i class="fa-solid fa-robot"></i>AI interviews: 7 completed</span>
                             <span><i class="fa-solid fa-user-check"></i>Real-person validation: not done</span>
                         </div>
                     </div>
@@ -330,7 +334,7 @@
             <section id="real-voices" class="space-y-2">
                 <h2 class="section-title">Real voices vs. AI voices</h2>
                 <p class="text-[13px] text-faint">Sampled from public posts and comments (2 platforms, 40 posts, 310 comments). Real voices check whether the AI interviews drifted.</p>
-                <p class="text-[14px] leading-7 text-muted"><span class="chip voices-agree mr-1.5">Same as the interviews</span>Peer proof before trying, forgetting the app after week one.<a href="#s3" class="citation-ref">[S3]</a><a href="#s4" class="citation-ref">[S4]</a></p>
+                <p class="text-[14px] leading-7 text-muted"><span class="chip voices-agree mr-1.5">Same as the interviews</span>Public posts also mention peer examples and forgetting a trial; this does not establish why this app’s users stopped.<a href="#s3" class="citation-ref">[S3]</a><a href="#s4" class="citation-ref">[S4]</a></p>
                 <article class="py-6 border-b border-rule space-y-4">
                     <div class="flex items-center gap-2">
                         <h3 class="text-[17px] font-bold">Price is the first question, not the last</h3>
@@ -344,11 +348,11 @@
                         </div>
                         <div class="margin-note space-y-2" data-persona-tone="Zhang Wei">
                             <p class="text-xs text-faint"><i class="fa-solid fa-robot mr-1"></i>AI interview</p>
-                            <p class="hang text-[14.5px] font-bold leading-7">Price comes up once I already like it.</p>
+                            <p class="hang text-[14.5px] font-bold leading-7">Not before I see a friend using it.</p>
                             <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>Zhang Wei · <a href="#q3" class="text-link">Q3</a></p>
                         </div>
                     </div>
-                    <p class="text-[13px] text-muted">What it means: AI respondents may underweight price; H2 needs real-person data before pricing work.</p>
+                    <p class="text-[13px] text-muted">What it means: public posts foreground price while this AI answer focuses on peer trust. Our inference is that H2 needs real-person data before pricing work.</p>
                     <!-- For voices-differ rows, add one line on what the gap means for the conclusion and which hypothesis it weakens. -->
                 </article>
             </section>
@@ -364,6 +368,14 @@
             <!-- Persona panel: one card per persona; the head takes the persona colour -->
             <section id="personas" class="space-y-4">
                 <h2 class="section-title">Persona panel</h2>
+                <div class="flex flex-wrap gap-4">
+                    <a href="#personas" class="flex flex-col items-center gap-1 text-xs text-muted w-16 text-center no-underline">
+                        <span class="persona-portrait w-11 h-11" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>Zhang Wei
+                    </a>
+                    <a href="#personas" class="flex flex-col items-center gap-1 text-xs text-muted w-16 text-center no-underline">
+                        <span class="persona-portrait w-11 h-11" data-persona="Li Na" data-gender="female" data-age="34"></span>Li Na
+                    </a>
+                </div>
                 <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     <div class="rounded-2xl border border-rule overflow-hidden" data-persona-tone="Zhang Wei">
                         <div class="persona-head flex items-center gap-3 px-4 py-4">
@@ -388,6 +400,22 @@
                         <p data-source-title class="hang text-[15px] font-bold leading-7">I tried it twice the first week, then forgot it existed.</p>
                         <p class="flex items-center gap-2 text-xs text-faint mt-2"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>[Q1] <span data-source-name>Zhang Wei</span> · interview, round 2 · theme: no routine</p>
                     </a>
+                    <a id="q2" href="interviews/sample.json" class="block py-4 pl-6 pr-2 hover:bg-sunken">
+                        <p data-source-title class="hang text-[15px] font-bold leading-7">I liked trying it, but never found a weekly task for it.</p>
+                        <p class="text-xs text-muted mt-2">[Q2] <span data-source-name>Li Na</span> · AI-simulated · illustrative quote</p>
+                    </a>
+                    <a id="q3" href="interviews/sample.json" class="block py-4 pl-6 pr-2 hover:bg-sunken">
+                        <p data-source-title class="hang text-[15px] font-bold leading-7">Not before I see a friend using it.</p>
+                        <p class="text-xs text-muted mt-2">[Q3] <span data-source-name>Zhang Wei</span> · AI-simulated · illustrative quote</p>
+                    </a>
+                    <a id="q4" href="interviews/sample.json" class="block py-4 pl-6 pr-2 hover:bg-sunken">
+                        <p data-source-title class="hang text-[15px] font-bold leading-7">I tried the free version without asking anyone.</p>
+                        <p class="text-xs text-muted mt-2">[Q4] <span data-source-name>Li Na</span> · AI-simulated · illustrative quote</p>
+                    </a>
+                    <a id="q5" href="interviews/sample.json" class="block py-4 pl-6 pr-2 hover:bg-sunken">
+                        <p data-source-title class="hang text-[15px] font-bold leading-7">I would not record customer details in a new tool.</p>
+                        <p class="text-xs text-muted mt-2">[Q5] <span data-source-name>Zhang Wei</span> · AI-simulated · illustrative quote</p>
+                    </a>
                 </div>
             </section>
 
@@ -408,7 +436,8 @@
             <section id="validation" class="space-y-4">
                 <h2 class="section-title">Validate with real people</h2>
                 <p class="text-[14px] leading-7 text-muted max-w-3xl">Run <a class="text-link underline" href="validation-questionnaire.md">validation-questionnaire.md</a> (or import <a class="text-link underline" href="validation-questionnaire.csv">validation-questionnaire.csv</a> into a survey tool) with 8-15 real people. Each question is tagged with its hypothesis, for example [H1]. Validate H1 first.</p>
-                <!-- Include this table only after real-person answers are compared (from validation-results.json); mark disagreements in red -->
+                <!-- Include this table only after real-person answers are compared (from validation-results.json); mark disagreements in red.
+                Example only: insert and populate this table after validation_compared.
                 <div class="overflow-x-auto border-y border-rule">
                     <table class="w-full text-sm">
                         <thead class="text-xs text-faint text-left"><tr><th class="py-2 pr-4 font-normal">Hypothesis</th><th class="py-2 pr-4 font-normal">AI verdict</th><th class="py-2 pr-4 font-normal">Real people (12)</th><th class="py-2 font-normal">Agreement</th></tr></thead>
@@ -418,6 +447,7 @@
                         </tbody>
                     </table>
                 </div>
+                -->
             </section>
 
             <!-- Sources: every [S#] target lives here -->
@@ -427,6 +457,18 @@
                     <li><a href="https://example.com/trial-retention-benchmarks" target="_blank" id="s1" class="flex gap-3 py-3 hover:bg-sunken group">
                         <span class="font-mono text-xs text-faint w-9 shrink-0 pt-0.5">[S1]</span>
                         <span class="min-w-0"><span data-source-title class="block text-sm font-medium text-link group-hover:underline">SaaS Trial Retention Benchmarks</span><span data-source-name class="block text-xs text-faint">Example Research</span></span>
+                    </a></li>
+                    <li><a href="https://example.com/sample-source-2" target="_blank" id="s2" class="flex gap-3 py-3 hover:bg-sunken group">
+                        <span class="font-mono text-xs text-muted w-9 shrink-0 pt-0.5">[S2]</span>
+                        <span class="min-w-0"><span data-source-title class="block text-sm font-medium text-link group-hover:underline">Tool Adoption Guide</span><span data-source-name class="block text-xs text-muted">Illustrative source</span></span>
+                    </a></li>
+                    <li><a href="https://example.com/sample-source-3" target="_blank" id="s3" class="flex gap-3 py-3 hover:bg-sunken group">
+                        <span class="font-mono text-xs text-muted w-9 shrink-0 pt-0.5">[S3]</span>
+                        <span class="min-w-0"><span data-source-title class="block text-sm font-medium text-link group-hover:underline">Public Discussion: Trial Costs</span><span data-source-name class="block text-xs text-muted">Illustrative source</span></span>
+                    </a></li>
+                    <li><a href="https://example.com/sample-source-4" target="_blank" id="s4" class="flex gap-3 py-3 hover:bg-sunken group">
+                        <span class="font-mono text-xs text-muted w-9 shrink-0 pt-0.5">[S4]</span>
+                        <span class="min-w-0"><span data-source-title class="block text-sm font-medium text-link group-hover:underline">Public Discussion: Forgotten Trials</span><span data-source-name class="block text-xs text-muted">Illustrative source</span></span>
                     </a></li>
                 </ol>
             </section>
