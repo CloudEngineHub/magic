@@ -10,21 +10,9 @@ import {
 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
-import { toast } from "sonner"
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "@/components/shadcn-ui/alert-dialog"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
 import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/components/MobileInputContainer"
-import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
@@ -32,6 +20,7 @@ import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
 import { useResearchTemplates } from "../hooks/useResearchTemplates"
+import { useStudyActions } from "../hooks/useStudyActions"
 import PersonaAvatar from "../components/PersonaAvatar"
 import ResearchComposerOptions, {
 	type ReportTemplateOption,
@@ -71,16 +60,12 @@ function ResearchHomePage() {
 	const heroWidth = useSize(heroRef)?.width
 	const heroSplit = !isMobile && (heroWidth === undefined || heroWidth >= HERO_SPLIT_MIN_WIDTH)
 	const templates = useResearchTemplates()
-	const [pendingDelete, setPendingDelete] = useState<Topic | null>(null)
+	const { openStudy, requestDelete, deleteDialog } = useStudyActions()
 
 	// The home composer always starts a new study, never continues the last opened one.
 	useEffect(() => {
 		store.selectStudy(undefined)
 	}, [store])
-
-	const openStudy = useMemoizedFn((topic: Topic) => {
-		navigate({ name: RouteName.PersonaResearchStudy, params: { topicId: topic.id } })
-	})
 
 	// Study settings beside the composer; remembered per browser as a convenience only.
 	const [options, setOptions] = useState<ResearchOptions>(readSavedOptions)
@@ -138,18 +123,6 @@ function ResearchHomePage() {
 		document
 			.querySelector('[data-testid="persona-research-composer"]')
 			?.scrollIntoView({ behavior: "smooth", block: "center" })
-	})
-
-	const confirmDelete = useMemoizedFn(async () => {
-		const topic = pendingDelete
-		setPendingDelete(null)
-		if (!topic) return
-		try {
-			await store.deleteStudy(topic.id)
-			toast.success(t("home.deleted"))
-		} catch {
-			toast.error(t("home.deleteFailed"))
-		}
 	})
 
 	const libraryPersonas = store.personas.map((ref) => ref.data)
@@ -430,33 +403,13 @@ function ResearchHomePage() {
 
 				<StudyListSection
 					onOpen={openStudy}
-					onDelete={setPendingDelete}
+					onDelete={requestDelete}
 					onTrySample={() => applyStarter(t("home.samplePrompt"))}
+					onViewAll={() => navigate({ name: RouteName.PersonaResearchStudies })}
 				/>
 			</div>
 
-			<AlertDialog
-				open={Boolean(pendingDelete)}
-				onOpenChange={(open) => !open && setPendingDelete(null)}
-			>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>{t("home.deleteTitle")}</AlertDialogTitle>
-						<AlertDialogDescription>
-							{t("home.deleteDescription")}
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-						<AlertDialogAction
-							className="bg-destructive text-white hover:bg-destructive/90"
-							onClick={() => void confirmDelete()}
-						>
-							{t("home.delete")}
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
+			{deleteDialog}
 			{/* The page is fully rendered once the shell shows it (the store loads before). */}
 			<ResearchOnboarding page="home" ready onFinish={focusComposer} />
 		</ScrollArea>

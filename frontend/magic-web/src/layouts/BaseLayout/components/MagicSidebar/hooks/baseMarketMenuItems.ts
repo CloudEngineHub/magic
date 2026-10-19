@@ -25,6 +25,7 @@ export const BASE_MARKET_MENU_ITEMS: SidebarMarketMenuItem[] = [
 			RouteName.PersonaResearch,
 			RouteName.PersonaResearchPersonas,
 			RouteName.PersonaResearchTemplates,
+			RouteName.PersonaResearchStudies,
 			RouteName.PersonaResearchStudy,
 		],
 		testId: "sidebar-content-persona-research-button",

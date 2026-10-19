@@ -112,6 +112,7 @@ export const enum RoutePath {
 	PersonaResearch = "/super/research",
 	PersonaResearchPersonas = "/super/research/personas",
 	PersonaResearchTemplates = "/super/research/templates",
+	PersonaResearchStudies = "/super/research/studies",
 	PersonaResearchStudy = "/super/research/:topicId",
 	SuperAssistant = "/super/assistant",
 	CrewMarket = "/market",

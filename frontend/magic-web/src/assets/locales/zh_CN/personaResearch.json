@@ -287,7 +287,8 @@
 		"templatesHint": "选一个研究方法，内容可以再改",
 		"templatesTitle": "从一个问题开始",
 		"title": "拍板之前，\n先听听客户怎么说。",
-		"trySample": "试试示例研究"
+		"trySample": "试试示例研究",
+		"viewAllStudies": "查看全部 {{count}} 项"
 	},
 	"hypothesis": {
 		"aiOnly": "仅 AI 访谈，无外部对照",
@@ -725,6 +726,10 @@
 		"idle": "已暂停",
 		"running": "研究中",
 		"waitingUser": "等你回复"
+	},
+	"studies": {
+		"showMore": "再显示 {{count}} 项",
+		"subtitle": "共 {{count}} 项，按最近更新排序"
 	},
 	"study": {
 		"aiDisclaimer": "受访者由 AI 模拟，不代表真实用户",

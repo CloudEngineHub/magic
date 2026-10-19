@@ -17,6 +17,9 @@ const PersonaLibraryPage = lazy(
 const ReportTemplatesPage = lazy(
 	() => import("@/pages/superMagic/pages/PersonaResearch/pages/ReportTemplatesPage"),
 )
+const ResearchStudiesPage = lazy(
+	() => import("@/pages/superMagic/pages/PersonaResearch/pages/ResearchStudiesPage"),
+)
 const NotFound = lazy(() => import("@/pages/exception/not-found"))
 
 function PersonaResearchRoute({ children }: PropsWithChildren) {
@@ -53,6 +56,12 @@ export const superMagicPersonaResearchRoutes: RouteObject[] = [
 				name: RouteName.PersonaResearchTemplates,
 				path: `/:clusterCode${RoutePath.PersonaResearchTemplates}`,
 				element: <ReportTemplatesPage />,
+				meta: { title: "routes.personaResearch" },
+			},
+			{
+				name: RouteName.PersonaResearchStudies,
+				path: `/:clusterCode${RoutePath.PersonaResearchStudies}`,
+				element: <ResearchStudiesPage />,
 				meta: { title: "routes.personaResearch" },
 			},
 			{
