@@ -11,7 +11,9 @@ import DefaultTool from "../Default"
 import type { ToolCallViewModel } from "../../types"
 import ResearchToolCard, { resolveTone } from "./ResearchToolCard"
 import type { ResearchToolTone } from "./ResearchToolCard"
-import { getPersonaChat, getPersonaChatArguments } from "./parse"
+import { useFoldedToolRun } from "@/pages/superMagic/components/MessageList/folded-tool-runs-context"
+import type { FoldedToolAttempt } from "@/pages/superMagic/components/MessageList/folded-tool-runs"
+import { getPersonaChat, getPersonaChatArguments, isSelfCorrectingError } from "./parse"
 import type { PendingPersona, PortraitHint } from "./parse"
 
 interface PersonaChatToolProps {
@@ -103,7 +105,21 @@ function PersonaChatTool({
 	const { t } = useTranslation("personaResearch")
 	// 默认展开：问答本身就是这张卡片的内容；用户收起后在本条消息内保持收起
 	const [open, toggle] = useToggleWithScrollPreserve(true, "persona-chat-expanded")
+	// 紧接着的同因失败已从消息流里隐去，由这张卡片汇总显示
+	const foldedRun = useFoldedToolRun(toolData.id)
 	const data = loading ? null : getPersonaChat(toolData.detail)
+
+	if (foldedRun && !loading) {
+		return (
+			<FoldedPersonaChat
+				toolData={toolData}
+				attempts={foldedRun}
+				classNames={classNames}
+				onMouseEnter={onMouseEnter}
+				onMouseLeave={onMouseLeave}
+			/>
+		)
+	}
 	const pending = loading ? getPersonaChatArguments(toolData.rawArguments) : null
 	const baseTone = resolveTone(loading, toolData.status)
 
@@ -128,7 +144,11 @@ function PersonaChatTool({
 			? t("toolCard.roundOf", { round, limit: data.round_limit })
 			: t("toolCard.round", { round })
 		: null
-	const tone = tonePersonaChat(baseTone, data?.answers.length ?? 0)
+	const selfCorrecting = data ? isSelfCorrectingError(data.error, data.error_reason) : false
+	const tone =
+		selfCorrecting && baseTone === "error"
+			? "partial"
+			: tonePersonaChat(baseTone, data?.answers.length ?? 0)
 
 	return (
 		<ResearchToolCard
@@ -190,7 +210,12 @@ function PersonaChatTool({
 						</li>
 					))}
 					{data?.error && (
-						<li className="flex items-start gap-1.5 text-xs text-destructive">
+						<li
+							className={cn(
+								"flex items-start gap-1.5 text-xs",
+								selfCorrecting ? "text-warning" : "text-destructive",
+							)}
+						>
 							<CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
 							<span className="min-w-0 break-words">{data.error}</span>
 						</li>
@@ -211,6 +236,70 @@ function PersonaChatTool({
 								{t("toolCard.answering")}
 							</span>
 						</Turn>
+					))}
+				</ol>
+			</ScrollArea>
+		</ResearchToolCard>
+	)
+}
+
+/**
+ * 连续多次同因失败折叠成的一张卡片：「人设访谈 · 有 N 次未执行，AI 已调整」，默认收起，
+ * 展开逐条列出每次的问题和原因。AI 会自己修正的失败用琥珀色，真正的失败才用红色。
+ */
+function FoldedPersonaChat({
+	toolData,
+	attempts,
+	classNames,
+	onMouseEnter,
+	onMouseLeave,
+}: {
+	toolData: ToolCallViewModel
+	attempts: FoldedToolAttempt[]
+	classNames?: string
+	onMouseEnter?: (evt: MouseEvent) => void
+	onMouseLeave?: (evt: MouseEvent) => void
+}) {
+	const { t } = useTranslation("personaResearch")
+	const [open, toggle] = useToggleWithScrollPreserve(false, "persona-chat-folded-expanded")
+	const selfCorrecting = attempts.every((attempt) => isSelfCorrectingError(attempt.error))
+	return (
+		<ResearchToolCard
+			toolData={toolData}
+			tone={selfCorrecting ? "partial" : "error"}
+			classNames={classNames}
+			remark={null}
+			summary={
+				<span className="min-w-0 truncate text-xs text-muted-foreground">
+					{t("toolCard.foldedAttempts", { count: attempts.length })}
+				</span>
+			}
+			open={open}
+			onToggle={toggle}
+			onMouseEnter={onMouseEnter}
+			onMouseLeave={onMouseLeave}
+		>
+			<ScrollArea
+				className="[&_[data-radix-scroll-area-viewport]>div]:!block"
+				viewportClassName="max-h-72"
+			>
+				<ol className="m-0 flex list-none flex-col gap-2.5 p-3 text-xs">
+					{attempts.map((attempt, index) => (
+						<li key={attempt.toolCallId} className="flex flex-col gap-0.5">
+							<span className="line-clamp-2 break-words text-muted-foreground">
+								{t("toolCard.attempt", { index: index + 1 })}
+								{attempt.question ? ` · ${attempt.question}` : ""}
+							</span>
+							<span
+								className={cn(
+									"inline-flex items-start gap-1",
+									selfCorrecting ? "text-warning" : "text-destructive",
+								)}
+							>
+								<CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+								<span className="min-w-0 break-words">{attempt.error}</span>
+							</span>
+						</li>
 					))}
 				</ol>
 			</ScrollArea>

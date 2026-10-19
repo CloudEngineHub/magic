@@ -802,6 +802,8 @@
 	},
 	"toolCard": {
 		"answering": "正在作答…",
+		"attempt": "第 {{index}} 次",
+		"foldedAttempts": "有 {{count}} 次未执行，AI 已调整",
 		"newAndReused": "新建 {{new}} · 复用 {{reused}}",
 		"notAnswered": "未能回答",
 		"round": "第 {{round}} 轮",

@@ -46,6 +46,22 @@ export interface PersonaChatData {
 	failed: PersonaChatFailure[]
 	/** 整次请求被拒时的原因（已翻译）；此时 answers、failed 都为空 */
 	error: string
+	/** error 对应的原因码（如 invalid_request）；旧消息没有 */
+	error_reason: string
+}
+
+/**
+ * 「访谈参数不正确，AI 会修正后重试」是 AI 自己会改的可预期失败，不是要用户处理的错误：
+ * 用琥珀色而不是红色。旧消息没有原因码，只能比对后端翻译后的文案。
+ */
+const SELF_CORRECTING_REASONS = new Set(["invalid_request"])
+const SELF_CORRECTING_TEXTS = new Set([
+	"访谈参数不正确，AI 会修正后重试",
+	"The interview request was invalid; the AI will correct it and retry",
+])
+
+export function isSelfCorrectingError(error: string, errorReason = ""): boolean {
+	return SELF_CORRECTING_REASONS.has(errorReason) || SELF_CORRECTING_TEXTS.has(error.trim())
 }
 
 export interface StudyPersonaItem extends PortraitHint {
@@ -150,6 +166,7 @@ export function getPersonaChat(detail: unknown): PersonaChatData | null {
 		answers,
 		failed,
 		error: readString(data.error),
+		error_reason: readString(data.error_reason),
 	}
 }
 

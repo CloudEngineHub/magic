@@ -804,6 +804,8 @@
 	},
 	"toolCard": {
 		"answering": "Answering…",
+		"attempt": "Attempt {{index}}",
+		"foldedAttempts": "{{count}} attempts not run; the AI adjusted",
 		"newAndReused": "{{new}} new · {{reused}} reused",
 		"notAnswered": "Could not answer",
 		"round": "Round {{round}}",
