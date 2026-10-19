@@ -43,6 +43,7 @@ Turn one business question into a study: clarify, plan, desk research, AI person
 personas/<persona_id>.json          persona library, shared across studies in this project
 panels/<panel_id>.json              saved persona groups
 templates/<name>.html               report templates (visual style only), shared across studies
+study-topics/<topic_id>.json         related-topic association or primary-topic deletion state
 studies/<slug>/study.json           study state (drives the UI stepper)
 studies/<slug>/plan.md
 studies/<slug>/desk-research.md
