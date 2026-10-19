@@ -160,6 +160,13 @@ Quote every claim with the persona's exact words. `save_study_synthesis` locates
 
 ### Writing Findings
 
+Bottom line (the report's opening verdict):
+
+- `go` only when every hypothesis the decision depends on is `supported` (or `refuted`, for a no-go) with a source that covers the core claim. When any of them is `mixed`, `insufficient`, or pending real-person validation, the verdict is at most `conditional`, and the conditions are exactly the things to validate first.
+- Under the verdict, state the evidence basis in one line: web sources N, AI-simulated interviews N, real-person validation done or not done.
+- When synthesis raised a homogeneity warning, or the leak check was skipped or overridden, say so in the bottom line, not only in the limitations.
+- When only the top themes are written out in full, keep at least one theme where some personas oppose or are mixed, together with its counter-evidence; never show only the agreeing themes.
+
 - Do not write counts or ratios of personas ("5 of 8", "62%"). Use "most", "some", or "a few", and state once that AI-simulated samples do not support statistical inference.
 - Group findings by theme, and show segment differences inside each theme; a theme raised by one persona only is a signal, not a pattern.
 - Each claim cites its evidence: interview quotes (persona name + transcript file) and web sources `[S#]`. Mark claims supported only by your inference as such.
