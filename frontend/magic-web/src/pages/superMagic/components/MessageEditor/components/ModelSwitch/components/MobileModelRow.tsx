@@ -168,7 +168,7 @@ export function MobileModelRow({
 							<legend className="mb-2 text-sm text-muted-foreground">
 								{t("messageEditor.modelSwitch.reasoning.mobileLabel")}
 							</legend>
-							<div className="grid grid-cols-4 gap-2">
+							<div className="grid grid-cols-4 gap-1 rounded-xl bg-muted/60 p-1">
 								{levels.map((value) => (
 									<Button
 										key={value}
