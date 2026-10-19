@@ -264,6 +264,38 @@ async def test_save_personas_assigns_ids_tiers_and_panel(tmp_path):
     assert [(p.name, p.segment, p.age) for p in detail.data.personas] == [("Zhang", "Owners", "40"), ("Li", "Skeptics", "40")]
 
 
+async def test_save_personas_appends_new_people_after_the_study_is_done(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    first = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="Study panel",
+        personas=[_persona("Zhang", "Owners"), _persona("Li", "Skeptics")],
+    ))
+    assert first.ok, first.content
+    study = _read(tmp_path, f"{study_dir}/study.json")
+    study["phase"] = "done"
+    _write(tmp_path, f"{study_dir}/study.json", study)
+
+    # 研究结束后不带 append 仍然拒绝，并提示追加的方式。
+    replace = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[_persona("Wang", "Owners")],
+    ))
+    assert replace.ok is False and "append=true" in replace.content
+
+    added = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[_persona("Wang", "Owners")], append=True,
+    ))
+    assert added.ok, added.content
+    panel = _read(tmp_path, f"{study_dir}/panel.json")
+    assert len(panel["persona_ids"]) == 3 and panel["name"] == "Study panel"
+    assert panel["selection"][-1]["added_later"] is True
+
+    again = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", append=True,
+        personas=[{"id": panel["persona_ids"][-1], "segment": "Owners", "reason": "join again"}],
+    ))
+    assert again.ok is False and "already on this study's panel" in again.content
+
+
 async def test_save_personas_rejects_incomplete_persona_and_unknown_segment(tmp_path):
     study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
     incomplete = _persona("Zhang", "Owners")

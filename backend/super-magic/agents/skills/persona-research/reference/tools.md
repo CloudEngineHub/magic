@@ -52,6 +52,7 @@ In a `persona_build` study, call it only after the user approved the drafts; at 
 - After the keyword check, a semantic check flags stance fields that state a hypothesis's outcome in other words, and the call is rejected with each flagged persona, field, text, and hypothesis. Rewrite those fields as past facts. Only when a flag is a plain situation fact, keep it with `leak_overrides`: `[{persona, field, hypothesis_id, reason}]` (`persona` is the name or id); overrides are recorded in `panel.json` and belong in the report limitations.
 - Every persona also needs `segment` (a quota segment) and `reason`. Set `from_uploaded_people: true` only for personas built from uploaded materials about real people.
 - `panel_name` and `criteria` describe the group. Set `library_panel_name` only when the user asked to save the group to the library.
+- `append: true` adds the listed personas to the existing panel instead of replacing it, from the `interview` phase on (also after `done`). Use it to bring new people into a follow-up focus group. The panel may hold at most 12 personas in total, listed personas must not already be on it, and the same outcome-term and semantic checks apply to them.
 
 ```python
 result = tool.call("save_personas", {

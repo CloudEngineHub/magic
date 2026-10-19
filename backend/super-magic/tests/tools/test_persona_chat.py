@@ -349,6 +349,19 @@ async def test_focus_group_saves_its_topic_once(tool, tmp_path, fake_llm):
     assert _read(tmp_path, DISCUSSION)["topic"] == "按月付费的小家电会员"
 
 
+async def test_new_focus_group_stops_at_the_study_cap(tool, tmp_path, fake_llm, monkeypatch):
+    monkeypatch.setattr(persona_chat_module, "MAX_DISCUSSIONS", 1)
+    paths = [_write_persona(tmp_path, "p_zhang_1a2b", "Zhang"), _write_persona(tmp_path, "p_li_3c4d", "Li")]
+    await tool.execute(ToolContext(), _ask(paths, "Price?", 1, DISCUSSION))
+    second = DISCUSSION.replace(".json", "_b.json")
+
+    result = await tool.execute(ToolContext(), _ask(paths, "Price?", 1, second))
+
+    assert result.ok is False
+    assert "the maximum is 1" in result.content
+    assert not (tmp_path / second).exists()
+
+
 async def test_nothing_is_recorded_when_every_answer_fails(tool, tmp_path, fake_llm):
     fake_llm.failing_names = {"Zhang"}
     path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")

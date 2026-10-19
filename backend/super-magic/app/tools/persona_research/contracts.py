@@ -21,6 +21,8 @@ MAX_PERSONAS = 12
 # 「只构建人设」的对话每次最多保存的人设数（SKILL.md「Persona Building Requests」）。
 MAX_BUILD_PERSONAS = 6
 MAX_INTERVIEW_ROUNDS = 7
+# 每个研究最多的焦点小组场数：只防止失控重复开场，正常追加讨论碰不到。
+MAX_DISCUSSIONS = 10
 DEFAULT_INTERVIEW_ROUNDS = 5
 
 # 访谈质量降权阈值，与 methods.md「Downweighting」一致。

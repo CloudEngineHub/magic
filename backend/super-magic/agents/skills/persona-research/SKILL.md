@@ -32,7 +32,8 @@ Turn one business question into a study: clarify, plan, desk research, AI person
 | Personas per study | 8 | 12 |
 | Interview rounds per persona (one question + one answer = one round) | 5 | 7 |
 | Interviewer sub-agents running in parallel | up to 4 | 4 (each handles 2-3 personas) |
-| Focus groups per study | 0 (only if the plan includes one) | 2, with 3-6 participants each |
+| Focus groups you plan yourself | 0 (only if the plan includes one) | 2, with 3-6 participants each |
+| Focus groups the user asks for later | as requested | no planning cap; `persona_chat` stops at 10 per study as a safety limit |
 | `persona_chat` `max_tokens` per answer | 400 | 800 |
 
 ## Directory Layout
@@ -168,6 +169,10 @@ When the user uploads real respondents' answers (spreadsheet, CSV, survey export
 - Before answering, read the existing study files (`study.json`, `plan.md`, transcripts, report) instead of relying on memory.
 - "Ask @persona ..." / "追问 @persona": run additional rounds for that persona with `persona_chat` (directly with the transcript's `transcript_path` and next `round_number`, or through one interviewer sub-agent for several rounds) within the remaining round limit (when none remain, tell the user instead of calling `persona_chat`), close the transcript again with `finish_persona_transcript`, and update the report section the new answers affect. Say which answers are new.
 - When the user mentions a persona file (`personas/<id>.json`) or that persona's transcript (`interviews/<id>.json`) and asks what the persona would think, say, or do, treat it as the follow-up above and get the answer from `persona_chat`. Never answer in the persona's voice yourself; questions about the file itself (summarize, compare, quote) are answered from the file.
+- "Run another focus group" / "再组织一场讨论": the user may add focus groups beyond the plan. Before starting, say in one message: the topic, the participants and why, and the estimated cost (roughly one interviewer's worth of credits per group of 5 × 5 rounds). Choose participants by purpose:
+  - Reuse panel members to go deeper on what they already said or to make them react to each other.
+  - Bring in new personas (reused library personas or new ones, saved with `save_personas` `append: true`) when a finding rests on few people, all supporters share one segment, or the user wants to know whether it holds for others. A finding confirmed by new people is stronger evidence than the same people repeating it.
+  Synthesis counts each persona once per theme (`stance_by_persona`), however many discussions they joined, so repeating the same people never adds votes; say in the report which conclusions were confirmed by newly added personas.
 - A follow-up that changes the locked plan's scope, audience, or method needs a new study.
 
 ## Platform Data Skills (When Available)

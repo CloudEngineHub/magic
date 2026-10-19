@@ -36,6 +36,7 @@ imported 和 manual（用户手动填写）人设复用时保持原 tier。
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -131,6 +132,12 @@ class SavePersonasParams(BaseToolParams):
     leak_overrides: List[LeakOverride] = Field(
         default_factory=list, description="Keep fields the semantic leak check flagged, each with the reason."
     )
+    append: bool = Field(
+        default=False,
+        description="Add these personas to the study's existing panel instead of replacing it, for example to bring "
+        "new people into a follow-up focus group after the interviews. Allowed from the interview phase on; the panel "
+        f"may hold at most {MAX_PERSONAS} personas in total.",
+    )
 
 
 # 模型使用说明：agents/skills/persona-research/reference/tools.md
@@ -147,14 +154,27 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             if building:
                 if study.phase not in (StudyPhase.CLARIFY, StudyPhase.DONE):
                     raise StudyFilesError(f"a persona_build study cannot save personas in phase {study.phase}")
+            elif params.append:
+                if study.phase in (StudyPhase.CLARIFY, StudyPhase.PLAN, StudyPhase.DESK_RESEARCH):
+                    raise StudyFilesError(f"personas can be appended from the interview phase on; the study is in {study.phase}")
             elif study.phase != StudyPhase.INTERVIEW:
                 raise StudyFilesError(
                     f"personas are saved in the interview phase; the study is in {study.phase}. "
-                    "Send update_study desk_research_done or desk_research_skipped first"
+                    "Send update_study desk_research_done or desk_research_skipped first. "
+                    "To add people after the interviews, call save_personas with append=true"
                 )
-            limit = study.limits.personas if study.limits else MAX_PERSONAS
-            if len(params.personas) > limit:
-                raise StudyFilesError(f"{len(params.personas)} personas exceed this study's limit of {limit}")
+            existing_panel = await _existing_panel(study_path) if params.append and not building else None
+            if existing_panel is not None:
+                # 追加时人数按整个研究算，上限是硬上限而不是计划人数：计划之外加人本来就是追加的用途。
+                total = len(existing_panel["persona_ids"]) + len(params.personas)
+                if total > MAX_PERSONAS:
+                    raise StudyFilesError(
+                        f"the panel would have {total} personas; a study holds at most {MAX_PERSONAS}. Reuse panel members instead"
+                    )
+            else:
+                limit = study.limits.personas if study.limits else MAX_PERSONAS
+                if len(params.personas) > limit:
+                    raise StudyFilesError(f"{len(params.personas)} personas exceed this study's limit of {limit}")
             # persona_build 没有配额，segment 只是展示用的人群标签。
             quota = set() if building else {item.segment for item in study.quota}
             unknown = sorted({p.segment for p in params.personas if quota and p.segment not in quota})
@@ -195,6 +215,10 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             ids = [pid for pid, _ in files]
             if len(set(ids)) != len(ids):
                 raise StudyFilesError("the same persona appears more than once")
+            if existing_panel is not None:
+                already = sorted(set(ids) & set(existing_panel["persona_ids"]))
+                if already:
+                    raise StudyFilesError(f"{', '.join(already)} is already on this study's panel; invite them directly")
             leak_check = (
                 await _semantic_leak_check(tool_context, study, files, params.leak_overrides)
                 if outcome_terms
@@ -203,19 +227,27 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
 
             for pid, persona in files:
                 await write_json_file(base / PERSONAS_DIR / f"{pid}.json", persona)
-            panel = {
-                "schema_version": SCHEMA_VERSION,
-                "id": f"panel_{study_path.name}",
-                "name": params.panel_name.strip(),
-                "persona_ids": ids,
-                "criteria": params.criteria.strip(),
-                "selection": [
-                    {"persona_id": row["persona_id"], "reason": item.reason.strip(), "reused": row["reused"], "segment": item.segment}
-                    for row, item in zip(summary, params.personas)
-                ],
-            }
-            if leak_check is not None:
-                panel["leak_check"] = leak_check
+            selection = [
+                {"persona_id": row["persona_id"], "reason": item.reason.strip(), "reused": row["reused"], "segment": item.segment}
+                for row, item in zip(summary, params.personas)
+            ]
+            if existing_panel is not None:
+                panel = existing_panel
+                panel["persona_ids"] = [*panel["persona_ids"], *ids]
+                panel["selection"] = [*(panel.get("selection") or []), *({**row, "added_later": True} for row in selection)]
+                if leak_check is not None:
+                    panel.setdefault("leak_checks_added", []).append(leak_check)
+            else:
+                panel = {
+                    "schema_version": SCHEMA_VERSION,
+                    "id": f"panel_{study_path.name}",
+                    "name": params.panel_name.strip(),
+                    "persona_ids": ids,
+                    "criteria": params.criteria.strip(),
+                    "selection": selection,
+                }
+                if leak_check is not None:
+                    panel["leak_check"] = leak_check
             await write_json_file(study_path / "panel.json", panel)
             library_note = ""
             if params.library_panel_name.strip():
@@ -234,7 +266,8 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
         except StudyFilesError as exc:
             return ToolResult.error(f"Personas not saved: {exc}")
 
-        lines = [f"Saved {len(ids)} personas and {params.study_dir}/panel.json (interview order as listed).{library_note}"]
+        verb = "Added" if existing_panel is not None else "Saved"
+        lines = [f"{verb} {len(ids)} personas and {params.study_dir}/panel.json (interview order as listed).{library_note}"]
         lines.extend(
             f"- {row['persona_id']} {row['name']}: tier {row['tier']}, {'reused' if row['reused'] else 'new'}, segment {row['segment']}"
             for row in summary
@@ -554,3 +587,11 @@ def _empty(value: Any) -> bool:
 
 def _translate(key: str, **kwargs: Any) -> str:
     return i18n.translate(key, category="tool.messages", **kwargs)
+
+
+async def _existing_panel(study_path: Path) -> Dict[str, Any]:
+    """追加模式读取已有 panel.json；没有时说明应先正常保存人设。"""
+    data = await read_json_file(study_path / "panel.json")
+    if not isinstance(data, dict) or not isinstance(data.get("persona_ids"), list):
+        raise StudyFilesError("this study has no panel.json yet; save its panel without append first")
+    return data

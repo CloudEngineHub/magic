@@ -56,6 +56,7 @@ from app.tools.media_utils.constants import DISABLE_THINKING_BODY
 from app.tools.persona_research.contracts import (
     DISCUSSIONS_DIR,
     INTERVIEWS_DIR,
+    MAX_DISCUSSIONS,
     MAX_INTERVIEW_ROUNDS,
     SCHEMA_VERSION,
     TranscriptStatus,
@@ -348,6 +349,13 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
                 )
 
         if data is None:
+            if is_discussion:
+                existing = [f for f in transcript_file.parent.glob("*.json") if f != transcript_file]
+                if len(existing) >= MAX_DISCUSSIONS:
+                    raise _InvalidRequest(
+                        f"this study already has {len(existing)} focus groups, the maximum is {MAX_DISCUSSIONS}; "
+                        "continue an existing discussion or start a new study"
+                    )
             data = _new_transcript(transcript_file.stem, is_discussion, persona_ids)
         if is_discussion and params.topic.strip() and not _text(data.get("topic")):
             data["topic"] = params.topic.strip()
