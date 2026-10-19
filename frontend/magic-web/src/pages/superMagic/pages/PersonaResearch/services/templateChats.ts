@@ -1,5 +1,7 @@
 import { z } from "zod"
+import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types"
+import { getAttachmentPath, listLibraryFiles } from "./researchFiles"
 
 /**
  * Report template conversations ("create / edit a template with AI") are ordinary research
@@ -14,6 +16,20 @@ import { TaskStatus, type Topic } from "@/pages/superMagic/pages/Workspace/types
  * conversation has produced or changed a template yet.
  */
 export const TEMPLATE_CHATS_DIR = "template-chats/"
+
+/**
+ * Topic ids of template conversations, read from marker file names so no content is needed.
+ * Example: [template-chats/971.json, personas/p1.json] → {"971"}.
+ */
+export function templateChatTopicIds(list: AttachmentItem[]): Set<string> {
+	return new Set(
+		listLibraryFiles(list, TEMPLATE_CHATS_DIR).map((item) =>
+			getAttachmentPath(item)
+				.slice(TEMPLATE_CHATS_DIR.length)
+				.replace(/\.json$/i, ""),
+		),
+	)
+}
 
 const markerSchema = z.object({
 	schema_version: z.literal(1),

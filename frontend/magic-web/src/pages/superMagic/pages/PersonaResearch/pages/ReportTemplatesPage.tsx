@@ -122,6 +122,8 @@ function ReportTemplatesPage() {
 	/** Marks the new topic as a template conversation so its card survives closing the panel. */
 	const rememberChat = useMemoizedFn((topic: Topic) => {
 		setChatTopic(topic)
+		// Keeps it out of the study list right away; the marker file makes that permanent.
+		store.markTemplateChat(String(topic.id))
 		const marker = serializeTemplateChatMarker({
 			schema_version: 1,
 			topic_id: String(topic.id),

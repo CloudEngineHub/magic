@@ -33,6 +33,7 @@ import {
 	personaFilePath,
 	type StudyAttachments,
 } from "../services/researchFiles"
+import { templateChatTopicIds } from "../services/templateChats"
 import type {
 	DiscussionFile,
 	InterviewFile,
@@ -107,6 +108,8 @@ export class PersonaResearchStore {
 	contentVersion = 0
 	/** Text the home composer fills once it is ready, e.g. "start a study with these personas". */
 	pendingComposerText: string | null = null
+	/** Template conversations started in this page session, until their marker file arrives. */
+	startedTemplateChatIds: string[] = []
 	/** True once every study.json has been read, so list rows can show real statuses. */
 	studyFilesReady = false
 	/** Topic whose study files finished their first read; differs while a study is loading. */
@@ -208,12 +211,30 @@ export class PersonaResearchStore {
 	}
 
 	/**
+	 * Report template conversations: never studies, listed only on the template library page.
+	 * Marker files (template-chats/<topic_id>.json) plus ones started a moment ago.
+	 */
+	get templateChatTopicIds(): Set<string> {
+		const ids = templateChatTopicIds(this.attachmentList)
+		for (const id of this.startedTemplateChatIds) ids.add(id)
+		return ids
+	}
+
+	markTemplateChat(topicId: string) {
+		if (!this.startedTemplateChatIds.includes(topicId)) {
+			this.startedTemplateChatIds = [...this.startedTemplateChatIds, topicId]
+		}
+	}
+
+	/**
 	 * Topics shown as studies. Blank topics (never sent, no study files) are hidden; the special
 	 * project creates one by default and the home composer reuses it instead of creating more.
+	 * Report template conversations are not studies and are left out too.
 	 */
 	get studies(): Topic[] {
+		const templateChats = this.templateChatTopicIds
 		return this.topicStore.topics
-			.filter((topic) => !this.isBlankTopic(topic))
+			.filter((topic) => !this.isBlankTopic(topic) && !templateChats.has(String(topic.id)))
 			.slice()
 			.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")))
 	}

@@ -4,6 +4,7 @@ import {
 	parseTemplateChatMarker,
 	resolveTemplateChatState,
 	serializeTemplateChatMarker,
+	templateChatTopicIds,
 } from "../services/templateChats"
 
 const before = { templates_before: { "templates/voices.html": "v1" } }
@@ -63,5 +64,23 @@ describe("template chat markers", () => {
 		expect(parseTemplateChatMarker("{")).toBeNull()
 		expect(parseTemplateChatMarker(JSON.stringify({ topic_id: "1" }))).toBeNull()
 		expect(parseTemplateChatMarker(undefined)).toBeNull()
+	})
+})
+
+describe("templateChatTopicIds", () => {
+	it("reads topic ids from marker file names only", () => {
+		const file = (path: string) => ({
+			file_id: path,
+			relative_file_path: path,
+			is_directory: false,
+		})
+		expect(
+			templateChatTopicIds([
+				file("template-chats/971.json"),
+				file("template-chats/old/972.json"),
+				file("personas/973.json"),
+				file("templates/voices.html"),
+			]),
+		).toEqual(new Set(["971"]))
 	})
 })
