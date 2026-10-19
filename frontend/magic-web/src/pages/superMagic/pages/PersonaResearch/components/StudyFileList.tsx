@@ -87,7 +87,8 @@ function StudyFileList({
 	}
 
 	return (
-		<ScrollArea className="h-full">
+		// Radix's table wrapper otherwise expands to long filenames, defeating truncation.
+		<ScrollArea className="h-full" viewportClassName="[&>div]:!block">
 			<div className={cn("flex flex-col gap-3 p-2", variant === "mobile" && "pb-1")}>
 				{groups.map((group) => (
 					<Collapsible
@@ -121,7 +122,7 @@ function StudyFileList({
 										)}
 									>
 										{iconOf(entry.file)}
-										<span className="flex min-w-0 flex-col">
+										<span className="flex min-w-0 flex-1 flex-col">
 											<span className="truncate text-xs text-foreground">
 												{label}
 											</span>
