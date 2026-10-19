@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Boxes, ChevronDown, Folder } from "lucide-react"
 import {
-	buildModelPriceGroups,
+	getVisibleModelPriceGroups,
 	calculateModelPrice,
 	supportsPriceCalculation,
 	formatPreviewDecimal,
@@ -45,13 +45,7 @@ export function DefaultModelPriceTable({
 	const { styles: classes } = useDefaultModelPriceStyles()
 	const snapshot = preview.data
 	const supported = snapshot ? supportsPriceCalculation(snapshot) : true
-	const groups = useMemo(
-		() =>
-			snapshot
-				? buildModelPriceGroups(snapshot).filter((group) => group.rows.length > 0)
-				: [],
-		[snapshot],
-	)
+	const groups = useMemo(() => (snapshot ? getVisibleModelPriceGroups(snapshot) : []), [snapshot])
 	const labels: Record<string, string> = {
 		legacy: t("modelPricePreview.legacy"),
 		fixed: t("modelPricePreview.fixed"),
@@ -319,7 +313,8 @@ export function DefaultModelPriceTable({
 			) : snapshot ? (
 				<>
 					{!supported ? <p role="alert">{t("modelPricePreview.unsupported")}</p> : null}
-					{snapshot.warnings.length || groups.some((group) => hasBlocked(group.rows)) ? (
+					{snapshot.warnings.some((warning) => warning.code !== "missing_model") ||
+					groups.some((group) => hasBlocked(group.rows)) ? (
 						<p role="status" className={classes.muted}>
 							{t("modelPricePreview.warning")}
 						</p>

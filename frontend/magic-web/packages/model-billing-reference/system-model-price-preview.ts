@@ -250,6 +250,19 @@ export function buildModelPriceGroups(snapshot: ModelPriceSnapshot) {
 	}))
 }
 
+/** 展示时隐藏不存在的模型及空组，保留其他异常提示和原始关系路径，不改写快照。 */
+export function getVisibleModelPriceGroups(snapshot: ModelPriceSnapshot) {
+	/** 对动态候选递归过滤，保留剩余模型的顺序和展开标识。 */
+	function visibleRows(rows: ModelPriceRow[]): ModelPriceRow[] {
+		return rows
+			.filter((row) => !(row.model.kind === "unavailable" && row.model.reason === "missing"))
+			.map((row) => ({ ...row, children: visibleRows(row.children) }))
+	}
+	return buildModelPriceGroups(snapshot)
+		.map((group) => ({ ...group, rows: visibleRows(group.rows) }))
+		.filter((group) => group.rows.length > 0)
+}
+
 /** 仅格式化展示，不改写价格或参与计算；极小正数用上界提示而非显示为零。 */
 export function formatPreviewDecimal(value: string | null | undefined, precision?: number): string {
 	if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value)) return "—"

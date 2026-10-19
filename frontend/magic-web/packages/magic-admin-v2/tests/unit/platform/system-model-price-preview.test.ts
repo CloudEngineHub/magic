@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import {
 	buildModelPriceGroups,
+	getVisibleModelPriceGroups,
 	formatPreviewDecimal,
 	calculateModelPrice,
 	supportsPriceCalculation,
@@ -143,4 +144,56 @@ it("trims padded decimals without mutating prices or hiding tiny positives", () 
 	assert.equal(formatPreviewDecimal("0.0000000", 6), "0")
 	assert.equal(formatPreviewDecimal(null), "—")
 	assert.equal(formatPreviewDecimal("1.2500", 0), "1.25")
+})
+
+it("filters missing models and empty groups without changing source data or surviving paths", () => {
+	const snapshot = mockSnapshot()
+	snapshot.groups.unshift({
+		id: "missing-only",
+		name: "Missing group",
+		items: [
+			{ relation_id: "missing-root", model_id: "deleted", display_name: "Deleted model" },
+		],
+	})
+	snapshot.models.deleted = {
+		kind: "unavailable",
+		model_id: "deleted",
+		name: "Deleted model",
+		reason: "missing",
+	}
+	snapshot.models.dynamic = {
+		kind: "dynamic",
+		model_id: "dynamic",
+		name: "Mock dynamic",
+		state: "available",
+		children: [
+			{ index: 0, model_id: "deleted" },
+			{ index: 1, model_id: "mock-model" },
+		],
+	}
+	snapshot.groups[1].items.push({
+		relation_id: "dynamic",
+		model_id: "dynamic",
+		display_name: "Mock dynamic",
+	})
+	snapshot.models.pending = {
+		kind: "unavailable",
+		model_id: "pending",
+		name: "Pending model",
+		reason: "not_loaded",
+	}
+	snapshot.groups[1].items.push({
+		relation_id: "pending",
+		model_id: "pending",
+		display_name: "Pending model",
+	})
+	const before = JSON.stringify(snapshot)
+	const original = buildModelPriceGroups(snapshot)
+	const visible = getVisibleModelPriceGroups(snapshot)
+	assert.equal(visible.length, 1)
+	assert.equal(visible[0].id, "mock-group")
+	assert.equal(visible[0].rows[1].children.length, 1)
+	assert.equal(visible[0].rows[1].children[0].key, original[1].rows[1].children[1].key)
+	assert.equal(visible[0].rows[2].model.model_id, "pending")
+	assert.equal(JSON.stringify(snapshot), before)
 })
