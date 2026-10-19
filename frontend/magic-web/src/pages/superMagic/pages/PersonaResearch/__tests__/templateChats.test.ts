@@ -12,11 +12,11 @@ const before = { templates_before: { "templates/voices.html": "v1" }, started_at
 const unchanged = [{ path: "templates/voices.html", version: "v1" }]
 
 describe("resolveTemplateChatState", () => {
-	it("treats a task still queued long after sending as stopped", () => {
+	it("treats a task still queued long after sending as unsent", () => {
 		const queued = { task_status: TaskStatus.WAITING }
 		const at = (minutes: number) => Date.parse(startedAt) + minutes * 60 * 1000
 		expect(resolveTemplateChatState(before, queued, unchanged, at(1))).toBe("generating")
-		expect(resolveTemplateChatState(before, queued, unchanged, at(5))).toBe("stopped")
+		expect(resolveTemplateChatState(before, queued, unchanged, at(5))).toBe("unsent")
 	})
 
 	it("follows the topic while the conversation is open", () => {
@@ -72,6 +72,7 @@ describe("template chat markers", () => {
 			template_path: "templates/brand.html",
 			templates_before: { "templates/brand.html": "v3" },
 			started_at: "2026-10-19T10:00:00.000Z",
+			prompt: { type: "doc", content: [{ type: "paragraph" }] },
 		}
 		expect(parseTemplateChatMarker(serializeTemplateChatMarker(marker))).toEqual(marker)
 		expect(parseTemplateChatMarker("{")).toBeNull()

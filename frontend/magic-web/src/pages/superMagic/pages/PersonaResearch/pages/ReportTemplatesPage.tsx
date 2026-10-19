@@ -42,7 +42,12 @@ import {
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { isTopicTaskRunning, type Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
+import {
+	isTopicTaskRunning,
+	TaskStatus,
+	type Topic,
+} from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
@@ -85,6 +90,8 @@ function ReportTemplatesPage() {
 	const [chat, setChat] = useState<TemplateChat | null>(null)
 	/** The open conversation once it has started, or one reopened from its card. */
 	const [chatTopic, setChatTopic] = useState<Topic | null>(null)
+	/** First message to send again when the reopened conversation never reached the AI. */
+	const [chatResend, setChatResend] = useState<string | JSONContent | null>(null)
 	const [pendingChatDelete, setPendingChatDelete] = useState<TemplateChatEntry | null>(null)
 	const templateChats = useTemplateChats()
 	/** Template versions when the AI sheet opened; anything new or changed since is its work. */
@@ -104,11 +111,12 @@ function ReportTemplatesPage() {
 			new Map(templates.map((item) => [getAttachmentPath(item), attachmentVersionKey(item)])),
 		)
 		setChatTopic(null)
+		setChatResend(null)
 		setChat(next)
 	})
 
 	/** Reopens an earlier conversation from its card, measuring results from when it began. */
-	const reopenChat = useMemoizedFn(({ marker, topic }: TemplateChatEntry) => {
+	const reopenChat = useMemoizedFn(({ marker, topic, state }: TemplateChatEntry) => {
 		setChatBaseline(new Map(Object.entries(marker.templates_before)))
 		setChat(
 			marker.mode === "edit" && marker.template_path
@@ -116,11 +124,18 @@ function ReportTemplatesPage() {
 				: { mode: "create" },
 		)
 		setChatTopic(topic)
+		// Markers written before the request was recorded fall back to the opening prompt.
+		setChatResend(
+			state === "unsent"
+				? ((marker.prompt as JSONContent | undefined) ??
+						t("reportTemplates.chat.createPrompt"))
+				: null,
+		)
 		store.selectStudy(topic.id)
 	})
 
 	/** Marks the new topic as a template conversation so its card survives closing the panel. */
-	const rememberChat = useMemoizedFn((topic: Topic) => {
+	const rememberChat = useMemoizedFn((topic: Topic, firstMessage?: JSONContent) => {
 		setChatTopic(topic)
 		// Keeps it out of the study list right away; the marker file makes that permanent.
 		store.markTemplateChat(String(topic.id))
@@ -131,6 +146,7 @@ function ReportTemplatesPage() {
 			template_path: chat?.mode === "edit" ? chat.path : undefined,
 			templates_before: Object.fromEntries(chatBaseline),
 			started_at: new Date().toISOString(),
+			prompt: firstMessage as Record<string, unknown> | undefined,
 		})
 		void createProjectTextFile(store, TEMPLATE_CHATS_DIR, `${topic.id}.json`, marker).then(
 			(saved) => {
@@ -139,13 +155,21 @@ function ReportTemplatesPage() {
 		)
 	})
 
+	// Live status of the open conversation: the resend notice goes once the message is sent.
+	const liveChatTopic = chatTopic
+		? (store.topicStore.topics.find((topic) => topic.id === chatTopic.id) ?? chatTopic)
+		: null
+	const chatNeverStarted =
+		Boolean(liveChatTopic) &&
+		(!liveChatTopic?.task_status || liveChatTopic.task_status === TaskStatus.WAITING)
+
 	const closeChat = useMemoizedFn(() => {
-		const live = chatTopic
-			? store.topicStore.topics.find((topic) => topic.id === chatTopic.id)
-			: null
-		if (live && isTopicTaskRunning(live)) toast.info(t("reportTemplates.chat.backgroundHint"))
+		if (liveChatTopic && isTopicTaskRunning(liveChatTopic)) {
+			toast.info(t("reportTemplates.chat.backgroundHint"))
+		}
 		setChat(null)
 		setChatTopic(null)
+		setChatResend(null)
 		store.selectStudy(undefined)
 	})
 
@@ -340,6 +364,11 @@ function ReportTemplatesPage() {
 				onOpenChange={(open) => !open && closeChat()}
 				topic={chatTopic}
 				onTopicChange={rememberChat}
+				resend={
+					chatResend && chatNeverStarted
+						? { notice: t("reportTemplates.chat.unsentNotice"), content: chatResend }
+						: undefined
+				}
 				title={
 					chat?.mode === "edit"
 						? t("reportTemplates.chat.editTitle")

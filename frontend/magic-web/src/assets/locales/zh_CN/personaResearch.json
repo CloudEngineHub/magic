@@ -638,7 +638,8 @@
 			"tipBase": "或说明基于哪个现有模板改",
 			"tipDescribe": "描述品牌色、字体和版式，例如“深色、杂志感、大标题”",
 			"tipUpload": "上传一份喜欢的报告或网页 HTML 作为参考",
-			"title": "让 AI 新建模板"
+			"title": "让 AI 新建模板",
+			"unsentNotice": "这条消息没有发出去，AI 还没收到。已把原需求填回输入框，确认后发送即可。"
 		},
 		"chatCard": {
 			"continue": "继续",
@@ -650,9 +651,12 @@
 			"failedHint": "可以继续对话，让 AI 重试",
 			"generating": "生成中…",
 			"generatingHint": "AI 正在制作模板，点开可以查看进度",
+			"resend": "重新发送",
 			"started": "{{time}}开始",
 			"stopped": "未完成",
 			"stoppedHint": "对话已结束，还没有生成模板",
+			"unsent": "没有发出",
+			"unsentHint": "消息没有发出去，点开可以重新发送",
 			"waiting": "等你回复",
 			"waitingHint": "AI 有问题需要你确认"
 		},

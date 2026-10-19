@@ -13,6 +13,8 @@ import type {
 	SceneEditorNodes,
 } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
 import { useTaskInterrupt } from "@/pages/superMagic/hooks/useTaskInterrupt"
+import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import {
 	isTopicTaskRunning,
@@ -44,6 +46,8 @@ interface UseResearchEditorOptions {
 	 * composer uses it for the 【研究设置】 line. Null or empty sends the message unchanged.
 	 */
 	appendToMessage?: () => string | null
+	/** Receives each sent message's editor content, e.g. to remember a template chat's request. */
+	onSendContent?: (value: HandleSendParams["value"]) => void
 	/** The page draws the composer frame (home); the editor drops its own border to avoid a double line. */
 	bareContainer?: boolean
 	/** Receives the composer's send entry so a failed message can be retried through the normal send flow. */
@@ -70,6 +74,7 @@ export function useResearchEditor({
 	onStudyStarted,
 	onEditorReady,
 	appendToMessage,
+	onSendContent,
 	bareContainer = false,
 	onMessageSendReady,
 }: UseResearchEditorOptions) {
@@ -184,6 +189,7 @@ export function useResearchEditor({
 			createTopic: createStudyTopic,
 			onSendSuccess: handleSendSuccess,
 			mergeSendParams: ({ defaultParams }) => {
+				onSendContent?.(defaultParams.value)
 				const params = merge({}, defaultParams, {
 					topicMode: TopicMode.PersonaResearch,
 					extra: { super_agent: { topic_pattern: TopicMode.PersonaResearch } },
@@ -210,6 +216,7 @@ export function useResearchEditor({
 			onEditorReady,
 			onFileClick,
 			onMessageSendReady,
+			onSendContent,
 			selectedProject,
 			selectedTopic,
 			showLoading,
@@ -227,11 +234,16 @@ export function useResearchEditor({
 		],
 	)
 
-	/** Replaces the composer text, e.g. from a template card or "ask this persona". */
-	const fillComposer = useMemoizedFn((text: string) => {
+	/**
+	 * Replaces the composer content (text, or editor JSON that keeps mentions), e.g. from a
+	 * template card, "ask this persona", or resending an unsent message. False until the editor
+	 * is ready.
+	 */
+	const fillComposer = useMemoizedFn((content: string | JSONContent): boolean => {
 		const editor = messageQueue.editorRef.current?.editor
-		if (!editor) return
-		editor.chain().focus().setContent(text).run()
+		if (!editor) return false
+		editor.chain().focus().setContent(content).run()
+		return true
 	})
 
 	return { editorContext, editorNodes, topicModelStore, fillComposer, messageQueue }

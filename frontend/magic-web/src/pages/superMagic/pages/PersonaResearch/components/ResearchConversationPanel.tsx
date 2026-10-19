@@ -31,8 +31,8 @@ import type { ResearchConsoleTab } from "./ResearchConsole"
 import ResearchDeliverables from "./ResearchDeliverables"
 
 export interface ResearchConversationPanelRef {
-	/** Replaces the composer text and focuses it, e.g. "ask this persona". */
-	fillComposer: (text: string) => void
+	/** Replaces the composer content and focuses it, e.g. "ask this persona"; false until ready. */
+	fillComposer: (content: string | JSONContent) => boolean
 }
 
 interface ResearchConversationPanelProps {

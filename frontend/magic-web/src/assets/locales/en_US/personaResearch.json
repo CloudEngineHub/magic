@@ -640,7 +640,8 @@
 			"tipBase": "Or say which existing template to start from",
 			"tipDescribe": "Describe brand colours, fonts, and layout, e.g. \"dark, magazine-like, big headlines\"",
 			"tipUpload": "Upload a report or web page HTML you like as a reference",
-			"title": "Create a template with AI"
+			"title": "Create a template with AI",
+			"unsentNotice": "This message was never sent, so the AI has not seen it. Your request is back in the composer; send it again when ready."
 		},
 		"chatCard": {
 			"continue": "Continue",
@@ -652,9 +653,12 @@
 			"failedHint": "Continue the conversation to let the AI retry",
 			"generating": "Generating…",
 			"generatingHint": "The AI is making the template; open to watch",
+			"resend": "Send again",
 			"started": "Started {{time}}",
 			"stopped": "Not finished",
 			"stoppedHint": "The conversation ended before a template was made",
+			"unsent": "Not sent",
+			"unsentHint": "The message never went out; open to send it again",
 			"waiting": "Waiting for you",
 			"waitingHint": "The AI has a question for you"
 		},

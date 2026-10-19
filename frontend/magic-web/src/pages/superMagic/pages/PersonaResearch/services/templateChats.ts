@@ -9,11 +9,13 @@ import { getAttachmentPath, listLibraryFiles } from "./researchFiles"
  * first message is sent the page writes one marker per conversation:
  *
  *   template-chats/<topic_id>.json
- *   { schema_version: 1, topic_id, mode: "create" | "edit", template_path?, templates_before, started_at }
+ *   { schema_version: 1, topic_id, mode: "create" | "edit", template_path?, templates_before,
+ *     started_at, prompt? }
  *
  * The marker lives in the project, so the conversation can be found again after closing the
  * panel, a refresh, or on another device. templates_before (path → version) tells whether the
- * conversation has produced or changed a template yet.
+ * conversation has produced or changed a template yet; prompt (the first message) lets a message
+ * that never went out be sent again.
  */
 export const TEMPLATE_CHATS_DIR = "template-chats/"
 
@@ -38,6 +40,8 @@ const markerSchema = z.object({
 	template_path: z.string().optional().catch(undefined),
 	templates_before: z.record(z.string(), z.string()).catch({}),
 	started_at: z.string().catch(""),
+	/** The first message as editor content, so mentions survive a resend. */
+	prompt: z.record(z.string(), z.unknown()).optional().catch(undefined),
 })
 
 export type TemplateChatMarker = z.infer<typeof markerSchema>
@@ -63,14 +67,15 @@ export function serializeTemplateChatMarker(marker: TemplateChatMarker): string 
  * | generating | the task is running, or queued for at most 2 minutes after sending |
  * | waiting    | the AI asked a question                                      |
  * | failed     | the task errored                                             |
- * | stopped    | finished, stopped, or never started (the first message did not  |
- * |            | go out), without any template added or changed                |
+ * | unsent     | still queued 2 minutes after sending: the first message never   |
+ * |            | reached the AI (for example a dropped connection)             |
+ * | stopped    | finished or stopped without any template added or changed    |
  * | done       | finished and a template was added or changed: the card goes, |
  * |            | the template card in the grid takes its place                |
  *
  * Example: create chat started with {voices.html: v1}; it finishes and brand.html appears → done.
  */
-export type TemplateChatState = "generating" | "waiting" | "failed" | "stopped" | "done"
+export type TemplateChatState = "generating" | "waiting" | "failed" | "unsent" | "stopped" | "done"
 
 /** A queued task normally starts within seconds; past this it never got the message. */
 const QUEUED_GRACE_MS = 2 * 60 * 1000
@@ -86,6 +91,7 @@ export function resolveTemplateChatState(
 	if (status === TaskStatus.WAITING || !status) {
 		const startedAt = Date.parse(marker.started_at)
 		if (Number.isNaN(startedAt) || now - startedAt < QUEUED_GRACE_MS) return "generating"
+		return "unsent"
 	}
 	if (status === TaskStatus.WAITING_FOR_USER) return "waiting"
 	if (status === TaskStatus.ERROR) return "failed"

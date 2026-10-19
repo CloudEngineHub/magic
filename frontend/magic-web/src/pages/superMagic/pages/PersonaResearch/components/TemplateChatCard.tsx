@@ -1,4 +1,11 @@
-import { CircleAlert, CirclePause, Loader2, MessageCircleQuestion, Trash2 } from "lucide-react"
+import {
+	CircleAlert,
+	CirclePause,
+	Loader2,
+	MessageCircleQuestion,
+	MessageSquareWarning,
+	Trash2,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import dayjs from "@/infrastructure/vendors/dayjs"
@@ -35,15 +42,16 @@ export default function TemplateChatCard({ entry, onOpen, onDelete }: TemplateCh
 		waiting: { icon: MessageCircleQuestion, className: "text-amber-600" },
 		stopped: { icon: CirclePause, className: "text-muted-foreground" },
 		failed: { icon: CircleAlert, className: "text-destructive" },
+		unsent: { icon: MessageSquareWarning, className: "text-amber-600" },
 	}[state]
 	const Icon = stateView.icon
-	const settled = state === "stopped" || state === "failed"
+	const settled = state === "stopped" || state === "failed" || state === "unsent"
 
 	return (
 		<div
 			className={cn(
 				"flex flex-col overflow-hidden rounded-xl border border-dashed bg-background transition-shadow hover:shadow-md",
-				state === "waiting" ? "border-amber-500/60" : "border-border",
+				state === "waiting" || state === "unsent" ? "border-amber-500/60" : "border-border",
 			)}
 			data-testid="report-template-chat-card"
 		>
@@ -97,7 +105,9 @@ export default function TemplateChatCard({ entry, onOpen, onDelete }: TemplateCh
 							className="h-7 px-2.5 text-xs"
 							onClick={onOpen}
 						>
-							{t("reportTemplates.chatCard.continue")}
+							{state === "unsent"
+								? t("reportTemplates.chatCard.resend")
+								: t("reportTemplates.chatCard.continue")}
 						</Button>
 					</>
 				) : null}
