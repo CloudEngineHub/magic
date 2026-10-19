@@ -233,14 +233,23 @@ class TopicDomainService
 
     /**
      * Update topic status by sandbox IDs.
-     * Only updates topics that are in active status (waiting or running) to prevent
-     * accidentally updating already completed or error topics.
+     *
+     * Only topics in one of $fromStatuses are touched; default is the
+     * waiting/running pair. Sandbox restart passes waiting_for_user explicitly
+     * as well, because a topic parked on a human answer is still using the pod
+     * that is about to be replaced.
+     *
+     * @param TaskStatus[] $fromStatuses statuses allowed to transition; empty = waiting + running
      */
-    public function updateTopicStatusBySandboxIds(array $sandboxIds, TaskStatus $taskStatus): bool
+    public function updateTopicStatusBySandboxIds(array $sandboxIds, TaskStatus $taskStatus, array $fromStatuses = []): bool
     {
-        // Only update topics with active statuses (waiting or running)
-        $activeStatuses = [TaskStatus::WAITING->value, TaskStatus::RUNNING->value];
-        return $this->topicRepository->updateTopicStatusBySandboxIds($sandboxIds, $taskStatus->value, $activeStatuses);
+        $sourceStatuses = $fromStatuses === []
+            ? [TaskStatus::WAITING->value, TaskStatus::RUNNING->value]
+            : array_values(array_unique(array_map(
+                static fn (TaskStatus $status): string => $status->value,
+                $fromStatuses
+            )));
+        return $this->topicRepository->updateTopicStatusBySandboxIds($sandboxIds, $taskStatus->value, $sourceStatuses);
     }
 
     public function updateTopic(DataIsolation $dataIsolation, int $id, string $topicName): TopicEntity

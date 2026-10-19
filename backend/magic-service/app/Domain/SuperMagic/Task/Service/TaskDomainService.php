@@ -637,18 +637,32 @@ class TaskDomainService
 
     /**
      * Update task status by topic IDs.
-     * Only updates tasks that are in active status (waiting or running) to prevent
-     * accidentally updating already completed or error tasks.
+     *
+     * Only tasks in one of $fromStatuses are touched, so a batch operation can
+     * never drag an already finished task back into a live state. Default is the
+     * "not yet terminal" pair (waiting/running), which is what status sync and
+     * sandbox recovery need. Callers that must include a human-in-the-loop task
+     * (waiting_for_user) pass their own list explicitly.
+     *
+     * @param TaskStatus[] $fromStatuses statuses allowed to transition; empty = waiting + running
      */
-    public function updateTaskStatusByTopicIds(array $topicIds, TaskStatus $taskStatus, ?string $errMsg = null): int
-    {
+    public function updateTaskStatusByTopicIds(
+        array $topicIds,
+        TaskStatus $taskStatus,
+        ?string $errMsg = null,
+        array $fromStatuses = []
+    ): int {
         $finishedTime = null;
         if ($taskStatus->isFinal()) {
             $finishedTime = date('Y-m-d H:i:s');
         }
-        // Only update tasks with active statuses (waiting or running)
-        $activeStatuses = [TaskStatus::WAITING->value, TaskStatus::RUNNING->value];
-        return $this->taskRepository->updateTaskStatusByTopicIds($topicIds, $taskStatus->value, $errMsg, $finishedTime, $activeStatuses);
+        $sourceStatuses = $fromStatuses === []
+            ? [TaskStatus::WAITING->value, TaskStatus::RUNNING->value]
+            : array_values(array_unique(array_map(
+                static fn (TaskStatus $status): string => $status->value,
+                $fromStatuses
+            )));
+        return $this->taskRepository->updateTaskStatusByTopicIds($topicIds, $taskStatus->value, $errMsg, $finishedTime, $sourceStatuses);
     }
 
     public function executeScriptTask(DataIsolation $dataIsolation, ScriptTaskEntity $scriptTaskEntity): void

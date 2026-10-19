@@ -118,15 +118,22 @@ readonly class AgentAppService
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param int $topicId 话题ID
+     * @param bool $allowWarmPool false 时跳过温池、直接冷启动，用于镜像发布后的强制重建
      * @return string 沙箱ID
      */
-    public function startSandbox(DataIsolation $dataIsolation, int $topicId): string
+    public function startSandbox(DataIsolation $dataIsolation, int $topicId, bool $allowWarmPool = true): string
     {
         $this->logger->info('[Sandbox][App] Starting sandbox via reinit (no delete)', [
             'topic_id' => $topicId,
+            'allow_warm_pool' => $allowWarmPool,
         ]);
 
-        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return $this->ensureSandboxInitialized(
+            $dataIsolation,
+            $topicId,
+            skipInitMessages: true,
+            allowWarmPool: $allowWarmPool
+        );
     }
 
     /**
@@ -136,9 +143,11 @@ readonly class AgentAppService
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param int $topicId 话题ID
+     * @param bool $allowWarmPool false 时强制冷启动。镜像发布后的重建必须传 false：
+     *                            温池里的 pod 可能是发布前构建的，领用等于换回老镜像
      * @return string 沙箱ID
      */
-    public function restartSandbox(DataIsolation $dataIsolation, int $topicId): string
+    public function restartSandbox(DataIsolation $dataIsolation, int $topicId, bool $allowWarmPool = true): string
     {
         $topicEntity = $this->topicDomainService->getTopicById($topicId);
         if (is_null($topicEntity)) {
@@ -154,6 +163,7 @@ readonly class AgentAppService
         $this->logger->info('[Sandbox][App] Restarting sandbox via delete + reinit', [
             'topic_id' => $topicId,
             'sandbox_id' => $sandboxId,
+            'allow_warm_pool' => $allowWarmPool,
         ]);
 
         // 删除旧沙箱；仅在网关明确返回 NOT_FOUND 时继续重建。
@@ -173,7 +183,12 @@ readonly class AgentAppService
             ]);
         }
 
-        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return $this->ensureSandboxInitialized(
+            $dataIsolation,
+            $topicId,
+            skipInitMessages: true,
+            allowWarmPool: $allowWarmPool
+        );
     }
 
     /**
@@ -330,6 +345,7 @@ readonly class AgentAppService
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param int $topicId 话题ID
+     * @param bool $allowWarmPool false 时跳过温池，直接冷启动
      * @return string 沙箱ID
      * @throws BusinessException 当初始化失败时
      */
@@ -337,10 +353,12 @@ readonly class AgentAppService
         DataIsolation $dataIsolation,
         int $topicId,
         bool $skipInitMessages = false,
+        bool $allowWarmPool = true,
     ): string {
         $this->logger->info('[Sandbox][App] Ensuring sandbox is initialized', [
             'topic_id' => $topicId,
             'skip_init_messages' => $skipInitMessages,
+            'allow_warm_pool' => $allowWarmPool,
         ]);
 
         // Prepare metadata using Trait
@@ -378,7 +396,8 @@ readonly class AgentAppService
                 (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
                 (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode()),
                 (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory($projectEntity->getId(), $topicEntity->getId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(), $projectEntity->getUserOrganizationCode())
-            )
+            ),
+            allowWarmPool: $allowWarmPool
         );
 
         // 初始化可能切换到 Warm Pool 或重新创建沙箱，必须同步刷新 topic 与 task 的最终绑定。

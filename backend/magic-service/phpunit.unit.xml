@@ -4,5 +4,18 @@
         <testsuite name="Socket.IO维护">
             <file>test/Cases/Unit/RedisAdapterV3MaintenanceTest.php</file>
         </testsuite>
+        <!--
+          沙箱镜像发布相关的纯单测：不启动应用、不连数据库，可在任何环境跑。
+          加在这里（而不只是 phpunit.xml 的超级麦吉套件）是因为这些用例的全部依赖
+          都用 PHPUnit 替身构造，没有容器也能执行，适合放进最快的反馈回路。
+        -->
+        <testsuite name="沙箱重启">
+            <directory suffix="Test.php">test/Cases/Unit/SuperMagic/SandboxRestart</directory>
+            <file>test/Cases/Infrastructure/SuperMagic/ExternalAPI/SandboxOS/Gateway/Result/SandboxListResultTest.php</file>
+            <file>test/Cases/Infrastructure/SuperMagic/ExternalAPI/SandboxOS/SandboxListGatewayTest.php</file>
+            <file>test/Cases/Domain/SuperAgent/Service/SandboxVersionDomainServiceTest.php</file>
+            <file>test/Cases/Domain/SuperMagic/Task/Service/AgentDomainServiceEnsureSandboxInitializedTest.php</file>
+            <file>test/Cases/Application/SuperAgent/Service/AgentAppServiceVersionCheckTest.php</file>
+        </testsuite>
     </testsuites>
 </phpunit>

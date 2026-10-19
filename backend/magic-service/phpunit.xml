@@ -57,9 +57,17 @@
       <file>test/Cases/Application/SuperMagic/File/Service/MagicFSChangePublisherTest.php</file>
       <file>test/Cases/Application/SuperMagic/File/Service/MagicFSFileAppServiceChangeFeedBatchTest.php</file>
       <!--
-        Magic Claw 沙箱重启命令与网关清单解析：同样按文件精确登记（原因见上）。
+        沙箱全量重启（sandbox:restart-all）：计划生成、编排、CLI 契约。按文件精确登记，
+        原因同上——整个 Application/SuperMagic 目录不在任何 suite 里。
       -->
-      <file>test/Cases/Application/SuperMagic/Agent/Command/RestartAllMagicClawSandboxCommandTest.php</file>
+      <file>test/Cases/Unit/SuperMagic/SandboxRestart/SandboxImageVersionTest.php</file>
+      <file>test/Cases/Unit/SuperMagic/SandboxRestart/SandboxRestartPlannerTest.php</file>
+      <file>test/Cases/Unit/SuperMagic/SandboxRestart/SandboxRestartAppServiceTest.php</file>
+      <file>test/Cases/Unit/SuperMagic/SandboxRestart/SandboxRestartBatchRunnerTest.php</file>
+      <file>test/Cases/Unit/SuperMagic/SandboxRestart/RestartAllSandboxCommandTest.php</file>
+      <file>test/Cases/Domain/SuperMagic/Task/Service/AgentDomainServiceEnsureSandboxInitializedTest.php</file>
+      <file>test/Cases/Domain/SuperAgent/Service/SandboxVersionDomainServiceTest.php</file>
+      <file>test/Cases/Application/SuperAgent/Service/AgentAppServiceVersionCheckTest.php</file>
       <file>test/Cases/Interfaces/SuperMagic/Task/DTO/Request/CreateOpenTaskRequestDTOTest.php</file>
       <file>test/Cases/Application/SuperMagic/Message/Assembler/UserMessageDTOAssemblerTest.php</file>
       <file>test/Cases/Application/SuperMagic/Message/Service/HandleUserMessageDispatchTest.php</file>

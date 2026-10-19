@@ -20,7 +20,10 @@ use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentInitContext;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
+use App\Domain\SuperMagic\Task\Service\CrossProjectMentionPathTranslator;
+use App\Domain\SuperMagic\Task\Service\WarmPoolSandboxDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Repository\Facade\TopicRepositoryInterface;
 use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
@@ -203,6 +206,89 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         $this->assertSame($createdId, $result);
     }
 
+    /**
+     * 镜像发布后的强制重建必须跳过温池：温池 pod 可能是发布前构建的，
+     * 领用等于把刚删掉的老镜像原样换回来。
+     *
+     * 两个对照用例共用同一套夹具，唯一差异是 $allowWarmPool：
+     * - true  → 温池被咨询（证明夹具确实能走到温池分支）；
+     * - false → 温池完全不被咨询（证明跳过生效，而不是"本来就走不到"）。
+     */
+    public function testWarmPoolIsConsultedWhenCallerAllowsIt(): void
+    {
+        $warmPool = $this->createMock(WarmPoolSandboxDomainService::class);
+        $warmPool->expects($this->once())->method('tryAcquireAndMount')->willReturn(null);
+
+        $this->runRestartWithWarmPoolFlag($warmPool, true);
+    }
+
+    public function testWarmPoolIsSkippedWhenCallerForbidsIt(): void
+    {
+        $warmPool = $this->createMock(WarmPoolSandboxDomainService::class);
+        $warmPool->expects($this->never())->method('tryAcquireAndMount');
+
+        $this->runRestartWithWarmPoolFlag($warmPool, false);
+    }
+
+    /**
+     * @param bool $allowWarmPool 透传给 ensureSandboxInitialized 的开关
+     */
+    private function runRestartWithWarmPoolFlag(WarmPoolSandboxDomainService $warmPool, bool $allowWarmPool): void
+    {
+        $topicId = 945988521691942917;
+        $staleId = '953340869490270210';
+        $createdId = '945988521691942918';
+
+        // 打开温池开关，否则 tryWarmPoolFastPath 会在第一行就返回，无法证明跳过逻辑。
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('get')->willReturnCallback(
+            static fn (string $key, mixed $default = null): mixed => $key === 'super-magic.warm_pool.enabled' ? true : ($default ?? 'test')
+        );
+        $container = ApplicationContext::getContainer();
+        self::assertInstanceOf(EnsureSandboxFakeContainer::class, $container);
+        $container->services[ConfigInterface::class] = $config;
+        $container->services[WarmPoolSandboxDomainService::class] = $warmPool;
+
+        $topicRepository = $this->createMock(TopicRepositoryInterface::class);
+        $topicRepository->method('getTopicById')->willReturn($this->buildTopic($topicId, $staleId));
+        $topicRepository->method('updateTopicByCondition')->willReturn(true);
+
+        $agent = $this->createMock(SandboxAgentInterface::class);
+        // 旧 pod 已不存在（NOT_FOUND），新沙箱就绪：分别应答，避免后续 waitForWorkspaceReady 抛错。
+        $agent->method('getWorkspaceStatus')->willReturnCallback(
+            fn (DataIsolation $isolation, string $sandboxId): AgentResponse => $sandboxId === $createdId
+                ? $this->readyResponse()
+                : $this->notFoundResponse()
+        );
+        $agent->expects($this->once())->method('initAgent')->willReturn(
+            AgentResponse::fromApiResponse(['code' => ResponseCode::SUCCESS, 'message' => 'ok', 'data' => []])
+        );
+
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        $gateway->expects($this->once())->method('createSandbox')->willReturn(
+            new GatewayResult(ResponseCode::SUCCESS, 'ok', ['sandbox_id' => $createdId])
+        );
+
+        $service = $this->buildService($agent, $gateway, $topicRepository);
+        $agentContext = $this->buildAgentContext($this->buildTopic($topicId, $staleId), '');
+
+        // 必须带 project 根目录：温池分支要求 project_space_root_file_id 非空，
+        // 否则两个对照用例都会在进入温池前就返回，测试变得毫无意义。
+        // 温池挂载要以用户身份写 metadata.json，缺少 token 时分支同样会提前返回。
+        $dataIsolation = $this->buildDataIsolation();
+        $dataIsolation->setUserAuthorizationToken('test-user-token');
+
+        $result = $service->ensureSandboxInitialized(
+            $dataIsolation,
+            $agentContext,
+            new SandboxRootFileIds('project-root-file-id', 'user-root-file-id', 'topic-root-file-id'),
+            null,
+            $allowWarmPool
+        );
+
+        self::assertSame($createdId, $result);
+    }
+
     private function buildService(
         SandboxAgentInterface $agent,
         SandboxGatewayInterface $gateway,
@@ -230,6 +316,7 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
             $topicRepository,
             $this->createMock(WorkspaceRepositoryInterface::class),
             $this->createMock(TaskMessageRepositoryInterface::class),
+            new CrossProjectMentionPathTranslator(),
         );
     }
 

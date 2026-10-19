@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result;
 
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodSnapshot;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 
 /**
@@ -16,7 +17,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\Respons
 class SandboxListResult extends GatewayResult
 {
     /**
-     * @var array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}>
+     * @var SandboxPodSnapshot[]
      */
     private array $sandboxes = [];
 
@@ -41,25 +42,16 @@ class SandboxListResult extends GatewayResult
             if (! is_array($sandbox) || ! isset($sandbox['sandbox_id'])) {
                 continue;
             }
-            $result->sandboxes[] = [
-                'sandbox_id' => (string) $sandbox['sandbox_id'],
-                'status' => (string) ($sandbox['status'] ?? ''),
-                'project_id' => (string) ($sandbox['project_id'] ?? ''),
-                'topic_id' => (string) ($sandbox['topic_id'] ?? ''),
-                'warm_pool' => (bool) ($sandbox['warm_pool'] ?? false),
-                'bound' => (bool) ($sandbox['bound'] ?? false),
-                // pod 创建时间（RFC3339 UTC）：老网关不返回该字段时为空串，调用方按“未知”处理。
-                'created_at' => (string) ($sandbox['created_at'] ?? ''),
-            ];
+            $result->sandboxes[] = SandboxPodSnapshot::fromGatewayArray($sandbox);
         }
 
         return $result;
     }
 
     /**
-     * 获取沙箱列表.
+     * 获取沙箱 pod 快照列表.
      *
-     * @return array<int, array{sandbox_id: string, status: string, project_id: string, topic_id: string, warm_pool: bool, bound: bool, created_at: string}>
+     * @return SandboxPodSnapshot[]
      */
     public function getSandboxes(): array
     {
@@ -85,7 +77,7 @@ class SandboxListResult extends GatewayResult
     {
         $counts = [];
         foreach ($this->sandboxes as $sandbox) {
-            $status = $sandbox['status'] !== '' ? $sandbox['status'] : 'Unknown';
+            $status = $sandbox->getStatus() !== '' ? $sandbox->getStatus() : 'Unknown';
             $counts[$status] = ($counts[$status] ?? 0) + 1;
         }
 
