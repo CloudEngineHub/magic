@@ -239,6 +239,23 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         }
     }
 
+    public function testSharedStopTreatsMissingSandboxAsSuccess(): void
+    {
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        $gateway->method('deleteSandbox')->willReturn(new GatewayResult(ResponseCode::NOT_FOUND, 'gone'));
+        $service = $this->buildService($this->createMock(SandboxAgentInterface::class), $gateway, $this->createMock(TopicRepositoryInterface::class));
+        self::assertTrue($service->stopSandboxIfExists('actual-sandbox')->isSuccess());
+    }
+
+    public function testSharedStopRetainsUnconfirmedFailure(): void
+    {
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        $gateway->method('deleteSandbox')->willReturn(new GatewayResult(ResponseCode::ERROR, 'timeout'));
+        $service = $this->buildService($this->createMock(SandboxAgentInterface::class), $gateway, $this->createMock(TopicRepositoryInterface::class));
+        $this->expectException(SandboxOperationException::class);
+        $service->stopSandboxIfExists('actual-sandbox');
+    }
+
     private function buildService(
         SandboxAgentInterface $agent,
         SandboxGatewayInterface $gateway,

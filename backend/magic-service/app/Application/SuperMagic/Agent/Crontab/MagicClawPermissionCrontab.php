@@ -16,13 +16,14 @@ class MagicClawPermissionCrontab
     {
     }
 
-    #[Crontab(rule: '*/5 * * * * *', name: 'MagicClawPermissionReconcile', singleton: true, mutexExpires: 600, onOneServer: true)]
+    // Events handle normal changes. These schedules only recover missed work.
+    #[Crontab(rule: '0 */10 * * * *', name: 'MagicClawPermissionReconcile', singleton: true, mutexExpires: 600, onOneServer: true)]
     public function execute(): void
     {
         $this->service->execute();
     }
 
-    #[Crontab(rule: '0 * * * * *', name: 'MagicClawPermissionDiscovery', singleton: true, mutexExpires: 600, onOneServer: true)]
+    #[Crontab(rule: '0 17 * * * *', name: 'MagicClawPermissionDiscovery', singleton: true, mutexExpires: 600, onOneServer: true)]
     public function discover(): void
     {
         $this->service->discover();

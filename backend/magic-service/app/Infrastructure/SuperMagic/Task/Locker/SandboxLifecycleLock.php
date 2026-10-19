@@ -39,7 +39,7 @@ class SandboxLifecycleLock
      * @param callable(callable(): void): T $operation
      * @return T
      */
-    public function run(int $topicId, callable $operation): mixed
+    public function run(int $topicId, callable $operation, ?int $waitSeconds = null): mixed
     {
         $name = 'super_agent:sandbox:init:' . $topicId;
         // Include the coroutine ID: child coroutines may inherit Context values.
@@ -50,7 +50,7 @@ class SandboxLifecycleLock
             return $operation($nested);
         }
         $owner = bin2hex(random_bytes(16));
-        if (! $this->locker->spinLock($name, $owner, self::LEASE_SECONDS, self::WAIT_SECONDS)) {
+        if (! $this->locker->spinLock($name, $owner, self::LEASE_SECONDS, $waitSeconds ?? self::WAIT_SECONDS)) {
             throw new BusinessException('Sandbox lifecycle is still running for topic ID: ' . $topicId);
         }
 

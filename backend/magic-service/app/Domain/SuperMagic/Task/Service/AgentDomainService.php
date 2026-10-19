@@ -372,13 +372,7 @@ class AgentDomainService
                 // If deletion is uncertain, keep that pointer for the permission reconciler.
                 $currentBinding = (string) ($this->topicRepository->getTopicById((int) $topicEntity->getId())?->getSandboxId() ?? '');
                 if ($currentBinding !== '') {
-                    try {
-                        $this->stopSandbox($currentBinding);
-                    } catch (SandboxOperationException $exception) {
-                        if (! ResponseCode::isNotFound($exception->getCode())) {
-                            throw $exception;
-                        }
-                    }
+                    $this->stopSandboxIfExists($currentBinding);
                     $this->topicRepository->updateTopicByCondition(['id' => $topicEntity->getId(), 'sandbox_id' => $currentBinding], ['sandbox_id' => '']);
                 }
                 $boundBeforeSwitch = '';
@@ -529,6 +523,19 @@ class AgentDomainService
         $this->logger->info('[Sandbox][Domain] Sandbox stopped successfully', ['sandbox_id' => $sandboxId]);
 
         return $result;
+    }
+
+    /** Shared by explicit cleanup, restart and permission-driven cleanup. */
+    public function stopSandboxIfExists(string $sandboxId): GatewayResult
+    {
+        try {
+            return $this->stopSandbox($sandboxId);
+        } catch (SandboxOperationException $exception) {
+            if (! ResponseCode::isNotFound($exception->getCode())) {
+                throw $exception;
+            }
+            return GatewayResult::success(['sandbox_id' => $sandboxId], 'Sandbox already absent');
+        }
     }
 
     /**
@@ -1497,7 +1504,7 @@ class AgentDomainService
                 $this->magicClawRepository->setRuntimeBlock((int) $claw->getId(), (string) IdGenerator::getSnowId());
             }
             try {
-                $this->stopSandbox($sandboxId);
+                $this->stopSandboxIfExists($sandboxId);
                 if ($topicId !== null) {
                     $this->topicRepository->updateTopicByCondition(['id' => $topicId, 'sandbox_id' => $sandboxId], ['sandbox_id' => '']);
                 } elseif ($claw !== null) {

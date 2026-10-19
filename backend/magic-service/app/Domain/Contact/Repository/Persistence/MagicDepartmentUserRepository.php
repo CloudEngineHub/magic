@@ -14,6 +14,8 @@ use App\Domain\Contact\Event\DepartmentMembershipChanged;
 use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
 use App\Domain\Contact\Repository\Persistence\Model\DepartmentModel;
 use App\Domain\Contact\Repository\Persistence\Model\DepartmentUserModel;
+use Hyperf\Context\Context;
+use Hyperf\Coroutine\Coroutine;
 use Hyperf\DbConnection\Db;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\SimpleCache\CacheInterface;
@@ -251,7 +253,13 @@ class MagicDepartmentUserRepository implements MagicDepartmentUserRepositoryInte
 
     private function membershipChanged(string $organization): void
     {
+        // Bulk directory syncs notify once per organization in the originating coroutine.
+        $key = 'department_membership_changed:' . Coroutine::id() . ':' . $organization;
+        if (Context::get($key, false)) {
+            return;
+        }
         di(EventDispatcherInterface::class)->dispatch(new DepartmentMembershipChanged($organization));
+        Context::set($key, true);
     }
 
     /**

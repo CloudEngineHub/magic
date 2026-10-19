@@ -46,14 +46,35 @@ class MagicClawReconciliationRepository
     public function activeOperations(int $limit): array
     {
         return Db::table(self::OPERATIONS)->whereIn('status', ['pending', 'running', 'partial_failed'])
-            ->where('lease_until', '<', time())->orderBy('updated_at')->limit($limit)->get()->map(fn ($row) => (array) $row)->all();
+            ->where('lease_until', '<', time())
+            ->where(function ($query): void {
+                $query->where('scan_completed', false)->orWhereExists(function ($items): void {
+                    $items->selectRaw('1')->from(self::ITEMS)
+                        ->whereColumn('operation_id', self::OPERATIONS . '.id')
+                        ->whereIn('status', ['pending', 'failed'])->where('next_retry_at', '<=', time());
+                });
+            })->orderBy('updated_at')->limit($limit)->get()->map(fn ($row) => (array) $row)->all();
     }
 
     public function claim(array $operation, string $leaseOwner): bool
     {
         return Db::table(self::OPERATIONS)->where('id', $operation['id'])
             ->whereIn('status', ['pending', 'running', 'partial_failed'])->where('lease_until', '<', time())
-            ->update(['lease_until' => time() + 1200, 'lease_owner' => $leaseOwner]) > 0;
+            ->update(['lease_until' => time() + 300, 'lease_owner' => $leaseOwner]) > 0;
+    }
+
+    public function hasDueWork(array $operation): bool
+    {
+        return ! $operation['scan_completed'] || Db::table(self::ITEMS)->where('operation_id', $operation['id'])
+            ->whereIn('status', ['pending', 'failed'])->where('next_retry_at', '<=', time())->exists();
+    }
+
+    public function renew(array $operation, string $owner): bool
+    {
+        $query = Db::table(self::OPERATIONS)->where('id', $operation['id'])->where('lease_owner', $owner)
+            ->where('lease_until', '>=', time())->where('status', '!=', 'superseded');
+        // MySQL may report zero changed rows when renewed twice in the same second.
+        return (clone $query)->update(['lease_until' => time() + 300]) > 0 || $query->exists();
     }
 
     public function release(array $operation, string $leaseOwner): void
@@ -66,12 +87,18 @@ class MagicClawReconciliationRepository
     public function claws(string $organization, int $after, int $limit = 100): array
     {
         return MagicClawModel::withTrashed()->where('organization_code', $organization)
-            ->where('id', '>', $after)->orderBy('id')->limit($limit)->get()->toArray();
+            ->where(function ($query): void {
+                $query->whereNull('deleted_at')->orWhere(function ($bindings): void {
+                    $this->withRuntimeBindings($bindings);
+                });
+            })->where('id', '>', $after)->orderBy('id')->limit($limit)->get()->toArray();
     }
 
     public function discoveryPage(int $after, int $limit = 100): array
     {
-        return MagicClawModel::withTrashed()->where('id', '>', $after)->orderBy('id')->limit($limit)->get()->toArray();
+        return MagicClawModel::withTrashed()->where('id', '>', $after)->where(function ($query): void {
+            $this->withRuntimeBindings($query);
+        })->orderBy('id')->limit($limit)->get()->toArray();
     }
 
     /** @return iterable<array> */
@@ -79,14 +106,25 @@ class MagicClawReconciliationRepository
     {
         $cursor = 0;
         do {
-            $rows = TopicModel::withTrashed()->where('project_id', $claw['project_id'])
-                ->where('user_organization_code', $claw['organization_code'])->where('user_id', $claw['user_id'])
-                ->where('id', '>', $cursor)->orderBy('id')->limit(100)->get()->toArray();
+            $rows = $this->topicPage($claw, $cursor, 100);
             foreach ($rows as $row) {
                 $cursor = (int) $row['id'];
                 yield $row;
             }
         } while (count($rows) === 100);
+    }
+
+    public function topicPage(array $claw, int $after, int $limit = 25): array
+    {
+        return TopicModel::withTrashed()->where('project_id', $claw['project_id'])
+            ->where('user_organization_code', $claw['organization_code'])->where('user_id', $claw['user_id'])
+            ->where('id', '>', $after)->orderBy('id')->limit($limit)->get()->toArray();
+    }
+
+    public function scannedTopicCursor(array $operation, array $claw): int
+    {
+        return (int) Db::table(self::ITEMS)->where('operation_id', $operation['id'])
+            ->where('claw_id', $claw['id'])->max('topic_id');
     }
 
     public function topic(int $topicId): ?array
@@ -127,11 +165,11 @@ class MagicClawReconciliationRepository
         Db::table(self::ITEMS)->where('id', $item['id'])->update($values + ['updated_at' => date('Y-m-d H:i:s')]);
     }
 
-    public function cancelQueuedMessages(array $topic): void
+    public function cancelQueuedMessages(array $topic, string $reason = 'Magic Claw access revoked'): void
     {
         MessageQueueModel::query()
             ->where('topic_id', $topic['id'])->where('organization_code', $topic['user_organization_code'])
-            ->whereIn('status', [0, 3])->update(['status' => 2, 'err_message' => 'Magic Claw access revoked']);
+            ->whereIn('status', [0, 3])->update(['status' => 2, 'err_message' => $reason]);
     }
 
     public function clearBinding(int $topicId, string $sandboxId): void
@@ -172,5 +210,15 @@ class MagicClawReconciliationRepository
             'failed_count' => count(array_filter($claws, fn (array $states) => isset($states['failed']))),
             'skipped_count' => count(array_filter($claws, fn (array $states) => count($states) === 1 && isset($states['skipped']))),
         ];
+    }
+
+    private function withRuntimeBindings($query): void
+    {
+        $query->where('file_converter_sandbox_id', '!=', '')->orWhereExists(function ($topics): void {
+            $topics->selectRaw('1')->from('magic_super_agent_topics')
+                ->whereColumn('project_id', 'magic_super_magic_claw.project_id')
+                ->whereColumn('user_organization_code', 'magic_super_magic_claw.organization_code')
+                ->whereColumn('user_id', 'magic_super_magic_claw.user_id')->where('sandbox_id', '!=', '');
+        });
     }
 }

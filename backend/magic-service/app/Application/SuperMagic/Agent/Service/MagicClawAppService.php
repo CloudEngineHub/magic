@@ -126,41 +126,9 @@ class MagicClawAppService extends AbstractSuperMagicAppService
         $userId = $dataIsolation->getCurrentUserId();
         $orgCode = $dataIsolation->getCurrentOrganizationCode();
 
-        // Resolve sandbox_id before deletion: code → project_id → topic_id → sandbox_id
-        $sandboxId = null;
-        $entity = $this->magicClawDomainService->findByCode($code, $userId, $orgCode);
-        $projectId = $entity->getProjectId();
-        if ($projectId !== null) {
-            $topicIdMap = $this->projectDomainService->getTopicIdMapByProjectIds([$projectId]);
-            $topicId = $topicIdMap[$projectId] ?? null;
-            if ($topicId !== null) {
-                $topic = $this->topicDomainService->getTopicById($topicId);
-                $sandboxId = $topic?->getSandboxId() ?: null;
-            }
-        }
-
-        // Soft-delete MagicClaw record
+        // Deletion uses the same durable cleanup as revocation, including every topic and converter.
         $this->magicClawDomainService->deleteClaw($code, $userId, $orgCode);
-
-        // Stop sandbox after deletion (non-fatal: sandbox may already be gone)
-        if (! empty($sandboxId)) {
-            try {
-                $result = $this->sandboxGateway->deleteSandbox($sandboxId);
-                if (! $result->isSuccess()) {
-                    $this->logger->warning('[MagicClaw] Failed to stop sandbox after deletion', [
-                        'code' => $code,
-                        'sandbox_id' => $sandboxId,
-                        'message' => $result->getMessage(),
-                    ]);
-                }
-            } catch (Throwable $e) {
-                $this->logger->warning('[MagicClaw] Exception while stopping sandbox after deletion', [
-                    'code' => $code,
-                    'sandbox_id' => $sandboxId,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
+        di(MagicClawReconciliationAppService::class)->requestReconciliation($orgCode, 'claw_deleted', true);
     }
 
     /**

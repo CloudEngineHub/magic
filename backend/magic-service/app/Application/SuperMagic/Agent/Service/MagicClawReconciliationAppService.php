@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Agent\Service;
 
+use App\Domain\SuperMagic\Agent\Event\ClawPermissionReconciliationRequestedEvent;
 use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
 use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
@@ -16,10 +17,9 @@ use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\ErrorCode\PermissionErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\HasLogger;
-use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
-use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use App\Infrastructure\Util\Locker\LockerInterface;
+use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\DbConnection\Db;
 use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
@@ -44,11 +44,13 @@ class MagicClawReconciliationAppService
     /** The policy write and durable work record commit together. No network I/O in this transaction. */
     public function savePolicy(string $organization, string $actor, callable $save): mixed
     {
-        return $this->withOrganizationLock($organization, fn () => Db::transaction(function () use ($organization, $actor, $save) {
+        $result = $this->withOrganizationLock($organization, fn () => Db::transaction(function () use ($organization, $actor, $save) {
             $result = $save();
             $this->repository->create($organization, $actor, 'policy_changed');
             return $result;
         }));
+        $this->notify($organization);
+        return $result;
     }
 
     public function status(string $organization): ?array
@@ -65,7 +67,7 @@ class MagicClawReconciliationAppService
             $rows = $this->repository->claws($organization, $cursor);
             foreach ($rows as $claw) {
                 $cursor = (int) $claw['id'];
-                if ($this->policy->isAllowed($organization, $claw['user_id'])) {
+                if (empty($claw['deleted_at']) && $this->policy->isAllowed($organization, $claw['user_id'])) {
                     continue;
                 }
                 $resources = 0;
@@ -82,7 +84,7 @@ class MagicClawReconciliationAppService
 
     public function retry(string $organization, string $operationId): array
     {
-        return $this->withOrganizationLock($organization, function () use ($organization, $operationId): array {
+        $result = $this->withOrganizationLock($organization, function () use ($organization, $operationId): array {
             $operation = $this->repository->latest($organization);
             if ($operation === null || (string) $operation['id'] !== $operationId) {
                 ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'permission.magic_claw_reconciliation_stale');
@@ -92,64 +94,107 @@ class MagicClawReconciliationAppService
             }
             return $this->status($organization) ?? [];
         });
+        $this->notify($organization);
+        return $result;
     }
 
-    public function execute(int $itemLimit = 5): void
+    public function execute(): void
     {
-        // Bounded pages and work batches; a slow gateway does not monopolize subsequent organizations.
+        // Recovery only: no sandbox I/O or scans inside the periodic scheduler.
         foreach ($this->repository->activeOperations(5) as $operation) {
-            $owner = bin2hex(random_bytes(16));
-            if (! $this->repository->claim($operation, $owner)) {
-                continue;
+            $this->notify($operation['organization_code']);
+        }
+    }
+
+    /** Process one small batch. True requests a paced continuation, not a polling loop. */
+    public function executeForOrganization(string $organization, int $itemLimit = 5): bool
+    {
+        $operation = $this->repository->latest($organization);
+        if ($operation === null || ! in_array($operation['status'], ['pending', 'running', 'partial_failed'], true)
+            || ! $this->repository->hasDueWork($operation)) {
+            return false;
+        }
+        $owner = bin2hex(random_bytes(16));
+        $slot = null;
+        // At most two background batches across the deployment; occupied slots do not spin.
+        for ($index = 0; $index < 2; ++$index) {
+            $name = 'claw_permission_worker:' . $index;
+            if ($this->locker->mutexLock($name, $owner, 600)) {
+                $slot = $name;
+                break;
             }
+        }
+        if ($slot === null) {
+            return false;
+        }
+        $claimed = false;
+        try {
+            $claimed = $this->repository->claim($operation, $owner);
+            if (! $claimed) {
+                return false;
+            }
+            $deadline = microtime(true) + 20;
+            $this->scan($operation, $deadline);
+            for ($processed = 0; $processed < max(1, min($itemLimit, 20)); ++$processed) {
+                if (microtime(true) >= $deadline || ! $this->repository->isCurrent($operation)
+                    || ! ($item = $this->repository->dueItem($operation))) {
+                    break;
+                }
+                if (! $this->repository->renew($operation, $owner)) {
+                    return false;
+                }
+                $this->stopItem($operation, $item);
+            }
+            $fresh = $this->repository->latest($organization);
+            if ($fresh !== null && (string) $fresh['id'] === (string) $operation['id']) {
+                $this->repository->updateOperation($fresh, ['status' => $this->repository->summarize($fresh)['status']]);
+                return $this->repository->hasDueWork($fresh);
+            }
+            return false;
+        } catch (Throwable $exception) {
+            $this->logger->error('龙虾权限停机处理失败', ['operation_id' => (string) $operation['id'], 'exception' => $exception->getMessage()]);
+            throw $exception;
+        } finally {
             try {
-                $this->scan($operation);
-                $deadline = microtime(true) + 20;
-                for ($processed = 0; $processed < max(1, min($itemLimit, 20)); ++$processed) {
-                    if (microtime(true) >= $deadline || ! $this->repository->isCurrent($operation)
-                        || ! ($item = $this->repository->dueItem($operation))) {
-                        break;
-                    }
-                    $this->stopItem($operation, $item);
+                if ($claimed) {
+                    $this->repository->release($operation, $owner);
                 }
-                $fresh = $this->repository->latest($operation['organization_code']);
-                if ($fresh !== null && (string) $fresh['id'] === (string) $operation['id']) {
-                    $this->repository->updateOperation($fresh, ['status' => $this->repository->summarize($fresh)['status']]);
-                }
-            } catch (Throwable $exception) {
-                $this->logger->error('龙虾权限停机处理失败', ['operation_id' => (string) $operation['id'], 'exception' => $exception->getMessage()]);
             } finally {
-                $this->repository->release($operation, $owner);
+                $this->locker->release($slot, $owner);
             }
         }
     }
 
-    /** Also covers department syncs and previously missed revocations, without scanning all users. */
+    /** Hourly, bounded repair inventory. Only recorded runtime bindings participate. */
     public function discover(): void
     {
         $cursorKey = 'magic_claw_permission_discovery_cursor';
-        $rows = $this->repository->discoveryPage((int) $this->cache->get($cursorKey, 0));
-        foreach ($rows as $claw) {
-            if (! $this->policy->isAllowed($claw['organization_code'], $claw['user_id'])) {
-                $hasBinding = false;
-                foreach ($this->repository->topics($claw) as $topic) {
-                    if (! empty($topic['sandbox_id'])) {
-                        $hasBinding = true;
-                        break;
-                    }
+        $cursor = (int) $this->cache->get($cursorKey, 0);
+        $deadline = microtime(true) + 10;
+        $decisions = [];
+        $organizations = [];
+        for ($page = 0; $page < 10 && microtime(true) < $deadline; ++$page) {
+            $rows = $this->repository->discoveryPage($cursor);
+            foreach ($rows as $claw) {
+                $organization = $claw['organization_code'];
+                $decisions[$organization][$claw['user_id']] ??= $this->policy->isAllowed($organization, $claw['user_id']);
+                if (! empty($claw['deleted_at']) || ! $decisions[$organization][$claw['user_id']]) {
+                    $organizations[$organization] = $organization;
                 }
-                if ($claw['runtime_block_reason'] === '' || $hasBinding || ! empty($claw['file_converter_sandbox_id'])) {
-                    $this->requestReconciliation($claw['organization_code'], 'membership_check');
-                }
+                $cursor = (int) $claw['id'];
             }
-            $this->cache->set($cursorKey, (string) $claw['id']);
+            if (count($rows) < 100) {
+                $cursor = 0;
+                break;
+            }
         }
-        if (count($rows) < 100) {
-            $this->cache->set($cursorKey, '0');
+        $this->cache->set($cursorKey, (string) $cursor);
+        foreach ($organizations as $organization) {
+            $this->requestReconciliation($organization, 'runtime_check');
         }
     }
 
-    public function requestReconciliation(string $organization, string $reason, bool $force = false): void
+    public function requestReconciliation(string $organization, string $reason, bool $force = false, bool $notify = true): void
     {
         $this->withOrganizationLock($organization, function () use ($organization, $reason, $force): void {
             $latest = $this->repository->latest($organization);
@@ -158,25 +203,41 @@ class MagicClawReconciliationAppService
             }
             Db::transaction(fn () => $this->repository->create($organization, '', $reason));
         });
+        if ($notify) {
+            $this->notify($organization);
+        }
     }
 
-    private function scan(array $operation): void
+    private function notify(string $organization): void
+    {
+        AsyncEventUtil::dispatch(new ClawPermissionReconciliationRequestedEvent($organization));
+    }
+
+    private function scan(array $operation, float $deadline): void
     {
         if ($operation['scan_completed'] || ! $this->repository->isCurrent($operation)) {
             return;
         }
-        $claws = $this->repository->claws($operation['organization_code'], (int) $operation['cursor']);
+        $claws = $this->repository->claws($operation['organization_code'], (int) $operation['cursor'], 10);
         foreach ($claws as $claw) {
-            if (! $this->policy->isAllowed($claw['organization_code'], $claw['user_id'])) {
-                foreach ($this->repository->topics($claw) as $topic) {
+            if (! empty($claw['deleted_at']) || ! $this->policy->isAllowed($claw['organization_code'], $claw['user_id'])) {
+                $topics = $this->repository->topicPage($claw, $this->repository->scannedTopicCursor($operation, $claw));
+                foreach ($topics as $topic) {
                     $this->repository->enqueue($operation, $claw, $topic);
+                }
+                if (count($topics) === 25) {
+                    // Keep the claw cursor here; persisted items supply the next topic page cursor.
+                    return;
                 }
                 // The auxiliary resource also represents claws with no topic yet.
                 $this->repository->enqueue($operation, $claw, ['id' => 0, 'sandbox_id' => $claw['file_converter_sandbox_id'] ?? '']);
             }
             $this->repository->updateOperation($operation, ['cursor' => $claw['id']]);
+            if (microtime(true) >= $deadline) {
+                return;
+            }
         }
-        if (count($claws) < 100) {
+        if (count($claws) < 10) {
             $this->repository->updateOperation($operation, ['scan_completed' => true]);
         }
     }
@@ -206,7 +267,7 @@ class MagicClawReconciliationAppService
                     if (! $this->repository->isCurrent($operation)) {
                         return false;
                     }
-                    if ($this->policy->isAllowed($claw['organization_code'], $claw['user_id'])) {
+                    if (empty($claw['deleted_at']) && $this->policy->isAllowed($claw['organization_code'], $claw['user_id'])) {
                         $this->repository->updateItem($item, ['status' => 'skipped', 'last_error' => '']);
                         return false;
                     }
@@ -218,35 +279,29 @@ class MagicClawReconciliationAppService
                 }
                 // Cancel queued work even when stopping the pod times out, so it cannot replay after reauthorization.
                 if ($topic !== null) {
-                    $this->repository->cancelQueuedMessages($topic);
+                    $this->repository->cancelQueuedMessages($topic, ! empty($claw['deleted_at']) ? 'Magic Claw deleted' : 'Magic Claw access revoked');
                 }
                 // Resolve again under the initialization lock; never delete an ID guessed from topic_id.
                 $sandboxId = (string) ($topic !== null ? ($topic['sandbox_id'] ?? '') : ($claw['file_converter_sandbox_id'] ?? ''));
                 $this->repository->updateItem($item, ['sandbox_id' => $sandboxId]);
                 $assertOwnership();
                 if ($sandboxId !== '') {
-                    try {
-                        $this->agent->stopSandbox($sandboxId);
-                    } catch (SandboxOperationException $exception) {
-                        if (! ResponseCode::isNotFound($exception->getCode())) {
-                            throw $exception;
-                        }
-                    }
+                    $this->agent->stopSandboxIfExists($sandboxId);
                 }
                 $assertOwnership();
                 if ($topic !== null) {
-                    $this->tasks->updateTaskStatusByTopicIds([(int) $topic['id']], TaskStatus::Stopped, 'Magic Claw access revoked', true);
+                    $this->tasks->updateTaskStatusByTopicIds([(int) $topic['id']], TaskStatus::Stopped, ! empty($claw['deleted_at']) ? 'Magic Claw deleted' : 'Magic Claw access revoked', true);
                     $this->repository->clearBinding((int) $topic['id'], $sandboxId);
                 } else {
                     $this->claws->clearFileConverterSandbox((int) $claw['id'], $sandboxId);
                 }
                 $this->repository->updateItem($item, ['status' => 'stopped', 'last_error' => '']);
-            });
+            }, 0);
         } catch (Throwable $exception) {
             $attempts = (int) $item['attempts'] + 1;
-            $delay = [10, 30, 60][min($attempts - 1, 2)];
+            $delay = [300, 600, 1800][min($attempts - 1, 2)];
             $this->repository->updateItem($item, [
-                'status' => 'failed', 'attempts' => $attempts, 'next_retry_at' => time() + ($attempts > 3 ? 300 : $delay),
+                'status' => 'failed', 'attempts' => $attempts, 'next_retry_at' => time() + ($attempts > 3 ? 3600 : $delay),
                 // Do not return provider URLs, tokens or raw exception messages to administrators.
                 'last_error' => 'sandbox_stop_unconfirmed',
             ]);
