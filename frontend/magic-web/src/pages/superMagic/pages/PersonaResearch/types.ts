@@ -90,8 +90,6 @@ export interface StudyFile {
 	schema_version: 1
 	/** Topic that runs this study; the workspace finds a topic's study directory by it. */
 	topic_id?: string
-	/** Additional conversations sharing this study; topic_id remains the primary topic. */
-	topic_ids?: string[]
 	title: string
 	question: string
 	study_type?: StudyType

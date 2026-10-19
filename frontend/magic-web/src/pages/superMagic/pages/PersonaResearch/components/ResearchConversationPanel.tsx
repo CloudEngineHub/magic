@@ -151,24 +151,26 @@ const ResearchConversationPanel = forwardRef<
 	// ask_user answers and message re-sends from the list go through the same send flow.
 	const handleSendMsg = useMemoizedFn(
 		(content: JSONContent | string, options?: SendMessageOptions) => {
-			const reference = store.conversationReference(selectedTopic?.id)
+			const references = store.conversationReferences(selectedTopic?.id)
+			let prepared: JSONContent | string = content
+			for (const reference of references) {
+				prepared = appendStudyReference(
+					typeof prepared === "string"
+						? {
+								type: "doc",
+								content: [
+									{
+										type: "paragraph",
+										content: [{ type: "text", text: prepared }],
+									},
+								],
+							}
+						: prepared,
+					reference,
+				)
+			}
 			messageSendService.sendContent({
-				content: reference
-					? appendStudyReference(
-							typeof content === "string"
-								? {
-										type: "doc",
-										content: [
-											{
-												type: "paragraph",
-												content: [{ type: "text", text: content }],
-											},
-										],
-									}
-								: content,
-							reference,
-						)
-					: content,
+				content: prepared,
 				options,
 				showLoading: messages.length > 1 && showLoading,
 				context: resolveMessageSendContext({

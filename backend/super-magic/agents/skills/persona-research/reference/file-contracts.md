@@ -30,7 +30,6 @@ Path: `studies/<slug>/study.json`
 |---|---|---|
 | `schema_version` | yes | `1` |
 | `topic_id` | yes | the primary topic ID assigned at creation, as a string; keep it unchanged when continuing from a related topic |
-| `topic_ids` | no | additional related topic IDs, as strings, managed by the research workspace; missing means no additional topics. Preserve on every rewrite; a new topic does not create a new study or reset limits. Deleted topic IDs may remain and are ignored by the UI. |
 | `title` | yes | short study title |
 | `question` | yes | the user's original question, verbatim |
 | `study_type` | no | `user_research` \| `product_rnd` \| `concept_test` \| `fast_insight` \| `panel_only` \| `persona_build` (persona building only: no plan, interviews, or report) |
@@ -129,6 +128,23 @@ Example (report written, real-person answers compared):
   "validated_count": 12
 }
 ```
+
+## study-topics/<topic_id>.json
+
+Immutable conversation relationships managed by the research workspace, separate from `study.json`. Do not write or delete these records with tools. A missing record means the topic may only own a study through its primary `study.json.topic_id`.
+
+| Field | Required | Values |
+|---|---|---|
+| `schema_version` | yes | `1` |
+| `topic_id` | yes | the current product topic ID, matching the JSON filename |
+| `primary_topic_id` | yes | the study's unchanged `study.json.topic_id` |
+| `study_dir` | yes | `studies/<slug>`, workspace-relative with no trailing slash |
+| `state` | yes | `linked` for a child topic; `deleting` only when topic_id equals primary_topic_id |
+| `title` | yes | the study title for deletion recovery; not an ownership key |
+
+For a child conversation, the native project-file references include both this record and the original `study.json`. Read `study-topics/<current product topic ID>.json`, verify its `topic_id`, `primary_topic_id`, and `study_dir` against the referenced study, then continue there without `created`. Never infer a relationship from a display name or an unrelated file reference.
+
+Before continuing, also read `study-topics/<primary_topic_id>.json` if present. `state: deleting` means stop: do not resume, create a replacement study, or write its outputs. This record may remain after deletion to reject delayed association requests. A partial deletion is not proof that the outputs remain intact. Deleted child-topic records have no active conversation and are ignored by the UI; cleanup may be retried separately.
 
 ## personas/<persona_id>.json
 

@@ -21,7 +21,9 @@ async def test_child_cannot_create_another_study_and_updates_keep_relationship(t
     ))
     path = tmp_path / created.data["study_dir"] / "study.json"
     raw = json.loads(path.read_text())
-    raw["topic_ids"] = ["child"]
+    marker = {"schema_version": 1, "topic_id": "child", "primary_topic_id": "main", "study_dir": created.data["study_dir"], "state": "linked", "title": "Study"}
+    (tmp_path / "study-topics").mkdir()
+    (tmp_path / "study-topics" / "child.json").write_text(json.dumps(marker))
     raw["custom_field"] = "kept"
     path.write_text(json.dumps(raw))
     before = path.read_text()
@@ -40,7 +42,7 @@ async def test_child_cannot_create_another_study_and_updates_keep_relationship(t
     assert continued.ok
     saved = json.loads(path.read_text())
     assert saved["topic_id"] == "main"
-    assert saved["topic_ids"] == ["child"]
+    assert json.loads((tmp_path / "study-topics" / "child.json").read_text()) == marker
     assert saved["custom_field"] == "kept"
 
 
@@ -58,3 +60,34 @@ async def test_old_study_without_children_is_readable(tmp_path):
     ))
     assert updated.ok
     assert json.loads(path.read_text())["topic_id"] == "main"
+
+
+async def test_deletion_intent_blocks_linked_topic_creation_and_study_writes(tmp_path):
+    tool = UpdateStudy(base_dir=tmp_path)
+    created = await tool.execute(context("main"), UpdateStudyParams(event="created", title="Study", question="Question", slug_hint="study"))
+    directory = tmp_path / "study-topics"
+    directory.mkdir()
+    base = {"schema_version": 1, "primary_topic_id": "main", "study_dir": created.data["study_dir"], "title": "Study"}
+    (directory / "main.json").write_text(json.dumps({**base, "topic_id": "main", "state": "deleting"}))
+    (directory / "child.json").write_text(json.dumps({**base, "topic_id": "child", "state": "linked"}))
+    before = (tmp_path / created.data["study_dir"] / "study.json").read_text()
+    for topic_id in ("main", "child"):
+        result = await tool.execute(context(topic_id), UpdateStudyParams(event="created", title="Wrong", question="Wrong"))
+        assert not result.ok
+        assert "delet" in result.content
+    result = await tool.execute(context("child"), UpdateStudyParams(event="clarified", study_dir=created.data["study_dir"]))
+    assert not result.ok
+    assert (tmp_path / created.data["study_dir"] / "study.json").read_text() == before
+
+
+async def test_mismatched_or_malformed_marker_never_creates_another_study(tmp_path):
+    tool = UpdateStudy(base_dir=tmp_path)
+    created = await tool.execute(context("main"), UpdateStudyParams(event="created", title="Study", question="Question"))
+    directory = tmp_path / "study-topics"
+    directory.mkdir()
+    marker = {"schema_version": 1, "primary_topic_id": "other", "topic_id": "child", "study_dir": created.data["study_dir"], "state": "linked", "title": "Study"}
+    for raw in (json.dumps(marker), "{broken"):
+        (directory / "child.json").write_text(raw)
+        result = await tool.execute(context("child"), UpdateStudyParams(event="created", title="Wrong", question="Wrong"))
+        assert not result.ok
+        assert len(list((tmp_path / "studies").iterdir())) == 1

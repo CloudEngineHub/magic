@@ -260,8 +260,11 @@
 		"delete": "删除",
 		"deleteDescription": "将删除本研究的所有话题和专属产物。人设库、面板和报告模板会保留。",
 		"deleteFailed": "删除失败，请重试",
+		"deleteFilesPartial": "部分产物已删除，剩余会话或文件未完成删除，请重试",
+		"deletePartial": "部分话题已删除，剩余内容未完成删除，请重试",
 		"deleteTitle": "删除这项研究？",
 		"deleted": "已删除",
+		"deletionPending": "删除未完成，部分话题或产物可能已删除；请重试完成清理。",
 		"emptyTitle": "开始你的第一项研究",
 		"filter": {
 			"all": "全部",
@@ -283,6 +286,7 @@
 		},
 		"rename": "重命名",
 		"reportTemplatesLabel": "报告模板",
+		"retryDelete": "重试删除",
 		"samplePrompt": "AI 录音硬件在传统行业老板（“老登”）人群里有没有机会？请从圈层和 JTBD 角度，研究他们的痛点、付费意愿和小团队的切入点。",
 		"share": "分享",
 		"shareUnavailable": "研究完成后可分享",
@@ -824,11 +828,14 @@
 		"sourceReused": "复用"
 	},
 	"topics": {
+		"childDeletedCleanupFailed": "话题已删除，关联记录暂未清理；研究产物已保留",
+		"cleanupFailed": "创建未完成，部分清理失败，请刷新核对话题状态",
 		"create": "新建话题",
 		"createDescription": "共用本研究的计划、证据和产物。你可以继续追问或补充材料，研究范围和访谈额度保持不变。",
 		"createFailed": "创建未完成，请重试",
 		"createTitle": "围绕这项研究新建话题",
 		"created": "新话题已创建，可继续追问",
+		"createdNeedsRefresh": "话题已关联，但状态确认未完成，请刷新后查看",
 		"creating": "正在创建…",
 		"delete": "删除话题",
 		"deleteDescription": "仅删除这个话题的会话记录。本研究的计划、证据、报告和其他话题都会保留。",
@@ -837,6 +844,7 @@
 		"deleted": "话题已删除，研究产物已保留",
 		"label": "研究话题",
 		"name": "话题名称",
+		"nameNotSaved": "话题已创建并关联，名称未保存，可继续使用",
 		"primary": "主话题",
 		"untitled": "未命名话题",
 		"waitForIdle": "请等待研究中的话题结束或停止后再操作"

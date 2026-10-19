@@ -35,6 +35,7 @@ import MagicTooltip from "@/components/base/MagicTooltip"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { usePersonaResearchStore } from "../context"
+import { ResearchOperationError } from "../services/researchOperationError"
 
 /** Conversations change independently; the study and its deliverables stay selected. */
 function StudyTopics() {
@@ -57,8 +58,21 @@ function StudyTopics() {
 			setName("")
 			openTopic(topic.id)
 			toast.success(t("topics.created"))
-		} catch {
-			toast.error(t("topics.createFailed"))
+		} catch (error) {
+			if (
+				error instanceof ResearchOperationError &&
+				error.stage === "rename" &&
+				error.progress.topic
+			) {
+				setCreating(false)
+				setName("")
+				openTopic(error.progress.topic.id)
+				toast.warning(t("topics.nameNotSaved"))
+			} else if (error instanceof ResearchOperationError && error.cleanupErrors.length) {
+				toast.error(t("topics.cleanupFailed"))
+			} else if (error instanceof ResearchOperationError && error.progress.markerSaved) {
+				toast.warning(t("topics.createdNeedsRefresh"))
+			} else toast.error(t("topics.createFailed"))
 		}
 	}
 	const remove = async () => {
@@ -68,8 +82,15 @@ function StudyTopics() {
 			setDeleting(false)
 			if (fallback) openTopic(fallback.id)
 			toast.success(t("topics.deleted"))
-		} catch {
-			toast.error(t("topics.deleteFailed"))
+		} catch (error) {
+			if (
+				error instanceof ResearchOperationError &&
+				error.progress.deletedTopicIds?.includes(selected.id)
+			) {
+				setDeleting(false)
+				if (fallback) openTopic(fallback.id)
+				toast.warning(t("topics.childDeletedCleanupFailed"))
+			} else toast.error(t("topics.deleteFailed"))
 		}
 	}
 	return (

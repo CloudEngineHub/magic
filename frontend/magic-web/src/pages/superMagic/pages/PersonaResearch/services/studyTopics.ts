@@ -1,48 +1,42 @@
-import { SuperMagicApi } from "@/apis"
-import { getFileContentsByIds } from "@/pages/superMagic/utils/api"
-import { getAttachmentPath, parseStudyFile } from "./researchFiles"
+import { z } from "zod"
+import { getAttachmentPath, listLibraryFiles } from "./researchFiles"
 import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import type { ParsedResearchFile } from "../types"
 
-/** Read only contract IDs; unknown/malformed JSON must not claim another study's topic. */
-export function studyTopicIds(raw: unknown): string[] {
-	const parsed = parseStudyFile(raw)
-	if (!parsed.ok) return []
-	return [
-		...new Set(
-			[parsed.data.topic_id, ...(parsed.data.topic_ids ?? [])].filter((id): id is string =>
-				Boolean(id && id !== "0"),
-			),
-		),
-	]
-}
-
-/** Read the latest whole contract and preserve extra fields when adding one relationship. */
-export async function linkStudyTopic(fileId: string, primaryId: string, topicId: string) {
-	const { successes } = await getFileContentsByIds([fileId], {
-		responseType: "text",
-		forceRefresh: true,
+export const STUDY_TOPICS_DIR = "study-topics/"
+const idSchema = z.string().regex(/^[A-Za-z0-9_-]+$/)
+const markerSchema = z
+	.object({
+		schema_version: z.literal(1),
+		topic_id: idSchema,
+		primary_topic_id: idSchema,
+		study_dir: z.string().regex(/^studies\/[A-Za-z0-9_-]+$/),
+		state: z.enum(["linked", "deleting"]),
+		title: z.string(),
 	})
-	const content = successes.get(fileId)
-	if (typeof content !== "string") throw new Error("study_topic_read_failed")
-	const raw: unknown = JSON.parse(content)
-	const parsed = parseStudyFile(raw)
-	if (!parsed.ok || !raw || typeof raw !== "object" || parsed.data.topic_id !== primaryId)
-		throw new Error("study_topic_contract_changed")
-	const next = {
-		...raw,
-		topic_ids: [...new Set([...(parsed.data.topic_ids ?? []), topicId])],
-	}
-	const response = await SuperMagicApi.saveFileContent([
-		{ file_id: fileId, content: JSON.stringify(next, null, 2) + "\n" },
-	])
-	if (!response?.success_files?.some((file) => String(file.file_id) === fileId))
-		throw new Error("study_topic_save_unconfirmed")
-	return next
-}
+	.refine((marker) =>
+		marker.state === "deleting"
+			? marker.topic_id === marker.primary_topic_id
+			: marker.topic_id !== marker.primary_topic_id,
+	)
 
+export type StudyTopicMarker = z.infer<typeof markerSchema>
+export function parseStudyTopicMarker(raw: unknown): ParsedResearchFile<StudyTopicMarker> {
+	const parsed = markerSchema.safeParse(raw)
+	return parsed.success
+		? { ok: true, data: parsed.data }
+		: { ok: false, reason: "invalid_study_topic_marker" }
+}
+export function studyTopicMarkerPath(topicId: string): string {
+	if (!idSchema.safeParse(topicId).success) throw new Error("invalid_study_topic_id")
+	return `${STUDY_TOPICS_DIR}${topicId}.json`
+}
+export function listStudyTopicMarkers(list: AttachmentItem[]): AttachmentItem[] {
+	return listLibraryFiles(list, STUDY_TOPICS_DIR)
+}
 /** Native file identity survives transport, history and re-editing; no prompt prose in the UI. */
 export function studyTopicReference(
 	file: AttachmentItem,

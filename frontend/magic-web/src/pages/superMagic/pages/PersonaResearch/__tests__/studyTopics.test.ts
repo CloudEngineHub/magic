@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { appendStudyReference, studyTopicIds, studyTopicReference } from "../services/studyTopics"
+import {
+	appendStudyReference,
+	parseStudyTopicMarker,
+	studyTopicReference,
+} from "../services/studyTopics"
 
 describe("study topic protocol", () => {
 	it("retains native file identity and deduplicates retry/re-edit references", () => {
@@ -25,20 +29,21 @@ describe("study topic protocol", () => {
 		})
 		expect(appendStudyReference(restored, reference)).toBe(restored)
 	})
-	it("ignores malformed contracts and preserves old single-topic data", () => {
-		const old = {
+	it("validates independent relationship and deletion-intent roles", () => {
+		const marker = {
 			schema_version: 1,
-			topic_id: "main",
+			topic_id: "child",
+			primary_topic_id: "main",
+			study_dir: "studies/one",
+			state: "linked",
 			title: "T",
-			question: "Q",
-			phase: "done",
-			phases: [],
 		}
-		expect(studyTopicIds(old)).toEqual(["main"])
-		expect(studyTopicIds({ ...old, topic_ids: ["main", "child", "child"] })).toEqual([
-			"main",
-			"child",
-		])
-		expect(studyTopicIds({ topic_id: "unrelated", topic_ids: ["child"] })).toEqual([])
+		expect(parseStudyTopicMarker(marker).ok).toBe(true)
+		expect(parseStudyTopicMarker({ ...marker, study_dir: "studies/../other" }).ok).toBe(false)
+		expect(parseStudyTopicMarker({ ...marker, state: "deleting" }).ok).toBe(false)
+		expect(parseStudyTopicMarker({ ...marker, topic_id: "main", state: "deleting" }).ok).toBe(
+			true,
+		)
+		expect(parseStudyTopicMarker({ ...marker, topic_id: "main" }).ok).toBe(false)
 	})
 })

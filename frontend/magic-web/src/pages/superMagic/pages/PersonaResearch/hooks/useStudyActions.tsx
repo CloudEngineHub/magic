@@ -16,6 +16,7 @@ import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { usePersonaResearchStore } from "../context"
+import { ResearchOperationError } from "../services/researchOperationError"
 
 /**
  * Opening and deleting studies from a list (the home and the full study list): `requestDelete`
@@ -38,8 +39,17 @@ export function useStudyActions() {
 		try {
 			await store.deleteStudy(topic.id)
 			toast.success(t("home.deleted"))
-		} catch {
-			toast.error(t("home.deleteFailed"))
+		} catch (error) {
+			if (error instanceof ResearchOperationError && error.progress.completed)
+				toast.success(t("home.deleted"))
+			else if (error instanceof ResearchOperationError && error.progress.filesDeleted)
+				toast.error(t("home.deleteFilesPartial"))
+			else if (
+				error instanceof ResearchOperationError &&
+				error.progress.deletedTopicIds?.length
+			)
+				toast.error(t("home.deletePartial"))
+			else toast.error(t("home.deleteFailed"))
 		}
 	})
 

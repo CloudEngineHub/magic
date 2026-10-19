@@ -333,6 +333,23 @@ function ResearchStudioPage() {
 
 	const title = (selectedTopic && store.studyTitleOf(selectedTopic)) || t("study.untitled")
 	const outputsCount = [report, studyAttachments?.validation].filter(Boolean).length
+	if (store.studyDeletionOf(selectedTopic?.id)) {
+		return (
+			<Empty className="h-full">
+				<EmptyHeader>
+					<EmptyTitle>{t("home.deletionPending")}</EmptyTitle>
+				</EmptyHeader>
+				<EmptyContent>
+					<Button
+						variant="outline"
+						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+					>
+						{t("study.backHome")}
+					</Button>
+				</EmptyContent>
+			</Empty>
+		)
+	}
 
 	if (!selectedTopic) {
 		return (

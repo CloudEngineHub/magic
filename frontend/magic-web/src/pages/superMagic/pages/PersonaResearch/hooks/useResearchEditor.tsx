@@ -127,8 +127,8 @@ export function useResearchEditor({
 		store.setSelectedTopic(topic)
 		onStudyStarted?.(topic)
 	})
-	const getConversationReference = useMemoizedFn(() =>
-		store.conversationReference(selectedTopic?.id),
+	const getConversationReferences = useMemoizedFn(() =>
+		store.conversationReferences(selectedTopic?.id),
 	)
 
 	const editorNodes = useMemo<SceneEditorNodes>(() => {
@@ -201,8 +201,8 @@ export function useResearchEditor({
 				const appended = appendToMessage?.()?.trim()
 				// Assigned after merge: lodash merge would combine paragraph arrays index by index.
 				if (appended) params.value = appendParagraph(defaultParams.value, appended)
-				const reference = getConversationReference()
-				if (reference) {
+				const references = getConversationReferences()
+				for (const reference of references) {
 					params.value = appendStudyReference(params.value, reference)
 					params.mentionItems = [...params.mentionItems, reference]
 				}
@@ -217,7 +217,7 @@ export function useResearchEditor({
 			bareContainer,
 			canInterruptTask,
 			createStudyTopic,
-			getConversationReference,
+			getConversationReferences,
 			handleInterrupt,
 			handleSendSuccess,
 			isMobile,
