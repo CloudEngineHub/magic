@@ -83,3 +83,19 @@ async def test_php_compatibility_vector_matches_python_encoder():
     data = json.dumps(json.loads(expected_json), ensure_ascii=False, separators=(",", ":"))
 
     assert ShadowCode.shadow_json(data) == wire
+
+
+@pytest.mark.asyncio
+async def test_shared_v2_vectors_are_decoded_without_loss():
+    """Python 读取与 PHP、前端共用的 V2 和旧格式向量。"""
+    fixture = Path(__file__).resolve().parents[1] / "fixtures/shadow_code_vectors.json"
+    vectors = json.loads(await async_read_text(fixture))
+    for vector in vectors["valid"]:
+        assert ShadowCode.is_shadowed(vector["v2"])
+        assert ShadowCode.unshadow(vector["v2"]) == vector["plain"]
+        if vector["v1"] is not None:
+            assert ShadowCode.unshadow(vector["v1"]) == vector["plain"]
+    for payload in vectors["invalid"]:
+        assert ShadowCode.is_shadowed(payload)
+        with pytest.raises(ValueError):
+            ShadowCode.unshadow(payload)

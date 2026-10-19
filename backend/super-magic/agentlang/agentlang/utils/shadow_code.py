@@ -8,6 +8,7 @@ The implementation processes strings byte by byte in UTF-8 encoding to ensure
 complete compatibility with the PHP version.
 """
 
+import base64
 import json
 import re
 
@@ -33,6 +34,7 @@ class ShadowCode:
 
     # Prefix added to obfuscated strings
     PREFIX = 'SHADOWED_'
+    PREFIX_V2 = 'SHADOWED2_'
 
     # Character mapping table for obfuscation (ASCII value mapping)
     SHUFFLE_MAP = [
@@ -135,6 +137,11 @@ class ShadowCode:
         if not input_string:
             return input_string
 
+        if input_string.startswith(cls.PREFIX_V2):
+            return cls._unshadow_v2(input_string[len(cls.PREFIX_V2):])
+        if re.match(r"^SHADOWED[0-9]+_", input_string):
+            raise ValueError("Unsupported shadow version")
+
         # Check if the string has the expected prefix
         if not input_string.startswith(cls.PREFIX):
             return input_string
@@ -169,14 +176,17 @@ class ShadowCode:
             raise ValueError(f"Failed to deobfuscate string: {e}")
 
     @classmethod
+    def _unshadow_v2(cls, payload: str) -> str:
+        """严格还原 V2 字节，拒绝非规范 Base64 和无效 UTF-8。"""
+        try:
+            mapped = base64.b64decode(payload, validate=True)
+            if base64.b64encode(mapped).decode("ascii") != payload:
+                raise ValueError("Invalid shadow payload")
+            return mapped.translate(bytes(cls.UNSHUFFLE_MAP)).decode("utf-8")
+        except (ValueError, UnicodeError):
+            raise ValueError("Invalid shadow payload") from None
+
+    @classmethod
     def is_shadowed(cls, input_string: str) -> bool:
-        """
-        Check if a string has been obfuscated (has the shadow prefix).
-
-        Args:
-            input_string: The string to check
-
-        Returns:
-            bool: True if the string appears to be obfuscated, False otherwise
-        """
-        return bool(input_string and input_string.startswith(cls.PREFIX))
+        """识别已编码载荷及保留版本标记，交由解码器验证内容。"""
+        return bool(input_string and re.match(r"^SHADOWED(?:[0-9]+)?_", input_string))
