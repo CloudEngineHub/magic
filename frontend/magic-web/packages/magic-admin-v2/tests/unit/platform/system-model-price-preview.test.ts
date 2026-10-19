@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import {
 	buildModelPriceGroups,
+	formatPreviewDecimal,
 	calculateModelPrice,
 	supportsPriceCalculation,
 } from "../../../../model-billing-reference"
@@ -130,4 +131,16 @@ describe("系统模型售价预览", () => {
 		assert.equal(row.depth, 32)
 		assert.equal(row.blocked, true)
 	})
+})
+
+/** 格式化不损失试算数据，主表限制展示长度，详情仍可核对全部有效位。 */
+it("trims padded decimals without mutating prices or hiding tiny positives", () => {
+	assert.equal(formatPreviewDecimal("0.750000000000000000000000000000000000"), "0.75")
+	assert.equal(formatPreviewDecimal("0002.000000000000"), "2")
+	assert.equal(formatPreviewDecimal("0.0761362875", 6), "0.076136")
+	assert.equal(formatPreviewDecimal("9.9999999", 6), "10")
+	assert.equal(formatPreviewDecimal("0.000000000000000000000000000000000001", 6), "<0.000001")
+	assert.equal(formatPreviewDecimal("0.0000000", 6), "0")
+	assert.equal(formatPreviewDecimal(null), "—")
+	assert.equal(formatPreviewDecimal("1.2500", 0), "1.25")
 })

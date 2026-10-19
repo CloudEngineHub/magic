@@ -16,6 +16,7 @@ export interface ModelPriceSnapshot {
 	groups: {
 		id: string
 		name: string
+		icon?: string | null
 		items: { relation_id: string; model_id: string; display_name: string }[]
 	}[]
 	models: Record<string, PreviewModel>
@@ -44,6 +45,7 @@ export type PreviewModel =
 			kind: "normal"
 			model_id: string
 			name: string
+			icon?: string | null
 			state: "available" | "disabled" | "no_valid_price"
 			bindings: PreviewBinding[]
 	  }
@@ -51,6 +53,7 @@ export type PreviewModel =
 			kind: "dynamic"
 			model_id: string
 			name: string
+			icon?: string | null
 			state: "available" | "disabled" | "invalid_config"
 			children: { index: number; model_id: string }[]
 	  }
@@ -58,6 +61,7 @@ export type PreviewModel =
 			kind: "unavailable"
 			model_id: string
 			name: string
+			icon?: string | null
 			reason: "missing" | "unsupported_type" | "not_loaded"
 	  }
 /** 公式和结果共用同一次计算，避免详情与表格数值不一致。 */
@@ -244,4 +248,27 @@ export function buildModelPriceGroups(snapshot: ModelPriceSnapshot) {
 			),
 		),
 	}))
+}
+
+/** 仅格式化展示，不改写价格或参与计算；极小正数用上界提示而非显示为零。 */
+export function formatPreviewDecimal(value: string | null | undefined, precision?: number): string {
+	if (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value)) return "—"
+	const [rawInteger, rawFraction = ""] = value.split(".")
+	const integer = rawInteger.replace(/^0+(?=\d)/, "")
+	const fraction = rawFraction.replace(/0+$/, "")
+	if (
+		precision === undefined ||
+		!Number.isInteger(precision) ||
+		precision < 1 ||
+		precision > 36 ||
+		fraction.length <= precision
+	)
+		return integer + (fraction ? `.${fraction}` : "")
+	const digits = integer + fraction.slice(0, precision)
+	if (BigInt(digits) === BigInt(0)) return `<0.${"0".repeat(precision - 1)}1`
+	const rounded = (BigInt(digits) + (Number(fraction[precision]) >= 5 ? BigInt(1) : BigInt(0)))
+		.toString()
+		.padStart(precision + 1, "0")
+	const tail = rounded.slice(-precision).replace(/0+$/, "")
+	return rounded.slice(0, -precision) + (tail ? `.${tail}` : "")
 }
