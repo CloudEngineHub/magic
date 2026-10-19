@@ -3,6 +3,7 @@ import type { ProjectListItem, Topic } from "@/pages/superMagic/pages/Workspace/
 import {
 	ensureProjectForMessageContext,
 	preparePanelSend,
+	prependImplicitMentions,
 	processMessageMentions,
 	releaseHtmlScreenshotsAfterSend,
 	resolveMessageSendContext,
@@ -10,6 +11,8 @@ import {
 import { mentionItemsProcessor } from "@/pages/superMagic/components/MessageEditor/services/MentionItemsProcessor"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
+import type { JSONContent } from "@/infrastructure/editors/tiptap/react"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 
 const { createProjectApiMock, analyticsTrackMock } = vi.hoisted(() => ({
@@ -573,5 +576,81 @@ describe("messageSendPreparation", () => {
 				project_id: "project-b",
 			}),
 		)
+	})
+})
+
+describe("prependImplicitMentions", () => {
+	const canvasMention = {
+		type: "mention",
+		attrs: {
+			type: "project_directory",
+			data: {
+				directory_id: "folder-1",
+				directory_name: "Canvas",
+				directory_path: "Canvas",
+				directory_metadata: { type: "design" },
+			},
+		},
+	} as MentionListItem
+	const textContent: JSONContent = {
+		type: "doc",
+		content: [{ type: "paragraph", content: [{ type: "text", text: "draw a cat" }] }],
+	}
+
+	it("returns the original content when no implicit mention is provided", () => {
+		const result = prependImplicitMentions(textContent, [], [])
+
+		expect(result.content).toBe(textContent)
+		expect(result.mentionItems).toEqual([])
+	})
+
+	it("prepends a missing canvas mention to the first paragraph", () => {
+		const result = prependImplicitMentions(textContent, [], [canvasMention])
+
+		expect(result.mentionItems).toEqual([canvasMention])
+		expect(result.content.content?.[0]?.content).toEqual([
+			{ type: "mention", attrs: canvasMention.attrs },
+			{ type: "text", text: " " },
+			{ type: "text", text: "draw a cat" },
+		])
+	})
+
+	it("does not duplicate a canvas the user already referenced", () => {
+		const userMention = {
+			...canvasMention,
+			attrs: {
+				...canvasMention.attrs,
+				data: { ...canvasMention.attrs.data, directory_path: "/Canvas" },
+			},
+		} as MentionListItem
+		const result = prependImplicitMentions(textContent, [userMention], [canvasMention])
+
+		expect(result.content).toBe(textContent)
+		expect(result.mentionItems).toEqual([userMention])
+	})
+
+	it("binds implicit mentions after preparePanelSend resolves the project", async () => {
+		const selectedProject = { id: "project-1", workspace_id: "workspace-1" } as ProjectListItem
+		const selectedTopic = {
+			id: "topic-1",
+			project_id: "project-1",
+			chat_topic_id: "chat-topic-1",
+			chat_conversation_id: "conversation-1",
+		} as Topic
+		const getImplicitMentionItems = vi.fn(() => [canvasMention])
+
+		const result = await preparePanelSend({
+			params: { value: textContent, mentionItems: [], topicMode: TopicMode.Design },
+			context: { selectedProject, selectedTopic, getImplicitMentionItems },
+			tabPattern: TopicMode.Design,
+			messagesLength: 1,
+		})
+
+		expect(getImplicitMentionItems).toHaveBeenCalledWith(selectedProject)
+		expect(result?.params.mentionItems).toEqual([canvasMention])
+		expect(result?.params.value?.content?.[0]?.content?.[0]).toEqual({
+			type: "mention",
+			attrs: canvasMention.attrs,
+		})
 	})
 })

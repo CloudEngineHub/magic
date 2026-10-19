@@ -365,6 +365,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 					topicStore: _topicStore,
 					createProject: editorContext?.createProject,
 					createTopic: editorContext?.createTopic,
+					getImplicitMentionItems: editorContext?.getImplicitMentionItems,
 				},
 				tabPattern: effectiveTopicMode,
 				editorRef: tiptapEditorRef.current,

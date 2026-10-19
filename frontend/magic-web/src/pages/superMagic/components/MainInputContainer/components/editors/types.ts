@@ -99,6 +99,13 @@ export interface SceneEditorContext {
 		workdir?: string
 	}) => Promise<CreatedProject | null>
 	createTopic?: (params: { selectedProject?: ProjectListItem | null }) => Promise<Topic | null>
+	/**
+	 * Mentions bound to every sent message once the project exists (see
+	 * MessageSendPreparationContext.getImplicitMentionItems); the AI canvas uses it for its canvas.
+	 */
+	getImplicitMentionItems?: (
+		project: ProjectListItem,
+	) => MentionListItem[] | Promise<MentionListItem[]>
 	onSendSuccess?: (params: {
 		currentProject: ProjectListItem | null
 		currentTopic: Topic | null
