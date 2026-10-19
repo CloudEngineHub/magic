@@ -34,6 +34,35 @@ final class NotificationEventEnvelopeValidatorTest extends TestCase
         self::assertCount(1, $data['recipients']);
     }
 
+    public function testTaskUserIdUsesMagicContactUserIdFormat(): void
+    {
+        $envelope = $this->envelope();
+        $envelope['recipients'][0]['user_id'] = 'usi_dg_dashboard_admin';
+        $envelope['recipients'][0]['source_event_key'] = 'task:MAGIC:785205968218931201:usi_dg_dashboard_admin:finished';
+
+        self::assertSame('task.finished', $this->validator->validate($envelope)['event_type']);
+    }
+
+    public function testTaskSourceEventKeyRejectsUserIdContainingDelimiter(): void
+    {
+        $envelope = $this->envelope();
+        $envelope['recipients'][0]['user_id'] = 'usi:invalid';
+        $envelope['recipients'][0]['source_event_key'] = 'task:MAGIC:785205968218931201:usi:invalid:finished';
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->validator->validate($envelope);
+    }
+
+    public function testSourceEventKeyUserIdMustMatchRecipientUserId(): void
+    {
+        $envelope = $this->envelope();
+        $envelope['recipients'][0]['user_id'] = 'usi_dg_dashboard_admin';
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('source_event_key user_id does not match recipient.user_id');
+        $this->validator->validate($envelope);
+    }
+
     public function testDuplicateRecipientsAreRejected(): void
     {
         $envelope = $this->envelope();

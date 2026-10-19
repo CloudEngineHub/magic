@@ -88,7 +88,7 @@ final readonly class NotificationEventEnvelopeValidator
             if ($sourceEventKey === '' || strlen($sourceEventKey) > 255 || preg_match('/[\x00-\x1F\x7F]/', $sourceEventKey)) {
                 throw new InvalidArgumentException('recipient.source_event_key is invalid');
             }
-            $this->assertSourceEventKey($eventType, $sourceEventKey);
+            $this->assertSourceEventKey($eventType, $sourceEventKey, $userId);
             if (isset($recipient['payload']) && ! is_array($recipient['payload'])) {
                 throw new InvalidArgumentException('recipient.payload must be an object');
             }
@@ -123,20 +123,32 @@ final readonly class NotificationEventEnvelopeValidator
         }
     }
 
-    private function assertSourceEventKey(string $eventType, string $sourceEventKey): void
+    private function assertSourceEventKey(string $eventType, string $sourceEventKey, string $recipientUserId): void
     {
-        $pattern = match (true) {
-            $eventType === 'task.finished' => '/^task:[^:]+:[0-9]+:[0-9]+:finished$/',
-            $eventType === 'task.error' => '/^task:[^:]+:[0-9]+:[0-9]+:error$/',
-            $eventType === 'share.project.recipients_added' => '/^share:[^:]+:project:[0-9]+:[^:]+:[^:]+$/',
-            $eventType === 'share.file.recipients_added' => '/^share:[^:]+:file:[0-9]+:[^:]+:[^:]+$/',
-            $eventType === 'review.skill.version_approved' => '/^review:[^:]+:skill:[0-9]+:[0-9]+:[^:]+:approved$/',
-            $eventType === 'review.agent.version_approved' => '/^review:[^:]+:agent:[0-9]+:[0-9]+:[^:]+:approved$/',
-            str_starts_with($eventType, 'collaboration.') => '/^collaboration:[^:]+:(project|agent|skill):[0-9]+:[0-9]+:[0-9]+$/',
+        $rule = match (true) {
+            // recipient_user_id is the string user_id from magic_contact_users.
+            // It is not required to be a numeric snowflake (the current system
+            // uses values such as usi_dg_dashboard_admin), but it must remain a
+            // single key segment so the source-event-key grammar is unambiguous.
+            $eventType === 'task.finished' => ['/^task:[^:]+:[0-9]+:([^:]+):finished$/', 1],
+            $eventType === 'task.error' => ['/^task:[^:]+:[0-9]+:([^:]+):error$/', 1],
+            $eventType === 'share.project.recipients_added' => ['/^share:[^:]+:project:[0-9]+:[^:]+:([^:]+)$/', 1],
+            $eventType === 'share.file.recipients_added' => ['/^share:[^:]+:file:[0-9]+:[^:]+:([^:]+)$/', 1],
+            $eventType === 'review.skill.version_approved' => ['/^review:[^:]+:skill:[0-9]+:[0-9]+:([^:]+):approved$/', 1],
+            $eventType === 'review.agent.version_approved' => ['/^review:[^:]+:agent:[0-9]+:[0-9]+:([^:]+):approved$/', 1],
+            str_starts_with($eventType, 'collaboration.') => ['/^collaboration:[^:]+:(project|agent|skill):[0-9]+:([^:]+):[0-9]+$/', 2],
             default => null,
         };
-        if ($pattern !== null && preg_match($pattern, $sourceEventKey) !== 1) {
+        if ($rule === null) {
+            return;
+        }
+        [$pattern, $userGroup] = $rule;
+        $matches = [];
+        if (preg_match($pattern, $sourceEventKey, $matches) !== 1) {
             throw new InvalidArgumentException("source_event_key does not match event_type: {$eventType}");
+        }
+        if (($matches[$userGroup] ?? null) !== $recipientUserId) {
+            throw new InvalidArgumentException('source_event_key user_id does not match recipient.user_id');
         }
     }
 }

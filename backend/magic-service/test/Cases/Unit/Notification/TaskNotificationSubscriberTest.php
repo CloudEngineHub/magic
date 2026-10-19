@@ -43,7 +43,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         self::assertSame('task.finished', $published[0]->eventType);
         self::assertSame('ORG', $published[0]->organizationCode);
         self::assertSame('456', $published[0]->source->id);
-        self::assertSame('task:ORG:456:789:finished', $published[0]->recipients[0]->sourceEventKey);
+        self::assertSame('task:ORG:456:usi_recipient:finished', $published[0]->recipients[0]->sourceEventKey);
         self::assertSame('finished', $published[0]->payload['status']);
     }
 
@@ -65,7 +65,7 @@ final class TaskNotificationSubscriberTest extends TestCase
 
         self::assertCount(1, $published);
         self::assertSame('task.error', $published[0]->eventType);
-        self::assertSame('task:ORG:456:789:error', $published[0]->recipients[0]->sourceEventKey);
+        self::assertSame('task:ORG:456:usi_recipient:error', $published[0]->recipients[0]->sourceEventKey);
         self::assertSame($status, $published[0]->payload['status']);
         self::assertSame('task failed', $published[0]->payload['error_message']);
     }
@@ -137,7 +137,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         $event = $this->createMock(RunTaskCallbackEvent::class);
         $event->method('getEventId')->willReturn(111);
         $event->method('getOrganizationCode')->willReturn('ORG');
-        $event->method('getUserId')->willReturn('789');
+        $event->method('getUserId')->willReturn('usi_recipient');
         $event->method('getTopicId')->willReturn(123);
         $event->method('getTopicName')->willReturn('Weekly report');
         $event->method('getTaskId')->willReturn(456);
