@@ -69,10 +69,10 @@ def no_leaks(monkeypatch):
 SAMPLED = {"status": "sampled", "platforms": ["xiaohongshu"], "posts": 12, "comments": 80}
 
 
-async def _study_at(tmp_path, phase_events):
+async def _study_at(tmp_path, phase_events, topic_id=TOPIC_ID):
     tool = UpdateStudy(base_dir=tmp_path)
     created = await tool.execute(
-        _context(), UpdateStudyParams(event="created", title="T", question="Q?", slug_hint="Owner Pain")
+        _context(topic_id), UpdateStudyParams(event="created", title="T", question="Q?", slug_hint="Owner Pain")
     )
     study_dir = created.data["study_dir"]
     for event in phase_events:
@@ -107,7 +107,7 @@ async def test_first_study_seeds_the_default_report_template_once(tmp_path):
     # A user template means the library is no longer empty: deleting voices.html is respected.
     seeded.unlink()
     (tmp_path / "templates" / "brand.html").write_text("<html></html>", encoding="utf-8")
-    await _study_at(tmp_path, [])
+    await _study_at(tmp_path, [], topic_id="another-study")
     assert not seeded.exists()
 
 

@@ -27,6 +27,8 @@ import { userStore } from "@/models/user"
 import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
 import { classifyStudyDeliverables } from "../services/researchDeliverables"
+import { appendStudyReference } from "../services/studyTopics"
+import StudyTopics from "./StudyTopics"
 import type { ResearchConsoleTab } from "./ResearchConsole"
 import ResearchDeliverables from "./ResearchDeliverables"
 
@@ -149,8 +151,24 @@ const ResearchConversationPanel = forwardRef<
 	// ask_user answers and message re-sends from the list go through the same send flow.
 	const handleSendMsg = useMemoizedFn(
 		(content: JSONContent | string, options?: SendMessageOptions) => {
+			const reference = store.conversationReference(selectedTopic?.id)
 			messageSendService.sendContent({
-				content,
+				content: reference
+					? appendStudyReference(
+							typeof content === "string"
+								? {
+										type: "doc",
+										content: [
+											{
+												type: "paragraph",
+												content: [{ type: "text", text: content }],
+											},
+										],
+									}
+								: content,
+							reference,
+						)
+					: content,
 				options,
 				showLoading: messages.length > 1 && showLoading,
 				context: resolveMessageSendContext({
@@ -220,6 +238,7 @@ const ResearchConversationPanel = forwardRef<
 			className="flex h-full min-h-0 w-full flex-col"
 			data-testid="persona-research-conversation"
 		>
+			<StudyTopics />
 			<MessageListProvider value={messageListProviderValue}>
 				<MessageList
 					className="[--message-list-surface:rgb(var(--background-rgb))]"

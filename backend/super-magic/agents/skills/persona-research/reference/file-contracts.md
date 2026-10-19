@@ -29,7 +29,8 @@ Path: `studies/<slug>/study.json`
 | Field | Required | Values |
 |---|---|---|
 | `schema_version` | yes | `1` |
-| `topic_id` | yes | the current topic ID from the latest `<super_magic_product_context>`, as a string; the research workspace finds the study of a topic by this field, so keep it on every rewrite |
+| `topic_id` | yes | the primary topic ID assigned at creation, as a string; keep it unchanged when continuing from a related topic |
+| `topic_ids` | no | additional related topic IDs, as strings, managed by the research workspace; missing means no additional topics. Preserve on every rewrite; a new topic does not create a new study or reset limits. Deleted topic IDs may remain and are ignored by the UI. |
 | `title` | yes | short study title |
 | `question` | yes | the user's original question, verbatim |
 | `study_type` | no | `user_research` \| `product_rnd` \| `concept_test` \| `fast_insight` \| `panel_only` \| `persona_build` (persona building only: no plan, interviews, or report) |

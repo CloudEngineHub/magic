@@ -25,6 +25,7 @@ import {
 import { userStore } from "@/models/user"
 import { usePersonaResearchStore } from "../context"
 import { appendParagraph } from "../services/researchOptions"
+import { appendStudyReference } from "../services/studyTopics"
 import { withResearchTopicFields } from "../store/research-store"
 import { useResearchMentionCatalog } from "./useResearchMentionCatalog"
 
@@ -126,6 +127,9 @@ export function useResearchEditor({
 		store.setSelectedTopic(topic)
 		onStudyStarted?.(topic)
 	})
+	const getConversationReference = useMemoizedFn(() =>
+		store.conversationReference(selectedTopic?.id),
+	)
 
 	const editorNodes = useMemo<SceneEditorNodes>(() => {
 		const messageQueueNode =
@@ -197,6 +201,11 @@ export function useResearchEditor({
 				const appended = appendToMessage?.()?.trim()
 				// Assigned after merge: lodash merge would combine paragraph arrays index by index.
 				if (appended) params.value = appendParagraph(defaultParams.value, appended)
+				const reference = getConversationReference()
+				if (reference) {
+					params.value = appendStudyReference(params.value, reference)
+					params.mentionItems = [...params.mentionItems, reference]
+				}
 				return params
 			},
 			editorRef: messageQueue.editorRef,
@@ -208,6 +217,7 @@ export function useResearchEditor({
 			bareContainer,
 			canInterruptTask,
 			createStudyTopic,
+			getConversationReference,
 			handleInterrupt,
 			handleSendSuccess,
 			isMobile,

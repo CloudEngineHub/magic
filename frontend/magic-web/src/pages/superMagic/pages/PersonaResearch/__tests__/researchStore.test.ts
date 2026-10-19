@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import { SuperMagicApi } from "@/apis"
 
 /** File contents by file id; a missing id hangs until the read is aborted. */
 const contents = new Map<string, string>()
@@ -96,6 +97,7 @@ const downloaded = () => requested.flat()
 
 describe("PersonaResearchStore content reads", () => {
 	beforeEach(() => {
+		vi.restoreAllMocks()
 		contents.clear()
 		requested.length = 0
 	})
@@ -185,5 +187,159 @@ describe("PersonaResearchStore content reads", () => {
 		await store.reloadParsedContent()
 		expect(store.studyFileOf(topic("t2"))?.title).toBe("S2")
 		expect(store.studies.map((item) => item.id).sort()).toEqual(["t1", "t2"])
+	})
+
+	it("restores child topics into one study without including a template chat", async () => {
+		const files = seed()
+		contents.set(
+			"studies/s1/study.json",
+			JSON.stringify({
+				...JSON.parse(study("t1", "S1")),
+				topic_ids: ["child", "template"],
+			}),
+		)
+		files.push(file("template-chats/template.json"))
+		const store = createStore(files)
+		store.topicStore.setTopics([topic("child"), topic("template"), topic("t2"), topic("t1")])
+		store.selectStudy("child")
+		await store.reloadParsedContent()
+		expect(store.studyDir).toBe("studies/s1/")
+		expect(store.study?.topic_id).toBe("t1")
+		expect(store.studyTitleOf(topic("child"))).toBe("t1")
+		expect(store.studyTopics.map((item) => item.id).sort()).toEqual(["child", "t1"])
+		expect(store.studies.map((item) => item.id).sort()).toEqual(["t1", "t2"])
+		store.selectStudy("t1")
+		await store.reloadParsedContent()
+		expect(store.studyDir).toBe("studies/s1/")
+	})
+
+	it("persists a child before exposing it and leaves the primary topic unchanged", async () => {
+		const store = createStore(seed())
+		store.selectedProject = { id: "project" } as never
+		store.selectStudy("t1")
+		await store.reloadParsedContent()
+		vi.spyOn(SuperMagicApi, "createTopic").mockResolvedValue(topic("child") as never)
+		vi.spyOn(SuperMagicApi, "editTopic").mockResolvedValue(undefined as never)
+		const save = vi
+			.spyOn(SuperMagicApi, "saveFileContent")
+			.mockResolvedValue({ success_files: [{ file_id: "studies/s1/study.json" }] } as never)
+		await store.createStudyTopic("Follow up")
+		const raw = JSON.parse(save.mock.calls[0][0][0].content)
+		expect(raw.topic_id).toBe("t1")
+		expect(raw.topic_ids).toEqual(["child"])
+		store.selectStudy("child")
+		await store.reloadParsedContent()
+		expect(store.studyDir).toBe("studies/s1/")
+		expect(store.conversationReference("child")?.attrs.data).toMatchObject({
+			file_path: "studies/s1/study.json",
+			file_id: "studies/s1/study.json",
+		})
+		expect(store.studies.map((item) => item.id).sort()).toEqual(["t1", "t2"])
+	})
+
+	it("cleans up a newly created topic when saving the relationship fails", async () => {
+		const store = createStore(seed())
+		store.selectedProject = { id: "project" } as never
+		store.selectStudy("t1")
+		await store.reloadParsedContent()
+		vi.spyOn(SuperMagicApi, "createTopic").mockResolvedValue(topic("child") as never)
+		vi.spyOn(SuperMagicApi, "saveFileContent").mockRejectedValue(new Error("failed"))
+		const remove = vi.spyOn(SuperMagicApi, "deleteTopic").mockResolvedValue(undefined as never)
+		await expect(store.createStudyTopic("Follow up")).rejects.toThrow("failed")
+		expect(remove).toHaveBeenCalledWith({ id: "child" })
+		expect(store.topicStore.topics.some((item) => item.id === "child")).toBe(false)
+		expect(store.isChangingStudyTopics).toBe(false)
+	})
+
+	it("deletes a child without deleting outputs, and deletes a study within its directory only", async () => {
+		const files = seed()
+		contents.set(
+			"studies/s1/study.json",
+			JSON.stringify({ ...JSON.parse(study("t1", "S1")), topic_ids: ["child", "gone"] }),
+		)
+		const store = createStore(files)
+		store.selectedProject = { id: "project" } as never
+		store.topicStore.setTopics([topic("t1"), topic("t2"), topic("child")])
+		store.selectStudy("t1")
+		await store.reloadParsedContent()
+		const removeTopic = vi
+			.spyOn(SuperMagicApi, "deleteTopic")
+			.mockResolvedValue(undefined as never)
+		const removeFiles = vi
+			.spyOn(SuperMagicApi, "deleteFiles")
+			.mockResolvedValue(undefined as never)
+		await store.deleteStudyTopic("child")
+		expect(removeFiles).not.toHaveBeenCalled()
+		expect(store.studyDir).toBe("studies/s1/")
+		await store.deleteStudy("t1")
+		expect(removeTopic.mock.calls.map(([args]) => args.id)).toEqual(["child", "t1"])
+		expect(removeFiles.mock.calls[0][0].file_ids).toEqual([
+			"studies/s1/study.json",
+			"studies/s1/panel.json",
+		])
+		expect(store.studies.map((item) => item.id)).toEqual(["t2"])
+	})
+
+	it("never expands share topics or permits relationship changes in a share", async () => {
+		const files = seed()
+		contents.set(
+			"studies/s1/study.json",
+			JSON.stringify({ ...JSON.parse(study("t1", "S1")), topic_ids: ["child"] }),
+		)
+		const store = createStore(files)
+		store.isReadOnly = true
+		store.topicStore.setTopics([topic("child")])
+		store.selectStudy("child")
+		await store.reloadParsedContent()
+		expect(store.studyDir).toBe("studies/s1/")
+		expect(store.studyTopics.map((item) => item.id)).toEqual(["child"])
+		expect(store.canChangeStudyTopics).toBe(false)
+		expect(await store.createStudyTopic("no")).toBeNull()
+	})
+
+	it("keeps a retryable study when one child deletion fails", async () => {
+		const files = seed()
+		contents.set(
+			"studies/s1/study.json",
+			JSON.stringify({ ...JSON.parse(study("t1", "S1")), topic_ids: ["c1", "c2"] }),
+		)
+		const store = createStore(files)
+		store.selectedProject = { id: "project" } as never
+		store.topicStore.setTopics([topic("t1"), topic("t2"), topic("c1"), topic("c2")])
+		await store.reloadParsedContent()
+		const remove = vi
+			.spyOn(SuperMagicApi, "deleteTopic")
+			.mockResolvedValueOnce(undefined as never)
+			.mockRejectedValueOnce(new Error("failed"))
+		const removeFiles = vi
+			.spyOn(SuperMagicApi, "deleteFiles")
+			.mockResolvedValue(undefined as never)
+		await expect(store.deleteStudy("t1")).rejects.toThrow("failed")
+		expect(remove.mock.calls.map(([arg]) => arg.id)).toEqual(["c1", "c2"])
+		expect(removeFiles).not.toHaveBeenCalled()
+		expect(store.studies.map((item) => item.id).sort()).toEqual(["t1", "t2"])
+		expect(store.isChangingStudyTopics).toBe(false)
+		remove.mockResolvedValue(undefined as never)
+		await store.deleteStudy("t1")
+		expect(remove.mock.calls.map(([arg]) => arg.id)).toEqual(["c1", "c2", "c2", "t1"])
+	})
+
+	it("blocks relationship writes while another topic in the study is running", async () => {
+		const files = seed()
+		contents.set(
+			"studies/s1/study.json",
+			JSON.stringify({ ...JSON.parse(study("t1", "S1")), topic_ids: ["child"] }),
+		)
+		const store = createStore(files)
+		store.selectedProject = { id: "project" } as never
+		store.topicStore.setTopics([
+			topic("t1"),
+			{ ...topic("child"), task_status: TaskStatus.RUNNING },
+		])
+		store.selectStudy("t1")
+		await store.reloadParsedContent()
+		expect(store.canChangeStudyTopics).toBe(false)
+		expect(await store.createStudyTopic("no")).toBeNull()
+		await expect(store.deleteStudy("t1")).rejects.toThrow("study_delete_running")
 	})
 })

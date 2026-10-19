@@ -230,6 +230,8 @@ class Study(_Lenient):
 
     schema_version: Literal[1]
     topic_id: str = Field(..., min_length=1)
+    # 子话题共享计划与产物；主 topic_id 不随当前会话变化。
+    topic_ids: List[str] = Field(default_factory=list)
     title: str = Field(..., min_length=1)
     question: str = Field(..., min_length=1)
     study_type: Optional[StudyType] = None

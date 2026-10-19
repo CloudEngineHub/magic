@@ -4,6 +4,8 @@ These tools write every structured study file. Call them from `run_sdk_snippet` 
 
 Each tool returns `result.data["study_dir"]` where relevant. Pass `study_dir` as `studies/<slug>`.
 
+When a message supplies an existing research directory, read that study's files and continue there, even in a new conversation. Verify the current product topic ID matches `topic_id` or `topic_ids` in its `study.json`. Do not call `created`, replace the primary topic ID, use another study's files, reset the confirmed plan or interview limits, or infer approval for paid work. The existing same-study follow-up rules still apply. If `created` rejects an already linked topic, use the directory named in its error instead of retrying creation.
+
 ```python
 from sdk.tool import tool
 

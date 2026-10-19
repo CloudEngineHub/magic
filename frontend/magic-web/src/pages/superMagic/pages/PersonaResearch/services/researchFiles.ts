@@ -61,15 +61,15 @@ export function listStudyFiles(list: AttachmentItem[]): AttachmentItem[] {
 
 /**
  * Finds the study directory that belongs to one topic.
- * The agent records the topic in study.json `topic_id`, read through `studyTopicIdOf`; the
- * attachment's own topic_id is only a fallback because agent-written files may carry 0.
+ * study.json records the primary `topic_id` and optional related `topic_ids`, supplied by
+ * the reader. The attachment's own topic_id is used only when no contract IDs were found.
  * Example: study.json of "studies/ai-recorder-7f3a/" has topic_id "123" → "studies/ai-recorder-7f3a/".
  * When several study files match (a renamed study), the most recently updated wins.
  */
 export function findStudyDir(
 	list: AttachmentItem[],
 	topicId: string | undefined,
-	studyTopicIdOf?: (item: AttachmentItem) => string | undefined,
+	studyTopicIdOf?: (item: AttachmentItem) => string | string[] | undefined,
 ): string | null {
 	if (!topicId) return null
 	return indexStudyDirs(list, studyTopicIdOf).get(String(topicId)) ?? null
@@ -83,7 +83,7 @@ export function findStudyDir(
  */
 export function indexStudyDirs(
 	list: AttachmentItem[],
-	studyTopicIdOf?: (item: AttachmentItem) => string | undefined,
+	studyTopicIdOf?: (item: AttachmentItem) => string | string[] | undefined,
 ): Map<string, string> {
 	const latest = new Map<string, AttachmentItem>()
 	const claim = (topicId: string | undefined, item: AttachmentItem) => {
@@ -99,9 +99,11 @@ export function indexStudyDirs(
 	}
 	for (const item of listStudyFiles(list)) {
 		const recorded = studyTopicIdOf?.(item)
-		claim(recorded, item)
-		const own = String(item.topic_id ?? "")
-		if (own !== recorded) claim(own, item)
+		const ids = Array.isArray(recorded) ? recorded : recorded ? [recorded] : []
+		for (const id of ids) claim(id, item)
+		// Once the contract supplies ownership, the last writer's attachment topic is not
+		// another owner. A child conversation may overwrite study.json in place.
+		if (!ids.length) claim(String(item.topic_id ?? ""), item)
 	}
 	const dirs = new Map<string, string>()
 	for (const [topicId, item] of latest) {
@@ -281,6 +283,7 @@ const hypothesisSchema = z.object({
 const studySchema = z.object({
 	schema_version: schemaVersion,
 	topic_id: z.coerce.string().optional().catch(undefined),
+	topic_ids: z.array(z.string().min(1)).optional().catch(undefined),
 	title: z.string(),
 	question: z.string(),
 	study_type: z

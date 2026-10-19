@@ -261,7 +261,7 @@
 	},
 	"home": {
 		"delete": "Delete",
-		"deleteDescription": "The conversation and this study's output files will be deleted. Personas in the library are kept.",
+		"deleteDescription": "Delete all topics and outputs belonging to this study. Library personas, panels and report templates will be kept.",
 		"deleteFailed": "Delete failed. Please try again.",
 		"deleteTitle": "Delete this study?",
 		"deleted": "Deleted",
@@ -825,6 +825,24 @@
 		"roundOf": "Round {{round}}/{{limit}}",
 		"sourceNew": "New",
 		"sourceReused": "Reused"
+	},
+	"topics": {
+		"create": "New topic",
+		"createDescription": "Share this study’s plan, evidence and outputs. Ask follow-up questions or add materials within the existing scope and interview limits.",
+		"createFailed": "Could not finish creating the topic. Try again.",
+		"createTitle": "Start a topic in this study",
+		"created": "Topic created. Continue your research here.",
+		"creating": "Creating…",
+		"delete": "Delete topic",
+		"deleteDescription": "Only this conversation will be deleted. The study’s plan, evidence, report and other topics will be kept.",
+		"deleteFailed": "Could not delete the topic. Try again.",
+		"deleteTitle": "Delete this topic?",
+		"deleted": "Topic deleted. Study outputs kept.",
+		"label": "Study topics",
+		"name": "Topic name",
+		"primary": "Main topic",
+		"untitled": "Untitled topic",
+		"waitForIdle": "Wait for this study’s conversations to finish or stop them before making changes."
 	},
 	"transcript": {
 		"collapse": "Show less",
