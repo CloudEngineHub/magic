@@ -19,6 +19,7 @@ import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import { useResearchFileDownload } from "../hooks/useResearchFileDownload"
+import { discussionTitle } from "../services/discussionTitle"
 import type { StudyDeliverables } from "../services/researchDeliverables"
 import type { ResearchConsoleTab } from "./ResearchConsole"
 
@@ -46,7 +47,7 @@ function ResearchDeliverables({
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
 	const discussionTopics = store.discussions
-		.map((ref) => ref.data.topic?.trim())
+		.map((ref) => discussionTitle(ref.data)?.text)
 		.filter((topic): topic is string => Boolean(topic))
 	const { permissions } = useFileAccess()
 	const downloadFile = useResearchFileDownload()

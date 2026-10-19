@@ -57,6 +57,7 @@
 	"console": {
 		"analysis": "分析",
 		"backToList": "返回访谈列表",
+		"discussionFirstQuestion": "首个问题：{{topic}}",
 		"discussionN": "讨论 {{index}}",
 		"discussionTopic": "讨论主题：{{topic}}",
 		"discussions": "讨论",

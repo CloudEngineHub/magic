@@ -32,6 +32,7 @@ import { useSlidingThumb } from "../hooks/useSlidingThumb"
 import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
 import type { PersonaFile, QuoteRef } from "../types"
 import AnalysisBoard from "./AnalysisBoard"
+import { discussionTitle } from "../services/discussionTitle"
 import HypothesisBoard from "./HypothesisBoard"
 import InterviewsPanel from "./InterviewsPanel"
 import PersonaAvatar from "./PersonaAvatar"
@@ -225,6 +226,7 @@ function ResearchConsole({
 	]
 
 	const activeDiscussion = discussions[activeDiscussionIndex]
+	const activeDiscussionTitle = activeDiscussion ? discussionTitle(activeDiscussion.data) : null
 	const { containerRef: thumbContainerRef, rect: thumb } = useSlidingThumb<HTMLDivElement>(
 		`${activeTab}:${isMobile}`,
 	)
@@ -384,7 +386,7 @@ function ResearchConsole({
 										>
 											{/* The topic tells discussions apart; older files fall back to a number. */}
 											<span className="max-w-[16em] truncate">
-												{ref.data.topic?.trim() ||
+												{discussionTitle(ref.data)?.text ||
 													t("console.discussionN", { index: index + 1 })}
 											</span>
 										</Button>
@@ -408,11 +410,23 @@ function ResearchConsole({
 						</div>
 						<ScrollArea className="min-h-0 flex-1">
 							<div className="mx-auto max-w-3xl p-4">
-								{activeDiscussion?.data.topic?.trim() ? (
-									<h3 className="mb-3 text-[15px] font-semibold leading-6 text-foreground">
-										{t("console.discussionTopic", {
-											topic: activeDiscussion.data.topic.trim(),
-										})}
+								{activeDiscussionTitle ? (
+									// Older discussions saved no topic; their first question stands in,
+									// labelled as such so it is not read as a topic.
+									<h3
+										className={cn(
+											"mb-3 text-[15px] leading-6",
+											activeDiscussionTitle.isFirstQuestion
+												? "font-medium text-muted-foreground"
+												: "font-semibold text-foreground",
+										)}
+									>
+										{t(
+											activeDiscussionTitle.isFirstQuestion
+												? "console.discussionFirstQuestion"
+												: "console.discussionTopic",
+											{ topic: activeDiscussionTitle.text },
+										)}
 									</h3>
 								) : null}
 								{activeDiscussion ? (

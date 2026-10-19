@@ -57,6 +57,7 @@
 	"console": {
 		"analysis": "Analysis",
 		"backToList": "Back to interviews",
+		"discussionFirstQuestion": "First question: {{topic}}",
 		"discussionN": "Discussion {{index}}",
 		"discussionTopic": "Topic: {{topic}}",
 		"discussions": "Discussions",
