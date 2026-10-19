@@ -87,6 +87,18 @@ interface PreparedAssetMedia {
 	source: Exclude<CanvasAssetImportResult["source"], "existing-connection">
 }
 
+interface AssetMediaDownloadSource {
+	assetId: string
+	mediaType: CanvasAssetMediaType
+	fileUrl: string
+	fileName?: string
+}
+
+type AssetMediaPreparation =
+	| { assetId: string; prepared: PreparedAssetMedia }
+	| { assetId: string; pending: Promise<PreparedAssetMedia> }
+	| { assetId: string; source: AssetMediaDownloadSource }
+
 const FALLBACK_FILE_EXTENSIONS: Record<CanvasAssetMediaType, string> = {
 	image: "png",
 	video: "mp4",
@@ -455,10 +467,9 @@ export class CanvasAssetImportManager {
 		validateImportRequest(request)
 		assertImportTarget(this.canvas, request.targetElementId, request.targetKind)
 
-		const preparedAssets = await Promise.all(
-			request.assetIds.map((assetId) =>
-				this.prepareAssetMedia(assetId, request.allowedMediaTypes),
-			),
+		const preparedAssets = await this.prepareAssetMediaBatch(
+			request.assetIds,
+			request.allowedMediaTypes,
 		)
 		if (this.destroyed) throw new Error("Canvas asset import manager destroyed")
 		if (request.isCurrent?.() === false) throw new Error("Asset import session is stale")
@@ -707,10 +718,18 @@ export class CanvasAssetImportManager {
 		assetId: string,
 		allowedMediaTypes: readonly CanvasAssetMediaType[],
 	): Promise<PreparedAssetMedia> {
+		const preparation = await this.resolveAssetMediaPreparation(assetId, allowedMediaTypes)
+		if ("prepared" in preparation) return preparation.prepared
+		if ("pending" in preparation) return preparation.pending
+		return this.downloadAndUpload(preparation.source)
+	}
+
+	private async resolveAssetMediaPreparation(
+		assetId: string,
+		allowedMediaTypes: readonly CanvasAssetMediaType[],
+	): Promise<AssetMediaPreparation> {
 		const existing = this.findBinding(assetId, allowedMediaTypes)
-		if (existing) {
-			return this.fromBinding(existing)
-		}
+		if (existing) return { assetId, prepared: this.fromBinding(existing) }
 
 		const resource = await this.canvas.assetResourceManager.getResource(assetId, {
 			forceRefresh: true,
@@ -722,7 +741,7 @@ export class CanvasAssetImportManager {
 
 		// 素材详情请求期间可能已有另一个入口完成落图，复用文件或上传前再扫描一次。
 		const refreshedBinding = this.findBinding(assetId, allowedMediaTypes)
-		if (refreshedBinding) return this.fromBinding(refreshedBinding)
+		if (refreshedBinding) return { assetId, prepared: this.fromBinding(refreshedBinding) }
 
 		for (const fileName of getAssetFileNameCandidates({
 			mediaType: resource.mediaType,
@@ -736,39 +755,172 @@ export class CanvasAssetImportManager {
 			if (!existingFile) continue
 			return {
 				assetId,
-				...existingFile,
-				dimensions: await resolveImportedMediaDimensions({
+				prepared: {
 					assetId,
-					mediaType: resource.mediaType,
-					fileUrl: resource.fileUrl,
-				}),
-				source: "existing-file",
+					...existingFile,
+					dimensions: await resolveImportedMediaDimensions({
+						assetId,
+						mediaType: resource.mediaType,
+						fileUrl: resource.fileUrl,
+					}),
+					source: "existing-file",
+				},
 			}
 		}
 
 		if (!resource.fileUrl) throw new Error("Asset file URL is unavailable")
 
 		const pending = this.importPromises.get(assetId)
-		if (pending) {
-			const prepared = await pending
-			if (!allowedMediaTypes.includes(prepared.mediaType)) {
-				throw new Error("Asset media type is not allowed for this slot")
-			}
-			return prepared
+		if (pending) return { assetId, pending }
+
+		return {
+			assetId,
+			source: {
+				assetId,
+				mediaType: resource.mediaType,
+				fileUrl: resource.fileUrl,
+				fileName: resource.fileName,
+			},
+		}
+	}
+
+	/**
+	 * Batch imports download assets in parallel, then upload each media directory once.
+	 * The result order stays aligned with the selected asset order for connection seeds.
+	 */
+	private async prepareAssetMediaBatch(
+		assetIds: readonly string[],
+		allowedMediaTypes: readonly CanvasAssetMediaType[],
+	): Promise<PreparedAssetMedia[]> {
+		const directResults = new Map<string, PreparedAssetMedia>()
+		const pendingResults = new Map<string, Promise<PreparedAssetMedia>>()
+		const downloadSourcesByIndex: Array<AssetMediaDownloadSource | undefined> = []
+
+		await Promise.all(
+			assetIds.map(async (assetId, index) => {
+				const preparation = await this.resolveAssetMediaPreparation(
+					assetId,
+					allowedMediaTypes,
+				)
+				if ("prepared" in preparation) {
+					directResults.set(assetId, preparation.prepared)
+					return
+				}
+				if ("pending" in preparation) {
+					pendingResults.set(assetId, preparation.pending)
+					return
+				}
+				downloadSourcesByIndex[index] = preparation.source
+			}),
+		)
+		const downloadSources = downloadSourcesByIndex.filter(
+			(source): source is AssetMediaDownloadSource => Boolean(source),
+		)
+
+		const groupedSources = new Map<CanvasAssetMediaType, AssetMediaDownloadSource[]>()
+		for (const source of downloadSources) {
+			const group = groupedSources.get(source.mediaType) ?? []
+			group.push(source)
+			groupedSources.set(source.mediaType, group)
+		}
+		const batchPendingResults = new Map<string, Promise<PreparedAssetMedia>>()
+		for (const sources of groupedSources.values()) {
+			const batchPromise = this.downloadAndUploadBatch(sources)
+			sources.forEach((source, index) => {
+				const pending = batchPromise.then((prepared) => {
+					const result = prepared[index]
+					if (!result) throw new Error("Asset upload result is missing")
+					return result
+				})
+				batchPendingResults.set(source.assetId, pending)
+				this.importPromises.set(source.assetId, pending)
+			})
 		}
 
-		const importPromise = this.downloadAndUpload({
-			assetId,
-			mediaType: resource.mediaType,
-			fileUrl: resource.fileUrl,
-			fileName: resource.fileName,
-		})
-		this.importPromises.set(assetId, importPromise)
 		try {
-			return await importPromise
+			await Promise.all([...batchPendingResults.values(), ...pendingResults.values()])
+			for (const [assetId, pending] of batchPendingResults) {
+				directResults.set(assetId, await pending)
+			}
+			for (const [assetId, pending] of pendingResults) {
+				directResults.set(assetId, await pending)
+			}
 		} finally {
-			if (this.importPromises.get(assetId) === importPromise) {
-				this.importPromises.delete(assetId)
+			for (const [assetId, pending] of batchPendingResults) {
+				if (this.importPromises.get(assetId) === pending)
+					this.importPromises.delete(assetId)
+			}
+		}
+
+		return assetIds.map((assetId) => {
+			const prepared = directResults.get(assetId)
+			if (!prepared) throw new Error("Failed to prepare asset media")
+			return prepared
+		})
+	}
+
+	private async downloadAndUploadBatch(
+		sources: readonly AssetMediaDownloadSource[],
+	): Promise<PreparedAssetMedia[]> {
+		const downloaded = await Promise.all(
+			sources.map(async (source) => {
+				const response = await fetch(source.fileUrl, { cache: "default" })
+				if (!response.ok)
+					throw new Error(`Failed to download asset media: ${response.status}`)
+				const blob = await response.blob()
+				if (blob.size === 0) throw new Error("Downloaded asset media is empty")
+
+				const mimeType = blob.type || FALLBACK_MIME_TYPES[source.mediaType]
+				const fileName = buildAssetFileName({ ...source, mimeType })
+				const file = new File([blob], fileName, { type: mimeType })
+				const dimensions = await resolveImportedMediaDimensions({
+					assetId: source.assetId,
+					mediaType: source.mediaType,
+					file,
+					fileUrl: source.fileUrl,
+				})
+				return { source, file, fileName, dimensions }
+			}),
+		)
+
+		const uploadResults = await this.canvas.canvasFileUploadManager.uploadDirect(
+			downloaded.map(({ file }) => file),
+			undefined,
+			undefined,
+			{ uploadSubDir: getAssetUploadSubDir(sources[0]?.mediaType ?? "image") },
+		)
+		if (uploadResults.length !== downloaded.length) {
+			throw new Error("Asset upload result count does not match input files")
+		}
+
+		return downloaded.map(({ source, fileName, dimensions }, index) => {
+			const uploadResult = uploadResults[index]
+			if (!uploadResult?.path) throw new Error("Asset upload returned no workspace path")
+			this.primeMediaCache(source.mediaType, uploadResult)
+			return {
+				assetId: source.assetId,
+				mediaType: source.mediaType,
+				workspacePath: uploadResult.path,
+				fileName: uploadResult.fileName || fileName,
+				dimensions,
+				source: "downloaded",
+			}
+		})
+	}
+
+	private async downloadAndUpload(
+		options: AssetMediaDownloadSource,
+	): Promise<PreparedAssetMedia> {
+		const pending = this.downloadAndUploadBatch([options]).then(([prepared]) => {
+			if (!prepared) throw new Error("Asset upload result is missing")
+			return prepared
+		})
+		this.importPromises.set(options.assetId, pending)
+		try {
+			return await pending
+		} finally {
+			if (this.importPromises.get(options.assetId) === pending) {
+				this.importPromises.delete(options.assetId)
 			}
 		}
 	}
@@ -785,45 +937,6 @@ export class CanvasAssetImportManager {
 			...binding,
 			dimensions: getRememberedAssetMediaDimensions(binding.assetId) ?? binding.dimensions,
 			source: "existing-binding",
-		}
-	}
-
-	private async downloadAndUpload(options: {
-		assetId: string
-		mediaType: CanvasAssetMediaType
-		fileUrl: string
-		fileName?: string
-	}): Promise<PreparedAssetMedia> {
-		const response = await fetch(options.fileUrl, { cache: "default" })
-		if (!response.ok) throw new Error(`Failed to download asset media: ${response.status}`)
-		const blob = await response.blob()
-		if (blob.size === 0) throw new Error("Downloaded asset media is empty")
-
-		const mimeType = blob.type || FALLBACK_MIME_TYPES[options.mediaType]
-		const fileName = buildAssetFileName({ ...options, mimeType })
-		const file = new File([blob], fileName, { type: mimeType })
-		const dimensions = await resolveImportedMediaDimensions({
-			assetId: options.assetId,
-			mediaType: options.mediaType,
-			file,
-			fileUrl: options.fileUrl,
-		})
-		const [uploadResult] = await this.canvas.canvasFileUploadManager.uploadDirect(
-			[file],
-			undefined,
-			undefined,
-			{ uploadSubDir: getAssetUploadSubDir(options.mediaType) },
-		)
-		if (!uploadResult?.path) throw new Error("Asset upload returned no workspace path")
-		this.primeMediaCache(options.mediaType, uploadResult)
-
-		return {
-			assetId: options.assetId,
-			mediaType: options.mediaType,
-			workspacePath: uploadResult.path,
-			fileName: uploadResult.fileName || fileName,
-			dimensions,
-			source: "downloaded",
 		}
 	}
 

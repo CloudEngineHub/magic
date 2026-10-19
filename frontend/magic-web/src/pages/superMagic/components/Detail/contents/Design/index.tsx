@@ -2013,7 +2013,7 @@ function DesignViewer(props: DesignViewerProps) {
 					getPreviewUrl={getSaveAssetPreviewUrl}
 					onSave={methods.saveAssetToLibrary}
 					onUpdateAsset={async (assetId, params) => {
-						await AssetsApi.updateAsset(assetId, {
+						const updatedAsset = await AssetsApi.updateAsset(assetId, {
 							name: params.name,
 							description: params.description,
 							visibility:
@@ -2022,6 +2022,7 @@ function DesignViewer(props: DesignViewerProps) {
 									: undefined,
 							tag_ids: params.tagIds,
 						})
+						assetLibrarySessionStore.upsertAsset(updatedAsset)
 						const session = saveAssetDialogSessionRef.current
 						if (session?.kind === "edit") session.onUpdated()
 					}}

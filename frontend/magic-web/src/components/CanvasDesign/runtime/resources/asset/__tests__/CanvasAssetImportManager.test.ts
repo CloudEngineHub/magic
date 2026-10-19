@@ -3,6 +3,7 @@ import { createTestResourceReferenceResolver } from "../../../../public/__tests_
 import { ElementTypeEnum, type LayerElement } from "../../../document/types"
 import { CanvasAssetImportManager, getAssetUploadSubDir } from "../CanvasAssetImportManager"
 import { UploadSubDir, type CanvasAssetResourceInfo } from "../../../../public/magic-types"
+import { rememberAssetMediaDimensions } from "../assetMediaDimensionCache"
 
 // This manager suite supplies its own Canvas/resource harness; avoid loading the
 // unrelated admin API barrel while resolving runtime Canvas dependencies.
@@ -415,6 +416,118 @@ describe("CanvasAssetImportManager", () => {
 			harness.uploadResult.path,
 			harness.uploadResult,
 		)
+	})
+
+	it("uploads multiple selected assets in one media-type batch and preserves selection order", async () => {
+		const harness = createHarness({
+			assets: {
+				"asset-audio-a": {
+					assetId: "asset-audio-a",
+					mediaType: "audio",
+					fileUrl: "https://example.test/a.mp3",
+					fileName: "a.mp3",
+				},
+				"asset-audio-b": {
+					assetId: "asset-audio-b",
+					mediaType: "audio",
+					fileUrl: "https://example.test/b.mp3",
+					fileName: "b.mp3",
+				},
+			},
+		})
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async (url: string) =>
+					new Response(new Blob([url], { type: "audio/mpeg" }), { status: 200 }),
+			),
+		)
+		harness.uploadDirect.mockImplementationOnce(async (files: File[]) =>
+			files.map((file, index) => ({
+				...harness.uploadResult,
+				path: `./audios/${file.name}`,
+				fileName: file.name,
+				src: `https://example.test/uploaded-${index}.mp3`,
+			})),
+		)
+		const manager = new CanvasAssetImportManager(harness.canvas as never)
+
+		const results = await manager.importAndConnectMany({
+			assetIds: ["asset-audio-b", "asset-audio-a"],
+			targetElementId: "video-target",
+			targetKind: "video-generator",
+			slot: { kind: "reference" },
+			allowedMediaTypes: ["audio"],
+		})
+
+		expect(harness.uploadDirect).toHaveBeenCalledTimes(1)
+		expect(harness.uploadDirect).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({ name: "b.mp3" }),
+				expect.objectContaining({ name: "a.mp3" }),
+			],
+			undefined,
+			undefined,
+			{ uploadSubDir: UploadSubDir.Audios },
+		)
+		expect(results.map((result) => result.workspacePath)).toEqual([
+			"./audios/b.mp3",
+			"./audios/a.mp3",
+		])
+	})
+
+	it("keeps different media directories in separate upload batches", async () => {
+		const harness = createHarness({
+			assets: {
+				"asset-audio": {
+					assetId: "asset-audio",
+					mediaType: "audio",
+					fileUrl: "https://example.test/audio.mp3",
+					fileName: "audio.mp3",
+				},
+				"asset-video": {
+					assetId: "asset-video",
+					mediaType: "video",
+					fileUrl: "https://example.test/video.mp4",
+					fileName: "video.mp4",
+				},
+			},
+		})
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async (url: string) =>
+					new Response(
+						new Blob([url], {
+							type: url.endsWith(".mp4") ? "video/mp4" : "audio/mpeg",
+						}),
+						{ status: 200 },
+					),
+			),
+		)
+		harness.uploadDirect.mockImplementation(async (files: File[], _a, _b, options) =>
+			files.map((file) => ({
+				...harness.uploadResult,
+				path: `${options?.uploadSubDir}/${file.name}`,
+				fileName: file.name,
+			})),
+		)
+		const manager = new CanvasAssetImportManager(harness.canvas as never)
+		rememberAssetMediaDimensions("asset-video", { width: 640, height: 360 })
+
+		await manager.importAndConnectMany({
+			assetIds: ["asset-video", "asset-audio"],
+			targetElementId: "video-target",
+			targetKind: "video-generator",
+			slot: { kind: "reference" },
+			allowedMediaTypes: ["audio", "video"],
+		})
+
+		expect(harness.uploadDirect).toHaveBeenCalledTimes(2)
+		expect(harness.uploadDirect.mock.calls.map((call) => call[3])).toEqual([
+			{ uploadSubDir: UploadSubDir.Videos },
+			{ uploadSubDir: UploadSubDir.Audios },
+		])
 	})
 
 	it("does not share concurrent batch promises across slot or media policies", async () => {

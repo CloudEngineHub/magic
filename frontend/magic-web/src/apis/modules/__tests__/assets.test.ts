@@ -47,6 +47,7 @@ describe("generateAssetsApi", () => {
 			if (path === "/api/v1/assets/batch-delete") {
 				return Promise.resolve({ deleted_num: 2, asset_ids: ["asset-1", "asset-2"] })
 			}
+			if (path === "/api/v1/assets/batch-compliance") return Promise.resolve({ items: [] })
 			return Promise.resolve({})
 		})
 		const put = vi.fn().mockResolvedValue({})
@@ -102,6 +103,7 @@ describe("generateAssetsApi", () => {
 		await api.getAssetOwners()
 		await api.transferAssetOwner({ asset_ids: ["asset-1"], owner_uid: "user-2" })
 		await api.deleteAsset("asset-1")
+		await api.batchGetAssetCompliance({ asset_ids: ["asset-1", "asset-2"] })
 
 		expect(post).toHaveBeenNthCalledWith(1, "/api/v1/file/private-upload-token", {
 			business_code: "ASSET",
@@ -134,6 +136,9 @@ describe("generateAssetsApi", () => {
 			asset_ids: ["asset-1", "asset-2"],
 		})
 		expect(post).toHaveBeenNthCalledWith(8, "/api/v1/assets/batch-delete", {
+			asset_ids: ["asset-1", "asset-2"],
+		})
+		expect(post).toHaveBeenCalledWith("/api/v1/assets/batch-compliance", {
 			asset_ids: ["asset-1", "asset-2"],
 		})
 		expect(get).toHaveBeenNthCalledWith(1, "/api/v1/asset-agreements")

@@ -1831,6 +1831,8 @@ export interface CanvasDesignMethods {
 	) => Promise<CanvasAssetResourceInfo[]>
 	/** 获取单个素材的异步合规状态，用于 Canvas 级轮询管理器。 */
 	getAssetComplianceStatus?: (assetId: string) => Promise<CanvasAssetComplianceState>
+	/** 批量获取素材的异步合规状态，用于多个素材共享一次轮询请求。 */
+	getAssetComplianceStatuses?: (assetIds: string[]) => Promise<CanvasAssetComplianceState[]>
 	/** 请求宿主打开素材信息编辑弹窗；该入口本身不得直接发起保存。 */
 	openSaveAssetToLibraryDialog?: (params: CanvasOpenSaveAssetDialogParams) => void
 	/** 素材库本地上传：打开保存弹窗，不在选文件时直接入库。 */
