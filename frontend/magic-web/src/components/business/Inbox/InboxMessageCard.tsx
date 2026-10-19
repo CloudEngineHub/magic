@@ -5,9 +5,7 @@ import { Link } from "react-router-dom"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
-import { RouteName } from "@/routes/constants"
-import { getRoutePath } from "@/routes/history/helpers"
-import { getInboxProjectId } from "./getInboxProjectId"
+import { getInboxResourceRoute } from "./getInboxResourceRoute"
 import InboxMessageIcon from "./InboxMessageIcon"
 import { resolveInboxCopy } from "./resolveInboxCopy"
 import { inboxStore } from "./store"
@@ -31,13 +29,7 @@ const InboxMessageCard = observer(function InboxMessageCard({
 	const organization = message.payload.organization_name
 	const permission = copy.payload.permission
 	const points = message.payload.points
-	const projectId = getInboxProjectId(message)
-	const projectPath = projectId
-		? getRoutePath({
-				name: RouteName.SuperWorkspaceProjectState,
-				params: { projectId: encodeURIComponent(projectId) },
-			})
-		: null
+	const resourceRoute = getInboxResourceRoute(message)
 	const statusLabel =
 		message.auth_status === "accepted"
 			? t("inbox.meta.accepted")
@@ -118,16 +110,11 @@ const InboxMessageCard = observer(function InboxMessageCard({
 				) : null}
 				<p className="mt-[5px] break-words text-[13px] leading-[1.55] text-[#7a8394] dark:text-muted-foreground">
 					{copy.bodyParts?.map((part) => {
-						// Match template fields, not text: a sender/file can have the same name as a project.
-						const isProjectName =
-							part.field === "project_name" ||
-							(part.field === "resource_name" &&
-								(message.type === "project_invitation" ||
-									message.type === "project_shared"))
+						// Link only resource placeholders, even when a sender has the same display name.
 						if (
-							!projectPath ||
-							!isProjectName ||
+							!resourceRoute ||
 							!part.field ||
+							!resourceRoute.nameFields.includes(part.field) ||
 							copy.payload[part.field] == null ||
 							copy.payload[part.field] === ""
 						) {
@@ -136,7 +123,7 @@ const InboxMessageCard = observer(function InboxMessageCard({
 						return (
 							<Link
 								key={part.offset}
-								to={projectPath}
+								to={resourceRoute.path}
 								className="rounded-sm text-blue-600 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-blue-400"
 								onClick={(event) => {
 									// Keep this panel open when the link opens in another tab/window.
