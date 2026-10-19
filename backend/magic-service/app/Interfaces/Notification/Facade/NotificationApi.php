@@ -48,22 +48,6 @@ final class NotificationApi extends AbstractApi
         return $this->service->markRead($this->isolation(), $notificationId);
     }
 
-    /** @return array<string,mixed> */
-    public function accept(string $notificationId): array
-    {
-        return $this->service->action($this->isolation(), $notificationId, true);
-    }
-
-    /** @return array<string,mixed> */
-    public function reject(string $notificationId): array
-    {
-        $reason = $this->request->input('reason', '');
-        if (! is_string($reason) || mb_strlen($reason) > 500) {
-            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'reason must not exceed 500 characters');
-        }
-        return $this->service->action($this->isolation(), $notificationId, false, ['reason' => $reason]);
-    }
-
     private function isolation(): NotificationDataIsolation
     {
         $authorization = $this->getAuthorization();
