@@ -119,6 +119,18 @@
         "zh_CN": "名称",
         "en_US": "Name"
     },
+    "field.job_title": {
+        "zh_CN": "职位",
+        "en_US": "Job title"
+    },
+    "field.departments": {
+        "zh_CN": "所属部门",
+        "en_US": "Departments"
+    },
+    "field.department_path": {
+        "zh_CN": "部门层级",
+        "en_US": "Department path"
+    },
     "field.project_name": {
         "zh_CN": "项目名称",
         "en_US": "Project name"

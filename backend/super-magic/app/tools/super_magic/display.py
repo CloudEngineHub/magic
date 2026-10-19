@@ -14,7 +14,6 @@ from zoneinfo import ZoneInfo
 from agentlang.context.tool_context import ToolContext
 from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
-
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.infrastructure.sdk.base.exceptions import HttpRequestError
@@ -216,7 +215,25 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
                     continue
                 name = (item.get("nickname") or item.get("real_name")) if tool_name == "search_users" else item.get("name")
                 visible_name = _visible_text(name or "-", 200).replace("\n", " ")
-                lines.append(f"- {visible_name}")
+                details = []
+                if tool_name == "search_users":
+                    if item.get("job_title"):
+                        details.append(f"{_label('field.job_title')}: {_visible_text(item['job_title'], 120)}")
+                    departments = item.get("departments")
+                    if isinstance(departments, list):
+                        paths = []
+                        for department in departments[:3]:
+                            if isinstance(department, dict):
+                                names = department.get("path_names") or [department.get("name", "")]
+                                if isinstance(names, list):
+                                    paths.append("/".join(_visible_text(part, 120) for part in names))
+                        if paths:
+                            details.append(f"{_label('field.departments')}: {', '.join(paths)}")
+                else:
+                    names = item.get("path_names")
+                    if isinstance(names, list) and names:
+                        details.append(f"{_label('field.department_path')}: {'/'.join(_visible_text(part, 120) for part in names)}")
+                lines.append(f"- {visible_name}" + (f" · {' · '.join(details)}" if details else ""))
             if len(records) > 20:
                 lines.extend(["", _label("truncated")])
         else:

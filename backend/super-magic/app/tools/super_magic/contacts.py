@@ -45,7 +45,26 @@ def _page(raw: Any, kind: str) -> dict[str, Any]:
     for item in raw["items"]:
         if not isinstance(item, dict) or any(not isinstance(item.get(field), str) for field in fields):
             raise ValueError("The contact service returned an invalid item.")
-        items.append({field: item[field] for field in fields})
+        projected = {field: item[field] for field in fields}
+        if kind == "user":
+            title = item.get("job_title", "")
+            departments = item.get("departments", [])
+            if not isinstance(title, str) or not isinstance(departments, list):
+                raise ValueError("The contact service returned invalid user details.")
+            projected["job_title"] = title
+            projected["departments"] = []
+            for department in departments:
+                if not isinstance(department, dict) or not isinstance(department.get("department_id"), str) or not isinstance(department.get("name"), str):
+                    raise ValueError("The contact service returned invalid user departments.")
+                path_names = _path_names(department.get("path_names", []))
+                projected["departments"].append({
+                    "department_id": department["department_id"],
+                    "name": department["name"],
+                    "path_names": path_names,
+                })
+        else:
+            projected["path_names"] = _path_names(item.get("path_names", []))
+        items.append(projected)
     if kind == "department":
         if raw.get("coverage") != "bounded" or len(items) > 100:
             raise ValueError("The contact service returned invalid department coverage.")
@@ -62,15 +81,33 @@ def _display_name(value: str) -> str:
     return " ".join(value.split())[:120]
 
 
+def _path_names(value: Any) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(name, str) for name in value):
+        raise ValueError("The contact service returned an invalid department path.")
+    return value
+
+
 def _present(data: dict[str, Any], kind: str) -> ToolResult:
     items = data["items"]
     lines = [f"{len(items)} {kind} result(s) returned for the current user."]
     for item in items[:20]:
         if kind == "user":
             name = _display_name(item["nickname"] or item["real_name"])
-            lines.append(f"- {name} (user_id: {item['user_id']}; real name: {_display_name(item['real_name'])})")
+            details = [f"user_id: {item['user_id']}", f"real name: {_display_name(item['real_name'])}"]
+            if item["job_title"]:
+                details.append(f"job title: {_display_name(item['job_title'])}")
+            if item["departments"]:
+                paths = [
+                    "/".join(_display_name(part) for part in department["path_names"]) or _display_name(department["name"])
+                    for department in item["departments"][:3]
+                ]
+                details.append("departments: " + ", ".join(paths))
+                if len(item["departments"]) > 3:
+                    details.append(f"{len(item['departments']) - 3} more departments in result.data")
+            lines.append(f"- {name} ({'; '.join(details)})")
         else:
-            lines.append(f"- {_display_name(item['name'])} (department_id: {item['department_id']}; parent_department_id: {item['parent_department_id']})")
+            path = "/".join(_display_name(part) for part in item["path_names"])
+            lines.append(f"- {_display_name(item['name'])} (department_id: {item['department_id']}; parent_department_id: {item['parent_department_id']}; path: {path or 'unavailable'})")
     if kind == "user":
         if data["has_more"]:
             lines.append(f"More user results are available. Continue with page_token: {data['page_token']}.")

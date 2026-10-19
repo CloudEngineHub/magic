@@ -54,7 +54,11 @@ async def test_user_tool_projects_results_and_forwards_same_auth(monkeypatch, au
     async def search_users(received_auth, query, page_token):
         calls.append((received_auth, query, page_token))
         return {
-            "items": [{"user_id": "456", "nickname": "Alice", "real_name": "Alice Lee", "phone": "private"}],
+            "items": [{
+                "user_id": "456", "nickname": "Alice", "real_name": "Alice Lee", "job_title": "Engineer",
+                "departments": [{"department_id": "10", "name": "Platform", "path_names": ["Organization", "Platform"], "internal": "private"}],
+                "phone": "private",
+            }],
             "has_more": True,
             "page_token": "20",
             "secret": "private",
@@ -69,11 +73,15 @@ async def test_user_tool_projects_results_and_forwards_same_auth(monkeypatch, au
     result = await SearchUsers().execute(None, SearchUsersParams(query=" Alice ", page_token="0"))
     assert calls == [(auth, "Alice", "0")]
     assert result.ok and result.data == {
-        "items": [{"user_id": "456", "nickname": "Alice", "real_name": "Alice Lee"}],
+        "items": [{
+            "user_id": "456", "nickname": "Alice", "real_name": "Alice Lee", "job_title": "Engineer",
+            "departments": [{"department_id": "10", "name": "Platform", "path_names": ["Organization", "Platform"]}],
+        }],
         "has_more": True,
         "page_token": "20",
     }
     assert "private" not in result.content
+    assert "Engineer" in result.content and "Organization/Platform" in result.content
     assert "page_token: 20" in result.content
 
 
@@ -81,7 +89,7 @@ async def test_user_tool_projects_results_and_forwards_same_auth(monkeypatch, au
 async def test_department_tool_reports_bounded_coverage(monkeypatch, auth):
     async def search_departments(received_auth, query):
         assert received_auth is auth and query == "Sales"
-        return {"items": [{"department_id": "10", "name": "Sales", "parent_department_id": "1", "internal": "private"}], "coverage": "bounded"}
+        return {"items": [{"department_id": "10", "name": "Sales", "parent_department_id": "1", "path_names": ["Organization", "Sales"], "internal": "private"}], "coverage": "bounded"}
 
     context = SimpleNamespace(auth=auth, sdk=SimpleNamespace(contact=SimpleNamespace(search_departments_async=search_departments)))
 
@@ -90,8 +98,8 @@ async def test_department_tool_reports_bounded_coverage(monkeypatch, auth):
 
     monkeypatch.setattr(ProductTool, "run_product", run_product)
     result = await SearchDepartments().execute(None, ContactSearchParams(query="Sales"))
-    assert result.data == {"items": [{"department_id": "10", "name": "Sales", "parent_department_id": "1"}], "coverage": "bounded"}
-    assert "at most 100" in result.content and "private" not in result.content
+    assert result.data == {"items": [{"department_id": "10", "name": "Sales", "parent_department_id": "1", "path_names": ["Organization", "Sales"]}], "coverage": "bounded"}
+    assert "at most 100" in result.content and "Organization/Sales" in result.content and "private" not in result.content
 
 
 def test_reject_invalid_search_pages_and_cursors():
@@ -103,17 +111,24 @@ def test_reject_invalid_search_pages_and_cursors():
         _page({"items": [{"user_id": "1", "nickname": "A", "real_name": "A"}], "has_more": True, "page_token": ""}, "user")
     with pytest.raises(ValueError):
         _page({"items": [], "coverage": "complete"}, "department")
+    with pytest.raises(ValueError):
+        _page({"items": [{"department_id": "1", "name": "Sales", "parent_department_id": "-1", "path_names": ["Organization", 4]}], "coverage": "bounded"}, "department")
 
 
 def test_contact_user_detail_shows_name_without_identifiers():
     i18n.set_language("en_US")
     try:
-        result = ToolResult(content="", data={"items": [{"user_id": "123", "nickname": "Alice", "real_name": "Alice Lee"}], "has_more": False, "page_token": ""})
+        result = ToolResult(content="", data={"items": [{
+            "user_id": "123", "nickname": "Alice", "real_name": "Alice Lee", "job_title": "Engineer",
+            "departments": [{"department_id": "30", "name": "Platform", "path_names": ["Organization", "Platform"]}],
+        }], "has_more": False, "page_token": ""})
         detail = product_detail("search_users", result).data.content
         assert "Alice" in detail and "123" not in detail and "No more records" in detail
-        department = ToolResult(content="", data={"items": [{"department_id": "20", "name": "Sales", "parent_department_id": "1"}], "coverage": "bounded"})
+        assert "Engineer" in detail and "Organization/Platform" in detail and "30" not in detail
+        department = ToolResult(content="", data={"items": [{"department_id": "20", "name": "Sales", "parent_department_id": "1", "path_names": ["Organization", "Sales"]}], "coverage": "bounded"})
         department_detail = product_detail("search_departments", department).data.content
         assert "Sales" in department_detail and "20" not in department_detail
+        assert "Organization/Sales" in department_detail
         assert "at most 100 matches" in department_detail
     finally:
         i18n.reset_language()

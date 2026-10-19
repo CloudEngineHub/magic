@@ -18,7 +18,7 @@ use App\ErrorCode\PermissionErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Util\Context\RequestCoContext;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
-use App\Interfaces\Chat\DTO\UserDetailDTO;
+use App\Interfaces\Chat\DTO\UserDepartmentDetailDTO;
 use App\Interfaces\Contact\Facade\Open\MagicContactSandboxApi;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Context\Context;
@@ -49,21 +49,39 @@ class MagicContactSandboxApiTest extends TestCase
             self::callback(static fn (UserQueryDTO $query): bool => $query->getQuery() === 'Alice'
                 && $query->getPageToken() === '20'
                 && $query->getPageSize() === 20
-                && $query->getQueryType() === UserQueryType::User
+                && $query->getQueryType() === UserQueryType::UserAndDepartmentFullPath
                 && $query->isFilterAgent()),
             $authorization
         )->willReturn([
             'items' => [
-                new UserDetailDTO(['user_id' => 'u1', 'organization_code' => 'org-1', 'nickname' => 'Alice', 'real_name' => 'Alice A', 'phone' => '12345678901']),
-                new UserDetailDTO(['user_id' => 'u2', 'organization_code' => 'other-org', 'nickname' => 'Other', 'real_name' => 'Other B']),
+                new UserDepartmentDetailDTO([
+                    'user_id' => 'u1', 'organization_code' => 'org-1', 'nickname' => 'Alice', 'real_name' => 'Alice A',
+                    'job_title' => 'Engineer', 'phone' => '12345678901',
+                    'full_path_nodes' => ['d1' => [
+                        ['department_id' => '-1', 'department_name' => 'Organization', 'parent_department_id' => '-1', 'path' => '-1'],
+                        ['department_id' => 'd1', 'department_name' => 'Engineering', 'parent_department_id' => '-1', 'path' => '-1/d1'],
+                    ]],
+                ]),
+                new UserDepartmentDetailDTO(['user_id' => 'u2', 'organization_code' => 'other-org', 'nickname' => 'Other', 'real_name' => 'Other B']),
             ],
             'has_more' => true,
             'page_token' => '40',
         ]);
 
-        $api = new MagicContactSandboxApi($request, $users, $this->createMock(MagicDepartmentAppService::class));
+        $departments = $this->createMock(MagicDepartmentAppService::class);
+        $departments->expects(self::once())->method('getDepartmentByIds')->with(
+            self::callback(static fn (DepartmentQueryDTO $query): bool => $query->getDepartmentIds() === ['-1', 'd1']),
+            $authorization
+        )->willReturn([
+            $this->department('-1', '-1', 'Organization', '-1', 0),
+            $this->department('d1', '-1', 'Engineering', '-1/d1', 1),
+        ]);
+        $api = new MagicContactSandboxApi($request, $users, $departments);
         self::assertSame([
-            'items' => [['user_id' => 'u1', 'nickname' => 'Alice', 'real_name' => 'Alice A']],
+            'items' => [[
+                'user_id' => 'u1', 'nickname' => 'Alice', 'real_name' => 'Alice A', 'job_title' => 'Engineer',
+                'departments' => [['department_id' => 'd1', 'name' => 'Engineering', 'path_names' => ['Organization', 'Engineering']]],
+            ]],
             'has_more' => true,
             'page_token' => '40',
         ], $api->searchUsers());
@@ -80,16 +98,78 @@ class MagicContactSandboxApiTest extends TestCase
             $authorization
         )->willReturn([
             'items' => [
-                new MagicDepartmentEntity(['department_id' => 'd1', 'parent_department_id' => 'root', 'name' => 'Sales', 'organization_code' => 'org-1']),
-                new MagicDepartmentEntity(['department_id' => 'd2', 'parent_department_id' => 'root', 'name' => 'Other', 'organization_code' => 'other-org']),
+                $this->department('d1', '-1', 'Sales', '-1/d1', 1),
+                $this->department('d2', '-1', 'Other', '-1/d2', 1, 'other-org'),
             ],
+        ]);
+        $departments->expects(self::once())->method('getDepartmentByIds')->with(
+            self::callback(static fn (DepartmentQueryDTO $query): bool => $query->getDepartmentIds() === ['-1', 'd1']),
+            $authorization
+        )->willReturn([
+            $this->department('-1', '-1', 'Organization', '-1', 0),
+            $this->department('d1', '-1', 'Sales', '-1/d1', 1),
         ]);
 
         $api = new MagicContactSandboxApi($request, $this->createMock(MagicUserContactAppService::class), $departments);
         self::assertSame([
-            'items' => [['department_id' => 'd1', 'name' => 'Sales', 'parent_department_id' => 'root']],
+            'items' => [['department_id' => 'd1', 'name' => 'Sales', 'parent_department_id' => '-1', 'path_names' => ['Organization', 'Sales']]],
             'coverage' => 'bounded',
         ], $api->searchDepartments());
+    }
+
+    public function testSearchDepartmentsDoesNotExposeChildOfHiddenDepartment(): void
+    {
+        $authorization = $this->authorization();
+        RequestCoContext::setUserAuthorization($authorization);
+        $departments = $this->createMock(MagicDepartmentAppService::class);
+        $departments->method('searchDepartment')->willReturn([
+            'items' => [$this->department('child', 'hidden', 'Child', '-1/hidden/child', 2)],
+        ]);
+        // getDepartmentByIds removes the hidden ancestor under the existing contact visibility rule.
+        $departments->method('getDepartmentByIds')->willReturn([
+            $this->department('-1', '-1', 'Organization', '-1', 0),
+            $this->department('child', 'hidden', 'Child', '-1/hidden/child', 2),
+        ]);
+
+        $api = new MagicContactSandboxApi($this->request(['query' => 'Child']), $this->createMock(MagicUserContactAppService::class), $departments);
+        self::assertSame(['items' => [], 'coverage' => 'bounded'], $api->searchDepartments());
+    }
+
+    public function testSearchUsersOmitsHiddenDepartmentAndItsJobTitle(): void
+    {
+        $authorization = $this->authorization();
+        RequestCoContext::setUserAuthorization($authorization);
+        $users = $this->createMock(MagicUserContactAppService::class);
+        $users->method('searchDepartmentUser')->willReturn([
+            'items' => [new UserDepartmentDetailDTO([
+                'user_id' => 'u1', 'organization_code' => 'org-1', 'nickname' => 'Alice', 'real_name' => 'Alice A',
+                'job_title' => 'Private role',
+                'full_path_nodes' => ['child' => [
+                    ['department_id' => '-1', 'department_name' => 'Organization', 'parent_department_id' => '-1', 'path' => '-1'],
+                    ['department_id' => 'hidden', 'department_name' => 'Hidden', 'parent_department_id' => '-1', 'path' => '-1/hidden'],
+                    ['department_id' => 'child', 'department_name' => 'Child', 'parent_department_id' => 'hidden', 'path' => '-1/hidden/child'],
+                ], 'd2' => [
+                    ['department_id' => '-1', 'department_name' => 'Organization', 'parent_department_id' => '-1', 'path' => '-1'],
+                    ['department_id' => 'd2', 'department_name' => 'Public', 'parent_department_id' => '-1', 'path' => '-1/d2'],
+                ]],
+            ])],
+        ]);
+        $departments = $this->createMock(MagicDepartmentAppService::class);
+        $departments->method('getDepartmentByIds')->willReturn([
+            $this->department('-1', '-1', 'Organization', '-1', 0),
+            $this->department('child', 'hidden', 'Child', '-1/hidden/child', 2),
+            $this->department('d2', '-1', 'Public', '-1/d2', 1),
+        ]);
+
+        $api = new MagicContactSandboxApi($this->request(['query' => 'Alice']), $users, $departments);
+        self::assertSame([
+            'items' => [[
+                'user_id' => 'u1', 'nickname' => 'Alice', 'real_name' => 'Alice A', 'job_title' => '',
+                'departments' => [['department_id' => 'd2', 'name' => 'Public', 'path_names' => ['Organization', 'Public']]],
+            ]],
+            'has_more' => false,
+            'page_token' => '',
+        ], $api->searchUsers());
     }
 
     public function testSearchRejectsMissingUserAuthorization(): void
@@ -138,6 +218,18 @@ class MagicContactSandboxApiTest extends TestCase
         $authorization->setOrganizationCode('org-1');
         $authorization->setStatus('1');
         return $authorization;
+    }
+
+    private function department(string $id, string $parentId, string $name, string $path, int $level, string $organizationCode = 'org-1'): MagicDepartmentEntity
+    {
+        return new MagicDepartmentEntity([
+            'department_id' => $id,
+            'parent_department_id' => $parentId,
+            'name' => $name,
+            'path' => $path,
+            'level' => $level,
+            'organization_code' => $organizationCode,
+        ]);
     }
 
     private function request(array $input): RequestInterface
