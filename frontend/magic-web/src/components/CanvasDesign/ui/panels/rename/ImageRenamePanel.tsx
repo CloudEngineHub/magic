@@ -114,7 +114,9 @@ export default function ImageRenamePanel({ element }: { element: ImageElement })
 			</p>
 			<div className={styles.renameBody}>
 				<div className={styles.renameSection}>
-					<div className={styles.renameSectionHeader}>
+					<div
+						className={`${styles.renameSectionHeader} ${styles.renameImageTitleHeader}`}
+					>
 						<span className={styles.renameSectionLabel}>
 							{t("rename.imageTitle", "图片标题（元素名称）")}
 						</span>
@@ -250,7 +252,6 @@ export default function ImageRenamePanel({ element }: { element: ImageElement })
 				<ScrollArea
 					className={`${styles.renameScrollable} min-h-0`}
 					viewportClassName="[&>div]:!block"
-					viewportStyle={{ maxHeight: "min(60dvh, 440px)" }}
 				>
 					<ul className={`${styles.renameFileRows} divide-y divide-border`}>
 						{form.rows.map((row) => (

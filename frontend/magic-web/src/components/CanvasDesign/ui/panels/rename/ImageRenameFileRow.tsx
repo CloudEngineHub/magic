@@ -8,6 +8,7 @@ import RenameNameField from "./RenameNameField"
 
 const nameRowClass =
 	"grid grid-cols-[64px_minmax(0,1fr)] items-start gap-2 px-3 py-2 text-sm leading-5"
+const fileInputRowClass = "flex min-w-0 flex-col gap-1 px-3 py-2 text-sm leading-5"
 const labelClass = "whitespace-nowrap text-muted-foreground"
 
 function RenameThumbnail({ path, processing }: { path: string; processing: boolean }) {
@@ -48,11 +49,34 @@ export default function ImageRenameFileRow({
 	const file = row.file
 	const edited = Boolean(file && row.name !== file.fileName)
 	const parts = splitRenameFileName(row.name)
+	const status = row.processing ? (
+		<span className="flex items-center gap-1">
+			<Loader2 size={16} className="animate-spin" />
+			{t("rename.generating", "生成中")}
+		</span>
+	) : row.status === "saving" ? (
+		<span className="flex items-center gap-1">
+			<Loader2 size={16} className="animate-spin" />
+			{t("rename.saving", "正在保存")}
+		</span>
+	) : row.status === "success" ? (
+		<span className="flex items-center gap-1 text-success">
+			<CircleCheck size={16} />
+			{t("rename.renamed", "文件已改名")}
+		</span>
+	) : row.status === "error" ? (
+		<span className="flex items-center gap-1 text-destructive">
+			<CircleX size={16} />
+			{t("rename.failed", "重命名失败")}
+		</span>
+	) : edited ? (
+		<span>{t("rename.awaitingConfirmation", "待确认")}</span>
+	) : null
 	return (
-		<li className="grid min-w-0 grid-cols-[80px_minmax(0,1fr)] items-start gap-3 px-5 py-2.5">
+		<li className="grid min-w-0 grid-cols-[80px_minmax(0,1fr)] items-start gap-3 px-3 py-2.5">
 			<RenameThumbnail path={row.content.src || ""} processing={row.processing} />
 			<div className="min-w-0">
-				<div className="mb-1 flex min-h-5 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+				<div className="mb-1 flex min-h-5 min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
 					<span className="font-medium text-foreground">
 						{t("rename.version", { defaultValue: "V{{number}}", number: row.version })}
 					</span>
@@ -67,32 +91,12 @@ export default function ImageRenameFileRow({
 						</span>
 					)}
 					{row.shared && <span>{t("rename.sharedFile", "共用同一文件")}</span>}
-					{row.processing ? (
-						<span className="ml-auto flex items-center gap-1">
-							<Loader2 size={16} className="animate-spin" />
-							{t("rename.generating", "生成中")}
-						</span>
-					) : row.status === "saving" ? (
-						<span className="ml-auto flex items-center gap-1">
-							<Loader2 size={16} className="animate-spin" />
-							{t("rename.saving", "正在保存")}
-						</span>
-					) : row.status === "success" ? (
-						<span className="ml-auto flex items-center gap-1 text-success">
-							<CircleCheck size={16} />
-							{t("rename.renamed", "文件已改名")}
-						</span>
-					) : row.status === "error" ? (
-						<span className="ml-auto flex items-center gap-1 text-destructive">
-							<CircleX size={16} />
-							{t("rename.failed", "重命名失败")}
-						</span>
-					) : edited ? (
-						<span className="ml-auto">
-							{t("rename.awaitingConfirmation", "待确认")}
-						</span>
-					) : null}
 				</div>
+				{status && (
+					<div className="mb-1 flex min-h-5 items-center text-xs text-muted-foreground">
+						{status}
+					</div>
+				)}
 				{file ? (
 					<div
 						className={cn(
@@ -114,15 +118,20 @@ export default function ImageRenameFileRow({
 							{/* 固定 key 保留输入 DOM：首次改动插入原名行时，光标仍在同一字段。 */}
 							<div
 								key="file-input"
-								className={cn(nameRowClass, "bg-background", edited && "border-t")}
+								className={cn(
+									fileInputRowClass,
+									"bg-background",
+									edited && "border-t",
+								)}
 							>
-								<span className={labelClass}>
+								<span className={`${labelClass} text-xs leading-4`}>
 									{row.status === "success"
 										? t("rename.savedFileName", "现文件名")
 										: edited
 											? t("rename.newFileName", "新文件名")
 											: t("rename.fileNameLabel", "文件名")}
 								</span>
+								{/* 窄版本行内限制输入高度，避免长文件名撑满整个重命名面板。 */}
 								<RenameNameField
 									value={parts.base}
 									extension={splitRenameFileName(file.fileName).extension}
@@ -131,6 +140,7 @@ export default function ImageRenameFileRow({
 										number: row.version,
 									})}
 									disabled={saving}
+									maxRows={4}
 									invalid={Boolean(row.error)}
 									onChange={(name) =>
 										onChange(
