@@ -623,6 +623,7 @@
 	},
 	"reportTemplates": {
 		"chat": {
+			"backgroundHint": "The template is still being made in the background; find it in the template list",
 			"createPrompt": "Create a new report template in this style: ",
 			"disclaimer": "Templates change only the look; report sections, citations, and the AI-sample notice stay the same",
 			"editIntroTitle": "Edit \"{{name}}\"",
@@ -635,6 +636,22 @@
 			"tipDescribe": "Describe brand colours, fonts, and layout, e.g. \"dark, magazine-like, big headlines\"",
 			"tipUpload": "Upload a report or web page HTML you like as a reference",
 			"title": "Create a template with AI"
+		},
+		"chatCard": {
+			"continue": "Continue",
+			"delete": "Delete chat",
+			"deleteDescription": "The conversation is deleted. Templates it already made stay in the library.",
+			"deleteTitle": "Delete this template conversation?",
+			"deleted": "Conversation deleted",
+			"failed": "Failed",
+			"failedHint": "Continue the conversation to let the AI retry",
+			"generating": "Generating…",
+			"generatingHint": "The AI is making the template; open to watch",
+			"started": "Started {{time}}",
+			"stopped": "Not finished",
+			"stoppedHint": "The conversation ended before a template was made",
+			"waiting": "Waiting for you",
+			"waitingHint": "The AI has a question for you"
 		},
 		"createWithAi": "Create with AI",
 		"defaultBadge": "Default",

@@ -42,15 +42,18 @@ import {
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { isTopicTaskRunning, type Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { usePersonaResearchStore } from "../context"
 import ReportTemplateCard, { ReportTemplateFrame } from "../components/ReportTemplateCard"
 import ResearchChatSheet from "../components/ResearchChatSheet"
+import TemplateChatCard from "../components/TemplateChatCard"
 import { useReportTemplateHtml } from "../hooks/useReportTemplateHtml"
 import { useResearchFileDownload } from "../hooks/useResearchFileDownload"
-import { deleteProjectFile } from "../services/projectFileWriter"
+import { type TemplateChatEntry, useTemplateChats } from "../hooks/useTemplateChats"
+import { createProjectTextFile, deleteProjectFile } from "../services/projectFileWriter"
 import {
 	DEFAULT_REPORT_TEMPLATE_PATH,
 	attachmentVersionKey,
@@ -59,6 +62,7 @@ import {
 } from "../services/researchFiles"
 import { saveReportTemplateChoice } from "../services/researchOptions"
 import { MAX_TEMPLATE_BYTES, uploadReportTemplate } from "../services/reportTemplates"
+import { TEMPLATE_CHATS_DIR, serializeTemplateChatMarker } from "../services/templateChats"
 
 /** What the AI conversation sheet is doing: a new template, or restyling one file. */
 type TemplateChat = { mode: "create" } | { mode: "edit"; path: string }
@@ -79,6 +83,10 @@ function ReportTemplatesPage() {
 	const [previewing, setPreviewing] = useState<AttachmentItem | null>(null)
 	const [pendingDelete, setPendingDelete] = useState<AttachmentItem | null>(null)
 	const [chat, setChat] = useState<TemplateChat | null>(null)
+	/** The open conversation once it has started, or one reopened from its card. */
+	const [chatTopic, setChatTopic] = useState<Topic | null>(null)
+	const [pendingChatDelete, setPendingChatDelete] = useState<TemplateChatEntry | null>(null)
+	const templateChats = useTemplateChats()
 	/** Template versions when the AI sheet opened; anything new or changed since is its work. */
 	const [chatBaseline, setChatBaseline] = useState<Map<string, string>>(new Map())
 	const canEdit = !store.isReadOnly
@@ -95,7 +103,63 @@ function ReportTemplatesPage() {
 		setChatBaseline(
 			new Map(templates.map((item) => [getAttachmentPath(item), attachmentVersionKey(item)])),
 		)
+		setChatTopic(null)
 		setChat(next)
+	})
+
+	/** Reopens an earlier conversation from its card, measuring results from when it began. */
+	const reopenChat = useMemoizedFn(({ marker, topic }: TemplateChatEntry) => {
+		setChatBaseline(new Map(Object.entries(marker.templates_before)))
+		setChat(
+			marker.mode === "edit" && marker.template_path
+				? { mode: "edit", path: marker.template_path }
+				: { mode: "create" },
+		)
+		setChatTopic(topic)
+		store.selectStudy(topic.id)
+	})
+
+	/** Marks the new topic as a template conversation so its card survives closing the panel. */
+	const rememberChat = useMemoizedFn((topic: Topic) => {
+		setChatTopic(topic)
+		const marker = serializeTemplateChatMarker({
+			schema_version: 1,
+			topic_id: String(topic.id),
+			mode: chat?.mode ?? "create",
+			template_path: chat?.mode === "edit" ? chat.path : undefined,
+			templates_before: Object.fromEntries(chatBaseline),
+			started_at: new Date().toISOString(),
+		})
+		void createProjectTextFile(store, TEMPLATE_CHATS_DIR, `${topic.id}.json`, marker).then(
+			(saved) => {
+				if (!saved) console.error("Failed to save the report template chat marker")
+			},
+		)
+	})
+
+	const closeChat = useMemoizedFn(() => {
+		const live = chatTopic
+			? store.topicStore.topics.find((topic) => topic.id === chatTopic.id)
+			: null
+		if (live && isTopicTaskRunning(live)) toast.info(t("reportTemplates.chat.backgroundHint"))
+		setChat(null)
+		setChatTopic(null)
+		store.selectStudy(undefined)
+	})
+
+	const confirmChatDelete = useMemoizedFn(async () => {
+		const entry = pendingChatDelete
+		setPendingChatDelete(null)
+		if (!entry) return
+		try {
+			await store.deleteStudy(entry.topic.id)
+			if (entry.markerFile.file_id) {
+				await deleteProjectFile(store, String(entry.markerFile.file_id))
+			}
+			toast.success(t("reportTemplates.chatCard.deleted"))
+		} catch {
+			toast.error(t("reportTemplates.deleteFailed"))
+		}
 	})
 
 	const chatResults = useMemo(
@@ -203,7 +267,7 @@ function ReportTemplatesPage() {
 
 			<ScrollArea className="min-h-0 flex-1">
 				<div className="mx-auto w-full max-w-6xl p-4">
-					{templates.length === 0 ? (
+					{templates.length === 0 && templateChats.length === 0 ? (
 						<Empty className="py-16">
 							<EmptyHeader>
 								<EmptyMedia variant="icon">
@@ -220,6 +284,16 @@ function ReportTemplatesPage() {
 						</Empty>
 					) : (
 						<div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+							{templateChats.map((entry) => (
+								<TemplateChatCard
+									key={entry.marker.topic_id}
+									entry={entry}
+									onOpen={() => reopenChat(entry)}
+									onDelete={
+										canEdit ? () => setPendingChatDelete(entry) : undefined
+									}
+								/>
+							))}
 							{templates.map((item) => {
 								const path = getAttachmentPath(item)
 								return (
@@ -261,7 +335,9 @@ function ReportTemplatesPage() {
 
 			<ResearchChatSheet
 				open={Boolean(chat)}
-				onOpenChange={(open) => !open && setChat(null)}
+				onOpenChange={(open) => !open && closeChat()}
+				topic={chatTopic}
+				onTopicChange={rememberChat}
 				title={
 					chat?.mode === "edit"
 						? t("reportTemplates.chat.editTitle")
@@ -303,6 +379,31 @@ function ReportTemplatesPage() {
 					) : null
 				}
 			/>
+
+			<AlertDialog
+				open={Boolean(pendingChatDelete)}
+				onOpenChange={(open) => !open && setPendingChatDelete(null)}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{t("reportTemplates.chatCard.deleteTitle")}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t("reportTemplates.chatCard.deleteDescription")}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t("library.cancel")}</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-white hover:bg-destructive/90"
+							onClick={() => void confirmChatDelete()}
+						>
+							{t("library.deleteConfirm")}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			<AlertDialog
 				open={Boolean(pendingDelete)}

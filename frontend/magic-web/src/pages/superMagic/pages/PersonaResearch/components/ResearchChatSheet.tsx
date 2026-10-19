@@ -38,6 +38,12 @@ interface ResearchChatSheetProps {
 	headerAction?: (topic: Topic) => ReactNode
 	/** Positive feedback under the conversation, e.g. the personas saved so far. */
 	footer?: ReactNode
+	/**
+	 * Controlled conversation: pass the topic to reopen an earlier conversation, and receive the
+	 * new one once the first message is sent. Left out, every opening starts a new conversation.
+	 */
+	topic?: Topic | null
+	onTopicChange?: (topic: Topic) => void
 }
 
 /**
@@ -46,7 +52,7 @@ interface ResearchChatSheetProps {
  *
  * Before the first message the sheet shows its intro and a prefilled composer; sending creates
  * a research topic exactly like the research home, then the shared conversation panel takes over.
- * Every opening starts a new conversation.
+ * Every opening starts a new conversation unless the caller passes `topic` to reopen one.
  */
 function ResearchChatSheet({
 	open,
@@ -55,12 +61,19 @@ function ResearchChatSheet({
 	intro,
 	headerAction,
 	footer,
+	topic: controlledTopic,
+	onTopicChange,
 }: ResearchChatSheetProps) {
 	const isMobile = useIsMobile()
-	const [topic, setTopic] = useState<Topic | null>(null)
+	const [ownTopic, setOwnTopic] = useState<Topic | null>(null)
+	const topic = controlledTopic === undefined ? ownTopic : controlledTopic
+	const handleStarted = useMemoizedFn((started: Topic) => {
+		setOwnTopic(started)
+		onTopicChange?.(started)
+	})
 
 	useEffect(() => {
-		if (!open) setTopic(null)
+		if (!open) setOwnTopic(null)
 	}, [open])
 
 	return (
@@ -82,7 +95,7 @@ function ResearchChatSheet({
 					{topic ? (
 						<ResearchConversationPanel variant={isMobile ? "mobile" : "desktop"} />
 					) : (
-						<ChatIntro intro={intro} onStarted={setTopic} />
+						<ChatIntro intro={intro} onStarted={handleStarted} />
 					)}
 				</div>
 				{footer}

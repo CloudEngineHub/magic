@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest"
+import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
+import {
+	parseTemplateChatMarker,
+	resolveTemplateChatState,
+	serializeTemplateChatMarker,
+} from "../services/templateChats"
+
+const before = { templates_before: { "templates/voices.html": "v1" } }
+const unchanged = [{ path: "templates/voices.html", version: "v1" }]
+
+describe("resolveTemplateChatState", () => {
+	it("follows the topic while the conversation is open", () => {
+		expect(
+			resolveTemplateChatState(before, { task_status: TaskStatus.RUNNING }, unchanged),
+		).toBe("generating")
+		expect(
+			resolveTemplateChatState(before, { task_status: TaskStatus.WAITING }, unchanged),
+		).toBe("generating")
+		expect(
+			resolveTemplateChatState(
+				before,
+				{ task_status: TaskStatus.WAITING_FOR_USER },
+				unchanged,
+			),
+		).toBe("waiting")
+		expect(resolveTemplateChatState(before, { task_status: TaskStatus.ERROR }, unchanged)).toBe(
+			"failed",
+		)
+	})
+
+	it("is done once a template was added or changed, otherwise stopped", () => {
+		const finished = { task_status: TaskStatus.FINISHED }
+		expect(resolveTemplateChatState(before, finished, unchanged)).toBe("stopped")
+		expect(
+			resolveTemplateChatState(before, finished, [
+				...unchanged,
+				{ path: "templates/brand.html", version: "v1" },
+			]),
+		).toBe("done")
+		expect(
+			resolveTemplateChatState(before, finished, [
+				{ path: "templates/voices.html", version: "v2" },
+			]),
+		).toBe("done")
+		expect(
+			resolveTemplateChatState(before, { task_status: TaskStatus.SUSPENDED }, unchanged),
+		).toBe("stopped")
+	})
+})
+
+describe("template chat markers", () => {
+	it("round-trips and rejects unknown content", () => {
+		const marker = {
+			schema_version: 1 as const,
+			topic_id: "42",
+			mode: "edit" as const,
+			template_path: "templates/brand.html",
+			templates_before: { "templates/brand.html": "v3" },
+			started_at: "2026-10-19T10:00:00.000Z",
+		}
+		expect(parseTemplateChatMarker(serializeTemplateChatMarker(marker))).toEqual(marker)
+		expect(parseTemplateChatMarker("{")).toBeNull()
+		expect(parseTemplateChatMarker(JSON.stringify({ topic_id: "1" }))).toBeNull()
+		expect(parseTemplateChatMarker(undefined)).toBeNull()
+	})
+})
