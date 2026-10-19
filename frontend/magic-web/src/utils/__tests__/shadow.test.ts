@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest"
 import vectors from "../../../../../backend/super-magic/tests/fixtures/shadow_code_vectors.json"
-import { isShadowed, shadowV2, unshadow } from "../shadow"
+import { isShadowed, shadow, shadowV2, unshadow } from "../shadow"
 
 describe("ShadowCode V2 跨端协议", () => {
 	it.each(vectors.valid)("无损还原共享样例 $name", ({ plain, v1, v2 }) => {
 		expect(shadowV2(plain)).toBe(v2)
+		expect(shadow(plain)).toBe(v2)
 		expect(unshadow(v2)).toBe(plain)
 		expect(isShadowed(v2)).toBe(true)
 		if (v1 !== null) expect(unshadow(v1)).toBe(plain)

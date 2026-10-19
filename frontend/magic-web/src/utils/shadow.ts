@@ -32,13 +32,9 @@ const unshuffleMap = [
 	251, 250, 253, 252, 255, 254,
 ]
 
-/** 保留旧发送行为，阶段 B 再切换默认编码。 */
+/** 默认写入 ASCII 安全的 V2，避免 UTF-8 替换造成正文丢失。 */
 export function shadow(input: string): string {
-	const u8Arr = new TextEncoder().encode(input)
-	for (let i = 0; i < u8Arr.length; i += 1) {
-		u8Arr[i] = shuffleMap[u8Arr[i]]
-	}
-	return `${Prefix}${new TextDecoder().decode(u8Arr)}`
+	return shadowV2(input)
 }
 
 /** 识别旧格式、新格式及需要明确报错的未知版本。 */

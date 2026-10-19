@@ -8,7 +8,6 @@ import { TextSaveStatus } from "../../components/TextSaveStatus"
 import { Input } from "antd"
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useMemoizedFn } from "ahooks"
-import { shadow } from "@/utils/shadow"
 import { useAIEditMenuItems } from "@/pages/superMagic/components/Detail/components/EditToolbar/useAIEditMenuItems"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import CommonFooter from "../../components/CommonFooter"
@@ -131,8 +130,8 @@ export default function Text(props: any) {
 		if (readOnlyPreview) return
 		if (textFileSession) return textFileSession.save()
 		if ((editingContent || editingContent === "") && editingContent !== content) {
-			// 保存文本编辑内容，使用 shadow 函数加密
-			const enable_shadow = true
+			// 编辑器提交的是原始正文，关闭解码避免误处理正文中的协议前缀。
+			const enable_shadow = false
 			// Feedback is the top-right save chip, so skip the centered toast.
 			await saveEditContent?.(
 				editingContent,

@@ -69,6 +69,7 @@ describe("persistFileSave", () => {
 		).rejects.toThrow("Invalid shadow payload")
 		expect(ossUploadService.uploadContentByFileKey).not.toHaveBeenCalled()
 		expect(SuperMagicApi.replaceFile).not.toHaveBeenCalled()
+		expect(SuperMagicApi.saveFileContent).not.toHaveBeenCalled()
 	})
 
 	it("rejects when the remote version moved past the baseline", async () => {
