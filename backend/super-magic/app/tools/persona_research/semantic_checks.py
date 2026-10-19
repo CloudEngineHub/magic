@@ -93,9 +93,10 @@ def _parse_json_object(text: str) -> Dict[str, Any]:
 # ── 单问号连问 ─────────────────────────────────────────────────────────────
 
 _QUOTED = re.compile(r"“[^”]*”|「[^」]*」|『[^』]*』|‘[^’]*’|\"[^\"]*\"")
-_CLAUSE_BREAK = re.compile(r"[，,；;。.！!：:—]+")
+_SENTENCE_BREAK = re.compile(r"[。！!？?]+|(?<=[a-zA-Z])\.\s")
+_CLAUSE_BREAK = re.compile(r"[，,；;：:—]+")
 _ASKS = re.compile(
-    r"什么|怎么|为什么|为啥|哪|多少|是否|会不会|能不能|有没有|要不要|是不是|吗$|呢$"
+    r"什么|怎么|为什么|为啥|哪|多少|几[次个天回件块分钟岁家趟]|是否|会不会|能不能|有没有|要不要|是不是|吗$|呢$"
     r"|\b(what|how|why|which|would|will|do|does|did|is|are|can|could)\b",
     re.IGNORECASE,
 )
@@ -108,18 +109,29 @@ _ELABORATION = re.compile(
 
 
 def asks_joined_questions(text: str) -> bool:
-    """初筛：只有一个问号、但问号前有 2 个及以上提问分句时为 True；引号里的受访者原话不计。
+    """初筛：问号不超过一个、但全文有 2 个及以上提问分句时为 True；引号里的受访者原话不计。
 
-    例：「什么样的会员你不会买，如果这条解决了你会买吗？」→ True（交给语义判定）。
+    多个问号由 persona_chat 直接拒绝，这里不管。没有问号也要数：被拒过的主持人会把问号换成句号，
+    例：「什么情况下你会觉得这张卡不值，那种时候你最不敢把哪件衣服放进去。」→ True。
+    「什么样的会员你不会买，如果这条解决了你会买吗？」→ True（交给语义判定）。
     「那次从头到尾怎么回事？比如几点、和谁」→ False（「比如」开头的分句是细节提示）。
-    回测 7 项研究 76 个单问号提问：命中 12 个，其中 4 个是真连问。
+    回测 9 项研究 57 个不超过一个问号的提问：命中 20 个，由语义判定区分真连问和细节提示。
     """
-    parts = re.split(r"[？?]", _QUOTED.sub("X", text))
-    if len(parts) != 2:
+    masked = _QUOTED.sub("X", text)
+    if len(re.findall(r"[？?]", masked)) >= 2:
         return False
-    clauses = [c.strip() for c in _CLAUSE_BREAK.split(parts[0]) if c.strip()]
-    asks = [c for c in clauses if _ASKS.search(c) and not _ELABORATION.match(c)]
-    return len(asks) >= 2
+    asks = 0
+    for sentence in _SENTENCE_BREAK.split(masked):
+        # 句中一旦出现「比如、具体说说」等细节提示，后面的分句都算这条提示的展开。
+        elaborating = False
+        for clause in (c.strip() for c in _CLAUSE_BREAK.split(sentence)):
+            if not clause:
+                continue
+            if _ELABORATION.match(clause):
+                elaborating = True
+            elif not elaborating and _ASKS.search(clause):
+                asks += 1
+    return asks >= 2
 
 
 _QUESTION_JUDGE_PROMPT = """\
@@ -128,6 +140,7 @@ You check one moderator message from a qualitative research interview. Decide wh
 - Two things: "What kind of membership would you not buy, and if that were fixed, would you buy it?"
 - One thing with detail prompts: "Walk me through that time: when it was, who was there, how you decided."
 - One thing that restates the participant's words first: "You said it felt risky. Risky how?"
+- Two things ending with a period instead of a question mark still count as two: "When would the card not be worth it, and which clothes would you never put in that machine."
 
 Reply with JSON only: {"two_questions": true or false, "reason": "<one short sentence>"}"""
 
@@ -161,8 +174,9 @@ Situation facts are not leaks: age, job, schedule, budget, current tools, and pa
 - Leak: needs_pains "afraid of buying another card and leaving sessions unused again", for a hypothesis about unused sessions.
 - Not a leak: behavior "last year's 10-session card: used 6, the rest expired".
 - Leak: tagline "only trusts tools that peers have used for months", for a hypothesis about peer referrals.
+- Leak: expression "I can't know what other people washed in there, so I won't go", for a hypothesis about hygiene worries outweighing price. Quotes in expression count as the persona's stated attitude.
 
-Flag only clear leaks. When unsure, do not flag.
+Check every field, including each expression line. When unsure, flag it: the research lead can keep a flagged field by writing down why it is a plain situation fact.
 
 Reply with JSON only: {"leaks": [{"persona": "<label such as P1>", "field": "<field name>", "hypothesis_id": "<such as H1>", "text": "<the leaking text, copied>", "why": "<one short sentence>"}]}. Use an empty list when nothing leaks."""
 

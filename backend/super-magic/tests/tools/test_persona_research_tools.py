@@ -510,6 +510,10 @@ async def test_check_interviews_lists_what_to_continue(tmp_path):
     ("你说“哪个都行，怎么都好”，具体是指什么？", False),
     ("上周末孩子是怎么过的？", False),
     ("你最想先弄清楚什么？哪条规则会让你觉得亏？", False),  # 多个问号由 persona_chat 直接拒绝
+    # 洗衣研究里被拒后改用句号结尾的两条连问（原文）。
+    ("那在什么情况下你会觉得这张卡不值、干脆不办，那种时候你最不敢把哪件衣服放进去、宁可自己在家洗。", True),
+    ("按这张卡，你觉得自己一个月会去几次，那几次大概会拿些什么东西下去，为什么是这些。", True),
+    ("你上一次洗床单被套是哪天。具体说说那天几点开始、洗了多久、怎么晾的。", False),
 ])
 def test_joined_question_detection(text, joined):
     assert asks_joined_questions(text) is joined
@@ -616,6 +620,37 @@ async def test_unavailable_leak_judge_saves_and_says_so(tmp_path, monkeypatch):
     assert result.ok is True
     assert _read(tmp_path, f"{study_dir}/panel.json")["leak_check"]["status"] == "skipped"
     assert "did not run" in result.content
+
+
+ZHOU_HUI_EXPRESSION = "别人家洗过什么，我无从知道，那我就不去。"
+
+
+async def test_expression_line_reaches_the_leak_judge_and_blocks(tmp_path, monkeypatch):
+    """洗衣研究里周慧的 expression 原文通过了第二次判定，报告还把它当作 H2 的发现引用。"""
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    seen = _leak_judge(monkeypatch, [Leak("P1", "expression", "H2", ZHOU_HUI_EXPRESSION, "states the hygiene worry")])
+    persona = _persona("周慧", "Owners")
+    persona["layers"]["expression"] = [ZHOU_HUI_EXPRESSION, "手洗是麻烦，但心里踏实。"]
+
+    blocked = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[persona],
+    ))
+    kept = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), SavePersonasParams(
+        study_dir=study_dir, panel_name="p", personas=[persona],
+        leak_overrides=[{"persona": "周慧", "field": "expression", "hypothesis_id": "H2", "reason": "habit, not the tested worry"}],
+    ))
+
+    assert ZHOU_HUI_EXPRESSION in seen["personas"]["P1"]["expression"]
+    assert blocked.ok is False and "周慧 expression (H2)" in blocked.content
+    assert kept.ok is True and _read(tmp_path, f"{study_dir}/panel.json")["leak_check"]["overrides"][0]["field"] == "expression"
+
+
+def test_leak_judge_prompt_flags_when_unsure_and_names_expression():
+    from app.tools.persona_research import semantic_checks
+
+    prompt = semantic_checks._LEAK_JUDGE_PROMPT
+    assert "When unsure, flag it" in prompt and "When unsure, do not flag" not in prompt
+    assert "each expression line" in prompt
 
 
 async def test_leak_judge_drops_items_outside_its_input(monkeypatch):

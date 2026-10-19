@@ -456,3 +456,21 @@ def test_judge_output_parsing_accepts_fenced_json_and_rejects_prose():
     with pytest.raises(semantic_checks.JudgeUnavailable):
         semantic_checks._parse_json_object("Yes, two questions.")
 
+
+
+async def test_joined_question_ending_with_a_period_is_still_judged(tool, tmp_path, fake_llm, monkeypatch):
+    path = _write_persona(tmp_path, "p_zhou_1a2b", "Zhou")
+    judged = []
+
+    async def judge(tool_context, question):
+        judged.append(question)
+        return "asks when it is not worth it and which clothes stay home"
+
+    monkeypatch.setattr(persona_chat_module, "judge_joined_question", judge)
+
+    result = await tool.execute(ToolContext(), PersonaChatParams(
+        persona_paths=[path],
+        question="那在什么情况下你会觉得这张卡不值、干脆不办，那种时候你最不敢把哪件衣服放进去、宁可自己在家洗。",
+    ))
+
+    assert result.ok is False and len(judged) == 1 and fake_llm.calls == []
