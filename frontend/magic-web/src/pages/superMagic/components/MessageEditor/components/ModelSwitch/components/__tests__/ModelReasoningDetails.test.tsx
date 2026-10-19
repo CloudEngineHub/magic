@@ -4,7 +4,11 @@ import { ModelReasoningDetails } from "../ModelReasoningDetails"
 import { ModelStatusEnum, type ModelItem } from "../../types"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string) => key,
+	}),
+}))
 vi.mock("@/services/superMagic/topicModel/SuperMagicTopicModelCacheService", () => ({
 	default: { getReasoningEffort: () => undefined, setReasoningEffort: vi.fn() },
 }))
@@ -21,6 +25,7 @@ function setup(
 	multiplier?: number | null,
 	maxContextTokens?: number | null,
 	withScrollContainer = false,
+	defaultEffort?: ModelItem["reasoning_effort_default"],
 ) {
 	const model: ModelItem = {
 		id: "mock-model",
@@ -33,6 +38,7 @@ function setup(
 		sort: 0,
 		model_status: ModelStatusEnum.Normal,
 		reasoning_effort_levels: levels,
+		reasoning_effort_default: defaultEffort,
 		billing_multiplier: multiplier,
 		max_context_tokens: maxContextTokens,
 	}
@@ -98,6 +104,25 @@ describe("模型详情思考强度", () => {
 		expect(screen.queryByRole("dialog")).toBeNull()
 		expect(screen.queryByText("Mock description")).toBeNull()
 	})
+	it("桌面详情直接选中后台档位，点击继承档位仍不冻结用户覆盖", () => {
+		const { model, onReasoningEffortChange } = setup(
+			false,
+			["none", "high"],
+			undefined,
+			undefined,
+			false,
+			"high",
+		)
+		fireEvent.click(
+			screen.getByRole("button", { name: /messageEditor.modelSwitch.reasoning.label/ }),
+		)
+		const choice = screen.getByRole("button", {
+			name: "messageEditor.modelSwitch.reasoning.high",
+		})
+		expect(choice.getAttribute("aria-pressed")).toBe("true")
+		fireEvent.click(choice)
+		expect(onReasoningEffortChange).toHaveBeenCalledWith({ ...model, reasoning_effort: null })
+	})
 	it("后端关闭倍率时隐藏数值和对应说明", () => {
 		setup(false, [], null)
 		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplierHint")).toBeNull()
@@ -148,7 +173,7 @@ describe("模型详情思考强度", () => {
 		fireEvent.scroll(screen.getByTestId("model-switch-scroll-container"))
 		expect(screen.queryByRole("dialog")).toBeNull()
 	})
-	it("键盘右箭头进入详情，默认选择保留可见焦点", () => {
+	it("键盘右箭头进入详情，具体档位选择保留可见焦点", () => {
 		const { onReasoningEffortChange } = setup()
 		const strength = screen.getByRole("button", {
 			name: /messageEditor.modelSwitch.reasoning.label/,
@@ -157,13 +182,13 @@ describe("模型详情思考强度", () => {
 		expect(document.activeElement).toBe(strength)
 		fireEvent.click(strength)
 		const choice = screen.getByRole("button", {
-			name: "messageEditor.modelSwitch.reasoning.default",
+			name: "messageEditor.modelSwitch.reasoning.high",
 		})
 		choice.focus()
 		expect(document.activeElement).toBe(choice)
 		fireEvent.click(choice)
 		expect(onReasoningEffortChange).toHaveBeenCalledWith(
-			expect.objectContaining({ reasoning_effort: null }),
+			expect.objectContaining({ reasoning_effort: "high" }),
 		)
 	})
 

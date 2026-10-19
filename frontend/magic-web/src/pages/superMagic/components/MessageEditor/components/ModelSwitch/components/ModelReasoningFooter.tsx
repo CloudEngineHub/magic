@@ -18,7 +18,7 @@ import {
 	type ModelTabType,
 	type ReasoningEffort,
 } from "../types"
-import { getModelReasoningEffort } from "../utils"
+import { getModelDisplayedReasoningEffort } from "../utils"
 
 /** 用列表里的当前模型能力，并保留已选模型上的显式强度。 */
 export function resolveReasoningFooterModel({
@@ -81,7 +81,11 @@ export function ModelReasoningFooter({
 	)
 	const canSelect = levels.length > 0
 	const selected =
-		override === undefined ? getModelReasoningEffort(model) : (override ?? undefined)
+		override === undefined
+			? canSelect
+				? getModelDisplayedReasoningEffort(model)
+				: undefined
+			: (override ?? undefined)
 	const selectedLabel =
 		canSelect && selected ? labels[selected] : t("messageEditor.modelSwitch.reasoning.default")
 

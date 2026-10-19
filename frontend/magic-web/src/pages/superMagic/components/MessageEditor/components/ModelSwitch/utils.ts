@@ -1,5 +1,11 @@
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
-import { ModelItem, ModelStatusEnum, ModelTagEnum, ReasoningEffort } from "./types"
+import {
+	ModelItem,
+	ModelStatusEnum,
+	ModelTagEnum,
+	ReasoningEffort,
+	reasoningEffortLevels,
+} from "./types"
 
 interface ResolveShowSelectedModelNameOptions {
 	showSelectedModelName: boolean
@@ -35,13 +41,41 @@ export function isGemini3FlashModel(model?: ModelItem): boolean {
 	return model.model_id.toLocaleLowerCase() === "gemini-3-flash-preview"
 }
 
-/** Resolve the visible reasoning preference without replacing an explicit default with a stale cache value. */
+/** 只展示仍在可选档位中的有效默认值，兼容旧接口缺失字段及未来未知档位。 */
+export function getModelDefaultReasoningEffort(
+	model?: ModelItem | null,
+): ReasoningEffort | undefined {
+	return reasoningEffortLevels.find(
+		(level) =>
+			level === model?.reasoning_effort_default &&
+			model.reasoning_effort_levels?.includes(level),
+	)
+}
+
+/** 读取有效用户覆盖，显式 null 表示继承，不能回读旧缓存。 */
 export function getModelReasoningEffort(model?: ModelItem | null): ReasoningEffort | undefined {
 	if (!model?.reasoning_effort_levels?.length) return undefined
-	if (Object.prototype.hasOwnProperty.call(model, "reasoning_effort")) {
-		return model.reasoning_effort ?? undefined
-	}
-	return modelCache.getReasoningEffort(model)
+	const preference = Object.prototype.hasOwnProperty.call(model, "reasoning_effort")
+		? (model.reasoning_effort ?? undefined)
+		: modelCache.getReasoningEffort(model)
+	return reasoningEffortLevels.find(
+		(level) => level === preference && model.reasoning_effort_levels?.includes(level),
+	)
+}
+
+/** 展示实际选中档位：用户有效偏好优先，否则继承后台；后台空默认时无选中项。 */
+export function getModelDisplayedReasoningEffort(
+	model?: ModelItem | null,
+): ReasoningEffort | undefined {
+	return getModelReasoningEffort(model) ?? getModelDefaultReasoningEffort(model)
+}
+
+/** 再次点击已选档位清除覆盖，恢复后台设置；只返回用户覆盖，不冻结继承值。 */
+export function getNextModelReasoningEffort(
+	model: ModelItem,
+	level: ReasoningEffort,
+): ReasoningEffort | undefined {
+	return getModelDisplayedReasoningEffort(model) === level ? undefined : level
 }
 
 /**

@@ -1,7 +1,7 @@
 import ModelIcon from "./ModelIcon"
 import type { ModelItem, ReasoningEffort } from "../types"
 import { useTranslation } from "react-i18next"
-import { getModelReasoningEffort } from "../utils"
+import { getModelDisplayedReasoningEffort } from "../utils"
 
 interface ModelPreferenceTooltipProps {
 	selectedLanguageModel: ModelItem | null
@@ -25,12 +25,12 @@ export function ModelPreferenceTooltip({
 		xhigh: t("messageEditor.modelSwitch.reasoning.xhigh"),
 		max: t("messageEditor.modelSwitch.reasoning.max"),
 	}
-	// Selection callbacks attach an explicit snapshot value; untouched models use the saved preference.
-	const selectedReasoningEffort = getModelReasoningEffort(selectedLanguageModel)
+	const defaultLabel = t("messageEditor.modelSwitch.reasoning.default")
+	const selectedReasoningEffort = getModelDisplayedReasoningEffort(selectedLanguageModel)
 	const reasoningValue = selectedLanguageModel?.reasoning_effort_levels?.length
 		? selectedReasoningEffort
 			? reasoningLabels[selectedReasoningEffort]
-			: t("messageEditor.modelSwitch.reasoning.default")
+			: defaultLabel
 		: null
 	const selectedModelSections = [
 		{

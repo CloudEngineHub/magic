@@ -1,6 +1,7 @@
 /** Endpoints that are available in the open-source edition and backed by Magic. */
 export const BaseRequestUrl = {
 	platformInfo: "/api/v1/platform/setting",
+	modelBillingPreview: "/api/v1/platform/setting/model-billing-preview",
 	officialOrganizationInfo: "/api/v1/admin/service-providers/office-info",
 	myPermissionList: "/api/v1/permissions/me",
 	globalConfig: "/api/v1/settings/global",

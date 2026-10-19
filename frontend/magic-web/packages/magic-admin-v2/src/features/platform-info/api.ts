@@ -1,3 +1,4 @@
+import type { ModelPriceSnapshot } from "../../../../model-billing-reference";
 import { RequestUrl } from "@magic-admin-v2/api/constants";
 import type { HttpClient, RequestOptions } from "@magic-admin-v2/api/types";
 import type {
@@ -204,6 +205,10 @@ export function toChangedPlatformInfoParams(
 
 export function createPlatformInfoApi(client: HttpClient) {
   return {
+    /** 获取当前页面使用的默认文本模型售价快照。 */
+    getModelBillingPreview(options?: RequestOptions) {
+      return client.get<ModelPriceSnapshot>(RequestUrl.modelBillingPreview, options);
+    },
     getPlatformInfo(options?: RequestOptions) {
       return client.get<PlatformInfoDetails>(RequestUrl.platformInfo, options);
     },

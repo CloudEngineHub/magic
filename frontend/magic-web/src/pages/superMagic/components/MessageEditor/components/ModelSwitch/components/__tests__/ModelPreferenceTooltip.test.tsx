@@ -37,6 +37,22 @@ const createModel = (model_id: string, model_name: string): ModelItem =>
 	}) as ModelItem
 
 describe("ModelPreferenceTooltip", () => {
+	it("显式恢复默认时显示后台档位，不回读旧偏好", () => {
+		render(
+			<ModelPreferenceTooltip
+				selectedLanguageModel={{
+					...createModel("mock-model", "Mock"),
+					reasoning_effort_levels: ["high"],
+					reasoning_effort_default: "high",
+					reasoning_effort: null,
+				}}
+				selectedImageModel={null}
+				selectedVideoModel={null}
+			/>,
+		)
+		expect(screen.getByText("高")).toBeInTheDocument()
+	})
+
 	it("hides model sections that do not have a selected model", () => {
 		render(
 			<ModelPreferenceTooltip

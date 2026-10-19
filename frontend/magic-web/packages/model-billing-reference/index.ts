@@ -13,9 +13,7 @@ export interface ModelBillingMultiplierSettings {
 const DECIMAL_SCALE = 12
 // 使用构造函数兼容既有构建目标，运行环境至少为支持 BigInt 的 Chrome 100。
 const ZERO = BigInt(0)
-const TWO = BigInt(2)
 const TEN = BigInt(10)
-const HUNDRED = BigInt(100)
 
 /** 按接口精度读取非负单价，不把空值、非法值当作零。 */
 function readDecimal(value: string | null | undefined): bigint | null {
@@ -76,60 +74,6 @@ export function validateMultiplierSettings(value: ModelBillingMultiplierSettings
 	return fields
 }
 
-/** 静态价格快照供管理员比较，不读取或修改平台实际供应商配置。 */
-export interface ReferenceModelPrice {
-	id: string
-	name: string
-	input: string
-	output: string
-	source: string
-	basis: "fixed" | "tiers" | "peak" | "internationalTiers"
-}
-
-/** 价格于 2026-10-15 从各官方页面核对；阶梯等权均价与时段优惠分开处理。 */
-export const referenceModelPrices: readonly ReferenceModelPrice[] = [
-	{
-		id: "claude",
-		name: "Claude Sonnet 5.5",
-		input: "2",
-		output: "10",
-		source: "https://www.anthropic.com/claude-sonnet-5-5",
-		basis: "fixed",
-	},
-	{
-		id: "gpt",
-		name: "GPT-5.4",
-		input: "3.75",
-		output: "18.75",
-		source: "https://developers.openai.com/api/docs/models/gpt-5.4",
-		basis: "tiers",
-	},
-	{
-		id: "gemini",
-		name: "Gemini 3.1 Pro Preview",
-		input: "3",
-		output: "15",
-		source: "https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-pro-preview",
-		basis: "tiers",
-	},
-	{
-		id: "deepseek",
-		name: "DeepSeek V4.1 Flash",
-		input: "0.30",
-		output: "1.20",
-		source: "https://api-docs.deepseek.com/quick_start/pricing/",
-		basis: "peak",
-	},
-	{
-		id: "qwen",
-		name: "Qwen3.6-Plus",
-		input: "1.25",
-		output: "4.50",
-		source: "https://www.alibabacloud.com/help/en/model-studio/model-pricing",
-		basis: "internationalTiers",
-	},
-]
-
 /** 参考金额含固定用量和换汇精度，统一转为二十七位定点数。 */
 function readReferenceAmount(value: string | null): bigint | null {
 	if (typeof value !== "string" || !/^\d{1,24}(?:\.\d{1,27})?$/.test(value)) return null
@@ -137,25 +81,4 @@ function readReferenceAmount(value: string | null): bigint | null {
 	return BigInt(integer + fraction.padEnd(27, "0"))
 }
 
-/** 美元快照按展示汇率换算人民币；缺少汇率或有效基准时隐藏对应结果。 */
-export function previewModelPrice(
-	model: ReferenceModelPrice,
-	rate: string | null,
-	base: string | null,
-) {
-	const rateUnits = readDecimal(rate)
-	const usdUnits = referenceUnits(model.input, model.output)
-	if (rateUnits === null || rateUnits === ZERO || usdUnits === null)
-		return { amount: null, multiplier: null }
-	const cnyUnits = usdUnits * rateUnits
-	const denominator = readReferenceAmount(base) ?? ZERO
-	let multiplier: string | null = null
-	if (denominator > ZERO) {
-		if (cnyUnits > ZERO && cnyUnits * HUNDRED < denominator) multiplier = "<0.01x"
-		else {
-			const cents = (cnyUnits * HUNDRED + denominator / TWO) / denominator
-			multiplier = `${cents / HUNDRED}.${(cents % HUNDRED).toString().padStart(2, "0")}x`
-		}
-	}
-	return { amount: decimalText(cnyUnits, 27), multiplier }
-}
+export * from "./system-model-price-preview"

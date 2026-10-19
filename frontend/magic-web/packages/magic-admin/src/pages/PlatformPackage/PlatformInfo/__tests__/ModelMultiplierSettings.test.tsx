@@ -1,9 +1,45 @@
+import { DefaultModelPriceTable } from "../DefaultModelPriceTable"
+import { mockSnapshot } from "../../../../../../magic-admin-v2/tests/fixtures/model-price-preview"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { Form } from "antd"
 import { afterEach, expect, it, vi } from "vitest"
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react"
 import ModelMultiplierSettings from "../ModelMultiplierSettings"
 
+vi.mock("@admin/apis", () => ({
+	useApis: () => ({
+		PlatformInfoApi: {
+			getModelBillingPreview: vi.fn().mockResolvedValue({
+				snapshot_id: "mock",
+				generated_at: "mock",
+				scope: "default_text_models",
+				mode: null,
+				calculation: {
+					version: "text-reference-v1",
+					input_tokens: 10000,
+					output_tokens: 1000,
+					price_unit: "per_million_tokens",
+					decimal_scale: 36,
+					tier_aggregation: "equal_average",
+					provider_aggregation: "equal_average",
+				},
+				groups: [],
+				models: {},
+				warnings: [],
+			}),
+		},
+	}),
+}))
+const { mockClient } = vi.hoisted(() => ({ mockClient: {} }))
+vi.mock("@admin/provider/AdminProvider", () => ({
+	useAdmin: () => ({
+		apiClients: { magicClient: mockClient },
+		user: { userInfo: null },
+		organization: { organizationCode: "mock" },
+		env: { MAGIC_BASE_URL: "mock" },
+		clusterCode: "mock",
+	}),
+}))
 vi.unmock("antd")
 // 外层页面样式依赖管理端主题；此处只验证折叠与保存行为。
 vi.mock("../styles", () => ({
@@ -20,6 +56,8 @@ vi.mock("../styles", () => ({
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock("@admin-components", () => ({
+	MagicAvatar: ({ src, children }: { src?: string; children?: ReactNode }) =>
+		src ? <img src={src} alt="mock-logo" /> : <span>{children}</span>,
 	MagicButton: (props: ButtonHTMLAttributes<HTMLButtonElement>) => (
 		<button
 			type="button"
@@ -154,4 +192,62 @@ it("折叠时保存无效配置自动展开并显示错误", async () => {
 		expect(screen.getAllByText("multiplier.invalidPrices").length).toBeGreaterThan(0),
 	)
 	expect(submit).not.toHaveBeenCalled()
+})
+
+it("旧端分组表隐藏空组并展示 logo，公式仍默认折叠", () => {
+	const snapshot = mockSnapshot()
+	snapshot.groups.unshift({ id: "empty", name: "Hidden group", items: [] })
+	snapshot.groups[1].icon = "https://example.com/group.png"
+	snapshot.models["mock-model"].icon = "https://example.com/model.png"
+	render(
+		<DefaultModelPriceTable
+			preview={{
+				data: snapshot,
+				loading: false,
+				error: false,
+				retry: () => {},
+				expanded: new Map(),
+				toggle: () => {},
+			}}
+			base="0.015"
+			rate="7"
+			currency="CNY"
+			enabled
+		/>,
+	)
+	expect(screen.queryByText("Hidden group")).toBeNull()
+	expect(screen.getByText("Mock group")).toBeTruthy()
+	expect(screen.getAllByAltText("mock-logo")).toHaveLength(2)
+	expect(screen.queryByText("modelPricePreview.reference")).toBeNull()
+	expect(
+		screen
+			.getByRole("button", { name: /modelPricePreview.details/ })
+			.getAttribute("aria-expanded"),
+	).toBe("false")
+	expect(screen.getByText("2.00x")).toBeTruthy()
+})
+
+it("旧端参考值根据当前币种换算，切换不回填或修改原始快照", () => {
+	const snapshot = mockSnapshot()
+	const preview = {
+		data: snapshot,
+		loading: false,
+		error: false,
+		retry: () => {},
+		expanded: new Map<string, boolean>(),
+		toggle: () => {},
+	}
+	const before = JSON.stringify(snapshot)
+	const view = render(
+		<DefaultModelPriceTable preview={preview} base="0.015" rate="7" currency="CNY" enabled />,
+	)
+	expect(screen.getByTestId("benchmark-input").textContent).toBe("2")
+	expect(screen.getByTestId("benchmark-output").textContent).toBe("10")
+	view.rerender(
+		<DefaultModelPriceTable preview={preview} base="0.015" rate="7" currency="USD" enabled />,
+	)
+	expect(screen.getByTestId("benchmark-input").textContent).toBe("≈0.285714285714")
+	expect(screen.getByTestId("benchmark-output").textContent).toBe("≈1.428571428571")
+	expect(screen.getAllByRole("button")).toHaveLength(1)
+	expect(JSON.stringify(snapshot)).toBe(before)
 })
