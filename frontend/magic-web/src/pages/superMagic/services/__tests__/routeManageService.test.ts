@@ -141,6 +141,32 @@ describe("routeManageService.navigateToHome", () => {
 	})
 })
 
+describe("routeManageService.navigateToWorkspace", () => {
+	beforeEach(() => {
+		mockState.pathname = "/global/super"
+		mockState.search = ""
+		mockState.isMobile = false
+		navigateMock.mockReset()
+		routesMatchMock.mockReset()
+		routeManageService.setNavigate(navigateMock)
+	})
+
+	it("keeps pending deep-link query on the desktop workspace route", () => {
+		routeManageService.navigateToWorkspace("workspace-1", true, {
+			agentCode: "SMA-test-agent",
+		})
+
+		expect(navigateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				name: RouteName.SuperWorkspaceState,
+				params: { workspaceId: "workspace-1" },
+				query: { agentCode: "SMA-test-agent" },
+				replace: true,
+			}),
+		)
+	})
+})
+
 describe("routeManageService.isCurrentMobileHomeRoute", () => {
 	it("returns true for bare /super index", () => {
 		expect(
@@ -204,6 +230,24 @@ describe("routeManageService.fixRouteParams", () => {
 			pathname: "/global/super",
 			pathnameBase: "/global/super",
 			route: { name: RouteName.Super },
+		})
+
+		routeManageService.fixRouteParams()
+
+		expect(navigateMock).not.toHaveBeenCalled()
+		expect(replaceMock).not.toHaveBeenCalled()
+		expect(pushMock).not.toHaveBeenCalled()
+	})
+
+	it("preserves a desktop agentCode deep link until the homepage resolves it", () => {
+		mockState.pathname = "/global/super/workspace/workspace-1"
+		mockState.search = "?agentCode=SMA-test-agent"
+		mockState.isMobile = false
+		routesMatchMock.mockReturnValue({
+			params: { clusterCode: "global", workspaceId: "workspace-1" },
+			pathname: "/global/super/workspace/workspace-1",
+			pathnameBase: "/global/super/workspace/workspace-1",
+			route: { name: RouteName.SuperWorkspaceState },
 		})
 
 		routeManageService.fixRouteParams()
@@ -276,6 +320,7 @@ describe("routeManageService.shouldPreserveChatRoute", () => {
 describe("routeManageService.fixRouteParams desktop chat exit", () => {
 	beforeEach(() => {
 		mockState.isMobile = false
+		mockState.search = ""
 		mockState.selectedProject = null
 		mockState.selectedTopic = null
 		navigateMock.mockReset()

@@ -117,6 +117,10 @@ export interface AgentAccessCheckView {
 	canUse: boolean
 }
 
+export type AgentAccessResolution =
+	| { status: "ready"; code: string; hired: boolean }
+	| { status: "invalid" | "unavailable"; code: string; hired: false }
+
 export interface AgentDetailView {
 	id: string
 	agentCode: string
@@ -186,6 +190,8 @@ export interface PagedResult<T> {
 // ======================== Service ========================
 
 export class CrewService {
+	private readonly inFlightAccessHires = new Map<string, Promise<void>>()
+
 	// ─── Categories ─────────────────────────────────────────────────────────
 
 	async getStoreCategories(options: GetStoreCategoriesOptions = {}): Promise<CategoryView[]> {
@@ -210,6 +216,39 @@ export class CrewService {
 	/** Hires one market agent for the current user. */
 	hireAgent(code: string) {
 		return CrewApi.hireStoreAgent({ code })
+	}
+
+	/** Resolves a shared-link agent and hires it when the current user has access. */
+	async resolveAgentAccess(
+		rawCode: string,
+		options: { autoHire?: boolean } = {},
+	): Promise<AgentAccessResolution> {
+		const code = rawCode.trim()
+		if (!code) return { status: "invalid", code, hired: false }
+
+		const access = await this.checkAgentAccess(code)
+		if (!access.exists) return { status: "invalid", code: access.code, hired: false }
+		if (access.canUse) return { status: "ready", code: access.code, hired: false }
+		if (!options.autoHire) return { status: "unavailable", code: access.code, hired: false }
+
+		await this.hireAgentOnce(access.code)
+		return { status: "ready", code: access.code, hired: true }
+	}
+
+	/** Shares an in-flight hire promise so StrictMode and remounts cannot duplicate writes. */
+	private hireAgentOnce(code: string): Promise<void> {
+		const pending = this.inFlightAccessHires.get(code)
+		if (pending) return pending
+
+		const request = this.hireAgent(code)
+			.then(() => undefined)
+			.finally(() => {
+				if (this.inFlightAccessHires.get(code) === request) {
+					this.inFlightAccessHires.delete(code)
+				}
+			})
+		this.inFlightAccessHires.set(code, request)
+		return request
 	}
 
 	/**

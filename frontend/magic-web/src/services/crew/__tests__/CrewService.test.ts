@@ -11,6 +11,7 @@ vi.mock("@/services/analytics", () => ({
 vi.mock("@/apis", () => ({
 	CrewApi: {
 		checkAgentAccess: vi.fn(),
+		hireStoreAgent: vi.fn(),
 		createAgent: vi.fn(),
 	},
 }))
@@ -33,6 +34,87 @@ describe("CrewService.checkAgentAccess", () => {
 			exists: true,
 			canUse: false,
 		})
+	})
+})
+
+describe("CrewService.resolveAgentAccess", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
+	it("returns ready without hiring an already usable agent", async () => {
+		vi.mocked(CrewApi.checkAgentAccess).mockResolvedValue({
+			code: "SMA-ready-mock",
+			exists: true,
+			can_use: true,
+		})
+		const service = new CrewService()
+
+		await expect(
+			service.resolveAgentAccess("SMA-request-mock", { autoHire: true }),
+		).resolves.toEqual({
+			status: "ready",
+			code: "SMA-ready-mock",
+			hired: false,
+		})
+		expect(CrewApi.hireStoreAgent).not.toHaveBeenCalled()
+	})
+
+	it("hires an available agent that the current user has not hired", async () => {
+		vi.mocked(CrewApi.checkAgentAccess).mockResolvedValue({
+			code: "SMA-hire-mock",
+			exists: true,
+			can_use: false,
+		})
+		vi.mocked(CrewApi.hireStoreAgent).mockResolvedValue([])
+		const service = new CrewService()
+
+		await expect(
+			service.resolveAgentAccess("SMA-hire-mock", { autoHire: true }),
+		).resolves.toEqual({
+			status: "ready",
+			code: "SMA-hire-mock",
+			hired: true,
+		})
+		expect(CrewApi.hireStoreAgent).toHaveBeenCalledWith({ code: "SMA-hire-mock" })
+	})
+
+	it("deduplicates concurrent hire requests", async () => {
+		vi.mocked(CrewApi.checkAgentAccess).mockResolvedValue({
+			code: "SMA-concurrent-mock",
+			exists: true,
+			can_use: false,
+		})
+		vi.mocked(CrewApi.hireStoreAgent).mockResolvedValue([])
+		const service = new CrewService()
+
+		await Promise.all([
+			service.resolveAgentAccess("SMA-concurrent-mock", { autoHire: true }),
+			service.resolveAgentAccess("SMA-concurrent-mock", { autoHire: true }),
+		])
+
+		expect(CrewApi.hireStoreAgent).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps invalid and non-auto-hire states side effect free", async () => {
+		vi.mocked(CrewApi.checkAgentAccess)
+			.mockResolvedValueOnce({ code: "SMA-missing-mock", exists: false, can_use: false })
+			.mockResolvedValueOnce({ code: "SMA-unavailable-mock", exists: true, can_use: false })
+		const service = new CrewService()
+
+		await expect(
+			service.resolveAgentAccess("SMA-missing-mock", { autoHire: true }),
+		).resolves.toEqual({
+			status: "invalid",
+			code: "SMA-missing-mock",
+			hired: false,
+		})
+		await expect(service.resolveAgentAccess("SMA-unavailable-mock")).resolves.toEqual({
+			status: "unavailable",
+			code: "SMA-unavailable-mock",
+			hired: false,
+		})
+		expect(CrewApi.hireStoreAgent).not.toHaveBeenCalled()
 	})
 })
 
