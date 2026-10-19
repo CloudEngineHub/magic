@@ -7,6 +7,7 @@ export interface AttachmentProps extends AttachmentItem {
 	url: string
 	file_id: string
 	display_filename?: string
+	file_tag?: "user_upload" | "process" | "browser" | "final"
 	display_config?: {
 		version: string
 		type: string

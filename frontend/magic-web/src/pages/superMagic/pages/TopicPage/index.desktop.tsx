@@ -227,6 +227,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	const {
 		shouldShowDetailPanel,
+		activeDetailTabType,
 		isDetailPanelCollapsed,
 		collapseDetailPanel,
 		expandDetailPanel,
@@ -823,6 +824,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				topicActions={topicActions}
 				isConversationPanelCollapsed={isConversationPanelCollapsed}
 				isDraggingPanel={isDraggingPanel}
+				activeFileId={activeFileId}
+				activeDetailTabType={activeDetailTabType}
 				onToggleConversationPanel={onToggleConversationPanel}
 				onExpandConversationPanel={onExpandConversationPanel}
 				detailPanelVisible={shouldShowDetailPanel}

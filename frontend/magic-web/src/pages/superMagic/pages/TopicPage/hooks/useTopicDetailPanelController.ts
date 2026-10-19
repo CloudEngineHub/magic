@@ -26,6 +26,7 @@ interface UseTopicDetailPanelControllerOptions {
 interface UseTopicDetailPanelControllerReturn {
 	shouldShowDetailPanel: boolean
 	hasActiveDetailTab: boolean
+	activeDetailTabType: ActiveDetailTabType
 	isDetailPanelCollapsed: boolean
 	collapseDetailPanel: () => void
 	expandDetailPanel: () => void
@@ -278,6 +279,7 @@ export function useTopicDetailPanelController({
 	return {
 		shouldShowDetailPanel,
 		hasActiveDetailTab,
+		activeDetailTabType,
 		isDetailPanelCollapsed:
 			!isReadOnly &&
 			isDetailPanelCollapsed &&

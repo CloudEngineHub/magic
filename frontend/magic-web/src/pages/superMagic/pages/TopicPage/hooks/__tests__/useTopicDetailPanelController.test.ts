@@ -43,17 +43,20 @@ describe("useTopicDetailPanelController", () => {
 
 		expect(result.current.shouldShowDetailPanel).toBe(false)
 		expect(result.current.hasActiveDetailTab).toBe(false)
+		expect(result.current.activeDetailTabType).toBeNull()
 
 		act(() => {
 			result.current.handleActiveDetailTabChange("playback")
 		})
 		expect(result.current.shouldShowDetailPanel).toBe(true)
 		expect(result.current.hasActiveDetailTab).toBe(true)
+		expect(result.current.activeDetailTabType).toBe("playback")
 
 		act(() => {
 			result.current.clearActiveDetailTabType()
 		})
 		expect(result.current.shouldShowDetailPanel).toBe(false)
+		expect(result.current.activeDetailTabType).toBeNull()
 	})
 
 	it("keeps a published micro-app preview open when preserving it across topic changes", () => {
