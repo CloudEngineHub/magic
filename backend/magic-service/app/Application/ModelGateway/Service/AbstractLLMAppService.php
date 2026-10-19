@@ -30,6 +30,7 @@ use App\Domain\ModelGateway\Service\UserConfigDomainService;
 use App\Domain\Provider\Service\AdminProviderDomainService;
 use App\Domain\Provider\Service\ModelFilter\PackageFilterInterface;
 use App\Domain\Provider\Service\ProviderModelDomainService;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\ExternalAPI\FileUrlProxy\TemporaryFileUrlProxyManager;
@@ -71,7 +72,7 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
         $this->logger = $this->loggerFactory->get(static::class);
     }
 
-    public function createModelGatewayDataIsolationByAccessToken(string $inputAccessToken, array $businessParams = []): ModelGatewayDataIsolation
+    public function createModelGatewayDataIsolationByAccessToken(string $inputAccessToken, array $businessParams = [], bool $enforceRuntimePermission = true): ModelGatewayDataIsolation
     {
         if (empty($inputAccessToken)) {
             ExceptionBuilder::throw(MagicApiErrorCode::TOKEN_NOT_EXIST);
@@ -128,6 +129,9 @@ abstract class AbstractLLMAppService extends AbstractKernelAppService
             $dataIsolation->getSubscriptionManager()->setEnabled(false);
         }
 
+        if ($enforceRuntimePermission) {
+            di(MagicClawRuntimePolicyDomainService::class)->assertModelInvocation($dataIsolation, $businessParams);
+        }
         return $dataIsolation;
     }
 

@@ -270,7 +270,7 @@ readonly class VideoOperationAppService
 
     public function getOperation(string $accessToken, string $operationId, array $businessParams = []): VideoOperationResponseDTO
     {
-        $dataIsolation = $this->llmAppService->createModelGatewayDataIsolationByAccessToken($accessToken, $businessParams);
+        $dataIsolation = $this->llmAppService->createModelGatewayDataIsolationByAccessToken($accessToken, $businessParams, enforceRuntimePermission: false);
         $this->videoQueueDomainService->getOperation(
             $operationId,
             $dataIsolation->getCurrentOrganizationCode(),

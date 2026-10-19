@@ -16,6 +16,10 @@ class MagicClawEntity extends AbstractEntity
      */
     protected ?int $id = null;
 
+    protected string $runtimeBlockReason = '';
+
+    protected string $runtimeBlockRevision = '0';
+
     /**
      * Unique claw code.
      */
@@ -80,6 +84,26 @@ class MagicClawEntity extends AbstractEntity
      * Last update time.
      */
     protected ?string $updatedAt = null;
+
+    public function getRuntimeBlockReason(): string
+    {
+        return $this->runtimeBlockReason;
+    }
+
+    public function setRuntimeBlockReason(string $reason): void
+    {
+        $this->runtimeBlockReason = $reason;
+    }
+
+    public function getRuntimeBlockRevision(): string
+    {
+        return $this->runtimeBlockRevision;
+    }
+
+    public function setRuntimeBlockRevision(string $revision): void
+    {
+        $this->runtimeBlockRevision = $revision;
+    }
 
     public function getId(): ?int
     {

@@ -16,6 +16,7 @@ use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigM
 use App\Domain\SuperMagic\Message\Repository\Facade\TaskMessageRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
+use App\Domain\SuperMagic\Task\Service\CrossProjectMentionPathTranslator;
 use App\Domain\SuperMagic\Topic\Repository\Facade\TopicRepositoryInterface;
 use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
 use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
@@ -25,7 +26,6 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperati
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use App\Infrastructure\Util\Locker\LockerInterface;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
@@ -160,11 +160,11 @@ class AgentDomainServiceSendUserToolCallFeedbackTest extends TestCase
             $this->createMock(MagicClawRepositoryInterface::class),
             $this->createMock(SuperMagicAgentRepositoryInterface::class),
             $this->createMock(MagicTokenRepositoryInterface::class),
-            $this->createMock(LockerInterface::class),
             $this->createMock(ProjectRepositoryInterface::class),
             $this->createMock(TopicRepositoryInterface::class),
             $this->createMock(WorkspaceRepositoryInterface::class),
             $this->createMock(TaskMessageRepositoryInterface::class),
+            new CrossProjectMentionPathTranslator(),
         );
     }
 

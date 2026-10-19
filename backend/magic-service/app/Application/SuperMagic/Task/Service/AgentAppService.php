@@ -14,6 +14,7 @@ use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\File\Event\CheckpointRollbackFilesChangedEvent;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Event\CheckpointRollbackMessagesChangedEvent;
@@ -35,6 +36,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayRe
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use App\Infrastructure\SuperMagic\Task\Locker\CheckpointRollbackLock;
+use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -126,7 +128,7 @@ readonly class AgentAppService
             'topic_id' => $topicId,
         ]);
 
-        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return di(SandboxLifecycleLock::class)->run($topicId, fn (): string => di(MagicClawRuntimePolicyDomainService::class)->manualStart($topicId, fn (): string => $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true)));
     }
 
     /**
@@ -140,40 +142,7 @@ readonly class AgentAppService
      */
     public function restartSandbox(DataIsolation $dataIsolation, int $topicId): string
     {
-        $topicEntity = $this->topicDomainService->getTopicById($topicId);
-        if (is_null($topicEntity)) {
-            throw new BusinessException('Topic not found for ID: ' . $topicId);
-        }
-
-        if ($topicEntity->getUserId() !== $dataIsolation->getCurrentUserId()) {
-            throw new BusinessException('Access denied for topic ID: ' . $topicId);
-        }
-
-        $persistedSandboxId = $topicEntity->getSandboxId();
-        $sandboxId = $persistedSandboxId !== '' ? $persistedSandboxId : (string) $topicId;
-        $this->logger->info('[Sandbox][App] Restarting sandbox via delete + reinit', [
-            'topic_id' => $topicId,
-            'sandbox_id' => $sandboxId,
-        ]);
-
-        // 删除旧沙箱；仅在网关明确返回 NOT_FOUND 时继续重建。
-        try {
-            $this->agentDomainService->stopSandbox($sandboxId);
-            $this->logger->info('[Sandbox][App] Old sandbox deleted for restart', [
-                'topic_id' => $topicId,
-                'sandbox_id' => $sandboxId,
-            ]);
-        } catch (SandboxOperationException $e) {
-            if (! ResponseCode::isNotFound($e->getCode())) {
-                throw $e;
-            }
-            $this->logger->info('[Sandbox][App] Old sandbox does not exist, proceeding with reinit', [
-                'topic_id' => $topicId,
-                'sandbox_id' => $sandboxId,
-            ]);
-        }
-
-        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return di(SandboxLifecycleLock::class)->run($topicId, fn (): string => di(MagicClawRuntimePolicyDomainService::class)->manualStart($topicId, fn (): string => $this->restartSandboxWithinLock($dataIsolation, $topicId)));
     }
 
     /**
@@ -187,6 +156,7 @@ readonly class AgentAppService
      */
     public function upgradeSandbox(DataIsolation $dataIsolation, int $topicId): string
     {
+        di(MagicClawRuntimePolicyDomainService::class)->assertTopic($topicId);
         $topicEntity = $this->topicDomainService->getTopicById($topicId);
         if (is_null($topicEntity)) {
             throw new BusinessException('Topic not found for ID: ' . $topicId);
@@ -734,6 +704,44 @@ readonly class AgentAppService
         }
 
         return $response;
+    }
+
+    private function restartSandboxWithinLock(DataIsolation $dataIsolation, int $topicId): string
+    {
+        $topicEntity = $this->topicDomainService->getTopicById($topicId);
+        if (is_null($topicEntity)) {
+            throw new BusinessException('Topic not found for ID: ' . $topicId);
+        }
+
+        if ($topicEntity->getUserId() !== $dataIsolation->getCurrentUserId()) {
+            throw new BusinessException('Access denied for topic ID: ' . $topicId);
+        }
+
+        $persistedSandboxId = $topicEntity->getSandboxId();
+        $sandboxId = $persistedSandboxId !== '' ? $persistedSandboxId : (string) $topicId;
+        $this->logger->info('[Sandbox][App] Restarting sandbox via delete + reinit', [
+            'topic_id' => $topicId,
+            'sandbox_id' => $sandboxId,
+        ]);
+
+        // 删除旧沙箱；仅在网关明确返回 NOT_FOUND 时继续重建。
+        try {
+            $this->agentDomainService->stopSandbox($sandboxId);
+            $this->logger->info('[Sandbox][App] Old sandbox deleted for restart', [
+                'topic_id' => $topicId,
+                'sandbox_id' => $sandboxId,
+            ]);
+        } catch (SandboxOperationException $e) {
+            if (! ResponseCode::isNotFound($e->getCode())) {
+                throw $e;
+            }
+            $this->logger->info('[Sandbox][App] Old sandbox does not exist, proceeding with reinit', [
+                'topic_id' => $topicId,
+                'sandbox_id' => $sandboxId,
+            ]);
+        }
+
+        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
     }
 
     /**

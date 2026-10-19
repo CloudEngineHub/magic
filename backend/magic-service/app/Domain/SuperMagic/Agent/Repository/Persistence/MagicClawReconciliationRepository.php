@@ -1,0 +1,176 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
+
+namespace App\Domain\SuperMagic\Agent\Repository\Persistence;
+
+use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\MagicClawModel;
+use App\Domain\SuperMagic\Message\Repository\Model\MessageQueueModel;
+use App\Domain\SuperMagic\Topic\Repository\Model\TopicModel;
+use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Hyperf\DbConnection\Db;
+
+class MagicClawReconciliationRepository
+{
+    private const OPERATIONS = 'magic_claw_permission_reconciliations';
+
+    private const ITEMS = 'magic_claw_permission_reconciliation_items';
+
+    public function create(string $organization, string $actor, string $reason): array
+    {
+        $id = (string) IdGenerator::getSnowId();
+        $now = date('Y-m-d H:i:s');
+        Db::table(self::OPERATIONS)->where('organization_code', $organization)
+            ->where('status', '!=', 'superseded')->update(['status' => 'superseded', 'updated_at' => $now]);
+        Db::table(self::OPERATIONS)->insert([
+            'id' => $id, 'organization_code' => $organization, 'actor' => $actor,
+            'reason' => $reason, 'status' => 'pending', 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        return $this->latest($organization) ?? [];
+    }
+
+    public function latest(string $organization): ?array
+    {
+        $row = Db::table(self::OPERATIONS)->where('organization_code', $organization)->orderByDesc('id')->first();
+        return $row === null ? null : (array) $row;
+    }
+
+    public function isCurrent(array $operation): bool
+    {
+        return (string) ($this->latest($operation['organization_code'])['id'] ?? '') === (string) $operation['id'];
+    }
+
+    public function activeOperations(int $limit): array
+    {
+        return Db::table(self::OPERATIONS)->whereIn('status', ['pending', 'running', 'partial_failed'])
+            ->where('lease_until', '<', time())->orderBy('updated_at')->limit($limit)->get()->map(fn ($row) => (array) $row)->all();
+    }
+
+    public function claim(array $operation, string $leaseOwner): bool
+    {
+        return Db::table(self::OPERATIONS)->where('id', $operation['id'])
+            ->whereIn('status', ['pending', 'running', 'partial_failed'])->where('lease_until', '<', time())
+            ->update(['lease_until' => time() + 1200, 'lease_owner' => $leaseOwner]) > 0;
+    }
+
+    public function release(array $operation, string $leaseOwner): void
+    {
+        Db::table(self::OPERATIONS)->where('id', $operation['id'])->where('lease_owner', $leaseOwner)
+            ->update(['lease_until' => 0, 'lease_owner' => '', 'updated_at' => date('Y-m-d H:i:s')]);
+    }
+
+    /** Stable cursors include soft-deleted owners/topics, whose pods may still exist. */
+    public function claws(string $organization, int $after, int $limit = 100): array
+    {
+        return MagicClawModel::withTrashed()->where('organization_code', $organization)
+            ->where('id', '>', $after)->orderBy('id')->limit($limit)->get()->toArray();
+    }
+
+    public function discoveryPage(int $after, int $limit = 100): array
+    {
+        return MagicClawModel::withTrashed()->where('id', '>', $after)->orderBy('id')->limit($limit)->get()->toArray();
+    }
+
+    /** @return iterable<array> */
+    public function topics(array $claw): iterable
+    {
+        $cursor = 0;
+        do {
+            $rows = TopicModel::withTrashed()->where('project_id', $claw['project_id'])
+                ->where('user_organization_code', $claw['organization_code'])->where('user_id', $claw['user_id'])
+                ->where('id', '>', $cursor)->orderBy('id')->limit(100)->get()->toArray();
+            foreach ($rows as $row) {
+                $cursor = (int) $row['id'];
+                yield $row;
+            }
+        } while (count($rows) === 100);
+    }
+
+    public function topic(int $topicId): ?array
+    {
+        $topic = TopicModel::withTrashed()->where('id', $topicId)->first();
+        return $topic?->toArray();
+    }
+
+    public function claw(int $clawId): ?array
+    {
+        return MagicClawModel::withTrashed()->where('id', $clawId)->first()?->toArray();
+    }
+
+    public function enqueue(array $operation, array $claw, array $topic): void
+    {
+        $now = date('Y-m-d H:i:s');
+        Db::table(self::ITEMS)->insertOrIgnore([
+            'operation_id' => $operation['id'], 'claw_id' => $claw['id'], 'topic_id' => $topic['id'],
+            'sandbox_id' => (string) ($topic['sandbox_id'] ?? ''), 'created_at' => $now, 'updated_at' => $now,
+        ]);
+    }
+
+    public function updateOperation(array $operation, array $values): void
+    {
+        Db::table(self::OPERATIONS)->where('id', $operation['id'])->where('status', '!=', 'superseded')
+            ->update($values + ['updated_at' => date('Y-m-d H:i:s')]);
+    }
+
+    public function dueItem(array $operation): ?array
+    {
+        $row = Db::table(self::ITEMS)->where('operation_id', $operation['id'])->whereIn('status', ['pending', 'failed'])
+            ->where('next_retry_at', '<=', time())->orderBy('next_retry_at')->orderBy('id')->first();
+        return $row === null ? null : (array) $row;
+    }
+
+    public function updateItem(array $item, array $values): void
+    {
+        Db::table(self::ITEMS)->where('id', $item['id'])->update($values + ['updated_at' => date('Y-m-d H:i:s')]);
+    }
+
+    public function cancelQueuedMessages(array $topic): void
+    {
+        MessageQueueModel::query()
+            ->where('topic_id', $topic['id'])->where('organization_code', $topic['user_organization_code'])
+            ->whereIn('status', [0, 3])->update(['status' => 2, 'err_message' => 'Magic Claw access revoked']);
+    }
+
+    public function clearBinding(int $topicId, string $sandboxId): void
+    {
+        TopicModel::withTrashed()->where('id', $topicId)->where('sandbox_id', $sandboxId)
+            ->update(['sandbox_id' => '', 'current_task_status' => 'stopped']);
+    }
+
+    public function retry(array $operation): void
+    {
+        Db::table(self::ITEMS)->where('operation_id', $operation['id'])->where('status', 'failed')
+            ->update(['next_retry_at' => 0]);
+        $this->updateOperation($operation, ['status' => 'running']);
+    }
+
+    public function summarize(array $operation): array
+    {
+        $counts = Db::table(self::ITEMS)->where('operation_id', $operation['id'])
+            ->selectRaw('claw_id, status, COUNT(*) AS total')->groupBy('claw_id', 'status')->get();
+        $claws = [];
+        $pending = 0;
+        $failed = 0;
+        foreach ($counts as $row) {
+            $claws[(string) $row->claw_id][(string) $row->status] = (int) $row->total;
+            $pending += $row->status === 'pending' ? (int) $row->total : 0;
+            $failed += $row->status === 'failed' ? (int) $row->total : 0;
+        }
+        $status = $operation['status'];
+        if ($status !== 'superseded') {
+            $status = ! $operation['scan_completed'] || $pending > 0 ? 'running' : ($failed > 0 ? 'partial_failed' : 'completed');
+        }
+        return [
+            // Snowflake identifiers are strings to avoid JavaScript precision loss.
+            'operation_id' => (string) $operation['id'], 'policy_revision' => (string) $operation['id'],
+            'status' => $status,
+            'affected_count' => $operation['scan_completed'] ? count($claws) : null,
+            'stopped_count' => count(array_filter($claws, fn (array $states) => isset($states['stopped']) && ! isset($states['pending']) && ! isset($states['failed']))),
+            'failed_count' => count(array_filter($claws, fn (array $states) => isset($states['failed']))),
+            'skipped_count' => count(array_filter($claws, fn (array $states) => count($states) === 1 && isset($states['skipped']))),
+        ];
+    }
+}

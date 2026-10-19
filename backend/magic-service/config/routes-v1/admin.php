@@ -161,6 +161,7 @@ Router::addGroup('/api/v1/admin', static function () {
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     Router::addGroup('/function-permissions', static function () {
+        Router::post('/magic_claw.access/runtime-reconciliation/retry', [FunctionPermissionAdminApi::class, 'retryClawRuntimeReconciliation']);
         Router::get('/catalog', [FunctionPermissionAdminApi::class, 'catalog']);
         Router::get('', [FunctionPermissionAdminApi::class, 'queries']);
         Router::get('/settings', [FunctionPermissionAdminApi::class, 'settings']);

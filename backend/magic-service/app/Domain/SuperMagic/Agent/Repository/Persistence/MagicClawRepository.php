@@ -18,6 +18,31 @@ class MagicClawRepository extends SuperMagicAbstractRepository implements MagicC
     {
     }
 
+    public function bindFileConverterSandbox(int $clawId, string $sandboxId): void
+    {
+        MagicClawModel::withTrashed()->where('id', $clawId)->update(['file_converter_sandbox_id' => $sandboxId]);
+    }
+
+    public function clearFileConverterSandbox(int $clawId, string $sandboxId): void
+    {
+        MagicClawModel::withTrashed()->where('id', $clawId)->where('file_converter_sandbox_id', $sandboxId)
+            ->update(['file_converter_sandbox_id' => '']);
+    }
+
+    public function setRuntimeBlock(int $id, string $revision): void
+    {
+        $this->magicClawModel::withTrashed()->where('id', $id)->update([
+            'runtime_block_reason' => 'permission_revoked',
+            'runtime_block_revision' => $revision,
+        ]);
+    }
+
+    public function clearRuntimeBlock(int $id, string $expectedRevision): bool
+    {
+        return $this->magicClawModel::query()->where('id', $id)
+            ->where('runtime_block_revision', $expectedRevision)->update(['runtime_block_reason' => '']) > 0;
+    }
+
     public function create(MagicClawEntity $entity): MagicClawEntity
     {
         $id = IdGenerator::getSnowId();
@@ -162,6 +187,8 @@ class MagicClawRepository extends SuperMagicAbstractRepository implements MagicC
     {
         $entity = new MagicClawEntity();
         $entity->setId((int) $model->id);
+        $entity->setRuntimeBlockReason((string) ($model->runtime_block_reason ?? ''));
+        $entity->setRuntimeBlockRevision((string) ($model->runtime_block_revision ?? '0'));
         $entity->setCode((string) $model->code);
         $entity->setName((string) $model->name);
         $entity->setDescription((string) ($model->description ?? ''));

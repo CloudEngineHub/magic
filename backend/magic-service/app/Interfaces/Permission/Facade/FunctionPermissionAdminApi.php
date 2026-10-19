@@ -10,6 +10,7 @@ namespace App\Interfaces\Permission\Facade;
 use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
 use App\Application\Permission\Service\FunctionPermissionAppService;
+use App\Application\SuperMagic\Agent\Service\MagicClawReconciliationAppService;
 use App\Domain\Permission\Entity\ValueObject\PermissionControlStatus;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\ErrorCode\PermissionErrorCode;
@@ -132,6 +133,17 @@ class FunctionPermissionAdminApi extends AbstractPermissionApi
             $this->createPermissionDataIsolation($authorization),
             $status
         );
+    }
+
+    #[CheckPermission(MagicResourceEnum::ADMIN_SAFE_FUNCTION_PERMISSION, MagicOperationEnum::EDIT)]
+    public function retryClawRuntimeReconciliation(): array
+    {
+        $authorization = $this->getAuthorization();
+        $operationId = (string) $this->request->input('operation_id', '');
+        if ($operationId === '' || ! ctype_digit($operationId)) {
+            ExceptionBuilder::throw(PermissionErrorCode::ValidateFailed, 'invalid operation_id');
+        }
+        return di(MagicClawReconciliationAppService::class)->retry($authorization->getOrganizationCode(), $operationId);
     }
 
     private function createPermissionDataIsolation(MagicUserAuthorization $authorization): PermissionDataIsolation

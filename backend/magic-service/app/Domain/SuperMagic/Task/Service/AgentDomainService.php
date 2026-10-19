@@ -14,8 +14,10 @@ use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use App\Domain\SuperMagic\Agent\Exception\MagicClawRuntimeDeniedException;
 use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicProductContext;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\UserInfoValueObject;
@@ -67,9 +69,9 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayRe
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use App\Infrastructure\SuperMagic\Utils\WorkDirectoryUtil;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
-use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
 use Carbon\Carbon;
 use Hyperf\Codec\Json;
@@ -99,7 +101,6 @@ class AgentDomainService
         private readonly MagicClawRepositoryInterface $magicClawRepository,
         private readonly SuperMagicAgentRepositoryInterface $superMagicAgentRepository,
         private readonly MagicTokenRepositoryInterface $magicTokenRepository,
-        private readonly LockerInterface $locker,
         private readonly ProjectRepositoryInterface $projectRepository,
         private readonly TopicRepositoryInterface $topicRepository,
         private readonly WorkspaceRepositoryInterface $workspaceRepository,
@@ -289,34 +290,9 @@ class AgentDomainService
             'has_interrupt_checker' => $interruptChecker !== null,
         ]);
 
-        $lockKey = sprintf('super_agent:sandbox:init:%s', $topicEntity->getId());
-        $lockOwner = uniqid('sandbox_init_', true);
-        $lockAcquired = false;
-
-        try {
-            $this->logger->info('[Sandbox][Domain] Attempting to acquire lock for sandbox initialization', [
-                'topic_id' => $topicEntity->getId(),
-                'lock_key' => $lockKey,
-                'lock_owner' => $lockOwner,
-                'timeout_seconds' => 60,
-            ]);
-
-            $lockAcquired = $this->locker->spinLock($lockKey, $lockOwner, 120, 360);
-
-            if (! $lockAcquired) {
-                $this->logger->error('[Sandbox][Domain] Failed to acquire lock for sandbox initialization', [
-                    'topic_id' => $topicEntity->getId(),
-                    'lock_key' => $lockKey,
-                ]);
-                throw new ServerException('Failed to acquire lock for sandbox initialization, please try again');
-            }
-
-            $this->logger->info('[Sandbox][Domain] Lock acquired successfully for sandbox initialization', [
-                'topic_id' => $topicEntity->getId(),
-                'lock_key' => $lockKey,
-                'lock_owner' => $lockOwner,
-            ]);
-
+        return di(SandboxLifecycleLock::class)->run((int) $topicEntity->getId(), function (callable $assertOwnership) use ($dataIsolation, $agentContext, $rootFileIds, $interruptChecker, $topicEntity, $contextSandboxId, $sandboxId): string {
+            $assertOwnership();
+            di(MagicClawRuntimePolicyDomainService::class)->assertTopic((int) $topicEntity->getId());
             // 上面的 $sandboxId 是拿锁【前】解析出的快照，等锁期间可能已失效。
             // 典型竞态（A=升级/重启流程，B=本方法的另一次并发调用）：
             //
@@ -365,6 +341,8 @@ class AgentDomainService
                         'sandbox_id' => $sandboxId,
                         'workspace_status' => $status,
                     ]);
+                    $assertOwnership();
+                    $this->assertSandboxRuntime((int) $topicEntity->getProjectId(), $sandboxId, (int) $topicEntity->getId());
                     return $sandboxId;
                 }
 
@@ -387,6 +365,23 @@ class AgentDomainService
                 // 在线。统一把残留 id 抹空，让 warm pool 守卫得以放行。
                 $agentContext->setSandboxId('');
                 $sandboxId = '';
+            }
+
+            if (di(MagicClawRuntimePolicyDomainService::class)->assertTopic((int) $topicEntity->getId()) !== null) {
+                // Retire the recorded old pod before replacing its only durable pointer.
+                // If deletion is uncertain, keep that pointer for the permission reconciler.
+                $currentBinding = (string) ($this->topicRepository->getTopicById((int) $topicEntity->getId())?->getSandboxId() ?? '');
+                if ($currentBinding !== '') {
+                    try {
+                        $this->stopSandbox($currentBinding);
+                    } catch (SandboxOperationException $exception) {
+                        if (! ResponseCode::isNotFound($exception->getCode())) {
+                            throw $exception;
+                        }
+                    }
+                    $this->topicRepository->updateTopicByCondition(['id' => $topicEntity->getId(), 'sandbox_id' => $currentBinding], ['sandbox_id' => '']);
+                }
+                $boundBeforeSwitch = '';
             }
 
             // Step 2: Get root file IDs for sandbox initialization
@@ -427,6 +422,8 @@ class AgentDomainService
                 $sandboxId = $createdSandboxId;
             }
 
+            $assertOwnership();
+            $this->assertSandboxRuntime((int) $topicEntity->getProjectId(), $sandboxId, (int) $topicEntity->getId());
             $this->refreshInitContextSandboxId($agentContext, $sandboxId);
 
             if ($interruptChecker !== null && $interruptChecker()) {
@@ -434,6 +431,8 @@ class AgentDomainService
                     'sandbox_id' => $sandboxId,
                     'topic_id' => $topicEntity->getId(),
                 ]);
+                $assertOwnership();
+                $this->assertSandboxRuntime((int) $topicEntity->getProjectId(), $sandboxId, (int) $topicEntity->getId());
                 return $sandboxId;
             }
 
@@ -453,6 +452,8 @@ class AgentDomainService
                     'sandbox_id' => $sandboxId,
                     'topic_id' => $topicEntity->getId(),
                 ]);
+                $assertOwnership();
+                $this->assertSandboxRuntime((int) $topicEntity->getProjectId(), $sandboxId, (int) $topicEntity->getId());
                 return $sandboxId;
             }
 
@@ -463,6 +464,8 @@ class AgentDomainService
                     'sandbox_id' => $sandboxId,
                     'topic_id' => $topicEntity->getId(),
                 ]);
+                $assertOwnership();
+                $this->assertSandboxRuntime((int) $topicEntity->getProjectId(), $sandboxId, (int) $topicEntity->getId());
                 return $sandboxId;
             }
 
@@ -471,17 +474,10 @@ class AgentDomainService
                 'topic_id' => $topicEntity->getId(),
             ]);
 
+            $assertOwnership();
+            $this->assertSandboxRuntime((int) $topicEntity->getProjectId(), $sandboxId, (int) $topicEntity->getId());
             return $sandboxId;
-        } finally {
-            if ($lockAcquired) {
-                $released = $this->locker->release($lockKey, $lockOwner);
-                $this->logger->info('[Sandbox][Domain] Lock released for sandbox initialization', [
-                    'topic_id' => $topicEntity->getId(),
-                    'lock_owner' => $lockOwner,
-                    'released' => $released,
-                ]);
-            }
-        }
+        });
     }
 
     /**
@@ -489,82 +485,24 @@ class AgentDomainService
      */
     public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
     {
-        $this->logger->debug('[Sandbox][App] Creating sandbox', [
-            'project_id' => $projectId,
-            'sandbox_id' => $sandboxID,
-            'project_oss_path' => $workDir,
-            'project_space_root_file_id' => $projectSpaceRootFileId,
-            'user_space_root_file_id' => $userSpaceRootFileId,
-            'topic_space_root_file_id' => $topicSpaceRootFileId,
-            'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
-        ]);
-
-        // Stamp the topic id onto the pod labels so the sandbox can be
-        // correlated back to its topic (warm pool stamps it at mount time).
-        $labels = $topicId !== null ? ['topic-id' => (string) $topicId] : [];
-        // Also stamp agent code so both custom-agent and magic-claw sandboxes
-        // can be correlated back to the original agent identity.
-        if ($agentCode !== null && $agentCode !== '') {
-            $labels['agent-code'] = $agentCode;
+        $claw = di(MagicClawRuntimePolicyDomainService::class)->assertProject((int) $projectId);
+        if ($claw !== null && $topicId === null) {
+            throw new MagicClawRuntimeDeniedException();
         }
-        $result = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $topicSpaceRootFileId, $labels);
-
-        // 添加详细的调试日志，检查 result 对象
-        $this->logger->debug('[Sandbox][App] Gateway result analysis', [
-            'result_class' => get_class($result),
-            'result_is_success' => $result->isSuccess(),
-            'result_code' => $result->getCode(),
-            'result_message' => $result->getMessage(),
-            'result_data_raw' => $result->getData(),
-            'result_data_type' => gettype($result->getData()),
-            'sandbox_id_via_getDataValue' => $result->getDataValue('sandbox_id'),
-            'sandbox_id_via_getData_direct' => $result->getData()['sandbox_id'] ?? 'KEY_NOT_FOUND',
-        ]);
-
-        if (! $result->isSuccess()) {
-            $this->logger->error('[Sandbox][App] Failed to create sandbox', [
-                'project_id' => $projectId,
-                'sandbox_id' => $sandboxID,
-                'error' => $result->getMessage(),
-                'code' => $result->getCode(),
-            ]);
-            throw new SandboxOperationException('Create sandbox', $result->getMessage(), $result->getCode());
-        }
-
-        $returnedSandboxId = $result->getDataValue('sandbox_id');
-        $agentImage = $result->getDataValue('agent_image');
-        $agentImage = is_string($agentImage) ? $agentImage : '';
-
-        $this->logger->info('[Sandbox][App] Create sandbox success', [
-            'project_id' => $projectId,
-            'input_sandbox_id' => $sandboxID,
-            'returned_sandbox_id' => $returnedSandboxId,
-            'agent_image' => $agentImage,
-        ]);
-
-        // 创建成功后立即持久化 sandbox id 与响应中的双镜像。优先使用调用方传入的 topic id，
-        // 避免自定义 sandbox_id 场景把 sandbox_id 误当成 topic_id。
-        $topicUpdateId = $topicId ?? ((string) (int) $returnedSandboxId === (string) $returnedSandboxId ? (int) $returnedSandboxId : 0);
-        if ($topicUpdateId > 0) {
-            $topicUpdateData = [
-                'sandbox_images' => $result->getSandboxImages(),
-                'updated_uid' => $dataIsolation->getCurrentUserId(),
-                'updated_at' => date('Y-m-d H:i:s'),
-            ];
-            if (! empty($returnedSandboxId)) {
-                $topicUpdateData['sandbox_id'] = (string) $returnedSandboxId;
+        $create = function () use ($claw, $dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $topicSpaceRootFileId, $topicId, $agentCode): string {
+            di(MagicClawRuntimePolicyDomainService::class)->assertProject((int) $projectId);
+            if ($claw !== null) {
+                $topic = $this->topicRepository->getTopicById((int) $topicId);
+                if ($topic === null || $topic->getProjectId() !== (int) $projectId) {
+                    throw new MagicClawRuntimeDeniedException();
+                }
+                $this->topicRepository->updateTopicByCondition(['id' => $topicId], ['sandbox_id' => $sandboxID]);
             }
-            if (! empty($agentImage)) {
-                // Keep the legacy column populated for old readers only;
-                // sandbox_images is the canonical field for new consumers.
-                $topicUpdateData['agent_image'] = $agentImage;
-            }
-            if (isset($topicUpdateData['sandbox_id']) || isset($topicUpdateData['agent_image'])) {
-                $this->topicRepository->updateTopicByCondition(['id' => $topicUpdateId], $topicUpdateData);
-            }
-        }
-
-        return $returnedSandboxId;
+            $id = $this->createSandboxWithinLifecycle($dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $topicSpaceRootFileId, $topicId, $agentCode);
+            $this->assertSandboxRuntime((int) $projectId, $id, $topicId);
+            return $id;
+        };
+        return $topicId !== null ? di(SandboxLifecycleLock::class)->run($topicId, $create) : $create();
     }
 
     /**
@@ -711,6 +649,7 @@ class AgentDomainService
      */
     public function sendChatMessage(DataIsolation $dataIsolation, TaskContext $taskContext, array $personalPreferences = []): void
     {
+        di(MagicClawRuntimePolicyDomainService::class)->assertTopic($taskContext->getTopicId());
         $taskDynamicConfig = $taskContext->getDynamicConfig();
 
         if ($taskId = (string) $taskContext->getTask()->getId()) {
@@ -863,6 +802,10 @@ class AgentDomainService
         string $responseStatus,
         string $answer
     ): void {
+        $topic = $this->topicRepository->getTopicBySandboxId($sandboxId);
+        if ($topic !== null) {
+            di(MagicClawRuntimePolicyDomainService::class)->assertTopic((int) $topic->getId());
+        }
         $this->logger->debug('[Sandbox][Domain] Sending ask_user feedback to sandbox', [
             'sandbox_id' => $sandboxId,
             'task_id' => $taskId,
@@ -913,6 +856,10 @@ class AgentDomainService
         string $toolCallId,
         array $detail
     ): void {
+        $topic = $this->topicRepository->getTopicBySandboxId($sandboxId);
+        if ($topic !== null) {
+            di(MagicClawRuntimePolicyDomainService::class)->assertTopic((int) $topic->getId());
+        }
         $this->logger->debug('[Sandbox][Domain] Sending user_tool_call feedback to sandbox', [
             'sandbox_id' => $sandboxId,
             'name' => $name,
@@ -1375,68 +1322,21 @@ class AgentDomainService
         string $projectSpaceRootFileId = '',
         string $topicSpaceRootFileId = ''
     ): string {
-        $userId = $dataIsolation->getCurrentUserId();
-        $this->logger->debug('[Sandbox][Domain] Ensuring sandbox container is running', [
-            'sandbox_id' => $sandboxId,
-            'project_id' => $projectId,
-            'user_id' => $userId,
-        ]);
-
-        // Check if sandbox already running
-        $statusResult = $this->getSandboxStatus($sandboxId);
-        if ($statusResult->isSuccess() && $statusResult->getCode() === ResponseCode::SUCCESS) {
-            if (SandboxStatus::isAvailable($statusResult->getStatus())) {
-                $this->logger->debug('[Sandbox][Domain] Sandbox container is already running', [
-                    'sandbox_id' => $sandboxId,
-                ]);
-                return $sandboxId;
-            }
-
-            // If Pending, wait for it to become Running
-            if ($statusResult->getStatus() === SandboxStatus::PENDING) {
-                $this->logger->debug('[Sandbox][Domain] Sandbox container is pending, waiting for it to become running', [
-                    'sandbox_id' => $sandboxId,
-                ]);
-                try {
-                    return $this->waitForSandboxContainerRunning($sandboxId, 'existing');
-                } catch (SandboxOperationException $e) {
-                    $this->logger->warning('[Sandbox][Domain] Failed to wait for existing sandbox container, will recreate', [
-                        'sandbox_id' => $sandboxId,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
+        $claw = di(MagicClawRuntimePolicyDomainService::class)->assertProject((int) $projectId);
+        if ($claw === null) {
+            return $this->ensureSandboxContainerRunning($dataIsolation, $sandboxId, $projectId, $workDir, $projectSpaceRootFileId, $topicSpaceRootFileId);
         }
-
-        // Create sandbox container. Per-call user identity flows through
-        // as a DataIsolation value object – the gateway forwards the
-        // authorization token on the HTTP request so the in-pod
-        // agfs-server / super-magic agent auth middleware can validate it.
-        $createResult = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxId, $workDir, $projectSpaceRootFileId, '', $topicSpaceRootFileId);
-
-        if (! $createResult->isSuccess()) {
-            $this->logger->error('[Sandbox][Domain] Failed to create sandbox container', [
-                'sandbox_id' => $sandboxId,
-                'project_id' => $projectId,
-                'code' => $createResult->getCode(),
-                'message' => $createResult->getMessage(),
-            ]);
-            throw new SandboxOperationException('Create sandbox', $createResult->getMessage(), $createResult->getCode());
-        }
-
-        $newSandboxId = $createResult->getDataValue('sandbox_id');
-        if (empty($newSandboxId)) {
-            $this->logger->error('[Sandbox][Domain] Failed to get sandbox_id from create result', [
-                'sandbox_id' => $sandboxId,
-                'project_id' => $projectId,
-            ]);
-            throw new SandboxOperationException('Get sandbox_id from create result', 'Failed to get sandbox_id from create result', 2001);
-        }
-
-        $this->logger->debug('[Sandbox][Domain] Sandbox container created, waiting for it to become running', [
-            'sandbox_id' => $newSandboxId,
-        ]);
-        return $this->waitForSandboxContainerRunning($newSandboxId, 'new');
+        // Auxiliary conversion containers do not own a topic. Negative project IDs use a disjoint lock namespace.
+        return di(SandboxLifecycleLock::class)->run(-((int) $projectId), function (callable $guard) use ($claw, $dataIsolation, $sandboxId, $projectId, $workDir, $projectSpaceRootFileId, $topicSpaceRootFileId): string {
+            $guard();
+            di(MagicClawRuntimePolicyDomainService::class)->assertProject((int) $projectId);
+            $this->magicClawRepository->bindFileConverterSandbox((int) $claw->getId(), $sandboxId);
+            $id = $this->ensureSandboxContainerRunning($dataIsolation, $sandboxId, $projectId, $workDir, $projectSpaceRootFileId, $topicSpaceRootFileId, fn (string $createdId) => $this->magicClawRepository->bindFileConverterSandbox((int) $claw->getId(), $createdId));
+            $this->magicClawRepository->bindFileConverterSandbox((int) $claw->getId(), $id);
+            $guard();
+            $this->assertSandboxRuntime((int) $projectId, $id);
+            return $id;
+        });
     }
 
     /**
@@ -1503,6 +1403,181 @@ class AgentDomainService
         foreach ($projectIds as $projectId) {
             $this->mountSingleReferencedProject($dataIsolation, $sandboxId, $projectId, (string) ($projectRootFileIds[(int) $projectId] ?? $projectRootFileIds[$projectId] ?? ''));
         }
+    }
+
+    private function createSandboxWithinLifecycle(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
+    {
+        di(MagicClawRuntimePolicyDomainService::class)->assertProject((int) $projectId);
+        $this->logger->debug('[Sandbox][App] Creating sandbox', [
+            'project_id' => $projectId,
+            'sandbox_id' => $sandboxID,
+            'project_oss_path' => $workDir,
+            'project_space_root_file_id' => $projectSpaceRootFileId,
+            'user_space_root_file_id' => $userSpaceRootFileId,
+            'topic_space_root_file_id' => $topicSpaceRootFileId,
+            'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
+        ]);
+
+        // Stamp the topic id onto the pod labels so the sandbox can be
+        // correlated back to its topic (warm pool stamps it at mount time).
+        $labels = $topicId !== null ? ['topic-id' => (string) $topicId] : [];
+        // Also stamp agent code so both custom-agent and magic-claw sandboxes
+        // can be correlated back to the original agent identity.
+        if ($agentCode !== null && $agentCode !== '') {
+            $labels['agent-code'] = $agentCode;
+        }
+        $result = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $topicSpaceRootFileId, $labels);
+
+        // 添加详细的调试日志，检查 result 对象
+        $this->logger->debug('[Sandbox][App] Gateway result analysis', [
+            'result_class' => get_class($result),
+            'result_is_success' => $result->isSuccess(),
+            'result_code' => $result->getCode(),
+            'result_message' => $result->getMessage(),
+            'result_data_raw' => $result->getData(),
+            'result_data_type' => gettype($result->getData()),
+            'sandbox_id_via_getDataValue' => $result->getDataValue('sandbox_id'),
+            'sandbox_id_via_getData_direct' => $result->getData()['sandbox_id'] ?? 'KEY_NOT_FOUND',
+        ]);
+
+        if (! $result->isSuccess()) {
+            $this->logger->error('[Sandbox][App] Failed to create sandbox', [
+                'project_id' => $projectId,
+                'sandbox_id' => $sandboxID,
+                'error' => $result->getMessage(),
+                'code' => $result->getCode(),
+            ]);
+            throw new SandboxOperationException('Create sandbox', $result->getMessage(), $result->getCode());
+        }
+
+        $returnedSandboxId = $result->getDataValue('sandbox_id');
+        $agentImage = $result->getDataValue('agent_image');
+        $agentImage = is_string($agentImage) ? $agentImage : '';
+
+        $this->logger->info('[Sandbox][App] Create sandbox success', [
+            'project_id' => $projectId,
+            'input_sandbox_id' => $sandboxID,
+            'returned_sandbox_id' => $returnedSandboxId,
+            'agent_image' => $agentImage,
+        ]);
+
+        // 创建成功后立即持久化 sandbox id 与响应中的双镜像。优先使用调用方传入的 topic id，
+        // 避免自定义 sandbox_id 场景把 sandbox_id 误当成 topic_id。
+        $topicUpdateId = $topicId ?? ((string) (int) $returnedSandboxId === (string) $returnedSandboxId ? (int) $returnedSandboxId : 0);
+        if ($topicUpdateId > 0) {
+            $topicUpdateData = [
+                'sandbox_images' => $result->getSandboxImages(),
+                'updated_uid' => $dataIsolation->getCurrentUserId(),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ];
+            if (! empty($returnedSandboxId)) {
+                $topicUpdateData['sandbox_id'] = (string) $returnedSandboxId;
+            }
+            if (! empty($agentImage)) {
+                // Keep the legacy column populated for old readers only;
+                // sandbox_images is the canonical field for new consumers.
+                $topicUpdateData['agent_image'] = $agentImage;
+            }
+            if (isset($topicUpdateData['sandbox_id']) || isset($topicUpdateData['agent_image'])) {
+                $this->topicRepository->updateTopicByCondition(['id' => $topicUpdateId], $topicUpdateData);
+            }
+        }
+
+        return $returnedSandboxId;
+    }
+
+    private function assertSandboxRuntime(int $projectId, string $sandboxId, ?int $topicId = null): void
+    {
+        try {
+            di(MagicClawRuntimePolicyDomainService::class)->assertProject($projectId);
+        } catch (MagicClawRuntimeDeniedException $denied) {
+            // Keep the binding if deletion cannot be confirmed; the durable reconciler will retry it.
+            $claw = $this->magicClawRepository->getByProjectId($projectId);
+            if ($claw !== null) {
+                $this->magicClawRepository->setRuntimeBlock((int) $claw->getId(), (string) IdGenerator::getSnowId());
+            }
+            try {
+                $this->stopSandbox($sandboxId);
+                if ($topicId !== null) {
+                    $this->topicRepository->updateTopicByCondition(['id' => $topicId, 'sandbox_id' => $sandboxId], ['sandbox_id' => '']);
+                } elseif ($claw !== null) {
+                    $this->magicClawRepository->clearFileConverterSandbox((int) $claw->getId(), $sandboxId);
+                }
+            } catch (Throwable $cleanupError) {
+                $this->logger->warning('撤权后的新沙箱清理未确认', ['sandbox_id' => $sandboxId, 'error' => $cleanupError->getMessage()]);
+            }
+            throw $denied;
+        }
+    }
+
+    private function ensureSandboxContainerRunning(DataIsolation $dataIsolation, string $sandboxId, string $projectId, string $workDir, string $projectSpaceRootFileId, string $topicSpaceRootFileId, ?callable $onCreated = null): string
+    {
+        $userId = $dataIsolation->getCurrentUserId();
+        $this->logger->debug('[Sandbox][Domain] Ensuring sandbox container is running', [
+            'sandbox_id' => $sandboxId,
+            'project_id' => $projectId,
+            'user_id' => $userId,
+        ]);
+
+        // Check if sandbox already running
+        $statusResult = $this->getSandboxStatus($sandboxId);
+        if ($statusResult->isSuccess() && $statusResult->getCode() === ResponseCode::SUCCESS) {
+            if (SandboxStatus::isAvailable($statusResult->getStatus())) {
+                $this->logger->debug('[Sandbox][Domain] Sandbox container is already running', [
+                    'sandbox_id' => $sandboxId,
+                ]);
+                return $sandboxId;
+            }
+
+            // If Pending, wait for it to become Running
+            if ($statusResult->getStatus() === SandboxStatus::PENDING) {
+                $this->logger->debug('[Sandbox][Domain] Sandbox container is pending, waiting for it to become running', [
+                    'sandbox_id' => $sandboxId,
+                ]);
+                try {
+                    return $this->waitForSandboxContainerRunning($sandboxId, 'existing');
+                } catch (SandboxOperationException $e) {
+                    $this->logger->warning('[Sandbox][Domain] Failed to wait for existing sandbox container, will recreate', [
+                        'sandbox_id' => $sandboxId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        // Create sandbox container. Per-call user identity flows through
+        // as a DataIsolation value object – the gateway forwards the
+        // authorization token on the HTTP request so the in-pod
+        // agfs-server / super-magic agent auth middleware can validate it.
+        $createResult = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxId, $workDir, $projectSpaceRootFileId, '', $topicSpaceRootFileId);
+
+        if (! $createResult->isSuccess()) {
+            $this->logger->error('[Sandbox][Domain] Failed to create sandbox container', [
+                'sandbox_id' => $sandboxId,
+                'project_id' => $projectId,
+                'code' => $createResult->getCode(),
+                'message' => $createResult->getMessage(),
+            ]);
+            throw new SandboxOperationException('Create sandbox', $createResult->getMessage(), $createResult->getCode());
+        }
+
+        $newSandboxId = $createResult->getDataValue('sandbox_id');
+        if (empty($newSandboxId)) {
+            $this->logger->error('[Sandbox][Domain] Failed to get sandbox_id from create result', [
+                'sandbox_id' => $sandboxId,
+                'project_id' => $projectId,
+            ]);
+            throw new SandboxOperationException('Get sandbox_id from create result', 'Failed to get sandbox_id from create result', 2001);
+        }
+
+        // Persist the actual gateway ID before readiness waiting can time out.
+        if ($onCreated !== null) {
+            $onCreated((string) $newSandboxId);
+        }
+        $this->logger->debug('[Sandbox][Domain] Sandbox container created, waiting for it to become running', [
+            'sandbox_id' => $newSandboxId,
+        ]);
+        return $this->waitForSandboxContainerRunning($newSandboxId, 'new');
     }
 
     /**

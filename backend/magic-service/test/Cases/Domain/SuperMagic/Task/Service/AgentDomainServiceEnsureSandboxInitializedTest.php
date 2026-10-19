@@ -10,8 +10,10 @@ namespace HyperfTest\Cases\Domain\SuperMagic\Task\Service;
 use App\Application\Chat\Service\MagicUserInfoAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicProductContext;
 use App\Domain\SuperMagic\Message\Repository\Facade\TaskMessageRepositoryInterface;
@@ -21,6 +23,7 @@ use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentInitContext;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
+use App\Domain\SuperMagic\Task\Service\CrossProjectMentionPathTranslator;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Repository\Facade\TopicRepositoryInterface;
 use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
@@ -28,10 +31,12 @@ use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Constant\WorkspaceStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResponse;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\SandboxAgentInterface;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use App\Infrastructure\Util\Locker\LockerInterface;
+use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
@@ -63,6 +68,10 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
 
         $container = new EnsureSandboxFakeContainer();
         $container->services[ConfigInterface::class] = $config;
+        $container->services[MagicClawRuntimePolicyDomainService::class] = $this->createMock(MagicClawRuntimePolicyDomainService::class);
+        $lifecycle = $this->createMock(SandboxLifecycleLock::class);
+        $lifecycle->method('run')->willReturnCallback(static fn (int $id, callable $operation) => $operation(static function (): void {}));
+        $container->services[SandboxLifecycleLock::class] = $lifecycle;
         ApplicationContext::setContainer($container);
     }
 
@@ -203,17 +212,41 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         $this->assertSame($createdId, $result);
     }
 
+    public function testAuxiliaryActualBindingSurvivesReadinessFailure(): void
+    {
+        $policy = ApplicationContext::getContainer()->get(MagicClawRuntimePolicyDomainService::class);
+        $policy->method('assertProject')->willReturn(new MagicClawEntity(['id' => 5, 'project_id' => 1]));
+        $bindings = [];
+        $claws = $this->createMock(MagicClawRepositoryInterface::class);
+        $claws->method('bindFileConverterSandbox')->willReturnCallback(static function (int $id, string $sandbox) use (&$bindings): void {
+            self::assertSame(5, $id);
+            $bindings[] = $sandbox;
+        });
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        $gateway->method('createSandbox')->willReturn(new GatewayResult(ResponseCode::SUCCESS, 'ok', ['sandbox_id' => 'actual-converter']));
+        $gateway->method('getSandboxStatus')->willReturnCallback(static function (string $sandbox): SandboxStatusResult {
+            if ($sandbox === 'requested-converter') {
+                return new SandboxStatusResult(ResponseCode::NOT_FOUND, 'gone');
+            }
+            throw new SandboxOperationException('status', 'timeout', 500);
+        });
+        $service = $this->buildService($this->createMock(SandboxAgentInterface::class), $gateway, $this->createMock(TopicRepositoryInterface::class), $claws);
+        try {
+            $service->ensureSandboxRunning($this->buildDataIsolation(), 'requested-converter', '1', '/work');
+            self::fail('Expected readiness failure');
+        } catch (SandboxOperationException) {
+            self::assertSame(['requested-converter', 'actual-converter'], $bindings);
+        }
+    }
+
     private function buildService(
         SandboxAgentInterface $agent,
         SandboxGatewayInterface $gateway,
-        TopicRepositoryInterface $topicRepository
+        TopicRepositoryInterface $topicRepository,
+        ?MagicClawRepositoryInterface $claws = null,
     ): AgentDomainService {
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn(new NullLogger());
-
-        $locker = $this->createMock(LockerInterface::class);
-        $locker->method('spinLock')->willReturn(true);
-        $locker->method('release')->willReturn(true);
 
         return new AgentDomainService(
             $loggerFactory,
@@ -222,14 +255,14 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
             $this->createMock(MagicUserInfoAppService::class),
             $this->createMock(CloudFileRepositoryInterface::class),
             $this->createMock(DynamicConfigManager::class),
-            $this->createMock(MagicClawRepositoryInterface::class),
+            $claws ?? $this->createMock(MagicClawRepositoryInterface::class),
             $this->createMock(SuperMagicAgentRepositoryInterface::class),
             $this->createMock(MagicTokenRepositoryInterface::class),
-            $locker,
             $this->createMock(ProjectRepositoryInterface::class),
             $topicRepository,
             $this->createMock(WorkspaceRepositoryInterface::class),
             $this->createMock(TaskMessageRepositoryInterface::class),
+            new CrossProjectMentionPathTranslator(),
         );
     }
 

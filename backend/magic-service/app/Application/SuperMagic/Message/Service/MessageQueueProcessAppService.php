@@ -15,6 +15,7 @@ use App\Domain\Chat\Entity\ValueObject\ConversationType;
 use App\Domain\Chat\Entity\ValueObject\MessageType\ChatMessageType;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Message\Entity\MessageQueueEntity;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageQueueStatus;
 use App\Domain\SuperMagic\Message\Event\MessageQueueConsumedEvent;
@@ -305,6 +306,7 @@ class MessageQueueProcessAppService extends AbstractAppService
         $messageStruct
     ): array {
         try {
+            di(MagicClawRuntimePolicyDomainService::class)->assertTopic($message->getTopicId());
             // Create MagicSeqEntity based on message content
             $seqEntity = new MagicSeqEntity();
             $seqEntity->setContent($messageStruct);

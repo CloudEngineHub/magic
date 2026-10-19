@@ -20,6 +20,12 @@
 		"refresh": "刷新对话列表",
 		"title": "对话"
 	},
+	"clawRuntime": {
+		"accessRevoked": "你当前没有龙虾使用权限，系统会停止相关龙虾。已保存的数据保留；重新授权后需要手动启动。停止前已发生的用量可能延迟入账。",
+		"accessUnavailable": "龙虾暂不可用",
+		"refreshFailed": "暂时无法确认使用权限，请重试。",
+		"refreshPermission": "刷新权限"
+	},
 	"crewMarket": {
 		"title": "数字员工"
 	},

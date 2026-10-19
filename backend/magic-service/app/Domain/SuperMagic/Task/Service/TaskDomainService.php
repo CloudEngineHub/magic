@@ -640,7 +640,7 @@ class TaskDomainService
      * Only updates tasks that are in active status (waiting or running) to prevent
      * accidentally updating already completed or error tasks.
      */
-    public function updateTaskStatusByTopicIds(array $topicIds, TaskStatus $taskStatus, ?string $errMsg = null): int
+    public function updateTaskStatusByTopicIds(array $topicIds, TaskStatus $taskStatus, ?string $errMsg = null, bool $includeWaitingForUser = false): int
     {
         $finishedTime = null;
         if ($taskStatus->isFinal()) {
@@ -648,6 +648,9 @@ class TaskDomainService
         }
         // Only update tasks with active statuses (waiting or running)
         $activeStatuses = [TaskStatus::WAITING->value, TaskStatus::RUNNING->value];
+        if ($includeWaitingForUser) {
+            $activeStatuses[] = TaskStatus::WAITING_FOR_USER->value;
+        }
         return $this->taskRepository->updateTaskStatusByTopicIds($topicIds, $taskStatus->value, $errMsg, $finishedTime, $activeStatuses);
     }
 

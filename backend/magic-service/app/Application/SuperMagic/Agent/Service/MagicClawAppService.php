@@ -10,6 +10,7 @@ namespace App\Application\SuperMagic\Agent\Service;
 use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Event\BeforeCreateClawEvent;
 use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Service\SandboxVersionDomainService;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
@@ -51,6 +52,7 @@ class MagicClawAppService extends AbstractSuperMagicAppService
         $dataIsolation = $this->createSuperMagicDataIsolation($authorization);
         $userId = $dataIsolation->getCurrentUserId();
         $orgCode = $dataIsolation->getCurrentOrganizationCode();
+        di(MagicClawRuntimePolicyDomainService::class)->assertCanCreate($orgCode, $userId);
 
         $this->eventDispatcher->dispatch(new BeforeCreateClawEvent(
             $orgCode,
