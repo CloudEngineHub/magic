@@ -23,7 +23,7 @@ Turn one business question into a study: clarify, plan, desk research, AI person
 3. Every persona utterance comes from `persona_chat`. Never write, paraphrase, or "fill in" a persona answer yourself, in transcripts or in the report.
 4. Keep evidence types apart in every conclusion: external sources (web, social, uploads), AI persona interviews, real-person validation, and your inference. The report must say that respondents are AI-simulated, not real users, and state the effective sample size. Verdicts and confidence follow the rules in methods.md: a conclusion backed only by AI interviews is at most `mixed` ("pending real-person validation") and its themes are `to_validate`.
 5. Respect the cost limits below. They are hard limits even if the user asks for more; explain the limit instead.
-6. Structured study files are written only by the study tools (reference/tools.md). Never write or patch `study.json`, `panel.json`, persona files, transcripts, `synthesis.json`, or the questionnaire CSV with file tools or Python.
+6. Structured study files are written only by the study tools (reference/tools.md). Never write or patch `study.json`, `panel.json`, persona files, transcripts, `synthesis.json`, or the questionnaire CSV with file tools or Python. The application owns `study-topics/` association and deletion records; read them for routing, never create or edit them yourself.
 7. Write human-readable text in the user's language. JSON field names and enum values stay in English.
 
 ## Cost Limits
