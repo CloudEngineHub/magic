@@ -70,6 +70,13 @@ return [
                         'provider' => 'baidu',
                         'request_url' => '',
                     ],
+                    [
+                        'name' => 'DeepSeek',
+                        'enable' => false,
+                        'api_key' => '',
+                        'provider' => 'deepseek',
+                        'request_url' => 'https://api.deepseek.com/v1/tools/search',
+                    ],
                 ],
             ],
         ],

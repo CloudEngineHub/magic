@@ -30,6 +30,13 @@ export const DefaultWebSearchProviderList = [
 		enable: false,
 	},
 	{
+		provider: "deepseek",
+		name: "DeepSeek",
+		request_url: "https://api.deepseek.com/v1/tools/search",
+		api_key: "",
+		enable: false,
+	},
+	{
 		provider: "doubao",
 		name: "Doubao",
 		request_url: "",

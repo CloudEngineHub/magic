@@ -137,6 +137,13 @@ const webServiceProviders: ProviderConfig[] = [
 	{ provider: "bing", name: "Bing", request_url: "", api_key: "", enable: false },
 	{ provider: "cloudsway", name: "Cloudsway", request_url: "", api_key: "", enable: false },
 	{ provider: "baidu", name: "Baidu", request_url: "", api_key: "", enable: false },
+	{
+		provider: "deepseek",
+		name: "DeepSeek",
+		request_url: "https://api.deepseek.com/v1/tools/search",
+		api_key: "",
+		enable: false,
+	},
 	{ provider: "doubao", name: "Doubao", request_url: "", api_key: "", enable: false },
 ]
 
