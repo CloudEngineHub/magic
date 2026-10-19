@@ -16,6 +16,9 @@ class DeepSeekSearchAdapter implements SearchEngineAdapterInterface
 {
     private array $providerConfig;
 
+    /**
+     * 注入 DeepSeek 请求服务和后台提供商配置，保持统一搜索适配器的调用边界。
+     */
     public function __construct(
         private readonly DeepSeekSearch $deepSeekSearch,
         array $providerConfig = []
@@ -107,17 +110,26 @@ class DeepSeekSearchAdapter implements SearchEngineAdapterInterface
         return $response;
     }
 
+    /**
+     * 返回统一搜索引擎标识，供调用审计和响应元数据使用。
+     */
     public function getEngineName(): string
     {
         return 'deepseek';
     }
 
+    /**
+     * 只有同时配置请求地址和密钥时才允许工厂选择 DeepSeek，避免空配置发起外部请求。
+     */
     public function isAvailable(): bool
     {
         return ! empty($this->providerConfig['request_url'])
             && ! empty($this->providerConfig['api_key']);
     }
 
+    /**
+     * 从结果 URL 提取域名作为统一响应的展示地址，解析失败时返回空字符串。
+     */
     private function resolveHost(string $url): string
     {
         $host = parse_url($url, PHP_URL_HOST);

@@ -22,6 +22,9 @@ class DeepSeekWebScrape extends AbstractWebScrape
 
     private string $apiKey;
 
+    /**
+     * 注入后台保存的请求地址和密钥；缺少任一配置时禁止启用该提供商。
+     */
     public function configure(array $config): void
     {
         $this->requestUrl = (string) ($config['request_url'] ?? '');
@@ -36,11 +39,17 @@ class DeepSeekWebScrape extends AbstractWebScrape
         }
     }
 
+    /**
+     * 返回网页抓取提供商标识，供统一响应和日志记录使用。
+     */
     public function getPlatformName(): string
     {
         return 'deepseek';
     }
 
+    /**
+     * 调用 DeepSeek Fetch 并返回 Markdown；上游失败原样转为基础设施异常交给应用层处理。
+     */
     public function scrape(string $url, array $formats, string $mode, array $options = []): WebScrapeResponse
     {
         $this->validateRequest($url, $formats);

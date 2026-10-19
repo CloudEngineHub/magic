@@ -107,6 +107,9 @@ class DeepSeekSearch
         throw new RuntimeException('DeepSeek search request failed.', 0, $lastException);
     }
 
+    /**
+     * 判断错误是否属于允许重试的临时故障；鉴权、参数等业务错误直接失败。
+     */
     private function isRetryableStatus(?int $statusCode): bool
     {
         // A missing status code represents a transport/timeout failure and can be retried once.
