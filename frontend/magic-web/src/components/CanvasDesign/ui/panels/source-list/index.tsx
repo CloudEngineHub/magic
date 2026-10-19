@@ -14,6 +14,7 @@ import ReferenceMediaPreview from "../../previews/reference-media/index"
 import { Tooltip, TooltipTrigger } from "../../primitives/shadcn/tooltip"
 import ResourcePathTooltipContent from "../../primitives/custom/ResourcePathTooltipContent"
 import { Checkbox } from "../../primitives/shadcn/checkbox"
+import { VideoSolidPlay } from "../../primitives/icons"
 import styles from "./SourceList.module.css"
 import { cn } from "../../../runtime/shared/lib/utils"
 import { getMediaResourcePathKind } from "../../../runtime/resources/media-common/mediaResourcePathKind"
@@ -248,6 +249,15 @@ export default function SourceList(props: SourceListProps) {
 							{entry.isLinked ? (
 								<span className={styles.sourceItemLinkedIcon} aria-hidden>
 									<Link2 size={11} className={styles.sourceItemLinkedIconSvg} />
+								</span>
+							) : null}
+							{resourceKind === "video" ? (
+								<span
+									className={styles.sourceItemVideoBadge}
+									data-testid="source-list-video-indicator"
+									aria-hidden
+								>
+									<VideoSolidPlay size={10} />
 								</span>
 							) : null}
 							{entry.resourceStatusLabel ? (
