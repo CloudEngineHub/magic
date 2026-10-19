@@ -23,6 +23,7 @@ Use a template only if it is a readable, complete HTML document (`<html` or `<bo
 - Every hypothesis, recommendation, and theme carries an evidence bar: web sources N, AI interviews N people, real-person validation status.
 - The bottom line opens with a decision badge (`decision-go`, `decision-conditional`, or `decision-nogo` in the default template) and a one-sentence answer before any detail; the rest of the report never contradicts it.
 - The limitations section says respondents are AI-simulated and states the effective sample size. Never write persona counts or ratios.
+- Charts and data tables are optional inline fragments chosen by report-charts.md, placed in `findings` (or `hypotheses`), never in `summary`. They carry their own styles, so any template shows them; a report without them is correct when the data does not warrant one.
 - Replace every sample text in the template with study content, and set `<html lang>` to the user's language.
 - Keep the template's own scripts. Behaviour a template lacks (citation popovers, persona portraits) is not added; citations then work as plain anchor links.
 

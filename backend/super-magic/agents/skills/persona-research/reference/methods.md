@@ -168,6 +168,7 @@ Bottom line (the report's opening verdict):
 - When only the top themes are written out in full, keep at least one theme where some personas oppose or are mixed, together with its counter-evidence; never show only the agreeing themes.
 
 - Do not write counts or ratios of personas ("5 of 8", "62%"). Use "most", "some", or "a few", and state once that AI-simulated samples do not support statistical inference.
+- A chart cell or dot is one respondent, not a count or ratio; charts never sum personas, show percentages, or average numbers. Draw a chart only when its data warrants it (report-charts.md). A theme's `not_mentioned` is silence, never agreement.
 - Group findings by theme, and show segment differences inside each theme; a theme raised by one persona only is a signal, not a pattern.
 - Each claim cites its evidence: interview quotes (persona name + transcript file) and web sources `[S#]`. Mark claims supported only by your inference as such.
 - Report counter-evidence and minority views next to the main finding.
