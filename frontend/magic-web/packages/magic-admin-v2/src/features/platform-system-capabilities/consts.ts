@@ -179,9 +179,13 @@ const imageEditProviders: ProviderConfig[] = [
 
 export const DEFAULT_PROVIDER_LIST_MAP: Record<string, ProviderConfig[]> = {
 	[aiPowerCode.webSearch]: webServiceProviders,
-	[aiPowerCode.webScrape]: webServiceProviders.filter((item) =>
-		["magic", "bing", "cloudsway"].includes(item.provider),
-	),
+	[aiPowerCode.webScrape]: webServiceProviders
+		.filter((item) => ["magic", "bing", "cloudsway", "deepseek"].includes(item.provider))
+		.map((item) =>
+			item.provider === "deepseek"
+				? { ...item, request_url: "https://api.deepseek.com/v1/tools/fetch" }
+				: item,
+		),
 	[aiPowerCode.imageSearch]: [
 		{ provider: "bing", name: "Bing", request_url: "", api_key: "", enable: false },
 		{ provider: "cloudsway", name: "Cloudsway", request_url: "", api_key: "", enable: false },

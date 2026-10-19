@@ -68,6 +68,13 @@ export const DefaultWebScrapeProviderList = [
 		api_key: "",
 		enable: false,
 	},
+	{
+		provider: "deepseek",
+		name: "DeepSeek",
+		request_url: "https://api.deepseek.com/v1/tools/fetch",
+		api_key: "",
+		enable: false,
+	},
 ]
 
 // 图片搜索 - 默认服务商列表
