@@ -188,6 +188,21 @@ describe("MobileComposerModeSelector", () => {
 		)
 	})
 
+	it("shows reasoning under the outer language model row, not inside the model list", async () => {
+		render(<MobileComposerModeSelector topicMode={TopicMode.General} />)
+
+		fireEvent.click(screen.getByTestId("mobile-composer-mode-selector-trigger"))
+		const footer = screen.getByTestId("mobile-composer-reasoning-footer")
+		const languageRow = screen.getByTestId("mobile-composer-language-model-trigger-row")
+		expect(languageRow.contains(footer)).toBe(true)
+		expect(footer).toHaveTextContent("messageEditor.modelSwitch.reasoning.default")
+
+		fireEvent.click(screen.getByTestId("mobile-composer-language-model-trigger-button"))
+		const popup = await screen.findByTestId("mobile-composer-mode-selector-model-popup")
+		expect(popup.querySelector("[data-testid='model-switch-reasoning-footer']")).toBeNull()
+		expect(popup.querySelector("[data-testid='mobile-composer-reasoning-footer']")).toBeNull()
+	})
+
 	it("uses the employee selector trigger for the default variant", () => {
 		render(
 			<MobileComposerModeSelector

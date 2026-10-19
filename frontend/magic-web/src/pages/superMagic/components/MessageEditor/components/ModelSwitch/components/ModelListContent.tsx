@@ -6,7 +6,6 @@ import { MyModelsList } from "./MyModelsList"
 import type { ModelItem, ModelListGroup, MessageEditorSize, ModelListKey } from "../types"
 import type React from "react"
 import { useTranslation } from "react-i18next"
-import { useEffect, useState } from "react"
 import { isModelDisabled } from "../utils"
 import { ModelEmptyState } from "./ModelEmptyState"
 import { ModelGroupSection, type RenderableModelGroup } from "./ModelGroupSection"
@@ -23,6 +22,8 @@ interface ModelListContentProps {
 	getModelDescription: (model: ModelItem) => string | undefined
 	modelKey?: ModelListKey
 	onModelsLoaded?: () => Promise<void> | void
+	/** 为 false 时模型行不再挂悬停详情，避免移动端弹出菜单。 */
+	showReasoningDetails?: boolean
 }
 
 export const ModelListContent = observer(function ModelListContent({
@@ -36,13 +37,9 @@ export const ModelListContent = observer(function ModelListContent({
 	getModelDescription,
 	modelKey = "models",
 	onModelsLoaded,
+	showReasoningDetails = true,
 }: ModelListContentProps) {
 	const { t } = useTranslation("super")
-	const [expandedModelId, setExpandedModelId] = useState<string | null>(null)
-	// Keep one inline detail section open across provider groups and tab changes.
-	useEffect(() => {
-		setExpandedModelId(null)
-	}, [modelKey, selectedModel?.model_id])
 	const visibleGroups = getVisibleGroups({ modelList, modelKey, searchKeyword })
 	const isSearchResultEmpty = !!searchKeyword && visibleGroups.length === 0
 	const EmptyStateIcon = isSearchResultEmpty ? SearchX : Sparkles
@@ -96,10 +93,7 @@ export const ModelListContent = observer(function ModelListContent({
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
 					isLanguageModel={modelKey === "models"}
-					expandedMobileModelId={expandedModelId}
-					onToggleMobileModel={(modelId) =>
-						setExpandedModelId((current) => (current === modelId ? null : modelId))
-					}
+					showReasoningDetails={showReasoningDetails}
 				/>
 			))}
 		</ModelDetailsHoverProvider>

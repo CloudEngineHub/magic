@@ -28,8 +28,8 @@ interface ModelGroupSectionProps {
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
 	isLanguageModel?: boolean
-	expandedMobileModelId: string | null
-	onToggleMobileModel: (modelId: string) => void
+	/** 移动端弹层没有悬停详情，思考强度只从底部点按条修改。 */
+	showReasoningDetails?: boolean
 }
 
 export function ModelGroupSection({
@@ -41,8 +41,7 @@ export function ModelGroupSection({
 	selectedItemRef,
 	getModelDescription,
 	isLanguageModel = true,
-	expandedMobileModelId,
-	onToggleMobileModel,
+	showReasoningDetails = true,
 }: ModelGroupSectionProps) {
 	const { t } = useTranslation("super")
 	const isMobile = size === "mobile"
@@ -65,20 +64,16 @@ export function ModelGroupSection({
 					const isSelected = selectedModel?.model_id === model.model_id
 					const isDisabled = isModelDisabled(model)
 					const description = getModelDescription(model)
-					if (isLanguageModel && (isMobile || isSelected)) {
+					if (isLanguageModel && isMobile) {
 						return (
 							<MobileModelRow
 								key={model.model_id}
 								model={model}
-								description={description}
 								selected={isSelected}
-								variant={isMobile ? "mobile" : "desktop"}
+								variant="mobile"
 								disabled={isDisabled}
-								expanded={expandedMobileModelId === model.model_id}
 								selectedItemRef={selectedItemRef}
-								onToggle={() => onToggleMobileModel(model.model_id)}
 								onSelect={onModelClick}
-								onReasoningEffortChange={onReasoningEffortChange}
 							/>
 						)
 					}
@@ -236,7 +231,8 @@ export function ModelGroupSection({
 							) : null}
 						</div>
 					)
-					return isLanguageModel ? (
+					if (!isLanguageModel || !showReasoningDetails) return row
+					return (
 						<ModelReasoningDetails
 							key={model.model_id}
 							model={model}
@@ -247,8 +243,6 @@ export function ModelGroupSection({
 						>
 							{row}
 						</ModelReasoningDetails>
-					) : (
-						row
 					)
 				})}
 			</div>

@@ -18,6 +18,10 @@ import { useFeaturedModeListRefreshOnFirstOpen } from "@/pages/superMagic/hooks/
 import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import ModelIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelIcon"
 import { ModelListContent } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelListContent"
+import {
+	ModelReasoningFooter,
+	resolveReasoningFooterModel,
+} from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelReasoningFooter"
 import { ModelTabSwitcher } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/components/ModelTabSwitcher"
 import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/useTopicModel"
 import { useOptionalMessageEditorStore } from "@/pages/superMagic/components/MessageEditor/stores"
@@ -258,6 +262,10 @@ function MobileComposerModeSelectorComponent({
 		setModelSearchKeyword("")
 	})
 
+	const handleReasoningEffortChange = useMemoizedFn((model: ModelItem) => {
+		setSelectedModel(model)
+	})
+
 	const getModelDescription = useMemoizedFn((model: ModelItem) => {
 		return model.model_description
 	})
@@ -324,6 +332,11 @@ function MobileComposerModeSelectorComponent({
 	const isCurrentTabEmpty =
 		(activeModelTab === "image" && !hasImageModels) ||
 		(activeModelTab === "video" && !hasVideoModels)
+	const reasoningFooterModel = resolveReasoningFooterModel({
+		activeTab: activeModelTab,
+		selectedModel: resolvedTopicModelStore.selectedLanguageModel,
+		groups: modelList,
+	})
 
 	const clawStackModels = useMemo(() => {
 		const candidates = [
@@ -494,10 +507,12 @@ function MobileComposerModeSelectorComponent({
 										searchKeyword={modelSearchKeyword}
 										size="mobile"
 										onModelClick={handleModelSelect}
+										onReasoningEffortChange={handleReasoningEffortChange}
 										selectedItemRef={selectedModelItemRef}
 										getModelDescription={getModelDescription}
 										modelKey={currentModelKey}
 										onModelsLoaded={validateSelectedModels}
+										showReasoningDetails={false}
 									/>
 								)}
 							</div>
@@ -629,6 +644,41 @@ function MobileComposerModeSelectorComponent({
 											<ChevronsUpDown className="h-4 w-4 shrink-0 text-foreground" />
 										</div>
 									</button>
+									{row.defaultTab === "language" ? (
+										reasoningFooterModel ? (
+											<ModelReasoningFooter
+												model={reasoningFooterModel}
+												onReasoningEffortChange={
+													handleReasoningEffortChange
+												}
+												openOn="tap"
+												layout="inline"
+											/>
+										) : (
+											<div
+												className="flex h-12 items-center"
+												aria-disabled="true"
+												data-testid="mobile-composer-reasoning-footer"
+											>
+												<span className="w-7 shrink-0" aria-hidden="true" />
+												<span className="text-base text-muted-foreground">
+													{tSuper(
+														"messageEditor.modelSwitch.reasoning.label",
+													)}
+												</span>
+												<span className="ml-auto text-base text-foreground">
+													{tSuper(
+														"messageEditor.modelSwitch.reasoning.default",
+													)}
+												</span>
+											</div>
+										)
+									) : null}
+									{row.defaultTab === "language" && modelRows.length > 1 ? (
+										<div className="py-1.5" aria-hidden="true">
+											<div className="h-px w-full bg-border" />
+										</div>
+									) : null}
 								</div>
 							))}
 						</div>

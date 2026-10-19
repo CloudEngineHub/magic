@@ -125,6 +125,7 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
 			modelKey="models"
+			showReasoningDetails={!isMobile}
 		/>
 	)
 

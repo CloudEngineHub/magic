@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { ModelReasoningDetails } from "../ModelReasoningDetails"
 import { ModelStatusEnum, type ModelItem } from "../../types"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
@@ -56,19 +56,47 @@ function setup(
 			details
 		),
 	)
-	if (mobile)
-		fireEvent.click(
-			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.details" }),
-		)
-	else fireEvent.focus(screen.getByTestId("model-switch-item"))
+	// Desktop keyboard focus opens the detail menu; mouse users open it by hovering.
+	fireEvent.focus(screen.getByTestId("model-switch-item"))
 	return { model, onReasoningEffortChange }
 }
 
 describe("模型详情思考强度", () => {
-	it.each([false, true])("桌面及移动详情展示后端倍率和参考说明 mobile=%s", (mobile) => {
-		setup(mobile, [], 0)
+	it("桌面详情展示后端倍率和参考说明", () => {
+		setup(false, [], 0)
 		expect(screen.getByText("0.00x")).toBeTruthy()
 		expect(screen.getByText("messageEditor.modelSwitch.billingMultiplierHint")).toBeTruthy()
+	})
+	it("移动端悬停、焦点和右箭头都不打开详情菜单", () => {
+		const model: ModelItem = {
+			id: "mock-model",
+			model_id: "mock-model",
+			model_name: "Mock model",
+			model_description: "Mock description",
+			model_icon: "",
+			group_id: "mock-group",
+			provider_model_id: "mock-provider",
+			sort: 0,
+			model_status: ModelStatusEnum.Normal,
+			reasoning_effort_levels: ["none", "high"],
+		}
+		render(
+			<ModelReasoningDetails
+				model={model}
+				mobile
+				disabled={false}
+				onReasoningEffortChange={vi.fn()}
+			>
+				<button data-testid="model-switch-item">Mock row</button>
+			</ModelReasoningDetails>,
+		)
+		const row = screen.getByTestId("model-switch-item")
+		fireEvent.focus(row)
+		fireEvent.pointerOver(row, { pointerType: "mouse" })
+		fireEvent.mouseOver(row)
+		fireEvent.keyDown(row, { key: "ArrowRight" })
+		expect(screen.queryByRole("dialog")).toBeNull()
+		expect(screen.queryByText("Mock description")).toBeNull()
 	})
 	it("后端关闭倍率时隐藏数值和对应说明", () => {
 		setup(false, [], null)
@@ -85,12 +113,10 @@ describe("模型详情思考强度", () => {
 		expect(screen.queryByText("messageEditor.modelSwitch.contextWindow")).toBeNull()
 	})
 
-	it("Esc 关闭桌面详情并返回模型行，不因恢复焦点再次打开", async () => {
+	it("Esc 关闭桌面详情并返回模型行，不因恢复焦点再次打开", () => {
 		setup(false, [])
 		fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" })
-		await waitFor(() =>
-			expect(document.activeElement === screen.getByTestId("model-switch-item")).toBe(true),
-		)
+		expect(document.activeElement).toBe(screen.getByTestId("model-switch-item"))
 		expect(screen.queryByText("Mock description")).toBeNull()
 	})
 	it("鼠标离开详情卡片时关闭，即使卡片仍保留焦点", () => {
@@ -160,27 +186,18 @@ describe("模型详情思考强度", () => {
 		expect(model).not.toHaveProperty("reasoning_effort")
 	})
 
-	it("移动端在同一面板选择默认，清除覆盖并关闭详情", () => {
-		const { model, onReasoningEffortChange } = setup(true)
-		fireEvent.click(
-			screen.getByRole("button", { name: /messageEditor.modelSwitch.reasoning.label/ }),
-		)
-		expect(screen.queryByText("Mock description")).toBeNull()
-		fireEvent.click(
-			screen.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.default" }),
-		)
-		expect(onReasoningEffortChange).toHaveBeenCalledWith({
-			...model,
-			reasoning_effort: null,
-		})
-		expect(screen.queryByText("Mock description")).toBeNull()
-	})
-
-	it("无能力时显示详情但不显示强度入口", () => {
+	it("无思考档位时详情仍显示默认，且不能打开选择菜单", () => {
 		setup(false, [])
 		expect(screen.getByText("Mock description")).toBeTruthy()
+		const locked = screen.getByTestId("model-switch-reasoning-locked")
+		expect(locked).toHaveTextContent("messageEditor.modelSwitch.reasoning.default")
 		expect(
 			screen.queryByRole("button", { name: /messageEditor.modelSwitch.reasoning.label/ }),
+		).toBeNull()
+		fireEvent.pointerOver(locked, { pointerType: "mouse" })
+		fireEvent.click(locked)
+		expect(
+			screen.queryByRole("button", { name: "messageEditor.modelSwitch.reasoning.none" }),
 		).toBeNull()
 	})
 })

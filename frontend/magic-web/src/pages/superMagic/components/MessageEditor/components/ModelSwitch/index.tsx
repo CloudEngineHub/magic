@@ -18,6 +18,11 @@ import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constant
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"
 import { ModelListContent } from "./components/ModelListContent"
 import {
+	MODEL_REASONING_FOOTER_HEIGHT_CLASS,
+	ModelReasoningFooter,
+	resolveReasoningFooterModel,
+} from "./components/ModelReasoningFooter"
+import {
 	ChevronsUpDownIcon,
 	ChevronLeft,
 	ChevronDownIcon,
@@ -197,6 +202,11 @@ export const ModelSwitch = observer(function ModelSwitch({
 				: selectedModel
 	const currentModelKey: ModelListKey =
 		activeTab === "image" ? "image_models" : activeTab === "video" ? "video_models" : "models"
+	const reasoningFooterModel = resolveReasoningFooterModel({
+		activeTab,
+		selectedModel,
+		groups: modelList,
+	})
 
 	const ADD_MODEL_DROPDOWN_CONTENT_CLASS = "model-switch-add-model-dropdown-content"
 
@@ -353,6 +363,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 			getModelDescription={getModelDescription}
 			modelKey={currentModelKey}
 			onModelsLoaded={onBeforeOpen}
+			showReasoningDetails={!isMobile}
 		/>
 	)
 
@@ -522,6 +533,15 @@ export const ModelSwitch = observer(function ModelSwitch({
 						className="z-dropdown max-h-[min(90dvh,var(--radix-dropdown-menu-content-available-height))] w-[380px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border-border/80 bg-card p-0 shadow-lg"
 						sideOffset={4}
 						collisionPadding={12}
+						onFocusOutside={(event) => {
+							const target = event.target
+							if (
+								target instanceof Element &&
+								target.closest("[data-model-switch-details-overlay]")
+							) {
+								event.preventDefault()
+							}
+						}}
 						onInteractOutside={(event) => {
 							const target = event.target
 							if (!(target instanceof Element)) return
@@ -542,12 +562,30 @@ export const ModelSwitch = observer(function ModelSwitch({
 						<div className="flex flex-col">
 							{popoverHeader}
 							{tabSwitcher}
-							<div
-								ref={desktopScrollContainerRef}
-								data-model-switch-scroll-container
-								className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
-							>
-								{mainContent}
+							{/* 思考强度固定盖住列表底部，模型行从遮罩后面滚过。 */}
+							<div className="relative min-h-0">
+								<div
+									ref={desktopScrollContainerRef}
+									data-model-switch-scroll-container
+									className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
+								>
+									{mainContent}
+									{reasoningFooterModel ? (
+										<div
+											aria-hidden
+											className={cn(
+												MODEL_REASONING_FOOTER_HEIGHT_CLASS,
+												"shrink-0",
+											)}
+										/>
+									) : null}
+								</div>
+								{reasoningFooterModel ? (
+									<ModelReasoningFooter
+										model={reasoningFooterModel}
+										onReasoningEffortChange={handleModelChange}
+									/>
+								) : null}
 							</div>
 						</div>
 					</DropdownMenuContent>

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactElement } from "react"
-import { Check, ChevronLeft, ChevronRight } from "lucide-react"
+import { Check, ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import {
@@ -35,7 +35,7 @@ interface ModelReasoningDetailsProps {
 	children: ReactElement
 }
 
-/** 紧凑模型行的三级详情；桌面跨区域共享悬停状态，移动端单层切换。 */
+/** 桌面紧凑模型行的悬停详情。移动端不打开这层菜单，思考强度走底部点按条。 */
 export function ModelReasoningDetails({
 	model,
 	description = model.model_description,
@@ -54,7 +54,6 @@ export function ModelReasoningDetails({
 	const hoverOpened = useRef(false)
 	const levelsHoverOpened = useRef(false)
 	const focusStrength = useRef(false)
-	const restoreRowFocus = useRef(false)
 	const restoringFocus = useRef(false)
 	const anchorRef = useRef<HTMLDivElement>(null)
 	const strengthRef = useRef<HTMLButtonElement>(null)
@@ -73,10 +72,10 @@ export function ModelReasoningDetails({
 	const levels = reasoningEffortLevels.filter((level) =>
 		model.reasoning_effort_levels?.includes(level),
 	)
-	const selected = modelCache.getReasoningEffort(model)
-	const selectedLabel = selected
-		? labels[selected]
-		: t("messageEditor.modelSwitch.reasoning.default")
+	const canSelect = levels.length > 0
+	const selected = canSelect ? modelCache.getReasoningEffort(model) : undefined
+	const selectedLabel =
+		canSelect && selected ? labels[selected] : t("messageEditor.modelSwitch.reasoning.default")
 	const hasMultiplier =
 		typeof model.billing_multiplier === "number" &&
 		Number.isFinite(model.billing_multiplier) &&
@@ -95,7 +94,6 @@ export function ModelReasoningDetails({
 	) {
 		clearTimeout(levelTimer.current)
 		// 鼠标离开时即使焦点仍留在卡片内也要关闭；键盘焦点转移由 blur 事件单独保护。
-		if (mobile) return
 		const relatedTarget = event?.relatedTarget
 		const target =
 			relatedTarget && typeof (relatedTarget as Node).nodeType === "number"
@@ -130,6 +128,7 @@ export function ModelReasoningDetails({
 
 	/** 子菜单入口支持悬停与点击，离开前取消尚未执行的打开任务。 */
 	function scheduleLevels() {
+		if (!canSelect) return
 		keepOpen()
 		clearTimeout(levelTimer.current)
 		levelTimer.current = setTimeout(() => {
@@ -138,7 +137,18 @@ export function ModelReasoningDetails({
 		}, MODEL_DETAILS_HOVER_OPEN_DELAY_MS)
 	}
 
-	/** 关闭或切换模型后恢复折叠详情，键盘右箭头将焦点移到思考入口。 */
+	/** Restore keyboard focus to the model row without reopening its hover card. */
+	function focusModelRow() {
+		const modelRow = anchorRef.current?.querySelector<HTMLElement>(
+			'[data-testid="model-switch-item"]',
+		)
+		if (!modelRow) return
+		restoringFocus.current = true
+		modelRow.focus()
+		restoringFocus.current = false
+	}
+
+	/** 关闭或切换模型后恢复详情状态，键盘右箭头将焦点移到思考入口。 */
 	useEffect(() => {
 		if (!open) {
 			clearTimeout(levelTimer.current)
@@ -162,6 +172,10 @@ export function ModelReasoningDetails({
 		scrollContainer.addEventListener("scroll", handleScroll, { passive: true })
 		return () => scrollContainer.removeEventListener("scroll", handleScroll)
 	}, [id, requestClose])
+
+	// 移动端点按模型行只负责选中；悬停、焦点和方向键都不能再弹出详情或强度菜单。
+	if (mobile) return children
+
 	const choices = (
 		<ScrollArea viewportClassName="max-h-80">
 			<div
@@ -198,9 +212,8 @@ export function ModelReasoningDetails({
 			ref={strengthRef}
 			variant="ghost"
 			className="h-10 w-full justify-between rounded-lg px-2 text-sm font-normal hover:bg-muted/70"
-			onClick={mobile ? () => setLevelsOpen(true) : undefined}
 			onPointerEnter={(event) => {
-				if (!mobile && event.pointerType === "mouse") scheduleLevels()
+				if (event.pointerType === "mouse") scheduleLevels()
 			}}
 			onPointerLeave={() => clearTimeout(levelTimer.current)}
 		>
@@ -225,16 +238,15 @@ export function ModelReasoningDetails({
 					ref={anchorRef}
 					className={cn(
 						"flex min-w-0 items-center gap-1",
-						open && !mobile && "[&_[data-testid=model-switch-item]]:bg-muted/80",
+						open && "[&_[data-testid=model-switch-item]]:bg-muted/80",
 					)}
 					onPointerEnter={(event) => {
-						if (!mobile && event.pointerType === "mouse") showDetails()
+						if (event.pointerType === "mouse") showDetails()
 					}}
 					onPointerLeave={scheduleClose}
 					onFocusCapture={(event) => {
 						if (restoringFocus.current) return
 						if (
-							!mobile &&
 							!disabled &&
 							event.target.getAttribute("data-testid") === "model-switch-item"
 						) {
@@ -252,7 +264,7 @@ export function ModelReasoningDetails({
 							scheduleClose()
 					}}
 					onKeyDownCapture={(event) => {
-						if (!mobile && !disabled && event.key === "ArrowRight" && levels.length) {
+						if (!disabled && event.key === "ArrowRight" && levels.length) {
 							event.preventDefault()
 							focusStrength.current = true
 							hoverOpened.current = true
@@ -265,20 +277,6 @@ export function ModelReasoningDetails({
 					}}
 				>
 					<div className="min-w-0 flex-1">{children}</div>
-					{mobile && (
-						<PopoverTrigger asChild>
-							<Button
-								variant="ghost"
-								size="icon"
-								className="size-9 shrink-0"
-								disabled={disabled}
-								aria-label={t("messageEditor.modelSwitch.reasoning.details")}
-								onClick={() => showDetails(true)}
-							>
-								<ChevronRight className="size-4" />
-							</Button>
-						</PopoverTrigger>
-					)}
 				</div>
 			</PopoverAnchor>
 			<PopoverContent
@@ -298,7 +296,6 @@ export function ModelReasoningDetails({
 				onBlurCapture={(event) => {
 					const target = event.relatedTarget as Node | null
 					if (
-						!mobile &&
 						!event.currentTarget.contains(target) &&
 						!levelsRef.current?.contains(target)
 					)
@@ -312,127 +309,112 @@ export function ModelReasoningDetails({
 					if (hoverOpened.current) event.preventDefault()
 				}}
 				onCloseAutoFocus={(event) => {
-					if (hoverOpened.current || restoreRowFocus.current) event.preventDefault()
-					// 桌面没有独立详情按钮，Esc 返回原模型行且不重新触发打开。
-					if (restoreRowFocus.current) {
-						restoreRowFocus.current = false
-						restoringFocus.current = true
-						anchorRef.current
-							?.querySelector<HTMLElement>('[data-testid="model-switch-item"]')
-							?.focus()
-						restoringFocus.current = false
-					}
+					if (hoverOpened.current) event.preventDefault()
 				}}
-				onEscapeKeyDown={() => {
-					if (!mobile) restoreRowFocus.current = true
+				onEscapeKeyDown={(event) => {
+					event.preventDefault()
+					hover.requestClose(id, true)
+					focusModelRow()
 				}}
 			>
-				{mobile && levelsOpen ? (
-					<>
-						<Button variant="ghost" onClick={() => setLevelsOpen(false)}>
-							<ChevronLeft className="size-4" />
-							{t("messageEditor.modelSwitch.reasoning.label")}
-						</Button>
-						{choices}
-					</>
-				) : (
-					<>
-						<div className="border-b border-border/70 px-4 pb-4 pt-4">
-							<div className="break-words text-base font-medium leading-6">
-								{model.model_name}
-							</div>
-							{description && (
-								<ScrollArea viewportClassName="mt-1.5 max-h-28">
-									<CollapsibleDescription
-										description={description}
-										className="!text-sm !leading-5"
-										isExpanded={descriptionExpanded}
-										expandLabel={t(
-											"messageEditor.modelSwitch.expandDescription",
-										)}
-										collapseLabel={t(
-											"messageEditor.modelSwitch.collapseDescription",
-										)}
-										onToggle={() => setDescriptionExpanded((value) => !value)}
-									/>
-								</ScrollArea>
-							)}
+				<>
+					<div className="border-b border-border/70 px-4 pb-4 pt-4">
+						<div className="break-words text-base font-medium leading-6">
+							{model.model_name}
 						</div>
-						{hasMultiplier && (
-							<div className="border-b border-border/70 px-4 py-3.5 text-sm">
-								<div className="flex items-center justify-between">
-									<span className="text-muted-foreground">
-										{t("messageEditor.modelSwitch.billingMultiplier")}
-									</span>
-									<ModelBillingMultiplier value={model.billing_multiplier} />
-								</div>
-								<p className="leading-3.5 mt-1 text-[10px] text-muted-foreground">
-									{t("messageEditor.modelSwitch.billingMultiplierHint")}
-								</p>
-							</div>
+						{description && (
+							<ScrollArea viewportClassName="mt-1.5 max-h-28">
+								<CollapsibleDescription
+									description={description}
+									className="!text-sm !leading-5"
+									isExpanded={descriptionExpanded}
+									expandLabel={t("messageEditor.modelSwitch.expandDescription")}
+									collapseLabel={t(
+										"messageEditor.modelSwitch.collapseDescription",
+									)}
+									onToggle={() => setDescriptionExpanded((value) => !value)}
+								/>
+							</ScrollArea>
 						)}
-						{levels.length > 0 && (
-							<div className="px-3 py-2.5">
-								{mobile ? (
-									strengthButton
-								) : (
-									<Popover
-										open={levelsOpen}
-										onOpenChange={(value) => {
-											levelsHoverOpened.current = false
-											setLevelsOpen(value)
-										}}
-									>
-										<PopoverTrigger asChild>{strengthButton}</PopoverTrigger>
-										<PopoverContent
-											ref={levelsRef}
-											data-model-switch-details-overlay
-											side="right"
-											align="start"
-											// This popover is anchored to an inner row; the larger offset
-											// keeps it parallel with the complete detail card.
-											sideOffset={16}
-											className="w-36 p-0 duration-100"
-											onPointerEnter={keepOpen}
-											onPointerLeave={(event) => scheduleClose(event, false)}
-											onFocusCapture={keepOpen}
-											onOpenAutoFocus={(event) => {
-												if (levelsHoverOpened.current)
-													event.preventDefault()
-											}}
-											onCloseAutoFocus={(event) => {
-												if (levelsHoverOpened.current)
-													event.preventDefault()
-											}}
-											onBlurCapture={(event) => {
-												const target = event.relatedTarget as Node | null
-												if (
-													!mobile &&
-													!event.currentTarget.contains(target) &&
-													!detailRef.current?.contains(target)
-												)
-													hover.requestClose(id)
-											}}
-										>
-											{choices}
-										</PopoverContent>
-									</Popover>
-								)}
-							</div>
-						)}
-						{contextWindow && (
-							<div className="flex items-center justify-between border-t border-border/70 px-4 py-3.5 text-sm">
-								<span className="text-foreground">
-									{t("messageEditor.modelSwitch.contextWindow")}
+					</div>
+					{hasMultiplier && (
+						<div className="border-b border-border/70 px-4 py-3.5 text-sm">
+							<div className="flex items-center justify-between">
+								<span className="text-muted-foreground">
+									{t("messageEditor.modelSwitch.billingMultiplier")}
 								</span>
-								<span className="flex items-center gap-1 text-muted-foreground">
-									<span className="tabular-nums">{contextWindow}</span>
-									<ChevronRight className="size-4" aria-hidden="true" />
+								<ModelBillingMultiplier value={model.billing_multiplier} />
+							</div>
+							<p className="leading-3.5 mt-1 text-[10px] text-muted-foreground">
+								{t("messageEditor.modelSwitch.billingMultiplierHint")}
+							</p>
+						</div>
+					)}
+					<div className="px-3 py-2.5">
+						{canSelect ? (
+							<Popover
+								open={levelsOpen}
+								onOpenChange={(value) => {
+									levelsHoverOpened.current = false
+									setLevelsOpen(value)
+								}}
+							>
+								<PopoverTrigger asChild>{strengthButton}</PopoverTrigger>
+								<PopoverContent
+									ref={levelsRef}
+									data-model-switch-details-overlay
+									side="right"
+									align="start"
+									// This popover is anchored to an inner row; the larger offset
+									// keeps it parallel with the complete detail card.
+									sideOffset={16}
+									className="w-36 p-0 duration-100"
+									onPointerEnter={keepOpen}
+									onPointerLeave={(event) => scheduleClose(event, false)}
+									onFocusCapture={keepOpen}
+									onOpenAutoFocus={(event) => {
+										if (levelsHoverOpened.current) event.preventDefault()
+									}}
+									onCloseAutoFocus={(event) => {
+										if (levelsHoverOpened.current) event.preventDefault()
+									}}
+									onBlurCapture={(event) => {
+										const target = event.relatedTarget as Node | null
+										if (
+											!event.currentTarget.contains(target) &&
+											!detailRef.current?.contains(target)
+										)
+											hover.requestClose(id)
+									}}
+								>
+									{choices}
+								</PopoverContent>
+							</Popover>
+						) : (
+							<div
+								className="flex h-10 w-full items-center justify-between rounded-lg px-2 text-sm"
+								aria-disabled="true"
+								data-testid="model-switch-reasoning-locked"
+							>
+								<span>{t("messageEditor.modelSwitch.reasoning.label")}</span>
+								<span className="text-xs text-muted-foreground">
+									{t("messageEditor.modelSwitch.reasoning.default")}
 								</span>
 							</div>
 						)}
-					</>
-				)}
+					</div>
+					{contextWindow && (
+						<div className="flex items-center justify-between border-t border-border/70 px-4 py-3.5 text-sm">
+							<span className="text-foreground">
+								{t("messageEditor.modelSwitch.contextWindow")}
+							</span>
+							<span className="flex items-center gap-1 text-muted-foreground">
+								<span className="tabular-nums">{contextWindow}</span>
+								<ChevronRight className="size-4" aria-hidden="true" />
+							</span>
+						</div>
+					)}
+				</>
 			</PopoverContent>
 		</Popover>
 	)
