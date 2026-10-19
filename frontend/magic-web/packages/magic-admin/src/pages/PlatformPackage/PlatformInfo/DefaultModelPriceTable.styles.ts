@@ -128,6 +128,14 @@ export const useDefaultModelPriceStyles = createStyles(({ css, token }) => ({
 			grid-column: span 3;
 		}
 	`,
+	benchmark: css`
+		margin-top: 8px;
+		padding: 8px;
+		border-radius: 6px;
+		background: ${token.colorFillQuaternary};
+		font-size: 12px;
+		line-height: 20px;
+	`,
 	priceLine: css`
 		display: flex;
 		align-items: baseline;

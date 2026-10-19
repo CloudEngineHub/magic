@@ -7,6 +7,8 @@ import {
 	getVisibleModelPriceGroups,
 	formatPreviewDecimal,
 	calculateModelPrice,
+	calculateModelBenchmark,
+	formatBenchmarkUnitPrice,
 	supportsPriceCalculation,
 } from "../../../../model-billing-reference"
 import { mockBinding, mockModel, mockSnapshot } from "../../fixtures/model-price-preview"
@@ -59,6 +61,10 @@ describe("系统模型售价预览", () => {
 		)
 		assert.equal(tiny.amount, "0.000000000000001")
 		assert.equal(tiny.multiplier, "<0.01x")
+		const reference = compiled.calculateModelBenchmark(mockModel(), "USD", "7")
+		assert.equal(reference.input?.value, "0.285714285714")
+		assert.equal(reference.input?.approximate, true)
+		assert.equal(reference.output?.value, "1.428571428571")
 	})
 	it("按人民币金额平均混合币种，符合后端合成金样例", () => {
 		const normal = calculateModelPrice(mockModel(), "0.015", "7")
@@ -246,4 +252,111 @@ it("filters missing models and empty groups without changing source data or surv
 	assert.equal(visible[0].rows[1].children[0].key, original[1].rows[1].children[1].key)
 	assert.equal(visible[0].rows[2].model.model_id, "pending")
 	assert.equal(JSON.stringify(snapshot), before)
+})
+
+/** 基准参考仅消费合成价格，覆盖换汇与可配置精度的边界。 */
+describe("所选币种的一倍基准参考", () => {
+	it("同币种保留原价且不依赖汇率，美元原价不往返换算", () => {
+		const usd = mockModel([mockBinding("0.142857142857", "0.714285714286", "USD")])
+		const result = calculateModelBenchmark(usd, "USD", null)
+		assert.equal(result.status, "available")
+		assert.deepEqual(result.input, {
+			value: "0.142857142857",
+			approximate: false,
+			belowPrecision: false,
+		})
+		assert.equal(result.output?.value, "0.714285714286")
+		assert.equal(calculateModelBenchmark(mockModel(), "CNY", "invalid").input?.value, "2")
+	})
+	it("双向换汇只在最终舍入，有限小数不标近似，循环小数明确标注", () => {
+		const cny = calculateModelBenchmark(
+			mockModel([mockBinding("0.75", "3.75", "USD")]),
+			"CNY",
+			"7",
+		)
+		assert.equal(cny.input?.value, "5.25")
+		assert.equal(cny.output?.value, "26.25")
+		assert.equal(cny.input?.approximate, false)
+		const usd = calculateModelBenchmark(mockModel([mockBinding("1", "5")]), "USD", "7")
+		assert.equal(usd.input?.value, "0.142857142857")
+		assert.equal(usd.output?.value, "0.714285714286")
+		assert.ok(usd.input)
+		assert.equal(formatBenchmarkUnitPrice(usd.input), "≈0.142857142857")
+	})
+	it("混合币种等权平均，汇率无效不丢弃需换汇的有效来源", () => {
+		const mixed = mockModel([mockBinding("1", "5"), mockBinding("1", "5", "USD")])
+		const result = calculateModelBenchmark(mixed, "CNY", "7")
+		assert.equal(result.input?.value, "4")
+		assert.equal(result.output?.value, "20")
+		for (const rate of [null, "0", "-1", "invalid", "1.0000000000001"])
+			assert.equal(calculateModelBenchmark(mixed, "CNY", rate).status, "invalid_rate")
+		// 各绑定的除法有余数，合计恰好整除时仍应判为精确值。
+		const exact = calculateModelBenchmark(
+			mockModel([mockBinding("1", "1"), mockBinding("6", "6")]),
+			"USD",
+			"7",
+		)
+		assert.equal(exact.input?.value, "0.5")
+		assert.equal(exact.input?.approximate, false)
+	})
+	it("部分缺价按零，两侧共用有效绑定分母，不修改源数据", () => {
+		const missing = mockBinding("2", "10")
+		missing.input.status = "missing_as_zero"
+		const invalid = mockBinding("999", "999")
+		invalid.output.status = "invalid"
+		const excluded = mockBinding("999", "999")
+		excluded.eligible = false
+		const tiered = mockBinding("4", "6")
+		tiered.input.source = "tiered"
+		tiered.input.rule_prices = ["2", "6"]
+		const model = mockModel([missing, invalid, excluded, tiered])
+		const before = JSON.stringify(model)
+		const result = calculateModelBenchmark(model, "CNY", "7")
+		assert.equal(result.input?.value, "2")
+		assert.equal(result.output?.value, "8")
+		assert.equal(JSON.stringify(model), before)
+	})
+	it("舍入有标记，溢出和极小价不伪装为可填零价", () => {
+		const result = calculateModelBenchmark(
+			mockModel([mockBinding("1.1234567890125", "1")]),
+			"CNY",
+			null,
+		)
+		assert.equal(result.input?.value, "1.123456789013")
+		assert.equal(result.input?.approximate, true)
+		assert.equal(
+			calculateModelBenchmark(
+				mockModel([mockBinding("999999999999.9999999999999", "1")]),
+				"CNY",
+				null,
+			).status,
+			"out_of_range",
+		)
+		assert.equal(
+			calculateModelBenchmark(mockModel([mockBinding("0.0000000000001", "0")]), "CNY", null)
+				.status,
+			"below_precision",
+		)
+		const tiny = calculateModelBenchmark(
+			mockModel([mockBinding("0.0000000000001", "1")]),
+			"CNY",
+			null,
+		)
+		assert.ok(tiny.input)
+		assert.equal(formatBenchmarkUnitPrice(tiny.input), "<0.000000000001")
+	})
+	it("拒绝未知协议、币种、禁用、零价和空绑定", () => {
+		assert.equal(calculateModelBenchmark(mockModel(), "EUR", "7").status, "invalid_currency")
+		assert.equal(calculateModelBenchmark(mockModel(), null, "7").status, "invalid_currency")
+		assert.equal(calculateModelBenchmark(mockModel(), "CNY", "7", false).status, "unsupported")
+		assert.equal(
+			calculateModelBenchmark({ ...mockModel(), state: "disabled" }, "CNY", "7").status,
+			"disabled",
+		)
+		assert.equal(calculateModelBenchmark(mockModel([]), "CNY", "7").status, "no_valid_price")
+		assert.equal(
+			calculateModelBenchmark(mockModel([mockBinding("0", "0")]), "CNY", "7").status,
+			"zero_price",
+		)
+	})
 })

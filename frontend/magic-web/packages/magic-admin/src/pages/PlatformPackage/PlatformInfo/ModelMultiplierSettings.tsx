@@ -266,6 +266,7 @@ export default function ModelMultiplierSettings({
 						preview={pricePreview}
 						base={reference}
 						rate={value?.usd_to_cny_rate ?? null}
+						currency={value?.currency}
 						enabled={Boolean(value?.enabled)}
 					/>
 					<section className={styles.section} aria-label={t("multiplier.rulesTitle")}>

@@ -4,6 +4,8 @@ import { Boxes, ChevronDown, Folder } from "lucide-react"
 import {
 	getVisibleModelPriceGroups,
 	calculateModelPrice,
+	calculateModelBenchmark,
+	formatBenchmarkUnitPrice,
 	supportsPriceCalculation,
 	formatPreviewDecimal,
 	type ModelPriceRow,
@@ -34,11 +36,13 @@ export function DefaultModelPriceTable({
 	preview,
 	base,
 	rate,
+	currency,
 	enabled,
 }: {
 	preview: ModelPricePreviewState
 	base: string | null
 	rate: string | null
+	currency?: string | null
 	enabled: boolean
 }) {
 	const { t } = useTranslation("admin/platform/info")
@@ -70,6 +74,10 @@ export function DefaultModelPriceTable({
 		unsupported_type: t("modelPricePreview.unsupported_type"),
 		not_loaded: t("modelPricePreview.not_loaded"),
 		invalid_config: t("modelPricePreview.invalid_config"),
+		invalid_currency: t("modelPricePreview.invalid_currency"),
+		zero_price: t("modelPricePreview.zero_price"),
+		out_of_range: t("modelPricePreview.out_of_range"),
+		below_precision: t("modelPricePreview.below_precision"),
 	}
 	/** 单项来源仅解释接口售价，不从旧配置或市场价格推断。 */
 	function priceDetails(price: PreviewPrice, title: string) {
@@ -103,6 +111,10 @@ export function DefaultModelPriceTable({
 		const open = preview.expanded.get(row.key) ?? dynamic
 		const result =
 			model.kind === "normal" ? calculateModelPrice(model, base, rate, supported) : null
+		const benchmark =
+			model.kind === "normal"
+				? calculateModelBenchmark(model, currency, rate, supported)
+				: null
 		const status =
 			result && result.status !== "available"
 				? labels[result.status]
@@ -178,6 +190,37 @@ export function DefaultModelPriceTable({
 									</div>
 								))
 							: "—"}
+						{benchmark ? (
+							<section
+								className={classes.benchmark}
+								data-testid="model-benchmark"
+								data-model-id={model.model_id}
+								aria-label={`${row.name}: ${t("modelPricePreview.benchmarkTitle", { currency: currency ?? "—" })}`}
+							>
+								<p>
+									{t("modelPricePreview.benchmarkTitle", {
+										currency: currency ?? "—",
+									})}
+								</p>
+								{benchmark.status === "available" &&
+								benchmark.input &&
+								benchmark.output ? (
+									<p>
+										{t("modelPricePreview.input")}:{" "}
+										<span data-testid="benchmark-input">
+											{formatBenchmarkUnitPrice(benchmark.input)}
+										</span>
+										{" · "}
+										{t("modelPricePreview.output")}:{" "}
+										<span data-testid="benchmark-output">
+											{formatBenchmarkUnitPrice(benchmark.output)}
+										</span>
+									</p>
+								) : (
+									<p className={classes.muted}>— · {labels[benchmark.status]}</p>
+								)}
+							</section>
+						) : null}
 					</div>
 					<div className={classes.amount} title={result?.amount ?? undefined}>
 						<span className={classes.mobile}>{t("modelPricePreview.amount")}: </span>
@@ -211,7 +254,11 @@ export function DefaultModelPriceTable({
 				{!dynamic && open && result ? (
 					<div className={classes.formula}>
 						<p className={classes.muted}>{t("modelPricePreview.reference")}</p>
-						<p className={classes.muted}>{t("modelPricePreview.precision")}</p>
+						<p className={classes.muted}>
+							{t("modelPricePreview.precision")}
+							<br />
+							{t("modelPricePreview.benchmarkHint")}
+						</p>
 						{result.bindings.map(({ binding, amount, cny }, index) => (
 							<div key={`${index}:${binding.binding_id}`} className={classes.binding}>
 								<strong>

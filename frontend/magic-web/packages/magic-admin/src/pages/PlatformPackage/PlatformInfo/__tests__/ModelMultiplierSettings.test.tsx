@@ -211,6 +211,7 @@ it("旧端分组表隐藏空组并展示 logo，公式仍默认折叠", () => {
 			}}
 			base="0.015"
 			rate="7"
+			currency="CNY"
 			enabled
 		/>,
 	)
@@ -224,4 +225,29 @@ it("旧端分组表隐藏空组并展示 logo，公式仍默认折叠", () => {
 			.getAttribute("aria-expanded"),
 	).toBe("false")
 	expect(screen.getByText("2.00x")).toBeTruthy()
+})
+
+it("旧端参考值根据当前币种换算，切换不回填或修改原始快照", () => {
+	const snapshot = mockSnapshot()
+	const preview = {
+		data: snapshot,
+		loading: false,
+		error: false,
+		retry: () => {},
+		expanded: new Map<string, boolean>(),
+		toggle: () => {},
+	}
+	const before = JSON.stringify(snapshot)
+	const view = render(
+		<DefaultModelPriceTable preview={preview} base="0.015" rate="7" currency="CNY" enabled />,
+	)
+	expect(screen.getByTestId("benchmark-input").textContent).toBe("2")
+	expect(screen.getByTestId("benchmark-output").textContent).toBe("10")
+	view.rerender(
+		<DefaultModelPriceTable preview={preview} base="0.015" rate="7" currency="USD" enabled />,
+	)
+	expect(screen.getByTestId("benchmark-input").textContent).toBe("≈0.285714285714")
+	expect(screen.getByTestId("benchmark-output").textContent).toBe("≈1.428571428571")
+	expect(screen.getAllByRole("button")).toHaveLength(1)
+	expect(JSON.stringify(snapshot)).toBe(before)
 })

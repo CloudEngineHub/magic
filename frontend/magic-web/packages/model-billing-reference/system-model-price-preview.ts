@@ -87,6 +87,16 @@ function units(value: string | null): bigint | null {
 	const [integer, fraction = ""] = value.split(".")
 	return BigInt(integer + fraction.padEnd(36, "0"))
 }
+/** 两项价格共用绑定资格，缺价为零，非法项不会进入任一侧的平均。 */
+function bindingPrices(binding: PreviewBinding) {
+	const read = (price: PreviewPrice) =>
+		price.status === "missing_as_zero"
+			? ZERO
+			: price.status === "priced"
+				? units(price.effective_unit_price)
+				: null
+	return { input: read(binding.input), output: read(binding.output) }
+}
 /** 输出精确十进制，不把极小正数格式化成零。 */
 function decimal(value: bigint): string {
 	const digits = value.toString().padStart(37, "0")
@@ -133,18 +143,7 @@ export function calculateModelPrice(
 	let count = 0
 	let invalidRate = false
 	for (const binding of model.bindings) {
-		const input =
-			binding.input.status === "missing_as_zero"
-				? ZERO
-				: binding.input.status === "priced"
-					? units(binding.input.effective_unit_price)
-					: null
-		const output =
-			binding.output.status === "missing_as_zero"
-				? ZERO
-				: binding.output.status === "priced"
-					? units(binding.output.effective_unit_price)
-					: null
+		const { input, output } = bindingPrices(binding)
 		let amount: bigint | null = null
 		let cny: bigint | null = null
 		if (
@@ -183,6 +182,95 @@ export function calculateModelPrice(
 			: `${display.toFixed(2)}x`
 		: null
 	return { ...result, status: "available" }
+}
+
+/** 可填写单价的展示结果；极小正数单独标识，不显示成明确零价。 */
+export interface BenchmarkUnitPrice {
+	value: string
+	approximate: boolean
+	belowPrecision: boolean
+}
+
+/** 只读基准参考，不修改模型售价、表单或现有倍率结果。 */
+export interface ModelBenchmarkResult {
+	status:
+		| "available"
+		| "invalid_currency"
+		| "invalid_rate"
+		| "unsupported"
+		| "disabled"
+		| "no_valid_price"
+		| "zero_price"
+		| "out_of_range"
+		| "below_precision"
+	input: BenchmarkUnitPrice | null
+	output: BenchmarkUnitPrice | null
+}
+
+/** 按所选币种等权汇总有效单价；用有理数累加，最后才舍入至可配置的十二位。 */
+export function calculateModelBenchmark(
+	model: Extract<PreviewModel, { kind: "normal" }>,
+	currency: string | null | undefined,
+	rate: string | null,
+	supported = true,
+): ModelBenchmarkResult {
+	const empty: ModelBenchmarkResult = { status: "no_valid_price", input: null, output: null }
+	if (!supported) return { ...empty, status: "unsupported" }
+	if (model.state === "disabled") return { ...empty, status: "disabled" }
+	if (currency !== "CNY" && currency !== "USD") return { ...empty, status: "invalid_currency" }
+	const bindings = model.bindings.flatMap((binding) => {
+		const { input, output } = bindingPrices(binding)
+		return binding.eligible &&
+			input !== null &&
+			output !== null &&
+			(binding.currency === "CNY" || binding.currency === "USD")
+			? [{ currency: binding.currency, input, output }]
+			: []
+	})
+	if (bindings.length === 0) return empty
+	const convert = bindings.some((binding) => binding.currency !== currency)
+	const exchange =
+		typeof rate === "string" && /^\d{1,12}(?:\.\d{1,12})?$/.test(rate) ? units(rate) : null
+	if (convert && (exchange === null || exchange <= ZERO))
+		return { ...empty, status: "invalid_rate" }
+	// 同币种无需汇率；异币种使用公共分母，避免逐绑定截断造成二次换汇损失。
+	const conversionRate = exchange ?? BigInt(1)
+	const divisor = convert ? (currency === "USD" ? conversionRate : SCALE) : BigInt(1)
+	let input = ZERO
+	let output = ZERO
+	for (const binding of bindings) {
+		const factor =
+			binding.currency === currency ? divisor : currency === "USD" ? SCALE : conversionRate
+		input += binding.input * factor
+		output += binding.output * factor
+	}
+	if (input === ZERO && output === ZERO) return { ...empty, status: "zero_price" }
+	const precision = BigInt("1" + "0".repeat(24))
+	const denominator = divisor * BigInt(bindings.length) * precision
+	/** 每项仅舍入一次，余数同时决定近似标记。 */
+	function reference(numerator: bigint): BenchmarkUnitPrice {
+		const remainder = numerator % denominator
+		const rounded =
+			numerator / denominator + (remainder * BigInt(2) >= denominator ? BigInt(1) : ZERO)
+		return {
+			value: decimal(rounded * precision),
+			approximate: remainder !== ZERO,
+			belowPrecision: numerator > ZERO && rounded === ZERO,
+		}
+	}
+	const result = { input: reference(input), output: reference(output) }
+	if ([result.input, result.output].some((price) => price.value.split(".")[0].length > 12))
+		return { ...empty, status: "out_of_range" }
+	if (result.input.value === "0" && result.output.value === "0")
+		return { ...empty, status: "below_precision" }
+	return { status: "available", ...result }
+}
+
+/** 统一数字展示，近似零值用精度上界表达，保持两个管理端口径一致。 */
+export function formatBenchmarkUnitPrice(price: BenchmarkUnitPrice): string {
+	return price.belowPrecision
+		? "<0.000000000001"
+		: `${price.approximate ? "≈" : ""}${price.value}`
 }
 /** 关系与完整候选路径共同标识一行，跨组或共享模型不共用展开状态。 */
 export interface ModelPriceRow {
