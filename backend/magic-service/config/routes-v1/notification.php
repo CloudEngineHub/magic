@@ -16,8 +16,6 @@ Router::addGroup('/api/v1/notifications', static function () {
     Router::get('', ['App\\Interfaces\\Notification\\Facade\\NotificationApi', 'list']);
     Router::get('/counts', ['App\\Interfaces\\Notification\\Facade\\NotificationApi', 'counts']);
     Router::post('/{notificationId}/read', ['App\\Interfaces\\Notification\\Facade\\NotificationApi', 'read']);
-    Router::post('/{notificationId}/accept', ['App\\Interfaces\\Notification\\Facade\\NotificationApi', 'accept']);
-    Router::post('/{notificationId}/reject', ['App\\Interfaces\\Notification\\Facade\\NotificationApi', 'reject']);
 }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
 
 Router::get('/api/v1/notification-templates', ['App\\Interfaces\\Notification\\Facade\\NotificationTemplateApi', 'catalog'], [
