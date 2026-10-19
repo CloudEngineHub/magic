@@ -102,6 +102,19 @@ describe("buildFoldedToolRuns", () => {
 		).toBe(0)
 	})
 
+	it("reads history messages that keep tool data under debug", () => {
+		const history = (message: SuperMagicMessageItem) =>
+			({
+				type: "super_magic_message",
+				role: message.role,
+				content: null,
+				tool_calls: null,
+				debug: { ...message },
+			}) as unknown as SuperMagicMessageItem
+		const messages = [call("a"), result("a"), call("b"), result("b")].map(history)
+		expect(buildFoldedToolRuns(messages).attemptsByLeadId.get("a")).toHaveLength(2)
+	})
+
 	it("leaves single failures and other tools alone", () => {
 		expect(buildFoldedToolRuns([call("a"), result("a")]).hiddenSourceIndices.size).toBe(0)
 		const other = [call("a", "web_search"), result("a"), call("b", "web_search"), result("b")]

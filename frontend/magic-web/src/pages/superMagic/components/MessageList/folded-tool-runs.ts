@@ -39,9 +39,18 @@ function text(value: unknown): string {
 	return typeof value === "string" ? value.trim() : ""
 }
 
+/** A field read from the message or its `debug` copy (history messages keep tool data there). */
+function field(node: SuperMagicMessageItem, key: string): unknown {
+	const value = node?.[key]
+	if (value !== undefined && value !== null) return value
+	return isRecord(node?.debug) ? node.debug[key] : undefined
+}
+
 /** The one foldable tool call an assistant message makes, or null. */
 function soleFoldableCall(node: SuperMagicMessageItem) {
-	const calls = Array.isArray(node?.tool_calls) ? node.tool_calls : []
+	if (node?.role === "tool") return null
+	const toolCalls = field(node, "tool_calls")
+	const calls = Array.isArray(toolCalls) ? toolCalls : []
 	if (calls.length !== 1 || !isRecord(calls[0])) return null
 	const call = calls[0] as Record<string, unknown>
 	const fn = isRecord(call.function) ? call.function : {}
@@ -81,8 +90,9 @@ function failureOf(result: ToolResult | undefined, call: Record<string, unknown>
 function isTransparent(node: SuperMagicMessageItem): boolean {
 	if (node?.role === "tool") return true
 	if (node?.role !== "assistant") return false
-	const hasCalls = Array.isArray(node.tool_calls) && node.tool_calls.length > 0
-	return !hasCalls && !text(node.content)
+	const toolCalls = field(node, "tool_calls")
+	const hasCalls = Array.isArray(toolCalls) && toolCalls.length > 0
+	return !hasCalls && !text(field(node, "content"))
 }
 
 /**
@@ -97,9 +107,8 @@ export function buildFoldedToolRuns(
 	const results = new Map<string, ToolResult>()
 	let hasFoldable = false
 	for (const node of messages) {
-		if (node?.role === "tool" && isRecord(node.tool) && text(node.tool.id)) {
-			results.set(text(node.tool.id), node.tool as ToolResult)
-		}
+		const tool = node?.role === "tool" ? field(node, "tool") : undefined
+		if (isRecord(tool) && text(tool.id)) results.set(text(tool.id), tool as ToolResult)
 		if (!hasFoldable && soleFoldableCall(node)) hasFoldable = true
 	}
 	if (!hasFoldable) return EMPTY_RUNS
