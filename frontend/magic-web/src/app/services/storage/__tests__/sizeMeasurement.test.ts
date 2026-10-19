@@ -132,6 +132,22 @@ describe("measureStorageSizesInContext", () => {
 		expect(yieldControl).toHaveBeenCalled()
 	})
 
+	it("excludes the known stream-record database from byte and Top10 measurements", async () => {
+		vi.stubGlobal("indexedDB", new IDBFactory())
+		vi.stubGlobal("IDBKeyRange", IDBKeyRange)
+		await createDatabase("MAGIC:stream-record-db", { topic: ["ignored-stream-data"] })
+		await createDatabase("db-alpha", { records: ["kept-data"] })
+		stubCaches({})
+
+		const result = await measureStorageSizesInContext({ budgetMs: 10_000 })
+
+		expect(result.indexedDBContentBytes).toBe(measureValueBytes("kept-data"))
+		expect(result.top10).toEqual([
+			expect.objectContaining({ storageType: "indexedDB", container: "db-alpha/records" }),
+		])
+		expect(JSON.stringify(result.top10)).not.toContain("stream-record-db")
+	})
+
 	it("fails the whole enrichment when its budget expires", async () => {
 		vi.stubGlobal("indexedDB", new IDBFactory())
 		vi.stubGlobal("IDBKeyRange", IDBKeyRange)
