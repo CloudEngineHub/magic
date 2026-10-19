@@ -132,6 +132,10 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
 
     private bool $indexDirty = false;
 
+    private int $indexRevision = 0;
+
+    private int $indexFailureRevision = 0;
+
     /**
      * @var string[]
      */
@@ -193,6 +197,7 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
 
             $businessRoom = ! DistributedSidCodec::isSelfRoom($sid, $room);
             $roomWasEmpty = empty($this->roomSids[$roomKey]);
+            ++$this->indexRevision;
             $this->sidRooms[$sid][$roomKey] = $room;
             $this->roomSids[$roomKey][$sid] = true;
             $this->roomLocalCount[$roomKey] = ($this->roomLocalCount[$roomKey] ?? 0) + 1;
@@ -245,6 +250,7 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
                 continue;
             }
 
+            ++$this->indexRevision;
             unset($this->sidRooms[$sid][$roomKey], $this->roomSids[$roomKey][$sid]);
             $this->roomLocalCount[$roomKey] = max(0, ($this->roomLocalCount[$roomKey] ?? 1) - 1);
             if (! DistributedSidCodec::isSelfRoom($sid, $room)) {
@@ -548,37 +554,41 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
         $nodeId = $this->getNodeId();
         $ttl = $this->indexTtlSeconds;
         $businessRooms = $this->getBusinessRooms();
-        $sids = array_keys($this->sidRooms);
+        $localSidCount = count($this->sidRooms);
 
-        if ($businessRooms === [] && $sids === [] && ! $this->indexDirty) {
+        if ($businessRooms === [] && $localSidCount === 0 && ! $this->indexDirty) {
             return;
         }
 
         $rebuilding = $this->indexDirty;
-        $plannedCommands = count($businessRooms) * 3 + count($sids) + 2;
-        $success = $this->runRedisWrite('renewIndexLease', function () use ($nodeId, $ttl, $businessRooms, $sids, &$plannedCommands) {
-            if ($this->indexDirty) {
+        $plannedCommands = count($businessRooms) * 2 + 2;
+        $success = $this->runRedisWrite('renewIndexLease', function () use ($nodeId, $ttl, $businessRooms, &$plannedCommands, &$rebuilding) {
+            // 普通续期不重写 SID；索引被淘汰或停顿超过 TTL 时仍须恢复路由。
+            if (! $rebuilding) {
+                $rebuilding = ($this->sidRooms !== [] && ! $this->redis->exists($this->getNodeSidRoomsKey($nodeId)))
+                    || ($businessRooms !== [] && ! $this->redis->exists($this->getNodeRoomSidsKey($nodeId)));
+            }
+            if ($rebuilding) {
+                $revision = $this->indexRevision;
+                $failureRevision = $this->indexFailureRevision;
+                $businessRooms = $this->getBusinessRooms();
+                $sids = array_keys($this->sidRooms);
                 $this->rebuildLocalRouteIndex($nodeId, $ttl, $businessRooms, $sids, $plannedCommands);
-                $this->indexDirty = false;
+                // 重建等待 Redis 期间可能发生关闭或写失败，旧快照成功不能覆盖新的 dirty。
+                $this->indexDirty = $revision !== $this->indexRevision || $failureRevision !== $this->indexFailureRevision;
                 return;
             }
 
-            $this->pipeline($this->redis, function ($pipeline) use ($nodeId, $ttl, $businessRooms, $sids) {
+            $this->pipeline($this->redis, function ($pipeline) use ($nodeId, $ttl, $businessRooms) {
                 foreach ($businessRooms as $room) {
                     $roomHash = $this->hashValue($room);
                     $pipeline->sAdd($this->getRoomNodesKeyByHash($roomHash), $nodeId);
                     $pipeline->expire($this->getRoomNodesKeyByHash($roomHash), $ttl);
-                    $this->pipelineSyncRoomSidsField($pipeline, $nodeId, $roomHash, $room);
-                }
-
-                foreach ($sids as $sid) {
-                    $this->pipelineSyncSidRoomsField($pipeline, $nodeId, (string) $sid);
                 }
                 // 同一节点 Hash 每轮只续期一次，避免连接数放大重复 EXPIRE。
                 $pipeline->expire($this->getNodeRoomSidsKey($nodeId), $ttl);
                 $pipeline->expire($this->getNodeSidRoomsKey($nodeId), $ttl);
             });
-            $this->indexDirty = false;
         });
         // 只记录每轮汇总；planned_commands 是计划命令数，失败时不代表全部执行成功。
         $this->logger->info(sprintf(
@@ -586,7 +596,7 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
             $this->nsp->getNamespace(),
             (int) $success,
             (int) $rebuilding,
-            count($sids),
+            $localSidCount,
             count($businessRooms),
             $plannedCommands,
             (hrtime(true) - $startedAt) / 1000000,
@@ -893,6 +903,10 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
 
     private function pipelineSyncSidRoomsField(object $pipeline, string $nodeId, string $sid): void
     {
+        if (! isset($this->sidRooms[$sid])) {
+            $pipeline->hDel($this->getNodeSidRoomsKey($nodeId), $sid);
+            return;
+        }
         $businessRooms = [];
         foreach ($this->sidRooms[$sid] ?? [] as $room) {
             if (! DistributedSidCodec::isSelfRoom($sid, $room)) {
@@ -919,6 +933,7 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
             $write();
             return true;
         } catch (Throwable $throwable) {
+            ++$this->indexFailureRevision;
             $this->indexDirty = true;
             $this->logger->warning(sprintf(
                 'socketioRouteIndex event=%sFailed namespace=%s error=%s',
@@ -974,11 +989,29 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
      */
     private function pipeline(\Hyperf\Redis\Redis|Redis|RedisProxy $redis, callable $commands): mixed
     {
-        $pipeline = $redis->pipeline();
-        // 连接池可能保留上次命令的错误；清除后只判断本轮 pipeline 的执行状态。
-        $pipeline->clearLastError();
-        $commands($pipeline);
-        $result = $pipeline->exec();
+        $pipeline = null;
+        $enqueue = static function (object $connection) use ($commands, &$pipeline): void {
+            $pipeline = $connection;
+            // 连接池可能保留上次命令的错误；清除后只判断本轮 pipeline 的执行状态。
+            $connection->clearLastError();
+            try {
+                $commands($connection);
+            } catch (Throwable $exception) {
+                try {
+                    $connection->discard();
+                } finally {
+                    throw $exception;
+                }
+            }
+        };
+        if ($redis instanceof \Hyperf\Redis\Redis) {
+            // 回调式 pipeline 在执行结束后归还连接；维护协程不会长期占用连接池。
+            $result = $redis->pipeline($enqueue);
+        } else {
+            $pipeline = $redis->pipeline();
+            $enqueue($pipeline);
+            $result = $pipeline->exec();
+        }
         $error = $pipeline->getLastError();
         if ($result === false || (is_string($error) && $error !== '')) {
             throw new RuntimeException('Socket.IO Redis pipeline execution failed' . ($error ? ': ' . $error : ''));
