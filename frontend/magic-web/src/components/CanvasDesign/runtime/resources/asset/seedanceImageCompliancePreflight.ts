@@ -163,23 +163,6 @@ export function shouldRunSeedanceImageCompliancePreflight(options: {
 	)
 }
 
-/** Mark the source video while the strict pre-submit check is awaiting PASS. */
-export function beginSeedanceImageComplianceCheck(options: {
-	canvas: Canvas
-	elementId: string
-	contentId?: string
-	request: GenerateVideoRequest
-	modelName?: string
-}): string | undefined {
-	if (!shouldRunSeedanceImageCompliancePreflight(options)) return undefined
-	const beginComplianceCheck = options.canvas.generationRuntimeManager?.beginComplianceCheck
-	if (!beginComplianceCheck) return undefined
-	return beginComplianceCheck.call(options.canvas.generationRuntimeManager, {
-		elementId: options.elementId,
-		...(options.contentId !== undefined ? { contentId: options.contentId } : {}),
-	})
-}
-
 function addImageAssetReference(
 	byAssetId: Map<string, ImageAssetReference>,
 	uri: string,

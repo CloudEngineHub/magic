@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
 	isReplacing: false,
 	selectedElements: [] as Array<Record<string, unknown>>,
 	eventHandlers: {} as Record<string, (event: { data: { elementId: string } }) => void>,
+	submissionHidden: false,
+	submissionBusy: false,
 }))
 
 vi.mock("../../../../app/providers/CanvasUIProvider", () => ({
@@ -53,7 +55,21 @@ vi.mock("../../../../app/hooks/canvas", () => ({
 			: listener
 	},
 	useGenerationRuntime: vi.fn(() => null),
+	useGenerationSubmissionState: vi.fn(() => null),
 	useIsMediaReplacing: () => mocks.isReplacing,
+}))
+
+vi.mock("../shared/useMediaEditorSubmission", () => ({
+	useMediaEditorSubmission: () => ({
+		hidden: mocks.submissionHidden,
+		busy: mocks.submissionBusy,
+		activeSubmission: null,
+		begin: vi.fn(() => "submission-1"),
+		setPhase: vi.fn(),
+		finish: vi.fn(),
+		reveal: vi.fn(),
+		run: vi.fn(),
+	}),
 }))
 
 vi.mock("../image/SecondEdit", () => ({
@@ -81,6 +97,8 @@ describe("media editor replacement gating", () => {
 		mocks.isReplacing = false
 		mocks.selectedElements = []
 		mocks.eventHandlers = {}
+		mocks.submissionHidden = false
+		mocks.submissionBusy = false
 	})
 
 	it("mounts image second-edit when the result exists and unmounts it while replacement is active", () => {
@@ -189,6 +207,31 @@ describe("media editor replacement gating", () => {
 		expect(screen.getByText("video-second-edit")).toBeInTheDocument()
 	})
 
+	it("restores video result actions after a dismissed submission is no longer busy", () => {
+		mocks.selectedElements = [
+			{
+				id: "video-1",
+				type: ElementTypeEnum.Video,
+				contents: [
+					{
+						contentId: "video-content-1",
+						src: "/videos/current.mp4",
+						status: GenerationStatus.Completed,
+						generateVideoRequest: { model_id: "video-model" },
+					},
+				],
+				activeContentId: "video-content-1",
+				mainContentId: "video-content-1",
+			},
+		]
+		mocks.submissionHidden = true
+		mocks.submissionBusy = false
+
+		render(<VideoGenerateEditor />)
+
+		expect(screen.getByText("video-second-edit")).toBeInTheDocument()
+	})
+
 	it("restores image result actions after switching away from the submitted version", () => {
 		const imageWithVersions = {
 			id: "image-1",
@@ -213,13 +256,13 @@ describe("media editor replacement gating", () => {
 		mocks.selectedElements = [imageWithVersions]
 		const view = render(<ImageMessageEditor />)
 
-		act(() => {
-			mocks.eventHandlers["element:image:generate-submit-started"]?.({
-				data: { elementId: "image-1" },
-			})
-		})
+		mocks.submissionHidden = true
+		mocks.submissionBusy = true
+		view.rerender(<ImageMessageEditor />)
 		expect(screen.queryByText("image-second-edit")).toBeNull()
 
+		mocks.submissionHidden = false
+		mocks.submissionBusy = false
 		mocks.selectedElements = [{ ...imageWithVersions, activeContentId: "image-content-1" }]
 		view.rerender(<ImageMessageEditor />)
 		expect(screen.getByText("image-second-edit")).toBeInTheDocument()

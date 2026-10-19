@@ -21,6 +21,7 @@ import MediaResourceFullscreenPreview, {
 } from "../../../fullscreen/media-resource/index"
 import ImageMessageEditorRender from "./ImageMessageEditorRender"
 import SecondEdit from "./SecondEdit"
+import { useMediaEditorSubmission } from "../shared/useMediaEditorSubmission"
 import { ImageElement as ImageElementClass } from "../../../../runtime/elements/image/ImageElement"
 import type { GenerationToolCommandRequest } from "../../../../runtime/element-tools"
 
@@ -156,7 +157,6 @@ function ActiveImageMessageEditor({
 	isMediaResourcePreviewOpen,
 }: ActiveImageMessageEditorProps) {
 	const { canvas } = useCanvas()
-	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
 	const activeContent = getActiveImageContent(imageElement)
 	const generationRuntime = useGenerationRuntime(imageElement.id, activeContent.contentId)
 	const activeContentState = getContentState(activeContent)
@@ -183,51 +183,42 @@ function ActiveImageMessageEditor({
 	const isTimedOut = displayState?.status === "timed-out"
 	const isGenerating =
 		!isTimedOut && (displayState?.status === "generating" || Boolean(generationRuntime))
-	const readOnly = isGenerating || !canvas?.permissionManager.can("sideEffect.generate")
-
-	useEffect(() => {
-		setHiddenAfterSubmit(false)
-	}, [activeContent.contentId, imageElement.id])
-
-	useCanvasEvent(
-		"element:image:generate-submit-started",
-		({ data }) => {
-			if (data.elementId === imageElement.id) {
-				setHiddenAfterSubmit(true)
-			}
-		},
-		[imageElement.id],
-	)
+	const isRetryEditing =
+		activeContentState === "failed" && retryEditingElementId === imageElement.id
+	const submission = useMediaEditorSubmission({
+		elementId: imageElement.id,
+		contentId: activeContent.contentId,
+		isGenerating,
+		isTimedOut,
+		isRetryEditing,
+	})
+	const readOnly = !canvas?.permissionManager.can("sideEffect.generate")
 
 	useCanvasEvent(
 		"element:image:generate-submit-failed",
 		({ data }) => {
 			if (data.elementId === imageElement.id) {
-				setHiddenAfterSubmit(false)
+				submission.reveal()
 			}
 		},
-		[imageElement.id],
+		[imageElement.id, submission.reveal],
 	)
 
 	useCanvasEvent(
 		"element:image:retryClick",
 		({ data }) => {
-			if (data.elementId === imageElement.id) setHiddenAfterSubmit(false)
+			if (data.elementId === imageElement.id) submission.reveal()
 		},
-		[imageElement.id],
+		[imageElement.id, submission.reveal],
 	)
 
-	if (isTemporaryElement || isDragging || (hiddenAfterSubmit && !isGenerating && !isTimedOut))
-		return null
-
-	const isRetryEditing =
-		activeContentState === "failed" && retryEditingElementId === imageElement.id
+	if (isTemporaryElement || isDragging || submission.hidden) return null
 
 	// 如果没有生成图片请求且没有结果图片，则显示图片编辑器
 	if (
 		(!hasGenerateImageRequest && !hasResultImage) ||
 		isRetryEditing ||
-		(!hasResultImage && (isGenerating || isTimedOut))
+		(!hasResultImage && isTimedOut)
 	) {
 		return (
 			<ImageMessageEditorRender
@@ -241,6 +232,7 @@ function ActiveImageMessageEditor({
 				autoFocusAtDocumentEnd={isRetryEditing}
 				onPreviewMediaResource={onPreviewMediaResource}
 				isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+				submissionController={submission}
 			/>
 		)
 	}
@@ -255,6 +247,7 @@ function ActiveImageMessageEditor({
 				onPendingToolCommandHandled={onPendingToolCommandHandled}
 				onPreviewMediaResource={onPreviewMediaResource}
 				isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+				submissionController={submission}
 			/>
 		)
 	}

@@ -37,53 +37,70 @@ describe("GenerationRuntimeManager", () => {
 		expect(targetListener).toHaveBeenCalledTimes(2)
 	})
 
-	it("tracks compliance checks independently from generation attempts", () => {
+	it("tracks submission phases independently from generation attempts", () => {
 		const manager = new GenerationRuntimeManager()
 		const listener = vi.fn()
 		manager.subscribeElement("video-1", listener)
 
-		const complianceId = manager.beginComplianceCheck({
+		const submissionId = manager.beginSubmission({
 			elementId: "video-1",
 			contentId: "content-1",
+			phase: "validating",
 		})
 
-		expect(manager.getComplianceState("video-1", "content-1")).toMatchObject({
-			complianceId,
+		expect(manager.getSubmissionState("video-1", "content-1")).toMatchObject({
+			submissionId,
 			elementId: "video-1",
 			contentId: "content-1",
+			phase: "validating",
 		})
 		expect(manager.hasActiveGeneration("video-1", "content-1")).toBe(false)
 		expect(listener).toHaveBeenCalledTimes(1)
 
-		expect(manager.clearComplianceCheck(complianceId)).toBe(true)
+		expect(manager.updateSubmissionPhase(submissionId, "submitting")).toBe(true)
+		expect(manager.getSubmissionState("video-1", "content-1")?.phase).toBe("submitting")
 		expect(manager.getComplianceState("video-1", "content-1")).toBeNull()
 		expect(listener).toHaveBeenCalledTimes(2)
+
+		expect(manager.clearSubmission(submissionId)).toBe(true)
+		expect(manager.getSubmissionState("video-1", "content-1")).toBeNull()
+		expect(listener).toHaveBeenCalledTimes(3)
 	})
 
-	it("keeps the newest Content check when an older token settles", () => {
+	it("keeps the newest Content submission when an older token settles", () => {
 		const manager = new GenerationRuntimeManager()
-		const olderId = manager.beginComplianceCheck({
+		const olderId = manager.beginSubmission({
 			elementId: "video-1",
 			contentId: "content-1",
+			phase: "preparing",
 		})
-		manager.beginComplianceCheck({ elementId: "video-1", contentId: "content-2" })
-		const newestId = manager.beginComplianceCheck({
+		manager.beginSubmission({
+			elementId: "video-1",
+			contentId: "content-2",
+			phase: "submitting",
+		})
+		const newestId = manager.beginSubmission({
 			elementId: "video-1",
 			contentId: "content-1",
+			phase: "validating",
 		})
 
-		expect(manager.getComplianceState("video-1")?.complianceId).toBe(newestId)
-		expect(manager.clearComplianceCheck(olderId)).toBe(false)
-		expect(manager.getComplianceState("video-1", "content-1")?.complianceId).toBe(newestId)
+		expect(manager.getSubmissionState("video-1")?.submissionId).toBe(newestId)
+		expect(manager.clearSubmission(olderId)).toBe(false)
+		expect(manager.getSubmissionState("video-1", "content-1")?.submissionId).toBe(newestId)
 	})
 
-	it("clears a compliance check when its Content is deleted", () => {
+	it("clears a submission when its Content is deleted", () => {
 		const manager = new GenerationRuntimeManager()
-		manager.beginComplianceCheck({ elementId: "video-1", contentId: "content-1" })
+		manager.beginSubmission({
+			elementId: "video-1",
+			contentId: "content-1",
+			phase: "preparing",
+		})
 
 		manager.clearTarget("video-1", "content-1")
 
-		expect(manager.getComplianceState("video-1", "content-1")).toBeNull()
+		expect(manager.getSubmissionState("video-1", "content-1")).toBeNull()
 	})
 
 	it("supersedes an older attempt for the same element", () => {

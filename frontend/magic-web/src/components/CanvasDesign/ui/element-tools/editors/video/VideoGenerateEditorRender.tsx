@@ -152,10 +152,11 @@ import {
 	type MediaEditIntent,
 } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 import {
-	beginSeedanceImageComplianceCheck,
 	runSeedanceImageCompliancePreflight,
+	shouldRunSeedanceImageCompliancePreflight,
 } from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
 import { toastSeedanceCompliancePreflightBlocked } from "../../../toolbar/asset-library/assetComplianceToasts"
+import type { MediaEditorSubmissionController } from "../shared/useMediaEditorSubmission"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -175,6 +176,7 @@ interface VideoGenerateEditorRenderProps {
 	syncElementSize?: UseVideoEditorConfigOptions["syncElementSize"]
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	isMediaResourcePreviewOpen?: boolean
+	submissionController: MediaEditorSubmissionController
 }
 
 interface VideoAssetSelectionSession {
@@ -247,6 +249,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		syncElementSize,
 		onPreviewMediaResource,
 		isMediaResourcePreviewOpen = false,
+		submissionController,
 	} = props
 	const { t } = useCanvasDesignI18n()
 	const promptPlaceholderTokenConfig = useMemo(() => resolvePromptPlaceholderTokenConfig(t), [t])
@@ -1597,78 +1600,82 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				return
 			const elementInstance = canvas.elementManager.getElementInstance(videoElement.id)
 			if (!(elementInstance instanceof VideoElementClass)) return
+			const modelName = config.selectedModelOption?.model.model_name
+			const requiresCompliance = shouldRunSeedanceImageCompliancePreflight({
+				canvas,
+				request: requestParams,
+				modelName,
+			})
 			sendingRef.current = true
 			clipboardEpochRef.current += 1
 			clipboardSessionIdRef.current = getClipboardSessionId()
 			setIsSending(true)
-			let complianceCheckId: string | undefined
 			try {
-				complianceCheckId = beginSeedanceImageComplianceCheck({
-					canvas,
-					elementId: videoElement.id,
-					contentId: videoElement.activeContentId ?? undefined,
-					request: requestParams,
-					modelName: config.selectedModelOption?.model.model_name,
-				})
-				const requestImageInputSnapshot = JSON.stringify({
-					frames: requestParams.inputs?.frames ?? [],
-					reference_images: requestParams.inputs?.reference_images ?? [],
-				})
-				const compliancePreflight = await runSeedanceImageCompliancePreflight({
-					canvas,
-					sourceVideoElementId: videoElement.id,
-					request: requestParams,
-					modelName: config.selectedModelOption?.model.model_name,
-					isRequestStillCurrent: () => {
-						const latestRequest = buildRequestParamsWithLinkedInputsRef.current()
-						return (
-							JSON.stringify({
-								frames: latestRequest.inputs?.frames ?? [],
-								reference_images: latestRequest.inputs?.reference_images ?? [],
-							}) === requestImageInputSnapshot
-						)
+				await submissionController.run({
+					initialPhase: requiresCompliance ? "validating" : "submitting",
+					execute: async ({ setPhase }) => {
+						if (requiresCompliance) {
+							const requestImageInputSnapshot = JSON.stringify({
+								frames: requestParams.inputs?.frames ?? [],
+								reference_images: requestParams.inputs?.reference_images ?? [],
+							})
+							const compliancePreflight = await runSeedanceImageCompliancePreflight({
+								canvas,
+								sourceVideoElementId: videoElement.id,
+								request: requestParams,
+								modelName,
+								isRequestStillCurrent: () => {
+									const latestRequest =
+										buildRequestParamsWithLinkedInputsRef.current()
+									return (
+										JSON.stringify({
+											frames: latestRequest.inputs?.frames ?? [],
+											reference_images:
+												latestRequest.inputs?.reference_images ?? [],
+										}) === requestImageInputSnapshot
+									)
+								},
+							})
+							if (!compliancePreflight.proceed) {
+								toastSeedanceCompliancePreflightBlocked(t, compliancePreflight)
+								return { accepted: false }
+							}
+						}
+
+						setPhase("submitting")
+
+						handlers.cancelPendingDraftPersistence()
+						if (submitTarget === "current-content") captureSessionDraft()
+						const submitted =
+							submitTarget === "new-element"
+								? await createAndSubmitVideoGeneration({
+										canvas,
+										sourceVideoElement: videoElement,
+										request: requestParams,
+										newElementSize: config.ratioOption,
+									})
+								: submitTarget === "current-content"
+									? await elementInstance.submitContentGeneration(requestParams, {
+											recoveryIntent: sessionIntent,
+										})
+									: await (async () => {
+											handlers.saveDraftRequest(
+												options?.draftRequest ?? requestParams,
+											)
+											return elementInstance.generateVideo(requestParams)
+										})()
+						if (submitted) {
+							sessionPersistenceEnabledRef.current = false
+							if (sessionStore && sessionKey) {
+								sessionStore.clear(sessionKey)
+								setHasInterruptedDraft(false)
+							}
+							onGenerateSubmitSucceeded?.()
+						}
+						return { accepted: submitted }
 					},
 				})
-				if (!compliancePreflight.proceed) {
-					toastSeedanceCompliancePreflightBlocked(t, compliancePreflight)
-					return
-				}
-				if (complianceCheckId) {
-					canvas.generationRuntimeManager.clearComplianceCheck(complianceCheckId)
-				}
-
-				handlers.cancelPendingDraftPersistence()
-				if (submitTarget === "current-content") captureSessionDraft()
-				const submitted =
-					submitTarget === "new-element"
-						? await createAndSubmitVideoGeneration({
-								canvas,
-								sourceVideoElement: videoElement,
-								request: requestParams,
-								newElementSize: config.ratioOption,
-							})
-						: submitTarget === "current-content"
-							? await elementInstance.submitContentGeneration(requestParams, {
-									recoveryIntent: sessionIntent,
-								})
-							: await (async () => {
-									handlers.saveDraftRequest(
-										options?.draftRequest ?? requestParams,
-									)
-									return elementInstance.generateVideo(requestParams)
-								})()
-				if (submitted) {
-					sessionPersistenceEnabledRef.current = false
-					if (sessionStore && sessionKey) {
-						sessionStore.clear(sessionKey)
-						setHasInterruptedDraft(false)
-					}
-					onGenerateSubmitSucceeded?.()
-				}
 			} finally {
-				if (complianceCheckId) {
-					canvas.generationRuntimeManager.clearComplianceCheck(complianceCheckId)
-				}
 				sendingRef.current = false
 				if (isMountedRef.current) setIsSending(false)
 			}
@@ -1683,6 +1690,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			handlers,
 			config.selectedModelOption,
 			onGenerateSubmitSucceeded,
+			submissionController,
 			sessionKey,
 			sessionStore,
 			sessionIntent,
