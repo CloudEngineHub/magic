@@ -11,14 +11,6 @@ use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 
 interface MagicClawRepositoryInterface
 {
-    public function bindFileConverterSandbox(int $clawId, string $sandboxId): void;
-
-    public function clearFileConverterSandbox(int $clawId, string $sandboxId): void;
-
-    public function setRuntimeBlock(int $id, string $revision): void;
-
-    public function clearRuntimeBlock(int $id, string $expectedRevision): bool;
-
     /**
      * Create a new magic claw record.
      */

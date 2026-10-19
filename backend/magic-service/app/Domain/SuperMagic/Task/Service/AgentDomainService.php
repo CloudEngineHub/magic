@@ -17,6 +17,7 @@ use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
 use App\Domain\SuperMagic\Agent\Exception\MagicClawRuntimeDeniedException;
 use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
 use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicProductContext;
@@ -1337,9 +1338,9 @@ class AgentDomainService
         return di(SandboxLifecycleLock::class)->run(-((int) $projectId), function (callable $guard) use ($claw, $dataIsolation, $sandboxId, $projectId, $workDir, $projectSpaceRootFileId, $topicSpaceRootFileId): string {
             $guard();
             di(MagicClawRuntimePolicyDomainService::class)->assertProject((int) $projectId);
-            $this->magicClawRepository->bindFileConverterSandbox((int) $claw->getId(), $sandboxId);
-            $id = $this->ensureSandboxContainerRunning($dataIsolation, $sandboxId, $projectId, $workDir, $projectSpaceRootFileId, $topicSpaceRootFileId, fn (string $createdId) => $this->magicClawRepository->bindFileConverterSandbox((int) $claw->getId(), $createdId));
-            $this->magicClawRepository->bindFileConverterSandbox((int) $claw->getId(), $id);
+            di(MagicClawReconciliationRepository::class)->bindConverter((int) $claw->getId(), $sandboxId);
+            $id = $this->ensureSandboxContainerRunning($dataIsolation, $sandboxId, $projectId, $workDir, $projectSpaceRootFileId, $topicSpaceRootFileId, fn (string $createdId) => di(MagicClawReconciliationRepository::class)->bindConverter((int) $claw->getId(), $createdId));
+            di(MagicClawReconciliationRepository::class)->bindConverter((int) $claw->getId(), $id);
             $guard();
             $this->assertSandboxRuntime((int) $projectId, $id);
             return $id;
@@ -1501,14 +1502,14 @@ class AgentDomainService
             // Keep the binding if deletion cannot be confirmed; the durable reconciler will retry it.
             $claw = $this->magicClawRepository->getByProjectId($projectId);
             if ($claw !== null) {
-                $this->magicClawRepository->setRuntimeBlock((int) $claw->getId(), (string) IdGenerator::getSnowId());
+                di(MagicClawReconciliationRepository::class)->recordRuntimeDenial($claw, $topicId ?? 0, $sandboxId);
             }
             try {
                 $this->stopSandboxIfExists($sandboxId);
                 if ($topicId !== null) {
                     $this->topicRepository->updateTopicByCondition(['id' => $topicId, 'sandbox_id' => $sandboxId], ['sandbox_id' => '']);
                 } elseif ($claw !== null) {
-                    $this->magicClawRepository->clearFileConverterSandbox((int) $claw->getId(), $sandboxId);
+                    di(MagicClawReconciliationRepository::class)->clearConverter((int) $claw->getId(), $sandboxId);
                 }
             } catch (Throwable $cleanupError) {
                 $this->logger->warning('撤权后的新沙箱清理未确认', ['sandbox_id' => $sandboxId, 'error' => $cleanupError->getMessage()]);

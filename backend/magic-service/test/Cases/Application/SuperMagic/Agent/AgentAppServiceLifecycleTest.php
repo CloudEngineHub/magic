@@ -11,10 +11,13 @@ use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Agent\Exception\MagicClawRuntimeDeniedException;
 use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
+use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\SandboxVersionDomainService;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Infrastructure\Core\Exception\BusinessException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use Closure;
 use HyperfTest\Support\MagicClawTestEnvironment;
@@ -94,7 +97,7 @@ final class AgentAppServiceLifecycleTest extends TestCase
 
     public static function operations(): array
     {
-        return [['startSandbox'], ['restartSandbox'], ['upgradeSandbox']];
+        return [['startSandbox'], ['restartMagicClawSandbox'], ['upgradeSandbox']];
     }
 
     public function testUpToDateUpgradeDoesNotRestartAnAllowedUnpausedSandbox(): void
@@ -103,5 +106,33 @@ final class AgentAppServiceLifecycleTest extends TestCase
         $this->allowVersionCheck = true;
         self::assertSame('actual-id', $this->app->upgradeSandbox($this->isolation, 20));
         self::assertSame(1, $this->versionCalls);
+    }
+
+    public function testClawWrapperDelegatesToSharedRestartAndKeepsNotFoundRecovery(): void
+    {
+        $this->policy->expects(self::once())->method('manualStart')->with(20)
+            ->willReturnCallback(static fn ($id, $operation) => $operation());
+        // Only initialization is isolated: the wrapper and shared delete/restart stay real.
+        $app = new readonly class extends AgentAppService {
+            public function __construct()
+            {
+            }
+
+            public function ensureSandboxInitialized(DataIsolation $dataIsolation, int $topicId, bool $skipInitMessages = false, bool $allowWarmPool = true): string
+            {
+                TestCase::assertSame(20, $topicId);
+                TestCase::assertTrue($skipInitMessages);
+                return 'initialized';
+            }
+        };
+        $reflection = new ReflectionClass(AgentAppService::class);
+        foreach (['topicDomainService', 'logger'] as $name) {
+            $reflection->getProperty($name)->setValue($app, $reflection->getProperty($name)->getValue($this->app));
+        }
+        $agent = $this->createMock(AgentDomainService::class);
+        $agent->expects(self::once())->method('stopSandbox')->with('actual-id')
+            ->willThrowException(new SandboxOperationException('stop', 'gone', ResponseCode::NOT_FOUND));
+        $reflection->getProperty('agentDomainService')->setValue($app, $agent);
+        self::assertSame('initialized', $app->restartMagicClawSandbox($this->isolation, 20));
     }
 }

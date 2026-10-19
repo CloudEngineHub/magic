@@ -13,6 +13,7 @@ use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
 use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicProductContext;
@@ -72,6 +73,7 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         $lifecycle = $this->createMock(SandboxLifecycleLock::class);
         $lifecycle->method('run')->willReturnCallback(static fn (int $id, callable $operation) => $operation(static function (): void {}));
         $container->services[SandboxLifecycleLock::class] = $lifecycle;
+        $container->services[MagicClawReconciliationRepository::class] = $this->createMock(MagicClawReconciliationRepository::class);
         ApplicationContext::setContainer($container);
     }
 
@@ -217,8 +219,9 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         $policy = ApplicationContext::getContainer()->get(MagicClawRuntimePolicyDomainService::class);
         $policy->method('assertProject')->willReturn(new MagicClawEntity(['id' => 5, 'project_id' => 1]));
         $bindings = [];
-        $claws = $this->createMock(MagicClawRepositoryInterface::class);
-        $claws->method('bindFileConverterSandbox')->willReturnCallback(static function (int $id, string $sandbox) use (&$bindings): void {
+        $records = $this->createMock(MagicClawReconciliationRepository::class);
+        ApplicationContext::getContainer()->services[MagicClawReconciliationRepository::class] = $records;
+        $records->method('bindConverter')->willReturnCallback(static function (int $id, string $sandbox) use (&$bindings): void {
             self::assertSame(5, $id);
             $bindings[] = $sandbox;
         });
@@ -230,7 +233,7 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
             }
             throw new SandboxOperationException('status', 'timeout', 500);
         });
-        $service = $this->buildService($this->createMock(SandboxAgentInterface::class), $gateway, $this->createMock(TopicRepositoryInterface::class), $claws);
+        $service = $this->buildService($this->createMock(SandboxAgentInterface::class), $gateway, $this->createMock(TopicRepositoryInterface::class));
         try {
             $service->ensureSandboxRunning($this->buildDataIsolation(), 'requested-converter', '1', '/work');
             self::fail('Expected readiness failure');

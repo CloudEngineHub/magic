@@ -8,7 +8,6 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Agent\Service;
 
 use App\Domain\SuperMagic\Agent\Event\ClawPermissionReconciliationRequestedEvent;
-use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
 use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
@@ -30,7 +29,6 @@ class MagicClawReconciliationAppService
 
     public function __construct(
         private readonly MagicClawReconciliationRepository $repository,
-        private readonly MagicClawRepositoryInterface $claws,
         private readonly MagicClawRuntimePolicyDomainService $policy,
         private readonly AgentDomainService $agent,
         private readonly TaskDomainService $tasks,
@@ -61,8 +59,9 @@ class MagicClawReconciliationAppService
                     ++$resources;
                     yield ['claw_id' => (string) $claw['id'], 'user_id' => $claw['user_id'], 'topic_id' => (string) $topic['id'], 'sandbox_id' => (string) ($topic['sandbox_id'] ?? '')];
                 }
-                if ($resources === 0 || ! empty($claw['file_converter_sandbox_id'])) {
-                    yield ['claw_id' => (string) $claw['id'], 'user_id' => $claw['user_id'], 'topic_id' => '0', 'sandbox_id' => (string) ($claw['file_converter_sandbox_id'] ?? '')];
+                $converter = $this->repository->converterSandbox((int) $claw['id']);
+                if ($resources === 0 || $converter !== '') {
+                    yield ['claw_id' => (string) $claw['id'], 'user_id' => $claw['user_id'], 'topic_id' => '0', 'sandbox_id' => $converter];
                 }
             }
         } while (count($rows) === 100);
@@ -187,7 +186,7 @@ class MagicClawReconciliationAppService
                     return;
                 }
                 // The auxiliary resource also represents claws with no topic yet.
-                $this->repository->enqueue($operation, $claw, ['id' => 0, 'sandbox_id' => $claw['file_converter_sandbox_id'] ?? '']);
+                $this->repository->enqueue($operation, $claw, ['id' => 0, 'sandbox_id' => $this->repository->converterSandbox((int) $claw['id'])]);
             }
             $this->repository->updateOperation($operation, ['cursor' => $claw['id']]);
             if (microtime(true) >= $deadline) {
@@ -228,7 +227,7 @@ class MagicClawReconciliationAppService
                         $this->repository->updateItem($item, ['status' => 'skipped', 'last_error' => '']);
                         return false;
                     }
-                    $this->claws->setRuntimeBlock((int) $claw['id'], (string) $operation['id']);
+                    $this->repository->requireManualStart($item);
                     return true;
                 });
                 if (! $shouldStop) {
@@ -239,7 +238,7 @@ class MagicClawReconciliationAppService
                     $this->repository->cancelQueuedMessages($topic, ! empty($claw['deleted_at']) ? 'Magic Claw deleted' : 'Magic Claw access revoked');
                 }
                 // Resolve again under the initialization lock; never delete an ID guessed from topic_id.
-                $sandboxId = (string) ($topic !== null ? ($topic['sandbox_id'] ?? '') : ($claw['file_converter_sandbox_id'] ?? ''));
+                $sandboxId = (string) ($topic !== null ? ($topic['sandbox_id'] ?? '') : ($this->repository->converterSandbox((int) $claw['id'])));
                 $this->repository->updateItem($item, ['sandbox_id' => $sandboxId]);
                 $assertOwnership();
                 if ($sandboxId !== '') {
@@ -250,7 +249,7 @@ class MagicClawReconciliationAppService
                     $this->tasks->updateTaskStatusByTopicIds([(int) $topic['id']], TaskStatus::Stopped, ! empty($claw['deleted_at']) ? 'Magic Claw deleted' : 'Magic Claw access revoked', true);
                     $this->repository->clearBinding((int) $topic['id'], $sandboxId);
                 } else {
-                    $this->claws->clearFileConverterSandbox((int) $claw['id'], $sandboxId);
+                    $this->repository->clearConverter((int) $claw['id'], $sandboxId);
                 }
                 $this->repository->updateItem($item, ['status' => 'stopped', 'last_error' => '']);
             }, 0);

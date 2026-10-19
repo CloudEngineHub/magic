@@ -13,10 +13,9 @@ use App\Domain\Contact\Event\DepartmentMembershipChanged;
 use App\Domain\Contact\Repository\Persistence\MagicDepartmentUserRepository;
 use App\Domain\Contact\Repository\Persistence\Model\DepartmentUserModel;
 use App\Domain\Permission\Event\FunctionPermissionChanged;
+use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Event\ClawPermissionReconciliationRequestedEvent;
 use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
-use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawRepository;
-use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\MagicClawModel;
 use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
@@ -104,11 +103,8 @@ final class MagicClawReconciliationTest extends TestCase
         $ddl = $this->db->pretend(fn () => $this->migration->up());
         self::assertNotEmpty($ddl);
         // SQLite executes repository/transaction behavior. Production migration DDL is compiled for MySQL above.
-        $pdo->exec("ALTER TABLE magic_super_magic_claw ADD COLUMN runtime_block_reason TEXT DEFAULT ''");
-        $pdo->exec('ALTER TABLE magic_super_magic_claw ADD COLUMN runtime_block_revision INTEGER DEFAULT 0');
-        $pdo->exec("ALTER TABLE magic_super_magic_claw ADD COLUMN file_converter_sandbox_id TEXT DEFAULT ''");
         $pdo->exec("CREATE TABLE magic_claw_permission_reconciliations (id INTEGER PRIMARY KEY, organization_code TEXT, actor TEXT, reason TEXT, status TEXT DEFAULT 'pending', cursor INTEGER DEFAULT 0, lease_until INTEGER DEFAULT 0, lease_owner TEXT DEFAULT '', scan_completed INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT)");
-        $pdo->exec("CREATE TABLE magic_claw_permission_reconciliation_items (id INTEGER PRIMARY KEY AUTOINCREMENT, operation_id INTEGER, claw_id INTEGER, topic_id INTEGER, sandbox_id TEXT DEFAULT '', status TEXT DEFAULT 'pending', attempts INTEGER DEFAULT 0, next_retry_at INTEGER DEFAULT 0, last_error TEXT DEFAULT '', created_at TEXT, updated_at TEXT, UNIQUE(operation_id, claw_id, topic_id))");
+        $pdo->exec("CREATE TABLE magic_claw_permission_reconciliation_items (id INTEGER PRIMARY KEY AUTOINCREMENT, operation_id INTEGER, claw_id INTEGER, topic_id INTEGER, sandbox_id TEXT DEFAULT '', status TEXT DEFAULT 'pending', attempts INTEGER DEFAULT 0, requires_manual_start INTEGER DEFAULT 0, next_retry_at INTEGER DEFAULT 0, last_error TEXT DEFAULT '', created_at TEXT, updated_at TEXT, UNIQUE(operation_id, claw_id, topic_id))");
         $this->db->table('magic_super_magic_claw')->insert(['id' => 1, 'organization_code' => 'org', 'user_id' => 'owner', 'project_id' => 10]);
         $this->db->table('magic_super_agent_topics')->insert(['id' => 20, 'user_organization_code' => 'org', 'user_id' => 'owner', 'project_id' => 10, 'sandbox_id' => 'warm-pool-real-id', 'current_task_status' => 'running']);
         $this->repository = new MagicClawReconciliationRepository();
@@ -122,7 +118,7 @@ final class MagicClawReconciliationTest extends TestCase
         $locker->method('spinLock')->willReturn(true);
         $locker->method('mutexLock')->willReturn(true);
         $locker->method('release')->willReturn(true);
-        $this->service = new MagicClawReconciliationAppService($this->repository, new MagicClawRepository(new MagicClawModel()), $policy, $this->agent, $this->createMock(TaskDomainService::class), $lock, $locker);
+        $this->service = new MagicClawReconciliationAppService($this->repository, $policy, $this->agent, $this->createMock(TaskDomainService::class), $lock, $locker);
         $this->service->logger = new NullLogger();
     }
 
@@ -130,6 +126,70 @@ final class MagicClawReconciliationTest extends TestCase
     {
         Context::destroy('department_membership_changed:' . Coroutine::id() . ':org');
         Register::unsetConnectionResolver();
+    }
+
+    public function testMigrationOnlyCreatesAndDropsTheTwoReconciliationTables(): void
+    {
+        $up = $this->db->pretend(fn () => $this->migration->up());
+        $down = $this->db->pretend(fn () => $this->migration->down());
+        self::assertCount(2, $down);
+        foreach (array_merge($up, $down) as $statement) {
+            self::assertStringNotContainsString('magic_super_magic_claw', $statement['query']);
+            self::assertStringContainsString('magic_claw_permission_reconciliation', $statement['query']);
+        }
+        self::assertSame(
+            ['id', 'organization_code', 'user_id', 'project_id', 'deleted_at', 'updated_at'],
+            array_column($this->db->getPdo()->query('PRAGMA table_info(magic_super_magic_claw)')->fetchAll(PDO::FETCH_ASSOC), 'name')
+        );
+    }
+
+    public function testConverterBindingDoesNotCreateAStopOperationOrAffectItsProgress(): void
+    {
+        $this->repository->bindConverter(1, 'actual-converter');
+        self::assertSame('actual-converter', $this->repository->converterSandbox(1));
+        self::assertNull($this->service->status('org'));
+        self::assertSame([], $this->repository->activeOperations(10));
+        self::assertSame('0', $this->repository->pauseRevision(1));
+        $operation = $this->repository->create('org', 'admin', 'policy_changed');
+        self::assertSame(0, $this->repository->summarize($operation)['stopped_count']);
+        self::assertNull($this->repository->dueItem($operation));
+        // An acknowledgement for an old binding cannot delete its replacement.
+        $this->repository->bindConverter(1, 'replacement-converter');
+        $this->repository->clearConverter(1, 'actual-converter');
+        self::assertSame('replacement-converter', $this->repository->converterSandbox(1));
+    }
+
+    public function testResumeKeepsNewerPausesAndPreservesStopHistory(): void
+    {
+        $old = $this->repository->create('org', 'admin', 'policy_changed');
+        $this->repository->enqueue($old, ['id' => 1], ['id' => 20]);
+        $this->repository->requireManualStart($this->repository->dueItem($old));
+        $observed = $this->repository->pauseRevision(1);
+        $new = $this->repository->create('org', 'admin', 'policy_changed');
+        $this->repository->enqueue($new, ['id' => 1], ['id' => 20]);
+        $this->repository->requireManualStart($this->repository->dueItem($new));
+        self::assertFalse($this->repository->resumeAfterStart(1, $observed));
+        self::assertSame((string) $new['id'], $this->repository->pauseRevision(1));
+        self::assertTrue($this->repository->resumeAfterStart(1, (string) $new['id']));
+        self::assertSame('0', $this->repository->pauseRevision(1));
+        self::assertSame('pending', $this->repository->dueItem($new)['status']);
+        self::assertSame(2, $this->db->table('magic_claw_permission_reconciliation_items')->count());
+    }
+
+    public function testLateRevocationReopensCompletedWorkAndRetainsConverterAfterFailedCleanup(): void
+    {
+        $operation = $this->repository->create('org', 'admin', 'policy_changed');
+        $this->repository->updateOperation($operation, ['status' => 'completed', 'scan_completed' => true]);
+        $claw = new MagicClawEntity(['id' => 1, 'organization_code' => 'org', 'user_id' => 'owner']);
+        $this->repository->recordRuntimeDenial($claw, 0, 'actual-late-converter');
+        self::assertSame('running', $this->service->status('org')['status']);
+        self::assertSame((string) $operation['id'], $this->repository->pauseRevision(1));
+        $this->agent->method('stopSandboxIfExists')->willThrowException(new SandboxOperationException('stop', 'timeout', 500));
+        $this->service->executeForOrganization('org');
+        self::assertSame('actual-late-converter', $this->repository->converterSandbox(1));
+        self::assertSame('partial_failed', $this->service->status('org')['status']);
+        self::assertSame('actual-late-converter', $this->db->table('magic_claw_permission_reconciliation_items')
+            ->where('operation_id', $operation['id'])->value('sandbox_id'));
     }
 
     public function testPermissionEventRecordsWorkAtomicallyWithoutStoppingResources(): void
@@ -183,7 +243,7 @@ final class MagicClawReconciliationTest extends TestCase
         $this->db->table('magic_super_magic_claw')->insert(['id' => 2, 'organization_code' => 'other-org', 'user_id' => 'other', 'project_id' => 11]);
         self::assertSame([['claw_id' => '1', 'user_id' => 'owner', 'topic_id' => '20', 'sandbox_id' => 'warm-pool-real-id']], iterator_to_array($this->service->preview('org')));
         self::assertNull($this->repository->latest('org'));
-        self::assertSame('', $this->repository->claw(1)['runtime_block_reason']);
+        self::assertSame('0', $this->repository->pauseRevision(1));
         $this->allowed = true;
         self::assertSame([], iterator_to_array($this->service->preview('org')));
     }
@@ -207,7 +267,7 @@ final class MagicClawReconciliationTest extends TestCase
         $this->service->executeForOrganization('org', 1);
         self::assertSame('', $this->repository->topic(20)['sandbox_id']);
         self::assertSame('running', $this->service->status('org')['status']);
-        self::assertSame('permission_revoked', $this->repository->claw(1)['runtime_block_reason']);
+        self::assertNotSame('0', $this->repository->pauseRevision(1));
         self::assertSame(2, (int) $this->db->table('magic_super_agent_message_queue')->where('id', 1)->value('status'));
         self::assertSame(1, (int) $this->db->table('magic_super_agent_message_queue')->where('id', 2)->value('status'));
         $this->service->executeForOrganization('org', 1);
@@ -231,13 +291,13 @@ final class MagicClawReconciliationTest extends TestCase
 
     public function testNotFoundIsConfirmedStopAndAuxiliarySandboxIsIncluded(): void
     {
-        $this->db->table('magic_super_magic_claw')->where('id', 1)->update(['file_converter_sandbox_id' => 'converter-real-id']);
+        $this->repository->bindConverter(1, 'converter-real-id');
         $this->agent->expects(self::exactly(2))->method('stopSandboxIfExists')->willReturn(new GatewayResult(ResponseCode::SUCCESS, 'already absent'));
         $this->repository->create('org', 'admin', 'policy_changed');
         $this->service->executeForOrganization('org', 1);
         $this->service->executeForOrganization('org', 1);
         self::assertSame('completed', $this->service->status('org')['status']);
-        self::assertSame('', $this->repository->claw(1)['file_converter_sandbox_id']);
+        self::assertSame('', $this->repository->converterSandbox(1));
     }
 
     public function testRegrantSkipsQueuedStopAndNeverStartsAnything(): void
@@ -249,7 +309,7 @@ final class MagicClawReconciliationTest extends TestCase
         $this->service->executeForOrganization('org', 1);
         self::assertSame('completed', $this->service->status('org')['status']);
         self::assertSame('warm-pool-real-id', $this->repository->topic(20)['sandbox_id']);
-        self::assertSame('', $this->repository->claw(1)['runtime_block_reason']);
+        self::assertSame('0', $this->repository->pauseRevision(1));
         self::assertSame(1, $this->service->status('org')['skipped_count']);
     }
 
@@ -294,7 +354,7 @@ final class MagicClawReconciliationTest extends TestCase
     {
         $locker = $this->createMock(LockerInterface::class);
         $locker->expects(self::exactly(2))->method('mutexLock')->willReturn(false);
-        $service = new MagicClawReconciliationAppService($this->repository, new MagicClawRepository(new MagicClawModel()), $this->policy, $this->agent, $this->createMock(TaskDomainService::class), $this->createMock(SandboxLifecycleLock::class), $locker);
+        $service = new MagicClawReconciliationAppService($this->repository, $this->policy, $this->agent, $this->createMock(TaskDomainService::class), $this->createMock(SandboxLifecycleLock::class), $locker);
         $this->repository->create('org', 'admin', 'policy_changed');
         $this->agent->expects(self::never())->method('stopSandboxIfExists');
         self::assertFalse($service->executeForOrganization('org'));
@@ -305,14 +365,15 @@ final class MagicClawReconciliationTest extends TestCase
     public function testDeletedClawStopsEveryResourceEvenWhenOwnerStillHasPermission(): void
     {
         $this->allowed = true;
-        $this->db->table('magic_super_magic_claw')->where('id', 1)->update(['deleted_at' => '2026-10-19 00:00:00', 'file_converter_sandbox_id' => 'converter']);
+        $this->db->table('magic_super_magic_claw')->where('id', 1)->update(['deleted_at' => '2026-10-19 00:00:00']);
+        $this->repository->bindConverter(1, 'converter');
         $this->db->table('magic_super_agent_topics')->insert(['id' => 21, 'user_organization_code' => 'org', 'user_id' => 'owner', 'project_id' => 10, 'sandbox_id' => 'second-real-id']);
         $this->agent->expects(self::exactly(3))->method('stopSandboxIfExists');
         $this->repository->create('org', 'admin', 'claw_deleted');
         self::assertFalse($this->service->executeForOrganization('org'));
         self::assertSame('completed', $this->service->status('org')['status']);
         self::assertSame('', $this->repository->topic(21)['sandbox_id']);
-        self::assertSame('', $this->repository->claw(1)['file_converter_sandbox_id']);
+        self::assertSame('', $this->repository->converterSandbox(1));
         // Replayed events do not scan or stop completed resources again.
         self::assertFalse($this->service->executeForOrganization('org'));
         self::assertSame([], $this->repository->claws('org', 0));

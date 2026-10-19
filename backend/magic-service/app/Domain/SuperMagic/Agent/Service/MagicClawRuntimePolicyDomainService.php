@@ -13,6 +13,7 @@ use App\Domain\Permission\Service\FunctionPermissionDomainService;
 use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Exception\MagicClawRuntimeDeniedException;
 use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Task\Repository\Facade\TaskRepositoryInterface;
@@ -30,6 +31,7 @@ class MagicClawRuntimePolicyDomainService
         private readonly ProjectRepositoryInterface $projects,
         private readonly TopicRepositoryInterface $topics,
         private readonly TaskRepositoryInterface $tasks,
+        private readonly MagicClawReconciliationRepository $reconciliations,
     ) {
     }
 
@@ -68,10 +70,15 @@ class MagicClawRuntimePolicyDomainService
         $claw = $this->claws->getByProjectId($projectId);
         if ($claw === null || $claw->getOrganizationCode() !== $project->getUserOrganizationCode()
             || ! $this->isAllowed($claw->getOrganizationCode(), $claw->getUserId())
-            || (! $manualStart && $claw->getRuntimeBlockReason() !== '')) {
+            || (! $manualStart && $this->requiresManualStart($claw))) {
             throw new MagicClawRuntimeDeniedException();
         }
         return $claw;
+    }
+
+    public function requiresManualStart(MagicClawEntity $claw): bool
+    {
+        return $this->reconciliations->pauseRevision((int) $claw->getId()) !== '0';
     }
 
     /** Resolve IDs against server-side records; client-supplied mode/owner never decides permission. */
@@ -111,7 +118,7 @@ class MagicClawRuntimePolicyDomainService
             return $operation();
         }
         $projectId = (int) $claw->getProjectId();
-        $revision = $claw->getRuntimeBlockRevision();
+        $revision = $this->reconciliations->pauseRevision((int) $claw->getId());
         $key = $this->manualContextKey($projectId);
         Context::set($key, true);
         try {
@@ -126,9 +133,9 @@ class MagicClawRuntimePolicyDomainService
     public function completeManualStart(int $projectId, string $expectedRevision): void
     {
         $claw = $this->assertProject($projectId, true);
-        if ($claw !== null && $claw->getRuntimeBlockReason() !== '') {
+        if ($claw !== null) {
             // Do not erase a newer revocation recorded during initialization.
-            if (! $this->claws->clearRuntimeBlock((int) $claw->getId(), $expectedRevision)) {
+            if (! $this->reconciliations->resumeAfterStart((int) $claw->getId(), $expectedRevision)) {
                 throw new MagicClawRuntimeDeniedException();
             }
         }

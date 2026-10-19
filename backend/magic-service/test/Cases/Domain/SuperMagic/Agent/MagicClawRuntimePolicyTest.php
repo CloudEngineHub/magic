@@ -13,6 +13,7 @@ use App\Domain\Permission\Service\FunctionPermissionDomainService;
 use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Exception\MagicClawRuntimeDeniedException;
 use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
 use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
@@ -37,6 +38,10 @@ final class MagicClawRuntimePolicyTest extends TestCase
     private ProjectEntity $project;
 
     private MagicClawEntity $claw;
+
+    private string $pauseRevision = '0';
+
+    private MagicClawReconciliationRepository $reconciliations;
 
     private bool $allowed = true;
 
@@ -74,7 +79,9 @@ final class MagicClawRuntimePolicyTest extends TestCase
         $topics->method('getTopicById')->willReturnCallback(static fn ($id) => $id === 20 ? new TopicEntity(['id' => 20, 'project_id' => 10, 'user_organization_code' => 'org']) : null);
         $tasks = $this->createMock(TaskRepositoryInterface::class);
         $tasks->method('getTaskById')->willReturnCallback(static fn ($id) => $id === 30 ? new TaskEntity(['id' => 30, 'topic_id' => 20]) : null);
-        $this->policy = new MagicClawRuntimePolicyDomainService($permissions, $this->claws, $projects, $topics, $tasks);
+        $this->reconciliations = $this->createMock(MagicClawReconciliationRepository::class);
+        $this->reconciliations->method('pauseRevision')->with(5)->willReturnCallback(fn () => $this->pauseRevision);
+        $this->policy = new MagicClawRuntimePolicyDomainService($permissions, $this->claws, $projects, $topics, $tasks, $this->reconciliations);
     }
 
     public function testOwnerRevokedCannotRunEvenWhenNoPauseWasPersistedYet(): void
@@ -102,16 +109,15 @@ final class MagicClawRuntimePolicyTest extends TestCase
 
     public function testRegrantDoesNotClearPauseForAutomaticExecution(): void
     {
-        $this->claw->setRuntimeBlockReason('permission_revoked');
+        $this->pauseRevision = '123';
         $this->expectException(MagicClawRuntimeDeniedException::class);
         $this->policy->assertTopic(20);
     }
 
     public function testManualStartClearsOnlyObservedRevisionAfterSuccess(): void
     {
-        $this->claw->setRuntimeBlockReason('permission_revoked');
-        $this->claw->setRuntimeBlockRevision('123');
-        $this->claws->expects(self::once())->method('clearRuntimeBlock')->with(5, '123')->willReturn(true);
+        $this->pauseRevision = '123';
+        $this->reconciliations->expects(self::once())->method('resumeAfterStart')->with(5, '123')->willReturn(true);
         self::assertSame('started', $this->policy->manualStart(20, function () {
             self::assertSame($this->claw, $this->policy->assertTopic(20));
             return 'started';
@@ -123,19 +129,18 @@ final class MagicClawRuntimePolicyTest extends TestCase
 
     public function testFailedManualStartKeepsPause(): void
     {
-        $this->claw->setRuntimeBlockReason('permission_revoked');
-        $this->claws->expects(self::never())->method('clearRuntimeBlock');
+        $this->pauseRevision = '123';
+        $this->reconciliations->expects(self::never())->method('resumeAfterStart');
         $this->expectException(RuntimeException::class);
         $this->policy->manualStart(20, static fn () => throw new RuntimeException('network failed'));
     }
 
     public function testConcurrentRevocationCannotBeClearedByOldManualStart(): void
     {
-        $this->claw->setRuntimeBlockReason('permission_revoked');
-        $this->claw->setRuntimeBlockRevision('123');
-        $this->claws->expects(self::once())->method('clearRuntimeBlock')->with(5, '123')->willReturn(false);
+        $this->pauseRevision = '123';
+        $this->reconciliations->expects(self::once())->method('resumeAfterStart')->with(5, '123')->willReturn(false);
         $this->expectException(MagicClawRuntimeDeniedException::class);
-        $this->policy->manualStart(20, fn () => $this->claw->setRuntimeBlockRevision('124'));
+        $this->policy->manualStart(20, fn () => $this->pauseRevision = '124');
     }
 
     public function testModelTaskResolvesItsCanonicalTopicAndRejectsRevokedOwner(): void

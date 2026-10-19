@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Agent\Repository\Persistence;
 
+use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Repository\Persistence\Model\MagicClawModel;
 use App\Domain\SuperMagic\Message\Repository\Model\MessageQueueModel;
 use App\Domain\SuperMagic\Topic\Repository\Model\TopicModel;
@@ -18,6 +19,74 @@ class MagicClawReconciliationRepository
     private const OPERATIONS = 'magic_claw_permission_reconciliations';
 
     private const ITEMS = 'magic_claw_permission_reconciliation_items';
+
+    /**
+     * Operation zero is a resource binding, not a stop request. Keeping this
+     * unique row outside real operations excludes it from progress and retries.
+     */
+    public function bindConverter(int $clawId, string $sandboxId): void
+    {
+        $now = date('Y-m-d H:i:s');
+        Db::table(self::ITEMS)->insertOrIgnore([
+            'operation_id' => 0, 'claw_id' => $clawId, 'topic_id' => 0,
+            'sandbox_id' => $sandboxId, 'status' => 'bound', 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        Db::table(self::ITEMS)->where('operation_id', 0)->where('claw_id', $clawId)->where('topic_id', 0)
+            ->update(['sandbox_id' => $sandboxId, 'updated_at' => $now]);
+    }
+
+    public function converterSandbox(int $clawId): string
+    {
+        return (string) (Db::table(self::ITEMS)->where('operation_id', 0)->where('claw_id', $clawId)
+            ->where('topic_id', 0)->value('sandbox_id') ?? '');
+    }
+
+    public function clearConverter(int $clawId, string $sandboxId): void
+    {
+        Db::table(self::ITEMS)->where('operation_id', 0)->where('claw_id', $clawId)->where('topic_id', 0)
+            ->where('sandbox_id', $sandboxId)->delete();
+    }
+
+    public function requireManualStart(array $item): void
+    {
+        $this->updateItem($item, ['requires_manual_start' => true]);
+    }
+
+    /** Operation IDs already order revocations; no second revision is stored on the claw. */
+    public function pauseRevision(int $clawId): string
+    {
+        return (string) (Db::table(self::ITEMS)->where('claw_id', $clawId)
+            ->where('requires_manual_start', true)->max('operation_id') ?? '0');
+    }
+
+    public function resumeAfterStart(int $clawId, string $observedOperation): bool
+    {
+        // A start may acknowledge older pauses, but must never erase a newer stop.
+        Db::table(self::ITEMS)->where('claw_id', $clawId)->where('requires_manual_start', true)
+            ->where('operation_id', '<=', $observedOperation)
+            ->update(['requires_manual_start' => false, 'updated_at' => date('Y-m-d H:i:s')]);
+        return $this->pauseRevision($clawId) === '0';
+    }
+
+    /** Persist a late revocation before attempting cleanup, including failed cleanup. */
+    public function recordRuntimeDenial(MagicClawEntity $claw, int $topicId, string $sandboxId): void
+    {
+        Db::transaction(function () use ($claw, $topicId, $sandboxId): void {
+            if ($topicId === 0) {
+                $this->bindConverter((int) $claw->getId(), $sandboxId);
+            }
+            $operation = $this->latest($claw->getOrganizationCode())
+                ?? $this->create($claw->getOrganizationCode(), $claw->getUserId(), 'runtime_denied');
+            $this->enqueue($operation, ['id' => $claw->getId()], ['id' => $topicId, 'sandbox_id' => $sandboxId]);
+            Db::table(self::ITEMS)->where('operation_id', $operation['id'])->where('claw_id', $claw->getId())
+                ->where('topic_id', $topicId)->update([
+                    'sandbox_id' => $sandboxId, 'status' => 'pending', 'requires_manual_start' => true,
+                    'next_retry_at' => 0, 'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+            // A scan may have completed while this resource was being initialized.
+            $this->updateOperation($operation, ['status' => 'running']);
+        });
+    }
 
     public function create(string $organization, string $actor, string $reason): array
     {
@@ -207,7 +276,10 @@ class MagicClawReconciliationRepository
 
     private function withRuntimeBindings($query): void
     {
-        $query->where('file_converter_sandbox_id', '!=', '')->orWhereExists(function ($topics): void {
+        $query->whereExists(function ($bindings): void {
+            $bindings->selectRaw('1')->from(self::ITEMS)->where('operation_id', 0)->where('topic_id', 0)
+                ->whereColumn('claw_id', 'magic_super_magic_claw.id')->where('sandbox_id', '!=', '');
+        })->orWhereExists(function ($topics): void {
             $topics->selectRaw('1')->from('magic_super_agent_topics')
                 ->whereColumn('project_id', 'magic_super_magic_claw.project_id')
                 ->whereColumn('user_organization_code', 'magic_super_magic_claw.organization_code')

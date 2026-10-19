@@ -11,12 +11,6 @@ use Hyperf\Database\Schema\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::table('magic_super_magic_claw', function (Blueprint $table): void {
-            $table->string('runtime_block_reason', 32)->default('');
-            $table->unsignedBigInteger('runtime_block_revision')->default(0);
-            $table->string('file_converter_sandbox_id', 128)->default('');
-            $table->index(['organization_code', 'id'], 'idx_claw_org_cursor');
-        });
         Schema::create('magic_claw_permission_reconciliations', function (Blueprint $table): void {
             $table->unsignedBigInteger('id')->primary();
             $table->string('organization_code', 64);
@@ -39,11 +33,13 @@ return new class extends Migration {
             $table->string('sandbox_id', 128)->default('');
             $table->string('status', 24)->default('pending');
             $table->unsignedInteger('attempts')->default(0);
+            $table->boolean('requires_manual_start')->default(false);
             $table->unsignedBigInteger('next_retry_at')->default(0);
             $table->string('last_error', 128)->default('');
             $table->datetimes();
             $table->unique(['operation_id', 'claw_id', 'topic_id'], 'uniq_claw_reconcile_topic');
             $table->index(['operation_id', 'status', 'next_retry_at'], 'idx_claw_reconcile_due');
+            $table->index(['claw_id', 'requires_manual_start', 'operation_id'], 'idx_claw_reconcile_pause');
         });
     }
 
@@ -52,9 +48,5 @@ return new class extends Migration {
         // Roll back application code before removing the pause and reconciliation state.
         Schema::dropIfExists('magic_claw_permission_reconciliation_items');
         Schema::dropIfExists('magic_claw_permission_reconciliations');
-        Schema::table('magic_super_magic_claw', function (Blueprint $table): void {
-            $table->dropIndex('idx_claw_org_cursor');
-            $table->dropColumn(['runtime_block_reason', 'runtime_block_revision', 'file_converter_sandbox_id']);
-        });
     }
 };
