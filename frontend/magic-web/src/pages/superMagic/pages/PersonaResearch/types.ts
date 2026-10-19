@@ -135,6 +135,15 @@ export interface PersonaEvidence {
 	quote?: string
 }
 
+/** A library persona chosen for the next study, as the home composer shows and sends it. */
+export interface StudyPersonaPick {
+	id: string
+	name: string
+	/** Project-relative persona file, sent in the settings line as "指定人设: <paths>". */
+	path: string
+	demographics?: Record<string, unknown>
+}
+
 export interface PersonaFile {
 	schema_version: 1
 	id: string

@@ -43,27 +43,40 @@ export const RESEARCH_SETTINGS_PREFIX = "【研究设置】"
 
 /**
  * One line appended to the first message, e.g.
- * "【研究设置】访谈人数: 8 · 访谈轮数: 5 · 研究方式: concept_test · 报告模板: templates/brand.html".
- * A custom method is sent as "研究方式: 自定义：<description>".
+ * "【研究设置】访谈人数: 8 · 访谈轮数: 5 · 研究方式: concept_test ·
+ *  指定人设: personas/p_a.json, personas/p_b.json · 报告模板: templates/brand.html".
+ * A custom method is sent as "研究方式: 自定义：<description>". Chosen personas are the panel as
+ * they are; a fixed panel size smaller than their number is raised to it, never below.
  * Items left on "auto" (or the default report template, null) are omitted; with nothing fixed
  * there is no line. Labels stay in Chinese whatever the UI language, because the skill matches
  * them literally.
  */
 export function researchSettingsLine(
 	options: ResearchOptions,
-	reportTemplatePath: string | null = null,
+	extras: { reportTemplatePath?: string | null; personaPaths?: string[] } = {},
 ): string | null {
+	const { reportTemplatePath = null, personaPaths = [] } = extras
+	const panelSize = effectivePanelSize(options.panelSize, personaPaths.length)
 	const items = [
-		options.panelSize === "auto" ? null : `访谈人数: ${options.panelSize}`,
+		panelSize === "auto" ? null : `访谈人数: ${panelSize}`,
 		options.rounds === "auto" ? null : `访谈轮数: ${options.rounds}`,
 		options.method === "auto"
 			? null
 			: options.method === "custom"
 				? `研究方式: 自定义：${options.customMethod}`
 				: `研究方式: ${options.method}`,
+		personaPaths.length ? `指定人设: ${personaPaths.join(", ")}` : null,
 		reportTemplatePath ? `报告模板: ${reportTemplatePath}` : null,
 	].filter(Boolean)
 	return items.length ? `${RESEARCH_SETTINGS_PREFIX}${items.join(" · ")}` : null
+}
+
+/** A fixed panel size never below the number of chosen personas; "auto" stays auto. */
+export function effectivePanelSize(
+	panelSize: ResearchOptions["panelSize"],
+	chosenCount: number,
+): ResearchOptions["panelSize"] {
+	return panelSize === "auto" ? "auto" : Math.max(panelSize, chosenCount)
 }
 
 /** Appends a plain paragraph to an editor document without mutating it. */

@@ -42,6 +42,7 @@ import type {
 	PersonaFile,
 	ResearchFileRef,
 	StudyFile,
+	StudyPersonaPick,
 	SynthesisFile,
 	ValidationResultsFile,
 } from "../types"
@@ -106,8 +107,12 @@ export class PersonaResearchStore {
 	studyFileInvalid = false
 	/** Bumped after each content reload so list rows re-read titles from the parse cache. */
 	contentVersion = 0
-	/** Text the home composer fills once it is ready, e.g. "start a study with these personas". */
-	pendingComposerText: string | null = null
+	/**
+	 * Personas picked in the library for the next study started on the home. A snapshot (name,
+	 * path, demographics) because the home loads only a few library files. Kept until a study
+	 * is sent, so a failed send keeps them.
+	 */
+	studyPersonaPicks: StudyPersonaPick[] = []
 	/** Template conversations started in this page session, until their marker file arrives. */
 	startedTemplateChatIds: string[] = []
 	/** True once every study.json has been read, so list rows can show real statuses. */
@@ -543,15 +548,21 @@ export class PersonaResearchStore {
 		this.selectedWorkspace = workspace
 	}
 
-	setPendingComposerText(text: string | null) {
-		this.pendingComposerText = text
+	/** Adds personas to the picks for the next study; ones already picked stay where they are. */
+	addStudyPersonaPicks(picks: StudyPersonaPick[]) {
+		const known = new Set(this.studyPersonaPicks.map((pick) => pick.id))
+		this.studyPersonaPicks = [
+			...this.studyPersonaPicks,
+			...picks.filter((pick) => !known.has(pick.id)),
+		]
 	}
 
-	/** Returns and clears the pending composer text so it is applied once. */
-	consumePendingComposerText(): string | null {
-		const text = this.pendingComposerText
-		this.pendingComposerText = null
-		return text
+	removeStudyPersonaPick(personaId: string) {
+		this.studyPersonaPicks = this.studyPersonaPicks.filter((pick) => pick.id !== personaId)
+	}
+
+	clearStudyPersonaPicks() {
+		this.studyPersonaPicks = []
 	}
 
 	setConversationGenerating(isGenerating: boolean) {

@@ -16,6 +16,7 @@ import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/compon
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
+import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import { useResearchEditor } from "../hooks/useResearchEditor"
@@ -41,6 +42,7 @@ import {
 } from "../services/researchFiles"
 import SectionTitle from "../components/SectionTitle"
 import StudyListSection from "../components/StudyListSection"
+import StudyPersonaPicks from "../components/StudyPersonaPicks"
 import ResearchOnboarding from "../onboarding/ResearchOnboarding"
 import ResearchHelp from "../onboarding/ResearchHelp"
 import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
@@ -106,14 +108,19 @@ function ResearchHomePage() {
 		selectedTopic: null,
 		showLoading: false,
 		messagesLength: 0,
-		onStudyStarted: openStudy,
-		// Fixed settings travel as one 【研究设置】 line at the end of the first message.
-		appendToMessage: useMemoizedFn(() => researchSettingsLine(options, reportTemplate)),
-		bareContainer: true,
-		onEditorReady: useMemoizedFn(() => {
-			const text = store.consumePendingComposerText()
-			if (text) fillComposer(text)
+		// The picks belong to the study just sent; a failed send never gets here and keeps them.
+		onStudyStarted: useMemoizedFn((topic: Topic) => {
+			store.clearStudyPersonaPicks()
+			openStudy(topic)
 		}),
+		// Fixed settings travel as one 【研究设置】 line at the end of the first message.
+		appendToMessage: useMemoizedFn(() =>
+			researchSettingsLine(options, {
+				reportTemplatePath: reportTemplate,
+				personaPaths: store.studyPersonaPicks.map((pick) => pick.path),
+			}),
+		),
+		bareContainer: true,
 	})
 
 	/** Templates sit below the fold on small screens; bring the composer back into view. */
@@ -259,16 +266,8 @@ function ResearchHomePage() {
 									reportTemplate={reportTemplateOption}
 									guideAnchor={ResearchOnboardingAnchor.HomeSettings}
 									className="px-2.5 pb-3 pt-1.5"
-									trailing={
-										<button
-											type="button"
-											className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25"
-											onClick={openLibrary}
-										>
-											<UsersRound className="size-3.5" />
-											{t("options.pickFromLibrary")}
-										</button>
-									}
+									pickedCount={store.studyPersonaPicks.length}
+									trailing={<StudyPersonaPicks onPickMore={openLibrary} />}
 								/>
 							</div>
 							{/* What every study promises, in place of decorative value-prop tiles. */}

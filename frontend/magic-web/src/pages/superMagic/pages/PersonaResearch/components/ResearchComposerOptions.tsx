@@ -24,6 +24,7 @@ import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/utils/cn"
 import {
 	CUSTOM_METHOD_MAX_LENGTH,
+	effectivePanelSize,
 	normalizeCustomMethod,
 	PANEL_SIZE_RANGE,
 	PANEL_SIZES,
@@ -60,6 +61,8 @@ interface ResearchComposerOptionsProps {
 	className?: string
 	/** `data-guide-anchor` for the research onboarding; only the home composer passes one. */
 	guideAnchor?: string
+	/** Personas picked for this study; the panel chip never shows fewer interviewees. */
+	pickedCount?: number
 }
 
 /**
@@ -74,6 +77,7 @@ export default function ResearchComposerOptions({
 	trailing,
 	className,
 	guideAnchor,
+	pickedCount = 0,
 }: ResearchComposerOptionsProps) {
 	const { t } = useTranslation("personaResearch")
 	const methodLabel: Record<(typeof RESEARCH_METHODS)[number], string> = {
@@ -129,10 +133,15 @@ export default function ResearchComposerOptions({
 				icon={<UsersRound className="size-3.5" />}
 				label={t("options.panel")}
 				showAuto={showAuto}
+				// Picked personas set a floor: a smaller fixed size is sent (and shown) as their number.
 				valueLabel={
-					value.panelSize === "auto" ? t("options.auto") : panelLabel(value.panelSize)
+					value.panelSize !== "auto"
+						? panelLabel(Number(effectivePanelSize(value.panelSize, pickedCount)))
+						: pickedCount
+							? t("options.panelWithPicks", { count: pickedCount })
+							: t("options.auto")
 				}
-				active={value.panelSize !== "auto"}
+				active={value.panelSize !== "auto" || pickedCount > 0}
 				items={PANEL_SIZES.map((size) => ({
 					key: String(size),
 					label: size === "auto" ? t("options.autoPanel") : panelLabel(size),

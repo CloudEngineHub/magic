@@ -124,13 +124,27 @@ function PersonaLibraryPage() {
 			.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")))
 	}, [keyword, store.personas, tier])
 
-	/** Prefills the home composer with the chosen persona files so the agent reuses them. */
+	/**
+	 * Hands the chosen personas to the home composer, which shows them by the settings and sends
+	 * their files with the study; nothing is written into the question itself.
+	 */
 	const startStudyWith = useMemoizedFn((personaIds: string[]) => {
-		const paths = personaIds
-			.map((id) => pathById.get(id))
-			.filter((path): path is string => Boolean(path))
-		if (paths.length === 0) return
-		store.setPendingComposerText(t("library.startPrompt", { paths: paths.join("\n") }))
+		const picks = personaIds.flatMap((id) => {
+			const path = pathById.get(id)
+			const persona = store.personaById(id)
+			return path && persona
+				? [
+						{
+							id,
+							name: persona.name,
+							path,
+							demographics: persona.dimensions?.demographics,
+						},
+					]
+				: []
+		})
+		if (picks.length === 0) return
+		store.addStudyPersonaPicks(picks)
 		navigate({ name: RouteName.PersonaResearch })
 	})
 

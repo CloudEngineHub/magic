@@ -40,12 +40,42 @@ describe("researchSettingsLine with a report template", () => {
 		expect(
 			researchSettingsLine(
 				{ method: "auto", panelSize: "auto", rounds: "auto" },
-				"templates/brand.html",
+				{ reportTemplatePath: "templates/brand.html" },
 			),
 		).toBe("【研究设置】报告模板: templates/brand.html")
-		expect(researchSettingsLine({ method: "auto", panelSize: 6, rounds: "auto" }, null)).toBe(
+		expect(researchSettingsLine({ method: "auto", panelSize: 6, rounds: "auto" }, {})).toBe(
 			"【研究设置】访谈人数: 6",
 		)
+	})
+})
+
+describe("researchSettingsLine with chosen personas", () => {
+	const paths = ["personas/p_a.json", "personas/p_b.json", "personas/p_c.json"]
+
+	it("lists the persona files and keeps auto panel size out", () => {
+		expect(
+			researchSettingsLine(
+				{ method: "auto", panelSize: "auto", rounds: "auto" },
+				{ personaPaths: paths, reportTemplatePath: "templates/brand.html" },
+			),
+		).toBe(
+			"【研究设置】指定人设: personas/p_a.json, personas/p_b.json, personas/p_c.json · 报告模板: templates/brand.html",
+		)
+	})
+
+	it("raises a fixed panel size to the number of chosen personas", () => {
+		expect(
+			researchSettingsLine(
+				{ method: "auto", panelSize: 2, rounds: "auto" },
+				{ personaPaths: paths },
+			),
+		).toMatch(/^【研究设置】访谈人数: 3 · 指定人设: /)
+		expect(
+			researchSettingsLine(
+				{ method: "auto", panelSize: 6, rounds: "auto" },
+				{ personaPaths: paths },
+			),
+		).toMatch(/^【研究设置】访谈人数: 6 · /)
 	})
 })
 
