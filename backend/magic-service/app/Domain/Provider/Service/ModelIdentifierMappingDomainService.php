@@ -14,7 +14,8 @@ use App\Domain\Provider\Entity\ValueObject\Query\ModelIdentifierMappingQuery;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Repository\Facade\ModelIdentifierMappingRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\ProviderModelRepositoryInterface;
-use App\Infrastructure\Core\Exception\BusinessException;
+use App\ErrorCode\ServiceProviderErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\OfficialOrganizationUtil;
@@ -56,7 +57,7 @@ class ModelIdentifierMappingDomainService
         $this->assertOfficialOrganization($dataIsolation);
         $rows = $this->mappingRepository->getByGroupId($dataIsolation, $groupId);
         if ($rows === []) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.group_not_found'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.group_not_found');
         }
         return $this->assembleGroup($rows);
     }
@@ -108,7 +109,7 @@ class ModelIdentifierMappingDomainService
         $this->assertOfficialOrganization($dataIsolation);
         $this->assertBatchIds($groupIds);
         if ($status === null) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.status_required'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.status_required');
         }
         $this->validateStatus($status);
         $groups = $this->mappingRepository->getByGroupIds($dataIsolation, $groupIds);
@@ -174,24 +175,24 @@ class ModelIdentifierMappingDomainService
     ): void
     {
         if ($groupName === '') {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.group_name_required'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.group_name_required');
         }
         if (mb_strlen($groupName) > 100) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.group_name_too_long'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.group_name_too_long');
         }
         if ($sourceModelIds === []) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.source_models_required'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.source_models_required');
         }
         if (count($sourceModelIds) > 100) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.source_models_too_many'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.source_models_too_many');
         }
         foreach (array_merge($sourceModelIds, [$targetModelId]) as $modelId) {
             if ($modelId === '' || mb_strlen($modelId) > 100) {
-                throw new BusinessException(__('service_provider.model_identifier_mapping.model_id_invalid'));
+                ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.model_id_invalid');
             }
         }
         if (in_array($targetModelId, $sourceModelIds, true)) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.source_target_same'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.source_target_same');
         }
 
         $conflicts = $this->mappingRepository->findConflictingSourceModelIds(
@@ -201,22 +202,22 @@ class ModelIdentifierMappingDomainService
         );
         $sourceConflicts = array_values(array_intersect($sourceModelIds, $conflicts));
         if ($sourceConflicts !== []) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.source_model_conflict', [
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.source_model_conflict', [
                 'model_ids' => implode('、', $sourceConflicts),
-            ]));
+            ]);
         }
 
         $models = $this->providerModelRepository->getAvailableByModelIds($dataIsolation, [$targetModelId]);
         $targetModel = $models[$targetModelId][0] ?? null;
         if ($targetModel === null || ! $targetModel->getStatus()->isEnabled()) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.target_model_unavailable'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.target_model_unavailable');
         }
         if ($targetModel->getType() === ProviderModelType::DYNAMIC) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.target_model_dynamic'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.target_model_dynamic');
         }
 
         if (in_array($targetModelId, $conflicts, true)) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.target_model_used_as_source'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.target_model_used_as_source');
         }
     }
 
@@ -226,7 +227,7 @@ class ModelIdentifierMappingDomainService
     public function assertOfficialOrganization(ProviderDataIsolation $dataIsolation): void
     {
         if (! OfficialOrganizationUtil::isOfficialOrganization($dataIsolation->getCurrentOrganizationCode())) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.official_organization_only'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.official_organization_only');
         }
     }
 
@@ -236,7 +237,7 @@ class ModelIdentifierMappingDomainService
     public function validateStatus(int $status): void
     {
         if (! in_array($status, [Status::Disabled->value, Status::Enabled->value], true)) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.invalid_status'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.invalid_status');
         }
     }
 
@@ -247,21 +248,21 @@ class ModelIdentifierMappingDomainService
     {
         $targetModelIds = array_values(array_unique(array_filter($targetModelIds)));
         if ($targetModelIds === []) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.valid_groups_required'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.valid_groups_required');
         }
 
         $models = $this->providerModelRepository->getAvailableByModelIds($dataIsolation, $targetModelIds);
         foreach ($targetModelIds as $targetModelId) {
             $targetModel = $models[$targetModelId][0] ?? null;
             if ($targetModel === null || ! $targetModel->getStatus()->isEnabled()) {
-                throw new BusinessException(__('service_provider.model_identifier_mapping.target_model_unavailable_for_group', [
+                ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.target_model_unavailable_for_group', [
                     'model_id' => $targetModelId,
-                ]));
+                ]);
             }
             if ($targetModel->getType() === ProviderModelType::DYNAMIC) {
-                throw new BusinessException(__('service_provider.model_identifier_mapping.target_model_dynamic_for_group', [
+                ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.target_model_dynamic_for_group', [
                     'model_id' => $targetModelId,
-                ]));
+                ]);
             }
         }
     }
@@ -289,10 +290,10 @@ class ModelIdentifierMappingDomainService
     private function assertBatchIds(array $groupIds): void
     {
         if ($groupIds === []) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.groups_required'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.groups_required');
         }
         if (count($groupIds) > 100) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.groups_too_many'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.groups_too_many');
         }
     }
 
@@ -302,7 +303,7 @@ class ModelIdentifierMappingDomainService
     private function assertExistingGroup(array $rows): void
     {
         if ($rows === []) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.group_not_found'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.group_not_found');
         }
     }
 
@@ -312,7 +313,7 @@ class ModelIdentifierMappingDomainService
     private function assertExistingGroups(array $groupIds, array $groups): void
     {
         if (array_diff($groupIds, array_keys($groups)) !== []) {
-            throw new BusinessException(__('service_provider.model_identifier_mapping.groups_partial_missing'));
+            ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.groups_partial_missing');
         }
     }
 }
