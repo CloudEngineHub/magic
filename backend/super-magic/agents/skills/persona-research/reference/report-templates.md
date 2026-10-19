@@ -1,6 +1,6 @@
 # Report Templates
 
-A report template sets only the visual style of `report.html`: colours, fonts, layout, decoration, and scripts. The report contract below applies whatever the template looks like, section order included: when a template's sample sections come in another order (older copies of `templates/voices.html` too), follow the contract order, not the template's.
+A report template supplies the visual language of `report.html`: colours, fonts, decoration, and supported interactions. The report contract below controls reading order, including with older copies of `templates/voices.html`. Keep the user's template source unchanged; when producing the report, rearrange its content and adapt layout styles so a full-height cover, CSS ordering, or positioned decoration cannot push the decision behind background material. Preserve its working scripts and their required hooks.
 
 ## Where Templates Live
 
@@ -58,7 +58,7 @@ Keep the title compact enough for the answer to be visible on a typical laptop. 
 |---|---|
 | `summary` | Opening described above; decision classes and confidence follow methods.md. Show homogeneity warnings and skipped or overridden leak checks beside the verdict. |
 | `hypotheses` | Each hypothesis's verdict, reason and evidence; fold support/refute criteria. |
-| `business` | Target segment priority, one-line positioning, pricing direction as a range with the AI-optimism warning, channels and reach, first-30-day actions. Each item lists hypothesis ids, evidence, and what to validate first. For no-go, title it "If you still want to try" and give conditions and cheap tests only, never a launch plan. |
+| `business` | Target segment priority, one-line positioning, pricing direction, channels and reach, first-30-day actions. Give a pricing range only when cited evidence supports it, with the AI-optimism warning; otherwise say what evidence is missing and how to collect it. Label untested positioning and channels as candidates. Each item lists hypothesis ids, evidence, and what to validate first; actions remain conditional on those results, including when the opening says to test first. For no-go, title it "If you still want to try" and give conditions and cheap tests only, never a launch plan. |
 | `method` | Scope, framework, completed vs. planned interviews and rounds, and any focus group actually run. |
 | `findings` | At most 6 decision-relevant themes in full, strongest first, with segment differences and counter-evidence beside the claim. Other themes get one line and a citation each. |
 | `real-voices` | Full rows only where public platform quotes differ from AI interviews or are silent; agreeing themes share one cited line. |
@@ -74,7 +74,7 @@ Before delivery, read only the title, opening and section headings once. Can the
 - Fill each slot with one image that fits this study, or delete the whole figure. A finished report never contains `.image-placeholder` or a broken image.
 - Search with `image_search` for real products, places, and settings. Use the returned image URL as `src` and caption it with the source site, linked to its page.
 - Generate with `generate_images` for concepts and scenes no photo shows. Save into `studies/<slug>/images/`, use `src="images/<file>"`, and caption it as an AI-generated illustration.
-- Images illustrate; they are never evidence. Do not cite them as `[S#]` or `[Q#]` or base claims on them. Never generate a real person, a real brand's product, or the personas (their portraits come from the template script), and skip photos of identifiable private people.
+- Images illustrate; they are never evidence. Do not cite them as `[S#]` or `[Q#]` or base claims on them. Never generate a real person or a real brand's product, and skip photos of identifiable private people. Do not generate persona portraits for report image slots. Separately requested fictional persona portraits follow [persona-portraits.md](persona-portraits.md) and are delivered as standalone files; they do not replace the template's scripted portraits.
 - Per report: at most 4 images, one `image_search` call, and one `generate_images` call. On an error or no fitting result, delete the slot instead of retrying.
 
 ## Creating or Changing Templates
