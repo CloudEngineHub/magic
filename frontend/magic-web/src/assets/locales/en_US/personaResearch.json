@@ -97,6 +97,8 @@
 		"interviews_other": "{{count}} interviews",
 		"openReport": "Open report",
 		"panel": "Persona panel",
+		"personas_one": "{{count}} persona",
+		"personas_other": "{{count}} personas",
 		"questionnaireFormats": "Questionnaire · CSV",
 		"reportSummary": "{{decided}} of {{total}} hypotheses concluded",
 		"title": "Research deliverables",

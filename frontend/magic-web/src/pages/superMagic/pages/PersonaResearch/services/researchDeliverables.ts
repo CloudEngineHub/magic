@@ -1,5 +1,5 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { getAttachmentPath, type StudyAttachments } from "./researchFiles"
+import { PERSONAS_DIR, getAttachmentPath, type StudyAttachments } from "./researchFiles"
 
 /** Readable study documents, in reading order. */
 export type StudyDocumentKey = "plan" | "deskResearch"
@@ -17,8 +17,21 @@ export interface StudyDeliverables {
 	hasPanel: boolean
 	hasSynthesis: boolean
 	hasValidationResults: boolean
+	/** Persona library files, rendered as people instead of file names. */
+	personas: AttachmentItem[]
 	/** Files in the message that are not part of the study contract (user files, images). */
 	others: AttachmentItem[]
+}
+
+/**
+ * Id of a persona library file, e.g. "personas/p_chen_1a2b.json" → "p_chen_1a2b"; null for any
+ * other file. Library personas are shown as people, not as file names.
+ */
+export function personaIdOfFile(file: AttachmentItem): string | null {
+	const path = getAttachmentPath(file).replace(/^\//, "")
+	if (!path.startsWith(PERSONAS_DIR) || !path.endsWith(".json")) return null
+	const name = path.slice(PERSONAS_DIR.length, -".json".length)
+	return name && !name.includes("/") ? name : null
 }
 
 const sameFile = (a: AttachmentItem, b: AttachmentItem | null | undefined) => {
@@ -49,6 +62,7 @@ export function classifyStudyDeliverables(
 		hasPanel: false,
 		hasSynthesis: false,
 		hasValidationResults: false,
+		personas: [],
 		others: [],
 	}
 	files.forEach((file) => {
@@ -65,6 +79,7 @@ export function classifyStudyDeliverables(
 		else if (is(study.validationResults)) result.hasValidationResults = true
 		// study.json is the page's own state file; it has nothing to read on its own.
 		else if (is(study.study)) return
+		else if (personaIdOfFile(file)) result.personas.push(file)
 		else result.others.push(file)
 	})
 
@@ -77,7 +92,8 @@ export function classifyStudyDeliverables(
 		result.discussions ||
 		result.hasPanel ||
 		result.hasSynthesis ||
-		result.hasValidationResults
+		result.hasValidationResults ||
+		result.personas.length
 	// Only study.json or no study file at all: nothing study-specific to present.
 	if (!hasStudyContent) return null
 	// Plan before desk research, whatever order the agent attached them in.

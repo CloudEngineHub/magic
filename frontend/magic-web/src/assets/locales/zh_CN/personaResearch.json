@@ -95,6 +95,7 @@
 		"interviews": "访谈 {{count}} 份",
 		"openReport": "打开报告",
 		"panel": "人设组",
+		"personas": "人设 {{count}} 位",
 		"questionnaireFormats": "问卷 · CSV",
 		"reportSummary": "{{decided}}/{{total}} 条假设已有结论",
 		"title": "研究产物",

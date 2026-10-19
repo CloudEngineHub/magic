@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { classifyStudyDeliverables } from "../services/researchDeliverables"
+import { classifyStudyDeliverables, personaIdOfFile } from "../services/researchDeliverables"
 import { collectStudyAttachments } from "../services/researchFiles"
 
 const file = (path: string): AttachmentItem => ({
@@ -50,5 +50,33 @@ describe("classifyStudyDeliverables", () => {
 		expect(classifyStudyDeliverables([file("uploads/notes.png")], study)).toBeNull()
 		expect(classifyStudyDeliverables([file(`${dir}study.json`)], study)).toBeNull()
 		expect(classifyStudyDeliverables(projectFiles, null)).toBeNull()
+	})
+})
+
+describe("persona library files", () => {
+	it("extracts the persona id from a library file path only", () => {
+		expect(personaIdOfFile(file("personas/p_chen_1a2b.json"))).toBe("p_chen_1a2b")
+		expect(personaIdOfFile(file("/personas/p_chen_1a2b.json"))).toBe("p_chen_1a2b")
+		expect(personaIdOfFile(file("personas/nested/p1.json"))).toBeNull()
+		expect(personaIdOfFile(file("personas/README.md"))).toBeNull()
+		expect(personaIdOfFile(file(`${dir}interviews/p1.json`))).toBeNull()
+	})
+
+	it("lists library personas separately from other files", () => {
+		const result = classifyStudyDeliverables(
+			[
+				file("studies/recorder-7f3a/study.json"),
+				file("personas/p_a.json"),
+				file("personas/p_b.json"),
+				file("uploads/notes.png"),
+			],
+			study,
+		)
+
+		expect(result?.personas.map((item) => item.file_id)).toEqual([
+			"personas/p_a.json",
+			"personas/p_b.json",
+		])
+		expect(result?.others.map((item) => item.file_id)).toEqual(["uploads/notes.png"])
 	})
 })

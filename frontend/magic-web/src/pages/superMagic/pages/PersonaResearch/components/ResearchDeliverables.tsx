@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import {
 	ChartColumn,
 	ChevronRight,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
@@ -20,7 +21,10 @@ import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import { useResearchFileDownload } from "../hooks/useResearchFileDownload"
 import { discussionTitle } from "../services/discussionTitle"
-import type { StudyDeliverables } from "../services/researchDeliverables"
+import { personaIdOfFile, type StudyDeliverables } from "../services/researchDeliverables"
+import type { PersonaFile } from "../services/researchFiles"
+import PersonaAvatar from "./PersonaAvatar"
+import PersonaDetailSheet from "./PersonaDetailSheet"
 import type { ResearchConsoleTab } from "./ResearchConsole"
 
 const INVALID_FILE_NAME = /[\\/:*?"<>|\r\n]+/g
@@ -209,6 +213,10 @@ function ResearchDeliverables({
 				/>
 			))}
 
+			{deliverables.personas.length ? (
+				<DeliverablePersonas files={deliverables.personas} onOpenFile={onOpenFile} />
+			) : null}
+
 			{summaryChips.length ? (
 				<div className="flex flex-wrap gap-1.5">
 					{summaryChips.map(({ key, icon: Icon, label, tab }) => {
@@ -277,6 +285,68 @@ function DeliverableRow({ title, meta, onOpen, action }: DeliverableRowProps) {
 		</div>
 	)
 }
+
+/**
+ * Persona library files are shown as people: portrait, name and one line about them. A click opens
+ * the same detail dialog as the personas tab. A file whose persona is not loaded falls back to
+ * opening the file.
+ */
+const DeliverablePersonas = observer(function DeliverablePersonas({
+	files,
+	onOpenFile,
+}: {
+	files: AttachmentItem[]
+	onOpenFile?: (file: AttachmentItem) => void
+}) {
+	const { t } = useTranslation("personaResearch")
+	const store = usePersonaResearchStore()
+	const isMobile = useIsMobile()
+	const [opened, setOpened] = useState<PersonaFile | null>(null)
+
+	return (
+		<div className="flex flex-col gap-1.5" data-testid="persona-research-deliverable-personas">
+			<div className="text-xs text-muted-foreground">
+				{t("deliverables.personas", { count: files.length })}
+			</div>
+			<div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+				{files.map((file) => {
+					const id = personaIdOfFile(file) ?? ""
+					const persona = store.personaById(id)
+					return (
+						<button
+							key={String(file.file_id ?? file.relative_file_path)}
+							type="button"
+							className="flex min-w-0 items-center gap-2.5 rounded-xl bg-fill px-2.5 py-2 text-left outline-none transition-colors hover:bg-fill-secondary focus-visible:ring-2 focus-visible:ring-ring"
+							onClick={() => (persona ? setOpened(persona) : onOpenFile?.(file))}
+						>
+							<PersonaAvatar
+								id={id}
+								name={persona?.name ?? id}
+								shape="square"
+								className="size-9 shrink-0"
+							/>
+							<span className="flex min-w-0 flex-col">
+								<span className="truncate text-sm font-medium text-foreground">
+									{persona?.name ?? file.file_name}
+								</span>
+								{persona?.tagline ? (
+									<span className="truncate text-xs text-muted-foreground">
+										{persona.tagline}
+									</span>
+								) : null}
+							</span>
+						</button>
+					)
+				})}
+			</div>
+			<PersonaDetailSheet
+				persona={opened}
+				onOpenChange={(open) => !open && setOpened(null)}
+				side={isMobile ? "bottom" : "center"}
+			/>
+		</div>
+	)
+})
 
 function DownloadButton({ label, onClick }: { label: string; onClick: () => void }) {
 	return (
