@@ -71,14 +71,14 @@ export default function TemplateChatCard({ entry, onOpen, onDelete }: TemplateCh
 					{t(`reportTemplates.chatCard.${state}Hint`)}
 				</span>
 			</button>
-			<div className="flex items-center gap-2 px-3 py-2.5">
+			<div className="flex flex-col gap-2 px-3 py-2.5">
 				<button
 					type="button"
 					onClick={onOpen}
-					className="flex min-w-0 flex-1 flex-col rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="flex min-w-0 flex-col rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				>
 					<span className="truncate text-sm font-medium">{title}</span>
-					<span className="text-xs text-muted-foreground">
+					<span className="truncate text-xs text-muted-foreground">
 						{marker.started_at
 							? t("reportTemplates.chatCard.started", {
 									time: dayjs(marker.started_at).locale(dayjsLocale).fromNow(),
@@ -87,7 +87,8 @@ export default function TemplateChatCard({ entry, onOpen, onDelete }: TemplateCh
 					</span>
 				</button>
 				{settled ? (
-					<>
+					// Own row so the title and time never get squeezed by the actions.
+					<div className="flex items-center justify-end gap-1.5">
 						{onDelete ? (
 							<Button
 								variant="ghost"
@@ -109,7 +110,7 @@ export default function TemplateChatCard({ entry, onOpen, onDelete }: TemplateCh
 								? t("reportTemplates.chatCard.resend")
 								: t("reportTemplates.chatCard.continue")}
 						</Button>
-					</>
+					</div>
 				) : null}
 			</div>
 		</div>

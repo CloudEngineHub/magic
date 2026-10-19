@@ -94,17 +94,25 @@ function ResearchChatSheet({
 	}, [open])
 
 	// The panel's editor mounts a moment after the panel; retry until it takes the content.
+	// Fills once per opening: the topic status can flicker back to "queued" right after the
+	// message is resent, and a second fill would put the old request back in the composer.
+	const refilledTopicId = useRef<string | null>(null)
 	const resendContent = open && topic ? resend?.content : undefined
+	const topicId = topic ? String(topic.id) : null
 	useEffect(() => {
-		if (!resendContent) return
+		if (!open) refilledTopicId.current = null
+	}, [open])
+	useEffect(() => {
+		if (!resendContent || !topicId || refilledTopicId.current === topicId) return
 		let attempts = 0
 		const timer = window.setInterval(() => {
 			attempts += 1
 			const filled = panelRef.current?.fillComposer(resendContent) ?? false
+			if (filled) refilledTopicId.current = topicId
 			if (filled || attempts >= REFILL_ATTEMPTS) window.clearInterval(timer)
 		}, REFILL_INTERVAL_MS)
 		return () => window.clearInterval(timer)
-	}, [resendContent])
+	}, [resendContent, topicId])
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
