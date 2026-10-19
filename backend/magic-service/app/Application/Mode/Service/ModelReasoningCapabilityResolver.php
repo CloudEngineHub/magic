@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Application\Mode\Service;
 
@@ -21,7 +24,7 @@ class ModelReasoningCapabilityResolver
      * 批量解析能力；预加载候选模型避免嵌套动态模型的重复查询。
      * @param array<string, ProviderModelEntity> $models
      * @param array<string, ProviderModelEntity> $preloadedModels
-     * @return array<string, array{resolved_model_id: string, reasoning_effort_levels: list<string>}>
+     * @return array<string, array{resolved_model_id: string, reasoning_effort_levels: list<string>, reasoning_effort_default: ?string}>
      */
     public function resolve(array $models, array $preloadedModels, ModelGatewayDataIsolation $isolation, ?ModelAccessContext $accessContext): array
     {
@@ -36,6 +39,7 @@ class ModelReasoningCapabilityResolver
             $result[$model->getModelId()] = [
                 'resolved_model_id' => $resolvedId,
                 'reasoning_effort_levels' => $resolved?->getConfig()?->getEffectiveReasoningEffortLevels() ?? [],
+                'reasoning_effort_default' => $resolved?->getConfig()?->getEffectiveReasoningEffortDefault(),
             ];
         }
         return $result;
