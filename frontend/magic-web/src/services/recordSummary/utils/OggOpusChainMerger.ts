@@ -20,28 +20,26 @@ interface ParsedOggStream {
 	finalGranule48k: bigint
 }
 
-/** Decode independent streams and re-encode one continuous, playable Ogg Opus export. */
+/**
+ * Decode independent streams and re-encode one continuous, playable Ogg Opus export.
+ * Chunks are decoded one at a time and fed straight into the streaming encoder, so peak
+ * memory is one chunk of PCM instead of the whole recording (hours of 16 kHz PCM is GBs).
+ */
 export async function mergeOggOpusChunks(blobs: Blob[]): Promise<Blob | null> {
 	if (blobs.length === 0) return null
 
-	const pcmParts: Int16Array[] = []
-	for (const blob of blobs) {
-		const parsed = parseOggOpusStream(new Uint8Array(await readBlobAsArrayBuffer(blob)))
-		pcmParts.push(await decodeOggOpusStream(parsed))
+	async function* decodeChunks(): AsyncGenerator<Int16Array> {
+		for (const blob of blobs) {
+			const parsed = parseOggOpusStream(new Uint8Array(await readBlobAsArrayBuffer(blob)))
+			yield await decodeOggOpusStream(parsed)
+		}
 	}
-	const pcmData = concatenatePcm(pcmParts)
-	if (pcmData.length === 0) return null
 
 	const encoder = new WasmOpusEncoder(32_000)
 	try {
 		await encoder.initialize()
-		const encoded = await encoder.encode({
-			pcmData,
-			sampleRate: 16_000,
-			bitRate: 16,
-			duration: pcmData.length / 16_000,
-		})
-		return new Blob([encoded.data], { type: encoded.mimeType })
+		const encoded = await encoder.encodeStream(decodeChunks())
+		return encoded ? new Blob([encoded.data], { type: encoded.mimeType }) : null
 	} finally {
 		await encoder.close()
 	}
