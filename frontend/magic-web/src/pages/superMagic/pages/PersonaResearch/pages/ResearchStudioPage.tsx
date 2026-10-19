@@ -686,11 +686,14 @@ function ResearchStudioPage() {
 				page="studio"
 				ready={!isContentLoading}
 				// The agent waiting for an answer (an ask_user card) or still working is not the
-				// moment for a tour: it would cover the card the user needs to answer.
+				// moment for a tour: it would cover the card the user needs to answer. Without any
+				// output the results panel is not rendered yet, so the tour would skip its tabs
+				// and validation steps and still be marked seen; wait for the first output.
 				deferred={
 					status.kind === "waiting_user" ||
 					status.kind === "running" ||
-					store.isConversationGenerating
+					store.isConversationGenerating ||
+					outputsHidden
 				}
 				interrupted={status.kind === "waiting_user"}
 			/>
