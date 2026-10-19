@@ -125,6 +125,12 @@ Optional transcript file for this session: studies/<slug>/interviews/<persona_id
         description="""<!--zh: 使用 transcript_path 时必填：本轮是第几轮，从 1 开始（一轮 = 一个主持人问题 + 回答）。必须等于记录里已有轮数加 1，否则不调用模型并返回当前轮数-->
 Required with transcript_path: the number of this round, starting at 1 (one round = one moderator message plus the answers). It must equal the rounds already recorded plus one; otherwise no answer is generated and the tool reports the current round count.""",
     )
+    topic: str = Field(
+        default="",
+        max_length=80,
+        description="""<!--zh: 焦点小组的讨论主题（一句话，用户语言），首轮传入，写进讨论记录供界面展示；一对一访谈不用-->
+Focus groups only: the discussion topic in one short line, in the user's language. Pass it on the first round; it is saved in the discussion transcript and shown in the UI. Ignored for one-on-one interviews.""",
+    )
     max_tokens: int = Field(
         default=DEFAULT_MAX_TOKENS,
         description="""<!--zh: 每个人设回答的 token 上限，默认 400，最大 800-->
@@ -343,6 +349,8 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
 
         if data is None:
             data = _new_transcript(transcript_file.stem, is_discussion, persona_ids)
+        if is_discussion and params.topic.strip() and not _text(data.get("topic")):
+            data["topic"] = params.topic.strip()
         elif not isinstance(data.get("rounds"), list):
             raise _InvalidRequest(f"{params.transcript_path} has no rounds array; it was not written by persona_chat")
 

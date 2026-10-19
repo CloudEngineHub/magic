@@ -328,6 +328,7 @@ The same fields as an interview file without `persona_id`, plus `id` and `partic
 | `schema_version` | yes | `1` |
 | `id` | no | same as the file name without `.json` |
 | `participants` | yes | list of persona ids (3-6) |
+| `topic` | no | the discussion topic in one short line, in the user's language; `persona_chat` saves it from the first round's `topic` and the UI shows it as the discussion title |
 | `status` | yes | `done` \| `running` \| `failed` |
 | `error` | no | reason when `status` is `failed` |
 | `rounds` | yes | array of `{ "speaker": "moderator" \| <persona_id>, "text" }` |

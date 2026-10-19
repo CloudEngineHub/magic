@@ -111,7 +111,7 @@ Steps:
 
 1. Split the personas into at most 4 groups of 2-3. Dispatch one `persona-interviewer` sub-agent per group in the background with the subagents skill (`call_subagent` via `run_sdk_snippet`), then `wait_for_subagents` until all are finished.
 2. Each prompt must be self-contained: objective, study directory, assigned persona file paths, the interview guide copied from `plan.md`, the round limit, `max_tokens` for `persona_chat`, the exact output paths, the quality requirements, the parallel-context line, what is out of scope (other personas, persona files, study.json, report), and the final report it must return. Do not pass the hypotheses to interviewers; they must not steer answers toward them.
-3. A focus group, when planned, goes to one sub-agent with its own `discussions/<discussion_id>.json` path and 3-6 participants already interviewed or selected.
+3. A focus group, when planned, goes to one sub-agent with its own `discussions/<discussion_id>.json` path, a one-line topic in the user's language (passed as `topic` on round 1), and 3-6 participants already interviewed or selected. Each focus group of a study gets its own file and topic.
 
 ```python
 from sdk.tool import tool

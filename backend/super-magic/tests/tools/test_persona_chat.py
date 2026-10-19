@@ -332,6 +332,21 @@ async def test_focus_group_records_only_successful_answers(tool, tmp_path, fake_
     ]
 
 
+async def test_focus_group_saves_its_topic_once(tool, tmp_path, fake_llm):
+    paths = [_write_persona(tmp_path, "p_zhang_1a2b", "Zhang"), _write_persona(tmp_path, "p_li_3c4d", "Li")]
+    first = PersonaChatParams(
+        persona_paths=paths, question="Price?", transcript_path=DISCUSSION, round_number=1, topic="按月付费的小家电会员"
+    )
+    await tool.execute(ToolContext(), first)
+    # 后续轮次传别的主题也不覆盖首轮写下的主题。
+    second = PersonaChatParams(
+        persona_paths=paths, question="Why?", transcript_path=DISCUSSION, round_number=2, topic="另一个主题"
+    )
+    await tool.execute(ToolContext(), second)
+
+    assert _read(tmp_path, DISCUSSION)["topic"] == "按月付费的小家电会员"
+
+
 async def test_nothing_is_recorded_when_every_answer_fails(tool, tmp_path, fake_llm):
     fake_llm.failing_names = {"Zhang"}
     path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
