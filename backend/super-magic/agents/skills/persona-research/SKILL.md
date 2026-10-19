@@ -65,6 +65,16 @@ studies/<slug>/validation-results.json   AI vs. real-person comparison
 
 When a step stops (unanswered question, user interruption, failure), send no event: the current phase stays running, and every file already written is kept.
 
+## Entry: New or Existing Study
+
+Before Phase 1, inspect the current message's native project-file references. A reference to `studies/<slug>/study.json` identifies an existing-study candidate; use the actual workspace-relative path, not the displayed file name. Read it and obtain the current topic ID from the latest `<super_magic_product_context>` (`topic.id`).
+
+- For the primary topic, match that ID to the study's `topic_id`.
+- For a related topic, also read `study-topics/<current_topic_id>.json`. Its `schema_version` must be `1`, `state` must be `linked`, and its `topic_id`, `primary_topic_id`, and `study_dir` must match the current topic and referenced study. Do not change the study's primary topic.
+- Check `study-topics/<primary_topic_id>.json` too. If it records `state: deleting`, stop: deletion is in progress or has already removed the study. Do not recreate files or resume research.
+
+When the association is valid, read the existing plan and relevant evidence or outputs, then follow “Follow-Ups in the Same Study”. This also applies to the first message of a new related topic: skip Phase 1's pre-search and `update_study` `created`. Keep the confirmed plan, scope and study-wide cost limits; a new conversation is not approval for more research or image costs. If a referenced contract is missing, unreadable or mismatched, explain that the association cannot be verified and stop rather than starting another study. Use Phase 1 only for a new study without an existing-study reference.
+
 ## Workflow
 
 ### Phase 1: Clarify (`clarify`)
