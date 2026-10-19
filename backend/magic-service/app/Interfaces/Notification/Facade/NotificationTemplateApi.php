@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Interfaces\Notification\Facade;
 
-use App\Domain\Notification\Repository\Facade\NotificationTemplateRepositoryInterface;
+use App\Application\Notification\Service\NotificationTemplateAppService;
 use App\Infrastructure\Core\AbstractApi;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use App\ErrorCode\GenericErrorCode;
+use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
 #[ApiResponse('low_code')]
@@ -14,30 +16,18 @@ final class NotificationTemplateApi extends AbstractApi
 {
     public function __construct(
         RequestInterface $request,
-        private readonly NotificationTemplateRepositoryInterface $templates
+        private readonly NotificationTemplateAppService $service,
     ) {
         parent::__construct($request);
     }
 
-    /** @return array{locale:string,templates:list<array<string,mixed>>} */
+    /** @return array{locale:string,catalog_version:string,templates:array<string,array{title_template:string,body_template:string}>} */
     public function catalog(): array
     {
-        $locale = str_replace('_', '-', strtolower((string) $this->request->input('locale', 'zh-CN')));
-        $locale = match ($locale) {
-            'en-us' => 'en-US',
-            default => 'zh-CN',
-        };
-        $items = [];
-        foreach ($this->templates->listCatalog($locale) as $template) {
-            $items[] = [
-                'template_type' => $template->getTemplateType(),
-                'version' => $template->getVersion(),
-                'locale' => $template->getLocale(),
-                'title_template' => $template->getTitleTemplate(),
-                'body_template' => $template->getBodyTemplate(),
-                'status' => $template->getStatus()->value,
-            ];
+        $locale = $this->request->input('locale');
+        if ($locale !== null && ! is_string($locale)) {
+            ExceptionBuilder::throw(GenericErrorCode::ParameterValidationFailed, 'locale is invalid');
         }
-        return ['locale' => $locale, 'templates' => $items];
+        return $this->service->catalog($locale)->toArray();
     }
 }

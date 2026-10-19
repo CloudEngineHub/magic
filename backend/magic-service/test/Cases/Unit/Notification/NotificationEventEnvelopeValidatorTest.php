@@ -56,8 +56,8 @@ final class NotificationEventEnvelopeValidatorTest extends TestCase
     public function testUnknownEventIsRejectedBeforePersistence(): void
     {
         $envelope = $this->envelope();
-        $envelope['event_type'] = 'payment.succeeded';
-        $envelope['source']['domain'] = 'payment';
+        $envelope['event_type'] = 'unknown.succeeded';
+        $envelope['source']['domain'] = 'unknown';
 
         $this->expectException(InvalidArgumentException::class);
         $this->validator->validate($envelope);

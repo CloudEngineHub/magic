@@ -14,6 +14,7 @@ use App\Domain\Notification\Constant\NotificationActionStatus;
 use App\Domain\Notification\Constant\NotificationCategory;
 use App\Domain\Notification\Constant\NotificationEventType;
 use App\Domain\Notification\Constant\NotificationMessageStatus;
+use App\Domain\Notification\Constant\NotificationTemplateStatus;
 use App\Domain\Notification\Constant\NotificationType;
 use App\Domain\Notification\Entity\NotificationEntity;
 use App\Domain\Notification\Entity\NotificationEventEntity;
@@ -122,6 +123,14 @@ final readonly class NotificationConsumerService
         $template = $this->templates->findLatestActive($messageType->value, 'zh-CN');
         if ($template === null) {
             throw new RuntimeException("Notification template not found: {$messageType->value}", 35010);
+        }
+        $englishTemplate = $this->templates->findByTypeVersionLocale(
+            $messageType->value,
+            $template->getVersion(),
+            'en-US'
+        );
+        if ($englishTemplate === null || $englishTemplate->getStatus() !== NotificationTemplateStatus::ACTIVE) {
+            throw new RuntimeException("Notification template pair not found: {$messageType->value}:{$template->getVersion()}", 35010);
         }
 
         $created = 0;
