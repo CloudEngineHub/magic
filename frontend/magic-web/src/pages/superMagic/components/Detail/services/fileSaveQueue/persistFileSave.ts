@@ -1,7 +1,7 @@
 import { SuperMagicApi } from "@/apis"
 import type { FileScope } from "@/apis/modules/fileScope"
 import { ossUploadService } from "@/stores/folderUpload/uploadService"
-import { isShadowed, unshadow } from "@/utils/shadow"
+import { unshadow } from "@/utils/shadow"
 import {
 	FileSaveConflictError,
 	FileSavePermanentError,
@@ -82,8 +82,8 @@ export async function persistFileSave(
 		const meta = context.getFileMeta(request.fileId)
 		const contentStr =
 			typeof request.content === "string" ? request.content : JSON.stringify(request.content)
-		const uploadContent =
-			request.enableShadow && isShadowed(contentStr) ? unshadow(contentStr) : contentStr
+		// 解码器统一处理版本及无前缀正文，避免持久化层重复判断协议。
+		const uploadContent = request.enableShadow ? unshadow(contentStr) : contentStr
 
 		if (meta.fileKey && meta.projectId) {
 			const uploadedPath = await ossUploadService.uploadContentByFileKey(

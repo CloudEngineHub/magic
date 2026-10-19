@@ -24,6 +24,18 @@ import { ossUploadService } from "@/stores/folderUpload/uploadService"
 describe("persistFileSave", () => {
 	beforeEach(() => vi.clearAllMocks())
 
+	it("开启解码时无前缀正文仍原样上传", async () => {
+		vi.mocked(ossUploadService.uploadContentByFileKey).mockResolvedValue("mock-key")
+		vi.mocked(SuperMagicApi.replaceFile).mockResolvedValue({} as never)
+		await persistFileSave(
+			{ fileId: "mock-file", content: "저 raw text", enableShadow: true },
+			{ getFileMeta: () => ({ fileKey: "mock-key", projectId: "mock-project" }) },
+		)
+		expect(vi.mocked(ossUploadService.uploadContentByFileKey).mock.calls[0]?.[0]).toBe(
+			"저 raw text",
+		)
+	})
+
 	it("V2 在 OSS 分支上传原文，在 API 分支保持编码与标记一致", async () => {
 		const plain = "<p>저\u1000\ufeff</p>"
 		const encoded = shadowV2(plain)
