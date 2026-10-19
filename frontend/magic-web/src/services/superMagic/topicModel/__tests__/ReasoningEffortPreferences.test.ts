@@ -5,6 +5,7 @@ import {
 	ModelStatusEnum,
 	type ModelItem,
 } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/types"
+import { getModelDefaultReasoningEffort } from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/utils"
 import { serializeMessageContent } from "@/pages/superMagic/services/messageQueueSerialization"
 
 vi.mock("@/models/user", () => ({
@@ -57,6 +58,44 @@ beforeEach(() => {
 })
 
 describe("思考偏好和队列快照", () => {
+	it("后台默认值只用于展示，发送及快照不冻结继承档位", () => {
+		const item = { ...model(), reasoning_effort_default: "medium" as const }
+		expect(getModelDefaultReasoningEffort(item)).toBe("medium")
+		expect(cache.getReasoningEffort(item)).toBeUndefined()
+		expect(cache.snapshotLanguageModel(item).reasoning_effort).toBeNull()
+		expect(
+			serializeMessageContent({ type: "doc" }, [], item).extra.super_agent.model,
+		).not.toHaveProperty("reasoning_effort")
+		cache.setReasoningEffort(item, "none")
+		expect(
+			serializeMessageContent({ type: "doc" }, [], item).extra.super_agent.model
+				.reasoning_effort,
+		).toBe("none")
+	})
+
+	it("默认为空、字段缺失、默认档移除或未知档位时不补造默认值", () => {
+		expect(getModelDefaultReasoningEffort(model())).toBeUndefined()
+		expect(
+			getModelDefaultReasoningEffort({ ...model(), reasoning_effort_default: null }),
+		).toBeUndefined()
+		expect(
+			getModelDefaultReasoningEffort({
+				...model(),
+				reasoning_effort_default: "high",
+				reasoning_effort_levels: ["low"],
+			}),
+		).toBeUndefined()
+		expect(
+			getModelDefaultReasoningEffort({
+				...model(),
+				reasoning_effort_default: "unknown" as never,
+			}),
+		).toBeUndefined()
+		expect(
+			getModelDefaultReasoningEffort({ ...model(), reasoning_effort_default: "none" }),
+		).toBe("none")
+	})
+
 	it("按用户、组织及逻辑模型隔离，并读取动态模型能力", () => {
 		const item = model()
 		cache.setReasoningEffort(item, "high")

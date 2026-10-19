@@ -63,6 +63,8 @@ export interface ModelItem {
 	/** 后端按当前用户权限解析的实际模型，仅用于能力展示。 */
 	resolved_model_id?: string
 	reasoning_effort_levels?: ReasoningEffort[]
+	/** 实际解析模型的有效默认强度，仅用于展示，不作为用户覆盖发送。 */
+	reasoning_effort_default?: ReasoningEffort | null
 	/** 仅发送快照使用；模型列表中的能力对象不写入此选择值。 */
 	reasoning_effort?: ReasoningEffort | null
 	model_description: string

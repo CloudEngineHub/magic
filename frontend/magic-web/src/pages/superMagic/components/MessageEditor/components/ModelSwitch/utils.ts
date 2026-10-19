@@ -1,5 +1,11 @@
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
-import { ModelItem, ModelStatusEnum, ModelTagEnum, ReasoningEffort } from "./types"
+import {
+	ModelItem,
+	ModelStatusEnum,
+	ModelTagEnum,
+	ReasoningEffort,
+	reasoningEffortLevels,
+} from "./types"
 
 interface ResolveShowSelectedModelNameOptions {
 	showSelectedModelName: boolean
@@ -33,6 +39,17 @@ export function isQwenCoderPlusModel(model?: ModelItem): boolean {
 export function isGemini3FlashModel(model?: ModelItem): boolean {
 	if (!model) return false
 	return model.model_id.toLocaleLowerCase() === "gemini-3-flash-preview"
+}
+
+/** 只展示仍在可选档位中的有效默认值，兼容旧接口缺失字段及未来未知档位。 */
+export function getModelDefaultReasoningEffort(
+	model?: ModelItem | null,
+): ReasoningEffort | undefined {
+	return reasoningEffortLevels.find(
+		(level) =>
+			level === model?.reasoning_effort_default &&
+			model.reasoning_effort_levels?.includes(level),
+	)
 }
 
 /** Resolve the visible reasoning preference without replacing an explicit default with a stale cache value. */

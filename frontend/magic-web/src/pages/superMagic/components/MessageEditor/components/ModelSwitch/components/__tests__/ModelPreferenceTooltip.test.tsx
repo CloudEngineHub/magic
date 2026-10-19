@@ -5,15 +5,17 @@ import type { ModelItem } from "../../types"
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
-		t: (key: string) =>
-			({
-				"messageEditor.pleaseSelectModel": "请选择模型",
-				"messageEditor.modelSwitch.tooltipLanguageModel": "语言模型",
-				"messageEditor.modelSwitch.tooltipImageModel": "生图模型",
-				"messageEditor.modelSwitch.tooltipVideoModel": "视频模型",
-				"messageEditor.modelSwitch.reasoning.label": "思考强度",
-				"messageEditor.modelSwitch.reasoning.high": "高",
-			})[key] ?? key,
+		t: (key: string, values?: { level?: string }) =>
+			key.endsWith("defaultWithLevel")
+				? `默认（${values?.level}）`
+				: ({
+						"messageEditor.pleaseSelectModel": "请选择模型",
+						"messageEditor.modelSwitch.tooltipLanguageModel": "语言模型",
+						"messageEditor.modelSwitch.tooltipImageModel": "生图模型",
+						"messageEditor.modelSwitch.tooltipVideoModel": "视频模型",
+						"messageEditor.modelSwitch.reasoning.label": "思考强度",
+						"messageEditor.modelSwitch.reasoning.high": "高",
+					}[key] ?? key),
 	}),
 }))
 
@@ -37,6 +39,22 @@ const createModel = (model_id: string, model_name: string): ModelItem =>
 	}) as ModelItem
 
 describe("ModelPreferenceTooltip", () => {
+	it("显式恢复默认时显示后台档位，不回读旧偏好", () => {
+		render(
+			<ModelPreferenceTooltip
+				selectedLanguageModel={{
+					...createModel("mock-model", "Mock"),
+					reasoning_effort_levels: ["high"],
+					reasoning_effort_default: "high",
+					reasoning_effort: null,
+				}}
+				selectedImageModel={null}
+				selectedVideoModel={null}
+			/>,
+		)
+		expect(screen.getByText("默认（高）")).toBeInTheDocument()
+	})
+
 	it("hides model sections that do not have a selected model", () => {
 		render(
 			<ModelPreferenceTooltip

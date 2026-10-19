@@ -3593,6 +3593,7 @@
 			"noVideoModelsDesc": "当前模式暂无可用的视频模型",
 			"reasoning": {
 				"default": "默认",
+				"defaultWithLevel": "默认（{{level}}）",
 				"details": "模型详情",
 				"detailsFor": "查看 {{name}} 详情",
 				"high": "高",

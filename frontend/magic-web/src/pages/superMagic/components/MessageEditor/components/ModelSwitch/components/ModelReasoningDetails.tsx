@@ -9,6 +9,7 @@ import {
 	PopoverTrigger,
 } from "@/components/shadcn-ui/popover"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { getModelDefaultReasoningEffort } from "../utils"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { reasoningEffortLevels, type ModelItem, type ReasoningEffort } from "../types"
 import {
@@ -74,9 +75,13 @@ export function ModelReasoningDetails({
 		model.reasoning_effort_levels?.includes(level),
 	)
 	const selected = modelCache.getReasoningEffort(model)
-	const selectedLabel = selected
-		? labels[selected]
+	const defaultEffort = getModelDefaultReasoningEffort(model)
+	const defaultLabel = defaultEffort
+		? t("messageEditor.modelSwitch.reasoning.defaultWithLevel", {
+				level: labels[defaultEffort],
+			})
 		: t("messageEditor.modelSwitch.reasoning.default")
+	const selectedLabel = selected ? labels[selected] : defaultLabel
 	const hasMultiplier =
 		typeof model.billing_multiplier === "number" &&
 		Number.isFinite(model.billing_multiplier) &&
@@ -183,9 +188,7 @@ export function ModelReasoningDetails({
 							onClick={() => selectEffort(level)}
 							aria-pressed={selected === level}
 						>
-							{level
-								? labels[level]
-								: t("messageEditor.modelSwitch.reasoning.default")}
+							{level ? labels[level] : defaultLabel}
 							{selected === level && <Check className="size-4" aria-hidden="true" />}
 						</Button>
 					</div>

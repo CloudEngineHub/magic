@@ -18,7 +18,11 @@ const cache = vi.hoisted(() => ({
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, values?: { name?: string; level?: string }) =>
-			key.endsWith("detailsFor") ? `Details ${values?.name}` : key,
+			key.endsWith("detailsFor")
+				? `Details ${values?.name}`
+				: key.endsWith("defaultWithLevel")
+					? `Default (${values?.level})`
+					: key,
 	}),
 }))
 vi.mock("@/services/superMagic/topicModel/SuperMagicTopicModelCacheService", () => ({
@@ -40,7 +44,10 @@ vi.mock("../MyModelsList", () => ({ MyModelsList: () => null }))
 vi.mock("@/components/base/FlexBox", () => ({
 	default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
-vi.mock("../../utils", () => ({ isModelDisabled: () => false }))
+vi.mock("../../utils", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../../utils")>()),
+	isModelDisabled: () => false,
+}))
 
 beforeEach(() => {
 	cache.values.clear()
@@ -96,6 +103,46 @@ function setup(overrides: Partial<Parameters<typeof MobileModelRow>[0]> = {}) {
 }
 
 describe("移动端模型行内设置", () => {
+	it("首次使用展示继承档位，后台更新后刷新展示且不保存用户偏好", () => {
+		const item = { ...model(), reasoning_effort_default: "high" as const }
+		const { props, rerender } = setup({ model: item })
+		const name = "Default (messageEditor.modelSwitch.reasoning.high)"
+		expect(screen.getByRole("button", { name }).getAttribute("aria-pressed")).toBe("true")
+		expect(
+			screen
+				.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.high" })
+				.getAttribute("aria-pressed"),
+		).toBe("false")
+		expect(cache.setReasoningEffort).not.toHaveBeenCalled()
+		rerender(
+			<MobileModelRow {...props} model={{ ...item, reasoning_effort_default: "none" }} />,
+		)
+		const choice = screen.getByRole("button", {
+			name: "Default (messageEditor.modelSwitch.reasoning.none)",
+		})
+		expect(choice.getAttribute("aria-pressed")).toBe("true")
+		fireEvent.click(choice)
+		expect(props.onSelect).toHaveBeenCalledWith(
+			expect.objectContaining({ reasoning_effort: null }),
+		)
+		expect(cache.setReasoningEffort).toHaveBeenCalledWith(expect.anything(), undefined)
+	})
+
+	it("用户手动偏好优先于后台默认值", () => {
+		cache.values.set("mock-model", "none")
+		setup({ model: { ...model(), reasoning_effort_default: "high" } })
+		expect(
+			screen
+				.getByRole("button", { name: "messageEditor.modelSwitch.reasoning.none" })
+				.getAttribute("aria-pressed"),
+		).toBe("true")
+		expect(
+			screen
+				.getByRole("button", { name: "Default (messageEditor.modelSwitch.reasoning.high)" })
+				.getAttribute("aria-pressed"),
+		).toBe("false")
+	})
+
 	it("收起时显示零倍率，参考说明和描述仅在展开区域内显示", () => {
 		const { props, rerender } = setup({ expanded: false })
 		expect(screen.getByText("0.00x")).toBeTruthy()

@@ -2,6 +2,7 @@ import { useId, useState, type RefObject } from "react"
 import { Check, ChevronRight, ChevronUp } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { getModelDefaultReasoningEffort } from "../utils"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { cn } from "@/utils/cn"
 import { reasoningEffortLevels, type ModelItem, type ReasoningEffort } from "../types"
@@ -48,7 +49,12 @@ export function MobileModelRow({
 		xhigh: t("messageEditor.modelSwitch.reasoning.xhigh"),
 		max: t("messageEditor.modelSwitch.reasoning.max"),
 	}
-	const defaultLabel = t("messageEditor.modelSwitch.reasoning.default")
+	const defaultEffort = getModelDefaultReasoningEffort(model)
+	const defaultLabel = defaultEffort
+		? t("messageEditor.modelSwitch.reasoning.defaultWithLevel", {
+				level: labels[defaultEffort],
+			})
+		: t("messageEditor.modelSwitch.reasoning.default")
 	const levels = reasoningEffortLevels.filter((level) =>
 		model.reasoning_effort_levels?.includes(level),
 	)
@@ -176,6 +182,8 @@ export function MobileModelRow({
 										aria-pressed={effort === value}
 										className={cn(
 											"h-11 min-w-0 gap-1 rounded-full bg-muted px-1 text-sm font-normal",
+											// 默认值带具体档位时占两格，避免移动端截断继承信息。
+											!value && defaultEffort && "col-span-2",
 											effort === value &&
 												"bg-primary/10 text-primary hover:bg-primary/15",
 										)}

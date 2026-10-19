@@ -4,7 +4,12 @@ import { ModelReasoningDetails } from "../ModelReasoningDetails"
 import { ModelStatusEnum, type ModelItem } from "../../types"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+vi.mock("react-i18next", () => ({
+	useTranslation: () => ({
+		t: (key: string, values?: { level?: string }) =>
+			key.endsWith("defaultWithLevel") ? `Default (${values?.level})` : key,
+	}),
+}))
 vi.mock("@/services/superMagic/topicModel/SuperMagicTopicModelCacheService", () => ({
 	default: { getReasoningEffort: () => undefined, setReasoningEffort: vi.fn() },
 }))
@@ -21,6 +26,7 @@ function setup(
 	multiplier?: number | null,
 	maxContextTokens?: number | null,
 	withScrollContainer = false,
+	defaultEffort?: ModelItem["reasoning_effort_default"],
 ) {
 	const model: ModelItem = {
 		id: "mock-model",
@@ -33,6 +39,7 @@ function setup(
 		sort: 0,
 		model_status: ModelStatusEnum.Normal,
 		reasoning_effort_levels: levels,
+		reasoning_effort_default: defaultEffort,
 		billing_multiplier: multiplier,
 		max_context_tokens: maxContextTokens,
 	}
@@ -70,6 +77,26 @@ describe("模型详情思考强度", () => {
 		expect(screen.getByText("0.00x")).toBeTruthy()
 		expect(screen.getByText("messageEditor.modelSwitch.billingMultiplierHint")).toBeTruthy()
 	})
+	it("桌面详情显示后台默认档位，重新选择默认仍清除请求覆盖", () => {
+		const { model, onReasoningEffortChange } = setup(
+			false,
+			["none", "high"],
+			undefined,
+			undefined,
+			false,
+			"high",
+		)
+		fireEvent.click(
+			screen.getByRole("button", { name: /messageEditor.modelSwitch.reasoning.label/ }),
+		)
+		const choice = screen.getByRole("button", {
+			name: "Default (messageEditor.modelSwitch.reasoning.high)",
+		})
+		expect(choice.getAttribute("aria-pressed")).toBe("true")
+		fireEvent.click(choice)
+		expect(onReasoningEffortChange).toHaveBeenCalledWith({ ...model, reasoning_effort: null })
+	})
+
 	it("后端关闭倍率时隐藏数值和对应说明", () => {
 		setup(false, [], null)
 		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplierHint")).toBeNull()
