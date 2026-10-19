@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Domain\Notification\Repository\Persistence;
 
 use App\Domain\Notification\Constant\NotificationCategory;
+use App\Domain\Notification\Constant\NotificationMessageStatus;
 use App\Domain\Notification\Entity\NotificationEntity;
 use App\Domain\Notification\Entity\ValueObject\NotificationDataIsolation;
 use App\Domain\Notification\Repository\Facade\NotificationRepositoryInterface;
@@ -191,6 +192,24 @@ final class NotificationRepository implements NotificationRepositoryInterface
             'message_status' => 'withdrawn',
             'updated_at' => $updatedAt,
         ]);
+    }
+
+    public function withdrawAllBySourceIdentity(
+        NotificationDataIsolation $dataIsolation,
+        string $sourceDomain,
+        string $sourceType,
+        string $sourceId,
+        string $updatedAt
+    ): int {
+        return $this->organizationQuery($dataIsolation)
+            ->where('source_domain', $sourceDomain)
+            ->where('source_type', $sourceType)
+            ->where('source_id', $sourceId)
+            ->where('message_status', NotificationMessageStatus::ACTIVE->value)
+            ->update([
+                'message_status' => NotificationMessageStatus::WITHDRAWN->value,
+                'updated_at' => $updatedAt,
+            ]);
     }
 
     private function scopedQuery(NotificationDataIsolation $dataIsolation): Builder

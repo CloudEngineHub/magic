@@ -27,11 +27,6 @@ final class DefaultNotificationCatalogStrategy implements NotificationCatalogStr
         'share.file.withdrawn',
         'review.skill.version_approved',
         'review.agent.version_approved',
-        'collaboration.project.invited',
-        'collaboration.agent.invited',
-        'collaboration.skill.invited',
-        'collaboration.invitation.withdrawn',
-        'collaboration.invitation.permission_changed',
     ];
 
     /**
@@ -44,9 +39,6 @@ final class DefaultNotificationCatalogStrategy implements NotificationCatalogStr
         'file_shared',
         'skill_approved',
         'agent_approved',
-        'project_invitation',
-        'agent_invitation',
-        'skill_invitation',
     ];
 
     public function eventTypes(): array

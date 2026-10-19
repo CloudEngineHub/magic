@@ -46,6 +46,8 @@ use App\Application\Provider\Policy\DefaultProviderControlPolicy;
 use App\Application\Provider\Policy\ProviderControlPolicyInterface;
 use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
 use App\Application\Notification\Strategy\NotificationCatalogStrategyInterface;
+use App\Application\Notification\Contract\NotificationEventPublisherInterface;
+use App\Application\Notification\Service\NotificationEventAppService;
 use App\Application\SuperMagic\Message\Event\Subscribe\SuperAgentMessageSubscriberV2;
 use App\Domain\Admin\Repository\Facade\AdminGlobalSettingsRepositoryInterface;
 use App\Domain\Admin\Repository\Persistence\AdminGlobalSettingsRepository;
@@ -209,6 +211,7 @@ use App\Domain\Notification\Repository\Facade\NotificationTemplateRepositoryInte
 use App\Domain\Notification\Repository\Persistence\NotificationEventRepository;
 use App\Domain\Notification\Repository\Persistence\NotificationRepository;
 use App\Domain\Notification\Repository\Persistence\NotificationTemplateRepository;
+use App\Domain\Notification\Service\NotificationEventTypeRegistry;
 use App\Domain\ModelGateway\Repository\Facade\AccessTokenRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\ApplicationRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\ModelConfigRepositoryInterface;
@@ -384,6 +387,8 @@ use Psr\Http\Client\ClientInterface;
 
 $dependencies = [
     NotificationCatalogStrategyInterface::class => DefaultNotificationCatalogStrategy::class,
+    NotificationEventPublisherInterface::class => NotificationEventAppService::class,
+    NotificationEventTypeRegistry::class => NotificationEventTypeRegistry::class,
     NotificationDataIsolation::class => NotificationDataIsolation::class,
     NotificationRepositoryInterface::class => NotificationRepository::class,
     NotificationEventRepositoryInterface::class => NotificationEventRepository::class,
