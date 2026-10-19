@@ -13,16 +13,19 @@ import { env } from "@/utils/env"
 import { normalizeLocale } from "@/utils/locale"
 import { normalizeThemeMode } from "@/constants/theme"
 
+/** Owns local preferences, cluster configuration, and edition-specific configuration reads. */
 export class ConfigService {
 	private readonly commonApi: typeof apis.CommonApi
 
+	/** Bind the edition's API adapter without starting requests or restoring local preferences. */
 	constructor(dependencies: Pick<typeof apis, "CommonApi">) {
 		this.commonApi = dependencies.CommonApi
 	}
 
 	/**
-	 * Align i18n with persisted locale before full config init (same source as init).
-	 * Uses getLocaleConfig (IDB + Storage fallback + native app). URL overrides win.
+	 * Restore URL and persisted language preferences before full configuration initialization.
+	 * Waits for the i18n core and reads the same repository as init(); URL overrides win.
+	 * Language synchronization failures propagate to the initialization owner.
 	 */
 	async hydrateLanguageEarly() {
 		if (typeof window === "undefined") return
@@ -42,7 +45,10 @@ export class ConfigService {
 	}
 
 	/**
-	 * @description 初始化(持久化数据/内存状态)
+	 * Restore theme, font scale, and language preferences into memory.
+	 * Missing preferences are persisted using the supplied defaults or current store values.
+	 * @param options Defaults for preferences that have not been persisted yet.
+	 * @returns Resolves after local configuration and language synchronization finish.
 	 */
 	async init(options: Config.InitializeGlobalConfig) {
 		const config = new ConfigRepository()
@@ -62,7 +68,7 @@ export class ConfigService {
 			if (normalized !== theme) await config.setThemeConfig(normalized)
 		}
 
-		// 字体缩放初始化
+		// Restore the persisted font scale, or persist the current store default.
 		const fontScale = await config.getFontScaleConfig()
 		if (fontScale === undefined) {
 			const defaultFontScale = configStore.font.fontScale
@@ -71,7 +77,7 @@ export class ConfigService {
 			configStore.font.setFontScale(fontScale)
 		}
 
-		// 国际化语言初始化
+		// Initialize language preferences after the i18n core becomes available.
 		await configStore.i18n.waitForI18nCoreReady()
 
 		const initialLanguage = configStore.i18n.language
@@ -95,6 +101,10 @@ export class ConfigService {
 		}
 	}
 
+	/**
+	 * Read a supported temporary language from the lang or locale URL parameter.
+	 * @returns The normalized locale, or null outside a browser or for invalid input.
+	 */
 	private getTemporaryLanguageFromUrl(): Config.LanguageValue | null {
 		if (typeof window === "undefined") return null
 
@@ -118,9 +128,13 @@ export class ConfigService {
 		}
 	}
 
+	/**
+	 * Restore local cluster identifiers and configuration, creating missing defaults.
+	 * Refreshes the environment-defined SaaS entry before loading the available clusters.
+	 */
 	async initialCluster() {
 		const config = new ConfigRepository()
-		// 集群编码初始化
+		// Restore the active cluster and its most recently selected identifier.
 		const [clusterCode, clusterCodeCache] = await Promise.all([
 			config.getClusterConfig(),
 			config.getClusterCacheConfig(),
@@ -135,10 +149,10 @@ export class ConfigService {
 			configStore.cluster.setClusterCodeCache(clusterCodeCache || "")
 		}
 
-		// 集群配置初始化
+		// Restore the available cluster definitions.
 		const cluster = new ClusterRepository()
 
-		// 根据当前环境变量，强制更新 saas 配置
+		// Refresh the SaaS definition from the current environment configuration.
 		await cluster.setClusterConfig(this.envConfigToClusterConfig())
 
 		const clustersConfig = await cluster.getClustersConfig()
@@ -150,6 +164,7 @@ export class ConfigService {
 		}
 	}
 
+	/** Build the default SaaS cluster definition from the configured service URLs. */
 	envConfigToClusterConfig = () => {
 		return {
 			orgcode: "",
@@ -171,35 +186,41 @@ export class ConfigService {
 		}
 	}
 
-	/** Read through the injected edition API without writing application-wide configuration. */
+	/**
+	 * Fetch language options and phone area codes through the injected edition API.
+	 * Returns the response without changing the global store; request failures propagate.
+	 * @param options Controls whether the request bypasses the application initialization gate.
+	 */
 	getInternationalizedSettings(options?: Pick<RequestConfig, "skipAppInitWait">) {
 		return this.commonApi.getInternationalizedSettings(options)
 	}
 
-	/** Configuration discovery uses the injected API, including popup-owned enterprise routing. */
+	/**
+	 * Discover a private deployment through the injected edition API without changing local state.
+	 * @param code Deployment or organization identifier understood by the API adapter.
+	 */
 	getPrivateConfigure(code: string) {
 		return this.commonApi.getPrivateConfigure(code)
 	}
 
 	/**
-	 * 加载语言列表，国际冠号等配置
-	 * @param options 请求配置
-	 * @returns 语言列表，国际冠号等配置
+	 * Fetch a non-null internationalization response, then apply its language options and phone area codes.
+	 * Errors propagate unchanged so the initialization owner can report failures and retry.
+	 * @param options Controls whether the request bypasses the application initialization gate.
+	 * @returns Resolves after both configuration lists have been applied.
 	 */
 	loadConfig = async (options?: Pick<RequestConfig, "skipAppInitWait">) => {
-		try {
-			const response = await this.getInternationalizedSettings(options)
-			if (response) {
-				configStore.i18n.setLanguages(response.languages)
-				configStore.i18n.setAreaCodes(response.phone_area_codes)
-			}
-		} catch (error) {
-			console.error("Failed to fetch internationalization settings:", error)
-		}
+		// Let the initialization owner report failures and decide when to retry.
+		const response = await this.getInternationalizedSettings(options)
+		if (response == null) throw new Error("Invalid internationalization settings response")
+		configStore.i18n.setLanguages(response.languages)
+		configStore.i18n.setAreaCodes(response.phone_area_codes)
 	}
 
 	/**
-	 * @description 主题设置
+	 * Normalize the requested theme, start persisting it, and update the theme store.
+	 * Synchronous failures are logged locally; persistence is not awaited here.
+	 * @param theme Requested theme mode.
 	 */
 	setThemeConfig(theme: ThemeMode) {
 		try {
@@ -213,7 +234,9 @@ export class ConfigService {
 	}
 
 	/**
-	 * @description 字体缩放设置
+	 * Start persisting the font scale and update its in-memory value immediately.
+	 * Synchronous failures are logged locally; persistence is not awaited here.
+	 * @param scale Requested font scaling factor.
 	 */
 	setFontScaleConfig(scale: number) {
 		try {
@@ -226,7 +249,9 @@ export class ConfigService {
 	}
 
 	/**
-	 * @description 设置国际化语言
+	 * Apply an explicit language choice and broadcast it to other application contexts.
+	 * Persistence, i18n synchronization, and date-library updates run in the background.
+	 * @param lang Requested persistent language; replaces any temporary language override.
 	 */
 	setLanguage(lang: Config.LanguageValue) {
 		const hasTemporaryLanguage = Boolean(configStore.i18n.temporaryLanguage)
@@ -246,14 +271,17 @@ export class ConfigService {
 	}
 
 	/**
-	 * @description 设置集群配置（不包括设置当前访问集群）
+	 * Update a cluster definition and the cached cluster selection without switching the active cluster.
+	 * Updates memory first, then attempts persistence; persistence failures are logged and contained.
+	 * @param clusterCode Identifier for the cluster definition and cached selection.
+	 * @param clusterConfig Service endpoints and deployment metadata for the cluster.
 	 */
 	async setClusterConfig(clusterCode: string, clusterConfig: Common.PrivateConfig) {
 		configStore.cluster.setClusterCodeCache(clusterCode)
 		configStore.cluster.setClusterConfig(clusterCode, clusterConfig)
 
 		try {
-			// 数据持久化
+			// Persist the cluster definition and cached selection after updating memory.
 			const cluster = new ClusterRepository()
 			await cluster.setClusterConfig({ ...clusterConfig, deployCode: clusterCode })
 			const config = new ConfigRepository()
@@ -264,15 +292,16 @@ export class ConfigService {
 	}
 
 	/**
-	 * @description 设置当前访问的集群编码
-	 * @param clusterCode 集群编码
+	 * Switch the active cluster in memory, then attempt to persist its identifier.
+	 * Persistence failures are logged and do not roll back the in-memory selection.
+	 * @param clusterCode Identifier of the cluster to activate.
 	 */
 	async setClusterCode(clusterCode: string) {
-		// 内存状态变更
+		// Apply the active cluster before attempting persistence.
 		configStore.cluster.setClusterCode(clusterCode)
 
 		try {
-			// 数据持久化
+			// Persist the active cluster identifier.
 			const config = new ConfigRepository()
 			await config.setClusterConfig(clusterCode)
 		} catch (error) {
@@ -281,8 +310,9 @@ export class ConfigService {
 	}
 
 	/**
-	 * @description 设置集群编码缓存
-	 * @param clusterCode
+	 * Cache a cluster selection in memory and attempt to persist it without activating it.
+	 * Persistence failures are logged and do not roll back the cached selection.
+	 * @param clusterCode Identifier to remember for a later cluster selection.
 	 */
 	async setClusterCodeCache(clusterCode: string) {
 		configStore.cluster.setClusterCodeCache(clusterCode)

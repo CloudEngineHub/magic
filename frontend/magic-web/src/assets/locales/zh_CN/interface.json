@@ -1034,6 +1034,9 @@
 		"subtitle": "请按照视频操作进行授权，授权成功即收录电脑音频",
 		"title": "录制电脑音频：请选择屏幕并开启共享"
 	},
+	"redirect": {
+		"urlNotAllowlisted": "当前URL不在白名单中，无法打开"
+	},
 	"richEditor": {
 		"bold": "加粗",
 		"centerAlign": "居中对齐",

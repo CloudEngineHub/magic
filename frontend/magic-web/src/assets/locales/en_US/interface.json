@@ -1034,6 +1034,9 @@
 		"subtitle": "Please follow the video operation to authorize, and computer audio will be recorded upon successful authorization",
 		"title": "Record Computer Audio: Please Select Screen and Enable Sharing"
 	},
+	"redirect": {
+		"urlNotAllowlisted": "This URL is not allowlisted and cannot be opened."
+	},
 	"richEditor": {
 		"bold": "Bold",
 		"centerAlign": "center alignment",
