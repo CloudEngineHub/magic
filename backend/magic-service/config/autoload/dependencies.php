@@ -44,6 +44,8 @@ use App\Application\ModelGateway\Component\Points\PointComponent;
 use App\Application\ModelGateway\Component\Points\PointComponentInterface;
 use App\Application\Provider\Policy\DefaultProviderControlPolicy;
 use App\Application\Provider\Policy\ProviderControlPolicyInterface;
+use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
+use App\Application\Notification\Strategy\NotificationCatalogStrategyInterface;
 use App\Application\SuperMagic\Message\Event\Subscribe\SuperAgentMessageSubscriberV2;
 use App\Domain\Admin\Repository\Facade\AdminGlobalSettingsRepositoryInterface;
 use App\Domain\Admin\Repository\Persistence\AdminGlobalSettingsRepository;
@@ -200,6 +202,13 @@ use App\Domain\Mode\Repository\Persistence\ModeRepository;
 use App\Domain\ModelGateway\Contract\QueueOperationExecutorInterface;
 use App\Domain\ModelGateway\Contract\VideoGenerationProviderAdapterFactoryInterface;
 use App\Domain\ModelGateway\Contract\VideoMediaProbeInterface;
+use App\Domain\Notification\Entity\ValueObject\NotificationDataIsolation;
+use App\Domain\Notification\Repository\Facade\NotificationEventRepositoryInterface;
+use App\Domain\Notification\Repository\Facade\NotificationRepositoryInterface;
+use App\Domain\Notification\Repository\Facade\NotificationTemplateRepositoryInterface;
+use App\Domain\Notification\Repository\Persistence\NotificationEventRepository;
+use App\Domain\Notification\Repository\Persistence\NotificationRepository;
+use App\Domain\Notification\Repository\Persistence\NotificationTemplateRepository;
 use App\Domain\ModelGateway\Repository\Facade\AccessTokenRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\ApplicationRepositoryInterface;
 use App\Domain\ModelGateway\Repository\Facade\ModelConfigRepositoryInterface;
@@ -374,6 +383,12 @@ use Hyperf\SocketIOServer\SidProvider\SidProviderInterface;
 use Psr\Http\Client\ClientInterface;
 
 $dependencies = [
+    NotificationCatalogStrategyInterface::class => DefaultNotificationCatalogStrategy::class,
+    NotificationDataIsolation::class => NotificationDataIsolation::class,
+    NotificationRepositoryInterface::class => NotificationRepository::class,
+    NotificationEventRepositoryInterface::class => NotificationEventRepository::class,
+    NotificationTemplateRepositoryInterface::class => NotificationTemplateRepository::class,
+
     PointComponentInterface::class => new PriorityDefinition(PointComponent::class, 10),
 
     SmsInterface::class => VolceApiClient::class,
