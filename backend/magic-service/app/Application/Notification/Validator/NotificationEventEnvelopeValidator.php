@@ -136,7 +136,6 @@ final readonly class NotificationEventEnvelopeValidator
             $eventType === 'share.file.recipients_added' => ['/^share:[^:]+:file:[0-9]+:[^:]+:([^:]+)$/', 1],
             $eventType === 'review.skill.version_approved' => ['/^review:[^:]+:skill:[0-9]+:[0-9]+:([^:]+):approved$/', 1],
             $eventType === 'review.agent.version_approved' => ['/^review:[^:]+:agent:[0-9]+:[0-9]+:([^:]+):approved$/', 1],
-            str_starts_with($eventType, 'collaboration.') => ['/^collaboration:[^:]+:(project|agent|skill):[0-9]+:([^:]+):[0-9]+$/', 2],
             default => null,
         };
         if ($rule === null) {
