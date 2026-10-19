@@ -4,7 +4,7 @@
 	"desc.customServiceProviderLicense": "Manage custom service provider licenses and availability.",
 	"desc.digitalEmployeeReview": "Review digital employee publishing, changes, and risk content.",
 	"desc.internalPublishReview": "Review internal publishing requests for digital employees and skills.",
-	"desc.modelIdentifierMapping": "Map retired or changed model identifiers to keep model calls working during migration.",
+	"desc.modelIdentifierMapping": "Convert source model identifiers configured in workflows to target model identifiers.\nUse this when a model is retired, upgraded, or renamed so existing workflows can continue without being modified.\nExample: automatically convert deepseek-v4-flash to deepseek-v4.1-flash.",
 	"desc.modelList": "View model categories, provider coverage, and availability.",
 	"desc.officialMarketplace": "Manage official marketplace Agents, display, and recommendations.",
 	"desc.officialStaff": "Manage official staff Agents and built-in service roles.",

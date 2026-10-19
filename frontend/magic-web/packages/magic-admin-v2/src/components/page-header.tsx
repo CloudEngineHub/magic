@@ -35,7 +35,7 @@ export function PageHeader({ title, titleAddon, description, actions, testId }: 
 					{titleAddon}
 				</div>
 				{description ? (
-					<p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
+					<p className="max-w-2xl whitespace-pre-line text-sm text-muted-foreground">{description}</p>
 				) : null}
 			</div>
 			{actions ? <PageHeaderActions>{actions}</PageHeaderActions> : null}
