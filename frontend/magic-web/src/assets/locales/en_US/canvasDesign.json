@@ -902,6 +902,7 @@
 		"defaultName": "Triangle"
 	},
 	"video": {
+		"complianceChecking": "Checking",
 		"defaultName": "Video Generator",
 		"empty": "Please send an instruction to generate a video",
 		"fileMissing": "Video file is missing",

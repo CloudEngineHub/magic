@@ -151,7 +151,10 @@ import {
 	areMediaEditSnapshotsEqual,
 	type MediaEditIntent,
 } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
-import { runSeedanceImageCompliancePreflight } from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
+import {
+	beginSeedanceImageComplianceCheck,
+	runSeedanceImageCompliancePreflight,
+} from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
 import { toastSeedanceCompliancePreflightBlocked } from "../../../toolbar/asset-library/assetComplianceToasts"
 
 interface VideoGenerateEditorRenderProps {
@@ -1598,7 +1601,15 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			clipboardEpochRef.current += 1
 			clipboardSessionIdRef.current = getClipboardSessionId()
 			setIsSending(true)
+			let complianceCheckId: string | undefined
 			try {
+				complianceCheckId = beginSeedanceImageComplianceCheck({
+					canvas,
+					elementId: videoElement.id,
+					contentId: videoElement.activeContentId ?? undefined,
+					request: requestParams,
+					modelName: config.selectedModelOption?.model.model_name,
+				})
 				const requestImageInputSnapshot = JSON.stringify({
 					frames: requestParams.inputs?.frames ?? [],
 					reference_images: requestParams.inputs?.reference_images ?? [],
@@ -1621,6 +1632,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 				if (!compliancePreflight.proceed) {
 					toastSeedanceCompliancePreflightBlocked(t, compliancePreflight)
 					return
+				}
+				if (complianceCheckId) {
+					canvas.generationRuntimeManager.clearComplianceCheck(complianceCheckId)
 				}
 
 				handlers.cancelPendingDraftPersistence()
@@ -1652,6 +1666,9 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 					onGenerateSubmitSucceeded?.()
 				}
 			} finally {
+				if (complianceCheckId) {
+					canvas.generationRuntimeManager.clearComplianceCheck(complianceCheckId)
+				}
 				sendingRef.current = false
 				if (isMountedRef.current) setIsSending(false)
 			}

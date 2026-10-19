@@ -903,6 +903,7 @@
 		"defaultName": "三角形"
 	},
 	"video": {
+		"complianceChecking": "正在校验",
 		"defaultName": "视频生成器",
 		"empty": "请发送生成视频的指令",
 		"fileMissing": "视频文件不存在",

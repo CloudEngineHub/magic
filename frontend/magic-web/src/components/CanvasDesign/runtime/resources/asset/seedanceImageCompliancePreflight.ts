@@ -151,6 +151,35 @@ export function collectSeedanceImageUris(
 	return uris
 }
 
+export function shouldRunSeedanceImageCompliancePreflight(options: {
+	canvas: Canvas
+	request: GenerateVideoRequest
+	modelName?: string
+}): boolean {
+	return (
+		options.canvas.isSeedanceComplianceEnabled() &&
+		isSeedanceModelName(options.modelName) &&
+		collectSeedanceImageUris(options.request).length > 0
+	)
+}
+
+/** Mark the source video while the strict pre-submit check is awaiting PASS. */
+export function beginSeedanceImageComplianceCheck(options: {
+	canvas: Canvas
+	elementId: string
+	contentId?: string
+	request: GenerateVideoRequest
+	modelName?: string
+}): string | undefined {
+	if (!shouldRunSeedanceImageCompliancePreflight(options)) return undefined
+	const beginComplianceCheck = options.canvas.generationRuntimeManager?.beginComplianceCheck
+	if (!beginComplianceCheck) return undefined
+	return beginComplianceCheck.call(options.canvas.generationRuntimeManager, {
+		elementId: options.elementId,
+		...(options.contentId !== undefined ? { contentId: options.contentId } : {}),
+	})
+}
+
 function addImageAssetReference(
 	byAssetId: Map<string, ImageAssetReference>,
 	uri: string,
@@ -506,7 +535,7 @@ async function waitForSeedanceAssetPass(
 
 	return await new Promise<CanvasAssetComplianceState>((resolve, reject) => {
 		let settled = false
-		let unsubscribe = () => undefined
+		let unsubscribe: () => void = () => undefined
 		const finish = (callback: () => void) => {
 			if (settled) return
 			settled = true
@@ -675,8 +704,9 @@ export async function runSeedanceImageCompliancePreflight(
 	options: SeedanceImageCompliancePreflightOptions,
 ): Promise<SeedanceImageCompliancePreflightResult> {
 	const { canvas, request, sourceVideoElementId, modelName } = options
-	if (!canvas.isSeedanceComplianceEnabled()) return { proceed: true }
-	if (!isSeedanceModelName(modelName)) return { proceed: true }
+	if (!shouldRunSeedanceImageCompliancePreflight({ canvas, request, modelName })) {
+		return { proceed: true }
+	}
 
 	const uris = collectSeedanceImageUris(request)
 	if (uris.length === 0) return { proceed: true }

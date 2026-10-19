@@ -27,7 +27,10 @@ import { isEditorInteractiveKeyboardTarget } from "../../../editors/keyboard"
 import { resolveVideoReferenceVideoModel } from "./model-config/video-editor-config.model"
 import type { VideoEditSessionSnapshot } from "./video-editor-config.types"
 import { buildMediaEditSourceFingerprint } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
-import { runSeedanceImageCompliancePreflight } from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
+import {
+	beginSeedanceImageComplianceCheck,
+	runSeedanceImageCompliancePreflight,
+} from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
 import { useElementToolCommand } from "../../model/useElementToolCommand"
 import type { GenerationToolCommandRequest } from "../../../../runtime/element-tools"
 import {
@@ -272,11 +275,19 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			onConfirm: async () => {
 				if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
 				setIsGeneratingAgain(true)
+				const requestWithId = generateVideoRequest
+				const modelName = videoModelList.find(
+					(model) => model.model_id === requestWithId.model_id,
+				)?.model_name
+				let complianceCheckId: string | undefined
 				try {
-					const requestWithId = generateVideoRequest
-					const modelName = videoModelList.find(
-						(model) => model.model_id === requestWithId.model_id,
-					)?.model_name
+					complianceCheckId = beginSeedanceImageComplianceCheck({
+						canvas,
+						elementId: videoElement.id,
+						contentId: sessionContentId,
+						request: generateVideoRequest,
+						modelName,
+					})
 					const compliancePreflight = await runSeedanceImageCompliancePreflight({
 						canvas,
 						sourceVideoElementId: videoElement.id,
@@ -286,6 +297,9 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 					if (!compliancePreflight.proceed) {
 						toastSeedanceCompliancePreflightBlocked(t, compliancePreflight)
 						return
+					}
+					if (complianceCheckId) {
+						canvas.generationRuntimeManager.clearComplianceCheck(complianceCheckId)
 					}
 
 					const elementInstance = canvas.elementManager.getElementInstance(
@@ -298,6 +312,9 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 					)
 					if (submitted) sessionStore?.clearContent(videoElement.id, sessionContentId)
 				} finally {
+					if (complianceCheckId) {
+						canvas.generationRuntimeManager.clearComplianceCheck(complianceCheckId)
+					}
 					setIsGeneratingAgain(false)
 				}
 			},
