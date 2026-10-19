@@ -41,7 +41,11 @@ async def list_models() -> BaseResponse:
         return create_error_response(f"读取初始化配置失败: {e}")
 
     url = f"{magic_service_host}/v1/models"
-    params = {"with_info": "1", "with_dynamic_models": "1"}
+    params = {
+        "with_info": "1",
+        "with_dynamic_models": "1",
+        "with_organization_models": "1",
+    }
     headers = {"user-authorization": authorization}
     MetadataUtil.add_sandbox_id_header(headers)
 

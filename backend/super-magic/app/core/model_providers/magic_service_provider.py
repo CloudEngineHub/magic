@@ -64,7 +64,11 @@ class MagicServiceProvider(ModelProvider):
             raise MagicServiceProviderError("magic_service_host not available")
 
         url = f"{_normalize_magic_service_host(host)}/v1/models"
-        params = {"with_info": "1", "with_dynamic_models": "1"}
+        params = {
+            "with_info": "1",
+            "with_dynamic_models": "1",
+            "with_organization_models": "1",
+        }
         headers: Dict[str, str] = {}
         can_send_magic_headers = MetadataUtil.should_send_magic_authorization_headers(host)
         if authorization and can_send_magic_headers:

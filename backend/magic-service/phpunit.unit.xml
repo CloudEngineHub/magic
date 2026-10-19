@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="test/bootstrap.unit.php" colors="true" cacheDirectory=".phpunit.unit.cache">
+    <testsuites>
+        <testsuite name="Socket.IO维护">
+            <file>test/Cases/Unit/RedisAdapterV3MaintenanceTest.php</file>
+        </testsuite>
+    </testsuites>
+</phpunit>
