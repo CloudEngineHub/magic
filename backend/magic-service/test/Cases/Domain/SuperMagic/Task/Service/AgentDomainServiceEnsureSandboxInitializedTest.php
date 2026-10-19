@@ -207,39 +207,60 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
     }
 
     /**
-     * 镜像发布后的强制重建必须跳过温池：温池 pod 可能是发布前构建的，
-     * 领用等于把刚删掉的老镜像原样换回来。
+     * 镜像发布后的重建要走温池：旧 pod 删掉后，探测拿到 NOT_FOUND 会把残留的
+     * sandbox_id 抹空，「调用方指定了 sandbox_id」的守卫随之放行，于是直接领一个
+     * 现成的温池 pod 挂载，而不是从零冷启动。
      *
-     * 两个对照用例共用同一套夹具，唯一差异是 $allowWarmPool：
-     * - true  → 温池被咨询（证明夹具确实能走到温池分支）；
-     * - false → 温池完全不被咨询（证明跳过生效，而不是"本来就走不到"）。
+     * 这条用例钉住的是"能走温池"，也就是发布重启不会退化成慢速冷启动。
      */
-    public function testWarmPoolIsConsultedWhenCallerAllowsIt(): void
+    public function testRebuildClaimsAWarmPoolSandboxInsteadOfColdStarting(): void
     {
+        $warmSandboxId = 'warm-980001';
+
         $warmPool = $this->createMock(WarmPoolSandboxDomainService::class);
-        $warmPool->expects($this->once())->method('tryAcquireAndMount')->willReturn(null);
+        $warmPool->expects($this->once())
+            ->method('tryAcquireAndMount')
+            ->willReturn($warmSandboxId);
 
-        $this->runRestartWithWarmPoolFlag($warmPool, true);
-    }
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        // 温池命中就不应该再冷创建 pod——否则等于既领了温池又白起一个。
+        $gateway->expects($this->never())->method('createSandbox');
 
-    public function testWarmPoolIsSkippedWhenCallerForbidsIt(): void
-    {
-        $warmPool = $this->createMock(WarmPoolSandboxDomainService::class);
-        $warmPool->expects($this->never())->method('tryAcquireAndMount');
-
-        $this->runRestartWithWarmPoolFlag($warmPool, false);
+        $this->runRebuild($warmPool, $warmSandboxId, $gateway);
     }
 
     /**
-     * @param bool $allowWarmPool 透传给 ensureSandboxInitialized 的开关
+     * 温池空仓（补货没跟上）时退回冷创建，保证重启不会因为温池没货而失败。
      */
-    private function runRestartWithWarmPoolFlag(WarmPoolSandboxDomainService $warmPool, bool $allowWarmPool): void
+    public function testRebuildFallsBackToColdCreateWhenWarmPoolIsEmpty(): void
     {
+        $coldSandboxId = '945988521691942918';
+
+        $warmPool = $this->createMock(WarmPoolSandboxDomainService::class);
+        $warmPool->expects($this->once())->method('tryAcquireAndMount')->willReturn(null);
+
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        $gateway->expects($this->once())->method('createSandbox')->willReturn(
+            new GatewayResult(ResponseCode::SUCCESS, 'ok', ['sandbox_id' => $coldSandboxId])
+        );
+
+        $this->runRebuild($warmPool, $coldSandboxId, $gateway);
+    }
+
+    /**
+     * 搭一套"旧 pod 已不存在"的重建夹具，并断言最终绑定到 $expectedSandboxId。
+     *
+     * 两个用例共用：温池返回新 pod 时证明走了温池；温池返回 null 时证明退回冷创建。
+     */
+    private function runRebuild(
+        WarmPoolSandboxDomainService $warmPool,
+        string $expectedSandboxId,
+        SandboxGatewayInterface $gateway
+    ): void {
         $topicId = 945988521691942917;
         $staleId = '953340869490270210';
-        $createdId = '945988521691942918';
 
-        // 打开温池开关，否则 tryWarmPoolFastPath 会在第一行就返回，无法证明跳过逻辑。
+        // 打开温池开关，否则 tryWarmPoolFastPath 会在第一行就返回，测不到温池分支。
         $config = $this->createMock(ConfigInterface::class);
         $config->method('get')->willReturnCallback(
             static fn (string $key, mixed $default = null): mixed => $key === 'super-magic.warm_pool.enabled' ? true : ($default ?? 'test')
@@ -256,7 +277,7 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         $agent = $this->createMock(SandboxAgentInterface::class);
         // 旧 pod 已不存在（NOT_FOUND），新沙箱就绪：分别应答，避免后续 waitForWorkspaceReady 抛错。
         $agent->method('getWorkspaceStatus')->willReturnCallback(
-            fn (DataIsolation $isolation, string $sandboxId): AgentResponse => $sandboxId === $createdId
+            fn (DataIsolation $isolation, string $sandboxId): AgentResponse => $sandboxId === $expectedSandboxId
                 ? $this->readyResponse()
                 : $this->notFoundResponse()
         );
@@ -264,29 +285,21 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
             AgentResponse::fromApiResponse(['code' => ResponseCode::SUCCESS, 'message' => 'ok', 'data' => []])
         );
 
-        $gateway = $this->createMock(SandboxGatewayInterface::class);
-        $gateway->expects($this->once())->method('createSandbox')->willReturn(
-            new GatewayResult(ResponseCode::SUCCESS, 'ok', ['sandbox_id' => $createdId])
-        );
-
         $service = $this->buildService($agent, $gateway, $topicRepository);
         $agentContext = $this->buildAgentContext($this->buildTopic($topicId, $staleId), '');
 
-        // 必须带 project 根目录：温池分支要求 project_space_root_file_id 非空，
-        // 否则两个对照用例都会在进入温池前就返回，测试变得毫无意义。
-        // 温池挂载要以用户身份写 metadata.json，缺少 token 时分支同样会提前返回。
+        // 必须带 project 根目录：温池分支要求 project_space_root_file_id 非空。
+        // 温池挂载还要以用户身份写 metadata.json，缺少 token 时分支同样会提前返回。
         $dataIsolation = $this->buildDataIsolation();
         $dataIsolation->setUserAuthorizationToken('test-user-token');
 
         $result = $service->ensureSandboxInitialized(
             $dataIsolation,
             $agentContext,
-            new SandboxRootFileIds('project-root-file-id', 'user-root-file-id', 'topic-root-file-id'),
-            null,
-            $allowWarmPool
+            new SandboxRootFileIds('project-root-file-id', 'user-root-file-id', 'topic-root-file-id')
         );
 
-        self::assertSame($createdId, $result);
+        self::assertSame($expectedSandboxId, $result);
     }
 
     private function buildService(

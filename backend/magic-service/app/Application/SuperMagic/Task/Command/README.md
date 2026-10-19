@@ -99,11 +99,17 @@ kubectl -n <namespace> exec -it deploy/magic-service -- \
 
 1. 把该话题 `waiting` / `running` / `waiting_for_user` 的任务与话题状态置为 `suspended`；
 2. 删除网关清单里属于该话题的**全部** pod（删不掉的记录失败但继续）；
-3. 以话题 owner 身份重建沙箱，**强制冷启动**（`allowWarmPool=false`），保证读到当前发布的镜像；
+3. 以话题 owner 身份重建沙箱，**优先复用温池**：旧 pod 删掉后探测返回 NOT_FOUND，
+   「调用方指定了 sandbox_id」的守卫随之放行，直接领一个现成 pod 挂载，不必从零冷启动；
 4. 回写话题与任务的 `sandbox_id`。
 
 第 1 步刻意放在删除之前：现有 `CheckTaskStatusTask` 会周期性检查"任务在跑但沙箱不存在"并把任务标成
-`ERROR`，先挂起可以把这类误报压到最低。第 3 步强制冷启动的原因同上：温池里的 pod 可能是发布前构建的。
+`ERROR`，先挂起可以把这类误报压到最低。
+
+第 3 步走温池是重启速度的关键：冷启动要等 pod 调度、镜像拉取与 AGFS sidecar 就绪，
+而温池挂载只做 metadata 写入 + mount。**前提是温池由补货流程维持在最新镜像**——
+如果刚更新了 ConfigMap 但温池里还是旧 pod，重启会把旧镜像换个话题继续用。
+发布窗口内无法保证这一点时，应先等温池补货完成再重启。
 
 ## 6. 失败处理
 

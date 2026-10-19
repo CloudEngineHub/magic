@@ -18,9 +18,10 @@ use Psr\Log\LoggerInterface;
 /**
  * 用 AgentAppService 既有的重启流程实现重建端口.
  *
- * 两个关键约束：
- * 1. 重建必须跳过温池（allowWarmPool=false）。镜像发布会先把老 pod 删掉，
- *    若这时从温池领一个更早构建的 pod，等于把刚删掉的老镜像原样换回来。
+ * 约束：
+ * 1. 重建照常走温池。镜像发布会先把老 pod 删掉，剩下的交给正常初始化流程：
+ *    探测到旧 pod 不存在后，温池守卫放行，直接领一个现成的 pod 挂载，
+ *    比从零冷启动快得多。前提是温池由补货流程维持在最新镜像。
  * 2. 删除必须幂等：清单里的 pod 可能已被 GC 或前一轮重启删掉，
  *    网关返回 NOT_FOUND 时视为已完成。
  */
@@ -60,6 +61,6 @@ readonly class AgentSandboxRebuildAdapter implements SandboxRebuildPortInterface
         $dataIsolation = DataIsolation::create($organizationCode, $userId);
         $dataIsolation->setThirdPartyOrganizationCode($organizationCode);
 
-        return $this->agentAppService->restartSandbox($dataIsolation, $topicId, allowWarmPool: false);
+        return $this->agentAppService->restartSandbox($dataIsolation, $topicId);
     }
 }

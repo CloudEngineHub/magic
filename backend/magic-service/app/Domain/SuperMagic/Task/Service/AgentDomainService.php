@@ -256,10 +256,6 @@ class AgentDomainService
      * @param AgentContext $agentContext Agent context with initialization data
      * @param null|SandboxRootFileIds $rootFileIds root file ids to mount
      * @param null|callable $interruptChecker Optional callable that returns true to interrupt initialization
-     * @param bool $allowWarmPool when false, skip the warm-pool fast path and always cold-create.
-     *                            Image-rollout restarts use this: a warm pod may have been stocked
-     *                            before the release, and only a cold create is guaranteed to read the
-     *                            current ConfigMap images.
      * @return string Sandbox ID (always valid, even if interrupted after sandbox creation)
      * @throws ServerException If metadata is incomplete or lock acquisition fails
      */
@@ -267,8 +263,7 @@ class AgentDomainService
         DataIsolation $dataIsolation,
         AgentContext $agentContext,
         ?SandboxRootFileIds $rootFileIds = null,
-        ?callable $interruptChecker = null,
-        bool $allowWarmPool = true
+        ?callable $interruptChecker = null
     ): string {
         $topicEntity = $agentContext->getTopicEntity();
 
@@ -401,19 +396,20 @@ class AgentDomainService
             $topicSpaceRootFileId = $rootFileIds?->getTopicSpaceRootFileId() ?? '';
             // Step 2.5: Warm pool fast path.
             // Only attempt when the caller didn't ask for a specific sandbox id
-            // (those are typically reconnects to an existing pod), the caller
-            // allows the warm pool ($allowWarmPool) AND we have a project-space
-            // root file id to mount. On any failure we fall through to the cold
-            // path so the user-facing call never breaks.
-            $warmSandboxId = $allowWarmPool
-                ? $this->tryWarmPoolFastPath(
-                    $dataIsolation,
-                    $agentContext,
-                    $projectSpaceRootFileId,
-                    $userSpaceRootFileId,
-                    $topicSpaceRootFileId
-                )
-                : null;
+            // (those are typically reconnects to an existing pod) AND we have
+            // a project-space root file id to mount.  On any failure we fall
+            // through to the cold path so the user-facing call never breaks.
+            //
+            // 镜像发布后的重启同样走这里：旧 pod 已被删掉，上面的探测会拿到
+            // NOT_FOUND 并抹空 sandbox_id，于是温池守卫放行、直接领一个现成的
+            // pod 挂载，而不是从零冷启动。前提是温池由补货流程维持在最新镜像。
+            $warmSandboxId = $this->tryWarmPoolFastPath(
+                $dataIsolation,
+                $agentContext,
+                $projectSpaceRootFileId,
+                $userSpaceRootFileId,
+                $topicSpaceRootFileId
+            );
             if ($warmSandboxId !== null) {
                 $this->releaseReplacedSandbox($boundBeforeSwitch, $warmSandboxId, (int) $topicEntity->getId());
                 $sandboxId = $warmSandboxId;

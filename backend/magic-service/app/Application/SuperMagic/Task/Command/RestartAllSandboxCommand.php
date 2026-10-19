@@ -99,8 +99,10 @@ What happens per topic:
      not reported as failed while the pod is gone;
   2. every pod the gateway lists for that topic is deleted (including drifted
      duplicates); a failed delete is recorded but does not block the rebuild;
-  3. exactly one sandbox is rebuilt through the normal initialization path,
-     forced to cold-start so it cannot claim an older warm-pool pod.
+  3. exactly one sandbox is rebuilt through the normal initialization path. That
+     path prefers the warm pool: once the old pod is gone the pinned-sandbox
+     guard no longer applies, so a ready pod is claimed and mounted instead of
+     cold-starting. This assumes the warm pool is kept on the latest images.
 
 Pods owned by no topic (unbound warm pool, orphans) are deleted without rebuild.
 

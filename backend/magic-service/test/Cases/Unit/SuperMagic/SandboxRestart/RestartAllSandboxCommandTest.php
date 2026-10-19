@@ -96,7 +96,7 @@ class RestartAllSandboxCommandTest extends TestCase
         $display = $command->getProcessedHelp();
         self::assertStringContainsString('never sends a chat message', $display);
         self::assertStringContainsString('waiting_for_user tasks are suspended first', $display);
-        self::assertStringContainsString('forced to cold-start', $display);
+        self::assertStringContainsString('prefers the warm pool', $display);
         self::assertStringContainsString('Exit codes:', $display);
         self::assertStringContainsString('php bin/hyperf.php sandbox:restart-all', $display, '帮助里要给出可直接执行的形式');
     }
