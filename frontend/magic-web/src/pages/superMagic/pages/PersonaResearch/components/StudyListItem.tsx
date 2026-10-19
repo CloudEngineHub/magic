@@ -52,6 +52,7 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 	const shareable = status.kind === "done"
 	// Rename and share take focus themselves; returning it to "…" would close them at once.
 	const keepFocusAwayRef = useRef(false)
+	const menuButtonRef = useRef<HTMLButtonElement>(null)
 	const isPersonaBuild = study?.study_type === "persona_build"
 	// No phase progress for plain conversations (topics without a study file).
 	const isConversation = status.kind === "conversation"
@@ -160,6 +161,7 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 				<MagicTooltip title={t("home.moreActions")}>
 					<DropdownMenuTrigger asChild>
 						<Button
+							ref={menuButtonRef}
 							variant="ghost"
 							size="icon"
 							className="size-8 opacity-60 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
@@ -223,6 +225,11 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 				topicId={topic.id}
 				topicTitle={title}
 				fileListOffHint={t("share.fileListOffHint")}
+				// The menu item that opened it is gone; give focus back to this row's "…".
+				onCloseAutoFocus={(event) => {
+					event.preventDefault()
+					menuButtonRef.current?.focus()
+				}}
 			/>
 			<ChevronRight
 				aria-hidden

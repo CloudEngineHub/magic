@@ -38,6 +38,11 @@ interface TopicSharePopoverProps {
 	onSaveSuccess?: () => void // 保存成功回调
 	/** Warning under "show file list" while it is off, for topics whose value lives in files. */
 	fileListOffHint?: string
+	/**
+	 * Dialog mode only (no children): where focus goes when the dialog closes, for openers that
+	 * are not the focused element when it opens (e.g. a menu item whose menu has just closed).
+	 */
+	onCloseAutoFocus?: (event: Event) => void
 }
 
 interface TopicShareSettings {
@@ -760,6 +765,7 @@ function TopicSharePopover({
 	children,
 	onSaveSuccess,
 	fileListOffHint,
+	onCloseAutoFocus,
 }: TopicSharePopoverProps) {
 	const isMobile = useIsMobile()
 	const hasDataChangedRef = useRef(false)
@@ -810,7 +816,11 @@ function TopicSharePopover({
 
 		return (
 			<Dialog open={open} onOpenChange={handleClose}>
-				<DialogContent className="w-[420px] p-3.5" style={{ zIndex: 1500 }}>
+				<DialogContent
+					className="w-[420px] p-3.5"
+					style={{ zIndex: 1500 }}
+					onCloseAutoFocus={onCloseAutoFocus}
+				>
 					{topicTitle && (
 						<DialogHeader>
 							<DialogTitle>{topicTitle}</DialogTitle>
