@@ -216,5 +216,61 @@ describe("acceptMagicWidgetConfig", () => {
 				},
 			}),
 		).toThrow(/https:/)
+
+		// Reject malformed URL with https prefix
+		expect(() =>
+			acceptMagicWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "malformed-url-group",
+							label: "Malformed URL Group",
+							iconUrl: "https://[",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/valid HTTPS URL/)
+	})
+
+	it("validates and preserves custom Mention group placement in provider", () => {
+		const configWithPlacement = {
+			panel: {
+				customGroups: [
+					{
+						id: "start-group",
+						label: "Start Group",
+						placement: "start" as const,
+						items: [],
+					},
+					{
+						id: "end-group",
+						label: "End Group",
+						placement: "end" as const,
+						items: [],
+					},
+				],
+			},
+		}
+
+		expect(acceptMagicWidgetConfig(configWithPlacement)).toEqual(configWithPlacement)
+
+		// Rejects invalid placement
+		expect(() =>
+			acceptMagicWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "invalid-placement-group",
+							label: "Invalid Placement Group",
+							// @ts-expect-error test invalid placement
+							placement: "top",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/must be "start" or "end"/)
 	})
 })

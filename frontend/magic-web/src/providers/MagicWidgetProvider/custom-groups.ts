@@ -63,18 +63,31 @@ function readOptionalIconUrl(
 		)
 	}
 	const trimmed = field.trim()
+	let parsed: URL
 	try {
-		const parsed = new URL(trimmed)
-		if (parsed.protocol !== "https:") {
-			throw invalidConfig(`Magic widget ${label}.${key} must use the https: protocol`)
-		}
-	} catch (error) {
-		if (error instanceof Error && error.message.includes("https:")) {
-			throw error
-		}
+		parsed = new URL(trimmed)
+	} catch {
 		throw invalidConfig(`Magic widget ${label}.${key} must be a valid HTTPS URL`)
 	}
+	if (parsed.protocol !== "https:") {
+		throw invalidConfig(`Magic widget ${label}.${key} must use the https: protocol`)
+	}
 	return trimmed
+}
+
+/**
+ * Validates the optional placement parameter for custom Mention groups.
+ * Must be either "start" or "end".
+ */
+function readOptionalPlacement(
+	record: Record<string, unknown>,
+	key: string,
+	label: string,
+): MagicWidget.CustomMentionGroupPlacement | undefined {
+	const value = record[key]
+	if (value === undefined) return undefined
+	if (value === "start" || value === "end") return value
+	throw invalidConfig(`Magic widget ${label}.${key} must be "start" or "end"`)
 }
 
 /** Accepts plain records only so class instances cannot cross the iframe state boundary. */
@@ -319,7 +332,7 @@ export function normalizeMagicWidgetCustomGroups(
 	const groups = candidateGroups.map((rawGroup, index) => {
 		const label = `config.panel.customGroups[${index}]`
 		const group = requirePlainObject(rawGroup, label)
-		const allowedKeys = new Set(["id", "label", "icon", "iconUrl", "items"])
+		const allowedKeys = new Set(["id", "label", "icon", "iconUrl", "placement", "items"])
 		const unknownKey = Object.keys(group).find((key) => !allowedKeys.has(key))
 		if (unknownKey) throw invalidConfig(`${label}.${unknownKey} is not supported`)
 		const { id, label: displayLabel } = group
@@ -353,6 +366,7 @@ export function normalizeMagicWidgetCustomGroups(
 				`${label}.icon must be a string of at most ${MAGIC_WIDGET_CUSTOM_GROUP_LIMITS.maxIdAndTypeLength} characters`,
 			)
 		const iconUrl = readOptionalIconUrl(group, "iconUrl", label)
+		const placement = readOptionalPlacement(group, "placement", label)
 		if (!Array.isArray(group.items))
 			throw invalidConfig(`Magic widget ${label}.items must be an array`)
 		const items = normalizeItems(
@@ -368,6 +382,7 @@ export function normalizeMagicWidgetCustomGroups(
 				label: displayLabel,
 				...(group.icon === undefined ? {} : { icon: group.icon }),
 				...(iconUrl === undefined ? {} : { iconUrl }),
+				...(placement === undefined ? {} : { placement }),
 				items,
 			}),
 		) as MagicWidget.CustomMentionGroup

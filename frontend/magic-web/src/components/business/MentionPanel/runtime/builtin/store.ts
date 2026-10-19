@@ -511,29 +511,40 @@ export class MentionPanelStore {
 	private buildDefaultItems(t: I18nTexts): MentionItem[] {
 		let defaultItems = createDefaultItems(t)[PanelState.DEFAULT] as MentionItem[]
 		if (this.customMentionGroups.length > 0) {
-			defaultItems = [
-				...defaultItems,
-				...this.customMentionGroups
-					.filter((group) => group.items.length > 0)
-					.map((group) => {
-						const icon = normalizeCustomMentionIcon(group.icon)
-						const iconUrl = normalizeCustomMentionIconUrl(group.iconUrl)
-						return {
-							id: group.id,
-							type: MentionItemType.FOLDER,
-							name: group.label,
-							icon,
-							iconUrl,
-							hasChildren: true,
-							isFolder: true,
-							metadata: {
-								customMentionGroup: true,
-								customMentionGroupId: group.id,
-								...(iconUrl ? { iconUrl } : {}),
-							},
-						}
-					}),
-			]
+			const activeGroups = this.customMentionGroups.filter((group) => group.items.length > 0)
+
+			// Helper to convert a CustomMentionGroup configuration into a MentionItem folder entry
+			const toMentionItem = (group: MagicWidget.CustomMentionGroup): MentionItem => {
+				const icon = normalizeCustomMentionIcon(group.icon)
+				const iconUrl = normalizeCustomMentionIconUrl(group.iconUrl)
+				return {
+					id: group.id,
+					type: MentionItemType.FOLDER,
+					name: group.label,
+					icon,
+					iconUrl,
+					hasChildren: true,
+					isFolder: true,
+					metadata: {
+						customMentionGroup: true,
+						customMentionGroupId: group.id,
+						...(group.placement ? { placement: group.placement } : {}),
+						...(iconUrl ? { iconUrl } : {}),
+					},
+				}
+			}
+
+			// Groups configured with placement="start" are rendered before built-in categories
+			const startItems = activeGroups
+				.filter((group) => group.placement === "start")
+				.map(toMentionItem)
+
+			// Default groups (or placement="end") are placed after built-in categories
+			const endItems = activeGroups
+				.filter((group) => group.placement !== "start")
+				.map(toMentionItem)
+
+			defaultItems = [...startItems, ...defaultItems, ...endItems]
 		}
 		if (this.projectFilesStore.currentSelectedProject) {
 			defaultItems = defaultItems.filter((item) => item.id !== BuiltinItemId.UPLOAD_FILES)

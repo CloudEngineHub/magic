@@ -125,6 +125,9 @@ export declare namespace MagicWidget {
 		data?: Record<string, unknown>
 	}
 
+	/** Placement of a custom group relative to built-in Mention panel categories. */
+	export type CustomMentionGroupPlacement = "start" | "end"
+
 	/** Describes one named host-owned group in the Mention panel. */
 	export interface CustomMentionGroup {
 		id: string
@@ -133,6 +136,12 @@ export declare namespace MagicWidget {
 		icon?: string
 		/** HTTPS URL pointing to an icon image; takes precedence over icon token. */
 		iconUrl?: string
+		/**
+		 * Placement relative to built-in categories in the Mention panel root list.
+		 * - "start": Placed at the top before built-in categories (micro apps, connectors, etc.).
+		 * - "end": Placed at the bottom after built-in categories (default).
+		 */
+		placement?: CustomMentionGroupPlacement
 		items: CustomMentionItem[]
 	}
 

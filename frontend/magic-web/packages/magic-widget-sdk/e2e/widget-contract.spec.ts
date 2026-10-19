@@ -505,4 +505,18 @@ test.describe("Magic Widget SDK contract", () => {
 		await page.getByTestId("get-input").click()
 		await expect(page.getByTestId("status")).toContainText("get-input:Mock input from host")
 	})
+
+	test("places custom Mention groups with placement 'start' at the top of the root list", async ({
+		page,
+	}) => {
+		const frame = widgetFrame(page)
+		await frame.getByTestId("super-message-editor-at-button").click()
+		const scroller = frame.getByTestId("virtuoso-scroller")
+		await expect(scroller).toBeVisible()
+
+		// The group configured with placement="start" should appear at the top of the root list
+		const firstOption = frame.getByRole("option").first()
+		await expect(firstOption).toBeVisible()
+		await expect(firstOption).toContainText("Priority actions")
+	})
 })

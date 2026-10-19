@@ -576,5 +576,70 @@ describe("Widget config", () => {
 				},
 			}),
 		).toThrow(/at most 2048 characters/)
+
+		// Reject malformed URL containing https: prefix
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "group-bracket",
+							label: "Bracket Group",
+							iconUrl: "https://[",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/valid HTTPS URL/)
+	})
+
+	it("validates and preserves custom Mention group placement", () => {
+		// Accepts "start" and "end"
+		const normalized = normalizeWidgetConfig({
+			panel: {
+				customGroups: [
+					{
+						id: "group-start",
+						label: "Start Group",
+						placement: "start",
+						items: [],
+					},
+					{
+						id: "group-end",
+						label: "End Group",
+						placement: "end",
+						items: [],
+					},
+					{
+						id: "group-default",
+						label: "Default Group",
+						items: [],
+					},
+				],
+			},
+		})
+
+		const groups = normalized.panel?.customGroups
+		expect(groups?.[0]?.placement).toBe("start")
+		expect(groups?.[1]?.placement).toBe("end")
+		expect(groups?.[2]?.placement).toBeUndefined()
+
+		// Rejects invalid placement
+		expect(() =>
+			normalizeWidgetConfig({
+				panel: {
+					customGroups: [
+						{
+							id: "group-invalid",
+							label: "Invalid Placement",
+							// @ts-expect-error test runtime validation of invalid value
+							placement: "top",
+							items: [],
+						},
+					],
+				},
+			}),
+		).toThrow(/must be "start" or "end"/)
 	})
 })

@@ -492,6 +492,57 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			expect(contentItems.items?.[1]?.iconUrl).toBeUndefined()
 		})
 
+		it("orders custom groups according to placement in root items", async () => {
+			mentionPanelStore.setCustomMentionGroups([
+				{
+					id: "start-group-1",
+					label: "Start Group 1",
+					placement: "start",
+					items: [{ id: "item-s1", type: "card", text: "S1" }],
+				},
+				{
+					id: "start-group-2",
+					label: "Start Group 2",
+					placement: "start",
+					items: [{ id: "item-s2", type: "card", text: "S2" }],
+				},
+				{
+					id: "end-group-1",
+					label: "End Group 1",
+					placement: "end",
+					items: [{ id: "item-e1", type: "card", text: "E1" }],
+				},
+				{
+					id: "default-group-1",
+					label: "Default Group 1",
+					items: [{ id: "item-d1", type: "card", text: "D1" }],
+				},
+			])
+
+			const rootItems = await getDefaultItems()
+			const startGroup1Index = rootItems.findIndex((item) => item.id === "start-group-1")
+			const startGroup2Index = rootItems.findIndex((item) => item.id === "start-group-2")
+			const endGroup1Index = rootItems.findIndex((item) => item.id === "end-group-1")
+			const defaultGroup1Index = rootItems.findIndex((item) => item.id === "default-group-1")
+
+			// Start groups appear at the beginning of the list
+			expect(startGroup1Index).toBe(0)
+			expect(startGroup2Index).toBe(1)
+
+			// Built-in categories appear after start groups
+			const builtinSkillsIndex = rootItems.findIndex(
+				(item) => item.id === MentionItemType.SKILL,
+			)
+			if (builtinSkillsIndex !== -1) {
+				expect(builtinSkillsIndex).toBeGreaterThan(startGroup2Index)
+				expect(builtinSkillsIndex).toBeLessThan(endGroup1Index)
+			}
+
+			// End groups appear after built-ins in configured order
+			expect(endGroup1Index).toBeLessThan(defaultGroup1Index)
+			expect(defaultGroup1Index).toBe(rootItems.length - 1)
+		})
+
 		it("should show other project files without a current project", async () => {
 			projectFilesStore.setSelectedProject(null)
 
