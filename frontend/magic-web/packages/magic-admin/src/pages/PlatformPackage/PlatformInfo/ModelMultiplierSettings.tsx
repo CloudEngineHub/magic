@@ -1,3 +1,7 @@
+import { DefaultModelPriceTable } from "./DefaultModelPriceTable"
+import { useAdmin } from "@admin/provider/AdminProvider"
+import { useApis } from "@admin/apis"
+import { useModelPricePreview } from "../../../../../model-billing-reference/use-model-price-preview"
 import { Flex, Form } from "antd"
 import type { FormInstance } from "antd"
 import { useId, useState, type ChangeEvent } from "react"
@@ -6,8 +10,6 @@ import { useTranslation } from "react-i18next"
 import { MagicButton, MagicInput, MagicSelect, MagicSwitch, SubHeader } from "@admin-components"
 import {
 	getReferenceAmount,
-	previewModelPrice,
-	referenceModelPrices,
 	validateMultiplierSettings,
 } from "../../../../../model-billing-reference"
 import type { ModelBillingMultiplierSettings } from "../../../../../model-billing-reference"
@@ -26,6 +28,19 @@ export default function ModelMultiplierSettings({
 	const { styles } = useModelMultiplierStyles()
 	const { styles: pageStyles, cx } = usePlatformInfoStyles({})
 	const [expanded, setExpanded] = useState(false)
+	const admin = useAdmin()
+	const { PlatformInfoApi } = useApis()
+	const pricePreview = useModelPricePreview(
+		JSON.stringify([
+			admin.user.userInfo?.magic_id,
+			admin.user.userInfo?.user_id,
+			admin.organization.organizationCode,
+			admin.clusterCode,
+			admin.env.MAGIC_BASE_URL,
+		]),
+		(signal) => PlatformInfoApi.getModelBillingPreview(signal),
+		admin.apiClients.magicClient,
+	)
 	const contentId = useId()
 	// 监听该配置组，编辑和刷新时同步预览，不给接口缺失项补默认价格。
 	const value = Form.useWatch(["model_billing_multiplier"], { form, preserve: true }) as
@@ -61,12 +76,6 @@ export default function ModelMultiplierSettings({
 			placeholder: t("multiplier.ratePlaceholder"),
 		},
 	] as const
-	const basis = {
-		fixed: t("multiplier.basisFixed"),
-		tiers: t("multiplier.basisTiers"),
-		peak: t("multiplier.basisPeak"),
-		internationalTiers: t("multiplier.basisInternational"),
-	}
 	const rules = [
 		[t("multiplier.usageRuleTitle"), t("multiplier.usageRuleDescription")],
 		[t("multiplier.averageRuleTitle"), t("multiplier.calculationSteps")],
@@ -253,50 +262,12 @@ export default function ModelMultiplierSettings({
 							) : null}
 						</div>
 					</div>
-					<section className={styles.section} aria-label={t("multiplier.examplesTitle")}>
-						<h4>{t("multiplier.examplesTitle")}</h4>
-						<p className={styles.muted}>{t("multiplier.examplesHint")}</p>
-						{referenceModelPrices.map((model) => {
-							const result = previewModelPrice(
-								model,
-								value?.usd_to_cny_rate ?? null,
-								reference,
-							)
-							return (
-								<div key={model.id} className={styles.example}>
-									<div>
-										<strong>{model.name}</strong>
-										<br />
-										<a href={model.source} target="_blank" rel="noreferrer">
-											{basis[model.basis]}
-										</a>
-									</div>
-									<div className={styles.muted}>
-										<p>
-											{t("multiplier.exampleInput", { price: model.input })}
-										</p>
-										<p>
-											{t("multiplier.exampleOutput", { price: model.output })}
-										</p>
-									</div>
-									<div>
-										<span className={styles.muted}>
-											{t("multiplier.amountColumn")}
-										</span>
-										<br />
-										{result.amount ?? "—"}
-									</div>
-									<output data-testid={`legacy-example-ratio-${model.id}`}>
-										{result.multiplier ?? "—"}
-									</output>
-								</div>
-							)
-						})}
-						<Flex vertical gap={8} className={styles.muted}>
-							<p>{t("multiplier.snapshotHint")}</p>
-							<p>{t("multiplier.tierSources")}</p>
-						</Flex>
-					</section>
+					<DefaultModelPriceTable
+						preview={pricePreview}
+						base={reference}
+						rate={value?.usd_to_cny_rate ?? null}
+						enabled={Boolean(value?.enabled)}
+					/>
 					<section className={styles.section} aria-label={t("multiplier.rulesTitle")}>
 						<h4>{t("multiplier.rulesTitle")}</h4>
 						<dl className={styles.rules}>

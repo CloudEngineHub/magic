@@ -4,6 +4,40 @@ import { afterEach, expect, it, vi } from "vitest"
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react"
 import ModelMultiplierSettings from "../ModelMultiplierSettings"
 
+vi.mock("@admin/apis", () => ({
+	useApis: () => ({
+		PlatformInfoApi: {
+			getModelBillingPreview: vi.fn().mockResolvedValue({
+				snapshot_id: "mock",
+				generated_at: "mock",
+				scope: "default_text_models",
+				mode: null,
+				calculation: {
+					version: "text-reference-v1",
+					input_tokens: 10000,
+					output_tokens: 1000,
+					price_unit: "per_million_tokens",
+					decimal_scale: 36,
+					tier_aggregation: "equal_average",
+					provider_aggregation: "equal_average",
+				},
+				groups: [],
+				models: {},
+				warnings: [],
+			}),
+		},
+	}),
+}))
+const { mockClient } = vi.hoisted(() => ({ mockClient: {} }))
+vi.mock("@admin/provider/AdminProvider", () => ({
+	useAdmin: () => ({
+		apiClients: { magicClient: mockClient },
+		user: { userInfo: null },
+		organization: { organizationCode: "mock" },
+		env: { MAGIC_BASE_URL: "mock" },
+		clusterCode: "mock",
+	}),
+}))
 vi.unmock("antd")
 // 外层页面样式依赖管理端主题；此处只验证折叠与保存行为。
 vi.mock("../styles", () => ({

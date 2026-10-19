@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next"
-import { previewModelPrice, referenceModelPrices } from "../../../../../model-billing-reference"
 
 /** 右侧金额为只读结果，明确区分编辑预览与后端已保存数据。 */
 export function MultiplierReferencePreview({
@@ -53,99 +52,6 @@ export function MultiplierReferencePreview({
 				</p>
 			) : null}
 		</aside>
-	)
-}
-
-/** 官方价格快照只演示倍率变化，与平台实际价格和模型权限隔离。 */
-export function MultiplierReferenceExamples({
-	base,
-	rate,
-}: {
-	base: string | null
-	rate: string | null
-}) {
-	const { t } = useTranslation()
-	const basis = {
-		fixed: t("platformInfo.multiplier.basisFixed"),
-		tiers: t("platformInfo.multiplier.basisTiers"),
-		peak: t("platformInfo.multiplier.basisPeak"),
-		internationalTiers: t("platformInfo.multiplier.basisInternational"),
-	}
-	return (
-		<section
-			className="space-y-4 rounded-lg border bg-card p-5"
-			aria-label={t("platformInfo.multiplier.examplesTitle")}
-		>
-			<div>
-				<h4 className="text-sm font-medium">
-					{t("platformInfo.multiplier.examplesTitle")}
-				</h4>
-				<p className="mt-1 text-sm leading-6 text-muted-foreground">
-					{t("platformInfo.multiplier.examplesHint")}
-				</p>
-			</div>
-			{/* 桌面保持四列可对照，小屏每个模型折成两行，避免横向溢出。 */}
-			<div className="divide-y">
-				<div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_1fr_0.8fr] gap-4 pb-3 text-xs text-muted-foreground sm:grid">
-					<span>{t("platformInfo.multiplier.modelColumn")}</span>
-					<span>{t("platformInfo.multiplier.priceColumn")}</span>
-					<span className="text-right">{t("platformInfo.multiplier.amountColumn")}</span>
-					<span className="text-right">{t("platformInfo.multiplier.ratioColumn")}</span>
-				</div>
-				{referenceModelPrices.map((model) => {
-					const result = previewModelPrice(model, rate, base)
-					return (
-						<div
-							key={model.id}
-							data-testid={`multiplier-example-${model.id}`}
-							className="grid grid-cols-2 items-center gap-3 py-4 text-sm sm:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_1fr_0.8fr] sm:gap-4"
-						>
-							<div className="min-w-0">
-								<p className="break-words font-medium">{model.name}</p>
-								<a
-									href={model.source}
-									target="_blank"
-									rel="noreferrer"
-									className="mt-1 inline-block text-xs leading-5 text-muted-foreground underline underline-offset-4"
-								>
-									{basis[model.basis]}
-								</a>
-							</div>
-							<div className="text-right text-xs tabular-nums sm:text-left">
-								<p>
-									{t("platformInfo.multiplier.exampleInput", {
-										price: model.input,
-									})}
-								</p>
-								<p className="mt-1">
-									{t("platformInfo.multiplier.exampleOutput", {
-										price: model.output,
-									})}
-								</p>
-							</div>
-							<div className="break-all tabular-nums sm:text-right">
-								<span className="mr-1 text-xs text-muted-foreground sm:hidden">
-									{t("platformInfo.multiplier.amountColumn")}
-								</span>
-								{result.amount ?? t("common.emptyValue")}
-							</div>
-							<output
-								className="text-right font-medium tabular-nums"
-								data-testid={`multiplier-example-ratio-${model.id}`}
-							>
-								{result.multiplier ?? t("common.emptyValue")}
-							</output>
-						</div>
-					)
-				})}
-			</div>
-			<p className="text-xs leading-5 text-muted-foreground">
-				{t("platformInfo.multiplier.snapshotHint")}
-			</p>
-			<p className="text-xs leading-5 text-muted-foreground">
-				{t("platformInfo.multiplier.tierSources")}
-			</p>
-		</section>
 	)
 }
 

@@ -43,6 +43,10 @@ const getVitestBaseConfig = () => {
 			conditions: ["magic-web-source", ...defaultClientConditions],
 			alias: [
 				{
+					find: "@admin-components",
+					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
+				},
+				{
 					find: "@customer/",
 					replacement: `${resolve(__dirname, "customer/src")}/`,
 				},
