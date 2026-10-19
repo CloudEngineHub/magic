@@ -13,12 +13,14 @@ use App\ErrorCode\GenericErrorCode;
 use App\ErrorCode\NotificationErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use InvalidArgumentException;
+use Throwable;
 use ValueError;
 
 final readonly class NotificationAppService
 {
     public function __construct(
         private NotificationRepositoryInterface $notifications,
+        private ?NotificationRealtimePushService $realtimePush = null,
     ) {
     }
 
@@ -77,12 +79,26 @@ final readonly class NotificationAppService
             $readAt = date('Y-m-d H:i:s');
             $this->notifications->markRead($isolation, $notificationId, $readAt);
             $notification->setReadAt($readAt);
+            $this->pushRealtimeUpdate($isolation, 'read');
         }
         return [
             'notification_id' => $notification->getId(),
             'read_status' => 'read',
             'read_at' => $notification->getReadAt(),
         ];
+    }
+
+    private function pushRealtimeUpdate(NotificationDataIsolation $isolation, string $reason): void
+    {
+        try {
+            if ($this->realtimePush !== null) {
+                $this->realtimePush->pushForUser($isolation, $reason);
+                return;
+            }
+            di(NotificationRealtimePushService::class)->pushForUser($isolation, $reason);
+        } catch (Throwable) {
+            // WebSocket delivery is best effort; the committed read state is authoritative.
+        }
     }
 
     private function assertExistsAndActive(?NotificationEntity $notification): void

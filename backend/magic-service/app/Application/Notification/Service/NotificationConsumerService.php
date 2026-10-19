@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace App\Application\Notification\Service;
 
 use App\Application\Notification\Contract\EventEnvelope;
+use App\Application\Notification\Contract\EventRecipient;
 use App\Application\Notification\Exception\NotificationEventValidationException;
 use App\Application\Notification\Strategy\NotificationCatalogStrategyInterface;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
@@ -49,6 +50,7 @@ final readonly class NotificationConsumerService
         private NotificationCatalogStrategyInterface $catalog,
         private ConfigInterface $config,
         LoggerFactory $loggerFactory,
+        private ?NotificationRealtimePushService $realtimePush = null,
     ) {
         $this->logger = $loggerFactory->get(self::class);
     }
@@ -80,6 +82,15 @@ final readonly class NotificationConsumerService
                 }
                 return $count;
             });
+            $this->pushRealtimeUpdate(
+                $envelope->organizationCode,
+                array_map(
+                    static fn (EventRecipient $recipient): string => $recipient->userId,
+                    $envelope->recipients
+                ),
+                $this->isWithdrawal($envelope->eventType) ? 'withdrawn' : 'created',
+                $eventId,
+            );
             $this->logger->info('Notification event consumed', [
                 'event_id' => $eventId,
                 'event_type' => $envelope->eventType,
@@ -129,6 +140,30 @@ final readonly class NotificationConsumerService
                 'retryable' => $retryable,
             ]);
             throw $throwable;
+        }
+    }
+
+    /** @param list<string> $userIds */
+    private function pushRealtimeUpdate(
+        string $organizationCode,
+        array $userIds,
+        string $reason,
+        string $eventId,
+    ): void {
+        if ($this->realtimePush !== null) {
+            $this->realtimePush->pushForUsers($organizationCode, $userIds, $reason, $eventId);
+            return;
+        }
+
+        // Keep hand-built tests and legacy workers compatible while allowing
+        // the container to resolve the concrete service in normal runtime.
+        try {
+            di(NotificationRealtimePushService::class)->pushForUsers($organizationCode, $userIds, $reason, $eventId);
+        } catch (Throwable $throwable) {
+            $this->logger->warning('Notification realtime push service unavailable', [
+                'event_id' => $eventId,
+                'error' => $throwable->getMessage(),
+            ]);
         }
     }
 
