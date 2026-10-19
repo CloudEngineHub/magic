@@ -9,6 +9,8 @@ namespace App\Application\Mode\Service;
 
 use App\Application\Mode\Assembler\DefaultModelPricePreviewAssembler;
 use App\Application\Mode\DTO\DefaultModelPricePreviewDTO;
+use App\Domain\File\Service\FileDomainService;
+use App\Domain\Mode\Entity\ModeAggregate;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 
 /** 编排默认文本模型售价快照，与前台用户模型解析链路隔离。 */
@@ -19,6 +21,7 @@ class DefaultModelPricePreviewService
         private readonly AdminModeAppService $modes,
         private readonly DefaultModelPricePreviewGraphBuilder $graphBuilder,
         private readonly DefaultModelPricePreviewAssembler $assembler,
+        private readonly FileDomainService $files,
     ) {
     }
 
@@ -29,6 +32,28 @@ class DefaultModelPricePreviewService
         if ($snapshot['mode'] === null) {
             return new DefaultModelPricePreviewDTO();
         }
-        return $this->assembler->assemble($snapshot['mode'], $this->graphBuilder->build($snapshot), $locale);
+        $graph = $this->graphBuilder->build($snapshot);
+        return $this->assembler->assemble($snapshot['mode'], $graph, $locale, $this->loadIcons($snapshot['mode'], $graph));
+    }
+
+    /** 批量解析分组与可达模型的对象路径，外部地址保持原样，不修改共享实体。 */
+    private function loadIcons(ModeAggregate $mode, array $graph): array
+    {
+        $paths = [];
+        foreach ($mode->getGroupAggregates() as $group) {
+            $paths[] = $group->getGroup()->getIcon();
+        }
+        foreach ($graph['nodes'] as $node) {
+            $paths[] = isset($node['model']) ? $node['model']->getIcon() : '';
+        }
+        $paths = array_values(array_unique(array_filter($paths, static fn (string $path): bool => $path !== '' && ! is_url($path))));
+        if ($paths === []) {
+            return [];
+        }
+        $icons = [];
+        foreach ($this->files->getBatchLinksByOrgPaths($paths) as $path => $link) {
+            $icons[$path] = $link->getUrl();
+        }
+        return $icons;
     }
 }

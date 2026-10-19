@@ -22,7 +22,7 @@ class DefaultModelPricePreviewAssembler
     }
 
     /** 保留分组及关系顺序，动态父项只输出候选引用。 */
-    public function assemble(ModeAggregate $mode, array $graph, string $locale): DefaultModelPricePreviewDTO
+    public function assemble(ModeAggregate $mode, array $graph, string $locale, array $icons = []): DefaultModelPricePreviewDTO
     {
         $locale = str_replace('-', '_', $locale);
         $models = [];
@@ -30,10 +30,11 @@ class DefaultModelPricePreviewAssembler
             $id = (string) $id;
             $model = $node['model'] ?? null;
             if ($model === null) {
-                $models[$id] = ['kind' => 'unavailable', 'model_id' => $id, 'name' => $id, 'reason' => $node['reason']];
+                $models[$id] = ['kind' => 'unavailable', 'model_id' => $id, 'name' => $id, 'icon' => '', 'reason' => $node['reason']];
                 continue;
             }
-            $base = ['model_id' => $id, 'name' => $model->getLocalizedName($locale) ?: $id];
+            $base = ['model_id' => $id, 'name' => $model->getLocalizedName($locale) ?: $id,
+                'icon' => $icons[$model->getIcon()] ?? $model->getIcon()];
             if ($model->isDynamicModel()) {
                 $models[$id] = $base + ['kind' => 'dynamic',
                     'state' => $node['invalid_config'] ? 'invalid_config' : ($model->getStatus() === Status::Enabled ? 'available' : 'disabled'),
@@ -63,12 +64,10 @@ class DefaultModelPricePreviewAssembler
         }
         $groups = [];
         $groupAggregates = $mode->getGroupAggregates();
-        usort($groupAggregates, static fn ($a, $b) => $a->getGroup()->getSort() <=> $b->getGroup()->getSort());
         foreach ($groupAggregates as $aggregate) {
             $group = $aggregate->getGroup();
             $items = [];
             $relations = $aggregate->getRelations();
-            usort($relations, static fn ($a, $b) => $a->getSort() <=> $b->getSort());
             foreach ($relations as $relation) {
                 $id = $relation->getModelId();
                 if (($models[$id]['reason'] ?? null) === 'unsupported_type') {
@@ -76,7 +75,8 @@ class DefaultModelPricePreviewAssembler
                 }
                 $items[] = ['relation_id' => (string) $relation->getId(), 'model_id' => $id, 'display_name' => $models[$id]['name'] ?? $id];
             }
-            $groups[] = ['id' => (string) $group->getId(), 'name' => $this->name($group->getNameI18n(), $locale), 'items' => $items];
+            $groups[] = ['id' => (string) $group->getId(), 'name' => $this->name($group->getNameI18n(), $locale),
+                'icon' => $icons[$group->getIcon()] ?? $group->getIcon(), 'items' => $items];
         }
         // 非文本根项移除后，仅返回仍由分组或动态候选引用的节点。
         $reachable = [];

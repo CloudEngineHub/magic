@@ -18,6 +18,8 @@ use App\Application\Mode\Service\DefaultModelPricePreviewGraphBuilder;
 use App\Application\Mode\Service\DefaultModelPricePreviewService;
 use App\Application\Mode\Service\ModeAppService;
 use App\Application\Mode\Service\TextModelPriceSummaryResolver;
+use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
+use App\Domain\File\Service\FileDomainService;
 use App\Domain\Mode\Entity\ModeAggregate;
 use App\Domain\Mode\Entity\ModeDataIsolation;
 use App\Domain\Mode\Entity\ModeEntity;
@@ -35,6 +37,7 @@ use App\Domain\Provider\Service\ProviderModelDomainService;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\Kernel\Facade\ModelBillingPreviewApi;
+use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\TranslatorInterface;
 use PHPUnit\Framework\TestCase;
@@ -80,7 +83,7 @@ class DefaultModelPricePreviewTest extends TestCase
         $builder->expects(self::never())->method('build');
         $assembler = $this->createMock(DefaultModelPricePreviewAssembler::class);
         $assembler->expects(self::never())->method('assemble');
-        $service = new DefaultModelPricePreviewService($modes, $builder, $assembler);
+        $service = new DefaultModelPricePreviewService($modes, $builder, $assembler, new FileDomainService($this->createMock(CloudFileRepositoryInterface::class)));
         self::assertNull($service->get($this->createMock(MagicUserAuthorization::class), 'zh_CN')->toArray()['mode']);
     }
 
@@ -100,7 +103,8 @@ class DefaultModelPricePreviewTest extends TestCase
         $service = new DefaultModelPricePreviewService(
             $this->admin($mode, $models, $providers),
             new DefaultModelPricePreviewGraphBuilder(),
-            new DefaultModelPricePreviewAssembler(new TextModelPriceSummaryResolver())
+            new DefaultModelPricePreviewAssembler(new TextModelPriceSummaryResolver()),
+            new FileDomainService($this->createMock(CloudFileRepositoryInterface::class))
         );
         $data = $service->get($this->createMock(MagicUserAuthorization::class), 'zh_CN')->toArray();
         self::assertSame('默认配置', $data['mode']['name']);
@@ -305,7 +309,7 @@ class DefaultModelPricePreviewTest extends TestCase
         $providers = $this->createMock(ProviderConfigDomainService::class);
         $providers->expects(self::never())->method('getByIds');
         $modes = $this->admin($this->mode(['mock-model']), $models, $providers);
-        $service = new DefaultModelPricePreviewService($modes, new DefaultModelPricePreviewGraphBuilder(), new DefaultModelPricePreviewAssembler(new TextModelPriceSummaryResolver()));
+        $service = new DefaultModelPricePreviewService($modes, new DefaultModelPricePreviewGraphBuilder(), new DefaultModelPricePreviewAssembler(new TextModelPriceSummaryResolver()), new FileDomainService($this->createMock(CloudFileRepositoryInterface::class)));
         $this->expectException(RuntimeException::class);
         $service->get($this->createMock(MagicUserAuthorization::class), 'zh_CN');
     }
@@ -342,6 +346,56 @@ class DefaultModelPricePreviewTest extends TestCase
         self::assertSame([], $data['groups'][0]['items']);
         self::assertSame('{}', json_encode($data['models']));
         self::assertSame('测试分组', $data['groups'][0]['name']);
+    }
+
+    /** 预览保持默认详情原始分组和关系顺序，不按历史 sort 重新排序。 */
+    public function testPreviewKeepsConfiguredArrayOrderAndIcons(): void
+    {
+        $first = $this->model('first', 1);
+        $first->setIcon('mock/group/model.png');
+        $second = $this->model('second', 2);
+        $second->setIcon('https://example.com/mock-model.png');
+        $group = new ModeGroupEntity(['id' => 2, 'name_i18n' => ['zh_CN' => '推荐'], 'sort' => 99, 'icon' => 'mock/group.png']);
+        $last = new ModeGroupEntity(['id' => 1, 'name_i18n' => ['zh_CN' => '末组'], 'sort' => 0]);
+        $relations = [new ModeGroupRelationEntity(['id' => 2, 'model_id' => 'second', 'sort' => 99]),
+            new ModeGroupRelationEntity(['id' => 1, 'model_id' => 'first', 'sort' => 0])];
+        $mode = new ModeAggregate(new ModeEntity(['id' => 1]), [new ModeGroupAggregate($group, $relations), new ModeGroupAggregate($last, [])]);
+        $graph = $this->read(['first', 'second'], ['first' => [$first], 'second' => [$second]]);
+        $icons = ['mock/group.png' => 'https://example.com/group.png', 'mock/group/model.png' => 'https://example.com/model.png'];
+        $data = (new DefaultModelPricePreviewAssembler(new TextModelPriceSummaryResolver()))->assemble($mode, $graph, 'zh_CN', $icons)->toArray();
+        self::assertSame(['2', '1'], array_column($data['groups'], 'id'));
+        self::assertSame(['second', 'first'], array_column($data['groups'][0]['items'], 'model_id'));
+        self::assertSame('https://example.com/group.png', $data['groups'][0]['icon']);
+        $nodes = (array) $data['models'];
+        self::assertSame('https://example.com/model.png', $nodes['first']['icon']);
+        self::assertSame('https://example.com/mock-model.png', $nodes['second']['icon']);
+    }
+
+    /** 图标按路径去重后批量签发，已有 URL 和空图标不请求存储。 */
+    public function testPreviewResolvesSharedIconsInOneBatch(): void
+    {
+        $repository = $this->createMock(CloudFileRepositoryInterface::class);
+        $repository->expects(self::once())->method('getLinks')->with('mock', ['mock/shared.png'])
+            ->willReturn(['mock/shared.png' => new FileLink('mock/shared.png', 'https://example.com/shared.png', 0)]);
+        $service = new DefaultModelPricePreviewService(
+            $this->createMock(AdminModeAppService::class),
+            new DefaultModelPricePreviewGraphBuilder(),
+            new DefaultModelPricePreviewAssembler(new TextModelPriceSummaryResolver()),
+            new FileDomainService($repository)
+        );
+        $mode = $this->mode([]);
+        $mode->getGroupAggregates()[0]->getGroup()->setIcon('mock/shared.png');
+        $shared = $this->model('shared', 1);
+        $shared->setIcon('mock/shared.png');
+        $external = $this->model('external', 2);
+        $external->setIcon('https://example.com/external.png');
+        $icons = (new ReflectionMethod($service, 'loadIcons'))->invoke(
+            $service,
+            $mode,
+            ['nodes' => [['model' => $shared], ['model' => $external], ['reason' => 'missing']]]
+        );
+        self::assertSame(['mock/shared.png' => 'https://example.com/shared.png'], $icons);
+        self::assertSame('mock/shared.png', $shared->getIcon());
     }
 
     /** 模拟隔离对象和批量领域服务，校验每个模型仅查询一次。 */
