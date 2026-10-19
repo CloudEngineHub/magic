@@ -1,6 +1,6 @@
 import Konva from "konva"
 import type { FrameElement as FrameElementData, LayerElement } from "../../document/types"
-import { BaseElement, type TransformContext } from "../core/BaseElement"
+import { BaseElement, type NameLabelContent, type TransformContext } from "../core/BaseElement"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { Canvas } from "../../core/Canvas"
 import { BorderDecorator } from "../decorators/BorderDecorator"
@@ -30,6 +30,21 @@ export class FrameElement extends BaseElement<FrameElementData> {
 	 */
 	public getRenderName(): string {
 		return this.getText("frame.defaultName", "画框")
+	}
+
+	/**
+	 * 名称标签展示画框内直接子元素数量；数量只属于展示状态，不写入 DSL 的 name。
+	 */
+	public override getNameLabelContent(): NameLabelContent {
+		const content = super.getNameLabelContent()
+		const childCount = this.data.children?.length ?? 0
+
+		if (childCount === 0) return content
+
+		return {
+			...content,
+			suffix: { text: ` (${childCount})`, showBackground: false },
+		}
 	}
 
 	/**

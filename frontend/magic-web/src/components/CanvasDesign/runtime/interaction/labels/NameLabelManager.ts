@@ -305,6 +305,7 @@ export class NameLabelManager extends BaseLabelManager {
 		const content = this.getLabelContent(elementId)
 		const primaryText = content.primaryText || ""
 		const suffixText = content.suffix?.text || ""
+		const showSuffixBackground = content.suffix?.showBackground !== false
 		let changed = false
 
 		if (textNode.text() !== primaryText) {
@@ -316,6 +317,7 @@ export class NameLabelManager extends BaseLabelManager {
 		}
 
 		let suffixNode = this.getSuffixNode(labelGroup)
+		let background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
 		if (suffixText) {
 			if (!suffixNode) {
 				suffixNode = new Konva.Text({
@@ -328,30 +330,38 @@ export class NameLabelManager extends BaseLabelManager {
 					listening: false,
 				})
 				labelGroup.add(suffixNode)
-				labelGroup.add(
-					new Konva.Rect({
-						name: "name-label-status-background",
-						cornerRadius: 7,
-						listening: false,
-					}),
-				)
-				suffixNode.moveToTop()
 				changed = true
 			} else if (suffixNode.text() !== suffixText) {
 				suffixNode.text(suffixText)
 				changed = true
 			}
 
-			// 进行中的任务使用画布蓝色；终态保留中性色，避免继续传达正在处理。
-			const statusColor = content.suffix?.inProgress ? "#3B82F6" : this.labelConfig.textColor
-			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
-			const backgroundColor = content.suffix?.inProgress
-				? "rgba(59, 130, 246, 0.08)"
-				: "rgba(115, 115, 115, 0.08)"
-			if (background?.fill() !== backgroundColor) {
-				background?.fill(backgroundColor)
+			if (showSuffixBackground) {
+				if (!background) {
+					background = new Konva.Rect({
+						name: "name-label-status-background",
+						cornerRadius: 7,
+						listening: false,
+					})
+					labelGroup.add(background)
+					changed = true
+				}
+				// 进行中的任务使用画布蓝色；终态保留中性色，避免继续传达正在处理。
+				const backgroundColor = content.suffix?.inProgress
+					? "rgba(59, 130, 246, 0.08)"
+					: "rgba(115, 115, 115, 0.08)"
+				if (background.fill() !== backgroundColor) {
+					background.fill(backgroundColor)
+					changed = true
+				}
+			} else if (background) {
+				background.destroy()
+				background = null
 				changed = true
 			}
+			suffixNode.moveToTop()
+
+			const statusColor = content.suffix?.inProgress ? "#3B82F6" : this.labelConfig.textColor
 			if (suffixNode.fill() !== statusColor) {
 				suffixNode.fill(statusColor)
 				changed = true
@@ -360,8 +370,10 @@ export class NameLabelManager extends BaseLabelManager {
 			if (state.suffixText !== suffixText || changed) {
 				state.suffixNaturalTextWidth =
 					this.measureNaturalTextWidth(suffixNode) +
-					NAME_LABEL_CONFIG.STATUS_PADDING_X * 2
-				state.suffixHeight = suffixNode.height() + NAME_LABEL_CONFIG.STATUS_PADDING_Y * 2
+					(showSuffixBackground ? NAME_LABEL_CONFIG.STATUS_PADDING_X * 2 : 0)
+				state.suffixHeight =
+					suffixNode.height() +
+					(showSuffixBackground ? NAME_LABEL_CONFIG.STATUS_PADDING_Y * 2 : 0)
 				changed = true
 			}
 		} else {
@@ -549,15 +561,18 @@ export class NameLabelManager extends BaseLabelManager {
 			// 胶囊整体与标题居中，内部文字独立居中；字号较小也不会沿标题底部排列。
 			const suffixY = (labelHeight - state.suffixHeight) / 2
 			const suffixTextX = suffixOffsetX
-			const suffixTextY = suffixY + NAME_LABEL_CONFIG.STATUS_PADDING_Y
 			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
+			const suffixTextY = suffixY + (background ? NAME_LABEL_CONFIG.STATUS_PADDING_Y : 0)
+			const backgroundGeometryChanged = background
+				? background.x() !== suffixOffsetX - NAME_LABEL_CONFIG.STATUS_PADDING_X ||
+					background.y() !== suffixY ||
+					background.width() !== state.suffixNaturalTextWidth ||
+					background.height() !== state.suffixHeight
+				: false
 			if (
 				suffixNode.x() !== suffixTextX ||
 				suffixNode.y() !== suffixTextY ||
-				background?.x() !== suffixOffsetX ||
-				background?.y() !== suffixY ||
-				background?.width() !== state.suffixNaturalTextWidth ||
-				background?.height() !== state.suffixHeight
+				backgroundGeometryChanged
 			) {
 				suffixNode.position({ x: suffixTextX, y: suffixTextY })
 				background?.setAttrs({

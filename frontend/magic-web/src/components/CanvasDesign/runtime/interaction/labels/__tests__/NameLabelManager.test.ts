@@ -107,6 +107,14 @@ class TestNameLabelManager extends NameLabelManager {
 		)
 	}
 
+	public getSuffixBackgroundForTest(elementId: string): Konva.Rect | null {
+		return (
+			(this.labelMap
+				.get(elementId)
+				?.findOne(".name-label-status-background") as Konva.Rect | null) ?? null
+		)
+	}
+
 	public updateLabelPositionForTest(elementId: string): boolean {
 		return this.updateLabelPosition(elementId, true)
 	}
@@ -552,10 +560,37 @@ describe("NameLabelManager visibility", () => {
 
 		expect(manager.getTextNodeForTest("image-1")?.text()).toBe(primaryText)
 		expect(manager.getSuffixNodeForTest("image-1")?.text()).toBe("(生成中)")
+		expect(manager.getSuffixBackgroundForTest("image-1")).toBeInstanceOf(Konva.Rect)
 		expect(manager.getRenameHitNodeForTest("image-1")).toBeInstanceOf(Konva.Rect)
 		expect(manager.getRenameHitNodeForTest("image-1")?.listening()).toBe(true)
 		expect(manager.getRenameIconNodeForTest("image-1")?.visible()).toBe(false)
 		expect(manager.getIconNodeForTest("image-1")?.x()).toBe(0)
+
+		manager.destroy()
+	})
+
+	it("renders a meta suffix without a status background", () => {
+		const elements = new Map<string, TestElement>([
+			[
+				"frame-1",
+				{
+					getBoundingRect: () => ({ x: 10, y: 20, width: 200, height: 80 }),
+					getData: () => ({ id: "frame-1", type: ElementTypeEnum.Frame }),
+					getNameLabelContent: () => ({
+						primaryText: "画框",
+						suffix: { text: " (2)", showBackground: false },
+					}),
+					getNode: () => ({}),
+				},
+			],
+		])
+		const manager = createManager(elements)
+
+		manager.createOrUpdateLabelForTest("frame-1")
+
+		expect(manager.getTextNodeForTest("frame-1")?.text()).toBe("画框")
+		expect(manager.getSuffixNodeForTest("frame-1")?.text()).toBe(" (2)")
+		expect(manager.getSuffixBackgroundForTest("frame-1")).toBeNull()
 
 		manager.destroy()
 	})

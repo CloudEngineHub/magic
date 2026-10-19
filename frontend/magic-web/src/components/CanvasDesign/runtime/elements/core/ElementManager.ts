@@ -1987,6 +1987,17 @@ export class ElementManager {
 				{ phase: "commit" },
 			)
 		}
+
+		// Reparenting updates the source/target parent instances directly, so the
+		// regular element:updated label refresh never sees the changed frame counts.
+		if (parentChangedItems.length > 0) {
+			const affectedParentIds = new Set<string>()
+			parentChangedItems.forEach((item) => {
+				if (item.sourceParentId) affectedParentIds.add(item.sourceParentId)
+			})
+			if (targetParentId) affectedParentIds.add(targetParentId)
+			this.canvas.refreshNameLabelIcons?.(Array.from(affectedParentIds))
+		}
 		return true
 	}
 
