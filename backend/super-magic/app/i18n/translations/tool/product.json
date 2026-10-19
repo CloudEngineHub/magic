@@ -107,6 +107,10 @@
         "zh_CN": "操作遇到问题，请稍后重试。",
         "en_US": "The operation encountered a problem. Please try again later."
     },
+    "error.resource_files_unavailable": {
+        "zh_CN": "无法读取所需的项目文件，请检查项目访问权限和文件挂载后重试。",
+        "en_US": "The required project files are unavailable. Check project access and the file mount before retrying."
+    },
     "error.duplicate_file_id": {
         "zh_CN": "选择的文件存在重复，请移除重复项后重试。",
         "en_US": "The selected files contain duplicates. Remove them and try again."

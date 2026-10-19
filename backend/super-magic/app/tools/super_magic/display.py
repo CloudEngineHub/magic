@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import html
 import re
+import traceback
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.infrastructure.sdk.base.exceptions import HttpRequestError
@@ -25,6 +28,7 @@ from app.tools.utils.time_display import format_tool_time
 from .context import ProductConfigurationError, ProductContext, ProductContextError, current_product_context
 
 T = TypeVar("T", bound=BaseToolParams)
+logger = get_logger(__name__)
 
 
 def _label(key: str, **kwargs: object) -> str:
@@ -381,5 +385,17 @@ class ProductTool(BaseTool[T]):
             return ToolResult.error(str(exc), use_custom_remark=True, data={"code": "execution_config_unavailable"})
         except ValueError as exc:
             return ToolResult.error(str(exc), use_custom_remark=True, data={"code": "invalid_input_or_response"})
-        except Exception:
+        except (FileNotFoundError, PermissionError):
+            return ToolResult.error(
+                "The required project files are unavailable. Check the configured project mount and access permissions before retrying.",
+                use_custom_remark=True, data={"code": "resource_files_unavailable"},
+            )
+        except Exception as exc:
+            # 保留异常类型和调用位置，避免记录可能含凭据的上游正文或函数局部变量。
+            frames = "; ".join(f"{frame.filename}:{frame.lineno} in {frame.name}" for frame in traceback.extract_tb(exc.__traceback__))
+            logger.error(
+                f"Product operation failed: tool={self.name}, action={action}, "
+                f"tool_call_id={tool_context.tool_call_id if tool_context else 'unknown'}, "
+                f"exception_type={type(exc).__name__}, stack={frames}"
+            )
             return ToolResult.error("The product operation failed unexpectedly.", use_custom_remark=True, data={"code": "unexpected_error"})

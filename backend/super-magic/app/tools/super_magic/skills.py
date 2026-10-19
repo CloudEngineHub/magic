@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import os
 from pathlib import Path
 from typing import Literal
 
@@ -17,6 +16,7 @@ from app.path_manager import PathManager
 from app.service.prepared_operation_confirmation import PreparedOperationConfirmation
 from app.tools.core import tool
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
+from app.utils.agfs_mount_path import get_referenced_project_mount_base
 from app.utils.async_file_utils import (
     async_chmod,
     async_exists,
@@ -169,8 +169,8 @@ async def interruptible(ctx, awaitable):
 async def materialize_snapshot(record: dict, agent) -> Path:
     """复制经云端哈希校验的内容供审查；不改写被引用项目。"""
     project_id = resource_id(str(record["project_id"]), "project_id")
-    base = os.environ.get("AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH", "").strip() or "/mnt/agfs/magicfs/referenced-projects"
-    root = Path(base) / project_id / ".magic" / "skills" / record["skill_dir"]
+    # 与文件工具共享网关注入的 FUSE 根；未显式配置跨项目根时也必须跟随它。
+    root = get_referenced_project_mount_base() / project_id / ".magic" / "skills" / record["skill_dir"]
     root = await asyncio.to_thread(root.resolve, strict=True)
     destination = PathManager.get_runtime_dir() / "skill-publish" / record["prepare_token"]
     await async_mkdir(destination, parents=True, exist_ok=True)
@@ -238,6 +238,7 @@ class PrepareSkillPublish(ProductTool[PrepareSkillPublishParams]):
                     break
                 await interruptible(ctx, asyncio.sleep(2))
                 record = await interruptible(ctx, ctx.sdk.skill.check_preparation_async(ctx.auth, params.code, record["prepare_token"]))
+            recovery["publish_task_id"] = record["prepare_token"]
             if record["status"] != "ready":
                 return record
             snapshot = await materialize_snapshot(record, ctx.agent)
@@ -255,7 +256,11 @@ class PrepareSkillPublish(ProductTool[PrepareSkillPublishParams]):
             result = await self.run_product(tool_context, "Skill publication preparation", operation, write=True, format_result=skill_result)
             if not result.ok and recovery:
                 result.data.update(recovery)
-                result.content += f" Check or resume preparation with publish_task_id={recovery['publish_task_id']}. A preparation never submits a release."
+                result.content += f" Preparation task: publish_task_id={recovery['publish_task_id']}. No release has been submitted."
+                if result.data.get("code") in {"outcome_unknown", "network_error"}:
+                    result.content += " Check or resume this task to recover the uncertain request."
+                elif result.data.get("code") in {"resource_files_unavailable", "unexpected_error"}:
+                    result.content += " Do not keep polling or create another export with unchanged inputs. Resolve the reported problem first, then resume this same task."
             return result
         finally:
             stop_tool_keep_alive(keepalive)

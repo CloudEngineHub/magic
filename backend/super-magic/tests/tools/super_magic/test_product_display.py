@@ -3,12 +3,12 @@ import ast
 import importlib
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
-
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
+
 from app.core.entity.factory.task_message_factory_v2 import TaskMessageFactoryV2
 from app.i18n import i18n
 from app.tools.super_magic.display import TOOL_SUBJECTS, ProductTool, product_detail
@@ -114,6 +114,23 @@ async def test_write_timeout_retains_specific_outcome_and_is_not_retried(monkeyp
     assert not result.ok and result.data["code"] == "outcome_unknown"
     assert result.use_custom_remark
     operation.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_failure_logs_call_site_without_private_exception_body(monkeypatch):
+    tool = CreateTopic()
+    ctx = SimpleNamespace(agent=SimpleNamespace(is_interruption_requested=lambda: False))
+    monkeypatch.setattr('app.tools.super_magic.display.current_product_context', lambda _: ctx)
+    logger = Mock()
+    monkeypatch.setattr('app.tools.super_magic.display.logger', logger, raising=False)
+    operation = AsyncMock(side_effect=KeyError('private-upstream-body'))
+    result = await tool.run_product(SimpleNamespace(tool_call_id='failing-call'), 'Topic creation', operation, write=True)
+    assert not result.ok and result.data['code'] == 'unexpected_error'
+    logger.error.assert_called_once()
+    logged = str(logger.error.call_args)
+    assert 'failing-call' in logged and 'KeyError' in logged and 'run_product' in logged
+    assert 'private-upstream-body' not in logged
+    assert 'private-upstream-body' not in result.content
 
 
 @pytest.mark.asyncio

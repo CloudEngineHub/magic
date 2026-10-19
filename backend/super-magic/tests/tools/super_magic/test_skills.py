@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.core.context.execution_source import SuperMagicExecutionSource
+from app.i18n import i18n
 from app.infrastructure.sdk.base.exceptions import HttpRequestError
 from app.infrastructure.sdk.magic_service.api.skill_api import SkillApi
 from app.infrastructure.sdk.magic_service.kernel.magic_service_parameter import MagicServiceAuthConfig
@@ -18,6 +19,8 @@ from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.super_magic.context import ProductContext
 from app.tools.super_magic.skills import (
     GetSkillParams,
+    PrepareSkillPublish,
+    PrepareSkillPublishParams,
     PublishSkill,
     PublishSkillParams,
     interruptible,
@@ -158,6 +161,64 @@ async def test_snapshot_rejects_changes_and_keeps_old_bytes(context, tmp_path, m
     record['manifest'] = {'../outside': 'hash'}
     with pytest.raises(ValueError, match='invalid path'):
         await materialize_snapshot(record, context[0].agent)
+
+
+def ready_preparation():
+    return {
+        'status': 'ready', 'skill_code': 'skill-code', 'project_id': '789',
+        'skill_dir': 'demo', 'prepare_token': 'a' * 64, 'publish_task_id': 'a' * 64,
+        'name': 'Demo', 'description': 'Reusable workflow', 'version': '1.0.0',
+        'publish_target_type': 'PRIVATE', 'package_sha256': 'package-hash',
+        'manifest': {'SKILL.md': hashlib.sha256(b'original').hexdigest()},
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('explicit_base', [None, '', '   ', 'custom'])
+async def test_prepare_reviews_real_snapshot_using_runtime_mount_root(context, tmp_path, monkeypatch, explicit_base):
+    fuse_root = tmp_path / 'agfs-vol/agfs'
+    monkeypatch.setenv('AGFS_FUSE_MOUNT_PATH', str(fuse_root))
+    if explicit_base is None:
+        monkeypatch.delenv('AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH', raising=False)
+    else:
+        monkeypatch.setenv('AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH', str(tmp_path / 'custom') if explicit_base == 'custom' else explicit_base)
+    mount = tmp_path / 'custom' if explicit_base == 'custom' else fuse_root / 'magicfs/referenced-projects'
+    source = mount / '789/.magic/skills/demo/SKILL.md'
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b'original')
+    context[0].sdk.skill.prepare_publish_async = AsyncMock(return_value=ready_preparation())
+    result = await PrepareSkillPublish().execute(context[1], PrepareSkillPublishParams(code='skill-code'))
+    assert result.ok, result.content
+    assert result.data['status'] == 'ready'
+    assert (tmp_path / '.runtime/skill-publish' / ('a' * 64) / 'SKILL.md').read_bytes() == b'original'
+    record = await PreparedOperationConfirmation(context[0].agent).read(context[1].tool_call_id)
+    assert record.state == 'prepared'
+    assert record.payload['project_id'] == '789'
+    assert record.payload['snapshot_path'] == result.data['snapshot_path']
+    context[0].sdk.skill.publish_prepared_async.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_source_reports_recovery_without_reexporting(context, tmp_path, monkeypatch):
+    monkeypatch.delenv('AGENT_REFERENCED_PROJECT_MOUNT_BASE_PATH', raising=False)
+    monkeypatch.setenv('AGFS_FUSE_MOUNT_PATH', str(tmp_path / 'unavailable-mount'))
+    context[0].sdk.skill.check_preparation_async = AsyncMock(return_value=ready_preparation())
+    result = await PrepareSkillPublish().execute(context[1], PrepareSkillPublishParams(code='skill-code', publish_task_id='a' * 64))
+    assert not result.ok
+    assert result.data['code'] == 'resource_files_unavailable'
+    assert result.data['publish_task_id'] == 'a' * 64
+    assert 'mount' in result.content and 'permissions' in result.content
+    assert 'Do not keep polling or create another export' in result.content
+    context[0].sdk.skill.check_preparation_async.assert_awaited_once()
+    context[0].sdk.skill.publish_prepared_async.assert_not_awaited()
+    assert not PreparedOperationConfirmation(context[0].agent)._path(context[1].tool_call_id).exists()
+    i18n.set_language('zh_CN')
+    try:
+        detail = await PrepareSkillPublish().get_tool_detail(None, result)
+        assert '无法读取所需的项目文件' in detail.data.content
+        assert str(tmp_path) not in detail.data.content
+    finally:
+        i18n.reset_language()
 
 
 @pytest.mark.asyncio
