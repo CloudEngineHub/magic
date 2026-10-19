@@ -19,7 +19,6 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import dayjs from "@/infrastructure/vendors/dayjs"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
 	Dialog,
 	DialogContent,
@@ -205,9 +204,10 @@ export default function PersonaDetailSheet({
 					) : null}
 					<AiSimulatedNote />
 				</div>
-				{/* Radix wraps content in a table that grows with long values; keep it to the panel width. */}
+				{/* A plain scrolling box between the fixed header and footer: the Radix scroll area
+				    did not take its flex height here, so long content ran on under the footer. */}
 				<FieldLabelsContext.Provider value={persona.field_labels}>
-					<ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
+					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
 						<div className="flex flex-col gap-6 p-5 text-sm">
 							{interview?.quotes?.[0] ? (
 								<blockquote className="flex gap-2 rounded-xl bg-primary/5 p-3 text-sm leading-6">
@@ -310,10 +310,16 @@ export default function PersonaDetailSheet({
 								</Section>
 							)}
 						</div>
-					</ScrollArea>
+					</div>
 				</FieldLabelsContext.Provider>
 				{onAskPersona || (interview && onOpenInterview) ? (
-					<div className="flex shrink-0 gap-2 border-t border-border p-4">
+					// A lone "view interview" sits at the right instead of stretching across.
+					<div
+						className={cn(
+							"flex shrink-0 gap-2 border-t border-border bg-background p-4",
+							!onAskPersona && "justify-end",
+						)}
+					>
 						{onAskPersona ? (
 							<Button
 								className="flex-1"
@@ -326,7 +332,7 @@ export default function PersonaDetailSheet({
 						{interview && onOpenInterview ? (
 							<Button
 								variant="outline"
-								className="flex-1"
+								className={onAskPersona ? "flex-1" : undefined}
 								onClick={() => leaveWith(() => onOpenInterview(persona.id))}
 							>
 								<MessagesSquare className="size-4" />
@@ -422,7 +428,7 @@ function Field({
 					.map(([key, item]) => ({
 						key,
 						label: nameOf(key),
-						rawLabel: key.replaceAll("_", " "),
+						rawLabel: humanizeKey(key),
 						text: format(item),
 					}))
 					.filter((entry) => entry.text)
@@ -454,17 +460,25 @@ function Field({
 				) : null}
 			</span>
 			{entries?.length ? (
-				<dl className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-x-4 gap-y-2.5">
+				<dl className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-4 gap-y-3">
 					{entries.map((entry) => (
-						<div key={entry.key} className="flex min-w-0 flex-col gap-0.5">
-							{/* An unnamed key (e.g. "money_style") is not shown as a title: the value
-							    leads and the raw key trails as a faint hint. */}
+						<div
+							key={entry.key}
+							className={cn(
+								"flex min-w-0 flex-col gap-0.5",
+								// Sentences get two columns so they are not squeezed into a narrow cell.
+								entry.text.length > LONG_VALUE_LENGTH && "sm:col-span-2",
+							)}
+						>
+							{/* Every cell has its title above the value; a key without a name shows as
+							    readable words ("Time style") in a lighter tone. */}
 							<dt
-								className={
+								className={cn(
+									"text-[11px] leading-4",
 									entry.label
-										? "text-[11px] leading-4 text-muted-foreground"
-										: "order-last text-[10px] leading-4 text-muted-foreground/60"
-								}
+										? "text-muted-foreground"
+										: "text-muted-foreground/60",
+								)}
 							>
 								{entry.label ?? entry.rawLabel}
 							</dt>
@@ -488,6 +502,15 @@ function Field({
 			)}
 		</div>
 	)
+}
+
+/** Values longer than this span two grid columns. */
+const LONG_VALUE_LENGTH = 24
+
+/** "time_style" → "Time style": a readable title for a key that has no display name. */
+function humanizeKey(key: string): string {
+	const words = key.replace(/[_-]+/g, " ").trim()
+	return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
 /** Source card: type icon, title, domain for web sources and the quoted snippet. */
