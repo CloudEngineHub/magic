@@ -294,7 +294,7 @@ const ResearchShareBody = observer(function ResearchShareBody({
 					setFocusedInterviewId(personaId)
 					setConsoleTab("interviews")
 				}}
-				side={isMobile ? "bottom" : "right"}
+				side={isMobile ? "bottom" : "center"}
 			/>
 		</div>
 	)

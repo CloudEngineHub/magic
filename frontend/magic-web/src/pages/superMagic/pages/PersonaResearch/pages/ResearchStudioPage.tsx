@@ -499,7 +499,7 @@ function ResearchStudioPage() {
 			onOpenChange={(open) => !open && setOpenedPersona(null)}
 			onAskPersona={handleAskPersona}
 			onOpenInterview={handleOpenInterview}
-			side={isMobile ? "bottom" : "right"}
+			side={isMobile ? "bottom" : "center"}
 		/>
 	)
 

@@ -507,7 +507,7 @@ function PersonaLibraryPage() {
 				onOpenChange={(open) => !open && setOpenedPersona(null)}
 				onEdit={canEdit ? openEditForm : undefined}
 				onDelete={canEdit ? requestDelete : undefined}
-				side={isMobile ? "bottom" : "right"}
+				side={isMobile ? "bottom" : "center"}
 			/>
 
 			<PersonaFormDialog

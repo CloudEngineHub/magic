@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { createContext, useContext, useRef, type ReactNode } from "react"
 import {
 	Brain,
 	ExternalLink,
@@ -21,12 +21,12 @@ import MagicTooltip from "@/components/base/MagicTooltip"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-} from "@/components/shadcn-ui/sheet"
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "@/components/shadcn-ui/dialog"
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/shadcn-ui/sheet"
 import { cn } from "@/utils/cn"
 import type {
 	InterviewFile,
@@ -52,8 +52,12 @@ interface PersonaDetailSheetProps {
 	/** Persona library only: open the edit form / ask to delete this persona. */
 	onEdit?: (persona: PersonaFile) => void
 	onDelete?: (persona: PersonaFile) => void
-	side?: "right" | "bottom"
+	/** A centred dialog on desktop, so the page behind keeps its place; a bottom sheet on phones. */
+	side?: "center" | "bottom"
 }
+
+/** The opened persona's own names for keys the agent made up (persona.field_labels). */
+const FieldLabelsContext = createContext<Record<string, string> | undefined>(undefined)
 
 /** Seven dimensions, four evidence layers and sources of one persona. */
 export default function PersonaDetailSheet({
@@ -64,7 +68,7 @@ export default function PersonaDetailSheet({
 	onOpenInterview,
 	onEdit,
 	onDelete,
-	side = "right",
+	side = "center",
 }: PersonaDetailSheetProps) {
 	const { t } = useTranslation("personaResearch")
 	const dimensions = persona?.dimensions
@@ -95,240 +99,265 @@ export default function PersonaDetailSheet({
 		: null
 	const answeredRounds = interview?.rounds.filter((round) => round.role === "persona").length ?? 0
 	const leadQuote = interview?.quotes?.[0]?.text
+	const isDialog = side === "center"
+	const Title = isDialog ? DialogTitle : SheetTitle
+	const Description = isDialog ? DialogDescription : SheetDescription
+	// Closing returns focus to the persona card, except after "ask" or "view interview":
+	// those move the user on (to the composer or the interview), so focus must not jump back.
+	const leavingRef = useRef(false)
+	const leaveWith = (action: () => void) => {
+		leavingRef.current = true
+		action()
+	}
+	const onCloseAutoFocus = (event: Event) => {
+		if (!leavingRef.current) return
+		event.preventDefault()
+		leavingRef.current = false
+	}
 
-	return (
-		<Sheet open={Boolean(persona)} onOpenChange={onOpenChange}>
-			<SheetContent
-				side={side}
-				className={
-					side === "right"
-						? "flex w-full flex-col gap-0 p-0 sm:max-w-md"
-						: "flex max-h-[88vh] flex-col gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)]"
-				}
-			>
-				{persona && tierCopy ? (
-					<>
-						{/* Persona-coloured header, matching their card, quotes and transcript highlights. */}
-						<SheetHeader
-							className="gap-3 border-b border-border p-5"
-							style={{
-								backgroundColor: personaTone(persona.name || persona.id).tint,
-							}}
-						>
-							<div className="flex items-center gap-3.5">
-								<PersonaAvatar
-									id={persona.id}
-									name={persona.name}
-									shape="square"
-									className="size-16"
-								/>
-								<div className="min-w-0 flex-1">
-									<SheetTitle className="truncate text-xl font-black tracking-tight">
-										{persona.name}
-									</SheetTitle>
-									<SheetDescription className="line-clamp-2">
-										{persona.tagline}
-									</SheetDescription>
-								</div>
-								{onEdit || onDelete ? (
-									// Right padding keeps clear of the sheet's own close button.
-									<div className="flex shrink-0 items-center gap-0.5 self-start pr-7">
-										{onEdit ? (
-											<Button
-												variant="ghost"
-												size="sm"
-												className="h-7 gap-1 px-2 text-xs"
-												onClick={() => onEdit(persona)}
-											>
-												<Pencil className="size-3.5" />
-												{t("persona.edit")}
-											</Button>
-										) : null}
-										{onDelete ? (
-											<MagicTooltip title={t("persona.delete")}>
-												<Button
-													variant="ghost"
-													size="icon"
-													className="size-7 text-muted-foreground hover:text-destructive"
-													aria-label={t("persona.delete")}
-													onClick={() => onDelete(persona)}
-												>
-													<Trash2 className="size-3.5" />
-												</Button>
-											</MagicTooltip>
-										) : null}
-									</div>
-								) : null}
-							</div>
-							{leadQuote ? (
-								<HangingQuote
-									text={leadQuote}
-									className="text-[15px] font-bold leading-relaxed text-foreground"
-								/>
-							) : null}
-							<div className="flex flex-wrap gap-1">
-								{(persona.tags ?? []).map((tag) => (
-									<span
-										key={tag}
-										className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
-									>
-										{tag}
-									</span>
-								))}
-							</div>
-							<div className="grid grid-cols-3 gap-2 text-center">
-								<Stat label={t("persona.stat.tier")} value={tierCopy.label} />
-								<Stat
-									label={t("persona.stat.sources")}
-									value={isManual ? "—" : String(persona.evidence?.length ?? 0)}
-								/>
-								<Stat
-									label={t("persona.stat.rounds")}
-									value={interview ? String(answeredRounds) : "—"}
-								/>
-							</div>
-							<p className="text-xs leading-5 text-muted-foreground">
-								{tierCopy.hint}
-							</p>
-							{persona.edited_at && !isManual ? (
-								<p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs leading-5 text-muted-foreground">
-									{t("persona.editedNotice", {
-										date: dayjs(persona.edited_at).format("MM-DD"),
-									})}
-								</p>
-							) : null}
-							<AiSimulatedNote />
-						</SheetHeader>
-						{/* Radix wraps content in a table that grows with long values; keep it to the sheet width. */}
-						<ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
-							<div className="flex flex-col gap-6 p-5 text-sm">
-								{interview?.quotes?.[0] ? (
-									<blockquote className="flex gap-2 rounded-xl bg-primary/5 p-3 text-sm leading-6">
-										<Quote className="mt-1 size-4 shrink-0 text-primary" />
-										<span>{interview.quotes[0].text}</span>
-									</blockquote>
-								) : null}
-								<Section
-									icon={<FingerprintPattern className="size-4" />}
-									title={t("persona.section.dimensions")}
-								>
-									<Field
-										label={t("persona.dimension.demographics")}
-										value={dimensions?.demographics}
-										source={fieldSourceOf("demographics")}
-									/>
-									<Field
-										label={t("persona.dimension.geography")}
-										value={dimensions?.geography}
-										source={fieldSourceOf("geography")}
-									/>
-									<Field
-										label={t("persona.dimension.psychographics")}
-										value={dimensions?.psychographics}
-										source={fieldSourceOf("psychographics")}
-									/>
-									<Field
-										label={t("persona.dimension.behavior")}
-										value={dimensions?.behavior}
-										source={fieldSourceOf("behavior")}
-									/>
-									<Field
-										label={t("persona.dimension.needsPains")}
-										value={dimensions?.needs_pains}
-										source={fieldSourceOf("needs_pains")}
-									/>
-									<Field
-										label={t("persona.dimension.techAdoption")}
-										value={dimensions?.tech_adoption}
-										source={fieldSourceOf("tech_adoption")}
-									/>
-									<Field
-										label={t("persona.dimension.social")}
-										value={dimensions?.social}
-										source={fieldSourceOf("social")}
-									/>
-								</Section>
-								<Section
-									icon={<Layers className="size-4" />}
-									title={t("persona.section.layers")}
-								>
-									<Field
-										label={t("persona.layer.expression")}
-										value={layers?.expression}
-									/>
-									<Field label={t("persona.layer.story")} value={layers?.story} />
-									<DecisionWeights value={layers?.cognition?.decision_weights} />
-									<Field
-										label={t("persona.layer.behavior")}
-										value={layers?.behavior}
-									/>
-								</Section>
-								{persona.consistency_notes?.length ? (
-									<Section
-										icon={<Split className="size-4" />}
-										title={t("persona.section.contradictions")}
-									>
-										<ul className="flex flex-col gap-1.5">
-											{persona.consistency_notes.map((note, index) => (
-												<li
-													key={index}
-													className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs leading-5"
-												>
-													{note}
-												</li>
-											))}
-										</ul>
-										<p className="text-[11px] text-muted-foreground">
-											{t("persona.contradictionsHint")}
-										</p>
-									</Section>
-								) : null}
-								{isManual && !persona.evidence?.length ? null : (
-									<Section
-										icon={<Brain className="size-4" />}
-										title={t("persona.section.evidence")}
-									>
-										{persona.evidence?.length ? (
-											<ul className="flex flex-col gap-2">
-												{persona.evidence.map((item) => (
-													<EvidenceItem key={item.id} item={item} />
-												))}
-											</ul>
-										) : (
-											<p className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-400">
-												<ShieldAlert className="mt-0.5 size-4 shrink-0" />
-												{t("persona.noEvidence")}
-											</p>
-										)}
-									</Section>
-								)}
-							</div>
-						</ScrollArea>
-						{onAskPersona || (interview && onOpenInterview) ? (
-							<div className="flex gap-2 border-t border-border p-4">
-								{onAskPersona ? (
+	const content =
+		persona && tierCopy ? (
+			<>
+				{/* Persona-coloured header, matching their card, quotes and transcript highlights. */}
+				<div
+					className="flex shrink-0 flex-col gap-3 border-b border-border p-5 text-left"
+					style={{
+						backgroundColor: personaTone(persona.name || persona.id).tint,
+					}}
+				>
+					<div className="flex items-center gap-3.5">
+						<PersonaAvatar
+							id={persona.id}
+							name={persona.name}
+							shape="square"
+							className="size-16"
+						/>
+						<div className="min-w-0 flex-1">
+							<Title className="truncate text-xl font-black leading-tight tracking-tight">
+								{persona.name}
+							</Title>
+							<Description className="line-clamp-2">{persona.tagline}</Description>
+						</div>
+						{onEdit || onDelete ? (
+							// Right padding keeps clear of the sheet's own close button.
+							<div className="flex shrink-0 items-center gap-0.5 self-start pr-7">
+								{onEdit ? (
 									<Button
-										className="flex-1"
-										onClick={() => onAskPersona(persona)}
+										variant="ghost"
+										size="sm"
+										className="h-7 gap-1 px-2 text-xs"
+										onClick={() => onEdit(persona)}
 									>
-										<MessageCircleQuestion className="size-4" />
-										{t("persona.ask")}
+										<Pencil className="size-3.5" />
+										{t("persona.edit")}
 									</Button>
 								) : null}
-								{interview && onOpenInterview ? (
-									<Button
-										variant="outline"
-										className="flex-1"
-										onClick={() => onOpenInterview(persona.id)}
-									>
-										<MessagesSquare className="size-4" />
-										{t("persona.viewInterview")}
-									</Button>
+								{onDelete ? (
+									<MagicTooltip title={t("persona.delete")}>
+										<Button
+											variant="ghost"
+											size="icon"
+											className="size-7 text-muted-foreground hover:text-destructive"
+											aria-label={t("persona.delete")}
+											onClick={() => onDelete(persona)}
+										>
+											<Trash2 className="size-3.5" />
+										</Button>
+									</MagicTooltip>
 								) : null}
 							</div>
 						) : null}
-					</>
+					</div>
+					{leadQuote ? (
+						<HangingQuote
+							text={leadQuote}
+							className="text-[15px] font-bold leading-relaxed text-foreground"
+						/>
+					) : null}
+					<div className="flex flex-wrap gap-1">
+						{(persona.tags ?? []).map((tag) => (
+							<span
+								key={tag}
+								className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+							>
+								{tag}
+							</span>
+						))}
+					</div>
+					<div className="grid grid-cols-3 gap-2 text-center">
+						<Stat label={t("persona.stat.tier")} value={tierCopy.label} />
+						<Stat
+							label={t("persona.stat.sources")}
+							value={isManual ? "—" : String(persona.evidence?.length ?? 0)}
+						/>
+						<Stat
+							label={t("persona.stat.rounds")}
+							value={interview ? String(answeredRounds) : "—"}
+						/>
+					</div>
+					<p className="text-xs leading-5 text-muted-foreground">{tierCopy.hint}</p>
+					{persona.edited_at && !isManual ? (
+						<p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs leading-5 text-muted-foreground">
+							{t("persona.editedNotice", {
+								date: dayjs(persona.edited_at).format("MM-DD"),
+							})}
+						</p>
+					) : null}
+					<AiSimulatedNote />
+				</div>
+				{/* Radix wraps content in a table that grows with long values; keep it to the panel width. */}
+				<FieldLabelsContext.Provider value={persona.field_labels}>
+					<ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
+						<div className="flex flex-col gap-6 p-5 text-sm">
+							{interview?.quotes?.[0] ? (
+								<blockquote className="flex gap-2 rounded-xl bg-primary/5 p-3 text-sm leading-6">
+									<Quote className="mt-1 size-4 shrink-0 text-primary" />
+									<span>{interview.quotes[0].text}</span>
+								</blockquote>
+							) : null}
+							<Section
+								icon={<FingerprintPattern className="size-4" />}
+								title={t("persona.section.dimensions")}
+							>
+								<Field
+									label={t("persona.dimension.demographics")}
+									value={dimensions?.demographics}
+									source={fieldSourceOf("demographics")}
+								/>
+								<Field
+									label={t("persona.dimension.geography")}
+									value={dimensions?.geography}
+									source={fieldSourceOf("geography")}
+								/>
+								<Field
+									label={t("persona.dimension.psychographics")}
+									value={dimensions?.psychographics}
+									source={fieldSourceOf("psychographics")}
+								/>
+								<Field
+									label={t("persona.dimension.behavior")}
+									value={dimensions?.behavior}
+									source={fieldSourceOf("behavior")}
+								/>
+								<Field
+									label={t("persona.dimension.needsPains")}
+									value={dimensions?.needs_pains}
+									source={fieldSourceOf("needs_pains")}
+								/>
+								<Field
+									label={t("persona.dimension.techAdoption")}
+									value={dimensions?.tech_adoption}
+									source={fieldSourceOf("tech_adoption")}
+								/>
+								<Field
+									label={t("persona.dimension.social")}
+									value={dimensions?.social}
+									source={fieldSourceOf("social")}
+								/>
+							</Section>
+							<Section
+								icon={<Layers className="size-4" />}
+								title={t("persona.section.layers")}
+							>
+								<Field
+									label={t("persona.layer.expression")}
+									value={layers?.expression}
+								/>
+								<Field label={t("persona.layer.story")} value={layers?.story} />
+								<DecisionWeights value={layers?.cognition?.decision_weights} />
+								<Field
+									label={t("persona.layer.behavior")}
+									value={layers?.behavior}
+								/>
+							</Section>
+							{persona.consistency_notes?.length ? (
+								<Section
+									icon={<Split className="size-4" />}
+									title={t("persona.section.contradictions")}
+								>
+									<ul className="flex flex-col gap-1.5">
+										{persona.consistency_notes.map((note, index) => (
+											<li
+												key={index}
+												className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs leading-5"
+											>
+												{note}
+											</li>
+										))}
+									</ul>
+									<p className="text-[11px] text-muted-foreground">
+										{t("persona.contradictionsHint")}
+									</p>
+								</Section>
+							) : null}
+							{isManual && !persona.evidence?.length ? null : (
+								<Section
+									icon={<Brain className="size-4" />}
+									title={t("persona.section.evidence")}
+								>
+									{persona.evidence?.length ? (
+										<ul className="flex flex-col gap-2">
+											{persona.evidence.map((item) => (
+												<EvidenceItem key={item.id} item={item} />
+											))}
+										</ul>
+									) : (
+										<p className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-400">
+											<ShieldAlert className="mt-0.5 size-4 shrink-0" />
+											{t("persona.noEvidence")}
+										</p>
+									)}
+								</Section>
+							)}
+						</div>
+					</ScrollArea>
+				</FieldLabelsContext.Provider>
+				{onAskPersona || (interview && onOpenInterview) ? (
+					<div className="flex shrink-0 gap-2 border-t border-border p-4">
+						{onAskPersona ? (
+							<Button
+								className="flex-1"
+								onClick={() => leaveWith(() => onAskPersona(persona))}
+							>
+								<MessageCircleQuestion className="size-4" />
+								{t("persona.ask")}
+							</Button>
+						) : null}
+						{interview && onOpenInterview ? (
+							<Button
+								variant="outline"
+								className="flex-1"
+								onClick={() => leaveWith(() => onOpenInterview(persona.id))}
+							>
+								<MessagesSquare className="size-4" />
+								{t("persona.viewInterview")}
+							</Button>
+						) : null}
+					</div>
 				) : null}
+			</>
+		) : null
+
+	if (isDialog) {
+		return (
+			<Dialog open={Boolean(persona)} onOpenChange={onOpenChange}>
+				<DialogContent
+					className="flex max-h-[85vh] w-[calc(100vw-2rem)] max-w-[760px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]"
+					onCloseAutoFocus={onCloseAutoFocus}
+				>
+					{content}
+				</DialogContent>
+			</Dialog>
+		)
+	}
+	return (
+		<Sheet open={Boolean(persona)} onOpenChange={onOpenChange}>
+			<SheetContent
+				side="bottom"
+				className="flex max-h-[88vh] flex-col gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)]"
+				onCloseAutoFocus={onCloseAutoFocus}
+			>
+				{content}
 			</SheetContent>
 		</Sheet>
 	)
@@ -374,11 +403,13 @@ function Field({
 	source?: PersonaFieldSource
 }) {
 	const { t, i18n } = useTranslation("personaResearch")
-	// Contract keys and values (age, city_tier, male) get names; anything else shows as written.
-	const labelOf = (text: string) =>
-		i18n.exists(`personaResearch:persona.field.${text}`)
-			? t(`persona.field.${text}`)
-			: text.replaceAll("_", " ")
+	const fieldLabels = useContext(FieldLabelsContext)
+	// A key's name: the persona's own label for made-up keys, then the built-in names for
+	// contract keys and values (age, city_tier, male); null when neither knows it.
+	const nameOf = (text: string): string | null =>
+		fieldLabels?.[text]?.trim() ||
+		(i18n.exists(`personaResearch:persona.field.${text}`) ? t(`persona.field.${text}`) : null)
+	const labelOf = (text: string) => nameOf(text) ?? text.replaceAll("_", " ")
 	const format = (item: unknown) =>
 		formatResearchValue(item, {
 			labelOf,
@@ -388,7 +419,12 @@ function Field({
 	const entries =
 		value && typeof value === "object" && !Array.isArray(value)
 			? Object.entries(value as Record<string, unknown>)
-					.map(([key, item]) => ({ key, label: labelOf(key), text: format(item) }))
+					.map(([key, item]) => ({
+						key,
+						label: nameOf(key),
+						rawLabel: key.replaceAll("_", " "),
+						text: format(item),
+					}))
 					.filter((entry) => entry.text)
 			: null
 	const items = Array.isArray(value) ? value.map(format).filter(Boolean) : null
@@ -421,8 +457,16 @@ function Field({
 				<dl className="grid min-w-0 grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-x-4 gap-y-2.5">
 					{entries.map((entry) => (
 						<div key={entry.key} className="flex min-w-0 flex-col gap-0.5">
-							<dt className="text-[11px] leading-4 text-muted-foreground">
-								{entry.label}
+							{/* An unnamed key (e.g. "money_style") is not shown as a title: the value
+							    leads and the raw key trails as a faint hint. */}
+							<dt
+								className={
+									entry.label
+										? "text-[11px] leading-4 text-muted-foreground"
+										: "order-last text-[10px] leading-4 text-muted-foreground/60"
+								}
+							>
+								{entry.label ?? entry.rawLabel}
 							</dt>
 							<dd className="break-words leading-5 text-foreground">{entry.text}</dd>
 						</div>

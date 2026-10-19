@@ -164,6 +164,11 @@ export interface PersonaFile {
 	evidence?: PersonaEvidence[]
 	/** Evidence ids backing each dimension, "inferred" when nothing backs it, "user" when the user wrote it. */
 	field_sources?: Record<string, PersonaFieldSource>
+	/**
+	 * Display names, in the user's language, for keys the agent made up inside dimensions and
+	 * layers (e.g. {"monthly_allowance_cny": "月生活费（元）"}); standard keys have built-in names.
+	 */
+	field_labels?: Record<string, string>
 	/** Cross-layer contradictions kept on purpose, e.g. says X but does Y. */
 	consistency_notes?: string[]
 	created_in?: string
