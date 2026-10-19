@@ -288,7 +288,7 @@
 		"subtitle": "方案、定价、新功能，先让一组 AI 模拟用户聊一遍。",
 		"templatesHint": "选一个研究方法，内容可以再改",
 		"templatesTitle": "从一个问题开始",
-		"title": "拍板之前，\n先听听客户怎么说。",
+		"title": "拍板之前，\n先听听用户怎么说。",
 		"trySample": "试试示例研究",
 		"viewAllStudies": "查看全部 {{count}} 项"
 	},
