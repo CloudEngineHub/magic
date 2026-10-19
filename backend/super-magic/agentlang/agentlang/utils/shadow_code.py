@@ -8,7 +8,9 @@ The implementation processes strings byte by byte in UTF-8 encoding to ensure
 complete compatibility with the PHP version.
 """
 
-from typing import Optional
+import json
+import re
+
 from agentlang.logger import get_logger
 
 logger = get_logger(__name__)
@@ -57,10 +59,26 @@ class ShadowCode:
     ]
 
     @classmethod
+    def shadow_json(cls, input_string: str) -> str:
+        """安全混淆已序列化的有效 JSON，供旧接收端解混淆后按 JSON 解析。
+
+        字节映射不保证非 ASCII 内容仍是合法 UTF-8，因此先将实际 Unicode
+        字符转为 JSON 转义；四字节字符由标准编码器生成代理对。只替换非 ASCII
+        片段，保留数字字面量、空白和已有转义，避免重新解析整个业务载荷。
+        本方法不适用于任意纯文本，也不承担上游 JSON 格式校验。
+        """
+        ascii_json = re.sub(
+            r"[^\x00-\x7f]+",
+            lambda match: json.dumps(match.group(), ensure_ascii=True)[1:-1],
+            input_string,
+        )
+        return cls.shadow(ascii_json)
+
+    @classmethod
     def shadow(cls, input_string: str) -> str:
         """
         Obfuscate a string using byte-level character mapping.
-        
+
         This method processes the input string byte by byte (like PHP version),
         not character by character, to ensure compatibility with PHP implementation.
 
@@ -76,7 +94,7 @@ class ShadowCode:
         try:
             # Convert string to UTF-8 bytes (like PHP processes strings)
             input_bytes = input_string.encode('utf-8')
-            
+
             # Process each byte using the shuffle map
             result_bytes = bytearray()
             for byte_val in input_bytes:
@@ -104,7 +122,7 @@ class ShadowCode:
     def unshadow(cls, input_string: str) -> str:
         """
         Deobfuscate a string that was previously obfuscated.
-        
+
         This method processes the input string byte by byte (like PHP version),
         not character by character, to ensure compatibility with PHP implementation.
 
@@ -124,7 +142,7 @@ class ShadowCode:
         try:
             # Remove the prefix
             obfuscated_part = input_string[len(cls.PREFIX):]
-            
+
             # Convert string to UTF-8 bytes (like PHP processes strings)
             input_bytes = obfuscated_part.encode('utf-8')
 
