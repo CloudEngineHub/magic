@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useEventListener, useLatest } from "ahooks"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
+import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
 import type { Canvas } from "../../../../runtime/core/Canvas"
 import { ElementTypeEnum, type VideoElement } from "../../../../runtime/document/types"
@@ -38,6 +39,7 @@ import {
 } from "../../../../runtime/resources/video-draft-final/videoDraftFinalRequest"
 import { resolveVideoDraftFinalHint } from "../../../../runtime/resources/video-draft-final/videoDraftFinalHint"
 import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
+import { toastSeedanceCompliancePreflightBlocked } from "../../../toolbar/asset-library/assetComplianceToasts"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
@@ -87,6 +89,7 @@ async function waitForPendingVideoGenerationResources(
 export default function VideoSecondEdit(props: VideoSecondEditProps) {
 	const { videoElement, pendingToolCommand, onPendingToolCommandHandled } = props
 	const { canvas } = useCanvas()
+	const { t } = useCanvasDesignI18n()
 	const { methods, videoModelList, getCachedVideoPointsEstimate, getVideoPointsEstimate } =
 		useMagic()
 	const { selectedElements } = useCanvasUI()
@@ -280,7 +283,10 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 						request: requestWithId,
 						modelName,
 					})
-					if (!compliancePreflight.proceed) return
+					if (!compliancePreflight.proceed) {
+						toastSeedanceCompliancePreflightBlocked(t, compliancePreflight)
+						return
+					}
 
 					const elementInstance = canvas.elementManager.getElementInstance(
 						videoElement.id,
@@ -305,6 +311,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		savedGenerateVideoRequest,
 		sessionContentId,
 		sessionStore,
+		t,
 		videoModelList,
 		videoElement,
 	])

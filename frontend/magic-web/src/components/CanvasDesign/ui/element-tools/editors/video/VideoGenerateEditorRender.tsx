@@ -152,6 +152,7 @@ import {
 	type MediaEditIntent,
 } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 import { runSeedanceImageCompliancePreflight } from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
+import { toastSeedanceCompliancePreflightBlocked } from "../../../toolbar/asset-library/assetComplianceToasts"
 
 interface VideoGenerateEditorRenderProps {
 	videoElement: VideoElement
@@ -1617,7 +1618,10 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 						)
 					},
 				})
-				if (!compliancePreflight.proceed) return
+				if (!compliancePreflight.proceed) {
+					toastSeedanceCompliancePreflightBlocked(t, compliancePreflight)
+					return
+				}
 
 				handlers.cancelPendingDraftPersistence()
 				if (submitTarget === "current-content") captureSessionDraft()
@@ -1666,6 +1670,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 			sessionStore,
 			sessionIntent,
 			submitTarget,
+			t,
 			videoElement,
 		],
 	)

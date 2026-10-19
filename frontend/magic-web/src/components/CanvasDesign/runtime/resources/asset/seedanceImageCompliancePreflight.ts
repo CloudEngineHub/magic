@@ -10,6 +10,7 @@ import {
 import { resolveConnectedMediaCandidates } from "../../interaction/connection/connectedMediaInputs"
 import type {
 	CanvasAssetComplianceStatus,
+	CanvasAssetComplianceState,
 	CanvasDesignMethods,
 	GenerateVideoRequest,
 	GenerateVideoInputs,
@@ -23,6 +24,7 @@ import {
 import { assetDetailStore } from "./AssetDetailStore"
 import {
 	normalizeAssetComplianceStatus,
+	resolveMediaComplianceFailedReason,
 	resolveMediaComplianceStatus,
 } from "./assetComplianceState"
 
@@ -32,12 +34,24 @@ import {
  * agreement dialog is intentionally not subject to this timeout.
  */
 export const DEFAULT_SEEDANCE_COMPLIANCE_PREFLIGHT_TIMEOUT_MS = 5000
+export const DEFAULT_SEEDANCE_COMPLIANCE_WAIT_TIMEOUT_MS = 5 * 60 * 1000
+
+export type SeedanceImageComplianceBlockedReason =
+	| "agreement-cancelled"
+	| "agreement-error"
+	| "source-changed"
+	| "compliance-failed"
+	| "compliance-unavailable"
+	| "compliance-timeout"
 
 export type SeedanceImageCompliancePreflightResult =
 	| { proceed: true }
 	| {
 			proceed: false
-			reason: "agreement-cancelled" | "agreement-error" | "source-changed"
+			reason: SeedanceImageComplianceBlockedReason
+			assetId?: string
+			failedReason?: string | null
+			status?: CanvasAssetComplianceStatus
 	  }
 
 export interface SeedanceImageCompliancePreflightOptions {
@@ -46,6 +60,8 @@ export interface SeedanceImageCompliancePreflightOptions {
 	request: GenerateVideoRequest
 	modelName?: string
 	timeoutMs?: number
+	/** Maximum time spent waiting for already-started compliance tasks. */
+	waitTimeoutMs?: number
 	/** Optional editor-state check for inputs that live outside the persisted video element. */
 	isRequestStillCurrent?: () => boolean
 }
@@ -322,7 +338,9 @@ function isSeedanceSourceSnapshotCurrent(
 		const current = captureSeedanceSourceSnapshot(canvas, snapshot.elementId)
 		return current?.fingerprint === snapshot.fingerprint
 	} catch {
-		return true
+		// A source snapshot that cannot be re-read is not enough evidence to
+		// release a strict compliance gate after an asynchronous wait.
+		return false
 	}
 }
 
@@ -394,6 +412,12 @@ function getPreflightTimeout(timeoutMs?: number): number {
 		: DEFAULT_SEEDANCE_COMPLIANCE_PREFLIGHT_TIMEOUT_MS
 }
 
+function getComplianceWaitTimeout(waitTimeoutMs?: number): number {
+	return Number.isFinite(waitTimeoutMs) && (waitTimeoutMs as number) > 0
+		? (waitTimeoutMs as number)
+		: DEFAULT_SEEDANCE_COMPLIANCE_WAIT_TIMEOUT_MS
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
 		let settled = false
@@ -417,6 +441,120 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
 				reject(error)
 			},
 		)
+	})
+}
+
+function getComplianceFailureReason(value: unknown): string | null {
+	if (typeof value !== "string") return null
+	const reason = value.trim()
+	return reason || null
+}
+
+function getComplianceBlockedResult(
+	reason: SeedanceImageComplianceBlockedReason,
+	options?: {
+		assetId?: string
+		status?: CanvasAssetComplianceStatus
+		failedReason?: string | null
+	},
+): SeedanceImageCompliancePreflightResult {
+	return {
+		proceed: false,
+		reason,
+		...(options?.assetId ? { assetId: options.assetId } : {}),
+		...(options?.status ? { status: options.status } : {}),
+		...(options?.failedReason !== undefined ? { failedReason: options.failedReason } : {}),
+	}
+}
+
+function areAllSeedanceImageReferencesResolved(
+	canvas: Canvas,
+	uris: readonly string[],
+	assets: readonly ImageAssetReference[],
+): boolean {
+	const resolveResourceReference =
+		canvas.magicConfigManager.config?.methods?.resolveResourceReference
+	return uris.every((uri) =>
+		assets.some((asset) =>
+			areCanvasResourceReferencesSame(uri, asset.uri, resolveResourceReference),
+		),
+	)
+}
+
+async function waitForSeedanceAssetPass(
+	canvas: Canvas,
+	assetId: string,
+	statusTimeoutMs: number,
+	waitTimeoutMs: number,
+): Promise<CanvasAssetComplianceState> {
+	const getAssetComplianceStatus =
+		canvas.magicConfigManager.config?.methods?.getAssetComplianceStatus
+	if (!getAssetComplianceStatus) {
+		throw new Error("Asset compliance resolver is not configured")
+	}
+
+	const initialState = await withTimeout(getAssetComplianceStatus(assetId), statusTimeoutMs)
+	if (initialState.assetId !== assetId) {
+		throw new Error("Asset compliance response does not match the requested asset")
+	}
+	if (initialState.status === "PASS" || initialState.status === "FAILED") {
+		return initialState
+	}
+	if (initialState.status !== "PROCESSING") {
+		throw new Error("Asset compliance state is unavailable")
+	}
+
+	return await new Promise<CanvasAssetComplianceState>((resolve, reject) => {
+		let settled = false
+		let unsubscribe = () => undefined
+		const finish = (callback: () => void) => {
+			if (settled) return
+			settled = true
+			clearTimeout(timer)
+			unsubscribe()
+			callback()
+		}
+		const timer = setTimeout(() => {
+			finish(() => reject(new Error("Asset compliance wait timed out")))
+		}, waitTimeoutMs)
+
+		unsubscribe = canvas.assetComplianceTaskManager.watchCheck(assetId, {
+			onUpdate: (state) => {
+				if (state.assetId !== assetId) {
+					finish(() =>
+						reject(
+							new Error(
+								"Asset compliance response does not match the requested asset",
+							),
+						),
+					)
+					return
+				}
+				if (state.status === "PASS" || state.status === "FAILED") {
+					finish(() => resolve(state))
+				}
+			},
+			onSettled: (state) => {
+				if (state.assetId !== assetId) {
+					finish(() =>
+						reject(
+							new Error(
+								"Asset compliance response does not match the requested asset",
+							),
+						),
+					)
+					return
+				}
+				if (state.status === "PASS" || state.status === "FAILED") {
+					finish(() => resolve(state))
+				} else {
+					finish(() => reject(new Error("Asset compliance state is unavailable")))
+				}
+			},
+			// Strict preflight treats a status lookup error as a failed gate. Removing
+			// this listener stops this request from silently retrying the same check.
+			onError: (error) => finish(() => reject(error)),
+		})
 	})
 }
 
@@ -469,7 +607,7 @@ async function resolveAssetCompliance(
 				methods.getAssetComplianceStatus(asset.assetId),
 				timeoutMs,
 			)
-			if (!remoteState) return null
+			if (!remoteState || remoteState.assetId !== asset.assetId) return null
 			status = normalizeAssetComplianceStatus(remoteState?.status)
 		} catch {
 			// An unknown remote state must not cause a duplicate compliance POST.
@@ -487,6 +625,7 @@ async function resolveAssetCompliance(
 		const detail = cachedDetail?.file_key?.trim()
 			? cachedDetail
 			: await withTimeout(assetDetailStore.getWithFileKey(asset.assetId), timeoutMs)
+		if (detail.asset_id?.trim() !== asset.assetId) return null
 		const detailStatus = normalizeAssetComplianceStatus(detail.compliance_status)
 		if (detailStatus !== "UNVERIFIED") {
 			if (detailStatus === "PROCESSING") ensureProcessingWatcher(canvas, asset.assetId)
@@ -496,23 +635,6 @@ async function resolveAssetCompliance(
 	} catch {
 		// Without a reliable file_key/detail, do not guess a source path.
 		return null
-	}
-}
-
-async function prepareUnverifiedAsset(
-	canvas: Canvas,
-	asset: BoundImageAssetReference,
-	timeoutMs: number,
-): Promise<PreparedLibraryAsset | null> {
-	const resolved = await resolveAssetCompliance(canvas, asset, timeoutMs)
-	if (!resolved || resolved.status !== "UNVERIFIED") return null
-
-	const fileKey = resolved.detail?.file_key?.trim()
-	if (!fileKey) return null
-	return {
-		assetId: asset.assetId,
-		fileKey,
-		name: resolved.detail?.name?.trim() || undefined,
 	}
 }
 
@@ -545,8 +667,9 @@ function canBindWorkspaceAsset(canvas: Canvas): boolean {
 
 /**
  * Run the Seedance-only image compliance preflight immediately before submit.
- * Technical status/detail/start failures intentionally fail open; only an
- * explicit agreement refusal/error prevents the video request from being sent.
+ * The generation request is released only after every resolved image asset is
+ * confirmed PASS. A lookup, start, or wait failure blocks this submission;
+ * callers may let the user explicitly try again later.
  */
 export async function runSeedanceImageCompliancePreflight(
 	options: SeedanceImageCompliancePreflightOptions,
@@ -562,19 +685,21 @@ export async function runSeedanceImageCompliancePreflight(
 	try {
 		sourceSnapshot = captureSeedanceSourceSnapshot(canvas, sourceVideoElementId)
 	} catch {
-		// A host that is still mounting the element manager cannot provide a
-		// snapshot; preserve the existing fail-open submit behavior.
-		sourceSnapshot = undefined
+		return getComplianceBlockedResult("compliance-unavailable")
 	}
+	if (!sourceSnapshot) return getComplianceBlockedResult("compliance-unavailable")
 	let assets: ImageAssetReference[]
 	try {
 		assets = resolveSeedanceImageAssetReferences(canvas, sourceVideoElementId, uris)
 	} catch {
-		// Resource graph lookup is best effort. Do not make a malformed/stale
-		// Canvas snapshot prevent the original video request from being sent.
-		return { proceed: true }
+		return getComplianceBlockedResult("compliance-unavailable")
 	}
-	if (assets.length === 0) return { proceed: true }
+	if (assets.length === 0) {
+		return getComplianceBlockedResult("compliance-unavailable")
+	}
+	if (!areAllSeedanceImageReferencesResolved(canvas, uris, assets)) {
+		return getComplianceBlockedResult("compliance-unavailable")
+	}
 
 	const sourceIsStillCurrent = (
 		expectedWorkspaceBindings: ReadonlyMap<string, string> = new Map(),
@@ -583,9 +708,7 @@ export async function runSeedanceImageCompliancePreflight(
 			try {
 				if (!options.isRequestStillCurrent()) return false
 			} catch {
-				// A transient editor snapshot failure is technical uncertainty, not
-				// evidence that the user changed the source; continue with the Canvas
-				// element/resource checks below.
+				return false
 			}
 		}
 		if (!isSeedanceSourceSnapshotCurrent(canvas, sourceSnapshot)) return false
@@ -603,10 +726,7 @@ export async function runSeedanceImageCompliancePreflight(
 				expectedWorkspaceBindings,
 			)
 		} catch {
-			// A transient connection snapshot failure is a technical lookup issue;
-			// fail open rather than cancelling a request without positive evidence of
-			// a source change.
-			return true
+			return false
 		}
 	}
 
@@ -615,32 +735,126 @@ export async function runSeedanceImageCompliancePreflight(
 	const startWorkspaceMediaCompliance = methods?.startWorkspaceMediaCompliance
 
 	const timeoutMs = getPreflightTimeout(options.timeoutMs)
-	const preparedWorkspaceAssets =
-		startWorkspaceMediaCompliance && canBindWorkspaceAsset(canvas)
-			? assets
-					.filter((asset): asset is WorkspaceImageAssetReference => !asset.assetId)
-					.map((asset) => prepareUnboundWorkspaceAsset(canvas, asset))
-					.filter((asset): asset is PreparedWorkspaceAsset => Boolean(asset))
-			: []
-	const preparedAssets = (
-		await Promise.all(
-			startExistingAssetCompliance
-				? assets
-						.filter((asset): asset is BoundImageAssetReference =>
-							Boolean(asset.assetId),
-						)
-						.map(async (asset) => {
-							try {
-								return await prepareUnverifiedAsset(canvas, asset, timeoutMs)
-							} catch {
-								return null
-							}
-						})
-				: [],
+	const waitTimeoutMs = getComplianceWaitTimeout(options.waitTimeoutMs)
+	const workspaceReferences = assets.filter(
+		(asset): asset is WorkspaceImageAssetReference => !asset.assetId,
+	)
+	if (workspaceReferences.length > 0) {
+		if (!startWorkspaceMediaCompliance || !canBindWorkspaceAsset(canvas)) {
+			return getComplianceBlockedResult("compliance-unavailable")
+		}
+		const failedWorkspaceAsset = workspaceReferences.find(
+			(asset) =>
+				resolveMediaComplianceStatus(canvas, {
+					complianceStatus: asset.complianceStatus,
+				}) === "FAILED",
 		)
-	).filter((asset): asset is PreparedLibraryAsset => Boolean(asset))
-	if (!sourceIsStillCurrent()) return { proceed: false, reason: "source-changed" }
-	if (preparedWorkspaceAssets.length === 0 && preparedAssets.length === 0) {
+		if (failedWorkspaceAsset) {
+			return getComplianceBlockedResult("compliance-failed", {
+				failedReason:
+					resolveMediaComplianceFailedReason(canvas, failedWorkspaceAsset) ?? null,
+				status: "FAILED",
+			})
+		}
+	}
+	const preparedWorkspaceAssets = workspaceReferences
+		.map((asset) => prepareUnboundWorkspaceAsset(canvas, asset))
+		.filter((asset): asset is PreparedWorkspaceAsset => Boolean(asset))
+	if (preparedWorkspaceAssets.length !== workspaceReferences.length) {
+		return getComplianceBlockedResult("compliance-unavailable")
+	}
+
+	const boundAssets = assets.filter((asset): asset is BoundImageAssetReference =>
+		Boolean(asset.assetId),
+	)
+	const boundResolutions = await Promise.all(
+		boundAssets.map(async (asset) => {
+			try {
+				return {
+					asset,
+					resolution: await resolveAssetCompliance(canvas, asset, timeoutMs),
+				}
+			} catch {
+				return { asset, resolution: null }
+			}
+		}),
+	)
+	if (boundResolutions.some(({ resolution }) => !resolution)) {
+		return getComplianceBlockedResult("compliance-unavailable")
+	}
+	const failedResolution = boundResolutions.find(
+		({ resolution }) => resolution?.status === "FAILED",
+	)
+	if (failedResolution?.resolution) {
+		return getComplianceBlockedResult("compliance-failed", {
+			assetId: failedResolution.asset.assetId,
+			status: failedResolution.resolution.status,
+			failedReason:
+				resolveMediaComplianceFailedReason(canvas, failedResolution.asset) ??
+				getComplianceFailureReason(
+					failedResolution.resolution.detail?.compliance_failed_reason,
+				),
+		})
+	}
+	const processingAssetIds = boundResolutions
+		.filter(({ resolution }) => resolution?.status === "PROCESSING")
+		.map(({ asset }) => asset.assetId)
+	const preparedAssets: PreparedLibraryAsset[] = []
+	for (const { asset, resolution } of boundResolutions) {
+		if (resolution?.status !== "UNVERIFIED") continue
+		const fileKey = resolution.detail?.file_key?.trim()
+		if (!fileKey || !startExistingAssetCompliance) {
+			return getComplianceBlockedResult("compliance-unavailable", {
+				assetId: asset.assetId,
+				status: resolution.status,
+			})
+		}
+		preparedAssets.push({
+			assetId: asset.assetId,
+			fileKey,
+			name: resolution.detail?.name?.trim() || undefined,
+		})
+	}
+	if (!sourceIsStillCurrent()) return getComplianceBlockedResult("source-changed")
+	if (
+		preparedWorkspaceAssets.length === 0 &&
+		preparedAssets.length === 0 &&
+		processingAssetIds.length === 0
+	) {
+		// A fresh status read is required even when a local cache says PASS. This
+		// keeps the final gate from relying on a stale list or Canvas snapshot.
+		try {
+			const states = await Promise.all(
+				boundAssets.map((asset) =>
+					withTimeout(
+						Promise.resolve().then(() =>
+							methods?.getAssetComplianceStatus?.(asset.assetId),
+						),
+						timeoutMs,
+					),
+				),
+			)
+			if (
+				states.some(
+					(state, index) => !state || state.assetId !== boundAssets[index]?.assetId,
+				)
+			) {
+				return getComplianceBlockedResult("compliance-unavailable")
+			}
+			const failedState = states.find((state) => state?.status === "FAILED")
+			if (failedState) {
+				return getComplianceBlockedResult("compliance-failed", {
+					assetId: failedState.assetId,
+					status: failedState.status,
+					failedReason: getComplianceFailureReason(failedState.failedReason),
+				})
+			}
+			if (states.some((state) => state?.status !== "PASS")) {
+				return getComplianceBlockedResult("compliance-unavailable")
+			}
+		} catch {
+			return getComplianceBlockedResult("compliance-unavailable")
+		}
 		return { proceed: true }
 	}
 
@@ -662,9 +876,11 @@ export async function runSeedanceImageCompliancePreflight(
 	if (!sourceIsStillCurrent()) return { proceed: false, reason: "source-changed" }
 
 	const expectedWorkspaceBindings = new Map<string, string>()
-	if (startWorkspaceMediaCompliance) {
-		await Promise.allSettled(
-			preparedWorkspaceAssets.map(async ({ reference, name }) => {
+	const startedWorkspaceAssetIds: string[] = []
+	const workspaceStartResults = await Promise.all(
+		preparedWorkspaceAssets.map(async ({ reference, name }) => {
+			try {
+				if (!startWorkspaceMediaCompliance) return null
 				const assetId = await withTimeout(
 					Promise.resolve().then(() =>
 						canvas.assetComplianceTaskManager.startWorkspaceFileCompliance({
@@ -680,15 +896,21 @@ export async function runSeedanceImageCompliancePreflight(
 					),
 					timeoutMs,
 				)
-				if (assetId) {
-					const targetKey = getImageReferenceTargetKey(reference)
-					if (targetKey) expectedWorkspaceBindings.set(targetKey, assetId)
-				}
-			}),
-		)
+				if (!assetId) return null
+				const targetKey = getImageReferenceTargetKey(reference)
+				if (targetKey) expectedWorkspaceBindings.set(targetKey, assetId)
+				startedWorkspaceAssetIds.push(assetId)
+				return assetId
+			} catch {
+				return null
+			}
+		}),
+	)
+	if (workspaceStartResults.some((assetId) => !assetId)) {
+		return getComplianceBlockedResult("compliance-unavailable")
 	}
 	if (!sourceIsStillCurrent(expectedWorkspaceBindings)) {
-		return { proceed: false, reason: "source-changed" }
+		return getComplianceBlockedResult("source-changed")
 	}
 
 	// Workspace compliance creates and binds the asset first. Rebuild the
@@ -698,29 +920,70 @@ export async function runSeedanceImageCompliancePreflight(
 		try {
 			assets = resolveSeedanceImageAssetReferences(canvas, sourceVideoElementId, uris)
 		} catch {
-			// Keep the original fail-open behavior when the connection graph is
-			// temporarily unavailable after a successful workspace mutation.
+			return getComplianceBlockedResult("compliance-unavailable")
 		}
 	}
 
+	const startedLibraryAssetIds: string[] = []
 	if (startExistingAssetCompliance) {
-		const startPromises = preparedAssets.map((asset) =>
-			withTimeout(
-				Promise.resolve().then(() =>
-					canvas.assetComplianceTaskManager.startLibraryAssetCompliance({
-						assetId: asset.assetId,
-						fileKey: asset.fileKey,
-						name: asset.name,
-						startExistingAssetCompliance,
-					}),
-				),
-				timeoutMs,
-			),
+		const startResults = await Promise.all(
+			preparedAssets.map(async (asset) => {
+				try {
+					const startedAssetId = await withTimeout(
+						Promise.resolve().then(() =>
+							canvas.assetComplianceTaskManager.startLibraryAssetCompliance({
+								assetId: asset.assetId,
+								fileKey: asset.fileKey,
+								name: asset.name,
+								startExistingAssetCompliance,
+							}),
+						),
+						timeoutMs,
+					)
+					if (startedAssetId) startedLibraryAssetIds.push(asset.assetId)
+					return startedAssetId
+				} catch {
+					return null
+				}
+			}),
 		)
-		await Promise.allSettled(startPromises)
+		if (startResults.some((assetId) => !assetId)) {
+			return getComplianceBlockedResult("compliance-unavailable")
+		}
 	}
 	if (!sourceIsStillCurrent(expectedWorkspaceBindings)) {
-		return { proceed: false, reason: "source-changed" }
+		return getComplianceBlockedResult("source-changed")
+	}
+
+	const assetsToWaitFor = Array.from(
+		new Set([...processingAssetIds, ...startedWorkspaceAssetIds, ...startedLibraryAssetIds]),
+	)
+	try {
+		const states = await Promise.all(
+			assetsToWaitFor.map((assetId) =>
+				waitForSeedanceAssetPass(canvas, assetId, timeoutMs, waitTimeoutMs),
+			),
+		)
+		const failedState = states.find((state) => state.status === "FAILED")
+		if (failedState) {
+			return getComplianceBlockedResult("compliance-failed", {
+				assetId: failedState.assetId,
+				status: failedState.status,
+				failedReason: getComplianceFailureReason(failedState.failedReason),
+			})
+		}
+		if (states.some((state) => state.status !== "PASS")) {
+			return getComplianceBlockedResult("compliance-unavailable")
+		}
+	} catch (error) {
+		return getComplianceBlockedResult(
+			error instanceof Error && error.message.includes("timed out")
+				? "compliance-timeout"
+				: "compliance-unavailable",
+		)
+	}
+	if (!sourceIsStillCurrent(expectedWorkspaceBindings)) {
+		return getComplianceBlockedResult("source-changed")
 	}
 	return { proceed: true }
 }

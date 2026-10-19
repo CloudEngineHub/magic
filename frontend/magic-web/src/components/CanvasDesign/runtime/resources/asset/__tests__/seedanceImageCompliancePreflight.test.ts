@@ -21,12 +21,54 @@ function createCanvas(
 ) {
 	const startLibraryAssetCompliance = vi.fn().mockResolvedValue("asset-1")
 	const startWorkspaceFileCompliance = vi.fn().mockResolvedValue("asset-workspace")
+	const defaultVideo = {
+		id: "video-1",
+		type: ElementTypeEnum.Video,
+		activeContentId: "video-content",
+		mainContentId: "video-content",
+		contents: [{ contentId: "video-content", src: "./videos/source.mp4" }],
+	} as unknown as LayerElement
+	const getAssetComplianceStatus =
+		methods.getAssetComplianceStatus ??
+		vi.fn().mockResolvedValue({
+			assetId: "asset-1",
+			status: options?.pollingStatus ?? "UNVERIFIED",
+			failedReason: null,
+		})
 	const canvas = {
 		isSeedanceComplianceEnabled: () => true,
-		magicConfigManager: { config: { methods } },
+		magicConfigManager: { config: { methods: { ...methods, getAssetComplianceStatus } } },
 		assetComplianceTaskManager: {
 			startLibraryAssetCompliance,
 			startWorkspaceFileCompliance,
+			watchCheck: vi.fn(
+				(
+					assetId: string,
+					watchOptions: {
+						onUpdate?: (state: unknown) => void
+						onSettled?: (state: unknown) => void
+						onError?: (error: unknown) => void
+					},
+				) => {
+					let active = true
+					void Promise.resolve().then(async () => {
+						if (!active) return
+						try {
+							const state = await getAssetComplianceStatus(assetId)
+							if (!active) return
+							watchOptions.onUpdate?.(state)
+							if ((state as { status?: string }).status !== "PROCESSING") {
+								watchOptions.onSettled?.(state)
+							}
+						} catch (error) {
+							watchOptions.onError?.(error)
+						}
+					})
+					return () => {
+						active = false
+					}
+				},
+			),
 			watchLibraryComplianceChecks: vi.fn(),
 		},
 		assetCompliancePollingManager: {
@@ -50,7 +92,11 @@ function createCanvas(
 			can: vi.fn(() => true),
 		},
 		elementManager: {
-			getElementData: vi.fn((elementId: string) => options?.elementData?.get(elementId)),
+			getElementData: vi.fn(
+				(elementId: string) =>
+					options?.elementData?.get(elementId) ??
+					(elementId === "video-1" ? defaultVideo : undefined),
+			),
 		},
 	} as unknown as Canvas
 
@@ -231,6 +277,18 @@ describe("Seedance image compliance preflight", () => {
 			{
 				ensureAssetAgreementSigned: vi.fn().mockResolvedValue(true),
 				startWorkspaceMediaCompliance,
+				getAssetComplianceStatus: vi
+					.fn()
+					.mockResolvedValueOnce({
+						assetId: "asset-workspace",
+						status: "PROCESSING",
+						failedReason: null,
+					})
+					.mockResolvedValueOnce({
+						assetId: "asset-workspace",
+						status: "PASS",
+						failedReason: null,
+					}),
 			},
 			{
 				elementData: new Map([
@@ -279,6 +337,61 @@ describe("Seedance image compliance preflight", () => {
 		expect((image.contents[0] as { assetId?: string }).assetId).toBe("asset-workspace")
 	})
 
+	it("does not restart an unbound workspace image that already FAILED", async () => {
+		const image = {
+			id: "image-1",
+			type: ElementTypeEnum.Image,
+			activeContentId: "image-content",
+			mainContentId: "image-content",
+			contents: [
+				{
+					contentId: "image-content",
+					src: "./images/portrait.png",
+					complianceStatus: "FAILED",
+					complianceFailedReason: "blocked",
+				},
+			],
+		} as unknown as LayerElement
+		const video = {
+			id: "video-1",
+			type: ElementTypeEnum.Video,
+			activeContentId: "video-content",
+			mainContentId: "video-content",
+			contents: [{ contentId: "video-content", src: "./videos/source.mp4" }],
+		} as unknown as LayerElement
+		const startWorkspaceMediaCompliance = vi.fn()
+		const { canvas, startWorkspaceFileCompliance } = createCanvas(
+			{
+				ensureAssetAgreementSigned: vi.fn(),
+				startWorkspaceMediaCompliance,
+			},
+			{
+				elementData: new Map([
+					["video-1", video],
+					["image-1", image],
+				]),
+				upstreamConnections: {
+					"video-1": [{ id: "connection-1", sourceElementId: "image-1" }],
+				},
+			},
+		)
+
+		await expect(
+			runSeedanceImageCompliancePreflight({
+				canvas,
+				sourceVideoElementId: "video-1",
+				request: request({ reference_images: [{ uri: "./images/portrait.png" }] }),
+				modelName: "Seedance",
+			}),
+		).resolves.toMatchObject({
+			proceed: false,
+			reason: "compliance-failed",
+			status: "FAILED",
+		})
+		expect(startWorkspaceFileCompliance).not.toHaveBeenCalled()
+		expect(startWorkspaceMediaCompliance).not.toHaveBeenCalled()
+	})
+
 	it("does not start compliance when the asset is already PASS", async () => {
 		const getAssetComplianceStatus = vi.fn().mockResolvedValue({
 			assetId: "asset-1",
@@ -304,40 +417,106 @@ describe("Seedance image compliance preflight", () => {
 		expect(startLibraryAssetCompliance).not.toHaveBeenCalled()
 	})
 
-	it.each(["PROCESSING", "FAILED"])(
-		"does not restart an asset with status %s",
-		async (status) => {
-			const getAssetComplianceStatus = vi.fn().mockResolvedValue({
+	it("waits for an existing PROCESSING asset to pass without restarting it", async () => {
+		const getAssetComplianceStatus = vi
+			.fn()
+			.mockResolvedValueOnce({
 				assetId: "asset-1",
-				status,
-				failedReason: status === "FAILED" ? "blocked" : null,
+				status: "PROCESSING",
+				failedReason: null,
 			})
-			const ensureAssetAgreementSigned = vi.fn()
-			const { canvas, startLibraryAssetCompliance } = createCanvas({
-				getAssetComplianceStatus,
-				ensureAssetAgreementSigned,
-				startExistingAssetCompliance: vi.fn(),
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				status: "PASS",
+				failedReason: null,
 			})
+		const ensureAssetAgreementSigned = vi.fn()
+		const { canvas, startLibraryAssetCompliance } = createCanvas({
+			getAssetComplianceStatus,
+			ensureAssetAgreementSigned,
+			startExistingAssetCompliance: vi.fn(),
+		})
 
-			await expect(
-				runSeedanceImageCompliancePreflight({
-					canvas,
-					sourceVideoElementId: "video-1",
-					request: request({ reference_images: [{ uri: "asset://asset-1" }] }),
-					modelName: "Seedance 2.5",
-				}),
-			).resolves.toEqual({ proceed: true })
-			expect(ensureAssetAgreementSigned).not.toHaveBeenCalled()
-			expect(startLibraryAssetCompliance).not.toHaveBeenCalled()
-		},
-	)
+		await expect(
+			runSeedanceImageCompliancePreflight({
+				canvas,
+				sourceVideoElementId: "video-1",
+				request: request({ reference_images: [{ uri: "asset://asset-1" }] }),
+				modelName: "Seedance 2.5",
+			}),
+		).resolves.toEqual({ proceed: true })
+		expect(ensureAssetAgreementSigned).not.toHaveBeenCalled()
+		expect(startLibraryAssetCompliance).not.toHaveBeenCalled()
+	})
 
-	it("starts unverified assets and continues without waiting for PASS", async () => {
+	it("blocks an asset that is already FAILED without restarting it", async () => {
 		const getAssetComplianceStatus = vi.fn().mockResolvedValue({
 			assetId: "asset-1",
-			status: "UNVERIFIED",
-			failedReason: null,
+			status: "FAILED",
+			failedReason: "blocked",
 		})
+		const ensureAssetAgreementSigned = vi.fn()
+		const { canvas, startLibraryAssetCompliance } = createCanvas({
+			getAssetComplianceStatus,
+			ensureAssetAgreementSigned,
+			startExistingAssetCompliance: vi.fn(),
+		})
+
+		await expect(
+			runSeedanceImageCompliancePreflight({
+				canvas,
+				sourceVideoElementId: "video-1",
+				request: request({ reference_images: [{ uri: "asset://asset-1" }] }),
+				modelName: "Seedance 2.5",
+			}),
+		).resolves.toMatchObject({
+			proceed: false,
+			reason: "compliance-failed",
+			status: "FAILED",
+		})
+		expect(ensureAssetAgreementSigned).not.toHaveBeenCalled()
+		expect(startLibraryAssetCompliance).not.toHaveBeenCalled()
+	})
+
+	it("blocks a status response that belongs to another asset", async () => {
+		const { canvas, startLibraryAssetCompliance } = createCanvas({
+			getAssetComplianceStatus: vi.fn().mockResolvedValue({
+				assetId: "asset-2",
+				status: "PASS",
+				failedReason: null,
+			}),
+			startExistingAssetCompliance: vi.fn(),
+		})
+
+		await expect(
+			runSeedanceImageCompliancePreflight({
+				canvas,
+				sourceVideoElementId: "video-1",
+				request: request({ reference_images: [{ uri: "asset://asset-1" }] }),
+				modelName: "Seedance 2.5",
+			}),
+		).resolves.toEqual({ proceed: false, reason: "compliance-unavailable" })
+		expect(startLibraryAssetCompliance).not.toHaveBeenCalled()
+	})
+
+	it("starts unverified assets and waits for PASS before continuing", async () => {
+		const getAssetComplianceStatus = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				status: "UNVERIFIED",
+				failedReason: null,
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				status: "PROCESSING",
+				failedReason: null,
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				status: "PASS",
+				failedReason: null,
+			})
 		const ensureAssetAgreementSigned = vi.fn().mockResolvedValue(true)
 		const startExistingAssetCompliance = vi.fn().mockResolvedValue({
 			assetId: "different-response-id",
@@ -363,6 +542,7 @@ describe("Seedance image compliance preflight", () => {
 				request: request({ reference_images: [{ uri: "asset://asset-1" }] }),
 				modelName: "seedance-2-5",
 				timeoutMs: 100,
+				waitTimeoutMs: 100,
 			}),
 		).resolves.toEqual({ proceed: true })
 		expect(ensureAssetAgreementSigned).toHaveBeenCalledTimes(1)
@@ -377,11 +557,23 @@ describe("Seedance image compliance preflight", () => {
 	it("starts when detail is available but has no prior compliance status", async () => {
 		const ensureAssetAgreementSigned = vi.fn().mockResolvedValue(true)
 		const { canvas, startLibraryAssetCompliance } = createCanvas({
-			getAssetComplianceStatus: vi.fn().mockResolvedValue({
-				assetId: "asset-1",
-				status: "UNVERIFIED",
-				failedReason: null,
-			}),
+			getAssetComplianceStatus: vi
+				.fn()
+				.mockResolvedValueOnce({
+					assetId: "asset-1",
+					status: "UNVERIFIED",
+					failedReason: null,
+				})
+				.mockResolvedValueOnce({
+					assetId: "asset-1",
+					status: "PROCESSING",
+					failedReason: null,
+				})
+				.mockResolvedValueOnce({
+					assetId: "asset-1",
+					status: "PASS",
+					failedReason: null,
+				}),
 			ensureAssetAgreementSigned,
 			startExistingAssetCompliance: vi.fn(),
 		})
@@ -397,6 +589,7 @@ describe("Seedance image compliance preflight", () => {
 				sourceVideoElementId: "video-1",
 				request: request({ reference_images: [{ uri: "asset://asset-1" }] }),
 				modelName: "Seedance",
+				waitTimeoutMs: 100,
 			}),
 		).resolves.toEqual({ proceed: true })
 		expect(ensureAssetAgreementSigned).toHaveBeenCalledTimes(1)
@@ -405,9 +598,17 @@ describe("Seedance image compliance preflight", () => {
 
 	it("deduplicates repeated image asset IDs and starts each unique asset in parallel", async () => {
 		const startLibraryAssetCompliance = vi.fn().mockResolvedValue("asset")
-		const getAssetComplianceStatus = vi.fn((assetId: string) =>
-			Promise.resolve({ assetId, status: "UNVERIFIED" as const, failedReason: null }),
-		)
+		const complianceCalls = new Map<string, number>()
+		const getAssetComplianceStatus = vi.fn((assetId: string) => {
+			const callIndex = complianceCalls.get(assetId) ?? 0
+			complianceCalls.set(assetId, callIndex + 1)
+			const states = ["UNVERIFIED", "PROCESSING", "PASS"] as const
+			return Promise.resolve({
+				assetId,
+				status: states[Math.min(callIndex, states.length - 1)],
+				failedReason: null,
+			})
+		})
 		const ensureAssetAgreementSigned = vi.fn().mockResolvedValue(true)
 		const { canvas } = createCanvas({
 			getAssetComplianceStatus,
@@ -437,6 +638,7 @@ describe("Seedance image compliance preflight", () => {
 					],
 				}),
 				modelName: "Seedance",
+				waitTimeoutMs: 100,
 			}),
 		).resolves.toEqual({ proceed: true })
 		expect(startLibraryAssetCompliance).toHaveBeenCalledTimes(2)
@@ -545,7 +747,7 @@ describe("Seedance image compliance preflight", () => {
 		expect(startLibraryAssetCompliance).not.toHaveBeenCalled()
 	})
 
-	it("fails open when status lookup fails", async () => {
+	it("blocks when status lookup fails", async () => {
 		const { canvas, startLibraryAssetCompliance } = createCanvas({
 			getAssetComplianceStatus: vi.fn().mockRejectedValue(new Error("offline")),
 			ensureAssetAgreementSigned: vi.fn(),
@@ -559,11 +761,11 @@ describe("Seedance image compliance preflight", () => {
 				request: request({ reference_images: [{ uri: "asset://asset-1" }] }),
 				modelName: "Seedance",
 			}),
-		).resolves.toEqual({ proceed: true })
+		).resolves.toEqual({ proceed: false, reason: "compliance-unavailable" })
 		expect(startLibraryAssetCompliance).not.toHaveBeenCalled()
 	})
 
-	it("does not trigger for a non-Seedance model or a workspace image without assetId", async () => {
+	it("does not trigger for a non-Seedance model and blocks unresolved workspace images", async () => {
 		const methods: Partial<CanvasDesignMethods> = {
 			getAssetComplianceStatus: vi.fn(),
 			ensureAssetAgreementSigned: vi.fn(),
@@ -571,18 +773,22 @@ describe("Seedance image compliance preflight", () => {
 		}
 		const { canvas, startLibraryAssetCompliance } = createCanvas(methods)
 
-		await runSeedanceImageCompliancePreflight({
-			canvas,
-			sourceVideoElementId: "video-1",
-			request: request({ reference_images: [{ uri: "./images/portrait.png" }] }),
-			modelName: "Seedream",
-		})
-		await runSeedanceImageCompliancePreflight({
-			canvas,
-			sourceVideoElementId: "video-1",
-			request: request({ reference_images: [{ uri: "./images/portrait.png" }] }),
-			modelName: "Seedance",
-		})
+		await expect(
+			runSeedanceImageCompliancePreflight({
+				canvas,
+				sourceVideoElementId: "video-1",
+				request: request({ reference_images: [{ uri: "./images/portrait.png" }] }),
+				modelName: "Seedream",
+			}),
+		).resolves.toEqual({ proceed: true })
+		await expect(
+			runSeedanceImageCompliancePreflight({
+				canvas,
+				sourceVideoElementId: "video-1",
+				request: request({ reference_images: [{ uri: "./images/portrait.png" }] }),
+				modelName: "Seedance",
+			}),
+		).resolves.toEqual({ proceed: false, reason: "compliance-unavailable" })
 
 		expect(startLibraryAssetCompliance).not.toHaveBeenCalled()
 	})
