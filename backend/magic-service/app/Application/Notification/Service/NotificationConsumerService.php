@@ -135,7 +135,7 @@ final readonly class NotificationConsumerService
     {
         $eventType = $envelope->eventType;
         if ($this->isWithdrawal($eventType)) {
-            return $this->withdraw($event, $eventType);
+            return $this->withdraw($event);
         }
 
         // The source type is the stable fallback for permission-change events;
@@ -160,19 +160,11 @@ final readonly class NotificationConsumerService
             throw new RuntimeException("Notification template pair not found: {$messageType}:{$template->getVersion()}", NotificationErrorCode::TEMPLATE_NOT_FOUND->value);
         }
 
-        if ($eventType === NotificationEventType::INVITATION_PERMISSION_CHANGED->value) {
-            $this->withdrawAllVersions($event, $envelope);
-        }
-
-        $category = $this->category($messageType);
-        $actionStatus = $category === NotificationCategory::AUTHORIZATION
-            ? NotificationActionStatus::PENDING
-            : NotificationActionStatus::NONE;
         $created = 0;
         foreach ($envelope->recipients as $recipient) {
             $notification = new NotificationEntity();
             $notification->setRecipientUserId($recipient->userId);
-            $notification->setCategory($category);
+            $notification->setCategory(NotificationCategory::SYSTEM);
             $notification->setType($messageType);
             $notification->setTemplateVersion($template->getVersion());
             $notification->setPayload(array_merge($envelope->payload, $recipient->payload));
@@ -182,7 +174,7 @@ final readonly class NotificationConsumerService
             $notification->setSourceId($envelope->source->id);
             $notification->setSourceVersion($envelope->source->version);
             $notification->setMessageStatus(NotificationMessageStatus::ACTIVE);
-            $notification->setActionStatus($actionStatus);
+            $notification->setActionStatus(NotificationActionStatus::NONE);
             $existingNotification = $this->notifications->findBySourceEventKey(
                 NotificationDataIsolation::create($envelope->organizationCode, $recipient->userId),
                 $recipient->sourceEventKey,
@@ -199,54 +191,9 @@ final readonly class NotificationConsumerService
         return $created;
     }
 
-    private function withdraw(NotificationEventEntity $event, string $eventType): int
+    private function withdraw(NotificationEventEntity $event): int
     {
-        $isInvitation = $eventType === NotificationEventType::INVITATION_WITHDRAWN->value;
-        $isVersioned = $isInvitation && $event->getSourceVersion() !== null;
         $isolation = NotificationDataIsolation::create($event->getOrganizationCode());
-        if ($isInvitation) {
-            $payload = $event->getEventPayload();
-            $recipients = (array) ($payload['recipients'] ?? []);
-            if ($recipients !== []) {
-                $withdrawn = 0;
-                foreach ($recipients as $recipient) {
-                    $userId = trim((string) ($recipient['user_id'] ?? ''));
-                    if ($userId === '') {
-                        continue;
-                    }
-                    if ($event->getSourceVersion() !== null) {
-                        $withdrawn += $this->notifications->withdrawBySourceIdentity(
-                            $isolation,
-                            $event->getSourceDomain(),
-                            $event->getSourceType(),
-                            $event->getSourceId(),
-                            $event->getSourceVersion(),
-                            date('Y-m-d H:i:s')
-                        );
-                    } else {
-                        $withdrawn += $this->notifications->withdrawAllBySourceIdentityAndRecipient(
-                            $isolation,
-                            $event->getSourceDomain(),
-                            $event->getSourceType(),
-                            $event->getSourceId(),
-                            $userId,
-                            date('Y-m-d H:i:s')
-                        );
-                    }
-                }
-                return $withdrawn;
-            }
-        }
-        if ($isVersioned) {
-            return $this->notifications->withdrawBySourceIdentity(
-                $isolation,
-                $event->getSourceDomain(),
-                $event->getSourceType(),
-                $event->getSourceId(),
-                $event->getSourceVersion(),
-                date('Y-m-d H:i:s')
-            );
-        }
         return $this->notifications->withdrawAllBySourceIdentity(
             $isolation,
             $event->getSourceDomain(),
@@ -256,36 +203,11 @@ final readonly class NotificationConsumerService
         );
     }
 
-    private function withdrawAllVersions(NotificationEventEntity $event, EventEnvelope $envelope): void
-    {
-        $isolation = NotificationDataIsolation::create($envelope->organizationCode);
-        foreach ($envelope->recipients as $recipient) {
-            $this->notifications->withdrawAllBySourceIdentityAndRecipient(
-                $isolation,
-                $envelope->source->domain,
-                $envelope->source->type,
-                $envelope->source->id,
-                $recipient->userId,
-                date('Y-m-d H:i:s')
-            );
-        }
-    }
-
     private function isWithdrawal(string $eventType): bool
     {
         return in_array($eventType, [
             NotificationEventType::PROJECT_WITHDRAWN->value,
             NotificationEventType::FILE_WITHDRAWN->value,
-            NotificationEventType::INVITATION_WITHDRAWN->value,
         ], true);
-    }
-
-    private function category(string $type): NotificationCategory
-    {
-        return in_array($type, [
-            'project_invitation',
-            'agent_invitation',
-            'skill_invitation',
-        ], true) ? NotificationCategory::AUTHORIZATION : NotificationCategory::SYSTEM;
     }
 }
