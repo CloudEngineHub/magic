@@ -118,13 +118,18 @@ function ResearchStudioPage() {
 
 	useEffect(() => {
 		store.selectStudy(topicId)
-		followedPhaseRef.current = null
-		outputsWereHiddenRef.current = false
-		setOutputsRequested(false)
-		// Tool steps belong to one study's conversation; never carry them into another study.
+		// Tool details belong to the conversation, even when its study stays the same.
 		setUserSelectDetail(undefined)
 		setAutoDetail(undefined)
 	}, [store, topicId])
+
+	const studyKey = store.studyDir ?? topicId
+	useEffect(() => {
+		followedPhaseRef.current = null
+		outputsWereHiddenRef.current = false
+		setOutputsRequested(false)
+		// Switching conversations within the same study preserves the open output tab.
+	}, [studyKey])
 
 	const selectedTopic = store.selectedTopic
 	const study = store.study
@@ -199,7 +204,7 @@ function ResearchStudioPage() {
 	const filesOpenedRef = useRef(false)
 	useEffect(() => {
 		filesOpenedRef.current = false
-	}, [topicId])
+	}, [studyKey])
 	useEffect(() => {
 		if (consoleTab !== "files" || filesOpenedRef.current) return
 		// autoDetail is the conversation's latest tool step, pushed on load even when no tab shows it.
@@ -328,6 +333,23 @@ function ResearchStudioPage() {
 
 	const title = (selectedTopic && store.studyTitleOf(selectedTopic)) || t("study.untitled")
 	const outputsCount = [report, studyAttachments?.validation].filter(Boolean).length
+	if (store.studyDeletionOf(selectedTopic?.id)) {
+		return (
+			<Empty className="h-full">
+				<EmptyHeader>
+					<EmptyTitle>{t("home.deletionPending")}</EmptyTitle>
+				</EmptyHeader>
+				<EmptyContent>
+					<Button
+						variant="outline"
+						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+					>
+						{t("study.backHome")}
+					</Button>
+				</EmptyContent>
+			</Empty>
+		)
+	}
 
 	if (!selectedTopic) {
 		return (

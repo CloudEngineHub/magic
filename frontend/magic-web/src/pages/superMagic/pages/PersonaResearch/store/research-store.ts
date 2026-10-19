@@ -1,5 +1,6 @@
 import { makeAutoObservable, observable, runInAction } from "mobx"
 import { SuperMagicApi } from "@/apis"
+import { userStore } from "@/models/user"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { createMentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
 import { ProjectFilesStore } from "@/stores/projectFiles"
@@ -34,6 +35,20 @@ import {
 	type StudyAttachments,
 } from "../services/researchFiles"
 import { isLegacyTemplateChatName, templateChatTopicIds } from "../services/templateChats"
+import {
+	studyTopicReference,
+	listStudyTopicMarkers,
+	parseStudyTopicMarker,
+	studyTopicMarkerPath,
+	type StudyTopicMarker,
+} from "../services/studyTopics"
+import { persistStudyTopicMarker } from "../services/studyTopicFiles"
+import { ResearchOperationError } from "../services/researchOperationError"
+import {
+	loadAllResearchTopics,
+	loadResearchFiles,
+	loadResearchTopics,
+} from "../services/researchSnapshot"
 import type {
 	DiscussionFile,
 	InterviewFile,
@@ -85,6 +100,7 @@ export class PersonaResearchStore {
 	attachments: AttachmentItem[] = []
 	attachmentList: AttachmentItem[] = []
 	isCreatingStudy = false
+	isChangingStudyTopics = false
 	isConversationGenerating = false
 
 	/**
@@ -187,6 +203,11 @@ export class PersonaResearchStore {
 		)
 	}
 
+	private get accessScopeKey(): string {
+		if (this.isReadOnly) return "share"
+		return `${userStore.user.userInfo?.user_id ?? ""}:${userStore.user.organizationCode}`
+	}
+
 	get selectedTopic() {
 		return this.topicStore.selectedTopic
 	}
@@ -242,8 +263,32 @@ export class PersonaResearchStore {
 		const isTemplateChat = (topic: Topic) =>
 			templateChats.has(String(topic.id)) ||
 			(!this.studyDirOf(topic.id) && isLegacyTemplateChatName(topic.topic_name))
+		const seen = new Set<string>()
+		const markerTopicIds = this.studyMarkerTopicIds
+		const visibleIds = new Set(
+			this.topicStore.topics
+				.filter((topic) => !isTemplateChat(topic))
+				.map((topic) => topic.id),
+		)
 		return this.topicStore.topics
-			.filter((topic) => !this.isBlankTopic(topic) && !isTemplateChat(topic))
+			.filter(
+				(topic) =>
+					!this.isBlankTopic(topic) &&
+					!isTemplateChat(topic) &&
+					(!markerTopicIds.has(topic.id) || Boolean(this.studyDirOf(topic.id))),
+			)
+			.filter((topic) => {
+				const dir = this.studyDirOf(topic.id)
+				if (!dir) return true
+				const primary =
+					this.studyFileOf(topic)?.topic_id ??
+					this.studyDeletionOf(topic.id)?.primary_topic_id
+				// Prefer the primary topic, but keep the study reachable if it was deleted elsewhere.
+				if (primary && primary !== topic.id && visibleIds.has(primary)) return false
+				if (seen.has(dir)) return false
+				seen.add(dir)
+				return true
+			})
 			.slice()
 			.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")))
 	}
@@ -253,8 +298,305 @@ export class PersonaResearchStore {
 	 * lists) and the only one users rename. study.json's title covers a topic not named yet.
 	 */
 	studyTitleOf(topic: Topic): string {
-		if (topic.topic_name) return topic.topic_name
-		return this.studyFileOf(topic)?.title || ""
+		const study = this.studyFileOf(topic)
+		const primary = this.topicStore.topics.find((item) => item.id === study?.topic_id)
+		return (
+			primary?.topic_name ||
+			study?.title ||
+			this.studyDeletionOf(topic.id)?.title ||
+			topic.topic_name ||
+			""
+		)
+	}
+
+	/** Only topics already visible through the current project/share scope are selectable. */
+	get studyTopics(): Topic[] {
+		const dir = this.studyDir
+		if (!dir) return this.selectedTopic ? [this.selectedTopic] : []
+		return this.topicStore.topics.filter(
+			(topic) =>
+				!this.templateChatTopicIds.has(topic.id) && this.studyDirOf(topic.id) === dir,
+		)
+	}
+
+	get canChangeStudyTopics(): boolean {
+		return (
+			!this.isReadOnly &&
+			!isReadOnlyProject(this.selectedProject?.user_role) &&
+			!this.isChangingStudyTopics &&
+			Boolean(this.study?.topic_id) &&
+			!this.studyDeletionOf(this.selectedTopic?.id) &&
+			!this.isStudyContentLoading &&
+			!this.isConversationGenerating &&
+			this.studyTopics.every(
+				(topic) =>
+					![TaskStatus.RUNNING, TaskStatus.WAITING_FOR_USER].includes(topic.task_status),
+			)
+		)
+	}
+
+	conversationReferences(topicId: string | undefined) {
+		const dir = this.studyDirOf(topicId)
+		const projectId = this.selectedProject?.id
+		const topic = this.topicStore.topics.find((item) => item.id === topicId)
+		if (!dir || !projectId || !topic || this.studyDeletionOf(topicId)) return []
+		const studyFile = collectStudyAttachments(this.attachmentList, dir).study
+		const markerFile = this.studyMarkers.get(topicId ?? "")?.file
+		return [studyFile, markerFile]
+			.filter((file): file is AttachmentItem => Boolean(file?.file_id))
+			.map((file) =>
+				studyTopicReference(
+					file,
+					projectId,
+					file === markerFile
+						? topic.topic_name || this.studyTitleOf(topic)
+						: this.studyTitleOf(topic),
+				),
+			)
+	}
+
+	studyDeletionOf(topicId: string | undefined): StudyTopicMarker | null {
+		const dir = this.studyDirOf(topicId)
+		return dir ? (this.studyDeletionByDir.get(dir) ?? null) : null
+	}
+
+	private get studyDeletionByDir(): Map<string, StudyTopicMarker> {
+		const result = new Map<string, StudyTopicMarker>()
+		for (const { marker } of this.studyMarkers.values()) {
+			const path = `${marker.study_dir}/study.json`
+			if (
+				marker.state === "deleting" &&
+				(!this.studyFilesByPath.has(path) ||
+					this.peekStudy(path)?.topic_id === marker.primary_topic_id)
+			)
+				result.set(`${marker.study_dir}/`, marker)
+		}
+		return result
+	}
+
+	private get studyMarkerTopicIds(): Set<string> {
+		return new Set(
+			listStudyTopicMarkers(this.attachmentList).map(
+				(file) =>
+					getAttachmentPath(file)
+						.split("/")
+						.pop()
+						?.replace(/\.json$/, "") ?? "",
+			),
+		)
+	}
+
+	private get studyMarkers() {
+		void this.contentVersion
+		const result = new Map<string, { marker: StudyTopicMarker; file: AttachmentItem }>()
+		for (const file of listStudyTopicMarkers(this.attachmentList)) {
+			const parsed = this.getParsed(file, parseStudyTopicMarker)
+			if (
+				parsed?.ok &&
+				getAttachmentPath(file) === studyTopicMarkerPath(parsed.data.topic_id)
+			)
+				result.set(parsed.data.topic_id, { marker: parsed.data, file })
+		}
+		return result
+	}
+
+	private commitTopicMarker(file: AttachmentItem, marker: StudyTopicMarker) {
+		this.parsedCache.set(getAttachmentPath(file), {
+			versionKey: attachmentVersionKey(file),
+			raw: marker,
+		})
+		this.applyAttachments(this.attachments, [
+			...this.attachmentList.filter((item) => String(item.file_id) !== String(file.file_id)),
+			file,
+		])
+		this.contentVersion += 1
+	}
+
+	private currentStudy(dir: string): StudyFile | null {
+		const file = this.studyFilesByPath.get(`${dir}study.json`)
+		if (
+			!file ||
+			this.parsedCache.get(getAttachmentPath(file))?.versionKey !== attachmentVersionKey(file)
+		)
+			return null
+		return this.peekStudy(`${dir}study.json`)
+	}
+
+	async createStudyTopic(name: string): Promise<Topic | null> {
+		const projectId = this.selectedProject?.id
+		const dir = this.studyDir
+		const primaryId = this.study?.topic_id
+		if (!projectId || !dir || !primaryId || !name.trim() || !this.canChangeStudyTopics)
+			return null
+		this.isChangingStudyTopics = true
+		const generation = this.contentGeneration
+		const accessScope = this.accessScopeKey
+		const assertCurrent = () => {
+			if (
+				generation !== this.contentGeneration ||
+				this.selectedProject?.id !== projectId ||
+				accessScope !== this.accessScopeKey
+			)
+				throw new Error("study_topic_scope_changed")
+		}
+		let created: Topic | null = null
+		let markerFile: AttachmentItem | null = null
+		let deleting = false
+		try {
+			await this.refreshResearchSnapshot()
+			assertCurrent()
+			if (this.currentStudy(dir)?.topic_id !== primaryId || this.studyDeletionOf(primaryId))
+				throw new Error("study_topic_study_unavailable")
+			if (
+				this.topicStore.topics.some(
+					(topic) =>
+						this.studyDirOf(topic.id) === dir &&
+						[TaskStatus.RUNNING, TaskStatus.WAITING_FOR_USER].includes(
+							topic.task_status,
+						),
+				)
+			)
+				throw new Error("study_topic_running")
+			const result = await SuperMagicApi.createTopic({
+				project_id: projectId,
+				topic_name: "",
+				project_mode: TopicMode.PersonaResearch,
+			})
+			if (!result?.id) throw new Error("study_topic_create_failed")
+			const topic = withResearchTopicFields(result as Topic)
+			created = topic
+			assertCurrent()
+			await this.refreshResearchSnapshot()
+			assertCurrent()
+			if (this.studyDeletionOf(primaryId)) throw new Error("study_topic_study_deleting")
+			const marker: StudyTopicMarker = {
+				schema_version: 1,
+				topic_id: topic.id,
+				primary_topic_id: primaryId,
+				study_dir: dir.replace(/\/$/, ""),
+				state: "linked",
+				title: this.studyTitleOf(topic) || this.peekStudy(`${dir}study.json`)?.title || "",
+			}
+			markerFile = await persistStudyTopicMarker(projectId, this.attachmentList, marker)
+			assertCurrent()
+			runInAction(() => {
+				this.commitTopicMarker(markerFile as AttachmentItem, marker)
+				this.topicStore.setTopics([
+					topic,
+					...this.topicStore.topics.filter((item) => item.id !== topic.id),
+				])
+			})
+			await this.refreshResearchSnapshot()
+			assertCurrent()
+			deleting =
+				Boolean(this.studyDeletionOf(topic.id)) ||
+				this.currentStudy(dir)?.topic_id !== primaryId
+			if (deleting) throw new Error("study_topic_study_deleting")
+			try {
+				await SuperMagicApi.editTopic({
+					id: topic.id,
+					project_id: projectId,
+					topic_name: name.trim(),
+				})
+			} catch (error) {
+				// The conversation and relationship already exist. Do not destroy them for a label failure.
+				throw new ResearchOperationError("rename", error, { topic, markerSaved: true })
+			}
+			assertCurrent()
+			runInAction(() => this.topicStore.updateTopicName(topic.id, name.trim()))
+			return { ...topic, topic_name: name.trim() }
+		} catch (error) {
+			if (
+				generation !== this.contentGeneration ||
+				this.selectedProject?.id !== projectId ||
+				accessScope !== this.accessScopeKey
+			)
+				throw new ResearchOperationError("verify", error, {
+					topic: created ?? undefined,
+					markerSaved: Boolean(markerFile),
+				})
+			if (error instanceof ResearchOperationError && error.stage === "rename") throw error
+			if (markerFile && !deleting)
+				throw new ResearchOperationError("verify", error, {
+					topic: created ?? undefined,
+					markerSaved: true,
+				})
+			const cleanupErrors =
+				error instanceof ResearchOperationError ? [...error.cleanupErrors] : []
+			let retainedTopic = created
+			let retainedMarker = Boolean(markerFile)
+			if (created) {
+				try {
+					await SuperMagicApi.deleteTopic({ id: created.id })
+					retainedTopic = null
+					assertCurrent()
+					runInAction(() => this.topicStore.removeTopic(created?.id ?? ""))
+					if (markerFile?.file_id) {
+						const response = await SuperMagicApi.deleteFiles({
+							project_id: projectId,
+							file_ids: [String(markerFile.file_id)],
+						})
+						assertCurrent()
+						if (!response?.file_ids?.map(String).includes(String(markerFile.file_id)))
+							throw new Error("study_topic_cleanup_unconfirmed")
+						retainedMarker = false
+						runInAction(() =>
+							this.removeAttachmentsLocally([String(markerFile?.file_id)]),
+						)
+					}
+				} catch (cleanupError) {
+					cleanupErrors.push(cleanupError)
+				}
+			}
+			throw new ResearchOperationError(
+				"link",
+				error instanceof ResearchOperationError ? error.originalError : error,
+				{ topic: retainedTopic ?? undefined, markerSaved: retainedMarker },
+				cleanupErrors,
+			)
+		} finally {
+			runInAction(() => {
+				this.isChangingStudyTopics = false
+			})
+		}
+	}
+
+	/** Child deletion never touches study outputs; a failed marker cleanup is partial success. */
+	async deleteStudyTopic(topicId: string): Promise<void> {
+		const projectId = this.selectedProject?.id
+		if (!projectId || !this.canChangeStudyTopics || topicId === this.study?.topic_id)
+			throw new Error("study_topic_delete_unavailable")
+		this.isChangingStudyTopics = true
+		let topicDeleted = false
+		try {
+			await this.refreshResearchSnapshot()
+			if (
+				this.studyDeletionOf(topicId) ||
+				!this.studyTopics.some((topic) => topic.id === topicId)
+			)
+				throw new Error("study_topic_delete_unavailable")
+			const markerFile = this.studyMarkers.get(topicId)?.file
+			await SuperMagicApi.deleteTopic({ id: topicId })
+			topicDeleted = true
+			runInAction(() => this.topicStore.removeTopic(topicId))
+			if (markerFile?.file_id) {
+				const response = await SuperMagicApi.deleteFiles({
+					project_id: projectId,
+					file_ids: [String(markerFile.file_id)],
+				})
+				if (!response?.file_ids?.map(String).includes(String(markerFile.file_id)))
+					throw new Error("study_topic_cleanup_unconfirmed")
+				runInAction(() => this.removeAttachmentsLocally([String(markerFile.file_id)]))
+			}
+		} catch (originalError) {
+			throw new ResearchOperationError("delete", originalError, {
+				deletedTopicIds: topicDeleted ? [topicId] : [],
+			})
+		} finally {
+			runInAction(() => {
+				this.isChangingStudyTopics = false
+			})
+		}
 	}
 
 	/** Renames a study through its topic name. */
@@ -262,6 +604,9 @@ export class PersonaResearchStore {
 		const topicName = name.trim()
 		const projectId = this.selectedProject?.id
 		if (!topicName || !projectId || this.isReadOnly) return
+		const primaryId = this.studyFileOf({ id: topicId } as Topic)?.topic_id
+		if (primaryId && this.topicStore.topics.some((item) => item.id === primaryId))
+			topicId = primaryId
 		const topic = this.topicStore.topics.find((item) => item.id === topicId)
 		if (topic?.topic_name === topicName) return
 		await SuperMagicApi.editTopic({ id: topicId, topic_name: topicName, project_id: projectId })
@@ -310,9 +655,33 @@ export class PersonaResearchStore {
 	}
 
 	/** Study directory per topic, rebuilt once per attachment or study.json change. */
+	private get studyFilesByPath(): Map<string, AttachmentItem> {
+		return new Map(
+			listStudyFiles(this.attachmentList).map((file) => [getAttachmentPath(file), file]),
+		)
+	}
+
 	private get studyDirByTopicId(): Map<string, string> {
 		void this.contentVersion
-		return indexStudyDirs(this.attachmentList, this.studyTopicIdOf)
+		const dirs = indexStudyDirs(this.attachmentList, this.studyTopicIdOf)
+		const markers = this.studyMarkers
+		for (const { marker } of markers.values()) {
+			if (this.templateChatTopicIds.has(marker.topic_id)) continue
+			const dir = `${marker.study_dir}/`
+			const fence = markers.get(marker.primary_topic_id)?.marker
+			const studyFileExists = this.studyFilesByPath.has(`${dir}study.json`)
+			const validFence =
+				fence?.state === "deleting" &&
+				fence.study_dir === marker.study_dir &&
+				(!studyFileExists ||
+					this.peekStudy(`${dir}study.json`)?.topic_id === marker.primary_topic_id)
+			if (
+				validFence ||
+				this.peekStudy(`${dir}study.json`)?.topic_id === marker.primary_topic_id
+			)
+				dirs.set(marker.topic_id, dir)
+		}
+		return dirs
 	}
 
 	personaById(personaId: string): PersonaFile | null {
@@ -350,15 +719,12 @@ export class PersonaResearchStore {
 			try {
 				const [detail, topicsResponse, attachmentsResponse] = await Promise.all([
 					SuperMagicApi.getProjectDetail({ id: project.id }),
-					SuperMagicApi.getTopicsByProjectId({ id: project.id, page: 1, page_size: 999 }),
-					SuperMagicApi.getAttachmentsByProjectId({
-						projectId: project.id,
-						temporaryToken: "",
-					}),
+					loadResearchTopics(project.id),
+					loadResearchFiles(project.id),
 				])
 				if (generation !== this.bootstrapGeneration) return
 				const processed = AttachmentDataProcessor.processAttachmentData(attachmentsResponse)
-				const topics = Array.isArray(topicsResponse?.list) ? topicsResponse.list : []
+				const topics = topicsResponse
 				runInAction(() => {
 					const resolvedProject = detail?.id ? detail : project
 					this.selectedProject = resolvedProject
@@ -426,22 +792,33 @@ export class PersonaResearchStore {
 	 */
 	async prepareStudyTopic(): Promise<Topic | null> {
 		const projectId = this.selectedProject?.id
-		if (!projectId || this.isCreatingStudy) return null
-		const blank = this.topicStore.topics.find((topic) => this.isBlankTopic(topic))
-		if (blank) return blank
-
+		if (!projectId || this.isCreatingStudy || this.isReadOnly) return null
 		this.isCreatingStudy = true
+		const generation = this.contentGeneration
+		const accessScope = this.accessScopeKey
+		const assertCurrent = () => {
+			if (
+				generation !== this.contentGeneration ||
+				this.selectedProject?.id !== projectId ||
+				this.accessScopeKey !== accessScope
+			)
+				throw new Error("study_topic_scope_changed")
+		}
 		try {
+			// A blank child whose marker was absent from a fallback read is not a reusable new study.
+			await this.refreshResearchSnapshot()
+			assertCurrent()
+			const blank = this.topicStore.topics.find((topic) => this.isBlankTopic(topic))
+			if (blank) return blank
 			const created = await SuperMagicApi.createTopic({
 				project_id: projectId,
 				topic_name: "",
 				project_mode: TopicMode.PersonaResearch,
 			})
 			if (!created?.id) return null
+			assertCurrent()
 			const topic = withResearchTopicFields(created as Topic)
-			runInAction(() => {
-				this.topicStore.setTopics([topic, ...this.topicStore.topics])
-			})
+			runInAction(() => this.topicStore.setTopics([topic, ...this.topicStore.topics]))
 			return topic
 		} finally {
 			runInAction(() => {
@@ -450,27 +827,182 @@ export class PersonaResearchStore {
 		}
 	}
 
-	/** Deletes the topic and its study directory; persona library files are kept. */
+	/** Publish deletion intent before deleting conversations or project-owned outputs. */
 	async deleteStudy(topicId: string): Promise<void> {
-		const dir = this.studyDirOf(topicId)
-		const fileIds = dir ? this.collectDirectoryFileIds(dir) : []
-		await SuperMagicApi.deleteTopic({ id: topicId })
-		if (fileIds.length > 0 && this.selectedProject?.id) {
-			await SuperMagicApi.deleteFiles({
-				file_ids: fileIds,
-				project_id: this.selectedProject.id,
+		const projectId = this.selectedProject?.id
+		if (
+			!projectId ||
+			this.isReadOnly ||
+			isReadOnlyProject(this.selectedProject?.user_role) ||
+			this.isChangingStudyTopics
+		)
+			throw new Error("study_delete_unavailable")
+		this.isChangingStudyTopics = true
+		const generation = this.contentGeneration
+		const accessScope = this.accessScopeKey
+		const deletedTopicIds: string[] = []
+		const attemptedTopicIds: string[] = []
+		let attemptedFileIds: string[] = []
+		let targetDir: string | null = null
+		let targetPrimaryId: string | undefined
+		let filesDeleted = false
+		const assertCurrent = () => {
+			if (
+				generation !== this.contentGeneration ||
+				this.selectedProject?.id !== projectId ||
+				accessScope !== this.accessScopeKey
+			)
+				throw new Error("study_delete_scope_changed")
+		}
+		try {
+			await this.refreshResearchSnapshot(topicId)
+			assertCurrent()
+			const dir = this.studyDirOf(topicId)
+			targetDir = dir
+			if (!dir) {
+				// A plain conversation has no study-owned files.
+				if (this.studyMarkerTopicIds.has(topicId))
+					throw new Error("research_relations_incomplete")
+				if (this.topicStore.topics.some((topic) => topic.id === topicId)) {
+					await SuperMagicApi.deleteTopic({ id: topicId })
+					assertCurrent()
+					runInAction(() => this.topicStore.removeTopic(topicId))
+				}
+				return
+			}
+			const existingIntent = this.studyDeletionOf(topicId)
+			const study = this.currentStudy(dir)
+			const primaryId = existingIntent?.primary_topic_id ?? study?.topic_id
+			if (!primaryId) throw new Error("study_delete_contract_invalid")
+			targetPrimaryId = primaryId
+			const related = () =>
+				this.topicStore.topics.filter(
+					(topic) =>
+						!this.templateChatTopicIds.has(topic.id) &&
+						this.studyDirOf(topic.id) === dir,
+				)
+			const assertIdle = () => {
+				if (
+					related().some((topic) =>
+						[TaskStatus.RUNNING, TaskStatus.WAITING_FOR_USER].includes(
+							topic.task_status,
+						),
+					)
+				)
+					throw new Error("study_delete_running")
+			}
+			assertIdle()
+			const marker: StudyTopicMarker = existingIntent ?? {
+				schema_version: 1,
+				topic_id: primaryId,
+				primary_topic_id: primaryId,
+				study_dir: dir.replace(/\/$/, ""),
+				state: "deleting",
+				title: study?.title ?? "",
+			}
+			const intentFile = await persistStudyTopicMarker(projectId, this.attachmentList, marker)
+			assertCurrent()
+			runInAction(() => this.commitTopicMarker(intentFile, marker))
+			// Refresh after publishing intent: concurrent creators must either appear here or see
+			// the persistent intent in their own post-save check and compensate their new topic.
+			for (let attempt = 0; attempt < 3; attempt += 1) {
+				await this.refreshResearchSnapshot()
+				assertCurrent()
+				assertIdle()
+				const children = related().filter((topic) => topic.id !== primaryId)
+				if (!children.length) break
+				for (const topic of children) {
+					attemptedTopicIds.push(topic.id)
+					await SuperMagicApi.deleteTopic({ id: topic.id })
+					assertCurrent()
+					deletedTopicIds.push(topic.id)
+					runInAction(() => this.topicStore.removeTopic(topic.id))
+				}
+			}
+			await this.refreshResearchSnapshot()
+			assertCurrent()
+			assertIdle()
+			if (related().some((topic) => topic.id !== primaryId))
+				throw new Error("study_delete_relations_changed")
+			const markerIds = [...this.studyMarkers.values()]
+				.filter(
+					({ marker: item }) =>
+						item.state === "linked" &&
+						item.primary_topic_id === primaryId &&
+						`${item.study_dir}/` === dir,
+				)
+				.map(({ file }) => String(file.file_id))
+			const fileIds = [...new Set([...this.collectDirectoryFileIds(dir), ...markerIds])]
+			if (fileIds.length) {
+				attemptedFileIds = fileIds
+				const response = await SuperMagicApi.deleteFiles({
+					file_ids: fileIds,
+					project_id: projectId,
+				})
+				assertCurrent()
+				if (
+					!response?.file_ids ||
+					fileIds.some((id) => !response.file_ids.map(String).includes(id))
+				)
+					throw new Error("study_delete_files_unconfirmed")
+				filesDeleted = true
+				runInAction(() => this.removeAttachmentsLocally(fileIds))
+			}
+			await this.refreshResearchSnapshot()
+			assertCurrent()
+			if (
+				this.collectDirectoryFileIds(dir).length ||
+				related().some((topic) => topic.id !== primaryId)
+			)
+				throw new Error("study_delete_changed")
+			if (this.topicStore.topics.some((topic) => topic.id === primaryId)) {
+				attemptedTopicIds.push(primaryId)
+				await SuperMagicApi.deleteTopic({ id: primaryId })
+				assertCurrent()
+				deletedTopicIds.push(primaryId)
+				runInAction(() => this.topicStore.removeTopic(primaryId))
+			}
+			await this.refreshResearchSnapshot()
+			assertCurrent()
+			if (this.collectDirectoryFileIds(dir).length || related().length)
+				throw new Error("study_delete_changed")
+		} catch (originalError) {
+			const reconciliationErrors: unknown[] = []
+			let completed = false
+			try {
+				assertCurrent()
+				await this.refreshResearchSnapshot()
+				assertCurrent()
+				const liveTopics = new Set(this.topicStore.topics.map((topic) => topic.id))
+				for (const id of attemptedTopicIds)
+					if (!liveTopics.has(id) && !deletedTopicIds.includes(id))
+						deletedTopicIds.push(id)
+				const liveFiles = new Set(this.attachmentList.map((file) => String(file.file_id)))
+				if (attemptedFileIds.some((id) => !liveFiles.has(id))) filesDeleted = true
+				completed = Boolean(
+					targetDir &&
+					targetPrimaryId &&
+					this.studyMarkers.get(targetPrimaryId)?.marker.state === "deleting" &&
+					!this.collectDirectoryFileIds(targetDir).length &&
+					!this.topicStore.topics.some(
+						(topic) => this.studyDirOf(topic.id) === targetDir,
+					),
+				)
+			} catch (error) {
+				reconciliationErrors.push(error)
+			}
+			// The intent and actual remote file list remain visible on a retryable real topic.
+			throw new ResearchOperationError(
+				"delete",
+				originalError,
+				{ deletedTopicIds, filesDeleted, completed },
+				reconciliationErrors,
+			)
+		} finally {
+			runInAction(() => {
+				this.isChangingStudyTopics = false
 			})
 		}
-		runInAction(() => {
-			this.topicStore.removeTopic(topicId)
-			if (fileIds.length > 0) {
-				const removed = new Set(fileIds)
-				this.applyAttachments(
-					this.attachments,
-					this.attachmentList.filter((item) => !removed.has(String(item.file_id))),
-				)
-			}
-		})
 	}
 
 	/** Called by realtime file events and polling with the latest raw project attachments. */
@@ -504,34 +1036,99 @@ export class PersonaResearchStore {
 	/** Re-reads attachments from the server; used after page visibility returns. */
 	async refreshAttachments(): Promise<void> {
 		const projectId = this.selectedProject?.id
-		if (!projectId) return
-		const response = await SuperMagicApi.getAttachmentsByProjectId({
-			projectId,
-			temporaryToken: "",
-		})
+		if (!projectId || this.isReadOnly) return
+		const response = await loadResearchFiles(projectId)
 		if (this.selectedProject?.id !== projectId) return
-		this.setAttachments(response?.tree ?? [], response?.list ?? [])
+		this.setAttachments(response.tree, response.list)
 	}
 
 	async refreshTopics(): Promise<void> {
 		const projectId = this.selectedProject?.id
-		if (!projectId) return
-		const response = await SuperMagicApi.getTopicsByProjectId({
-			id: projectId,
-			page: 1,
-			page_size: 999,
-		})
+		if (!projectId || this.isReadOnly) return
+		const topics = await loadResearchTopics(projectId)
 		if (this.selectedProject?.id !== projectId) return
-		const topics = Array.isArray(response?.list) ? response.list : []
+		runInAction(() => this.commitTopics(topics))
+	}
+
+	private commitTopics(topics: Topic[]) {
+		const selectedId = this.selectedTopic?.id
+		this.topicStore.setTopics(topics.map(withResearchTopicFields))
+		if (selectedId)
+			this.topicStore.setSelectedTopic(
+				this.topicStore.topics.find((topic) => topic.id === selectedId) ?? null,
+			)
+	}
+
+	/** Mutations require complete authorized reads; failed/half-written relations stop the write. */
+	async refreshResearchSnapshot(allowEmptyIntentFor?: string): Promise<void> {
+		const projectId = this.selectedProject?.id
+		const generation = this.contentGeneration
+		const accessScope = this.accessScopeKey
+		if (!projectId || this.isReadOnly) throw new Error("research_snapshot_unavailable")
+		const [topics, files] = await Promise.all([
+			loadAllResearchTopics(projectId),
+			loadResearchFiles(projectId, true),
+		])
+		if (
+			generation !== this.contentGeneration ||
+			this.selectedProject?.id !== projectId ||
+			accessScope !== this.accessScopeKey
+		)
+			throw new Error("research_snapshot_scope_changed")
 		runInAction(() => {
-			const selectedId = this.topicStore.selectedTopic?.id
-			this.topicStore.setTopics(topics.map(withResearchTopicFields))
-			if (selectedId) {
-				this.topicStore.setSelectedTopic(
-					this.topicStore.topics.find((topic) => topic.id === selectedId) ?? null,
-				)
-			}
+			this.commitTopics(topics)
+			this.setAttachments(files.tree, files.list)
 		})
+		await this.reloadParsedContent()
+		if (
+			generation !== this.contentGeneration ||
+			this.selectedProject?.id !== projectId ||
+			accessScope !== this.accessScopeKey
+		)
+			throw new Error("research_snapshot_scope_changed")
+		const liveTopicIds = new Set(this.topicStore.topics.map((topic) => topic.id))
+		const referencedPrimaryIds = new Set(
+			[...this.studyMarkers.values()]
+				.filter(({ marker }) => liveTopicIds.has(marker.topic_id))
+				.map(({ marker }) => marker.primary_topic_id),
+		)
+		for (const file of listStudyTopicMarkers(this.attachmentList)) {
+			const fileTopicId =
+				getAttachmentPath(file)
+					.split("/")
+					.pop()
+					?.replace(/\.json$/, "") ?? ""
+			// A failed compensation may leave a broken file for an already deleted topic.
+			// It cannot claim a live conversation; unrelated writes must not be blocked by it.
+			if (!liveTopicIds.has(fileTopicId) && !referencedPrimaryIds.has(fileTopicId)) continue
+			const entry = this.parsedCache.get(getAttachmentPath(file))
+			const parsed = this.getParsed(file, parseStudyTopicMarker)
+			if (
+				allowEmptyIntentFor &&
+				entry?.raw === "" &&
+				entry.versionKey === attachmentVersionKey(file) &&
+				getAttachmentPath(file) === studyTopicMarkerPath(allowEmptyIntentFor) &&
+				listStudyFiles(this.attachmentList).some(
+					(studyFile) =>
+						this.peekStudy(getAttachmentPath(studyFile))?.topic_id ===
+						allowEmptyIntentFor,
+				)
+			)
+				continue
+			if (
+				entry?.versionKey !== attachmentVersionKey(file) ||
+				!parsed?.ok ||
+				getAttachmentPath(file) !== studyTopicMarkerPath(parsed.data.topic_id)
+			)
+				throw new Error("research_relations_incomplete")
+			const studyFile = this.studyFilesByPath.get(`${parsed.data.study_dir}/study.json`)
+			if (
+				studyFile &&
+				this.currentStudy(`${parsed.data.study_dir}/`)?.topic_id !==
+					parsed.data.primary_topic_id
+			)
+				throw new Error("research_relation_study_mismatch")
+		}
 	}
 
 	setSelectedTopic(topic: Topic | null) {
@@ -630,7 +1227,14 @@ export class PersonaResearchStore {
 		// Aborting only fails the downloads still pending; the read then commits what it has, so
 		// a hung request ends the loading state instead of keeping the skeleton up forever.
 		const timer = setTimeout(() => controller.abort(), FILE_READ_TIMEOUT_MS)
-		const isCurrent = () => generation === this.contentGeneration
+		const projectId = this.selectedProject?.id
+		const accessScope = this.accessScopeKey
+		const access = this.fileAccess
+		const isCurrent = () =>
+			generation === this.contentGeneration &&
+			this.selectedProject?.id === projectId &&
+			this.accessScopeKey === accessScope &&
+			this.fileAccess === access
 		try {
 			const libraryRequested = this.libraryRequested
 			const personaFiles = this.personaFiles
@@ -640,6 +1244,7 @@ export class PersonaResearchStore {
 			await this.ensureParsed(
 				[
 					...listStudyFiles(this.attachmentList),
+					...listStudyTopicMarkers(this.attachmentList),
 					...(libraryRequested
 						? personaFiles
 						: personaFiles.slice(0, LIBRARY_PREVIEW_COUNT)),
@@ -746,7 +1351,13 @@ export class PersonaResearchStore {
 	private syncTopicNamesFromStudies() {
 		if (this.isReadOnly || isReadOnlyProject(this.selectedProject?.user_role)) return
 		for (const topic of this.topicStore.topics) {
-			if (topic.topic_name || this.topicNameSyncs.has(topic.id)) continue
+			if (
+				topic.topic_name ||
+				this.topicNameSyncs.has(topic.id) ||
+				this.studyFileOf(topic)?.topic_id !== topic.id ||
+				this.studyDeletionOf(topic.id)
+			)
+				continue
 			const title = this.studyFileOf(topic)?.title?.trim()
 			if (!title) continue
 			this.topicNameSyncs.add(topic.id)
@@ -757,12 +1368,22 @@ export class PersonaResearchStore {
 	}
 
 	private async ensureParsed(items: AttachmentItem[], signal?: AbortSignal) {
+		const projectId = this.selectedProject?.id
+		const accessScope = this.accessScopeKey
+		const access = this.fileAccess
+		const generation = this.contentGeneration
 		const stale = items.filter(
 			(item) =>
 				this.parsedCache.get(getAttachmentPath(item))?.versionKey !==
 				attachmentVersionKey(item),
 		)
 		if (stale.length === 0) return
+		const previousEntries = new Map(
+			stale.map((item) => [
+				getAttachmentPath(item),
+				this.parsedCache.get(getAttachmentPath(item)),
+			]),
+		)
 		const ids = stale.map((item) => String(item.file_id))
 		// forceRefresh: the agent overwrites these files in place; never serve a stale copy.
 		// Only files whose version changed get here, so unchanged files are never re-downloaded.
@@ -773,6 +1394,20 @@ export class PersonaResearchStore {
 			signal,
 		})
 		for (const item of stale) {
+			if (
+				this.selectedProject?.id !== projectId ||
+				this.accessScopeKey !== accessScope ||
+				this.fileAccess !== access ||
+				this.contentGeneration !== generation
+			)
+				return
+			// A confirmed topic-link save can arrive while a preceding file read is in flight.
+			// Do not let that older read discard the newly persisted relationship.
+			if (
+				this.parsedCache.get(getAttachmentPath(item)) !==
+				previousEntries.get(getAttachmentPath(item))
+			)
+				continue
 			const content = successes.get(String(item.file_id))
 			// A failed download keeps the previous version, which retries on the next read.
 			if (typeof content !== "string") continue
@@ -803,12 +1438,9 @@ export class PersonaResearchStore {
 	}
 
 	private studyTopicIdOf(item: AttachmentItem): string | undefined {
-		const raw = this.parsedCache.get(getAttachmentPath(item))?.raw
-		const topicId =
-			raw && typeof raw === "object" ? (raw as { topic_id?: unknown }).topic_id : null
-		return typeof topicId === "string" || typeof topicId === "number"
-			? String(topicId)
-			: undefined
+		const parsed = this.getParsed(item, parseStudyFile)
+		const id = parsed?.ok ? parsed.data.topic_id : undefined
+		return id && id !== "0" && !this.templateChatTopicIds.has(id) ? id : undefined
 	}
 
 	/** Reads an already-fetched study.json for list rows; never triggers a request. */
@@ -862,7 +1494,12 @@ export class PersonaResearchStore {
 
 	private isBlankTopic(topic: Topic): boolean {
 		const neverRan = !topic.task_status || topic.task_status === TaskStatus.WAITING
-		return neverRan && !topic.topic_name && !this.studyDirOf(topic.id)
+		return (
+			neverRan &&
+			!topic.topic_name &&
+			!this.studyDirOf(topic.id) &&
+			!this.studyMarkerTopicIds.has(topic.id)
+		)
 	}
 
 	private applyAttachments(tree: AttachmentItem[], list: AttachmentItem[]) {

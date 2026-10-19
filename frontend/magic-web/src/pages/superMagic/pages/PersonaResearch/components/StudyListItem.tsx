@@ -83,6 +83,24 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 			(item) => item.verdict !== "pending" && item.verdict !== "insufficient",
 		),
 	)
+	if (store.studyDeletionOf(topic.id)) {
+		return (
+			<li className="flex items-center gap-3 py-3.5">
+				<div className="min-w-0 flex-1">
+					<p className="truncate text-sm font-medium">{title}</p>
+					<p className="text-xs text-muted-foreground">{t("home.deletionPending")}</p>
+				</div>
+				<Button
+					variant="outline"
+					size="sm"
+					disabled={store.isChangingStudyTopics}
+					onClick={() => onDelete(topic)}
+				>
+					{t("home.retryDelete")}
+				</Button>
+			</li>
+		)
+	}
 
 	return (
 		<li

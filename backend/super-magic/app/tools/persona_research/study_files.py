@@ -26,6 +26,7 @@ from app.tools.persona_research.contracts import (
     STUDIES_DIR,
     TEMPLATES_DIR,
     Study,
+    StudyTopicMarker,
     TranscriptStatus,
 )
 from app.utils.async_file_utils import (
@@ -130,7 +131,7 @@ async def load_study(study_path: Path) -> Study:
     if data is None:
         raise StudyFilesError(f"{study_path.name}/study.json does not exist.")
     try:
-        return Study.model_validate(data)
+        study = Study.model_validate(data)
     except ValidationError as exc:
         problems = "; ".join(
             f"{'.'.join(str(p) for p in err['loc']) or 'study.json'}: {err['msg']}" for err in exc.errors()[:6]
@@ -139,9 +140,37 @@ async def load_study(study_path: Path) -> Study:
             f"study.json does not match the file contract ({problems}). "
             "It was not written by update_study; recreate the study with update_study event=created."
         ) from exc
+    await assert_study_not_deleting(study_path, study)
+    return study
+
+
+async def load_study_topic_marker(base_dir: Path, topic_id: str) -> Optional[StudyTopicMarker]:
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", topic_id):
+        raise StudyFilesError("The current topic ID is invalid; do not create another study.")
+    path = await resolve_in_workspace(base_dir, f"study-topics/{topic_id}.json")
+    data = await read_json_file(path)
+    if data is None:
+        return None
+    try:
+        marker = StudyTopicMarker.model_validate(data)
+    except ValidationError as exc:
+        raise StudyFilesError("The study topic association is invalid; do not create another study.") from exc
+    if marker.topic_id != topic_id:
+        raise StudyFilesError("The study topic association does not match this topic; nothing was changed.")
+    return marker
+
+
+async def assert_study_not_deleting(study_path: Path, study: Study) -> None:
+    marker = await load_study_topic_marker(study_path.parent.parent, study.topic_id)
+    if marker is not None and marker.study_dir != workspace_relative(study_path.parent.parent, study_path):
+        raise StudyFilesError("The study topic association points to a different study. Nothing was changed.")
+    if marker is not None and marker.state == "deleting":
+        raise StudyFilesError("This study is being deleted. Do not create, resume or write its files.")
 
 
 async def save_study(study_path: Path, study: Study) -> None:
+    # 再读删除意图，拦住多数“读取之后才开始删除”的在途工具；这不是跨服务事务。
+    await assert_study_not_deleting(study_path, study)
     await write_json_file(study_path / "study.json", study.to_file())
 
 

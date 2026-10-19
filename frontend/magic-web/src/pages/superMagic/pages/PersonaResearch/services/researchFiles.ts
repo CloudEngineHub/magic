@@ -61,8 +61,8 @@ export function listStudyFiles(list: AttachmentItem[]): AttachmentItem[] {
 
 /**
  * Finds the study directory that belongs to one topic.
- * The agent records the topic in study.json `topic_id`, read through `studyTopicIdOf`; the
- * attachment's own topic_id is only a fallback because agent-written files may carry 0.
+ * study.json records the primary `topic_id`. Related topic markers are indexed separately
+ * by the store. The attachment's topic_id is only a fallback when no contract ID was found.
  * Example: study.json of "studies/ai-recorder-7f3a/" has topic_id "123" → "studies/ai-recorder-7f3a/".
  * When several study files match (a renamed study), the most recently updated wins.
  */
@@ -100,8 +100,9 @@ export function indexStudyDirs(
 	for (const item of listStudyFiles(list)) {
 		const recorded = studyTopicIdOf?.(item)
 		claim(recorded, item)
-		const own = String(item.topic_id ?? "")
-		if (own !== recorded) claim(own, item)
+		// Once the contract supplies ownership, the last writer's attachment topic is not
+		// another owner. A child conversation may overwrite study.json in place.
+		if (!recorded) claim(String(item.topic_id ?? ""), item)
 	}
 	const dirs = new Map<string, string>()
 	for (const [topicId, item] of latest) {

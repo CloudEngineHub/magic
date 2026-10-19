@@ -75,8 +75,10 @@ from app.tools.persona_research.study_files import (
     StudyFilesError,
     ascii_slug,
     load_study,
+    load_study_topic_marker,
     load_transcripts,
     random_hex,
+    read_json_file,
     resolve_in_workspace,
     resolve_study_dir,
     save_study,
@@ -84,7 +86,7 @@ from app.tools.persona_research.study_files import (
     workspace_relative,
 )
 from app.tools.workspace_tool import WorkspaceTool
-from app.utils.async_file_utils import async_exists, async_mkdir, async_realpath
+from app.utils.async_file_utils import async_exists, async_mkdir, async_realpath, async_scandir
 
 logger = get_logger(__name__)
 
@@ -210,6 +212,37 @@ class UpdateStudy(WorkspaceTool[UpdateStudyParams]):
         if not topic_id:
             raise StudyFilesError("the current topic ID is unavailable, so the study cannot be linked to this topic")
         base = await async_realpath(self.base_dir)
+        marker = await load_study_topic_marker(base, topic_id)
+        if marker is not None:
+            if marker.state == "deleting":
+                raise StudyFilesError("This study is being deleted. Do not create or resume it.")
+            existing_path = await resolve_study_dir(base, marker.study_dir)
+            existing_study = await load_study(existing_path)
+            if existing_study.topic_id != marker.primary_topic_id:
+                raise StudyFilesError("The study topic association does not match its study. Do not create another study.")
+            raise StudyFilesError(
+                f"this topic already belongs to {marker.study_dir}. Read its study.json and plan.md and "
+                "continue that study without calling created or resetting limits. Nothing was changed."
+            )
+        # 一个研究内的新话题只恢复现有目录，不能因对话历史为空重建研究或重置额度。
+        studies_root = await resolve_in_workspace(base, STUDIES_DIR)
+        if await async_exists(studies_root):
+            for entry in await async_scandir(studies_root):
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                try:
+                    existing = await read_json_file(studies_root / entry.name / "study.json")
+                except StudyFilesError:
+                    # 无关研究正在写入或已损坏，不能把它当作当前话题的关联。
+                    continue
+                if existing is None:
+                    continue
+                if topic_id == str(existing.get("topic_id", "")):
+                    raise StudyFilesError(
+                        f"this topic already belongs to {STUDIES_DIR}/{entry.name}. "
+                        "Read that study.json and plan.md and continue the same study. "
+                        "Do not reset the confirmed plan or interview limits. Nothing was changed."
+                    )
         slug_base = ascii_slug(params.slug_hint) or "study"
         for _ in range(5):
             study_path = await resolve_in_workspace(base, f"{STUDIES_DIR}/{slug_base}-{random_hex()}")

@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 SCHEMA_VERSION = 1
 
@@ -269,6 +269,23 @@ class Study(_Lenient):
 
     def to_file(self) -> Dict[str, Any]:
         return self.model_dump(mode="json", exclude_none=True)
+
+
+class StudyTopicMarker(_Lenient):
+    """前端持有的独立话题关联；工具不改写研究关系，也不从话题显示名称猜目录。"""
+
+    schema_version: Literal[1]
+    topic_id: str = Field(pattern=r"^[A-Za-z0-9_-]+$")
+    primary_topic_id: str = Field(pattern=r"^[A-Za-z0-9_-]+$")
+    study_dir: str = Field(pattern=r"^studies/[A-Za-z0-9_-]+$")
+    state: Literal["linked", "deleting"]
+    title: str
+
+    @model_validator(mode="after")
+    def _valid_role(self) -> "StudyTopicMarker":
+        if (self.state == "deleting") != (self.topic_id == self.primary_topic_id):
+            raise ValueError("only the primary topic may publish deletion intent")
+        return self
 
 
 def initial_phases() -> List[PhaseState]:
