@@ -163,6 +163,14 @@ class MagicUserDomainService extends AbstractContactDomainService
         return $this->userRepository->getByUserIds($dataIsolation->getCurrentOrganizationCode(), $userIds);
     }
 
+    /**
+     * @return MagicUserEntity[]
+     */
+    public function getActiveUsersByOrganization(string $organizationCode): array
+    {
+        return $this->userRepository->getActiveUsersByOrganization($organizationCode);
+    }
+
     public function searchFriend(string $keyword): array
     {
         // 检查 uid 和 friendId 是否存在

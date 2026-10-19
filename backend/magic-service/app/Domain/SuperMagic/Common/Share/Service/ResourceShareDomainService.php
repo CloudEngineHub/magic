@@ -133,6 +133,11 @@ class ResourceShareDomainService
         return $this->shareRepository->getShareByResourceId($resourceId);
     }
 
+    public function getShareById(int $shareId): ?ResourceShareEntity
+    {
+        return $this->shareRepository->getShareById($shareId);
+    }
+
     /**
      * 通过资源ID获取分享（包括已删除的记录）.
      *

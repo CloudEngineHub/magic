@@ -46,6 +46,13 @@ interface MagicUserRepositoryInterface
     public function getByUserIds(string $organizationCode, array $userIds): array;
 
     /**
+     * 获取组织内当前可接收通知的用户。
+     *
+     * @return MagicUserEntity[]
+     */
+    public function getActiveUsersByOrganization(string $organizationCode): array;
+
+    /**
      * 根据 userIdType,生成对应类型的值.
      */
     public function getUserIdByType(UserIdType $userIdType, string $addStr): string;

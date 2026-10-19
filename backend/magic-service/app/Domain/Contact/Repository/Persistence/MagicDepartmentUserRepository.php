@@ -99,6 +99,7 @@ class MagicDepartmentUserRepository implements MagicDepartmentUserRepositoryInte
             ->select($fields)
             ->whereIn('department_id', $departmentIds)
             ->where('organization_code', $organizationCode)
+            ->whereNull('deleted_at')
             ->limit($limit);
         $departmentUsers = Db::select($query->toSql(), $query->getBindings());
         return $this->getDepartmentUserEntities($departmentUsers);

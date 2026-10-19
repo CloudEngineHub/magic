@@ -191,6 +191,29 @@ readonly class MagicUserRepository implements MagicUserRepositoryInterface
     }
 
     /**
+     * @return MagicUserEntity[]
+     */
+    public function getActiveUsersByOrganization(string $organizationCode): array
+    {
+        $query = $this->userModel::query()
+            ->join('magic_contact_accounts', 'magic_contact_accounts.magic_id', '=', 'magic_contact_users.magic_id')
+            ->where('magic_contact_users.organization_code', $organizationCode)
+            ->where('magic_contact_users.status', UserStatus::Activated->value)
+            ->whereNull('magic_contact_users.deleted_at')
+            ->whereNull('magic_contact_accounts.deleted_at')
+            ->where('magic_contact_accounts.status', AccountStatus::Normal->value)
+            ->select('magic_contact_users.*');
+
+        $list = [];
+        /** @var UserModel $model */
+        foreach ($query->get() as $model) {
+            $entity = ContactUserFactory::createByModel($model);
+            $list[$entity->getUserId()] = $entity;
+        }
+        return $list;
+    }
+
+    /**
      * @return string[]
      */
     public function getUserOrganizations(string $userId): array

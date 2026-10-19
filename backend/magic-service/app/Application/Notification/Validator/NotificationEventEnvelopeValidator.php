@@ -128,10 +128,11 @@ final readonly class NotificationEventEnvelopeValidator
         $pattern = match (true) {
             $eventType === 'task.finished' => '/^task:[^:]+:[0-9]+:[0-9]+:finished$/',
             $eventType === 'task.error' => '/^task:[^:]+:[0-9]+:[0-9]+:error$/',
-            $eventType === 'share.project.recipients_added' => '/^share:[^:]+:project:[0-9]+:[0-9]+:[0-9]+$/',
-            $eventType === 'share.file.recipients_added' => '/^share:[^:]+:file:[0-9]+:[0-9]+:[0-9]+$/',
-            $eventType === 'review.skill.version_approved' => '/^review:[^:]+:skill:[0-9]+:[0-9]+:[0-9]+:approved$/',
-            $eventType === 'review.agent.version_approved' => '/^review:[^:]+:agent:[0-9]+:[0-9]+:[0-9]+:approved$/',
+            $eventType === 'share.project.recipients_added' => '/^share:[^:]+:project:[0-9]+:[^:]+:[^:]+$/',
+            $eventType === 'share.file.recipients_added' => '/^share:[^:]+:file:[0-9]+:[^:]+:[^:]+$/',
+            $eventType === 'review.skill.version_approved' => '/^review:[^:]+:skill:[0-9]+:[0-9]+:[^:]+:approved$/',
+            $eventType === 'review.agent.version_approved' => '/^review:[^:]+:agent:[0-9]+:[0-9]+:[^:]+:approved$/',
+            str_starts_with($eventType, 'collaboration.') => '/^collaboration:[^:]+:(project|agent|skill):[0-9]+:[0-9]+:[0-9]+$/',
             default => null,
         };
         if ($pattern !== null && preg_match($pattern, $sourceEventKey) !== 1) {
