@@ -320,7 +320,7 @@ export default function HtmlPermissionManagerDialog({
 									>
 										<AlertCircle />
 										<div className="min-w-0 space-y-2">
-											<AlertTitle>
+											<AlertTitle className="line-clamp-none">
 												{t("htmlEditor.permissionManager.codeBanner.title")}
 											</AlertTitle>
 											<AlertDescription className="text-amber-800 dark:text-amber-200">
