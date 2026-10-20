@@ -28,6 +28,8 @@ bun run dev
 - 健康检查：`curl http://127.0.0.1:4318/healthz`
 - 页面：`http://127.0.0.1:4318/`
 
+`dev` 脚本使用 `bun --watch` 运行：修改 `server.ts` 会自动重启进程；`index.html` 在每次请求时重新读取，改完刷新浏览器即可看到效果。`start` 为不带 watch 的启动方式。
+
 ## 环境变量
 
 | 变量                               | 必填 | 默认值               | 说明                                                           |
@@ -44,7 +46,7 @@ Bun 启动时会自动加载当前目录下的 `.env` 文件。
 
 ## 工作原理
 
-服务端 `server.ts` 读取环境变量，将 `index.html` 中的两个占位符替换为实际值后返回：
+服务端 `server.ts` 读取环境变量，在每次请求时重新读取 `index.html`（避免缓存模板），将其中的两个占位符替换为实际值后返回：
 
 - `{{SDK_URL}}` → `${WIDGET_EXAMPLE_APP_URL}/sdk/magic-widget.js`（SDK 脚本地址）
 - `{{EXAMPLE_ENV_JSON}}` → 序列化后的连接配置，写入 `window.__MAGIC_WIDGET_EXAMPLE_ENV__`

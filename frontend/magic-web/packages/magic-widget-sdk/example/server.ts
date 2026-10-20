@@ -72,9 +72,9 @@ const envJson = serializeEnv(env);
 const port = Number(process.env.WIDGET_EXAMPLE_PORT ?? 4318);
 const hostname = process.env.WIDGET_EXAMPLE_HOST ?? "127.0.0.1";
 
-// Read the template once at startup so every request is served from the same in-memory copy.
-const template = await Bun.file(join(import.meta.dir, "index.html")).text();
-const html = renderHtml(template, sdkUrl, envJson);
+// The template is read on every request instead of being cached at startup, so editing
+// index.html takes effect on the next browser refresh without restarting the process.
+const pagePath = join(import.meta.dir, "index.html");
 
 /**
  * Serves the rendered example page plus a health check endpoint.
@@ -89,7 +89,7 @@ function startServer(): void {
 		Bun.serve({
 			port,
 			hostname,
-			fetch(request) {
+			async fetch(request) {
 				const url = new URL(request.url);
 
 				if (url.pathname === "/healthz") {
@@ -99,7 +99,8 @@ function startServer(): void {
 				}
 
 				if (url.pathname === "/" || url.pathname === "/index.html") {
-					return new Response(html, {
+					const template = await Bun.file(pagePath).text();
+					return new Response(renderHtml(template, sdkUrl, envJson), {
 						headers: { "content-type": "text/html; charset=utf-8" },
 					});
 				}
