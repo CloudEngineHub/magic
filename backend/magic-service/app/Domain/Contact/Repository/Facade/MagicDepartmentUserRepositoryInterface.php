@@ -35,7 +35,7 @@ interface MagicDepartmentUserRepositoryInterface
      */
     public function getDepartmentUsersByDepartmentIds(array $departmentIds, string $organizationCode, int $limit, array $fields = ['*']): array;
 
-    public function getDepartmentIdsByUserIds(DataIsolation $dataIsolation, array $userIds, bool $withAllParentIds = false): array;
+    public function getDepartmentIdsByUserIds(DataIsolation $dataIsolation, array $userIds, bool $withAllParentIds = false, bool $useCache = true): array;
 
     public function createDepartmentUsers(array $createDepartmentUserDTOs): bool;
 

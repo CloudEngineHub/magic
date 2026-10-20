@@ -14,6 +14,7 @@ use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\File\Event\CheckpointRollbackFilesChangedEvent;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Event\CheckpointRollbackMessagesChangedEvent;
@@ -36,6 +37,7 @@ use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayRe
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use App\Infrastructure\SuperMagic\Task\Locker\CheckpointRollbackLock;
+use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -127,7 +129,7 @@ readonly class AgentAppService
             'topic_id' => $topicId,
         ]);
 
-        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return $this->runManualSandboxOperation($dataIsolation, $topicId, fn (): string => $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true));
     }
 
     /**
@@ -180,6 +182,12 @@ readonly class AgentAppService
         return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true, images: $images);
     }
 
+    /** Keep claw-specific permission and serialization outside the shared restart implementation. */
+    public function restartMagicClawSandbox(DataIsolation $dataIsolation, int $topicId): string
+    {
+        return $this->runManualSandboxOperation($dataIsolation, $topicId, fn (): string => $this->restartSandbox($dataIsolation, $topicId));
+    }
+
     /**
      * 升级沙箱：检查镜像版本，有新版本时才执行重启和重建流程.
      *
@@ -191,38 +199,16 @@ readonly class AgentAppService
      */
     public function upgradeSandbox(DataIsolation $dataIsolation, int $topicId): string
     {
-        $topicEntity = $this->topicDomainService->getTopicById($topicId);
-        if (is_null($topicEntity)) {
-            throw new BusinessException('Topic not found for ID: ' . $topicId);
-        }
-
-        if ($topicEntity->getUserId() !== $dataIsolation->getCurrentUserId()) {
-            throw new BusinessException('Access denied for topic ID: ' . $topicId);
-        }
-
-        $persistedSandboxId = $topicEntity->getSandboxId();
-        $sandboxId = $persistedSandboxId !== '' ? $persistedSandboxId : (string) $topicId;
-        $this->logger->info('[Sandbox][App] Upgrading sandbox via delete + reinit', [
-            'topic_id' => $topicId,
-            'sandbox_id' => $sandboxId,
-        ]);
-
-        // 检查当前沙箱双镜像与最新发布镜像是否一致，一致则无需升级。
-        $versionInfo = $this->sandboxVersionDomainService->checkSandboxVersion(
-            $topicId,
-            false,
-            $sandboxId
-        );
-        if ($versionInfo['needs_update'] === false) {
-            $this->logger->info('[Sandbox][App] Sandbox image is already up-to-date, skipping upgrade', [
-                'topic_id' => $topicId,
-                'current_version' => $versionInfo['current_version'],
-                'latest_version' => $versionInfo['latest_version'],
-            ]);
-            return $sandboxId;
-        }
-
-        return $this->restartSandbox($dataIsolation, $topicId);
+        return $this->runManualSandboxOperation($dataIsolation, $topicId, function (TopicEntity $topic) use ($dataIsolation, $topicId): string {
+            $sandboxId = $topic->getSandboxId() ?: (string) $topicId;
+            $versionInfo = $this->sandboxVersionDomainService->checkSandboxVersion($topicId, false, $sandboxId);
+            // A previously revoked claw must be explicitly initialized before its pause is cleared.
+            $claw = di(MagicClawRuntimePolicyDomainService::class)->assertTopic($topicId, true);
+            if ($versionInfo['needs_update'] === false && ($claw === null || ! di(MagicClawRuntimePolicyDomainService::class)->requiresManualStart($claw))) {
+                return $sandboxId;
+            }
+            return $this->restartSandbox($dataIsolation, $topicId);
+        });
     }
 
     /**
@@ -233,7 +219,7 @@ readonly class AgentAppService
      */
     public function stopSandbox(string $sandboxId): GatewayResult
     {
-        return $this->agentDomainService->stopSandbox($sandboxId);
+        return $this->agentDomainService->stopSandboxIfExists($sandboxId);
     }
 
     /**
@@ -741,6 +727,22 @@ readonly class AgentAppService
         }
 
         return $response;
+    }
+
+    /** Permission, ownership and serialization are shared by all explicit run operations. */
+    private function runManualSandboxOperation(DataIsolation $dataIsolation, int $topicId, callable $operation): string
+    {
+        return di(SandboxLifecycleLock::class)->run($topicId, function () use ($dataIsolation, $topicId, $operation): string {
+            $topic = $this->topicDomainService->getTopicById($topicId);
+            if ($topic === null) {
+                throw new BusinessException('Topic not found for ID: ' . $topicId);
+            }
+            if ($topic->getUserId() !== $dataIsolation->getCurrentUserId()
+                || $topic->getUserOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode()) {
+                throw new BusinessException('Access denied for topic ID: ' . $topicId);
+            }
+            return di(MagicClawRuntimePolicyDomainService::class)->manualStart($topicId, fn (): string => $operation($topic));
+        });
     }
 
     /**

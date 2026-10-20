@@ -10,8 +10,11 @@ namespace HyperfTest\Cases\Domain\SuperMagic\Task\Service;
 use App\Application\Chat\Service\MagicUserInfoAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Repository\Facade\MagicClawRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\SuperMagicAgentRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Repository\Persistence\MagicClawReconciliationRepository;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\DynamicConfig\DynamicConfigManager;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicProductContext;
 use App\Domain\SuperMagic\Message\Repository\Facade\TaskMessageRepositoryInterface;
@@ -20,6 +23,7 @@ use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentInitContext;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\CrossProjectMentionPathTranslator;
@@ -31,10 +35,12 @@ use App\Domain\Token\Repository\Facade\MagicTokenRepositoryInterface;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Constant\WorkspaceStatus;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\Response\AgentResponse;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Agent\SandboxAgentInterface;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
+use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
-use App\Infrastructure\Util\Locker\LockerInterface;
+use App\Infrastructure\SuperMagic\Task\Locker\SandboxLifecycleLock;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
@@ -66,6 +72,11 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
 
         $container = new EnsureSandboxFakeContainer();
         $container->services[ConfigInterface::class] = $config;
+        $container->services[MagicClawRuntimePolicyDomainService::class] = $this->createMock(MagicClawRuntimePolicyDomainService::class);
+        $lifecycle = $this->createMock(SandboxLifecycleLock::class);
+        $lifecycle->method('run')->willReturnCallback(static fn (int $id, callable $operation) => $operation(static function (): void {}));
+        $container->services[SandboxLifecycleLock::class] = $lifecycle;
+        $container->services[MagicClawReconciliationRepository::class] = $this->createMock(MagicClawReconciliationRepository::class);
         ApplicationContext::setContainer($container);
     }
 
@@ -113,10 +124,15 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         $topicId = 934139051737997315;
         $staleId = '940990111199096833';
         $createdId = '934139051737997315';
+        $images = SandboxImageTarget::withSpecifiedImages(null, 'agent:rollback', 'agfs:rollback');
 
         $topicRepository = $this->createMock(TopicRepositoryInterface::class);
         $topicRepository->method('getTopicById')->willReturn($this->buildTopic($topicId, $staleId));
-        $topicRepository->expects($this->once())->method('updateTopicByCondition');
+        $topicRepository->expects($this->once())->method('updateTopicByCondition')->with(
+            ['id' => $topicId],
+            $this->callback(static fn (array $data): bool => $data['sandbox_id'] === $createdId
+                && $data['sandbox_images'] === ['agent_image' => 'agent:rollback', 'agfs_image' => 'agfs:rollback'])
+        );
 
         $agent = $this->createMock(SandboxAgentInterface::class);
         $agent->expects($this->exactly(2))->method('getWorkspaceStatus')->willReturnOnConsecutiveCalls(
@@ -126,8 +142,14 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         $agent->expects($this->once())->method('initAgent')->willReturn($this->readyResponse());
 
         $gateway = $this->createMock(SandboxGatewayInterface::class);
-        $gateway->expects($this->once())->method('createSandbox')->willReturn(
-            new GatewayResult(ResponseCode::SUCCESS, 'ok', ['sandbox_id' => $createdId])
+        $gateway->expects($this->once())->method('createSandbox')->willReturnCallback(
+            static function (...$arguments) use ($images, $createdId): GatewayResult {
+                // Both lifecycle closures must preserve the rollout's explicit image target.
+                self::assertSame($images, $arguments[8]);
+                return new GatewayResult(ResponseCode::SUCCESS, 'ok', [
+                    'sandbox_id' => $createdId, 'agent_image' => 'agent:rollback', 'agfs_image' => 'agfs:rollback',
+                ]);
+            }
         );
         // 关键断言：被替换的旧沙箱被停止。
         $gateway->expects($this->once())->method('deleteSandbox')->with($staleId)
@@ -137,7 +159,7 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
 
         $agentContext = $this->buildAgentContext($this->buildTopic($topicId, $staleId), '');
 
-        $result = $service->ensureSandboxInitialized($this->buildDataIsolation(), $agentContext);
+        $result = $service->ensureSandboxInitialized($this->buildDataIsolation(), $agentContext, images: $images);
 
         $this->assertSame($createdId, $result);
     }
@@ -247,6 +269,51 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
         $this->runRebuild($warmPool, $coldSandboxId, $gateway);
     }
 
+    public function testAuxiliaryActualBindingSurvivesReadinessFailure(): void
+    {
+        $policy = ApplicationContext::getContainer()->get(MagicClawRuntimePolicyDomainService::class);
+        $policy->method('assertProject')->willReturn(new MagicClawEntity(['id' => 5, 'project_id' => 1]));
+        $bindings = [];
+        $records = $this->createMock(MagicClawReconciliationRepository::class);
+        ApplicationContext::getContainer()->services[MagicClawReconciliationRepository::class] = $records;
+        $records->method('bindConverter')->willReturnCallback(static function (int $id, string $sandbox) use (&$bindings): void {
+            self::assertSame(5, $id);
+            $bindings[] = $sandbox;
+        });
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        $gateway->method('createSandbox')->willReturn(new GatewayResult(ResponseCode::SUCCESS, 'ok', ['sandbox_id' => 'actual-converter']));
+        $gateway->method('getSandboxStatus')->willReturnCallback(static function (string $sandbox): SandboxStatusResult {
+            if ($sandbox === 'requested-converter') {
+                return new SandboxStatusResult(ResponseCode::NOT_FOUND, 'gone');
+            }
+            throw new SandboxOperationException('status', 'timeout', 500);
+        });
+        $service = $this->buildService($this->createMock(SandboxAgentInterface::class), $gateway, $this->createMock(TopicRepositoryInterface::class));
+        try {
+            $service->ensureSandboxRunning($this->buildDataIsolation(), 'requested-converter', '1', '/work');
+            self::fail('Expected readiness failure');
+        } catch (SandboxOperationException) {
+            self::assertSame(['requested-converter', 'actual-converter'], $bindings);
+        }
+    }
+
+    public function testSharedStopTreatsMissingSandboxAsSuccess(): void
+    {
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        $gateway->method('deleteSandbox')->willReturn(new GatewayResult(ResponseCode::NOT_FOUND, 'gone'));
+        $service = $this->buildService($this->createMock(SandboxAgentInterface::class), $gateway, $this->createMock(TopicRepositoryInterface::class));
+        self::assertTrue($service->stopSandboxIfExists('actual-sandbox')->isSuccess());
+    }
+
+    public function testSharedStopRetainsUnconfirmedFailure(): void
+    {
+        $gateway = $this->createMock(SandboxGatewayInterface::class);
+        $gateway->method('deleteSandbox')->willReturn(new GatewayResult(ResponseCode::ERROR, 'timeout'));
+        $service = $this->buildService($this->createMock(SandboxAgentInterface::class), $gateway, $this->createMock(TopicRepositoryInterface::class));
+        $this->expectException(SandboxOperationException::class);
+        $service->stopSandboxIfExists('actual-sandbox');
+    }
+
     /**
      * 搭一套"旧 pod 已不存在"的重建夹具，并断言最终绑定到 $expectedSandboxId。
      *
@@ -305,14 +372,11 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
     private function buildService(
         SandboxAgentInterface $agent,
         SandboxGatewayInterface $gateway,
-        TopicRepositoryInterface $topicRepository
+        TopicRepositoryInterface $topicRepository,
+        ?MagicClawRepositoryInterface $claws = null,
     ): AgentDomainService {
         $loggerFactory = $this->createMock(LoggerFactory::class);
         $loggerFactory->method('get')->willReturn(new NullLogger());
-
-        $locker = $this->createMock(LockerInterface::class);
-        $locker->method('spinLock')->willReturn(true);
-        $locker->method('release')->willReturn(true);
 
         return new AgentDomainService(
             $loggerFactory,
@@ -321,10 +385,9 @@ class AgentDomainServiceEnsureSandboxInitializedTest extends TestCase
             $this->createMock(MagicUserInfoAppService::class),
             $this->createMock(CloudFileRepositoryInterface::class),
             $this->createMock(DynamicConfigManager::class),
-            $this->createMock(MagicClawRepositoryInterface::class),
+            $claws ?? $this->createMock(MagicClawRepositoryInterface::class),
             $this->createMock(SuperMagicAgentRepositoryInterface::class),
             $this->createMock(MagicTokenRepositoryInterface::class),
-            $locker,
             $this->createMock(ProjectRepositoryInterface::class),
             $topicRepository,
             $this->createMock(WorkspaceRepositoryInterface::class),

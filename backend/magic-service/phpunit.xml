@@ -68,6 +68,8 @@
       <file>test/Cases/Domain/SuperMagic/Task/Service/AgentDomainServiceEnsureSandboxInitializedTest.php</file>
       <file>test/Cases/Domain/SuperAgent/Service/SandboxVersionDomainServiceTest.php</file>
       <file>test/Cases/Application/SuperAgent/Service/AgentAppServiceVersionCheckTest.php</file>
+      <file>test/Cases/Application/SuperMagic/Agent/AgentAppServiceLifecycleTest.php</file>
+      <file>test/Cases/Application/SuperMagic/Agent/ClawPermissionReconciliationSubscriberTest.php</file>
       <file>test/Cases/Interfaces/SuperMagic/Task/DTO/Request/CreateOpenTaskRequestDTOTest.php</file>
       <file>test/Cases/Application/SuperMagic/Message/Assembler/UserMessageDTOAssemblerTest.php</file>
       <file>test/Cases/Application/SuperMagic/Message/Service/HandleUserMessageDispatchTest.php</file>
