@@ -18,7 +18,8 @@ import {
 	MY_AGENTS_WORKSPACE_ID,
 	MICRO_APPS_WORKSPACE_ID,
 } from "../../../../constants"
-import { loadResourceProjectPage } from "../../utils/resourceProjects"
+import { loadResourceProjectPage, type AgentResourceScope } from "../../utils/resourceProjects"
+import { isSharedWorkspaceProject } from "../../resourceProjectTypes"
 import type { ResourceProject } from "../../resourceProjectTypes"
 
 export const RESOURCE_WORKSPACE_IDS = new Set<string>([
@@ -56,6 +57,8 @@ export function useResourceProjects({
 	const loadingMoreResourcesRef = useRef(false)
 	const projectsRequestId = useRef(0)
 	const keywordRef = useRef("")
+	const [agentScope, setAgentScope] = useState<AgentResourceScope>("created")
+	const agentScopeRef = useRef<AgentResourceScope>("created")
 	const microWorkspaceRef = useRef<Workspace | null>(null)
 	const cancelProjectRequest = useMemoizedFn(() => {
 		projectsRequestId.current += 1
@@ -78,12 +81,12 @@ export function useResourceProjects({
 			})
 			if (requestId !== projectsRequestId.current) return
 			// 将 CollaborationProjectListItem 转换为 ProjectListItem
-			const projects: ProjectListItem[] = (res?.list || []).map(
-				(item: CollaborationProjectListItem) => ({
+			const projects: ProjectListItem[] = (res?.list || [])
+				.filter(isSharedWorkspaceProject)
+				.map((item: CollaborationProjectListItem) => ({
 					...item,
 					tag: "collaboration" as const,
-				}),
-			)
+				}))
 			setAvailableProjects(projects)
 		} catch (error) {
 			if (requestId !== projectsRequestId.current) return
@@ -127,6 +130,7 @@ export function useResourceProjects({
 				page,
 				pageSize: RESOURCE_PROJECTS_PAGE_SIZE,
 				keyword: keywordRef.current,
+				agentScope: agentScopeRef.current,
 			})
 			const mapped = response.list
 			if (requestId !== projectsRequestId.current) return
@@ -264,7 +268,17 @@ export function useResourceProjects({
 		workspace.workspace_type === "micro-app" && microWorkspaceRef.current
 			? { ...microWorkspaceRef.current, name: workspace.name }
 			: workspace
+	const changeAgentScope = useMemoizedFn((scope: AgentResourceScope) => {
+		if (scope === agentScopeRef.current) return
+		agentScopeRef.current = scope
+		setAgentScope(scope)
+		// 清空旧分类结果并立即使旧请求失效，搜索词和已选文件仍保留。
+		setAvailableProjects([])
+		void fetchResourceProjects(MY_AGENTS_WORKSPACE_ID)
+	})
 	return {
+		agentScope,
+		changeAgentScope,
 		availableProjects,
 		setAvailableProjects,
 		loadingMoreResources,

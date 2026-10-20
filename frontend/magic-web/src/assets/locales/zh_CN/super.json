@@ -6333,12 +6333,15 @@
 		"resultCount": "返回 {{count}} 条结果"
 	},
 	"selectPathModal": {
+		"agentSource": "数字员工来源",
 		"all": "全部",
 		"cannotSelectCurrentFolder": "不能选择当前已选中的文件夹作为移动目标",
 		"chatCount": "{{count}} 个对话",
+		"collaboratedAgents": "我协作的（可编辑）",
 		"collaboratedMicroApps": "我协作的",
 		"completeFolderCreation": "请完成文件夹创建",
 		"confirm": "确认",
+		"createdAgents": "我创建的",
 		"createdMicroApps": "我创建的",
 		"createdSuccessfully": "创建成功",
 		"defaultFolderName": "新建文件夹",

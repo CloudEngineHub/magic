@@ -44,6 +44,7 @@ import { MAX_MENTION_PROJECT_COUNT, type ProjectResourceSelection } from "../../
 import { isMicroAppEnabled } from "@/services/microAppFeature"
 import { loadMicroAppProjectPage } from "../../utils/microAppProjects"
 import type { ResourceProject } from "../../resourceProjectTypes"
+import { isSharedWorkspaceProject } from "../../resourceProjectTypes"
 import { ProjectResourceInfo } from "../ProjectResourceSelectorModal/ProjectResourceInfo"
 
 interface MobileFilesMoveSheetProps {
@@ -733,7 +734,7 @@ function MobileFilesMoveSheet({
 				workspaceResult.status === "fulfilled" ? workspaceResult.value?.list || [] : []
 			const sharedProjectsTotal =
 				collaborationResult.status === "fulfilled"
-					? (collaborationResult.value?.list?.length ??
+					? (collaborationResult.value?.list?.filter(isSharedWorkspaceProject).length ??
 						collaborationResult.value?.total ??
 						0)
 					: 0
@@ -840,7 +841,7 @@ function MobileFilesMoveSheet({
 					})
 					request.signal.throwIfAborted()
 					setProjectItems(
-						(response?.list || []).map((project) => ({
+						(response?.list || []).filter(isSharedWorkspaceProject).map((project) => ({
 							...project,
 							tag: "collaboration" as const,
 						})),

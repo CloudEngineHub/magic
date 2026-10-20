@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react"
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { useDebounce } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -59,6 +59,7 @@ interface Props {
 	workspace: Workspace | null
 	project: ProjectListItem | null
 	projects: ProjectListItem[]
+	resourceFilter?: ReactNode
 	attachments: AttachmentItem[]
 	loading: boolean
 	error: boolean
@@ -504,6 +505,7 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 										<ViewToggle value={viewMode} onChange={setViewMode} />
 									}
 								/>
+								{props.resourceFilter}
 								<ProjectsPanelList
 									projects={projects}
 									listLayout={

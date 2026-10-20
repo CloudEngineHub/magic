@@ -53,7 +53,7 @@ export function MentionSourceSidebar({
 				key={workspace.id}
 				label={workspace.name || t("workspace.unnamedWorkspace")}
 				labelVariant="navigation"
-				labelClassName="text-xs"
+				labelClassName="flex-1 text-xs [&>span]:block [&>span]:truncate"
 				leading={<Icon size={16} />}
 				hideChevron
 				testId={`picker-source-${workspace.id}`}
@@ -70,7 +70,7 @@ export function MentionSourceSidebar({
 	return (
 		<nav
 			aria-label={t("selectPathModal.workspace")}
-			className="flex min-h-0 w-40 shrink-0 flex-col border-r bg-muted/20 p-2"
+			className="flex min-h-0 w-40 min-w-0 shrink-0 flex-col border-r bg-muted/20 p-2"
 		>
 			<SidebarRow
 				label={t("projectNavigation.recent")}
@@ -85,7 +85,8 @@ export function MentionSourceSidebar({
 			<div className="shrink-0 px-2 py-2 text-xs font-medium text-muted-foreground">
 				{t("selectPathModal.workspace")}
 			</div>
-			<div ref={viewport.containerRef} className="min-h-0 flex-1">
+			{/* 限制滚动视口宽度，让长工作区名称在文字节点省略而非被侧栏硬裁切。 */}
+			<div ref={viewport.containerRef} className="min-h-0 min-w-0 flex-1">
 				<ScrollArea
 					className="h-full"
 					style={viewport.height ? { height: viewport.height } : undefined}
