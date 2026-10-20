@@ -23,13 +23,9 @@ const createdId = (file: CreatedFile | undefined) => {
 }
 
 /** Directory id at the project root, created the first time a file is saved into it. */
-export async function ensureProjectRootDir(
-	projectId: string,
-	dir: string,
-	attachments: PersonaResearchStore["attachmentList"],
-) {
+async function ensureRootDir(store: PersonaResearchStore, projectId: string, dir: string) {
 	const dirName = dir.replace(/\/$/, "")
-	const existing = attachments.find(
+	const existing = store.attachmentList.find(
 		(item) => item.is_directory && getAttachmentPath(item).replace(/\/$/, "") === dirName,
 	)
 	if (existing?.file_id) return String(existing.file_id)
@@ -37,8 +33,6 @@ export async function ensureProjectRootDir(
 		project_id: projectId,
 		file_name: dirName,
 		is_directory: true,
-		// Concurrent writers may both observe a missing directory; reuse the server's winner.
-		ignore_duplicate: true,
 	})) as CreatedFile
 	return createdId(created)
 }
@@ -53,7 +47,7 @@ export async function createProjectTextFile(
 	if (!projectId || store.isReadOnly) return false
 	let fileId: string | null = null
 	try {
-		const dirId = await ensureProjectRootDir(projectId, dir, store.attachmentList)
+		const dirId = await ensureRootDir(store, projectId, dir)
 		if (!dirId) return false
 		fileId = createdId(
 			(await SuperMagicApi.createFile({
