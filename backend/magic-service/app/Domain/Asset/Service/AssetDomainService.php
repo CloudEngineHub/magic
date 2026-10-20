@@ -982,7 +982,7 @@ class AssetDomainService
                     'provider_status' => $status->value,
                 ]);
                 $this->persistProviderStatus($dataIsolation, $providerAssetEntity, $status);
-                ExceptionBuilder::throw(AssetErrorCode::COMPLIANCE_FAILED, trans('asset.compliance_failed', [], 'en_US'));
+                ExceptionBuilder::throw(AssetErrorCode::COMPLIANCE_FAILED);
             }
             if ($this->isComplianceWaitExpired($deadline)) {
                 $this->logger->error('第三方素材合规回查超时', [
