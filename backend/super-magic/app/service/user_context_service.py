@@ -184,6 +184,7 @@ class UserContextService:
             f"Profile captured at: {format_context_time(result.captured_at)}.",
             f"User ID: {user.id}",
             f"Magic ID: {user.magic_id}",
+            f"Third-party user ID: {user.third_platform_id or 'not available'}.",
             f"Organization: {result.organization.name or 'Name not provided'} (code: {result.organization.code})",
         ]
         for label, value in (

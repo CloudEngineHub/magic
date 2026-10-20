@@ -26,6 +26,7 @@ class User(BaseModel):
     """用户信息"""
 
     id: Optional[str] = None
+    third_platform_id: str = Field(default="", strict=True)
     nickname: Optional[str] = None
     real_name: Optional[str] = None
     work_number: Optional[str] = None
@@ -33,6 +34,11 @@ class User(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     departments: Optional[List[Department]] = Field(default_factory=list)
+
+    @validator("third_platform_id", pre=True)
+    def normalize_third_platform_id(cls, value):
+        """保留来源用户 ID，历史 null 按无法确定处理。"""
+        return "" if value is None else value
 
 
 class Metadata(BaseModel):
