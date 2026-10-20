@@ -14,6 +14,7 @@ use Hyperf\Database\Connection;
 use Hyperf\Database\ConnectionResolverInterface;
 use Hyperf\Database\Query\Grammars\MySqlGrammar;
 use Hyperf\DbConnection\Db;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -23,7 +24,8 @@ use RuntimeException;
 /** @internal SQL is compiled against a fake connection; PDO must never be opened. */
 final class MicroAppTransferRepositoryTest extends TestCase
 {
-    public function testTransferChangesOnlyScopedOwnershipAndInvalidatesShareScope(): void
+    #[DataProvider('projectPermissionValues')]
+    public function testTransferChangesOnlyScopedOwnershipAndInvalidatesShareScope(?string $permission): void
     {
         $previous = ApplicationContext::hasContainer() ? ApplicationContext::getContainer() : null;
         $connection = $this->getMockBuilder(Connection::class)
@@ -49,12 +51,20 @@ final class MicroAppTransferRepositoryTest extends TestCase
             self::assertSame(['org', 12, 'resource-1'], $bindings);
             return [(object) ['id' => 100]];
         });
-        $connection->expects(self::exactly(2))->method('update')->willReturnCallback(static function ($sql, $bindings) use (&$writes) {
+        $connection->expects(self::exactly(3))->method('update')->willReturnCallback(static function ($sql, $bindings) use (&$writes) {
             $writes[] = [$sql, $bindings];
             return 1;
         });
         try {
-            (new MicroAppTransferRepository())->changeAppOwner(new MicroAppEntity([
+            $repository = new MicroAppTransferRepository();
+            $project = MicroAppTransferRepository::hydrateProject([
+                'id' => 10, 'user_id' => 'sender', 'user_organization_code' => 'org', 'workspace_id' => 20,
+                'project_description' => null, 'default_join_permission' => $permission,
+                'created_uid' => 'historical-author',
+            ]);
+            $project->setUserId('receiver')->setWorkspaceId(99)->setUpdatedAt('2026-01-01 12:00:00');
+            $repository->changeProjectOwner($project);
+            $repository->changeAppOwner(new MicroAppEntity([
                 'id' => 30, 'resource_id' => 'resource-1', 'organization_code' => 'org', 'creator_id' => 'author',
             ]), 'receiver');
         } finally {
@@ -64,6 +74,10 @@ final class MicroAppTransferRepositoryTest extends TestCase
                 (new ReflectionProperty(ApplicationContext::class, 'container'))->setValue(null, null);
             }
         }
+        [$projectSql, $projectBindings] = array_shift($writes);
+        // Exact write columns protect both NULL and existing values from entity defaults.
+        self::assertSame('update `magic_super_agent_project` set `user_id` = ?, `workspace_id` = ?, `magic_super_agent_project`.`updated_at` = ? where `id` = ? and `user_organization_code` = ? and `magic_super_agent_project`.`deleted_at` is null', $projectSql);
+        self::assertSame(['receiver', 99, '2026-01-01 12:00:00', 10, 'org'], $projectBindings);
         self::assertStringContainsString('magic_super_agent_micro_apps', $writes[0][0]);
         self::assertStringNotContainsString('creator_id', $writes[0][0]);
         self::assertSame('receiver', $writes[0][1][0]);
@@ -77,5 +91,10 @@ final class MicroAppTransferRepositoryTest extends TestCase
             self::assertStringNotContainsString($preserved, $shareSql);
         }
         self::assertSame(['org', 12, 'resource-1', 100], array_slice($writes[1][1], -4));
+    }
+
+    public static function projectPermissionValues(): array
+    {
+        return ['nullable permission' => [null], 'existing permission' => ['editor']];
     }
 }

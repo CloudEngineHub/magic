@@ -11,7 +11,6 @@ use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\HiddenType;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\TransferResult;
-use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Persistence\MicroAppTransferRepository;
 use App\Domain\SuperMagic\Workspace\Entity\ValueObject\WorkspaceType;
 use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
@@ -21,7 +20,6 @@ class MicroAppTransferDomainService
 {
     public function __construct(
         private readonly MicroAppTransferRepository $repository,
-        private readonly ProjectRepositoryInterface $projects,
         private readonly WorkspaceRepositoryInterface $workspaces,
         private readonly WorkspaceDomainService $workspaceDomain,
     ) {
@@ -46,7 +44,7 @@ class MicroAppTransferDomainService
         }
         $target = $this->workspaceDomain->getOrCreateWorkspaceByType(DataIsolation::create($org, $receiver), WorkspaceType::MicroApp);
         $project->setUserId($receiver)->setWorkspaceId($target->getId())->setUpdatedAt(date('Y-m-d H:i:s'));
-        $project = $this->projects->save($project);
+        $this->repository->changeProjectOwner($project);
         if ($app !== null) {
             $this->repository->changeAppOwner($app, $receiver);
         }
