@@ -2,11 +2,12 @@ import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
-describe("share shell radius", () => {
-	it("clips the desktop share shell bottom corners while keeping document-flow capture unchanged", async () => {
-		const source = await readFile(resolve(__dirname, "../index.tsx"), "utf8")
+describe("share playback bar radius", () => {
+	it("rounds the desktop playback bar so its fixed white surface does not square off the page corners", async () => {
+		const source = await readFile(resolve(__dirname, "../components/Topic/index.tsx"), "utf8")
 
-		expect(source).toContain("shareDisplayOptions.documentFlowFullscreen")
-		expect(source).toContain('"rounded-b-[5px] max-md:rounded-none"')
+		expect(source).toContain('data-testid="share-playback-controls"')
+		expect(source).toContain("rounded-b-lg")
+		expect(source).toContain("max-md:rounded-none")
 	})
 })

@@ -461,29 +461,6 @@ describe("FilesViewer fullscreen portal", () => {
 		expect(mockState.pptUnmount).toHaveBeenCalledOnce()
 	})
 
-	it("keeps bottom corners on the shared fullscreen preview surface", () => {
-		mockState.tab.fileData = {
-			file_id: "shared-ppt-folder",
-			file_name: "Shared deck",
-			file_extension: "",
-			is_directory: true,
-			updated_at: "2026-07-28T00:00:00Z",
-			display_config: { type: "slide" },
-		}
-		render(<FilesViewer forceFullscreenMode isFileShare hideTabBar />)
-
-		const viewer = document.querySelector<HTMLElement>(
-			'[data-files-viewer-fullscreen-surface="shared"]',
-		)
-		const portalHost = document.querySelector<HTMLElement>(
-			'[data-files-viewer-ppt-portal="true"]',
-		)
-
-		expect(viewer).toHaveClass("rounded-b-lg", "overflow-hidden")
-		expect(portalHost?.style.borderRadius).toBe("0px 0px 0.5rem 0.5rem")
-		expect(document.querySelector('[data-files-viewer-preview-anchor="true"]')).toBeTruthy()
-	})
-
 	it("fully hides the stable PPT surface when its viewer area has no size", () => {
 		mockState.tab.fileData = {
 			file_id: "hidden-ppt-folder",

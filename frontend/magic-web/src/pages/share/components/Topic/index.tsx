@@ -1149,7 +1149,6 @@ function Topic({
 								/>
 							</>
 						) : null}
-						{/* Clip detail content so the rounded shell keeps clean bottom corners. */}
 						{(isEmpty(autoDetail) &&
 							isEmpty(userDetail) &&
 							!showAllProjectFiles &&
@@ -1160,8 +1159,8 @@ function Topic({
 									documentFlowFullscreen
 										? "min-h-dvh w-full flex-1 overflow-visible bg-transparent"
 										: shouldRenderFullscreenFileOnly
-											? "h-full min-h-0 w-full flex-1 overflow-hidden rounded-b-lg bg-transparent"
-											: "mr-2 flex-1 overflow-hidden rounded-lg transition-all duration-300 ease-in-out",
+											? "h-full min-h-0 w-full flex-1 overflow-hidden bg-transparent"
+											: "mr-2 flex-1 overflow-y-hidden rounded-lg transition-all duration-300 ease-in-out",
 									!isFullscreenMode &&
 										!shouldRenderFullscreenFileOnly &&
 										"my-2 border border-border bg-card",
@@ -1296,8 +1295,10 @@ function Topic({
 			</div>
 
 			{hasStarted && !isFileShare && !isNewFileShare && (
+				// Fixed to the viewport, so the share shell cannot clip it. Round the bar itself
+				// or its white background paints square corners over the muted page.
 				<div
-					className="fixed bottom-0 left-0 right-0 z-[1020] box-border h-[50px] bg-background shadow-[0px_0px_1px_0px_rgba(0,0,0,0.3),0px_0px_30px_0px_rgba(0,0,0,0.06)] max-md:h-[calc(50px+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]"
+					className="fixed bottom-0 left-0 right-0 z-[1020] box-border h-[50px] overflow-hidden rounded-b-lg bg-background shadow-[0px_0px_1px_0px_rgba(0,0,0,0.3),0px_0px_30px_0px_rgba(0,0,0,0.06)] max-md:h-[calc(50px+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] max-md:rounded-none"
 					data-testid="share-playback-controls"
 				>
 					<div className="flex flex-col gap-2.5 p-2">

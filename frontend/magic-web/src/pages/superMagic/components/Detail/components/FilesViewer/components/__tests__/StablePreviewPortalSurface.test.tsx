@@ -155,27 +155,6 @@ describe("StablePreviewPortalSurface PPT viewport", () => {
 		},
 	)
 
-	it("keeps shared fullscreen corners when a PPT viewport fills the window", async () => {
-		render(
-			<StablePreviewPortalSurface
-				anchor={anchor}
-				enabled
-				visible
-				isPpt
-				isFullscreen
-				borderRadius="0px 0px 0.5rem 0.5rem"
-				preserveFullscreenRadius
-			>
-				<div data-testid="ppt-root" data-presenter-console="true" />
-			</StablePreviewPortalSurface>,
-		)
-
-		const host = screen.getByTestId("ppt-root").parentElement
-		if (!host) throw new Error("Missing portal host")
-		await act(async () => undefined)
-		expect(host.style.borderRadius).toBe("0px 0px 0.5rem 0.5rem")
-	})
-
 	it("detects a presenter subtree mounted or removed after the portal", async () => {
 		const view = (presenter: boolean) => (
 			<StablePreviewPortalSurface anchor={anchor} enabled visible isPpt isFullscreen>

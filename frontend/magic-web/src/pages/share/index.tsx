@@ -857,10 +857,6 @@ function Share() {
 					isFileShare && "max-md:pb-0",
 					!isFileShare && "pb-[50px]",
 					isImmersiveFullscreen && "max-md:bg-transparent dark:max-md:bg-transparent",
-					// The share shell is the visible outer layer around the preview. Clip its
-					// bottom corners so the page background cannot square off the inner panels.
-					!shareDisplayOptions.documentFlowFullscreen &&
-						"rounded-b-[5px] max-md:rounded-none",
 				)}
 				data-testid="share-page-root"
 			>

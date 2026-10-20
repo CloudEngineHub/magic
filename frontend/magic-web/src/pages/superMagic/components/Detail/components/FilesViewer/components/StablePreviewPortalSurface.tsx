@@ -14,8 +14,6 @@ interface StablePreviewPortalSurfaceProps {
 	enabled: boolean
 	isFullscreen: boolean
 	isPpt?: boolean
-	/** Keep the shared preview's bottom corners when a PPT renderer promotes itself to viewport size. */
-	preserveFullscreenRadius?: boolean
 	visible: boolean
 }
 
@@ -48,7 +46,6 @@ export default function StablePreviewPortalSurface({
 	enabled,
 	isFullscreen,
 	isPpt = false,
-	preserveFullscreenRadius = false,
 	visible,
 }: StablePreviewPortalSurfaceProps) {
 	const parentOverlayZIndex = useCurrentOverlayZIndex()
@@ -104,15 +101,15 @@ export default function StablePreviewPortalSurface({
 		)
 		const layoutSignature =
 			isVisible && rect
-				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}|${isPpt}|${preserveFullscreenRadius}|${usesViewport}|${window.innerWidth}|${window.innerHeight}`
-				: `hidden|${isFullscreen}|${borderRadius}|${isPpt}|${preserveFullscreenRadius}`
+				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}|${isPpt}|${usesViewport}|${window.innerWidth}|${window.innerHeight}`
+				: `hidden|${isFullscreen}|${borderRadius}|${isPpt}`
 		if (layoutSignatureRef.current === layoutSignature) return
 		layoutSignatureRef.current = layoutSignature
 
 		host.style.pointerEvents = isVisible ? "auto" : "none"
 		host.style.display = isVisible ? "block" : "none"
 		host.style.visibility = isVisible ? "visible" : "hidden"
-		host.style.borderRadius = usesViewport && !preserveFullscreenRadius ? "0px" : borderRadius
+		host.style.borderRadius = usesViewport ? "0px" : borderRadius
 		if (isPpt) host.dataset.filesViewerPptPortal = "true"
 		else delete host.dataset.filesViewerPptPortal
 		// The fullscreen viewer shell has the base fullscreen z-index and a white background.
@@ -142,7 +139,7 @@ export default function StablePreviewPortalSurface({
 		host.style.left = usesViewport ? "0px" : `${rect.left}px`
 		host.style.width = `${usesViewport ? window.innerWidth : rect.width}px`
 		host.style.height = `${usesViewport ? window.innerHeight : rect.height}px`
-	}, [anchor, borderRadius, host, isFullscreen, isPpt, preserveFullscreenRadius, visible])
+	}, [anchor, borderRadius, host, isFullscreen, isPpt, visible])
 
 	useLayoutEffect(() => {
 		if (!host || !enabled) return
