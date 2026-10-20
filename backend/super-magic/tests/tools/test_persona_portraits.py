@@ -124,6 +124,28 @@ async def test_report_embeds_same_bytes_once_and_retains_template_and_ai_disclos
 
 
 @pytest.mark.asyncio
+async def test_unreadable_persona_does_not_block_other_report_portraits(tmp_path):
+    await profile(tmp_path)
+    await source(tmp_path)
+    assert (await attach(tmp_path)).ok
+    await write(tmp_path, "studies/s1/study.json", {})
+    broken_id = "p_broken_ab34"
+    await write(tmp_path, "studies/s1/panel.json", {"persona_ids": [broken_id, PID]})
+    await async_write_text(tmp_path / f"personas/{broken_id}.json", '{"id":')
+    report = tmp_path / "studies/s1/report.html"
+    await async_write_text(report, '<body>AI-simulated<span data-persona="Test"><svg></svg></span></body>')
+    result = await EmbedPersonaPortraits(base_dir=tmp_path).execute(
+        ToolContext(), EmbedPersonaPortraitsParams(study_dir="studies/s1")
+    )
+    assert result.ok, result.content
+    assert "Embedded 1 bound portraits" in result.content and broken_id in result.content
+    html = await async_read_text(report)
+    manifest = json.loads(re.search(r'id="persona-portrait-assets">(.*?)</script>', html, re.S).group(1))
+    assert manifest[0]["src"] == "" and manifest[1]["src"].startswith("data:image/webp;base64,")
+    assert "AI-simulated" in html and "<svg>" in html
+
+
+@pytest.mark.asyncio
 async def test_malformed_panel_id_cannot_read_another_file(tmp_path):
     await write(tmp_path, "studies/s1/study.json", {})
     await write(tmp_path, "studies/s1/panel.json", {"persona_ids": ["../../private"]})

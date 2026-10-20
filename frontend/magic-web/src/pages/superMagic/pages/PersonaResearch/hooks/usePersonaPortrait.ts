@@ -32,10 +32,11 @@ function readProfile(api: FileApi, fileId: string, key: string) {
 			.getFileContentById(fileId, { responseType: "text", forceRefresh: true })
 			.then((text) => {
 				const parsed = parsePersonaFile(typeof text === "string" ? JSON.parse(text) : null)
-				return parsed.ok ? parsed.data : undefined
+				if (!parsed.ok) throw new Error("Invalid persona profile")
+				return parsed.data
 			})
 			.catch(() => {
-				profiles.delete(key)
+				if (profiles.get(key) === pending) profiles.delete(key)
 				return undefined
 			})
 		if (profiles.size >= 256) profiles.delete(profiles.keys().next().value as string)
@@ -61,11 +62,18 @@ export function usePersonaPortrait(id: string) {
 	useEffect(() => {
 		if (local || !fileId) return
 		let cancelled = false
-		void readProfile(api, fileId, key).then((persona) => {
-			if (!cancelled) setLoaded({ key, persona: persona?.id === id ? persona : undefined })
-		})
+		const load = () => {
+			void readProfile(api, fileId, key).then((persona) => {
+				if (!cancelled)
+					setLoaded({ key, persona: persona?.id === id ? persona : undefined })
+			})
+		}
+		load()
+		// Recover metadata even when no image mounted after a failed initial read.
+		const unsubscribe = subscribePortraitRecovery(load)
 		return () => {
 			cancelled = true
+			unsubscribe()
 		}
 	}, [api, fileId, id, key, local])
 	const persona = local ?? (loaded?.key === key ? loaded.persona : undefined)

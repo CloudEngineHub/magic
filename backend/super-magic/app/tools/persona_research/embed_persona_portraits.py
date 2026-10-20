@@ -42,7 +42,7 @@ PORTRAIT_SCRIPT = """
     document.querySelectorAll('[data-persona]').forEach(function (el) {
         var id = el.getAttribute('data-persona-id');
         var matches = id ? assets.filter(function (p) { return p.id === id; }) :
-            assets.filter(function (p) { return p.name === el.getAttribute('data-persona'); });
+            assets.filter(function (p) { return p.name && p.name === el.getAttribute('data-persona'); });
         if (matches.length !== 1 || !matches[0].src) return;
         var img = new Image();
         img.alt = ''; img.setAttribute('aria-hidden', 'true');
@@ -77,7 +77,11 @@ class EmbedPersonaPortraits(WorkspaceTool[EmbedPersonaPortraitsParams]):
             report = await resolve_in_workspace(base, f"{params.study_dir}/report.html")
             assets, missing = [], []
             for persona_id in dict.fromkeys(ids):
-                profile = await read_json_file(await resolve_in_workspace(base, f"personas/{persona_id}.json"))
+                # 单个人设暂时不可读时继续其他头像；空名字不参与按名字猜测。
+                try:
+                    profile = await read_json_file(await resolve_in_workspace(base, f"personas/{persona_id}.json"))
+                except (StudyFilesError, OSError, ValueError):
+                    profile = None
                 portrait = profile.get("portrait") if profile else None
                 asset = {"id": persona_id, "name": profile.get("name", "") if profile else "", "src": ""}
                 assets.append(asset)

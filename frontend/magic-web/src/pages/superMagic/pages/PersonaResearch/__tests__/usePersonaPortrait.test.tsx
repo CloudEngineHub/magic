@@ -1,5 +1,5 @@
-import { renderHook, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { usePersonaPortrait } from "../hooks/usePersonaPortrait"
 
@@ -30,6 +30,7 @@ const persona = (file = portrait) =>
 let scope = 0
 
 describe("current persona avatar identity", () => {
+	afterEach(cleanup)
 	beforeEach(() => {
 		mocks.local = null
 		mocks.api.identityKey = `session:${++scope}`
@@ -47,6 +48,31 @@ describe("current persona avatar identity", () => {
 		await waitFor(() => expect(second.current.image?.file_id).toBe("photo"))
 		expect(mocks.api.getFileContentById).toHaveBeenCalledTimes(1)
 	})
+
+	it.each(["offline", "invalid profile"])(
+		"recovers %s metadata on reconnect without duplicate reads",
+		async (failure) => {
+			if (failure === "offline")
+				mocks.api.getFileContentById.mockRejectedValueOnce(new Error("Offline"))
+			else mocks.api.getFileContentById.mockResolvedValueOnce("{}")
+			const first = renderHook(() => usePersonaPortrait(id))
+			const second = renderHook(() => usePersonaPortrait(id))
+			await act(async () => {
+				await Promise.resolve()
+			})
+			expect(first.result.current.image).toBeUndefined()
+			await act(async () => {
+				window.dispatchEvent(new Event("online"))
+			})
+			await waitFor(() => expect(first.result.current.image?.file_id).toBe("photo"))
+			expect(second.result.current.image?.file_id).toBe("photo")
+			expect(mocks.api.getFileContentById).toHaveBeenCalledTimes(2)
+			first.unmount()
+			second.unmount()
+			window.dispatchEvent(new Event("online"))
+			expect(mocks.api.getFileContentById).toHaveBeenCalledTimes(2)
+		},
+	)
 
 	it("does not resolve an image omitted from the authorized share attachments", async () => {
 		mocks.api.identityKey = `share:${scope}`
