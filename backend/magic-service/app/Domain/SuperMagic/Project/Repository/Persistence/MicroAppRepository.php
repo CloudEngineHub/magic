@@ -332,12 +332,11 @@ class MicroAppRepository implements MicroAppRepositoryInterface
 
         switch ($scope) {
             case MicroAppListScope::Created:
-                $query->where('ma.creator_id', $userId);
+                $query->where('p.user_id', $userId);
                 break;
             case MicroAppListScope::Collaborated:
                 $query
-                    ->where('p.user_id', '<>', $userId)
-                    ->where('ma.creator_id', '<>', $userId);
+                    ->where('p.user_id', '<>', $userId);
                 break;
             case MicroAppListScope::Recent:
                 break;

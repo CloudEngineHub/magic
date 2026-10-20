@@ -1,3 +1,5 @@
+// Must be evaluated first: other modules call polyfilled APIs such as requestIdleCallback.
+import "@/utils/polyfill"
 import { httpService } from "@/app/services/httpService"
 import "./index.css"
 import { loggerService } from "./app/services/loggerService"
@@ -7,7 +9,6 @@ import { enableMapSet } from "immer"
 // import ReactDom from "react-dom"
 import { createRoot } from "react-dom/client"
 import App from "./App"
-import "@/utils/polyfill"
 import { appService } from "./services/app/AppService"
 import { initializeMicroAppInstallPromptCapture } from "./services/microAppInstallPrompt"
 import { DevStrictMode } from "@/utils/devStrictMode"

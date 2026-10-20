@@ -14,7 +14,7 @@ use App\Infrastructure\Core\ValueObject\Page;
 
 interface SuperMagicAgentRepositoryInterface
 {
-    public function getByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code): ?SuperMagicAgentEntity;
+    public function getByCode(SuperMagicAgentDataIsolation $dataIsolation, string $code, bool $forUpdate = false): ?SuperMagicAgentEntity;
 
     /**
      * @param array<string> $codes
