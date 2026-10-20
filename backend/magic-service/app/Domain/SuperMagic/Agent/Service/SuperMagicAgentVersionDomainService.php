@@ -414,6 +414,11 @@ class SuperMagicAgentVersionDomainService
         SuperMagicAgentDataIsolation $dataIsolation,
         AgentVersionEntity $versionEntity
     ): AgentMarketEntity {
+        // Serialize market ownership with resource transfer in the surrounding publish transaction.
+        $agent = $this->superMagicAgentRepository->getByCode($dataIsolation, $versionEntity->getCode(), true);
+        if ($agent === null) {
+            ExceptionBuilder::throw(SuperMagicErrorCode::NotFound, 'common.not_found', ['label' => $versionEntity->getCode()]);
+        }
         $existingMarket = $this->storeAgentRepository->findByAgentCodeWithoutStatus($versionEntity->getCode());
 
         $marketEntity = new AgentMarketEntity();
@@ -432,7 +437,8 @@ class SuperMagicAgentVersionDomainService
             ]
         ));
         $marketEntity->setIcon($versionEntity->getIcon());
-        $marketEntity->setPublisherId($versionEntity->getCreator());
+        // Market responsibility follows the current owner; the published version retains its author.
+        $marketEntity->setPublisherId($agent->getCreator());
         $marketEntity->setPublisherType(PublisherType::USER);
         $marketEntity->setCategoryIds($this->categoryRelationDomainService->getVersionCategoryIds((int) $versionEntity->getId()));
         $marketEntity->setPublishStatus(PublishStatus::PUBLISHED);
