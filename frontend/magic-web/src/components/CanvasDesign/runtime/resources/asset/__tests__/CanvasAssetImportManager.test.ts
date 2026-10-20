@@ -315,6 +315,124 @@ describe("CanvasAssetImportManager", () => {
 		expect(harness.register).not.toHaveBeenCalled()
 	})
 
+	it("does not register a reference seed when a batch only reuses existing connections", async () => {
+		const existingImage: LayerElement = {
+			id: "existing-image",
+			type: ElementTypeEnum.Image,
+			width: 640,
+			height: 360,
+			activeContentId: "existing-content",
+			mainContentId: "existing-content",
+			contents: [
+				{
+					contentId: "existing-content",
+					src: "./images/existing.png",
+					assetId: "asset-image",
+				},
+			],
+		}
+		const harness = createHarness({
+			elements: [existingImage],
+			upstreamConnections: [
+				{
+					id: "existing-connection",
+					sourceElementId: "existing-image",
+					targetElementId: "video-target",
+				},
+			],
+		})
+		const manager = new CanvasAssetImportManager(harness.canvas as never)
+
+		const results = await manager.importAndConnectMany({
+			assetIds: ["asset-image"],
+			targetElementId: "video-target",
+			targetKind: "video-generator",
+			slot: { kind: "reference" },
+			allowedMediaTypes: ["image"],
+		})
+
+		expect(results).toEqual([
+			expect.objectContaining({
+				elementId: "existing-image",
+				connectionId: "existing-connection",
+				workspacePath: "./images/existing.png",
+				source: "existing-connection",
+			}),
+		])
+		expect(harness.canvas.connectionManager.connectElementsBatch).not.toHaveBeenCalled()
+		// The editor's explicit asset insertion already adds the mention; a seed
+		// would insert a second, path-named mention for the same media.
+		expect(harness.register).not.toHaveBeenCalled()
+	})
+
+	it("registers a batch reference seed only for newly created connections", async () => {
+		const connectedImage: LayerElement = {
+			id: "connected-image",
+			type: ElementTypeEnum.Image,
+			width: 640,
+			height: 360,
+			activeContentId: "connected-content",
+			mainContentId: "connected-content",
+			contents: [
+				{
+					contentId: "connected-content",
+					src: "./images/connected.png",
+					assetId: "asset-connected",
+				},
+			],
+		}
+		const freshImage: LayerElement = {
+			id: "fresh-image",
+			type: ElementTypeEnum.Image,
+			width: 640,
+			height: 360,
+			activeContentId: "fresh-content",
+			mainContentId: "fresh-content",
+			contents: [
+				{
+					contentId: "fresh-content",
+					src: "./images/fresh.png",
+					assetId: "asset-fresh",
+				},
+			],
+		}
+		const harness = createHarness({
+			elements: [connectedImage, freshImage],
+			attachmentPathsByFileId: {
+				connected: "./images/connected.png",
+				fresh: "./images/fresh.png",
+			},
+			upstreamConnections: [
+				{
+					id: "existing-connection",
+					sourceElementId: "connected-image",
+					targetElementId: "video-target",
+				},
+			],
+		})
+		const manager = new CanvasAssetImportManager(harness.canvas as never)
+
+		const results = await manager.importAndConnectMany({
+			assetIds: ["asset-connected", "asset-fresh"],
+			targetElementId: "video-target",
+			targetKind: "video-generator",
+			slot: { kind: "reference" },
+			allowedMediaTypes: ["image"],
+		})
+
+		expect(results.map((result) => result.source)).toEqual([
+			"existing-connection",
+			"existing-binding",
+		])
+		expect(harness.register).toHaveBeenCalledTimes(1)
+		expect(harness.register).toHaveBeenCalledWith(
+			expect.objectContaining({
+				targetElementId: "video-target",
+				orderedSources: [{ elementId: results[1]?.elementId, kind: "image" }],
+			}),
+		)
+	})
+
 	it("reuses a same-name current-canvas file before requiring a signed URL", async () => {
 		const harness = createHarness({
 			asset: {
@@ -562,7 +680,14 @@ describe("CanvasAssetImportManager", () => {
 		expect(frameResult).toHaveLength(1)
 		expect(referenceResult).toHaveLength(1)
 		expect(harness.canvas.connectionManager.connectElementsBatch).toHaveBeenCalledTimes(1)
-		expect(harness.register).toHaveBeenCalledTimes(1)
+		// The reference call reuses the frame call's connection instead of sharing
+		// its promise, and a reused connection does not register a seed.
+		expect(referenceResult[0]).toMatchObject({
+			elementId: frameResult[0]?.elementId,
+			connectionId: frameResult[0]?.connectionId,
+			source: "existing-connection",
+		})
+		expect(harness.register).not.toHaveBeenCalled()
 	})
 
 	it("does not share a batch promise across incompatible media policies", async () => {

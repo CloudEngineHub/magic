@@ -496,6 +496,18 @@ export class CanvasAssetImportManager {
 			}
 			pendingConnections.push(prepared)
 		}
+		if (pendingConnections.length === 0) {
+			if (request.isCurrent?.() === false) throw new Error("Asset import session is stale")
+			// Already-connected media is selected by the editor's explicit asset
+			// insertion (ensurePromptMention). Registering a seed here would insert a
+			// second mention under the path-derived file name, which still carries the
+			// extension and therefore splits a fresh element-name chip into text.
+			return request.assetIds.map((assetId) => {
+				const result = resultsByAssetId.get(assetId)
+				if (!result) throw new Error("Failed to resolve imported asset media connections")
+				return result
+			})
+		}
 		const previousSeed =
 			request.slot.kind === "reference"
 				? this.canvas.connectionAssociationSeedManager.peek(request.targetElementId)
@@ -509,33 +521,6 @@ export class CanvasAssetImportManager {
 			const { id: previousSeedId, ...seed } = previousSeed
 			void previousSeedId
 			this.canvas.connectionAssociationSeedManager.register(seed)
-		}
-		if (pendingConnections.length === 0) {
-			if (request.isCurrent?.() === false) throw new Error("Asset import session is stale")
-			const existingResults = request.assetIds.map((assetId) => {
-				const result = resultsByAssetId.get(assetId)
-				if (!result) throw new Error("Failed to resolve imported asset media connections")
-				return result
-			})
-			let registeredSeedId: string | null = null
-			try {
-				registeredSeedId = this.registerReferenceSeed(request, existingResults)
-			} catch (error) {
-				restorePreviousSeed()
-				throw error
-			}
-			if (request.isCurrent?.() === false) {
-				if (registeredSeedId) {
-					const currentSeed = this.canvas.connectionAssociationSeedManager.peek(
-						request.targetElementId,
-					)
-					if (currentSeed?.id === registeredSeedId) {
-						restorePreviousSeed()
-					}
-				}
-				throw new Error("Asset import session is stale")
-			}
-			return existingResults
 		}
 
 		const createdElements: string[] = []
@@ -669,7 +654,12 @@ export class CanvasAssetImportManager {
 		const resolvedResults = results as CanvasAssetImportResult[]
 
 		try {
-			registeredSeedId = this.registerReferenceSeed(request, resolvedResults)
+			// Only newly created connections need the one-shot seed. Reused bindings
+			// are already inserted by the editor's explicit asset insertion.
+			registeredSeedId = this.registerReferenceSeed(
+				request,
+				resolvedResults.filter((result) => result.source !== "existing-connection"),
+			)
 		} catch (error) {
 			// `register` may remove the prior seed before throwing. The normal
 			// rollback only has an id after successful registration, so restore the
