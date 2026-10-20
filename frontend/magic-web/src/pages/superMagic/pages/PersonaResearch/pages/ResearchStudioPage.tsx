@@ -65,6 +65,7 @@ import {
 import ResearchOnboarding from "../onboarding/ResearchOnboarding"
 import ResearchHelp from "../onboarding/ResearchHelp"
 import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
+import type { InterviewChatSend } from "../services/interviewChat"
 import { routeResearchFile } from "../services/researchFileRouting"
 import { getAttachmentPath, normalizeResearchPath } from "../services/researchFiles"
 import {
@@ -329,6 +330,14 @@ function ResearchStudioPage() {
 	const title = (selectedTopic && store.studyTitleOf(selectedTopic)) || t("study.untitled")
 	const outputsCount = [report, studyAttachments?.validation].filter(Boolean).length
 
+	const sendInterviewFollowUp = useMemoizedFn<InterviewChatSend>(async (request) => {
+		return (await conversationRef.current?.sendInterviewFollowUp(request)) ?? false
+	})
+	const showConversation = useMemoizedFn(() => {
+		if (isMobile) setMobileView("conversation")
+		else conversationPanelRef.current?.expand()
+	})
+
 	if (!selectedTopic) {
 		return (
 			<Empty className="h-full">
@@ -514,6 +523,8 @@ function ResearchStudioPage() {
 		<ResearchConsoleSkeleton />
 	) : (
 		<ResearchConsole
+			onSendFollowUp={sendInterviewFollowUp}
+			onShowConversation={showConversation}
 			activeTab={consoleTab}
 			onTabChange={setConsoleTab}
 			focusedInterviewPersonaId={focusedInterviewId}

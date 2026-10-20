@@ -284,6 +284,9 @@ Example:
 | `status` | yes | `done` \| `running` \| `failed` |
 | `error` | no | reason when `status` is `failed`, otherwise `""` |
 | `rounds` | yes | array of `{ "role": "moderator" \| "persona", "text" }` in speaking order |
+| `rounds[].request_id` | no | copied from an explicit user chat request onto its question and answer; retries reuse it and do not append another answer |
+| `rounds[].source` | no | `user` on a question typed by the user; absent for automatic moderator questions |
+| `insights_outdated` | no | `true` after user chat adds answers without regenerating the original summary and report |
 | `summary` | no | short summary of the interview |
 | `key_findings` | no | array of strings |
 | `quotes` | no | array of `{ "text", "theme" }`; `text` is the persona's exact words from `rounds` |

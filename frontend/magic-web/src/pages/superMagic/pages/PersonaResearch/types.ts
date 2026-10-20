@@ -207,6 +207,9 @@ export interface PanelFile {
 }
 
 export interface TranscriptRound {
+	/** Present only on explicit user chat turns; older automatic interview files omit these. */
+	request_id?: string
+	source?: "user"
 	/** "moderator", "persona" (interviews) or a persona_id (discussions). */
 	role?: string
 	speaker?: string
@@ -219,6 +222,8 @@ export interface TranscriptQuote {
 }
 
 export interface InterviewFile {
+	/** Additional chat answers have not been incorporated into the original summary/report. */
+	insights_outdated?: boolean
 	schema_version: 1
 	persona_id: string
 	status: "done" | "running" | "failed"

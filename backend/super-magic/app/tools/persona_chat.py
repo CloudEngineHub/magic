@@ -69,6 +69,7 @@ from app.tools.persona_research.semantic_checks import (
 )
 from app.tools.persona_research.study_files import (
     StudyFilesError,
+    compute_inferred_ratio,
     load_study,
     portrait_hint,
     read_json_file,
@@ -137,6 +138,11 @@ Focus groups only: the discussion topic in one short line, in the user's languag
         description="""<!--zh: 每个人设回答的 token 上限，默认 400，最大 800-->
 Token limit for each persona's answer. Default 400, maximum 800.""",
     )
+    follow_up_request_id: str = Field(
+        default="",
+        max_length=100,
+        description="User-initiated interview chat only: copy the request ID from the user's interview follow-up context. Requires one persona and an existing transcript. Records exactly this user message, outside the automatic interview round budget. Reuse the same ID on retries; never invent one for automatic interviews.",
+    )
 
     @field_validator("max_tokens", mode="before")
     @classmethod
@@ -199,14 +205,15 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
     """
 
     async def execute(self, tool_context: ToolContext, params: PersonaChatParams) -> ToolResult:
-        if _asks_several_things(params.question):
+        # 自动主持人必须逐题提问；用户手动聊天保留原话，不替用户改写或拆分问题。
+        if not params.follow_up_request_id and _asks_several_things(params.question):
             return ToolResult.error(
                 "Nothing was asked or recorded: the moderator message asks more than one thing (several question "
                 "marks or a numbered list). Ask one open question per round and keep the rest for later rounds; "
                 "when you restate the participant's words, end that part with a period, not a question mark.",
                 extra_info={"user_error_reason": INVALID_REQUEST_REASON},
             )
-        joined_reason = await _joined_question_reason(tool_context, params.question)
+        joined_reason = "" if params.follow_up_request_id else await _joined_question_reason(tool_context, params.question)
         if joined_reason:
             return ToolResult.error(
                 f"Nothing was asked or recorded: the moderator message asks two different things under one question "
@@ -214,6 +221,8 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
                 extra_info={"user_error_reason": INVALID_REQUEST_REASON},
             )
         try:
+            if params.follow_up_request_id and (len(params.persona_paths) != 1 or not params.transcript_path):
+                raise _InvalidRequest("user-initiated chat requires one persona and an existing interview transcript")
             persona_files = [await self._resolve_workspace_path(path) for path in params.persona_paths]
             transcript_file = (
                 await self._resolve_workspace_path(params.transcript_path)
@@ -243,6 +252,10 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
 
         async with transcript_lock(transcript_file):
             try:
+                if params.follow_up_request_id:
+                    replay = await self._read_follow_up(params, transcript_file, personas)
+                    if replay is not None:
+                        return replay
                 record = await self._open_record(params, transcript_file, personas, failures)
             except (_InvalidRequest, StudyFilesError) as exc:
                 return ToolResult.error(
@@ -251,10 +264,50 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
                 )
             transcript_text = _format_transcript(record.data, {p.persona_id: p.name for p in personas})
             answers = await self._collect_answers(tool_context, params, personas, failures, transcript_text)
-            recorded_indexes = await self._append_round(record, params.question, answers) if answers else []
+            recorded_indexes = await self._append_round(record, params.question, answers, params.follow_up_request_id) if answers else []
         return self._build_result(
             params, personas, answers, failures, record=record, recorded_indexes=recorded_indexes
         )
+
+    async def _read_follow_up(
+        self, params: PersonaChatParams, transcript_file: Path, personas: List[_Persona]
+    ) -> Optional[ToolResult]:
+        """同一记录锁下校验手动追问并返回已完成的回答；不重放有副作用的模型调用。"""
+        existing = await read_json_file(transcript_file)
+        if (
+            not existing
+            or transcript_file.parent.name != INTERVIEWS_DIR
+            or transcript_file.parent.parent.parent.name != "studies"
+            or transcript_file.suffix != ".json"
+        ):
+            raise _InvalidRequest("user-initiated chat requires an existing interview transcript")
+        if (
+            len(personas) != 1
+            or existing.get("persona_id") != personas[0].persona_id
+            or transcript_file.stem != personas[0].persona_id
+        ):
+            raise _InvalidRequest("the follow-up persona must match the existing interview")
+        turns = existing.get("rounds")
+        if not isinstance(turns, list):
+            raise _InvalidRequest("the interview has no rounds array")
+        for index, turn in enumerate(turns):
+            if turn.get("request_id") != params.follow_up_request_id or _speaker(turn) != "moderator":
+                continue
+            if turn.get("text") != params.question:
+                raise _InvalidRequest("this follow-up request ID was already used for a different message")
+            answer = turns[index + 1] if index + 1 < len(turns) else None
+            if not answer or answer.get("request_id") != params.follow_up_request_id or _speaker(answer) != "persona":
+                raise _InvalidRequest("the recorded follow-up is incomplete; inspect the transcript before retrying")
+            round_number = sum(1 for item in turns[:index + 1] if _speaker(item) == "moderator")
+            record = _Record(transcript_file, params.transcript_path, False, existing, round_number,
+                             await self._round_limit(transcript_file, False))
+            result = self._build_result(
+                params, personas, [_Answer(personas[0].persona_id, personas[0].name, answer["text"])], [],
+                record=record, recorded_indexes=[index, index + 1],
+            )
+            result.content = "This user follow-up was already recorded; no model was called.\n" + result.content
+            return result
+        return None
 
     async def _collect_answers(
         self,
@@ -371,7 +424,8 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
                 "to get past this check"
             )
         limit = await self._round_limit(transcript_file, is_discussion)
-        if params.round_number > limit:
+        automatic_rounds = sum(1 for turn in data["rounds"] if _speaker(turn) == "moderator" and not turn.get("request_id"))
+        if not params.follow_up_request_id and automatic_rounds >= limit:
             raise _InvalidRequest(
                 f"the round limit for this study is {limit} and this transcript has used it. Do not call persona_chat "
                 "for this transcript again with any round_number; close it with finish_persona_transcript and report "
@@ -391,10 +445,10 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         return study.limits.interview_rounds if study.limits else MAX_INTERVIEW_ROUNDS
 
     @staticmethod
-    async def _append_round(record: _Record, question: str, answers: List[_Answer]) -> List[int]:
+    async def _append_round(record: _Record, question: str, answers: List[_Answer], request_id: str = "") -> List[int]:
         """追加主持人问题和成功的回答，返回每条新内容的 round_index。
 
-        已结束（done/failed）的记录被追问时重新标为 running，需要再次收尾。
+        自动访谈追加后标为 running，需再次收尾；用户手动聊天一问一答后即为 done。
         """
         rounds: List[Dict[str, Any]] = record.data["rounds"]
         start = len(rounds)
@@ -404,7 +458,17 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
         else:
             rounds.append({"role": "moderator", "text": question})
             rounds.extend({"role": "persona", "text": answer.text} for answer in answers)
-        record.data["status"] = TranscriptStatus.RUNNING.value
+        if request_id:
+            for turn in rounds[start:]:
+                turn["request_id"] = request_id
+            rounds[start]["source"] = "user"
+            # 单条聊天即完成；摘要与报告仍对应原研究，不让 Agent 为一次追问重跑研究。
+            record.data["insights_outdated"] = True
+            if isinstance(record.data.get("quality"), dict):
+                record.data["quality"]["inferred_ratio"] = compute_inferred_ratio(
+                    [turn["text"] for turn in rounds if _speaker(turn) == "persona"]
+                )
+        record.data["status"] = TranscriptStatus.DONE.value if request_id else TranscriptStatus.RUNNING.value
         record.data["error"] = ""
         await write_json_file(record.path, record.data)
         return list(range(start, len(rounds)))
@@ -501,10 +565,13 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
                 f"{recorded_indexes[0]}, answers at round_index "
                 f"{', '.join(str(i) for i in recorded_indexes[1:])}. Do not write this transcript yourself."
             )
-            lines.append(
-                f"Next: ask round {record.round_number + 1} with round_number={record.round_number + 1}, "
-                "or call finish_persona_transcript when the session ends."
-            )
+            if params.follow_up_request_id:
+                lines.append("This user chat turn is complete. Do not ask another question, finish the transcript, or update the report or study. Reply briefly in the user's language.")
+            else:
+                lines.append(
+                    f"Next: ask round {record.round_number + 1} with round_number={record.round_number + 1}, "
+                    "or call finish_persona_transcript when the session ends."
+                )
         else:
             lines.append(
                 f"Nothing was recorded for round {record.round_number}. Retry once with the same round_number; "
@@ -587,8 +654,8 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
             type=DisplayType.PERSONA_CHAT,
             data=PersonaChatContent(
                 question=_text((arguments or {}).get("question")),
-                round_number=data.get("round_number") if recorded else None,
-                round_limit=data.get("round_limit") if recorded else None,
+                round_number=data.get("round_number") if recorded and not (arguments or {}).get("follow_up_request_id") else None,
+                round_limit=data.get("round_limit") if recorded and not (arguments or {}).get("follow_up_request_id") else None,
                 answers=[
                     PersonaChatAnswerContent(**{k: item[k] for k in ("persona_id", "name", "text", "gender", "age")})
                     for item in data.get("answers") or []

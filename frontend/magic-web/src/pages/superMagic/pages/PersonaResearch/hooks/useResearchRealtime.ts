@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { useMemoizedFn } from "ahooks"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { useAttachmentsPolling } from "@/pages/superMagic/hooks/useAttachmentsPolling"
@@ -20,6 +20,16 @@ const RUNNING_POLL_INTERVAL_MS = 8000
  */
 export function useResearchRealtime(store: PersonaResearchStore, isStudyRunning: boolean) {
 	const projectId = store.selectedProject?.id
+	const previousRun = useRef({ projectId, running: isStudyRunning })
+	useEffect(() => {
+		const previous = previousRun.current
+		previousRun.current = { projectId, running: isStudyRunning }
+		// A final chat answer can land between the last poll and task completion. Reconcile once
+		// after completion through the existing data owner; never replay the submitted question.
+		if (projectId && previous.projectId === projectId && previous.running && !isStudyRunning) {
+			void store.refreshAttachments().catch(() => undefined)
+		}
+	}, [projectId, isStudyRunning, store])
 
 	const handleAttachments = useMemoizedFn(
 		({ tree, list }: { tree: AttachmentItem[]; list: AttachmentItem[] }) => {

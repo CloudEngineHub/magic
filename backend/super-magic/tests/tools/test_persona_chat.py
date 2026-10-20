@@ -256,6 +256,64 @@ async def test_first_round_creates_transcript_and_reports_round_indexes(tool, tm
     }
 
 
+async def test_user_chat_can_continue_after_automatic_budget_and_retries_are_idempotent(tool, tmp_path, fake_llm):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    for number in range(1, 8):
+        assert (await tool.execute(ToolContext(), _ask(path, f"question {number}", number))).ok
+    # 自动访谈仍被限制；用户的一条消息获得一条回答，不重跑整项研究。
+    assert not (await tool.execute(ToolContext(), _ask(path, "automatic extra", 8))).ok
+    request = _ask(path, "Would it help? Why?", 8)
+    request.follow_up_request_id = "user-chat-1"
+    first = await tool.execute(ToolContext(), request)
+    assert first.ok
+    data = _read(tmp_path, INTERVIEW)
+    assert data["status"] == "done"
+    assert data["insights_outdated"] is True
+    assert data["rounds"][-2] == {
+        "role": "moderator", "text": "Would it help? Why?", "source": "user", "request_id": "user-chat-1"
+    }
+    assert data["rounds"][-1]["request_id"] == "user-chat-1"
+    calls = len(fake_llm.calls)
+    # Agent 即便在重试时算出了下一轮，也不能再次执行同一个请求。
+    request.round_number = 9
+    retry = await tool.execute(ToolContext(), request)
+    assert retry.ok
+    assert "already recorded" in retry.content
+    assert len(fake_llm.calls) == calls
+    assert _read(tmp_path, INTERVIEW) == data
+    request.question = "different message"
+    assert not (await tool.execute(ToolContext(), request)).ok
+    assert len(fake_llm.calls) == calls
+
+
+async def test_user_chat_requires_an_existing_matching_interview(tool, tmp_path, fake_llm):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    request = _ask(path, "follow up", 1)
+    request.follow_up_request_id = "user-chat-1"
+    assert not (await tool.execute(ToolContext(), request)).ok
+    assert not fake_llm.calls
+    await tool.execute(ToolContext(), _ask(path, "first question", 1))
+    other = _write_persona(tmp_path, "p_other_1a2b", "Other")
+    request.persona_paths = [other]
+    request.round_number = 2
+    assert not (await tool.execute(ToolContext(), request)).ok
+    assert len(fake_llm.calls) == 1
+
+
+async def test_failed_user_chat_does_not_write_or_consume_request_id(tool, tmp_path, fake_llm):
+    path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
+    await tool.execute(ToolContext(), _ask(path, "first question", 1))
+    before = _read(tmp_path, INTERVIEW)
+    fake_llm.failing_names.add("Zhang")
+    request = _ask(path, "follow up", 2)
+    request.follow_up_request_id = "user-chat-1"
+    assert not (await tool.execute(ToolContext(), request)).ok
+    assert _read(tmp_path, INTERVIEW) == before
+    fake_llm.failing_names.clear()
+    assert (await tool.execute(ToolContext(), request)).ok
+    assert len(_read(tmp_path, INTERVIEW)["rounds"]) == 4
+
+
 async def test_next_round_uses_transcript_as_context_and_appends(tool, tmp_path, fake_llm):
     path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
     await tool.execute(ToolContext(), _ask(path, "Earlier question", 1))

@@ -328,6 +328,23 @@
 		"supportIf": "什么情况算支持",
 		"validationSummary": "真人验证："
 	},
+	"interviewChat": {
+		"aiNote": "回答由 AI 模拟生成",
+		"failed": "发送未完成，请重试",
+		"keyboardHint": "Enter 发送 · Shift+Enter 换行",
+		"label": "与 {{name}} 继续聊",
+		"newReply": "有新回答",
+		"placeholder": "继续问问 {{name}}…",
+		"processing": "正在处理追问…",
+		"queued": "等待处理；如已有任务，追问会排队发送",
+		"reportUnchanged": "新增回答尚未纳入原摘要和报告",
+		"retry": "重试发送",
+		"send": "发送",
+		"sending": "正在发送…",
+		"showProgress": "查看处理进度",
+		"unrecorded": "问题已发送，访谈尚未更新",
+		"you": "你"
+	},
 	"level": {
 		"high": "高",
 		"low": "低",

@@ -11,6 +11,8 @@ import { personaTone } from "./personaPortrait"
 import { AiSimulatedNote } from "./ResearchBadges"
 
 interface TranscriptViewProps {
+	/** Interviews can continue as chat; discussions keep the numbered research transcript. */
+	chat?: boolean
 	transcript: InterviewFile | DiscussionFile
 	/** Resolves persona_id / speaker ids to persona cards for names and avatars. */
 	resolvePersona: (personaId: string) => PersonaFile | null
@@ -34,6 +36,7 @@ interface TranscriptViewProps {
  * with their hypothesis; inferred details (persona_chat's "(inferred)" marker) are underlined.
  */
 export default function TranscriptView({
+	chat = false,
 	transcript,
 	resolvePersona,
 	respondentId,
@@ -157,6 +160,26 @@ export default function TranscriptView({
 						flashIndex === index &&
 						"ring-2 ring-primary/50 ring-offset-4 ring-offset-background transition-shadow"
 					if (isModerator) {
+						if (chat)
+							return (
+								<li
+									key={index}
+									data-round={index}
+									className={cn(
+										"ml-auto flex max-w-[85%] flex-col items-end gap-1 rounded-lg",
+										flash,
+									)}
+								>
+									<span className="text-xs text-muted-foreground">
+										{round.source === "user"
+											? t("interviewChat.you")
+											: t("transcript.moderator")}
+									</span>
+									<p className="whitespace-pre-wrap break-words rounded-[16px_4px_16px_16px] bg-muted px-4 py-2.5 text-sm leading-6">
+										{round.text}
+									</p>
+								</li>
+							)
 						const answers = answersAfter.get(index) ?? []
 						const foldable = answers.some(
 							(answerIndex) =>
@@ -192,7 +215,7 @@ export default function TranscriptView({
 						)
 					}
 					// A group shows who speaks on every answer; one respondent is named once.
-					const showSpeaker = isGroup || !shownRespondentAvatar
+					const showSpeaker = chat || isGroup || !shownRespondentAvatar
 					if (!isGroup) shownRespondentAvatar = true
 					const age = textAge(persona?.dimensions?.demographics?.age)
 					return (
@@ -222,6 +245,7 @@ export default function TranscriptView({
 								) : null}
 								<AnswerBubble
 									text={round.text}
+									alwaysOpen={chat && Boolean(round.request_id)}
 									marks={marks}
 									speaker={name}
 									open={openRounds.has(index)}
@@ -276,12 +300,14 @@ function textAge(value: unknown): string | null {
  * gap however many blank lines the model left between them.
  */
 function AnswerBubble({
+	alwaysOpen = false,
 	text,
 	marks,
 	speaker,
 	open,
 	onToggle,
 }: {
+	alwaysOpen?: boolean
 	text: string
 	marks: HighlightMark[]
 	speaker: string
@@ -299,9 +325,9 @@ function AnswerBubble({
 
 	useLayoutEffect(() => {
 		const body = bodyRef.current
-		if (!body || open) return
+		if (!body || open || alwaysOpen) return
 		setOverflows(body.scrollHeight > body.clientHeight + 1)
-	}, [open, text])
+	}, [open, text, alwaysOpen])
 
 	return (
 		<div
@@ -312,9 +338,9 @@ function AnswerBubble({
 			    count lines across several paragraphs. */}
 			<div
 				ref={bodyRef}
-				className={cn("space-y-2", !open && "max-h-[8.5em] overflow-hidden")}
+				className={cn("space-y-2", !open && !alwaysOpen && "max-h-[8.5em] overflow-hidden")}
 				// The cut line fades out instead of stopping mid-glyph; -webkit- for Chrome 100.
-				style={!open && overflows ? FOLD_FADE : undefined}
+				style={!open && !alwaysOpen && overflows ? FOLD_FADE : undefined}
 			>
 				{paragraphs.map((paragraph, index) => (
 					<p key={index} className="whitespace-pre-wrap break-words">
@@ -322,7 +348,7 @@ function AnswerBubble({
 					</p>
 				))}
 			</div>
-			{overflows || open ? (
+			{!alwaysOpen && (overflows || open) ? (
 				<button
 					type="button"
 					className="mt-1 rounded text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"

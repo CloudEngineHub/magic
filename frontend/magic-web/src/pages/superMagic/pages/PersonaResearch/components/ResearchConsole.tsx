@@ -42,6 +42,8 @@ import { EASE_OUT, PRESSABLE } from "./surface"
 import TranscriptView from "./TranscriptView"
 import ValidationPane from "./ValidationPane"
 
+import type { InterviewChatSend } from "../services/interviewChat"
+
 export type ResearchConsoleTab =
 	| "report"
 	| "hypotheses"
@@ -53,6 +55,8 @@ export type ResearchConsoleTab =
 	| "validation"
 
 interface ResearchConsoleProps {
+	onSendFollowUp?: InterviewChatSend
+	onShowConversation?: () => void
 	activeTab: ResearchConsoleTab
 	onTabChange: (tab: ResearchConsoleTab) => void
 	/** The report on its own, the first thing a finished study shows. */
@@ -86,6 +90,8 @@ type RoundHighlight = { key: string; roundIndex: number; nonce: number }
  * real-person validation. Quotes anywhere jump to their transcript round.
  */
 function ResearchConsole({
+	onSendFollowUp,
+	onShowConversation,
 	activeTab,
 	onTabChange,
 	reportPane,
@@ -345,6 +351,8 @@ function ResearchConsole({
 
 			<TabsContent value="interviews" className="mt-0 min-h-0 flex-1">
 				<InterviewsPanel
+					onSendFollowUp={onSendFollowUp}
+					onShowProgress={onShowConversation}
 					variant={variant}
 					focusedPersonaId={focusedInterviewPersonaId}
 					onFocus={onFocusInterview}

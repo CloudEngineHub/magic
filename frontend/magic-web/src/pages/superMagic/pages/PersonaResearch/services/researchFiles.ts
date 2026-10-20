@@ -437,6 +437,7 @@ const panelSchema = z.object({
 })
 
 const transcriptBase = {
+	insights_outdated: z.boolean().optional(),
 	schema_version: schemaVersion,
 	status: z.enum(["done", "running", "failed"]).catch("running"),
 	error: optionalString,
@@ -445,6 +446,8 @@ const transcriptBase = {
 			role: z.string().optional(),
 			speaker: z.string().optional(),
 			text: z.string(),
+			request_id: z.string().optional(),
+			source: z.literal("user").optional().catch(undefined),
 		}),
 	),
 	summary: optionalString,

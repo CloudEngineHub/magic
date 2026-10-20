@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react"
 import { useSize } from "ahooks"
 import { ArrowLeft, ChevronLeft, ChevronRight, Mic } from "lucide-react"
+import { userStore } from "@/models/user"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
@@ -21,8 +22,12 @@ import PersonaAvatar from "./PersonaAvatar"
 import { InterviewStatusChip } from "./PersonaCard"
 import { personaTone } from "./personaPortrait"
 import TranscriptView, { TranscriptInsights } from "./TranscriptView"
+import InterviewConversation from "./InterviewConversation"
+import type { InterviewChatSend } from "../services/interviewChat"
 
 interface InterviewsPanelProps {
+	onSendFollowUp?: InterviewChatSend
+	onShowProgress?: () => void
 	variant: "desktop" | "mobile"
 	focusedPersonaId: string | null
 	onFocus: (personaId: string | null) => void
@@ -31,7 +36,14 @@ interface InterviewsPanelProps {
 }
 
 /** Interview list (with round progress and quality warning) beside the selected transcript. */
-function InterviewsPanel({ variant, focusedPersonaId, onFocus, focusRound }: InterviewsPanelProps) {
+function InterviewsPanel({
+	variant,
+	focusedPersonaId,
+	onFocus,
+	focusRound,
+	onSendFollowUp,
+	onShowProgress,
+}: InterviewsPanelProps) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
 	const interviews = store.interviews
@@ -66,6 +78,22 @@ function InterviewsPanel({ variant, focusedPersonaId, onFocus, focusRound }: Int
 		}))
 		return [...cited, ...own]
 	}, [selected, store.study])
+
+	const transcriptContent = selected ? (
+		<>
+			<RespondentHeader persona={store.personaById(selected.persona_id)} />
+			<TranscriptView
+				key={selected.persona_id}
+				chat
+				transcript={selected}
+				respondentId={selected.persona_id}
+				resolvePersona={store.personaById}
+				focusRound={focusRound}
+				highlights={highlights}
+				insightsPlacement={wide ? "side" : "inline"}
+			/>
+		</>
+	) : null
 
 	if (interviews.length === 0) {
 		return (
@@ -149,25 +177,26 @@ function InterviewsPanel({ variant, focusedPersonaId, onFocus, focusRound }: Int
 					</div>
 				) : null}
 				<div className="flex min-h-0 flex-1">
-					<ScrollArea className="min-h-0 min-w-0 flex-1">
-						<div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 pb-14 pt-6">
-							{selected ? (
-								<>
-									<RespondentHeader
-										persona={store.personaById(selected.persona_id)}
-									/>
-									<TranscriptView
-										transcript={selected}
-										respondentId={selected.persona_id}
-										resolvePersona={store.personaById}
-										focusRound={focusRound}
-										highlights={highlights}
-										insightsPlacement={wide ? "side" : "inline"}
-									/>
-								</>
-							) : null}
-						</div>
-					</ScrollArea>
+					{selected && onSendFollowUp && onShowProgress && !store.isReadOnly ? (
+						<InterviewConversation
+							key={`${userStore.user.userInfo?.user_id}:${userStore.user.userInfo?.organization_code}:${store.selectedProject?.id}:${store.selectedTopic?.id}:${selected.persona_id}`}
+							transcript={selected}
+							name={
+								store.personaById(selected.persona_id)?.name ?? selected.persona_id
+							}
+							isMobile={isMobile}
+							onSend={onSendFollowUp}
+							onShowProgress={onShowProgress}
+						>
+							{transcriptContent}
+						</InterviewConversation>
+					) : (
+						<ScrollArea className="min-h-0 min-w-0 flex-1">
+							<div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 pb-14 pt-6">
+								{transcriptContent}
+							</div>
+						</ScrollArea>
+					)}
 					{wide && selected ? (
 						<ScrollArea className="w-80 shrink-0 border-l border-border bg-muted/30">
 							<TranscriptInsights transcript={selected} className="p-5" />

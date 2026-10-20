@@ -29,10 +29,17 @@ import { useResearchEditor } from "../hooks/useResearchEditor"
 import { classifyStudyDeliverables } from "../services/researchDeliverables"
 import type { ResearchConsoleTab } from "./ResearchConsole"
 import ResearchDeliverables from "./ResearchDeliverables"
+import {
+	interviewChatContent,
+	isInterviewChatMessage,
+	type InterviewChatSend,
+} from "../services/interviewChat"
+import { optimisticMessageStore } from "@/pages/superMagic/stores/optimisticMessageStore"
 
 export interface ResearchConversationPanelRef {
 	/** Replaces the composer content and focuses it, e.g. "ask this persona"; false until ready. */
 	fillComposer: (content: string | JSONContent) => boolean
+	sendInterviewFollowUp: InterviewChatSend
 }
 
 interface ResearchConversationPanelProps {
@@ -136,6 +143,55 @@ const ResearchConversationPanel = forwardRef<
 			shouldScrollAfterRetryRef.current = true
 		},
 	})
+	const retryInterviewMessage = useRetryOptimisticMessage({
+		chatTopicId: selectedTopic?.chat_topic_id,
+		getSendMessage: () => {
+			const send = sendRetryMessageRef.current
+			return send
+				? (params) =>
+						send({
+							...params,
+							shouldClearEditorAfterSend: false,
+							shouldFocusEditorAfterSend: false,
+						})
+				: undefined
+		},
+	})
+	const sendInterviewFollowUp = useMemoizedFn<InterviewChatSend>(async (request) => {
+		if (store.isReadOnly || selectedTopic?.id !== request.topicId) return false
+		const failed = messages.find((item) => {
+			const node = superMagicStore.getMessageNode(item.super_message_id)
+			return (
+				isInterviewChatMessage(node, request.id) &&
+				optimisticMessageStore.getStatus(
+					selectedTopic.chat_topic_id,
+					item.app_message_id,
+				) === "failed"
+			)
+		})
+		if (failed) {
+			await retryInterviewMessage(failed)
+			return (
+				optimisticMessageStore.getStatus(
+					selectedTopic.chat_topic_id,
+					failed.app_message_id,
+				) !== "failed"
+			)
+		}
+		const send = sendRetryMessageRef.current
+		if (!send) return false
+		return send({
+			value: interviewChatContent(
+				request,
+				store.personaById(request.personaId)?.name ?? request.personaId,
+			),
+			mentionItems: [],
+			selectedModel: topicModelStore.selectedLanguageModel,
+			targetTopic: selectedTopic,
+			shouldClearEditorAfterSend: false,
+			shouldFocusEditorAfterSend: false,
+		})
+	})
 
 	useLayoutEffect(() => {
 		if (!shouldScrollAfterRetryRef.current) return
@@ -144,7 +200,10 @@ const ResearchConversationPanel = forwardRef<
 		pubsub.publish(PubSubEvents.Message_Scroll_To_Bottom, { behavior: "auto", time: 1000 })
 	})
 
-	useImperativeHandle(ref, () => ({ fillComposer }), [fillComposer])
+	useImperativeHandle(ref, () => ({ fillComposer, sendInterviewFollowUp }), [
+		fillComposer,
+		sendInterviewFollowUp,
+	])
 
 	// ask_user answers and message re-sends from the list go through the same send flow.
 	const handleSendMsg = useMemoizedFn(

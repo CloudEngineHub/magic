@@ -86,6 +86,8 @@ export interface HandleSendParams {
 	isFromQueue?: boolean
 	queueId?: string
 	shouldClearEditorAfterSend?: boolean
+	/** Programmatic surfaces keep focus in their own input after sending. */
+	shouldFocusEditorAfterSend?: boolean
 	throwOnError?: boolean
 	extra?: Record<string, unknown>
 	targetTopic?: Topic | null
@@ -466,7 +468,7 @@ class MessageSendService {
 				editorRef?.clearContentAfterSend()
 			}
 
-			if (!params.isFromQueue) {
+			if (!params.isFromQueue && params.shouldFocusEditorAfterSend !== false) {
 				if (isMobile) {
 					setFocused(false)
 				} else {
