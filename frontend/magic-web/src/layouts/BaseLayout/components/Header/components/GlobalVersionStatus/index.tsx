@@ -36,6 +36,8 @@ function GlobalVersionStatus() {
 		toast.info(t("globalServiceStatus.newVersion"), {
 			id: "global-new-version",
 			duration: Infinity,
+			// Align Sonner's action with the shared button radius instead of its fixed 4px default.
+			actionButtonStyle: { borderRadius: "var(--radius-md)" },
 			action: {
 				label: t("globalServiceStatus.update"),
 				onClick: () => {
