@@ -53,6 +53,20 @@ interface MagicUserRepositoryInterface
     public function getActiveUsersByOrganization(string $organizationCode): array;
 
     /**
+     * Return active user IDs in cursor pages for bounded notification fan-out.
+     *
+     * @return list<string>
+     */
+    public function getActiveUserIdsByOrganization(string $organizationCode, ?string $afterUserId = null, int $limit = 500): array;
+
+    /**
+     * Return active users for the supplied IDs in one organization.
+     *
+     * @return array<string, MagicUserEntity>
+     */
+    public function getActiveUsersByIds(string $organizationCode, array $userIds): array;
+
+    /**
      * 根据 userIdType,生成对应类型的值.
      */
     public function getUserIdByType(UserIdType $userIdType, string $addStr): string;
