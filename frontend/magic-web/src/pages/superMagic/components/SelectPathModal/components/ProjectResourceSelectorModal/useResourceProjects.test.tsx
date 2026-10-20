@@ -60,6 +60,7 @@ describe("resource picker sources", () => {
 				{ id: "skill", project_mode: TopicMode.SkillProjectCreator },
 				{ id: "legacy" },
 			],
+			total: 5,
 		})
 		const { result } = setup(SHARE_WORKSPACE_ID)
 		await act(() => result.current.fetchProjectsByWorkspace(SHARE_WORKSPACE_ID))
@@ -68,6 +69,22 @@ describe("resource picker sources", () => {
 			"skill",
 			"legacy",
 		])
+	})
+
+	it("loads shared projects after an entirely excluded first page", async () => {
+		mocks.shared
+			.mockResolvedValueOnce({
+				list: Array.from({ length: 100 }, (_, id) => ({
+					id: `agent-${id}`,
+					project_mode: TopicMode.AgentCreator,
+				})),
+				total: 101,
+			})
+			.mockResolvedValueOnce({ list: [{ id: "shared" }], total: 101 })
+		const { result } = setup(SHARE_WORKSPACE_ID)
+		await act(() => result.current.fetchProjectsByWorkspace(SHARE_WORKSPACE_ID))
+		expect(result.current.availableProjects).toEqual([{ id: "shared", tag: "collaboration" }])
+		expect(mocks.shared).toHaveBeenCalledTimes(2)
 	})
 
 	it("separates created and editable collaborated employees while retaining project identity", async () => {

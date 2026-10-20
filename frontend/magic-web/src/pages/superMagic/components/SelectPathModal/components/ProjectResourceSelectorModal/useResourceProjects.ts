@@ -3,11 +3,7 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
-import {
-	type Workspace,
-	type ProjectListItem,
-	type CollaborationProjectListItem,
-} from "../../../../pages/Workspace/types"
+import { type Workspace, type ProjectListItem } from "../../../../pages/Workspace/types"
 import {
 	MY_CLAW_WORKSPACE_DATA,
 	MY_SKILLS_WORKSPACE_DATA,
@@ -19,7 +15,7 @@ import {
 	MICRO_APPS_WORKSPACE_ID,
 } from "../../../../constants"
 import { loadResourceProjectPage, type AgentResourceScope } from "../../utils/resourceProjects"
-import { isSharedWorkspaceProject } from "../../resourceProjectTypes"
+import { loadSharedWorkspaceProjects } from "../../utils/sharedWorkspaceProjects"
 import type { ResourceProject } from "../../resourceProjectTypes"
 
 export const RESOURCE_WORKSPACE_IDS = new Set<string>([
@@ -56,12 +52,14 @@ export function useResourceProjects({
 	const [hasMoreResourceProjects, setHasMoreResourceProjects] = useState(false)
 	const loadingMoreResourcesRef = useRef(false)
 	const projectsRequestId = useRef(0)
+	const sharedRequestRef = useRef<AbortController | null>(null)
 	const keywordRef = useRef("")
 	const [agentScope, setAgentScope] = useState<AgentResourceScope>("created")
 	const agentScopeRef = useRef<AgentResourceScope>("created")
 	const microWorkspaceRef = useRef<Workspace | null>(null)
 	const cancelProjectRequest = useMemoizedFn(() => {
 		projectsRequestId.current += 1
+		sharedRequestRef.current?.abort()
 	})
 	useEffect(() => {
 		return () => {
@@ -75,18 +73,15 @@ export function useResourceProjects({
 		setLoadError(false)
 		setLoading(true)
 		try {
-			const res = await SuperMagicApi.getCollaborationProjects({
-				page: 1,
-				page_size: 99,
-			})
+			sharedRequestRef.current?.abort()
+			const request = new AbortController()
+			sharedRequestRef.current = request
+			const list = await loadSharedWorkspaceProjects({ signal: request.signal })
 			if (requestId !== projectsRequestId.current) return
-			// 将 CollaborationProjectListItem 转换为 ProjectListItem
-			const projects: ProjectListItem[] = (res?.list || [])
-				.filter(isSharedWorkspaceProject)
-				.map((item: CollaborationProjectListItem) => ({
-					...item,
-					tag: "collaboration" as const,
-				}))
+			const projects: ProjectListItem[] = list.map((item) => ({
+				...item,
+				tag: "collaboration" as const,
+			}))
 			setAvailableProjects(projects)
 		} catch (error) {
 			if (requestId !== projectsRequestId.current) return
@@ -223,6 +218,7 @@ export function useResourceProjects({
 
 	// 获取工作区的项目列表
 	const fetchProjectsByWorkspace = useMemoizedFn(async (workspaceId: string, keyword = "") => {
+		sharedRequestRef.current?.abort()
 		keywordRef.current = keyword
 		if (
 			isMentionMode &&
