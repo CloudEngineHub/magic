@@ -137,6 +137,7 @@ async function applyFallbackSnapshot(
 				scope: grant.scope,
 				grantedAt: grant.grantedAt,
 				expiresAt: grant.expiresAt,
+				...(grant.codeFingerprint ? { codeFingerprint: grant.codeFingerprint } : {}),
 				epoch: targetEpoch,
 			} satisfies StoredHtmlPermissionGrant),
 		)

@@ -28,6 +28,12 @@ export interface HtmlPermissionGrant extends HtmlPermissionGrantIdentity {
 	scope: HtmlPermissionScope
 	grantedAt: number
 	expiresAt: number | null
+	/**
+	 * Version of the app's executable files when the user last confirmed this grant. It is not part
+	 * of the grant key: it only lets the service tell whether the code changed after authorization.
+	 * Missing on grants saved before this field existed.
+	 */
+	codeFingerprint?: string
 }
 
 export interface HtmlPermissionGrantStore {

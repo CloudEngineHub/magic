@@ -175,6 +175,9 @@ export class IndexedDbHtmlPermissionGrantStore implements HtmlPermissionGrantSto
 						scope: grant.scope,
 						grantedAt: grant.grantedAt,
 						expiresAt: grant.expiresAt,
+						...(grant.codeFingerprint
+							? { codeFingerprint: grant.codeFingerprint }
+							: {}),
 						epoch: currentEpoch,
 					}
 					await getRequestResult(grantsStore.put(record))

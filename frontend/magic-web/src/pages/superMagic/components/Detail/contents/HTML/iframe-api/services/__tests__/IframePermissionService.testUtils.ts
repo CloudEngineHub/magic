@@ -1,6 +1,8 @@
 import { vi } from "vitest"
 import {
 	IframePermissionService,
+	type HtmlPermissionCodeChangeConfirmRequest,
+	type HtmlPermissionCodeChangeDecision,
 	type HtmlPermissionConfirmRequest,
 	type IframePermissionServiceConfig,
 } from "../IframePermissionService"
@@ -106,6 +108,12 @@ export function createService(overrides: Partial<IframePermissionServiceConfig> 
 				ttlMs: request.defaultTtlMs,
 			})),
 	)
+	const confirmCodeChange = vi.fn(
+		overrides.confirmCodeChange ||
+			(async (
+				_request: HtmlPermissionCodeChangeConfirmRequest,
+			): Promise<HtmlPermissionCodeChangeDecision> => "remember"),
+	)
 	const service = new IframePermissionService({
 		legacyMigrationMarker: createMemoryLegacyMigrationMarker(),
 		appConfigState: {
@@ -131,7 +139,8 @@ export function createService(overrides: Partial<IframePermissionServiceConfig> 
 		...overrides,
 		grantStore,
 		confirmPermission,
+		confirmCodeChange,
 		getNow,
 	})
-	return { service, grantStore, confirmPermission }
+	return { service, grantStore, confirmPermission, confirmCodeChange }
 }

@@ -106,6 +106,7 @@ export class LocalStorageHtmlPermissionGrantStore implements HtmlPermissionGrant
 				scope: grant.scope,
 				grantedAt: grant.grantedAt,
 				expiresAt: grant.expiresAt,
+				...(grant.codeFingerprint ? { codeFingerprint: grant.codeFingerprint } : {}),
 				epoch: data.epoch,
 				revision,
 			}
