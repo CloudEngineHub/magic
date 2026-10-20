@@ -115,6 +115,7 @@ import {
 } from "./utils/edit-capability-session"
 
 const htmlRenderLogger = Logger.createLogger("HTMLContent")
+import { HTML_PERMISSION_ANCHOR_ATTRIBUTE } from "./components/PermissionManager/CodeChangeConfirmPopover"
 const HtmlPermissionManagerDialog = lazy(
 	() => import("./components/PermissionManager/HtmlPermissionManagerDialog"),
 )
@@ -508,6 +509,8 @@ export default memo(function HTML(props: HTMLProps) {
 		revokeHtmlPermission,
 		updateHtmlPermissionTtl,
 		revokeAllHtmlPermissions,
+		acknowledgeHtmlPermissionCodeChanges,
+		htmlPermissionCodeChanged,
 		permissionRevision,
 	} = htmlPermissionController
 	const canManageHtmlPermissions = Boolean(
@@ -1727,7 +1730,26 @@ export default memo(function HTML(props: HTMLProps) {
 					visible: () => canManageHtmlPermissions && !sharedHtmlPermissionController,
 					render: (context) => (
 						<ActionButton
-							icon={<ShieldCheck size={16} />}
+							icon={
+								// The anchor lets the code-change reminder point at this button; the dot flags
+								// grants whose app code changed after they were confirmed.
+								<span
+									className="relative inline-flex"
+									{...{ [HTML_PERMISSION_ANCHOR_ATTRIBUTE]: "" }}
+								>
+									<ShieldCheck size={16} />
+									{htmlPermissionCodeChanged ? (
+										<span
+											role="img"
+											aria-label={t(
+												"htmlEditor.permissionManager.codeChangedDot",
+											)}
+											className="absolute -right-1 -top-1 size-2 rounded-full bg-amber-500 ring-2 ring-background"
+											data-testid="html-permission-code-changed-dot"
+										/>
+									) : null}
+								</span>
+							}
 							onClick={() =>
 								void runGuardedAction(
 									context.beforeAction,
@@ -2113,6 +2135,7 @@ export default memo(function HTML(props: HTMLProps) {
 						onRevoke={revokeHtmlPermission}
 						onUpdateTtl={updateHtmlPermissionTtl}
 						onRevokeAll={revokeAllHtmlPermissions}
+						onAcknowledgeCodeChanges={acknowledgeHtmlPermissionCodeChanges}
 					/>
 				</Suspense>
 			) : null}
