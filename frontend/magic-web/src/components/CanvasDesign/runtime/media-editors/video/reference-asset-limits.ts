@@ -66,7 +66,31 @@ function fieldForKind(kind: ReferenceAssetKind): ReferenceAssetField {
 	return "reference_audios"
 }
 
-export function countReferenceAssets(assets: ReferenceAssetLike[] = []): ReferenceAssetCounts {
+/**
+ * Validate a picker batch incrementally. Unlike submit-time validation this
+ * permits a draft that has not reached a variant minimum yet, while rejecting
+ * any addition that exceeds total/per-kind maxima or makes every variant
+ * impossible.
+ */
+export function validateReferenceAssetAdditionsByCounts(
+	modeConfig: VideoInputModeConfig | undefined,
+	currentCounts: ReferenceAssetCounts,
+	additions: readonly ReferenceAssetKind[],
+	options: ResolveReferenceAssetLimitsOptions = {},
+): boolean {
+	let counts = { ...currentCounts }
+	for (const kind of additions) {
+		if (!canAddReferenceAssetByCounts(modeConfig, counts, kind, options)) return false
+		if (kind === "image") counts = { ...counts, images: counts.images + 1 }
+		if (kind === "video") counts = { ...counts, videos: counts.videos + 1 }
+		if (kind === "audio") counts = { ...counts, audios: counts.audios + 1 }
+	}
+	return true
+}
+
+export function countReferenceAssets(
+	assets: readonly ReferenceAssetLike[] = [],
+): ReferenceAssetCounts {
 	return assets.reduce(
 		(acc, item) => {
 			if (item.assetType === "image") acc.images += 1

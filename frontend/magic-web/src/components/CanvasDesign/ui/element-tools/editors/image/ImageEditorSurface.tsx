@@ -10,6 +10,7 @@ import {
 } from "react"
 import type { AssetItem } from "@/apis"
 import { ArrowUp, LoaderCircle } from "lucide-react"
+import { useLatest } from "ahooks"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasModeUI } from "../../../../app/providers/CanvasUIProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
@@ -82,6 +83,7 @@ import type {
 } from "../../../../public/magic-types"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import type { Canvas } from "../../../../runtime/core/Canvas"
+import type { CanvasAssetImportResult } from "../../../../runtime/resources/asset/CanvasAssetImportManager"
 import {
 	areCanvasResourceReferencesSame,
 	getCanvasResourceAvailability,
@@ -127,10 +129,27 @@ interface ImageEditorSurfaceProps {
 }
 
 interface ImageAssetSelectionSession {
+	canvas: Canvas
 	elementId: string
 	contentId: string | null
+	modelId: string
+	maxReferenceFiles: number | undefined
 	selectionPersistenceKey: string
+	referencePaths: string[]
 	slot: ImageReferenceSlotInfo
+}
+
+function areReferencePathSnapshotsEqual(
+	first: readonly string[],
+	second: readonly string[],
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
+	return (
+		first.length === second.length &&
+		first.every((path, index) =>
+			areCanvasResourceReferencesSame(path, second[index] ?? "", resolveResourceReference),
+		)
+	)
 }
 
 /** 只有权威 resolver 确认删除的引用阻塞提交；上传 pending 窗口内保持可恢复。 */
@@ -240,6 +259,20 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		currentReferenceFiles,
 		isReferenceFileLimitReached,
 	} = config
+	// The modal can resolve an asset after several renders. Keep the guard on a
+	// ref so that an old confirmation callback cannot validate against stale
+	// element/content/model state captured by its render closure.
+	const latestAssetSelectionStateRef = useLatest({
+		canvas,
+		elementId: imageElement.id,
+		elementType: imageElement.type,
+		contentId: imageElement.activeContentId ?? null,
+		modelId: config.selectedModelId,
+		maxReferenceFiles,
+		selectionPersistenceKey,
+		selectedReferenceSlot: config.selectedReferenceSlot,
+		isReferencePolicyReady,
+	})
 	const clipboardHandlersRef = useRef(handlers)
 	clipboardHandlersRef.current = handlers
 	const richClipboardSessionRef = useRef<RichMessageClipboardSession | null>(null)
@@ -294,6 +327,10 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			),
 		[currentReferenceFiles, linkedActiveImagePaths, resolveResourceReference],
 	)
+	// Keep a resolver-aware snapshot separate from the modal callback closure so
+	// an upload, linked-media toggle, or external reconciliation during the
+	// confirmation cannot write into a changed reference list.
+	const latestAssetSelectionReferencePathsRef = useLatest(effectiveCurrentReferenceFiles)
 	useEffect(() => {
 		if (!canvas) return
 		return canvas.eventEmitter.on("upload:resource-pending-change", ({ data }) => {
@@ -384,7 +421,13 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 				handlers.triggerFileSelect()
 				return
 			}
-			if (source !== REFERENCE_RESOURCE_SOURCE_TYPES.assets || readOnly || !canvas) return
+			if (
+				source !== REFERENCE_RESOURCE_SOURCE_TYPES.assets ||
+				readOnly ||
+				!canvas ||
+				!isReferencePolicyReady
+			)
+				return
 			const selectedSlot = config.selectedReferenceSlot
 			if (!selectedSlot || maxReferenceFiles === undefined || maxReferenceFiles <= 0) return
 
@@ -393,9 +436,13 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			const capturedSlot = { ...selectedSlot }
 			setAssetSelectionSlot(capturedSlot)
 			assetSelectionSessionRef.current = {
+				canvas,
 				elementId: imageElement.id,
 				contentId: imageElement.activeContentId ?? null,
+				modelId: config.selectedModelId,
+				maxReferenceFiles,
 				selectionPersistenceKey,
+				referencePaths: [...effectiveCurrentReferenceFiles],
 				slot: capturedSlot,
 			}
 			handlers.setPopoverOpen(false)
@@ -405,10 +452,13 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			canvas,
 			config.isReferenceFileLimitReached,
 			config.selectedReferenceSlot,
+			config.selectedModelId,
 			effectiveIsReferenceFileLimitReached,
+			effectiveCurrentReferenceFiles,
 			handlers,
 			imageElement.activeContentId,
 			imageElement.id,
+			isReferencePolicyReady,
 			maxReferenceFiles,
 			readOnly,
 			selectionPersistenceKey,
@@ -426,22 +476,47 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	}, [assetSelectionSlot, effectiveCurrentReferenceFiles.length, maxReferenceFiles])
 
 	const isAssetSelectionCurrent = useCallback(() => {
+		const currentState = latestAssetSelectionStateRef.current
 		const session = assetSelectionSessionRef.current
-		if (!session || !isMountedRef.current || !canvas || canvas.isDestroyed) return false
 		if (
-			session.elementId !== imageElement.id ||
-			session.selectionPersistenceKey !== selectionPersistenceKey
+			!currentState ||
+			!session ||
+			!isMountedRef.current ||
+			!currentState.canvas ||
+			currentState.canvas.isDestroyed
+		)
+			return false
+		if (session.canvas !== currentState.canvas) return false
+		if (
+			session.elementId !== currentState.elementId ||
+			session.contentId !== currentState.contentId ||
+			session.modelId !== currentState.modelId ||
+			session.maxReferenceFiles !== currentState.maxReferenceFiles ||
+			session.selectionPersistenceKey !== currentState.selectionPersistenceKey ||
+			!currentState.isReferencePolicyReady
+		)
+			return false
+		const currentReferencePaths = latestAssetSelectionReferencePathsRef.current
+		if (!currentReferencePaths) return false
+		if (
+			!areReferencePathSnapshotsEqual(
+				session.referencePaths,
+				currentReferencePaths,
+				resolveResourceReference,
+			)
 		)
 			return false
 
-		const currentElement = canvas.elementManager.getElementData(imageElement.id)
+		const currentElement = currentState.canvas.elementManager.getElementData(
+			currentState.elementId,
+		)
 		if (
-			currentElement?.type !== imageElement.type ||
-			(currentElement?.activeContentId ?? null) !== session.contentId
+			currentElement?.type !== currentState.elementType ||
+			(currentElement?.activeContentId ?? null) !== currentState.contentId
 		)
 			return false
 
-		const currentSlot = config.selectedReferenceSlot
+		const currentSlot = currentState.selectedReferenceSlot
 		return (
 			currentSlot !== null &&
 			currentSlot.slotIndex === session.slot.slotIndex &&
@@ -449,11 +524,9 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			currentSlot.path === session.slot.path
 		)
 	}, [
-		canvas,
-		config.selectedReferenceSlot,
-		imageElement.id,
-		imageElement.type,
-		selectionPersistenceKey,
+		latestAssetSelectionStateRef,
+		latestAssetSelectionReferencePathsRef,
+		resolveResourceReference,
 	])
 
 	const handleAssetsModalClose = useCallback(() => {
@@ -474,17 +547,31 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			if (!canvas || !assetSelectionSlot || assets.length === 0) {
 				throw new Error("Asset selection context is unavailable")
 			}
-			if (!isAssetSelectionCurrent()) throw new Error("Asset selection session is stale")
+			if (!isAssetSelectionCurrent()) {
+				handleAssetsModalClose()
+				throw new Error("Asset selection session is stale")
+			}
 
-			const imported = await canvas.assetImportManager.importAndConnectMany({
-				assetIds: assets.map((asset) => asset.asset_id),
-				targetElementId: imageElement.id,
-				targetKind: "image-generator",
-				slot: { kind: "reference" },
-				allowedMediaTypes: ["image"],
-				isCurrent: isAssetSelectionCurrent,
-			})
-			if (!isAssetSelectionCurrent()) throw new Error("Asset selection session is stale")
+			let imported: CanvasAssetImportResult[]
+			try {
+				imported = await canvas.assetImportManager.importAndConnectMany({
+					assetIds: assets.map((asset) => asset.asset_id),
+					targetElementId: imageElement.id,
+					targetKind: "image-generator",
+					slot: { kind: "reference" },
+					allowedMediaTypes: ["image"],
+					isCurrent: isAssetSelectionCurrent,
+				})
+			} catch (error) {
+				// A stale session is terminal for this picker; ordinary import errors
+				// deliberately leave it open so the user can retry the same selection.
+				if (!isAssetSelectionCurrent()) handleAssetsModalClose()
+				throw error
+			}
+			if (!isAssetSelectionCurrent()) {
+				handleAssetsModalClose()
+				throw new Error("Asset selection session is stale")
+			}
 
 			applyImportedAssetsToImageSlots({
 				slot: assetSelectionSlot,
@@ -497,6 +584,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			assetSelectionSlot,
 			canvas,
 			currentReferenceFiles.length,
+			handleAssetsModalClose,
 			handlers,
 			imageElement.id,
 			isAssetSelectionCurrent,

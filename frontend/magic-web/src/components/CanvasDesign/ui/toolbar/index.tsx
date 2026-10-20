@@ -12,9 +12,8 @@ import {
 	Image as ImageIcon,
 	Mic,
 	Upload,
-	UsersRound,
 } from "lucide-react"
-import { ImageSparkles } from "../primitives/icons/index"
+import { ImageSparkles, AssetLibraryIcon } from "../primitives/icons/index"
 import styles from "./index.module.css"
 import { useCanvas } from "../../app/providers/CanvasProvider"
 import { useState, useCallback, useRef, type ChangeEvent } from "react"
@@ -301,7 +300,7 @@ export default function Tools() {
 		},
 		{
 			label: t("tools.assets", "素材库"),
-			icon: UsersRound,
+			icon: AssetLibraryIcon,
 			onClick: () => setAssetsVisible(true),
 		},
 		Divider,

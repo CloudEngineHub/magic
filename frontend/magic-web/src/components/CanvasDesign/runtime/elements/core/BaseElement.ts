@@ -14,7 +14,12 @@ import { normalizeSize } from "../../shared/normalize/normalizeUtils"
 /** 名称与运行状态分别布局；展示状态不进入元素名称或文件名。 */
 export interface NameLabelContent {
 	primaryText: string
-	suffix?: { text: string; inProgress?: boolean }
+	suffix?: {
+		text: string
+		inProgress?: boolean
+		/** 是否绘制状态胶囊背景，默认绘制；纯信息后缀可关闭。 */
+		showBackground?: boolean
+	}
 }
 
 /**
