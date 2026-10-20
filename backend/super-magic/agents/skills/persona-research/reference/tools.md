@@ -138,3 +138,12 @@ print(result.content)
 ## Interviewer Tools
 
 Interviewer sub-agents record rounds with `persona_chat` (`transcript_path` plus `round_number`) and close each transcript with `finish_persona_transcript`. For a follow-up you run yourself ("Ask @persona ..."), call `persona_chat` the same way with the next `round_number`, then `finish_persona_transcript` again; the transcript reopens automatically when a finished one gets a new round.
+
+## Persona Portrait Tools
+
+For photographic avatars, read [persona-portraits.md](persona-portraits.md).
+
+- `attach_persona_portrait`: `persona_id` (existing saved ID), `image_path` (successful workspace-relative generation output), optional `replace` (default false; only for a requested appearance change). Validates the raster, saves a small project-level WebP, and updates only the persona's optional `portrait` and `updated_at`. A failed call preserves the previous avatar. No study-phase transition or interview is needed.
+- `embed_persona_portraits`: `study_dir`. Embeds the panel's already bound WebP avatars into its existing `report.html`. The `report_written` event runs this automatically; call it directly only when a selected existing report needs its avatars refreshed. Repeat safely after a requested avatar replacement or report rewrite. It does not generate images, edit transcripts, change evidence, or edit templates.
+
+Print and check each result's `content`. A failed generation or attachment leaves the existing image or SVG fallback; do not promise the portrait was installed.

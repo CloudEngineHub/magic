@@ -358,6 +358,10 @@ const personaSchema = z.object({
 	schema_version: schemaVersion,
 	id: z.string().min(1),
 	name: z.string().min(1),
+	portrait: z
+		.object({ file: z.string().min(1), file_id: optionalString, updated_at: z.string() })
+		.optional()
+		.catch(undefined),
 	tagline: optionalString,
 	tags: z.array(z.string()).optional().catch(undefined),
 	tier: z.enum(["generated", "evidence_based", "imported", "manual"]).catch("generated"),

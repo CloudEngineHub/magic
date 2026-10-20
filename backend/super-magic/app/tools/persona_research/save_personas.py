@@ -79,6 +79,7 @@ from app.tools.persona_research.study_files import (
     read_json_file,
     resolve_study_dir,
     save_study,
+    transcript_lock,
     workspace_relative,
     write_json_file,
 )
@@ -226,7 +227,13 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
             )
 
             for pid, persona in files:
-                await write_json_file(base / PERSONAS_DIR / f"{pid}.json", persona)
+                path = base / PERSONAS_DIR / f"{pid}.json"
+                async with transcript_lock(path):
+                    # 另一话题可能刚完成生图绑定；保存研究内容不得写回较早的头像快照。
+                    current = await read_json_file(path)
+                    if current and "portrait" in current:
+                        persona["portrait"] = current["portrait"]
+                    await write_json_file(path, persona)
             selection = [
                 {"persona_id": row["persona_id"], "reason": item.reason.strip(), "reused": row["reused"], "segment": item.segment}
                 for row, item in zip(summary, params.personas)

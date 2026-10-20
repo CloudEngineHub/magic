@@ -74,8 +74,12 @@ Before delivery, read only the title, opening and section headings once. Can the
 - Fill each slot with one image that fits this study, or delete the whole figure. A finished report never contains `.image-placeholder` or a broken image.
 - Search with `image_search` for real products, places, and settings. Use the returned image URL as `src` and caption it with the source site, linked to its page.
 - Generate with `generate_images` for concepts and scenes no photo shows. Save into `studies/<slug>/images/`, use `src="images/<file>"`, and caption it as an AI-generated illustration.
-- Images illustrate; they are never evidence. Do not cite them as `[S#]` or `[Q#]` or base claims on them. Never generate a real person or a real brand's product, and skip photos of identifiable private people. Do not generate persona portraits for report image slots. Separately requested fictional persona portraits follow [persona-portraits.md](persona-portraits.md) and are delivered as standalone files; they do not replace the template's scripted portraits.
+- Images illustrate; they are never evidence. Do not cite them as `[S#]` or `[Q#]` or base claims on them. Never generate a real person, a real brand's product, or persona portraits for decorative image slots (requested fictional avatars follow persona-portraits.md), and skip photos of identifiable private people.
 - Per report: at most 4 images, one `image_search` call, and one `generate_images` call. On an error or no fitting result, delete the slot instead of retrying.
+
+## Bound Persona Avatars
+
+After writing the report, send `update_study` event `report_written` as usual; it automatically embeds the panel's bound portraits. For a specifically requested update to an existing report, `embed_persona_portraits` can also be called directly. Read [persona-portraits.md](persona-portraits.md) for generation and binding. This tool adds only a portable snapshot of the panel's already bound images; preserve the template's scripts, AI-simulation disclosure, and SVG fallback. On each existing portrait element keep `data-persona` and add `data-persona-id` with its saved ID. Do not place avatars in decorative image slots or generate them again for the report. A template with no persona elements needs no new ones.
 
 ## Creating or Changing Templates
 
