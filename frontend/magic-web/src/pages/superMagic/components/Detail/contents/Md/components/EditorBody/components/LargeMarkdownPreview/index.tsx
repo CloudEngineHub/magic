@@ -34,6 +34,10 @@ import {
 } from "../../largeMarkdown"
 import SearchWorker from "./largeMarkdownSearch.worker?worker"
 import { searchMarkdown, type MarkdownSearchResult } from "./largeMarkdownSearch"
+// This preview renders the SimpleEditor markup contract, so it must own the same stylesheet
+// set. Relying on the lazily loaded rich editor to inject them left the wrapper at
+// `height: auto`, which collapsed the Virtuoso scroller to 0px on a direct large-file preview.
+import "@/components/tiptap-templates/simple/simple-editor-styles"
 import "@/components/tiptap-templates/simple/components/SearchAndReplace/search-and-replace.scss"
 
 interface LargeMarkdownPreviewProps {
