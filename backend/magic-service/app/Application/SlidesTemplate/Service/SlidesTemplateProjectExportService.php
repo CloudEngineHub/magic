@@ -9,7 +9,6 @@ namespace App\Application\SlidesTemplate\Service;
 
 use App\Application\SlidesTemplate\DTO\SlidesTemplateProjectExportResult;
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
-use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateDataIsolation;
 use App\Domain\SlidesTemplate\Entity\SlidesTemplateEntity;
@@ -143,7 +142,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
             );
             // ExportWorkspaceRequest 只描述导出输入输出，实际文件打包由 Sandbox/本地导出器完成。
             $response = $this->workspaceExporter->export(
-                ContactDataIsolation::create($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId()),
+                $this->createContactDataIsolationByUser($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId()),
                 $sandboxId,
                 $request,
             );
@@ -321,7 +320,7 @@ final class SlidesTemplateProjectExportService extends AbstractAppService
         }
 
         $topic->setSandboxId($sandboxId);
-        $contactIsolation = ContactDataIsolation::create($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId());
+        $contactIsolation = $this->createContactDataIsolationByBase($dataIsolation);
         // 初始化任务和 Agent 上下文，确保 Sandbox 拥有导出所需的工作区文件。
         $task = $this->taskDomainService->initDefaultTask($contactIsolation, $topic, self::EXPORT_PROMPT);
         $context = $this->agentDomainService->buildInitAgentContext($contactIsolation, $project, $topic, $task, $sandboxId, true);

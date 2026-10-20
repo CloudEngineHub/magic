@@ -46,6 +46,7 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
@@ -55,6 +56,8 @@ use function Hyperf\Translation\trans;
 
 class TaskFileDomainService
 {
+    public const URL_EXPIRES = 3600;
+
     // File move operation constants
     private const FILE_MOVE_LOCK_PREFIX = 'file_move_operation';
 
@@ -66,8 +69,6 @@ class TaskFileDomainService
 
     // File URL cache constants
     private const FILE_URL_CACHE_PREFIX = 'super_agent:file_url:';
-
-    public const URL_EXPIRES = 3600;
 
     private const CACHE_TTL = 3540;
 
@@ -1580,6 +1581,7 @@ class TaskFileDomainService
         ProjectEntity $sourceProject,
         ProjectEntity $targetProject,
         int $targetParentId,
+        DataIsolation $sourceDataIsolation,
         array $keepBothFileIds = []
     ): void {
         if ($targetParentId <= 0) {
@@ -1695,7 +1697,8 @@ class TaskFileDomainService
                 $targetProject,
                 $targetFileKey,
                 $targetFileName,
-                $targetParentId
+                $targetParentId,
+                $sourceDataIsolation
             );
 
             Db::commit();
@@ -1733,6 +1736,7 @@ class TaskFileDomainService
         ProjectEntity $sourceProject,
         ProjectEntity $targetProject,
         int $targetParentId,
+        DataIsolation $sourceDataIsolation,
         array $keepBothFileIds = []
     ): TaskFileEntity {
         if ($targetParentId <= 0) {
@@ -1834,7 +1838,8 @@ class TaskFileDomainService
                 $fileEntity,
                 $sourceProject,
                 $targetProject,
-                $targetFileKey
+                $targetFileKey,
+                $sourceDataIsolation
             );
 
             // Create new file record
@@ -1912,7 +1917,8 @@ class TaskFileDomainService
         ProjectEntity $targetProject,
         string $targetFileKey,
         string $targetFileName,
-        int $targetParentId
+        int $targetParentId,
+        DataIsolation $sourceDataIsolation
     ): void {
         try {
             $sameProject = $sourceProject->getId() === $targetProject->getId();
@@ -1932,7 +1938,8 @@ class TaskFileDomainService
                     $fileEntity,
                     $sourceProject,
                     $targetProject,
-                    $targetFileKey
+                    $targetFileKey,
+                    $sourceDataIsolation
                 );
             }
 
@@ -2916,7 +2923,7 @@ class TaskFileDomainService
      * @return array<int, int> source file ID => fork file ID
      * @throws Throwable
      */
-    public function migrateProjectFile(DataIsolation $dataIsolation, ProjectEntity $sourceProjectEntity, ProjectEntity $forkProjectEntity, ProjectForkEntity $projectForkRecordEntity, ?array $fileIds = null): array
+    public function migrateProjectFile(DataIsolation $dataIsolation, ProjectEntity $sourceProjectEntity, ProjectEntity $forkProjectEntity, ProjectForkEntity $projectForkRecordEntity, DataIsolation $targetDataIsolation, ?array $fileIds = null): array
     {
         // 初始化基本参数
         $pageSize = 200; // Process 200 files at a time
@@ -2943,17 +2950,12 @@ class TaskFileDomainService
             return [];
         }
 
-        // 设置用户上下文
-        // Per-call user identity now flows through DataIsolation; the
-        // authorization token is fetched once from the magic_tokens
-        // stable user-token table and reused for every gateway call in
-        // this method's body. Capturing $userCtx in a local variable
-        // here mirrors the previous setUserContext()/clearUserContext()
-        // lifecycle (set at top of the loop, cleared at the end).
-        $userCtx = DataIsolation::create(
-            $forkProjectEntity->getUserOrganizationCode(),
-            $forkProjectEntity->getUserId()
-        );
+        // fork 网关操作使用目标项目身份，由应用层预先准备授权。
+        if ($targetDataIsolation->getCurrentOrganizationCode() !== $forkProjectEntity->getUserOrganizationCode()
+            || $targetDataIsolation->getCurrentUserId() !== $forkProjectEntity->getUserId()) {
+            throw new InvalidArgumentException('文件迁移必须传入目标项目用户的数据隔离对象');
+        }
+        $userCtx = $targetDataIsolation;
 
         // 根节点单独处理
         $sourceRootFileId = $this->findOrCreateProjectRootDirectory($sourceProjectEntity->getId(), $sourceProjectEntity->getWorkDir(), $sourceProjectEntity->getUserId(), $sourceProjectEntity->getUserOrganizationCode(), $sourceProjectEntity->getUserOrganizationCode());
@@ -3967,7 +3969,7 @@ class TaskFileDomainService
             $fileEntity->setDisplayConfig(! empty($taskFileEntity->getDisplayConfig()) ? $taskFileEntity->getDisplayConfig() : '');
             $fileEntity->setUpdatedAt($currentTime);
 
-            $savedEntity = Db::transaction(function () use (
+            return Db::transaction(function () use (
                 $fileEntity,
                 $beforeEntity,
                 $isNewFile,
@@ -4022,8 +4024,6 @@ class TaskFileDomainService
 
                 return $saved;
             });
-
-            return $savedEntity;
         } finally {
             if (! $this->locker->release($lockKey, $lockOwner)) {
                 $this->logger->warning('Failed to release project file node upsert lock', [
@@ -4702,7 +4702,8 @@ class TaskFileDomainService
         TaskFileEntity $fileEntity,
         ProjectEntity $sourceProject,
         ProjectEntity $targetProject,
-        string $targetPath
+        string $targetPath,
+        DataIsolation $sourceDataIsolation
     ): void {
         if ($sourceProject->getUserOrganizationCode() === $targetProject->getUserOrganizationCode()) {
             // Same organization: use copy operation
@@ -4715,10 +4716,11 @@ class TaskFileDomainService
             );
         } else {
             // Different organization: use sandbox gateway for cross-organization copy
-            $copyUserCtx = DataIsolation::create(
-                $sourceProject->getUserOrganizationCode(),
-                $sourceProject->getUserId()
-            );
+            if ($sourceDataIsolation->getCurrentOrganizationCode() !== $sourceProject->getUserOrganizationCode()
+                || $sourceDataIsolation->getCurrentUserId() !== $sourceProject->getUserId()) {
+                throw new InvalidArgumentException('跨组织文件操作必须传入源项目用户的数据隔离对象');
+            }
+            $copyUserCtx = $sourceDataIsolation;
             $copyResult = $this->sandboxGateway->copyFiles(
                 $copyUserCtx,
                 [
@@ -4768,7 +4770,8 @@ class TaskFileDomainService
         TaskFileEntity $fileEntity,
         ProjectEntity $sourceProject,
         ProjectEntity $targetProject,
-        string $targetPath
+        string $targetPath,
+        DataIsolation $sourceDataIsolation
     ): void {
         if ($sourceProject->getUserOrganizationCode() === $targetProject->getUserOrganizationCode()) {
             // Same organization: use efficient rename operation
@@ -4781,10 +4784,11 @@ class TaskFileDomainService
             );
         } else {
             // Different organization: use sandbox gateway for cross-organization copy
-            $copyUserCtx = DataIsolation::create(
-                $sourceProject->getUserOrganizationCode(),
-                $sourceProject->getUserId()
-            );
+            if ($sourceDataIsolation->getCurrentOrganizationCode() !== $sourceProject->getUserOrganizationCode()
+                || $sourceDataIsolation->getCurrentUserId() !== $sourceProject->getUserId()) {
+                throw new InvalidArgumentException('跨组织文件操作必须传入源项目用户的数据隔离对象');
+            }
+            $copyUserCtx = $sourceDataIsolation;
             $copyResult = $this->sandboxGateway->copyFiles(
                 $copyUserCtx,
                 [

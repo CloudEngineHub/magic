@@ -104,7 +104,7 @@ class SandboxPreWarmAppService extends AbstractAppService
         }
 
         // 创建 DataIsolation 对象
-        $dataIsolation = DataIsolation::simpleMake(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userId
         );
@@ -351,7 +351,7 @@ class SandboxPreWarmAppService extends AbstractAppService
         ));
 
         // 创建 DataIsolation 对象
-        $dataIsolation = DataIsolation::simpleMake(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userId
         );
@@ -462,7 +462,7 @@ class SandboxPreWarmAppService extends AbstractAppService
         ));
 
         // 创建 DataIsolation
-        $dataIsolation = DataIsolation::simpleMake(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userId
         );

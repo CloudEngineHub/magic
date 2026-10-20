@@ -1309,7 +1309,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $authorization = $dataIsolation->getUserAuthorizationToken();
 
-        if ($userId !== null && $userId !== '') {
+        if ($userId !== '') {
             $headers['magic-user-id'] = $userId;
         }
         if ($organizationCode !== '') {

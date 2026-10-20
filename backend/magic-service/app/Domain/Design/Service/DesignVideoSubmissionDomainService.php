@@ -7,10 +7,10 @@ declare(strict_types=1);
 
 namespace App\Domain\Design\Service;
 
+use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Design\Contract\VideoGatewayPayloadBuilderInterface;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
-use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -33,13 +33,6 @@ readonly class DesignVideoSubmissionDomainService
      */
     public function submit(DesignGenerationTaskEntity $entity): array
     {
-        if ($entity->getGenerationType() === DesignGenerationType::CANVAS_COMPOSITION) {
-            $service = $this->canvasCompositionService ?? di(DesignCanvasCompositionSubmissionService::class);
-            return $service->submit(
-                DesignDataIsolation::create($entity->getOrganizationCode(), $entity->getUserId()),
-                $entity,
-            );
-        }
         try {
             $result = $this->videoGatewayClient->submitVideo(
                 $this->payloadBuilder->build($entity),
@@ -79,15 +72,28 @@ readonly class DesignVideoSubmissionDomainService
     /** 查询 Design 视频任务对应的业务执行器。 */
     public function query(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): array
     {
-        if ($entity->getGenerationType() === DesignGenerationType::CANVAS_COMPOSITION) {
-            $service = $this->canvasCompositionService ?? di(DesignCanvasCompositionSubmissionService::class);
-            return $service->query($dataIsolation, $entity);
-        }
-
         return $this->videoGatewayClient->queryVideo($entity->getOperationId(), [
             'organization_code' => $entity->getOrganizationCode(),
             'user_id' => $entity->getUserId(),
         ]);
+    }
+
+    /** 提交画布合成任务，调用方必须提供已准备的用户上下文。 */
+    public function submitCanvasComposition(DesignGenerationTaskEntity $entity, ContactDataIsolation $contactIsolation): array
+    {
+        $service = $this->canvasCompositionService ?? di(DesignCanvasCompositionSubmissionService::class);
+        return $service->submit(
+            DesignDataIsolation::create($entity->getOrganizationCode(), $entity->getUserId()),
+            $entity,
+            $contactIsolation,
+        );
+    }
+
+    /** 查询画布合成任务，复用应用边界准备的用户上下文。 */
+    public function queryCanvasComposition(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, ContactDataIsolation $contactIsolation): array
+    {
+        $service = $this->canvasCompositionService ?? di(DesignCanvasCompositionSubmissionService::class);
+        return $service->query($dataIsolation, $entity, $contactIsolation);
     }
 
     public function estimate(array $payload, array $businessParams): array

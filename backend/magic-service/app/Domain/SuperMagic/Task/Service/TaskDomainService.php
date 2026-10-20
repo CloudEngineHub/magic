@@ -464,13 +464,13 @@ class TaskDomainService
         // Always get task entity to obtain project_id and user_id if needed
         $taskEntity = $this->taskRepository->getTaskById($taskId);
 
-        // Process user ID: Priority use user ID from DataIsolation, if null use from task
+        // 优先使用隔离对象身份；无身份时从任务补齐，最终保留系统身份兜底。
         $userId = $dataIsolation->getCurrentUserId();
         if (empty($userId) && $taskEntity) {
             $userId = $taskEntity->getUserId();
         }
 
-        $taskFileEntity->setUserId($userId ?? 'system');
+        $taskFileEntity->setUserId($userId !== '' ? $userId : 'system');
         $taskFileEntity->setOrganizationCode($dataIsolation->getCurrentOrganizationCode());
         $taskFileEntity->setTopicId($topicId);
         $taskFileEntity->setTaskId($taskId);
