@@ -1160,7 +1160,7 @@ function Topic({
 									documentFlowFullscreen
 										? "min-h-dvh w-full flex-1 overflow-visible bg-transparent"
 										: shouldRenderFullscreenFileOnly
-											? "h-full min-h-0 w-full flex-1 overflow-hidden bg-transparent"
+											? "h-full min-h-0 w-full flex-1 overflow-hidden rounded-b-lg bg-transparent"
 											: "mr-2 flex-1 overflow-hidden rounded-lg transition-all duration-300 ease-in-out",
 									!isFullscreenMode &&
 										!shouldRenderFullscreenFileOnly &&

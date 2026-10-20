@@ -515,6 +515,9 @@ const FilesViewer = memo(
 				isFullscreenMode || Boolean(isFullscreen) || fullscreenFileId === currentTab?.id
 			const isDocumentFlowFullscreen =
 				Boolean(props.documentFlowFullscreen) && effectiveIsFullscreen
+			const isShareFullscreen =
+				Boolean(props.isFileShare && props.hideTabBar && effectiveIsFullscreen) &&
+				!isDocumentFlowFullscreen
 			const currentRenderProps = useMemo(
 				() => ({
 					isFullscreen: effectiveIsFullscreen,
@@ -766,8 +769,15 @@ const FilesViewer = memo(
 									"flex h-full flex-col",
 									effectiveIsFullscreen &&
 										FILE_VIEWER_FULLSCREEN_VIEWPORT_CLASS_NAME,
+									// Shared file previews use a body portal, so the shell itself must clip
+									// the bottom corners instead of relying on the source Detail wrapper.
+									effectiveIsFullscreen &&
+										(isShareFullscreen
+											? "overflow-hidden rounded-b-lg"
+											: "rounded-none"),
 								),
 					)}
+					data-files-viewer-fullscreen-surface={isShareFullscreen ? "shared" : undefined}
 				>
 					<div
 						className={cn(
@@ -949,17 +959,20 @@ const FilesViewer = memo(
 					<StablePreviewPortalSurface
 						anchor={stablePreviewSurfaceAnchor}
 						borderRadius={
-							isActivePptPreview
-								? effectiveIsFullscreen
-									? "0px"
-									: props.hideTabBar
-										? "0.5rem"
-										: "0px 0px 0.5rem 0.5rem"
-								: "0px"
+							isShareFullscreen
+								? "0px 0px 0.5rem 0.5rem"
+								: isActivePptPreview
+									? effectiveIsFullscreen
+										? "0px"
+										: props.hideTabBar
+											? "0.5rem"
+											: "0px 0px 0.5rem 0.5rem"
+									: "0px"
 						}
 						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStableTabs}
 						isFullscreen={effectiveIsFullscreen}
 						isPpt={isActivePptPreview}
+						preserveFullscreenRadius={isShareFullscreen}
 						visible={hasActiveStableTab && !props.isPreviewCollapsed}
 					>
 						{stableCachedTabs}
