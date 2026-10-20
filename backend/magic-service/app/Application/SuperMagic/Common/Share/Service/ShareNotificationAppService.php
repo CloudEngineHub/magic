@@ -14,6 +14,9 @@ use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\SuperMagic\Common\Share\Constant\ResourceType;
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
+use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 
 /** 将项目、文件团队分享转换为统一站内信事件。 */
@@ -21,10 +24,14 @@ final readonly class ShareNotificationAppService
 {
     private const RECIPIENT_SNAPSHOT = 'notification_recipient_user_ids';
 
+    private const RECIPIENT_BATCH_SIZE = 500;
+
     public function __construct(
         private NotificationEventPublisherInterface $publisher,
         private MagicUserDomainService $users,
         private MagicDepartmentUserDomainService $departmentUsers,
+        private ?ProjectDomainService $projectDomainService = null,
+        private ?MagicClawDomainService $magicClawDomainService = null,
     ) {
     }
 
@@ -70,30 +77,36 @@ final readonly class ShareNotificationAppService
         $kind = $this->resourceKind($after);
         $payload = [
             'share_id' => (string) $after->getId(),
-            'resource_name' => $after->getResourceName(),
+            'resource_name' => $after->getResourceName() !== '' ? $after->getResourceName() : $after->getResourceId(),
             'share_scope' => $after->getShareRange() === 'all' ? '全员' : '指定成员/部门',
             'sharer_name' => $sharerName !== '' ? $sharerName : $this->resolveSharerName($after),
             'resource_id' => $after->getResourceId(),
             'resource_type' => $kind,
         ];
-        $recipients = [];
-        foreach ($newRecipients as $userId) {
-            $recipients[] = new EventRecipient(
-                $userId,
-                sprintf('share:%s:%s:%s:%s', $after->getOrganizationCode(), $kind, $after->getResourceId(), $userId),
-            );
-        }
+        [$projectMode, $resourceCode] = $this->resolveProjectNotificationContext($after->getProjectId());
+        $payload['project_mode'] = $projectMode;
+        $payload['resource_code'] = $resourceCode;
 
-        $this->publisher->publish(new EventEnvelope(
-            eventId: (string) IdGenerator::getSnowId(),
-            eventType: $eventType,
-            occurredAt: date('Y-m-d H:i:s'),
-            producer: 'super_magic.share',
-            organizationCode: $after->getOrganizationCode(),
-            source: new EventSource('share', $kind, $after->getResourceId()),
-            recipients: $recipients,
-            payload: $payload,
-        ));
+        foreach (array_chunk($newRecipients, self::RECIPIENT_BATCH_SIZE) as $recipientBatch) {
+            $recipients = [];
+            foreach ($recipientBatch as $userId) {
+                $recipients[] = new EventRecipient(
+                    $userId,
+                    sprintf('share:%s:%s:%s:%s:%s', $after->getOrganizationCode(), $kind, $after->getResourceId(), (string) $after->getId(), $userId),
+                );
+            }
+
+            $this->publisher->publish(new EventEnvelope(
+                eventId: (string) IdGenerator::getSnowId(),
+                eventType: $eventType,
+                occurredAt: date('Y-m-d H:i:s'),
+                producer: 'super_magic.share',
+                organizationCode: $after->getOrganizationCode(),
+                source: new EventSource('share', $kind, $after->getResourceId()),
+                recipients: $recipients,
+                payload: $payload,
+            ));
+        }
     }
 
     /** 在分享撤回成功后发布撤回事件。 */
@@ -122,9 +135,13 @@ final readonly class ShareNotificationAppService
     {
         $organizationCode = $share->getOrganizationCode();
         $userIds = [];
-        $activeUsers = $this->users->getActiveUsersByOrganization($organizationCode);
         if ($share->getShareRange() === 'all') {
-            $userIds = array_keys($activeUsers);
+            $cursor = null;
+            do {
+                $batch = $this->users->getActiveUserIdsByOrganization($organizationCode, $cursor, self::RECIPIENT_BATCH_SIZE);
+                $userIds = array_merge($userIds, $batch);
+                $cursor = $batch === [] ? null : $batch[array_key_last($batch)];
+            } while ($batch !== [] && count($batch) === self::RECIPIENT_BATCH_SIZE);
         } elseif ($share->getShareRange() === 'designated') {
             $userTargetIds = [];
             $departmentIds = [];
@@ -153,6 +170,7 @@ final readonly class ShareNotificationAppService
                     }
                 }
             }
+            $activeUsers = $this->users->getActiveUsersByIds($organizationCode, array_unique($userIds));
             $userIds = array_values(array_intersect(array_unique($userIds), array_keys($activeUsers)));
         }
         return array_values(array_unique(array_filter(array_map('strval', $userIds))));
@@ -194,7 +212,31 @@ final readonly class ShareNotificationAppService
 
     private function resolveSharerName(ResourceShareEntity $share): string
     {
-        $users = $this->users->getActiveUsersByOrganization($share->getOrganizationCode());
+        $users = $this->users->getActiveUsersByIds($share->getOrganizationCode(), [$share->getCreatedUid()]);
         return ($users[$share->getCreatedUid()] ?? null)?->getNickname() ?? $share->getCreatedUid();
+    }
+
+    /** @return array{string, string} [project_mode, resource_code] */
+    private function resolveProjectNotificationContext(?string $projectId): array
+    {
+        $projectId = (int) $projectId;
+        if ($projectId <= 0 || $this->projectDomainService === null) {
+            return ['', ''];
+        }
+
+        try {
+            $project = $this->projectDomainService->getProjectNotUserId($projectId);
+            $projectMode = trim((string) ($project?->getProjectMode() ?? ''));
+            if ($projectMode !== ProjectMode::MAGICLAW->value || $this->magicClawDomainService === null) {
+                return [$projectMode, ''];
+            }
+
+            return [
+                $projectMode,
+                trim($this->magicClawDomainService->getByProjectId($projectId)?->getCode() ?? ''),
+            ];
+        } catch (\Throwable) {
+            return ['', ''];
+        }
     }
 }
