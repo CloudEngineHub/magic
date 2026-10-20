@@ -2,6 +2,14 @@ import { toast } from "sonner"
 import type { CanvasAssetComplianceState } from "../../../public/magic-types"
 import type { TFunction } from "../../../public/i18n-types"
 
+export type SeedanceCompliancePreflightBlockReason =
+	| "agreement-cancelled"
+	| "agreement-error"
+	| "source-changed"
+	| "compliance-failed"
+	| "compliance-unavailable"
+	| "compliance-timeout"
+
 export function toastAssetComplianceFailureState(
 	t: TFunction,
 	state: Pick<CanvasAssetComplianceState, "status" | "failedReason">,
@@ -58,4 +66,23 @@ export function toastAssetComplianceUnavailable(t: TFunction): void {
 			defaultValue: "当前媒体无法发起合规校验",
 		}),
 	)
+}
+
+/** Show the same failure language for the submit-time strict compliance gate. */
+export function toastSeedanceCompliancePreflightBlocked(
+	t: TFunction,
+	result: {
+		reason: SeedanceCompliancePreflightBlockReason
+		failedReason?: string | null
+	},
+): void {
+	if (result.reason === "agreement-cancelled") return
+	if (result.reason === "compliance-failed") {
+		toastAssetComplianceFailureState(t, {
+			status: "FAILED",
+			failedReason: result.failedReason ?? null,
+		})
+		return
+	}
+	toastAssetComplianceUnavailable(t)
 }

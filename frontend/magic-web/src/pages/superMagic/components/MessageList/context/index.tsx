@@ -1,8 +1,8 @@
 import { Topic } from "@/pages/superMagic/pages/Workspace/types"
-import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { createContext, type PropsWithChildren, type ReactNode, useContext } from "react"
 import defaultProjectFilesStore, { type ProjectFilesStore } from "@/stores/projectFiles"
 import type { FileBundleDownloadCapability } from "@/pages/superMagic/hooks/useFileBundleDownload"
+import type { ActiveDetailTabType } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
 
 export interface MessageListContextState {
 	/** 打开当前话题的文件管理器，并显示一次性整理引导。 */
@@ -39,6 +39,12 @@ export interface MessageListContextState {
 	showTaskCompletedBadge?: boolean
 	/** 当前上下文的 projectFilesStore。每个 MessageListProvider 都必须传入对应场景实例。 */
 	projectFilesStore: ProjectFilesStore
+	/** 当前详情面板中激活的文件；缓存但隐藏的文件 Tab 不据此显示定位入口。 */
+	activeFileId?: string | null
+	/** 当前可见详情 Tab 类型。 */
+	activeDetailTabType?: ActiveDetailTabType
+	/** 详情面板是否实际可见。 */
+	detailPanelVisible?: boolean
 }
 
 const MessageListContext = createContext<MessageListContextState>({

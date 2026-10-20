@@ -14,6 +14,7 @@ function resolve(
 	return resolveVideoDisplayState({
 		content,
 		isTemporary: false,
+		isComplianceActive: false,
 		hasActiveGeneration: false,
 		hasActiveGenerationTask: false,
 		isCompositionActive: false,
@@ -73,6 +74,15 @@ describe("resolveVideoDisplayState", () => {
 				{ isReplacementUploading: true, hasPreview: true },
 			),
 		).toMatchObject({ status: "uploading", surface: "placeholder" })
+	})
+
+	it("shows the compliance placeholder before generation starts", () => {
+		expect(
+			resolve(
+				{ src: "./videos/original.mp4", status: GenerationStatus.Completed },
+				{ isComplianceActive: true, hasPreview: true },
+			),
+		).toMatchObject({ status: "compliance", surface: "placeholder" })
 	})
 
 	it("keeps an existing preview while generation or composition is active", () => {

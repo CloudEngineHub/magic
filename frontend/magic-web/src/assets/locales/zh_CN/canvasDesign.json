@@ -127,6 +127,9 @@
 		"mediaKindVideo": "视频",
 		"reorderLinkedText": "调整关联文本顺序"
 	},
+	"contextMenu": {
+		"seedanceCompliance": "Seedance 合规校验"
+	},
 	"dropOverlay": {
 		"loading": "加载中",
 		"referenceImageLimitReached": "参考图数量已达上限",
@@ -553,7 +556,7 @@
 		"restoreDraft": "取消废稿标记",
 		"restoreDraftDescription": "恢复正常显示",
 		"saveToAssets": "保存到素材库",
-		"seedanceCompliance": "Seedance 2.0 合规校验",
+		"seedanceCompliance": "Seedance 合规校验",
 		"show": "显示",
 		"unlock": "解锁"
 	},
@@ -608,6 +611,7 @@
 		"current": "当前",
 		"description": "修改图片标题和各版本文件名，确认后生效。",
 		"elementName": "元素名称",
+		"emptyName": "元素名称不能为空",
 		"expectedFile": "预计文件名",
 		"expectedName": "预计名称",
 		"failed": "重命名失败",
@@ -641,7 +645,7 @@
 		"stop": "停止后续操作",
 		"succeeded": "{{count}} 个文件已改名",
 		"syncFileName": "修改标题时同步修改文件名",
-		"title": "重命名图片",
+		"title": "重命名",
 		"titleChanged": "标题待修改",
 		"titleOnly": "仅修改元素名称",
 		"titleSaved": "元素名称已保存",
@@ -899,6 +903,7 @@
 		"defaultName": "三角形"
 	},
 	"video": {
+		"complianceChecking": "正在校验",
 		"defaultName": "视频生成器",
 		"empty": "请发送生成视频的指令",
 		"fileMissing": "视频文件不存在",
@@ -943,6 +948,7 @@
 		"emptyAudio": "未关联音频",
 		"emptyVideos": "暂无关联视频",
 		"mergeCancelled": "已取消合并",
+		"mergeStoryboard": "合并分镜",
 		"mergeVideos": "合并视频",
 		"unused": "未使用",
 		"usedAudio": "使用音频",
@@ -974,6 +980,9 @@
 		"promptPlaceholderReferenceVideoTokenLabel": "视频",
 		"quality": "画质",
 		"quickEdit": "快捷编辑",
+		"quickEditSourceLimitReached": "当前模式无法容纳快捷编辑的源视频，请先调整其他素材",
+		"quickEditSourceModeUnsupported": "当前模式不支持关联源视频，无法保留快捷编辑",
+		"quickEditSourceModelUnsupported": "当前模型不支持关联源视频，无法保留快捷编辑",
 		"reEditFromSaved": "重新编辑",
 		"reEnter": "重新输入",
 		"referenceAsset": "全能模式",
@@ -990,7 +999,7 @@
 		"referenceVideoMaxReached": "参考视频最多可上传 {{max}} 个",
 		"removeSlotResource": "移除该参考资源",
 		"resolution": "分辨率",
-		"sendButtonEstimatedPoints": "预计{{points}}",
+		"sendButtonEstimatedPoints": "预计 {{points}}",
 		"sendConfirmDescription": "本次任务预计消耗约 {{points}} 积分，是否确认执行？",
 		"sendConfirmOk": "确认执行",
 		"sendConfirmSkip": "下次不再提示",

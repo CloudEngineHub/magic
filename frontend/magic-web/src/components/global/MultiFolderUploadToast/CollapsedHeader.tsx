@@ -76,6 +76,10 @@ export const CollapsedHeader: React.FC<CollapsedHeaderProps> = observer(
 		const hasCreatingFolderTasks = activeTasks.some(
 			(task) => task.state.currentPhase === "creating_folders",
 		)
+		// 字节上传已结束但任务仍未完成，说明在等保存/画布消费方处理
+		const allActiveUploadsProcessed =
+			activeTasks.length > 0 &&
+			activeTasks.every((task) => task.state.processedFiles >= task.state.totalFiles)
 		const normalizedProgress = Number.isFinite(globalProgress)
 			? Math.min(Math.max(globalProgress, 0), 100)
 			: 0
@@ -126,6 +130,20 @@ export const CollapsedHeader: React.FC<CollapsedHeaderProps> = observer(
 						),
 						text: t("folderUpload.collapsed.creatingFolders"),
 						progress: `${uploadInfo.totalProcessedFiles}/${uploadInfo.totalFiles}`,
+					}
+				} else if (allActiveUploadsProcessed) {
+					// 上传已结束但任务还在收尾，避免提前显示“上传完成”
+					return {
+						icon: (
+							<span className={styles.progressIcon}>
+								<ProgressIndicator
+									icon={<Upload />}
+									label={t("folderUpload.collapsed.processing")}
+								/>
+							</span>
+						),
+						text: t("folderUpload.collapsed.processing"),
+						progress: fileCount,
 					}
 				} else {
 					// 上传中状态

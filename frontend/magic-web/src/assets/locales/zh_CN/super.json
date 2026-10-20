@@ -2951,6 +2951,7 @@
 			"completedWithErrors": "上传完成，{{count}} 个失败",
 			"creatingFolders": "正在创建目录结构",
 			"paused": "已暂停",
+			"processing": "处理中",
 			"uploading": "上传中"
 		},
 		"confirmations": {
