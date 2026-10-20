@@ -6394,6 +6394,7 @@
 		"preserveParentPathKeepDescription": "Selected files will be stored in the target project under their original folder paths.",
 		"preserveParentPathKeepTitle": "Keep folder path",
 		"projects": "projects",
+		"resizeSidebar": "Resize sidebar",
 		"returnSearch": "Exit Search",
 		"rootDirectory": "Root",
 		"searchDirectory": "Search Directory",

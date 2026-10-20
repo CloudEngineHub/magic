@@ -6393,6 +6393,7 @@
 		"preserveParentPathKeepDescription": "所选文件将按原有文件夹路径存储到目标项目。",
 		"preserveParentPathKeepTitle": "保留文件夹路径",
 		"projects": "项目",
+		"resizeSidebar": "拖动调整侧栏宽度",
 		"returnSearch": "退出搜索",
 		"rootDirectory": "根目录",
 		"searchDirectory": "搜索文件夹",
