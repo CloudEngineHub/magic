@@ -153,10 +153,10 @@
 		"tabsAria": "消息分类",
 		"templateUnavailable": "模板暂不可用",
 		"toast": {
-			"accepted": "已接受邀请，并通知邀请人",
+			"accepted": "已接受邀请",
 			"expired": "邀请已过期，未授予权限",
 			"markAllRead": "系统通知已全部标记为已读，授权邀请仍需处理",
-			"rejected": "已拒绝邀请，并通知邀请人",
+			"rejected": "已拒绝邀请",
 			"withdrawn": "该消息已撤回"
 		}
 	},

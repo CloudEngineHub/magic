@@ -153,10 +153,10 @@
 		"tabsAria": "Message categories",
 		"templateUnavailable": "Template unavailable",
 		"toast": {
-			"accepted": "Invite accepted. The sender will be notified.",
+			"accepted": "Invite accepted.",
 			"expired": "This invite has expired. No access was granted.",
 			"markAllRead": "System notifications marked as read. Approvals still need action.",
-			"rejected": "Invite declined. The sender will be notified.",
+			"rejected": "Invite declined.",
 			"withdrawn": "This message was withdrawn"
 		}
 	},
