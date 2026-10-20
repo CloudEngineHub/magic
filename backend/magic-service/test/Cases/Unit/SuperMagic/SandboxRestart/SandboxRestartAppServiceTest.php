@@ -190,6 +190,58 @@ class SandboxRestartAppServiceTest extends TestCase
         self::assertSame($target, $log->rebuildTargets[101] ?? null, '重建端口必须收到同一份目标镜像');
     }
 
+    /**
+     * 点名的沙箱只处理它所属的话题，其它话题不动。
+     */
+    public function testSandboxIdNarrowsThePlanToItsTopic(): void
+    {
+        $gateway = $this->gateway(
+            pods: [
+                $this->podArray('sandbox-101', 101, 'registry/agent:5.0.77'),
+                $this->podArray('sandbox-202', 202, 'registry/agent:5.0.77'),
+            ],
+            latestImages: self::LATEST
+        );
+        $service = $this->service($gateway, [
+            $this->topic(101, 11, 'sandbox-101'),
+            $this->topic(202, 12, 'sandbox-202'),
+        ]);
+
+        $plan = $service->plan(new SandboxRestartOptions(sandboxIds: ['sandbox-202']));
+
+        self::assertSame([202], array_map(static fn ($t) => $t->getTopicId(), $plan->getTargets()));
+    }
+
+    /**
+     * 打错一个字符必须立刻失败：这类命令最坏的失败模式是"什么都没做却看起来成功"。
+     */
+    public function testUnknownSandboxIdFailsBeforeAnythingHappens(): void
+    {
+        $gateway = $this->gateway(
+            pods: [$this->podArray('sandbox-101', 101, 'registry/agent:5.0.77')],
+            latestImages: self::LATEST
+        );
+        $service = $this->service($gateway, [$this->topic(101, 11, 'sandbox-101')]);
+
+        $this->expectExceptionMessage('typo-404');
+        $service->plan(new SandboxRestartOptions(sandboxIds: ['sandbox-101', 'typo-404']));
+    }
+
+    /**
+     * 未绑定温池的沙箱没有 owner，无法"重建"，同样要报出来而不是静默跳过。
+     */
+    public function testUnboundWarmPoolSandboxIdIsRejected(): void
+    {
+        $gateway = $this->gateway(
+            pods: [$this->warmPoolPodArray('warm-900')],
+            latestImages: self::LATEST
+        );
+        $service = $this->service($gateway, []);
+
+        $this->expectExceptionMessage('warm-900');
+        $service->plan(new SandboxRestartOptions(sandboxIds: ['warm-900']));
+    }
+
     public function testExecuteSuspendsActiveWorkBeforeDeletingPods(): void
     {
         $gateway = $this->gateway(

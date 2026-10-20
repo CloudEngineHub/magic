@@ -114,6 +114,12 @@ What happens per topic:
      cold-starting. A claimed pod always matches the target images, because the
      claim is keyed by the image pair.
 
+--sandbox-id narrows the run to the topic(s) that own the named sandboxes; every pod
+of a selected topic is still replaced (a topic with drifted duplicate pods must be
+rebuilt as a whole), and nothing else is touched -- no warm-pool or orphan cleanup.
+An id that is missing from the gateway list, or that belongs to no topic, fails the
+run before any pod is deleted.
+
 Unbound warm-pool pods are deleted without rebuild only when they still run
 outdated images; a pooled pod already on the release images is kept, because
 deleting it would just make the refill loop build the same pod again. Warm-pool
@@ -132,6 +138,7 @@ Examples:
   php bin/hyperf.php sandbox:restart-all --scope=magic-claw --code=my-claw
   php bin/hyperf.php sandbox:restart-all --force
   php bin/hyperf.php sandbox:restart-all --agent-image=repo/magic/super-magic:5.0.77 --dry-run
+  php bin/hyperf.php sandbox:restart-all --sandbox-id=971048413989916673 --agent-image=repo/magic/super-magic:5.0.77
 HELP);
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'Print the plan without deleting or rebuilding anything');
         $this->addOption('force', null, InputOption::VALUE_NONE, 'Restart even when the pod already runs the target images');
@@ -152,6 +159,13 @@ HELP);
         );
         $this->addOption('limit', null, InputOption::VALUE_OPTIONAL, 'Maximum number of topics to restart, 0 means unlimited', 0);
         $this->addOption('concurrency', null, InputOption::VALUE_OPTIONAL, 'How many topics to restart in parallel', 1);
+        $this->addOption(
+            'sandbox-id',
+            null,
+            InputOption::VALUE_REQUIRED,
+            'Only restart the topic(s) that own these sandboxes (comma separated). '
+            . 'Every pod of a selected topic is replaced, so pick one id per topic when duplicates exist.'
+        );
         $this->addOption(
             'agent-image',
             null,
@@ -271,7 +285,42 @@ HELP);
             concurrency: (int) $this->input->getOption('concurrency'),
             requestedAgentImage: $this->parseRequestedImage('agent-image'),
             requestedAgfsImage: $this->parseRequestedImage('agfs-image'),
+            sandboxIds: $this->parseSandboxIds(),
         );
+    }
+
+    /**
+     * 解析 --sandbox-id：逗号分隔，去空、去重。
+     *
+     * 这里只做"长得像不像一个 id"的校验（非空、无空白），是否存在留给用例层——
+     * 只有拿到网关清单之后才能判断 id 真假，而那时仍然在删除任何 pod 之前。
+     *
+     * @return string[]
+     */
+    private function parseSandboxIds(): array
+    {
+        $raw = $this->input->getOption('sandbox-id');
+        if ($raw === null) {
+            return [];
+        }
+
+        $ids = [];
+        foreach (explode(',', (string) $raw) as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            if (preg_match('/\s/', $part) === 1) {
+                throw new RuntimeException(sprintf('Invalid --sandbox-id value "%s": ids must not contain whitespace', $part));
+            }
+            $ids[$part] = $part;
+        }
+
+        if ($ids === []) {
+            throw new RuntimeException('--sandbox-id must not be empty when given; omit the option to restart every matching sandbox');
+        }
+
+        return array_values($ids);
     }
 
     /**
@@ -374,7 +423,14 @@ HELP);
     private function printPlan(SandboxRestartPlan $plan, SandboxRestartOptions $options): void
     {
         $target = $plan->getTarget();
+        $sandboxIds = $options->getSandboxIds();
         $this->line(sprintf('Sandbox list: %d pod(s)', $plan->getListedPods()));
+        if ($sandboxIds !== []) {
+            $this->line(sprintf(
+                'Restricted to --sandbox-id: %s (every pod of their topic is replaced)',
+                implode(', ', $sandboxIds)
+            ));
+        }
         $this->line(sprintf(
             'Target images (%s): %s',
             $target->hasSpecifiedImages() ? 'specified for this run' : 'gateway release',

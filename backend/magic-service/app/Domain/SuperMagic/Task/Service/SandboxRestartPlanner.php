@@ -46,11 +46,14 @@ class SandboxRestartPlanner
 
     private const SKIP_WARM_POOL_UP_TO_DATE = 'unbound warm-pool pod already runs the release images';
 
+    private const SKIP_NOT_SELECTED = 'not one of the sandboxes named by --sandbox-id';
+
     /**
      * @param SandboxPodSnapshot[] $pods 网关清单
      * @param array<int, SandboxTopicBinding> $bindingsByTopicId topicId => 归属信息
      * @param SandboxImageTarget $target 本次的目标镜像
      * @param int[] $scopeProjectIds 仅 Magic Claw 范围使用：允许处理的项目 id
+     * @param int[] $topicIds 只处理这些话题（来自 --sandbox-id 的解析结果）；空数组=不限定
      */
     public function plan(
         array $pods,
@@ -59,14 +62,24 @@ class SandboxRestartPlanner
         bool $force,
         SandboxRestartScope $scope,
         array $scopeProjectIds = [],
+        array $topicIds = [],
     ): SandboxRestartPlan {
         $deletions = [];
         $skipped = [];
         /** @var array<int, array{binding: SandboxTopicBinding, pods: SandboxPodSnapshot[]}> $grouped */
         $grouped = [];
         $allowedProjects = array_fill_keys(array_map('intval', $scopeProjectIds), true);
+        $allowedTopics = array_fill_keys(array_map('intval', $topicIds), true);
 
         foreach ($pods as $pod) {
+            // 点名了具体沙箱时，其余一切都是"不在本次范围"：包括别的话题、温池和孤儿。
+            // 这一步必须放在温池/孤儿分支之前——否则一次"只重启这一个"会顺手清空共享
+            // 温池或删掉无关孤儿，那是运维完全没要求的破坏性副作用。
+            if ($allowedTopics !== [] && ! $this->belongsToSelectedTopic($pod, $bindingsByTopicId, $allowedTopics)) {
+                $skipped[self::SKIP_NOT_SELECTED][] = $pod;
+                continue;
+            }
+
             // 未绑定的温池 pod 没有 owner，"重建"无从谈起。它的处置规则见
             // unboundWarmPoolDisposition()：只有确实跑着旧镜像的池 pod 才需要删掉，
             // 让补货流程用发布版本补齐；已经是最新镜像的池 pod 留着。
@@ -130,6 +143,62 @@ class SandboxRestartPlanner
             listedPods: count($pods),
             target: $target,
         );
+    }
+
+    /**
+     * 把"点名要重启的沙箱 id"解析成"要处理的话题 id"。
+     *
+     * 为什么落到话题而不是单个 pod：一个话题可能漂移出多个 pod，重建的最小正确单位
+     * 就是话题——只删其中一个 pod 会立刻留下新的漂移，正好是这条命令要消除的问题。
+     *
+     * @param SandboxPodSnapshot[] $pods
+     * @param array<int, SandboxTopicBinding> $bindingsByTopicId
+     * @param string[] $sandboxIds
+     * @return array{0: int[], 1: string[]} [选中话题 id（去重）, 无法归属到话题的沙箱 id]
+     */
+    public function resolveTopicIdsForSandboxIds(array $pods, array $bindingsByTopicId, array $sandboxIds): array
+    {
+        $wanted = array_fill_keys($sandboxIds, true);
+        $seen = [];
+        $topicIds = [];
+        $unmatched = [];
+
+        foreach ($pods as $pod) {
+            $sandboxId = $pod->getSandboxId();
+            if (! isset($wanted[$sandboxId])) {
+                continue;
+            }
+            $seen[$sandboxId] = true;
+
+            $binding = $this->resolveBinding($pod, $bindingsByTopicId);
+            if ($binding === null) {
+                // 未绑定温池 / 孤儿：没有 owner，无法"重建"，只能报出来让运维换个 id。
+                $unmatched[$sandboxId] = $sandboxId;
+                continue;
+            }
+            $topicIds[$binding->getTopicId()] = $binding->getTopicId();
+        }
+
+        // 清单里根本不存在的 id 也要报出来，否则打错一个字符会被静默当成"已处理"。
+        foreach (array_keys($wanted) as $sandboxId) {
+            if (! isset($seen[$sandboxId])) {
+                $unmatched[$sandboxId] = $sandboxId;
+            }
+        }
+
+        return [array_values($topicIds), array_values($unmatched)];
+    }
+
+    /**
+     * 该 pod 是否属于被点名的话题。
+     *
+     * @param array<int, SandboxTopicBinding> $bindingsByTopicId
+     * @param array<int, true> $allowedTopics
+     */
+    private function belongsToSelectedTopic(SandboxPodSnapshot $pod, array $bindingsByTopicId, array $allowedTopics): bool
+    {
+        $binding = $this->resolveBinding($pod, $bindingsByTopicId);
+        return $binding !== null && isset($allowedTopics[$binding->getTopicId()]);
     }
 
     /**

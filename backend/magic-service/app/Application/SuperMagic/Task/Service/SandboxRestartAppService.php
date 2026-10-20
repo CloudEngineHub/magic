@@ -93,6 +93,7 @@ readonly class SandboxRestartAppService
 
         $bindings = $this->loadBindings($pods);
         $scopeProjectIds = $this->resolveScopeProjectIds($options, $bindings);
+        $topicIds = $this->resolveSelectedTopicIds($options, $pods, $bindings);
 
         $plan = $this->planner->plan(
             pods: $pods,
@@ -101,6 +102,7 @@ readonly class SandboxRestartAppService
             force: $options->isForce(),
             scope: $options->getScope(),
             scopeProjectIds: $scopeProjectIds,
+            topicIds: $topicIds,
         );
 
         $targets = $plan->getTargetsOldestFirst();
@@ -508,6 +510,40 @@ readonly class SandboxRestartAppService
         }
 
         return null;
+    }
+
+    /**
+     * 把 --sandbox-id 点名的沙箱解析成话题集合.
+     *
+     * 写错一个字符就必须立刻失败：这类命令的失败模式是"什么都没做却看起来成功"，
+     * 等到事后 dry-run 才发现 id 根本不存在，代价是一次白跑的发布窗口。
+     *
+     * @param SandboxPodSnapshot[] $pods
+     * @param array<int, SandboxTopicBinding> $bindings
+     * @return int[] 选中话题 id；未点名任何沙箱时返回空数组（表示不限定）
+     */
+    private function resolveSelectedTopicIds(SandboxRestartOptions $options, array $pods, array $bindings): array
+    {
+        $sandboxIds = $options->getSandboxIds();
+        if ($sandboxIds === []) {
+            return [];
+        }
+
+        [$topicIds, $unmatched] = $this->planner->resolveTopicIdsForSandboxIds($pods, $bindings, $sandboxIds);
+        if ($unmatched !== []) {
+            throw new BusinessException(sprintf(
+                'These sandbox ids cannot be restarted: %s. They are missing from the sandbox gateway list, or they are unbound warm-pool/orphan pods that belong to no topic '
+                . '(run --dry-run without --sandbox-id to inspect the current list).',
+                implode(', ', $unmatched)
+            ));
+        }
+
+        $this->logger->info('[Sandbox][RestartAll] Restricted to the sandboxes named on the command line', [
+            'sandbox_ids' => $sandboxIds,
+            'topic_ids' => $topicIds,
+        ]);
+
+        return $topicIds;
     }
 
     /**
