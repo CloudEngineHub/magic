@@ -56,7 +56,7 @@ class LLMAssembler
         ];
     }
 
-    /** 输出模型流，已开始的异常必须使用SSE错误协议并结束当前响应。 */
+    /** 消费同一个上游流；下游断连由专用输出对象隔离，上游异常以SSE错误收尾。 */
     public static function createStreamResponseByChatCompletionResponse(CompletionDTO $sendMsgLLMDTO, ChatCompletionStreamResponse $chatCompletionStreamResponse): void
     {
         $startedStream = Context::get('LLMAssembler::EventStream');
@@ -219,6 +219,7 @@ class LLMAssembler
         }
     }
 
+    /** 在请求上下文中复用模型专用输出对象。 */
     private static function getEventStream(): EventStream
     {
         $key = 'LLMAssembler::EventStream';
