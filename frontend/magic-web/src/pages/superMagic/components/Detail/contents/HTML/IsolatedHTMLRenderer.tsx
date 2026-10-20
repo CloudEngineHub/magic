@@ -2797,7 +2797,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 															onLoad={handleIframeElementLoad}
 															onError={handleIframeElementError}
 															sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"
-															allow="fullscreen; autoplay; microphone; camera; picture-in-picture; encrypted-media; web-share; clipboard-write"
+															// Delegate the user-granted permission so the cross-origin shell can load the host runtime.
+															allow="fullscreen; autoplay; microphone; camera; picture-in-picture; encrypted-media; web-share; clipboard-write; local-network-access"
 															allowFullScreen
 															translate="no"
 															style={
