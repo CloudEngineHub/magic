@@ -328,6 +328,35 @@ const invalidIframeTitleOptions: MagicWidget.MountOptions = {
 
 void invalidIframeTitleOptions
 
+const hiddenTitleOptions: MagicWidget.MountOptions = {
+	page: {
+		type: "crew",
+		crewId: "crew-001",
+	},
+	config: {
+		header: {
+			title: { mode: "hidden" },
+			topicName: { mode: "current" },
+		},
+	},
+}
+
+void hiddenTitleOptions
+
+const staticTitleOptions: MagicWidget.MountOptions = {
+	page: {
+		type: "crew",
+		crewId: "crew-001",
+	},
+	config: {
+		header: {
+			title: { mode: "static", text: "Mock Assistant" },
+		},
+	},
+}
+
+void staticTitleOptions
+
 void window.MagicWidget?.setInput({
 	blocks: [
 		{

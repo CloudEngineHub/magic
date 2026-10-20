@@ -33,6 +33,34 @@ describe("resolveWidgetHeaderPresentation", () => {
 		expect(presentation.title.primary).toBe("Mock Assistant")
 	})
 
+	it("hides only the first title line and keeps the live topic name", () => {
+		const presentation = resolveWidgetHeaderPresentation({
+			fallbackTitle,
+			header: { title: { mode: "hidden" }, topicName: { mode: "current" } },
+		})
+
+		expect(presentation.visible).toBe(true)
+		expect(presentation.title).toEqual({
+			primary: "",
+			primaryVisible: false,
+			secondaryMode: "live",
+			renameEnabled: true,
+		})
+	})
+
+	it("reads a static title object without hiding the first line", () => {
+		const presentation = resolveWidgetHeaderPresentation({
+			fallbackTitle,
+			header: { title: { mode: "static", text: "Mock Assistant" } },
+		})
+
+		expect(presentation.title).toEqual({
+			primary: "Mock Assistant",
+			secondaryMode: "live",
+			renameEnabled: true,
+		})
+	})
+
 	it("keeps static and hidden topic labels out of rename", () => {
 		const staticPresentation = resolveWidgetHeaderPresentation({
 			fallbackTitle,

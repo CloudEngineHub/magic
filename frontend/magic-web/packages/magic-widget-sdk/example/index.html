@@ -522,8 +522,15 @@
 							>
 							<label>
 								Title
+								<select name="header.title.mode">
+									<option value="static">Static text</option>
+									<option value="hidden">Hidden</option>
+								</select>
+							</label>
+							<label>
+								Static title
 								<input
-									name="header.title"
+									name="header.title.text"
 									type="text"
 									placeholder="Leave empty to keep the current title"
 								/>
@@ -741,7 +748,7 @@
 					},
 					header: {
 						visible: true,
-						title: "E2E Magic Assistant",
+						title: { mode: "static", text: "E2E Magic Assistant" },
 						topicName: { mode: "current" },
 						actions: {
 							fullscreen: true,
@@ -1086,14 +1093,33 @@
 				if (control && "value" in control) control.value = value ?? ""
 			}
 
+			/** Maps a string title or a static/hidden title object back onto the example form. */
+			const readTitleFormValue = (title) => {
+				if (title && typeof title === "object") {
+					return {
+						mode: title.mode === "hidden" ? "hidden" : "static",
+						text: title.mode === "hidden" ? "" : (title.text ?? ""),
+					}
+				}
+				return { mode: "static", text: typeof title === "string" ? title : "" }
+			}
+
 			/** Builds the full UI snapshot the update button will send. Checkboxes are not applied live. */
 			const readUiConfigFromForm = () => {
-				const title = readControlValue("header.title").trim()
+				const titleMode = readControlValue("header.title.mode")
+				const titleText = readControlValue("header.title.text").trim()
 				const topicMode = readControlValue("header.topicName.mode")
 				const topicText = readControlValue("header.topicName.text").trim()
 				if (topicMode === "static" && !topicText) {
 					throw new Error("Static topic name cannot be empty")
 				}
+				// Hidden omits the first line. An empty static field keeps the title already applied.
+				const title =
+					titleMode === "hidden"
+						? { mode: "hidden" }
+						: titleText
+							? { mode: "static", text: titleText }
+							: undefined
 
 				return {
 					layout: readControlValue("layout"),
@@ -1154,7 +1180,9 @@
 					config.conversation?.previewMode ?? "switchable",
 				)
 				setChecked("header.visible", config.header?.visible)
-				setControlValue("header.title", config.header?.title ?? "")
+				const titleForm = readTitleFormValue(config.header?.title)
+				setControlValue("header.title.mode", titleForm.mode)
+				setControlValue("header.title.text", titleForm.text)
 				setControlValue(
 					"header.topicName.mode",
 					config.header?.topicName?.mode ?? "current",

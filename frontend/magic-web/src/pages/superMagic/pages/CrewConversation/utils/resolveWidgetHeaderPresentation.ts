@@ -36,16 +36,32 @@ export function resolveWidgetHeaderPresentation({
 	fallbackTitle,
 }: ResolveWidgetHeaderPresentationParams): WidgetHeaderPresentation {
 	const actions = header?.actions
-	// A whitespace-only title falls back to the shell label. Trim still cleans a padded host label.
-	const primary = header?.title?.trim() || fallbackTitle
+	const titleLine = resolveHeaderTitleLine(header?.title, fallbackTitle)
 
 	return {
 		visible: header?.visible !== false,
 		// `false` hides close, `true` forces it, and omission follows window.closable.
 		showClose: actions?.close ?? windowClosable !== false,
-		title: resolveTitlePresentation(header?.topicName, primary),
+		title: resolveTitlePresentation(header?.topicName, titleLine),
 		visibleActions: resolveVisibleActions(actions),
 	}
+}
+
+interface HeaderTitleLine {
+	text: string
+	visible: boolean
+}
+
+/** Resolves the first line. Hidden mode drops it; a missing string still uses the shell label. */
+function resolveHeaderTitleLine(
+	title: MagicWidget.HeaderConfig["title"],
+	fallbackTitle: string,
+): HeaderTitleLine {
+	if (title && typeof title === "object") {
+		if (title.mode === "hidden") return { text: "", visible: false }
+		return { text: title.text?.trim() || fallbackTitle, visible: true }
+	}
+	return { text: title?.trim() || fallbackTitle, visible: true }
 }
 
 /** Reports whether a host-configured action should stay available to the shell or adapter. */
@@ -67,12 +83,16 @@ export function isWidgetBuiltinActionVisible(
 /** Resolves the topic line. Static and hidden labels are display-only. */
 function resolveTitlePresentation(
 	topicName: MagicWidget.HeaderConfig["topicName"],
-	primary: string,
+	titleLine: HeaderTitleLine,
 ): MessageHeaderTitlePresentation {
 	const mode = topicName?.mode ?? "current"
+	const primaryFields = {
+		primary: titleLine.text,
+		...(titleLine.visible ? {} : { primaryVisible: false as const }),
+	}
 	if (mode === "hidden") {
 		return {
-			primary,
+			...primaryFields,
 			secondaryMode: "fixed",
 			secondaryText: "",
 			renameEnabled: false,
@@ -80,14 +100,14 @@ function resolveTitlePresentation(
 	}
 	if (mode === "static") {
 		return {
-			primary,
+			...primaryFields,
 			secondaryMode: "fixed",
 			secondaryText: topicName?.text ?? "",
 			renameEnabled: false,
 		}
 	}
 	return {
-		primary,
+		...primaryFields,
 		secondaryMode: "live",
 		renameEnabled: true,
 	}

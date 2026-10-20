@@ -19,6 +19,7 @@ const CONVERSATION_CONFIG_KEYS = new Set([
 ])
 const RESPONSIVE_CONFIG_KEYS = new Set(["mobileDetection"])
 const HEADER_CONFIG_KEYS = new Set(["visible", "title", "topicName", "actions"])
+const HEADER_TITLE_KEYS = new Set(["mode", "text"])
 const HEADER_TOPIC_NAME_KEYS = new Set(["mode", "text"])
 const HEADER_ACTION_NAME_FLAGS = {
 	fullscreen: true,
@@ -557,13 +558,51 @@ function normalizeCustomGroupsConfig(
 	return filteredGroups
 }
 
+/**
+ * Accepts a legacy string title or an explicit static/hidden title.
+ * A blank string stays invalid so it cannot be mistaken for hiding the line.
+ */
+function normalizeHeaderTitle(value: unknown): MagicWidget.HeaderConfig["title"] {
+	if (value === undefined) return undefined
+	if (typeof value === "string") {
+		return readOptionalDisplayText({ title: value }, "title", "config.header")
+	}
+
+	const record = requirePlainObject(value, "config.header.title")
+	assertKnownKeys(record, HEADER_TITLE_KEYS, "config.header.title")
+	const mode = record.mode
+	if (mode !== undefined && mode !== "static" && mode !== "hidden") {
+		throw createInvalidConfigError(
+			"Magic widget config.header.title.mode must be static or hidden",
+		)
+	}
+	const text = readOptionalDisplayText(record, "text", "config.header.title")
+	if (mode === "hidden") {
+		if (text !== undefined) {
+			throw createInvalidConfigError(
+				"Magic widget config.header.title.text is not allowed for hidden mode",
+			)
+		}
+		return { mode: "hidden" }
+	}
+	if (text === undefined) {
+		throw createInvalidConfigError(
+			"Magic widget config.header.title.text is required for static mode",
+		)
+	}
+	return {
+		...(mode === undefined ? {} : { mode }),
+		text,
+	}
+}
+
 /** Normalizes the optional two-line header labels without coupling them to React rendering. */
 function normalizeHeaderConfig(value: unknown): MagicWidget.HeaderConfig | undefined {
 	if (value === undefined) return undefined
 	const record = requirePlainObject(value, "config.header")
 	assertKnownKeys(record, HEADER_CONFIG_KEYS, "config.header")
 	const visible = readOptionalBoolean(record, "visible", "config.header")
-	const title = readOptionalDisplayText(record, "title", "config.header")
+	const title = normalizeHeaderTitle(record.title)
 	let actions: MagicWidget.HeaderConfig["actions"]
 	if (record.actions !== undefined) {
 		const actionRecord = requirePlainObject(record.actions, "config.header.actions")

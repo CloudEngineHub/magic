@@ -119,6 +119,15 @@ describe("Widget config", () => {
 			/topicName.text/,
 		)
 		expect(() => normalizeWidgetConfig({ header: { title: "   " } })).toThrow(/header\.title/)
+		expect(() => normalizeWidgetConfig({ header: { title: { mode: "static" } } })).toThrow(
+			/title\.text/,
+		)
+		expect(() =>
+			normalizeWidgetConfig({ header: { title: { mode: "hidden", text: "Mock Title" } } }),
+		).toThrow(/title\.text/)
+		expect(() => normalizeWidgetConfig({ header: { title: { mode: "current" } } })).toThrow(
+			/title\.mode/,
+		)
 		expect(() => normalizeWidgetConfig({ panel: { agents: false } })).toThrow(/panel\.agents/)
 		expect(() =>
 			normalizeWidgetConfig({ header: { topicName: { mode: "static", text: "   " } } }),
@@ -162,6 +171,14 @@ describe("Widget config", () => {
 		expect(
 			normalizeWidgetConfig({ header: { title: "  Mock Assistant  " } }).header?.title,
 		).toBe("Mock Assistant")
+		expect(
+			normalizeWidgetConfig({
+				header: { title: { mode: "static", text: "  Mock Assistant  " } },
+			}).header?.title,
+		).toEqual({ mode: "static", text: "Mock Assistant" })
+		expect(normalizeWidgetConfig({ header: { title: { mode: "hidden" } } }).header?.title).toEqual(
+			{ mode: "hidden" },
+		)
 		expect(initial.header?.actions).toEqual({ fullscreen: true, share: false, close: false })
 		expect(initial.panel).toEqual({
 			projectFiles: false,
@@ -181,13 +198,13 @@ describe("Widget config", () => {
 		expect(
 			mergeWidgetConfig(initial, {
 				panel: { workflows: false },
-				header: { actions: { more: false } },
+				header: { actions: { more: false }, title: { mode: "hidden" } },
 				bottom: { upload: { buttonVisible: true } },
 			}),
 		).toEqual({
 			header: {
 				visible: true,
-				title: "Mock Assistant",
+				title: { mode: "hidden" },
 				topicName: { mode: "current" },
 				actions: { fullscreen: true, share: false, close: false, more: false },
 			},

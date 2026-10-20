@@ -8,6 +8,7 @@ const shellProps = vi.hoisted(() => ({
 	current: null as null | {
 		titlePresentation?: {
 			primary?: string
+			primaryVisible?: boolean
 			secondaryMode?: string
 			secondaryText?: string
 			renameEnabled?: boolean
@@ -59,6 +60,7 @@ vi.mock("@/pages/superMagic/components/MessageHeader", () => ({
 	default: (props: {
 		titlePresentation?: {
 			primary?: string
+			primaryVisible?: boolean
 			secondaryMode?: string
 			secondaryText?: string
 			renameEnabled?: boolean
@@ -107,7 +109,7 @@ function renderHeader(
 	overrides: Partial<{
 		header: {
 			visible?: boolean
-			title?: string
+			title?: string | { mode?: "static" | "hidden"; text?: string }
 			topicName?: { mode?: "current" | "hidden" | "static"; text?: string }
 			actions?: Record<string, boolean>
 		}
@@ -173,6 +175,20 @@ describe("WidgetMessageHeader", () => {
 		expect(screen.queryByTestId("message-header-fullscreen-button")).not.toBeInTheDocument()
 		expect(screen.getByTestId("message-header-pin-window-button")).toBeInTheDocument()
 		expect(screen.queryByTestId("message-header-close-button")).not.toBeInTheDocument()
+	})
+
+	it("omits the first title line when the host hides it", () => {
+		renderHeader({
+			header: { title: { mode: "hidden" }, topicName: { mode: "current" } },
+		})
+
+		expect(shellProps.current?.titlePresentation).toMatchObject({
+			primary: "",
+			primaryVisible: false,
+			secondaryMode: "live",
+			renameEnabled: true,
+		})
+		expect(screen.getByTestId("message-header-pin-window-button")).toBeInTheDocument()
 	})
 
 	it("hides history when the conversation disables topic history", () => {

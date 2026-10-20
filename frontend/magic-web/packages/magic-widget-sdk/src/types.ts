@@ -55,9 +55,19 @@ export declare namespace MagicWidget {
 	export type HeaderActionName =
 		"fullscreen" | "pin" | "newTopic" | "history" | "share" | "more" | "close"
 
+	/** First-line header label. `hidden` omits that line; `static` shows `text`. */
+	export interface HeaderTitleConfig {
+		mode?: "static" | "hidden"
+		text?: string
+	}
+
 	export interface HeaderConfig {
 		visible?: boolean
-		title?: string
+		/**
+		 * First-line label. A string is static text.
+		 * `{ mode: "hidden" }` omits the line while keeping the topic name and actions.
+		 */
+		title?: string | HeaderTitleConfig
 		topicName?: { mode?: "current" | "hidden" | "static"; text?: string }
 		/**
 		 * Visibility flags. Omitted actions stay visible.

@@ -7,6 +7,8 @@ export type MessageHeaderBuiltinAction = "newTopic" | "history" | "share" | "mor
  */
 export interface MessageHeaderTitlePresentation {
 	primary: string
+	/** False omits the first line. Omitted keeps that line visible. */
+	primaryVisible?: boolean
 	/** `live` shows the current topic title; `fixed` shows `secondaryText`, which may be empty. */
 	secondaryMode: "live" | "fixed"
 	secondaryText?: string

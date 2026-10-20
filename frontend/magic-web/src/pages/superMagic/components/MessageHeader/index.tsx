@@ -865,9 +865,14 @@ function MessageHeader({
 									>
 										{/* Block layout stays on a div so the two lines are valid HTML. */}
 										<div className="flex min-w-0 flex-col">
-											<span className="truncate text-sm font-semibold">
-												{titlePresentation.primary}
-											</span>
+											{titlePresentation.primaryVisible === false ? null : (
+												<span
+													className="truncate text-sm font-semibold"
+													data-testid="message-header-primary-title"
+												>
+													{titlePresentation.primary}
+												</span>
+											)}
 											{presentedSecondary ? (
 												<span className="truncate text-xs text-muted-foreground">
 													{presentedSecondary}

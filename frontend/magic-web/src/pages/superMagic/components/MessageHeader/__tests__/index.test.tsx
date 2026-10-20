@@ -525,6 +525,23 @@ describe("MessageHeader", () => {
 		expect(screen.queryByTestId("message-header-rename-input")).not.toBeInTheDocument()
 	})
 
+	it("omits the first title line and keeps the topic line in its secondary style", () => {
+		renderComponent({
+			titlePresentation: {
+				primary: "",
+				primaryVisible: false,
+				secondaryMode: "fixed",
+				secondaryText: "Mock Topic",
+				renameEnabled: false,
+			},
+		})
+
+		expect(screen.queryByTestId("message-header-primary-title")).not.toBeInTheDocument()
+		const topicLine = screen.getByText("Mock Topic")
+		expect(topicLine.className).toContain("text-xs")
+		expect(topicLine.className).toContain("text-muted-foreground")
+	})
+
 	it("hides built-in actions in both expanded and collapsed layouts", () => {
 		const hideTopicActions = (action: string) => action !== "newTopic" && action !== "history"
 
