@@ -2952,6 +2952,7 @@
 			"completedWithErrors": "Upload Completed, {{count}} Failed",
 			"creatingFolders": "Creating folders",
 			"paused": "Paused",
+			"processing": "Processing",
 			"uploading": "Uploading"
 		},
 		"confirmations": {
