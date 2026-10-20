@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { SlideScreenshotService } from "../SlideScreenshotService"
 import { snapdom } from "@zumer/snapdom"
+import { prepareScreenshotAnimations } from "../prepareScreenshotAnimations"
+
+// jsdom has no layout/animation engine. The animation preparation contract is
+// exercised separately and in a real browser; these tests own capture/cache lifecycle.
+vi.mock("../prepareScreenshotAnimations", () => ({
+	prepareScreenshotAnimations: vi.fn(async () => undefined),
+}))
 
 vi.mock("../../../../contents/HTML/utils/full-content", () => ({
 	decodeHTMLEntities: (content: string) => content,
@@ -63,6 +70,7 @@ describe("SlideScreenshotService", () => {
 		service = new SlideScreenshotService()
 		snapdomMocks.resetCounter()
 		vi.clearAllMocks()
+		vi.mocked(prepareScreenshotAnimations).mockResolvedValue(undefined)
 	})
 
 	afterEach(() => {
@@ -71,6 +79,16 @@ describe("SlideScreenshotService", () => {
 	})
 
 	describe("generateScreenshot", () => {
+		it("does not capture or cache a page whose content never becomes visible", async () => {
+			vi.mocked(prepareScreenshotAnimations).mockRejectedValueOnce(
+				new Error("Slide content stayed hidden"),
+			)
+			await expect(
+				service.generateScreenshot("hidden-slide", "<html><body>Hidden</body></html>"),
+			).rejects.toThrow("Slide content stayed hidden")
+			expect(snapdom).not.toHaveBeenCalled()
+			expect(service.hasCachedScreenshot("hidden-slide")).toBe(false)
+		})
 		it("should generate screenshot for HTML content", async () => {
 			const url = "https://example.com/slide1.html"
 			const content = "<html><body>Test Content</body></html>"
