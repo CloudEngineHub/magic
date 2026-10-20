@@ -34,6 +34,7 @@ import { createDefaultConfig } from "./constants"
 // Components
 import MenuItem from "./components/MenuItem"
 import GalleryItem from "./components/GalleryItem"
+import SelectedItemsStrip from "./components/SelectedItemsStrip"
 import ViewModeSwitcher from "./components/ViewModeSwitcher"
 import { isMentionPanelGalleryPreviewTarget } from "./components/GalleryPreviewDialog"
 import MagicIcon from "../../base/MagicIcon"
@@ -58,6 +59,7 @@ import {
 } from "./utils/multiSelect"
 import { prepareMentionItemForPending } from "./utils/multiSelectValidation"
 import { getMentionPanelSelectionSummaryCounts } from "./utils/selectionSummary"
+import { resolveMentionPanelHeight } from "./utils/panelSize"
 import { MentionPanelBuiltinItemId } from "./runtime/builtin/catalog-ids"
 import { createOtherProjectMentionItem } from "./utils/otherProjectMention"
 import projectFilesStore from "@/stores/projectFiles"
@@ -136,15 +138,6 @@ const MentionPanel = observer(
 		const activeViewMode = canSwitchViewMode ? internalViewMode : viewMode
 		const isGalleryMode = activeViewMode === MentionPanelViewMode.GALLERY && !isMobile
 
-		const panelWidth = isGalleryMode ? GALLERY_PANEL_WIDTH : LIST_PANEL_WIDTH
-		const panelHeight = isGalleryMode ? GALLERY_PANEL_HEIGHT : defaultConfig.height
-		const panelSizeStyle = useMemo<CSSProperties>(
-			() => ({
-				width: panelWidth,
-				height: panelHeight,
-			}),
-			[panelHeight, panelWidth],
-		)
 		const resolvedRuntime = useMemo(
 			() =>
 				resolveMentionPanelRuntime({
@@ -223,10 +216,12 @@ const MentionPanel = observer(
 		const {
 			multiSelectMode,
 			pendingByKey,
+			pendingEntries,
 			submittablePendingEntries,
 			enterMultiSelectMode,
 			leaveMultiSelectMode,
 			togglePendingForItem,
+			removePendingKey,
 			clearForNavigation,
 			reset: resetLocalMultiSelectState,
 		} = useMentionSelectionSession({
@@ -263,6 +258,24 @@ const MentionPanel = observer(
 				return typeof limit === "number" && Number.isFinite(limit) && limit > 0
 			})
 		}, [selectionSummary, selectionSummaryCounts, t.selectionSummary])
+		const showSelectionSummary = Boolean(
+			multiSelectMode && selectionSummary && selectionSummaryCounts,
+		)
+		const showSelectedItems = multiSelectMode && pendingEntries.length > 0
+		const panelWidth = isGalleryMode ? GALLERY_PANEL_WIDTH : LIST_PANEL_WIDTH
+		const panelHeight = resolveMentionPanelHeight({
+			baseHeight: isGalleryMode ? GALLERY_PANEL_HEIGHT : defaultConfig.height,
+			isGalleryMode,
+			showSelectionSummary,
+			showSelectedItems,
+		})
+		const panelSizeStyle = useMemo<CSSProperties>(
+			() => ({
+				width: panelWidth,
+				height: panelHeight,
+			}),
+			[panelHeight, panelWidth],
+		)
 
 		// Auto-focus search input when panel becomes visible
 		useEffect(() => {
@@ -332,6 +345,19 @@ const MentionPanel = observer(
 
 		// Use state.items directly as history is now integrated in useMentionPanel
 		const displayItems = state.items
+		const panelPreviewItems = useMemo(() => {
+			if (pendingEntries.length === 0) return displayItems
+
+			const items = [...displayItems]
+			const seenKeys = new Set(items.map((item) => getMentionItemSelectionKey(item)))
+			for (const { item } of pendingEntries) {
+				const key = getMentionItemSelectionKey(item)
+				if (seenKeys.has(key)) continue
+				seenKeys.add(key)
+				items.push(item)
+			}
+			return items
+		}, [displayItems, pendingEntries])
 
 		const canUseMultiSelectInCurrentList = useMemo(() => {
 			if (!enableMultiSelect) return false
@@ -355,19 +381,6 @@ const MentionPanel = observer(
 		const menuListRef = useRef<HTMLDivElement>(null)
 		const virtuosoRef = useRef<VirtuosoHandle>(null)
 		const virtuosoGridRef = useRef<VirtuosoGridHandle>(null)
-
-		const menuListStyle = useMemo(() => {
-			const searchHeaderHeight = defaultConfig.headerHeight
-			const keyboardHintsHeight = 36
-			const breadcrumbHeight = 16
-			const panelPadding = 4
-			const reservedHeight =
-				searchHeaderHeight + keyboardHintsHeight + breadcrumbHeight + panelPadding
-
-			return {
-				height: Math.max(panelHeight - reservedHeight, 160),
-			}
-		}, [defaultConfig, panelHeight])
 
 		// Auto-scroll when the selected item or the logical list changes. The list can
 		// also be refreshed asynchronously while the user is scrolling; tying this
@@ -947,27 +960,6 @@ const MentionPanel = observer(
 							</span>
 						))}
 					</div>
-					{/* Keep the summary fixed-width so a long breadcrumb never overlaps the counts. */}
-					{multiSelectMode && selectionSummary && selectionSummaryCounts && (
-						<div
-							className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap pb-1.5 pl-2 pt-2 font-['Geist'] text-[10px] leading-[16px] text-muted-foreground"
-							data-testid="mention-panel-selection-summary"
-							aria-label={t.selectionSummary.selected}
-						>
-							<span>
-								{t.selectionSummary.selected} {pendingByKey.size}
-							</span>
-							{selectionSummaryItems.map(({ type, label }) => (
-								<span key={type} className="inline-flex items-center gap-1">
-									<span aria-hidden>{" · "}</span>
-									<span>
-										{label} {selectionSummaryCounts[type]}/
-										{selectionSummary.limits[type]}
-									</span>
-								</span>
-							))}
-						</div>
-					)}
 				</div>
 			)
 		})()
@@ -976,7 +968,7 @@ const MentionPanel = observer(
 			<MentionPanelRootProviders
 				dataService={resolvedRuntime.dataService}
 				getItemRenderer={resolvedRuntime.getItemRenderer}
-				items={displayItems}
+				items={panelPreviewItems}
 			>
 				<div className="flex w-full flex-1 flex-col overflow-hidden transition-all duration-200 ease-out">
 					{/* Search header (matches Figma design) */}
@@ -1086,12 +1078,11 @@ const MentionPanel = observer(
 					<div
 						ref={menuListRef}
 						className={cn(
-							"flex flex-1 flex-col gap-0 overflow-hidden transition-all duration-200 ease-out",
+							"flex min-h-0 flex-1 flex-col gap-0 overflow-hidden transition-all duration-200 ease-out",
 							isGalleryMode
 								? "p-2 [&_div[data-virtuoso-scroller]::-webkit-scrollbar]:hidden [&_div[data-virtuoso-scroller]]:[-ms-overflow-style:none] [&_div[data-virtuoso-scroller]]:[scrollbar-width:none]"
 								: "[&_div[data-virtuoso-scroller]]:scrollbar-thin [&_div[data-virtuoso-scroller]]:scrollbar-thumb-border [&_div[data-virtuoso-scroller]]:scrollbar-track-transparent [&_div[data-virtuoso-scroller]]:scrollbar-thumb-rounded p-1 [&_div[data-virtuoso-scroller]]:mr-0.5",
 						)}
-						style={menuListStyle}
 						role="listbox"
 					>
 						{dataSource.loading ? (
@@ -1141,6 +1132,36 @@ const MentionPanel = observer(
 							/>
 						)}
 					</div>
+
+					{showSelectionSummary && selectionSummary && selectionSummaryCounts && (
+						<div
+							className="mx-1 flex shrink-0 items-center justify-start gap-1 overflow-hidden whitespace-nowrap px-1.5 pb-1 font-['Geist'] text-[10px] leading-[16px] text-muted-foreground"
+							data-testid="mention-panel-selection-summary"
+							aria-label={t.selectionSummary.selected}
+						>
+							<span>
+								{t.selectionSummary.selected} {pendingByKey.size}
+							</span>
+							{selectionSummaryItems.map(({ type, label }) => (
+								<span key={type} className="inline-flex items-center gap-1">
+									<span aria-hidden>{" · "}</span>
+									<span>
+										{label} {selectionSummaryCounts[type]}/
+										{selectionSummary.limits[type]}
+									</span>
+								</span>
+							))}
+						</div>
+					)}
+
+					{showSelectedItems && (
+						<SelectedItemsStrip
+							entries={pendingEntries}
+							isGalleryMode={isGalleryMode}
+							t={t}
+							onRemove={removePendingKey}
+						/>
+					)}
 
 					{/* Keyboard Hints */}
 					<div className="mx-1 mb-1 flex flex-nowrap items-center gap-1.5 rounded bg-accent px-1.5 py-1.5">

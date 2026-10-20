@@ -78,11 +78,11 @@ export type TimeFilterPanelProps = {
 	className?: string
 	/** 是否显示触发器中的清空操作；默认开启。 */
 	clearable?: boolean
-	/** Stable selectors for the trigger and expanded content. */
-	triggerTestId?: string
-	contentTestId?: string
+	/** 触发器、面板及清空按钮的测试标识。 */
 	clearButtonTestId?: string
+	contentTestId?: string
 	testIdPrefix?: string
+	triggerTestId?: string
 	/** 非受控模式首次初始化时使用的相对时间预设。 */
 	defaultPresetKey?: TimePresetKey
 	/** 可用的最大自然日；同时作为近 X 天等快捷范围的计算基准和最终输出上限。 */
@@ -103,8 +103,8 @@ export type TimeFilterPanelProps = {
 
 export function TimeFilterPanel({
 	className,
-	clearButtonTestId,
 	clearable = true,
+	clearButtonTestId,
 	contentTestId,
 	defaultPresetKey,
 	maxDate,
@@ -112,9 +112,9 @@ export function TimeFilterPanel({
 	presentation = "popover",
 	prefix,
 	supportedRelativeUnits = defaultSupportedRelativeUnits,
-	timePrecision = "second",
-	triggerTestId,
 	testIdPrefix,
+	triggerTestId,
+	timePrecision = "second",
 	value,
 }: TimeFilterPanelProps) {
 	const { t } = useTranslation()
@@ -123,6 +123,12 @@ export function TimeFilterPanel({
 	const hasInitializedRef = useRef(false)
 	const isControlled = value !== undefined
 	const isInline = presentation === "inline"
+	const panelTestIdPrefix = testIdPrefix ?? triggerTestId?.replace(/-trigger$/, "")
+	const testId = (suffix: string) =>
+		panelTestIdPrefix ? `${panelTestIdPrefix}-${suffix}` : undefined
+	const resolvedTriggerTestId = triggerTestId ?? testId("trigger")
+	const resolvedContentTestId = contentTestId ?? testId("content")
+	const resolvedClearButtonTestId = clearButtonTestId ?? testId("clear-button")
 	const normalizedSupportedUnits = useMemo(
 		() => normalizeSupportedRelativeUnits(supportedRelativeUnits),
 		[supportedRelativeUnits],
@@ -132,12 +138,6 @@ export function TimeFilterPanel({
 		: normalizedSupportedUnits[0]
 	const isRelativeDayOnly = isDayOnlyRelativeUnits(normalizedSupportedUnits)
 	const isAbsoluteDateOnly = timePrecision === "day"
-	const panelTestIdPrefix = testIdPrefix ?? triggerTestId?.replace(/-trigger$/, "")
-	const testId = (suffix: string) =>
-		panelTestIdPrefix ? `${panelTestIdPrefix}-${suffix}` : undefined
-	const resolvedTriggerTestId = triggerTestId ?? testId("trigger")
-	const resolvedContentTestId = contentTestId ?? testId("content")
-	const resolvedClearButtonTestId = clearButtonTestId ?? testId("clear-button")
 	const [internalValue, setInternalValue] = useState<TimeRangeValue | null>(null)
 	const timeRangeValue = isControlled ? value : internalValue
 	const [open, setOpen] = useState(false)
@@ -163,9 +163,7 @@ export function TimeFilterPanel({
 		() => (maxDateTime === undefined ? undefined : new Date(maxDateTime)),
 		[maxDateTime],
 	)
-	const [visibleMonth, setVisibleMonth] = useState(() =>
-		startOf(calendarReferenceDate, "month"),
-	)
+	const [visibleMonth, setVisibleMonth] = useState(() => startOf(calendarReferenceDate, "month"))
 	const [history, setHistory] = useState<TimeFilterHistoryItem[]>([])
 
 	const monthKeys = useMemo(
@@ -256,16 +254,10 @@ export function TimeFilterPanel({
 			tab: TimeFilterTab
 			unit?: RelativeUnit
 		}) => {
-			// Normalize every mode through the same precision contract so relative presets
-			// cannot emit minute/second boundaries when a page requires hour buckets.
-			const normalizedStart = normalizeAbsoluteDate(start, timePrecision, "start")
-			const normalizedEnd = normalizeAbsoluteDate(end, timePrecision, "end")
 			const maxRangeEnd = maxDate ? endOf(maxDate, "day") : null
-			if (maxRangeEnd && normalizedStart.getTime() > maxRangeEnd.getTime()) return
+			if (maxRangeEnd && start.getTime() > maxRangeEnd.getTime()) return
 			const boundedEnd =
-				maxRangeEnd && normalizedEnd.getTime() > maxRangeEnd.getTime()
-					? maxRangeEnd
-					: normalizedEnd
+				maxRangeEnd && end.getTime() > maxRangeEnd.getTime() ? maxRangeEnd : end
 
 			const nextValue: TimeRangeValue = {
 				endDate: formatDateTime(boundedEnd),
@@ -273,14 +265,14 @@ export function TimeFilterPanel({
 				mode,
 				...(presetKey ? { presetKey } : {}),
 				...(unit ? { relativeUnit: unit } : {}),
-				startDate: formatDateTime(normalizedStart),
+				startDate: formatDateTime(start),
 				tab,
 			}
 			setTimeRangeValue(nextValue)
 			if (persist) setHistory(upsertHistory(createHistoryEntry(nextValue)))
 			if (closePanel) setOpen(false)
 		},
-		[maxDate, setTimeRangeValue, timePrecision],
+		[maxDate, setTimeRangeValue],
 	)
 
 	useEffect(() => setHistory(loadHistory()), [])
@@ -356,9 +348,7 @@ export function TimeFilterPanel({
 		hasInitializedRef.current = true
 		const relativePreset = getRelativePresetOption(defaultPresetKey)
 		const presetReferenceDate =
-			configuredMaxDate &&
-			isRelativeDayOnly &&
-			relativePreset?.unit === relativeUnit.day
+			configuredMaxDate && isRelativeDayOnly && relativePreset?.unit === relativeUnit.day
 				? configuredMaxDate
 				: new Date()
 		const [start, end] = getRangeByPreset(
@@ -392,9 +382,7 @@ export function TimeFilterPanel({
 		)
 		const relativePreset = getRelativePresetOption(presetKey)
 		const presetReferenceDate =
-			configuredMaxDate &&
-			isRelativeDayOnly &&
-			relativePreset?.unit === relativeUnit.day
+			configuredMaxDate && isRelativeDayOnly && relativePreset?.unit === relativeUnit.day
 				? configuredMaxDate
 				: new Date()
 		const [start, end] = getRangeByPreset(
@@ -475,10 +463,9 @@ export function TimeFilterPanel({
 		if (!current || timePrecision === "day") return
 		const [hours = 0, minutes = 0, seconds = 0] = nextValue.split(":").map(Number)
 		const next = new Date(current)
-		const nextMinutes = timePrecision === "hour" ? (boundary === "end" ? 59 : 0) : minutes
 		next.setHours(
 			hours,
-			nextMinutes,
+			minutes,
 			timePrecision === "second" ? seconds : boundary === "end" ? 59 : 0,
 			0,
 		)
@@ -520,9 +507,7 @@ export function TimeFilterPanel({
 		)
 		const relativePreset = getRelativePresetOption(timeRangeValue.presetKey)
 		const presetReferenceDate =
-			configuredMaxDate &&
-			isRelativeDayOnly &&
-			relativePreset?.unit === relativeUnit.day
+			configuredMaxDate && isRelativeDayOnly && relativePreset?.unit === relativeUnit.day
 				? configuredMaxDate
 				: new Date()
 		const [start, end] = getRangeByPreset(
@@ -629,8 +614,8 @@ export function TimeFilterPanel({
 					standardPresetOptions={availableStandardPresetOptions}
 					supportedUnits={normalizedSupportedUnits}
 					timeRangeValue={timeRangeValue}
-					showAlignToUnit={timePrecision !== "hour"}
 					onAlignToUnitChange={handleAlignToUnitChange}
+					onCancel={() => setOpen(false)}
 					onCustomRelativeApply={handleCustomRelativeApply}
 					onCustomUnitChange={setCustomUnit}
 					onCustomUnitMenuOpenChange={setCustomUnitMenuOpen}
@@ -654,6 +639,7 @@ export function TimeFilterPanel({
 					maxDate={maxDate}
 					visibleMonth={visibleMonth}
 					onAbsoluteApply={handleAbsoluteApply}
+					onCancel={() => setOpen(false)}
 					onAbsoluteDateSelect={handleAbsoluteDateSelect}
 					onAbsolutePresetSelect={handleAbsolutePresetSelect}
 					onAbsoluteTimeChange={handleAbsoluteTimeChange}

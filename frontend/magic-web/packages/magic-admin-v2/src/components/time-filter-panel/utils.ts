@@ -594,7 +594,7 @@ export function getAbsoluteTimeInputValue(date: Date | null, precision: TimePrec
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
   if (precision === "second") return `${hours}:${minutes}:${seconds}`;
-  if (precision === "hour") return `${hours}:${minutes}`;
+  if (precision === "hour") return `${hours}:00`;
   return `${hours}:${minutes}`;
 }
 

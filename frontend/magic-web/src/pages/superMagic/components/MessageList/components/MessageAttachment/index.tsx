@@ -19,12 +19,17 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
 import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
 import { observer } from "mobx-react-lite"
-import { useMessageListProjectFilesStore } from "../../context"
+import { useMessageListContext } from "../../context"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
 import {
 	HomeOnboardingAnchor,
 	startHomeOnboardingDeliverableRunIfDue,
 } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
+import { Send } from "lucide-react"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useCanvasElementFileIndex } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasElementFileIndex"
+
+const EMPTY_CANVAS_ELEMENT_IDS: readonly string[] = []
 
 export const Attachment = observer(function Attachment({
 	attachments,
@@ -38,7 +43,14 @@ export const Attachment = observer(function Attachment({
 	className?: string
 }) {
 	const { t } = useTranslation("super")
-	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
+	const { t: tCanvas } = useTranslation("canvasDesign")
+	const {
+		projectFilesStore: resolvedProjectFilesStore,
+		activeFileId,
+		activeDetailTabType,
+		detailPanelVisible,
+	} = useMessageListContext()
+	const canvasElementFileIndex = useCanvasElementFileIndex(activeFileId)
 	const isMobile = useIsMobile()
 	const { permissions: access } = useFileAccess()
 	const handleDownload = useMessageAttachmentDownload(attachments)
@@ -183,6 +195,24 @@ export const Attachment = observer(function Attachment({
 							magicProjectResolution?.projectName ||
 							getMetaDataName(display_config) ||
 							fileName
+						const canvasElementIds = item.file_id
+							? (canvasElementFileIndex?.elementIdsByFileId.get(
+									String(item.file_id),
+								) ?? EMPTY_CANVAS_ELEMENT_IDS)
+							: EMPTY_CANVAS_ELEMENT_IDS
+						const mediaType = getFileType(item.file_extension || "")
+						const locateTarget =
+							item.file_tag === "final" &&
+							(mediaType === "image" || mediaType === "video") &&
+							activeDetailTabType === "file" &&
+							detailPanelVisible === true &&
+							activeFileId &&
+							canvasElementIds.length === 1
+								? {
+										canvasDesignId: activeFileId,
+										elementId: canvasElementIds[0],
+									}
+								: undefined
 						return (
 							<div
 								key={item.file_id}
@@ -229,6 +259,28 @@ export const Attachment = observer(function Attachment({
 									>
 										{attachmentName}
 									</span>
+									{isEmpty(attachmentDisplayConfig) && locateTarget && (
+										<button
+											type="button"
+											aria-label={tCanvas("menu.locateProjectFile")}
+											className="inline-flex size-[18px] shrink-0 items-center justify-center text-muted-foreground hover:text-foreground/80"
+											onClick={(event) => {
+												event.preventDefault()
+												event.stopPropagation()
+												pubsub.publish(
+													PubSubEvents.Super_Magic_Focus_Canvas_Element,
+													{
+														canvasDesignId: locateTarget.canvasDesignId,
+														elementIds: [locateTarget.elementId],
+														selectElement: false,
+														animated: true,
+													},
+												)
+											}}
+										>
+											<Send aria-hidden="true" size={16} strokeWidth={2} />
+										</button>
+									)}
 									{access.view && access.preview && (
 										<MagicIcon
 											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
@@ -241,7 +293,7 @@ export const Attachment = observer(function Attachment({
 											size={18}
 										/>
 									)}
-									{access.download && isEmpty(attachmentDisplayConfig) && (
+									{isEmpty(attachmentDisplayConfig) && access.download && (
 										<MagicIcon
 											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
 											onClick={(e: any) => {

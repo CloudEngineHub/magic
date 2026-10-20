@@ -2632,17 +2632,25 @@ export class ClipboardManager {
 		options?: { skipFocus?: boolean; onProgress?: (current: number) => void },
 	): Promise<string[]> {
 		this.canvas.historyManager.disable()
-		let processedUploadCount = 0
+		let progressedUploadCount = 0
 		let failedUploadCount = 0
+		const progressedUploadIndexes = new Set<number>()
 		const processedUploadIndexes = new Set<number>()
+		// 遮罩进度跟随文件字节上传完成，与左下角上传面板保持同一事件源；
+		// 保存与元素转换仍由 markUploadProcessed 负责最终成功/失败统计。
+		const markUploadProgress = (index: number) => {
+			if (progressedUploadIndexes.has(index)) return
+			progressedUploadIndexes.add(index)
+			progressedUploadCount += 1
+			options?.onProgress?.(progressedUploadCount)
+		}
 		const markUploadProcessed = (index: number, status: "success" | "failed") => {
+			markUploadProgress(index)
 			if (processedUploadIndexes.has(index)) return
 			processedUploadIndexes.add(index)
-			processedUploadCount += 1
 			if (status === "failed") {
 				failedUploadCount += 1
 			}
-			options?.onProgress?.(processedUploadCount)
 		}
 
 		try {
@@ -2678,6 +2686,9 @@ export class ClipboardManager {
 								},
 								onUploadFailed: () => {
 									markUploadProcessed(i, "failed")
+								},
+								onUploadSettled: () => {
+									markUploadProgress(i)
 								},
 							})
 						if (!elementId) {

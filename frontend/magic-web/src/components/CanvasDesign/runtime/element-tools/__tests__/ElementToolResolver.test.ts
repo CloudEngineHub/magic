@@ -160,6 +160,29 @@ describe("ElementToolResolver", () => {
 		}
 	})
 
+	it("hides generation actions while the active Content is preparing", () => {
+		const { context, bottom } = resolve(createImage(), {
+			canvas: {
+				generationRuntimeManager: {
+					getTargetStates: () => [],
+					getSubmissionState: () => ({
+						elementId: "image-1",
+						contentId: "content-a",
+						submissionId: "submission-1",
+						phase: "preparing",
+						startedAt: Date.now(),
+					}),
+				},
+			} as never,
+		})
+
+		expect(context.generation.activeContentIsGenerating).toBe(true)
+		expect(bottom.map((tool) => tool.id)).not.toContain(
+			ElementToolTypeEnum.GenerationGenerateAgain,
+		)
+		expect(bottom.map((tool) => tool.id)).not.toContain(ElementToolTypeEnum.GenerationReEdit)
+	})
+
 	it("allows deleting an active processing Content while keeping other unsafe operations hidden", () => {
 		const { context, top, bottom } = resolve(
 			createImage({

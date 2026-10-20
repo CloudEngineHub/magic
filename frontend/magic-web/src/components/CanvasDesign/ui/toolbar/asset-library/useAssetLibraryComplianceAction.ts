@@ -11,7 +11,6 @@ import { resolveAssetComplianceTaskManager } from "../../../runtime/resources/as
 import {
 	toastAssetComplianceFailureState,
 	toastAssetComplianceStarted,
-	toastAssetComplianceState,
 	toastAssetComplianceUnavailable,
 } from "./assetComplianceToasts"
 
@@ -73,21 +72,11 @@ export function useAssetLibraryComplianceAction(options: {
 			}
 
 			if (asset.compliance_status === "PROCESSING") {
-				try {
-					const state = await methods?.getAssetComplianceStatus?.(listAssetId)
-					if (state) toastAssetComplianceState(t, state)
-					complianceTaskManager.watchLibraryComplianceChecks([listAssetId], (settled) =>
-						handleComplianceSettled(listAssetId, settled),
-					)
-				} catch (error) {
-					toast.error(
-						error instanceof Error && error.message
-							? error.message
-							: t("seedanceCompliance.unavailable", {
-									defaultValue: "当前媒体无法发起合规校验",
-								}),
-					)
-				}
+				// The watcher performs the first status read immediately. Avoid a
+				// duplicate single-item request before registering that watcher.
+				complianceTaskManager.watchLibraryComplianceChecks([listAssetId], (settled) =>
+					handleComplianceSettled(listAssetId, settled),
+				)
 				return
 			}
 

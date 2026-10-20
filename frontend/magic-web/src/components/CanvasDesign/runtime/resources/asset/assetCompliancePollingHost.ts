@@ -23,6 +23,21 @@ function getFallbackPollingManager(): CanvasAssetCompliancePollingManager {
 							const response = await AssetsApi.getAssetCompliance(assetId)
 							return toCanvasAssetComplianceState(response)
 						},
+						getAssetComplianceStatuses: async (assetIds: string[]) => {
+							try {
+								const responses = await AssetsApi.batchGetAssetCompliance({
+									asset_ids: assetIds,
+								})
+								return responses.map(toCanvasAssetComplianceState)
+							} catch {
+								return Promise.all(
+									assetIds.map(async (assetId) => {
+										const response = await AssetsApi.getAssetCompliance(assetId)
+										return toCanvasAssetComplianceState(response)
+									}),
+								)
+							}
+						},
 					},
 				},
 			},

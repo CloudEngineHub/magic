@@ -12,6 +12,20 @@ function createManager(getAssetComplianceStatus: ReturnType<typeof vi.fn>) {
 	return new CanvasAssetCompliancePollingManager(canvas as never)
 }
 
+function createBatchManager(
+	getAssetComplianceStatus: ReturnType<typeof vi.fn>,
+	getAssetComplianceStatuses: ReturnType<typeof vi.fn>,
+) {
+	const canvas = {
+		magicConfigManager: {
+			config: {
+				methods: { getAssetComplianceStatus, getAssetComplianceStatuses },
+			},
+		},
+	}
+	return new CanvasAssetCompliancePollingManager(canvas as never)
+}
+
 afterEach(() => {
 	vi.useRealTimers()
 })
@@ -56,6 +70,25 @@ describe("CanvasAssetCompliancePollingManager", () => {
 			failedReason: null,
 		})
 		expect(manager.getState("100")).toMatchObject({ status: "PASS" })
+	})
+
+	it("batches initial status reads for multiple assets", async () => {
+		vi.useFakeTimers()
+		const getAssetComplianceStatus = vi.fn()
+		const getAssetComplianceStatuses = vi.fn().mockResolvedValue([
+			{ assetId: "101", status: "PROCESSING", failedReason: null },
+			{ assetId: "102", status: "PROCESSING", failedReason: null },
+		])
+		const manager = createBatchManager(getAssetComplianceStatus, getAssetComplianceStatuses)
+
+		manager.start("101")
+		manager.start("102")
+		await vi.advanceTimersByTimeAsync(0)
+
+		expect(getAssetComplianceStatuses).toHaveBeenCalledTimes(1)
+		expect(getAssetComplianceStatuses).toHaveBeenCalledWith(["101", "102"])
+		expect(getAssetComplianceStatus).not.toHaveBeenCalled()
+		manager.destroy()
 	})
 
 	it("deduplicates network polling while notifying every listener", async () => {
@@ -136,8 +169,11 @@ describe("CanvasAssetCompliancePollingManager", () => {
 		const manager = createManager(getAssetComplianceStatus)
 
 		manager.start("400", { onUpdate })
+		await Promise.resolve()
+		await Promise.resolve()
 		manager.stop("400")
 		manager.start("400", { onUpdate })
+		await Promise.resolve()
 		await Promise.resolve()
 		await Promise.resolve()
 
@@ -166,6 +202,7 @@ describe("CanvasAssetCompliancePollingManager", () => {
 		expect(getAssetComplianceStatus).toHaveBeenCalledTimes(1)
 
 		manager.start("500")
+		await vi.advanceTimersByTimeAsync(0)
 		manager.destroy()
 		await vi.advanceTimersByTimeAsync(2500)
 		expect(getAssetComplianceStatus).toHaveBeenCalledTimes(2)

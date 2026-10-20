@@ -10,9 +10,11 @@ from .files import (
     MoveProjectFiles,
     RenameProjectFile,
 )
+from .skills import ListSkills, GetSkill, CreateSkill, PrepareSkillPublish, PublishSkill, GetSkillPublishResult
 from .messages import ReadTopicMessages
 from .prepare_files import PrepareProjectFiles
 from .search_files import SearchProjectFiles
+from .contacts import SearchUsers, SearchDepartments
 from .projects import (
     CreateProject,
     DeleteProject,
@@ -41,6 +43,13 @@ from .workspaces import (
 )
 
 __all__ = [
+    "ListSkills",
+    "GetSkill",
+    "CreateSkill",
+    "PrepareSkillPublish",
+    "PublishSkill",
+    "GetSkillPublishResult",
+
     "ArchiveTopic",
     "ArchiveWorkspace",
     "CancelTopicTask",
@@ -71,6 +80,8 @@ __all__ = [
     "ReadTopicMessages",
     "RenameProjectFile",
     "SearchProjectFiles",
+    "SearchUsers",
+    "SearchDepartments",
     "SendTopicMessage",
     "StartTopicTask",
     "UpdateProject",

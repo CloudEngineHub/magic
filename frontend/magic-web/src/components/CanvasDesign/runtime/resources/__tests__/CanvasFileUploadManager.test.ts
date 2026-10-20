@@ -1223,6 +1223,50 @@ describe("CanvasFileUploadManager upload queue", () => {
 		expect(secondRequest.onUploadComplete).not.toHaveBeenCalled()
 		expect(manager.isProcessingQueue).toBe(false)
 	})
+
+	it("settles a queued request once when its file upload progress reaches 100", async () => {
+		const uploadFiles = vi.fn(async (files: UploadFile[]) => {
+			files[0]?.onUploadProgress?.(42)
+			files[0]?.onUploadProgress?.(100)
+			files[0]?.onUploadProgress?.(100)
+		})
+		const request: UploadRequest = {
+			file: new File(["first"], "first.png", { type: "image/png" }),
+			onUploadComplete: vi.fn(),
+			onUploadFailed: vi.fn(),
+			onUploadSettled: vi.fn(),
+		}
+		const manager = Object.create(CanvasFileUploadManager.prototype) as {
+			canvas: {
+				magicConfigManager: {
+					config: {
+						methods: {
+							uploadFiles: typeof uploadFiles
+						}
+					}
+				}
+			}
+			uploadQueue: UploadRequest[]
+			isProcessingQueue: boolean
+			currentReferenceImages?: string[]
+			processQueue: () => Promise<void>
+		}
+		manager.canvas = {
+			magicConfigManager: {
+				config: {
+					methods: { uploadFiles },
+				},
+			},
+		}
+		manager.uploadQueue = [request]
+		manager.isProcessingQueue = false
+
+		await manager.processQueue()
+
+		expect(request.onUploadSettled).toHaveBeenCalledTimes(1)
+		expect(request.onUploadComplete).not.toHaveBeenCalled()
+		expect(request.onUploadFailed).not.toHaveBeenCalled()
+	})
 })
 
 describe("CanvasFileUploadManager remote resource load deferrals", () => {

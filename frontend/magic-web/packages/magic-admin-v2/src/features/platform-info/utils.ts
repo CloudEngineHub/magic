@@ -105,21 +105,38 @@ function isFilled(value: string) {
 	return value.trim().length > 0
 }
 
-function isContentLocaleComplete(value: PlatformInfoFormState, locale: PlatformLocale) {
-	return [
-		value.title_i18n[locale],
-		value.keywords_i18n[locale],
-		value.description_i18n[locale],
-		value.agent_role_name_i18n[locale],
-		value.agent_role_description_i18n[locale],
-		value.footer.copyright_i18n[locale],
-	].every(isFilled)
+function isContentLocaleComplete(
+	value: PlatformInfoFormState,
+	locale: PlatformLocale,
+	section: PlatformInfoSectionId,
+) {
+	// Language badges describe only the current section, not unrelated configuration.
+	switch (section) {
+		case "seo":
+			return [
+				value.title_i18n[locale],
+				value.keywords_i18n[locale],
+				value.description_i18n[locale],
+			].every(isFilled)
+		case "agentPrompt":
+			return [
+				value.agent_role_name_i18n[locale],
+				value.agent_role_description_i18n[locale],
+			].every(isFilled)
+		case "footer":
+			return isFilled(value.footer.copyright_i18n[locale])
+		default:
+			return false
+	}
 }
 
-export function getContentLocaleCompletion(value: PlatformInfoFormState): LocaleCompletion {
+export function getContentLocaleCompletion(
+	value: PlatformInfoFormState,
+	section: PlatformInfoSectionId,
+): LocaleCompletion {
 	return {
-		zh_CN: isContentLocaleComplete(value, Language.ZhCN),
-		en_US: isContentLocaleComplete(value, Language.EnUS),
+		zh_CN: isContentLocaleComplete(value, Language.ZhCN, section),
+		en_US: isContentLocaleComplete(value, Language.EnUS, section),
 	}
 }
 

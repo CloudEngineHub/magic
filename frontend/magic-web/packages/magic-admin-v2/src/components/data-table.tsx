@@ -23,7 +23,6 @@ import {
 	SheetTitle,
 } from "@magic-admin-v2/components/ui/sheet"
 import {
-	Table,
 	TableBody,
 	TableCell,
 	TableHead,
@@ -31,6 +30,7 @@ import {
 	TableRow,
 } from "@magic-admin-v2/components/ui/table"
 import { useIsMobile } from "@magic-admin-v2/hooks/use-is-mobile"
+import { DataTableFrame } from "@magic-admin-v2/components/data-table-frame"
 import { cn } from "@magic-admin-v2/utils/cn"
 import { mobileCardTokens } from "@magic-admin-v2/components/mobile-card"
 
@@ -69,7 +69,7 @@ export type DataTableProps<TData, TValue> = {
 	columns: Array<ColumnDef<TData, TValue>>
 	/** 表格容器的自定义样式。 */
 	containerClassName?: string
-	/** Stable selectors for list/table containers and repeated rows. */
+	/** Stable selectors for table containers and repeated rows. */
 	containerTestId?: string
 	loadingTestId?: string
 	rowTestId?: string
@@ -98,6 +98,8 @@ export type DataTableProps<TData, TValue> = {
 	sorting?: SortingState
 	/** 移动端详情抽屉中需要高亮的行 ID。 */
 	selectedRowId?: string
+	/** 默认保持桌面端表头在页面或弹窗滚动区顶部；特殊场景可显式关闭。 */
+	stickyHeader?: boolean
 	/** 需要固定在左侧的列 ID。 */
 	stickyLeftColumnId?: string
 	/** 需要固定在右侧的列 ID；移动端也会作为操作列保留。 */
@@ -120,10 +122,11 @@ export function DataTable<TData, TValue>({
 	mobileDetailCloseButtonTestId,
 	onColumnVisibilityChange,
 	onSortingChange,
-	rowTestId,
 	columnVisibility,
 	sorting,
+	rowTestId,
 	selectedRowId,
+	stickyHeader = true,
 	stickyLeftColumnId,
 	stickyRightColumnId,
 }: DataTableProps<TData, TValue>) {
@@ -179,7 +182,11 @@ export function DataTable<TData, TValue>({
 
 		if (table.getRowModel().rows.length === 0) {
 			return (
-				<div className={containerClassName} data-slot="data-table-mobile-empty">
+				<div
+					className={containerClassName}
+					data-slot="data-table-mobile-empty"
+					data-testid={containerTestId}
+				>
 					{emptyState}
 				</div>
 			)
@@ -196,10 +203,10 @@ export function DataTable<TData, TValue>({
 						<MobileDataCard
 							columnLabels={mobileColumnLabels}
 							key={row.id}
-							onViewDetails={() => setMobileDetailRow(row)}
 							mobileDetailButtonTestId={mobileDetailButtonTestId}
-							rowTestId={rowTestId}
+							onViewDetails={() => setMobileDetailRow(row)}
 							row={row}
+							rowTestId={rowTestId}
 							stickyRightColumnId={stickyRightColumnId}
 							viewDetailsLabel={t("common.viewDetails")}
 						/>
@@ -222,51 +229,79 @@ export function DataTable<TData, TValue>({
 		)
 	}
 
-	if (isLoading) {
+	if (!isLoading && table.getRowModel().rows.length === 0) {
 		return (
 			<div
 				className={cn(desktopContainerClassName, containerClassName)}
 				data-slot="data-table-desktop"
-				data-testid={loadingTestId ?? containerTestId}
 			>
-				<Table
-					className={hasFitContentColumn ? "table-auto" : "table-fixed"}
-					style={{ minWidth }}
-				>
-					<TableHeader>
-						{table.getHeaderGroups().map((headerGroup) => (
-							<TableRow key={headerGroup.id} className="hover:bg-transparent">
-								{headerGroup.headers.map((header) => (
-									<TableHead
-										className={cn(
-											getFitContentColumnClassName(header.column),
-											getStickyColumnClassName(
-												header.column.id,
-												stickyLeftColumnId,
-												stickyRightColumnId,
-												"head",
-											),
+				{emptyState}
+			</div>
+		)
+	}
+
+	function renderHeader(sizingOnly = false) {
+		return (
+			<TableHeader
+				aria-hidden={sizingOnly || undefined}
+				className={cn(stickyHeader && "bg-muted", sizingOnly && "[&_tr]:border-0")}
+				role={stickyHeader && !sizingOnly ? "rowgroup" : undefined}
+			>
+				{table.getHeaderGroups().map((headerGroup) => (
+					<TableRow
+						key={headerGroup.id}
+						className="hover:bg-transparent"
+						role={stickyHeader && !sizingOnly ? "row" : undefined}
+					>
+						{headerGroup.headers.map((header) => (
+							<TableHead
+								className={cn(
+									getFitContentColumnClassName(header.column),
+									!sizingOnly &&
+										getStickyColumnClassName(
+											header.column.id,
+											stickyLeftColumnId,
+											stickyRightColumnId,
+											"head",
+										),
+									sizingOnly && "h-0 py-0",
+								)}
+								colSpan={header.colSpan}
+								key={header.id}
+								role={stickyHeader && !sizingOnly ? "columnheader" : undefined}
+								style={getColumnSizeStyle(header.column)}
+							>
+								{header.isPlaceholder || sizingOnly ? null : (
+									<SortableHeader column={header.column}>
+										{flexRender(
+											header.column.columnDef.header,
+											header.getContext(),
 										)}
-										key={header.id}
-										style={getColumnSizeStyle(header.column)}
-									>
-										{header.isPlaceholder ? null : (
-											<SortableHeader column={header.column}>
-												{flexRender(
-													header.column.columnDef.header,
-													header.getContext(),
-												)}
-											</SortableHeader>
-										)}
-									</TableHead>
-								))}
-							</TableRow>
+									</SortableHeader>
+								)}
+							</TableHead>
 						))}
-					</TableHeader>
-					<TableBody>
-						{Array.from({ length: 6 }, (_, rowIndex) => (
-							<TableRow key={rowIndex}>
-								{table.getAllLeafColumns().map((column) => (
+					</TableRow>
+				))}
+			</TableHeader>
+		)
+	}
+
+	return (
+		<DataTableFrame
+			containerClassName={containerClassName}
+			header={renderHeader()}
+			containerTestId={containerTestId}
+			minWidth={minWidth}
+			sizingHeader={stickyHeader ? renderHeader(true) : null}
+			stickyHeader={stickyHeader}
+			tableClassName={hasFitContentColumn ? "table-auto" : "table-fixed"}
+		>
+			<TableBody role={stickyHeader ? "rowgroup" : undefined}>
+				{isLoading
+					? Array.from({ length: 6 }, (_, rowIndex) => (
+							<TableRow key={rowIndex} role={stickyHeader ? "row" : undefined}>
+								{table.getVisibleLeafColumns().map((column) => (
 									<TableCell
 										className={cn(
 											getFitContentColumnClassName(column),
@@ -278,6 +313,7 @@ export function DataTable<TData, TValue>({
 											),
 										)}
 										key={column.id}
+										role={stickyHeader ? "cell" : undefined}
 									>
 										<Skeleton
 											className={cn(
@@ -288,100 +324,47 @@ export function DataTable<TData, TValue>({
 									</TableCell>
 								))}
 							</TableRow>
-						))}
-					</TableBody>
-				</Table>
-			</div>
-		)
-	}
-
-	if (table.getRowModel().rows.length === 0) {
-		return (
-			<div
-				className={cn(desktopContainerClassName, containerClassName)}
-				data-slot="data-table-desktop"
-				data-testid={containerTestId}
-			>
-				{emptyState}
-			</div>
-		)
-	}
-
-	return (
-		<div
-			className={cn(desktopContainerClassName, containerClassName)}
-			data-slot="data-table-desktop"
-			data-testid={containerTestId}
-		>
-			<Table
-				className={hasFitContentColumn ? "table-auto" : "table-fixed"}
-				style={{ minWidth }}
-			>
-				<TableHeader>
-					{table.getHeaderGroups().map((headerGroup) => (
-						<TableRow key={headerGroup.id} className="hover:bg-transparent">
-							{headerGroup.headers.map((header) => (
-								<TableHead
-									className={cn(
-										getFitContentColumnClassName(header.column),
-										getStickyColumnClassName(
-											header.column.id,
-											stickyLeftColumnId,
-											stickyRightColumnId,
-											"head",
-										),
-									)}
-									key={header.id}
-									style={getColumnSizeStyle(header.column)}
+						))
+					: table.getRowModel().rows.map((row) => {
+							const selected = row.getIsSelected() || row.id === selectedRowId
+							return (
+								<TableRow
+									aria-selected={selected || undefined}
+									className={
+										selected ? "bg-primary/5 hover:bg-primary/10" : undefined
+									}
+									data-state={selected ? "selected" : undefined}
+									data-testid={
+										rowTestId ? rowTestId.replace("{id}", row.id) : undefined
+									}
+									key={row.id}
+									role={stickyHeader ? "row" : undefined}
 								>
-									{header.isPlaceholder ? null : (
-										<SortableHeader column={header.column}>
-											{flexRender(
-												header.column.columnDef.header,
-												header.getContext(),
+									{row.getVisibleCells().map((cell) => (
+										<TableCell
+											className={cn(
+												getFitContentColumnClassName(cell.column),
+												getStickyColumnClassName(
+													cell.column.id,
+													stickyLeftColumnId,
+													stickyRightColumnId,
+													"cell",
+												),
 											)}
-										</SortableHeader>
-									)}
-								</TableHead>
-							))}
-						</TableRow>
-					))}
-				</TableHeader>
-				<TableBody>
-					{table.getRowModel().rows.map((row) => {
-						const selected = row.getIsSelected() || row.id === selectedRowId
-						return (
-							<TableRow
-								aria-selected={selected || undefined}
-								className={
-									selected ? "bg-primary/5 hover:bg-primary/10" : undefined
-								}
-								data-state={selected ? "selected" : undefined}
-								data-testid={rowTestId}
-								key={row.id}
-							>
-								{row.getVisibleCells().map((cell) => (
-									<TableCell
-										className={cn(
-											getFitContentColumnClassName(cell.column),
-											getStickyColumnClassName(
-												cell.column.id,
-												stickyLeftColumnId,
-												stickyRightColumnId,
-												"cell",
-											),
-										)}
-										key={cell.id}
-									>
-										{flexRender(cell.column.columnDef.cell, cell.getContext())}
-									</TableCell>
-								))}
-							</TableRow>
-						)
-					})}
-				</TableBody>
-			</Table>
-		</div>
+											key={cell.id}
+											role={stickyHeader ? "cell" : undefined}
+										>
+											{flexRender(
+												cell.column.columnDef.cell,
+												cell.getContext(),
+											)}
+										</TableCell>
+									))}
+								</TableRow>
+							)
+						})}
+			</TableBody>
+		</DataTableFrame>
 	)
 }
 
@@ -389,16 +372,16 @@ function MobileDataCard<TData>({
 	columnLabels,
 	mobileDetailButtonTestId,
 	onViewDetails,
-	rowTestId,
 	row,
+	rowTestId,
 	stickyRightColumnId,
 	viewDetailsLabel,
 }: {
 	columnLabels: Map<string, ReactNode>
 	mobileDetailButtonTestId?: string
 	onViewDetails: () => void
-	rowTestId?: string
 	row: Row<TData>
+	rowTestId?: string
 	stickyRightColumnId?: string
 	viewDetailsLabel: string
 }) {
@@ -416,7 +399,10 @@ function MobileDataCard<TData>({
 	const summaryCells = dataCells.slice(1, 5)
 
 	return (
-		<article className={mobileCardTokens.card} data-testid={rowTestId}>
+		<article
+			className={mobileCardTokens.card}
+			data-testid={rowTestId ? rowTestId.replace("{id}", row.id) : undefined}
+		>
 			<div className={mobileCardTokens.header}>
 				{selectionCells.length > 0 ? (
 					<div className="flex shrink-0 items-center gap-2 pt-0.5">
@@ -432,9 +418,11 @@ function MobileDataCard<TData>({
 						? flexRender(titleCell.column.columnDef.cell, titleCell.getContext())
 						: null}
 				</div>
-				{actionCell
-					? flexRender(actionCell.column.columnDef.cell, actionCell.getContext())
-					: null}
+				{actionCell ? (
+					<div className="shrink-0">
+						{flexRender(actionCell.column.columnDef.cell, actionCell.getContext())}
+					</div>
+				) : null}
 			</div>
 
 			{summaryCells.length > 0 ? (
@@ -520,8 +508,8 @@ function MobileDataDetailSheet<TData>({
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent
 				className="max-h-[calc(100svh-0.5rem)] gap-0 rounded-t-xl p-0"
-				closeButtonTestId={closeButtonTestId}
 				data-testid={contentTestId}
+				closeButtonTestId={closeButtonTestId}
 				side="bottom"
 			>
 				<SheetHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left">

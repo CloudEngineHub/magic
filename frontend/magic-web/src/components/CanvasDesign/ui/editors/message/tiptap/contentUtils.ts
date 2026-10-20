@@ -98,7 +98,13 @@ export function getStringFromContent(doc: JSONContent | null | undefined): strin
 		}
 	}
 
-	traverse(doc)
+	// 原生多行粘贴会生成多个 paragraph；草稿只保存字符串，必须保留块边界，
+	// 否则重新进入编辑器时各段文本会粘连到同一行。
+	const blocks = doc.type === "doc" ? (doc.content ?? []) : [doc]
+	blocks.forEach((block, index) => {
+		if (index > 0) parts.push("\n")
+		traverse(block)
+	})
 	return parts.join("")
 }
 

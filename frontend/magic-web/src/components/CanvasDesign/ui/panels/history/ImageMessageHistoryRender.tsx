@@ -1,18 +1,13 @@
-import {
-	ElementTypeEnum,
-	type ImageElement,
-	type ImageElementContent,
-} from "../../../runtime/document/types"
+import { type ImageElement, type ImageElementContent } from "../../../runtime/document/types"
 import styles from "./index.module.css"
 import IconButton from "../../primitives/custom/IconButton/index"
 import { CircleCheck, CircleX, Copy, ImagePlus, Loader2, X } from "lucide-react"
 import { useMemo, useCallback, useState } from "react"
 import { toast } from "sonner"
-import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
-import { useCanvasPanelUI, useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
+import useCanvasSelectionFloatingPanel from "../../../app/hooks/layout/useCanvasSelectionFloatingPanel"
+import { useCanvasPanelUI } from "../../../app/providers/CanvasUIProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import ReferenceImageItem from "./ReferenceImageItem"
-import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
 import { ImageElement as ImageElementClass } from "../../../runtime/elements/image/ImageElement"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
@@ -27,7 +22,7 @@ import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/refer
 import { copyHistoryPromptToClipboard } from "./historyPromptClipboard"
 import { MessageHistoryCollapsiblePrompt } from "./MessageHistoryCollapsiblePrompt"
 import { PromptPlaceholderPreviewText } from "./PromptPlaceholderPreviewText"
-import { useGenerationRuntime, useCanvasEvent } from "../../../app/hooks/canvas"
+import { useCanvasEvent, useGenerationRuntime } from "../../../app/hooks/canvas"
 import {
 	getActiveImageContent,
 	getImageContentById,
@@ -44,8 +39,7 @@ interface ImageMessageHistoryRenderProps {
 
 export default function ImageMessageHistoryRender(props: ImageMessageHistoryRenderProps) {
 	const { imageElement, contentId, onPreviewMediaResource } = props
-	const { selectedElements } = useCanvasSelectionUI()
-	const { setMessageHistoryElementId } = useCanvasPanelUI()
+	const { closeMessageHistory } = useCanvasPanelUI()
 	const { imageModelList, convertHightConfig, methods } = useMagic()
 	const { canvas } = useCanvas()
 	const { t } = useCanvasDesignI18n()
@@ -125,36 +119,14 @@ export default function ImageMessageHistoryRender(props: ImageMessageHistoryRend
 		imageElement.id,
 	])
 
-	// 容器位置
-	const { containerRef: positionRef } = useElementPositionEffect({
-		position: "right",
-		offset: 8,
-		verticalAlign: "top",
-		shouldShow: () => {
-			return selectedElements.some((element) => element?.type === ElementTypeEnum.Image)
-		},
-	})
-
-	const { containerRef: floatingRef } = useFloatingComponent({
-		id: "image-message-history",
-		interactive: true,
-		enableWheelForwarding: true,
-		enablePointerPanForwarding: true,
-	})
-
-	// 合并 refs
-	const setRefs = useCallback(
-		(node: HTMLDivElement | null) => {
-			positionRef.current = node
-			floatingRef.current = node
-		},
-		[positionRef, floatingRef],
-	)
-
-	// 关闭按钮点击事件
 	const handleClose = useCallback(() => {
-		setMessageHistoryElementId(null)
-	}, [setMessageHistoryElementId])
+		closeMessageHistory()
+	}, [closeMessageHistory])
+	const { setRefs } = useCanvasSelectionFloatingPanel({
+		id: "image-message-history",
+		elementId: imageElement.id,
+		onClose: handleClose,
+	})
 
 	const promptText = request?.prompt?.trim() ?? ""
 	const referenceImagePaths = useMemo(

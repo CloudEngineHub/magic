@@ -1,18 +1,13 @@
-import {
-	ElementTypeEnum,
-	type VideoElement,
-	type VideoElementContent,
-} from "../../../runtime/document/types"
+import { type VideoElement, type VideoElementContent } from "../../../runtime/document/types"
 import styles from "./index.module.css"
 import IconButton from "../../primitives/custom/IconButton/index"
 import { Copy, ImagePlus, X } from "lucide-react"
 import { useMemo, useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import useElementPositionEffect from "../../../app/hooks/layout/useElementPositionEffect"
-import { useCanvasPanelUI, useCanvasSelectionUI } from "../../../app/providers/CanvasUIProvider"
+import useCanvasSelectionFloatingPanel from "../../../app/hooks/layout/useCanvasSelectionFloatingPanel"
+import { useCanvasPanelUI } from "../../../app/providers/CanvasUIProvider"
 import { useMagic } from "../../../app/providers/MagicProvider"
 import ReferenceImageItem from "./ReferenceImageItem"
-import { useFloatingComponent } from "../../../app/hooks/layout/useFloatingComponent"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import type { MediaResourceFullscreenPreviewItem } from "../../fullscreen/media-resource/index"
 import { resolvePromptPlaceholderTokenConfig } from "../../editors/message/reference-assets/promptPlaceholderTokenConfig"
@@ -39,8 +34,7 @@ interface MessageHistoryInfoRow {
 export default function VideoMessageHistoryRender(props: VideoMessageHistoryRenderProps) {
 	const { videoElement, onPreviewMediaResource } = props
 	const { canvas } = useCanvas()
-	const { selectedElements } = useCanvasSelectionUI()
-	const { setMessageHistoryElementId } = useCanvasPanelUI()
+	const { closeMessageHistory } = useCanvasPanelUI()
 	const { videoModelList, methods } = useMagic()
 	const { t } = useCanvasDesignI18n()
 	const generationRuntime = useGenerationRuntime(videoElement.id)
@@ -59,33 +53,13 @@ export default function VideoMessageHistoryRender(props: VideoMessageHistoryRend
 	})
 	const [nowMs, setNowMs] = useState(() => Date.now())
 
-	const { containerRef: positionRef } = useElementPositionEffect({
-		position: "right",
-		offset: 8,
-		verticalAlign: "top",
-		shouldShow: () => {
-			return selectedElements.some((element) => element?.type === ElementTypeEnum.Video)
-		},
-	})
-
-	const { containerRef: floatingRef } = useFloatingComponent({
-		id: "video-message-history",
-		interactive: true,
-		enableWheelForwarding: true,
-		enablePointerPanForwarding: true,
-	})
-
-	const setRefs = useCallback(
-		(node: HTMLDivElement | null) => {
-			positionRef.current = node
-			floatingRef.current = node
-		},
-		[positionRef, floatingRef],
-	)
-
 	const handleClose = useCallback(() => {
-		setMessageHistoryElementId(null)
-	}, [setMessageHistoryElementId])
+		closeMessageHistory()
+	}, [closeMessageHistory])
+	const { setRefs } = useCanvasSelectionFloatingPanel({
+		id: "video-message-history",
+		elementId: videoElement.id,
+	})
 
 	const promptText = request?.prompt?.trim() ?? ""
 

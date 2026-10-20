@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useEventListener, useLatest } from "ahooks"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
+import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
 import type { Canvas } from "../../../../runtime/core/Canvas"
 import { ElementTypeEnum, type VideoElement } from "../../../../runtime/document/types"
@@ -26,7 +27,10 @@ import { isEditorInteractiveKeyboardTarget } from "../../../editors/keyboard"
 import { resolveVideoReferenceVideoModel } from "./model-config/video-editor-config.model"
 import type { VideoEditSessionSnapshot } from "./video-editor-config.types"
 import { buildMediaEditSourceFingerprint } from "../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
-import { runSeedanceImageCompliancePreflight } from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
+import {
+	runSeedanceImageCompliancePreflight,
+	shouldRunSeedanceImageCompliancePreflight,
+} from "../../../../runtime/resources/asset/seedanceImageCompliancePreflight"
 import { useElementToolCommand } from "../../model/useElementToolCommand"
 import type { GenerationToolCommandRequest } from "../../../../runtime/element-tools"
 import {
@@ -38,6 +42,8 @@ import {
 } from "../../../../runtime/resources/video-draft-final/videoDraftFinalRequest"
 import { resolveVideoDraftFinalHint } from "../../../../runtime/resources/video-draft-final/videoDraftFinalHint"
 import { useVideoPointsEstimate } from "./useVideoPointsEstimate"
+import { toastSeedanceCompliancePreflightBlocked } from "../../../toolbar/asset-library/assetComplianceToasts"
+import type { MediaEditorSubmissionController } from "../shared/useMediaEditorSubmission"
 
 interface VideoSecondEditProps {
 	videoElement: VideoElement
@@ -45,6 +51,7 @@ interface VideoSecondEditProps {
 	onPendingToolCommandHandled?: () => void
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	isMediaResourcePreviewOpen?: boolean
+	submissionController: MediaEditorSubmissionController
 }
 
 async function waitForPendingVideoGenerationResources(
@@ -85,8 +92,10 @@ async function waitForPendingVideoGenerationResources(
 
 /** 视频成片结果态：重新编辑可调整已保存请求，再次生成则直接追加同配置 Content。 */
 export default function VideoSecondEdit(props: VideoSecondEditProps) {
-	const { videoElement, pendingToolCommand, onPendingToolCommandHandled } = props
+	const { videoElement, pendingToolCommand, onPendingToolCommandHandled, submissionController } =
+		props
 	const { canvas } = useCanvas()
+	const { t } = useCanvasDesignI18n()
 	const { methods, videoModelList, getCachedVideoPointsEstimate, getVideoPointsEstimate } =
 		useMagic()
 	const { selectedElements } = useCanvasUI()
@@ -269,28 +278,53 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			onConfirm: async () => {
 				if (canvas.mediaReplaceController?.isReplacing?.(videoElement.id)) return
 				setIsGeneratingAgain(true)
+				const requestWithId = generateVideoRequest
+				const modelName = videoModelList.find(
+					(model) => model.model_id === requestWithId.model_id,
+				)?.model_name
+				const requiresCompliance = shouldRunSeedanceImageCompliancePreflight({
+					canvas,
+					request: requestWithId,
+					modelName,
+				})
 				try {
-					const requestWithId = generateVideoRequest
-					const modelName = videoModelList.find(
-						(model) => model.model_id === requestWithId.model_id,
-					)?.model_name
-					const compliancePreflight = await runSeedanceImageCompliancePreflight({
-						canvas,
-						sourceVideoElementId: videoElement.id,
-						request: requestWithId,
-						modelName,
-					})
-					if (!compliancePreflight.proceed) return
+					await submissionController.run({
+						initialPhase: requiresCompliance ? "validating" : "submitting",
+						execute: async ({ setPhase }) => {
+							if (requiresCompliance) {
+								const compliancePreflight =
+									await runSeedanceImageCompliancePreflight({
+										canvas,
+										sourceVideoElementId: videoElement.id,
+										request: requestWithId,
+										modelName,
+									})
+								if (!compliancePreflight.proceed) {
+									toastSeedanceCompliancePreflightBlocked(t, compliancePreflight)
+									return { accepted: false }
+								}
+							}
 
-					const elementInstance = canvas.elementManager.getElementInstance(
-						videoElement.id,
-					)
-					if (!(elementInstance instanceof VideoElementClass)) return
-					const submitted = await elementInstance.submitContentGeneration(
-						generateVideoRequest,
-						{ preserveVideoId: true },
-					)
-					if (submitted) sessionStore?.clearContent(videoElement.id, sessionContentId)
+							setPhase("submitting")
+
+							const elementInstance = canvas.elementManager.getElementInstance(
+								videoElement.id,
+							)
+							if (!(elementInstance instanceof VideoElementClass)) {
+								return { accepted: false }
+							}
+							const submitted = await elementInstance.submitContentGeneration(
+								requestWithId,
+								{
+									preserveVideoId: true,
+								},
+							)
+							if (submitted) {
+								sessionStore?.clearContent(videoElement.id, sessionContentId)
+							}
+							return { accepted: submitted }
+						},
+					})
 				} finally {
 					setIsGeneratingAgain(false)
 				}
@@ -305,6 +339,8 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 		savedGenerateVideoRequest,
 		sessionContentId,
 		sessionStore,
+		submissionController,
+		t,
 		videoModelList,
 		videoElement,
 	])
@@ -553,6 +589,7 @@ export default function VideoSecondEdit(props: VideoSecondEditProps) {
 			onGenerateSubmitSucceeded={() => setEditingMode(null)}
 			onPreviewMediaResource={props.onPreviewMediaResource}
 			isMediaResourcePreviewOpen={props.isMediaResourcePreviewOpen}
+			submissionController={props.submissionController}
 		/>
 	)
 }

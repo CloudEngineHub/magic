@@ -253,6 +253,7 @@ export async function processBatchSavedFiles(params: {
  */
 export function createUploadCallbacks(params: CreateUploadCallbacksParams): {
 	onProgress: (taskId: string, state: { progress?: number }) => void
+	onFileProgress: (taskId: string, file: File, progress: number) => void
 	onBatchSaveComplete: (batchSaveInfo: BatchSaveInfo) => Promise<void>
 	onComplete: () => void
 	onError: (taskId: string, error: Error) => void

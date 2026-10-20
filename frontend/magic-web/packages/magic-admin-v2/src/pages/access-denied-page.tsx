@@ -10,7 +10,6 @@ export default function AccessDeniedPage() {
       testId="access-denied-empty"
       icon={ShieldAlert}
       title={t("accessDenied.title")}
-      description={t("accessDenied.description")}
-    />
+      description={t("accessDenied.description")} />
   );
 }

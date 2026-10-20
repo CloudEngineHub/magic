@@ -127,6 +127,9 @@
 		"mediaKindVideo": "Video",
 		"reorderLinkedText": "Reorder linked text"
 	},
+	"contextMenu": {
+		"seedanceCompliance": "Seedance Compliance Check"
+	},
 	"dropOverlay": {
 		"loading": "Loading",
 		"referenceImageLimitReached": "Reference image limit reached",
@@ -553,7 +556,7 @@
 		"restoreDraft": "Remove draft mark",
 		"restoreDraftDescription": "Restore the normal appearance",
 		"saveToAssets": "Save to Assets",
-		"seedanceCompliance": "Seedance 2.0 Compliance Check",
+		"seedanceCompliance": "Seedance Compliance Check",
 		"show": "Show",
 		"unlock": "Unlock"
 	},
@@ -608,6 +611,7 @@
 		"current": "Current",
 		"description": "Change the image title and version file names. Confirm to save.",
 		"elementName": "Element name",
+		"emptyName": "Element name cannot be empty",
 		"expectedFile": "Expected file name",
 		"expectedName": "Expected",
 		"failed": "Rename failed",
@@ -641,7 +645,7 @@
 		"stop": "Stop remaining changes",
 		"succeeded": "{{count}} files renamed",
 		"syncFileName": "Rename the file when changing the title",
-		"title": "Rename image",
+		"title": "Rename",
 		"titleChanged": "Title changed",
 		"titleOnly": "Changes the element name only",
 		"titleSaved": "Element name saved",
@@ -899,6 +903,7 @@
 		"defaultName": "Triangle"
 	},
 	"video": {
+		"complianceChecking": "Checking",
 		"defaultName": "Video Generator",
 		"empty": "Please send an instruction to generate a video",
 		"fileMissing": "Video file is missing",
@@ -943,6 +948,7 @@
 		"emptyAudio": "No linked audio",
 		"emptyVideos": "No linked videos",
 		"mergeCancelled": "Merge cancelled",
+		"mergeStoryboard": "Merge Storyboard",
 		"mergeVideos": "Merge Videos",
 		"unused": "Not used",
 		"usedAudio": "Audio",
@@ -974,6 +980,9 @@
 		"promptPlaceholderReferenceVideoTokenLabel": "Video",
 		"quality": "Quality",
 		"quickEdit": "Quick edit",
+		"quickEditSourceLimitReached": "This mode cannot fit the quick-edit source video. Adjust the other media first.",
+		"quickEditSourceModeUnsupported": "This mode does not support a source video and cannot preserve quick edit.",
+		"quickEditSourceModelUnsupported": "This model does not support a source video and cannot preserve quick edit.",
 		"reEditFromSaved": "Re-edit",
 		"reEnter": "Re-enter",
 		"referenceAsset": "Omni Mode",

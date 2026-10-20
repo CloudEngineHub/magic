@@ -81,7 +81,9 @@ export function PlatformAppMenuTable({
 				accessorKey: "open_method",
 				size: 150,
 				enableSorting: false,
-				header: () => <span className="whitespace-nowrap">{t("appMenu.column.openMethod")}</span>,
+				header: () => (
+					<span className="whitespace-nowrap">{t("appMenu.column.openMethod")}</span>
+				),
 				cell: ({ row }) => (
 					<span className="whitespace-nowrap text-muted-foreground">
 						{getOpenMethodLabel(row.original.open_method, t)}
@@ -93,7 +95,9 @@ export function PlatformAppMenuTable({
 				size: 100,
 				enableSorting: true,
 				sortDescFirst: false,
-				header: () => <span className="whitespace-nowrap">{t("appMenu.column.sortOrder")}</span>,
+				header: () => (
+					<span className="whitespace-nowrap">{t("appMenu.column.sortOrder")}</span>
+				),
 				cell: ({ row }) => (
 					<span className="whitespace-nowrap text-muted-foreground">
 						{row.original.sort_order ?? 0}
@@ -104,7 +108,9 @@ export function PlatformAppMenuTable({
 				accessorKey: "status",
 				size: 96,
 				enableSorting: false,
-				header: () => <span className="whitespace-nowrap">{t("appMenu.column.status")}</span>,
+				header: () => (
+					<span className="whitespace-nowrap">{t("appMenu.column.status")}</span>
+				),
 				meta: { mobile: { kind: "control" } },
 				cell: ({ row }) => {
 					const item = row.original
@@ -112,9 +118,9 @@ export function PlatformAppMenuTable({
 
 					return (
 						<Switch
+							data-testid="app-menu-status-switch"
 							aria-label={`${getMenuName(item, language)} ${t("appMenu.column.status")}`}
 							checked={item.status === appMenuStatus.enabled}
-							data-testid="app-menu-status-switch"
 							disabled={!hasEditRight || isStatusPending}
 							loading={isStatusPending}
 							onCheckedChange={(checked) => onStatusChange(item, checked)}
@@ -134,7 +140,10 @@ export function PlatformAppMenuTable({
 					return (
 						<div className="flex justify-end">
 							<DropdownMenu>
-								<DropdownMenuTrigger asChild data-testid="platform-app-menu-menu-trigger">
+								<DropdownMenuTrigger
+									asChild
+									data-testid="platform-app-menu-menu-trigger"
+								>
 									<Button
 										aria-label={t("appMenu.action.more")}
 										data-testid="app-menu-more-button"
@@ -144,7 +153,10 @@ export function PlatformAppMenuTable({
 										<MoreHorizontal className="size-4" aria-hidden="true" />
 									</Button>
 								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end" data-testid="app-menu-actions-menu">
+								<DropdownMenuContent
+									align="end"
+									data-testid="app-menu-actions-menu"
+								>
 									<DropdownMenuItem
 										data-testid="app-menu-edit-item"
 										disabled={!hasEditRight}
@@ -157,12 +169,15 @@ export function PlatformAppMenuTable({
 										<>
 											<DropdownMenuSeparator />
 											<DropdownMenuItem
-												className="text-destructive focus:text-destructive"
 												data-testid="app-menu-delete-item"
+												className="text-destructive focus:text-destructive"
 												disabled={!hasEditRight}
 												onSelect={() => hasEditRight && onDelete(item)}
 											>
-												<Trash2 className="mr-2 size-4" aria-hidden="true" />
+												<Trash2
+													className="mr-2 size-4"
+													aria-hidden="true"
+												/>
 												{t("appMenu.action.delete")}
 											</DropdownMenuItem>
 										</>
@@ -174,15 +189,7 @@ export function PlatformAppMenuTable({
 				},
 			},
 		],
-		[
-			hasEditRight,
-			language,
-			onDelete,
-			onEdit,
-			onStatusChange,
-			statusPendingIds,
-			t,
-		],
+		[hasEditRight, language, onDelete, onEdit, onStatusChange, statusPendingIds, t],
 	)
 
 	if (error) {
@@ -192,30 +199,33 @@ export function PlatformAppMenuTable({
 					description={error.message}
 					icon={AlertCircle}
 					testId="app-menu-error"
-					title={t("appMenu.error.loadTitle")}/>
+					title={t("appMenu.error.loadTitle")}
+				/>
 			</div>
 		)
 	}
 
 	return (
 		<DataTable
-				columns={columns}
+			columns={columns}
 			containerTestId="app-menu-table"
-				data={items}
-				emptyState={
-					<div className="p-4">
-						<EmptyState
-							description={t("appMenu.empty.description")}
-							icon={MenuSquare}
+			data={items}
+			emptyState={
+				<div className="p-4">
+					<EmptyState
+						description={t("appMenu.empty.description")}
+						icon={MenuSquare}
 						testId="app-menu-empty"
-							title={t("appMenu.empty.title")}/>
-					</div>
-				}
-				getRowId={(item) => item.id}
-				isLoading={isLoading}
+						title={t("appMenu.empty.title")}
+					/>
+				</div>
+			}
+			getRowId={(item) => item.id}
+			isLoading={isLoading}
 			loadingTestId="app-menu-loading"
-				minWidth={1140}
+			minWidth={1140}
 			rowTestId="app-menu-row"
-				stickyRightColumnId="actions"/>
+			stickyRightColumnId="actions"
+		/>
 	)
 }

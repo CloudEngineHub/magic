@@ -5,6 +5,7 @@ import { cn } from "@/utils/cn"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { useToolTooltip } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/hooks/useToolTooltip"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { AskUserQuestionItem } from "@/types/chat/conversation_message"
 import {
 	buildAskUserToolReplyDetail,
 	isAskUserTaskSuspended,
@@ -64,7 +65,6 @@ interface AskUserToolCallProps {
 }
 
 type AskUserDetailQuestion = {
-	default_value?: string | readonly string[] | null
 	sub_id?: string
 }
 
@@ -78,31 +78,28 @@ function normalizeAskUserStatus(status: unknown) {
 	return ASK_USER_CARD_STATUS.pending
 }
 
-function mergeDetailQuestionDefaults(
+function resolveDetailQuestions(
 	questions: readonly ParsedQuestion[],
 	detailQuestions: unknown,
 ): readonly ParsedQuestion[] {
 	if (!Array.isArray(detailQuestions) || detailQuestions.length === 0) return questions
 
-	let changed = false
-	const nextQuestions = questions.map((question, index) => {
-		const detailQuestion = detailQuestions[index] as AskUserDetailQuestion | undefined
-		if (
-			!detailQuestion ||
-			question.defaultValue !== undefined ||
-			detailQuestion.default_value == null
-		) {
-			return question
-		}
-
-		changed = true
+	// Prepared operations generate their questions on the server, so model XML
+	// may be absent or differ from the confirmed scope. The detail is authoritative.
+	return (detailQuestions as AskUserQuestionItem[]).map((question, index) => {
 		return {
-			...question,
-			defaultValue: detailQuestion.default_value,
+			// Keep existing XML answer/draft keys; server-only cards use the bound ID.
+			id: questions[index]?.id || question.sub_id,
+			type: question.interaction_type,
+			label: question.question,
+			options: question.options ?? [],
+			placeholder: question.placeholder ?? undefined,
+			min: question.min_select ?? undefined,
+			max: question.max_select ?? undefined,
+			defaultValue: question.default_value ?? undefined,
+			isComplete: true,
 		}
 	})
-
-	return changed ? nextQuestions : questions
 }
 
 /** 服务端答案以 sub_id 为键，流式 XML 题目以 q-{index} 为键，按题目顺序对齐。 */
@@ -167,7 +164,7 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 
 	const parsedQuestions = useMemo(() => {
 		const next = parseQuestionsXml(deferredRaw, prevParsedRef.current)
-		const resolvedQuestions = mergeDetailQuestionDefaults(next, detailData?.questions)
+		const resolvedQuestions = resolveDetailQuestions(next, detailData?.questions)
 		prevParsedRef.current = resolvedQuestions
 		return resolvedQuestions
 	}, [deferredRaw, detailData?.questions])

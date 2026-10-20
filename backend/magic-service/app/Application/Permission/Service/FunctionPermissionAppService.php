@@ -14,11 +14,14 @@ use App\Domain\Permission\Entity\FunctionPermissionPolicyEntity;
 use App\Domain\Permission\Entity\ValueObject\BindingScopeType;
 use App\Domain\Permission\Entity\ValueObject\PermissionControlStatus;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
+use App\Domain\Permission\Event\FunctionPermissionChanged;
 use App\Domain\Permission\Service\FunctionPermissionCatalog;
 use App\Domain\Permission\Service\FunctionPermissionDomainService;
 use App\ErrorCode\PermissionErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
+use Dtyq\AsyncEvent\AsyncEventUtil;
+use Hyperf\DbConnection\Db;
 
 use function Hyperf\Translation\__;
 
@@ -97,7 +100,11 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
         $entity->setBindingScope($bindingScope);
         $entity->setRemark($remark);
 
-        $savedEntity = $this->domainService->savePolicy($dataIsolation, $entity);
+        $savedEntity = $this->saveAndDispatchChange(
+            $dataIsolation,
+            [$functionCode],
+            fn () => $this->domainService->savePolicy($dataIsolation, $entity)
+        );
 
         return $this->buildDetailItem($catalog, $savedEntity);
     }
@@ -113,12 +120,12 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
         }
         $catalog = $this->resolveCatalogItem($catalog);
 
-        $savedEntity = $this->domainService->updatePolicyEnabled(
+        $savedEntity = $this->saveAndDispatchChange($dataIsolation, [$functionCode], fn () => $this->domainService->updatePolicyEnabled(
             $dataIsolation,
             $functionCode,
             $enabled,
             is_array($catalog['default_binding_scope'] ?? null) ? $catalog['default_binding_scope'] : []
-        );
+        ));
 
         return $this->buildDetailItem($catalog, $savedEntity);
     }
@@ -145,7 +152,11 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
             $entities[] = $entity;
         }
 
-        $savedEntities = $this->domainService->saveBatch($dataIsolation, $entities);
+        $savedEntities = $this->saveAndDispatchChange(
+            $dataIsolation,
+            array_values(array_unique(array_map(static fn (FunctionPermissionPolicyEntity $entity) => $entity->getFunctionCode(), $entities))),
+            fn () => $this->domainService->saveBatch($dataIsolation, $entities)
+        );
         $policyMap = $this->domainService->listPolicies($dataIsolation);
         $settingsStatus = $this->domainService->getPermissionControlStatus($dataIsolation);
 
@@ -165,7 +176,11 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
 
     public function updateSettings(PermissionDataIsolation $dataIsolation, PermissionControlStatus $status): array
     {
-        $savedStatus = $this->domainService->updatePermissionControlStatus($dataIsolation, $status);
+        $savedStatus = $this->saveAndDispatchChange(
+            $dataIsolation,
+            null,
+            fn () => $this->domainService->updatePermissionControlStatus($dataIsolation, $status)
+        );
 
         return [
             'permission_control_status' => $savedStatus->value,
@@ -195,6 +210,20 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
         );
 
         return $this->domainService->checkPermission($dataIsolation, $authorization->getId(), $functionCode);
+    }
+
+    /** A null function list denotes a global control change affecting every function. */
+    private function saveAndDispatchChange(PermissionDataIsolation $isolation, ?array $functionCodes, callable $save): mixed
+    {
+        return Db::transaction(function () use ($isolation, $functionCodes, $save): mixed {
+            $result = $save();
+            AsyncEventUtil::dispatch(new FunctionPermissionChanged(
+                $isolation->getCurrentOrganizationCode(),
+                $isolation->getCurrentUserId(),
+                $functionCodes
+            ));
+            return $result;
+        });
     }
 
     private function buildItem(array $catalog, ?FunctionPermissionPolicyEntity $policy, PermissionControlStatus $status): array

@@ -283,6 +283,7 @@ export class ElementManager {
 			uploadFiles: File[]
 			onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
 			onUploadFailed?: (elementId: string, error: Error) => void
+			onUploadSettled?: () => void
 		},
 	): string {
 		// 创建元素实例（与正式元素相同的渲染逻辑）
@@ -297,7 +298,7 @@ export class ElementManager {
 		}
 
 		// 使用全局上传管理器上传文件
-		const { uploadFiles, onUploadComplete, onUploadFailed } = uploadContext
+		const { uploadFiles, onUploadComplete, onUploadFailed, onUploadSettled } = uploadContext
 		if (uploadFiles.length > 0) {
 			this.canvas.canvasFileUploadManager.queueUpload({
 				elementId: createResult.elementId,
@@ -318,6 +319,7 @@ export class ElementManager {
 					// 触发原始回调
 					onUploadFailed?.(createResult.elementId, error)
 				},
+				onUploadSettled,
 			})
 		}
 
@@ -1986,6 +1988,17 @@ export class ElementManager {
 				),
 				{ phase: "commit" },
 			)
+		}
+
+		// Reparenting updates the source/target parent instances directly, so the
+		// regular element:updated label refresh never sees the changed frame counts.
+		if (parentChangedItems.length > 0) {
+			const affectedParentIds = new Set<string>()
+			parentChangedItems.forEach((item) => {
+				if (item.sourceParentId) affectedParentIds.add(item.sourceParentId)
+			})
+			if (targetParentId) affectedParentIds.add(targetParentId)
+			this.canvas.refreshNameLabelIcons?.(Array.from(affectedParentIds))
 		}
 		return true
 	}

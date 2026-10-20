@@ -7,12 +7,14 @@ import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-d
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
 import { PlatformAppMenuFilters } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-filters"
 import { PlatformAppMenuFormDialog } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-form-dialog"
 import { PlatformAppMenuTable } from "@magic-admin-v2/features/platform-app-menu/components/platform-app-menu-table"
 import {
 	APP_MENU_ALL_VALUE,
 	createDefaultAppMenuFilterDraft,
+	getAppMenuFilterActiveCount,
 	type AppMenuFilterDraft,
 } from "@magic-admin-v2/features/platform-app-menu/utils"
 import {
@@ -58,13 +60,23 @@ export default function PlatformAppMenuPage() {
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.APP_MENU_EDIT)
-	const { filterDraft, page, pageSize, params, setDebouncedField, setFilterDraft, setPage, setPageSize } =
-		useListQueryParams({
-			debounceFields: ["name"],
-			initialDraft: createDefaultAppMenuFilterDraft,
-			initialPageSize: defaultPageSize,
-			toParams: toAppMenuListParams,
-		})
+	const {
+		filterDraft,
+		page,
+		pageSize,
+		params,
+		setDebouncedField,
+		setFilterDraft,
+		setPage,
+		setPageSize,
+	} = useListQueryParams({
+		debounceFields: ["name"],
+		initialDraft: createDefaultAppMenuFilterDraft,
+		initialPageSize: defaultPageSize,
+		toParams: toAppMenuListParams,
+	})
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+	const activeFilterCount = getAppMenuFilterActiveCount(filterDraft)
 	const [isFormOpen, setIsFormOpen] = useState(false)
 	const [editingId, setEditingId] = useState<string | null>(null)
 	const [editingFallback, setEditingFallback] = useState<AppMenuItem | null>(null)
@@ -154,8 +166,15 @@ export default function PlatformAppMenuPage() {
 	return (
 		<>
 			<ListShell
+				testId="app-menu-page"
 				actions={
 					<>
+						<PageHeaderFilterButton
+							data-testid="app-menu-advanced-trigger"
+							count={activeFilterCount}
+							label={t("appMenu.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
+						/>
 						<PageHeaderActionButton
 							data-testid="app-menu-refresh-button"
 							disabled={listQuery.isFetching}
@@ -163,7 +182,10 @@ export default function PlatformAppMenuPage() {
 							variant="outline"
 						>
 							<RefreshCw
-								className={cn("size-4", listQuery.isFetching ? "animate-spin" : null)}
+								className={cn(
+									"size-4",
+									listQuery.isFetching ? "animate-spin" : null,
+								)}
 								aria-hidden="true"
 							/>
 							{t("common.refresh")}
@@ -179,17 +201,16 @@ export default function PlatformAppMenuPage() {
 					</>
 				}
 				description={t("nav.desc.appMenu")}
-				testId="app-menu-page"
 				title={t("nav.item.appMenu")}
-				contentHeader={
+			>
+				<div className="space-y-4">
 					<PlatformAppMenuFilters
+						mobileOpen={mobileFilterOpen}
 						onChange={setFilterDraft}
+						onMobileOpenChange={setMobileFilterOpen}
 						onSearchValueChange={(value) => setDebouncedField("name", value)}
 						value={filterDraft}
 					/>
-				}
-			>
-				<div className="space-y-4">
 					<PlatformAppMenuTable
 						error={queryError}
 						hasEditRight={hasEditRight}
@@ -203,18 +224,18 @@ export default function PlatformAppMenuPage() {
 
 					{!queryError && !listQuery.isLoading ? (
 						<ListPagination
-							pageSizeOptionTestId="app-menu-page-size-option"
 							showQuickJumper
 							className="px-1"
-							loading={listQuery.isFetching}
 							jumpInputTestId="app-menu-jump-input"
+							loading={listQuery.isFetching}
 							nextButtonTestId="app-menu-next-button"
 							onPageChange={setPage}
 							page={page}
 							pageSize={pageSize}
-							onPageSizeChange={setPageSize}
+							pageSizeOptionTestId="app-menu-page-size-option"
 							pageSizeTriggerTestId="app-menu-page-size-trigger"
 							previousButtonTestId="app-menu-previous-button"
+							onPageSizeChange={setPageSize}
 							testId="app-menu-pagination"
 							total={total}
 						/>
@@ -234,8 +255,8 @@ export default function PlatformAppMenuPage() {
 
 			<DeleteConfirmDialog
 				cancelButtonTestId="app-menu-delete-cancel-button"
-				confirmLabel={t("appMenu.action.confirmDelete")}
 				confirmButtonTestId="app-menu-delete-confirm-button"
+				confirmLabel={t("appMenu.action.confirmDelete")}
 				contentTestId="app-menu-delete-dialog"
 				description={formatTemplate(t("appMenu.confirm.deleteDescription"), {
 					name: deleteTarget ? getMenuName(deleteTarget, language) : "",
