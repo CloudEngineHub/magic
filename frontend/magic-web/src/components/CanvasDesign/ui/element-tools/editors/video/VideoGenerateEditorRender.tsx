@@ -306,6 +306,7 @@ export default function VideoGenerateEditorRender(props: VideoGenerateEditorRend
 		videoElement,
 		messageEditorRef: editorRef,
 		manageRecoverySession: !sessionIntent,
+		recoveryIntent: sessionIntent ?? "generate",
 		...(restoreOnMount ? { restoreOnMount } : {}),
 		...(sessionSnapshot ? { sessionSnapshot } : {}),
 		...(syncElementSize !== undefined ? { syncElementSize } : {}),

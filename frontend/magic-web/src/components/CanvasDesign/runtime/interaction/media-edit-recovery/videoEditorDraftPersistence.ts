@@ -11,6 +11,8 @@ import { ElementTypeEnum } from "../../document/types"
 export interface VideoEditorDraftSnapshot {
 	request: Partial<GenerateVideoRequest>
 	modeDrafts: Partial<Record<VideoInputMode, StoredVideoModeInputDraft>>
+	quickEditSource?: StoredVideoEditorDraft["quickEditSource"]
+	quickEditSourceRemoved?: boolean
 	mentionBindings?: StoredMentionPathBinding[]
 }
 
@@ -31,6 +33,9 @@ export function persistVideoEditorDraft(options: {
 	if (
 		JSON.stringify(currentDraft?.request) === JSON.stringify(snapshot.request) &&
 		JSON.stringify(currentDraft?.modeDrafts) === JSON.stringify(snapshot.modeDrafts) &&
+		JSON.stringify(currentDraft?.quickEditSource ?? null) ===
+			JSON.stringify(snapshot.quickEditSource ?? null) &&
+		currentDraft?.quickEditSourceRemoved === snapshot.quickEditSourceRemoved &&
 		JSON.stringify(currentDraft?.mentionBindings ?? []) ===
 			JSON.stringify(snapshot.mentionBindings ?? [])
 	) {
@@ -41,6 +46,8 @@ export function persistVideoEditorDraft(options: {
 		version: 1,
 		request: snapshot.request,
 		modeDrafts: snapshot.modeDrafts,
+		...(snapshot.quickEditSource ? { quickEditSource: snapshot.quickEditSource } : {}),
+		...(snapshot.quickEditSourceRemoved ? { quickEditSourceRemoved: true } : {}),
 		...(snapshot.mentionBindings?.length ? { mentionBindings: snapshot.mentionBindings } : {}),
 		updatedAt: Date.now(),
 	}

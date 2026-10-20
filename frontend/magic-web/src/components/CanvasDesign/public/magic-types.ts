@@ -1570,6 +1570,10 @@ export interface StoredVideoEditorDraft {
 	version: 1
 	request: Partial<GenerateVideoRequest>
 	modeDrafts: Partial<Record<VideoInputMode, StoredVideoModeInputDraft>>
+	/** 快捷编辑源视频。跨输入模式保留，避免切换模式时丢失当前视频。 */
+	quickEditSource?: UploadFileResponse & { assetType: "video" }
+	/** 用户已明确移除快捷编辑源视频；避免重新打开或切换模式时自动复活。 */
+	quickEditSourceRemoved?: boolean
 	/** 按 prompt mention 出现顺序保存的结构化身份，关闭重开后直接重建节点。 */
 	mentionBindings?: StoredMentionPathBinding[]
 	updatedAt: number
