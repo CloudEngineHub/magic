@@ -42,6 +42,11 @@ const getVitestBaseConfig = () => {
 			// Match application resolution so tests do not depend on a previously built dist.
 			conditions: ["magic-web-source", ...defaultClientConditions],
 			alias: [
+				// 与应用保持一致，组件测试直接解析导出工具源码，无需预构建包。
+				{
+					find: "@magic-web/html2image",
+					replacement: resolve(__dirname, "packages/html2image/src/index.ts"),
+				},
 				{
 					find: "@customer/",
 					replacement: `${resolve(__dirname, "customer/src")}/`,
