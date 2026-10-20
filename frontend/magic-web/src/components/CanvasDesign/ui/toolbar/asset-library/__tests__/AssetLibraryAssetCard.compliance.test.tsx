@@ -196,7 +196,7 @@ describe("AssetLibraryAssetCard compliance menu", () => {
 			/>,
 		)
 
-		fireEvent.click(screen.getByRole("menuitem", { name: "Seedance 2.0 合规校验" }))
+		fireEvent.click(screen.getByRole("menuitem", { name: "Seedance 合规校验" }))
 
 		expect(onComplianceCheck).toHaveBeenCalledWith(baseAsset)
 		expect(onToggle).not.toHaveBeenCalled()
@@ -217,7 +217,7 @@ describe("AssetLibraryAssetCard compliance menu", () => {
 			/>,
 		)
 
-		expect(screen.getByRole("menuitem", { name: "Seedance 2.0 合规校验" })).toBeInTheDocument()
+		expect(screen.getByRole("menuitem", { name: "Seedance 合规校验" })).toBeInTheDocument()
 	})
 
 	it("does not refresh asset detail when a preview fails", () => {

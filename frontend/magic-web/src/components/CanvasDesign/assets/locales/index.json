@@ -128,7 +128,7 @@
 		"reorderLinkedText": "调整关联文本顺序"
 	},
 	"contextMenu": {
-		"seedanceCompliance": "Seedance 2.0 合规校验"
+		"seedanceCompliance": "Seedance 合规校验"
 	},
 	"dropOverlay": {
 		"loading": "加载中",
@@ -517,7 +517,7 @@
 		"restoreDraft": "取消废稿标记",
 		"restoreDraftDescription": "恢复正常显示",
 		"saveToAssets": "保存到素材库",
-		"seedanceCompliance": "Seedance 2.0 合规校验",
+		"seedanceCompliance": "Seedance 合规校验",
 		"show": "显示",
 		"unlock": "解锁"
 	},

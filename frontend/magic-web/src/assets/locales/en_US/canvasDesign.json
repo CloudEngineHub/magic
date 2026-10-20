@@ -128,7 +128,7 @@
 		"reorderLinkedText": "Reorder linked text"
 	},
 	"contextMenu": {
-		"seedanceCompliance": "Seedance 2.0 Compliance Check"
+		"seedanceCompliance": "Seedance Compliance Check"
 	},
 	"dropOverlay": {
 		"loading": "Loading",
@@ -556,7 +556,7 @@
 		"restoreDraft": "Remove draft mark",
 		"restoreDraftDescription": "Restore the normal appearance",
 		"saveToAssets": "Save to Assets",
-		"seedanceCompliance": "Seedance 2.0 Compliance Check",
+		"seedanceCompliance": "Seedance Compliance Check",
 		"show": "Show",
 		"unlock": "Unlock"
 	},

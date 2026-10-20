@@ -237,7 +237,7 @@ export function AssetLibraryAssetCard({
 	const showComplianceAction =
 		manageable && Boolean(onComplianceCheck) && canStartAssetLibraryCompliance(displayAsset)
 	const showActionsMenu = manageable || showComplianceAction
-	const seedanceComplianceLabel = t("contextMenu.seedanceCompliance", "Seedance 2.0 合规校验")
+	const seedanceComplianceLabel = t("contextMenu.seedanceCompliance", "Seedance 合规校验")
 	const complianceFailedReason =
 		displayAsset.compliance_status === "FAILED"
 			? (displayAsset.compliance_failed_reason?.trim() ?? "")
