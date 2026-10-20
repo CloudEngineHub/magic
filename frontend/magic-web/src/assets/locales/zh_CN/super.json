@@ -330,6 +330,7 @@
 		"friend": "朋友",
 		"greet": "嗨, {{name}}",
 		"inputChatName": "请输入对话名称",
+		"nameMaxLengthTip": "名称长度不能超过 {{maxLength}} 个字符",
 		"noChats": "暂无对话",
 		"noPreview": "暂无对话预览",
 		"pinChat": "置顶",

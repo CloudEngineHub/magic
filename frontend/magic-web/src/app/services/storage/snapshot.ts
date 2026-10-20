@@ -1,3 +1,5 @@
+import { KNOWN_EXCLUDED_INDEXED_DB_NAME } from "./storageExclusions"
+
 export interface CacheBucketCount {
 	name: string
 	count: number
@@ -185,6 +187,8 @@ export async function countIndexedDBRecords(
 	for (const info of infos) {
 		const dbName = info.name
 		if (!dbName) continue
+		// Keep the known stream-record database out of diagnostics so other stores can be ranked.
+		if (dbName === KNOWN_EXCLUDED_INDEXED_DB_NAME) continue
 		const database = await openExistingDatabase(dbName, noteFault)
 		if (!database) continue
 		try {
