@@ -52,6 +52,7 @@ export class ContentCleaner {
 		const editingClasses = ["__editor-selected", "__editor-hover"]
 		const editingAttributes = [
 			"data-magic-editor-node-id",
+			"data-magic-ppt-build-hidden",
 			SOURCE_NODE_ATTRIBUTE,
 			"contenteditable",
 			"data-text-editing",

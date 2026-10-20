@@ -515,6 +515,7 @@ export interface ElementSelectedPayload {
 	attributes?: {
 		href?: string
 		dataMagicHref?: string
+		dataMagicPptBuild?: string
 		target?: string
 		rel?: string
 		download?: string

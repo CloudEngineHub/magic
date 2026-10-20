@@ -25,6 +25,7 @@ import { FileSaveSyncBadge } from "../../FileSaveSyncBadge"
 export function PPTControlBar({
 	activeIndex,
 	totalSlides,
+	buildProgress,
 	canGoPrevious = activeIndex > 0,
 	canGoNext = activeIndex < totalSlides - 1,
 	isTransitioning,
@@ -141,9 +142,22 @@ export function PPTControlBar({
 							: "col-start-1 row-start-1",
 				)}
 			>
+				{buildProgress && buildProgress.total > 0 && (
+					<span className="px-1 text-xs tabular-nums" aria-live="polite">
+						{t("ppt.build.progress", buildProgress)}
+					</span>
+				)}
 				<div className="flex items-center gap-1">
 					{/* Previous button */}
-					<MagicTooltip title={isMobile ? undefined : t("fileViewer.previousPage")}>
+					<MagicTooltip
+						title={
+							isMobile
+								? undefined
+								: buildProgress && buildProgress.step > 0
+									? t("ppt.build.previous")
+									: t("fileViewer.previousPage")
+						}
+					>
 						<span>
 							<Button
 								variant="ghost"
@@ -155,7 +169,11 @@ export function PPTControlBar({
 									e.currentTarget.blur()
 									onPrevSlide()
 								}}
-								aria-label={t("fileViewer.previousPage")}
+								aria-label={
+									buildProgress && buildProgress.step > 0
+										? t("ppt.build.previous")
+										: t("fileViewer.previousPage")
+								}
 								disabled={!canGoPrevious || isTransitioning}
 							>
 								<ChevronLeft className="h-4 w-4" />
@@ -223,7 +241,15 @@ export function PPTControlBar({
 					</div>
 
 					{/* Next button */}
-					<MagicTooltip title={isMobile ? undefined : t("fileViewer.nextPage")}>
+					<MagicTooltip
+						title={
+							isMobile
+								? undefined
+								: buildProgress && buildProgress.step < buildProgress.total
+									? t("ppt.build.next")
+									: t("fileViewer.nextPage")
+						}
+					>
 						<span>
 							<Button
 								variant="ghost"
@@ -235,7 +261,11 @@ export function PPTControlBar({
 									e.currentTarget.blur()
 									onNextSlide()
 								}}
-								aria-label={t("fileViewer.nextPage")}
+								aria-label={
+									buildProgress && buildProgress.step < buildProgress.total
+										? t("ppt.build.next")
+										: t("fileViewer.nextPage")
+								}
 								disabled={!canGoNext || isTransitioning}
 							>
 								<ChevronRight className="h-4 w-4" />

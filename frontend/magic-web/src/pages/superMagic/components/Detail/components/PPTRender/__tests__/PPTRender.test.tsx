@@ -88,6 +88,7 @@ const mockState = vi.hoisted(() => ({
 	toggleFullscreen: vi.fn(async () => undefined),
 	presenterIsOpen: false,
 	changeSlide: vi.fn(),
+	firstPage: vi.fn(async () => true),
 	jumpToPage: vi.fn(),
 	presenterFallbackOnly: false,
 	presenterOpen: vi.fn(async () => "opened" as const),
@@ -458,7 +459,7 @@ vi.mock("../hooks", () => ({
 		mockState.navigationCheck = options.checkBeforeNavigate
 		return {
 			changeSlide: mockState.changeSlide,
-			goToFirstSlide: vi.fn(),
+			goToFirstSlide: mockState.firstPage,
 			handleJumpToPage: mockState.jumpToPage,
 			preparePresentation: () => mockState.store.activeIndex,
 		}
@@ -1109,6 +1110,15 @@ describe("PPTRender", () => {
 
 		fireEvent.click(screen.getByTestId("ppt-presenter-console-exit-button"))
 		expect(mockState.presenterClose).toHaveBeenCalledTimes(1)
+	})
+
+	it("advances non-fullscreen playback with Space and jumps with Home", () => {
+		mockState.isSlideEditing = false
+		renderPPTRender({ isPlaybackMode: true })
+		fireEvent.keyDown(window, { key: " " })
+		expect(mockState.changeSlide).toHaveBeenCalledWith("next")
+		fireEvent.keyDown(window, { key: "Home" })
+		expect(mockState.firstPage).toHaveBeenCalledOnce()
 	})
 
 	it("supports presenter keyboard navigation and exit without intercepting controls", () => {

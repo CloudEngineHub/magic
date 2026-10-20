@@ -1,5 +1,6 @@
 export interface PPTControlBarProps {
 	activeIndex: number
+	buildProgress?: { step: number; total: number }
 	totalSlides: number
 	canGoPrevious?: boolean
 	canGoNext?: boolean

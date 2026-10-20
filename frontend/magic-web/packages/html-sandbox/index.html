@@ -679,7 +679,18 @@
 								event.target.tagName === "INPUT" ||
 								event.target.tagName === "TEXTAREA")
 
-						if (isEditMode || isTargetEditable) return
+						if (
+							isEditMode ||
+							isTargetEditable ||
+							event.repeat ||
+							(event.target instanceof Element &&
+								event.target.closest(
+									event.key === " "
+										? "button,a,select,[role=button],[role=menuitem]"
+										: "select,[role=menuitem]",
+								))
+						)
+							return
 
 						var key = event.key
 						var direction = null
@@ -717,6 +728,7 @@
 									type: "keyboardEvent",
 									direction: direction,
 									originalKey: key,
+									repeat: event.repeat,
 								},
 								"*",
 							)

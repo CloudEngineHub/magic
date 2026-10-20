@@ -138,6 +138,7 @@ interface ElementInfo {
 	attributes?: {
 		href?: string
 		dataMagicHref?: string
+		dataMagicPptBuild?: string
 		target?: string
 		rel?: string
 		download?: string
@@ -428,6 +429,7 @@ export class ElementSelector {
 		return {
 			href: read("href"),
 			dataMagicHref: read("data-magic-href"),
+			dataMagicPptBuild: read("data-magic-ppt-build"),
 			target: read("target"),
 			rel: read("rel"),
 			download: read("download"),

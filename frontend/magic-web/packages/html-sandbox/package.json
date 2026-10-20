@@ -47,6 +47,16 @@
 			"types": "./src/utils/parentOrigin.ts",
 			"import": "./dist/utils/parentOrigin.js"
 		},
+		"./utils/pptBuildRuntime": {
+			"magic-web-source": "./src/utils/pptBuildRuntime.ts",
+			"types": "./src/utils/pptBuildRuntime.ts",
+			"import": "./dist/utils/pptBuildRuntime.js"
+		},
+		"./utils/pptBuild": {
+			"magic-web-source": "./src/utils/pptBuild.ts",
+			"types": "./src/utils/pptBuild.ts",
+			"import": "./dist/utils/pptBuild.js"
+		},
 		"./utils/safeUrl": {
 			"magic-web-source": "./src/utils/safeUrl.ts",
 			"types": "./src/utils/safeUrl.ts",

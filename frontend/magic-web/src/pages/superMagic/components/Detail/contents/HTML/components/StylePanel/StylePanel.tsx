@@ -1,3 +1,4 @@
+import { PPTBuildControl } from "./controls/PPTBuildControl"
 import { observer } from "mobx-react-lite"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -47,6 +48,7 @@ const FullStylePanel = observer(function FullStylePanel({
 	className,
 	toolbarEndRef,
 	variant = "full",
+	isPptRender = false,
 	sidebarOpen,
 	onToggleSidebar,
 	domTreeOpen = false,
@@ -444,6 +446,7 @@ const FullStylePanel = observer(function FullStylePanel({
 				>
 					<HistoryActions editorRef={editorRef} />
 					<SelectionReadout selectedElement={selectedElement} editorRef={editorRef} />
+					{isPptRender && <PPTBuildControl editorRef={editorRef} disabled={disabled} />}
 					{showElementControls ? (
 						<Separator orientation="vertical" className="mx-1 !h-4" />
 					) : null}

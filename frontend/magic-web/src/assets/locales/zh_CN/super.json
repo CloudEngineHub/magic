@@ -5195,6 +5195,23 @@
 			"show": "取消隐藏",
 			"stop": "停止后续操作"
 		},
+		"build": {
+			"appear": "出现",
+			"apply": "应用",
+			"description": "仅放映时逐步显示；同一步的元素一起出现。",
+			"effect": "显示效果",
+			"fade": "淡入",
+			"fallback": "本页分步展示暂不可用，已恢复完整内容。",
+			"ignored": "部分动画配置无效或重叠，已忽略。",
+			"nested": "父级或子级已有页内动画，请先移除其中一层。",
+			"next": "下一步",
+			"previous": "上一步",
+			"progress": "步骤 {{step}}/{{total}}",
+			"remove": "移除动画",
+			"saveFailed": "动画设置失败，请重试。",
+			"step": "第几步",
+			"title": "页内动画"
+		},
 		"codeVersionCompare": {
 			"description": "检测到服务端有新的源码版本。请对比当前编辑内容与服务端版本，选择您想要保留的版本。",
 			"title": "源码版本对比"

@@ -55,7 +55,12 @@ import { injectPPTSwipeBridge } from "./utils/pptSwipeBridge"
 import { injectPPTAnimationHoldBridge } from "./utils/pptAnimationHold"
 import { canReplaySlideInPlace } from "./utils/slideReplayPolicy"
 import { usePPTSlideReplay } from "./hooks/usePPTSlideReplay"
+import { injectPPTBuildBridge } from "./utils/pptBuildBridge"
+import { usePPTBuildPlayback, type PPTBuildController } from "./hooks/usePPTBuildPlayback"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { usePPTSwipeNavigation, type PPTSwipeDirection } from "./hooks/usePPTSwipeNavigation"
+
+let buildDocumentSequence = 0
 
 export interface PPTSlideToolbarModel {
 	token: object
@@ -63,6 +68,9 @@ export interface PPTSlideToolbarModel {
 }
 
 interface PPTSlideProps {
+	buildStartAtEnd?: boolean
+	onBuildControllerChange?: (controller: PPTBuildController | null) => void
+	onBuildAction?: () => void
 	allowDownload?: boolean
 	showRefresh?: boolean
 	index: number
@@ -197,6 +205,9 @@ const PPTSlide = observer(function PPTSlide({
 	toolbarOwnerKey,
 	onToolbarModelChange,
 	onSwipe,
+	buildStartAtEnd,
+	onBuildControllerChange,
+	onBuildAction,
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -307,13 +318,47 @@ const PPTSlide = observer(function PPTSlide({
 		rawContent: rawContent,
 		sourceVersion: undefined,
 	})
-	// Keep runtime gesture code out of raw source and saved slide content.
+	// Bind only preview HTML to the frame runtime; saved/raw HTML remains authored content.
 	const hasSwipeNavigation = Boolean(onSwipe)
+	// Key the runtime by actual preview content, not unrelated metadata/reorder revisions.
+	const buildDocumentKey = useMemo(() => {
+		const source = `${fileId ?? "slide"}:${displayContent.sourceVersion ?? "latest"}`
+		return displayContent.content ? `${source}:${++buildDocumentSequence}` : `${source}:empty`
+	}, [displayContent.content, displayContent.sourceVersion, fileId])
+	const registerBuild = useMemoizedFn((controller: PPTBuildController | null) =>
+		onBuildControllerChange?.(controller),
+	)
+	const buildPlayback = usePPTBuildPlayback({
+		documentKey: buildDocumentKey,
+		hasBuilds: displayContent.content.includes("data-magic-ppt-build"),
+		enabled: Boolean(isFullscreen || isPlaybackMode) && !isEditMode,
+		active: isActive,
+		startAtEnd: buildStartAtEnd,
+		getIframe: () => rendererRef.current?.getIframeElement() ?? null,
+		onController: registerBuild,
+		onAction: onBuildAction,
+		onFailure: () => magicToast.info(t("ppt.build.fallback")),
+		onIgnored: () => magicToast.info(t("ppt.build.ignored")),
+	})
 	const previewRuntimeContent = useMemo(() => {
 		const origin = window.location.origin
-		const content = injectPPTAnimationHoldBridge(displayContent.content, origin)
+		let content = injectPPTAnimationHoldBridge(displayContent.content, origin)
+		content = injectPPTBuildBridge(
+			content,
+			origin,
+			buildDocumentKey,
+			Boolean(isFullscreen || isPlaybackMode) && !isEditMode && !buildPlayback.failed,
+		)
 		return hasSwipeNavigation ? injectPPTSwipeBridge(content, origin) : content
-	}, [displayContent.content, hasSwipeNavigation])
+	}, [
+		displayContent.content,
+		hasSwipeNavigation,
+		buildDocumentKey,
+		isFullscreen,
+		isPlaybackMode,
+		isEditMode,
+		buildPlayback.failed,
+	])
 
 	const isDisplayContentCurrent =
 		fileVersion === undefined
@@ -608,11 +653,17 @@ const PPTSlide = observer(function PPTSlide({
 	})
 
 	const handleSlideRenderReady = useMemoizedFn(() => {
-		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) {
-			return
+		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent)
+			return false
+		const finish = () => {
+			paintedRendererKeyRef.current = rendererKey
+			onReplayRenderReady()
+			return true
 		}
-		paintedRendererKeyRef.current = rendererKey
-		onReplayRenderReady()
+		// Static pages retain synchronous readiness. Only configured previews await a frame ack.
+		if (displayContent.content.includes("data-magic-ppt-build"))
+			return buildPlayback.initialize(true).then((ready) => ready && finish())
+		return finish()
 	})
 
 	useEffect(() => {
@@ -1329,7 +1380,7 @@ const PPTSlide = observer(function PPTSlide({
 					<div
 						key={`${rendererKey}-${frame.id}`}
 						className={
-							frame.isVisible
+							frame.isVisible && !buildPlayback.preparing
 								? "contents"
 								: "pointer-events-none invisible absolute inset-0"
 						}
@@ -1341,8 +1392,12 @@ const PPTSlide = observer(function PPTSlide({
 								content={frame.content}
 								onSaveReady={handleSaveReady}
 								onRenderReady={() => {
-									handleSlideRenderReady()
-									previewFrameSwap.markReady(frame.id)
+									const ready = handleSlideRenderReady()
+									if (ready instanceof Promise) {
+										void ready.then((allowed) => {
+											if (allowed) previewFrameSwap.markReady(frame.id)
+										})
+									} else previewFrameSwap.markReady(frame.id)
 								}}
 								onAppendPickingChange={setIsAppendPicking}
 								onQuickSelectionChange={setIsQuickSelecting}
@@ -1367,13 +1422,14 @@ const PPTSlide = observer(function PPTSlide({
 					previewStatusEnabled={false}
 					onRetry={() => undefined}
 				/>
-				{!isSlideRenderReady &&
-					!previewFrameSwap.holdsPreviousFrame &&
-					paintedRendererKeyRef.current !== rendererKey && (
-						<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">
-							<MagicSpin spinning />
-						</div>
-					)}
+				{(buildPlayback.preparing ||
+					(!isSlideRenderReady &&
+						!previewFrameSwap.holdsPreviousFrame &&
+						paintedRendererKeyRef.current !== rendererKey)) && (
+					<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">
+						<MagicSpin spinning />
+					</div>
+				)}
 			</div>
 		)
 	}

@@ -2666,6 +2666,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							<>
 								<StylePanel
 									variant="global"
+									isPptRender={isPptRender}
 									editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
 									disabled={isSaving}
 									sidebarOpen={sidebarOpen}

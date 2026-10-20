@@ -5197,6 +5197,23 @@
 			"show": "Show slides",
 			"stop": "Stop remaining operations"
 		},
+		"build": {
+			"appear": "Appear",
+			"apply": "Apply",
+			"description": "Reveal during presentation. Elements with the same step appear together.",
+			"effect": "Effect",
+			"fade": "Fade in",
+			"fallback": "Step-by-step playback is unavailable. Full content has been restored.",
+			"ignored": "Some animation settings are invalid or nested and have been ignored.",
+			"nested": "A parent or child already has an animation. Remove one level first.",
+			"next": "Next step",
+			"previous": "Previous step",
+			"progress": "Step {{step}}/{{total}}",
+			"remove": "Remove animation",
+			"saveFailed": "Could not update the animation. Try again.",
+			"step": "Step number",
+			"title": "In-slide animation"
+		},
 		"codeVersionCompare": {
 			"description": "A new server source version has been detected. Compare your current edits with the latest server version and choose which version to keep.",
 			"title": "Source Version Comparison"

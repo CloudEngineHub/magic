@@ -1072,6 +1072,7 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 			element.removeAttribute("data-resize-handle")
 			element.removeAttribute("data-drag-handle")
 			element.removeAttribute("data-ai-dropdown")
+			element.removeAttribute("data-magic-ppt-build-hidden")
 			element.removeAttribute("data-ppt-editable")
 			element.removeAttribute("data-listener-added")
 

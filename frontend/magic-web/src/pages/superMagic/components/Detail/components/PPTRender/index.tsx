@@ -16,6 +16,7 @@ import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { observer } from "mobx-react-lite"
 import { ChevronDown, Minimize, PanelLeftOpen, Presentation, Plus } from "lucide-react"
+import { usePPTBuildNavigation } from "./hooks/usePPTBuildNavigation"
 import PPTSlide, { type PPTSlideToolbarModel } from "./PPTSlide"
 import PPTSidebar from "./PPTSidebar/index"
 import { PPTControlBar } from "./PPTControlBar"
@@ -425,18 +426,22 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	useSlideFileLocator({ store })
 
 	// Presenter controls reuse the same guarded slide navigation as the main window.
-	const { changeSlide, goToFirstSlide, handleJumpToPage, preparePresentation } =
-		useSlideNavigation({
-			store,
-			checkBeforeNavigate,
-			isPresenting: () =>
-				isPresentationFullscreen || isPresenterWindowOpen || Boolean(isPlaybackMode),
-			getHiddenSlidePaths: () => store.getConfigForExport().displayConfig?.hidden_slides,
-			hasPendingNavigationGuard: () =>
-				transitionPanelOpen || isAnySlideEditing || activeInspectorPickingRef.current,
-			onHiddenSlide: () => magicToast.info(t("ppt.hiddenPageSkipped")),
-			onNoVisibleSlides: () => magicToast.info(t("ppt.noVisibleSlides")),
-		})
+	const {
+		changeSlide: changePage,
+		goToFirstSlide: firstPage,
+		handleJumpToPage: jumpPage,
+		preparePresentation,
+	} = useSlideNavigation({
+		store,
+		checkBeforeNavigate,
+		isPresenting: () =>
+			isPresentationFullscreen || isPresenterWindowOpen || Boolean(isPlaybackMode),
+		getHiddenSlidePaths: () => store.getConfigForExport().displayConfig?.hidden_slides,
+		hasPendingNavigationGuard: () =>
+			transitionPanelOpen || isAnySlideEditing || activeInspectorPickingRef.current,
+		onHiddenSlide: () => magicToast.info(t("ppt.hiddenPageSkipped")),
+		onNoVisibleSlides: () => magicToast.info(t("ppt.noVisibleSlides")),
+	})
 	// 这里只表示 PPT 放映全屏。外层 FilesViewer 全屏只放大完整查看界面，不能隐藏侧栏和工具栏。
 	const {
 		isFullscreen: isPresentationFullscreen,
@@ -498,6 +503,27 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	})
 	const isSingleWindowFullscreen = isPresentationFullscreen && !isPresenterView
 	const isPresenterConsole = isPresenterWindowOpen
+	const buildNavigation = usePPTBuildNavigation({
+		hasBuilds: () =>
+			Boolean(store.slides[store.activeIndex]?.content?.includes("data-magic-ppt-build")),
+		getPageKey: () => store.slides[store.activeIndex]?.path ?? "",
+		isPresenting: () =>
+			isPresentationFullscreen || isPresenterWindowOpen || Boolean(isPlaybackMode),
+		canNavigate: () =>
+			isTabActive !== false &&
+			!transitionPanelOpen &&
+			!isAnySlideEditing &&
+			!isDeleteModalOpen &&
+			!deckTools.busy &&
+			!store.isTransitioning &&
+			!pendingKey &&
+			!transitionState,
+		changePage,
+		jumpPage,
+		firstPage,
+	})
+	const { changeSlide, goToFirstSlide, handleJumpToPage } = buildNavigation
+
 	const visibleSlideIndices = getPptVisibleSlideIndices(
 		store.slides,
 		store.getConfigForExport().displayConfig?.hidden_slides,
@@ -774,6 +800,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	useEffect(() => {
 		function handleKeyDown(event: KeyboardEvent) {
 			if (
+				event.repeat ||
 				event.defaultPrevented ||
 				(event.target &&
 					(event.target as Element).nodeType === 1 &&
@@ -802,11 +829,15 @@ const PPTRenderInner = observer(function PPTRenderInner({
 				case "PageDown":
 					changeSlide("next")
 					break
+				case "Home":
+					event.preventDefault()
+					void goToFirstSlide()
+					break
 				case "Escape":
 					if (isPresenterConsole) closePresenterWindow()
 					break
 				case " ":
-					if (isPresentationFullscreen || isPresenterConsole) {
+					if (isPresentationFullscreen || isPresenterConsole || isPlaybackMode) {
 						event.preventDefault()
 						changeSlide("next")
 					}
@@ -823,6 +854,8 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		}
 	}, [
 		presenterConsoleContainer,
+		goToFirstSlide,
+		isPlaybackMode,
 		changeSlide,
 		isPresentationFullscreen,
 		isPresenterConsole,
@@ -836,7 +869,12 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	// iframe postMessage 导航 - 依赖 usePPTSidebar 返回的 isDeleteModalOpen
 	useEffect(() => {
 		function handleMessage(event: MessageEvent) {
-			if (!event.data || event.data.type !== "keyboardEvent") return
+			if (!event.data || event.data.type !== "keyboardEvent" || event.data.repeat) return
+			if (
+				store.slides[store.activeIndex]?.content?.includes("data-magic-ppt-build") &&
+				!buildNavigation.acceptsMessage(event)
+			)
+				return
 			if (
 				transitionPanelOpen ||
 				isAnySlideEditing ||
@@ -1529,6 +1567,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 										>
 											<PPTSlide
 												showRefresh={showRefresh}
+												buildStartAtEnd={buildNavigation.startAtEnd.current}
+												onBuildControllerChange={(controller) =>
+													buildNavigation.register(slide.path, controller)
+												}
+												onBuildAction={() => void changeSlide("next")}
 												index={index}
 												isActive={index === store.activeIndex}
 												isPresented={
@@ -1632,6 +1675,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									store.isReady &&
 									hasSlides && (
 										<PPTControlBar
+											buildProgress={buildNavigation.progress}
 											onOpenTransitions={
 												canConfigureTransitions
 													? () => openTransitions(store.activeIndex)
@@ -1639,14 +1683,17 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											}
 											canGoPrevious={
 												isPresentationFullscreen || isPlaybackMode
-													? visibleSlideIndices.some(
+													? buildNavigation.progress.step > 0 ||
+														visibleSlideIndices.some(
 															(index) => index < store.activeIndex,
 														)
 													: undefined
 											}
 											canGoNext={
 												isPresentationFullscreen || isPlaybackMode
-													? nextVisibleIndex >= 0
+													? buildNavigation.progress.step <
+															buildNavigation.progress.total ||
+														nextVisibleIndex >= 0
 													: undefined
 											}
 											notesVisible={
@@ -1742,10 +1789,18 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											store.isReady &&
 											hasSlides && (
 												<PPTPresenterConsoleControls
-													canGoPrevious={visibleSlideIndices.some(
-														(index) => index < store.activeIndex,
-													)}
-													canGoNext={nextVisibleIndex >= 0}
+													buildProgress={buildNavigation.progress}
+													canGoPrevious={
+														buildNavigation.progress.step > 0 ||
+														visibleSlideIndices.some(
+															(index) => index < store.activeIndex,
+														)
+													}
+													canGoNext={
+														buildNavigation.progress.step <
+															buildNavigation.progress.total ||
+														nextVisibleIndex >= 0
+													}
 													activeIndex={store.activeIndex}
 													totalSlides={store.slideUrls.length}
 													isTransitioning={store.isTransitioning}

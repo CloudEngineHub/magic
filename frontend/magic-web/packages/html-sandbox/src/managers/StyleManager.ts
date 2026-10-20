@@ -12,6 +12,7 @@
  *   the handler in EditorRuntime after creating the manager.
  */
 
+import { PPT_BUILD_ATTRIBUTE, parsePPTBuild, isPPTBuildElement } from "../utils/pptBuild"
 import type { CommandHistory } from "../core/CommandHistory"
 import type { CommandRecord } from "../core/types"
 import type { ElementSelector } from "../features/ElementSelector"
@@ -87,6 +88,7 @@ function setInlineStyle(element: HTMLElement, property: string, rawValue: string
 const COMMON_ATTRIBUTE_NAMES: Record<string, string> = {
 	href: "href",
 	dataMagicHref: "data-magic-href",
+	dataMagicPptBuild: PPT_BUILD_ATTRIBUTE,
 	target: "target",
 	rel: "rel",
 	download: "download",
@@ -914,6 +916,20 @@ export class StyleManager {
 		attributes: Record<string, string | null>,
 	): Promise<void> {
 		const element = findElement(selector)
+		// Validate before mutating any attribute, so a rejected build remains one atomic command.
+		if (attributes.dataMagicPptBuild != null) {
+			const build = parsePPTBuild(attributes.dataMagicPptBuild)
+			if (!build || !isPPTBuildElement(element)) throw new Error("PPT_BUILD_INVALID")
+			const related = [
+				...element.ownerDocument.querySelectorAll(`[${PPT_BUILD_ATTRIBUTE}]`),
+			].some(
+				(other) =>
+					other !== element &&
+					parsePPTBuild(other.getAttribute(PPT_BUILD_ATTRIBUTE)) &&
+					(other.contains(element) || element.contains(other)),
+			)
+			if (related) throw new Error("PPT_BUILD_NESTED")
+		}
 		const previousAttributes = readCommonAttributes(element)
 		const normalizedAttributes = Object.fromEntries(
 			Object.entries(attributes).map(([name, value]) => [
