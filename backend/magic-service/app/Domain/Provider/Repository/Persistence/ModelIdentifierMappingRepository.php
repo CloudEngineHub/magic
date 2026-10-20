@@ -126,9 +126,9 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
     }
 
     /**
-     * 查询已经被其他映射组占用的源模型标识。
+     * 查询已经被其他映射组占用的源模型标识，并排除当前编辑组的数据行。
      */
-    public function findConflictingSourceModelIds(ProviderDataIsolation $dataIsolation, array $sourceModelIds, ?string $excludeGroupId = null): array
+    public function findConflictingSourceModelIds(ProviderDataIsolation $dataIsolation, array $sourceModelIds, ?string $excludeGroupId = null, array $excludeIds = []): array
     {
         if ($sourceModelIds === []) {
             return [];
@@ -138,6 +138,10 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
             ->whereNull('deleted_at');
         if ($excludeGroupId !== null) {
             $query->where('group_id', '<>', $excludeGroupId);
+        }
+        $excludeIds = array_values(array_filter(array_map('intval', $excludeIds), static fn (int $id): bool => $id > 0));
+        if ($excludeIds !== []) {
+            $query->whereNotIn('id', $excludeIds);
         }
         return array_values(array_unique(array_map(
             static fn ($row): string => (string) $row->source_model_id,

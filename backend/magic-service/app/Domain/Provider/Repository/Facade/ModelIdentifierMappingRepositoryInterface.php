@@ -32,9 +32,10 @@ interface ModelIdentifierMappingRepositoryInterface
 
     /**
      * @param string[] $sourceModelIds
+     * @param int[] $excludeIds
      * @return string[]
      */
-    public function findConflictingSourceModelIds(ProviderDataIsolation $dataIsolation, array $sourceModelIds, ?string $excludeGroupId = null): array;
+    public function findConflictingSourceModelIds(ProviderDataIsolation $dataIsolation, array $sourceModelIds, ?string $excludeGroupId = null, array $excludeIds = []): array;
 
     /**
      * @return array<string, string>

@@ -195,10 +195,16 @@ class ModelIdentifierMappingDomainService
             ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.source_target_same');
         }
 
+        $currentGroupRows = $groupId === null ? [] : $this->mappingRepository->getByGroupId($dataIsolation, $groupId);
+        $currentGroupRowIds = array_values(array_filter(array_map(
+            static fn (ModelIdentifierMappingEntity $row): ?int => $row->getId(),
+            $currentGroupRows,
+        )));
         $conflicts = $this->mappingRepository->findConflictingSourceModelIds(
             $dataIsolation,
             array_merge($sourceModelIds, [$targetModelId]),
             $groupId,
+            $currentGroupRowIds,
         );
         $sourceConflicts = array_values(array_intersect($sourceModelIds, $conflicts));
         if ($sourceConflicts !== []) {
