@@ -20,7 +20,9 @@ use App\Application\SuperMagic\File\Service\MagicFSChangePublisher;
 use App\Application\SuperMagic\Message\Service\HandleAgentMessageAppService;
 use App\Application\SuperMagic\Message\Service\MessageQueueAppService;
 use App\Application\SuperMagic\Message\Service\MessageScheduleAppService;
+use App\Application\SuperMagic\Task\Contract\SandboxRebuildPortInterface;
 use App\Application\SuperMagic\Task\Service\AgentAppService;
+use App\Application\SuperMagic\Task\Service\AgentSandboxRebuildAdapter;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentCategoryRelationRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentCategoryRepositoryInterface;
 use App\Domain\SuperMagic\Agent\Repository\Facade\AgentMarketRepositoryInterface;
@@ -158,6 +160,8 @@ class ConfigProvider
                 ProjectMemberSettingRepositoryInterface::class => ProjectMemberSettingRepository::class,
                 // 添加SandboxOS相关服务的依赖注入
                 SandboxGatewayInterface::class => SandboxGatewayService::class,
+                // 沙箱重启编排依赖"重建单话题沙箱"的能力端口，生产实现是 AgentAppService 适配器
+                SandboxRebuildPortInterface::class => AgentSandboxRebuildAdapter::class,
                 SandboxAgentInterface::class => SandboxAgentService::class,
                 FileConverterInterface::class => FileConverterService::class,
                 BatchDownloadPackRepositoryInterface::class => BatchDownloadPackRepository::class,

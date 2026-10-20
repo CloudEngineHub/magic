@@ -21,6 +21,7 @@ use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Entity\ValueObject\UserType;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\SuperMagic\Agent\Entity\ValueObject\SuperMagicAgentDataIsolation;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\CreationSource;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\SuperMagicExecutionSource;
@@ -716,6 +717,9 @@ class MessageScheduleAppService extends AbstractAppService
                 throw new RuntimeException('Message schedule is disabled');
             }
             try {
+                if ($schedule->getProjectId() > 0) {
+                    di(MagicClawRuntimePolicyDomainService::class)->assertProject($schedule->getProjectId());
+                }
                 $this->assertMessageContentAgentAccess($dataIsolation, $schedule->getMessageContent());
             } catch (BusinessException $exception) {
                 $disabledSchedule = null;

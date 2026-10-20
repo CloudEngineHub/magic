@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Task\Service;
 
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageVersion;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
@@ -102,40 +103,27 @@ readonly class SandboxVersionDomainService
         array $latestImages
     ): array {
         $needsUpdate = null;
-        if ($this->hasCompleteImages($latestImages)) {
-            if ($this->hasCompleteImages($currentImages)) {
-                $needsUpdate = $currentImages['agent_image'] !== $latestImages['agent_image']
-                    || $currentImages['agfs_image'] !== $latestImages['agfs_image'];
+        if (SandboxImageVersion::isComplete($latestImages)) {
+            if (SandboxImageVersion::isComplete($currentImages)) {
+                $needsUpdate = SandboxImageVersion::compare($currentImages, $latestImages);
             } else {
-                $knownAgentImage = $this->nonEmptyImage($currentImages['agent_image'] ?? null)
-                    ?? $this->nonEmptyImage($legacyAgentImage);
-                if ($knownAgentImage !== null && $knownAgentImage !== $latestImages['agent_image']) {
+                $knownAgentImage = SandboxImageVersion::nonEmpty($currentImages[SandboxImageVersion::AGENT_IMAGE_KEY] ?? null)
+                    ?? SandboxImageVersion::nonEmpty($legacyAgentImage);
+                if ($knownAgentImage !== null && $knownAgentImage !== $latestImages[SandboxImageVersion::AGENT_IMAGE_KEY]) {
                     $needsUpdate = true;
                 }
             }
         }
 
-        $currentAgentImage = $this->nonEmptyImage($currentImages['agent_image'] ?? null)
-            ?? $this->nonEmptyImage($legacyAgentImage)
+        $currentAgentImage = SandboxImageVersion::nonEmpty($currentImages[SandboxImageVersion::AGENT_IMAGE_KEY] ?? null)
+            ?? SandboxImageVersion::nonEmpty($legacyAgentImage)
             ?? '';
 
         return [
-            'current_version' => self::extractImageVersion($currentAgentImage),
-            'latest_version' => self::extractImageVersion($latestImages['agent_image'] ?? ''),
+            'current_version' => SandboxImageVersion::extractTag($currentAgentImage),
+            'latest_version' => SandboxImageVersion::extractTag($latestImages[SandboxImageVersion::AGENT_IMAGE_KEY] ?? ''),
             'needs_update' => $needsUpdate,
         ];
-    }
-
-    /** @param null|array<string, mixed> $images */
-    private function hasCompleteImages(?array $images): bool
-    {
-        return $this->nonEmptyImage($images['agent_image'] ?? null) !== null
-            && $this->nonEmptyImage($images['agfs_image'] ?? null) !== null;
-    }
-
-    private function nonEmptyImage(mixed $image): ?string
-    {
-        return is_string($image) && trim($image) !== '' ? $image : null;
     }
 
     /** @return array<string, mixed> */
@@ -149,22 +137,5 @@ readonly class SandboxVersionDomainService
             ]);
             return [];
         }
-    }
-
-    /** Display only; comparisons always use complete image references. */
-    private static function extractImageVersion(mixed $image): string
-    {
-        if (! is_string($image) || $image === '') {
-            return '';
-        }
-
-        $imageWithoutDigest = explode('@', $image, 2)[0];
-        $lastSlashPos = strrpos($imageWithoutDigest, '/');
-        $tagPos = strrpos($imageWithoutDigest, ':');
-        if ($tagPos === false || ($lastSlashPos !== false && $tagPos < $lastSlashPos)) {
-            return '';
-        }
-
-        return substr($imageWithoutDigest, $tagPos + 1);
     }
 }
