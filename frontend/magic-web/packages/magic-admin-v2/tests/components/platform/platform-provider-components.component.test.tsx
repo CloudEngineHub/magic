@@ -198,7 +198,7 @@ describe("platform provider components", () => {
     expect(switches[2]).toHaveAttribute("aria-busy", "true");
   });
 
-  it("updates search input, search field, select filters, row actions, and per-row status", async () => {
+  it("updates independent search inputs, select filters, row actions, and per-row status", async () => {
     const onFilterChange = vi.fn();
     const onOpenDetail = vi.fn();
     const onStatusChange = vi.fn().mockResolvedValue(undefined);
@@ -206,21 +206,30 @@ describe("platform provider components", () => {
 
     const { unmount } = renderList({ filter, onFilterChange, onOpenDetail, onStatusChange });
 
-    const desktopFilters = within(screen.getByTestId("provider-desktop-filters"));
-    const search = desktopFilters.getByPlaceholderText("providerList.placeholder.search");
-    fireEvent.change(search, { target: { value: "open" } });
+    // Name, alias and provider ID are independent fields instead of a field selector.
+    fireEvent.change(screen.getByPlaceholderText("providerList.filter.name"), {
+      target: { value: "open" },
+    });
     expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, name: "open" });
+    fireEvent.change(screen.getByPlaceholderText("providerList.filter.alias"), {
+      target: { value: "oa" },
+    });
+    expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, alias: "oa" });
+    fireEvent.change(screen.getByPlaceholderText("providerList.filter.providerId"), {
+      target: { value: "code" },
+    });
+    expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, id: "code" });
 
-    changeNativeSelectOption("providerList.filter.alias");
-    expect(onFilterChange).toHaveBeenLastCalledWith({ ...filter, search_field: "alias" });
-
-    changeNativeSelectOption("providerList.status.enabled");
+    const comboboxes = screen.getAllByRole("combobox");
+    fireEvent.click(comboboxes[0]);
+    fireEvent.click(await screen.findByRole("option", { name: "providerList.status.enabled" }));
     expect(onFilterChange).toHaveBeenLastCalledWith({
       ...filter,
       status: String(providerStatus.enabled),
     });
 
-    changeNativeSelectOption("providerList.providerType.nonOfficial");
+    fireEvent.click(comboboxes[1]);
+    fireEvent.click(await screen.findByRole("option", { name: "providerList.providerType.nonOfficial" }));
     expect(onFilterChange).toHaveBeenLastCalledWith({
       ...filter,
       provider_type: String(providerType.nonOfficial),

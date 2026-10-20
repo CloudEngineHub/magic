@@ -1,25 +1,16 @@
-import { Bot, Filter, Plus, RefreshCw } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { Bot, Plus, RefreshCw } from "lucide-react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ConfirmDialog } from "@magic-admin-v2/components/confirm-dialog"
-import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
-import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
 import { ListPageSkeleton } from "@magic-admin-v2/components/list-page-skeleton"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
-import { Button } from "@magic-admin-v2/components/ui/button"
 import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@magic-admin-v2/components/ui/select"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
 import { AssignModelsDialog } from "@magic-admin-v2/features/platform-official-staff/components/assignment/assign-models-dialog"
 import { OfficialStaffFormDialog } from "@magic-admin-v2/features/platform-official-staff/components/staff/official-staff-form-dialog"
+import { StaffFilters } from "@magic-admin-v2/features/platform-official-staff/components/staff/staff-filters"
 import {
 	DefaultSettingsCard,
 	StaffCard,
@@ -37,6 +28,7 @@ import {
 import { buildDefaultAgentOptions } from "@magic-admin-v2/features/platform-official-staff/utils/default-agent"
 import {
 	createDefaultFilterDraft,
+	getOfficialStaffFilterActiveCount,
 	normalizeErrorMessage,
 	pageSize,
 	selectAllValue,
@@ -52,6 +44,21 @@ import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 import { useRights } from "@magic-admin-v2/hooks/use-rights"
 import { cn } from "@magic-admin-v2/utils/cn"
+
+function OfficialStaffShell({ actions, children }: { actions?: ReactNode; children: ReactNode }) {
+	const { t } = useTranslation()
+
+	return (
+		<ListShell
+			actions={actions}
+			description={t("nav.desc.officialStaff")}
+			testId="official-staff-page"
+			title={t("nav.item.officialStaff")}
+		>
+			{children}
+		</ListShell>
+	)
+}
 
 function toOfficialStaffListParams(
 	draft: FilterDraft,
@@ -71,15 +78,22 @@ export default function PlatformOfficialStaffPage() {
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const hasEditRight = useRights(PERMISSION_KEY_MAP.MODE_MANAGEMENT_EDIT)
-	const { filterDraft, page, pageSize: currentPageSize, params, setDebouncedField, setFilterDraft, setPage, setPageSize } =
-		useListQueryParams({
-			debounceFields: ["keyword", "identifier"],
-			initialDraft: createDefaultFilterDraft,
-			initialPageSize: pageSize,
-			toParams: toOfficialStaffListParams,
-		})
-	const [mobileFilterDraft, setMobileFilterDraft] = useState(createDefaultFilterDraft)
+	const {
+		filterDraft,
+		page,
+		pageSize: currentPageSize,
+		params,
+		setFilterDraft,
+		setPage,
+		setPageSize,
+	} = useListQueryParams({
+		debounceFields: ["keyword", "identifier"],
+		initialDraft: createDefaultFilterDraft,
+		initialPageSize: pageSize,
+		toParams: toOfficialStaffListParams,
+	})
 	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+	const activeFilterCount = getOfficialStaffFilterActiveCount(filterDraft)
 	const [staffDialog, setStaffDialog] = useState<StaffDialogState>({ open: false, staff: null })
 	const [assignDialog, setAssignDialog] = useState<AssignDialogState>({
 		open: false,
@@ -169,49 +183,38 @@ export default function PlatformOfficialStaffPage() {
 		}
 	}
 
-	function handleMobileFilterOpenChange(open: boolean) {
-		if (open) {
-			setMobileFilterDraft(filterDraft)
-		}
-		setMobileFilterOpen(open)
-	}
-
-	function resetMobileFilters() {
-		setMobileFilterDraft(createDefaultFilterDraft())
-	}
-
-	function applyMobileFilters() {
-		setFilterDraft((previous) => ({
-			...previous,
-			identifier: mobileFilterDraft.identifier,
-			keyword: mobileFilterDraft.keyword,
-			status: mobileFilterDraft.status,
-		}))
-		setMobileFilterOpen(false)
-	}
-
 	return (
 		<>
-			<ListShell
-				testId="official-staff-page"
+			<OfficialStaffShell
 				actions={
 					<>
-						<PageHeaderActionButton onClick={handleRefresh} variant="outline" data-testid="platform-official-staff-refresh-button">
+						<PageHeaderFilterButton
+							data-testid="platform-official-staff-filter-button"
+							count={activeFilterCount}
+							label={t("officialStaff.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
+						/>
+						<PageHeaderActionButton
+							data-testid="platform-official-staff-refresh-button"
+							onClick={handleRefresh}
+							variant="outline"
+						>
 							<RefreshCw
 								className={cn("size-4", listQuery.isFetching && "animate-spin")}
 							/>
 							{t("common.refresh")}
 						</PageHeaderActionButton>
 						{hasEditRight ? (
-							<PageHeaderActionButton onClick={() => setStaffDialog({ open: true, staff: null })} data-testid="platform-official-staff-create-button">
+							<PageHeaderActionButton
+								data-testid="platform-official-staff-create-button"
+								onClick={() => setStaffDialog({ open: true, staff: null })}
+							>
 								<Plus className="size-4" />
 								{t("officialStaff.action.addStaff")}
 							</PageHeaderActionButton>
 						) : null}
 					</>
 				}
-				description={t("nav.desc.officialStaff")}
-				title={t("nav.item.officialStaff")}
 			>
 				<div className="space-y-6">
 					<DefaultSettingsCard
@@ -235,148 +238,15 @@ export default function PlatformOfficialStaffPage() {
 					/>
 
 					<div className="space-y-4">
-						<div className="sticky top-0 z-40 -mx-4 flex min-w-0 items-end gap-2 bg-background px-4 py-2 md:hidden lg:-mx-6 lg:px-6">
-							<FilterControlField
-								className="min-w-0 flex-1"
-								label={t("officialStaff.filter.keyword")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									clearButtonTestId="platform-official-staff-mobile-clear-button"
-									onValueChange={(keyword) =>
-			setDebouncedField("keyword", keyword)}
-									placeholder={t("officialStaff.placeholder.keyword")}
-									value={filterDraft.keyword}
-								 inputTestId="platform-official-staff-mobile-search-input"/>
-							</FilterControlField>
-							<Button
-								aria-label={t("officialStaff.filter.title")}
-								onClick={() => handleMobileFilterOpenChange(true)}
-								size="icon"
-								variant="outline"
-							 data-testid="platform-official-staff-filter-button">
-								<Filter className="size-4" aria-hidden="true" />
-							</Button>
-						</div>
-						<div className="sticky top-0 z-40 -mx-4 hidden min-w-0 flex-col gap-2 bg-background px-4 py-2 md:flex md:flex-row md:items-end lg:-mx-6 lg:px-6">
-							<FilterControlField
-								className="w-fit"
-								label={t("officialStaff.filter.status")}
-							>
-								<Select
-									onOpenChange={(open) =>
-										setOpenFloatingId(open ? "staff-status-filter" : null)
-									}
-									onValueChange={(value) => {
-										setOpenFloatingId(null)
-										setFilterDraft((prev) => ({ ...prev, status: value }))
-									}}
-									open={openFloatingId === "staff-status-filter"}
-									value={filterDraft.status}
-								>
-									<SelectTrigger className="w-fit max-w-full" data-testid="platform-official-staff-select-trigger">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent data-testid="platform-official-staff-select-content">
-										<SelectItem value={selectAllValue} data-testid="platform-official-staff-option">
-											{t("officialStaff.filter.allStatuses")}
-										</SelectItem>
-										<SelectItem value="1" data-testid="platform-official-staff-option">{t("common.enabled")}</SelectItem>
-										<SelectItem value="0" data-testid="platform-official-staff-option">{t("common.disabled")}</SelectItem>
-									</SelectContent>
-								</Select>
-							</FilterControlField>
-							<FilterControlField
-								className="min-w-0 flex-1 md:flex-none md:w-[340px] xl:w-[420px]"
-								label={t("officialStaff.filter.keyword")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									clearButtonTestId="platform-official-staff-secondary-clear-button"
-									onValueChange={(keyword) =>
-			setDebouncedField("keyword", keyword)}
-									placeholder={t("officialStaff.placeholder.keyword")}
-									value={filterDraft.keyword}
-								 inputTestId="platform-official-staff-secondary-search-input"/>
-							</FilterControlField>
-							<FilterControlField
-								className="min-w-0 flex-1 md:flex-none md:w-[340px] xl:w-[420px]"
-								label={t("officialStaff.filter.identifier")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={(identifier) =>
-										setDebouncedField("identifier", identifier)
-									}
-									placeholder={t("officialStaff.placeholder.identifier")}
-									value={filterDraft.identifier}
-								 inputTestId="platform-official-staff-tertiary-search-input" clearButtonTestId="platform-official-staff-tertiary-search-clear-button"/>
-							</FilterControlField>
-						</div>
-						<FilterSheet contentTestId="platform-official-staff-filter-sheet" bodyTestId="platform-official-staff-filter-body" resetButtonTestId="platform-official-staff-reset-button" applyButtonTestId="platform-official-staff-apply-button"
-							closeButtonTestId="platform-official-staff-filter-close-button"
-							applyLabel={t("officialStaff.action.applyFilters")}
-							description={t("officialStaff.filter.description")}
-							onApply={applyMobileFilters}
-							onOpenChange={handleMobileFilterOpenChange}
-							onReset={resetMobileFilters}
-							open={mobileFilterOpen}
-							presentation="mobile-only"
-							resetLabel={t("officialStaff.action.reset")}
-							title={t("officialStaff.filter.title")}
-						>
-							<FilterControlField className="w-full" label={t("officialStaff.filter.keyword")}>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={(keyword) =>
-										setMobileFilterDraft((previous) => ({ ...previous, keyword }))
-									}
-									placeholder={t("officialStaff.placeholder.keyword")}
-									value={mobileFilterDraft.keyword}
-								 inputTestId="platform-official-staff-mobile-search-input" clearButtonTestId="platform-official-staff-mobile-search-clear-button"/>
-							</FilterControlField>
-							<FilterControlField
-								className="w-full"
-								label={t("officialStaff.filter.status")}
-							>
-								<Select
-									onValueChange={(status) =>
-										setMobileFilterDraft((previous) => ({ ...previous, status }))
-									}
-									value={mobileFilterDraft.status}
-								>
-									<SelectTrigger className="w-full" data-testid="platform-official-staff-select-trigger">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent data-testid="platform-official-staff-select-content">
-										<SelectItem value={selectAllValue} data-testid="platform-official-staff-option">
-											{t("officialStaff.filter.allStatuses")}
-										</SelectItem>
-										<SelectItem value="1" data-testid="platform-official-staff-option">{t("common.enabled")}</SelectItem>
-										<SelectItem value="0" data-testid="platform-official-staff-option">{t("common.disabled")}</SelectItem>
-									</SelectContent>
-								</Select>
-							</FilterControlField>
-							<FilterControlField
-								className="w-full"
-								label={t("officialStaff.filter.identifier")}
-							>
-								<FilterSearchInput
-									clearLabel={t("common.clear")}
-									onValueChange={(identifier) =>
-										setMobileFilterDraft((previous) => ({
-											...previous,
-											identifier,
-										}))
-									}
-									placeholder={t("officialStaff.placeholder.identifier")}
-									value={mobileFilterDraft.identifier}
-								 inputTestId="platform-official-staff-mobile-search-input" clearButtonTestId="platform-official-staff-mobile-search-clear-button"/>
-							</FilterControlField>
-						</FilterSheet>
+						<StaffFilters
+							mobileOpen={mobileFilterOpen}
+							onChange={setFilterDraft}
+							onMobileOpenChange={setMobileFilterOpen}
+							value={filterDraft}
+						/>
 
 						{listQuery.isLoading ? (
-							<ListPageSkeleton rows={6} testId="platform-official-staff-loading" />
+							<ListPageSkeleton rows={6}  testId="platform-official-staff-loading" />
 						) : listQuery.isError ? (
 							<div className="rounded-lg border border-border/50 p-4">
 								<EmptyState
@@ -385,16 +255,18 @@ export default function PlatformOfficialStaffPage() {
 										t("officialStaff.error.loadFailed"),
 									)}
 									icon={Bot}
+									testId="platform-official-staff-error"
 									title={t("officialStaff.error.loadTitle")}
-					 testId="platform-official-staff-error"/>
+								/>
 							</div>
 						) : regularItems.length === 0 ? (
 							<div className="rounded-lg border border-dashed bg-muted/20 p-4">
 								<EmptyState
 									description={t("officialStaff.empty.description")}
 									icon={Bot}
+									testId="platform-official-staff-empty"
 									title={t("officialStaff.empty.title")}
-								 testId="platform-official-staff-empty"/>
+								/>
 							</div>
 						) : (
 							<div className="space-y-3">
@@ -419,26 +291,26 @@ export default function PlatformOfficialStaffPage() {
 									))}
 								</div>
 								<ListPagination
-									previousButtonTestId="official-staff-previous-button"
-									nextButtonTestId="official-staff-next-button"
-									pageSizeTriggerTestId="official-staff-page-size-trigger"
-									pageSizeOptionTestId="official-staff-page-size-option"
-									jumpInputTestId="official-staff-jump-input"
-				testId="official-staff-pagination"
 									showQuickJumper
 									className="px-1"
+									jumpInputTestId="official-staff-jump-input"
 									loading={listQuery.isFetching}
+									nextButtonTestId="official-staff-next-button"
 									onPageChange={setPage}
+									onPageSizeChange={setPageSize}
 									page={page}
 									pageSize={currentPageSize}
-									onPageSizeChange={setPageSize}
+									pageSizeOptionTestId="official-staff-page-size-option"
+									pageSizeTriggerTestId="official-staff-page-size-trigger"
+									previousButtonTestId="official-staff-previous-button"
+									testId="official-staff-pagination"
 									total={total}
 								/>
 							</div>
 						)}
 					</div>
 				</div>
-			</ListShell>
+			</OfficialStaffShell>
 
 			{hasEditRight ? (
 				<OfficialStaffFormDialog
@@ -457,6 +329,9 @@ export default function PlatformOfficialStaffPage() {
 				staff={assignDialog.staff}
 			/>
 			<ConfirmDialog
+				cancelButtonTestId="platform-official-staff-confirm-dialog-cancel-button"
+				confirmButtonTestId="platform-official-staff-confirm-dialog-confirm-button"
+				contentTestId="platform-official-staff-confirm-dialog-content"
 				open={Boolean(statusDialog)}
 				onOpenChange={(open) => !open && setStatusDialog(null)}
 				onConfirm={handleStatusChange}
@@ -473,7 +348,7 @@ export default function PlatformOfficialStaffPage() {
 				confirmLabel={t("officialStaff.action.confirm")}
 				confirmDisabled={!hasEditRight}
 				isPending={statusMutation.isPending}
-			 contentTestId="platform-official-staff-confirm-dialog-content" cancelButtonTestId="platform-official-staff-confirm-dialog-cancel-button" confirmButtonTestId="platform-official-staff-confirm-dialog-confirm-button"/>
+			/>
 		</>
 	)
 }

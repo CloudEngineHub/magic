@@ -21,13 +21,6 @@ import {
 	DropdownMenuTrigger,
 } from "@magic-admin-v2/components/ui/dropdown-menu"
 import { Skeleton } from "@magic-admin-v2/components/ui/skeleton"
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-} from "@magic-admin-v2/components/ui/sheet"
 import { usePlatformInfoQuery } from "@magic-admin-v2/features/platform-info/queries"
 import { ShellAccountControls } from "@magic-admin-v2/layouts/components/shell-account-controls"
 import type {
@@ -70,6 +63,26 @@ export default function DashboardLayout() {
 		toggleMobileSidebar,
 		toggleSidebar,
 	} = useAppShellStore()
+	const [isMobileSidebarMounted, setIsMobileSidebarMounted] = useState(false)
+	const [isMobileSidebarEntered, setIsMobileSidebarEntered] = useState(false)
+
+	useEffect(() => {
+		let closeTimer: number | undefined
+		let enterFrame: number | undefined
+
+		if (isMobileSidebarOpen) {
+			setIsMobileSidebarMounted(true)
+			enterFrame = window.requestAnimationFrame(() => setIsMobileSidebarEntered(true))
+		} else {
+			setIsMobileSidebarEntered(false)
+			closeTimer = window.setTimeout(() => setIsMobileSidebarMounted(false), 300)
+		}
+
+		return () => {
+			if (enterFrame !== undefined) window.cancelAnimationFrame(enterFrame)
+			if (closeTimer !== undefined) window.clearTimeout(closeTimer)
+		}
+	}, [isMobileSidebarOpen])
 
 	useEffect(() => {
 		if (!platformBrand.isLoading && platformBrand.name) {
@@ -117,18 +130,30 @@ export default function DashboardLayout() {
 				/>
 			</aside>
 
-			<Sheet open={isMobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-				<SheetContent
-					className="w-[18rem] p-0 sm:max-w-none"
+			{isMobileSidebarMounted ? (
+				<div
+					className={cn(
+						"fixed inset-0 z-[60] isolate lg:hidden",
+						!isMobileSidebarEntered && "pointer-events-none",
+					)}
 					data-testid="dashboard-mobile-sidebar"
-					showCloseButton={false}
-					side="left"
 				>
-					<SheetHeader className="sr-only">
-						<SheetTitle>{t("aria.primaryNavigation")}</SheetTitle>
-						<SheetDescription>{t("aria.primaryNavigation")}</SheetDescription>
-					</SheetHeader>
-					<div className="flex min-h-0 flex-1 bg-sidebar text-sidebar-foreground">
+					<button
+						aria-label={t("aria.closeNavigationOverlay")}
+						data-testid="dashboard-mobile-menu-button"
+						className={cn(
+							"absolute inset-0 z-0 bg-black/50 transition-opacity duration-300 ease-out motion-reduce:transition-none",
+							isMobileSidebarEntered ? "opacity-100" : "opacity-0",
+						)}
+						onClick={() => setMobileSidebarOpen(false)}
+						type="button"
+					/>
+					<aside
+						className={cn(
+							"relative z-10 flex h-full w-[18rem] transform bg-sidebar text-sidebar-foreground shadow-xl transition-transform duration-300 ease-out motion-reduce:transition-none",
+							isMobileSidebarEntered ? "translate-x-0" : "-translate-x-full",
+						)}
+					>
 						<AppSidebar
 							activePathname={location.pathname}
 							brand={platformBrand}
@@ -137,9 +162,9 @@ export default function DashboardLayout() {
 							navigation={navigation}
 							onCloseMobile={() => setMobileSidebarOpen(false)}
 						/>
-					</div>
-				</SheetContent>
-			</Sheet>
+					</aside>
+				</div>
+			) : null}
 
 			<div
 				className={cn(
@@ -150,8 +175,8 @@ export default function DashboardLayout() {
 				<header className="sticky top-0 z-50 flex h-16 shrink-0 items-center gap-2 border-b border-border/50 bg-background/80 px-4 backdrop-blur-xl">
 					<Button
 						aria-label={t("aria.openNavigation")}
-						className="-ml-1 text-muted-foreground transition-colors hover:text-foreground lg:hidden"
 						data-testid="dashboard-open-navigation-button"
+						className="-ml-1 text-muted-foreground transition-colors hover:text-foreground lg:hidden"
 						onClick={toggleMobileSidebar}
 						size="icon-sm"
 						variant="ghost"
@@ -162,8 +187,8 @@ export default function DashboardLayout() {
 						aria-label={
 							isSidebarCollapsed ? t("aria.expandSidebar") : t("aria.collapseSidebar")
 						}
-						className="-ml-1 hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
 						data-testid="dashboard-toggle-sidebar-button"
+						className="-ml-1 hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
 						onClick={toggleSidebar}
 						size="icon-sm"
 						variant="ghost"
@@ -177,7 +202,7 @@ export default function DashboardLayout() {
             className="relative inline-flex h-8 items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:pr-12 md:w-36 lg:w-56"
             onClick={() => toast.message(t("common.modulePending"))}
             type="button"
-           data-testid="admin-layout-search-button">
+          >
             <Search className="size-4" aria-hidden="true" />
             <span>{t("appMenu.action.search")}</span>
             <kbd className="pointer-events-none absolute right-1.5 top-1/2 hidden h-5 -translate-y-1/2 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium sm:flex">
@@ -193,8 +218,8 @@ export default function DashboardLayout() {
 				</header>
 
 				<main
-					className="dashboard-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 pt-0"
 					data-testid="dashboard-main-content"
+					className="dashboard-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4 pt-0"
 				>
 					<div className="@container/main min-w-0 px-4 py-4 lg:px-6">
 						<Outlet />
@@ -232,7 +257,7 @@ function AppSidebar({
 				<div className="flex items-center gap-2">
 					<BrandMark brand={brand} href={homeHref} isCollapsed={isCollapsed} />
 					{onCloseMobile ? (
-						<Button data-testid="dashboard-mobile-menu-button"
+						<Button
 							aria-label={t("aria.closeNavigation")}
 							className="ml-auto text-muted-foreground"
 							onClick={onCloseMobile}
@@ -251,7 +276,11 @@ function AppSidebar({
 					"dashboard-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden",
 					isCollapsed && "items-center px-1.5 py-2",
 				)}
-				data-testid={isCollapsed ? "dashboard-sidebar-navigation-collapsed" : "dashboard-sidebar-navigation"}
+				data-testid={
+					isCollapsed
+						? "dashboard-sidebar-navigation-collapsed"
+						: "dashboard-sidebar-navigation"
+				}
 			>
 				{isCollapsed
 					? navigation.map((section) => (
@@ -286,7 +315,7 @@ function AppSidebar({
 
 			{onToggleSidebar ? (
 				<div className="flex flex-col gap-2 border-t border-sidebar-border p-2">
-					<Button data-testid="dashboard-access-button"
+					<Button
 						aria-label={
 							isCollapsed ? t("aria.expandSidebar") : t("aria.collapseSidebar")
 						}
@@ -294,6 +323,7 @@ function AppSidebar({
 							"h-8 justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
 							isCollapsed && "justify-center px-0",
 						)}
+						data-testid="dashboard-access-button"
 						onClick={onToggleSidebar}
 						variant="ghost"
 					>
@@ -315,6 +345,10 @@ type SidebarNavigationGroupProps = {
 	group: NavigationGroup
 	onCloseMobile?: () => void
 }
+
+// Limit hover animation to colors so host link outline resets cannot animate a temporary border.
+const sidebarNavigationInteraction =
+	"outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2"
 
 type CollapsedPrimaryNavigationProps = {
 	activePathname: string
@@ -408,7 +442,7 @@ function CollapsedPrimaryNavigation({
 
 	return (
 		<DropdownMenu modal={false} onOpenChange={handleMenuOpenChange} open={isMenuOpen}>
-			<DropdownMenuTrigger data-testid={section.testId} asChild>
+			<DropdownMenuTrigger asChild data-testid={section.testId}>
 				<Button
 					aria-label={t(section.titleKey)}
 					className={cn(
@@ -481,7 +515,7 @@ function CollapsedNavigationGroupMenu({
 
 	if (group.href && group.items.length === 0) {
 		return (
-			<DropdownMenuItem data-testid={group.testId} asChild className="p-0">
+			<DropdownMenuItem asChild className="p-0" data-testid={group.testId}>
 				<NavLink
 					className={({ isActive: isLinkActive }) =>
 						cn(
@@ -537,13 +571,14 @@ function CollapsedNavigationGroupMenu({
 
 						return (
 							<DropdownMenuItem asChild className="p-0" key={item.href}>
-								<NavLink data-testid={item.testId}
+								<NavLink
 									className={({ isActive: isLinkActive }) =>
 										cn(
 											"flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sm font-medium text-popover-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent",
 											isLinkActive && "bg-accent text-accent-foreground",
 										)
 									}
+									data-testid={item.testId}
 									onClick={onCloseMobile}
 									to={item.href}
 								>
@@ -583,10 +618,11 @@ function SidebarNavigationGroup({
 		return (
 			<NavLink
 				className={cn(
-					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground",
+					sidebarNavigationInteraction,
 					isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 				)}
-			data-testid={group.testId}
+				data-testid={group.testId}
 				onClick={onCloseMobile}
 				to={group.href}
 			>
@@ -610,7 +646,8 @@ function SidebarNavigationGroup({
 			<button
 				aria-expanded={isOpen}
 				className={cn(
-					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground",
+					sidebarNavigationInteraction,
 					isActive && "text-sidebar-accent-foreground",
 				)}
 				data-testid={group.testId}
@@ -631,6 +668,7 @@ function SidebarNavigationGroup({
 				/>
 			</button>
 			{isOpen ? (
+				// Auto width leaves room for the left margin instead of overflowing the sidebar.
 				<ul
 					className="ml-3.5 flex min-w-0 flex-col gap-1 border-l border-sidebar-border pl-2"
 					data-state="open"
@@ -663,7 +701,8 @@ function SidebarMenuLink({ activePathname, item, onCloseMobile }: SidebarMenuLin
 		<li className="group/menu-item relative min-w-0">
 			<NavLink
 				className={cn(
-					"peer/menu-button relative flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 pl-4 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2",
+					"peer/menu-button relative flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md p-2 pl-4 text-left text-sm font-medium text-sidebar-foreground",
+					sidebarNavigationInteraction,
 					isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
 				)}
 				data-testid={item.testId}
@@ -705,9 +744,9 @@ function BrandMark({ brand, href, isCollapsed = false }: BrandMarkProps) {
 			to={href}
 		>
 			{brand.isLoading ? (
-				<BrandLogoPlaceholder />
+				<BrandLogoPlaceholder isCollapsed={isCollapsed} />
 			) : (
-				<BrandLogo logoUrl={brand.logoUrl} name={brand.name} />
+				<BrandLogo isCollapsed={isCollapsed} logoUrl={brand.logoUrl} name={brand.name} />
 			)}
 			{!isCollapsed ? (
 				<div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
@@ -715,7 +754,9 @@ function BrandMark({ brand, href, isCollapsed = false }: BrandMarkProps) {
 						<BrandTextSkeleton />
 					) : (
 						<>
-							<span className="truncate font-semibold">{brand.name}</span>
+							<span className="truncate font-semibold text-sidebar-foreground">
+								{brand.name}
+							</span>
 							<span className="truncate text-xs text-muted-foreground">
 								{t("app.subtitle")}
 							</span>
@@ -734,13 +775,16 @@ type PlatformBrand = {
 	isLoading: boolean
 }
 
-function BrandLogoPlaceholder() {
+function BrandLogoPlaceholder({ isCollapsed }: { isCollapsed: boolean }) {
 	return (
 		<span
 			aria-hidden="true"
-			className="flex size-8 shrink-0 items-center justify-center rounded-lg"
+			className={cn(
+				"flex shrink-0 items-center justify-center rounded-lg",
+				isCollapsed ? "size-8" : "size-10",
+			)}
 		>
-			<Skeleton className="size-8 rounded-lg" />
+			<Skeleton className="size-full rounded-lg" />
 		</span>
 	)
 }
@@ -754,7 +798,15 @@ function BrandTextSkeleton() {
 	)
 }
 
-function BrandLogo({ logoUrl, name }: { logoUrl: string; name: string }) {
+function BrandLogo({
+	isCollapsed,
+	logoUrl,
+	name,
+}: {
+	isCollapsed: boolean
+	logoUrl: string
+	name: string
+}) {
 	const [hasImageError, setHasImageError] = useState(false)
 
 	useEffect(() => {
@@ -763,10 +815,18 @@ function BrandLogo({ logoUrl, name }: { logoUrl: string; name: string }) {
 
 	if (isSafeImageUrl(logoUrl) && !hasImageError) {
 		return (
-			<span className="flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-sidebar-border bg-background shadow-sm">
+			<span
+				className={cn(
+					"flex aspect-square shrink-0 items-center justify-center overflow-hidden rounded-lg border border-sidebar-border bg-background shadow-sm",
+					isCollapsed ? "size-8" : "size-10",
+				)}
+			>
 				<img
 					alt=""
-					className="max-h-7 max-w-7 object-contain"
+					className={cn(
+						"object-contain",
+						isCollapsed ? "max-h-7 max-w-7" : "max-h-9 max-w-9",
+					)}
 					draggable={false}
 					onError={() => setHasImageError(true)}
 					src={logoUrl}
@@ -778,7 +838,10 @@ function BrandLogo({ logoUrl, name }: { logoUrl: string; name: string }) {
 	return (
 		<span
 			aria-hidden="true"
-			className="relative flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-semibold text-white shadow-md shadow-violet-500/20 transition-transform group-hover/team:scale-105"
+			className={cn(
+				"relative flex aspect-square shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-semibold text-white shadow-md shadow-violet-500/20 transition-transform group-hover/team:scale-105",
+				isCollapsed ? "size-8" : "size-10",
+			)}
 		>
 			<Sparkles className="absolute size-4 opacity-20" />
 			<span className="relative">{getBrandInitial(name)}</span>

@@ -121,8 +121,8 @@ function AccountMenu({
 				<button
 					aria-label={t("userContext.switchOrganization")}
 					className="flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-card px-0 text-sm font-medium shadow-sm transition-colors hover:bg-accent data-[state=open]:bg-accent sm:w-auto sm:max-w-[260px] sm:px-3"
-					data-testid="shell-account-switcher-trigger"
 					type="button"
+					data-testid="shell-account-switcher-trigger"
 				>
 					<OrganizationLogo logo={currentOrganization.logo} />
 					<span className="hidden min-w-0 max-w-[188px] truncate text-left sm:block">
@@ -278,7 +278,10 @@ function OtherAccountMenu({
 	const platformName = account.platformName || t("userContext.saasPlatform")
 	return (
 		<DropdownMenuSub>
-			<DropdownMenuSubTrigger className="gap-2" data-testid="shell-account-other-account-trigger">
+			<DropdownMenuSubTrigger
+				className="gap-2"
+				data-testid="shell-account-other-account-trigger"
+			>
 				<UserAvatarRender
 					className="size-6 text-[10px]"
 					name={account.name}
@@ -346,8 +349,8 @@ function OrganizationSwitcher({
 				<button
 					aria-label={t("userContext.switchOrganization")}
 					className="flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-card px-0 text-sm font-medium shadow-sm transition-colors hover:bg-accent data-[state=open]:bg-accent disabled:pointer-events-none disabled:opacity-60 sm:w-auto sm:max-w-[260px] sm:px-3"
-					data-testid="shell-organization-switcher-trigger"
 					disabled={disabled || switchingOrganizationCode !== null}
+					data-testid="shell-organization-switcher-trigger"
 					type="button"
 				>
 					<OrganizationLogo logo={current.logo} />
@@ -439,8 +442,8 @@ function UserAvatarMenu({
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
-				align="end"
 				className="w-56"
+				align="end"
 				data-testid="shell-user-menu-content"
 				forceMount
 			>

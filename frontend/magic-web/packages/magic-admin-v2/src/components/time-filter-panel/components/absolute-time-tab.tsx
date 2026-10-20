@@ -40,6 +40,8 @@ type AbsoluteTimeTabProps = {
 	visibleMonth: Date
 	/** 提交当前绝对时间范围。 */
 	onAbsoluteApply: () => void
+	/** 关闭 inline 面板且不提交当前编辑。 */
+	onCancel: () => void
 	/** 选择日历中的日期，并由父组件决定如何组成范围。 */
 	onAbsoluteDateSelect: (date: Date) => void
 	/** 选择标准绝对时间预设并更新日历选中范围。 */
@@ -63,14 +65,15 @@ export function AbsoluteTimeTab({
 	maxDate,
 	visibleMonth,
 	onAbsoluteApply,
+	onCancel,
 	onAbsoluteDateSelect,
 	onAbsolutePresetSelect,
 	onAbsoluteTimeChange,
 	onMonthChange,
 	testIdPrefix,
 }: AbsoluteTimeTabProps) {
-	const { t } = useTranslation()
 	const testId = (suffix: string) => (testIdPrefix ? `${testIdPrefix}-${suffix}` : undefined)
+	const { t } = useTranslation()
 
 	return (
 		<div className="space-y-4">
@@ -83,18 +86,18 @@ export function AbsoluteTimeTab({
 						<div className="grid gap-2 sm:grid-cols-2">
 							<AbsoluteTimeField
 								label={t("timeFilter.startDate")}
-									testId={testId("start-time-trigger")}
 								disabled={!absoluteStartDate}
 								onChange={(value) => onAbsoluteTimeChange("start", value)}
 								precision={timePrecision}
+								testId={testId("start-time-trigger")}
 								value={getAbsoluteTimeInputValue(absoluteStartDate, timePrecision)}
 							/>
 							<AbsoluteTimeField
 								label={t("timeFilter.endDate")}
-									testId={testId("end-time-trigger")}
 								disabled={!absoluteEndDate}
 								onChange={(value) => onAbsoluteTimeChange("end", value)}
 								precision={timePrecision}
+								testId={testId("end-time-trigger")}
 								value={getAbsoluteTimeInputValue(absoluteEndDate, timePrecision)}
 							/>
 						</div>
@@ -102,7 +105,7 @@ export function AbsoluteTimeTab({
 					<div className="flex items-center justify-between gap-2">
 						<Button
 							aria-label="Previous month"
-									data-testid={testId("previous-month-button")}
+							data-testid={testId("previous-month-button")}
 							onClick={() => onMonthChange(-1)}
 							size="icon"
 							type="button"
@@ -118,7 +121,7 @@ export function AbsoluteTimeTab({
 						</div>
 						<Button
 							aria-label="Next month"
-									data-testid={testId("next-month-button")}
+							data-testid={testId("next-month-button")}
 							onClick={() => onMonthChange(1)}
 							size="icon"
 							type="button"
@@ -129,23 +132,23 @@ export function AbsoluteTimeTab({
 					</div>
 					<div className={cn("grid min-w-0 gap-1.5", !isInline && "lg:grid-cols-2")}>
 						<CalendarMonthPanel
+							dateButtonTestId={testId("date-button")}
 							endDate={absoluteEndDate}
 							intlLocale={intlLocale}
 							maxDate={maxDate}
 							month={visibleMonth}
 							onSelect={onAbsoluteDateSelect}
 							startDate={absoluteStartDate}
-									dateButtonTestId={testId("date-button")}
 						/>
 						{!isInline ? (
 							<CalendarMonthPanel
+								dateButtonTestId={testId("date-button")}
 								endDate={absoluteEndDate}
 								intlLocale={intlLocale}
 								maxDate={maxDate}
 								month={addMonths(visibleMonth, 1)}
 								onSelect={onAbsoluteDateSelect}
 								startDate={absoluteStartDate}
-									dateButtonTestId={testId("date-button")}
 							/>
 						) : null}
 					</div>
@@ -166,7 +169,7 @@ export function AbsoluteTimeTab({
 						<TimeOptionButton
 							key={preset.key}
 							onClick={() => onAbsolutePresetSelect(...preset.value)}
-								testId={testId("preset-option")}
+							testId={testId("preset-option")}
 						>
 							{getAbsolutePresetLabel(preset.key, t)}
 						</TimeOptionButton>
@@ -187,14 +190,21 @@ export function AbsoluteTimeTab({
 					<div className="min-w-0 break-all font-mono text-xs text-muted-foreground">
 						{absoluteRangeText}
 					</div>
-					<Button
-						className="w-fit shrink-0"
-								data-testid={testId("apply-button")}
-						disabled={!absoluteStartDate || !absoluteEndDate || absoluteRangeInvalid}
-						onClick={onAbsoluteApply}
-					>
-						{t("timeFilter.confirm")}
-					</Button>
+					<div className="flex items-center gap-2">
+						{isInline ? (
+							<Button onClick={onCancel} size="sm" variant="outline">
+								{t("timeFilter.cancel")}
+							</Button>
+						) : null}
+						<Button
+							className="w-fit shrink-0"
+							data-testid={testId("apply-button")}
+							disabled={!absoluteStartDate || !absoluteEndDate || absoluteRangeInvalid}
+							onClick={onAbsoluteApply}
+						>
+							{t("timeFilter.confirm")}
+						</Button>
+					</div>
 				</div>
 				{absoluteRangeInvalid ? (
 					<div className="text-xs text-destructive">{t("timeFilter.invalidRange")}</div>

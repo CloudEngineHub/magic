@@ -1,11 +1,12 @@
 import type { ColumnDef } from "@tanstack/react-table"
+import type { ReactNode } from "react"
 import { Bot, Tags } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import type { ApiError } from "@magic-admin-v2/api/types"
 import { Button } from "@magic-admin-v2/components/ui/button"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
+import { type ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import { AgentMarketCategoryManagerDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/agent-market-category-manager-dialog"
 import { createSharedMarketColumns } from "@magic-admin-v2/features/platform-official-marketplace/components/market-columns"
 import { MarketListPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/market-list-panel"
@@ -27,18 +28,18 @@ import {
 import type {
 	AgentMarketCategoryItem,
 	AgentMarketItem,
+	AgentMarketListParams,
 	MarketCategoryOption,
+	MarketFilterDraft,
 } from "@magic-admin-v2/features/platform-official-marketplace/types"
 import {
 	areSameCategoryIds,
-	createDefaultFilterDraft,
 	getAgentMarketCategoryIds,
 	getAgentMarketCategoryLabels,
 	getApiErrorMessage,
 	getLocalizedRoles,
 	getLocalizedText,
 	normalizeCategoryIds,
-	toAgentMarketParams,
 } from "@magic-admin-v2/features/platform-official-marketplace/utils"
 import { useI18n } from "@magic-admin-v2/i18n/use-i18n"
 
@@ -50,6 +51,10 @@ type EmployeeMarketPanelProps = {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
 	onInitialLoadingChange: (isLoading: boolean) => void
+	queryState: ListQueryParamsState<MarketFilterDraft, AgentMarketListParams>
+	onMobileFilterOpenChange: (open: boolean) => void
+	mobileFilterOpen: boolean
+	onToolbarActionsChange: (actions: ReactNode) => void
 	refreshToken: number
 }
 
@@ -59,17 +64,16 @@ export function EmployeeMarketPanel({
 	isActive,
 	onFetchingChange,
 	onInitialLoadingChange,
+	queryState,
+	onMobileFilterOpenChange,
+	mobileFilterOpen,
+	onToolbarActionsChange,
 	refreshToken,
 }: EmployeeMarketPanelProps) {
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
-	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } =
-		useListQueryParams({
-			debounceFields: ["search_value"],
-			initialDraft: createDefaultFilterDraft,
-			toParams: toAgentMarketParams,
-		})
+	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } = queryState
 	const query = useAgentMarketListQuery(params, isActive)
 	const categoryQuery = useAgentMarketCategoryListQuery({}, isActive)
 	const items = query.data?.list ?? emptyAgentMarketItems
@@ -181,6 +185,7 @@ export function EmployeeMarketPanel({
 								<MarketCategorySelectCell
 									ariaLabel={t("officialMarketplace.column.category")}
 									canEdit={canEdit}
+									disabled={!canEdit || saving}
 									categoryIds={getAgentMarketCategoryIds(record)}
 									categoryLabels={getAgentMarketCategoryLabels(
 										record,
@@ -195,7 +200,9 @@ export function EmployeeMarketPanel({
 									noMatchingLabel={t(
 										"officialMarketplace.filter.noMatchingCategories",
 									)}
-									onSave={(nextCategoryIds) => saveCategories(record, nextCategoryIds)}
+									onSave={(nextCategoryIds) =>
+										saveCategories(record, nextCategoryIds)
+									}
 									searchPlaceholder={t(
 										"officialMarketplace.filter.searchCategories",
 									)}
@@ -230,6 +237,25 @@ export function EmployeeMarketPanel({
 	}, [isActive, isInitialLoading, onInitialLoadingChange])
 
 	useEffect(() => {
+		if (!isActive) return
+
+		onToolbarActionsChange(
+			<Button
+				aria-label={t("officialMarketplace.category.manageTitle")}
+				className="h-9 w-9 px-0 md:w-auto md:px-3"
+				data-testid="platform-official-marketplace-edit-button"
+				onClick={() => setCategoryManagerOpen(true)}
+				variant="outline"
+			>
+				<Tags className="size-4" aria-hidden="true" />
+				<span className="hidden md:inline">
+					{t("officialMarketplace.category.manageButton")}
+				</span>
+			</Button>,
+		)
+	}, [isActive, onToolbarActionsChange, t])
+
+	useEffect(() => {
 		if (isActive) onFetchingChange(query.isFetching)
 	}, [isActive, onFetchingChange, query.isFetching])
 
@@ -256,6 +282,8 @@ export function EmployeeMarketPanel({
 				kind="employee"
 				minWidth={2480}
 				onDraftChange={setFilterDraft}
+				mobileOpen={isActive && mobileFilterOpen}
+				onMobileOpenChange={onMobileFilterOpenChange}
 				onPageChange={setPage}
 				page={page}
 				queryError={query.error as ApiError | null}
@@ -264,19 +292,6 @@ export function EmployeeMarketPanel({
 				showCategoryFilter
 				showPackageName={false}
 				stickyLeftColumnId="name"
-				toolbarActions={
-					<Button
-						aria-label={t("officialMarketplace.category.manageTitle")}
-						className="h-9 w-9 px-0 md:w-auto md:px-3"
-						onClick={() => setCategoryManagerOpen(true)}
-						variant="outline"
-					 data-testid="platform-official-marketplace-edit-button">
-						<Tags className="size-4" aria-hidden="true" />
-						<span className="hidden md:inline">
-							{t("officialMarketplace.category.manageButton")}
-						</span>
-					</Button>
-				}
 				total={query.data?.total ?? 0}
 			/>
 
