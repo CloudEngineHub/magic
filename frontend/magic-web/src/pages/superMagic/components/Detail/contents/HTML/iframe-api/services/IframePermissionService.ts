@@ -16,13 +16,13 @@ import {
 	getDefaultHtmlPermissionTtl,
 	getHtmlPermissionOnceTtlOption,
 	getSharedHtmlPermissionTtlOptions,
-	isHighRiskHtmlPermissionScope,
 	SUPPORTED_HTML_PERMISSION_SCOPES,
 	type HtmlPermissionMode,
 	type HtmlPermissionTtl,
 	type HtmlPermissionTtlOption,
 } from "./htmlPermissionPolicy"
 import { HtmlPermissionAuthorizationQueue } from "./HtmlPermissionAuthorizationQueue"
+
 import {
 	getSharedLegacyMigrationMarker,
 	type HtmlPermissionLegacyMigrationMarker,
@@ -53,20 +53,6 @@ export interface HtmlPermissionConfirmResult {
 	allowed: boolean
 	ttlMs: HtmlPermissionTtl
 }
-
-/** Asked when high-risk grants exist but the app's code changed after the user confirmed them. */
-export interface HtmlPermissionCodeChangeConfirmRequest {
-	appName: string
-	scopes: HtmlPermissionScope[]
-	signal?: AbortSignal
-}
-
-/**
- * - `remember`: keep the existing grant (same expiry) and mark the current code as confirmed.
- * - `once`: allow this call only; the grant stays tied to the previously confirmed code.
- * - `deny`: reject the call.
- */
-export type HtmlPermissionCodeChangeDecision = "remember" | "once" | "deny"
 
 export interface HtmlPermissionMissingDeclarationRequest {
 	appName: string
@@ -101,23 +87,12 @@ export type HtmlAppConfigState =
 	| { status: "loaded"; config: HTMLAppConfig }
 	| { status: "error"; error: string }
 
-export type HtmlPermissionCodeStatus = "same" | "changed" | "unknown"
-
 export interface HtmlPermissionSnapshotItem {
 	scope: string
 	supported: boolean
 	declarationStatus: "declared" | "notDeclared" | "unsupported"
 	grant?: HtmlPermissionGrant
 	ttlOptions: HtmlPermissionTtlOption[]
-	/** Whether this scope is re-confirmed after the app code changes. */
-	highRisk: boolean
-	/**
-	 * Compares the code version recorded when the grant was confirmed with the current one.
-	 * `unknown` means the grant predates code tracking.
-	 */
-	codeStatus: HtmlPermissionCodeStatus
-	/** True when the next use of this scope will ask again because of a code change. */
-	needsReconfirm: boolean
 }
 
 export interface HtmlPermissionSnapshot {
@@ -133,10 +108,6 @@ export interface HtmlPermissionSnapshot {
 	permissions: HtmlPermissionSnapshotItem[]
 	diagnostics: HtmlPermissionDiagnostic[]
 	activeGrantCount: number
-	/** Number of active grants whose recorded code version differs from the current one. */
-	codeChangedGrantCount: number
-	/** Number of active high-risk grants that will ask again on next use. */
-	needsReconfirmCount: number
 }
 
 export interface IframePermissionServiceConfig {
@@ -144,11 +115,7 @@ export interface IframePermissionServiceConfig {
 	confirmPermission: (
 		request: HtmlPermissionConfirmRequest,
 	) => Promise<HtmlPermissionConfirmResult>
-	/** Without it, high-risk grants whose code changed are denied rather than silently reused. */
-	confirmCodeChange?: (
-		request: HtmlPermissionCodeChangeConfirmRequest,
-	) => Promise<HtmlPermissionCodeChangeDecision>
-	/** Defaults to a localStorage-backed marker shared by all services. */
+	/** Tracks completed legacy migration and explicit revocation across reloads. */
 	legacyMigrationMarker?: HtmlPermissionLegacyMigrationMarker
 	onMissingDeclaration?: (request: HtmlPermissionMissingDeclarationRequest) => void
 	onGrantsChanged?: () => void
@@ -228,40 +195,13 @@ export class IframePermissionService {
 			this.canPersistGrant(identity) && (await this.cfg.grantStore.isPersistentAvailable())
 		if (this.authorizationQueue.isDisposed || signal.aborted) return false
 		if (options.allowOnce === false && !persistenceAvailable) return false
-		const existingGrants = await this.loadAppGrants(identity, mode, declaration.declaredScopes)
+		const existingScopes = new Set(
+			(await this.loadAppGrants(identity, mode, declaration.declaredScopes)).map(
+				(grant) => grant.scope,
+			),
+		)
 		if (this.authorizationQueue.isDisposed || signal.aborted) return false
-		const existingScopes = new Set(existingGrants.map((grant) => grant.scope))
 		const missingScopes = requestedScopes.filter((scope) => !existingScopes.has(scope))
-		const codeFingerprint = await this.getCodeFingerprint()
-
-		// Edits must not let already granted high-risk scopes run new code unseen: ask once per
-		// code version. Read-only scopes keep silent reuse and are only flagged in the manager UI.
-		// An empty fingerprint means the project file list is not loaded, so changes cannot be judged.
-		if (options.allowOnce !== false && codeFingerprint) {
-			const staleScopes = existingGrants
-				.filter(
-					(grant) =>
-						requestedScopes.includes(grant.scope) &&
-						isHighRiskHtmlPermissionScope(grant.scope) &&
-						grant.codeFingerprint !== codeFingerprint,
-				)
-				.map((grant) => grant.scope)
-			if (staleScopes.length > 0) {
-				const decision = this.cfg.confirmCodeChange
-					? await this.cfg.confirmCodeChange({
-							appName: appConfig?.name || "",
-							scopes: staleScopes,
-							signal,
-						})
-					: "deny"
-				if (this.authorizationQueue.isDisposed || signal.aborted) return false
-				if (decision === "deny") return false
-				if (decision === "remember") {
-					await this.restampGrants(existingGrants, staleScopes, codeFingerprint)
-					if (this.authorizationQueue.isDisposed || signal.aborted) return false
-				}
-			}
-		}
 		if (missingScopes.length === 0) return true
 
 		const ttlOptions = persistenceAvailable
@@ -306,7 +246,6 @@ export class IframePermissionService {
 					scope,
 					grantedAt: now,
 					expiresAt: result.ttlMs === null ? null : now + result.ttlMs,
-					codeFingerprint,
 				})
 				persisted = saved && persisted
 				if (this.authorizationQueue.isDisposed || signal.aborted) return false
@@ -331,7 +270,7 @@ export class IframePermissionService {
 	async getPermissionSnapshot(): Promise<HtmlPermissionSnapshot> {
 		const configState = this.cfg.appConfigState
 		if (configState.status === "loading") {
-			return this.createSnapshot(null, null, createEmptyHtmlPermissionDeclaration(), [], "")
+			return this.createSnapshot(null, null, createEmptyHtmlPermissionDeclaration(), [])
 		}
 
 		const appConfig = configState.status === "loaded" ? configState.config : null
@@ -340,42 +279,14 @@ export class IframePermissionService {
 		const identity = this.buildGrantIdentity(mode)
 		const grants = await this.loadAppGrants(identity, mode, declaration.declaredScopes)
 
-		return this.createSnapshot(
-			mode,
-			appConfig,
-			declaration,
-			grants,
-			await this.getCodeFingerprint(),
-		)
-	}
-
-	/**
-	 * Marks the current code as confirmed for every active grant (the user accepted the changes).
-	 * Expiry is kept; this never extends or broadens a grant.
-	 */
-	async acknowledgeCodeChanges(): Promise<HtmlPermissionSnapshot> {
-		const context = await this.resolveContext()
-		if (context) {
-			const identity = this.buildGrantIdentity(context.mode)
-			const grants = await this.loadAppGrants(
-				identity,
-				context.mode,
-				context.declaration.declaredScopes,
-			)
-			await this.restampGrants(
-				grants,
-				grants.map((grant) => grant.scope),
-				await this.getCodeFingerprint(),
-			)
-		}
-		return this.getPermissionSnapshot()
+		return this.createSnapshot(mode, appConfig, declaration, grants)
 	}
 
 	async revoke(scope: HtmlPermissionScope): Promise<HtmlPermissionSnapshot> {
 		const context = await this.resolveContext()
 		if (context) {
 			await this.cfg.grantStore.remove(this.buildGrantIdentity(context.mode), scope)
-			// A revoked grant must not come back through legacy migration, now or after a reload.
+			// A revoked grant must not come back through legacy migration.
 			await this.removeLegacyGrants(context.mode, context.appConfig, scope)
 			this.markLegacyMigrated(context.mode)
 			this.cfg.onGrantsChanged?.()
@@ -418,8 +329,6 @@ export class IframePermissionService {
 			scope,
 			grantedAt: now,
 			expiresAt: ttlMs === null ? null : now + ttlMs,
-			// Changing the duration is not a review of the code, so the confirmed version is kept.
-			codeFingerprint: existingGrant.codeFingerprint,
 		})
 		if (!saved) throw new Error("Permission grant could not be persisted")
 		this.cfg.onGrantsChanged?.()
@@ -442,14 +351,8 @@ export class IframePermissionService {
 		appConfig: HTMLAppConfig | null,
 		declaration: HtmlPermissionDeclarationAnalysis,
 		grants: HtmlPermissionGrant[],
-		currentCodeFingerprint: string,
 	): HtmlPermissionSnapshot {
 		const grantsByScope = new Map(grants.map((grant) => [grant.scope, grant]))
-		const codeStatusOf = (grant: HtmlPermissionGrant | undefined): HtmlPermissionCodeStatus => {
-			if (!grant || !currentCodeFingerprint) return "same"
-			if (!grant.codeFingerprint) return "unknown"
-			return grant.codeFingerprint === currentCodeFingerprint ? "same" : "changed"
-		}
 		const declaredScopeSet = new Set(declaration.declaredScopes)
 		const diagnostics = [...declaration.diagnostics]
 		if (this.cfg.appConfigState.status === "absent") {
@@ -487,30 +390,16 @@ export class IframePermissionService {
 								(option) => option.ttlMs !== 0,
 							)
 						: [],
-					highRisk: isHighRiskHtmlPermissionScope(scope),
-					codeStatus: codeStatusOf(grantsByScope.get(scope)),
-					needsReconfirm:
-						isHighRiskHtmlPermissionScope(scope) &&
-						codeStatusOf(grantsByScope.get(scope)) !== "same",
 				})),
 				...declaration.unsupportedScopes.map((scope) => ({
 					scope,
 					supported: false,
 					declarationStatus: "unsupported" as const,
 					ttlOptions: [],
-					highRisk: false,
-					codeStatus: "same" as const,
-					needsReconfirm: false,
 				})),
 			],
 			diagnostics,
 			activeGrantCount: grants.length,
-			codeChangedGrantCount: grants.filter((grant) => codeStatusOf(grant) === "changed")
-				.length,
-			needsReconfirmCount: grants.filter(
-				(grant) =>
-					isHighRiskHtmlPermissionScope(grant.scope) && codeStatusOf(grant) !== "same",
-			).length,
 		}
 	}
 
@@ -604,42 +493,12 @@ export class IframePermissionService {
 		return shortHash(source)
 	}
 
-	/**
-	 * Version of the app's executable files (HTML/JS file id, path and update time). Content is not
-	 * hashed: it may not be loaded yet, while file versions are available as soon as the project
-	 * file list is. It is empty when the file list is not ready, which disables change detection.
-	 */
-	private codeFingerprintPromise: Promise<string> | null = null
-	private getCodeFingerprint(): Promise<string> {
-		this.codeFingerprintPromise ??= (async () => {
-			const runtime = normalizeRuntimeFingerprint(this.getRuntimeFingerprint())
-			return runtime && runtime !== "[]" ? shortHash(`code:${runtime}`) : ""
-		})()
-		return this.codeFingerprintPromise
-	}
-
 	private getRuntimeFingerprint(): string {
 		return (
 			this.cfg.appInstance.runtimeFingerprint ??
 			this.cfg.appInstance.getRuntimeFingerprint?.() ??
 			""
 		)
-	}
-
-	/** Saves the same grants (same expiry) with the current code version recorded. */
-	private async restampGrants(
-		grants: HtmlPermissionGrant[],
-		scopes: HtmlPermissionScope[],
-		codeFingerprint: string,
-	): Promise<void> {
-		let changed = false
-		for (const grant of grants) {
-			if (!scopes.includes(grant.scope)) continue
-			if (grant.codeFingerprint === codeFingerprint) continue
-			const saved = await this.cfg.grantStore.save({ ...grant, codeFingerprint })
-			changed = saved || changed
-		}
-		if (changed) this.cfg.onGrantsChanged?.()
 	}
 
 	private getLegacyMigrationMarker(): HtmlPermissionLegacyMigrationMarker {
@@ -685,7 +544,7 @@ export class IframePermissionService {
 			const legacyGrants = await this.cfg.grantStore.getAppGrants(legacyIdentity)
 			const knownScopes = new Set(grants.map((grant) => grant.scope))
 			const adopted: HtmlPermissionGrant[] = []
-			const codeFingerprint = await this.getCodeFingerprint()
+			let migrationPersisted = true
 			for (const legacy of legacyGrants) {
 				if (knownScopes.has(legacy.scope)) continue
 				if (mode === "manifest" && !declaredScopes.includes(legacy.scope)) continue
@@ -694,16 +553,16 @@ export class IframePermissionService {
 					scope: legacy.scope,
 					grantedAt: legacy.grantedAt,
 					expiresAt: legacy.expiresAt,
-					// The legacy key only matches when the code is unchanged, so this version is confirmed.
-					codeFingerprint: codeFingerprint || undefined,
 				}
-				// Keep the grant effective for this call even if persisting the copy fails.
-				adopted.push(migrated)
 				if (await this.cfg.grantStore.save(migrated)) {
+					adopted.push(migrated)
 					await this.cfg.grantStore.remove(legacyIdentity, legacy.scope)
+				} else {
+					// Keep the old grant and retry later instead of permanently completing a failed copy.
+					migrationPersisted = false
 				}
 			}
-			if (runtimeReady) marker.add(migrationKey)
+			if (runtimeReady && migrationPersisted) marker.add(migrationKey)
 			return adopted.length > 0 ? [...grants, ...adopted] : grants
 		} catch (error) {
 			htmlMicroAppPreviewLogger.warn("Failed to migrate legacy permission grants", {
@@ -766,28 +625,4 @@ async function shortHash(value: string): Promise<string> {
 			.join("")
 	}
 	return ""
-}
-
-/**
- * The merged project file list can contain one file twice. The legacy key was built from that raw
- * list and must keep matching it, but the code version must not change just because of duplicates.
- */
-function normalizeRuntimeFingerprint(runtimeFingerprint: string): string {
-	try {
-		const parsed: unknown = JSON.parse(runtimeFingerprint)
-		if (!Array.isArray(parsed)) return runtimeFingerprint
-		const seen = new Set<string>()
-		const unique = parsed.filter((item) => {
-			const fileId =
-				item && typeof item === "object"
-					? String((item as { fileId?: unknown }).fileId)
-					: ""
-			if (!fileId || seen.has(fileId)) return !fileId
-			seen.add(fileId)
-			return true
-		})
-		return JSON.stringify(unique)
-	} catch {
-		return runtimeFingerprint
-	}
 }

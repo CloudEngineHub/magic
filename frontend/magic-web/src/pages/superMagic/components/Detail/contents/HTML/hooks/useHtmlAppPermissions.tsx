@@ -34,7 +34,6 @@ import {
 	serializeHtmlPermissionTtl,
 	type HtmlPermissionTtl,
 } from "../iframe-api/services/htmlPermissionPolicy"
-import { requestHtmlPermissionCodeChangeConfirm } from "../components/PermissionManager/CodeChangeConfirmPopover"
 import { useHtmlPermissionI18n } from "./useHtmlPermissionI18n"
 
 interface HtmlAppFileItem {
@@ -78,11 +77,9 @@ export function useHtmlAppPermissions({
 	const [activeGrantState, setActiveGrantState] = useState<{
 		service: IframePermissionService | null
 		count: number
-		codeChanged: boolean
 	}>({
 		service: null,
 		count: 0,
-		codeChanged: false,
 	})
 	const cleanedEntryPath = (relativeFilePath || "").replace(/^\/+/, "")
 	const lastSlash = cleanedEntryPath.lastIndexOf("/")
@@ -381,7 +378,6 @@ export function useHtmlAppPermissions({
 				grantStore: htmlPermissionGrantStore,
 				confirmPermission: confirmHtmlPermission,
 				onMissingDeclaration: notifyMissingPermissionDeclaration,
-				confirmCodeChange: requestHtmlPermissionCodeChangeConfirm,
 				onGrantsChanged: notifyGrantsChanged,
 				appConfigState: htmlAppConfigState,
 				appInstance: htmlAppInstance,
@@ -433,15 +429,12 @@ export function useHtmlAppPermissions({
 	const revokeAllHtmlPermissions = useMemoizedFn(async () => {
 		return htmlPermissionService.revokeAll()
 	})
-	const acknowledgeHtmlPermissionCodeChanges = useMemoizedFn(async () => {
-		return htmlPermissionService.acknowledgeCodeChanges()
-	})
 
 	useEffect(() => {
 		let cancelled = false
 
 		if (!enabled || htmlAppConfigState.status === "loading") {
-			setActiveGrantState({ service: htmlPermissionService, count: 0, codeChanged: false })
+			setActiveGrantState({ service: htmlPermissionService, count: 0 })
 			return
 		}
 
@@ -452,17 +445,11 @@ export function useHtmlAppPermissions({
 				setActiveGrantState({
 					service: htmlPermissionService,
 					count: snapshot.activeGrantCount,
-					codeChanged:
-						snapshot.codeChangedGrantCount > 0 || snapshot.needsReconfirmCount > 0,
 				})
 			})
 			.catch((error) => {
 				if (cancelled) return
-				setActiveGrantState({
-					service: htmlPermissionService,
-					count: 0,
-					codeChanged: false,
-				})
+				setActiveGrantState({ service: htmlPermissionService, count: 0 })
 				htmlMicroAppPreviewLogger.warn("Failed to read active permission grants", {
 					error,
 				})
@@ -548,9 +535,6 @@ export function useHtmlAppPermissions({
 		hasHtmlPermissionDeclarations,
 		activeHtmlPermissionGrantCount:
 			activeGrantState.service === htmlPermissionService ? activeGrantState.count : 0,
-		// Drives the dot on the permission button: grants exist whose app code changed afterwards.
-		htmlPermissionCodeChanged:
-			activeGrantState.service === htmlPermissionService && activeGrantState.codeChanged,
 		htmlAppInstanceKey,
 		authorizeHtmlPermission,
 		preauthorizeHtmlPermission,
@@ -559,7 +543,6 @@ export function useHtmlAppPermissions({
 		revokeHtmlPermission,
 		updateHtmlPermissionTtl,
 		revokeAllHtmlPermissions,
-		acknowledgeHtmlPermissionCodeChanges,
 		permissionRevision: `${htmlAppInstanceKey}:${htmlAppConfigState.status}:${grantRevision}`,
 	}
 }

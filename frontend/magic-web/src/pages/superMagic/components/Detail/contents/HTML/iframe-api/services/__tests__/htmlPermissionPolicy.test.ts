@@ -69,11 +69,11 @@ describe("htmlPermissionPolicy", () => {
 		defaultTtl: number
 	}>([
 		{ scope: "llm.use", options: [HOUR, 8 * HOUR, DAY, null], defaultTtl: HOUR },
-		{ scope: "project.message.write", options: [0, HOUR, 8 * HOUR, null], defaultTtl: 0 },
+		{ scope: "project.message.write", options: [0, HOUR, 8 * HOUR, null], defaultTtl: HOUR },
 		{ scope: "project.files.upload", options: [HOUR, 8 * HOUR, DAY, null], defaultTtl: HOUR },
 		{ scope: "project.files.download", options: [HOUR, 8 * HOUR, DAY, null], defaultTtl: HOUR },
 		{ scope: "fs.project.read", options: [HOUR, 8 * HOUR, DAY, null], defaultTtl: HOUR },
-		{ scope: "fs.project.write", options: [0, HOUR, 8 * HOUR, null], defaultTtl: 0 },
+		{ scope: "fs.project.write", options: [0, HOUR, 8 * HOUR, null], defaultTtl: HOUR },
 		{ scope: "user.profile.name", options: [HOUR, 8 * HOUR, DAY, null], defaultTtl: HOUR },
 		{ scope: "user.profile.identity", options: [HOUR, 8 * HOUR, DAY, null], defaultTtl: HOUR },
 		{
