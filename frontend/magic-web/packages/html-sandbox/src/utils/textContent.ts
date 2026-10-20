@@ -99,20 +99,71 @@ export function getEditableTextContent(element: Element): string {
 export function setElementTextContent(element: Element, nextContent: string): void {
 	const target = resolveEditableTextTarget(element)
 	if (target === "replace-all") {
-		element.textContent = nextContent
+		// Keep authored inline wrappers and put only the changed characters into their text run.
+		const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+		const nodes: Text[] = []
+		let node = walker.nextNode()
+		while (node) {
+			nodes.push(node as Text)
+			node = walker.nextNode()
+		}
+		if (nodes.length) replaceTextRuns(nodes, nextContent)
+		else element.appendChild(element.ownerDocument.createTextNode(nextContent))
 		return
 	}
 
 	if (target) {
-		target.textContent = nextContent
 		const directTextNodes = getDirectTextNodes(element)
-		if (directTextNodes.includes(target)) {
-			for (const node of directTextNodes) {
-				if (node !== target) node.remove()
-			}
-		}
+		replaceTextRuns(directTextNodes.includes(target) ? directTextNodes : [target], nextContent)
 		return
 	}
 
 	element.appendChild(element.ownerDocument.createTextNode(nextContent))
+}
+
+/** Full inline text can span several style runs; plain text alone cannot restore their boundaries. */
+export function captureEditableTextState(element: Element): {
+	textContent: string
+	innerHTML?: string
+} {
+	return {
+		textContent: getEditableTextContent(element),
+		...(element.children.length && !shouldPreserveElementChildren(element)
+			? { innerHTML: element.innerHTML }
+			: {}),
+	}
+}
+
+function replaceTextRuns(nodes: Text[], nextContent: string): void {
+	const previous = nodes.map((node) => node.data).join("")
+	if (previous === nextContent) return
+	let start = 0
+	while (
+		start < previous.length &&
+		start < nextContent.length &&
+		previous[start] === nextContent[start]
+	)
+		start++
+	let end = previous.length
+	let nextEnd = nextContent.length
+	while (end > start && nextEnd > start && previous[end - 1] === nextContent[nextEnd - 1]) {
+		end--
+		nextEnd--
+	}
+
+	// Preserve unchanged prefixes/suffixes in place, including text after an inline highlight.
+	let offset = 0
+	let inserted = false
+	for (const [index, node] of nodes.entries()) {
+		const length = node.length
+		const localStart = Math.max(0, Math.min(length, start - offset))
+		const localEnd = Math.max(localStart, Math.min(length, end - offset))
+		const insertHere = !inserted && (start < offset + length || index === nodes.length - 1)
+		const replacement = insertHere ? nextContent.slice(start, nextEnd) : ""
+		if (insertHere) inserted = true
+		if (localEnd > localStart || replacement) {
+			node.replaceData(localStart, localEnd - localStart, replacement)
+		}
+		offset += length
+	}
 }

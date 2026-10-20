@@ -15,6 +15,8 @@ import type { ElementSelector } from "../features/ElementSelector"
 import { EditorLogger } from "../utils/EditorLogger"
 import { findElement } from "../utils/ElementSelector"
 import { markSourceNode } from "../utils/sourceNodes"
+import { getElementSelector } from "../utils/dom"
+import { camelToKebab } from "../utils/css"
 
 export class TextStyleManager {
 	private commandHistory: CommandHistory
@@ -151,7 +153,9 @@ export class TextStyleManager {
 		while (current) {
 			if (current instanceof HTMLElement) {
 				// Check if this element is contenteditable
-				if (current.isContentEditable) {
+				// isContentEditable is inherited by nested spans; history belongs to the explicit root.
+				if (current.getAttribute("contenteditable") === "false") return null
+				if (current.getAttribute("contenteditable") === "true") {
 					return current
 				}
 			}
@@ -165,31 +169,7 @@ export class TextStyleManager {
 	 * Generate a unique selector for an element
 	 */
 	private generateSelector(element: HTMLElement): string {
-		// Try to use data-editor-id first
-		const editorId = element.getAttribute("data-editor-id")
-		if (editorId) {
-			return `[data-editor-id="${editorId}"]`
-		}
-
-		// Fallback to id
-		if (element.id) {
-			return `#${element.id}`
-		}
-
-		// Generate a path-based selector
-		const path: string[] = []
-		let current: HTMLElement | null = element
-
-		while (current && current !== document.body) {
-			let selector = current.tagName.toLowerCase()
-			if (current.className) {
-				selector += `.${current.className.split(" ").join(".")}`
-			}
-			path.unshift(selector)
-			current = current.parentElement
-		}
-
-		return path.join(" > ")
+		return getElementSelector(element)
 	}
 
 	/**
@@ -355,7 +335,10 @@ export class TextStyleManager {
 			}
 
 			// If the common ancestor is a span and the selection covers all its content
-			if (commonAncestor instanceof HTMLSpanElement) {
+			if (
+				commonAncestor instanceof HTMLSpanElement &&
+				commonAncestor.childElementCount === 0
+			) {
 				const spanTextContent = commonAncestor.textContent || ""
 				const selectedText = range.toString()
 
@@ -385,6 +368,7 @@ export class TextStyleManager {
 				}
 			}
 
+			const previousStyleAttribute = targetSpan?.getAttribute("style") ?? null
 			if (targetSpan) {
 				// Reuse the existing span - just update its styles
 				if (styles.fontWeight !== undefined) targetSpan.style.fontWeight = styles.fontWeight
@@ -410,6 +394,16 @@ export class TextStyleManager {
 
 				// Extract the selected content and wrap it in the span
 				const fragment = range.extractContents()
+				// A wrapper's inherited color cannot override authored colors inside the selection.
+				// Only extracted descendants are changed, so unselected runs retain their styling.
+				fragment.querySelectorAll<HTMLElement>("*").forEach((child) => {
+					if (!child.style) return
+					for (const [property, value] of Object.entries(styles)) {
+						if (value === undefined) continue
+						const name = camelToKebab(property)
+						child.style.setProperty(name, value, child.style.getPropertyPriority(name))
+					}
+				})
 				span.appendChild(fragment)
 
 				// Insert the span at the selection point
@@ -467,11 +461,25 @@ export class TextStyleManager {
 			const selectedText = this.currentRange.toString()
 
 			// If we reused an existing span, save style changes instead of innerHTML
-			if (Object.keys(previousStyles).length > 0) {
+			if (Object.keys(previousStyles).length > 0 && targetSpan) {
 				this.commandHistory.push({
 					commandType: "APPLY_TEXT_STYLE",
-					payload: { selector, styles, selectedText, isStyleUpdate: true }, // Mark as style update
-					previousState: { selector, styles: previousStyles, selectedText }, // Save previous styles
+					// The editable root and the styled run are different elements in mixed text.
+					payload: {
+						selector,
+						styles,
+						selectedText,
+						isStyleUpdate: true,
+						targetSelector: getElementSelector(targetSpan),
+						styleAttribute: targetSpan.getAttribute("style"),
+					},
+					previousState: {
+						selector,
+						styles: previousStyles,
+						selectedText,
+						targetSelector: getElementSelector(targetSpan),
+						styleAttribute: previousStyleAttribute,
+					},
 					timestamp: Date.now(),
 					metadata: {
 						canUndo: true,

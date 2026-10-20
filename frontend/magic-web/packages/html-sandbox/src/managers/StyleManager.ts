@@ -20,7 +20,11 @@ import { EditorLogger } from "../utils/EditorLogger"
 import { findElement } from "../utils/ElementSelector"
 import { camelToKebab } from "../utils/css"
 import { normalizeSafeHref } from "../utils/safeUrl"
-import { getEditableTextContent, setElementTextContent } from "../utils/textContent"
+import {
+	captureEditableTextState,
+	getEditableTextContent,
+	setElementTextContent,
+} from "../utils/textContent"
 import {
 	assignEditorNodeIds,
 	assignUniqueIdsToClone,
@@ -725,7 +729,7 @@ export class StyleManager {
 	 */
 	async setTextContent(selector: string, textContent: string): Promise<void> {
 		const element = findElement(selector)
-		const previousValue = getEditableTextContent(element)
+		const previousState = captureEditableTextState(element)
 
 		// Apply text content without wiping non-text children
 		setElementTextContent(element, textContent)
@@ -733,8 +737,8 @@ export class StyleManager {
 		// Record command
 		this.commandHistory.push({
 			commandType: "SET_TEXT_CONTENT",
-			payload: { selector, textContent },
-			previousState: { selector, textContent: previousValue },
+			payload: { selector, ...captureEditableTextState(element) },
+			previousState: { selector, ...previousState },
 			timestamp: Date.now(),
 			metadata: {
 				canUndo: true,
@@ -770,6 +774,8 @@ export class StyleManager {
 
 		EditorLogger.info("Enabling text editing", { selector })
 
+		// Native contenteditable changes markup as well as text. Keep both sides of the edit.
+		const previousHTML = element.innerHTML
 		const previousContent = element.textContent || ""
 
 		element.setAttribute("contenteditable", "true")
@@ -818,7 +824,7 @@ export class StyleManager {
 		// Handle blur event (save on focus loss)
 		const handleBlur = () => {
 			const newContent = element.textContent || ""
-			const oldContent = element.getAttribute("data-previous-content") || ""
+			const newHTML = element.innerHTML
 
 			// Clean up timer
 			if (updateTimer) {
@@ -827,11 +833,11 @@ export class StyleManager {
 			}
 
 			// Only save if content changed
-			if (newContent !== oldContent) {
+			if (newHTML !== previousHTML) {
 				this.commandHistory.push({
 					commandType: "UPDATE_TEXT_CONTENT",
-					payload: { selector, content: newContent },
-					previousState: { selector, textContent: oldContent },
+					payload: { selector, content: newContent, innerHTML: newHTML },
+					previousState: { selector, innerHTML: previousHTML },
 					timestamp: Date.now(),
 					metadata: {
 						canUndo: true,
@@ -890,7 +896,7 @@ export class StyleManager {
 	 */
 	async updateTextContent(selector: string, content: string): Promise<void> {
 		const element = findElement(selector)
-		const previousValue = getEditableTextContent(element)
+		const previousState = captureEditableTextState(element)
 
 		// Apply text content without wiping non-text children
 		setElementTextContent(element, content)
@@ -898,8 +904,8 @@ export class StyleManager {
 		// Record command
 		this.commandHistory.push({
 			commandType: "UPDATE_TEXT_CONTENT",
-			payload: { selector, content },
-			previousState: { selector, textContent: previousValue },
+			payload: { selector, content, ...captureEditableTextState(element) },
+			previousState: { selector, ...previousState },
 			timestamp: Date.now(),
 			metadata: {
 				canUndo: true,
@@ -1771,18 +1777,25 @@ export class StyleManager {
 				if (previousState.styles !== undefined) {
 					// Restore previous style values
 					const previousStyles = previousState.styles as Record<string, string>
-					const htmlElement = element as HTMLElement
+					const htmlElement = previousState.targetSelector
+						? findElement(previousState.targetSelector)
+						: element
 
 					// Restore each style property directly (using camelCase property access)
-					for (const [property, value] of Object.entries(previousStyles)) {
-						if (value === "") {
-							// Remove the property if it was empty before
-							htmlElement.style[property as any] = ""
-						} else {
-							// Restore the previous value
-							htmlElement.style[property as any] = value
+					if (previousState.styleAttribute !== undefined) {
+						if (previousState.styleAttribute === null)
+							htmlElement.removeAttribute("style")
+						else htmlElement.setAttribute("style", previousState.styleAttribute)
+					} else
+						for (const [property, value] of Object.entries(previousStyles)) {
+							if (value === "") {
+								// Remove the property if it was empty before
+								htmlElement.style[property as any] = ""
+							} else {
+								// Restore the previous value
+								htmlElement.style[property as any] = value
+							}
 						}
-					}
 
 					// Restore text selection
 					if (this.textStyleManager && previousState.selectedText) {
@@ -2051,11 +2064,15 @@ export class StyleManager {
 					break
 				}
 				case "SET_TEXT_CONTENT": {
-					setElementTextContent(element, textContent)
+					if (command.payload.innerHTML !== undefined)
+						element.innerHTML = command.payload.innerHTML
+					else setElementTextContent(element, textContent)
 					break
 				}
 				case "UPDATE_TEXT_CONTENT": {
-					setElementTextContent(element, content)
+					if (command.payload.innerHTML !== undefined)
+						element.innerHTML = command.payload.innerHTML
+					else setElementTextContent(element, content)
 					break
 				}
 				case "SET_ELEMENT_POSITION": {
@@ -2071,12 +2088,19 @@ export class StyleManager {
 					// Case 1: Style update (reusing existing span)
 					if (payload.isStyleUpdate && payload.styles) {
 						const styles = payload.styles as Record<string, string>
-						const htmlElement = element as HTMLElement
+						const htmlElement = payload.targetSelector
+							? findElement(payload.targetSelector)
+							: element
 
 						// Apply each style property directly (using camelCase property access)
-						for (const [property, value] of Object.entries(styles)) {
-							htmlElement.style[property as any] = value || ""
-						}
+						if (payload.styleAttribute !== undefined) {
+							if (payload.styleAttribute === null)
+								htmlElement.removeAttribute("style")
+							else htmlElement.setAttribute("style", payload.styleAttribute)
+						} else
+							for (const [property, value] of Object.entries(styles)) {
+								htmlElement.style[property as any] = value || ""
+							}
 
 						// Restore text selection
 						if (this.textStyleManager && payload.selectedText) {
