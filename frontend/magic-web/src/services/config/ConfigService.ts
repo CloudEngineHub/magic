@@ -52,6 +52,11 @@ export class ConfigService {
 	 */
 	async init(options: Config.InitializeGlobalConfig) {
 		const config = new ConfigRepository()
+		const defaultWrites: Promise<void>[] = []
+		// Defaults use independent keys: apply them now, but preserve init's completion boundary.
+		const saveDefault = (write: Promise<void>) => {
+			defaultWrites.push(write.catch((error) => console.warn(error)))
+		}
 		const theme = await config.getThemeConfig()
 
 		// Theme init: coerce to light while dark mode is disabled
@@ -60,19 +65,19 @@ export class ConfigService {
 			const initial = options.initializeTheme
 				? normalizeThemeMode(options.initializeTheme)
 				: defaultTheme
-			await config.setThemeConfig(initial)
 			configStore.theme.setTheme(initial)
+			saveDefault(config.setThemeConfig(initial))
 		} else {
 			const normalized = normalizeThemeMode(theme as ThemeMode)
 			configStore.theme.setTheme(normalized)
-			if (normalized !== theme) await config.setThemeConfig(normalized)
+			if (normalized !== theme) saveDefault(config.setThemeConfig(normalized))
 		}
 
 		// Restore the persisted font scale, or persist the current store default.
 		const fontScale = await config.getFontScaleConfig()
 		if (fontScale === undefined) {
 			const defaultFontScale = configStore.font.fontScale
-			await config.setFontScaleConfig(defaultFontScale)
+			saveDefault(config.setFontScaleConfig(defaultFontScale))
 		} else {
 			configStore.font.setFontScale(fontScale)
 		}
@@ -92,13 +97,16 @@ export class ConfigService {
 
 		if (!locale) {
 			const defaultLocale = initialLanguage
-			await config.setLocaleConfig(
-				options.initializeI18n || (defaultLocale as Config.LanguageValue),
+			saveDefault(
+				config.setLocaleConfig(
+					options.initializeI18n || (defaultLocale as Config.LanguageValue),
+				),
 			)
 			await configStore.i18n.syncLanguage(options.initializeI18n || defaultLocale)
 		} else {
 			await configStore.i18n.syncLanguage(locale)
 		}
+		await Promise.all(defaultWrites)
 	}
 
 	/**
@@ -276,16 +284,31 @@ export class ConfigService {
 	 * @param clusterCode Identifier for the cluster definition and cached selection.
 	 * @param clusterConfig Service endpoints and deployment metadata for the cluster.
 	 */
-	async setClusterConfig(clusterCode: string, clusterConfig: Common.PrivateConfig) {
+	async setClusterConfig(
+		clusterCode: string,
+		clusterConfig: Common.PrivateConfig,
+		options: { waitForPersistence?: boolean } = {},
+	) {
 		configStore.cluster.setClusterCodeCache(clusterCode)
 		configStore.cluster.setClusterConfig(clusterCode, clusterConfig)
 
 		try {
 			// Persist the cluster definition and cached selection after updating memory.
 			const cluster = new ClusterRepository()
-			await cluster.setClusterConfig({ ...clusterConfig, deployCode: clusterCode })
 			const config = new ConfigRepository()
-			await config.setClusterCacheConfig(clusterCode)
+			// Definitions and the remembered selection are independent writes, not a read-after-write chain.
+			const persistence = Promise.all(
+				[
+					cluster.setClusterConfig({ ...clusterConfig, deployCode: clusterCode }),
+					config.setClusterCacheConfig(clusterCode),
+				].map((write) => write.catch((error) => console.warn(error))),
+			)
+			if (options.waitForPersistence === false) {
+				// Read-only probes only need the in-memory configuration. Observe background failures.
+				void persistence.catch((error) => console.warn(error))
+				return
+			}
+			await persistence
 		} catch (error) {
 			console.warn(error)
 		}
