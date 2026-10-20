@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import random
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,6 +26,7 @@ _MESSAGE_QUEUE_MAXSIZE = 5000
 _SHUTDOWN_DRAIN_TIMEOUT_SECONDS = 20.0
 
 _shared_driver: Optional["SocketIODriver"] = None
+_shared_driver_shutdown: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,8 @@ def get_shared_socketio_driver(config: SocketIODriverConfig) -> "SocketIODriver"
     | 进程 shutdown  | shutdown_shared_socketio_driver 再断开    |
     """
     global _shared_driver
+    if _shared_driver_shutdown:
+        raise RuntimeError("Socket.IO driver is shutting down")
     if _shared_driver is None:
         _shared_driver = SocketIODriver(config)
     else:
@@ -52,13 +56,15 @@ def get_shared_socketio_driver(config: SocketIODriverConfig) -> "SocketIODriver"
 
 def reset_shared_socketio_driver() -> None:
     """测试用：丢掉单例引用，不负责断开真实连接。"""
-    global _shared_driver
+    global _shared_driver, _shared_driver_shutdown
     _shared_driver = None
+    _shared_driver_shutdown = False
 
 
 async def shutdown_shared_socketio_driver() -> None:
     """进程退出：等队列排空后断开，并清空单例。"""
-    global _shared_driver
+    global _shared_driver, _shared_driver_shutdown
+    _shared_driver_shutdown = True
     driver = _shared_driver
     _shared_driver = None
     if driver is None:
@@ -87,8 +93,16 @@ class SocketIODriver(StreamingInterface):
         self.config: SocketIODriverConfig = config
 
         # 连接状态
-        self.sio_client = None
-        self.connection_time = None
+        self.sio_client: Optional["socketio.AsyncClient"] = None
+        self.connection_time: Optional[float] = None
+        self._connection_lock = asyncio.Lock()
+        self._closing: bool = False
+        self._closed: bool = False
+        self._next_connection_attempt_at: float = 0.0
+        self._reconnect_delay: float = config.reconnect_delay
+        self._connection_attempts: int = 0
+        self._connection_failures: int = 0
+        self._dropped_messages: int = 0
 
         # 消息队列系统 - 保证消息顺序发送
         self.message_queue: Optional[asyncio.Queue] = None
@@ -243,19 +257,21 @@ class SocketIODriver(StreamingInterface):
             if not self.config.enabled:
                 return StreamingResult(success=False, message="Socket.IO streaming disabled")
 
-            created_queue = await self._initialize_message_queue()
-
-            if self.sio_client and self.sio_client.connected:
-                logger.debug("Socket.IO connection reused")
-                return StreamingResult(success=True, message="Socket.IO reused")
-
-            try:
-                await self._establish_full_connection()
-            except Exception:
-                # 首轮建连失败才拆掉刚建的 worker；复用中的队列继续给后续重连用。
-                if created_queue:
-                    await self._shutdown_message_queue()
-                raise
+            async with self._connection_lock:
+                if self._closing:
+                    return StreamingResult(success=False, message="Socket.IO driver is shutting down")
+                created_queue = await self._initialize_message_queue()
+                try:
+                    connected = await self._connect_locked()
+                except BaseException:
+                    # 首轮建连失败才拆掉刚建的 worker；复用中的队列继续给后续重连用。
+                    if created_queue:
+                        await self._shutdown_message_queue()
+                    raise
+                if not connected:
+                    if created_queue:
+                        await self._shutdown_message_queue()
+                    return StreamingResult(success=False, message="Socket.IO connection is backing off")
 
             return StreamingResult(success=True, message="Socket.IO ready")
 
@@ -266,6 +282,8 @@ class SocketIODriver(StreamingInterface):
     async def push(self, chunk_data: ChunkData) -> StreamingResult:
         """入队前用当轮 builder 构好消息，避免复用连接时发到下一轮 builder。"""
         try:
+            if self._closing:
+                return StreamingResult(success=False, message="Socket.IO driver is shutting down")
             request_id = chunk_data.request_id
             if request_id not in self.stats_by_request:
                 self.stats_by_request[request_id] = {"expected": 0, "actual": 0}
@@ -279,6 +297,9 @@ class SocketIODriver(StreamingInterface):
             if message is None:
                 logger.debug(f"Message build failed for {request_id}, skipping push")
                 return StreamingResult(success=False, message="Message build failed")
+
+            if self._closing:
+                return StreamingResult(success=False, message="Socket.IO driver is shutting down")
 
             try:
                 self.message_queue.put_nowait(_QueuedSocketIOMessage(request_id, message))
@@ -296,16 +317,18 @@ class SocketIODriver(StreamingInterface):
         """真正写 websocket。调用方是后台 worker，不在 Agent 热路径上。"""
         request_id = item.request_id
         try:
-            await self._ensure_connection()
-
-            if not self.sio_client or not self.sio_client.connected:
-                logger.warning(f"Connection failed for {request_id}, skipping push")
+            if not await self._ensure_connection():
+                self._dropped_messages += 1
+                return False
+            client = self.sio_client
+            if client is None:
+                self._dropped_messages += 1
                 return False
 
             self._write_to_debug_file(request_id, item.message)
 
             await asyncio.wait_for(
-                self.sio_client.emit(self.config.event_name, item.message, namespace=self.config.namespace),
+                client.emit(self.config.event_name, item.message, namespace=self.config.namespace),
                 timeout=self.config.push_timeout
             )
 
@@ -316,93 +339,88 @@ class SocketIODriver(StreamingInterface):
             return True
 
         except Exception as e:
+            self._dropped_messages += 1
             logger.warning(f"Async push failed for {request_id}: {e}")
             return False
 
-    async def _establish_full_connection(self) -> None:
-        """建立完整连接，包括命名空间连接确认"""
+    def _is_connected(self) -> bool:
+        client = self.sio_client
+        return bool(client and client.connected and self.config.namespace in client.namespaces)
+
+    async def _ensure_connection(self) -> bool:
+        """初始化与发送共用一把锁；空闲断线不产生后台重连任务。"""
+        async with self._connection_lock:
+            return await self._connect_locked()
+
+    async def _connect_locked(self) -> bool:
+        if self._closed:
+            return False
+        # 检查连接是否过期
+        expired = self.connection_time is not None and time.monotonic() - self.connection_time > self.config.max_connection_age
+        if self._is_connected() and not expired:
+            return True
+        if time.monotonic() < self._next_connection_attempt_at:
+            return False
+
+        client: Optional["socketio.AsyncClient"] = None
+        self._connection_attempts += 1
         try:
-            # 检查连接是否过期
-            if (self.sio_client and self.sio_client.connected and
-                self.connection_time and
-                time.time() - self.connection_time > self.config.max_connection_age):
-                logger.info("Connection expired, closing old connection")
-                await self._close_connection()
-
-            if self.sio_client and self.sio_client.connected:
-                return
-
-            # 创建新连接
-            self.sio_client = socketio.AsyncClient(logger=False, engineio_logger=False)
-
-            # 添加命名空间连接事件监听（参考 test_single_message.py）
-            namespace_connected = False
-
-            @self.sio_client.event(namespace=self.config.namespace)
-            async def connect():
-                nonlocal namespace_connected
-                namespace_connected = True
-                logger.debug(f"Namespace {self.config.namespace} connected successfully")
-
-            # 连接到服务器
+            await self._close_connection_locked()
+            # 只有现有发送路径负责恢复，避免库重连和新建客户端同时运行。
+            client = socketio.AsyncClient(reconnection=False, logger=False, engineio_logger=False)
             await asyncio.wait_for(
-                self.sio_client.connect(
+                client.connect(
                     self.config.base_url,
                     transports=self.config.transports,
                     namespaces=[self.config.namespace],
                     socketio_path=self.config.socketio_path,
-                    wait=False
+                    wait=True,
+                    wait_timeout=self.config.connection_timeout,
                 ),
-                timeout=self.config.connection_timeout
+                timeout=self.config.connection_timeout,
             )
+            self.sio_client = client
+            self.connection_time = time.monotonic()
+            self._reconnect_delay = self.config.reconnect_delay
+            self._next_connection_attempt_at = 0.0
+            logger.info(f"Socket.IO connected namespace={self.config.namespace} attempts={self._connection_attempts}")
+            return True
+        except Exception as error:
+            self._connection_failures += 1
+            delay = self._reconnect_delay + random.uniform(-self.config.reconnect_jitter, self.config.reconnect_jitter)
+            self._next_connection_attempt_at = time.monotonic() + delay
+            self._reconnect_delay = min(self._reconnect_delay * 2, self.config.reconnect_delay_max)
+            logger.warning(
+                f"Socket.IO connection failed error={type(error).__name__} "
+                f"retry_after_seconds={delay:.2f} failures={self._connection_failures}"
+            )
+            return False
+        finally:
+            if client is not None and client is not self.sio_client:
+                try:
+                    await self._shutdown_client(client)
+                except Exception as error:
+                    # 释放失败保留引用，下次先重试释放，不能遗弃仍有资源的客户端。
+                    self.sio_client = client
+                    logger.warning(f"Socket.IO client cleanup failed error={type(error).__name__}")
 
-                        # 等待连接真正建立，参考 test_single_message.py
-            logger.debug("Waiting for connection to be fully established...")
-            connection_check_timeout = self.config.connection_timeout
-            start_time = time.time()
-            while not self.sio_client.connected and (time.time() - start_time) < connection_check_timeout:
-                await asyncio.sleep(0.1)
+    async def _shutdown_client(self, client: "socketio.AsyncClient") -> None:
+        try:
+            await asyncio.wait_for(client.shutdown(), timeout=self.config.connection_timeout)
+        finally:
+            # Socket.IO 握手未完成时 shutdown 可能无事可做，Engine.IO 仍须释放 HTTP 会话。
+            await asyncio.wait_for(client.eio.disconnect(abort=True), timeout=self.config.connection_timeout)
 
-            if not self.sio_client.connected:
-                raise ConnectionError("Connection established but not in connected state")
-
-            # 等待命名空间连接成功（参考 test_single_message.py）
-            logger.debug(f"Waiting for namespace {self.config.namespace} to connect...")
-            namespace_timeout = 5.0  # 命名空间连接超时
-            start_time = time.time()
-            while not namespace_connected and (time.time() - start_time) < namespace_timeout:
-                await asyncio.sleep(0.1)
-
-            if not namespace_connected:
-                raise ConnectionError(f"Namespace {self.config.namespace} failed to connect")
-
-            self.connection_time = time.time()
-            logger.info(f"Socket.IO connected to {self.config.base_url} with path {self.config.socketio_path}, namespace {self.config.namespace} ready")
-
-        except Exception as e:
-            logger.warning(f"Full connection failed: {e}")
-            await self._close_connection()
-            raise
-
-    async def _ensure_connection(self) -> None:
-        """轻量级连接检查，必要时重连"""
-        if not self.sio_client or not self.sio_client.connected:
-            logger.debug("Connection lost, re-establishing...")
-            await self._establish_full_connection()
-        elif self.sio_client and hasattr(self.sio_client, 'namespaces') and self.config.namespace not in self.sio_client.namespaces:
-            logger.debug(f"Namespace {self.config.namespace} lost, re-establishing...")
-            await self._establish_full_connection()
+    async def _close_connection_locked(self) -> None:
+        if self.sio_client is not None:
+            await self._shutdown_client(self.sio_client)
+            self.sio_client = None
+        self.connection_time = None
 
     async def _close_connection(self) -> None:
         """关闭连接"""
-        try:
-            if self.sio_client:
-                await self.sio_client.disconnect()
-        except Exception:
-            pass  # 静默处理关闭错误
-        finally:
-            self.sio_client = None
-            self.connection_time = None
+        async with self._connection_lock:
+            await self._close_connection_locked()
 
     async def _build_message(self, chunk_data: ChunkData) -> Optional[Dict[str, Any]]:
         """构建 Socket.IO 消息"""
@@ -455,24 +473,33 @@ class SocketIODriver(StreamingInterface):
         """
         queue_size = self.message_queue.qsize() if self.message_queue else 0
         logger.info(
-            f"Socket.IO connection reused after stream, remaining queued messages: {queue_size}"
+            f"Socket.IO connection reused after stream, remaining queued messages: {queue_size} "
+            f"connected={self._is_connected()} attempts={self._connection_attempts} "
+            f"failures={self._connection_failures} discarded={self._dropped_messages}"
         )
         return StreamingResult(success=True, message="Socket.IO reused, drain in background")
 
     async def shutdown(self, timeout: float = _SHUTDOWN_DRAIN_TIMEOUT_SECONDS) -> StreamingResult:
         """进程退出时排空发送队列并断开。"""
+        self._closing = True
         try:
             completion_success = await self.wait_for_queue_completion(timeout=timeout)
             self._log_all_push_statistics()
-            await self._shutdown_message_queue()
-            await self._close_connection()
-            self._close_debug_file()
             if completion_success:
                 return StreamingResult(success=True, message="Connection closed after queue completion")
             return StreamingResult(success=True, message="Connection closed with queue timeout warnings")
         except Exception as e:
             logger.warning(f"Shutdown error: {e}")
             return StreamingResult(success=True, message="Connection closed with warnings")
+        finally:
+            try:
+                await self._shutdown_message_queue()
+            finally:
+                self._closed = True
+                try:
+                    await self._close_connection()
+                finally:
+                    self._close_debug_file()
 
     async def _initialize_message_queue(self) -> bool:
         """启动发送 worker。已在跑则复用，返回是否新建。"""
