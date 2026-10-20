@@ -1187,10 +1187,8 @@ class LLMAppService extends AbstractLLMAppService
             // 动态模型解析后仍需二次校验，确保最终落到的真实子模型也在用户可访问范围内。
             $this->modelGatewayModelAccessService->assertCanAccess($accessContext, $modeId);
 
-            // 设置原始 model_id（目前用于识别是否动态模型）.
             if ($proxyModelRequest instanceof AbstractRequestDTO) {
                 $proxyModelRequest->setModel($modeId);
-                $proxyModelRequest->setOriginalModelId($originalModelId);
             }
 
             // Check if high availability is enabled
@@ -1210,8 +1208,9 @@ class LLMAppService extends AbstractLLMAppService
                 $modeId,
             );
             if ($proxyModelRequest instanceof AbstractRequestDTO) {
-                // 同步请求模型标识，确保后续模型加载和调用使用映射后的标识。
+                // 设置原始 model_id（目前用于识别是否动态模型）.
                 $proxyModelRequest->setModel($modeId);
+                $proxyModelRequest->setOriginalModelId($originalModelId);
             }
 
             try {
