@@ -17,10 +17,16 @@ use App\Domain\SuperMagic\Agent\Service\SuperMagicAgentSkillDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillMarketDomainService;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Qbhy\HyperfAuth\Authenticatable;
+use RuntimeException;
 
 /** Dependencies remain owned by their authors; transferring must not widen their visibility. */
 class ResourceTransferDependencyGuard
 {
+    private const KNOWLEDGE_PAGE_SIZE = 100;
+
+    // Dependency reads run while the resource is locked; never allow unbounded RPC work.
+    private const MAX_KNOWLEDGE_PAGES = 10;
+
     public function __construct(
         private readonly ResourceAccessPolicyService $policy,
         private readonly SuperMagicAgentSkillDomainService $skills,
@@ -46,14 +52,26 @@ class ResourceTransferDependencyGuard
             $this->policy->assertReadable($receiverIsolation, ResourceType::Skill, VisibilityResourceType::SKILL, $skill->getSkillCode());
         }
         $receiverAuthorization = MagicUserAuthorization::fromUserEntity($receiver);
-        $page = 1;
-        do {
-            $result = $this->knowledge->queriesRaw($sender, ['agent_codes' => [$code], 'page' => $page, 'page_size' => 100]);
-            $items = $result['list'] ?? [];
-            foreach ($items as $item) {
-                $this->knowledge->showRaw($receiverAuthorization, (string) $item['code']);
+        $checkedCodes = [];
+        for ($page = 1; $page <= self::MAX_KNOWLEDGE_PAGES; ++$page) {
+            $result = $this->knowledge->queriesRaw($sender, ['agent_codes' => [$code], 'page' => $page, 'page_size' => self::KNOWLEDGE_PAGE_SIZE]);
+            $items = $result['list'] ?? null;
+            if (! is_array($items) || count($items) > self::KNOWLEDGE_PAGE_SIZE) {
+                throw new RuntimeException('Invalid knowledge-base dependency page.');
             }
-            ++$page;
-        } while (count($items) === 100);
+            foreach ($items as $item) {
+                $knowledgeCode = is_array($item) ? ($item['code'] ?? null) : null;
+                if (! is_string($knowledgeCode) || $knowledgeCode === '' || isset($checkedCodes[$knowledgeCode])) {
+                    // Fail closed instead of treating a repeated/truncated scan as complete authorization.
+                    throw new RuntimeException('Knowledge-base dependency pagination did not advance.');
+                }
+                $this->knowledge->showRaw($receiverAuthorization, $knowledgeCode);
+                $checkedCodes[$knowledgeCode] = true;
+            }
+            if (count($items) < self::KNOWLEDGE_PAGE_SIZE) {
+                return;
+            }
+        }
+        throw new RuntimeException('Knowledge-base dependency verification exceeded its page limit.');
     }
 }
