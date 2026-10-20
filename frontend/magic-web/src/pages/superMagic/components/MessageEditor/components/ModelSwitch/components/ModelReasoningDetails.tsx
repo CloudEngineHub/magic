@@ -14,6 +14,7 @@ import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCac
 import { reasoningEffortLevels, type ModelItem, type ReasoningEffort } from "../types"
 import {
 	MODEL_DETAILS_HOVER_OPEN_DELAY_MS,
+	MODEL_DETAILS_HOVER_SIDE_OFFSET,
 	useModelDetailsHover,
 } from "../hooks/useModelDetailsHover"
 import { CollapsibleDescription } from "./CollapsibleDescription"
@@ -285,7 +286,7 @@ export function ModelReasoningDetails({
 				align="start"
 				// The anchor is the compact model row, so leave enough room for the
 				// detail card to sit beside the full model-list panel without overlap.
-				sideOffset={mobile ? 8 : 20}
+				sideOffset={mobile ? 8 : MODEL_DETAILS_HOVER_SIDE_OFFSET}
 				collisionPadding={12}
 				className="w-64 max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl border-border/80 bg-card p-0 shadow-[0_12px_32px_rgba(15,23,42,0.14)] duration-100"
 				onPointerEnter={keepOpen}
@@ -363,9 +364,7 @@ export function ModelReasoningDetails({
 									data-model-switch-details-overlay
 									side="right"
 									align="start"
-									// This popover is anchored to an inner row; the larger offset
-									// keeps it parallel with the complete detail card.
-									sideOffset={16}
+									sideOffset={MODEL_DETAILS_HOVER_SIDE_OFFSET}
 									className="w-36 p-0 duration-100"
 									onPointerEnter={keepOpen}
 									onPointerLeave={(event) => scheduleClose(event, false)}

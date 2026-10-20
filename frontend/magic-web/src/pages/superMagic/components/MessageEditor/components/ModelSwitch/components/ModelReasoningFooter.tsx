@@ -11,7 +11,11 @@ import {
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { cn } from "@/utils/cn"
-import { MODEL_DETAILS_HOVER_CLOSE_DELAY_MS } from "../hooks/useModelDetailsHover"
+import {
+	MODEL_DETAILS_HOVER_CLOSE_DELAY_MS,
+	MODEL_DETAILS_HOVER_SIDE_OFFSET,
+	useModelDetailsHover,
+} from "../hooks/useModelDetailsHover"
 import {
 	reasoningEffortLevels,
 	type ModelItem,
@@ -61,6 +65,7 @@ export function ModelReasoningFooter({
 	layout = "overlay",
 }: ModelReasoningFooterProps) {
 	const { t } = useTranslation("super")
+	const modelDetailsHover = useModelDetailsHover()
 	const [open, setOpen] = useState(false)
 	const [override, setOverride] = useState<ReasoningEffort | null | undefined>(undefined)
 	const hoverOpened = useRef(false)
@@ -108,7 +113,15 @@ export function ModelReasoningFooter({
 		clearTimeout(closeTimer.current)
 	}
 
+	/** The footer is a sibling overlay, so explicitly dismiss the row detail first. */
+	function closeModelDetails() {
+		if (modelDetailsHover.activeId) {
+			modelDetailsHover.requestClose(modelDetailsHover.activeId, true)
+		}
+	}
+
 	function openFromHover() {
+		closeModelDetails()
 		if (!canSelect) return
 		keepOpen()
 		hoverOpened.current = true
@@ -250,6 +263,7 @@ export function ModelReasoningFooter({
 			{...(openOn === "tap" && canSelect
 				? {
 						onClick: () => {
+							closeModelDetails()
 							setOpen((value) => !value)
 						},
 					}
@@ -324,7 +338,7 @@ export function ModelReasoningFooter({
 				data-model-switch-details-overlay
 				side="right"
 				align="end"
-				sideOffset={8}
+				sideOffset={MODEL_DETAILS_HOVER_SIDE_OFFSET}
 				collisionPadding={12}
 				className="w-36 p-0 duration-100"
 				onPointerEnter={keepOpen}

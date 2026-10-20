@@ -11,6 +11,8 @@ import {
 export const MODEL_DETAILS_HOVER_OPEN_DELAY_MS = 80
 export const MODEL_DETAILS_HOVER_SWITCH_DELAY_MS = 140
 export const MODEL_DETAILS_HOVER_CLOSE_DELAY_MS = 240
+/** Keep the adjacent hover panels visually connected while leaving a small gap. */
+export const MODEL_DETAILS_HOVER_SIDE_OFFSET = 4
 
 /** 同一模型列表只展开一份详情，统一取消跨行及跨 Portal 的悬停计时。 */
 function useModelDetailsController() {

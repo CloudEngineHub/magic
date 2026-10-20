@@ -40,6 +40,7 @@ import { ModelTabSwitcher } from "./components/ModelTabSwitcher"
 import { resolveShowSelectedModelName } from "./utils"
 import { useOptionalAddModelStore } from "./components/AddModel/context"
 import { MODEL_TYPE_IMAGE, MODEL_TYPE_VIDEO } from "@/apis/modules/org-ai-model-provider"
+import { ModelDetailsHoverProvider } from "./hooks/useModelDetailsHover"
 
 export const ModelSwitch = observer(function ModelSwitch({
 	size = "default",
@@ -564,28 +565,30 @@ export const ModelSwitch = observer(function ModelSwitch({
 							{tabSwitcher}
 							{/* 思考强度固定盖住列表底部，模型行从遮罩后面滚过。 */}
 							<div className="relative min-h-0">
-								<div
-									ref={desktopScrollContainerRef}
-									data-model-switch-scroll-container
-									className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
-								>
-									{mainContent}
+								<ModelDetailsHoverProvider>
+									<div
+										ref={desktopScrollContainerRef}
+										data-model-switch-scroll-container
+										className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
+									>
+										{mainContent}
+										{reasoningFooterModel ? (
+											<div
+												aria-hidden
+												className={cn(
+													MODEL_REASONING_FOOTER_HEIGHT_CLASS,
+													"shrink-0",
+												)}
+											/>
+										) : null}
+									</div>
 									{reasoningFooterModel ? (
-										<div
-											aria-hidden
-											className={cn(
-												MODEL_REASONING_FOOTER_HEIGHT_CLASS,
-												"shrink-0",
-											)}
+										<ModelReasoningFooter
+											model={reasoningFooterModel}
+											onReasoningEffortChange={handleModelChange}
 										/>
 									) : null}
-								</div>
-								{reasoningFooterModel ? (
-									<ModelReasoningFooter
-										model={reasoningFooterModel}
-										onReasoningEffortChange={handleModelChange}
-									/>
-								) : null}
+								</ModelDetailsHoverProvider>
 							</div>
 						</div>
 					</DropdownMenuContent>

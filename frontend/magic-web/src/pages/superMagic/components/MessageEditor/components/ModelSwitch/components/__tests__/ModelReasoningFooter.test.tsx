@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ModelReasoningFooter, resolveReasoningFooterModel } from "../ModelReasoningFooter"
 import { ModelStatusEnum, type ModelItem } from "../../types"
+import { ModelDetailsHoverProvider, useModelDetailsHover } from "../../hooks/useModelDetailsHover"
 
 const { setReasoningEffort } = vi.hoisted(() => ({
 	setReasoningEffort: vi.fn(),
@@ -57,6 +58,20 @@ function hoverFooter() {
 	// React maps pointerover/mouseover onto the enter handlers.
 	fireEvent.pointerOver(footer, { pointerType: "mouse" })
 	fireEvent.mouseOver(footer)
+}
+
+function ActiveModelDetail() {
+	const hover = useModelDetailsHover()
+	return (
+		<>
+			<button type="button" onClick={() => hover.requestOpen("model-row", true)}>
+				open-model-detail
+			</button>
+			<span data-testid="model-detail-state">
+				{hover.activeId === "model-row" ? "open" : "closed"}
+			</span>
+		</>
+	)
 }
 
 describe("resolveReasoningFooterModel", () => {
@@ -117,6 +132,24 @@ describe("ModelReasoningFooter", () => {
 			screen.queryByText("A long model description that must stay out of the effort menu."),
 		).toBeNull()
 		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplier")).toBeNull()
+	})
+
+	it("closes the model detail when entering the reasoning footer", () => {
+		const model = createModel()
+		render(
+			<ModelDetailsHoverProvider>
+				<ActiveModelDetail />
+				<ModelReasoningFooter model={model} onReasoningEffortChange={vi.fn()} />
+			</ModelDetailsHoverProvider>,
+		)
+
+		fireEvent.click(screen.getByText("open-model-detail"))
+		expect(screen.getByTestId("model-detail-state")).toHaveTextContent("open")
+
+		hoverFooter()
+
+		expect(screen.getByTestId("model-detail-state")).toHaveTextContent("closed")
+		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
 	})
 
 	it("saves the selected effort without mutating the source model", () => {
