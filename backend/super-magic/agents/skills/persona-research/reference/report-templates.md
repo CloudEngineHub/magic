@@ -20,16 +20,16 @@ Use a template only if it is a readable, complete HTML document (`<html` or `<bo
 
 - Use this section order and the built-in ids: `summary` (the bottom line, always first), `hypotheses`, `business`, `method`, `findings`, `real-voices`, `tensions`, `personas`, `voices`, `limitations`, `validation`, `sources`. Drop a section only when it truly does not apply.
 - Citations are `<a href="#q<N>" class="citation-ref">[Q<N>]</a>` and `<a href="#s<N>" class="citation-ref">[S<N>]</a>`. Each quote card has `id="q<N>"`, `data-source-name` (persona name), and `data-source-title` (the quote); each source card has `id="s<N>"`.
-- Every hypothesis, recommendation, and theme carries an evidence bar: web sources N, AI interviews N people, real-person validation status.
-- The bottom line opens with a decision badge (`decision-go`, `decision-conditional`, or `decision-nogo` in the default template) and a one-sentence answer before any detail; the rest of the report never contradicts it.
-- State next to the opening answer that interviewees are AI-simulated, give the effective sample size, and say whether real-person validation is done. Repeat the full limitations in `limitations`. Sample accounting may use numbers; never count personas supporting a claim or turn their answers into ratios. Use most / some / a few, scoped to the AI interviews, not to real users.
+- Each hypothesis, recommendation, and theme has a compact evidence bar linking only its relevant evidence: AI interview signals `[Q#]`, external facts or context `[S#]`, inference from those premises, and the real-person validation status for that claim. Do not repeat study-wide interview or source totals here; a completed interview is not automatically evidence for every claim.
+- The bottom line opens with a decision badge (`decision-go`, `decision-conditional`, or `decision-nogo` in the default template) and a one-sentence answer before any detail; recommendations follow it, while findings retain the counter-evidence and uncertainty that qualify it.
+- State next to the opening answer that interviewees are AI-simulated and give clearly labeled whole-study totals: completed AI interviews, external sources reviewed, and real-person validation status. Put planned, failed and downweighted sample accounting in `method` and `limitations`; these numbers do not measure support for a claim. Follow methods.md for qualitative frequency wording and evidence judgments.
 - Charts and data tables are optional inline fragments chosen by report-charts.md, placed in `findings` (or `hypotheses`), never in `summary`. They carry their own styles, so any template shows them; a report without them is correct when the data does not warrant one.
 - Replace every sample text in the template with study content, and set `<html lang>` to the user's language.
 - Keep the template's own scripts. Behaviour a template lacks (citation popovers, persona portraits) is not added; citations then work as plain anchor links.
 
 ## Write for a Reader Making a Decision
 
-Before styling, draft the answer, its strongest evidence, what remains unknown, and the next action. A reader scanning only the opening and headings should understand the proposed decision and why it remains conditional.
+Before styling, draft the answer, its strongest evidence, what remains unknown, and the next action. A reader scanning only the opening and headings should understand the proposed decision, its evidence and any remaining conditions.
 
 - A short title names the decision or subject; the opening answer states the recommendation and its condition. Use a concrete judgment for each finding heading, not a topic label or a slogan. Prefer "Test a weekly task before adding features" to "Unlock a new retention journey". Do not repeat the research question as a subtitle.
 - Each paragraph makes one point in 1-3 sentences: what happened or was said, what it suggests, and why it matters for this decision. Keep a connected explanation when the reasoning needs it; do not split it into disconnected slogans. Use familiar words, specific subjects and verbs. Explain a necessary research term on first use.
@@ -48,7 +48,7 @@ Example (illustrative wording, not research evidence):
 
 ### Keep the Opening Small and Honest
 
-Before any image, method card or persona panel: short title, decision badge, one-sentence answer, 2-3 cited reasons, evidence basis and AI-simulation label, then what would change the answer and the 3 things to validate first (each tied to a hypothesis and a concrete test). If evidence is incomplete, say what cannot yet be decided instead of filling the space with a positive conclusion.
+Before any image, method card or persona panel: short title, decision badge, one-sentence answer, the few cited reasons needed to explain it, whole-study evidence scope and AI-simulation label, then what could change the answer. List at most 3 remaining validation priorities, each tied to a hypothesis and a concrete test; one is enough when only one matters, and none is needed when no material check remains. If evidence is incomplete, say what cannot yet be decided. Neither reasons nor validation tasks are quotas to fill.
 
 Keep the title compact enough for the answer to be visible on a typical laptop. Do not force a one-screen fit by clipping, shrinking or hiding material caveats. Use readable body text near 16px, relaxed line-height and a bounded reading width; let long titles, source names and badges wrap. Use spacing and type weight to group content, with one restrained emphasis color. No decorative cover before the decision, fixed-height text boxes, or walls of bold text. Images are optional supporting material after the decision content.
 
@@ -58,10 +58,10 @@ Keep the title compact enough for the answer to be visible on a typical laptop. 
 |---|---|
 | `summary` | Opening described above; decision classes and confidence follow methods.md. Show homogeneity warnings and skipped or overridden leak checks beside the verdict. |
 | `hypotheses` | Each hypothesis's verdict, reason and evidence; fold support/refute criteria. |
-| `business` | Target segment priority, one-line positioning, pricing direction, channels and reach, first-30-day actions. Give a pricing range only when cited evidence supports it, with the AI-optimism warning; otherwise say what evidence is missing and how to collect it. Label untested positioning and channels as candidates. Each item lists hypothesis ids, evidence, and what to validate first; actions remain conditional on those results, including when the opening says to test first. For no-go, title it "If you still want to try" and give conditions and cheap tests only, never a launch plan. |
+| `business` | Decision-relevant recommendations using methods.md, labeled as tests, conditional actions or supported actions. Omit unrelated commercial topics; for no-go, title it "If you still want to try" and give only stopping conditions or cheap tests. |
 | `method` | Scope, framework, completed vs. planned interviews and rounds, and any focus group actually run. |
 | `findings` | At most 6 decision-relevant themes in full, strongest first, with segment differences and counter-evidence beside the claim. Other themes get one line and a citation each. |
-| `real-voices` | Full rows only where public platform quotes differ from AI interviews or are silent; agreeing themes share one cited line. |
+| `real-voices` | Apply the comparison rules in methods.md. Explain decision-relevant conflicts or evidence gaps in full; compatible or non-comparable observations need only a short cited explanation. |
 | `tensions`, `personas`, `voices` | Disagreements, persona panel, and exact interview quotes with transcript links. |
 | `limitations` | AI simulation, effective sample, failed and downweighted interviews, saturation, removed quotes, search-only social evidence, and leak-check overrides or a skipped check. |
 | `validation`, `sources` | Real-person validation plan/results and all cited sources. Show the comparison table only after answers have actually been compared. |

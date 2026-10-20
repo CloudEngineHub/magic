@@ -18,6 +18,10 @@ class ReportDocument(HTMLParser):
         self.before_summary = []
         self.in_contents = False
         self.summary_seen = False
+        self.current_section = None
+        self.evidence_bars = []
+        self.bar_depth = 0
+        self.in_citation = False
         self.feed(content)
 
     def handle_starttag(self, tag, attrs):
@@ -25,7 +29,13 @@ class ReportDocument(HTMLParser):
         classes = attrs.get("class", "").split()
         if "id" in attrs:
             self.ids.append(attrs["id"])
+        if self.bar_depth:
+            self.bar_depth += 1
+        elif "evidence-bar" in classes:
+            self.bar_depth = 1
+            self.evidence_bars.append({"section": self.current_section, "citations": [], "text": ""})
         if tag == "section":
+            self.current_section = attrs.get("id")
             self.sections.append(attrs.get("id"))
             self.summary_seen |= attrs.get("id") == "summary"
         if not self.summary_seen:
@@ -36,8 +46,19 @@ class ReportDocument(HTMLParser):
             self.contents.append(attrs.get("href", "").removeprefix("#"))
         if tag == "a" and "citation-ref" in classes:
             self.citations.append(attrs.get("href", "").removeprefix("#"))
+            if self.bar_depth:
+                self.in_citation = True
+                self.evidence_bars[-1]["citations"].append(attrs.get("href"))
+
+    def handle_data(self, data):
+        if self.bar_depth and not self.in_citation:
+            self.evidence_bars[-1]["text"] += data
 
     def handle_endtag(self, tag):
+        if self.bar_depth:
+            self.bar_depth -= 1
+        if tag == "a":
+            self.in_citation = False
         if tag == "aside":
             self.in_contents = False
 
@@ -64,6 +85,16 @@ class PersonaReportTemplateTest(unittest.TestCase):
         self.assertTrue(self.document.citations)
         self.assertEqual(len(self.document.ids), len(set(self.document.ids)))
         self.assertEqual(set(self.document.citations) - set(self.document.ids), set())
+
+    def test_claim_evidence_is_cited_without_recycling_study_totals(self):
+        study_bars = [bar for bar in self.document.evidence_bars if bar["section"] == "summary"]
+        claim_bars = [bar for bar in self.document.evidence_bars if bar["section"] != "summary"]
+        self.assertEqual(len(study_bars), 1)
+        self.assertRegex(study_bars[0]["text"], r"\d")
+        self.assertTrue(claim_bars)
+        for bar in claim_bars:
+            self.assertTrue(bar["citations"], bar["section"])
+            self.assertNotRegex(bar["text"], r"(?:interviews|sources)[^.;]*:\s*\d", bar["section"])
 
 
 if __name__ == "__main__":
