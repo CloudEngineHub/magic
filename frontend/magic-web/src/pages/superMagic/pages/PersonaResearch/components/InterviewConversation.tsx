@@ -3,6 +3,8 @@ import { ArrowDown, ArrowUp, Loader2, RotateCcw } from "lucide-react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { Textarea } from "@/components/shadcn-ui/textarea"
+import { Label } from "@/components/shadcn-ui/label"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useInterviewChat } from "../hooks/useInterviewChat"
 import type { InterviewChatSend } from "../services/interviewChat"
@@ -30,7 +32,7 @@ function InterviewConversation({
 	const { t } = useTranslation("personaResearch")
 	const chat = useInterviewChat(transcript, onSend)
 	const viewport = useRef<HTMLDivElement>(null)
-	const input = useRef<HTMLTextAreaElement>(null)
+	const inputFrame = useRef<HTMLDivElement>(null)
 	const nearBottom = useRef(true)
 	const sending = useRef(false)
 	const lastContent = useRef("")
@@ -70,7 +72,8 @@ function InterviewConversation({
 		lastContent.current = contentKey
 	}, [contentKey])
 	useLayoutEffect(() => {
-		const node = input.current
+		// The shared Textarea is a function component in React 18; measure its native input through the frame.
+		const node = inputFrame.current?.querySelector("textarea")
 		if (!node) return
 		node.style.height = "auto"
 		node.style.height = `${Math.min(node.scrollHeight, 120)}px`
@@ -162,22 +165,24 @@ function InterviewConversation({
 							{t("interviewChat.reportUnchanged")}
 						</p>
 					) : null}
-					<div className="rounded-xl border border-border px-3 py-2.5 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
-						<label
+					<div
+						ref={inputFrame}
+						className="rounded-xl border border-border px-3 py-2.5 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring"
+					>
+						<Label
 							htmlFor={`interview-input-${transcript.persona_id}`}
 							className="mb-1 block text-xs font-medium"
 						>
 							{t("interviewChat.label", { name })}
-						</label>
-						<textarea
-							ref={input}
+						</Label>
+						<Textarea
 							id={`interview-input-${transcript.persona_id}`}
 							value={chat.draft}
 							onChange={(event) => chat.setDraft(event.target.value)}
 							placeholder={t("interviewChat.placeholder", { name })}
 							rows={2}
 							maxLength={4000}
-							className="block min-h-12 w-full resize-none bg-transparent text-sm leading-6 outline-none placeholder:text-muted-foreground"
+							className="block min-h-12 w-full resize-none rounded-none border-0 bg-transparent p-0 text-sm leading-6 shadow-none outline-none placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
 							onKeyDown={(event) => {
 								if (
 									event.key !== "Enter" ||
