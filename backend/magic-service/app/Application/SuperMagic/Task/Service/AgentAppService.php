@@ -18,6 +18,7 @@ use App\Domain\SuperMagic\File\Event\CheckpointRollbackFilesChangedEvent;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\Domain\SuperMagic\Message\Event\CheckpointRollbackMessagesChangedEvent;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Task\Service\AgentDomainService;
@@ -136,9 +137,11 @@ readonly class AgentAppService
      *
      * @param DataIsolation $dataIsolation 数据隔离上下文
      * @param int $topicId 话题ID
+     * @param null|SandboxImageTarget $images 重建的目标镜像；null=跟随网关发布版本。
+     *                                        传入指定镜像时，新沙箱必须按该版本构建（回滚演练）
      * @return string 沙箱ID
      */
-    public function restartSandbox(DataIsolation $dataIsolation, int $topicId): string
+    public function restartSandbox(DataIsolation $dataIsolation, int $topicId, ?SandboxImageTarget $images = null): string
     {
         $topicEntity = $this->topicDomainService->getTopicById($topicId);
         if (is_null($topicEntity)) {
@@ -154,6 +157,7 @@ readonly class AgentAppService
         $this->logger->info('[Sandbox][App] Restarting sandbox via delete + reinit', [
             'topic_id' => $topicId,
             'sandbox_id' => $sandboxId,
+            'images' => $images?->describe() ?? 'follow gateway release',
         ]);
 
         // 删除旧沙箱；仅在网关明确返回 NOT_FOUND 时继续重建。
@@ -173,7 +177,7 @@ readonly class AgentAppService
             ]);
         }
 
-        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true);
+        return $this->ensureSandboxInitialized($dataIsolation, $topicId, skipInitMessages: true, images: $images);
     }
 
     /**
@@ -337,10 +341,12 @@ readonly class AgentAppService
         DataIsolation $dataIsolation,
         int $topicId,
         bool $skipInitMessages = false,
+        ?SandboxImageTarget $images = null,
     ): string {
         $this->logger->info('[Sandbox][App] Ensuring sandbox is initialized', [
             'topic_id' => $topicId,
             'skip_init_messages' => $skipInitMessages,
+            'images' => $images?->describe() ?? 'follow gateway release',
         ]);
 
         // Prepare metadata using Trait
@@ -378,7 +384,8 @@ readonly class AgentAppService
                 (string) $this->taskFileDomainService->getProjectRootFileId($projectEntity->getId()),
                 (string) $this->taskFileDomainService->findOrCreateUserRootDirectory($dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode()),
                 (string) $this->taskFileDomainService->findOrCreateTopicRootDirectory($projectEntity->getId(), $topicEntity->getId(), $dataIsolation->getCurrentUserId(), $dataIsolation->getCurrentOrganizationCode(), $projectEntity->getUserOrganizationCode())
-            )
+            ),
+            images: $images
         );
 
         // 初始化可能切换到 Warm Pool 或重新创建沙箱，必须同步刷新 topic 与 task 的最终绑定。

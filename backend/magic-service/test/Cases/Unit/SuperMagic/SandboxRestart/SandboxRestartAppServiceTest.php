@@ -14,6 +14,7 @@ use App\Application\SuperMagic\Task\Service\SandboxRestartAppService;
 use App\Application\SuperMagic\Task\Service\SandboxRestartBatchRunner;
 use App\Domain\SuperMagic\Agent\Entity\MagicClawEntity;
 use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodDeletion;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodSnapshot;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartPlan;
@@ -60,7 +61,7 @@ class SandboxRestartAppServiceTest extends TestCase
 
         $service = $this->service($gateway, [$this->topic(101, 11, 'sandbox-101')]);
 
-        $this->expectExceptionMessage('Re-run with --force');
+        $this->expectExceptionMessage('refusing to guess whether a restart is needed');
         $service->plan(new SandboxRestartOptions());
     }
 
@@ -121,6 +122,74 @@ class SandboxRestartAppServiceTest extends TestCase
         self::assertSame([11, 21], $spy->requestedProjectIds, '只查一次，且包含清单里所有项目');
     }
 
+    /**
+     * 指定镜像必须真的改变判定基准：pod 跑在 5.0.77、发布是 5.0.92，
+     * 把目标指定成 5.0.77 后就应当判为"已经到位"，什么都不用做。
+     *
+     * 这条用例同时是回滚演练的说明书：先指定旧镜像重启，再不带参数 dry-run，
+     * 两者结论相反，正好证明重启命令确实换了镜像。
+     */
+    public function testSpecifiedImageBecomesTheTargetThatPodsAreComparedAgainst(): void
+    {
+        $gateway = $this->gateway(
+            pods: [$this->podArray('sandbox-101', 101, 'registry/agent:5.0.77')],
+            latestImages: self::LATEST
+        );
+        $service = $this->service($gateway, [$this->topic(101, 11, 'sandbox-101')]);
+
+        $plan = $service->plan(new SandboxRestartOptions(requestedAgentImage: 'registry/agent:5.0.77'));
+
+        self::assertSame([], $plan->getTargets(), 'pod 已经在指定镜像上，无需重启');
+        self::assertSame(1, $plan->getUpToDateTopics());
+        self::assertSame('registry/agent:5.0.77', $plan->getTarget()->getAgentImage());
+        self::assertSame(self::LATEST['agfs_image'], $plan->getTarget()->getAgfsImage(), '未指定的一侧跟随发布');
+    }
+
+    /**
+     * 目标完全解析不出来时（发布镜像读不到、也没指定）必须拒绝执行，
+     * 并且错误信息要指出"可以用什么参数补救"。
+     */
+    public function testUnresolvableTargetFailsWithAnActionableMessage(): void
+    {
+        $gateway = $this->gateway(
+            pods: [$this->podArray('sandbox-101', 101, 'registry/agent:5.0.77')],
+            latestImages: ['agent_image' => '', 'agfs_image' => '']
+        );
+        $service = $this->service($gateway, [$this->topic(101, 11, 'sandbox-101')]);
+
+        $this->expectExceptionMessage('--agent-image');
+        $service->plan(new SandboxRestartOptions());
+    }
+
+    /**
+     * 计划里的目标必须原样交给重建端口：编排层不重新解析、不偷换版本，
+     * 否则"判定用 A 版本、重建用 B 版本"这种偏差无从发现。
+     */
+    public function testExecuteHandsThePlanTargetToTheRebuildPort(): void
+    {
+        $gateway = $this->gateway(
+            pods: [$this->podArray('sandbox-101', 101, 'registry/agent:5.0.92')],
+            latestImages: self::LATEST
+        );
+        $target = SandboxImageTarget::withSpecifiedImages(self::LATEST, 'registry/agent:5.0.77', null);
+        $log = new SandboxRestartCallLog();
+        $service = $this->service($gateway, [$this->topic(101, 11, 'sandbox-101')], null, null, null, new SandboxRestartPortStub($log));
+
+        $plan = new SandboxRestartPlan(
+            targets: [$this->target(101, 11, 'sandbox-101')],
+            deletions: [],
+            skippedByReason: [],
+            upToDateTopics: 0,
+            listedPods: 1,
+            target: $target,
+        );
+
+        $outcome = $service->execute($plan, new SandboxRestartOptions());
+
+        self::assertSame(1, $outcome->getRestartedCount());
+        self::assertSame($target, $log->rebuildTargets[101] ?? null, '重建端口必须收到同一份目标镜像');
+    }
+
     public function testExecuteSuspendsActiveWorkBeforeDeletingPods(): void
     {
         $gateway = $this->gateway(
@@ -156,6 +225,7 @@ class SandboxRestartAppServiceTest extends TestCase
             skippedByReason: [],
             upToDateTopics: 0,
             listedPods: 1,
+            target: SandboxImageTarget::release(self::LATEST),
         );
 
         $outcome = $service->execute($plan, new SandboxRestartOptions());
@@ -180,6 +250,7 @@ class SandboxRestartAppServiceTest extends TestCase
             skippedByReason: [],
             upToDateTopics: 0,
             listedPods: 1,
+            target: SandboxImageTarget::release(self::LATEST),
         );
 
         $outcome = $service->execute($plan, new SandboxRestartOptions());
@@ -201,6 +272,7 @@ class SandboxRestartAppServiceTest extends TestCase
             skippedByReason: [],
             upToDateTopics: 0,
             listedPods: 2,
+            target: SandboxImageTarget::release(self::LATEST),
         );
 
         $outcome = $service->execute($plan, new SandboxRestartOptions());
@@ -215,27 +287,14 @@ class SandboxRestartAppServiceTest extends TestCase
 
     public function testOrphanAndWarmPoolPodsAreDeletedWithoutRebuild(): void
     {
-        $gateway = $this->gateway(pods: [], latestImages: self::LATEST);
+        $gateway = $this->gateway(pods: [$this->warmPoolPodArray('warm-900')], latestImages: self::LATEST);
         $log = new SandboxRestartCallLog();
-        $port = new SandboxRestartPortStub($log);
-        $service = $this->service($gateway, [], null, null, null, $port);
+        $service = $this->service($gateway, [], null, null, null, new SandboxRestartPortStub($log));
 
-        $plan = new SandboxRestartPlan(
-            targets: [],
-            deletions: [
-                new SandboxPodDeletion(
-                    SandboxPodSnapshot::fromGatewayArray([
-                        'sandbox_id' => 'warm-900',
-                        'warm_pool' => true,
-                        'bound' => false,
-                    ]),
-                    'unbound warm-pool sandbox'
-                ),
-            ],
-            skippedByReason: [],
-            upToDateTopics: 0,
-            listedPods: 1,
-        );
+        // 走真实的 plan()：池 pod 不是话题，只进 deletions。
+        $plan = $service->plan(new SandboxRestartOptions());
+        self::assertSame([], $plan->getTargets());
+        self::assertCount(1, $plan->getDeletions());
 
         $outcome = $service->execute($plan, new SandboxRestartOptions());
 
@@ -243,6 +302,56 @@ class SandboxRestartAppServiceTest extends TestCase
         self::assertCount(1, $outcome->getDeletedPods());
         self::assertSame(0, $outcome->getRestartedCount());
         self::assertFalse($outcome->hasFailures());
+    }
+
+    /**
+     * 重建会去温池领 pod：计划里"未绑定"的池 pod 可能在本批重建中被话题领走
+     * （挂载成功后 pod 会带上 topic-id 标签）。清理阶段必须按"现在还有没有主人"
+     * 重新判断，绝不能照旧快照删掉刚挂出去的新沙箱。
+     */
+    public function testCleanupKeepsWarmPoolPodThatGotClaimedDuringTheRestart(): void
+    {
+        $gateway = $this->gateway(
+            pods: [$this->warmPoolPodArray('warm-900')],
+            latestImages: self::LATEST,
+            reloadPods: [$this->warmPoolPodArray('warm-900', topicId: '101')],
+        );
+        $log = new SandboxRestartCallLog();
+        $service = $this->service($gateway, [], null, null, null, new SandboxRestartPortStub($log));
+
+        $plan = $service->plan(new SandboxRestartOptions());
+        $outcome = $service->execute($plan, new SandboxRestartOptions());
+
+        self::assertSame([], $log->calls, '已经被话题领走的沙箱不能再删');
+        self::assertCount(0, $outcome->getDeletedPods());
+        self::assertFalse($outcome->hasFailures(), '主动保留不是失败');
+    }
+
+    /**
+     * 清理前无法确认归属（网关列不出清单）时，宁可漏清理也不能误删：
+     * 每个待删项都要出现在删除失败里，让命令以非零退出码收尾。
+     */
+    public function testCleanupIsSkippedWhenOwnershipCannotBeReverified(): void
+    {
+        $gateway = $this->gateway(
+            pods: [$this->warmPoolPodArray('warm-900')],
+            latestImages: self::LATEST,
+            reloadResult: SandboxListResult::fromApiResponse([
+                'code' => ResponseCode::ERROR,
+                'message' => 'gateway unavailable',
+                'data' => [],
+            ])
+        );
+        $log = new SandboxRestartCallLog();
+        $service = $this->service($gateway, [], null, null, null, new SandboxRestartPortStub($log));
+
+        $plan = $service->plan(new SandboxRestartOptions());
+        $outcome = $service->execute($plan, new SandboxRestartOptions());
+
+        self::assertSame([], $log->calls);
+        self::assertSame(1, $outcome->getDeleteFailureCount());
+        self::assertTrue($outcome->hasFailures());
+        self::assertStringContainsString('could not be re-verified', $outcome->getDeletionFailures()[0]['error']);
     }
 
     public function testExecuteReportsEveryTargetThroughTheProgressCallback(): void
@@ -256,6 +365,7 @@ class SandboxRestartAppServiceTest extends TestCase
             skippedByReason: [],
             upToDateTopics: 0,
             listedPods: 2,
+            target: SandboxImageTarget::release(self::LATEST),
         );
 
         $reported = [];
@@ -282,6 +392,7 @@ class SandboxRestartAppServiceTest extends TestCase
             skippedByReason: [],
             upToDateTopics: 0,
             listedPods: 1,
+            target: SandboxImageTarget::release(self::LATEST),
         );
 
         $outcome = $service->execute(
@@ -335,17 +446,64 @@ class SandboxRestartAppServiceTest extends TestCase
      * @param array<int, array<string, mixed>> $pods
      * @param array<string, string> $latestImages
      */
-    private function gateway(array $pods, array $latestImages): SandboxGatewayInterface
-    {
+    /**
+     * 网关替身：第一次 listSandboxes 是计划阶段的清单，第二次是清理前的复核清单。
+     *
+     * 两个返回值必须分开，否则测不出"计划之后 pod 归属变了"这类竞态。
+     *
+     * @param array<int, array<string, mixed>> $pods 计划阶段看到的 pod 清单
+     * @param array<string, string> $latestImages 网关发布镜像
+     * @param null|array<int, array<string, mixed>> $reloadPods 复核阶段的 pod 清单；默认与计划阶段相同
+     * @param null|SandboxListResult $reloadResult 复核阶段整体失败时的返回值（优先于 $reloadPods）
+     */
+    private function gateway(
+        array $pods,
+        array $latestImages,
+        ?array $reloadPods = null,
+        ?SandboxListResult $reloadResult = null,
+    ): SandboxGatewayInterface {
         $gateway = $this->createMock(SandboxGatewayInterface::class);
-        $gateway->method('listSandboxes')->willReturn(SandboxListResult::fromApiResponse([
-            'code' => ResponseCode::SUCCESS,
-            'message' => 'ok',
-            'data' => ['total' => count($pods), 'sandboxes' => $pods],
-        ]));
+        $gateway->method('listSandboxes')->willReturnOnConsecutiveCalls(
+            $this->listResult($pods),
+            $reloadResult ?? $this->listResult($reloadPods ?? $pods),
+        );
         $gateway->method('getLatestImages')->willReturn($latestImages);
 
         return $gateway;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $pods
+     */
+    private function listResult(array $pods): SandboxListResult
+    {
+        return SandboxListResult::fromApiResponse([
+            'code' => ResponseCode::SUCCESS,
+            'message' => 'ok',
+            'data' => ['total' => count($pods), 'sandboxes' => $pods],
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function warmPoolPodArray(string $sandboxId, string $topicId = ''): array
+    {
+        return [
+            'sandbox_id' => $sandboxId,
+            'status' => 'Running',
+            'topic_id' => $topicId,
+            'warm_pool' => true,
+            'bound' => $topicId !== '',
+        ];
+    }
+
+    private function warmPoolDeletion(string $sandboxId): SandboxPodDeletion
+    {
+        return new SandboxPodDeletion(
+            SandboxPodSnapshot::fromGatewayArray($this->warmPoolPodArray($sandboxId)),
+            'unbound warm-pool sandbox'
+        );
     }
 
     /**
@@ -428,9 +586,12 @@ final class SandboxRestartPortStub implements SandboxRebuildPortInterface
         }
     }
 
-    public function rebuild(int $topicId, string $userId, string $organizationCode): string
+    public function rebuild(int $topicId, string $userId, string $organizationCode, ?SandboxImageTarget $images = null): string
     {
         $this->log->calls[] = 'rebuild:' . $topicId;
+        if ($images !== null) {
+            $this->log->rebuildTargets[$topicId] = $images;
+        }
         if (in_array($topicId, $this->failRebuild, true)) {
             throw new RuntimeException('rebuild exploded');
         }
@@ -466,6 +627,9 @@ final class SandboxRestartCallLog
 {
     /** @var string[] */
     public array $calls = [];
+
+    /** @var array<int, SandboxImageTarget> topicId => 重建时拿到的目标镜像 */
+    public array $rebuildTargets = [];
 }
 
 /**

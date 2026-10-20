@@ -11,6 +11,7 @@ use App\Application\SuperMagic\Task\DTO\SandboxRestartOptions;
 use App\Application\SuperMagic\Task\DTO\SandboxRestartOutcome;
 use App\Application\SuperMagic\Task\DTO\SandboxRestartResult;
 use App\Application\SuperMagic\Task\Service\SandboxRestartAppService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageVersion;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodDeletion;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodSnapshot;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartPlan;
@@ -32,6 +33,9 @@ use Throwable;
  * 因此这里只做两件事：删掉旧 pod、按同一套初始化流程重建新 pod——
  * 初始化不会发送任何聊天消息，用户不会凭空收到一条回复。
  *
+ * 目标镜像默认取网关当前发布版本；`--agent-image` / `--agfs-image` 可以显式指定
+ * 这次重建要跑的镜像（回滚演练、验证"重启确实换了镜像"），未指定的一侧继续跟随发布。
+ *
  * 用法示例：
  *   # 只看看会重启谁
  *   php bin/hyperf.php sandbox:restart-all --dry-run
@@ -41,6 +45,9 @@ use Throwable;
  *
  *   # 镜像已是最新也想强制重建（例如配置漂移）
  *   php bin/hyperf.php sandbox:restart-all --force
+ *
+ *   # 把沙箱重启到一个旧镜像（演练），随后不带参数 --dry-run 应能看到它们需要重启
+ *   php bin/hyperf.php sandbox:restart-all --agent-image=repo/magic/super-magic:5.0.77
  */
 #[Command]
 class RestartAllSandboxCommand extends HyperfCommand
@@ -82,9 +89,11 @@ class RestartAllSandboxCommand extends HyperfCommand
     public function configure(): void
     {
         parent::configure();
-        $this->setDescription('Restart sandbox pods so they pick up the sandbox gateway\'s current agent/agfs images');
+        $this->setDescription('Restart sandbox pods onto the target agent/agfs images (gateway release by default, or the images you specify)');
         $this->setHelp(<<<'HELP'
-Replaces sandbox pods whose images are not the gateway's current release.
+Replaces sandbox pods that do not run the target images. The target is the
+sandbox gateway's current release, unless --agent-image / --agfs-image names
+the images to launch instead.
 
 The command never sends a chat message to the in-pod Agent: it deletes the old
 pod(s) and rebuilds the sandbox through the normal initialization path, so a
@@ -102,23 +111,30 @@ What happens per topic:
   3. exactly one sandbox is rebuilt through the normal initialization path. That
      path prefers the warm pool: once the old pod is gone the pinned-sandbox
      guard no longer applies, so a ready pod is claimed and mounted instead of
-     cold-starting. This assumes the warm pool is kept on the latest images.
+     cold-starting. A claimed pod always matches the target images, because the
+     claim is keyed by the image pair.
 
-Pods owned by no topic (unbound warm pool, orphans) are deleted without rebuild.
+Unbound warm-pool pods are deleted without rebuild only when they still run
+outdated images; a pooled pod already on the release images is kept, because
+deleting it would just make the refill loop build the same pod again. Warm-pool
+pods are also kept when --scope=magic-claw (not our scope) and when you specify
+images (the pool serves the release, not this run); --force still replaces them.
+Orphan pods (no owning topic) are always deleted without rebuild.
 
 Exit codes:
   0  every targeted sandbox was restarted (or nothing needed a restart)
   1  at least one sandbox failed to delete/rebuild, or the plan could not be built
-     (e.g. the gateway's latest images are unreadable and --force was not given)
+     (e.g. the target images are unreadable and --force was not given)
 
 Examples:
   php bin/hyperf.php sandbox:restart-all --dry-run
   php bin/hyperf.php sandbox:restart-all --limit=20 --concurrency=4
   php bin/hyperf.php sandbox:restart-all --scope=magic-claw --code=my-claw
   php bin/hyperf.php sandbox:restart-all --force
+  php bin/hyperf.php sandbox:restart-all --agent-image=repo/magic/super-magic:5.0.77 --dry-run
 HELP);
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'Print the plan without deleting or rebuilding anything');
-        $this->addOption('force', null, InputOption::VALUE_NONE, 'Restart even when the pod already runs the latest images');
+        $this->addOption('force', null, InputOption::VALUE_NONE, 'Restart even when the pod already runs the target images');
         $this->addOption(
             'scope',
             null,
@@ -136,6 +152,20 @@ HELP);
         );
         $this->addOption('limit', null, InputOption::VALUE_OPTIONAL, 'Maximum number of topics to restart, 0 means unlimited', 0);
         $this->addOption('concurrency', null, InputOption::VALUE_OPTIONAL, 'How many topics to restart in parallel', 1);
+        $this->addOption(
+            'agent-image',
+            null,
+            InputOption::VALUE_REQUIRED,
+            'Launch the rebuilt sandboxes with this agent image (full reference with a tag or digest, '
+            . 'e.g. repo/magic/super-magic:5.0.92). Omit to follow the gateway release; '
+            . 'specifying an image is for rollback drills, not for normal rollouts.'
+        );
+        $this->addOption(
+            'agfs-image',
+            null,
+            InputOption::VALUE_REQUIRED,
+            'Launch the rebuilt sandboxes with this agfs (magicfs) image; same rules as --agent-image'
+        );
     }
 
     public function handle(): int
@@ -239,7 +269,51 @@ HELP);
             statuses: $this->parseStatuses((string) $this->input->getOption('status')),
             dryRun: (bool) $this->input->getOption('dry-run'),
             concurrency: (int) $this->input->getOption('concurrency'),
+            requestedAgentImage: $this->parseRequestedImage('agent-image'),
+            requestedAgfsImage: $this->parseRequestedImage('agfs-image'),
         );
+    }
+
+    /**
+     * 解析命令行指定的镜像引用.
+     *
+     * 这里做"引用长得对不对"的最小校验，而不是等删完 pod 才发现名字打错：
+     *   - 必须是一条完整引用（带仓库路径），裸名字在内部镜像里几乎总是笔误；
+     *   - 必须带 tag 或 digest，否则等于隐式 :latest，回滚演练会变成"指定当前最新"。
+     *
+     * 未提供该选项时返回空串（= 跟随网关发布版本）。
+     */
+    private function parseRequestedImage(string $option): string
+    {
+        $raw = $this->input->getOption($option);
+        if ($raw === null) {
+            return '';
+        }
+
+        $value = trim((string) $raw);
+        if ($value === '') {
+            throw new RuntimeException(sprintf('--%s must not be empty when given; omit the option to follow the gateway release', $option));
+        }
+        if (preg_match('/\s/', $value) === 1) {
+            throw new RuntimeException(sprintf('Invalid --%s value "%s": image references must not contain whitespace', $option, $value));
+        }
+        if (! str_contains($value, '/')) {
+            throw new RuntimeException(sprintf(
+                'Invalid --%s value "%s": expected a full image reference such as repo.example.com/magic/super-magic:5.0.92',
+                $option,
+                $value
+            ));
+        }
+        if (SandboxImageVersion::extractTag($value) === '' && ! str_contains($value, '@')) {
+            throw new RuntimeException(sprintf(
+                'Invalid --%s value "%s": add an explicit tag or digest (e.g. :5.0.92 or @sha256:...); '
+                . 'an implicit ":latest" would silently target "whatever is newest", which defeats the purpose',
+                $option,
+                $value
+            ));
+        }
+
+        return $value;
     }
 
     /**
@@ -292,13 +366,22 @@ HELP);
     }
 
     /**
-     * 动手前把"清单多大、要重启几个、为什么跳过"一次打清楚.
+     * 动手前把"按哪一版镜像、清单多大、要重启几个、为什么跳过"一次打清楚.
+     *
+     * 目标镜像必须显式打出来：dry-run 的结论只有在"按哪一版判定"明确了才有意义，
+     * 尤其是用 --agent-image / --agfs-image 做回滚演练时，pod 比目标"更新"也会被判成需要重启。
      */
     private function printPlan(SandboxRestartPlan $plan, SandboxRestartOptions $options): void
     {
+        $target = $plan->getTarget();
         $this->line(sprintf('Sandbox list: %d pod(s)', $plan->getListedPods()));
         $this->line(sprintf(
-            'Targets: %d topic(s) to rebuild, %d pod(s) to delete only, %d topic(s) already on the latest images',
+            'Target images (%s): %s',
+            $target->hasSpecifiedImages() ? 'specified for this run' : 'gateway release',
+            $target->describe()
+        ));
+        $this->line(sprintf(
+            'Targets: %d topic(s) to rebuild, %d pod(s) to delete only, %d topic(s) already on the target images',
             $plan->getTargetCount(),
             $plan->getDeletionCount(),
             $plan->getUpToDateTopics()

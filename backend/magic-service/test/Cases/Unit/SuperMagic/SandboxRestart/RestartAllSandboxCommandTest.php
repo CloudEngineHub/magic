@@ -13,6 +13,7 @@ use App\Application\SuperMagic\Task\DTO\SandboxRestartOptions;
 use App\Application\SuperMagic\Task\DTO\SandboxRestartOutcome;
 use App\Application\SuperMagic\Task\DTO\SandboxRestartResult;
 use App\Application\SuperMagic\Task\Service\SandboxRestartAppService;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodSnapshot;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartPlan;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartReason;
@@ -37,6 +38,15 @@ use Symfony\Component\Console\Tester\CommandTester;
  */
 class RestartAllSandboxCommandTest extends TestCase
 {
+    /**
+     * 计划里出现的目标镜像。帮助/输出断言用它确认"这次按哪一版重启"被打出来了。
+     * public 是因为命令替身（另一个类）也要用它构造空计划。
+     */
+    public const LATEST_IMAGES = [
+        'agent_image' => 'registry/agent:5.0.92',
+        'agfs_image' => 'registry/agfs:1.0.14',
+    ];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -86,6 +96,23 @@ class RestartAllSandboxCommandTest extends TestCase
     }
 
     /**
+     * 旧命令名重建参数对象时不能丢字段：它现在也继承了 --agent-image / --agfs-image，
+     * 如果重建时漏掉，流水线里写死的旧名字会静默"重启到最新"而不是指定版本。
+     */
+    public function testDeprecatedMagicClawNameForwardsSpecifiedImages(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+        self::assertSame(0, (new CommandTester($this->magicClawCommand($spy)))->execute([
+            '--dry-run' => true,
+            '--agent-image' => 'registry/agent:5.0.77',
+        ]));
+
+        self::assertSame('registry/agent:5.0.77', $spy->plannedWith?->getRequestedAgentImage());
+    }
+
+    /**
      * 帮助文本现在是这套用法的唯一出处（不再有独立的 shell 脚本），
      * 因此把"跑之前必须知道的事"钉住：不发给 Agent 消息、每个话题的动作顺序、退出码。
      */
@@ -114,6 +141,99 @@ class RestartAllSandboxCommandTest extends TestCase
         self::assertStringContainsString('recreates=1', $display);
         self::assertStringContainsString('targets: 1', $display);
         self::assertFalse($spy->executed, 'dry-run 不能删除或重建任何沙箱');
+    }
+
+    /**
+     * 指定镜像是"指定镜像启动"这个能力的入口：参数必须原样传到用例层，
+     * 且 dry-run 要能一眼看出这次按哪一版判定。
+     */
+    public function testSpecifiedImagesArePassedToTheUseCase(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+        $tester = new CommandTester($this->command($spy));
+        self::assertSame(0, $tester->execute([
+            '--dry-run' => true,
+            '--agent-image' => 'registry/agent:5.0.77',
+            '--agfs-image' => 'registry/agfs:1.0.13',
+        ]));
+
+        self::assertInstanceOf(SandboxRestartOptions::class, $spy->plannedWith);
+        self::assertSame('registry/agent:5.0.77', $spy->plannedWith->getRequestedAgentImage());
+        self::assertSame('registry/agfs:1.0.13', $spy->plannedWith->getRequestedAgfsImage());
+        self::assertStringContainsString('Target images (gateway release)', $tester->getDisplay());
+    }
+
+    public function testOmittingTheImageOptionsMeansFollowTheGatewayRelease(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+        (new CommandTester($this->command($spy)))->execute(['--dry-run' => true]);
+
+        self::assertNull($spy->plannedWith?->getRequestedAgentImage());
+        self::assertNull($spy->plannedWith?->getRequestedAgfsImage());
+    }
+
+    /**
+     * 镜像引用写错必须在动手前就失败。这里覆盖三种真实笔误：
+     * 空值、裸名字、以及漏掉 tag（等于隐式 :latest，回滚演练会固定成"当前最新"）。
+     */
+    public function testInvalidImageReferencesFailBeforePlanning(): void
+    {
+        $cases = [
+            '' => '--agent-image must not be empty',
+            'super-magic:5.0.77' => 'expected a full image reference',
+            'registry/agent' => 'add an explicit tag or digest',
+            'registry/agent :5.0.77' => 'must not contain whitespace',
+        ];
+
+        foreach ($cases as $value => $expected) {
+            $spy = new SandboxRestartCommandSpy();
+            $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+            $tester = new CommandTester($this->command($spy));
+            self::assertSame(1, $tester->execute(['--dry-run' => true, '--agent-image' => $value]), $value);
+            self::assertStringContainsString($expected, $tester->getDisplay(), $value);
+            self::assertNull($spy->plannedWith, '参数非法时不能进入计划阶段');
+        }
+    }
+
+    public function testDigestOnlyReferenceIsAccepted(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+        self::assertSame(0, (new CommandTester($this->command($spy)))->execute([
+            '--dry-run' => true,
+            '--agent-image' => 'registry/agent@sha256:' . str_repeat('a', 64),
+        ]));
+        self::assertSame('registry/agent@sha256:' . str_repeat('a', 64), $spy->plannedWith?->getRequestedAgentImage());
+    }
+
+    /**
+     * 指定镜像的运行时，plan 报告的目标就是指定值，dry-run 输出必须如实反映，
+     * 否则运维无法判断"这次是不是真的按旧版本在重启"。
+     */
+    public function testDryRunPrintsTheSpecifiedTargetImages(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = new SandboxRestartPlan(
+            targets: [],
+            deletions: [],
+            skippedByReason: [],
+            upToDateTopics: 0,
+            listedPods: 0,
+            target: SandboxImageTarget::withSpecifiedImages(self::LATEST_IMAGES, 'registry/agent:5.0.77', null),
+        );
+
+        $tester = new CommandTester($this->command($spy));
+        self::assertSame(0, $tester->execute(['--dry-run' => true, '--agent-image' => 'registry/agent:5.0.77']));
+
+        $display = $tester->getDisplay();
+        self::assertStringContainsString('Target images (specified for this run)', $display);
+        self::assertStringContainsString('agent=registry/agent:5.0.77 (specified)', $display);
     }
 
     public function testInvalidStatusFailsBeforePlanning(): void
@@ -253,6 +373,7 @@ class RestartAllSandboxCommandTest extends TestCase
             skippedByReason: [],
             upToDateTopics: 0,
             listedPods: 1,
+            target: SandboxImageTarget::release(self::LATEST_IMAGES),
         );
     }
 
@@ -317,7 +438,7 @@ readonly class SandboxRestartCommandServiceStub extends SandboxRestartAppService
 
         $plan = $this->spy->plan;
         if ($plan === null) {
-            return new SandboxRestartPlan([], [], [], 0, 0);
+            return new SandboxRestartPlan([], [], [], 0, 0, SandboxImageTarget::release(RestartAllSandboxCommandTest::LATEST_IMAGES));
         }
 
         $targets = $plan->getTargets();
@@ -331,6 +452,7 @@ readonly class SandboxRestartCommandServiceStub extends SandboxRestartAppService
             skippedByReason: $plan->getSkippedByReason(),
             upToDateTopics: $plan->getUpToDateTopics(),
             listedPods: $plan->getListedPods(),
+            target: $plan->getTarget(),
         );
     }
 

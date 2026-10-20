@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Task\DTO;
 
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartScope;
 
 /**
@@ -14,6 +15,10 @@ use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartScope;
  *
  * 集中一处默认值，命令层只负责解析 CLI、应用层只负责执行，避免默认值散落在
  * 两边、单测和线上行为不一致。
+ *
+ * 指定的镜像（requestedAgentImage / requestedAgfsImage）只描述"运维要求的目标"，
+ * 不参与解析。解析结果见 {@see SandboxImageTarget}：
+ * 未指定的一侧继续跟随网关发布版本。
  */
 readonly class SandboxRestartOptions
 {
@@ -24,6 +29,8 @@ readonly class SandboxRestartOptions
      * 此时 pod 仍被占用，重启后这条等待也不能被留成"沙箱不存在"的错误。
      *
      * @param string[] $statuses 传给网关的状态过滤（空数组=不过滤）
+     * @param string $requestedAgentImage 命令行指定的 agent 镜像；空串=跟随网关发布版本
+     * @param string $requestedAgfsImage 命令行指定的 agfs 镜像；空串=跟随网关发布版本
      */
     public function __construct(
         private bool $force = false,
@@ -33,6 +40,8 @@ readonly class SandboxRestartOptions
         private array $statuses = [],
         private bool $dryRun = false,
         private int $concurrency = 1,
+        private string $requestedAgentImage = '',
+        private string $requestedAgfsImage = '',
     ) {
     }
 
@@ -78,5 +87,23 @@ readonly class SandboxRestartOptions
     public function getConcurrency(): int
     {
         return max(1, $this->concurrency);
+    }
+
+    /**
+     * 命令行指定的 agent 镜像；null 表示跟随网关发布版本.
+     */
+    public function getRequestedAgentImage(): ?string
+    {
+        $value = trim($this->requestedAgentImage);
+        return $value === '' ? null : $value;
+    }
+
+    /**
+     * 命令行指定的 agfs 镜像；null 表示跟随网关发布版本.
+     */
+    public function getRequestedAgfsImage(): ?string
+    {
+        $value = trim($this->requestedAgfsImage);
+        return $value === '' ? null : $value;
     }
 }

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Unit\SuperMagic\SandboxRestart;
 
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodSnapshot;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartPlan;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartReason;
@@ -132,23 +133,75 @@ class SandboxRestartPlannerTest extends TestCase
         self::assertSame(SandboxRestartReason::AgentImageOutdated, $plan->getTargets()[0]->getReason());
     }
 
-    public function testUnboundWarmPoolPodIsDeletedButNotRebuilt(): void
+    public function testOutdatedUnboundWarmPoolPodIsDeletedButNotRebuilt(): void
     {
-        $warm = SandboxPodSnapshot::fromGatewayArray([
-            'sandbox_id' => 'warm-900',
-            'status' => 'Running',
-            'warm_pool' => true,
-            'bound' => false,
-            'agent_image' => 'registry/agent:5.0.77',
-            'agfs_image' => self::LATEST['agfs_image'],
-        ]);
+        $warm = $this->warmPoolPod('warm-900', 'registry/agent:5.0.77', self::LATEST['agfs_image']);
 
         $plan = $this->plan(pods: [$warm], bindings: []);
 
         self::assertSame([], $plan->getTargets());
         self::assertCount(1, $plan->getDeletions());
         self::assertSame('warm-900', $plan->getDeletions()[0]->getPod()->getSandboxId());
-        self::assertSame('unbound warm-pool sandbox', $plan->getDeletions()[0]->getReason());
+        self::assertSame('unbound warm-pool sandbox on outdated images', $plan->getDeletions()[0]->getReason());
+    }
+
+    /**
+     * 池子里已经是最新镜像的 pod 不必删：删掉它不会让本批任何沙箱变快，
+     * 只会让补货流程把同样的 pod 再造一遍（冷启动、拉镜像、等 sidecar 就绪）。
+     */
+    public function testUnboundWarmPoolPodOnTheReleaseImagesIsKept(): void
+    {
+        $plan = $this->plan(
+            pods: [$this->warmPoolPod('warm-900', self::LATEST['agent_image'], self::LATEST['agfs_image'])],
+            bindings: [],
+        );
+
+        self::assertSame([], $plan->getDeletions(), '已是最新镜像的池 pod 不该被删');
+        self::assertSame(1, $plan->getSkippedPodCount());
+        self::assertArrayHasKey('unbound warm-pool pod already runs the release images', $plan->getSkippedByReason());
+        self::assertTrue($plan->isEmpty(), '无事可做时计划应为空，命令输出"无需重启"');
+    }
+
+    /**
+     * 只有 agfs 落后也算落后：池 pod 是两个容器的组合，任何一个不是发布版本都要换。
+     */
+    public function testWarmPoolPodWithOnlyAgfsBehindIsDeleted(): void
+    {
+        $plan = $this->plan(
+            pods: [$this->warmPoolPod('warm-900', self::LATEST['agent_image'], 'registry/agfs:1.0.13')],
+            bindings: [],
+        );
+
+        self::assertCount(1, $plan->getDeletions());
+    }
+
+    /**
+     * 镜像字段缺失的池 pod 无法证明已最新，按保守方向删除（补货会立刻补上一个新的）。
+     * 这与话题侧 ImagesUnknown 是同一口径。
+     */
+    public function testWarmPoolPodWithoutImageInformationIsDeleted(): void
+    {
+        $plan = $this->plan(
+            pods: [$this->warmPoolPod('warm-900', '', '')],
+            bindings: [],
+        );
+
+        self::assertCount(1, $plan->getDeletions(), '无法证明已最新时必须替换');
+    }
+
+    /**
+     * --force 仍然强删已最新的池 pod：它用来处理"镜像引用没变但配置漂移"这类
+     * 无法从镜像判断的情况，此时必须给出一个真正的新 pod。
+     */
+    public function testForceStillReplacesUpToDateWarmPoolPods(): void
+    {
+        $plan = $this->plan(
+            pods: [$this->warmPoolPod('warm-900', self::LATEST['agent_image'], self::LATEST['agfs_image'])],
+            bindings: [],
+            force: true,
+        );
+
+        self::assertCount(1, $plan->getDeletions());
     }
 
     public function testOrphanPodIsDeletedButNotRebuilt(): void
@@ -203,6 +256,80 @@ class SandboxRestartPlannerTest extends TestCase
             $plan->getSkippedByReason(),
             '温池 pod 的跳过原因必须与"项目不在范围内"区分开'
         );
+    }
+
+    /**
+     * 指定镜像的运行时，共享温池不属于本次目标：池子永远预热的是"当前发布"，
+     * 删掉它不会让本批沙箱更快，只会让别人在补货前领不到预热沙箱。
+     */
+    public function testWarmPoolIsSkippedRatherThanEmptiedWhenAnImageIsSpecified(): void
+    {
+        $warm = SandboxPodSnapshot::fromGatewayArray([
+            'sandbox_id' => 'warm-900',
+            'warm_pool' => true,
+            'bound' => false,
+            'agent_image' => self::LATEST['agent_image'],
+            'agfs_image' => self::LATEST['agfs_image'],
+        ]);
+
+        $plan = $this->plan(
+            pods: [$warm],
+            bindings: [],
+            target: SandboxImageTarget::withSpecifiedImages(self::LATEST, 'registry/agent:5.0.77', null),
+        );
+
+        self::assertSame([], $plan->getDeletions(), '指定镜像时不能清空共享温池');
+        self::assertSame([], $plan->getTargets());
+        self::assertArrayHasKey(
+            'unbound warm-pool pod keeps the release images, which the specified images do not replace',
+            $plan->getSkippedByReason()
+        );
+    }
+
+    /**
+     * 回滚方向同样要被识别：pod 跑的是"更新"的发布版本，而目标是指定的旧版本，
+     * 这也算需要重启——否则回滚演练会得到"无事可做"的假结论。
+     */
+    public function testPodNewerThanTheSpecifiedTargetStillNeedsRestart(): void
+    {
+        $plan = $this->plan(
+            pods: [$this->pod('sandbox-101', 101, self::LATEST['agent_image'], self::LATEST['agfs_image'])],
+            bindings: [$this->binding(101, 11, 'sandbox-101')],
+            target: SandboxImageTarget::withSpecifiedImages(self::LATEST, 'registry/agent:5.0.77', null),
+        );
+
+        self::assertCount(1, $plan->getTargets());
+        self::assertSame(SandboxRestartReason::AgentImageOutdated, $plan->getTargets()[0]->getReason());
+        self::assertSame(0, $plan->getUpToDateTopics());
+    }
+
+    /**
+     * 指定了目标后，"已是最新"的判定基准随之改变：
+     * pod 与指定目标一致就算到位，不再和网关发布版本比较。
+     */
+    public function testPodAlreadyOnTheSpecifiedTargetIsUpToDate(): void
+    {
+        $specified = 'registry/agent:5.0.77';
+        $plan = $this->plan(
+            pods: [$this->pod('sandbox-101', 101, $specified, self::LATEST['agfs_image'])],
+            bindings: [$this->binding(101, 11, 'sandbox-101')],
+            target: SandboxImageTarget::withSpecifiedImages(self::LATEST, $specified, null),
+        );
+
+        self::assertSame([], $plan->getTargets());
+        self::assertSame(1, $plan->getUpToDateTopics());
+    }
+
+    /**
+     * 计划必须带上目标镜像，命令输出与执行校验都以它为准。
+     */
+    public function testPlanCarriesTheResolvedTarget(): void
+    {
+        $target = SandboxImageTarget::withSpecifiedImages(self::LATEST, 'registry/agent:5.0.77', null);
+        $plan = $this->plan(pods: [], bindings: [], target: $target);
+
+        self::assertTrue($plan->getTarget()->hasSpecifiedImages());
+        self::assertSame('registry/agent:5.0.77', $plan->getTarget()->getAgentImage());
     }
 
     public function testLegacyNumericSandboxIdRequiresMatchingTopicBinding(): void
@@ -265,6 +392,7 @@ class SandboxRestartPlannerTest extends TestCase
         bool $force = false,
         SandboxRestartScope $scope = SandboxRestartScope::All,
         array $scopeProjectIds = [],
+        ?SandboxImageTarget $target = null,
     ): SandboxRestartPlan {
         $bindingsById = [];
         foreach ($bindings as $binding) {
@@ -274,11 +402,23 @@ class SandboxRestartPlannerTest extends TestCase
         return $this->planner->plan(
             pods: $pods,
             bindingsByTopicId: $bindingsById,
-            latestImages: self::LATEST,
+            target: $target ?? SandboxImageTarget::release(self::LATEST),
             force: $force,
             scope: $scope,
             scopeProjectIds: $scopeProjectIds,
         );
+    }
+
+    private function warmPoolPod(string $sandboxId, string $agentImage, string $agfsImage): SandboxPodSnapshot
+    {
+        return SandboxPodSnapshot::fromGatewayArray([
+            'sandbox_id' => $sandboxId,
+            'status' => 'Running',
+            'warm_pool' => true,
+            'bound' => false,
+            'agent_image' => $agentImage,
+            'agfs_image' => $agfsImage,
+        ]);
     }
 
     private function pod(

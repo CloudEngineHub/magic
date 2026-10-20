@@ -12,7 +12,7 @@ use App\Application\SuperMagic\Task\DTO\SandboxRestartOptions;
 use App\Application\SuperMagic\Task\DTO\SandboxRestartOutcome;
 use App\Application\SuperMagic\Task\DTO\SandboxRestartResult;
 use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
-use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageVersion;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodDeletion;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodSnapshot;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartPlan;
@@ -37,15 +37,17 @@ use Throwable;
  * | 场景 | restart（单话题） | upgrade（单话题） | 本服务（全量） |
  * |---|---|---|---|
  * | 目标集合 | 一个话题 | 一个话题 | 网关 pod 清单，可过滤范围 |
+ * | 目标镜像 | 网关发布版本 | 网关发布版本 | 网关发布版本，或命令行指定的镜像 |
  * | 镜像已最新时 | 仍然重启 | 跳过 | 跳过（--force 可强制） |
  * | 同话题多个漂移 pod | 只删表里那个 | 只删表里那个 | 全删再重建一个 |
- * | 温池/孤儿 pod | 不处理 | 不处理 | 删除 |
+ * | 温池/孤儿 pod | 不处理 | 不处理 | 删除（指定镜像时不删共享温池） |
  * | 正在运行的任务 | 不处理 | 不处理 | 先挂起，避免误报失败 |
  * | 重建方式 | 冷启动或温池 | 冷启动或温池 | 同左：删掉旧 pod 后照常走温池，快 |
  *
  * 重建沿用正常初始化流程，因此会走温池：旧 pod 删掉后探测拿到 NOT_FOUND，
  * 温池守卫放行，直接领一个现成 pod 挂载，不必从零冷启动。
- * 前提是温池由补货流程维持在最新镜像（发布窗口内不应领到旧 pod）。
+ * 温池待领的 pod 必须与本次目标镜像一致（领取条件就是镜像对），因此指定镜像时
+ * 只会领到同一代的池子；池里没有就退回冷启动，仍按指定镜像构建。
  *
  * 使用方式分两步：先 plan() 得到只读计划（可 dry-run 打印），再 execute() 执行。
  */
@@ -87,7 +89,7 @@ readonly class SandboxRestartAppService
         /** @var SandboxPodSnapshot[] $pods */
         $pods = $listResult->getSandboxes();
 
-        $latestImages = $this->resolveLatestImages($options);
+        $target = $this->resolveImageTarget($options);
 
         $bindings = $this->loadBindings($pods);
         $scopeProjectIds = $this->resolveScopeProjectIds($options, $bindings);
@@ -95,7 +97,7 @@ readonly class SandboxRestartAppService
         $plan = $this->planner->plan(
             pods: $pods,
             bindingsByTopicId: $bindings,
-            latestImages: $latestImages,
+            target: $target,
             force: $options->isForce(),
             scope: $options->getScope(),
             scopeProjectIds: $scopeProjectIds,
@@ -112,6 +114,7 @@ readonly class SandboxRestartAppService
             skippedByReason: $plan->getSkippedByReason(),
             upToDateTopics: $plan->getUpToDateTopics(),
             listedPods: $plan->getListedPods(),
+            target: $target,
         );
     }
 
@@ -129,18 +132,19 @@ readonly class SandboxRestartAppService
     ): SandboxRestartOutcome {
         $startedAt = microtime(true);
         $targets = $plan->getTargets();
+        $images = $plan->getTarget();
 
         [$suspendedTasks, $suspendedTopics] = $this->suspendActiveWork($targets);
 
         $results = $this->batchRunner->run(
             $targets,
             $options->getConcurrency(),
-            function (mixed $target) use ($onTargetDone): ?SandboxRestartResult {
+            function (mixed $target) use ($onTargetDone, $images): ?SandboxRestartResult {
                 if (! $target instanceof SandboxRestartTarget) {
                     return null;
                 }
 
-                $result = $this->restartTarget($target);
+                $result = $this->restartTarget($target, $images);
                 if ($onTargetDone !== null) {
                     try {
                         $onTargetDone($result);
@@ -255,9 +259,9 @@ readonly class SandboxRestartAppService
     }
 
     /**
-     * 单个话题：删掉清单里的全部 pod，再重建一个.
+     * 单个话题：删掉清单里的全部 pod，再按本次目标镜像重建一个.
      */
-    private function restartTarget(SandboxRestartTarget $target): SandboxRestartResult
+    private function restartTarget(SandboxRestartTarget $target, SandboxImageTarget $images): SandboxRestartResult
     {
         $startedAt = microtime(true);
         $deleted = [];
@@ -287,7 +291,8 @@ readonly class SandboxRestartAppService
             $newSandboxId = $this->rebuildPort->rebuild(
                 $target->getTopicId(),
                 $binding->getUserId(),
-                $binding->getOrganizationCode()
+                $binding->getOrganizationCode(),
+                $images
             );
 
             return SandboxRestartResult::restarted(
@@ -318,26 +323,62 @@ readonly class SandboxRestartAppService
     /**
      * 删除只清理不重建的 pod（温池、孤儿）.
      *
+     * 计划是执行前算出来的快照，而重建本身会去温池领 pod：某个"未绑定"的池子 pod
+     * 完全可能在本批重建中被话题领走并挂载成功（挂载后 pod 会打上 topic-id 标签）。
+     * 若照旧快照删除，就会把刚刚挂给用户的新沙箱删掉，话题则指向一个不存在的沙箱。
+     *
+     * 因此删除前重新拉一次清单，只删"现在仍然没有话题归属"的 pod；无法重新确认
+     * （网关列不出清单）时一个都不删，并把原因写进删除失败里——宁可漏清理，
+     * 也不能误删仍在服役的沙箱。
+     *
      * @param SandboxPodDeletion[] $deletions
      * @return array{0: SandboxPodDeletion[], 1: array<int, array{pod: SandboxPodDeletion, error: string}>}
      */
     private function executeDeletions(array $deletions): array
     {
+        if ($deletions === []) {
+            return [[], []];
+        }
+
+        $stillUnowned = $this->reloadUnownedSandboxIds();
+        if ($stillUnowned === null) {
+            $failures = [];
+            foreach ($deletions as $index => $deletion) {
+                $failures[$index] = [
+                    'pod' => $deletion,
+                    'error' => 'pod ownership could not be re-verified; skipped to avoid deleting a sandbox that a topic may have just claimed',
+                ];
+            }
+            $this->logger->error('[Sandbox][RestartAll] Skipped every cleanup deletion: pod list is unavailable', [
+                'planned_deletions' => count($deletions),
+            ]);
+            return [[], $failures];
+        }
+
         $deleted = [];
         $failures = [];
         foreach ($deletions as $index => $deletion) {
-            $pod = $deletion->getPod();
+            $sandboxId = $deletion->getPod()->getSandboxId();
+            if (! isset($stillUnowned[$sandboxId])) {
+                // 已经被话题领走、或者已经消失：两种情况下都不该再删。
+                $this->logger->info('[Sandbox][RestartAll] Sandbox is no longer unowned, keeping it', [
+                    'sandbox_id' => $sandboxId,
+                    'reason' => $deletion->getReason(),
+                ]);
+                continue;
+            }
+
             try {
-                $this->rebuildPort->deleteSandbox($pod->getSandboxId());
+                $this->rebuildPort->deleteSandbox($sandboxId);
                 $deleted[] = $deletion;
                 $this->logger->info('[Sandbox][RestartAll] Deleted pod without rebuild', [
-                    'sandbox_id' => $pod->getSandboxId(),
+                    'sandbox_id' => $sandboxId,
                     'reason' => $deletion->getReason(),
                 ]);
             } catch (Throwable $e) {
                 $failures[$index] = ['pod' => $deletion, 'error' => $e->getMessage()];
                 $this->logger->error('[Sandbox][RestartAll] Failed to delete pod', [
-                    'sandbox_id' => $pod->getSandboxId(),
+                    'sandbox_id' => $sandboxId,
                     'reason' => $deletion->getReason(),
                     'error' => $e->getMessage(),
                 ]);
@@ -347,30 +388,79 @@ readonly class SandboxRestartAppService
     }
 
     /**
-     * 读取网关当前发布的镜像.
+     * 重新拉一次网关清单，返回"此刻仍然没有话题归属"的沙箱 id 集合.
      *
-     * 拿不到时不猜：没有发布标准就无法判断"是否需要重启"，
-     * 宁可中止并要求 --force 显式确认，也不做一次盲目全量重启。
+     * 判定口径与计划阶段一致：没有 topic-id 标签且未标记 bound，才是可以安全清理的
+     * 池子/孤儿 pod。返回 null 表示无法确认（调用方必须放弃删除而不是按旧快照删）。
      *
-     * @return array{agent_image: string, agfs_image: string}
+     * @return null|array<string, true>
      */
-    private function resolveLatestImages(SandboxRestartOptions $options): array
+    private function reloadUnownedSandboxIds(): ?array
     {
-        $images = $this->gateway->getLatestImages();
-        if (SandboxImageVersion::isComplete($images)) {
-            return $images;
+        try {
+            $listResult = $this->gateway->listSandboxes([]);
+        } catch (Throwable $e) {
+            $this->logger->error('[Sandbox][RestartAll] Failed to reload sandbox list before cleanup', [
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+
+        if (! $listResult->isSuccess()) {
+            $this->logger->error('[Sandbox][RestartAll] Sandbox list request failed before cleanup', [
+                'code' => $listResult->getCode(),
+                'message' => $listResult->getMessage(),
+            ]);
+            return null;
+        }
+
+        $unowned = [];
+        foreach ($listResult->getSandboxes() as $pod) {
+            if ($pod->getTopicId() !== '' || $pod->isBound()) {
+                continue;
+            }
+            $unowned[$pod->getSandboxId()] = true;
+        }
+        return $unowned;
+    }
+
+    /**
+     * 解析本次操作的目标镜像.
+     *
+     * 两种来源合成同一个目标：网关当前发布的镜像，以及命令行指定的镜像
+     * （指定了哪一侧就用哪一侧，另一侧继续跟随发布）。
+     *
+     * 目标不完整时不做盲目全量重启：没有标准就无法判断"是否需要重启"，
+     * 也无法证明重建结果符合预期。此时要求运维补齐指定镜像或显式 --force。
+     */
+    private function resolveImageTarget(SandboxRestartOptions $options): SandboxImageTarget
+    {
+        $release = $this->gateway->getLatestImages();
+        $requestedAgentImage = $options->getRequestedAgentImage();
+        $requestedAgfsImage = $options->getRequestedAgfsImage();
+
+        $target = $requestedAgentImage === null && $requestedAgfsImage === null
+            ? SandboxImageTarget::release($release)
+            : SandboxImageTarget::withSpecifiedImages($release, $requestedAgentImage, $requestedAgfsImage);
+
+        if ($target->isComplete()) {
+            $this->logger->info('[Sandbox][RestartAll] Resolved the target images', [
+                'target' => $target->describe(),
+                'specified' => $target->hasSpecifiedImages(),
+            ]);
+            return $target;
         }
 
         if ($options->isForce()) {
-            $this->logger->warning('[Sandbox][RestartAll] Latest images unavailable, continuing because --force was given', [
-                'images' => $images,
+            $this->logger->warning('[Sandbox][RestartAll] Target images are incomplete, continuing because --force was given', [
+                'target' => $target->describe(),
             ]);
-            return $images;
+            return $target;
         }
 
         throw new BusinessException(
-            'Unable to read the latest sandbox images from the sandbox gateway; '
-            . 'refusing to guess whether a restart is needed. Re-run with --force to restart unconditionally.'
+            'Unable to resolve the target sandbox images (' . $target->describe() . '); refusing to guess whether a restart is needed. '
+            . 'Pin them explicitly with --agent-image / --agfs-image, or re-run with --force to restart unconditionally.'
         );
     }
 

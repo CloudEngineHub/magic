@@ -54,7 +54,8 @@ class RestartAllMagicClawSandboxCommand extends RestartAllSandboxCommand
     }
 
     /**
-     * 旧命令名永远是 Magic Claw 范围，不接受 --scope 覆盖.
+     * 旧命令名永远是 Magic Claw 范围，不接受 --scope 覆盖；
+     * 其余参数（含 --agent-image / --agfs-image）原样透传。
      */
     protected function buildOptions(): SandboxRestartOptions
     {
@@ -68,6 +69,9 @@ class RestartAllMagicClawSandboxCommand extends RestartAllSandboxCommand
             statuses: $options->getStatuses(),
             dryRun: $options->isDryRun(),
             concurrency: $options->getConcurrency(),
+            // 指定镜像同样可以被旧命令名使用，不能因为重建 options 就丢掉。
+            requestedAgentImage: (string) $options->getRequestedAgentImage(),
+            requestedAgfsImage: (string) $options->getRequestedAgfsImage(),
         );
     }
 }

@@ -12,6 +12,9 @@ namespace App\Domain\SuperMagic\Task\Entity\ValueObject;
  *
  * 计划是纯数据，不持有任何服务引用，因此可以先 --dry-run 打印、再原样执行，
  * 也可以单独做单测：同一个输入永远得到同一份计划。
+ *
+ * 计划必须带上本次的目标镜像 {@see SandboxImageTarget}：判定、重建与执行后校验
+ * 都以它为准，输出里也要能回答"这次到底按哪一版镜像在重启"。
  */
 readonly class SandboxRestartPlan
 {
@@ -19,8 +22,9 @@ readonly class SandboxRestartPlan
      * @param SandboxRestartTarget[] $targets 需要重建的话题沙箱，最老的在前
      * @param SandboxPodDeletion[] $deletions 只删除不重建的 pod（温池/孤儿）
      * @param array<string, SandboxPodSnapshot[]> $skippedByReason 未处理的 pod 及原因
-     * @param int $upToDateTopics 已是最新镜像、无需重启的话题数
+     * @param int $upToDateTopics 已等于目标镜像、无需重启的话题数
      * @param int $listedPods 网关返回的 pod 总数（过滤前）
+     * @param SandboxImageTarget $target 本次按哪一版镜像判定与重建
      */
     public function __construct(
         private array $targets,
@@ -28,7 +32,13 @@ readonly class SandboxRestartPlan
         private array $skippedByReason,
         private int $upToDateTopics,
         private int $listedPods,
+        private SandboxImageTarget $target,
     ) {
+    }
+
+    public function getTarget(): SandboxImageTarget
+    {
+        return $this->target;
     }
 
     /**
@@ -55,6 +65,9 @@ readonly class SandboxRestartPlan
         return $this->skippedByReason;
     }
 
+    /**
+     * 已等于目标镜像、无需重启的话题数.
+     */
     public function getUpToDateTopics(): int
     {
         return $this->upToDateTopics;

@@ -31,6 +31,7 @@ use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\AgentInitContext;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\InitializationMetadataDTO;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRootFileIds;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskContext;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
@@ -263,7 +264,8 @@ class AgentDomainService
         DataIsolation $dataIsolation,
         AgentContext $agentContext,
         ?SandboxRootFileIds $rootFileIds = null,
-        ?callable $interruptChecker = null
+        ?callable $interruptChecker = null,
+        ?SandboxImageTarget $images = null
     ): string {
         $topicEntity = $agentContext->getTopicEntity();
 
@@ -288,6 +290,7 @@ class AgentDomainService
             'is_custom_sandbox_id' => $contextSandboxId,
             'persisted_sandbox_id' => $persistedSandboxId,
             'has_interrupt_checker' => $interruptChecker !== null,
+            'images' => $images?->describe() ?? 'follow gateway release',
         ]);
 
         $lockKey = sprintf('super_agent:sandbox:init:%s', $topicEntity->getId());
@@ -408,7 +411,8 @@ class AgentDomainService
                 $agentContext,
                 $projectSpaceRootFileId,
                 $userSpaceRootFileId,
-                $topicSpaceRootFileId
+                $topicSpaceRootFileId,
+                $images
             );
             if ($warmSandboxId !== null) {
                 $this->releaseReplacedSandbox($boundBeforeSwitch, $warmSandboxId, (int) $topicEntity->getId());
@@ -426,7 +430,8 @@ class AgentDomainService
                     userSpaceRootFileId: $userSpaceRootFileId,
                     topicSpaceRootFileId: $topicSpaceRootFileId,
                     topicId: $topicEntity->getId(),
-                    agentCode: $this->resolveAgentCodeLabel($topicEntity)
+                    agentCode: $this->resolveAgentCodeLabel($topicEntity),
+                    images: $images
                 );
                 $this->releaseReplacedSandbox($boundBeforeSwitch, $createdSandboxId, (int) $topicEntity->getId());
                 $sandboxId = $createdSandboxId;
@@ -492,7 +497,7 @@ class AgentDomainService
     /**
      * 调用沙箱网关，创建沙箱容器，如果 sandboxId 不存在，系统会默认创建一个.
      */
-    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null): string
+    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxID, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', ?int $topicId = null, ?string $agentCode = null, ?SandboxImageTarget $images = null): string
     {
         $this->logger->debug('[Sandbox][App] Creating sandbox', [
             'project_id' => $projectId,
@@ -502,6 +507,7 @@ class AgentDomainService
             'user_space_root_file_id' => $userSpaceRootFileId,
             'topic_space_root_file_id' => $topicSpaceRootFileId,
             'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
+            'images' => $images?->describe() ?? 'follow gateway release',
         ]);
 
         // Stamp the topic id onto the pod labels so the sandbox can be
@@ -512,7 +518,7 @@ class AgentDomainService
         if ($agentCode !== null && $agentCode !== '') {
             $labels['agent-code'] = $agentCode;
         }
-        $result = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $topicSpaceRootFileId, $labels);
+        $result = $this->gateway->createSandbox($dataIsolation, $projectId, $sandboxID, $workDir, $projectSpaceRootFileId, $userSpaceRootFileId, $topicSpaceRootFileId, $labels, $images);
 
         // 添加详细的调试日志，检查 result 对象
         $this->logger->debug('[Sandbox][App] Gateway result analysis', [
@@ -1685,7 +1691,8 @@ class AgentDomainService
         AgentContext $agentContext,
         string $projectSpaceRootFileId,
         string $userSpaceRootFileId,
-        string $topicSpaceRootFileId = ''
+        string $topicSpaceRootFileId = '',
+        ?SandboxImageTarget $images = null
     ): ?string {
         $topicEntity = $agentContext->getTopicEntity();
 
@@ -1744,7 +1751,8 @@ class AgentDomainService
                 topicSpaceRootFileId: $topicSpaceRootFileId,
                 labels: $this->buildSandboxLabels($topicEntity),
                 topicId: (string) $topicEntity->getId(),
-                sandboxImages: $sandboxImages
+                sandboxImages: $sandboxImages,
+                images: $images
             );
         } catch (Throwable $e) {
             // Fall back to the cold path on any unexpected error.

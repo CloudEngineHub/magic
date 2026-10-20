@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace App\Domain\SuperMagic\Task\Service;
 
-use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageVersion;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodDeletion;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxPodSnapshot;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartPlan;
@@ -17,7 +17,7 @@ use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxRestartTarget;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxTopicBinding;
 
 /**
- * 把"网关 pod 清单 + 话题归属 + 最新镜像"算成一份可执行的重启计划.
+ * 把"网关 pod 清单 + 话题归属 + 目标镜像"算成一份可执行的重启计划.
  *
  * 纯计算，无 IO、无随机、无时间依赖：同样的输入永远得到同一份计划，
  * 因此可以 --dry-run 先看计划再执行，也可以直接用单测钉住每一条判定规则。
@@ -25,7 +25,7 @@ use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxTopicBinding;
  * 输入三份事实：
  *   - pods       网关清单（每行 = 一个真实 pod，含它创建时用的镜像）
  *   - bindings   话题归属（topic → project/owner/sandbox_id），只读业务表快照
- *   - latest     网关当前发布的最新镜像
+ *   - target     本次的目标镜像（默认=网关发布版本；命令行也可以直接指定）
  *
  * 输出三类动作：
  *   - targets    需要"删掉该话题名下全部 pod，再重建一个"
@@ -42,16 +42,20 @@ class SandboxRestartPlanner
 
     private const SKIP_UNOWNED_SANDBOX = 'no topic owns this sandbox';
 
+    private const SKIP_WARM_POOL_WITH_SPECIFIED_IMAGES = 'unbound warm-pool pod keeps the release images, which the specified images do not replace';
+
+    private const SKIP_WARM_POOL_UP_TO_DATE = 'unbound warm-pool pod already runs the release images';
+
     /**
      * @param SandboxPodSnapshot[] $pods 网关清单
      * @param array<int, SandboxTopicBinding> $bindingsByTopicId topicId => 归属信息
-     * @param array{agent_image?: string, agfs_image?: string} $latestImages 网关最新镜像
+     * @param SandboxImageTarget $target 本次的目标镜像
      * @param int[] $scopeProjectIds 仅 Magic Claw 范围使用：允许处理的项目 id
      */
     public function plan(
         array $pods,
         array $bindingsByTopicId,
-        array $latestImages,
+        SandboxImageTarget $target,
         bool $force,
         SandboxRestartScope $scope,
         array $scopeProjectIds = [],
@@ -63,13 +67,15 @@ class SandboxRestartPlanner
         $allowedProjects = array_fill_keys(array_map('intval', $scopeProjectIds), true);
 
         foreach ($pods as $pod) {
-            // 未绑定的温池 pod 没有 owner，"重建"无从谈起：删掉后由温池补货流程
-            // 用新镜像补齐。Magic Claw 范围不动共享池，避免影响其他用户。
+            // 未绑定的温池 pod 没有 owner，"重建"无从谈起。它的处置规则见
+            // unboundWarmPoolDisposition()：只有确实跑着旧镜像的池 pod 才需要删掉，
+            // 让补货流程用发布版本补齐；已经是最新镜像的池 pod 留着。
             if ($pod->isUnboundWarmPool()) {
-                if ($scope->deletesSharedPods()) {
-                    $deletions[] = new SandboxPodDeletion($pod, 'unbound warm-pool sandbox');
+                $skipReason = $this->unboundWarmPoolSkipReason($pod, $target, $force, $scope);
+                if ($skipReason !== null) {
+                    $skipped[$skipReason][] = $pod;
                 } else {
-                    $skipped[self::SKIP_SHARED_WARM_POOL][] = $pod;
+                    $deletions[] = new SandboxPodDeletion($pod, 'unbound warm-pool sandbox on outdated images');
                 }
                 continue;
             }
@@ -108,7 +114,7 @@ class SandboxRestartPlanner
                 $group['pods'],
                 static fn (SandboxPodSnapshot $left, SandboxPodSnapshot $right): int => $left->getCreatedAtTimestamp() <=> $right->getCreatedAtTimestamp()
             );
-            $reason = $this->decideReason($group['pods'], $latestImages, $force);
+            $reason = $this->decideReason($group['pods'], $target, $force);
             if (! $reason->needsRestart()) {
                 ++$upToDateTopics;
                 continue;
@@ -122,25 +128,61 @@ class SandboxRestartPlanner
             skippedByReason: $skipped,
             upToDateTopics: $upToDateTopics,
             listedPods: count($pods),
+            target: $target,
         );
+    }
+
+    /**
+     * 未绑定的温池 pod 该不该删：返回 null 表示删，返回字符串表示跳过原因.
+     *
+     * | 条件 | 处置 | 理由 |
+     * |---|---|---|
+     * | 本次指定了镜像 | 跳过 | 池子预热的是发布版本，与本次目标无关；删它不加速本批 |
+     * | 范围不包含共享池（magic-claw） | 跳过 | 不属于本范围 |
+     * | 镜像已等于发布版本且没 --force | 跳过 | 已经是最新的，删掉只会让补货流程白做一遍 |
+     * | 镜像过期 / 缺字段 / --force | 删除 | 由补货流程用发布版本补齐 |
+     *
+     * 缺字段按"无法证明已最新"处理，与话题侧 ImagesUnknown 同一口径：
+     * 宁可多删一个（补货会立刻补上），也不留一个来历不明的旧镜像 pod。
+     *
+     * --force 依然强删已最新的池 pod：它的用途是处理"镜像引用没变但配置漂移"这类
+     * 无法从镜像判断的情况，此时必须给出一个真正的新 pod。
+     */
+    private function unboundWarmPoolSkipReason(
+        SandboxPodSnapshot $pod,
+        SandboxImageTarget $target,
+        bool $force,
+        SandboxRestartScope $scope,
+    ): ?string {
+        if ($target->hasSpecifiedImages()) {
+            return self::SKIP_WARM_POOL_WITH_SPECIFIED_IMAGES;
+        }
+
+        if (! $scope->deletesSharedPods()) {
+            return self::SKIP_SHARED_WARM_POOL;
+        }
+
+        // 未指定镜像时目标就是发布版本，所以这里比较的正是"池 pod vs 当前发布"。
+        if (! $force && $target->matches($pod->getImages())) {
+            return self::SKIP_WARM_POOL_UP_TO_DATE;
+        }
+
+        return null;
     }
 
     /**
      * 判定一个话题是否需要重启.
      *
      * @param SandboxPodSnapshot[] $pods 该话题名下的全部 pod
-     * @param array{agent_image?: string, agfs_image?: string} $latestImages
      */
-    private function decideReason(array $pods, array $latestImages, bool $force): SandboxRestartReason
+    private function decideReason(array $pods, SandboxImageTarget $target, bool $force): SandboxRestartReason
     {
         if ($force) {
             return SandboxRestartReason::Forced;
         }
 
-        $latestAgentImage = SandboxImageVersion::agentImage($latestImages);
-        $latestAgfsImage = SandboxImageVersion::agfsImage($latestImages);
-        if ($latestAgentImage === '' || $latestAgfsImage === '') {
-            // 没有发布标准就无法证明"已是最新"。这里返回 Unknown 而不是 UpToDate，
+        if (! $target->isComplete()) {
+            // 没有目标就无法证明"已经到位"。这里返回 Unknown 而不是 UpToDate，
             // 由调用方决定是否继续（应用层在没有 --force 时会直接报错要求显式确认）。
             return SandboxRestartReason::ImagesUnknown;
         }
@@ -148,14 +190,14 @@ class SandboxRestartPlanner
         $agentOutdated = false;
         $agfsOutdated = false;
         foreach ($pods as $pod) {
-            if (SandboxImageVersion::agentImage($pod->getImages()) === '' || SandboxImageVersion::agfsImage($pod->getImages()) === '') {
+            if ($pod->getAgentImage() === '' || $pod->getAgfsImage() === '') {
                 // 老 pod 可能只有 agent 容器、没有 agfs sidecar；镜像不完整一律按未知处理。
                 return SandboxRestartReason::ImagesUnknown;
             }
-            if ($pod->getAgentImage() !== $latestAgentImage) {
+            if ($pod->getAgentImage() !== $target->getAgentImage()) {
                 $agentOutdated = true;
             }
-            if ($pod->getAgfsImage() !== $latestAgfsImage) {
+            if ($pod->getAgfsImage() !== $target->getAgfsImage()) {
                 $agfsOutdated = true;
             }
         }
