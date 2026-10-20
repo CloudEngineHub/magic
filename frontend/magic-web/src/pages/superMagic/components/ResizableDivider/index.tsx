@@ -1,4 +1,10 @@
-import { memo, useState } from "react"
+import {
+	memo,
+	useCallback,
+	useEffect,
+	useState,
+	type PointerEvent as ReactPointerEvent,
+} from "react"
 import ReactDOM from "react-dom"
 import { cn } from "@/utils/cn"
 import { ResizableDividerProps } from "./types"
@@ -22,40 +28,37 @@ function ResizableDivider({
 		onHoverChange?.(false)
 	}
 
-	const handlePointerDown = (e: React.PointerEvent) => {
+	const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+		if (e.button !== 0) return
 		e.preventDefault()
 		setIsDragging(true)
 		onResizeStart(e.clientX)
 	}
 
-	// Forward pointermove events from the overlay to document.
-	const handleOverlayMouseMove = (e: React.PointerEvent) => {
-		// Create and dispatch a native PointerEvent on document.
-		const pointerEvent = new PointerEvent("pointermove", {
-			clientX: e.clientX,
-			clientY: e.clientY,
-			bubbles: true,
-			cancelable: true,
-		})
-		document.dispatchEvent(pointerEvent)
-	}
-
-	// Forward pointerup events from the overlay to document.
-	const handleOverlayMouseUp = (e: React.PointerEvent) => {
+	const handlePointerEnd = useCallback(() => {
 		setIsDragging(false)
-		const pointerEvent = new PointerEvent("pointerup", {
-			clientX: e.clientX,
-			clientY: e.clientY,
-			bubbles: true,
-			cancelable: true,
-		})
-		document.dispatchEvent(pointerEvent)
-	}
+		setIsHovering(false)
+		onHoverChange?.(false)
+	}, [onHoverChange])
+
+	useEffect(() => {
+		if (!isDragging) return
+
+		// The panel hook owns the resize listeners on document. Mirror its end events here
+		// so the visual divider is cleared even when the pointer is released outside the overlay.
+		document.addEventListener("pointerup", handlePointerEnd)
+		document.addEventListener("pointercancel", handlePointerEnd)
+
+		return () => {
+			document.removeEventListener("pointerup", handlePointerEnd)
+			document.removeEventListener("pointercancel", handlePointerEnd)
+		}
+	}, [isDragging, handlePointerEnd])
 
 	// Calculate inline style for dynamic positioning
 	const dividerStyle =
 		position === "right" && offsetLeft !== undefined
-			? { left: `${offsetLeft + 6}px`, right: "auto" }
+			? { left: `${offsetLeft + 2}px`, right: "auto" }
 			: position === "left" && offsetLeft !== undefined
 				? { right: `${offsetLeft}px`, left: "auto" }
 				: undefined
@@ -67,11 +70,11 @@ function ResizableDivider({
 			<div
 				className={cn(
 					// Base styles
-					"absolute top-0 flex h-full w-3 cursor-ew-resize items-center justify-center transition-opacity duration-200",
+					"absolute top-0 z-20 flex h-full w-3 cursor-ew-resize items-center justify-center transition-opacity duration-200",
 					// Position-specific styles
 					position === "left" ? "-left-1.5" : position === "right" ? "-right-1.5" : "",
-					// Center line (using before pseudo-element via arbitrary variants)
-					"before:h-full before:w-px before:transition-colors before:duration-200 before:content-['']",
+					// Keep the visible divider on the hit area's axis instead of relying on flex-item sizing.
+					"before:pointer-events-none before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:transition-colors before:duration-200 before:content-['']",
 					// Active state - show primary color
 					shouldShowActive
 						? "before:bg-neutral-400"
@@ -87,9 +90,9 @@ function ResizableDivider({
 			{isDragging &&
 				ReactDOM.createPortal(
 					<div
-						className="fixed inset-0 z-[9999] cursor-ew-resize select-none bg-transparent"
-						onMouseMove={handleOverlayMouseMove}
-						onMouseUp={handleOverlayMouseUp}
+						className="fixed inset-0 z-[9999] cursor-ew-resize touch-none select-none bg-transparent"
+						onPointerUp={handlePointerEnd}
+						onPointerCancel={handlePointerEnd}
 						data-testid="handle-overlay-mouse-move"
 					/>,
 					document.body,

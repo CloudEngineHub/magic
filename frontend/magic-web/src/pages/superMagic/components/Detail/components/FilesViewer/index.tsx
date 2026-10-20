@@ -1012,13 +1012,13 @@ const FilesViewer = memo(
 					<StablePreviewPortalSurface
 						anchor={stablePreviewSurfaceAnchor}
 						borderRadius={
-							isActivePptPreview
-								? effectiveIsFullscreen
-									? "0px"
-									: props.hideTabBar
-										? "0.5rem"
-										: "0px 0px 0.5rem 0.5rem"
-								: "0px"
+							// The preview is portaled to document.body, so the detail card's
+							// rounded-lg cannot clip it. Keep the card's bottom corners here.
+							effectiveIsFullscreen
+								? "0px"
+								: props.hideTabBar
+									? "0.5rem"
+									: "0px 0px 0.5rem 0.5rem"
 						}
 						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStableTabs}
 						isFullscreen={effectiveIsFullscreen}

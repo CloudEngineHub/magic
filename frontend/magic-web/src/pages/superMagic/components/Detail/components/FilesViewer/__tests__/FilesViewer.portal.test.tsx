@@ -348,6 +348,19 @@ describe("FilesViewer fullscreen portal", () => {
 		},
 	)
 
+	it("rounds the bottom of a non-fullscreen HTML preview portal", () => {
+		mockState.renderPropsType = "html"
+
+		const { rerender } = render(<FilesViewer />)
+		const portal = document.querySelector<HTMLElement>("[data-files-viewer-preview-portal]")
+
+		expect(portal?.style.borderRadius).toBe("0px 0px 0.5rem 0.5rem")
+
+		rerender(<FilesViewer forceFullscreenMode />)
+
+		expect(portal?.style.borderRadius).toBe("0px")
+	})
+
 	it("renders image content exactly once in the stable preview surface", () => {
 		mockState.renderPropsType = "image"
 
