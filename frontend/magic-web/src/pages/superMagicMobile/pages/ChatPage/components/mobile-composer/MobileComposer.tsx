@@ -28,6 +28,7 @@ import MobileComposerAttachments from "./MobileComposerAttachments"
 import MobileComposerHeader from "./MobileComposerHeader"
 import MobileVoiceEdgeGlow from "./MobileVoiceEdgeGlow"
 import MobileScenePanels from "./MobileScenePanels"
+import { getMobileComposerEditorClassName } from "./mobileComposerEditorClassName"
 import useMobileComposerLogic from "./useMobileComposerLogic"
 import { useInvalidTopicModeFallback } from "@/pages/superMagic/components/MessageEditor/hooks/useInvalidTopicModeFallback"
 import EditorHost from "@/pages/superMagic/components/MessageEditor/components/WechatChatHistory/EditorHost"
@@ -39,27 +40,6 @@ interface MobileComposerProps {
 	scenes?: SceneItem[]
 	enableReEditMessageFromPubSub?: boolean
 }
-
-const mobileComposerEditorClassName = cn(
-	"max-h-[100px] min-h-0 overflow-hidden text-sm text-foreground",
-	"[&_.ProseMirror]:m-0 [&_.ProseMirror]:max-h-[100px] [&_.ProseMirror]:overflow-y-auto",
-	"[&_.ProseMirror]:break-words [&_.ProseMirror]:text-sm [&_.ProseMirror]:outline-none",
-	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0",
-	// The placeholder lives in normal flow (a full-width block) instead of being absolutely
-	// positioned on top of the empty paragraph, so the composer dock grows with the prompt
-	// text and wraps it in full rather than clipping it to a single ellipsized line.
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:pointer-events-none",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:block",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:w-full",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:whitespace-normal",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:break-words",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:text-muted-foreground",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
-	// ProseMirror keeps an auxiliary <br> inside the empty paragraph to size its caret line.
-	// With the placeholder now occupying real space that line would add a blank line under it,
-	// so hide it from layout only (the node stays in the document, matching the WechatChatHistory case).
-	"[&_.ProseMirror_.is-editor-empty:first-child>.ProseMirror-trailingBreak]:hidden",
-)
 
 const MOBILE_VOICE_WAVEFORM_BAR_COUNT = 76
 const MOBILE_VOICE_WAVEFORM_HEIGHT = 40
@@ -557,7 +537,7 @@ function MobileComposerComponent({
 						<div
 							ref={logic.domRef}
 							className={cn(
-								mobileComposerEditorClassName,
+								getMobileComposerEditorClassName(logic.placeholder),
 								"max-h-none [&_.ProseMirror]:max-h-none [&_.ProseMirror]:overflow-visible",
 								logic.wechatChat.activeId && "[&_.ProseMirror>p]:hidden",
 							)}
