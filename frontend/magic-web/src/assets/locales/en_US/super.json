@@ -3181,7 +3181,7 @@
 	},
 	"htmlEditor": {
 		"codeChangeConfirm": {
-			"content": "The code of \"{{appName}}\" changed after you authorized it. It now wants to use: {{scope}}. Continue?",
+			"content": "The code of \"{{appName}}\" changed after you authorized it. It now wants to use: {{scope}}. Continue? Choose “Allow and remember” to reuse this permission after future code changes until it expires.",
 			"deny": "Deny",
 			"once": "Just this once",
 			"remember": "Allow and remember",

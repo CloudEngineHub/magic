@@ -3181,7 +3181,7 @@
 	},
 	"htmlEditor": {
 		"codeChangeConfirm": {
-			"content": "「{{appName}}」在你授权之后修改了代码，现在要使用：{{scope}}。请确认是否继续。",
+			"content": "「{{appName}}」在你授权之后修改了代码，现在要使用：{{scope}}。请确认是否继续。选择“允许并记住”后，有效期内代码再次修改也不再询问这项权限。",
 			"deny": "拒绝",
 			"once": "仅这一次",
 			"remember": "允许并记住",

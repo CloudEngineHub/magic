@@ -34,6 +34,8 @@ export interface HtmlPermissionGrant extends HtmlPermissionGrantIdentity {
 	 * Missing on grants saved before this field existed.
 	 */
 	codeFingerprint?: string
+	/** Explicit consent to reuse this scope for future code versions of the same app. */
+	reuseAcrossCodeChanges?: boolean
 }
 
 export interface HtmlPermissionGrantStore {

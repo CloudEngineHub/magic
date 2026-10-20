@@ -62,7 +62,7 @@ export interface HtmlPermissionCodeChangeConfirmRequest {
 }
 
 /**
- * - `remember`: keep the existing grant (same expiry) and mark the current code as confirmed.
+ * - `remember`: keep the existing grant (same expiry) and trust future code versions for this scope.
  * - `once`: allow this call only; the grant stays tied to the previously confirmed code.
  * - `deny`: reject the call.
  */
@@ -236,14 +236,14 @@ export class IframePermissionService {
 		const missingScopes = requestedScopes.filter((scope) => !existingScopes.has(scope))
 		const codeFingerprint = await this.getCodeFingerprint()
 
-		// Edits must not let already granted high-risk scopes run new code unseen: ask once per
-		// code version. Read-only scopes keep silent reuse and are only flagged in the manager UI.
-		// Without the file list, existing high-risk grants cannot be verified and must wait.
+		// Remembered consent follows the app and scope across edits. Other high-risk grants
+		// still require a code-change decision; read-only grants remain silently reusable.
 		if (options.allowOnce !== false) {
 			const staleScopes = existingGrants
 				.filter(
 					(grant) =>
 						requestedScopes.includes(grant.scope) &&
+						grant.reuseAcrossCodeChanges !== true &&
 						isHighRiskHtmlPermissionScope(grant.scope) &&
 						(!codeFingerprint || grant.codeFingerprint !== codeFingerprint),
 				)
@@ -260,7 +260,7 @@ export class IframePermissionService {
 				if (this.authorizationQueue.isDisposed || signal.aborted) return false
 				if (decision === "deny") return false
 				if (decision === "remember") {
-					await this.restampGrants(existingGrants, staleScopes, codeFingerprint)
+					await this.restampGrants(existingGrants, staleScopes, codeFingerprint, true)
 					if (this.authorizationQueue.isDisposed || signal.aborted) return false
 				}
 			}
@@ -428,8 +428,9 @@ export class IframePermissionService {
 			scope,
 			grantedAt: now,
 			expiresAt: ttlMs === null ? null : now + ttlMs,
-			// Changing the duration is not a review of the code, so the confirmed version is kept.
+			// Duration changes preserve both the confirmed version and explicit cross-version consent.
 			codeFingerprint: existingGrant.codeFingerprint,
+			reuseAcrossCodeChanges: existingGrant.reuseAcrossCodeChanges,
 		})
 		if (!saved) throw new Error("Permission grant could not be persisted")
 		this.cfg.onGrantsChanged?.()
@@ -500,6 +501,8 @@ export class IframePermissionService {
 					highRisk: isHighRiskHtmlPermissionScope(scope),
 					codeStatus: codeStatusOf(grantsByScope.get(scope)),
 					needsReconfirm:
+						Boolean(grantsByScope.get(scope)) &&
+						grantsByScope.get(scope)?.reuseAcrossCodeChanges !== true &&
 						isHighRiskHtmlPermissionScope(scope) &&
 						codeStatusOf(grantsByScope.get(scope)) !== "same",
 				})),
@@ -519,7 +522,9 @@ export class IframePermissionService {
 				.length,
 			needsReconfirmCount: grants.filter(
 				(grant) =>
-					isHighRiskHtmlPermissionScope(grant.scope) && codeStatusOf(grant) !== "same",
+					grant.reuseAcrossCodeChanges !== true &&
+					isHighRiskHtmlPermissionScope(grant.scope) &&
+					codeStatusOf(grant) !== "same",
 			).length,
 		}
 	}
@@ -639,19 +644,28 @@ export class IframePermissionService {
 		)
 	}
 
-	/** Saves the same grants (same expiry) with the current code version recorded. */
+	/** Keeps expiry and scope unchanged; only explicit remember also trusts future versions. */
 	private async restampGrants(
 		grants: HtmlPermissionGrant[],
 		scopes: HtmlPermissionScope[],
 		codeFingerprint: string,
+		reuseAcrossCodeChanges = false,
 	): Promise<void> {
 		// An unavailable file list is not a reviewed code version; keep the last known stamp.
 		if (!codeFingerprint) return
 		let changed = false
 		for (const grant of grants) {
 			if (!scopes.includes(grant.scope)) continue
-			if (grant.codeFingerprint === codeFingerprint) continue
-			const saved = await this.cfg.grantStore.save({ ...grant, codeFingerprint })
+			if (
+				grant.codeFingerprint === codeFingerprint &&
+				(!reuseAcrossCodeChanges || grant.reuseAcrossCodeChanges === true)
+			)
+				continue
+			const saved = await this.cfg.grantStore.save({
+				...grant,
+				codeFingerprint,
+				...(reuseAcrossCodeChanges ? { reuseAcrossCodeChanges: true } : {}),
+			})
 			changed = saved || changed
 		}
 		if (changed) this.cfg.onGrantsChanged?.()

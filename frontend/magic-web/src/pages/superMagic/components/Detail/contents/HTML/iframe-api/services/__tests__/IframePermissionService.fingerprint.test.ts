@@ -432,7 +432,7 @@ describe("IframePermissionService code change re-confirmation", () => {
 		return { store, confirmPermission }
 	}
 
-	it("asks again for high-risk scopes after the code changed, once per code version", async () => {
+	it("remembers high-risk consent across later code versions and service instances", async () => {
 		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
 		const later = createService({
 			grantStore: store,
@@ -445,10 +445,97 @@ describe("IframePermissionService code change re-confirmation", () => {
 		expect(later.confirmCodeChange).toHaveBeenCalledOnce()
 		expect(later.confirmCodeChange.mock.calls[0][0].scopes).toEqual(["llm.use"])
 
-		// "remember" recorded the new version, so the same code does not ask again.
+		// Remember follows this app and scope, rather than just the currently visible version.
 		await later.service.authorize("llm.use")
 		expect(later.confirmCodeChange).toHaveBeenCalledOnce()
 		expect(confirmPermission).toHaveBeenCalledOnce()
+		const remembered = store.grants.find((grant) => grant.scope === "llm.use")!
+		expect(remembered.reuseAcrossCodeChanges).toBe(true)
+		for (const runtimeFingerprint of ["runtime-v3", "runtime-v4", "[]"]) {
+			const reopened = createService({
+				grantStore: store,
+				confirmPermission,
+				appConfigState: manifestScopes,
+				appInstance: { ...baseInstance, runtimeFingerprint },
+			})
+			expect(await reopened.service.authorize("llm.use")).toBe(true)
+			expect(reopened.confirmCodeChange).not.toHaveBeenCalled()
+			const snapshot = await reopened.service.getPermissionSnapshot()
+			expect(snapshot.needsReconfirmCount).toBe(0)
+			expect(
+				snapshot.permissions.find((item) => item.scope === "llm.use")?.needsReconfirm,
+			).toBe(false)
+		}
+		expect(store.grants.find((grant) => grant.scope === "llm.use")).toEqual(remembered)
+	})
+
+	it.each(["revocation", "expiry"])(
+		"preserves remembered consent on duration changes, but not after %s",
+		async (end) => {
+			const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+			const later = createService({
+				grantStore: store,
+				confirmPermission,
+				appConfigState: manifestScopes,
+				appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+			})
+			await later.service.authorize("llm.use")
+			await later.service.updateGrantTtl("llm.use", DAY)
+			expect(
+				store.grants.find((grant) => grant.scope === "llm.use")?.reuseAcrossCodeChanges,
+			).toBe(true)
+			if (end === "revocation") await later.service.revoke("llm.use")
+			else await store.prune(1_000_000 + DAY + 1)
+			await later.service.authorize("llm.use")
+			expect(confirmPermission).toHaveBeenCalledTimes(2)
+			expect(
+				store.grants.find((grant) => grant.scope === "llm.use")?.reuseAcrossCodeChanges,
+			).not.toBe(true)
+		},
+	)
+
+	it("does not extend remembered consent to another permission or app", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		const config = manifest({ permissions: { scopes: ["llm.use", "project.message.write"] } })
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: config,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+		})
+		await later.service.authorize("llm.use")
+		await later.service.authorize("project.message.write")
+		expect(confirmPermission).toHaveBeenCalledTimes(2)
+		expect(confirmPermission.mock.calls[1][0].scopes).toEqual(["project.message.write"])
+		const other = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: config,
+			appInstance: {
+				...baseInstance,
+				entryFileId: "other-file",
+				runtimeFingerprint: "runtime-v3",
+			},
+		})
+		await other.service.authorize("llm.use")
+		expect(confirmPermission).toHaveBeenCalledTimes(3)
+	})
+
+	it("does not remember a failed persistence attempt", async () => {
+		const { store, confirmPermission } = await grantWithRuntime("runtime-v1")
+		store.save.mockResolvedValue(false)
+		const later = createService({
+			grantStore: store,
+			confirmPermission,
+			appConfigState: manifestScopes,
+			appInstance: { ...baseInstance, runtimeFingerprint: "runtime-v2" },
+		})
+		expect(await later.service.authorize("llm.use")).toBe(true)
+		expect(await later.service.authorize("llm.use")).toBe(true)
+		expect(later.confirmCodeChange).toHaveBeenCalledTimes(2)
+		expect(
+			store.grants.find((grant) => grant.scope === "llm.use")?.reuseAcrossCodeChanges,
+		).not.toBe(true)
 	})
 
 	it("never asks about read-only scopes after the code changed", async () => {
