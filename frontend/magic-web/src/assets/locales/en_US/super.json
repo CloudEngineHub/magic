@@ -330,6 +330,7 @@
 		"friend": "My friend",
 		"greet": "Hi! {{name}}",
 		"inputChatName": "Please enter conversation name",
+		"nameMaxLengthTip": "Name length cannot exceed {{maxLength}} characters",
 		"noChats": "No conversations yet",
 		"noPreview": "No conversation preview yet",
 		"pinChat": "Pin",

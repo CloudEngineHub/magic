@@ -327,6 +327,7 @@ describe("ChatsPage", () => {
 
 		expect(navigateMock).toHaveBeenCalledWith({
 			name: "MobileHome",
+			query: { homeMode: "chat" },
 		})
 		expect(reloadMock).not.toHaveBeenCalled()
 	})
