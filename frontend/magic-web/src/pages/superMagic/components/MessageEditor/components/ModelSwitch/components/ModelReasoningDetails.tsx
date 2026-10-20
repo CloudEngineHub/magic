@@ -14,6 +14,7 @@ import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCac
 import { reasoningEffortLevels, type ModelItem, type ReasoningEffort } from "../types"
 import {
 	MODEL_DETAILS_HOVER_OPEN_DELAY_MS,
+	MODEL_DETAILS_HOVER_LEVELS_SIDE_OFFSET,
 	MODEL_DETAILS_HOVER_SIDE_OFFSET,
 	useModelDetailsHover,
 } from "../hooks/useModelDetailsHover"
@@ -364,7 +365,7 @@ export function ModelReasoningDetails({
 									data-model-switch-details-overlay
 									side="right"
 									align="start"
-									sideOffset={MODEL_DETAILS_HOVER_SIDE_OFFSET}
+									sideOffset={MODEL_DETAILS_HOVER_LEVELS_SIDE_OFFSET}
 									className="w-36 p-0 duration-100"
 									onPointerEnter={keepOpen}
 									onPointerLeave={(event) => scheduleClose(event, false)}

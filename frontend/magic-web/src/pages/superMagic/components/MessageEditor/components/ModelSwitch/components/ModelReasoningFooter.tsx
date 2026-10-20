@@ -13,7 +13,7 @@ import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCac
 import { cn } from "@/utils/cn"
 import {
 	MODEL_DETAILS_HOVER_CLOSE_DELAY_MS,
-	MODEL_DETAILS_HOVER_SIDE_OFFSET,
+	MODEL_REASONING_FOOTER_SIDE_OFFSET,
 	useModelDetailsHover,
 } from "../hooks/useModelDetailsHover"
 import {
@@ -338,7 +338,7 @@ export function ModelReasoningFooter({
 				data-model-switch-details-overlay
 				side="right"
 				align="end"
-				sideOffset={MODEL_DETAILS_HOVER_SIDE_OFFSET}
+				sideOffset={MODEL_REASONING_FOOTER_SIDE_OFFSET}
 				collisionPadding={12}
 				className="w-36 p-0 duration-100"
 				onPointerEnter={keepOpen}

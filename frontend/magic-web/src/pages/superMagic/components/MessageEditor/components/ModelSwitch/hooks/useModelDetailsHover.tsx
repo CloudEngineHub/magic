@@ -11,8 +11,15 @@ import {
 export const MODEL_DETAILS_HOVER_OPEN_DELAY_MS = 80
 export const MODEL_DETAILS_HOVER_SWITCH_DELAY_MS = 140
 export const MODEL_DETAILS_HOVER_CLOSE_DELAY_MS = 240
-/** Keep the adjacent hover panels visually connected while leaving a small gap. */
-export const MODEL_DETAILS_HOVER_SIDE_OFFSET = 4
+/** Keep the model detail card two pixels clear of the first-level model list. */
+export const MODEL_DETAILS_HOVER_SIDE_OFFSET = 22
+/**
+ * The nested menu is anchored inside a `px-3` content area, so compensate for
+ * that inset and keep the menu two pixels outside the detail card edge.
+ */
+export const MODEL_DETAILS_HOVER_LEVELS_SIDE_OFFSET = 14
+/** Keep the footer reasoning menu two pixels clear of the trigger bar. */
+export const MODEL_REASONING_FOOTER_SIDE_OFFSET = 2
 
 /** 同一模型列表只展开一份详情，统一取消跨行及跨 Portal 的悬停计时。 */
 function useModelDetailsController() {
