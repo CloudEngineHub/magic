@@ -1,5 +1,5 @@
 import { act, render } from "@testing-library/react"
-import type { ReactNode, RefObject } from "react"
+import { useEffect, type ReactNode, type RefObject } from "react"
 import { describe, expect, it, vi } from "vitest"
 import {
 	StylePanelStoreProvider,
@@ -25,13 +25,29 @@ const useSelectionHandlesMock = vi.hoisted(() =>
 		executeDuplicate: vi.fn(),
 	})),
 )
+const selectionFixture = vi.hoisted(() => ({ enabled: false }))
 
 vi.mock("../hooks/useSelectionHandles", () => ({
 	useSelectionHandles: (options: { gapAxesLinked?: boolean }) => useSelectionHandlesMock(options),
 }))
 
 vi.mock("../hooks/useSelectionMessages", () => ({
-	useSelectionMessages: vi.fn(),
+	useSelectionMessages: (options: {
+		setSelectedInfoList: (items: unknown[]) => void
+		setIsSelectionMode: (enabled: boolean) => void
+	}) => {
+		useEffect(() => {
+			if (!selectionFixture.enabled) return
+			options.setSelectedInfoList([
+				{
+					selector: "#title",
+					rect: { top: 10, left: 10, width: 200, height: 80 },
+					computedStyles: {},
+				},
+			])
+			options.setIsSelectionMode(true)
+		}, [])
+	},
 }))
 
 vi.mock("../hooks/useScrollSync", () => ({
@@ -110,5 +126,19 @@ describe("SelectionOverlay gap lock binding", () => {
 
 		expect(useSelectionHandlesMock.mock.calls.length).toBe(callsAfterSelect)
 		expect(lastGapAxesLinked()).toBe(true)
+	})
+	it("keeps selection feedback without edit handles or shortcuts in animation mode", () => {
+		selectionFixture.enabled = true
+		const view = render(
+			<StylePanelStoreProvider>
+				<SelectionOverlay iframeRef={{ current: null }} readOnly />
+			</StylePanelStoreProvider>,
+		)
+		selectionFixture.enabled = false
+		expect(view.getByTestId("html-editor-selection-box")).toBeInTheDocument()
+		expect(view.queryByRole("button")).not.toBeInTheDocument()
+		const handles = useSelectionHandlesMock.mock.results.at(-1)!.value
+		window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", cancelable: true }))
+		expect(handles.executeDelete).not.toHaveBeenCalled()
 	})
 })

@@ -20,6 +20,8 @@ interface UseHTMLEditorV2Options {
 	iframeRef: React.RefObject<HTMLIFrameElement>
 	/** 是否处于编辑模式 */
 	isEditMode?: boolean
+	/** Select elements for animation metadata without enabling visual editing. */
+	isPPTBuildMode?: boolean
 	/** 沙箱类型 */
 	sandboxType?: "iframe" | "shadow-dom"
 	/** iframe 是否已加载 */
@@ -62,7 +64,8 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	const { t } = useTranslation("super")
 	const {
 		iframeRef,
-		isEditMode,
+		isEditMode: fullEditMode,
+		isPPTBuildMode = false,
 		sandboxType = "iframe",
 		iframeLoaded,
 		contentInjected,
@@ -77,6 +80,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		onZoomRequest,
 		onContentChanged,
 	} = options
+	const isEditMode = Boolean(fullEditMode || isPPTBuildMode)
+	const fullEditModeRef = useRef(Boolean(fullEditMode))
+	fullEditModeRef.current = Boolean(fullEditMode)
 
 	const stylePanelStore = useStylePanelStore()
 	const messageBridgeRef = useRef<MessageBridge | null>(null)
@@ -128,6 +134,8 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				const bridge = getActiveBridge()
 				if (bridge) {
 					if (!isCurrentTransition(transitionId)) return
+					await bridge.request(EditorMessageType.SET_PPT_BUILD_MODE, { enabled: false })
+					if (!isCurrentTransition(transitionId)) return
 					await bridge.request(EditorMessageType.EXIT_EDIT_MODE)
 
 					if (!isCurrentTransition(transitionId)) return
@@ -155,7 +163,17 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				const bridge = getActiveBridge()
 				if (!bridge) return
 
-				await bridge.request(EditorMessageType.ENTER_EDIT_MODE)
+				const fullEditing = fullEditModeRef.current
+				await bridge.request(EditorMessageType.SET_PPT_BUILD_MODE, { enabled: false })
+				if (!isCurrentTransition(transitionId) || !desiredEditModeRef.current) return
+				await bridge.request(
+					fullEditing
+						? EditorMessageType.ENTER_EDIT_MODE
+						: EditorMessageType.EXIT_EDIT_MODE,
+				)
+				if (!isCurrentTransition(transitionId) || !desiredEditModeRef.current) return
+				if (!fullEditing)
+					await bridge.request(EditorMessageType.SET_PPT_BUILD_MODE, { enabled: true })
 
 				if (!isCurrentTransition(transitionId) || !desiredEditModeRef.current) return
 
@@ -377,13 +395,14 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 					// snapshot for both persistence and the caller's saved-content baseline.
 					const cleanContent =
 						prepareSaveContentRef.current?.(filteredContent) ?? filteredContent
-					await saveEditContent(
+					const saved = await saveEditContent(
 						cleanContent,
 						String(fileId),
 						true,
 						undefined,
 						isPptRender,
 					)
+					if (saved === false) return defaultResult
 
 					return {
 						cleanContent,
@@ -974,8 +993,9 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 
 		const transitionId = ++editTransitionIdRef.current
 		editLifecycleRef.current = "activating"
+		setIsEditorReady(false)
 		void runEnterEditFlow(transitionId)
-	}, [isEditMode, contentInjected, isRuntimeReady, runEnterEditFlow])
+	}, [isEditMode, fullEditMode, contentInjected, isRuntimeReady, runEnterEditFlow])
 
 	return {
 		isEditorReady: Boolean(isEditMode && contentInjected && isRuntimeReady && isEditorReady),

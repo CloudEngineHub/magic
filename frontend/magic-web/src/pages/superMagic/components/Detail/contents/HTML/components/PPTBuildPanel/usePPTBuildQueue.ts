@@ -7,7 +7,11 @@ import type {
 	PPTBuildUpdate,
 } from "../../iframe-bridge/types/props"
 
-export function usePPTBuildQueue(editorRef: RefObject<HTMLEditorV2Ref>, contentRevision: number) {
+export function usePPTBuildQueue(
+	editorRef: RefObject<HTMLEditorV2Ref>,
+	contentRevision: number,
+	onCommit?: () => Promise<boolean>,
+) {
 	const { t } = useTranslation("super")
 	const [entries, setEntries] = useState<PPTBuildEntry[]>([])
 	const [loading, setLoading] = useState(true)
@@ -55,10 +59,24 @@ export function usePPTBuildQueue(editorRef: RefObject<HTMLEditorV2Ref>, contentR
 			if (pending.current || !updates.length || !editorRef.current) return
 			pending.current = true
 			setBusy(true)
+			const editor = editorRef.current
+			let needsRollback = false
 			try {
-				await editorRef.current.updatePPTBuilds(updates)
+				await editor.updatePPTBuilds(updates)
+				needsRollback = Boolean(onCommit)
+				// Browsing has no save toolbar: persist each completed queue operation.
+				// A failed save rolls back this one atomic command rather than leaving
+				// an invisible draft that could be lost when the sidebar closes.
+				if (onCommit && !(await onCommit())) throw new Error("PPT_BUILD_SAVE_FAILED")
+				needsRollback = false
 				await reload()
 			} catch (error) {
+				if (needsRollback) {
+					await editor.undo().catch(() => {
+						/* The slide may have been disposed. */
+					})
+					await reload()
+				}
 				if (alive.current)
 					magicToast.error(
 						String(error).includes("PPT_BUILD_NESTED")
@@ -70,7 +88,7 @@ export function usePPTBuildQueue(editorRef: RefObject<HTMLEditorV2Ref>, contentR
 				if (alive.current) setBusy(false)
 			}
 		},
-		[editorRef, reload, t],
+		[editorRef, reload, onCommit, t],
 	)
 	return { entries, loading, busy, failed, update, reload }
 }

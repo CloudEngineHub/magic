@@ -218,6 +218,7 @@ const ignoreDevicePreviewChange = () => undefined
 interface IsolatedHTMLRendererProps {
 	buildPanelOpen?: boolean
 	onBuildPanelOpenChange?: (open: boolean) => void
+	onBuildSave?: () => Promise<boolean>
 	devicePreview?: DevicePreviewControls & { enabled: boolean }
 	onDeviceContentScaledChange?: (scaled: boolean) => void
 	content: string
@@ -474,6 +475,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			isPptRender,
 			buildPanelOpen = false,
 			onBuildPanelOpenChange,
+			onBuildSave,
 			isPlaybackPaused = false,
 			isFullscreen,
 			documentFlowFullscreen = false,
@@ -953,7 +955,11 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		)
 		const { isEditorReady } = useHTMLEditorV2({
 			iframeRef,
-			isEditMode,
+			isEditMode: isEditMode && !buildPanelOpen,
+			isPPTBuildMode:
+				Boolean(isPptRender && buildPanelOpen) &&
+				isVisible !== false &&
+				isTabActive !== false,
 			sandboxType,
 			iframeLoaded,
 			contentInjected,
@@ -2612,7 +2618,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			if (isMediaScenario) {
 				// Media场景直接保存说话人配置
 				saveMediaConfiguration()
-			} else if (isEditMode && editorRef.current) {
+			} else if ((isEditMode || buildPanelOpen) && editorRef.current) {
 				// 使用新的编辑机制 V2 保存
 				try {
 					const saveResult = await editorRef.current.save()
@@ -2668,6 +2674,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					{/* 顶部工具栏与下方工作区共享同一个编辑器外框。 */}
 					{sandboxType === "iframe" &&
 						isEditMode &&
+						!buildPanelOpen &&
 						isVisible !== false &&
 						isTabActive !== false && (
 							<>
@@ -2849,37 +2856,39 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 										{sandboxType === "iframe" && (
 											<>
 												{/* 选择覆盖层 - 在父窗口中渲染元素高亮 */}
-												{isEditMode && isVisible !== false && (
-													<SelectionOverlay
-														containerRef={
-															devicePreviewEnabled
-																? canvasViewportRef
-																: contentWrapperRef
-														}
-														scrollContainerRef={scrollContainerRef}
-														iframeRef={iframeRef}
-														editorRef={editorRef}
-														scaleRatio={effectiveScaleRatio}
-														isPptRender={
-															shouldApplyScaling ||
-															devicePreviewEnabled
-														}
-														layoutKey={deviceLayoutKey}
-														disabled={isSaving}
-														onSelectedElementChange={
-															setSelectedElementRect
-														}
-														onSelectedElementViewportChange={
-															setSelectedElementViewportRect
-														}
-														onElementMoveStart={() =>
-															setIsContextPanelDismissed(true)
-														}
-														onElementMoveEnd={() =>
-															setIsContextPanelDismissed(true)
-														}
-													/>
-												)}
+												{(isEditMode || buildPanelOpen) &&
+													isVisible !== false && (
+														<SelectionOverlay
+															containerRef={
+																devicePreviewEnabled
+																	? canvasViewportRef
+																	: contentWrapperRef
+															}
+															readOnly={buildPanelOpen || !isEditMode}
+															scrollContainerRef={scrollContainerRef}
+															iframeRef={iframeRef}
+															editorRef={editorRef}
+															scaleRatio={effectiveScaleRatio}
+															isPptRender={
+																shouldApplyScaling ||
+																devicePreviewEnabled
+															}
+															layoutKey={deviceLayoutKey}
+															disabled={isSaving}
+															onSelectedElementChange={
+																setSelectedElementRect
+															}
+															onSelectedElementViewportChange={
+																setSelectedElementViewportRect
+															}
+															onElementMoveStart={() =>
+																setIsContextPanelDismissed(true)
+															}
+															onElementMoveEnd={() =>
+																setIsContextPanelDismissed(true)
+															}
+														/>
+													)}
 												{/* 元素检查覆盖层 - 独立于编辑模式 */}
 												{isVisible !== false && (
 													<ElementInspectorOverlay
@@ -3008,7 +3017,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 						</div>
 						{sandboxType === "iframe" &&
 						isPptRender &&
-						isEditMode &&
 						isVisible !== false &&
 						isTabActive !== false &&
 						buildPanelOpen &&
@@ -3017,6 +3025,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 								editorRef={editorRef}
 								contentRevision={domTreeRevision}
 								disabled={isSaving}
+								onCommit={isEditMode ? undefined : onBuildSave}
 								onClose={() => onBuildPanelOpenChange?.(false)}
 							/>
 						) : null}

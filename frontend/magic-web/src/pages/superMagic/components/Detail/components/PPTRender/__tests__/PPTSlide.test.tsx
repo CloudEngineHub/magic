@@ -404,13 +404,29 @@ function rerenderSlide(
 }
 
 describe("PPTSlide", () => {
-	it("enters the existing visual editor when the build sidebar opens", async () => {
+	it("opens the build sidebar without entering the visual editor", async () => {
 		mockState.initialEditMode = false
 		renderPPTSlide({ buildPanelOpen: true })
 		await waitFor(() =>
 			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
-				expect.objectContaining({ isEditMode: true, buildPanelOpen: true }),
+				expect.objectContaining({ isEditMode: false, buildPanelOpen: true }),
 			),
+		)
+	})
+	it("saves animation metadata through the existing slide boundary while browsing", async () => {
+		mockState.initialEditMode = false
+		renderPPTSlide({ buildPanelOpen: true })
+		const props = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0]
+		await act(async () => {
+			expect(await props.onBuildSave()).toBe(true)
+		})
+		expect(mockState.triggerSave).toHaveBeenCalledOnce()
+		expect(mockState.onManualSave).toHaveBeenCalledWith(
+			expect.objectContaining({ success: true }),
+			0,
+		)
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ isEditMode: false }),
 		)
 	})
 

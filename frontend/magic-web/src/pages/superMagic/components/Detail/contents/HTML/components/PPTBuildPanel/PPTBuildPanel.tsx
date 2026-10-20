@@ -17,17 +17,20 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 	contentRevision,
 	disabled,
 	onClose,
+	onCommit,
 }: {
 	editorRef: RefObject<HTMLEditorV2Ref>
 	contentRevision: number
 	disabled?: boolean
 	onClose: () => void
+	onCommit?: () => Promise<boolean>
 }) {
 	const { t } = useTranslation("super")
 	const { selectedElement } = useSelectedElement(editorRef)
 	const { entries, loading, busy, failed, update, reload } = usePPTBuildQueue(
 		editorRef,
 		contentRevision,
+		onCommit,
 	)
 	const groups = groupBuildQueue(entries)
 	const locked = disabled || busy || loading || failed
@@ -56,6 +59,7 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 						className="size-7"
 						aria-label={t("ppt.build.close")}
 						onClick={onClose}
+						disabled={busy || disabled}
 					>
 						<X size={16} />
 					</Button>

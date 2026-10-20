@@ -611,9 +611,17 @@ const PPTSlide = observer(function PPTSlide({
 		setTriggerSaveRef(() => triggerSave)
 	}, [])
 
+	const saveBuildConfiguration = useMemoizedFn(() => performSave())
 	const rendererStaticProps = {
-		buildPanelOpen: buildPanelOpen && Boolean(isEditMode) && isActive,
+		buildPanelOpen:
+			buildPanelOpen &&
+			allowEdit &&
+			isActive &&
+			!isFullscreen &&
+			!isPlaybackMode &&
+			!fileVersion,
 		onBuildPanelOpenChange,
+		onBuildSave: saveBuildConfiguration,
 		// Metadata saves must reach the save boundary immediately, even while the
 		// processed preview is retained. Historical previews keep their own source.
 		rawSourceCode: fileVersion === undefined ? rawContent : displayContent.rawContent,
@@ -750,20 +758,17 @@ const PPTSlide = observer(function PPTSlide({
 		}
 		setIsEditMode(true)
 	}, [setIsEditMode, fileVersion, changeFileVersion])
+	const prepareBuildPanel = useMemoizedFn(() => {
+		// Animation metadata always belongs to the latest slide, without opening a body draft.
+		if (fileVersion !== undefined) changeFileVersion(undefined)
+	})
 	useEffect(() => {
-		if (buildPanelOpen && allowEdit && isActive && !isFullscreen && !isPlaybackMode)
-			handleEdit()
-		// Only an explicit panel opening enters edit mode, never a later save/exit.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [buildPanelOpen])
-	const previousBuildEditMode = useRef(Boolean(isEditMode))
-	useEffect(() => {
-		if (previousBuildEditMode.current && !isEditMode) onBuildPanelOpenChange?.(false)
-		previousBuildEditMode.current = Boolean(isEditMode)
-	}, [isEditMode, onBuildPanelOpenChange])
+		if (buildPanelOpen) prepareBuildPanel()
+	}, [buildPanelOpen, prepareBuildPanel])
 
 	// 版本切换处理 - 强制退出编辑模式
 	const handleVersionChange = useMemoizedFn((version: number | undefined) => {
+		onBuildPanelOpenChange?.(false)
 		if (isEditMode) {
 			setIsEditMode(false)
 		}

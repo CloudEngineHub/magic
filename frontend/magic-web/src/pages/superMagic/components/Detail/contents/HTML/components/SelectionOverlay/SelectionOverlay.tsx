@@ -28,6 +28,8 @@ interface SelectionOverlayProps {
 	scaleRatio?: number
 	isPptRender?: boolean
 	disabled?: boolean
+	/** Draw selection feedback without manipulation handles or edit shortcuts. */
+	readOnly?: boolean
 	className?: string
 	onSelectedElementChange?: (rect: ElementRect | null) => void
 	onSelectedElementViewportChange?: (rect: (ElementRect & { selector?: string }) | null) => void
@@ -45,6 +47,7 @@ export const SelectionOverlay = observer(function SelectionOverlay({
 	scaleRatio = 1,
 	isPptRender = false,
 	disabled = false,
+	readOnly = false,
 	className,
 	onSelectedElementChange,
 	onSelectedElementViewportChange,
@@ -273,7 +276,7 @@ export const SelectionOverlay = observer(function SelectionOverlay({
 	])
 
 	useEffect(() => {
-		if (!isSelectionMode || !selectedInfo || disabled) {
+		if (!isSelectionMode || !selectedInfo || disabled || readOnly) {
 			return
 		}
 
@@ -336,7 +339,15 @@ export const SelectionOverlay = observer(function SelectionOverlay({
 		return () => {
 			window.removeEventListener("keydown", handleShortcut, true)
 		}
-	}, [containerRef, disabled, executeDelete, executeDuplicate, isSelectionMode, selectedInfo])
+	}, [
+		containerRef,
+		disabled,
+		readOnly,
+		executeDelete,
+		executeDuplicate,
+		isSelectionMode,
+		selectedInfo,
+	])
 
 	// Don't render when disabled (saving)
 	if (disabled) {
@@ -370,7 +381,7 @@ export const SelectionOverlay = observer(function SelectionOverlay({
 					transformedRect={transformedRect}
 					viewportRect={viewportRect}
 					isMultiSelect={isMultiSelect}
-					isSelectionMode={isSelectionMode}
+					isSelectionMode={isSelectionMode && !readOnly}
 					transform={transform}
 					containerElement={containerElement}
 					isMoving={isMoving}

@@ -847,7 +847,7 @@ export class ElementSelector {
 
 		// Preserve the existing first-selection editing state while CSS provides visual feedback.
 		const isText = this.isTextElement(element)
-		if (!multiSelect && isText && !element.isContentEditable) {
+		if (!this.selectionOnly && !multiSelect && isText && !element.isContentEditable) {
 			element.contentEditable = "true"
 			element.setAttribute("data-text-editing", "true")
 		}
@@ -1120,6 +1120,15 @@ export class ElementSelector {
 				this.deselectElement()
 			}
 		})
+	}
+
+	private selectionOnly = false
+
+	setSelectionOnly(value: boolean) {
+		if (value === this.selectionOnly) return
+		// Clear any contenteditable state left by an earlier full editing session.
+		this.disable()
+		this.selectionOnly = value
 	}
 
 	enable() {

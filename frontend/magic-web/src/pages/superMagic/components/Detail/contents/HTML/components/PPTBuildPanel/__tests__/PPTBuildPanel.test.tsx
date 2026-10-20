@@ -29,13 +29,18 @@ const make = (selector: string, step: number): PPTBuildEntry => ({
 	label: selector,
 	build: { version: 1, step, effect: "fade" },
 })
-function setup(initial = [make("first", 1), make("second", 2)]) {
+function setup(initial = [make("first", 1), make("second", 2)], onCommit?: () => Promise<boolean>) {
 	let entries = initial
+	let previous = entries
 	const editor = {
+		undo: vi.fn(async () => {
+			entries = previous
+		}),
 		getPPTBuilds: vi.fn(async () => entries),
 		setPPTBuildMarkers: vi.fn(async () => {}),
 		selectElement: vi.fn(async () => {}),
 		updatePPTBuilds: vi.fn(async (updates: PPTBuildUpdate[]) => {
+			previous = entries
 			for (const update of updates) {
 				entries = entries.filter((e) => e.selector !== update.selector)
 				if (update.build)
@@ -50,7 +55,12 @@ function setup(initial = [make("first", 1), make("second", 2)]) {
 	const editorRef = { current: editor as unknown as HTMLEditorV2Ref }
 	const onClose = vi.fn()
 	const view = render(
-		<PPTBuildPanel editorRef={editorRef} contentRevision={0} onClose={onClose} />,
+		<PPTBuildPanel
+			editorRef={editorRef}
+			contentRevision={0}
+			onClose={onClose}
+			onCommit={onCommit}
+		/>,
 	)
 	return { editor, onClose, ...view }
 }
@@ -60,6 +70,38 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 describe("PPT build panel", () => {
+	it("persists browsing-mode changes and blocks close until saving finishes", async () => {
+		let finish!: (saved: boolean) => void
+		const onCommit = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					finish = resolve
+				}),
+		)
+		const { editor } = setup(undefined, onCommit)
+		await screen.findByRole("button", { name: "first ppt.build.fade" })
+		fireEvent.click(screen.getAllByRole("button", { name: "ppt.build.remove" })[0])
+		await waitFor(() => expect(onCommit).toHaveBeenCalledOnce())
+		expect(screen.getByRole("button", { name: "ppt.build.close" })).toBeDisabled()
+		finish(true)
+		await waitFor(() =>
+			expect(
+				screen.queryByRole("button", { name: "first ppt.build.fade" }),
+			).not.toBeInTheDocument(),
+		)
+		expect(editor.undo).not.toHaveBeenCalled()
+	})
+	it("rolls back an animation operation when persistence fails", async () => {
+		const { editor } = setup(
+			undefined,
+			vi.fn(async () => false),
+		)
+		await screen.findByRole("button", { name: "first ppt.build.fade" })
+		fireEvent.click(screen.getAllByRole("button", { name: "ppt.build.remove" })[0])
+		await waitFor(() => expect(editor.undo).toHaveBeenCalledOnce())
+		await waitFor(() => expect(state.error).toHaveBeenCalledWith("ppt.build.saveFailed"))
+		expect(screen.getByRole("button", { name: "first ppt.build.fade" })).toBeInTheDocument()
+	})
 	it("shows ordered groups, selects the canvas element and disposes markers on close", async () => {
 		const { editor, unmount, onClose } = setup()
 		await screen.findByRole("button", { name: "first ppt.build.fade" })

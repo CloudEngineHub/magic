@@ -18,6 +18,36 @@ import pubsub, { PubSubEvents } from "@/utils/pubsub"
 describe("IsolatedHTMLRenderer lifecycle", () => {
 	useRendererTestSetup()
 
+	it("keeps animation selection independent and hides edit tools while the queue is open", async () => {
+		const { rerender } = renderIsolated(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				isPptRender
+				buildPanelOpen
+				isEditMode={false}
+			/>,
+		)
+		await flushReactEffects()
+		expect(hookState.editorOptions).toMatchObject({ isEditMode: false, isPPTBuildMode: true })
+		expect(screen.queryByTestId("html-editor-context-panel")).not.toBeInTheDocument()
+		// An existing body draft also stays intact when its tools are replaced by the queue.
+		rerender(<IsolatedHTMLRenderer {...defaultProps} isPptRender buildPanelOpen isEditMode />)
+		await flushReactEffects()
+		expect(hookState.editorOptions).toMatchObject({ isEditMode: false, isPPTBuildMode: true })
+		expect(screen.queryByTestId("html-editor-context-panel")).not.toBeInTheDocument()
+		rerender(
+			<IsolatedHTMLRenderer
+				{...defaultProps}
+				isPptRender
+				buildPanelOpen={false}
+				isEditMode
+			/>,
+		)
+		await flushReactEffects()
+		expect(hookState.editorOptions).toMatchObject({ isEditMode: true, isPPTBuildMode: false })
+		expect(screen.getByTestId("html-editor-context-panel")).toBeInTheDocument()
+	})
+
 	it("keeps the iframe document and runtime when switching tabs away and back", async () => {
 		const { rerender } = renderIsolated(
 			<IsolatedHTMLRenderer {...defaultProps} isVisible isTabActive />,

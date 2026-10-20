@@ -35,6 +35,7 @@ export class EditorRuntime {
 	private pptBuildManager: PPTBuildManager
 	private pptBuildMarkers = new PPTBuildMarkers()
 	private isEditMode = false
+	private isPPTBuildMode = false
 	private keyboardShortcutHandler: ((event: KeyboardEvent) => Promise<void>) | null = null
 	private hostShortcutHandler: ((event: KeyboardEvent) => void) | null = null
 	private wheelEventHandler: ((event: WheelEvent) => void) | null = null
@@ -51,7 +52,10 @@ export class EditorRuntime {
 		this.commandHistory = new CommandHistory(50)
 		this.bridge = new EditorBridge()
 		this.styleManager = new StyleManager(this.commandHistory)
-		this.pptBuildManager = new PPTBuildManager(this.commandHistory, () => this.isEditMode)
+		this.pptBuildManager = new PPTBuildManager(
+			this.commandHistory,
+			() => this.isEditMode || this.isPPTBuildMode,
+		)
 		this.textStyleManager = new TextStyleManager(this.commandHistory, this.bridge)
 		this.elementSelector = new ElementSelector(this.bridge)
 		this.domStructureManager = new DomStructureManager(
@@ -107,7 +111,7 @@ export class EditorRuntime {
 
 		// Set text editing callback for double-click activation
 		this.elementSelector.setTextEditingCallback((selector: string) => {
-			this.styleManager.enableTextEditing(selector)
+			if (this.isEditMode) this.styleManager.enableTextEditing(selector)
 		})
 
 		// Listen to history state changes
@@ -150,6 +154,19 @@ export class EditorRuntime {
 	 * Register all handlers
 	 */
 	private registerHandlers(): void {
+		// Animation configuration only selects source elements. It must never enable
+		// text editing, element manipulation shortcuts, or the full editor's tools.
+		this.bridge.onRequest("SET_PPT_BUILD_MODE", (payload) => {
+			const enabled = (payload as { enabled?: unknown })?.enabled
+			if (typeof enabled !== "boolean") throw new Error("PPT_BUILD_INVALID")
+			this.isPPTBuildMode = enabled
+			this.elementSelector.setSelectionOnly(enabled && !this.isEditMode)
+			if (enabled) this.elementSelector.enable()
+			else if (!this.isEditMode) this.elementSelector.disable()
+			if (!enabled) this.pptBuildMarkers.destroy()
+			this.notifySelectionModeChanged(enabled || this.isEditMode)
+			return { success: true }
+		})
 		this.bridge.onRequest("GET_PPT_BUILDS", () => this.pptBuildManager.getBuilds())
 		this.bridge.onCommand("UPDATE_PPT_BUILDS", (payload) => {
 			this.pptBuildManager.updateBuilds((payload as { updates: PPTBuildUpdate[] })?.updates)
@@ -159,7 +176,8 @@ export class EditorRuntime {
 		this.bridge.onRequest("SET_PPT_BUILD_MARKERS", (payload) => {
 			const visible = (payload as { visible?: unknown })?.visible
 			if (typeof visible !== "boolean") throw new Error("PPT_BUILD_INVALID")
-			if (visible && !this.isEditMode) throw new Error("PPT_BUILD_EDIT_MODE_REQUIRED")
+			if (visible && !this.isEditMode && !this.isPPTBuildMode)
+				throw new Error("PPT_BUILD_EDIT_MODE_REQUIRED")
 			this.pptBuildMarkers.setVisible(visible)
 			return { success: true }
 		})
@@ -173,6 +191,7 @@ export class EditorRuntime {
 			domStructureManager: this.domStructureManager,
 			onEditModeChange: (isEditMode: boolean) => {
 				this.isEditMode = isEditMode
+				this.elementSelector.setSelectionOnly(this.isPPTBuildMode && !isEditMode)
 				this.notifyEditModeChanged()
 
 				// Start/stop text selection monitoring based on edit mode
