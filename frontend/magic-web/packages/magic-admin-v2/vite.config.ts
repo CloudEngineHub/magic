@@ -60,6 +60,8 @@ export default defineConfig(({ mode }) => {
     resolve: {
       dedupe: ["react", "react-dom", "react-router", "react-router-dom", "i18next", "react-i18next"],
       alias: {
+        // Dialogs and filter panels reuse the host ScrollArea.
+        "@": path.resolve(__dirname, "../../src"),
         "@magic-admin-v2": path.resolve(__dirname, "src"),
       },
     },

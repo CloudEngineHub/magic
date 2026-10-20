@@ -29,6 +29,15 @@ describe("official staff default agent options", () => {
     assert.deepEqual(options.map((option) => option.value), ["general"]);
   });
 
+  it("does not render an option with an empty identifier", () => {
+    const options = buildDefaultAgentOptions([
+      createStaff({ identifier: "" }),
+      createStaff({ identifier: "general" }),
+    ]);
+
+    assert.deepEqual(options.map((option) => option.value), ["general"]);
+  });
+
   it("preserves an unavailable current value as disabled", () => {
     const options = buildDefaultAgentOptions(
       [createStaff({ identifier: "general" })],

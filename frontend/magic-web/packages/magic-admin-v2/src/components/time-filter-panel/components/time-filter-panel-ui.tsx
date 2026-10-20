@@ -32,12 +32,12 @@ export function TimeOptionButton({
 }) {
 	return (
 		<button
+			data-testid={testId}
 			className={cn(
 				"flex h-8 items-center justify-between gap-2 rounded-md px-2.5 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
 				active && "bg-accent text-accent-foreground",
 				disabled && "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-inherit",
 			)}
-			data-testid={testId}
 			disabled={disabled}
 			onClick={onClick}
 			type="button"
@@ -53,8 +53,8 @@ export function AbsoluteTimeField({
 	label,
 	onChange,
 	precision,
-	value,
 	testId,
+	value,
 }: {
 	/** 是否禁用时间输入；通常在对应日期尚未选择时禁用。 */
 	disabled: boolean
@@ -64,9 +64,9 @@ export function AbsoluteTimeField({
 	onChange: (value: string) => void
 	/** 时间输入精度；day 会在组件内部转换为 minute。 */
 	precision: TimePrecision
+	testId?: string
 	/** 当前时间输入值，格式由 precision 决定。 */
 	value: string
-	testId?: string
 }) {
 	return (
 		<label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
@@ -84,14 +84,15 @@ export function AbsoluteTimeField({
 }
 
 export function CalendarMonthPanel({
+	dateButtonTestId,
 	endDate,
 	intlLocale,
 	maxDate,
 	month,
 	onSelect,
 	startDate,
-	dateButtonTestId,
 }: {
+	dateButtonTestId?: string
 	/** 当前范围结束日期，用于渲染结束标记和范围高亮。 */
 	endDate: Date | null
 	/** 用于格式化月份标题和星期名称的 Intl locale。 */
@@ -104,7 +105,6 @@ export function CalendarMonthPanel({
 	onSelect: (date: Date) => void
 	/** 当前范围开始日期，用于渲染开始标记和范围高亮。 */
 	startDate: Date | null
-	dateButtonTestId?: string
 }) {
 	const calendarDays = getCalendarDays(month)
 	const weekdayLabels = getWeekdayLabels(intlLocale)

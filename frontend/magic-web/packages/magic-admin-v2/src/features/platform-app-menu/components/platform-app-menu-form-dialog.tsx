@@ -91,9 +91,9 @@ export function PlatformAppMenuFormDialog({
 	return (
 		<Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
 			<DialogContent
-				className="max-h-[calc(100vh-2rem)] overflow-visible sm:max-w-2xl"
 				data-testid="platform-app-menu-dialog-content"
 				closeButtonTestId="platform-app-menu-form-dialog-close-button"
+				className="max-h-[calc(100vh-2rem)] overflow-visible sm:max-w-2xl"
 			>
 				<DialogHeader>
 					<DialogTitle>
@@ -124,9 +124,9 @@ export function PlatformAppMenuFormDialog({
 								<Input
 									disabled={isSaving}
 									id="platform-app-menu-name-zh"
+									data-testid="platform-app-menu-platform-app-menu-name-zh-input"
 									placeholder={t("appMenu.placeholder.nameZh")}
 									{...form.register("name_i18n.zh_CN")}
-									data-testid="platform-app-menu-platform-app-menu-name-zh-input"
 								/>
 								<FieldError
 									message={form.formState.errors.name_i18n?.zh_CN?.message}
@@ -141,9 +141,9 @@ export function PlatformAppMenuFormDialog({
 								<Input
 									disabled={isSaving}
 									id="platform-app-menu-name-en"
+									data-testid="platform-app-menu-platform-app-menu-name-en-input"
 									placeholder={t("appMenu.placeholder.nameEn")}
 									{...form.register("name_i18n.en_US")}
-									data-testid="platform-app-menu-platform-app-menu-name-en-input"
 								/>
 								<FieldError
 									message={form.formState.errors.name_i18n?.en_US?.message}
@@ -160,9 +160,9 @@ export function PlatformAppMenuFormDialog({
 							<Input
 								disabled={isSaving}
 								id="platform-app-menu-path"
+								data-testid="platform-app-menu-platform-app-menu-path-input"
 								placeholder={t("appMenu.placeholder.path")}
 								{...form.register("path")}
-								data-testid="platform-app-menu-platform-app-menu-path-input"
 							/>
 							<FieldError message={form.formState.errors.path?.message} />
 						</DialogFormField>
@@ -199,11 +199,11 @@ export function PlatformAppMenuFormDialog({
 								<Input
 									disabled={isSaving}
 									id="platform-app-menu-sort-order"
+									data-testid="platform-app-menu-platform-app-menu-sort-order-input"
 									min={0}
 									placeholder={t("appMenu.placeholder.sortOrder")}
 									type="number"
 									{...form.register("sort_order", { valueAsNumber: true })}
-									data-testid="platform-app-menu-platform-app-menu-sort-order-input"
 								/>
 								<FieldError message={form.formState.errors.sort_order?.message} />
 							</DialogFormField>
@@ -320,11 +320,11 @@ export function PlatformAppMenuFormDialog({
 									name="status"
 									render={({ field }) => (
 										<Switch
+											data-testid="platform-app-menu-platform-app-menu-status-switch"
 											checked={field.value}
 											disabled={isSaving}
 											id="platform-app-menu-status"
 											onCheckedChange={field.onChange}
-											data-testid="platform-app-menu-platform-app-menu-status-switch"
 										/>
 									)}
 								/>
@@ -338,18 +338,18 @@ export function PlatformAppMenuFormDialog({
 
 						<DialogFooter className="pt-2">
 							<Button
+								data-testid="platform-app-menu-cancel-button"
 								disabled={isSaving}
 								onClick={onClose}
 								type="button"
 								variant="outline"
-								data-testid="platform-app-menu-cancel-button"
 							>
 								{t("common.cancel")}
 							</Button>
 							<Button
+								data-testid="platform-app-menu-save-button"
 								disabled={isSaving || isDetailLoading || isImageUploading}
 								type="submit"
-								data-testid="platform-app-menu-save-button"
 							>
 								{isSaving ? (
 									<Loader2 className="size-4 animate-spin" aria-hidden="true" />

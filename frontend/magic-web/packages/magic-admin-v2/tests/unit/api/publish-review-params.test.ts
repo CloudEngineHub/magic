@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import {
+	countActiveReviewFilters,
 	createDefaultFilterDraft,
 	createReviewPayload,
 	toAgentReviewParams,
@@ -8,6 +9,10 @@ import {
 } from "../../../src/features/platform-publish-review/params.ts"
 
 describe("publish review request parameters", () => {
+	it("does not count the default skill source type as an active filter", () => {
+		assert.equal(countActiveReviewFilters(createDefaultFilterDraft("skill"), "skill"), 0)
+	})
+
 	it("builds employee review params from the selected search field", () => {
 		const draft = {
 			...createDefaultFilterDraft("employee"),

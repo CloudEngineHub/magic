@@ -1,6 +1,7 @@
 {
 	"compilerOptions": {
 		"paths": {
+			"@/*": ["../../src/*"],
 			"@magic-admin-v2/*": ["src/*"]
 		}
 	},

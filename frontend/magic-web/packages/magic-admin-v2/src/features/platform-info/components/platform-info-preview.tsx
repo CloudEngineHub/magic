@@ -31,7 +31,7 @@ export function PlatformInfoPreview({
 	value: PlatformInfoFormState
 }) {
 	const { t } = useTranslation()
-	const contentCompletion = getContentLocaleCompletion(value)
+	const contentCompletion = getContentLocaleCompletion(value, activeSection)
 	const showContentLocale = showsPlatformInfoContentLocale(activeSection)
 
 	return (

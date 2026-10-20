@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react"
+import { Loader2, RotateCcw } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import {
@@ -57,7 +57,6 @@ export type FilterSheetProps = {
 	applyLoading?: boolean
 	/** Optional class names for page-specific body overflow requirements. */
 	bodyClassName?: string
-	/** Stable selectors for sheet content and footer actions. */
 	contentTestId?: string
 	bodyTestId?: string
 	resetButtonTestId?: string
@@ -89,19 +88,19 @@ export function FilterSheet({
 	applyDisabled = false,
 	applyLabel,
 	applyLoading = false,
-	applyButtonTestId,
-	bodyTestId,
 	bodyClassName,
-	children,
-	closeButtonTestId,
 	contentTestId,
+	bodyTestId,
+	resetButtonTestId,
+	applyButtonTestId,
+	closeButtonTestId,
+	children,
 	description,
 	onApply,
 	onOpenChange,
 	onReset,
 	open,
 	presentation = "responsive",
-	resetButtonTestId,
 	resetLabel,
 	title,
 }: FilterSheetProps) {
@@ -121,8 +120,8 @@ export function FilterSheet({
 							? "max-h-[85vh] rounded-t-xl"
 							: "w-full sm:max-w-md",
 					)}
-					closeButtonTestId={closeButtonTestId}
 					data-testid={contentTestId}
+					closeButtonTestId={closeButtonTestId}
 					side={side}
 				>
 					<SheetHeader className="shrink-0 border-b px-4 py-4 text-left">
@@ -152,6 +151,7 @@ export function FilterSheet({
 							type="button"
 							variant="outline"
 						>
+							<RotateCcw className="size-4" aria-hidden="true" />
 							{resetLabel}
 						</Button>
 						<Button

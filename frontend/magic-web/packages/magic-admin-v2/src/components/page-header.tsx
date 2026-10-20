@@ -26,7 +26,10 @@ export function PageHeaderActions({ children }: PageHeaderActionsProps) {
 
 export function PageHeader({ title, titleAddon, description, actions, testId }: PageHeaderProps) {
 	return (
-		<div className="flex min-w-0 flex-row items-start justify-between gap-4" data-testid={testId}>
+		<div
+			className="flex min-w-0 flex-row items-start justify-between gap-4"
+			data-testid={testId}
+		>
 			<div className="min-w-0 flex-1 space-y-2">
 				<div className="flex min-w-0 items-center gap-2">
 					<h1 className="truncate text-2xl font-bold tracking-tight text-foreground">
