@@ -23,7 +23,7 @@ Turn one business question into a study: clarify, plan, desk research, AI person
 3. Every persona answer comes from `persona_chat`; never invent or fill in an answer. Keep transcript answers and quoted wording exact. Summarize findings in your own voice with citations, and never present a summary as the persona's own utterance.
 4. Keep evidence types apart in every conclusion: external sources (web, social, uploads), AI persona interviews, real-person validation, and your inference. The report must say that respondents are AI-simulated, not real users, and state the effective sample size. Verdicts and confidence follow the rules in methods.md: a conclusion backed only by AI interviews is at most `mixed` ("pending real-person validation") and its themes are `to_validate`.
 5. Respect the cost limits below. They are hard limits even if the user asks for more; explain the limit instead.
-6. Structured study files are written only by the study tools (reference/tools.md). Never write or patch `study.json`, `panel.json`, persona files, transcripts, `synthesis.json`, or the questionnaire CSV with file tools or Python. The application owns `study-topics/` association and deletion records; read them for routing, never create or edit them yourself.
+6. Structured study files are written only by the study tools (reference/tools.md). Never write or patch `study.json`, `panel.json`, persona files, transcripts, `synthesis.json`, or the questionnaire CSV with file tools or Python.
 7. Write human-readable text in the user's language. JSON field names and enum values stay in English.
 
 ## Cost Limits
@@ -43,7 +43,6 @@ Turn one business question into a study: clarify, plan, desk research, AI person
 personas/<persona_id>.json          persona library, shared across studies in this project
 panels/<panel_id>.json              saved persona groups
 templates/<name>.html               report templates (visual style only), shared across studies
-study-topics/<topic_id>.json         related-topic association or primary-topic deletion state
 studies/<slug>/study.json           study state (drives the UI stepper)
 studies/<slug>/plan.md
 studies/<slug>/desk-research.md
@@ -65,16 +64,6 @@ studies/<slug>/validation-results.json   AI vs. real-person comparison
 `study.json` drives the UI stepper. Move it only with `update_study`, at these moments: `created` (study starts), `clarified`, `plan_confirmed`, `desk_research_done` or `desk_research_skipped`, `interviews_finished`, `report_written`, `questionnaire_written`, and `validation_compared`. The tool sets every phase status and refuses an event that does not fit the current phase.
 
 When a step stops (unanswered question, user interruption, failure), send no event: the current phase stays running, and every file already written is kept.
-
-## Entry: New or Existing Study
-
-Before Phase 1, inspect the current message's native project-file references. A reference to `studies/<slug>/study.json` identifies an existing-study candidate; use the actual workspace-relative path, not the displayed file name. Read it and obtain the current topic ID from the latest `<super_magic_product_context>` (`topic.id`).
-
-- For the primary topic, match that ID to the study's `topic_id`.
-- For a related topic, also read `study-topics/<current_topic_id>.json`. Its `schema_version` must be `1`, `state` must be `linked`, and its `topic_id`, `primary_topic_id`, and `study_dir` must match the current topic and referenced study. Do not change the study's primary topic.
-- Check `study-topics/<primary_topic_id>.json` too. If it records `state: deleting`, stop: deletion is in progress or has already removed the study. Do not recreate files or resume research.
-
-When the association is valid, read the existing plan and relevant evidence or outputs, then follow “Follow-Ups in the Same Study”. This also applies to the first message of a new related topic: skip Phase 1's pre-search and `update_study` `created`. Keep the confirmed plan, scope and study-wide cost limits; a new conversation is not approval for more research or image costs. If a referenced contract is missing, unreadable or mismatched, explain that the association cannot be verified and stop rather than starting another study. Use Phase 1 only for a new study without an existing-study reference.
 
 ## Workflow
 
