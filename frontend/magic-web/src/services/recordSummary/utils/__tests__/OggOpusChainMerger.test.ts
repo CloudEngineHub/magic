@@ -81,4 +81,50 @@ describe("mergeOggOpusChunks", () => {
 		).toHaveLength(1)
 		await encoder.close()
 	})
+
+	it("keeps the exact total duration when chunk lengths are not frame multiples", async () => {
+		// 500 + 700 samples: neither is a multiple of the 320-sample Opus frame, so the streaming
+		// encoder must carry the remainder across chunks and trim only the final padding.
+		const encoder = new WasmOpusEncoder()
+		await encoder.initialize()
+		const chunks = await Promise.all(
+			[500, 700].map((samples) =>
+				encoder.encode({
+					pcmData: new Int16Array(samples),
+					sampleRate: 16000,
+					bitRate: 16,
+					duration: samples / 16000,
+				}),
+			),
+		)
+
+		const merged = await mergeOggOpusChunks(
+			chunks.map((chunk) => new Blob([chunk.data], { type: chunk.mimeType })),
+		)
+		if (!merged) throw new Error("Expected a merged Ogg Opus export")
+
+		const bytes = new Uint8Array(await readBlobAsArrayBuffer(merged))
+		const pages = parsePages(bytes.buffer)
+		const headPayload = pages[0].payload
+		const preSkip48k = new DataView(
+			headPayload.buffer,
+			headPayload.byteOffset,
+			headPayload.byteLength,
+		).getUint16(10, true)
+		// The EOS page granule is the last absolute sample position at 48 kHz.
+		let offset = 0
+		let finalGranule = 0n
+		while (offset < bytes.byteLength) {
+			const view = new DataView(bytes.buffer, bytes.byteOffset + offset)
+			const segmentCount = view.getUint8(26)
+			let payloadLength = 0
+			for (let index = 0; index < segmentCount; index++) {
+				payloadLength += bytes[offset + 27 + index]
+			}
+			if ((view.getUint8(5) & 0x04) !== 0) finalGranule = view.getBigUint64(6, true)
+			offset += 27 + segmentCount + payloadLength
+		}
+		expect(finalGranule - BigInt(preSkip48k)).toBe(BigInt((500 + 700) * 3))
+		await encoder.close()
+	})
 })
