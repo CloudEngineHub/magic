@@ -383,6 +383,88 @@ class SandboxRestartPlannerTest extends TestCase
     }
 
     /**
+     * 点名一个沙箱时只处理它所属的话题，其它话题原样跳过。
+     */
+    public function testSandboxIdRestrictsThePlanToItsTopic(): void
+    {
+        $plan = $this->plan(
+            pods: [
+                $this->pod('sandbox-101', 101, 'registry/agent:5.0.77', self::LATEST['agfs_image']),
+                $this->pod('sandbox-202', 202, 'registry/agent:5.0.77', self::LATEST['agfs_image']),
+            ],
+            bindings: [$this->binding(101, 11, 'sandbox-101'), $this->binding(202, 12, 'sandbox-202')],
+            topicIds: [202],
+        );
+
+        self::assertSame([202], array_map(static fn ($t) => $t->getTopicId(), $plan->getTargets()));
+        self::assertArrayHasKey('not one of the sandboxes named by --sandbox-id', $plan->getSkippedByReason());
+    }
+
+    /**
+     * 话题漂移出多个 pod 时，只点名其中一个也必须把整组换掉：
+     * 只删点名的那个，另一个旧 pod 会立刻变成新的漂移。
+     */
+    public function testSandboxIdSelectionStillReplacesEveryPodOfThatTopic(): void
+    {
+        $plan = $this->plan(
+            pods: [
+                $this->pod('new', 101, 'registry/agent:5.0.77', self::LATEST['agfs_image'], '2026-10-10T00:00:00Z'),
+                $this->pod('old', 101, 'registry/agent:5.0.70', self::LATEST['agfs_image'], '2026-08-01T00:00:00Z'),
+            ],
+            bindings: [$this->binding(101, 11, 'new')],
+            topicIds: [101],
+        );
+
+        self::assertCount(1, $plan->getTargets());
+        self::assertSame(['old', 'new'], $plan->getTargets()[0]->getSandboxIds(), '同话题的两个 pod 都要换掉');
+    }
+
+    /**
+     * 点名具体沙箱是"精确操作"：绝不能顺手清空共享温池或删掉无关孤儿。
+     */
+    public function testSandboxIdSelectionLeavesWarmPoolAndOrphansAlone(): void
+    {
+        $outdatedWarm = $this->warmPoolPod('warm-900', 'registry/agent:5.0.77', self::LATEST['agfs_image']);
+        $plan = $this->plan(
+            pods: [
+                $this->pod('sandbox-101', 101, 'registry/agent:5.0.77', self::LATEST['agfs_image']),
+                $this->pod('sandbox-999', 999, 'registry/agent:5.0.77', self::LATEST['agfs_image']),
+                $outdatedWarm,
+            ],
+            bindings: [$this->binding(101, 11, 'sandbox-101')],
+            topicIds: [101],
+        );
+
+        self::assertSame([], $plan->getDeletions(), '点名模式下不做任何只删不建的动作');
+        self::assertSame(['sandbox-999', 'warm-900'], array_map(
+            static fn (SandboxPodSnapshot $pod): string => $pod->getSandboxId(),
+            $plan->getSkippedByReason()['not one of the sandboxes named by --sandbox-id']
+        ));
+    }
+
+    /**
+     * 点名解析：话题去重、无法归属与不存在的 id 都要报出来。
+     */
+    public function testResolveTopicIdsForSandboxIdsReportsUnmatchedIds(): void
+    {
+        $pods = [
+            $this->pod('sandbox-101', 101, self::LATEST['agent_image'], self::LATEST['agfs_image']),
+            $this->pod('sandbox-102', 101, self::LATEST['agent_image'], self::LATEST['agfs_image']),
+            $this->warmPoolPod('warm-900', self::LATEST['agent_image'], self::LATEST['agfs_image']),
+        ];
+        $bindings = [101 => $this->binding(101, 11, 'sandbox-101')];
+
+        [$topicIds, $unmatched] = $this->planner->resolveTopicIdsForSandboxIds(
+            $pods,
+            $bindings,
+            ['sandbox-101', 'sandbox-102', 'warm-900', 'typo-404']
+        );
+
+        self::assertSame([101], $topicIds, '同一话题的多个 pod 只产出一个话题');
+        self::assertSame(['warm-900', 'typo-404'], $unmatched, '未绑定温池与不存在的 id 都要报出来');
+    }
+
+    /**
      * @param SandboxPodSnapshot[] $pods
      * @param SandboxTopicBinding[] $bindings
      */
@@ -393,6 +475,7 @@ class SandboxRestartPlannerTest extends TestCase
         SandboxRestartScope $scope = SandboxRestartScope::All,
         array $scopeProjectIds = [],
         ?SandboxImageTarget $target = null,
+        array $topicIds = [],
     ): SandboxRestartPlan {
         $bindingsById = [];
         foreach ($bindings as $binding) {
@@ -406,6 +489,7 @@ class SandboxRestartPlannerTest extends TestCase
             force: $force,
             scope: $scope,
             scopeProjectIds: $scopeProjectIds,
+            topicIds: $topicIds,
         );
     }
 

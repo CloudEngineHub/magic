@@ -236,6 +236,63 @@ class RestartAllSandboxCommandTest extends TestCase
         self::assertStringContainsString('agent=registry/agent:5.0.77 (specified)', $display);
     }
 
+    /**
+     * --sandbox-id 支持逗号分隔并去重去空：同一次演练点几只就重启几只。
+     */
+    public function testSandboxIdsAreParsedAndDeduplicated(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+        $tester = new CommandTester($this->command($spy));
+        self::assertSame(0, $tester->execute(['--dry-run' => true, '--sandbox-id' => ' 101 , 101,202 ,']));
+
+        self::assertSame(['101', '202'], $spy->plannedWith?->getSandboxIds());
+        self::assertStringContainsString('Restricted to --sandbox-id: 101, 202', $tester->getDisplay());
+    }
+
+    public function testEmptySandboxIdFailsBeforePlanning(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+        $tester = new CommandTester($this->command($spy));
+        self::assertSame(1, $tester->execute(['--dry-run' => true, '--sandbox-id' => ' , ']));
+
+        self::assertStringContainsString('--sandbox-id must not be empty', $tester->getDisplay());
+        self::assertNull($spy->plannedWith, '参数非法时不能进入计划阶段');
+    }
+
+    /**
+     * 旧命令名同样要能点名：否则流水线里的旧名字会静默扩成整只 Claw 全量重启。
+     */
+    public function testDeprecatedMagicClawNameForwardsSandboxIds(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+        self::assertSame(0, (new CommandTester($this->magicClawCommand($spy)))->execute([
+            '--dry-run' => true,
+            '--sandbox-id' => '101',
+        ]));
+
+        self::assertSame(['101'], $spy->plannedWith?->getSandboxIds());
+    }
+
+    /**
+     * 不点名时不打这一行，避免日常发布输出里多一条噪音。
+     */
+    public function testNoRestrictionLineWithoutSandboxId(): void
+    {
+        $spy = new SandboxRestartCommandSpy();
+        $spy->plan = $this->planWithTarget(101, 'sandbox-101');
+
+        $tester = new CommandTester($this->command($spy));
+        $tester->execute(['--dry-run' => true]);
+
+        self::assertStringNotContainsString('Restricted to --sandbox-id', $tester->getDisplay());
+    }
+
     public function testInvalidStatusFailsBeforePlanning(): void
     {
         $spy = new SandboxRestartCommandSpy();

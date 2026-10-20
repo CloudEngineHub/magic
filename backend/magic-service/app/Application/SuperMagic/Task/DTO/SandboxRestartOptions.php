@@ -29,6 +29,8 @@ readonly class SandboxRestartOptions
      * 此时 pod 仍被占用，重启后这条等待也不能被留成"沙箱不存在"的错误。
      *
      * @param string[] $statuses 传给网关的状态过滤（空数组=不过滤）
+     * @param string[] $sandboxIds 点名的沙箱 id（空数组=不限定）。注意选中的是
+     *                             "该沙箱所属的话题"，见 SandboxRestartPlanner
      * @param string $requestedAgentImage 命令行指定的 agent 镜像；空串=跟随网关发布版本
      * @param string $requestedAgfsImage 命令行指定的 agfs 镜像；空串=跟随网关发布版本
      */
@@ -42,6 +44,7 @@ readonly class SandboxRestartOptions
         private int $concurrency = 1,
         private string $requestedAgentImage = '',
         private string $requestedAgfsImage = '',
+        private array $sandboxIds = [],
     ) {
     }
 
@@ -87,6 +90,26 @@ readonly class SandboxRestartOptions
     public function getConcurrency(): int
     {
         return max(1, $this->concurrency);
+    }
+
+    /**
+     * 点名的沙箱 id；空数组表示不限定范围.
+     *
+     * 去重并丢弃空串，保证重复写同一个 id 不会让它被处理两次。
+     *
+     * @return string[]
+     */
+    public function getSandboxIds(): array
+    {
+        $ids = [];
+        foreach ($this->sandboxIds as $sandboxId) {
+            $sandboxId = trim((string) $sandboxId);
+            if ($sandboxId === '') {
+                continue;
+            }
+            $ids[$sandboxId] = $sandboxId;
+        }
+        return array_values($ids);
     }
 
     /**

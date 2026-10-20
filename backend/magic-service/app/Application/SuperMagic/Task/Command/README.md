@@ -60,6 +60,7 @@ php bin/hyperf.php sandbox:restart-all --help
 | `--status=<a,b>` | 只看这些状态的 pod，默认不过滤 |
 | `--limit=<n>` | 最多重启 n 个话题，按"跑得最久优先" |
 | `--concurrency=<n>` | 同时处理多少个话题 |
+| `--sandbox-id=<a,b>` | 只重启这些沙箱**所属的话题**；不点名时按范围全量 |
 | `--agent-image=<ref>` | 指定这次重建要启动的 agent 镜像，未指定的另一侧仍跟随发布 |
 | `--agfs-image=<ref>` | 指定这次重建要启动的 agfs（magicfs）镜像 |
 
@@ -97,6 +98,31 @@ php bin/hyperf.php sandbox:restart-all --dry-run
 
 旧命令名 `magic-claw:restart-sandbox-all` 保留为兼容入口，等价于
 `--scope=magic-claw`（并保留历史上的 `--status=Running` 默认值）。
+
+### 3.1.2 只重启指定的沙箱
+
+演练时通常只想动一只沙箱。用 `--sandbox-id` 点名，可与 `--agent-image` 组合：
+
+```bash
+# 先看计划：只有这一只（及其所属话题）会出现在 Targets 里
+php bin/hyperf.php sandbox:restart-all --sandbox-id=971048413989916673 --dry-run
+
+# 把它重启到一版旧镜像
+php bin/hyperf.php sandbox:restart-all \
+  --sandbox-id=971048413989916673 \
+  --agent-image=<旧版本完整引用>
+```
+
+语义有两点必须知道：
+
+- **单位是话题，不是单个 pod**。一个话题如果漂移出多个 pod，点名其中一个会把该话题名下
+  **全部** pod 一起换掉——只删点名的那个，另一个旧 pod 会立刻变成新的漂移，正好是这条
+  命令要消除的问题。计划输出里 `[DUPLICATE]` 会明确列出这种话题。
+- **点名模式下不做任何"顺手清理"**。别的话题、共享温池、孤儿 pod 全部原样保留，
+  只会出现在 `Skipped` 统计里。日常发布才会按第 4 节的规则清理池子。
+
+沙箱 id 打错、或点到的是未绑定温池/孤儿 pod（没有 owner，无法重建）时，
+命令在删除任何东西**之前**就失败并列出这些 id，不会静默返回空计划。
 
 ### 3.2 在哪执行
 

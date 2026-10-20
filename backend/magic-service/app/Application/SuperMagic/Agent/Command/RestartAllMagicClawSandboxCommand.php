@@ -72,6 +72,8 @@ class RestartAllMagicClawSandboxCommand extends RestartAllSandboxCommand
             // 指定镜像同样可以被旧命令名使用，不能因为重建 options 就丢掉。
             requestedAgentImage: (string) $options->getRequestedAgentImage(),
             requestedAgfsImage: (string) $options->getRequestedAgfsImage(),
+            // 点名的沙箱同样透传，否则旧命令名会静默扩成"整只 Claw 全量重启"。
+            sandboxIds: $options->getSandboxIds(),
         );
     }
 }

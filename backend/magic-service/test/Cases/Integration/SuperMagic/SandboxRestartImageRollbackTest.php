@@ -116,6 +116,46 @@ class SandboxRestartImageRollbackTest extends TestCase
     }
 
     /**
+     * 用户最常用的演练方式：点名一只沙箱 + 指定一版旧镜像，其它沙箱原地不动。
+     *
+     * 这条用例把三个能力钉在一起：--sandbox-id 的精确范围、--agent-image 的目标镜像、
+     * 以及"只动这一只"的副作用边界。
+     */
+    public function testDrillOnOneNamedSandboxWithASpecifiedImage(): void
+    {
+        $this->cluster->addPod(sandboxId: 'sandbox-101', topicId: (string) self::TOPIC_ID);
+        $this->cluster->addPod(sandboxId: 'sandbox-202', topicId: '202');
+
+        $options = new SandboxRestartOptions(
+            sandboxIds: ['sandbox-101'],
+            requestedAgentImage: self::OLD_AGENT,
+        );
+
+        $plan = $this->service()->plan($options);
+        self::assertSame([self::TOPIC_ID], $this->topicIds($plan->getTargets()), '只处理点名的那一只');
+
+        $this->service()->execute($plan, $options);
+
+        self::assertSame(self::OLD_AGENT, $this->cluster->pod('sandbox-101')['agent_image'] ?? null);
+        self::assertSame(
+            self::RELEASE_AGENT,
+            $this->cluster->pod('sandbox-202')['agent_image'] ?? null,
+            '没点名的沙箱必须原地不动'
+        );
+    }
+
+    /**
+     * 点名一个不存在的沙箱要在动手前失败，而不是静默返回空计划。
+     */
+    public function testDrillOnAnUnknownSandboxFailsInsteadOfDoingNothing(): void
+    {
+        $this->cluster->addPod(sandboxId: 'sandbox-101', topicId: (string) self::TOPIC_ID);
+
+        $this->expectExceptionMessage('sandbox-404');
+        $this->service()->plan(new SandboxRestartOptions(sandboxIds: ['sandbox-404']));
+    }
+
+    /**
      * 反向确认：不指定镜像时，已经在发布版本上的沙箱一个都不该动。
      * 这条用例把"未指定就不下发镜像字段"这个契约钉在整条链路上。
      */
