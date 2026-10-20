@@ -376,7 +376,7 @@ function ResearchStudioPage() {
 		study?.limits?.personas && !isPersonaBuild
 			? t("study.scale", {
 					personas: study.limits.personas,
-					rounds: study.limits.interview_rounds ?? 5,
+					rounds: study.limits.interview_rounds ?? 20,
 				})
 			: null,
 		// Only platforms that desk research actually sampled; unavailable or skipped sampling shows nothing.

@@ -8,7 +8,6 @@ import pytest
 from agentlang.context.tool_context import ToolContext
 from app.tools.persona_research import save_personas as save_personas_module
 from app.tools.persona_research.check_interviews import CheckInterviews, CheckInterviewsParams
-from app.tools.persona_research.semantic_checks import JudgeUnavailable, Leak, asks_joined_questions
 from app.tools.persona_research.finish_persona_transcript import (
     FinishPersonaTranscript,
     FinishPersonaTranscriptParams,
@@ -19,6 +18,7 @@ from app.tools.persona_research.save_validation_questionnaire import (
     SaveValidationQuestionnaire,
     SaveValidationQuestionnaireParams,
 )
+from app.tools.persona_research.semantic_checks import JudgeUnavailable, Leak, asks_joined_questions
 from app.tools.persona_research.study_files import compute_inferred_ratio
 from app.tools.persona_research.update_study import UpdateStudy, UpdateStudyParams
 
@@ -128,6 +128,25 @@ async def test_plan_confirmed_fills_plan_fields_and_numbers_hypotheses(tmp_path)
     assert all(h["verdict"] == "pending" for h in study["hypotheses"])
     assert study["limits"] == {"personas": 2, "interview_rounds": 3}
     assert study["guide_review"]["items"][0]["issue"] == "leading"
+
+
+async def test_new_plan_defaults_to_twenty_round_ceiling(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified"])
+    plan = {key: value for key, value in PLAN.items() if key != "interview_rounds"}
+    result = await UpdateStudy(base_dir=tmp_path).execute(_context(), UpdateStudyParams(
+        event="plan_confirmed", study_dir=study_dir, **plan,
+    ))
+    assert result.ok, result.content
+    assert _read(tmp_path, f"{study_dir}/study.json")["limits"]["interview_rounds"] == 20
+
+
+async def test_plan_rejects_ceiling_above_twenty(tmp_path):
+    study_dir = await _study_at(tmp_path, ["clarified"])
+    result = await UpdateStudy(base_dir=tmp_path).execute(_context(), UpdateStudyParams(
+        event="plan_confirmed", study_dir=study_dir, **{**PLAN, "interview_rounds": 21},
+    ))
+    assert not result.ok
+    assert "between 1 and 20" in result.content
 
 
 async def test_update_study_detail_is_a_phase_snapshot(tmp_path):
@@ -514,6 +533,11 @@ def test_inferred_ratio_counts_marked_sentences():
 async def test_finish_transcript_verifies_quotes_and_computes_quality(tmp_path):
     rel = "studies/s-1a2b/interviews/p_a_0001.json"
     _write(tmp_path, rel, INTERVIEW)
+    # A twenty-round safety ceiling does not prevent a sufficient two-round interview ending.
+    _write(tmp_path, "studies/s-1a2b/study.json", {
+        "schema_version": 1, "topic_id": TOPIC_ID, "title": "T", "question": "Q",
+        "phase": "interview", "phases": [], "limits": {"personas": 1, "interview_rounds": 20},
+    })
 
     result = await FinishPersonaTranscript(base_dir=tmp_path).execute(ToolContext(), FinishPersonaTranscriptParams(
         transcript_path=rel, status="done", summary="s", key_findings=["k"],

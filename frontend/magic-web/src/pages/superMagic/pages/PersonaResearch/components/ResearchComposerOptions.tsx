@@ -25,12 +25,12 @@ import { cn } from "@/utils/cn"
 import {
 	CUSTOM_METHOD_MAX_LENGTH,
 	effectivePanelSize,
+	interviewDepth,
 	normalizeCustomMethod,
 	PANEL_SIZE_RANGE,
 	PANEL_SIZES,
 	parseWholeNumber,
 	RESEARCH_METHODS,
-	ROUND_COUNT_RANGE,
 	ROUND_COUNTS,
 	type ResearchOptions,
 } from "../services/researchOptions"
@@ -66,7 +66,7 @@ interface ResearchComposerOptionsProps {
 }
 
 /**
- * Study settings beside the composer: method, panel size, interview rounds and, on the home,
+ * Study settings beside the composer: method, panel size, interview depth and, on the home,
  * the report template. "Auto" leaves the choice to the AI researcher; a fixed value, preset or
  * typed in under "Custom", is sent with the first message and shown on its chip.
  */
@@ -88,9 +88,13 @@ export default function ResearchComposerOptions({
 		fast_insight: t("studyType.fastInsight"),
 	}
 	const panelLabel = (size: number) => t("options.panelValue", { count: size })
-	const roundsLabel = (rounds: number) => t("options.roundsValue", { count: rounds })
+	const depthLabels = {
+		quick: t("options.depthQuick"),
+		standard: t("options.depthStandard"),
+		deep: t("options.depthDeep"),
+	}
+	const roundsLabel = (rounds: number) => depthLabels[interviewDepth(rounds)]
 	const isPresetPanel = (PANEL_SIZES as readonly unknown[]).includes(value.panelSize)
-	const isPresetRounds = (ROUND_COUNTS as readonly unknown[]).includes(value.rounds)
 	const rowRef = useRef<HTMLDivElement>(null)
 	const rowSize = useSize(rowRef)
 	const showAuto = (rowSize?.width ?? AUTO_SUFFIX_MIN_WIDTH) >= AUTO_SUFFIX_MIN_WIDTH
@@ -177,26 +181,13 @@ export default function ResearchComposerOptions({
 				items={ROUND_COUNTS.map((rounds) => ({
 					key: String(rounds),
 					label: rounds === "auto" ? t("options.autoRounds") : roundsLabel(rounds),
-					selected: value.rounds === rounds,
+					selected:
+						rounds === "auto"
+							? value.rounds === "auto"
+							: value.rounds !== "auto" &&
+								interviewDepth(value.rounds) === interviewDepth(rounds),
 					onSelect: () => onChange({ ...value, rounds }),
 				}))}
-				custom={{
-					selected: !isPresetRounds,
-					current:
-						!isPresetRounds && value.rounds !== "auto"
-							? roundsLabel(value.rounds)
-							: undefined,
-					numeric: true,
-					placeholder: t("options.customRange", ROUND_COUNT_RANGE),
-					validate: (draft) =>
-						parseWholeNumber(draft, ROUND_COUNT_RANGE) === null
-							? t("options.roundsRangeError", ROUND_COUNT_RANGE)
-							: null,
-					onCommit: (draft) => {
-						const rounds = parseWholeNumber(draft, ROUND_COUNT_RANGE)
-						if (rounds !== null) onChange({ ...value, rounds })
-					},
-				}}
 			/>
 			{reportTemplate ? (
 				<OptionMenu
@@ -343,7 +334,10 @@ function OptionMenu({
 					<ChevronDown className="size-3.5 opacity-60" />
 				</button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="start" className={cn("min-w-40", custom && "w-64")}>
+			<DropdownMenuContent
+				align="start"
+				className={cn("min-w-40", (custom || description) && "w-64")}
+			>
 				<DropdownMenuLabel className="flex flex-col gap-0.5 text-xs font-normal">
 					<span className="text-muted-foreground">{title}</span>
 					{description ? (

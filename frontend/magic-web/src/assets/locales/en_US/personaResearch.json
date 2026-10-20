@@ -415,8 +415,8 @@
 			"phasesTitle": "How a study runs",
 			"replayHome": "Replay the home tour",
 			"replayStudio": "Replay the workspace tour",
-			"settings": "The method sets the question framework: JTBD asks which job users hire a product for, KANO separates must-haves from delighters. More respondents and rounds cover more ground and dig deeper, but take longer. When unsure, leave them on Auto and the AI will choose.",
-			"settingsTitle": "Method, respondents and rounds",
+			"settings": "The method sets the question framework: JTBD asks which job users hire a product for, KANO separates must-haves from delighters. More respondents broaden coverage; interview depth controls how closely answers are explored. Interviews stop when sufficient, with at most 20 rounds each. When unsure, leave them on Auto and the AI will choose.",
+			"settingsTitle": "Method, respondents and interview depth",
 			"simulated": "All respondents are simulated by AI from personas; they are not real users. Use AI research to narrow the field and find hypotheses worth testing before real research, not to replace it. Reports say \"most / some / few\" and make no statistical claims.",
 			"subtitle": "The flow, outputs and limits of AI research",
 			"summary": "Test business judgements with AI-simulated respondents. Click for the full guide.",
@@ -435,7 +435,7 @@
 				"title": "Persona library: where respondents come from"
 			},
 			"settings": {
-				"text": "The method sets the question framework (e.g. JTBD, KANO). Respondents are virtual users simulated by AI from personas. More rounds dig deeper but take longer. You can also pick respondents from the persona library.",
+				"text": "The method sets the question framework (e.g. JTBD, KANO). Respondents are virtual users simulated by AI from personas. AI probes each persona’s answers and stops when sufficient, with at most 20 rounds each. You can also pick respondents from the persona library.",
 				"title": "Choose method and scale"
 			},
 			"studies": {
@@ -443,7 +443,7 @@
 				"title": "Your studies stay here"
 			},
 			"templates": {
-				"text": "Each template presets a method, panel size and rounds. Pick one and adapt it to your business.",
+				"text": "Each template presets a method, panel size and interview depth. Pick one and adapt it to your business.",
 				"title": "Not sure where to start? Use a template"
 			}
 		},
@@ -480,13 +480,17 @@
 		}
 	},
 	"options": {
+		"answeredRounds": "{{count}} rounds answered",
 		"auto": "Auto",
 		"autoPanel": "Auto (AI decides from the quota)",
-		"autoRounds": "Auto (AI follows the guide, 5 by default)",
+		"autoRounds": "Auto (choose depth for the research question)",
 		"custom": "Custom",
 		"customApply": "Apply",
 		"customRange": "Enter {{min}}–{{max}}",
 		"customValue": "Custom: {{value}}",
+		"depthDeep": "In-depth exploration",
+		"depthQuick": "Quick overview",
+		"depthStandard": "Standard interview",
 		"manageReportTemplates": "Manage report templates",
 		"method": "Method",
 		"methodCustomPlaceholder": "e.g. price sensitivity with Van Westendorp",
@@ -503,10 +507,10 @@
 		"picksTitle": "Personas for this study",
 		"reportTemplate": "Report",
 		"reportTemplateDefault": "Default (Voices)",
-		"rounds": "Rounds",
-		"roundsHelp": "One question and answer is one round; more rounds go deeper and take more time and credits",
+		"rounds": "Interview depth",
+		"roundsHelp": "Probe each persona’s answers and stop when sufficient. Up to 20 rounds per person; deeper interviews may take more time and credits.",
 		"roundsRangeError": "Up to {{max}} rounds; enter a whole number from {{min}} to {{max}}",
-		"roundsTitle": "Rounds per interviewee",
+		"roundsTitle": "Interview depth",
 		"roundsValue": "{{count}} rounds"
 	},
 	"persona": {
@@ -786,7 +790,7 @@
 		"rename": "Rename study",
 		"renameFailed": "Couldn't rename the study. Try again.",
 		"resizePanels": "Resize conversation and outputs",
-		"scale": "{{personas}} people × {{rounds}} rounds",
+		"scale": "{{personas}} people · up to {{rounds}} rounds each",
 		"share": "Share",
 		"socialSampled": "Social sampled: {{platforms}}",
 		"untitled": "Untitled study"

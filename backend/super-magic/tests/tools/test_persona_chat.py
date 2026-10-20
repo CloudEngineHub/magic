@@ -248,7 +248,7 @@ async def test_first_round_creates_transcript_and_reports_round_indexes(tool, tm
     assert result.data["round_indexes"] == [0, 1]
     assert "Recorded round 1" in result.content
     detail = await tool.get_tool_detail(ToolContext(), result, {"question": "q1"})
-    assert (detail.data.round_number, detail.data.round_limit) == (1, 7)
+    assert (detail.data.round_number, detail.data.round_limit) == (1, 20)
     assert _read(tmp_path, INTERVIEW) == {
         "schema_version": 1, "persona_id": "p_zhang_1a2b", "status": "running", "error": "",
         "rounds": [{"role": "moderator", "text": "q1"}, {"role": "persona", "text": "Zhang answer"}],
@@ -258,11 +258,11 @@ async def test_first_round_creates_transcript_and_reports_round_indexes(tool, tm
 
 async def test_user_chat_can_continue_after_automatic_budget_and_retries_are_idempotent(tool, tmp_path, fake_llm):
     path = _write_persona(tmp_path, "p_zhang_1a2b", "Zhang")
-    for number in range(1, 8):
+    for number in range(1, 21):
         assert (await tool.execute(ToolContext(), _ask(path, f"question {number}", number))).ok
     # 自动访谈仍被限制；用户的一条消息获得一条回答，不重跑整项研究。
-    assert not (await tool.execute(ToolContext(), _ask(path, "automatic extra", 8))).ok
-    request = _ask(path, "Would it help? Why?", 8)
+    assert not (await tool.execute(ToolContext(), _ask(path, "automatic extra", 21))).ok
+    request = _ask(path, "Would it help? Why?", 21)
     request.follow_up_request_id = "user-chat-1"
     first = await tool.execute(ToolContext(), request)
     assert first.ok
@@ -275,7 +275,7 @@ async def test_user_chat_can_continue_after_automatic_budget_and_retries_are_ide
     assert data["rounds"][-1]["request_id"] == "user-chat-1"
     calls = len(fake_llm.calls)
     # Agent 即便在重试时算出了下一轮，也不能再次执行同一个请求。
-    request.round_number = 9
+    request.round_number = 22
     retry = await tool.execute(ToolContext(), request)
     assert retry.ok
     assert "already recorded" in retry.content

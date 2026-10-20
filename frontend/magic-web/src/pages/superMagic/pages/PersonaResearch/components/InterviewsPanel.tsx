@@ -48,7 +48,6 @@ function InterviewsPanel({
 	const store = usePersonaResearchStore()
 	const interviews = store.interviews
 	const isMobile = variant === "mobile"
-	const roundLimit = store.study?.limits?.interview_rounds ?? 5
 	const byPersona = useMemo(
 		() => new Map(interviews.map((ref) => [ref.data.persona_id, ref.data])),
 		[interviews],
@@ -115,7 +114,6 @@ function InterviewsPanel({
 		<InterviewList
 			items={ids}
 			selectedId={isMobile ? null : selectedId}
-			roundLimit={roundLimit}
 			resolvePersona={store.personaById}
 			interviewOf={(id) => byPersona.get(id)}
 			onSelect={onFocus}
@@ -211,14 +209,12 @@ function InterviewsPanel({
 function InterviewList({
 	items,
 	selectedId,
-	roundLimit,
 	resolvePersona,
 	interviewOf,
 	onSelect,
 }: {
 	items: string[]
 	selectedId: string | null
-	roundLimit: number
 	resolvePersona: (id: string) => PersonaFile | null
 	interviewOf: (id: string) => InterviewFile | undefined
 	onSelect: (id: string) => void
@@ -231,7 +227,6 @@ function InterviewList({
 				const interview = interviewOf(id)
 				const answered =
 					interview?.rounds.filter((round) => round.role === "persona").length ?? 0
-				const ratio = Math.min(1, answered / Math.max(1, roundLimit))
 				const highInferred = interview
 					? resolveTranscriptQuality(interview).isHighInferred
 					: false
@@ -272,13 +267,10 @@ function InterviewList({
 									<InterviewStatusChip status={interview.status} />
 								</span>
 							) : (
-								// Round progress is only informative while the interview runs.
+								// The ceiling is a safety budget, not a completion target.
 								<span className="flex items-center gap-2 pl-9">
-									<span className="h-1 flex-1 overflow-hidden rounded-full bg-border">
-										<span
-											className="block h-full rounded-full bg-primary transition-[width] duration-500"
-											style={{ width: `${Math.round(ratio * 100)}%` }}
-										/>
+									<span className="text-[11px] text-muted-foreground">
+										{t("options.answeredRounds", { count: answered })}
 									</span>
 									{interview ? (
 										<span className="text-[11px]">

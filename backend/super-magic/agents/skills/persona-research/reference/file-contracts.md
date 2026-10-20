@@ -36,7 +36,7 @@ Path: `studies/<slug>/study.json`
 | `framework` | no | list of framework names, for example `["JTBD"]` |
 | `phase` | yes | `clarify` \| `plan` \| `desk_research` \| `interview` \| `report` \| `validation` \| `done` |
 | `phases` | yes | all six phases in order, each `{ "key": <phase>, "status": "done" \| "running" \| "pending" \| "skipped" \| "failed" }` |
-| `limits` | no | `{ "personas": <int>, "interview_rounds": <int> }` |
+| `limits` | no | `{ "personas": <int>, "interview_rounds": <int> }`; interview rounds is a safety ceiling (1-20, new studies default to 20), not a quota; existing studies retain their saved ceiling. Depth and stopping criteria live in `plan.md` |
 | `outputs` | no | `{ "plan": "plan.md", "report": "report.html", "validation": "validation-questionnaire.md" }`, paths relative to the study directory |
 | `decision` | no | the business decision this study informs, one sentence |
 | `hypotheses` | no | array of hypothesis objects, see below |
@@ -84,7 +84,7 @@ Example (report written, real-person answers compared):
     { "key": "report", "status": "done" },
     { "key": "validation", "status": "done" }
   ],
-  "limits": { "personas": 8, "interview_rounds": 5 },
+  "limits": { "personas": 8, "interview_rounds": 20 },
   "outputs": { "plan": "plan.md", "report": "report.html", "validation": "validation-questionnaire.md" },
   "decision": "Whether to start building an AI call recorder for business owners",
   "hypotheses": [

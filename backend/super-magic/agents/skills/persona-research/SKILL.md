@@ -31,7 +31,8 @@ Turn one business question into a study: clarify, plan, desk research, AI person
 | Item | Default | Maximum |
 |---|---|---|
 | Personas per study | 8 | 12 |
-| Interview rounds per persona (one question + one answer = one round) | 5 | 7 |
+| Automatic interview ceiling per persona (one question + one answer = one round; not a quota) | 20 | 20 |
+| Focus-group rounds per discussion | 7 | 7 |
 | Interviewer sub-agents running in parallel | up to 4 | 4 (each handles 2-3 personas) |
 | Focus groups you plan yourself | 0 (only if the plan includes one) | 2, with 3-6 participants each |
 | Focus groups the user asks for later | as requested | no planning cap; `persona_chat` stops at 10 per study as a safety limit |
@@ -71,16 +72,16 @@ When a step stops (unanswered question, user interruption, failure), send no eve
 
 1. Run one quick `web_search` with 2-3 differentiated queries to understand the topic's shape. No deep reading yet.
 2. Create the study with `update_study` event `created` (it links the study to the current topic).
-3. If the request leaves material choices open, send at most 3 `select` questions in one direct `ask_user` call: the decision the study should inform, target audience, and study type (see methods.md). Skip questions the user already answered, including settings in a `【研究设置】` line at the end of the message (`访谈人数` = persona count, `访谈轮数` = interview rounds, `研究方式` = study type); never ask those again. When `研究方式` reads `自定义：<text>`, pick the closest study type, use the user's text to shape the framework and plan, and do not ask about study type. When `指定人设` lists persona files, use exactly those personas as the interview panel without rewriting them, and recruit extra personas only if `访谈人数` is larger than the list. Write questions and options in plain business language a shop owner understands, not research jargon, in the user's language and customized from the pre-search. Put the recommended option first, mark it as recommended, and set it as the `default`.
+3. If the request leaves material choices open, send at most 3 `select` questions in one direct `ask_user` call: the decision the study should inform, target audience, and study type (see methods.md). Skip questions the user already answered, including settings in a `【研究设置】` line at the end of the message (`访谈人数` = persona count, `访谈深度` = adaptive interview depth (`quick`, `standard`, or `deep`); legacy `访谈轮数` is an explicitly requested ceiling, `研究方式` = study type); never ask those again. When `研究方式` reads `自定义：<text>`, pick the closest study type, use the user's text to shape the framework and plan, and do not ask about study type. When `指定人设` lists persona files, use exactly those personas as the interview panel without rewriting them, and recruit extra personas only if `访谈人数` is larger than the list. Write questions and options in plain business language a shop owner understands, not research jargon, in the user's language and customized from the pre-search. Put the recommended option first, mark it as recommended, and set it as the `default`.
 4. Clarifying answers obey the deep-research interaction rules: on timeout or skip, state the open question, keep `phase=clarify`, and stop.
 
 ### Phase 2: Plan (`plan`)
 
 1. Name the decision the study supports, for example "whether to build X for segment Y". If the request supports no decision ("just tell me about my customers"), ask the user to narrow it to one decision before planning.
-2. Write `studies/<slug>/plan.md`: the decision, study type, framework, target audience, 3-5 hypotheses with support and refute criteria and `outcome_terms`, the sample quota table (segment, criteria, count; at least 25% non-users, skeptics, or churned users; counts add up to `访谈人数` when set), interview rounds (`访谈轮数` when set, otherwise 5), whether to run a focus group, the interview guide (core questions = rounds minus 1 or 2, one question each), a "Guide self-check" section, deliverables with the report template (report-templates.md), and the AI-simulation limitation. See methods.md for hypotheses, quota, and the guide self-check.
+2. Write `studies/<slug>/plan.md`: the decision, study type, framework, target audience, 3-5 hypotheses with support and refute criteria and `outcome_terms`, the sample quota table (segment, criteria, count; at least 25% non-users, skeptics, or churned users; counts add up to `访谈人数` when set), interview depth (`quick`: prioritize essential coverage, usually 3-5 rounds; `standard` or automatic: usually 8-12 rounds; `deep`: probe unresolved decision-relevant details further), a safety ceiling of 20 rounds per persona (never a target; honor a lower ceiling explicitly requested by the user), whether to run a focus group, the interview guide (3-5 shared core questions plus adaptive probes; reduce core questions for a quick interview, one question each), a "Guide self-check" section, deliverables with the report template (report-templates.md), and the AI-simulation limitation. See methods.md for hypotheses, quota, and the guide self-check.
 3. Run the guide self-check before showing the plan: rewrite leading, double-barreled, hypothesis-revealing, jargon, and sequence-priming questions, and list each change (before -> after) in "Guide self-check".
 4. Show in your message: the decision, every hypothesis with its support and refute criteria, the quota table, and "Guide self-check: N questions rewritten" with one example. Then call `ask_user` directly with one final `select` question and no `default`, with options to start the study as planned, adjust the hypotheses, or adjust the sample. Only the start option is approval.
-5. Approved: call `update_study` event `plan_confirmed` with the plan fields. Adjustment requested: revise `plan.md` and confirm again. Timeout, skip, or refusal: stop at the plan phase and say the study has not started. If clarification was answered or skipped as unnecessary, send `clarified` before showing the plan.
+5. Approved: call `update_study` event `plan_confirmed` with the plan fields and `interview_rounds: 20` unless the user explicitly requested a lower ceiling. The depth preference belongs in `plan.md`; never translate an expected range into a hard round limit. Adjustment requested: revise `plan.md` and confirm again. Timeout, skip, or refusal: stop at the plan phase and say the study has not started. If clarification was answered or skipped as unnecessary, send `clarified` before showing the plan.
 
 ### Phase 3: Desk Research (`desk_research`)
 
@@ -112,7 +113,7 @@ Steps:
 ### Phase 5: Interviews (`interview`)
 
 1. Split the personas into at most 4 groups of 2-3. Dispatch one `persona-interviewer` sub-agent per group in the background with the subagents skill (`call_subagent` via `run_sdk_snippet`), then `wait_for_subagents` until all are finished.
-2. Each prompt must be self-contained: objective, study directory, assigned persona file paths, the interview guide copied from `plan.md`, the round limit, `max_tokens` for `persona_chat`, the exact output paths, the quality requirements, the parallel-context line, what is out of scope (other personas, persona files, study.json, report), and the final report it must return. Do not pass the hypotheses to interviewers; they must not steer answers toward them.
+2. Each prompt must be self-contained: objective, study directory, assigned persona file paths, the interview guide copied from `plan.md`, the depth preference and stopping criteria from `plan.md`, the round ceiling (not a quota), `max_tokens` for `persona_chat`, the exact output paths, the quality requirements, the parallel-context line, what is out of scope (other personas, persona files, study.json, report), and the final report it must return. Do not pass the hypotheses to interviewers; they must not steer answers toward them.
 3. A focus group, when planned, goes to one sub-agent with its own `discussions/<discussion_id>.json` path, a one-line topic in the user's language (passed as `topic` on round 1), and 3-6 participants already interviewed or selected. Each focus group of a study gets its own file and topic.
 
 ```python
@@ -127,7 +128,8 @@ Personas: personas/<persona_id_a>.json, personas/<persona_id_b>.json
 Interview guide:
 1. <question>
 2. <question>
-Round limit: 5 per persona. persona_chat max_tokens: 400.
+Depth: standard (usually 8-12 rounds, never a required count). Safety ceiling: 20 automatic rounds per persona; stop earlier when sufficient. persona_chat max_tokens: 400.
+Adaptive interviewing: cover the shared core questions for comparison, then choose probes from this persona's actual answers, not demographics. Resolve decision-relevant gaps, unclear reasons, contradictions, constraints and counterexamples. Stop after core coverage and two consecutive probes add no useful information; do not repeat answered questions. Report the stopping reason and remaining gaps.
 Quality: one question per round. Follow the probing protocol: start each topic from the most recent real occasion, go one layer deeper on key answers, run one pressure round with the strongest counter-argument, and ask at least one "when would you not use this, or give up on it" question. Do not quote profile details the persona has not said. In a focus group, rotate the speaking order every round.
 Transcripts: studies/<slug>/interviews/<persona_id_a>.json and studies/<slug>/interviews/<persona_id_b>.json. persona_chat records every round (pass transcript_path and round_number); close each transcript with finish_persona_transcript.
 Parallel context: 4 interviewer sub-agents run at the same time. You own only the two personas above. Do not touch other transcripts, persona files, study.json, or the report. The research lead merges the results.
@@ -139,7 +141,7 @@ print(result.content)
 session_id = result.data["session_id"]
 ```
 
-4. After waiting, call `check_interviews`. For unfinished transcripts (interrupted or not started), dispatch interviewer sub-agents again with a continuation brief: the same personas and transcript paths, the round to continue from, and "the transcript already holds the earlier rounds". A failed interview stays failed with its error; redo it only after its cause is fixed, and say so.
+4. After waiting, call `check_interviews`. For unfinished transcripts (interrupted or not started), dispatch interviewer sub-agents again with a continuation brief: the same personas and transcript paths, depth preference and stopping criteria, the round to continue from, and "the transcript already holds the earlier rounds". A failed interview stays failed with its error; redo it only after its cause is fixed, and say so.
 5. When `check_interviews` shows no unfinished transcript, call `update_study` event `interviews_finished`, then read the completed transcripts.
 
 ### Phase 6: Report and Validation (`report`, `validation`)

@@ -49,13 +49,13 @@ Persona self-check, before calling `save_personas` (the tool also runs keyword a
 
 ## Interview Guide
 
-- Core questions = interview rounds minus 1 or 2, so every interview has room to probe: 3-4 core questions for 5 rounds, 2 for 3 rounds, 1 for 1-2 rounds (never fewer than 1). Order them from broad to specific: recent behavior, the problem, current solutions, reaction to the concept, then price or switching. Cut the least decision-relevant question instead of merging two.
+- Use 3-5 shared core questions for comparable coverage across personas, or fewer for a quick interview or an explicitly lower ceiling (never fewer than 1). The rest of the interview consists of probes chosen from each persona's actual answers, not a longer fixed questionnaire. Order them from broad to specific: recent behavior, the problem, current solutions, reaction to the concept, then price or switching. Cut the least decision-relevant question instead of merging two.
 - One question per round. `persona_chat` rejects a message with several question marks or a numbered list.
 - Open questions only; never ask two things in one question.
 - Do not reveal the hypothesis before the participant has described their own behavior.
 - Include at least one negative question: "In what situation would you not use this, or give up on it?"
 - Use the participant's everyday words instead of research or industry jargon.
-- Leave room for follow-up probes within the round limit; the guide is not a script to read verbatim.
+- Treat depth as a preference, not a quota: quick usually takes 3-5 rounds, standard/auto usually 8-12, and deep explores remaining useful details, always at most 20. After each answer, choose the most decision-relevant unresolved detail (episode, motive, constraint, contradiction or counterexample). Stop once core coverage is sufficient and two consecutive probes add no new useful information; end earlier when no relevant gap remains. Never force equal question counts across personas. Record the stopping reason and remaining gaps in the interview summary. The guide is not a script to read verbatim.
 
 ### Guide Self-Check
 

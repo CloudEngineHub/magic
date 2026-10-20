@@ -29,6 +29,7 @@ import ResearchComposerOptions, {
 import ResearchVoiceCard from "../components/ResearchVoiceCard"
 import {
 	DEFAULT_RESEARCH_OPTIONS,
+	interviewDepth,
 	parseResearchOptions,
 	readSavedReportTemplate,
 	researchSettingsLine,
@@ -382,9 +383,12 @@ function ResearchHomePage() {
 															})
 														: null,
 													preset?.rounds && preset.rounds !== "auto"
-														? t("options.roundsValue", {
-																count: preset.rounds,
-															})
+														? {
+																quick: t("options.depthQuick"),
+																standard:
+																	t("options.depthStandard"),
+																deep: t("options.depthDeep"),
+															}[interviewDepth(preset.rounds)]
 														: null,
 													method,
 												]

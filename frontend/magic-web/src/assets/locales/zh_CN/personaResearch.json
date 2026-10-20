@@ -412,8 +412,8 @@
 			"phasesTitle": "一项研究怎么跑完",
 			"replayHome": "重新播放首页引导",
 			"replayStudio": "重新播放工作台引导",
-			"settings": "方法决定提问框架，例如 JTBD 关注「用户雇佣产品完成什么任务」，KANO 区分必备与惊喜功能；受访者人数和访谈轮次越多，覆盖越广、问得越深，耗时也越长。拿不准时保持「自动」，AI 会按问题推荐。",
-			"settingsTitle": "方法、受访者和轮次",
+			"settings": "方法决定提问框架，例如 JTBD 关注「用户雇佣产品完成什么任务」，KANO 区分必备与惊喜功能；受访者人数决定覆盖范围；访谈深度决定追问的细致程度，每人最多 20 轮，信息充分即可结束。拿不准时保持「自动」，AI 会按问题推荐。",
+			"settingsTitle": "方法、受访者和访谈深度",
 			"simulated": "受访者全部由 AI 按人设模拟，不是真实用户。它适合在调研前缩小范围、找出值得验证的假设，不能替代真人调研；报告里用「多数 / 部分 / 少数」描述，不做统计推断。",
 			"subtitle": "了解 AI 研究的流程、产出和使用边界",
 			"summary": "用 AI 模拟的受访者快速验证商业判断；点击查看完整流程与说明。",
@@ -432,7 +432,7 @@
 				"title": "人设库：受访者从这里来"
 			},
 			"settings": {
-				"text": "方法决定提问框架（如 JTBD、KANO）；受访者是 AI 按人设模拟的虚拟用户；轮次越多问得越深，耗时也越长。也可以「从人设库挑人」指定受访者。",
+				"text": "方法决定提问框架（如 JTBD、KANO）；受访者是 AI 按人设模拟的虚拟用户；AI 按回答自动追问，信息充分即可结束，每人最多 20 轮。也可以「从人设库挑人」指定受访者。",
 				"title": "选方法和规模"
 			},
 			"studies": {
@@ -440,7 +440,7 @@
 				"title": "研究都留在这里"
 			},
 			"templates": {
-				"text": "每个模板都预设了方法、人数和轮次，选中后可以按你的业务继续修改。",
+				"text": "每个模板都预设了方法、人数和访谈深度，选中后可以按你的业务继续修改。",
 				"title": "没头绪？从模板开始"
 			}
 		},
@@ -477,13 +477,17 @@
 		}
 	},
 	"options": {
+		"answeredRounds": "已回答 {{count}} 轮",
 		"auto": "自动",
 		"autoPanel": "自动（AI 按配额决定）",
-		"autoRounds": "自动（AI 按提纲决定，默认 5 轮）",
+		"autoRounds": "自动（按研究问题决定深度）",
 		"custom": "自定义",
 		"customApply": "确定",
 		"customRange": "输入 {{min}}–{{max}}",
 		"customValue": "自定义：{{value}}",
+		"depthDeep": "深入探索",
+		"depthQuick": "快速了解",
+		"depthStandard": "标准访谈",
 		"manageReportTemplates": "管理报告模板",
 		"method": "方法",
 		"methodCustomPlaceholder": "如：价格敏感度测试，用 Van Westendorp",
@@ -500,10 +504,10 @@
 		"picksTitle": "这次研究使用的人设",
 		"reportTemplate": "报告模板",
 		"reportTemplateDefault": "默认（人声）",
-		"rounds": "轮次",
-		"roundsHelp": "一问一答为一轮；轮数越多越深入，耗时和积分随之增加",
+		"rounds": "访谈深度",
+		"roundsHelp": "按每个人设的回答自动追问，信息充分即可结束；每人最多 20 轮，深度越高耗时和积分可能越多",
 		"roundsRangeError": "最多 {{max}} 轮，请输入 {{min}}–{{max}} 的整数",
-		"roundsTitle": "每人访谈轮数",
+		"roundsTitle": "访谈深度",
 		"roundsValue": "{{count}} 轮"
 	},
 	"persona": {
@@ -783,7 +787,7 @@
 		"rename": "重命名研究",
 		"renameFailed": "重命名失败，请重试",
 		"resizePanels": "调整对话与产出区宽度",
-		"scale": "{{personas}} 人 × {{rounds}} 轮",
+		"scale": "{{personas}} 人 · 每人最多 {{rounds}} 轮",
 		"share": "分享",
 		"socialSampled": "社媒采样：{{platforms}}",
 		"untitled": "未命名研究"

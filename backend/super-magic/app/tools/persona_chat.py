@@ -56,6 +56,7 @@ from app.tools.media_utils.constants import DISABLE_THINKING_BODY
 from app.tools.persona_research.contracts import (
     DISCUSSIONS_DIR,
     INTERVIEWS_DIR,
+    MAX_DISCUSSION_ROUNDS,
     MAX_DISCUSSIONS,
     MAX_INTERVIEW_ROUNDS,
     SCHEMA_VERSION,
@@ -86,7 +87,7 @@ DEFAULT_MAX_TOKENS = 400
 MAX_TOKENS_LIMIT = 800
 MIN_MAX_TOKENS = 100
 MAX_PERSONAS = 6
-# 只把最近的对话轮次带给受访者：访谈最多 7 轮、小组讨论每轮多人发言，40 条足以覆盖。
+# 只把最近的对话轮次带给受访者：一对一自动访谈最多 20 轮，40 条保留完整问答；小组及额外手动追问保留最近对话。
 MAX_TRANSCRIPT_TURNS = 40
 MAX_TURN_CHARS = 1500
 MAX_PROFILE_TOKENS = 4000
@@ -435,9 +436,9 @@ class PersonaChat(WorkspaceTool[PersonaChatParams]):
 
     @staticmethod
     async def _round_limit(transcript_file: Path, is_discussion: bool) -> int:
-        """一对一访谈按 study.json 的 limits.interview_rounds；焦点小组和读不到时用硬上限 7。"""
+        """一对一沿用研究保存的上限，新研究默认 20；焦点小组保持 7 轮。"""
         if is_discussion:
-            return MAX_INTERVIEW_ROUNDS
+            return MAX_DISCUSSION_ROUNDS
         try:
             study = await load_study(transcript_file.parent.parent)
         except StudyFilesError:

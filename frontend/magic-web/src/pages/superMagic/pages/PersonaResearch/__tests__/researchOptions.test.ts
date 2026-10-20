@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
 	appendParagraph,
+	interviewDepth,
 	normalizeCustomMethod,
 	parseResearchOptions,
 	parseWholeNumber,
@@ -8,9 +9,24 @@ import {
 } from "../services/researchOptions"
 
 describe("researchSettingsLine", () => {
+	it("sends depth preferences instead of a required round count", () => {
+		for (const [rounds, depth] of [
+			[5, "quick"],
+			[12, "standard"],
+			[20, "deep"],
+		] as const) {
+			expect(researchSettingsLine({ method: "auto", panelSize: "auto", rounds })).toBe(
+				`【研究设置】访谈深度: ${depth}`,
+			)
+		}
+		// Existing saved numeric settings select a depth without changing old study files.
+		expect(interviewDepth(3)).toBe("quick")
+		expect(interviewDepth(7)).toBe("standard")
+		expect(parseResearchOptions({ rounds: 20 }).rounds).toBe(20)
+	})
 	it("omits auto items and uses the fixed prefix and labels", () => {
 		expect(researchSettingsLine({ method: "concept_test", panelSize: 8, rounds: 5 })).toBe(
-			"【研究设置】访谈人数: 8 · 访谈轮数: 5 · 研究方式: concept_test",
+			"【研究设置】访谈人数: 8 · 访谈深度: quick · 研究方式: concept_test",
 		)
 		expect(researchSettingsLine({ method: "auto", panelSize: 6, rounds: "auto" })).toBe(
 			"【研究设置】访谈人数: 6",
@@ -106,7 +122,7 @@ describe("parseResearchOptions", () => {
 			panelSize: 9,
 			rounds: 5,
 		})
-		expect(parseResearchOptions({ method: "nope", panelSize: 13, rounds: 8 })).toEqual({
+		expect(parseResearchOptions({ method: "nope", panelSize: 13, rounds: 21 })).toEqual({
 			method: "auto",
 			panelSize: "auto",
 			rounds: "auto",

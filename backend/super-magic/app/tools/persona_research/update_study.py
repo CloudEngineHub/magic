@@ -150,7 +150,11 @@ class UpdateStudyParams(BaseToolParams):
     decision: str = Field(default="", description="plan_confirmed: the decision the study informs.")
     hypotheses: List[HypothesisDraft] = Field(default_factory=list, description="plan_confirmed: in plan order.")
     quota: List[QuotaItem] = Field(default_factory=list, description="plan_confirmed: sample quota.")
-    interview_rounds: int = Field(default=DEFAULT_INTERVIEW_ROUNDS, description="plan_confirmed: rounds per persona.")
+    interview_rounds: int = Field(
+        default=DEFAULT_INTERVIEW_ROUNDS,
+        description="plan_confirmed: automatic interview ceiling per persona (1-20, default 20), not a target. "
+        "Stop when sufficient; depth is described in the plan.",
+    )
     guide_review: List[GuideReviewItem] = Field(default_factory=list, description="plan_confirmed: rewritten questions.")
     social_sampling: Optional[SocialSamplingRecord] = Field(
         default=None, description="desk_research_done: whether social platforms were sampled directly."

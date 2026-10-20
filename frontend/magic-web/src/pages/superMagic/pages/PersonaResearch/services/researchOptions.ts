@@ -9,11 +9,16 @@ export const RESEARCH_METHODS = [
 	"fast_insight",
 ] as const satisfies readonly ("auto" | StudyType)[]
 export const PANEL_SIZES = ["auto", 4, 6, 8, 10, 12] as const
-export const ROUND_COUNTS = ["auto", 3, 5, 7] as const
+// Keep numeric storage for existing saved composer settings and research templates.
+// These values select a depth preference, never a required question count.
+export const ROUND_COUNTS = ["auto", 5, 12, 20] as const
+export function interviewDepth(rounds: number): "quick" | "standard" | "deep" {
+	return rounds <= 5 ? "quick" : rounds <= 12 ? "standard" : "deep"
+}
 
-/** Bounds for typed-in values; the agent caps a panel at 12 people and interviews at 7 rounds. */
+/** Bounds for typed-in values; the agent caps a panel at 12 people and automatic interviews at 20 rounds. */
 export const PANEL_SIZE_RANGE = { min: 1, max: 12 } as const
-export const ROUND_COUNT_RANGE = { min: 1, max: 7 } as const
+export const ROUND_COUNT_RANGE = { min: 1, max: 20 } as const
 /** A custom method is one short sentence, e.g. "price sensitivity, Van Westendorp". */
 export const CUSTOM_METHOD_MAX_LENGTH = 60
 
@@ -25,7 +30,7 @@ export interface ResearchOptions {
 	customMethod?: string
 	/** "auto" or any whole number in PANEL_SIZE_RANGE, not only the presets. */
 	panelSize: "auto" | number
-	/** "auto" or any whole number in ROUND_COUNT_RANGE. */
+	/** Depth preference; legacy numeric settings are mapped to quick / standard / deep. */
 	rounds: "auto" | number
 }
 
@@ -43,7 +48,7 @@ export const RESEARCH_SETTINGS_PREFIX = "【研究设置】"
 
 /**
  * One line appended to the first message, e.g.
- * "【研究设置】访谈人数: 8 · 访谈轮数: 5 · 研究方式: concept_test ·
+ * "【研究设置】访谈人数: 8 · 访谈深度: quick · 研究方式: concept_test ·
  *  指定人设: personas/p_a.json, personas/p_b.json · 报告模板: templates/brand.html".
  * A custom method is sent as "研究方式: 自定义：<description>". Chosen personas are the panel as
  * they are; a fixed panel size smaller than their number is raised to it, never below.
@@ -59,7 +64,7 @@ export function researchSettingsLine(
 	const panelSize = effectivePanelSize(options.panelSize, personaPaths.length)
 	const items = [
 		panelSize === "auto" ? null : `访谈人数: ${panelSize}`,
-		options.rounds === "auto" ? null : `访谈轮数: ${options.rounds}`,
+		options.rounds === "auto" ? null : `访谈深度: ${interviewDepth(options.rounds)}`,
 		options.method === "auto"
 			? null
 			: options.method === "custom"

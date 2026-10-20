@@ -72,7 +72,7 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 		study?.limits?.personas && !isPersonaBuild
 			? t("study.scale", {
 					personas: study.limits.personas,
-					rounds: study.limits.interview_rounds ?? 5,
+					rounds: study.limits.interview_rounds ?? 20,
 				})
 			: null,
 	]
