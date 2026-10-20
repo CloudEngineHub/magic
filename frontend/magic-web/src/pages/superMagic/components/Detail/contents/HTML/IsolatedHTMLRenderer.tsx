@@ -210,11 +210,14 @@ import {
 	type HtmlNavigationRequest,
 } from "./utils/html-navigation"
 import type { HtmlPermissionScope } from "./iframe-api/types"
+import { PPTBuildPanel } from "./components/PPTBuildPanel/PPTBuildPanel"
 import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 
 const ignoreDevicePreviewChange = () => undefined
 
 interface IsolatedHTMLRendererProps {
+	buildPanelOpen?: boolean
+	onBuildPanelOpenChange?: (open: boolean) => void
 	devicePreview?: DevicePreviewControls & { enabled: boolean }
 	onDeviceContentScaledChange?: (scaled: boolean) => void
 	content: string
@@ -469,6 +472,8 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			sandboxType = "iframe",
 			className,
 			isPptRender,
+			buildPanelOpen = false,
+			onBuildPanelOpenChange,
 			isPlaybackPaused = false,
 			isFullscreen,
 			documentFlowFullscreen = false,
@@ -641,12 +646,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const [stylesExpanded, setStylesExpanded] = useState(true)
 		const [domTreeRevision, setDomTreeRevision] = useState(0)
 		const handleToggleSidebar = useCallback(() => {
+			onBuildPanelOpenChange?.(false)
 			setSidebarOpen((open) => !open)
-		}, [])
+		}, [onBuildPanelOpenChange])
 		const handleRevealMoreStyles = useCallback(() => {
+			onBuildPanelOpenChange?.(false)
 			setSidebarOpen(true)
 			setStylesExpanded(true)
-		}, [])
+		}, [onBuildPanelOpenChange])
 		const [contentInjected, setContentInjected] = useState(false) // 标记内容是否已注入到 iframe
 		const { revision: previewDocumentRevision, restart: restartPreviewDocument } =
 			usePreviewDocumentRevision(content, isEditMode)
@@ -944,7 +951,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				)
 			},
 		)
-		useHTMLEditorV2({
+		const { isEditorReady } = useHTMLEditorV2({
 			iframeRef,
 			isEditMode,
 			sandboxType,
@@ -2666,7 +2673,6 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							<>
 								<StylePanel
 									variant="global"
-									isPptRender={isPptRender}
 									editorRef={editorRef as React.RefObject<HTMLEditorV2Ref>}
 									disabled={isSaving}
 									sidebarOpen={sidebarOpen}
@@ -2689,7 +2695,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							</>
 						)}
 
-					<div className="flex min-h-0 min-w-0 flex-1">
+					<div className="relative flex min-h-0 min-w-0 flex-1">
 						<div
 							ref={inspectorViewportRef}
 							className="relative flex min-h-0 min-w-0 flex-1 flex-col"
@@ -3001,6 +3007,21 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							</div>
 						</div>
 						{sandboxType === "iframe" &&
+						isPptRender &&
+						isEditMode &&
+						isVisible !== false &&
+						isTabActive !== false &&
+						buildPanelOpen &&
+						isEditorReady ? (
+							<PPTBuildPanel
+								editorRef={editorRef}
+								contentRevision={domTreeRevision}
+								disabled={isSaving}
+								onClose={() => onBuildPanelOpenChange?.(false)}
+							/>
+						) : null}
+						{!buildPanelOpen &&
+						sandboxType === "iframe" &&
 						isEditMode &&
 						isVisible !== false &&
 						sidebarOpen ? (

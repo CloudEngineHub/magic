@@ -404,6 +404,16 @@ function rerenderSlide(
 }
 
 describe("PPTSlide", () => {
+	it("enters the existing visual editor when the build sidebar opens", async () => {
+		mockState.initialEditMode = false
+		renderPPTSlide({ buildPanelOpen: true })
+		await waitFor(() =>
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ isEditMode: true, buildPanelOpen: true }),
+			),
+		)
+	})
+
 	it("removes preview spacing from fullscreen on every device", () => {
 		renderPPTSlide({ isFullscreen: true })
 		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(

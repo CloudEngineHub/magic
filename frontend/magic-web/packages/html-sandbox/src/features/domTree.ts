@@ -111,6 +111,11 @@ function getNodeId(element: HTMLElement): string {
 	return nodeId
 }
 
+/** Reuse session-only DOM identities so build rows survive style changes and moves. */
+export function getEditorNodeSelector(element: HTMLElement): string {
+	return `[${EDITOR_NODE_ID_ATTRIBUTE}="${CSS.escape(getNodeId(element))}"]`
+}
+
 export function resetEditorNodeIds(root: Element): void {
 	if (root instanceof HTMLElement) root.removeAttribute(EDITOR_NODE_ID_ATTRIBUTE)
 	root.querySelectorAll(`[${EDITOR_NODE_ID_ATTRIBUTE}]`).forEach((element) => {

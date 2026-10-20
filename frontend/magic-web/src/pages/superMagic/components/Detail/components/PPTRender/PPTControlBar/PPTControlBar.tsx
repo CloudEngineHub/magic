@@ -13,13 +13,13 @@ import {
 	NotebookPen,
 	Monitor,
 	Check,
-	GalleryHorizontalEnd,
 } from "lucide-react"
 import type { PPTControlBarProps } from "./types"
 import { PPTZoomControl } from "./PPTZoomControl"
 import { cn } from "@/utils/cn"
 import { Button } from "@/components/shadcn-ui/button"
 import { MagicDropdown, MagicTooltip } from "@/components/base"
+import { PPTAnimationControls } from "./PPTAnimationControls"
 import { FileSaveSyncBadge } from "../../FileSaveSyncBadge"
 
 export function PPTControlBar({
@@ -47,6 +47,9 @@ export function PPTControlBar({
 	notesVisible,
 	onToggleNotes,
 	onOpenTransitions,
+	onToggleBuildPanel,
+	buildPanelOpen,
+	animationOnly,
 	scaleRatio,
 	isAutoScale,
 	portalContainer,
@@ -113,6 +116,27 @@ export function PPTControlBar({
 		onJumpToPage(num - 1)
 		setJumpPageInput("")
 	}
+
+	// Editing keeps the animation entry available while page navigation stays hidden.
+	if (animationOnly)
+		return (
+			<div
+				ref={containerRef}
+				data-testid="ppt-control-bar"
+				className={cn(
+					"pointer-events-none absolute inset-x-2 bottom-[18px] z-50 flex justify-center",
+					className,
+				)}
+			>
+				<div className={barClassName}>
+					<PPTAnimationControls
+						onOpenTransitions={onOpenTransitions}
+						onToggleBuildPanel={onToggleBuildPanel}
+						buildPanelOpen={buildPanelOpen}
+					/>
+				</div>
+			</div>
+		)
 
 	return (
 		<div
@@ -426,7 +450,7 @@ export function PPTControlBar({
 					</MagicDropdown>
 				) : null}
 			</div>
-			{(!isMobile || onToggleNotes || onOpenTransitions) && (
+			{(!isMobile || onToggleNotes || onOpenTransitions || onToggleBuildPanel) && (
 				<div
 					ref={zoomBarRef}
 					className={cn(
@@ -434,18 +458,13 @@ export function PPTControlBar({
 						separateRows || !onReplaceTemplate ? "col-start-2" : "col-start-3",
 					)}
 				>
-					{onOpenTransitions && (
+					{(onOpenTransitions || onToggleBuildPanel) && (
 						<div className={barClassName}>
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-7 gap-[5px] px-[7px]"
-								data-testid="ppt-control-bar-transitions"
-								onClick={onOpenTransitions}
-							>
-								<GalleryHorizontalEnd className="size-4" />
-								{t("ppt.transitions.title")}
-							</Button>
+							<PPTAnimationControls
+								onOpenTransitions={onOpenTransitions}
+								onToggleBuildPanel={onToggleBuildPanel}
+								buildPanelOpen={buildPanelOpen}
+							/>
 						</div>
 					)}
 					{onToggleNotes && (

@@ -1,4 +1,5 @@
 export interface PPTControlBarProps {
+	animationOnly?: boolean
 	activeIndex: number
 	buildProgress?: { step: number; total: number }
 	totalSlides: number
@@ -23,6 +24,8 @@ export interface PPTControlBarProps {
 	notesVisible?: boolean
 	onToggleNotes?: () => void
 	onOpenTransitions?: () => void
+	onToggleBuildPanel?: () => void
+	buildPanelOpen?: boolean
 	scaleRatio: number
 	isAutoScale: boolean
 	portalContainer: HTMLElement | null

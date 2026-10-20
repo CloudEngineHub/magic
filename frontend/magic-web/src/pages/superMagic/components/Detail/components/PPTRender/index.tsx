@@ -335,6 +335,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const [isAnySlideEditing, setIsAnySlideEditing] = useState(false)
 	const [notesPending, setNotesPending] = useState(false)
 	const [transitionPanelOpen, setTransitionPanelOpen] = useState(false)
+	const [buildPanelOpen, setBuildPanelOpen] = useState(false)
 	const [transitionPanelSession, setTransitionPanelSession] = useState(0)
 	const [transitionTarget, setTransitionTarget] = useState({
 		path: "",
@@ -502,6 +503,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		await togglePresentationFullscreen()
 	})
 	const isSingleWindowFullscreen = isPresentationFullscreen && !isPresenterView
+	useEffect(() => {
+		// A new page/document starts its own editor session; cached frames must not retain markers.
+		setBuildPanelOpen(false)
+	}, [store.activeIndex, mainFileId, isPlaybackMode, isPresentationFullscreen, isTabActive])
 	const isPresenterConsole = isPresenterWindowOpen
 	const buildNavigation = usePPTBuildNavigation({
 		hasBuilds: () =>
@@ -652,6 +657,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const openTransitions = useMemoizedFn(async (index?: number) => {
 		if (!canConfigureTransitions || deckTools.busy) return
 		if (transitionCloseGuardRef.current && !(await transitionCloseGuardRef.current())) return
+		setBuildPanelOpen(false)
 		const slide = store.slides[index ?? store.activeIndex]
 		if (!slide) return
 		// A new explicit opening starts a fresh draft after the previous guard resolved.
@@ -661,6 +667,16 @@ const PPTRenderInner = observer(function PPTRenderInner({
 			scope: index === undefined && deckTools.selected.size ? "selected" : "current",
 		})
 		setTransitionPanelOpen(true)
+	})
+	const toggleBuildPanel = useMemoizedFn(async () => {
+		if (!canConfigureTransitions || deckTools.busy) return
+		if (buildPanelOpen) {
+			setBuildPanelOpen(false)
+			return
+		}
+		if (transitionCloseGuardRef.current && !(await transitionCloseGuardRef.current())) return
+		setTransitionPanelOpen(false)
+		setBuildPanelOpen(true)
 	})
 	const saveTransitions = useMemoizedFn(async (edit: PPTTransitionEdit) => {
 		savingTransitionsRef.current = true
@@ -1566,6 +1582,10 @@ const PPTRenderInner = observer(function PPTRenderInner({
 											}}
 										>
 											<PPTSlide
+												buildPanelOpen={
+													buildPanelOpen && index === store.activeIndex
+												}
+												onBuildPanelOpenChange={setBuildPanelOpen}
 												showRefresh={showRefresh}
 												buildStartAtEnd={buildNavigation.startAtEnd.current}
 												onBuildControllerChange={(controller) =>
@@ -1669,12 +1689,19 @@ const PPTRenderInner = observer(function PPTRenderInner({
 
 								{/* 控制栏只覆盖幻灯片画布，不覆盖画布下方的备注区域。 */}
 								{!isPresenterConsole &&
-									!isAnySlideEditing &&
+									(!isAnySlideEditing || canConfigureTransitions) &&
 									!isPresentationFullscreen &&
 									presentedToolbarModel?.props.viewMode !== "code" &&
 									store.isReady &&
 									hasSlides && (
 										<PPTControlBar
+											animationOnly={isAnySlideEditing}
+											buildPanelOpen={buildPanelOpen}
+											onToggleBuildPanel={
+												canConfigureTransitions
+													? toggleBuildPanel
+													: undefined
+											}
 											buildProgress={buildNavigation.progress}
 											onOpenTransitions={
 												canConfigureTransitions

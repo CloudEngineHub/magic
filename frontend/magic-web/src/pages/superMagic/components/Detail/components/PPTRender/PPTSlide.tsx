@@ -68,6 +68,8 @@ export interface PPTSlideToolbarModel {
 }
 
 interface PPTSlideProps {
+	buildPanelOpen?: boolean
+	onBuildPanelOpenChange?: (open: boolean) => void
 	buildStartAtEnd?: boolean
 	onBuildControllerChange?: (controller: PPTBuildController | null) => void
 	onBuildAction?: () => void
@@ -159,6 +161,8 @@ interface PerformSaveOptions {
 }
 
 const PPTSlide = observer(function PPTSlide({
+	buildPanelOpen = false,
+	onBuildPanelOpenChange,
 	index,
 	isActive,
 	isPresented,
@@ -608,6 +612,8 @@ const PPTSlide = observer(function PPTSlide({
 	}, [])
 
 	const rendererStaticProps = {
+		buildPanelOpen: buildPanelOpen && Boolean(isEditMode) && isActive,
+		onBuildPanelOpenChange,
 		// Metadata saves must reach the save boundary immediately, even while the
 		// processed preview is retained. Historical previews keep their own source.
 		rawSourceCode: fileVersion === undefined ? rawContent : displayContent.rawContent,
@@ -744,6 +750,17 @@ const PPTSlide = observer(function PPTSlide({
 		}
 		setIsEditMode(true)
 	}, [setIsEditMode, fileVersion, changeFileVersion])
+	useEffect(() => {
+		if (buildPanelOpen && allowEdit && isActive && !isFullscreen && !isPlaybackMode)
+			handleEdit()
+		// Only an explicit panel opening enters edit mode, never a later save/exit.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [buildPanelOpen])
+	const previousBuildEditMode = useRef(Boolean(isEditMode))
+	useEffect(() => {
+		if (previousBuildEditMode.current && !isEditMode) onBuildPanelOpenChange?.(false)
+		previousBuildEditMode.current = Boolean(isEditMode)
+	}, [isEditMode, onBuildPanelOpenChange])
 
 	// 版本切换处理 - 强制退出编辑模式
 	const handleVersionChange = useMemoizedFn((version: number | undefined) => {
@@ -1406,6 +1423,8 @@ const PPTSlide = observer(function PPTSlide({
 							frame.frozenProps && (
 								<IsolatedHTMLRenderer
 									{...frame.frozenProps}
+									// Frozen preview frames cannot retain editor-only sidebars or markers.
+									buildPanelOpen={false}
 									// A saved frame can outlive its captured props while the deck starts a transition.
 									isPlaybackPaused={Boolean(transitionRole) || isPreparingReplay}
 									content={frame.content}

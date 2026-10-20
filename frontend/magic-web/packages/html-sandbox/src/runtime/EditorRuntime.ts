@@ -11,6 +11,8 @@ import { DragDropManager } from "../managers/DragDropManager"
 import { StyleManager } from "../managers/StyleManager"
 import { TextStyleManager } from "../managers/TextStyleManager"
 import { DomStructureManager } from "../managers/DomStructureManager"
+import { PPTBuildManager, type PPTBuildUpdate } from "../managers/PPTBuildManager"
+import { PPTBuildMarkers } from "../features/PPTBuildMarkers"
 import { EditorLogger } from "../utils/EditorLogger"
 import { isFromTrustedParent, getParentOrigin } from "../utils/parentOrigin"
 import {
@@ -30,6 +32,8 @@ export class EditorRuntime {
 	private elementSelector: ElementSelector
 	private imageManager: ImageManager
 	private dragDropManager: DragDropManager
+	private pptBuildManager: PPTBuildManager
+	private pptBuildMarkers = new PPTBuildMarkers()
 	private isEditMode = false
 	private keyboardShortcutHandler: ((event: KeyboardEvent) => Promise<void>) | null = null
 	private hostShortcutHandler: ((event: KeyboardEvent) => void) | null = null
@@ -47,6 +51,7 @@ export class EditorRuntime {
 		this.commandHistory = new CommandHistory(50)
 		this.bridge = new EditorBridge()
 		this.styleManager = new StyleManager(this.commandHistory)
+		this.pptBuildManager = new PPTBuildManager(this.commandHistory, () => this.isEditMode)
 		this.textStyleManager = new TextStyleManager(this.commandHistory, this.bridge)
 		this.elementSelector = new ElementSelector(this.bridge)
 		this.domStructureManager = new DomStructureManager(
@@ -55,6 +60,19 @@ export class EditorRuntime {
 		)
 		this.imageManager = new ImageManager(this.commandHistory, this.elementSelector)
 		this.dragDropManager = new DragDropManager(this.commandHistory, this.elementSelector)
+		this.styleManager.registerCommandHandler({
+			canHandleCommand: (type) => this.pptBuildManager.canHandleCommand(type),
+			restoreCommand: (command) => {
+				const restored = this.pptBuildManager.restoreCommand(command)
+				if (restored) this.elementSelector.refreshSelection()
+				return restored
+			},
+			applyCommand: (command) => {
+				const applied = this.pptBuildManager.applyCommand(command)
+				if (applied) this.elementSelector.refreshSelection()
+				return applied
+			},
+		})
 
 		// Connect styleManager with elementSelector for undo/redo refresh
 		this.styleManager.setElementSelector(this.elementSelector)
@@ -132,6 +150,19 @@ export class EditorRuntime {
 	 * Register all handlers
 	 */
 	private registerHandlers(): void {
+		this.bridge.onRequest("GET_PPT_BUILDS", () => this.pptBuildManager.getBuilds())
+		this.bridge.onCommand("UPDATE_PPT_BUILDS", (payload) => {
+			this.pptBuildManager.updateBuilds((payload as { updates: PPTBuildUpdate[] })?.updates)
+			this.elementSelector.refreshSelection()
+			return { success: true }
+		})
+		this.bridge.onRequest("SET_PPT_BUILD_MARKERS", (payload) => {
+			const visible = (payload as { visible?: unknown })?.visible
+			if (typeof visible !== "boolean") throw new Error("PPT_BUILD_INVALID")
+			if (visible && !this.isEditMode) throw new Error("PPT_BUILD_EDIT_MODE_REQUIRED")
+			this.pptBuildMarkers.setVisible(visible)
+			return { success: true }
+		})
 		// Register request handlers
 		registerRequestHandlers({
 			bridge: this.bridge,
@@ -148,6 +179,7 @@ export class EditorRuntime {
 				if (isEditMode) {
 					this.textStyleManager.startMonitoring()
 				} else {
+					this.pptBuildMarkers.destroy()
 					this.textStyleManager.stopMonitoring()
 				}
 			},
@@ -475,6 +507,7 @@ export class EditorRuntime {
 	 */
 	destroy(): void {
 		EditorLogger.info("Destroy editor runtime")
+		this.pptBuildMarkers.destroy()
 
 		// Remove keyboard shortcut handler
 		if (this.keyboardShortcutHandler) {

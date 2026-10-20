@@ -200,6 +200,9 @@ vi.mock("../PPTControlBar", () => ({
 		onToggleNotes,
 		onToggleFullscreen,
 		onOpenTransitions,
+		onToggleBuildPanel,
+		buildPanelOpen,
+		animationOnly,
 	}: {
 		scaleRatio: number
 		onScaleChange: (scale: number) => void
@@ -208,11 +211,24 @@ vi.mock("../PPTControlBar", () => ({
 		onToggleNotes?: () => void
 		onToggleFullscreen: () => void
 		onOpenTransitions?: () => void
+		onToggleBuildPanel?: () => void
+		buildPanelOpen?: boolean
+		animationOnly?: boolean
 	}) => {
-		mockState.pptControlBarProps({ scaleRatio, onScaleChange, onReplaceTemplate })
+		mockState.pptControlBarProps({
+			scaleRatio,
+			onScaleChange,
+			onReplaceTemplate,
+			animationOnly,
+		})
 		return (
 			<div data-testid="ppt-control-bar">
 				{onOpenTransitions && <button onClick={onOpenTransitions}>open transitions</button>}
+				{onToggleBuildPanel && (
+					<button onClick={onToggleBuildPanel} aria-expanded={buildPanelOpen}>
+						open builds
+					</button>
+				)}
 				<button onClick={onToggleNotes} aria-expanded={notesVisible}>
 					toggle notes
 				</button>
@@ -272,6 +288,7 @@ vi.mock("../PPTSlide", async () => {
 
 	function MockPPTSlide({
 		fileId,
+		buildPanelOpen,
 		onSwipe,
 		allowEdit,
 		isActive,
@@ -291,6 +308,7 @@ vi.mock("../PPTSlide", async () => {
 	}: {
 		openNewTab?: (fileId: string, path: string) => void
 		fileId?: string
+		buildPanelOpen?: boolean
 		onSwipe?: (direction: "prev" | "next") => void
 		allowEdit?: boolean
 		isActive?: boolean
@@ -312,6 +330,7 @@ vi.mock("../PPTSlide", async () => {
 		onManualSave?: (
 			saveResult: {
 				fileId?: string
+				buildPanelOpen?: boolean
 				success?: boolean
 				cleanContent?: string
 				rawContent?: string
@@ -332,6 +351,7 @@ vi.mock("../PPTSlide", async () => {
 		)
 
 		mockState.pptSlideProps({
+			buildPanelOpen,
 			openNewTab,
 			allowEdit,
 			fileId,
@@ -623,6 +643,44 @@ describe("PPTRender", () => {
 		expect(mockState.store.ensureSlideContent).toHaveBeenCalledWith(0, "preview")
 		expect(mockState.store.setActiveIndex).not.toHaveBeenCalled()
 	})
+	it("keeps the animation entry available after closing the panel in edit mode", async () => {
+		mockState.isSlideEditing = true
+		renderPPTRender()
+		const button = await screen.findByRole("button", { name: "open builds" })
+		expect(mockState.pptControlBarProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ animationOnly: true }),
+		)
+		fireEvent.click(button)
+		await waitFor(() => expect(button).toHaveAttribute("aria-expanded", "true"))
+		fireEvent.click(button)
+		await waitFor(() => expect(button).toHaveAttribute("aria-expanded", "false"))
+		fireEvent.click(button)
+		await waitFor(() => expect(button).toHaveAttribute("aria-expanded", "true"))
+	})
+
+	it("opens the build queue on the active slide and switches back to transitions", async () => {
+		mockState.isSlideEditing = false
+		renderPPTRender()
+		const button = screen.getByRole("button", { name: "open builds" })
+		fireEvent.click(button)
+		await waitFor(() => expect(button).toHaveAttribute("aria-expanded", "true"))
+		expect(mockState.pptSlideProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ buildPanelOpen: true, isActive: true }),
+		)
+		fireEvent.click(screen.getByRole("button", { name: "open transitions" }))
+		await screen.findByRole("complementary", { name: "ppt.transitions.title" })
+		expect(button).toHaveAttribute("aria-expanded", "false")
+	})
+
+	it.each([{ allowEdit: false }, { isPlaybackMode: true }])(
+		"hides build editing for read-only entry %j",
+		(input) => {
+			mockState.isSlideEditing = false
+			renderPPTRender(input)
+			expect(screen.queryByRole("button", { name: "open builds" })).not.toBeInTheDocument()
+		},
+	)
+
 	it("opens the real transition panel from the editable control bar", async () => {
 		mockState.isSlideEditing = false
 		renderPPTRender()

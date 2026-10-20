@@ -132,7 +132,6 @@ export interface SelectedElementInfo {
  * StylePanel 组件 Props
  */
 export interface StylePanelProps {
-	isPptRender?: boolean
 	/** 渲染模式：完整工具栏、顶部全局栏或元素上下文栏 */
 	variant?: "full" | "global" | "context"
 	/** HTMLEditorV2 的 ref 引用 */

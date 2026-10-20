@@ -12,7 +12,7 @@ import {
 	ImageActionPayload,
 } from "../iframe-bridge/types/messages"
 import type { DomTreeNode, DomTreeResponse } from "../iframe-bridge/types/messages"
-import type { HTMLEditorV2Ref } from "../iframe-bridge/types/props"
+import type { HTMLEditorV2Ref, PPTBuildEntry, PPTBuildUpdate } from "../iframe-bridge/types/props"
 import { filterInjectedTags } from "../utils"
 
 interface UseHTMLEditorV2Options {
@@ -81,6 +81,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	const stylePanelStore = useStylePanelStore()
 	const messageBridgeRef = useRef<MessageBridge | null>(null)
 	const [isRuntimeReady, setIsRuntimeReady] = useState(false)
+	const [isEditorReady, setIsEditorReady] = useState(false)
 	const activationRetryTimerRef = useRef<number | null>(null)
 	const prevContentInjectedRef = useRef(false)
 	const contentInjectedRef = useRef(contentInjected)
@@ -121,6 +122,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	const runExitEditFlow = useCallback(
 		async (transitionId: number) => {
 			if (!isCurrentTransition(transitionId)) return
+			setIsEditorReady(false)
 
 			try {
 				const bridge = getActiveBridge()
@@ -158,15 +160,23 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 				if (!isCurrentTransition(transitionId) || !desiredEditModeRef.current) return
 
 				const latestBridge = getActiveBridge()
-				if (!latestBridge) return
+				if (!latestBridge || latestBridge !== bridge) return
 
 				await latestBridge.request(EditorMessageType.ENTER_SELECTION_MODE)
 
-				if (isCurrentTransition(transitionId) && desiredEditModeRef.current) {
+				if (
+					isCurrentTransition(transitionId) &&
+					desiredEditModeRef.current &&
+					getActiveBridge() === bridge
+				) {
 					editLifecycleRef.current = "active"
+					setIsEditorReady(true)
 				}
 			} catch (error) {
-				if (isCurrentTransition(transitionId)) editLifecycleRef.current = "idle"
+				if (isCurrentTransition(transitionId)) {
+					editLifecycleRef.current = "idle"
+					setIsEditorReady(false)
+				}
 				console.error("[useHTMLEditorV2] Failed to enter edit flow:", error)
 			}
 		},
@@ -177,6 +187,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 	useEffect(() => {
 		if (!iframeLoaded || !iframeRef.current || sandboxType !== "iframe") {
 			setIsRuntimeReady(false)
+			setIsEditorReady(false)
 			if (messageBridgeRef.current?.isActive()) {
 				messageBridgeRef.current.destroy()
 			}
@@ -274,6 +285,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			}
 
 			setIsRuntimeReady(false)
+			setIsEditorReady(false)
 			editLifecycleRef.current = "idle"
 		}
 	}, [clearActivationRetry, sandboxType, iframeLoaded, iframeRef, targetOrigin])
@@ -283,6 +295,34 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		editorRef,
 		() => ({
 			getIframeElement: () => iframeRef.current,
+			getPPTBuilds: async () => {
+				const bridge = getActiveBridge()
+				if (!bridge) throw new Error("PPT_BUILD_EDITOR_NOT_READY")
+				return bridge.request<PPTBuildEntry[]>(EditorMessageType.GET_PPT_BUILDS)
+			},
+			updatePPTBuilds: async (updates: PPTBuildUpdate[]) => {
+				const bridge = getActiveBridge()
+				if (!bridge || !desiredEditModeRef.current || editLifecycleRef.current !== "active")
+					throw new Error("PPT_BUILD_EDITOR_NOT_READY")
+				await bridge.sendCommand(
+					EditorMessageType.UPDATE_PPT_BUILDS,
+					{ updates },
+					{ description: "Update presentation builds", canUndo: true },
+				)
+			},
+			setPPTBuildMarkers: async (visible: boolean) => {
+				const bridge = getActiveBridge()
+				if (!bridge) {
+					if (!visible) return
+					throw new Error("PPT_BUILD_EDITOR_NOT_READY")
+				}
+				if (
+					visible &&
+					(!desiredEditModeRef.current || editLifecycleRef.current !== "active")
+				)
+					throw new Error("PPT_BUILD_EDITOR_NOT_READY")
+				await bridge.request(EditorMessageType.SET_PPT_BUILD_MARKERS, { visible })
+			},
 			save: async () => {
 				console.log("[useHTMLEditorV2] save content", fileId)
 
@@ -805,6 +845,7 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 			},
 		}),
 		[
+			getActiveBridge,
 			iframeRef,
 			fileId,
 			saveEditContent,
@@ -914,6 +955,15 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 
 	// 当 runtime 就绪且内容已注入后，再启用编辑模式和选择模式，避免「选择元素」在 iframe 未加载完时执行
 	useEffect(() => {
+		if (!contentInjected || !isEditMode || !isRuntimeReady) {
+			setIsEditorReady(false)
+			// Exit owns its transition until EXIT_SELECTION_MODE completes. Only invalidate
+			// activation here when its document/runtime disappears while editing.
+			if (isEditMode) {
+				++editTransitionIdRef.current
+				editLifecycleRef.current = "idle"
+			}
+		}
 		if (
 			!isEditMode ||
 			!contentInjected ||
@@ -926,4 +976,8 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 		editLifecycleRef.current = "activating"
 		void runEnterEditFlow(transitionId)
 	}, [isEditMode, contentInjected, isRuntimeReady, runEnterEditFlow])
+
+	return {
+		isEditorReady: Boolean(isEditMode && contentInjected && isRuntimeReady && isEditorReady),
+	}
 }

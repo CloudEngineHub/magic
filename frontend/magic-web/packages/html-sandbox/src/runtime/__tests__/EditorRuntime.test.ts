@@ -55,6 +55,34 @@ describe("EditorRuntime", () => {
 	})
 
 	describe("initialization", () => {
+		it("guards build writes and disposes temporary markers on editor exit without dirtying history", async () => {
+			await sendRuntimeRequest("EXECUTE_COMMAND", {
+				category: MessageCategory.COMMAND,
+				commandType: "UPDATE_PPT_BUILDS",
+				payload: { updates: [] },
+			})
+			expect(postMessageSpy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					success: false,
+					error: expect.objectContaining({ message: "PPT_BUILD_EDIT_MODE_REQUIRED" }),
+				}),
+				parentOrigin,
+			)
+			await sendRuntimeRequest("ENTER_EDIT_MODE")
+			postMessageSpy.mockClear()
+			await sendRuntimeRequest("SET_PPT_BUILD_MARKERS", { visible: true })
+			expect(document.querySelector("[data-magic-ppt-build-markers]")).not.toBeNull()
+			expect(
+				postMessageSpy.mock.calls.some(([message]) => message.type === "CONTENT_CHANGED"),
+			).toBe(false)
+			await sendRuntimeRequest("EXIT_EDIT_MODE")
+			expect(document.querySelector("[data-magic-ppt-build-markers]")).toBeNull()
+			await sendRuntimeRequest("ENTER_EDIT_MODE")
+			await sendRuntimeRequest("SET_PPT_BUILD_MARKERS", { visible: true })
+			runtime.destroy()
+			expect(document.querySelector("[data-magic-ppt-build-markers]")).toBeNull()
+		})
+
 		it("should initialize successfully", () => {
 			expect(runtime).toBeDefined()
 		})
