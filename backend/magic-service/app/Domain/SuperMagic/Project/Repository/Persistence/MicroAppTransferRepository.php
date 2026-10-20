@@ -45,6 +45,18 @@ class MicroAppTransferRepository
         return $model === null ? null : new MicroAppEntity($model->toArray());
     }
 
+    public function changeProjectOwner(ProjectEntity $project): void
+    {
+        // Hydration defaults are for reads; do not persist them over nullable project columns.
+        ProjectModel::query()->where('id', $project->getId())
+            ->where('user_organization_code', $project->getUserOrganizationCode())
+            ->update([
+                'user_id' => $project->getUserId(),
+                'workspace_id' => $project->getWorkspaceId(),
+                'updated_at' => $project->getUpdatedAt(),
+            ]);
+    }
+
     public function changeAppOwner(MicroAppEntity $app, string $receiverId): void
     {
         MicroAppModel::withTrashed()->where('id', $app->getId())

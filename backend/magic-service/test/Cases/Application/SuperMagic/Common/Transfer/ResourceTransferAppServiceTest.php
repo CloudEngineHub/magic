@@ -327,15 +327,16 @@ class ResourceTransferAppServiceTest extends TestCase
         $this->transfer(false, 'manage');
     }
 
-    public function testAgentDependencyFailurePreventsAllOwnershipWrites(): void
+    public function testAgentTransferChangesItsOwnershipWithoutTransferringSkills(): void
     {
         $this->prepareResource();
         $this->dependencies['agents']->method('getResource')->willReturn($this->createMock(SuperMagicAgentEntity::class));
-        $this->dependencies['dependencies']->method('assertAgentDependencies')->willThrowException(new RuntimeException('Dependency inaccessible'));
-        $this->dependencies['repository']->expects($this->never())->method('changeOwner');
-        $this->dependencies['ownerships']->expects($this->never())->method('saveUserAgentOwnership');
-        $this->expectExceptionMessage('Dependency inaccessible');
-        $this->transfer(false, 'manage', true);
+        $this->dependencies['repository']->expects($this->once())->method('changeOwner')
+            ->with($this->anything(), true, 'receiver');
+        $this->dependencies['skills']->expects($this->never())->method('getResource');
+        $this->dependencies['skillOwnerships']->expects($this->never())->method('saveUserSkillOwnership');
+        $this->dependencies['skillOwnerships']->expects($this->never())->method('deleteUserSkillOwnership');
+        self::assertSame('receiver', $this->transfer(false, 'manage', true)['owner_id']);
     }
 
     public function testAgentMarketResponsibilityAndIndexFollowNewOwner(): void

@@ -71,7 +71,6 @@ class ResourceTransferAppService extends AbstractKernelAppService
         private readonly ProjectDomainService $projectDomain,
         private readonly UserAgentDomainService $ownerships,
         private readonly SkillDomainService $skillOwnerships,
-        private readonly ResourceTransferDependencyGuard $dependencies,
         private readonly TransferLogDomainService $logs,
         private readonly EventDispatcherInterface $events,
         private readonly LoggerFactory $loggerFactory,
@@ -99,7 +98,7 @@ class ResourceTransferAppService extends AbstractKernelAppService
         $projectId = 0;
         $projectName = '';
         $marketIds = [];
-        $response = Db::transaction(function () use ($authorization, $code, $isAgent, $request, $org, $sender, $receiver, $isolation, $type, $adapter, $role, &$projectId, &$projectName, &$marketIds) {
+        $response = Db::transaction(function () use ($authorization, $code, $isAgent, $request, $org, $sender, $isolation, $type, $adapter, $role, &$projectId, &$projectName, &$marketIds) {
             $resource = $this->repository->lock($isAgent, $org, $code);
             // Recheck after acquiring the resource lock; a stale editor cannot transfer twice.
             if (! $resource || $resource->getAttribute($isAgent ? 'creator' : 'creator_id') !== $sender
@@ -109,9 +108,8 @@ class ResourceTransferAppService extends AbstractKernelAppService
             }
             $context = $adapter->getResource($authorization, $code);
             $projectId = $adapter->getProjectId($context);
-            if ($isAgent) {
-                $this->dependencies->assertAgentDependencies($authorization, $receiver, $code);
-            }
+            // Referenced skills and knowledge keep their own ownership and access rules.
+            // Transferring the agent does not grant access to those independent resources.
             if ($projectId > 0) {
                 $project = $this->repository->lockProject($projectId);
                 if (! $project || $project->getAttribute('user_id') !== $sender || $project->getAttribute('user_organization_code') !== $org) {

@@ -85,7 +85,8 @@ final class MicroAppTransferDomainServiceTest extends TestCase
         });
         $repository->expects($hasApp ? self::once() : self::never())->method('changeAppOwner')->with($app, 'receiver');
         $projects = $this->createMock(ProjectRepositoryInterface::class);
-        $projects->expects(self::once())->method('save')->willReturnArgument(0);
+        $projects->expects(self::never())->method('save');
+        $repository->expects(self::once())->method('changeProjectOwner')->with($project);
         $workspaces = $this->createMock(WorkspaceRepositoryInterface::class);
         $workspaces->method('findById')->willReturn(new WorkspaceEntity(['workspace_type' => $workspaceType]));
         $workspaces->expects(self::never())->method('findByUserAndName');
@@ -94,7 +95,7 @@ final class MicroAppTransferDomainServiceTest extends TestCase
             ->with(self::callback(static fn ($identity) => $identity->getCurrentUserId() === 'receiver'
                 && $identity->getCurrentOrganizationCode() === 'org'), WorkspaceType::MicroApp)
             ->willReturn(new WorkspaceEntity(['id' => 99]));
-        $domain = new MicroAppTransferDomainService($repository, $projects, $workspaces, $workspaceDomain);
+        $domain = new MicroAppTransferDomainService($repository, $workspaces, $workspaceDomain);
         $result = (new TransferDomainService($workspaces, $projects, $domain))->transferProject(
             10,
             'sender',
@@ -123,11 +124,9 @@ final class MicroAppTransferDomainServiceTest extends TestCase
             'id' => 10, 'user_id' => $owner, 'user_organization_code' => $org, 'hidden_type' => $hiddenType,
         ]));
         $repository->expects(self::never())->method('changeAppOwner');
-        $projects = $this->createMock(ProjectRepositoryInterface::class);
-        $projects->expects(self::never())->method('save');
+        $repository->expects(self::never())->method('changeProjectOwner');
         $domain = new MicroAppTransferDomainService(
             $repository,
-            $projects,
             $this->createMock(WorkspaceRepositoryInterface::class),
             $this->createMock(WorkspaceDomainService::class)
         );
@@ -146,7 +145,6 @@ final class MicroAppTransferDomainServiceTest extends TestCase
         $repository->expects(self::never())->method('changeAppOwner');
         $domain = new MicroAppTransferDomainService(
             $repository,
-            $this->createMock(ProjectRepositoryInterface::class),
             $this->createMock(WorkspaceRepositoryInterface::class),
             $this->createMock(WorkspaceDomainService::class)
         );
@@ -162,7 +160,6 @@ final class MicroAppTransferDomainServiceTest extends TestCase
         $projects->expects(self::never())->method('batchUpdateOwner');
         $helper = new MicroAppTransferDomainService(
             $this->createMock(MicroAppTransferRepository::class),
-            $projects,
             $workspaces,
             $this->createMock(WorkspaceDomainService::class)
         );
