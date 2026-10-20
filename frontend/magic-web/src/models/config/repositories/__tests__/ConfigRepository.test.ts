@@ -30,6 +30,43 @@ const flushRejections = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const putError = () => new Error("Repository operation 'put' failed: Transaction aborted")
 
+describe("immediate configuration caches", () => {
+	it.each([
+		["theme", (repo: ConfigRepository) => repo.setThemeConfig("dark"), "dark"],
+		["i18n", (repo: ConfigRepository) => repo.setLocaleConfig("en_US"), "en_US"],
+		["cluster", (repo: ConfigRepository) => repo.setClusterConfig("private"), "private"],
+		[
+			"clusterCodeCache",
+			(repo: ConfigRepository) => repo.setClusterCacheConfig("private"),
+			"private",
+		],
+		["fontScale", (repo: ConfigRepository) => repo.setFontScaleConfig(1.2), "1.2"],
+	] as const)("updates %s before a slow database read", (key, save, value) => {
+		vi.clearAllMocks()
+		const repo = new ConfigRepository()
+		vi.spyOn(repo, "get").mockImplementation(() => new Promise(() => {}))
+		void save(repo)
+		expect(Storage.set).toHaveBeenCalledWith(`config:${key}`, { key, value })
+	})
+
+	it("caches a cluster definition before its database write finishes", async () => {
+		vi.clearAllMocks()
+		const repo = new ClusterRepository()
+		let finish!: () => void
+		vi.spyOn(repo, "put").mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve
+				}),
+		)
+		const config = { deployCode: "private" } as Parameters<typeof repo.setClusterConfig>[0]
+		const saved = repo.setClusterConfig(config)
+		expect(Storage.set).toHaveBeenCalledWith("cluster:private", config)
+		finish()
+		await saved
+	})
+})
+
 describe("ConfigRepository setters when IndexedDB put fails", () => {
 	let repository: ConfigRepository
 	let tracker: ReturnType<typeof trackUnhandledRejections>
