@@ -251,6 +251,7 @@ namespace MagicWidget {
 		headerActions?: Partial<
 			Record<HeaderActionName, (context: HeaderActionContext) => void | Promise<void>>
 		>
+		/** Resolves host-owned candidates for a non-empty search; superseded calls are cancelled via `signal`. */
 		customMentionSearch?: (context: {
 			query: string
 			scope: { type: "global" } | { type: "group"; groupId: string }
@@ -548,7 +549,19 @@ tabs
 
 自定义 Mention 分组会在 `config_ready` 握手后发送，因此不会进入受保护的首帧 URL query。桌面 inline Widget 会把非空分组展示在根列表中。默认情况下（或指定 `placement: "end"`），自定义分组排在系统内置 `@` 入口之后；若指定 `placement: "start"`，则将该自定义分组排在系统内置分类（微应用、连接器、技能等）之前。用户点击条目后会立即插入 `text` Mention 并关闭 Mention 面板；Mention 使用简短 `title` 展示（未提供时回退到 `text`），Agent prompt 使用完整 `text`。分组 ID、子项 ID、类型和数据保留在富文本 Mention 元数据中，不增加后端 Mention 协议字段。
 
-首屏列表和进入分组始终使用静态 `panel.customGroups`。用户输入非空搜索词后，可通过可选的 `customMentionSearch` 回调返回动态候选。回调的 `scope` 为 `{ type: "global" }` 或 `{ type: "group", groupId }`，每个返回结果都必须带所属静态分组的 `groupId`。静态自定义结果和回调结果会合并展示，并使用 `groupId + item.id` 去重；同一身份同时存在时，以回调结果为准。全局搜索再将合并后的自定义结果与内置 Mention 合并；清空搜索词后恢复静态列表。新的搜索开始时 SDK 会中止上一次回调请求，并忽略取消后迟到的结果。
+首屏列表和进入分组始终使用静态 `panel.customGroups`。用户输入非空搜索词后，可通过可选的 `customMentionSearch` 回调返回动态候选。回调的 `scope` 为 `{ type: "global" }` 或 `{ type: "group", groupId }`，每个返回结果都必须带所属静态分组的 `groupId`。静态自定义结果和回调结果会合并展示，并使用 `groupId + item.id` 去重；同一身份同时存在时，以回调结果为准。全局搜索再将合并后的自定义结果与内置 Mention 合并；清空搜索词后恢复静态列表。
+
+搜索请求的生命周期由 Widget 负责，宿主不需要自己实现请求时序控制。输入会经过防抖；开始新的搜索、替换分组或回调配置、以及卸载 Widget 时，都会通过 `signal` 中止正在执行的回调。被取消的回调不会影响面板：取消后迟到的结果会被丢弃，因此较早的慢响应无法覆盖最新的结果；取消也不会被渲染成失败态，面板会保留已经展示的结果。宿主只需要把 `signal` 透传给自己的数据请求，让底层请求尽早停止：
+
+```js
+customMentionSearch: async ({ query, scope, signal }) => {
+	const response = await fetch(`/host-search?q=${encodeURIComponent(query)}`, { signal })
+	const items = await response.json()
+	return [{ groupId: scope.type === "group" ? scope.groupId : "business-charts", items }]
+}
+```
+
+透传 `signal` 是推荐做法而非强制要求：宿主即使忽略它，自身的请求会继续执行，但 Widget 仍然会丢弃该结果。被取消的回调不能把取消回报成其他错误（例如超时或网络异常），因为不带 `AbortError` 的失败会被当作真实失败，并展示重试状态。
 
 ```js
 window.MagicWidget.mount({

@@ -251,6 +251,7 @@ namespace MagicWidget {
 		headerActions?: Partial<
 			Record<HeaderActionName, (context: HeaderActionContext) => void | Promise<void>>
 		>
+		/** Resolves host-owned candidates for a non-empty search; superseded calls are cancelled via `signal`. */
 		customMentionSearch?: (context: {
 			query: string
 			scope: { type: "global" } | { type: "group"; groupId: string }
@@ -548,7 +549,19 @@ Field semantics and host integration examples are in Custom Mention groups below
 
 Custom Mention groups are delivered after the `config_ready` handshake, so they are deliberately omitted from the protected initial URL query. A desktop inline Widget shows each non-empty host-named group in the root list. By default (or with `placement: "end"`), custom groups appear after the built-in `@` entries; specifying `placement: "start"` places the group at the top before built-in categories (micro-apps, connectors, skills, etc.). Clicking an item immediately inserts a `text` Mention and closes the Mention panel. The Mention displays the item's short `title` (falling back to `text`), while the Agent prompt uses the complete `text`. The original group ID, item ID, type, and data stay in the rich-text Mention metadata; no new backend Mention protocol is introduced.
 
-The initial list and group navigation always come from static `panel.customGroups`. When the user enters a non-empty search query, the optional `customMentionSearch` callback can resolve fresh candidates. The callback receives either `{ type: "global" }` or `{ type: "group", groupId }`; every returned result includes its owning static `groupId`. Static custom results and callback results are merged, keyed by `groupId` plus item `id`; when both sources contain the same identity, the callback result wins. Global results are then merged with built-in Mention results. Clearing the query restores the static list. The SDK aborts the previous callback request when a newer query starts and ignores results that arrive after cancellation.
+The initial list and group navigation always come from static `panel.customGroups`. When the user enters a non-empty search query, the optional `customMentionSearch` callback can resolve fresh candidates. The callback receives either `{ type: "global" }` or `{ type: "group", groupId }`; every returned result includes its owning static `groupId`. Static custom results and callback results are merged, keyed by `groupId` plus item `id`; when both sources contain the same identity, the callback result wins. Global results are then merged with built-in Mention results. Clearing the query restores the static list.
+
+The Widget owns the search request lifecycle, so hosts do not need to implement their own sequencing. Input is debounced; starting a newer query, replacing the group or callback configuration, or unmounting the Widget cancels the in-flight callback through `signal`. A cancelled callback never reaches the panel: results that arrive after cancellation are discarded, so a slow earlier response cannot overwrite the newest one, and cancellation is not rendered as a failure — the panel keeps the results it already showed. Hosts only need to forward `signal` into their own data request so the underlying work stops early:
+
+```js
+customMentionSearch: async ({ query, scope, signal }) => {
+	const response = await fetch(`/host-search?q=${encodeURIComponent(query)}`, { signal })
+	const items = await response.json()
+	return [{ groupId: scope.type === "group" ? scope.groupId : "business-charts", items }]
+}
+```
+
+Forwarding `signal` is recommended rather than required: a host that ignores it keeps its own request running, and the Widget still discards the result. What a cancelled callback must not do is report the cancellation as a different error, such as a timeout or a network failure, because a failure that does not carry `AbortError` is treated as a real one and shows the retry state.
 
 ```js
 window.MagicWidget.mount({

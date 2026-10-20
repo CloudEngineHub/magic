@@ -461,7 +461,9 @@
 						<code>revenue</code>, <code>active users</code>, or
 						<code>dynamic report</code>. Inside Business charts: try
 						<code>quarter</code>, <code>north region</code>, or
-						<code>dynamic chart</code>.
+						<code>dynamic chart</code>. To watch a slow request being cancelled,
+						type <code>slow report</code> and quickly replace it with
+						<code>dynamic report</code>.
 					</p>
 					<output id="e2e-mention-search-status" aria-live="polite">idle</output>
 				</section>
@@ -848,7 +850,24 @@
 
 			/** Searches a fictional host catalog and returns rich, group-owned Mention data. */
 			const customMentionSearch = async ({ query, scope, signal }) => {
-				const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+				const normalizedQuery = query.trim().toLowerCase()
+				// Simulates a slow host API so the superseded-request behavior can be checked by hand:
+				// typing "slow ..." keeps this request in flight while the next query cancels it.
+				if (normalizedQuery.startsWith("slow")) {
+					await new Promise((resolve, reject) => {
+						const timer = setTimeout(resolve, 1500)
+						// A real request forwarding `signal` settles as AbortError instead of resolving.
+						signal.addEventListener(
+							"abort",
+							() => {
+								clearTimeout(timer)
+								reject(new DOMException("Mention search aborted", "AbortError"))
+							},
+							{ once: true },
+						)
+					})
+				}
+				const tokens = normalizedQuery.split(/\s+/).filter(Boolean)
 				const catalog = [
 					{
 						groupId: "demo-business-charts",
@@ -897,6 +916,23 @@
 						},
 					},
 				]
+				// Exposes the delayed query's result so a late response is observable during manual checks.
+				catalog.push({
+					groupId: "demo-business-reports",
+					searchText: "slow report simulated latency",
+					item: {
+						id: "demo-slow-report",
+						type: "report",
+						title: "Slow Report",
+						text: "Slow report returned after a simulated 1.5s delay; it must never replace a newer search result.",
+						description: "Simulated slow response for manual cancellation checks",
+						data: {
+							source: "callback",
+							objectType: "business-report",
+							simulatedLatencyMs: 1500,
+						},
+					},
+				})
 				const results = catalog
 					.filter((entry) => scope.type === "global" || entry.groupId === scope.groupId)
 					.filter((entry) => tokens.every((token) => entry.searchText.includes(token)))

@@ -41,7 +41,7 @@ corepack pnpm test:e2e:ui
 corepack pnpm test:e2e:report
 ```
 
-Every contract test runs in headless Chromium, records video and trace for every test, and opens the HTML report after execution. `test:e2e:report` reopens the latest report without rerunning tests. The suite covers mount lifecycle, all host-owned Header callbacks and context, Header labels/visibility, layout/conversation/responsive/window configuration, readiness and preview-state events, runtime config updates, static and callback-driven global/scoped custom Mention search, plain and structured Mention input commands, structured `sendMessage` acknowledgement, and iframe stability. Without `WIDGET_E2E_APP_URL`, contract tests intentionally skip; with an invalid deployment or missing login, they fail at the application boundary so the environment can be corrected before continuing.
+Every contract test runs in headless Chromium, records video and trace for every test, and opens the HTML report after execution. `test:e2e:report` reopens the latest report without rerunning tests. The suite covers mount lifecycle, all host-owned Header callbacks and context, Header labels/visibility, layout/conversation/responsive/window configuration, readiness and preview-state events, runtime config updates, static and callback-driven global/scoped custom Mention search including superseded-query cancellation, plain and structured Mention input commands, structured `sendMessage` acknowledgement, and iframe stability. Without `WIDGET_E2E_APP_URL`, contract tests intentionally skip; with an invalid deployment or missing login, they fail at the application boundary so the environment can be corrected before continuing.
 
 ## Coverage boundary
 

@@ -372,6 +372,37 @@ test.describe("Magic Widget SDK contract", () => {
 		)
 	})
 
+	test("does not surface an aborted search when a newer query supersedes it", async ({
+		page,
+	}) => {
+		const frame = widgetFrame(page)
+		await frame.getByTestId("super-message-editor-at-button").click()
+		const searchInput = frame
+			.getByRole("searchbox", { name: "Search input area" })
+			.locator("input")
+
+		// The fixture holds "slow" queries for 1.5s, so this request is still in flight below.
+		await searchInput.fill("slow report")
+		await expect(frame.getByText(/Loading\.\.\.|加载中\.\.\./).first()).toBeVisible()
+
+		await searchInput.fill("dynamic report")
+
+		const report = frame
+			.getByTestId("mention-panel-menu-item")
+			.filter({ hasText: "Dynamic Report" })
+		await expect(report).toBeVisible()
+		// The cancelled request must neither own the result list nor show its cancellation as a failure.
+		await expect(
+			frame.getByTestId("mention-panel-menu-item").filter({ hasText: "Slow Report" }),
+		).toHaveCount(0)
+		await expect(frame.getByText("Custom Mention search was aborted")).toHaveCount(0)
+
+		await report.click()
+		await expect(frame.getByTestId("super-message-editor-content")).toContainText(
+			"@Dynamic Report",
+		)
+	})
+
 	test("uses the host callback for dynamic search inside a custom Mention group", async ({
 		page,
 	}) => {

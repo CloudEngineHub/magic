@@ -61,6 +61,16 @@ Bun 启动时会自动加载当前目录下的 `.env` 文件。
 
 示例回调位于 `index.html` 的 `customMentionSearch`，返回项包含完整 `text`、`description` 和结构化 `data`。返回结果通过 `groupId` 关联静态分组，清空搜索后仍恢复静态列表。
 
+### 手工验证被取消的搜索
+
+回调对以 `slow` 开头的查询模拟 1.5 秒延迟，并像真实请求一样在收到 `signal` 时以 `AbortError` 结束：
+
+1. 在 iframe 中打开 `@` 面板，输入 `slow report`，此时请求会挂起约 1.5 秒。
+2. 在返回前把输入改成 `dynamic report`。
+3. 预期：列表只显示 `Dynamic Report`；不出现 `Custom Mention search was aborted` 或重试按钮；底部的 `Dynamic custom Mention search` 状态只记录最新一次查询。
+
+如果旧请求的迟到结果覆盖了新结果，或取消被渲染成失败态，就说明请求时序处理出现了回归。
+
 ## 目录结构
 
 ```text

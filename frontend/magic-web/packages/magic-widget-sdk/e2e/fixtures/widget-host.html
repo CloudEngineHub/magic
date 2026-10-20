@@ -191,12 +191,32 @@
 				config,
 				...(inline ? { target } : {}),
 				customMentionSearch: async ({ query, scope, signal }) => {
-					// Keep existing static-search coverage stable while exposing deterministic dynamic fixtures.
-					await new Promise((resolve) =>
-						setTimeout(resolve, query.startsWith("dynamic") ? 30 : 0),
-					)
-					if (signal.aborted) throw new DOMException("Search aborted", "AbortError")
 					const normalizedQuery = query.toLowerCase()
+					// "slow" keeps one request in flight long enough for a follow-up query to supersede it,
+					// while "dynamic" answers quickly so the newer result is observable.
+					const delayMs = normalizedQuery.startsWith("slow")
+						? 1500
+						: normalizedQuery.startsWith("dynamic")
+							? 30
+							: 0
+					await new Promise((resolve) => setTimeout(resolve, delayMs))
+					if (signal.aborted) throw new DOMException("Search aborted", "AbortError")
+					if (normalizedQuery.startsWith("slow")) {
+						return [
+							{
+								groupId: "fixture-business-reports",
+								items: [
+									{
+										id: "slow-report-result",
+										type: "report",
+										title: "Slow Report",
+										description: "Slow E2E result",
+										text: "Slow report result that must never replace a newer search",
+									},
+								],
+							},
+						]
+					}
 					if (normalizedQuery === "sample quarter") {
 						return [
 							{
