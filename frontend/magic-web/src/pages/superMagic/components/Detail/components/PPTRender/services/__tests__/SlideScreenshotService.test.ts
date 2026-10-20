@@ -79,6 +79,50 @@ describe("SlideScreenshotService", () => {
 	})
 
 	describe("generateScreenshot", () => {
+		it.each(["loading", "interactive"] as const)(
+			"continues from a parsed body when resources stall the iframe in %s",
+			async (readyState) => {
+				vi.useFakeTimers()
+				const iframe = document.createElement("iframe")
+				document.body.appendChild(iframe)
+				const doc = iframe.contentDocument
+				if (!doc) throw new Error("Missing iframe document")
+				vi.spyOn(doc, "readyState", "get").mockReturnValue(readyState)
+				// Model a stylesheet/image that never settles: no iframe load notification.
+				vi.spyOn(iframe, "addEventListener").mockImplementation(() => undefined)
+				const controller = new AbortController()
+				let settled = false
+				const setup = (
+					service as unknown as {
+						setupScreenshotIframe: (args: {
+							iframe: HTMLIFrameElement
+							content: string
+							signal: AbortSignal
+						}) => Promise<void>
+					}
+				).setupScreenshotIframe({
+					iframe,
+					content: "<html><head></head><body><h1>Ready slide</h1></body></html>",
+					signal: controller.signal,
+				})
+				void setup.then(
+					() => {
+						settled = true
+					},
+					() => undefined,
+				)
+				try {
+					await vi.advanceTimersByTimeAsync(2000)
+					expect(settled).toBe(true)
+				} finally {
+					controller.abort()
+					await setup.catch(() => undefined)
+					iframe.remove()
+					vi.restoreAllMocks()
+					vi.useRealTimers()
+				}
+			},
+		)
 		it("does not capture or cache a page whose content never becomes visible", async () => {
 			vi.mocked(prepareScreenshotAnimations).mockRejectedValueOnce(
 				new Error("Slide content stayed hidden"),

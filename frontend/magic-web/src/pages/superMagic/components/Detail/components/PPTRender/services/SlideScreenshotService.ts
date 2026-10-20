@@ -812,8 +812,11 @@ export class SlideScreenshotService {
 
 				this.throwIfAborted(signal)
 
-				// 当前预览继续沿用原 fallback；已知缺图／字体未就绪的结果不进入长期缓存。
-				onCacheable?.(renderingReady && !usedFallbackImage)
+				// A resource-budget fallback can render, but must not persist a snapshot
+				// taken before late styles/scripts have finished loading.
+				onCacheable?.(
+					renderingReady && iframeDoc.readyState === "complete" && !usedFallbackImage,
+				)
 
 				const webpGeneration = result.toWebp({
 					width: width / THUMBNAIL_SCALE,
@@ -944,6 +947,7 @@ export class SlideScreenshotService {
 		signal: AbortSignal
 	}): Promise<void> {
 		const IFRAME_LOAD_TIMEOUT = 10000
+		const IFRAME_RESOURCE_WAIT_BUDGET = 2000
 
 		// 用于清理所有监听器和定时器
 		const cleanupFunctions: Array<() => void> = []
@@ -1064,6 +1068,19 @@ export class SlideScreenshotService {
 						doc.removeEventListener("readystatechange", checkComplete),
 					)
 					checkComplete()
+
+					// External fonts/images can keep load (and parser-blocked scripts)
+					// pending indefinitely. Keep the existing best-effort body fallback;
+					// resource checks and animation sampling still run before snapDOM.
+					const resourceWaitTimer = setTimeout(() => {
+						if (
+							doc.body &&
+							(doc.body.childElementCount > 0 || doc.body.textContent?.trim())
+						) {
+							handleResolve()
+						}
+					}, IFRAME_RESOURCE_WAIT_BUDGET)
+					cleanupFunctions.push(() => clearTimeout(resourceWaitTimer))
 				}),
 				signal,
 			)
