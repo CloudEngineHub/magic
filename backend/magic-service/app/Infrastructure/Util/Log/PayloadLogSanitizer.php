@@ -17,6 +17,26 @@ final class PayloadLogSanitizer
 {
     private const int MIN_BASE64_BYTES = 64;
 
+    private const string TRUNCATION_SUFFIX = '...[TRUNCATED]';
+
+    /**
+     * Keep provider content logs bounded without changing the original payload.
+     */
+    public static function truncateString(string $value, int $maxLength = 2048): string
+    {
+        if (mb_strlen($value, 'UTF-8') <= $maxLength) {
+            return $value;
+        }
+
+        $maxLength = max(0, $maxLength);
+        $suffixLength = mb_strlen(self::TRUNCATION_SUFFIX, 'UTF-8');
+        if ($maxLength <= $suffixLength) {
+            return mb_substr($value, 0, $maxLength, 'UTF-8');
+        }
+
+        return mb_substr($value, 0, $maxLength - $suffixLength, 'UTF-8') . self::TRUNCATION_SUFFIX;
+    }
+
     /**
      * Recursively summarize base64 values while keeping all other values unchanged.
      */
