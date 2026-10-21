@@ -686,6 +686,11 @@ skills:
       preload_files: [SKILL.md]
       # 声明不等于加载成功；必需正文失败时只停用该 Skill，主任务继续。
       disable_skill_on_preload_failure: true
+    - name: file-bundle
+      mount_when: always
+      allow_exclude: true
+      preload_files: []
+      disable_skill_on_preload_failure: false
 
 # 文件记忆运行时配置
 memory:
