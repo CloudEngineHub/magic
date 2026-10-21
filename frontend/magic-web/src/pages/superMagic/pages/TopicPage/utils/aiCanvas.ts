@@ -56,13 +56,32 @@ export function buildAiCanvasMention(folder: {
 	}
 }
 
-/** Default canvas folder name, localized like the file tree's "new canvas" action. */
+/**
+ * Default name of a new AI canvas project and of its canvas folder ("Untitled canvas"): the two
+ * start equal and the canvas then follows project renames (useAiCanvasDocument). Reads the lazily
+ * loaded `aiCanvas` namespace; callers outside the AI canvas home load it first (see
+ * createAiCanvasDocument).
+ */
 export function getAiCanvasDefaultFolderName(): string {
-	return i18next.t("topicFiles.contextMenu.newDesign.defaultName", { ns: "super" })
+	return i18next.t("home.untitled", { ns: "aiCanvas" })
+}
+
+/**
+ * Canvas folder name that follows the project name, or null while the project has no name yet
+ * (the canvas then keeps its default name). Path separators cannot appear in a folder name, so
+ * they become dashes.
+ */
+export function resolveAiCanvasFolderName(projectName?: string | null): string | null {
+	const name = (projectName ?? "").trim().replace(/[\\/]+/g, "-")
+	return name || null
 }
 
 /** Creates the default root canvas of an AI canvas project with the shared canvas writer. */
-export function createAiCanvasDocument(projectId: string): Promise<CreatedDesignProjectFiles> {
+export async function createAiCanvasDocument(
+	projectId: string,
+): Promise<CreatedDesignProjectFiles> {
+	// The project page can create the canvas before anything loaded the aiCanvas copy.
+	await i18next.loadNamespaces("aiCanvas")
 	return createDesignProjectFiles({
 		projectId,
 		folderName: getAiCanvasDefaultFolderName(),

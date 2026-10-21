@@ -21,7 +21,6 @@
 		"inspirationSubtitle": "Pick one and its prompt goes into the box above; tweak it and start",
 		"inspirationTitle": "Inspiration",
 		"loadFailed": "Failed to load canvases",
-		"loadMore": "Load more",
 		"moreActions": "More actions",
 		"myCanvases": "My canvases",
 		"myCanvasesSubtitle": "Pick up where you left off",
@@ -33,6 +32,9 @@
 		"rename": "Rename",
 		"retry": "Retry",
 		"save": "Save",
+		"searchClear": "Clear search",
+		"searchEmpty": "No canvases match “{{keyword}}”",
+		"searchPlaceholder": "Search canvases",
 		"showcaseGroup": "Featured",
 		"subtitle": "Describe what you want to see. AI generates images, videos and storyboards on the canvas, and you can keep refining",
 		"title": "AI Canvas",
@@ -42,7 +44,10 @@
 		"workspaceFailed": "Failed to load the AI canvas workspace"
 	},
 	"project": {
+		"backToHome": "Back to AI Canvas",
 		"canvasCreateFailed": "Failed to create the canvas",
+		"closePlayback": "Close playback",
+		"playbackTitle": "Tool playback",
 		"preparingCanvas": "Preparing the canvas",
 		"retry": "Retry"
 	}

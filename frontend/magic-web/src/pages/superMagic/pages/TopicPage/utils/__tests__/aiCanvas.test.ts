@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
-import { buildAiCanvasMention, findAiCanvasFolder } from "../aiCanvas"
+import { buildAiCanvasMention, findAiCanvasFolder, resolveAiCanvasFolderName } from "../aiCanvas"
 
 vi.mock("@/pages/superMagic/components/Detail/contents/Design/utils/designProjectCreation", () => ({
 	createDesignProjectFiles: vi.fn(),
@@ -60,5 +60,21 @@ describe("buildAiCanvasMention", () => {
 				},
 			},
 		})
+	})
+})
+
+describe("resolveAiCanvasFolderName", () => {
+	it("follows the trimmed project name", () => {
+		expect(resolveAiCanvasFolderName("  小狗沙滩奔跑  ")).toBe("小狗沙滩奔跑")
+	})
+
+	it("keeps the default name while the project has none", () => {
+		expect(resolveAiCanvasFolderName("")).toBeNull()
+		expect(resolveAiCanvasFolderName("   ")).toBeNull()
+		expect(resolveAiCanvasFolderName(undefined)).toBeNull()
+	})
+
+	it("replaces path separators, which a folder name cannot contain", () => {
+		expect(resolveAiCanvasFolderName("海报/分镜\\草稿")).toBe("海报-分镜-草稿")
 	})
 })

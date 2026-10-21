@@ -14,6 +14,7 @@ import SuperMagicService from "@/pages/superMagic/services"
 import {
 	buildAiCanvasMention,
 	createAiCanvasDocument,
+	getAiCanvasDefaultFolderName,
 } from "@/pages/superMagic/pages/TopicPage/utils/aiCanvas"
 
 interface AiCanvasCreatePromptProps {
@@ -62,6 +63,8 @@ function AiCanvasCreatePrompt({ workspace }: AiCanvasCreatePromptProps) {
 				try {
 					const created = await SuperMagicApi.createAiCanvasProject({
 						workspace_id: String(workspace.id),
+						// Starts with the same name as its canvas, which then follows renames.
+						project_name: getAiCanvasDefaultFolderName(),
 						workdir,
 					})
 					const canvas = await createAiCanvasDocument(String(created.project.id))

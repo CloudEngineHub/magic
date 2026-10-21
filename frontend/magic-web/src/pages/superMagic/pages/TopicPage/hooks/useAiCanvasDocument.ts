@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useMemoizedFn } from "ahooks"
+import { SuperMagicApi } from "@/apis"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { DesignProjectCreationError } from "@/pages/superMagic/components/Detail/contents/Design/utils/designProjectCreation"
@@ -11,11 +12,14 @@ import {
 	createAiCanvasDocument,
 	findAiCanvasFolder,
 	getAiCanvasDefaultFolderName,
+	resolveAiCanvasFolderName,
 } from "../utils/aiCanvas"
 
 interface UseAiCanvasDocumentOptions {
 	enabled: boolean
 	projectId?: string
+	/** The canvas folder follows this name (renames, AI-given names); see the rename sync below. */
+	projectName?: string
 	isReadOnly: boolean
 	/** Root file tree of the selected project (projectFilesStore.workspaceFileTree). */
 	attachments: AttachmentItem[]
@@ -34,12 +38,17 @@ interface UseAiCanvasDocumentOptions {
  * | has no canvas, read-only          | show the empty detail state; never write        |
  * | creation failed                   | expose the error; `retry` creates it again      |
  *
+ * The canvas also takes the project's name: once the files are loaded, an editable project whose
+ * name differs from its canvas folder renames that folder (once per folder and name, so a failed
+ * rename is not retried in a loop). Projects without a name keep the default canvas name.
+ *
  * Missing files are only judged after the project's complete request succeeded ("ready"):
  * partial snapshots may not contain the canvas yet and would otherwise create duplicates.
  */
 export function useAiCanvasDocument({
 	enabled,
 	projectId,
+	projectName,
 	isReadOnly,
 	attachments,
 	attachmentLoadState,
@@ -55,6 +64,8 @@ export function useAiCanvasDocument({
 	const openedKeyRef = useRef<string | null>(null)
 	// One creation attempt per project; reset only by switching project or an explicit retry.
 	const attemptedProjectRef = useRef<string | null>(null)
+	// Last folder rename sent, as `${folderId}:${name}`.
+	const renamedKeyRef = useRef<string | null>(null)
 	const currentProjectRef = useRef(projectId)
 	currentProjectRef.current = projectId
 
@@ -66,6 +77,7 @@ export function useAiCanvasDocument({
 	useEffect(() => {
 		openedKeyRef.current = null
 		attemptedProjectRef.current = null
+		renamedKeyRef.current = null
 		setIsCreating(false)
 		setCreationError(false)
 	}, [projectId])
@@ -118,6 +130,38 @@ export function useAiCanvasDocument({
 		if (attemptedProjectRef.current === projectId) return
 		void createCanvas()
 	}, [canvasFolder, createCanvas, enabled, isFilesReady, isReadOnly, projectId])
+
+	const targetFolderName = resolveAiCanvasFolderName(projectName)
+	const canvasFolderId = canvasFolder?.file_id ? String(canvasFolder.file_id) : ""
+	const canvasFolderName = canvasFolder?.file_name || canvasFolder?.name || ""
+
+	useEffect(() => {
+		if (!enabled || isReadOnly || !isFilesReady || !projectId || !canvasFolderId) return
+		if (!targetFolderName || canvasFolderName === targetFolderName) return
+		const key = `${canvasFolderId}:${targetFolderName}`
+		if (renamedKeyRef.current === key) return
+		renamedKeyRef.current = key
+		const targetProjectId = projectId
+
+		SuperMagicApi.renameFile({ file_id: canvasFolderId, target_name: targetFolderName })
+			.then(() => {
+				if (currentProjectRef.current !== targetProjectId) return
+				// The tree refresh brings the renamed folder (and its tab label) back in.
+				requestProjectAttachmentsFullRefresh({
+					projectId: targetProjectId,
+					reason: "ai-canvas-rename-canvas",
+				})
+			})
+			.catch((error) => console.error("Failed to rename the AI canvas folder:", error))
+	}, [
+		canvasFolderId,
+		canvasFolderName,
+		enabled,
+		isFilesReady,
+		isReadOnly,
+		projectId,
+		targetFolderName,
+	])
 
 	const canvasMentionItems = useMemo<MentionListItem[]>(
 		() => (canvasFolder ? [buildAiCanvasMention(canvasFolder)] : []),

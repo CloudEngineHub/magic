@@ -1,12 +1,13 @@
-import { memo, useState, type FormEvent } from "react"
+import { memo, useEffect, useRef, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { ExternalLink, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from "lucide-react"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import { Button } from "@/components/shadcn-ui/button"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import {
@@ -19,6 +20,7 @@ import {
 import { Input } from "@/components/shadcn-ui/input"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import type { FileMediaMetadata } from "@/pages/superMagic/services/useFileMediaSource"
+import PinnedTag from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import CanvasMediaImage from "./CanvasMediaImage"
 import EmptyCanvasCover from "./EmptyCanvasCover"
 import { cn } from "@/utils/cn"
@@ -30,7 +32,11 @@ interface AiCanvasProjectCardProps {
 	onOpen: (project: ProjectListItem) => void
 	onRename: (params: { projectId: string; projectName: string }) => Promise<void> | void
 	onDelete: (project: ProjectListItem) => void
+	onOpenInNewWindow?: (project: ProjectListItem) => void
+	onTogglePin?: (project: ProjectListItem) => void
 	onHover?: () => void
+	/** Called once when the card first nears the viewport; covers load from then on. */
+	onVisible?: (projectId: string) => void
 }
 
 /**
@@ -78,9 +84,37 @@ function AiCanvasProjectCard({
 	onOpen,
 	onRename,
 	onDelete,
+	onOpenInNewWindow,
+	onTogglePin,
 	onHover,
+	onVisible,
 }: AiCanvasProjectCardProps) {
+	const rootRef = useRef<HTMLDivElement>(null)
+
+	// One-shot visibility: the implicit root also accounts for the home's scroll container
+	// clipping the card. The 200px margin starts cover reads just before the card scrolls in.
+	useEffect(() => {
+		const element = rootRef.current
+		if (!element || !onVisible) return
+		if (typeof IntersectionObserver === "undefined") {
+			onVisible(project.id)
+			return
+		}
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries.some((entry) => entry.isIntersecting)) return
+				observer.disconnect()
+				onVisible(project.id)
+			},
+			{ rootMargin: "200px 0px" },
+		)
+		observer.observe(element)
+		return () => observer.disconnect()
+	}, [onVisible, project.id])
+
 	const { t, i18n } = useTranslation("aiCanvas")
+	// Shared project action labels, as in the project card's menu.
+	const { t: tSuper } = useTranslation("super")
 	const [renaming, setRenaming] = useState(false)
 	const [draftName, setDraftName] = useState("")
 	const name = project.project_name || t("home.untitled")
@@ -101,7 +135,7 @@ function AiCanvasProjectCard({
 	}
 
 	return (
-		<div className="group flex flex-col gap-2" onMouseEnter={onHover}>
+		<div ref={rootRef} className="group flex flex-col gap-2" onMouseEnter={onHover}>
 			<button
 				type="button"
 				onClick={() => onOpen(project)}
@@ -112,6 +146,10 @@ function AiCanvasProjectCard({
 				<div className="size-full transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100">
 					<CanvasCover covers={covers} />
 				</div>
+				{/* Same pinned tag as the project lists, on the cover's top-left; outside the zoom. */}
+				{project.is_pinned ? (
+					<PinnedTag className="absolute left-2.5 top-2.5 size-6 rounded-md shadow-sm" />
+				) : null}
 			</button>
 			<div className="flex items-start justify-between gap-2 px-0.5">
 				<div className="min-w-0">
@@ -134,6 +172,21 @@ function AiCanvasProjectCard({
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end">
+						{onOpenInNewWindow ? (
+							<DropdownMenuItem onSelect={() => onOpenInNewWindow(project)}>
+								<ExternalLink size={16} />
+								{tSuper("project.openInNewWindow")}
+							</DropdownMenuItem>
+						) : null}
+						{onTogglePin ? (
+							<DropdownMenuItem onSelect={() => onTogglePin(project)}>
+								{project.is_pinned ? <PinOff size={16} /> : <Pin size={16} />}
+								{project.is_pinned
+									? tSuper("project.unpin")
+									: tSuper("project.pin")}
+							</DropdownMenuItem>
+						) : null}
+						{onOpenInNewWindow || onTogglePin ? <DropdownMenuSeparator /> : null}
 						<DropdownMenuItem
 							onSelect={() => {
 								setDraftName(project.project_name || "")

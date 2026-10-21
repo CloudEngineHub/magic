@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useMemoizedFn } from "ahooks"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import { loadProjectAttachments } from "@/pages/superMagic/services/projectAttachmentsLoader"
@@ -57,23 +58,80 @@ export function pickCanvasCovers(
 }
 
 /**
- * Resolves cover images for the given AI canvas projects.
+ * Resolves cover images for the AI canvas projects whose cards have been on screen.
  *
- * Projects are read with the shared attachments loader (same API and fallback as the file
- * panel), at most three at a time. Leaving the page aborts pending reads; a failed read leaves
- * the cover unresolved so the card keeps its placeholder instead of showing an error.
+ * Covers load lazily: a project is queued once its card first enters the viewport
+ * (`visibleIds`), so a long list never reads attachments for cards nobody scrolled to. Reads go
+ * through the shared attachments loader (same API and fallback as the file panel), at most three
+ * at a time; later cards wait in the queue instead of cancelling earlier reads. Leaving the page
+ * aborts pending reads; a failed read leaves the cover unresolved (placeholder) and is retried
+ * the next time the card's project is queued.
  */
-export function useCanvasCovers(projects: ProjectListItem[]): CanvasCoverMap {
+export function useCanvasCovers(
+	projects: ProjectListItem[],
+	visibleIds: ReadonlySet<string>,
+): CanvasCoverMap {
 	const [covers, setCovers] = useState<CanvasCoverMap>(() =>
 		Object.fromEntries(
 			projects.map((project) => [project.id, coverCache.get(getCoverCacheKey(project))]),
 		),
 	)
 	const projectKey = projects.map(getCoverCacheKey).join(",")
+	const controllerRef = useRef<AbortController | null>(null)
+	const queueRef = useRef<ProjectListItem[]>([])
+	// Cache keys queued or loading, so a card seen twice is read once.
+	const pendingKeysRef = useRef(new Set<string>())
+	const activeRef = useRef(0)
 
 	useEffect(() => {
 		const controller = new AbortController()
-		const pending = projects.filter((project) => !coverCache.has(getCoverCacheKey(project)))
+		controllerRef.current = controller
+		return () => {
+			controller.abort()
+			controllerRef.current = null
+			queueRef.current = []
+			pendingKeysRef.current.clear()
+			activeRef.current = 0
+		}
+	}, [])
+
+	const pump = useMemoizedFn(() => {
+		const controller = controllerRef.current
+		if (!controller) return
+		while (activeRef.current < MAX_CONCURRENT_LOADS && queueRef.current.length > 0) {
+			const project = queueRef.current.shift()
+			if (!project) break
+			const key = getCoverCacheKey(project)
+			activeRef.current += 1
+			void loadProjectAttachments({
+				projectId: project.id,
+				signal: controller.signal,
+				enableErrorMessagePrompt: false,
+			})
+				.then((result) => {
+					if (controller.signal.aborted) return
+					const cover = pickCanvasCovers(result.list, project.id)
+					coverCache.set(key, cover)
+					setCovers((current) => ({ ...current, [project.id]: cover }))
+				})
+				.catch(() => {
+					// Keep the placeholder; nothing is cached, so a later queue retries it.
+				})
+				.finally(() => {
+					pendingKeysRef.current.delete(key)
+					if (controller.signal.aborted) return
+					activeRef.current -= 1
+					pump()
+				})
+		}
+	})
+
+	const visibleKey = projects
+		.filter((project) => visibleIds.has(project.id))
+		.map((project) => project.id)
+		.join(",")
+
+	useEffect(() => {
 		setCovers((current) => {
 			const next: CanvasCoverMap = {}
 			for (const project of projects) {
@@ -83,31 +141,17 @@ export function useCanvasCovers(projects: ProjectListItem[]): CanvasCoverMap {
 			return next
 		})
 
-		let index = 0
-		const worker = async () => {
-			while (index < pending.length && !controller.signal.aborted) {
-				const project = pending[index]
-				index += 1
-				try {
-					const result = await loadProjectAttachments({
-						projectId: project.id,
-						signal: controller.signal,
-						enableErrorMessagePrompt: false,
-					})
-					if (controller.signal.aborted) return
-					const cover = pickCanvasCovers(result.list, project.id)
-					coverCache.set(getCoverCacheKey(project), cover)
-					setCovers((current) => ({ ...current, [project.id]: cover }))
-				} catch {
-					// Keep the placeholder; the next visit retries because nothing was cached.
-				}
-			}
+		for (const project of projects) {
+			const key = getCoverCacheKey(project)
+			if (!visibleIds.has(project.id)) continue
+			if (coverCache.has(key) || pendingKeysRef.current.has(key)) continue
+			pendingKeysRef.current.add(key)
+			queueRef.current.push(project)
 		}
-		void Promise.all(Array.from({ length: MAX_CONCURRENT_LOADS }, worker))
-		return () => controller.abort()
-		// projectKey captures every input that changes which covers are needed.
+		pump()
+		// projectKey and visibleKey capture every input that changes which covers are needed.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [projectKey])
+	}, [projectKey, visibleKey])
 
 	return covers
 }
