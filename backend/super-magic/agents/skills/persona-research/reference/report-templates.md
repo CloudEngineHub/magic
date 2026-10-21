@@ -31,14 +31,24 @@ Use a template only if it is a readable, complete HTML document (`<html` or `<bo
 
 Before styling, draft the answer, its strongest evidence, what remains unknown, and the next action. A reader scanning only the opening and headings should understand the proposed decision, its evidence and any remaining conditions.
 
-- A short title names the decision or subject; the opening answer states the recommendation and its condition. Use a concrete judgment for each finding heading, not a topic label or a slogan. Prefer "Test a weekly task before adding features" to "Unlock a new retention journey". Do not repeat the research question as a subtitle.
+- Every heading names its subject and the point made about it, in one plain phrase. The report title is the research subject plus the decision it informs, with no verdict in it (for example "Trial user retention: whether to add a weekly task to onboarding"); the opening answer then states the recommendation and its condition. A hypothesis heading restates the hypothesis in neutral words; its verdict belongs in the badge and its reason in the paragraph. A theme heading names the theme and the direction of the finding. Do not repeat the research question as a subtitle.
+- Never use a quote, a sentence lifted from the body, a bare number, a persona's wording, a coined label or an unexplained abbreviation as a heading, and do not give two items the same heading. Test: a reader who sees only the headings can tell what is studied and what each part concludes.
+- Write in a formal, plain written register: complete sentences, a neutral tone, and no spoken fillers, slang, rhetorical questions, exclamations or slogans. Use one term for one idea throughout (for example always "AI interview", never alternating it with "chat" or "simulation"); define a necessary term or group name once, at first use; keep names, numbers and units exactly as in the source.
 - Each paragraph makes one point in 1-3 sentences: what happened or was said, what it suggests, and why it matters for this decision. Keep a connected explanation when the reasoning needs it; do not split it into disconnected slogans. Use familiar words, specific subjects and verbs. Explain a necessary research term on first use.
 - Put the citation directly after the fact it supports. Say "AI interview signal", "external evidence", "real-person result", or "our inference" when the distinction could be missed. A source about a related market does not prove the study's core claim. Preserve exact quotes; edit only the surrounding explanation.
 - Recommendations name an action, its audience or context, and the observable result to check. Do not invent an owner, deadline, threshold, price, cause, or quote to make the wording concrete. Say what is missing when the evidence cannot support a decision.
 - Delete generic introductions, exaggerated benefits, abstract noun chains, metaphors that hide the action, and repeated summaries. Replace "improve the end-to-end value experience" with the actual step and result. Keep a fact once in full; later sections may point back to it. Keep conflicting findings separate rather than smoothing them into a positive story.
 - Use a short list for parallel reasons or steps, a table for a real comparison, and paragraphs for reasoning. Bold only the judgment or action that deserves attention. Move judging criteria and secondary detail into labeled `details`; keep counter-evidence, missing validation and other limits that can change the decision visible beside it.
 
-Example (illustrative wording, not research evidence):
+Headings (illustrative):
+
+| Hard to follow | Clear |
+|---|---|
+| "4", or a quote such as "I forgot it existed" used as a heading | "Trial users do not form a weekly routine" |
+| "Rest gets squeezed" (a slogan) | "Short gaps between shifts reduce staff rest time" |
+| "H2: the late-to-early problem" (an unexplained coinage) | "Starting an early shift soon after a late shift is the most serious rest problem" |
+
+Body text (illustrative wording, not research evidence):
 
 | Hard to act on | Clear enough to assess |
 |---|---|
