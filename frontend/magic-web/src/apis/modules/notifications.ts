@@ -38,6 +38,18 @@ export interface NotificationCounts {
 	authorization_pending: number
 }
 
+export interface NotificationUpdate {
+	organization_code: string
+	counts: NotificationCounts
+	reason: "created" | "withdrawn" | "read" | "actioned"
+	event_id: string
+}
+
+export interface NotificationUpdateMessage {
+	type: "notification_update"
+	notification_update: NotificationUpdate
+}
+
 export interface NotificationTemplateEntry {
 	title_template: string
 	body_template: string
