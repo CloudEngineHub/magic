@@ -19,7 +19,7 @@ import { useDetailModeCache } from "../../hooks/useDetailModeCache"
 import { useAttachmentsPolling } from "../../hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "../../hooks/useProjectAttachmentsChangeRealtime"
 import { useDeferUntilFileTabsCacheLoaded } from "../../hooks/useDeferUntilFileTabsCacheLoaded"
-import { useAutoOpenCanvasFile } from "../../hooks/useAutoOpenCanvasFile"
+import { useAutoOpenCreatedCanvasTool } from "../../hooks/useAutoOpenCreatedCanvasTool"
 import { useRefreshTopicDetailOnTaskComplete } from "../../hooks/useRefreshTopicDetailOnTaskComplete"
 import { AttachmentDataProcessor } from "../../utils/attachmentDataProcessor"
 import {
@@ -228,6 +228,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	const {
 		shouldShowDetailPanel,
+		hasActiveDetailTab,
 		activeDetailTabType,
 		isDetailPanelCollapsed,
 		collapseDetailPanel,
@@ -252,10 +253,11 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const activeFileIdRef = useRef<string | null>(activeFileId)
 	activeFileIdRef.current = activeFileId
 
-	useAutoOpenCanvasFile({
+	useAutoOpenCreatedCanvasTool({
 		topicId: selectedTopic?.chat_topic_id,
 		projectId: selectedProject?.id,
 		activeFileId,
+		hasActiveDetailTab,
 		getActiveFileId: () => activeFileIdRef.current,
 		attachments,
 		attachmentList,
