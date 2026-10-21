@@ -620,6 +620,8 @@ export type MentionPanelSelectionAssetType = "image" | "video" | "audio"
 export interface MentionPanelSelectionSummary {
 	currentCounts: Record<MentionPanelSelectionAssetType, number>
 	limits: Partial<Record<MentionPanelSelectionAssetType, number>>
+	/** 所有资源类型的总上限；与 per-type 独立，非有限值表示无总上限。 */
+	totalLimit?: number
 	getItemAssetType?: (item: MentionItem) => MentionPanelSelectionAssetType | undefined
 	isItemAlreadySelected?: (item: MentionItem) => boolean
 }

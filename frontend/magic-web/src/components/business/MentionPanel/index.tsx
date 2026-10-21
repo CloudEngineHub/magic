@@ -58,7 +58,10 @@ import {
 	isMentionFolderItem,
 } from "./utils/multiSelect"
 import { prepareMentionItemForPending } from "./utils/multiSelectValidation"
-import { getMentionPanelSelectionSummaryCounts } from "./utils/selectionSummary"
+import {
+	canAcceptPendingItem,
+	getMentionPanelSelectionSummaryCounts,
+} from "./utils/selectionSummary"
 import { resolveMentionPanelHeight } from "./utils/panelSize"
 import { MentionPanelBuiltinItemId } from "./runtime/builtin/catalog-ids"
 import { createOtherProjectMentionItem } from "./utils/otherProjectMention"
@@ -193,7 +196,7 @@ const MentionPanel = observer(
 		// Destructure focus properties to avoid ESLint dependency warnings
 		const { shouldFocusSearch, clearFocusTrigger } = focus
 
-		const canToggleMultiSelectItemForItem = useCallback(
+		const canToggleBaseItem = useCallback(
 			(item: MentionItem) => {
 				if (!enableMultiSelect) return false
 				if (!canTogglePendingItem(item)) return false
@@ -226,13 +229,24 @@ const MentionPanel = observer(
 			reset: resetLocalMultiSelectState,
 		} = useMentionSelectionSession({
 			enabled: visible && enableMultiSelect && !isMobile,
-			canToggleItem: canToggleMultiSelectItemForItem,
+			canToggleItem: canToggleBaseItem,
 			navigationStack: state.navigationStack,
 			navigationKey: navigationSignature,
 			navigationPolicy: multiSelectNavigationPolicy,
 			scopeId: selectionScopeId,
 			prepareItem: prepareMentionItemForPending,
 		})
+
+		// 多选可勾选判定：基础类型/文件夹过滤之上，再叠加容量上限。
+		// 已暂存项允许取消勾选；新增项需满足「已提交 + 暂存」的 per-type / 总上限。
+		const canToggleMultiSelectItemForItem = useCallback(
+			(item: MentionItem) => {
+				if (!canToggleBaseItem(item)) return false
+				if (pendingByKey.has(getMentionItemSelectionKey(item))) return true
+				return canAcceptPendingItem(item, selectionSummary, pendingByKey.values())
+			},
+			[canToggleBaseItem, pendingByKey, selectionSummary],
+		)
 
 		// Current references are the committed base; pending entries are session-local
 		// and may have been collected from folders that are no longer visible.
