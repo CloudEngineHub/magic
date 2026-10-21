@@ -1,3 +1,5 @@
+import type { ModelBillingMultiplierSettings as SharedModelBillingMultiplierSettings } from "../../../model-billing-reference"
+
 export const enum SupportLocales {
 	auto = "auto",
 	zhCN = "zh_CN",
@@ -14,16 +16,7 @@ export type PlatformWatermarkIntensity = "light" | "standard" | "strong"
 /** 平台信息 */
 export namespace PlatformInfo {
 	/** 配置仅用于价格比较，最终参考金额由后端提供。 */
-	export interface ModelBillingMultiplierSettings {
-		enabled: boolean
-		base_price_cny: string | null
-		currency?: "CNY" | "USD" | null
-		input_price?: string | null
-		output_price?: string | null
-		input_price_cny?: string | null
-		output_price_cny?: string | null
-		usd_to_cny_rate: string | null
-	}
+	export type ModelBillingMultiplierSettings = SharedModelBillingMultiplierSettings
 
 	/** 组织水印配置 */
 	export interface WatermarkConfig {

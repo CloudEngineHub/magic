@@ -167,7 +167,6 @@ it("默认折叠，展开编辑后再次折叠仍以字符串提交完整配置"
 			model_billing_multiplier: {
 				enabled: true,
 				currency: "USD" as const,
-				base_price_cny: null,
 				input_price: "2.000000000001",
 				output_price: "3",
 				usd_to_cny_rate: "7",

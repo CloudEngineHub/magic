@@ -1,3 +1,4 @@
+import type { ModelBillingMultiplierSettings as SharedModelBillingMultiplierSettings } from "../../../../model-billing-reference";
 import type { Language } from "@magic-admin-v2/i18n/resources";
 
 export type PlatformLocale = Language;
@@ -35,16 +36,7 @@ export type PlatformInfoWatermark = {
 };
 
 /** 价格原文透传；后端提供默认值与最终参考金额。 */
-export type ModelBillingMultiplierSettings = {
-  enabled: boolean;
-  base_price_cny: string | null;
-  currency?: "CNY" | "USD" | null;
-  input_price?: string | null;
-  output_price?: string | null;
-  input_price_cny?: string | null;
-  output_price_cny?: string | null;
-  usd_to_cny_rate: string | null;
-};
+export type ModelBillingMultiplierSettings = SharedModelBillingMultiplierSettings;
 
 export type PlatformInfoDetails = {
   model_billing_multiplier?: ModelBillingMultiplierSettings;
@@ -85,7 +77,7 @@ export type PlatformInfoFormState = {
 };
 
 export type UpdatePlatformInfoParams = {
-  model_billing_multiplier: ModelBillingMultiplierSettings;
+  model_billing_multiplier: Omit<ModelBillingMultiplierSettings, "base_price_cny">;
   logo_zh_url: string;
   logo_en_url: string;
   minimal_logo_url: string;
