@@ -32,9 +32,11 @@ export const routeSketchMap: RouteSketchMap = {
 			() => import("@/pages/superMagic/lazy/skeleton/TopicPageMobileSkeletonWithLayout"),
 		),
 	},
-	// The canvas project route renders the topic page (canvas-only layout).
+	// The canvas project route has its own canvas-shaped placeholder.
 	[RouteName.AiCanvasProjectState]: {
-		desktop: lazy(() => import("@/pages/superMagic/lazy/skeleton/TopicPageDesktopSkeleton")),
+		desktop: lazy(
+			() => import("@/pages/superMagic/lazy/skeleton/AiCanvasProjectPageDesktopSkeleton"),
+		),
 		mobile: lazy(
 			() => import("@/pages/superMagic/lazy/skeleton/TopicPageMobileSkeletonWithLayout"),
 		),

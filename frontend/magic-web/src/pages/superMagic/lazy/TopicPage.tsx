@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react"
 import { useParams } from "react-router"
 import { Navigate } from "@/routes/components/Navigate"
 import { RouteName } from "@/routes/constants"
@@ -22,7 +22,12 @@ const TopicPageMobile = lazy(() => import("@/pages/superMagicMobile/pages/TopicP
  *
  * 如果数据尚未恢复，则显示骨架屏；恢复后显示对应页面内容。
  */
-const TopicPage = observer(function TopicPage() {
+const TopicPage = observer(function TopicPage({
+	desktopSkeleton,
+}: {
+	/** Desktop loading placeholder; the AI canvas route passes its canvas-shaped one. */
+	desktopSkeleton?: ReactNode
+}) {
 	const isMobile = useIsMobile()
 	const { projectId, topicId } = useParams()
 	const [hasRestoreFailed, setHasRestoreFailed] = useState(false)
@@ -119,7 +124,7 @@ const TopicPage = observer(function TopicPage() {
 
 	// 桌面端渲染，对应桌面端骨架屏和页面内容
 	return (
-		<Suspense fallback={<TopicPageDesktopSkeleton />}>
+		<Suspense fallback={desktopSkeleton ?? <TopicPageDesktopSkeleton />}>
 			<TopicPageDesktop />
 		</Suspense>
 	)

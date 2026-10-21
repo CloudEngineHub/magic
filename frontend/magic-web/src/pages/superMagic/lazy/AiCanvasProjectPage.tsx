@@ -9,6 +9,7 @@ import { isReadOnlyProject } from "../utils/permission"
 import { ProjectTopicMapCache } from "../utils/superMagicCache"
 import ProjectPage from "./ProjectPage"
 import TopicPage from "./TopicPage"
+import AiCanvasProjectPageDesktopSkeleton from "./skeleton/AiCanvasProjectPageDesktopSkeleton"
 
 /**
  * Page of the AI canvas project route (`/super/ai-canvas/:projectId`). The address carries no
@@ -53,7 +54,7 @@ const AiCanvasProjectPage = observer(function AiCanvasProjectPage() {
 	}, [needsTopic, project])
 
 	if (projectReady && isReadOnly && !hasProjectTopic) return <ProjectPage />
-	return <TopicPage />
+	return <TopicPage desktopSkeleton={<AiCanvasProjectPageDesktopSkeleton />} />
 })
 
 export default AiCanvasProjectPage

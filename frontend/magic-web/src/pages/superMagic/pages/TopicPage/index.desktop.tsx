@@ -8,7 +8,8 @@ import { useDeepCompareEffect, useDebounceFn, useUpdateEffect, useMemoizedFn } f
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Detail, { type DetailRef } from "../../components/Detail"
-import ProjectCardContainer from "../../components/ProjectCardContainer"
+import AiCanvasProjectHeader from "./components/AiCanvasProjectHeader"
+import AiCanvasPlaybackPanel from "./components/AiCanvasPlaybackPanel"
 import { SendMessageOptions } from "../../components/MessagePanel/types"
 import { shouldCheckAttachmentsOnTaskStatus } from "../../services/topicStatusSyncService"
 import useStyles from "../Workspace/style"
@@ -199,6 +200,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	/** ======================== States ======================== */
 	const [autoDetail, setAutoDetail] = useState<any>()
 	const [userSelectDetail, setUserSelectDetail] = useState<any>()
+	// Floating tool playback of an AI canvas project; one at a time, the latest replaces it.
+	const [canvasPlaybackDetail, setCanvasPlaybackDetail] = useState<unknown>(null)
+	const closeCanvasPlayback = useMemoizedFn(() => setCanvasPlaybackDetail(null))
+	useEffect(() => {
+		setCanvasPlaybackDetail(null)
+	}, [selectedTopic?.id])
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
 	const [isDetailPanelFullscreen, setIsDetailPanelFullscreen] = useState(false)
 	const clearUserSelectDetail = useMemoizedFn(() => {
@@ -251,6 +258,13 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		handleFileClick,
 		topicFilesProps,
 		attachmentList,
+		// AI canvas: tool playbacks float over the canvas instead of replacing it in the panel.
+		onOpenPlayback: isAiCanvas
+			? (toolData) => {
+					setCanvasPlaybackDetail(toolData)
+					return true
+				}
+			: undefined,
 	})
 
 	const { onFileTabsCacheLoaded, scheduleWhenTabsCacheReady } = useDeferUntilFileTabsCacheLoaded(
@@ -300,6 +314,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const aiCanvasDocument = useAiCanvasDocument({
 		enabled: isAiCanvas,
 		projectId: selectedProject?.id,
+		projectName: selectedProject?.project_name,
 		isReadOnly,
 		attachments,
 		attachmentLoadState: projectFilesStore.attachmentLoadState,
@@ -874,7 +889,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						: undefined
 				}
 				isDetailPanelFullscreen={isDetailPanelFullscreen}
-				enableProjectCollapse={canCollapseFileSidebar}
+				// The flag also arms drag-to-collapse of the conversation column. AI canvas has no
+				// file sidebar to collapse, but keeps that gesture so it resizes like other projects.
+				enableProjectCollapse={canCollapseFileSidebar || (isAiCanvas && !isReadOnly)}
 				showProjectSidebar={!isAiCanvas}
 				projectSiderPanelPersistence={
 					isSingleTopicChat ? CHAT_PROJECT_SIDER_PANEL_PERSISTENCE : undefined
@@ -938,12 +955,30 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 							// more) floats over the canvas's top-left corner instead.
 							previewSurfaceOverlay={
 								isAiCanvas ? (
-									<ProjectCardContainer
-										variant="compact"
-										selectedProject={selectedProject}
-										selectedWorkspace={selectedWorkspace}
-										className="w-auto min-w-[220px] max-w-[360px] shadow-sm"
-									/>
+									<>
+										<AiCanvasProjectHeader
+											selectedProject={selectedProject}
+											selectedWorkspace={selectedWorkspace}
+										/>
+										{canvasPlaybackDetail ? (
+											<AiCanvasPlaybackPanel
+												detail={canvasPlaybackDetail}
+												onDetailChange={setCanvasPlaybackDetail}
+												onClose={closeCanvasPlayback}
+												attachments={attachments}
+												attachmentList={attachmentList}
+												topicId={selectedTopic?.id}
+												baseShareUrl={`${window.location.origin}/share`}
+												currentTopicStatus={currentTopicStatus}
+												messages={messages}
+												autoDetail={autoDetail}
+												allowEdit={!isReadOnly}
+												selectedTopic={selectedTopic}
+												selectedProject={selectedProject}
+												projectId={selectedProject?.id}
+											/>
+										) : null}
+									</>
 								) : undefined
 							}
 							previewSurfaceFrame={
@@ -952,6 +987,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 											radius: "0.75rem",
 											outlineColor:
 												"rgb(var(--border-rgb) / var(--border-alpha))",
+											// The layers drawer starts below the floating project card (12px
+											// inset + ~42px card + 8px gap) instead of under it. Its CSS-module
+											// class is generated as `layers-drawer_<hash>`. In arbitrary variants
+											// "_" means a space, so the underscore is escaped; String.raw keeps
+											// the source text identical to the class, which Tailwind scans.
+											className: String.raw`[&_[class*='layers-drawer\_']]:!top-[62px]`,
 										}
 									: undefined
 							}

@@ -73,7 +73,7 @@ interface DetailProps {
 	/** When true, hides FilesViewer tab bar for immersive read-only preview */
 	hideTabBar?: boolean
 	/** Frame (radius, outline) of the floating preview layer; see FilesViewer `previewSurfaceFrame`. */
-	previewSurfaceFrame?: { radius: string; outlineColor?: string }
+	previewSurfaceFrame?: { radius: string; outlineColor?: string; className?: string }
 	/** Host UI floated over the preview's top-left corner; see FilesViewer `previewSurfaceOverlay`. */
 	previewSurfaceOverlay?: ReactNode
 	/** When true, treats the file viewer as fullscreen without requiring URL params */

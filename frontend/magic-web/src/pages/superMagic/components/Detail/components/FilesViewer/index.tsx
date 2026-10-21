@@ -1028,6 +1028,9 @@ const FilesViewer = memo(
 								: props.previewSurfaceFrame?.outlineColor
 						}
 						overlay={effectiveIsFullscreen ? undefined : props.previewSurfaceOverlay}
+						className={
+							effectiveIsFullscreen ? undefined : props.previewSurfaceFrame?.className
+						}
 						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStableTabs}
 						isFullscreen={effectiveIsFullscreen}
 						isPpt={isActivePptPreview}

@@ -8,6 +8,7 @@ import { RouteName } from "@/routes/constants"
 import { routesMatch } from "@/routes/history/helpers"
 import ProjectPageDesktopSkeleton from "./skeleton/ProjectPageDesktopSkeleton"
 import ProjectPageMobileSkeleton from "./skeleton/ProjectPageMobileSkeleton"
+import AiCanvasProjectPageDesktopSkeleton from "./skeleton/AiCanvasProjectPageDesktopSkeleton"
 import { isOwner, isReadOnlyProject } from "../utils/permission"
 import superMagicService from "../services"
 import { useUpdateEffect } from "ahooks"
@@ -195,7 +196,7 @@ const ProjectPage = observer(() => {
 		isAiCanvasProject(selectedProject) &&
 		routesMatch(pathname)?.route.name !== RouteName.AiCanvasProjectState
 	) {
-		return <ProjectPageDesktopSkeleton />
+		return <AiCanvasProjectPageDesktopSkeleton />
 	}
 
 	// Handle desktop redirect to topic page

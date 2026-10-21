@@ -265,7 +265,7 @@ export interface FilesViewerProps extends BaseComponentProps {
 	 * cannot reach it; hosts that frame their panel pass the same radius and outline color here so
 	 * the layer draws the frame itself. Defaults to a square, unframed layer.
 	 */
-	previewSurfaceFrame?: { radius: string; outlineColor?: string }
+	previewSurfaceFrame?: { radius: string; outlineColor?: string; className?: string }
 	/** Host UI floated over the preview's top-left corner; hidden in fullscreen. */
 	previewSurfaceOverlay?: ReactNode
 

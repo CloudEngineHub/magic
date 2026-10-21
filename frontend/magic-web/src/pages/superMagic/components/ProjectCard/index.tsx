@@ -13,6 +13,7 @@ import ProjectCardShareSection from "./components/ProjectCardShareSection"
 import ProjectCardInviteButton from "./components/ProjectCardInviteButton"
 import { openShareManagementModal } from "../ShareManagement/openShareManagementModal"
 import { isAiCanvasProject } from "../../utils/isAiCanvasProject"
+import MagicFileIcon from "@/components/base/MagicFileIcon"
 import IconWorkspaceProjectFolder from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
 import ProjectActionsDropdown from "../ProjectActionsDropdown"
 import useProjectItemActionProps from "../EmptyWorkspacePanel/hooks/useProjectItemActionProps"
@@ -165,7 +166,9 @@ function ProjectCard({
 				inCollaborationPanel={false}
 				trigger={["click"]}
 				placement="bottomRight"
-				onOpenInNewWindow={openProjectInNewTab}
+				// The compact card floats over the open project, so "open in new window" lives on
+				// the canvas list's menu instead.
+				onOpenInNewWindow={isCompact ? undefined : openProjectInNewTab}
 				onPinProject={handlePinProject}
 				onCopyCollaborationLink={handleCopyCollaborationLink}
 				onTransferProject={handleTransferProject}
@@ -198,8 +201,10 @@ function ProjectCard({
 		<div
 			className={cn(
 				"relative flex w-full flex-col items-center rounded-lg border border-border bg-background transition-all duration-300",
-				// Compact reads as a pill; while renaming it grows a second row, so ease the radius.
-				isCompact && (isEditing ? "rounded-2xl" : "rounded-full"),
+				// Compact reads as a pill (the one-row card is ~42px tall, so 24px fully rounds it);
+				// while renaming it grows a second row and eases to 16px. Both are pixel values, as
+				// rounded-full (9999px) would make the radius transition snap instead of animate.
+				isCompact && (isEditing ? "rounded-2xl" : "rounded-[24px]"),
 				className,
 			)}
 			data-testid="project-card"
@@ -253,7 +258,12 @@ function ProjectCard({
 					) : (
 						<>
 							<span className="flex size-4 shrink-0 items-center justify-center">
-								<IconWorkspaceProjectFolder size={16} isHovered={false} />
+								{/* An AI canvas project is its canvas: show the canvas file icon. */}
+								{isAiCanvasProject(selectedProject) ? (
+									<MagicFileIcon type="design" size={16} />
+								) : (
+									<IconWorkspaceProjectFolder size={16} isHovered={false} />
+								)}
 							</span>
 							<button
 								type="button"

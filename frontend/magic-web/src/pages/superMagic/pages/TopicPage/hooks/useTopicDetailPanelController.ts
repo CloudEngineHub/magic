@@ -21,6 +21,11 @@ interface UseTopicDetailPanelControllerOptions {
 	attachmentList?: AttachmentItem[]
 	/** 为 false 时由移动端 popup 消费 Open_Micro_App_Tab */
 	subscribeMicroAppTab?: boolean
+	/**
+	 * Takes over "open tool playback" requests; return true when handled, and the detail panel's
+	 * playback tab is left alone. The AI canvas shows playbacks in a floating panel instead.
+	 */
+	onOpenPlayback?: (toolData: unknown) => boolean
 }
 
 interface UseTopicDetailPanelControllerReturn {
@@ -52,7 +57,12 @@ export function useTopicDetailPanelController({
 	topicFilesProps,
 	attachmentList = [],
 	subscribeMicroAppTab = true,
+	onOpenPlayback,
 }: UseTopicDetailPanelControllerOptions): UseTopicDetailPanelControllerReturn {
+	// Stable wrapper, so a new handler from the host does not resubscribe every event.
+	const handleOpenPlaybackOverride = useMemoizedFn(
+		(toolData: unknown) => onOpenPlayback?.(toolData) ?? false,
+	)
 	const fileApi = useFileApi()
 	const [activeDetailTabType, setActiveDetailTabType] = useState<DetailTabType>(null)
 	// 收起只改变布局，不清空活动文件；展开继续使用原标签和编辑实例。
@@ -140,6 +150,7 @@ export function useTopicDetailPanelController({
 		}
 
 		const handleOpenPlaybackTab = (toolData: unknown) => {
+			if (handleOpenPlaybackOverride(toolData)) return
 			setActiveFileId(null)
 			setActiveDetailTabType("playback")
 			window.setTimeout(() => {
@@ -251,6 +262,7 @@ export function useTopicDetailPanelController({
 		attachmentList,
 		detailRef,
 		fileApi,
+		handleOpenPlaybackOverride,
 		scheduleFileOpenFallback,
 		setActiveFileId,
 		subscribeMicroAppTab,
