@@ -111,15 +111,45 @@ describe("stripConsole", () => {
 })
 
 describe("vitePluginStripConsole", () => {
+	const plugin = vitePluginStripConsole()
+	const transform = plugin.transform as unknown as {
+		filter: { id: RegExp; code: RegExp }
+		handler: (code: string, id: string) => { code: string; map: null } | null
+	}
+
+	/** Mirrors Rolldown: the native filter decides whether the handler is called at all. */
+	const runThroughPlugin = (code: string, id = "/virtual/test.ts") =>
+		transform.filter.id.test(id) && transform.filter.code.test(code)
+			? transform.handler(code, id)
+			: null
+
 	test("filters natively to script modules that mention console", () => {
-		const plugin = vitePluginStripConsole()
-		const transform = plugin.transform as unknown as {
-			filter: { id: RegExp; code: RegExp }
-		}
 		expect(transform.filter.id.test("/a/b.tsx")).toBe(true)
 		expect(transform.filter.id.test("/a/b.tsx?x")).toBe(false)
 		expect(transform.filter.id.test("/a/b.css")).toBe(false)
 		expect(transform.filter.code.test("console.log(1)")).toBe(true)
 		expect(transform.filter.code.test("const x = 1")).toBe(false)
+	})
+
+	test("the native filter admits every form the AST check can strip", () => {
+		// Regression: the filter once required `console` to be followed by `.` or `[`, so wrapped
+		// forms were skipped before the handler ever ran.
+		const forms = [
+			"console.log(1)",
+			'console["log"](1)',
+			"console\n.log(1)",
+			"console /* c */ .log(1)",
+			"(console).log(1)",
+			"console!.log(1)",
+			"(console as any).log(1)",
+			"(<any>console).log(1)",
+			"(console satisfies Console).log(1)",
+		]
+		for (const call of forms) {
+			const result = runThroughPlugin(`${call}\nx()`)
+			expect(result, call).not.toBeNull()
+			expect(result!.code.includes("console"), call).toBe(false)
+			expect(result!.map).toBeNull()
+		}
 	})
 })

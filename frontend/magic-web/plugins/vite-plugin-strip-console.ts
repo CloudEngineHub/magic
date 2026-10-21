@@ -45,8 +45,10 @@ import {
 const DEFAULT_KEEP_MARKER = "keep-console"
 // Same module set as the old plugin: matched against the raw id, so query ids are skipped.
 const SCRIPT_ID_FILTER = /\.(?:ts|tsx|js|jsx)$/
-// Cheap prefilter; false positives (strings, comments) just fall through to the AST check.
-const CONSOLE_CODE_FILTER = /\bconsole\s*[.[]/
+// Cheap prefilter. It must be a superset of what `isConsoleCall` accepts, so it only requires the
+// identifier itself: `console` can be followed by `)`, `!`, ` as X`, a comment or a line break
+// before the member access. False positives (strings, comments) just fall through to the AST check.
+const CONSOLE_CODE_FILTER = /\bconsole\b/
 
 interface StripConsoleOptions {
 	/** Comment text that protects a console call from removal. */
