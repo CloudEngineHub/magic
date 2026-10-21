@@ -346,7 +346,7 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
     }
 
     /**
-     * 龙虾名称按部署形态区分：国际 MagiClaw，国内英文 SuperClaw，国内中文超级龙虾。
+     * 龙虾描述按部署形态替换关键字：国际 MagiClaw，国内英文 SuperClaw，国内中文超级龙虾。
      *
      * @param array<string, mixed> $item
      * @return array<string, mixed>
@@ -355,14 +355,10 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
     {
         $brand = $this->resolveClawBrand();
 
-        $rebrand = static fn (string $text): string => strtr($text, [
+        $item['description'] = strtr((string) $item['description'], [
             'Magic Claw' => $brand,
             '龙虾' => $brand,
         ]);
-
-        $item['module_name'] = $rebrand((string) $item['module_name']);
-        $item['function_name'] = $rebrand((string) $item['function_name']);
-        $item['description'] = $rebrand((string) $item['description']);
 
         return $item;
     }
