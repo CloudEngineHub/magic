@@ -5,6 +5,7 @@ import type {
 } from "@/components/CanvasDesign/runtime/document/types"
 import { MarkerTypeEnum } from "@/components/CanvasDesign/runtime/document/types"
 import type {
+	CanvasAssetResourceInfo,
 	IdentifyImageMarkRequest,
 	IdentifyImageMarkResponse,
 	UploadPrivateFile,
@@ -12,7 +13,11 @@ import type {
 } from "@/components/CanvasDesign/public/magic-types"
 import { getPersistedSourceCrop } from "@/components/CanvasDesign/runtime/resources/image/imageCropUtils"
 import { getActiveImageContent } from "@/components/CanvasDesign/runtime/document/elementContent"
-import { getCanvasResourceFileName } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
+import {
+	getCanvasResourceFileName,
+	isAssetResourceScheme,
+	parseAssetResourcePath,
+} from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import { drawMarkerOnCanvas } from "./markerDrawers"
 import { generateUUID } from "@/components/CanvasDesign/runtime/shared/ids"
 
@@ -48,12 +53,44 @@ const DEFAULT_COMPRESSION_CONFIG: ImageCompressionConfig = {
 }
 
 export interface MarkerCompositorMethods {
-	getFileInfo: (
+	getFileInfo?: (
 		path: string,
 		options?: { useImageProcess?: boolean; forceRefresh?: boolean },
 	) => Promise<{ src?: string }>
+	getAssetResourceInfo?: (
+		assetId: string,
+		options?: { forceRefresh?: boolean },
+	) => Promise<CanvasAssetResourceInfo>
 	uploadPrivateFiles: (files: UploadPrivateFile[]) => Promise<UploadPrivateFileResponse[]>
 	identifyImageMark: (params: IdentifyImageMarkRequest) => Promise<IdentifyImageMarkResponse>
+}
+
+export async function resolveMarkerImageSourceUrl(
+	path: string,
+	methods: Pick<MarkerCompositorMethods, "getFileInfo" | "getAssetResourceInfo">,
+): Promise<string> {
+	const assetId = parseAssetResourcePath(path)
+	if (assetId !== undefined) {
+		if (!methods.getAssetResourceInfo) {
+			throw new Error("素材库资源解析器不可用")
+		}
+		const asset = await methods.getAssetResourceInfo(assetId)
+		if (asset.assetId !== assetId || asset.mediaType !== "image" || !asset.fileUrl) {
+			throw new Error(`素材库资源不是可用图片: ${path}`)
+		}
+		return asset.fileUrl
+	}
+	if (isAssetResourceScheme(path)) {
+		throw new Error(`无效的素材库资源路径: ${path}`)
+	}
+	if (!methods.getFileInfo) {
+		throw new Error("工作区文件解析器不可用")
+	}
+	const fileInfo = await methods.getFileInfo(path, { useImageProcess: true })
+	if (!fileInfo?.src) {
+		throw new Error(`无法获取图片 OSS 地址: ${path}`)
+	}
+	return fileInfo.src
 }
 
 export interface MarkerCompositorInput {
@@ -104,7 +141,7 @@ export class MarkerCompositorService {
 			ossUrl: providedOssUrl,
 			image: providedImage,
 		} = input
-		const { getFileInfo, uploadPrivateFiles } = methods
+		const { uploadPrivateFiles } = methods
 		const activeContent = getActiveImageContent(element)
 
 		if (!activeContent.src) {
@@ -115,11 +152,7 @@ export class MarkerCompositorService {
 		let ossUrl = providedOssUrl
 		if (!ossUrl) {
 			throwIfAborted(signal)
-			const fileInfo = await getFileInfo(activeContent.src, { useImageProcess: true })
-			ossUrl = fileInfo?.src
-			if (!ossUrl) {
-				throw new Error(`无法获取图片 OSS 地址: ${activeContent.src}`)
-			}
+			ossUrl = await resolveMarkerImageSourceUrl(activeContent.src, methods)
 		}
 
 		// 2. 加载图片和获取图片信息（优先使用提供的）

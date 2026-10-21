@@ -29,7 +29,20 @@ const context: SceneEditorContext = {
 	topicMode: TopicMode.RecordSummary,
 }
 describe("mobile home editor routing", () => {
-	it("uses one send-first composer even when the home employee is recording", () => {
+	it("uses the shared recording expert on the task homepage", () => {
+		render(
+			<MobileInputContainer
+				editorContext={{
+					...context,
+					deferProjectCreationUntilSend: true,
+					showModeToggle: true,
+				}}
+			/>,
+		)
+		expect(screen.getByTestId("recording-route")).toBeInTheDocument()
+		expect(screen.queryByTestId("composer")).toBeNull()
+	})
+	it("keeps the send-first composer when the homepage cannot switch employees", () => {
 		render(
 			<MobileInputContainer
 				editorContext={{ ...context, deferProjectCreationUntilSend: true }}

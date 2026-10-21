@@ -402,7 +402,7 @@ function FileContentRender(props: any) {
 			})
 	}
 
-	const exportPdf = async (fileId: string) => {
+	const exportPdf = async (fileId: string, previewElement?: HTMLElement) => {
 		if (!access.export || allowDownload === false) return
 		if (!fileId) return
 		if (!(await ensureFileSavesSynced([fileId]))) return
@@ -416,6 +416,12 @@ function FileContentRender(props: any) {
 		const toastId = createRandomUuidV4()
 		const resourceErrors = documentExporter.createResourceErrorCollector(t)
 		let pdfHandle: DocumentExport.Handle | null = null
+		const inPptMode =
+			displayConfig?.type === "slide" || isFileInPPTMode(fileId, attachmentList ?? [])
+		const page = inPptMode
+			? undefined
+			: await documentExporter.requestPdfExportSettings({ previewElement })
+		if (page === null) return
 
 		const getPdfExportToastContent = (progressText: string) => (
 			<div className="flex items-center gap-2">
@@ -452,9 +458,6 @@ function FileContentRender(props: any) {
 				throw new Error("Failed to fetch HTML file content")
 			}
 
-			const inPptMode =
-				displayConfig?.type === "slide" || isFileInPPTMode(fileId, attachmentList ?? [])
-
 			const preparedHtmlSlides = await prepareHtmlPagesForExport({
 				pages: result.htmlSlides,
 				attachments: attachments ?? [],
@@ -470,6 +473,7 @@ function FileContentRender(props: any) {
 				fileName: (result.fileName || "export") + ".pdf",
 				skipFailedPages: true,
 				pptMode: inPptMode,
+				page,
 				vector: {
 					fitContentWidth: !inPptMode,
 				},

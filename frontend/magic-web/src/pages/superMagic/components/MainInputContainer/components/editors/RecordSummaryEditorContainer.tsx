@@ -101,6 +101,9 @@ export default function RecordSummaryEditorContainer({
 				editorModeSwitch={editorModeSwitch}
 				modelSwitch={editorContext?.modelSwitch}
 				attachments={editorContext?.attachments}
+				beforeRecordingStart={editorContext?.beforeSend}
+				recordingNewProjectTopicMode={editorContext?.recordingNewProjectTopicMode}
+				allowSelectRecordingProject={editorContext?.allowSelectRecordingProject}
 				taskDataNode={editorNodes?.taskDataNode}
 				messageQueueNode={editorNodes?.messageQueueNode}
 				fillHeight={shouldFillHeight}

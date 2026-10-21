@@ -198,6 +198,41 @@ describe("clipboardResourceReferences", () => {
 		)
 	})
 
+	it("collects and rewrites only the uri fallback of a draft task", () => {
+		const video = videoElement([
+			{
+				contentId: "video-content",
+				src: "./videos/final.mp4",
+				generateVideoRequest: {
+					input_mode: "draft_task",
+					inputs: {
+						draft_task: {
+							video_id: "draft-video-id",
+							uri: "./videos/draft.mp4",
+						},
+					},
+				},
+			},
+		])
+
+		expect(collectElementResourceReferences([video]).map((ref) => ref.path)).toEqual([
+			"./videos/final.mp4",
+			"./videos/draft.mp4",
+		])
+		rewriteElementResourceReferences(
+			video,
+			new Map([
+				["./videos/final.mp4", "./videos/copied-final.mp4"],
+				["./videos/draft.mp4", "./videos/copied-draft.mp4"],
+			]),
+		)
+
+		expect(video.contents[0].generateVideoRequest?.inputs?.draft_task).toEqual({
+			video_id: "draft-video-id",
+			uri: "./videos/copied-draft.mp4",
+		})
+	})
+
 	it("dedupes and rewrites aliases without crossing workspace roots", () => {
 		const resolveResourceReference = createTestResourceReferenceResolver()
 		const image = imageElement([

@@ -43,6 +43,17 @@ class SkillMarketDomainService
     }
 
     /**
+     * 获取市场在架（已发布且未隐藏）的 Skill code.
+     *
+     * @param array<string> $skillCodes
+     * @return array<string>
+     */
+    public function getPublishedSkillCodes(array $skillCodes): array
+    {
+        return $this->skillMarketRepository->findPublishedSkillCodes($skillCodes);
+    }
+
+    /**
      * 获取已发布的官方内置 Skill 实体。
      *
      * @return array<int, SkillMarketEntity>

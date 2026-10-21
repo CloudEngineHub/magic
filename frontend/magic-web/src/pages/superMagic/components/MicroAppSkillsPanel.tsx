@@ -8,6 +8,7 @@ import type { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { MentionItemType } from "@/components/business/MentionPanel/types"
 import { Button } from "@/components/shadcn-ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { cn } from "@/utils/cn"
 
@@ -127,7 +128,8 @@ export default function MicroAppSkillsPanel({
 						{t("microAppPage.skills.subtitle")}
 					</p>
 				</div>
-				<div className="max-h-[430px] overflow-y-auto p-2">
+				{/* Cap the actual viewport while keeping short and empty skill lists content-sized. */}
+				<ScrollArea viewportClassName="h-auto max-h-[430px] p-2 [&>div]:!block">
 					{loading ? (
 						<div className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
 							<Loader2 className="size-4 animate-spin" aria-hidden />
@@ -180,7 +182,7 @@ export default function MicroAppSkillsPanel({
 							{t("microAppPage.skills.empty")}
 						</div>
 					)}
-				</div>
+				</ScrollArea>
 			</PopoverContent>
 		</Popover>
 	)

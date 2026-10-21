@@ -151,7 +151,7 @@ export function ChangePhoneModal({
 					<Input
 						value={newPhone}
 						onChange={(event) => {
-							setNewPhone(event.target.value)
+							setNewPhone(event.target.value.trim())
 							setErrors((prev) => ({ ...prev, newPhone: undefined }))
 						}}
 						placeholder={resolveToString(t("form.required"), {

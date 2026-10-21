@@ -18,6 +18,16 @@ vi.mock("@/pages/superMagic/stores", () => ({
 vi.mock("@/stores/projectFiles", () => ({ default: {} }))
 vi.mock("@/pages/superMagic/components/MessageList/context", () => ({
 	useMessageListContext: () => ({ projectFilesStore: { workspaceFilesList: state.files } }),
+	/**
+	 * The files a referenced path is resolved against, and the little that is needed to draw the
+	 * resolved file. The section reads all three through this hook, so the stand-in carries the same
+	 * shape a real store does rather than only the list these tests vary.
+	 */
+	useMessageListProjectFilesStore: () => ({
+		workspaceFilesList: state.files,
+		filePresentationContext: { kind: "project", projectId: "project-1" },
+		filePresentationIndex: undefined,
+	}),
 }))
 vi.mock("@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext", () => ({
 	useMessageViewState: () => [false, vi.fn()],
@@ -40,7 +50,32 @@ vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, options?: { count?: number }) => `${key}:${options?.count ?? ""}`,
 	}),
+	/**
+	 * Not used by this component, but reached from its graph anyway: the file icon it renders pulls
+	 * in the app's i18n store, and that store builds its instance at import time. Without this the
+	 * whole file fails to collect before a single test runs. The sibling `MessageAttachment` test
+	 * carries the same line for the same reason.
+	 */
+	initReactI18next: { type: "3rdParty", init: vi.fn() },
 }))
+
+/**
+ * The new-user guide's entry, as the section sees it. Held in a flag rather than stubbed per test
+ * because the section reads it inside the click, and because "the guide is due" is the only thing
+ * about it the section knows.
+ */
+const guideState = vi.hoisted(() => ({ deliverableRunDue: false }))
+
+vi.mock("@/pages/superMagic/components/LazyGuideTour/GuideTourManager", async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import("@/pages/superMagic/components/LazyGuideTour/GuideTourManager")
+		>()
+	return {
+		...actual,
+		startHomeOnboardingDeliverableRunIfDue: () => guideState.deliverableRunDue,
+	}
+})
 vi.mock(
 	"@/pages/superMagic/components/MessageList/utils/attachmentByFilePath",
 	async (importOriginal) => {
@@ -113,5 +148,42 @@ describe("AttachmentSection file reference deduplication", () => {
 			"docs/a b.md",
 		])
 		expect(screen.getAllByTestId("open-file-by-path")).toHaveLength(2)
+	})
+})
+
+/**
+ * The one click a new account's guide is allowed to take. It is the first of these files such an
+ * account ever asks for, and the guide explains what these files are — so the file stays shut while
+ * it is on screen, and the user opens it by clicking again. Everything else about the click is
+ * unchanged, which the group above covers.
+ */
+describe("the first click a new account gives one of these files", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		guideState.deliverableRunDue = false
+	})
+
+	it("spends it on the guide, opens nothing, and marks the block the guide frames", () => {
+		guideState.deliverableRunDue = true
+		showAttachments("[A](./docs/a.md)", ["docs/a.md"])
+
+		fireEvent.click(screen.getAllByTestId("open-file-by-path")[0])
+
+		expect(openFileByPath).not.toHaveBeenCalled()
+		// The guide's first step has nothing else to point at: this mark is the only record of which
+		// of the page's blocks the click belonged to.
+		expect(
+			document.querySelector('[data-guide-anchor="deliverable-attachment"]'),
+		).not.toBeNull()
+	})
+
+	it("opens the file on the click after the guide", () => {
+		showAttachments("[A](./docs/a.md)", ["docs/a.md"])
+
+		fireEvent.click(screen.getAllByTestId("open-file-by-path")[0])
+
+		expect(openFileByPath).toHaveBeenCalledWith(
+			expect.objectContaining({ filePath: "docs/a.md" }),
+		)
 	})
 })

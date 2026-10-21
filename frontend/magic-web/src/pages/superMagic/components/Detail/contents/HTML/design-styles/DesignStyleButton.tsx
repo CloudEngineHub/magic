@@ -20,6 +20,7 @@ interface DesignStyleButtonProps {
 	disabled?: boolean
 	testId?: string
 	getPopupContainer?: () => HTMLElement | null
+	isMobile?: boolean
 }
 
 export default function DesignStyleButton({
@@ -28,10 +29,12 @@ export default function DesignStyleButton({
 	disabled = false,
 	testId,
 	getPopupContainer,
+	isMobile = false,
 }: DesignStyleButtonProps) {
 	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
 	const submittedRequestRef = useRef<string | null>(null)
+
 
 	const canApply = Boolean(fileInfo.fileId && fileInfo.fileName && fileInfo.filePath) && !disabled
 
@@ -61,6 +64,8 @@ export default function DesignStyleButton({
 	)
 
 	const label = t("htmlEditor.designStyle.open")
+
+	if (isMobile) return null
 
 	return (
 		<>

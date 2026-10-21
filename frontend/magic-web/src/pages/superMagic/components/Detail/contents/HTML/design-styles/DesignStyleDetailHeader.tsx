@@ -2,7 +2,6 @@ import { ArrowLeft, FileText, Palette, Layout } from "lucide-react"
 import type { Ref } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import { DialogDescription, DialogTitle } from "@/components/shadcn-ui/dialog"
 import type { DesignStyle } from "./catalog"
 import { getStyleProfile } from "./styleProfiles"
 
@@ -47,13 +46,14 @@ export default function DesignStyleDetailHeader({
 					>
 						<ArrowLeft className="size-4" aria-hidden="true" />
 					</Button>
-					<DialogTitle className="text-lg font-semibold tracking-[-0.03em] text-foreground [text-wrap:balance]">
+					{/* MagicModal has no Radix Dialog context; keep this shared header context-free. */}
+					<h2 className="text-lg font-semibold tracking-[-0.03em] text-foreground [text-wrap:balance]">
 						{name}
-					</DialogTitle>
+					</h2>
 				</div>
-				<DialogDescription className="mt-1 max-w-[72ch] text-xs leading-5 [text-wrap:pretty]">
+				<p className="mt-1 max-w-[72ch] text-xs leading-5 text-muted-foreground [text-wrap:pretty]">
 					{description}
-				</DialogDescription>
+				</p>
 			</div>
 			<div
 				className="flex max-w-full flex-wrap items-center gap-x-4 gap-y-1"

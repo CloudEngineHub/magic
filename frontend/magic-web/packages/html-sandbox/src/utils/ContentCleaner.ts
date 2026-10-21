@@ -4,6 +4,7 @@
  */
 
 import { normalizeSafeHref } from "./safeUrl"
+import { removeRuntimeNodes, SOURCE_NODE_ATTRIBUTE } from "./sourceNodes"
 
 export class ContentCleaner {
 	/**
@@ -12,6 +13,7 @@ export class ContentCleaner {
 	static cleanDocument(html: string): string {
 		const parser = new DOMParser()
 		const doc = parser.parseFromString(html, "text/html")
+		removeRuntimeNodes(doc)
 
 		// Remove injected elements
 		this.removeInjectedElements(doc)
@@ -50,6 +52,7 @@ export class ContentCleaner {
 		const editingClasses = ["__editor-selected", "__editor-hover"]
 		const editingAttributes = [
 			"data-magic-editor-node-id",
+			SOURCE_NODE_ATTRIBUTE,
 			"contenteditable",
 			"data-text-editing",
 			"data-previous-content",

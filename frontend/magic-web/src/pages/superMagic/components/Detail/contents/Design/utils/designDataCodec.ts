@@ -48,6 +48,7 @@ const LEGACY_CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> 
 	[ElementTypeEnum.Image]: [
 		"visualUnderstanding",
 		"src",
+		"assetId",
 		"status",
 		"errorMessage",
 		"generateImageRequest",
@@ -58,12 +59,13 @@ const LEGACY_CONTENT_FIELDS_BY_TYPE: Partial<Record<string, readonly string[]>> 
 	[ElementTypeEnum.Video]: [
 		"visualUnderstanding",
 		"src",
+		"assetId",
 		"status",
 		"errorMessage",
 		"generateVideoRequest",
 		"videoGenerationResultMeta",
 	],
-	[ElementTypeEnum.Audio]: ["src"],
+	[ElementTypeEnum.Audio]: ["src", "assetId"],
 	[ElementTypeEnum.Text]: ["content", "defaultStyle"],
 	[ElementTypeEnum.Rectangle]: ["fill", "stroke", "strokeWidth", "cornerRadius"],
 	[ElementTypeEnum.Ellipse]: ["fill", "stroke", "strokeWidth"],
@@ -129,6 +131,7 @@ function sanitizeMigratedContent(content: UnknownRecord, type: string): void {
 	keepAllowedFields(content, new Set(["contentId", ...getElementContentFields(type)]))
 
 	omitIfNot(content, "src", (value) => typeof value === "string")
+	omitIfNot(content, "assetId", (value) => typeof value === "string" && value.trim().length > 0)
 	omitIfNot(content, "status", (value) => typeof value === "string")
 	omitIfNot(content, "errorMessage", (value) => typeof value === "string")
 	omitIfNot(content, "crop", (value) => {
@@ -288,8 +291,7 @@ function migrateElementToV3(
 	if (element.type === ElementTypeEnum.Image) {
 		if (firstContent.imageGenerationTaskMeta === undefined) {
 			const legacyHighRequest = firstContent.generateHightImageRequest as
-				| Parameters<typeof normalizeLegacyHighImageTaskMeta>[0]
-				| undefined
+				Parameters<typeof normalizeLegacyHighImageTaskMeta>[0] | undefined
 			const converted = normalizeLegacyHighImageTaskMeta(legacyHighRequest)
 			if (converted) firstContent.imageGenerationTaskMeta = converted
 		}

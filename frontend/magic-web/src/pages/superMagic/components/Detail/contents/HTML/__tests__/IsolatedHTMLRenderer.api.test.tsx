@@ -79,6 +79,27 @@ describe("IsolatedHTMLRenderer real API hook routing", () => {
 		)
 	})
 
+	it("denies identity requests in comparison previews without authorization", async () => {
+		userState.user.userInfo = { user_id: "private-id", real_name: "Display Name" }
+		renderIsolated(<IsolatedHTMLRenderer {...defaultProps} disableHtmlAppPermissions />)
+		await flushReactEffects()
+		const iframe = screen.getByTestId("isolated-html-content-iframe") as HTMLIFrameElement
+		const postMessage = vi
+			.spyOn(iframe.contentWindow as Window, "postMessage")
+			.mockImplementation(vi.fn())
+		dispatchIframeMessage(iframe, "MAGIC_GET_USER_INFO_REQUEST", window.location.origin, {
+			requestId: "comparison-identity",
+			scopes: [USER_INFO_SCOPES.IDENTITY],
+		})
+		await flushReactEffects()
+
+		expect(agentActionMocks.authorizeHtmlPermissions).not.toHaveBeenCalled()
+		expect(postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ requestId: "comparison-identity", success: false }),
+			window.location.origin,
+		)
+	})
+
 	it("routes a sibling request only to its own service and ignores unrelated senders", async () => {
 		userState.user.userInfo = { real_name: "Display Name" }
 		renderIsolated(

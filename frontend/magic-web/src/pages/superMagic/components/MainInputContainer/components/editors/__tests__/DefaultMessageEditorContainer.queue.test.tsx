@@ -111,6 +111,22 @@ vi.mock("@/pages/superMagic/components/MessageEditor/utils", () => ({
 import DefaultMessageEditorContainer from "../DefaultMessageEditorContainer"
 
 describe("DefaultMessageEditorContainer queue sending", () => {
+	it("passes the current composer employee to the historical chat model picker", () => {
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: { id: "project-1" } as never,
+					selectedTopic: { id: "topic-1", agent_code: "SMA-history" } as never,
+					topicMode: TopicMode.CustomAgent,
+					agentCode: "SMA-default",
+				}}
+			/>,
+		)
+
+		expect(mocks.editorProps.agentCode).toBe("SMA-default")
+		expect(mocks.editorProps.selectedTopic?.agent_code).toBe("SMA-history")
+	})
+
 	it("keeps long pasted text on temporary uploads until a blank chat is sent", async () => {
 		render(
 			<DefaultMessageEditorContainer
@@ -187,6 +203,52 @@ describe("DefaultMessageEditorContainer queue sending", () => {
 
 		expect(mocks.addToQueue).toHaveBeenCalledWith(
 			expect.objectContaining({ topicMode: mergedTopicMode }),
+		)
+	})
+
+	it("keeps the employee code when a crew creator message enters the queue", async () => {
+		render(
+			<DefaultMessageEditorContainer
+				editorContext={{
+					selectedProject: { id: "project-1" } as never,
+					selectedTopic: { id: "topic-1" } as never,
+					topicMode: TopicMode.Default,
+					showLoading: true,
+					mergeSendParams: ({ defaultParams }) => ({
+						...defaultParams,
+						topicMode: TopicMode.CrewCreator,
+						extra: { agent_code: "crew-123" },
+					}),
+					queueContext: {
+						editingQueueItem: null,
+						addToQueue: mocks.addToQueue,
+						finishEditQueueItem: vi.fn(),
+					},
+					onMessageSendReady: (sendMessage) => {
+						mocks.handleSend = sendMessage as typeof mocks.handleSend
+					},
+				}}
+			/>,
+		)
+
+		const value: JSONContent = {
+			type: "doc",
+			content: [{ type: "paragraph", content: [{ type: "text", text: "你好" }] }],
+		}
+
+		await act(async () => {
+			await mocks.handleSend?.({
+				value,
+				mentionItems: [],
+				topicMode: TopicMode.Default,
+			})
+		})
+
+		expect(mocks.addToQueue).toHaveBeenCalledWith(
+			expect.objectContaining({
+				topicMode: TopicMode.CrewCreator,
+				agentCode: "crew-123",
+			}),
 		)
 	})
 

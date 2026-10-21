@@ -164,7 +164,7 @@ class GoogleGeminiModel extends AbstractImageGenerate
             return $this->api->generateContent($prompt, [], $config);
         } catch (Exception $e) {
             $this->logger->warning('Google Gemini图片生成：调用图片生成接口失败', ['error' => $e->getMessage(), 'TraceAsString' => $e->getTraceAsString()]);
-            ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, $e->getMessage());
+            ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, throwable: $e);
         }
     }
 
@@ -292,7 +292,7 @@ class GoogleGeminiModel extends AbstractImageGenerate
             return [['imageData' => $this->extractImageDataFromResponse($result)]];
         } catch (Exception $e) {
             $this->logger->error('Google Gemini文生图：图片生成失败', ['error' => $e->getMessage()]);
-            ExceptionBuilder::throw(ImageGenerateErrorCode::NO_VALID_IMAGE, $e->getMessage());
+            ExceptionBuilder::throw(ImageGenerateErrorCode::GENERAL_ERROR, throwable: $e);
         } finally {
             $imageGenerateRequest->setReferImages($originalReferImages);
         }

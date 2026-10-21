@@ -78,6 +78,34 @@ describe("processHtmlContent image processing", () => {
 		expect(svg?.querySelector("div")?.textContent).toBe("<Button & text")
 	})
 
+	it("preserves entity literals in inline cart and advisor scripts", async () => {
+		const cartScript = `function escapeHtml(value) {
+			return String(value).replace(/[&<>'"]/g, (character) => ({
+				'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+			})[character]);
+		}`
+		const advisorScript = `function escapeAdvisorHtml(value) {
+			return String(value).replace(/[&<>'"]/g, (character) => ({
+				'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+			})[character]);
+		}`
+		const result = await processHtmlContent({
+			content: `<!doctype html><html><head><script>${cartScript}</script></head>
+				<body><script>${advisorScript}</script></body></html>`,
+			attachments: [
+				{ file_id: "html-file", file_name: "tool.html", relative_file_path: "tool.html" },
+			],
+			fileId: "html-file",
+		})
+		const scripts = Array.from(
+			new DOMParser()
+				.parseFromString(result.processedContent, "text/html")
+				.querySelectorAll("script:not([data-injected])"),
+			(script) => script.textContent,
+		)
+		expect(scripts).toEqual([cartScript, advisorScript])
+	})
+
 	it.each([
 		"img",
 		"inline-style",

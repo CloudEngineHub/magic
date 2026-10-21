@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Application\Design\Service;
 
 use App\Application\Design\Service\DesignVideoAppService;
+use App\Application\Design\Support\DesignDraftTaskResolver;
 use App\Application\ModelGateway\Mapper\ModelAttributes;
 use App\Application\ModelGateway\Mapper\ModelEntry;
 use App\Application\ModelGateway\Mapper\ModelGatewayMapper;
@@ -62,12 +63,15 @@ class DesignVideoAppServiceModelResolutionTest extends TestCase
 
         $taskDomainService = (new ReflectionClass(DesignGenerationTaskDomainService::class))->newInstanceWithoutConstructor();
         $submissionDomainService = (new ReflectionClass(DesignVideoSubmissionDomainService::class))->newInstanceWithoutConstructor();
+        // 本用例只测 findModelOrFail，样片解析器不参与，按同文件既有写法跳过构造。
+        $draftTaskResolver = (new ReflectionClass(DesignDraftTaskResolver::class))->newInstanceWithoutConstructor();
 
         $service = new DesignVideoAppService(
             $this->createMock(TaskFileDomainService::class),
             $modelGatewayMapper,
             $taskDomainService,
             $submissionDomainService,
+            $draftTaskResolver,
             $this->createMock(Producer::class),
         );
 

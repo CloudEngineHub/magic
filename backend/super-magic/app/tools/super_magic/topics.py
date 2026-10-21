@@ -58,7 +58,10 @@ class UpdateTopic(ProductTool[UpdateTopicParams]):
     async def execute(self, tool_context: ToolContext, params: UpdateTopicParams) -> ToolResult:
         topic_id = resource_id(params.topic_id, "topic_id")
         async def operation(ctx):
-            raw = await ctx.sdk.topic.update_async(ctx.auth, topic_id, {"topic_name": params.name})
+            # 后端保存接口要求 project_id；从目标话题读取，避免跨项目操作误用当前会话归属。
+            topic = projected(await ctx.sdk.topic.get_async(ctx.auth, topic_id), ("project_id",))
+            project_id = resource_id(topic.get("project_id", ""), "project_id")
+            raw = await ctx.sdk.topic.update_async(ctx.auth, topic_id, {"project_id": project_id, "topic_name": params.name})
             return {"id": str(raw.get("id", topic_id)), "topic_name": params.name}
         return await self.run_product(tool_context, "Topic update", operation, write=True)
 

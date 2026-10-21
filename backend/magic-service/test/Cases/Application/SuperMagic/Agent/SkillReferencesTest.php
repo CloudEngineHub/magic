@@ -46,7 +46,7 @@ class SkillReferencesTest extends TestCase
     {
         $service = (new ReflectionClass(SkillsMdSyncService::class))->newInstanceWithoutConstructor();
         $logger = $this->createMock(LoggerInterface::class);
-        $logger->expects(self::exactly(4))->method('warning');
+        $logger->expects(self::exactly(5))->method('warning');
         (new ReflectionProperty($service, 'logger'))->setValue($service, $logger);
         $makeVersion = static function (string $name, ?string $fileKey, string $source = 'LOCAL_UPLOAD') {
             $version = new SkillVersionEntity();
@@ -65,9 +65,9 @@ class SkillReferencesTest extends TestCase
         $codes = array_merge(['missing'], array_keys($versions));
         $method = new ReflectionMethod($service, 'buildBoundSkillEntries');
         $result = $method->invoke($service, $codes, $versions, 'SMA-example', false);
-        self::assertSame([['name' => 'valid', 'code' => 'valid', 'description' => '']], $result['market_skills']);
+        self::assertSame([['name' => 'valid', 'code' => 'conflict', 'description' => '']], $result['market_skills']);
         self::assertSame(['builtin'], $result['system_skills']);
-        foreach (['missing', 'no-package', 'conflict', 'invalid-name'] as $badCode) {
+        foreach (['missing', 'no-package', 'invalid-name'] as $badCode) {
             try {
                 $method->invoke($service, ['valid', $badCode], $versions, 'SMA-example', true);
                 self::fail('Strict publication accepted invalid binding: ' . $badCode);
@@ -75,6 +75,38 @@ class SkillReferencesTest extends TestCase
                 // Each invalid binding must still stop publication.
             }
         }
+
+        self::assertSame(
+            ['market_skills' => [['name' => 'valid', 'code' => 'conflict', 'description' => '']], 'system_skills' => []],
+            $method->invoke($service, ['valid', 'conflict'], $versions, 'SMA-example', true)
+        );
+    }
+
+    public function testLaterSkillWithDuplicatePackageNameOverridesEarlierSkillAcrossSources(): void
+    {
+        $service = (new ReflectionClass(SkillsMdSyncService::class))->newInstanceWithoutConstructor();
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects(self::exactly(2))->method('warning');
+        (new ReflectionProperty($service, 'logger'))->setValue($service, $logger);
+        $makeVersion = static function (string $name, ?string $fileKey, string $source = 'LOCAL_UPLOAD') {
+            $version = new SkillVersionEntity();
+            $version->setPackageName($name);
+            $version->setFileKey($fileKey);
+            $version->setSourceType($source);
+            return $version;
+        };
+        $versions = [
+            'market-first' => $makeVersion('shared', 'first.zip'),
+            'system-last' => $makeVersion('shared', null, 'SYSTEM'),
+            'system-first' => $makeVersion('other-shared', null, 'SYSTEM'),
+            'market-last' => $makeVersion('other-shared', 'last.zip'),
+        ];
+
+        $method = new ReflectionMethod($service, 'buildBoundSkillEntries');
+        self::assertSame(
+            ['market_skills' => [['name' => 'other-shared', 'code' => 'market-last', 'description' => '']], 'system_skills' => ['shared']],
+            $method->invoke($service, array_keys($versions), $versions, 'SMA-example', true)
+        );
     }
 
     public function testReferenceMergeRemovalPreservesManualSkillsAndOtherMetadata(): void

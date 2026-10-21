@@ -182,7 +182,10 @@ function CrewTopicPanel({
 			}),
 			selectedTopic,
 			selectedProject,
-			topicMode: TopicMode.Default,
+			topicMode: TopicMode.CrewCreator,
+			// Crew creation is a business mode; its model picker uses the default catalog.
+			modelTopicMode: TopicMode.Default,
+			agentCode: crewId,
 			topicStore,
 			setSelectedTopic: topicStore.setSelectedTopic,
 			mentionPanelStore,
@@ -193,12 +196,14 @@ function CrewTopicPanel({
 			showLoading,
 			size: detailPanelVisible ? "small" : "default",
 			onSendComplete: ({ success, currentProject, currentTopic }) => {
+				const resolvedProject = currentProject ?? selectedProject
+				const resolvedTopic = currentTopic ?? topicStore.selectedTopic
 				if (!success) return
 
 				applyOptimisticTopicRunningState({
 					topicStore,
-					topic: currentTopic ?? topicStore.selectedTopic,
-					project: currentProject ?? selectedProject,
+					topic: resolvedTopic,
+					project: resolvedProject,
 				})
 			},
 			mergeSendParams: ({ defaultParams }) => {
@@ -254,6 +259,7 @@ function CrewTopicPanel({
 					topicStore={topicStore}
 					topicActions={topicActions}
 					hideTopicListModeIcon
+					hideTopicTypeFilter
 					historyTriggerMode={historyTriggerMode}
 					isHistoryPanelOpen={isHistoryPanelOpen}
 					onToggleHistoryPanel={onToggleHistoryPanel}

@@ -1,4 +1,3 @@
-import { GuideTourElementId } from "../LazyGuideTour"
 import type { ReactNode } from "react"
 import { ScenePanelVariant } from "../MainInputContainer/components/LazyScenePanel/types"
 import CurrentSceneBadge from "../MainInputContainer/components/SelectedSkillBadge"
@@ -79,11 +78,7 @@ function DesktopInputContainer({
 	if (isActive && InvalidModeFallback) {
 		return (
 			<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.TopicPage}>
-				<div
-					ref={containerRef}
-					id={GuideTourElementId.MessagePanel}
-					className={cn(containerClassName, "bg-muted")}
-				>
+				<div ref={containerRef} className={cn(containerClassName, "bg-muted")}>
 					<div
 						className="flex w-full shrink-0 flex-col gap-2 [&:empty]:hidden"
 						data-conversation-input-accessory
@@ -128,11 +123,7 @@ function DesktopInputContainer({
 
 	return (
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.TopicPage}>
-			<div
-				ref={containerRef}
-				id={GuideTourElementId.MessagePanel}
-				className={containerClassName}
-			>
+			<div ref={containerRef} className={containerClassName}>
 				<div
 					className="flex w-full shrink-0 flex-col gap-2 [&:empty]:hidden"
 					data-conversation-input-accessory

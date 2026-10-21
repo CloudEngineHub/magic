@@ -28,11 +28,13 @@ class SkillPackageParserTest extends TestCase
         try {
             /** @var SkillPackageParser $parser */
             $parser = (new ReflectionClass(SkillPackageParser::class))->newInstanceWithoutConstructor();
-            $result = $parser->parseFile($zipPath, 'official/demo.zip');
+            $result = $parser->parseFile($zipPath, 'official/demo.zip', true);
 
             $this->assertSame('official/demo.zip', $result->fileKey);
             $this->assertSame('demo-skill', $result->packageName);
             $this->assertSame('Official demo', $result->packageDescription);
+            $this->assertSame(hash_file('sha256', $zipPath), $result->sha256);
+            $this->assertSame(['SKILL.md' => hash('sha256', "---\nname: demo-skill\ndescription: Official demo\n---\n")], $result->manifest);
         } finally {
             @unlink($zipPath);
         }

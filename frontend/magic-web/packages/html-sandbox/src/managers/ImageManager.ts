@@ -12,6 +12,7 @@ import { findElement } from "../utils/ElementSelector"
 import { getElementSelector } from "../utils/dom"
 import { resolveInsertedImageNodeWidth } from "../utils/inserted-image-width"
 import { getParentOrigin } from "../utils/parentOrigin"
+import { markSourceNode } from "../utils/sourceNodes"
 
 interface ReplaceElementImageState {
 	selector: string
@@ -303,6 +304,7 @@ export class ImageManager {
 			const reference = children[payload.index ?? children.length]
 			if (reference) parent.insertBefore(element, reference)
 			else parent.appendChild(element)
+			markSourceNode(element)
 			payload.selector = getElementSelector(element)
 			this.elementSelector.selectElement(element)
 			this.refreshSelectionWhenImageSettled(element)
@@ -628,6 +630,7 @@ export class ImageManager {
 		}
 
 		if (!isInserted) parent.appendChild(restoredElement)
+		markSourceNode(restoredElement)
 
 		return restoredElement
 	}
@@ -641,6 +644,7 @@ export class ImageManager {
 		const parent = findElement(previousState.parentSelector)
 
 		parent.appendChild(element)
+		markSourceNode(element)
 		const siblingIndex = Array.from(parent.children).indexOf(element)
 		const nextSibling = element.nextElementSibling
 
@@ -686,6 +690,7 @@ export class ImageManager {
 		const reference = children[index]
 		if (reference) parent.insertBefore(element, reference)
 		else parent.appendChild(element)
+		markSourceNode(element)
 
 		const payload: InsertImageNodeState = {
 			selector: getElementSelector(element),

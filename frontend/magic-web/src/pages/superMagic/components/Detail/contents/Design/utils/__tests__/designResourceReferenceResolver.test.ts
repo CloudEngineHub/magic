@@ -66,6 +66,7 @@ describe("designResourceReferenceResolver", () => {
 			status: "resolved",
 			resourceKind: "opaque-asset",
 			storagePath: "asset://virtual-human-asset-id",
+			assetId: "virtual-human-asset-id",
 			identity: "opaque-asset:asset://virtual-human-asset-id",
 		})
 		expect(resolveDesignCanvasResourceApiUri("asset://virtual-human-asset-id", context())).toBe(
@@ -74,6 +75,26 @@ describe("designResourceReferenceResolver", () => {
 		expect(
 			resolveDesignCanvasResourceWorkspacePath("asset://virtual-human-asset-id", context()),
 		).toBeUndefined()
+	})
+
+	it.each([
+		"asset://",
+		"asset:/virtual-human-asset-id",
+		"asset://virtual-human-asset-id/variant",
+		"asset://virtual-human-asset-id?version=1",
+		"asset://virtual-human-asset-id#preview",
+	])("rejects malformed asset references without workspace fallback: %s", (path) => {
+		const result = resolveDesignResourceReference(
+			{ namespace: "canvas-storage", path },
+			context(),
+		)
+
+		expect(result).toMatchObject({
+			status: "invalid",
+			reason: "invalid-asset-reference",
+		})
+		expect(resolveDesignCanvasResourceApiUri(path, context())).toBeUndefined()
+		expect(resolveDesignCanvasResourceWorkspacePath(path, context())).toBeUndefined()
 	})
 
 	it("builds a project/canvas-scoped resolver revision from identity semantics only", () => {

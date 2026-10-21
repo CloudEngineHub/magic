@@ -5,7 +5,7 @@ import { RecordingBatchSaveReporter } from "./RecordingBatchSaveReporter"
 import { AudioChunkDB, type StoredAudioChunk } from "./MediaRecorderService/AudioChunkDB"
 import { recordingLogger } from "./utils/RecordingLogger"
 import { getSnowflakeUploadFileName } from "./utils/getSnowflakeUploadFileName"
-import { isTaskEndError } from "./RecordingErrorManager"
+import { getBusinessErrorCode, isTaskEndError } from "./RecordingErrorManager"
 import { getNetworkMonitor, type NetworkMonitor } from "./NetworkMonitor"
 import { WasmOpusEncoder } from "./MediaRecorderService/encoders/WasmOpusEncoder"
 import { redactUploadErrorMessage } from "./utils/sanitizeUploadError"
@@ -269,8 +269,8 @@ export class ChunkUploader {
 		this.tokenManager = new UploadTokenManager(
 			{},
 			events.onTaskEnd
-				? (sessionId: string) => {
-						events.onTaskEnd?.(sessionId)
+				? (sessionId: string, code?: number) => {
+						return events.onTaskEnd?.(sessionId, code)
 					}
 				: undefined,
 		)
@@ -1083,7 +1083,7 @@ export class ChunkUploader {
 			this.clearRetryCount(chunkId)
 			this.cleanupChunkRuntimeState(chunkId, chunk.sessionId)
 			this.sessionQueues.delete(chunk.sessionId)
-			this.events.onTaskEnd?.(chunk.sessionId)
+			void this.events.onTaskEnd?.(chunk.sessionId, getBusinessErrorCode(error))
 			return
 		}
 

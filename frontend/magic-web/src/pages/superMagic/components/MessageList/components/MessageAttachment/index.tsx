@@ -3,7 +3,7 @@ import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { AttachmentProps } from "./type"
 import MagicIcon from "@/components/base/MagicIcon"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
@@ -19,8 +19,17 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { openMessageFile } from "../../utils/openMessageFile"
 import { useMessageAttachmentDownload } from "./hooks/useMessageAttachmentDownload"
 import { observer } from "mobx-react-lite"
-import { useMessageListProjectFilesStore } from "../../context"
+import { useMessageListContext } from "../../context"
 import { detectContentTypeRender } from "@/pages/superMagic/components/Detail/components/FilesViewer/utils/preview"
+import {
+	HomeOnboardingAnchor,
+	startHomeOnboardingDeliverableRunIfDue,
+} from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
+import { Send } from "lucide-react"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useCanvasElementFileIndex } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasElementFileIndex"
+
+const EMPTY_CANVAS_ELEMENT_IDS: readonly string[] = []
 
 export const Attachment = observer(function Attachment({
 	attachments,
@@ -34,11 +43,27 @@ export const Attachment = observer(function Attachment({
 	className?: string
 }) {
 	const { t } = useTranslation("super")
-	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
+	const { t: tCanvas } = useTranslation("canvasDesign")
+	const {
+		projectFilesStore: resolvedProjectFilesStore,
+		activeFileId,
+		activeDetailTabType,
+		detailPanelVisible,
+	} = useMessageListContext()
+	const canvasElementFileIndex = useCanvasElementFileIndex(activeFileId)
 	const isMobile = useIsMobile()
 	const { permissions: access } = useFileAccess()
 	const handleDownload = useMessageAttachmentDownload(attachments)
 	const [expanded, setExpanded] = useState(false)
+	/**
+	 * The block the new-user guide frames when it is opened from here.
+	 *
+	 * Marked by hand rather than declared in the markup, because the guide has to point at the block
+	 * that was *clicked* and nothing in the markup can tell the blocks apart: the message list holds
+	 * one of these per message, and they all look the same. See
+	 * `HomeOnboardingAnchor.DeliverableAttachment` and the tour's first step.
+	 */
+	const sectionRef = useRef<HTMLDivElement>(null)
 
 	const toggleExpanded = (e: any) => {
 		e.stopPropagation()
@@ -101,12 +126,38 @@ export const Attachment = observer(function Attachment({
 			})
 		}
 	}
+	/**
+	 * Opening one of these files — unless this is the first of them a new account has ever asked
+	 * for, in which case the guide takes the click and nothing is opened.
+	 *
+	 * The guide is about these files rather than about the one that was clicked: it says what a
+	 * task's results are and where they are kept, and both of its sentences are about the block the
+	 * user is looking at. Opening the file underneath would put that explanation on a screen the
+	 * user has not been introduced to yet, and the frame the first step draws around the block would
+	 * be over a panel that has just been replaced by the file's contents. So the click buys the
+	 * guide alone; the next one — what the guide's own words invite — opens the file, and every
+	 * click after that behaves as it always did.
+	 *
+	 * The block is still marked as the guide's anchor, and marked before the early return: the mark
+	 * is what the first step points at, and it is the only thing that can tell the guide which of
+	 * the page's attachment blocks was clicked. See `startHomeOnboardingDeliverableRunIfDue`.
+	 */
+	const openAttachment = (item: AttachmentProps) => {
+		if (startHomeOnboardingDeliverableRunIfDue()) {
+			sectionRef.current?.setAttribute(
+				"data-guide-anchor",
+				HomeOnboardingAnchor.DeliverableAttachment,
+			)
+			return
+		}
+		handleOpenFile(item)
+	}
 	const getMetaDataName = (item: any) => {
 		return item?.name ? `${item?.name}` : null
 	}
 	if (!show) return null
 	return (
-		<div className={cn("flex w-full flex-col rounded-md", className)}>
+		<div ref={sectionRef} className={cn("flex w-full flex-col rounded-md", className)}>
 			<div
 				className={cn(
 					"flex items-center gap-1",
@@ -144,6 +195,24 @@ export const Attachment = observer(function Attachment({
 							magicProjectResolution?.projectName ||
 							getMetaDataName(display_config) ||
 							fileName
+						const canvasElementIds = item.file_id
+							? (canvasElementFileIndex?.elementIdsByFileId.get(
+									String(item.file_id),
+								) ?? EMPTY_CANVAS_ELEMENT_IDS)
+							: EMPTY_CANVAS_ELEMENT_IDS
+						const mediaType = getFileType(item.file_extension || "")
+						const locateTarget =
+							item.file_tag === "final" &&
+							(mediaType === "image" || mediaType === "video") &&
+							activeDetailTabType === "file" &&
+							detailPanelVisible === true &&
+							activeFileId &&
+							canvasElementIds.length === 1
+								? {
+										canvasDesignId: activeFileId,
+										elementId: canvasElementIds[0],
+									}
+								: undefined
 						return (
 							<div
 								key={item.file_id}
@@ -153,7 +222,7 @@ export const Attachment = observer(function Attachment({
 										return
 									}
 									e.stopPropagation()
-									handleOpenFile(item)
+									openAttachment(item)
 								}}
 								data-testid="handle-open-file"
 							>
@@ -190,19 +259,41 @@ export const Attachment = observer(function Attachment({
 									>
 										{attachmentName}
 									</span>
+									{isEmpty(attachmentDisplayConfig) && locateTarget && (
+										<button
+											type="button"
+											aria-label={tCanvas("menu.locateProjectFile")}
+											className="inline-flex size-[18px] shrink-0 items-center justify-center text-muted-foreground hover:text-foreground/80"
+											onClick={(event) => {
+												event.preventDefault()
+												event.stopPropagation()
+												pubsub.publish(
+													PubSubEvents.Super_Magic_Focus_Canvas_Element,
+													{
+														canvasDesignId: locateTarget.canvasDesignId,
+														elementIds: [locateTarget.elementId],
+														selectElement: false,
+														animated: true,
+													},
+												)
+											}}
+										>
+											<Send aria-hidden="true" size={16} strokeWidth={2} />
+										</button>
+									)}
 									{access.view && access.preview && (
 										<MagicIcon
 											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
 											onClick={(e: any) => {
 												e.stopPropagation()
-												handleOpenFile(item)
+												openAttachment(item)
 											}}
 											component={IconEye}
 											stroke={2}
 											size={18}
 										/>
 									)}
-									{access.download && isEmpty(attachmentDisplayConfig) && (
+									{isEmpty(attachmentDisplayConfig) && access.download && (
 										<MagicIcon
 											className="shrink-0 cursor-pointer text-muted-foreground [&_svg]:text-muted-foreground hover:[&_svg]:text-foreground/80"
 											onClick={(e: any) => {

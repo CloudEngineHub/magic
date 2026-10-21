@@ -32,6 +32,7 @@ describe("DomStructureManager clipboard commands", () => {
 
 		const target = findNodeById(targetId)
 		expect(target.children).toHaveLength(2)
+		expect(target.children[0].hasAttribute("data-magic-source-node")).toBe(true)
 		expect(document.querySelectorAll("#source")).toHaveLength(1)
 		expect(document.querySelector("#source-copy")).toBeTruthy()
 		expect(document.querySelector("#source-copy-2")).toBeTruthy()

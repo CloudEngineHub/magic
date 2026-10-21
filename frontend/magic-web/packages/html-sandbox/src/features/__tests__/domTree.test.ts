@@ -1,10 +1,24 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { buildDomTree, resetEditorNodeIds } from "../domTree"
+import { markSourceNodes } from "../../utils/sourceNodes"
 
 describe("domTree", () => {
 	afterEach(() => {
 		resetEditorNodeIds(document.body)
 		document.body.replaceChildren()
+		document.documentElement.removeAttribute("data-magic-source-node")
+	})
+
+	it("omits JavaScript-created nodes from the editable structure", () => {
+		document.body.innerHTML = "<section><p>Fixed</p></section>"
+		markSourceNodes(document)
+		const dynamic = document.createElement("p")
+		dynamic.textContent = "Dynamic"
+		document.querySelector("section")?.appendChild(dynamic)
+
+		const tree = buildDomTree()
+		expect(tree.root.children[0].children).toHaveLength(1)
+		expect(tree.root.children[0].children[0].textContent).toBe("Fixed")
 	})
 
 	it("only exposes text previews for leaf elements", () => {

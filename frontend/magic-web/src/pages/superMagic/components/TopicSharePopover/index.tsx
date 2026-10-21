@@ -20,6 +20,7 @@ import {
 	useTopicShareTypePermissions,
 } from "../Share/hooks/useTopicShareTypePermissions"
 import { generateSharePassword, generateTopicShareMessageText } from "../Share/utils"
+import { analyticsService } from "@/services/analytics"
 import { SharePasswordField } from "../Share/ShareFields"
 import { useStyles } from "./styles"
 import { cn } from "@/utils/cn"
@@ -212,11 +213,11 @@ function TopicSharePopoverContent({
 			try {
 				const data = await SuperMagicApi.getShareInfoByCode({ code: topicId })
 				if (data?.resource_id) {
+					const isShareEnabled = data.share_type !== ShareType.None
 					const shareUrl = `${window.location.origin}/share/topic/${topicId}`
 					const finalShareUrl = data.password
 						? `${shareUrl}?password=${data.password}`
 						: shareUrl
-					const isShareEnabled = data.share_type !== ShareType.None
 
 					setSettings({
 						shareEnabled: isShareEnabled,
@@ -259,17 +260,19 @@ function TopicSharePopoverContent({
 					const password = passwordEnabled
 						? settings.password || generateSharePassword()
 						: ""
+					analyticsService.report("content_share_attempted", {
+						resourceType: ResourceType.Topic,
+					})
 					await SuperMagicApi.createShareTopic({
 						resource_id: topicId,
 						resource_type: ResourceType.Topic,
 						share_type: newShareType,
-						password: password,
+						password,
 						extra: {
 							show_original_info: settings.showOriginalInfo,
 							view_file_list: settings.showFileList,
 						},
 					})
-
 					const shareUrl = `${window.location.origin}/share/topic/${topicId}`
 					const finalShareUrl = password ? `${shareUrl}?password=${password}` : shareUrl
 					setSettings((prev) => ({

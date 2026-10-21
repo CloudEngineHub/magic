@@ -17,7 +17,7 @@
  * 所有操作通过 postMessage 委托给主站（parent window）处理。
  */
 
-import { BaseRuntimeBridgeApiPlugin } from "@dtyq/html-sandbox/runtime"
+import { BaseRuntimeBridgeApiPlugin } from "@dtyq/html-sandbox"
 import { MagicApiLogger } from "./MagicApiLogger"
 
 export interface AgentInfo {

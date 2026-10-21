@@ -12,8 +12,19 @@ import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { TopicStore } from "@/pages/superMagic/stores/core/topic"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 
+const { createProjectApiMock, analyticsTrackMock } = vi.hoisted(() => ({
+	createProjectApiMock: vi.fn(),
+	analyticsTrackMock: vi.fn(),
+}))
+
 vi.mock("@/apis", () => ({
-	SuperMagicApi: {},
+	SuperMagicApi: {
+		createProject: createProjectApiMock,
+	},
+}))
+
+vi.mock("@/services/analytics", () => ({
+	analyticsService: { report: analyticsTrackMock },
 }))
 
 vi.mock("@/components/Agent/MCP/service/MCPStorageService", () => ({
@@ -133,6 +144,8 @@ describe("messageSendPreparation", () => {
 		}
 	})
 	beforeEach(() => {
+		createProjectApiMock.mockReset()
+		analyticsTrackMock.mockReset()
 		modeServiceMock.defaultAgentCode = undefined
 		isModeValidMock.mockReset()
 		isModeValidMock.mockReturnValue(false)
@@ -140,6 +153,36 @@ describe("messageSendPreparation", () => {
 		isModeVisibleMock.mockReturnValue(true)
 		screenshotMocks.collectStorageIds.mockReset()
 		screenshotMocks.releaseStoredScreenshots.mockReset()
+	})
+
+	it("reports workspace creation when a workspace home uses an employee mode", async () => {
+		createProjectApiMock.mockResolvedValue({
+			project: {
+				id: "project-workspace",
+				workspace_id: "workspace-1",
+				project_mode: "SMA-agent",
+			},
+			topic: {
+				id: "topic-workspace",
+				project_id: "project-workspace",
+				workspace_id: "workspace-1",
+			},
+		})
+
+		const context = resolveMessageSendContext({
+			selectedWorkspace: { id: "workspace-1" } as never,
+			creationScene: "workspace",
+			setSelectedProject: vi.fn(),
+			setSelectedTopic: vi.fn(),
+		})
+
+		await context.createProject({ projectMode: "SMA-agent" as TopicMode })
+
+		expect(analyticsTrackMock).toHaveBeenCalledWith("project_create_attempted", {
+			workspaceId: "workspace-1",
+			sceneOverride: "workspace",
+			mode: "SMA-agent",
+		})
 	})
 
 	it("normalizes the configured non-SMA default employee for topic state and send params", async () => {
@@ -186,6 +229,48 @@ describe("messageSendPreparation", () => {
 			expect.objectContaining({
 				topicMode: "agent-default",
 				extra: undefined,
+			}),
+		)
+	})
+
+	it("keeps the employee code for direct crew creator sends", async () => {
+		const selectedProject = {
+			id: "project-1",
+			workspace_id: "workspace-1",
+		} as ProjectListItem
+		const selectedTopic = {
+			id: "topic-1",
+			project_id: "project-1",
+			chat_topic_id: "chat-topic-1",
+			chat_conversation_id: "conversation-1",
+			topic_mode: TopicMode.CrewCreator,
+		} as Topic
+
+		const result = await preparePanelSend({
+			params: {
+				value: {
+					type: "doc",
+					content: [{ type: "paragraph", content: [{ type: "text", text: "hello" }] }],
+				},
+				mentionItems: [],
+				topicMode: TopicMode.CrewCreator,
+				extra: { agent_code: "crew-123" },
+			},
+			context: { selectedProject, selectedTopic },
+			tabPattern: TopicMode.CrewCreator,
+			messagesLength: 1,
+		})
+
+		expect(result?.currentTopic).toEqual(
+			expect.objectContaining({
+				topic_mode: TopicMode.CrewCreator,
+				agent_code: "crew-123",
+			}),
+		)
+		expect(result?.params).toEqual(
+			expect.objectContaining({
+				topicMode: TopicMode.CrewCreator,
+				extra: { agent_code: "crew-123" },
 			}),
 		)
 	})

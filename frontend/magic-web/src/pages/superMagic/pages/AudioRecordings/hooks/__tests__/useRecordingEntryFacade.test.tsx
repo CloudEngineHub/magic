@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { VoiceResultUtterance } from "@/components/business/VoiceInput/services/VoiceClient/types"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { ProjectListItem, Topic, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import {
 	ALL_RECORDING_GROUP_ID,
@@ -28,6 +29,8 @@ const {
 	audioRecordingsServiceMock,
 	forceOverrideMock,
 	importTestState,
+	analyticsTrackMock,
+	isMobileMock,
 } = vi.hoisted(() => {
 	const importTestState = {
 		queuedFiles: [] as File[],
@@ -39,6 +42,7 @@ const {
 			modelId: string
 			taskKey: string
 			autoSummaryEnabled: boolean
+			onUploadStarted?: () => void
 		} | null,
 	}
 	return {
@@ -71,6 +75,7 @@ const {
 		},
 		recordSummaryStoreMock: {
 			status: "init",
+			isRecording: false,
 			isVisible: false,
 			isOtherTabRecording: false,
 			floatPanel: {
@@ -130,6 +135,8 @@ const {
 			run: vi.fn(),
 		},
 		importTestState,
+		analyticsTrackMock: vi.fn(),
+		isMobileMock: vi.fn(() => false),
 	}
 })
 
@@ -146,10 +153,12 @@ const audioImportStoreMock = vi.hoisted(() => ({
 				modelId: string
 				taskKey: string
 				autoSummaryEnabled: boolean
+				onUploadStarted?: () => void
 			},
 		) => {
 			importTestState.queuedFiles = files
 			importTestState.pendingImportContext = context
+			context.onUploadStarted?.()
 		},
 	),
 	cancelImport: vi.fn(),
@@ -261,8 +270,12 @@ vi.mock("@/apis", () => ({
 	SuperMagicApi: superMagicApiMock,
 }))
 
+vi.mock("@/services/analytics", () => ({
+	analyticsService: { report: analyticsTrackMock },
+}))
+
 vi.mock("@/hooks/useIsMobile", () => ({
-	useIsMobile: () => false,
+	useIsMobile: () => isMobileMock(),
 }))
 
 vi.mock("../../stores/audio-import-store", () => ({
@@ -300,7 +313,14 @@ describe("useRecordingEntryFacade", () => {
 		runtimeMock.state.isPaused = false
 		runtimeMock.state.duration = "00:00:00"
 		runtimeMock.actions.startRecording.mockReset()
+		runtimeMock.actions.startRecording.mockImplementation(() => {
+			runtimeMock.state.isRecording = true
+		})
 		runtimeMock.actions.finishRecording.mockReset()
+		recordSummaryStoreMock.isRecording = false
+		analyticsTrackMock.mockReset()
+		isMobileMock.mockReset()
+		isMobileMock.mockReturnValue(false)
 		recordSummaryServiceMock.ensureProjectAndTopic.mockReset()
 		recordSummaryServiceMock.getRecordingOverrideContext.mockReset()
 		recordSummaryServiceMock.getRecordingOverrideContext.mockResolvedValue(null)
@@ -450,6 +470,16 @@ describe("useRecordingEntryFacade", () => {
 			}),
 		)
 		expect(result.current.presentation).toBe("list")
+		expect(analyticsTrackMock).toHaveBeenCalledWith("project_create_attempted", {
+			workspaceId: undefined,
+			sceneOverride: "ai_recording",
+			mode: TopicMode.RecordSummary,
+		})
+		expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+			isMobile: false,
+			audioSource: "recorded",
+			transcriptionEnabled: true,
+		})
 	})
 
 	it("attaches the current real group workspace when starting a recording", async () => {
@@ -566,6 +596,11 @@ describe("useRecordingEntryFacade", () => {
 				transcriptionEnabled: false,
 			}),
 		)
+		expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+			isMobile: false,
+			audioSource: "recorded",
+			transcriptionEnabled: false,
+		})
 	})
 
 	it("reveals the desktop FloatPanel while recorder startup is still pending", async () => {
@@ -817,6 +852,11 @@ describe("useRecordingEntryFacade", () => {
 				project: expect.objectContaining({ id: "project-ensured" }),
 			}),
 		)
+		expect(analyticsTrackMock).toHaveBeenCalledWith("project_create_attempted", {
+			workspaceId: undefined,
+			sceneOverride: "ai_recording",
+			mode: TopicMode.RecordSummary,
+		})
 	})
 
 	it("hydrates summary model context on demand before starting recording", async () => {
@@ -929,6 +969,11 @@ describe("useRecordingEntryFacade", () => {
 			"mobile.recordingEntry.active.startTimedOut",
 		)
 		expect(result.current.startupErrorDetail).toContain("recording-start-timeout")
+		expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+			isMobile: false,
+			audioSource: "recorded",
+			transcriptionEnabled: true,
+		})
 
 		vi.useRealTimers()
 	})
@@ -1240,6 +1285,267 @@ describe("useRecordingEntryFacade", () => {
 			current_phase: "merging",
 			phase_status: "in_progress",
 			task_key: "session-web-mock-manual-summary-task",
+		})
+	})
+
+	describe("ai_recording_start_attempted", () => {
+		it("does not track when the user only reopens an already active session", async () => {
+			recordSummaryStoreMock.status = "recording"
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.startRecording()
+			})
+
+			expect(superMagicApiMock.createAudioProject).not.toHaveBeenCalled()
+			expect(runtimeMock.actions.startRecording).not.toHaveBeenCalled()
+			expect(analyticsTrackMock).not.toHaveBeenCalled()
+		})
+
+		it("does not track when microphone permission fails before project creation", async () => {
+			const getUserMedia = vi.fn().mockRejectedValue(new Error("PermissionDeniedError"))
+			Object.defineProperty(navigator, "mediaDevices", {
+				writable: true,
+				configurable: true,
+				value: { getUserMedia },
+			})
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.startRecording()
+			})
+
+			expect(superMagicApiMock.createAudioProject).not.toHaveBeenCalled()
+			expect(analyticsTrackMock).not.toHaveBeenCalled()
+		})
+
+		it("still tracks the attempt when createAudioProject fails", async () => {
+			superMagicApiMock.createAudioProject.mockResolvedValue(null)
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.startRecording()
+			})
+
+			expect(runtimeMock.actions.startRecording).not.toHaveBeenCalled()
+			expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+				isMobile: false,
+				audioSource: "recorded",
+				transcriptionEnabled: true,
+			})
+		})
+
+		it("still tracks the attempt when the recorder never actually starts", async () => {
+			runtimeMock.actions.startRecording.mockImplementation(() => {
+				runtimeMock.state.isRecording = false
+			})
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.startRecording()
+			})
+
+			expect(superMagicApiMock.createAudioProject).toHaveBeenCalled()
+			expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+				isMobile: false,
+				audioSource: "recorded",
+				transcriptionEnabled: true,
+			})
+			expect(superMagicApiMock.deleteProject).toHaveBeenCalledWith({
+				id: "project-audio-001",
+			})
+		})
+
+		it("reports a mobile web start with isMobile", async () => {
+			isMobileMock.mockReturnValue(true)
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.startRecording()
+			})
+
+			expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+				isMobile: true,
+				audioSource: "recorded",
+				transcriptionEnabled: true,
+			})
+		})
+
+		it("counts each accepted start attempt", async () => {
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.startRecording()
+				await result.current.startRecording()
+			})
+
+			expect(
+				analyticsTrackMock.mock.calls.filter(
+					([event]) => event === "ai_recording_start_attempted",
+				),
+			).toHaveLength(2)
+		})
+
+		it("tracks imported starts before the upload request", async () => {
+			superMagicApiMock.createAudioProject.mockResolvedValue({
+				project: {
+					id: "project-import-started",
+					project_name: "Imported Project Started",
+				},
+				topic: {
+					id: "topic-import-started",
+					topic_name: "Imported Topic Started",
+				},
+			})
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.importAudioFiles(
+					createFileList([new File(["voice"], "started.wav", { type: "audio/wav" })]),
+				)
+			})
+
+			expect(analyticsTrackMock).toHaveBeenCalledTimes(2)
+			expect(analyticsTrackMock).toHaveBeenCalledWith("project_create_attempted", {
+				workspaceId: undefined,
+				sceneOverride: "ai_recording",
+				mode: TopicMode.RecordSummary,
+			})
+			expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+				isMobile: false,
+				audioSource: "imported",
+				transcriptionEnabled: true,
+			})
+		})
+
+		it("reports imported starts with h5 source on mobile web", async () => {
+			isMobileMock.mockReturnValue(true)
+			superMagicApiMock.createAudioProject.mockResolvedValue({
+				project: {
+					id: "project-import-h5",
+					project_name: "Imported Project H5",
+				},
+				topic: {
+					id: "topic-import-h5",
+					topic_name: "Imported Topic H5",
+				},
+			})
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.importAudioFiles(
+					createFileList([new File(["voice"], "h5.wav", { type: "audio/wav" })]),
+				)
+			})
+
+			expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+				isMobile: true,
+				audioSource: "imported",
+				transcriptionEnabled: true,
+			})
+		})
+
+		it("still tracks imported attempts when upload never begins", async () => {
+			audioImportStoreMock.startAudioImport.mockImplementationOnce(async (files, context) => {
+				importTestState.queuedFiles = files
+				importTestState.pendingImportContext = context
+			})
+			superMagicApiMock.createAudioProject.mockResolvedValue({
+				project: {
+					id: "project-import-pending",
+					project_name: "Imported Project Pending",
+				},
+				topic: {
+					id: "topic-import-pending",
+					topic_name: "Imported Topic Pending",
+				},
+			})
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.importAudioFiles(
+					createFileList([new File(["voice"], "pending.wav", { type: "audio/wav" })]),
+				)
+			})
+
+			expect(superMagicApiMock.createAudioProject).toHaveBeenCalled()
+			expect(audioImportStoreMock.startAudioImport).toHaveBeenCalled()
+			expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+				isMobile: false,
+				audioSource: "imported",
+				transcriptionEnabled: true,
+			})
+		})
+
+		it("still tracks imported attempts when project creation fails", async () => {
+			superMagicApiMock.createAudioProject.mockResolvedValue(null)
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.importAudioFiles(
+					createFileList([new File(["voice"], "missing.wav", { type: "audio/wav" })]),
+				)
+			})
+
+			expect(audioImportStoreMock.startAudioImport).not.toHaveBeenCalled()
+			expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+				isMobile: false,
+				audioSource: "imported",
+				transcriptionEnabled: true,
+			})
+		})
+
+		it("tracks imported transcription_enabled from the real recording setting", async () => {
+			seedRecordingSettingsCacheForTests(
+				{
+					model: { model_id: "model-alpha" },
+					extra: {
+						model: { model_id: "model-alpha" },
+						transcription_enabled: false,
+						auto_summary_enabled: true,
+					},
+				},
+				{
+					transcription_enabled: false,
+					auto_summary_enabled: true,
+					model_id: "model-alpha",
+				},
+			)
+			superMagicApiMock.createAudioProject.mockResolvedValue({
+				project: {
+					id: "project-import-no-transcript",
+					project_name: "Imported Project No Transcript",
+				},
+				topic: {
+					id: "topic-import-no-transcript",
+					topic_name: "Imported Topic No Transcript",
+				},
+			})
+
+			const { result } = renderHook(() => useRecordingEntryFacade())
+
+			await act(async () => {
+				await result.current.importAudioFiles(
+					createFileList([
+						new File(["voice"], "no-transcript.wav", { type: "audio/wav" }),
+					]),
+				)
+			})
+
+			expect(analyticsTrackMock).toHaveBeenCalledWith("ai_recording_start_attempted", {
+				isMobile: false,
+				audioSource: "imported",
+				transcriptionEnabled: false,
+			})
 		})
 	})
 })

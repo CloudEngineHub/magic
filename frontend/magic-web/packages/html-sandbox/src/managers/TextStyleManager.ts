@@ -14,6 +14,7 @@ import type { EditorBridge } from "../core/EditorBridge"
 import type { ElementSelector } from "../features/ElementSelector"
 import { EditorLogger } from "../utils/EditorLogger"
 import { findElement } from "../utils/ElementSelector"
+import { markSourceNode } from "../utils/sourceNodes"
 
 export class TextStyleManager {
 	private commandHistory: CommandHistory
@@ -413,6 +414,7 @@ export class TextStyleManager {
 
 				// Insert the span at the selection point
 				range.insertNode(span)
+				markSourceNode(span)
 
 				// Update target span reference for re-selection
 				targetSpan = span

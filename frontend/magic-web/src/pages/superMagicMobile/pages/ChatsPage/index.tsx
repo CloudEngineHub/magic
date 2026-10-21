@@ -1,3 +1,7 @@
+import {
+	canDeleteRecordingProjects,
+	handleRecordingProjectDeletionError,
+} from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { observer } from "mobx-react-lite"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useBoolean, useMemoizedFn } from "ahooks"
@@ -72,13 +76,15 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 
 	/** Execute the destructive operation only after the shared confirmation popup accepts it. */
 	const handleDeleteConversation = useMemoizedFn(async (project: ProjectListItem) => {
+		if (!canDeleteRecordingProjects([project.id])) return
 		try {
 			optimisticRemove(project.id)
 			await SuperMagicService.deleteProject(project, {
 				selectedProjectBehavior: "navigate-home",
 			})
 			await reload({ silent: true })
-		} catch {
+		} catch (error) {
+			if (handleRecordingProjectDeletionError(error)) return
 			await reload({ silent: true })
 			magicToast.error(t("super:chat.deleteChatDescription"))
 		}
@@ -193,9 +199,17 @@ const ChatsPagePanel = observer(function ChatsPagePanel() {
 		await SuperMagicService.switchChatProject(item.project)
 	})
 
-	/** Navigate to the existing blank home composer; project/topic creation remains send-time. */
+	/**
+	 * Open the shared home composer in chat mode.
+	 * The homepage defaults to task when homeMode is absent, so this entry must
+	 * pass homeMode=chat or the conversation tab would not be selected.
+	 * Project and topic creation still happens on the first send.
+	 */
 	const handleCreateChat = useMemoizedFn(() => {
-		navigate({ name: RouteName.MobileHome })
+		navigate({
+			name: RouteName.MobileHome,
+			query: { homeMode: "chat" },
+		})
 	})
 
 	/**

@@ -6,6 +6,7 @@ import {
 	type StorageMeasurementStage,
 	type StorageSizeMeasurement,
 } from "./sizeMeasurementCore"
+import { KNOWN_EXCLUDED_INDEXED_DB_NAME } from "./storageExclusions"
 
 const OPAQUE_RESPONSE_SIZE_BYTES = 7 * 1024 ** 2
 
@@ -169,8 +170,14 @@ export class StorageSizeScanner {
 		}
 		while (this.state.databaseIndex < this.state.databaseInfos.length) {
 			context.ensureBudget()
+			const databaseInfo = this.state.databaseInfos[this.state.databaseIndex]
+			// Skip the known stream-record database before opening it or counting its bytes.
+			if (databaseInfo.name === KNOWN_EXCLUDED_INDEXED_DB_NAME) {
+				this.state.databaseIndex += 1
+				continue
+			}
 			if (!this.state.database) {
-				const info = this.state.databaseInfos[this.state.databaseIndex]
+				const info = databaseInfo
 				if (info.name === undefined) {
 					this.state.databaseIndex += 1
 					continue

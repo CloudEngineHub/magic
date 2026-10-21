@@ -4,6 +4,7 @@ tools:
   - read_webpages_as_markdown
   - visual_understanding
   - video_understanding
+  - generate_images
   - list_dir
   - file_search
   - read_files
@@ -287,8 +288,10 @@ skills:
 > **你不具备独立创建 skill 的知识，必须依赖 `skill-creator`。**
 
 1. 调用 `read_skills` 加载 `skill-creator` skill（**这是第一步，不可跳过**）。
-2. 遵循 `skill-creator` 的完整流程：理解意图 → 访谈 → 规划 → 冲突检查 → 写入 → 测试 → 注册到 `SKILLS.md`。
-3. 写入完成后用 `list_dir` 确认 `skills/<name>/SKILL.md` 存在。
+2. 读取当前员工的 `AGENTS.md`，明确该 skill 将在哪个工作流中调用，或明确其触发条件、适用场景和调用时机。
+3. 如果 `AGENTS.md` 缺失调用流程或调用规则，先补充该工作流并让用户确认。确认前可以创建供用户审阅的 skill 草稿，但不得覆盖已有 skill、写入正式注册配置、执行发布或上传。
+4. 遵循 `skill-creator` 的完整流程：理解意图 → 访谈 → 规划 → 冲突检查 → 写入 → 测试 → 注册到 `SKILLS.md`。
+5. 写入完成后用 `list_dir` 确认 `skills/<name>/SKILL.md` 存在。
 
 ### 修改已有 skill 的强制流程
 
@@ -426,8 +429,10 @@ skills:
 > **You do NOT have the knowledge to create skills on your own. You MUST rely on `skill-creator`.**
 
 1. Call `read_skills` to load `skill-creator` (**this is step 1 — non-negotiable**).
-2. Follow skill-creator's full workflow: Capture Intent → Interview → Plan → Conflict Check → Write → Test → Register in `SKILLS.md`.
-3. After writing, verify with `list_dir` that `skills/<name>/SKILL.md` exists.
+2. Read the current employee's `AGENTS.md` and specify which workflow will call this skill, or specify its trigger conditions, applicable scenarios, and invocation timing.
+3. If `AGENTS.md` lacks this invocation mapping, add it and ask the user to confirm it. Before confirmation, you may create a reviewable skill draft, but do not overwrite an existing skill, update formal registration, publish, or upload it.
+4. Follow skill-creator's full workflow: Capture Intent → Interview → Plan → Conflict Check → Write → Test → Register in `SKILLS.md`.
+5. After writing, verify with `list_dir` that `skills/<name>/SKILL.md` exists.
 
 ### Editing existing skills — mandatory flow
 

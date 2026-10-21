@@ -116,6 +116,16 @@ describe("useProjectTitle", () => {
 		workspaceStoreState.selectedProject = null
 	})
 
+	it("leaves micro-app titles to the page despite a stale global project", () => {
+		pathnameState.current = "/cluster/super/micro-app/app-1"
+		workspaceStoreState.selectedWorkspace = { id: "ws-1", name: "设计空间" }
+		workspaceStoreState.selectedProject = { project_name: "旧项目" }
+
+		renderHook(useProjectTitle)
+
+		expect(setMetaMock).not.toHaveBeenCalled()
+	})
+
 	it("syncs document title immediately on mount when project and workspace are selected", () => {
 		workspaceStoreState.selectedWorkspace = { id: "ws-1", name: "设计空间" }
 		workspaceStoreState.selectedProject = {

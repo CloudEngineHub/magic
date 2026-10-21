@@ -63,11 +63,11 @@ class DefaultModelPricePreviewTest extends TestCase
         self::assertSame(36, $data['calculation']['decimal_scale']);
     }
 
-    /** 普通使用权限不能代替平台设置查询权限。 */
+    /** 预览使用独立倍率查询权限，不再依赖平台信息权限。 */
     public function testPermissionContract(): void
     {
         $attribute = (new ReflectionMethod(ModelBillingPreviewApi::class, 'show'))->getAttributes(CheckPermission::class)[0]->newInstance();
-        self::assertSame([MagicResourceEnum::PLATFORM_SETTING_PLATFORM_INFO->value], $attribute->resource);
+        self::assertSame([MagicResourceEnum::PLATFORM_AI_MODEL_MULTIPLIER->value], $attribute->resource);
         self::assertSame(MagicOperationEnum::QUERY->value, $attribute->operation);
     }
 

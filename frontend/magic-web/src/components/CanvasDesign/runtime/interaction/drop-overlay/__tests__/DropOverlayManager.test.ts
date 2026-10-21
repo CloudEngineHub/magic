@@ -45,6 +45,7 @@ function createDragEvent(type: string, dataTransfer?: Partial<DataTransfer>): Dr
 
 function createDropHarness(options: {
 	getFileInfo: ReturnType<typeof vi.fn>
+	getAssetResource?: ReturnType<typeof vi.fn>
 	imageDimensions?: { width: number; height: number }
 	videoDimensions?: { width: number; height: number }
 }) {
@@ -75,6 +76,9 @@ function createDropHarness(options: {
 	const audioResourceManager = {
 		primeCache: vi.fn(),
 	}
+	const assetResourceManager = {
+		getResource: options.getAssetResource ?? vi.fn(),
+	}
 	const overlayHost = document.createElement("div")
 	const canvasContainer = document.createElement("div")
 	overlayHost.appendChild(canvasContainer)
@@ -87,6 +91,7 @@ function createDropHarness(options: {
 		imageResourceManager,
 		videoResourceManager,
 		audioResourceManager,
+		assetResourceManager,
 		magicConfigManager: {
 			config: {
 				methods: {
@@ -228,6 +233,48 @@ describe("DropOverlayManager custom attachment drops", () => {
 		expect(harness.canvas.audioResourceManager.primeCache).toHaveBeenCalledTimes(1)
 		expect(harness.canvas.imageResourceManager.loadResource).not.toHaveBeenCalled()
 		expect(harness.canvas.videoResourceManager.loadResource).not.toHaveBeenCalled()
+	})
+
+	it("uses asset metadata to create a video without workspace lookup or URL cache priming", async () => {
+		const getFileInfo = vi.fn()
+		const getAssetResource = vi.fn(async () => ({
+			assetId: "asset-video-1",
+			mediaType: "video",
+			fileUrl: "https://assets.test/video-1",
+			fileName: "library-video.mp4",
+		}))
+		const harness = createDropHarness({ getFileInfo, getAssetResource })
+
+		await harness.manager.handleCustomDragData([" asset://asset-video-1 "], {
+			x: 100,
+			y: 200,
+		})
+
+		const [element] = harness.elements.values()
+		if (element?.type !== ElementTypeEnum.Video) throw new Error("Expected video")
+		expect((element as VideoElement).contents[0]?.src).toBe("asset://asset-video-1")
+		expect(getAssetResource).toHaveBeenCalledWith("asset-video-1")
+		expect(getFileInfo).not.toHaveBeenCalled()
+		expect(harness.canvas.videoResourceManager.primeCache).not.toHaveBeenCalled()
+		expect(harness.canvas.videoResourceManager.loadResource).toHaveBeenCalledWith(
+			"asset://asset-video-1",
+		)
+	})
+
+	it("rejects a malformed asset scheme before workspace lookup", async () => {
+		const getFileInfo = vi.fn()
+		const harness = createDropHarness({ getFileInfo })
+
+		await harness.manager.handleCustomDragData(["asset://asset-video-1/child"], {
+			x: 100,
+			y: 200,
+		})
+
+		expect(harness.elements.size).toBe(0)
+		expect(getFileInfo).not.toHaveBeenCalled()
+		expect(toast.error).toHaveBeenCalledWith("媒体文件加载失败，请重试", {
+			id: "drop-toast-id",
+		})
 	})
 
 	it("shows an error toast and creates nothing when preload fails", async () => {

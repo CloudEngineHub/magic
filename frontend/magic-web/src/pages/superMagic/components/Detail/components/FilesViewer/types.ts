@@ -17,6 +17,7 @@ import type { AttachmentItem } from "../../../TopicFilesButton/hooks/types"
 import type { FileScope } from "@/apis/modules/fileScope"
 import type { FileReference, FileReferenceResult } from "@/apis/modules/superMagic"
 import type { HtmlNavigationRequest } from "../../contents/HTML/utils/html-navigation"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 // Base interfaces
 export interface FileSidebarControl {
@@ -204,6 +205,7 @@ export interface PlaybackTabItem extends TabItem {
 // FilesViewer component props
 export interface FilesViewerProps extends BaseComponentProps {
 	fileHelpContext?: FileHelpContext
+	projectFilesStore?: ProjectFilesStore
 	attachmentLoadState?: AttachmentLoadState
 	attachments?: FileItem[]
 	attachmentList?: FileItem[]

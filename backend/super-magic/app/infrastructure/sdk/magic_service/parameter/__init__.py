@@ -13,7 +13,7 @@ from .message_schedule_parameter import MessageScheduleParameter, TimeConfig
 from .oauth2_callback_relay_parameter import OAuth2CallbackRelayParameter
 from .mcp_authorization_credential_parameter import MCPAuthorizationCredentialParameter
 from .get_agent_openapi_parameter import GetAgentOpenApiParameter
-from .update_agent_parameter import UpdateAgentParameter
+from .update_crew_parameter import UpdateCrewParameter
 from .get_skill_file_urls_parameter import GetSkillFileUrlsParameter
 from .import_skill_from_agent_parameter import ImportSkillFromAgentParameter
 from .add_agent_skills_parameter import AddAgentSkillsParameter
@@ -58,7 +58,7 @@ __all__ = [  # noqa: RUF022 - 保留既有分组和导出顺序
     'OAuth2CallbackRelayParameter',
     'MCPAuthorizationCredentialParameter',
     'GetAgentOpenApiParameter',
-    'UpdateAgentParameter',
+    'UpdateCrewParameter',
     'GetSkillFileUrlsParameter',
     'ImportSkillFromAgentParameter',
     'AddAgentSkillsParameter',

@@ -1,4 +1,5 @@
 import { env } from "@/utils/env"
+import { removeRuntimeNodes, SOURCE_NODE_ATTRIBUTE } from "@dtyq/html-sandbox"
 import { normalizeConflictingBackgroundDeclarations } from "./background-style"
 import { restoreHtmlLocationHref } from "./location-href-restore"
 import valueParser from "postcss-value-parser"
@@ -1013,6 +1014,7 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		// 使用DOMParser解析HTML字符串
 		const parser = new DOMParser()
 		const doc = parser.parseFromString(htmlString, "text/html")
+		removeRuntimeNodes(doc)
 		restoreHtmlLocationHref(doc)
 
 		// 移除所有带有 data-injected 或历史 data-runtime 标记的元素
@@ -1064,6 +1066,7 @@ export function filterInjectedTags(htmlString: string, filePathMapping: Map<stri
 		const allElements = doc.querySelectorAll("*")
 		allElements.forEach((element) => {
 			// 移除编辑相关的 data 属性
+			element.removeAttribute(SOURCE_NODE_ATTRIBUTE)
 			element.removeAttribute("data-hover-toolbar")
 			element.removeAttribute("data-resize-handles")
 			element.removeAttribute("data-resize-handle")
@@ -1364,6 +1367,7 @@ function filterInjectedTagsWithRegex(htmlString: string): string {
 	// 移除所有剩余的 data-injected / data-runtime 属性（不管值是什么）
 	result = result.replace(/\s+data-injected\s*=\s*["'][^"']*["']/gi, "")
 	result = result.replace(/\s+data-runtime\s*=\s*["'][^"']*["']/gi, "")
+	result = result.replace(/\s+data-magic-source-node(?:\s*=\s*["'][^"']*["'])?/gi, "")
 
 	// 清理遗留的键盘拦截器脚本（无 data-injected 属性的历史脚本）
 	result = result.replace(

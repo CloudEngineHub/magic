@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { beforeEach, describe, it, expect, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import TopicSidebar from "../TopicSidebar"
 
 vi.mock("react-i18next", () => ({
@@ -14,8 +14,15 @@ vi.mock("@/pages/superMagic/components/ProjectCardContainer", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/ProjectSider", () => ({
-	default: ({ items }: { items: Array<{ key: string; title: string; content?: ReactNode }> }) => (
+	default: ({
+		items,
+		headerTrailingAction,
+	}: {
+		items: Array<{ key: string; title: string; content?: ReactNode }>
+		headerTrailingAction?: ReactNode
+	}) => (
 		<div data-testid="project-sider">
+			{headerTrailingAction}
 			{items.map((item) => (
 				<div key={item.key}>
 					<span data-testid={`project-sider-item-${item.key}`}>{item.title}</span>
@@ -50,7 +57,7 @@ vi.mock("@/enhance/tabler/icons-react/icons/iconShareCog", () => ({
 
 const controllerState = vi.hoisted(() => ({ isAudioProject: false }))
 
-vi.mock("../hooks/useAudioProjectSidebarController", () => ({
+vi.mock("../../hooks/useAudioProjectSidebarController", () => ({
 	useAudioProjectSidebarController: ({ isReadOnly }: { isReadOnly: boolean }) => ({
 		isAudioProject: controllerState.isAudioProject,
 		canManageAudioProject: controllerState.isAudioProject && !isReadOnly,
@@ -97,19 +104,19 @@ vi.mock("@/pages/superMagic/components/AudioProjectHeader", () => ({
 	default: () => <div data-testid="audio-project-header" />,
 }))
 
-vi.mock("../../AudioRecordings/components/AudioRecordingMoveGroupDialog", () => ({
+vi.mock("@/pages/superMagic/pages/AudioRecordings/components/AudioRecordingGroupDialogs", () => ({
 	AudioRecordingMoveGroupDialog: () => null,
 }))
 
-vi.mock("../../AudioRecordings/components/AudioRecordingCopyDialog", () => ({
+vi.mock("@/pages/superMagic/pages/AudioRecordings/components/AudioRecordingCopyDialog", () => ({
 	AudioRecordingCopyDialog: () => null,
 }))
 
-vi.mock("../../../components/Share/Modal", () => ({
+vi.mock("@/pages/superMagic/components/Share/Modal", () => ({
 	default: () => null,
 }))
 
-vi.mock("../components/AudioProjectShareDialogs", () => ({
+vi.mock("../AudioProjectShareDialogs", () => ({
 	default: () => null,
 }))
 
@@ -149,6 +156,27 @@ describe("TopicSidebar", () => {
 		expect(screen.queryByTestId("project-sider-item-task")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-sider-item-userSpace")).not.toBeInTheDocument()
 		expect(screen.queryByTestId("project-card-container")).not.toBeInTheDocument()
+	})
+
+	it("puts the collapse control beside the sider tabs for chat and calls onCollapse", () => {
+		const onCollapse = vi.fn()
+		render(
+			<TopicSidebar
+				{...baseProps}
+				siderVariant="chat"
+				hideProjectCard
+				onCollapse={onCollapse}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("project-card-collapse"))
+		expect(onCollapse).toHaveBeenCalledTimes(1)
+	})
+
+	it("does not render a header collapse control when the sidebar cannot collapse", () => {
+		render(<TopicSidebar {...baseProps} siderVariant="chat" hideProjectCard />)
+
+		expect(screen.queryByTestId("project-card-collapse")).not.toBeInTheDocument()
 	})
 
 	it("keeps only the file tree for recording projects", () => {

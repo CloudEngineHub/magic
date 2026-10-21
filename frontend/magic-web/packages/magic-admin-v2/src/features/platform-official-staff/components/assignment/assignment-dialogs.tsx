@@ -206,9 +206,9 @@ export function DynamicModelEditDialog({
 							>
 								<Input
 									aria-invalid={Boolean(form.formState.errors.nameZh)}
+									data-testid="platform-official-staff-official-staff-model-name-zh-input"
 									id="official-staff-model-name-zh"
-									{...form.register("nameZh")}
-								 data-testid="platform-official-staff-official-staff-model-name-zh-input"/>
+									{...form.register("nameZh")}/>
 								<FieldError message={form.formState.errors.nameZh?.message} />
 							</DialogFormField>
 							<DialogFormField
@@ -216,10 +216,10 @@ export function DynamicModelEditDialog({
 								label={t("officialStaff.field.modelDescription")}
 							>
 								<Textarea
+									data-testid="platform-official-staff-official-staff-model-description-zh-input"
 									id="official-staff-model-description-zh"
 									rows={4}
-									{...form.register("descriptionZh")}
-								 data-testid="platform-official-staff-official-staff-model-description-zh-input"/>
+									{...form.register("descriptionZh")}/>
 							</DialogFormField>
 							<DialogFormField
 								description={t("officialStaff.fieldDesc.modelIdentifier")}
@@ -228,14 +228,14 @@ export function DynamicModelEditDialog({
 								label={t("officialStaff.field.modelIdentifier")}
 							>
 								<Input
+									data-testid="platform-official-staff-official-staff-model-identifier-zh-input"
 									id="official-staff-model-identifier-zh"
 									disabled={hasLockedModelId}
 									onChange={(event) =>
 										form.setValue("modelId", event.target.value)
 									}
 									placeholder={t("officialStaff.placeholder.modelIdentifier")}
-									value={modelId}
-								 data-testid="platform-official-staff-official-staff-model-identifier-zh-input"/>
+									value={modelId}/>
 							</DialogFormField>
 						</TabsContent>
 						<TabsContent
@@ -250,9 +250,9 @@ export function DynamicModelEditDialog({
 							>
 								<Input
 									aria-invalid={Boolean(form.formState.errors.nameEn)}
+									data-testid="platform-official-staff-official-staff-model-name-en-input"
 									id="official-staff-model-name-en"
-									{...form.register("nameEn")}
-								 data-testid="platform-official-staff-official-staff-model-name-en-input"/>
+									{...form.register("nameEn")}/>
 								<FieldError message={form.formState.errors.nameEn?.message} />
 							</DialogFormField>
 							<DialogFormField
@@ -260,10 +260,10 @@ export function DynamicModelEditDialog({
 								label={t("officialStaff.field.modelDescription")}
 							>
 								<Textarea
+									data-testid="platform-official-staff-official-staff-model-description-en-input"
 									id="official-staff-model-description-en"
 									rows={4}
-									{...form.register("descriptionEn")}
-								 data-testid="platform-official-staff-official-staff-model-description-en-input"/>
+									{...form.register("descriptionEn")}/>
 							</DialogFormField>
 							<DialogFormField
 								description={t("officialStaff.fieldDesc.modelIdentifier")}
@@ -272,14 +272,14 @@ export function DynamicModelEditDialog({
 								label={t("officialStaff.field.modelIdentifier")}
 							>
 								<Input
+									data-testid="platform-official-staff-official-staff-model-identifier-en-input"
 									id="official-staff-model-identifier-en"
 									disabled={hasLockedModelId}
 									onChange={(event) =>
 										form.setValue("modelId", event.target.value)
 									}
 									placeholder={t("officialStaff.placeholder.modelIdentifier")}
-									value={modelId}
-								 data-testid="platform-official-staff-official-staff-model-identifier-en-input"/>
+									value={modelId}/>
 							</DialogFormField>
 						</TabsContent>
 					</Tabs>
@@ -380,10 +380,10 @@ export function SubModelRow({
 			{editable ? (
 				<Button
 					className="size-6"
+					data-testid="platform-official-staff-delete-button"
 					onClick={() => onDelete(subModel.id)}
 					size="icon"
-					variant="ghost"
-				 data-testid="platform-official-staff-delete-button">
+					variant="ghost">
 					<Trash2 className="size-3.5" />
 				</Button>
 			) : null}
@@ -532,10 +532,10 @@ export function GroupFormDialog({
 						>
 							<Input
 								aria-invalid={Boolean(form.formState.errors.nameZh)}
+								data-testid="platform-official-staff-official-staff-group-name-zh-input"
 								disabled={!canEdit}
 								id="official-staff-group-name-zh"
-								{...form.register("nameZh")}
-							 data-testid="platform-official-staff-official-staff-group-name-zh-input"/>
+								{...form.register("nameZh")}/>
 							<FieldError message={form.formState.errors.nameZh?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -545,10 +545,10 @@ export function GroupFormDialog({
 						>
 							<Input
 								aria-invalid={Boolean(form.formState.errors.nameEn)}
+								data-testid="platform-official-staff-official-staff-group-name-en-input"
 								disabled={!canEdit}
 								id="official-staff-group-name-en"
-								{...form.register("nameEn")}
-							 data-testid="platform-official-staff-official-staff-group-name-en-input"/>
+								{...form.register("nameEn")}/>
 							<FieldError message={form.formState.errors.nameEn?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -570,9 +570,9 @@ export function GroupFormDialog({
 							{t("common.cancel")}
 						</Button>
 						<Button
+							data-testid="platform-official-staff-save-button"
 							disabled={!canEdit || isIconUploading || saveGroupMutation.isPending}
-							type="submit"
-						 data-testid="platform-official-staff-save-button">
+							type="submit">
 							{saveGroupMutation.isPending ? (
 								<Loader2 className="size-4 animate-spin" />
 							) : (

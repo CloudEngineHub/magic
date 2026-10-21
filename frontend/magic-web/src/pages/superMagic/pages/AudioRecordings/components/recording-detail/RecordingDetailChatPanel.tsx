@@ -152,6 +152,7 @@ export default function RecordingDetailChatPanel({
 						topicStore={topicStore}
 						topicActions={topicActions}
 						onClose={onToggleHistory}
+						hideTopicTypeFilter
 					/>
 				</aside>
 			) : null}

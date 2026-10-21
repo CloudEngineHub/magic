@@ -1027,11 +1027,12 @@ function Topic({
 
 	return (
 		<>
+			{/* Anchor the absolute resize dividers to this share viewport. */}
 			<div
 				className={cn(
 					documentFlowFullscreen
-						? "flex min-h-dvh w-full flex-row justify-center overflow-visible bg-transparent"
-						: "flex h-full w-full flex-row justify-center overflow-hidden bg-transparent",
+						? "relative flex min-h-dvh w-full flex-row justify-center overflow-visible bg-transparent"
+						: "relative flex h-full w-full flex-row justify-center overflow-hidden bg-transparent",
 				)}
 			>
 				{isMobile ? (
@@ -1210,7 +1211,7 @@ function Topic({
 					<>
 						<ResizableDivider
 							position="left"
-							offsetLeft={messagePanelWidth + 5}
+							offsetLeft={messagePanelWidth + 2}
 							onResizeStart={handleMessagePanelResizeStart}
 							onHoverChange={setIsMessagePanelHovering}
 						/>

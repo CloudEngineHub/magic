@@ -34,6 +34,8 @@ interface MagicTooltipProps {
 	contentZIndex?: number
 	/** Distance between the trigger and tooltip content. */
 	sideOffset?: number
+	/** 覆盖这一条提示的悬停等待。未传时仍使用全局 700ms。 */
+	delayDuration?: number
 	/** Disable the tooltip while another menu or popover is open. */
 	disabled?: boolean
 }
@@ -60,6 +62,7 @@ export function MagicTooltip({
 	contentClassName,
 	contentZIndex,
 	sideOffset = 4,
+	delayDuration,
 	disabled = false,
 }: MagicTooltipProps) {
 	const isMobile = useIsMobile()
@@ -117,7 +120,11 @@ export function MagicTooltip({
 	// 桌面端正常显示
 	const container = getPopupContainer?.() ?? undefined
 	return (
-		<Tooltip open={open && !disabled} onOpenChange={handleOpenChange}>
+		<Tooltip
+			open={open && !disabled}
+			onOpenChange={handleOpenChange}
+			delayDuration={delayDuration}
+		>
 			<TooltipTrigger
 				asChild
 				onPointerEnter={handlePointerEnter}

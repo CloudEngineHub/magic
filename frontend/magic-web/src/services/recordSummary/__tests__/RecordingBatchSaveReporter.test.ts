@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { defaultErrorManager } from "../RecordingErrorManager"
 import { RecordingBatchSaveReporter } from "../RecordingBatchSaveReporter"
 
 const { batchSaveFiles } = vi.hoisted(() => ({
@@ -27,6 +28,24 @@ vi.mock("../utils/RecordingLogger", () => {
 })
 
 describe("RecordingBatchSaveReporter", () => {
+	it("forwards a deleted project from best-effort batch save with its original session", async () => {
+		const handler = vi.fn()
+		const unsubscribe = defaultErrorManager.onTaskEnd(handler)
+		batchSaveFiles.mockRejectedValueOnce({ response: { code: "51200" } })
+		await new RecordingBatchSaveReporter().reportUploadedFile({
+			sessionId: "old-session",
+			projectId: "project-1",
+			topicId: "topic-1",
+			taskId: "task-1",
+			fileKey: "audio.ogg",
+			fileName: "audio.ogg",
+			fileSize: 64,
+		})
+		expect(handler).toHaveBeenCalledWith(
+			expect.objectContaining({ sessionId: "old-session", code: 51200 }),
+		)
+		unsubscribe()
+	})
 	beforeEach(() => {
 		batchSaveFiles.mockClear()
 	})

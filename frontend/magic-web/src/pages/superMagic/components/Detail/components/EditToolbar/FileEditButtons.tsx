@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next"
 import { FilePenLine, Save, X, Loader2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Kbd } from "@/components/shadcn-ui/kbd"
-import { HTMLGuideTourElementId } from "@/pages/superMagic/hooks/useHTMLGuideTour"
 import ConditionalTooltip from "./ConditionalTooltip"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { runGuardedAction } from "../../utils/actionGuard"
@@ -141,7 +140,6 @@ function FileEditButtons({
 	return (
 		<div
 			className="flex items-center gap-1"
-			id={HTMLGuideTourElementId.HTMLFileEditButton}
 			data-testid={testIdPrefix ? `${testIdPrefix}-file-actions` : undefined}
 		>
 			{!isEditMode ? (

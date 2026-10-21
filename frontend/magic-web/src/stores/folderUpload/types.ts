@@ -115,6 +115,8 @@ export interface FolderUploadSharedDirectoryContext {
 export interface TaskCreateOptions extends FolderUploadOptions {
 	projectName: string
 	onProgress?: (taskId: string, state: FolderUploadState) => void
+	/** 逐文件上传进度，progress 为 0-100。 */
+	onFileProgress?: (taskId: string, file: File, progress: number) => void
 	onComplete?: (taskId: string) => void
 	onError?: (taskId: string, error: Error) => void
 	onBatchUploadComplete?: (batchInfo: BatchUploadInfo) => void
@@ -242,7 +244,8 @@ export interface TaskCallbacks {
 	onComplete?: (taskId: string) => void
 	onError?: (taskId: string, error: Error) => void
 	onBatchUploadComplete?: (batchInfo: BatchUploadInfo) => void
-	onBatchSaveComplete?: (batchSaveInfo: BatchSaveInfo) => void
+	/** Async consumers keep the task active until they settle. */
+	onBatchSaveComplete?: (batchSaveInfo: BatchSaveInfo) => void | Promise<void>
 }
 
 export interface UploadResult {

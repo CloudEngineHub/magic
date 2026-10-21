@@ -19,6 +19,7 @@ import { useDetailModeCache } from "../../hooks/useDetailModeCache"
 import { useAttachmentsPolling } from "../../hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "../../hooks/useProjectAttachmentsChangeRealtime"
 import { useDeferUntilFileTabsCacheLoaded } from "../../hooks/useDeferUntilFileTabsCacheLoaded"
+import { useAutoOpenCanvasFile } from "../../hooks/useAutoOpenCanvasFile"
 import { useRefreshTopicDetailOnTaskComplete } from "../../hooks/useRefreshTopicDetailOnTaskComplete"
 import { AttachmentDataProcessor } from "../../utils/attachmentDataProcessor"
 import {
@@ -33,6 +34,8 @@ import {
 	withAttachmentsRefreshWaitersResolved,
 } from "@/pages/superMagic/services/attachmentsTopicSync"
 import { isCollaborationWorkspace } from "../../constants"
+import { CHAT_PROJECT_SIDER_PANEL_STORAGE_KEY } from "../../constants/resizablePanel"
+import type { ProjectSiderPanelPersistence } from "./stores/TopicLayoutStore"
 import { useNoPermissionCollaborationProject } from "../../hooks/useNoPermissionCollaborationProject"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { observer } from "mobx-react-lite"
@@ -73,6 +76,15 @@ import { ASK_USER_RECOVERY_FAILED_EVENT } from "../../components/MessageList/uti
 
 /** 任务消息状态变化后延迟拉工作区/项目详情，减轻后端尚未落库时单次请求仍返回 running 的问题 */
 const WORKSPACE_PROJECT_STATUS_REFRESH_DELAY_MS = 1000
+
+/**
+ * The chat page puts the conversation first: files start collapsed, and the user's choice is
+ * remembered under its own key so it never changes the project page's sidebar state.
+ */
+const CHAT_PROJECT_SIDER_PANEL_PERSISTENCE: ProjectSiderPanelPersistence = {
+	storageKey: CHAT_PROJECT_SIDER_PANEL_STORAGE_KEY,
+	defaultCollapsed: true,
+}
 
 function normalizeMessageSendTimeToMs(value: unknown): number | null {
 	if (value === null || value === undefined) return null
@@ -159,7 +171,10 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const attachments = projectFilesStore.workspaceFileTree
 	const attachmentList = projectFilesStore.workspaceFilesList
 	const setAttachments = useMemoizedFn((nextAttachments: AttachmentItem[]) => {
-		projectFilesStore.setWorkspaceFileTree(nextAttachments)
+		projectFilesStore.setWorkspaceFileTree(nextAttachments, {
+			source: "TopicPage.local-mutation",
+			authoritative: false,
+		})
 	})
 
 	/** ======================== Hooks ======================== */
@@ -188,6 +203,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	// Calculate read-only status based on user role
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
 	const hideProjectCard = isSingleTopicChat || isAudioProjectMode(selectedProject?.project_mode)
+	// The chat page has no project card, but still collapses its file sidebar from the files panel header.
+	const canCollapseFileSidebar = !isReadOnly && (isSingleTopicChat || !hideProjectCard)
 	const topicActions = useMessageHeaderTopicActions({
 		selectedProject,
 		selectedTopic,
@@ -206,10 +223,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		setUserSelectDetail,
 		detailRef,
 		isReadOnly,
+		projectFilesStore,
 	})
 
 	const {
 		shouldShowDetailPanel,
+		activeDetailTabType,
 		isDetailPanelCollapsed,
 		collapseDetailPanel,
 		expandDetailPanel,
@@ -230,6 +249,18 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const { onFileTabsCacheLoaded, scheduleWhenTabsCacheReady } = useDeferUntilFileTabsCacheLoaded(
 		selectedProject?.id,
 	)
+	const activeFileIdRef = useRef<string | null>(activeFileId)
+	activeFileIdRef.current = activeFileId
+
+	useAutoOpenCanvasFile({
+		topicId: selectedTopic?.chat_topic_id,
+		projectId: selectedProject?.id,
+		activeFileId,
+		getActiveFileId: () => activeFileIdRef.current,
+		attachments,
+		attachmentList,
+		scheduleWhenTabsCacheReady,
+	})
 
 	useAICardDeepLinkOpen({
 		topicId: selectedTopic?.id,
@@ -806,6 +837,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				topicActions={topicActions}
 				isConversationPanelCollapsed={isConversationPanelCollapsed}
 				isDraggingPanel={isDraggingPanel}
+				activeFileId={activeFileId}
+				activeDetailTabType={activeDetailTabType}
 				onToggleConversationPanel={onToggleConversationPanel}
 				onExpandConversationPanel={onExpandConversationPanel}
 				detailPanelVisible={shouldShowDetailPanel}
@@ -824,7 +857,10 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				containerClassName={styles.container}
 				detailPanelClassName={styles.detailPanel}
 				isDetailPanelFullscreen={isDetailPanelFullscreen}
-				enableProjectCollapse={!isReadOnly && !hideProjectCard}
+				enableProjectCollapse={canCollapseFileSidebar}
+				projectSiderPanelPersistence={
+					isSingleTopicChat ? CHAT_PROJECT_SIDER_PANEL_PERSISTENCE : undefined
+				}
 				sidebar={({ onCollapse, isCollapsed }) => (
 					<TopicSidebar
 						onCollapse={onCollapse}
@@ -842,6 +878,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					<Detail
 						fileSidebarControl={fileSidebarControl}
 						attachmentLoadState={projectFilesStore.attachmentLoadState}
+						projectFilesStore={projectFilesStore}
 						ref={detailRef}
 						disPlayDetail={disPlayDetail}
 						userSelectDetail={userSelectDetail}
@@ -868,6 +905,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 					/>
 				)}
 				isReadOnly={isReadOnly}
+				// Closing the chat preview should free its width entirely, matching the project page,
+				// rather than leave an empty strip. Sidebar collapse already implies this; kept explicit.
+				showCollapsedDetailEntry={!isSingleTopicChat}
 				keepDetailMountedWhenHidden
 				historyLayout={
 					isSingleTopicChat

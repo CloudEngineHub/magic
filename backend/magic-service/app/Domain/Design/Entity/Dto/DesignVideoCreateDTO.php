@@ -220,6 +220,11 @@ class DesignVideoCreateDTO extends AbstractDTO
             return $this->inputMode;
         }
 
+        // 样片成片只靠 task 就能确定模式，且没有任何 frames / 参考素材可供推断。
+        if ($this->isDraftTask()) {
+            return VideoInputMode::DraftTask->value;
+        }
+
         // 旧调用不传 input_mode 时，仍按输入形态推断，避免 reference_images / frames 被误判。
         if ($this->getFrames() !== []) {
             return VideoInputMode::KeyframeGuided->value;
@@ -294,6 +299,20 @@ class DesignVideoCreateDTO extends AbstractDTO
     public function getExtensions(): array
     {
         return $this->extensions;
+    }
+
+    /**
+     * 样片成片引用。
+     *
+     * `video_id` 为样片的视频业务 ID，`uri` 为样片的工作区相对路径；二者至少其一，
+     * 同时存在时以 `video_id` 为准，由 Design 层解析成方舟样片任务 ID。
+     *
+     * @return array<string, mixed>
+     */
+    public function getDraftTask(): array
+    {
+        $draftTask = $this->inputs['draft_task'] ?? [];
+        return is_array($draftTask) ? $draftTask : [];
     }
 
     public function getMask(): ?string
@@ -381,7 +400,8 @@ class DesignVideoCreateDTO extends AbstractDTO
         if (! VideoTaskType::isValid($this->task)) {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'task is invalid');
         }
-        if (! $isCanvasComposition && $this->prompt === '') {
+        // 样片成片的提示词从样片任务继承，调用方不需要也不应该重新提供。
+        if (! $isCanvasComposition && ! $this->isDraftTask() && $this->prompt === '') {
             ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'prompt is required');
         }
         if (! $isCanvasComposition && $this->fileDir === '') {
@@ -554,6 +574,44 @@ class DesignVideoCreateDTO extends AbstractDTO
         $this->assertMediaObject($this->inputs['mask'] ?? null, 'inputs.mask');
         $this->assertMediaObjectList($this->getReferenceVideos(), 'inputs.reference_videos');
         $this->assertMediaObjectList($this->getReferenceAudios(), 'inputs.reference_audios');
+        $this->assertDraftTaskInput();
+    }
+
+    /**
+     * 校验样片成片引用：单个对象，必须给出 video_id 或 uri 之一。
+     */
+    private function assertDraftTaskInput(): void
+    {
+        $draftTask = $this->getDraftTask();
+        if ($draftTask === []) {
+            if ($this->isDraftTask()) {
+                ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task is required');
+            }
+            return;
+        }
+
+        // 样片引用是单个对象（与 inputs.mask 同构），不是列表。误传成列表时两个字段整体读不到，
+        // 不先拦下来只会退化成「video_id or uri is required」这种指向错误的提示。
+        if (array_is_list($draftTask)) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task must be an object');
+        }
+
+        $videoId = trim((string) ($draftTask['video_id'] ?? ''));
+        $uri = trim((string) ($draftTask['uri'] ?? ''));
+        if ($videoId === '' && $uri === '') {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task.video_id or inputs.draft_task.uri is required');
+        }
+        if ($uri !== '' && (str_contains($uri, '://') || str_contains($uri, "\0"))) {
+            ExceptionBuilder::throw(MagicApiErrorCode::ValidateFailed, 'inputs.draft_task.uri is invalid');
+        }
+    }
+
+    /**
+     * 是否为样片成片请求：只由 input_mode 判定，task 保持 generate 即可。
+     */
+    private function isDraftTask(): bool
+    {
+        return $this->inputMode === VideoInputMode::DraftTask->value;
     }
 
     private function assertGenerationFields(): void
@@ -572,6 +630,7 @@ class DesignVideoCreateDTO extends AbstractDTO
         $this->assertOptionalStringField($this->generation, 'negative_prompt', 'generation.negative_prompt', 4096);
         $this->assertOptionalBoolField($this->generation, 'generate_audio', 'generation.generate_audio');
         $this->assertOptionalBoolField($this->generation, 'web_search', 'generation.web_search');
+        $this->assertOptionalBoolField($this->generation, 'draft', 'generation.draft');
         $this->assertOptionalStringField($this->generation, 'person_generation', 'generation.person_generation', 50);
         $this->assertOptionalBoolField($this->generation, 'enhance_prompt', 'generation.enhance_prompt');
         $this->assertOptionalStringField($this->generation, 'compression_quality', 'generation.compression_quality', 50);

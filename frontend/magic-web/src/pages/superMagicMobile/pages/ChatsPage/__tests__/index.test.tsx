@@ -327,6 +327,7 @@ describe("ChatsPage", () => {
 
 		expect(navigateMock).toHaveBeenCalledWith({
 			name: "MobileHome",
+			query: { homeMode: "chat" },
 		})
 		expect(reloadMock).not.toHaveBeenCalled()
 	})
@@ -348,3 +349,8 @@ describe("ChatsPage", () => {
 		expect(screen.getByTestId("chat-list")).toBeInTheDocument()
 	})
 })
+
+vi.mock("@/services/recordSummary/projectDeletionRecordingNotice", () => ({
+	canDeleteRecordingProjects: vi.fn(() => true),
+	handleRecordingProjectDeletionError: vi.fn(() => false),
+}))

@@ -6,6 +6,10 @@ import {
 } from "../RecordingErrorManager"
 
 describe("RecordingErrorManager", () => {
+	it.each([51200, "51200", { code: "51200" }])("recognizes project deletion codes %j", (code) => {
+		const error = typeof code === "object" ? { response: { data: code } } : { code }
+		expect(new RecordingErrorManager().isTaskEndError(error)).toBe(true)
+	})
 	it("recognizes task-end errors when the backend serializes the code", () => {
 		const error = Object.assign(new Error("task already completed"), {
 			code: "43200",

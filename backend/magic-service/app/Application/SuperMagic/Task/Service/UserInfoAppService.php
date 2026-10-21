@@ -74,6 +74,7 @@ class UserInfoAppService
             organizationCode: $authorization->getOrganizationCode(),
             organizationName: $organization->getName(),
             account: $this->getAccountInfo($authorization),
+            thirdPlatformId: $profile['third_platform_id'] ?? '',
         );
     }
 

@@ -7,6 +7,7 @@
 from app.tools.dummy_tool import DummyTool # DummyTool 必须在第一个位置导入，
 from app.tools.ask_user import AskUserTool
 from app.tools.micro_app_plan import MicroAppPlanTool
+from app.tools.update_html_app_memory import UpdateHtmlAppMemory
 from app.tools.web_search import WebSearch
 from app.tools.find_agents import FindAgentsTool
 from app.tools.call_subagent import CallSubagent
@@ -39,6 +40,7 @@ from app.tools.multi_edit_file import MultiEditFile
 from app.tools.file_search import FileSearch
 from app.tools.get_js_cdn_address import GetJsCdnAddress
 from app.tools.get_sandbox_info import GetSandboxInfo
+from app.tools.get_user_language import GetUserLanguage
 from app.tools.grep_search import GrepSearch
 
 from app.tools.generate_images import GenerateImages
@@ -289,6 +291,13 @@ from app.tools.remote import (
 
 # Code Mode 产品工具也需进入加密打包的显式导入链。
 from app.tools.super_magic import (
+    ListSkills,
+    GetSkill,
+    CreateSkill,
+    PrepareSkillPublish,
+    PublishSkill,
+    GetSkillPublishResult,
+
     ArchiveTopic,
     ArchiveWorkspace,
     CancelTopicTask,
@@ -318,6 +327,9 @@ from app.tools.super_magic import (
     PrepareProjectFiles,
     ReadTopicMessages,
     RenameProjectFile,
+    SearchProjectFiles,
+    SearchUsers,
+    SearchDepartments,
     SendTopicMessage,
     StartTopicTask,
     UpdateProject,
@@ -332,9 +344,17 @@ import app.tools.design.utils
 import app.tools.design
 
 __all__ = [
+    "ListSkills",
+    "GetSkill",
+    "CreateSkill",
+    "PrepareSkillPublish",
+    "PublishSkill",
+    "GetSkillPublishResult",
+
     "DummyTool",
     "AskUserTool",
     "MicroAppPlanTool",
+    "UpdateHtmlAppMemory",
 
     # 核心组件
     "BaseTool",
@@ -413,6 +433,7 @@ __all__ = [
     "FileSearch",
     "GetJsCdnAddress",
     "GetSandboxInfo",
+    "GetUserLanguage",
     "GrepSearch",
     "ImageSearch",
     "GenerateImages",
@@ -616,6 +637,9 @@ __all__ = [
     "PrepareProjectFiles",
     "ReadTopicMessages",
     "RenameProjectFile",
+    "SearchProjectFiles",
+    "SearchUsers",
+    "SearchDepartments",
     "SendTopicMessage",
     "StartTopicTask",
     "UpdateProject",

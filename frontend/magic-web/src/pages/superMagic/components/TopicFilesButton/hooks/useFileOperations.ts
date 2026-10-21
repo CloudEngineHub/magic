@@ -47,7 +47,10 @@ import { waitForProjectAttachmentChange } from "@/pages/superMagic/utils/project
 import { exportHtmlToImage } from "@magic-web/html2image"
 import { textToHtml } from "../../../utils/textToHtml"
 import { createUploadRefreshCoordinator } from "../utils/uploadRefreshController"
-import { createDesignProjectFiles } from "../../Detail/contents/Design/utils/designProjectCreation"
+import {
+	createDesignProjectFiles,
+	DesignProjectCreationError,
+} from "../../Detail/contents/Design/utils/designProjectCreation"
 import { createSelfMediaProject as createSelfMediaProjectAction } from "./projectCreators/createSelfMediaProject"
 import { createAICardProject as createAICardProjectAction } from "./projectCreators/createAICardProject"
 import {
@@ -77,6 +80,8 @@ import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { checkDuplicateFileName } from "../utils/checkDuplicateFileName"
 import { toUserAttachment } from "../../UserSpace/services/userSpaceFileService"
+import type { ProjectFilesStore } from "@/stores/projectFiles"
+import { requestProjectAttachmentsFullRefresh } from "@/pages/superMagic/services/attachmentsTopicSync"
 
 // 工具函数：从attachments中递归删除指定ID的文件/文件夹
 const removeItemFromAttachments = (
@@ -273,6 +278,8 @@ export interface UseFileOperationsOptions {
 	onUpdateAttachments?: (sourceProjectId?: string) => void
 	// 添加直接更新attachments的回调
 	onAttachmentsChange?: (attachments: AttachmentItem[]) => void
+	/** Project-scoped store used to reconcile a just-created Canvas across all file surfaces. */
+	projectFilesStore?: ProjectFilesStore
 	selectedProject?: ProjectListItem
 	// 外部传入的共享 duplicateFileHandler（可选）
 	duplicateFileHandler?: ReturnType<typeof useDuplicateFileHandler>
@@ -298,6 +305,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 		onFileCreated,
 		onUpdateAttachments,
 		onAttachmentsChange,
+		projectFilesStore,
 		selectedProject,
 		duplicateFileHandler: externalDuplicateHandler,
 		selectedItems,
@@ -775,23 +783,69 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 
 		const projectKey = `${Date.now()}-${Math.random()}`
 		setCreatingFiles((prev) => new Set(prev).add(projectKey))
+		const refreshCreatedDesignProject = () => {
+			if (onUpdateAttachments) {
+				onUpdateAttachments()
+				return
+			}
+			requestProjectAttachmentsFullRefresh({
+				projectId,
+				reason: "created-design-project",
+			})
+		}
 
 		try {
+			if (options.isCurrent && !options.isCurrent())
+				throw new DOMException("Identity changed", "AbortError")
 			// 获取父文件夹ID
 			const parent_id = getParentIdFromPath(parentPath)
+			if (parentPath && !parent_id) {
+				throw new Error("父文件夹不存在，无法创建画布")
+			}
 
-			const { folder } = await createDesignProjectFiles({
+			const created = await createDesignProjectFiles({
 				projectId,
 				parentId: parent_id,
 				folderName,
 			})
+			if (options.isCurrent && !options.isCurrent())
+				throw new DOMException("Identity changed", "AbortError")
 
-			onUpdateAttachments?.()
+			projectFilesStore?.registerCreatedDesignProject({
+				projectId,
+				folderId: String(created.folder.file_id),
+				configFileId: String(created.magicProjectFile.file_id),
+				parentId: parent_id,
+				folderName,
+				status: "confirmed",
+			})
+
+			refreshCreatedDesignProject()
 
 			magicToast.success(t("topicFiles.contextMenu.createDesignSuccess"))
 
-			return folder
+			return created.folder
 		} catch (error) {
+			if (options.isCurrent && !options.isCurrent()) {
+				throw new DOMException("Identity changed", "AbortError")
+			}
+			if (error instanceof DesignProjectCreationError && error.outcome === "ambiguous") {
+				const folderId = error.context?.folder?.file_id ?? error.context?.folder?.id
+				const configFileId =
+					error.context?.magicProjectFile?.file_id ?? error.context?.magicProjectFile?.id
+				if (folderId && configFileId) {
+					projectFilesStore?.registerCreatedDesignProject({
+						projectId,
+						folderId: String(folderId),
+						configFileId: String(configFileId),
+						parentId: error.context?.parentId,
+						folderName,
+						status: "ambiguous",
+					})
+				}
+				refreshCreatedDesignProject()
+			}
+			if (error instanceof DOMException && error.name === "AbortError") throw error
 			magicToast.error(t("topicFiles.contextMenu.createDesignFailed"))
 			throw error
 		} finally {
@@ -983,6 +1037,7 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 			// 更新 attachments 列表
 			const updatedAttachments = removeItemFromAttachments(attachments || [], fileId)
 			onAttachmentsChange?.(updatedAttachments)
+			projectFilesStore?.clearCreatedDesignProject(fileId)
 
 			// 调用删除回调
 			if (onFileDelete) {

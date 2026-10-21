@@ -3,8 +3,12 @@ import type { VideoModelItem } from "../../../../../../public/magic-types"
 import {
 	buildVideoAspectRatioOptions,
 	buildVideoDurationOptions,
+	buildVideoResolutionOptions,
 	getVideoDurationConfig,
+	intersectVideoGenerationConstraints,
+	resolveDraftVideoGenerationConstraints,
 	resolveVideoDefaultDuration,
+	resolveRestoredVideoResolution,
 } from "../video-editor-config.generation"
 
 function createModel(generation: Record<string, unknown>): VideoModelItem {
@@ -119,5 +123,79 @@ describe("video generation duration configuration", () => {
 		expect(buildVideoDurationOptions(model, constraints)).toEqual([5, 7, 9])
 		expect(getVideoDurationConfig(model, constraints)).toEqual({ type: "options" })
 		expect(resolveVideoDefaultDuration(model, constraints)).toBe(9)
+	})
+})
+
+describe("draft video generation constraints", () => {
+	it("intersects the active mode with the fixed 480p draft capability", () => {
+		const model = createModel({
+			resolutions: ["480p", "720p", "1080p"],
+			default_resolution: "1080p",
+		})
+		const constraints = intersectVideoGenerationConstraints(
+			{ resolutions: ["480p", "1080p"], aspect_ratios: ["16:9", "9:16"] },
+			resolveDraftVideoGenerationConstraints({
+				resolutions: ["480p", "720p"],
+				aspect_ratios: ["16:9"],
+			}),
+		)
+
+		expect(constraints).toEqual({
+			resolutions: ["480p"],
+			aspect_ratios: ["16:9"],
+		})
+		expect(
+			buildVideoResolutionOptions(model, constraints).map((option) => option.value),
+		).toEqual(["480p"])
+	})
+
+	it("reports no draft resolution when the current mode excludes 480p", () => {
+		const constraints = intersectVideoGenerationConstraints(
+			{ resolutions: ["1080p"] },
+			resolveDraftVideoGenerationConstraints(),
+		)
+		expect(constraints?.resolutions).toEqual([])
+	})
+
+	it("does not fall back to model resolutions when the mode size whitelist excludes 480p", () => {
+		const model = createModel({
+			resolutions: ["480p", "1080p"],
+			sizes: [
+				{ label: "16:9", value: "864x496", width: 864, height: 496, resolution: "480p" },
+				{
+					label: "16:9",
+					value: "1920x1080",
+					width: 1920,
+					height: 1080,
+					resolution: "1080p",
+				},
+			],
+		})
+		const constraints = intersectVideoGenerationConstraints(
+			{
+				sizes: [
+					{
+						label: "16:9",
+						value: "1920x1080",
+						width: 1920,
+						height: 1080,
+						resolution: "1080p",
+					},
+				],
+			},
+			resolveDraftVideoGenerationConstraints(),
+		)
+
+		expect(buildVideoResolutionOptions(model, constraints)).toEqual([])
+	})
+
+	it("restores the previous resolution before falling back to model defaults", () => {
+		const model = createModel({
+			resolutions: ["480p", "720p", "1080p"],
+			default_resolution: "1080p",
+		})
+		const options = buildVideoResolutionOptions(model)
+		expect(resolveRestoredVideoResolution(model, options, "720p")).toBe("720p")
+		expect(resolveRestoredVideoResolution(model, options, "4k")).toBe("1080p")
 	})
 })

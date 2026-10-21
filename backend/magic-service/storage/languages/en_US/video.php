@@ -14,6 +14,10 @@ return [
             'name' => 'Web search',
             'description' => 'Whether to enable web search',
         ],
+        'draft' => [
+            'name' => 'Draft mode',
+            'description' => 'Generate a quick 480p draft first, then render at the final resolution once approved. The two renders are billed separately.',
+        ],
     ],
     'input_modes' => [
         'standard' => 'Standard text-to-video mode without any reference assets.',
@@ -41,6 +45,7 @@ return [
             'images_only' => 'Upload 1 reference video only for editing.',
             'image_and_video' => 'Upload 1 reference video and up to 6 reference images for editing.',
         ],
+        'draft_task' => 'Render the final video at full resolution from an existing draft. The prompt, reference assets, and duration are all inherited from the draft.',
     ],
     'errors' => [
         'generic' => 'Video generation failed. Please check your input and try again later.',

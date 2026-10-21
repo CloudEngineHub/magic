@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => {
 	}
 
 	return {
+		setMeta: vi.fn(),
 		setWorkspaceFileTree,
 		projectFilesStore,
 		selectedProject,
@@ -58,6 +59,10 @@ const mocks = vi.hoisted(() => {
 		},
 	}
 })
+
+vi.mock("@/routes/hooks/useRoutesMetaSet", () => ({
+	default: () => ({ setMeta: mocks.setMeta }),
+}))
 
 vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
@@ -175,11 +180,25 @@ describe("useMicroAppPageController attachment synchronization", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mocks.organizationCode.current = "org-1"
+		mocks.selectedProject.project_name = "Micro App"
 		delete mocks.selectedProject.user_role
 		vi.mocked(SuperMagicApi.getMicroAppProject).mockResolvedValue({
 			organization_code: "org-1",
 			publish: {},
 		} as never)
+	})
+
+	it("uses the development app title during usage and synchronizes renames", () => {
+		const { rerender } = renderHook(() => useMicroAppPageController("app-1", "project-1"))
+		expect(mocks.setMeta).toHaveBeenLastCalledWith({ title: "Micro App" })
+		mocks.selectedProject.project_name = "Renamed App"
+		rerender()
+		expect(mocks.setMeta).toHaveBeenLastCalledWith({ title: "Renamed App" })
+	})
+
+	it("does not reuse the previous app title while a different project loads", () => {
+		renderHook(() => useMicroAppPageController("app-2", "project-2"))
+		expect(mocks.setMeta).toHaveBeenLastCalledWith({ title: "microAppsPage.unnamedApp" })
 	})
 
 	it("applies realtime project file changes to the MicroApp attachment store", () => {

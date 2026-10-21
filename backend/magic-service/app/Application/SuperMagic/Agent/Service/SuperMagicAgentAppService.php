@@ -1577,6 +1577,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
 
         return array_values(array_unique(array_merge(
             $accessibleSkillCodes,
+            $this->skillMarketDomainService->getPublishedSkillCodes($skillCodes ?? []),
             array_values(array_intersect(
                 $this->skillMarketDomainService->getOfficialBuiltinSkillCodes(),
                 $skillCodes ?? []
@@ -2951,7 +2952,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 true
             );
         } catch (RuntimeException $e) {
-            // 发布前的严格重建失败（绑定技能无可用版本/包名冲突/SKILLS.md 读写失败等）必须中止发布，
+            // 发布前的严格重建失败（绑定技能无可用版本/非法包名/SKILLS.md 读写失败等）必须中止发布，
             // 但要以业务异常码暴露给用户，不能裸抛 RuntimeException 变成 500 + 英文原文
             ExceptionBuilder::throw(
                 SuperAgentErrorCode::PUBLISH_SKILLS_SYNC_FAILED,

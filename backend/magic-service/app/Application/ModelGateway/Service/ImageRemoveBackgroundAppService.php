@@ -321,7 +321,7 @@ class ImageRemoveBackgroundAppService extends AbstractLLMAppService
             'created' => time(),
             'data' => [],
             'usage' => null,
-            'provider_error_message' => $exception->getMessage(),
+            'provider_error_message' => __('image_generate.image_operation_failed'),
             'provider_error_code' => $exception->getProviderErrorCode(),
             'provider' => $exception->getProvider(),
         ]);

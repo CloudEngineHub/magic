@@ -102,19 +102,6 @@ function normalizePath(filePath) {
 	return filePath.replace(/\\/g, "/")
 }
 
-function resolveHtmlSandboxSource(subpath) {
-	const normalizedSubpath = subpath.replace(/^\/+/, "")
-	const basePath = path.join(pkgRoot, "src", normalizedSubpath)
-	const candidates = [
-		path.join(basePath, "index.ts"),
-		path.join(basePath, "index.tsx"),
-		`${basePath}.ts`,
-		`${basePath}.tsx`,
-		basePath,
-	]
-	return candidates.find((candidate) => fs.existsSync(candidate)) || null
-}
-
 function createHtmlSandboxAliasPlugin() {
 	return {
 		name: "html-sandbox-workspace-alias",
@@ -123,16 +110,6 @@ function createHtmlSandboxAliasPlugin() {
 				path: path.resolve(projectRoot, "src", args.path.slice(2)),
 			}))
 
-			buildContext.onResolve({ filter: /^@dtyq\/html-sandbox$/ }, () => ({
-				path: path.join(pkgRoot, "src", "index.ts"),
-			}))
-
-			buildContext.onResolve({ filter: /^@dtyq\/html-sandbox\/(.+)$/ }, (args) => {
-				const subpath = args.path.replace(/^@dtyq\/html-sandbox\/?/, "")
-				const resolved = resolveHtmlSandboxSource(subpath)
-				if (!resolved) return null
-				return { path: resolved }
-			})
 		},
 	}
 }
@@ -224,6 +201,7 @@ async function bundleRuntimeSource(runtimeEntry) {
 		minify: true,
 		sourcemap: false,
 		metafile: true,
+		conditions: ["magic-web-source"],
 		legalComments: "none",
 		plugins: [createHtmlSandboxAliasPlugin()],
 		banner: {

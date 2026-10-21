@@ -1,3 +1,7 @@
+import {
+	canDeleteRecordingProjects,
+	handleRecordingProjectDeletionError,
+} from "@/services/recordSummary/projectDeletionRecordingNotice"
 import type { ComponentType, ReactNode } from "react"
 import { observer } from "mobx-react-lite"
 import { InfiniteScroll } from "antd-mobile"
@@ -340,7 +344,14 @@ function AudioRecordingListPanel({
 	}
 
 	async function handleDelete(projectId: string) {
-		const success = await store.deleteProject(projectId)
+		if (!canDeleteRecordingProjects([projectId])) return false
+		let success: boolean
+		try {
+			success = await store.deleteProject(projectId)
+		} catch (error) {
+			if (handleRecordingProjectDeletionError(error)) return false
+			throw error
+		}
 		if (success) {
 			onResolveOptimisticItem?.(projectId)
 			toast.success(t("audioRecordings:actions.deleteSuccess"))

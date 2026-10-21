@@ -23,7 +23,7 @@ from app.service.memory.policies.memory_file_budget import (
     get_memory_md_budget,
     inspect_memory_file,
 )
-from app.service.memory.policies.memory_scope import MemoryScope, MemoryScopeKind, resolve_memory_scopes
+from app.service.memory.policies.memory_scope import MemoryScope, resolve_memory_scopes
 from app.tools.core import BaseTool, BaseToolParams, tool
 from app.tools.core.tool_keepalive import start_tool_keep_alive, stop_tool_keep_alive
 from app.utils.async_file_utils import async_realpath
@@ -131,11 +131,8 @@ class InspectMemory(BaseTool[InspectMemoryParams]):
             # 返回前确认仍是当前项目中的同一文件；自动开关不影响这项手动查询。
             if await self._resolve_scope(context, path) != scope or await async_realpath(path) != real_path:
                 return MemoryInspection(MemoryFileTokenUsage(path, MemoryFileReadStatus.OUTSIDE_SCOPE, None))
-            is_memory_md = (
-                # 主文件的预算只匹配作用域根下的 MEMORY.md；普通笔记或 Claw 文件不套这份额度。
-                scope.kind != MemoryScopeKind.CLAW_WORKSPACE
-                and real_path == await async_realpath(scope.memory_file)
-            )
+            # 三类作用域都只对根下的 MEMORY.md 使用预算，普通笔记不套这份额度。
+            is_memory_md = real_path == await async_realpath(scope.memory_file)
             return MemoryInspection(MemoryFileTokenUsage(
                 path, usage.status, usage.estimated_tokens, usage.error, usage.size_bytes,
             ), is_memory_md)

@@ -1,3 +1,4 @@
+import type { TopicTypeFilterValue } from "../utils/topicTypeFilter"
 import { SuperMagicApi } from "@/apis"
 import { runInAction } from "mobx"
 import { userStore } from "@/models/user"
@@ -9,6 +10,7 @@ import type { RequestConfig } from "@/infrastructure/network/http/clients"
 import { normalizeTopicHistoryItem } from "@/pages/superMagic/utils/topicHistory"
 import { interfaceStore } from "@/stores/interface"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { analyticsService } from "@/services/analytics"
 
 export interface FetchTopicsParams {
 	projectId: string
@@ -28,8 +30,11 @@ export interface UpdateTopicStatusParams {
 export interface CreateTopicParams {
 	projectId: string
 	topicName: string
+	/** Parent project context is known before the topic request and is required by analytics. */
+	workspaceId?: string | null
+	mode?: Topic["topic_mode"] | null
 	/** Topic whose frontend employee selection should be inherited after creation */
-	sourceTopic?: Pick<Topic, "project_id" | "topic_mode" | "agent_code"> | null
+	sourceTopic?: Pick<Topic, "project_id" | "workspace_id" | "topic_mode" | "agent_code"> | null
 }
 
 export interface MarkTopicReadProgressParams {
@@ -44,6 +49,7 @@ interface TopicsApiResponse {
 }
 
 interface GetSidebarTopicsByProjectIdParams {
+	topicType?: TopicTypeFilterValue
 	projectId: string
 	page: number
 	pageSize: number
@@ -141,6 +147,7 @@ class TopicService {
 	}
 
 	async getSidebarTopicsByProjectId({
+		topicType = "all",
 		projectId,
 		page,
 		pageSize,
@@ -152,12 +159,14 @@ class TopicService {
 			page,
 			pageSize,
 			searchKeyword?.trim() || "",
+			topicType,
 		)
 
 		const pendingRequest = this.pendingRequests.get(requestKey)
 		if (pendingRequest) return pendingRequest
 
 		const requestPromise = SuperMagicApi.getSidebarTopicsByProjectId({
+			...(topicType !== "all" ? { topicType } : {}),
 			id: projectId,
 			page,
 			page_size: pageSize,
@@ -247,9 +256,16 @@ class TopicService {
 	async createTopic({
 		projectId,
 		topicName,
+		workspaceId,
+		mode,
 		sourceTopic,
 	}: CreateTopicParams): Promise<Topic | null> {
 		try {
+			analyticsService.report("topic_create_attempted", {
+				projectId,
+				workspaceId: workspaceId ?? sourceTopic?.workspace_id,
+				mode: mode ?? sourceTopic?.topic_mode,
+			})
 			const newTopic = await SuperMagicApi.createTopic({
 				topic_name: topicName,
 				project_id: projectId,
@@ -278,7 +294,6 @@ class TopicService {
 					this.topicStore.setSelectedTopic(selectedTopic)
 				}
 			})
-
 			return selectedTopic
 		} catch (error) {
 			console.error("创建话题失败:", error)

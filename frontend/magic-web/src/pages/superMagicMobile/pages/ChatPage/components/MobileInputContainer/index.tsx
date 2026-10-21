@@ -14,6 +14,10 @@ import { ScenePanelVariant } from "@/pages/superMagic/components/MainInputContai
 import type { SceneItem } from "@/pages/superMagic/types/skill"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import MobileComposer from "../mobile-composer/MobileComposer"
+import {
+	applyTaskHomeRecordingEditorContext,
+	shouldShowMobileHomeRecordStart,
+} from "../mobile-composer/shouldShowMobileHomeRecordStart"
 import useMobileEditorType from "../mobile-composer/useMobileEditorType"
 import MobileRecordSummaryRoute from "../record-summary/MobileRecordSummaryRoute"
 import { clearMobileSceneSelectionOnSendSuccess } from "./sceneSelection"
@@ -43,11 +47,28 @@ function MobileInputRouteRenderer({
 		editorContext,
 	})
 
-	// Blank homes always use the send-first composer, even when the default employee is recording.
-	if (isRecordSummaryEditor && !editorContext.deferProjectCreationUntilSend) {
+	// Project and topic pages already use this panel. The task homepage uses it too,
+	// so recording starts in the selected workspace instead of the text composer.
+	const showSharedRecordingExpert =
+		isRecordSummaryEditor &&
+		(!editorContext.deferProjectCreationUntilSend ||
+			shouldShowMobileHomeRecordStart({
+				deferProjectCreationUntilSend: editorContext.deferProjectCreationUntilSend,
+				showModeToggle: editorContext.showModeToggle,
+				isRecordSummaryEditor,
+			}))
+
+	// Resolve the task-homepage recording overrides here, once. The route stays a pure
+	// presenter, so it can never re-decide which context the recording panel receives.
+	const recordingEditorContext = useMemo(
+		() => applyTaskHomeRecordingEditorContext(editorContext, isRecordSummaryEditor),
+		[editorContext, isRecordSummaryEditor],
+	)
+
+	if (showSharedRecordingExpert) {
 		return (
 			<MobileRecordSummaryRoute
-				editorContext={editorContext}
+				editorContext={recordingEditorContext}
 				editorNodes={editorNodes}
 				scenes={scenes}
 			/>

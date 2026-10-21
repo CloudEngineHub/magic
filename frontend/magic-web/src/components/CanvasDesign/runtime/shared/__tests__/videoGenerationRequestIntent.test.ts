@@ -76,6 +76,33 @@ describe("videoGenerationRequestIntent", () => {
 		).toBe(true)
 	})
 
+	it("accepts a promptless draft task with either supported source reference", () => {
+		for (const draftTask of [{ video_id: "draft-video-id" }, { uri: "./videos/draft.mp4" }]) {
+			const request: Partial<GenerateVideoRequest> = {
+				model_id: "video-model",
+				input_mode: "draft_task",
+				task: "generate",
+				inputs: { draft_task: draftTask },
+			}
+			expect(hasVideoGenerationRequestSubmitIntent(request)).toBe(true)
+			expect(hasVideoGenerationRequestEstimateIntent(request)).toBe(true)
+		}
+		expect(
+			hasVideoGenerationRequestSubmitIntent({
+				model_id: "video-model",
+				input_mode: "draft_task",
+				inputs: { draft_task: {} },
+			}),
+		).toBe(false)
+		expect(
+			hasVideoGenerationRequestEstimateIntent({
+				model_id: "video-model",
+				input_mode: "standard",
+				inputs: { draft_task: { video_id: "draft-video-id" } },
+			}),
+		).toBe(false)
+	})
+
 	it("accepts canvas composition without model or prompt", () => {
 		expect(
 			hasVideoGenerationRequestSubmitIntent({

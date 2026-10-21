@@ -48,10 +48,11 @@ function createFakeVideo(options: { paused: boolean; ended?: boolean; duration?:
 function getPlayerNodes(group: Konva.Group) {
 	const controlsGroup = group.findOne<Konva.Group>(".video-player-controls")
 	const progressGroup = group.findOne<Konva.Group>(".video-player-progress")
+	const draftTagGroup = group.findOne<Konva.Group>(".video-player-draft-tag")
 	const playButtonGroup = group.findOne<Konva.Group>(".video-player-play-button")
 	const progressText = progressGroup?.getChildren()[1] as Konva.Text | undefined
 
-	return { controlsGroup, playButtonGroup, progressText }
+	return { controlsGroup, draftTagGroup, playButtonGroup, progressGroup, progressText }
 }
 
 const POSTER_METADATA: LoadedVideoMetadata = {
@@ -92,6 +93,25 @@ describe("VideoRenderer player controls", () => {
 
 		expect(nodes.playButtonGroup?.visible()).toBe(true)
 		expect(nodes.controlsGroup?.visible()).toBe(true)
+
+		renderer.destroy()
+	})
+
+	it("renders the sample tag beside the duration tag", () => {
+		const renderer = new VideoRenderer()
+		const canvas = createCanvasMock()
+		renderer.loadPoster(document.createElement("canvas"), POSTER_METADATA)
+
+		const group = renderer.createPlayerNode(640, 360, canvas, { showDraftTag: true })
+		const nodes = getPlayerNodes(group as Konva.Group)
+		const progressBackground = nodes.progressGroup?.getChildren()[0] as Konva.Rect | undefined
+
+		expect(nodes.draftTagGroup).toBeDefined()
+		expect(nodes.draftTagGroup?.getChildren()[1]).toBeDefined()
+		expect((nodes.draftTagGroup?.getChildren()[1] as Konva.Text).text()).toBe("样片")
+		expect(nodes.draftTagGroup?.x()).toBeGreaterThan(
+			(nodes.progressGroup?.x() ?? 0) + (progressBackground?.width() ?? 0),
+		)
 
 		renderer.destroy()
 	})

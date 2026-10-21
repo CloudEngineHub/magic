@@ -173,7 +173,6 @@ vi.mock("../htmlProcessor", () => ({
 vi.mock("../utils/fetchInterceptor", () => ({
 	createParentMessageHandler: () => vi.fn(),
 	injectFetchInterceptorScript: (content: string) => content,
-	injectKeyboardInterceptorScript: (content: string) => content,
 	createKeyboardMessageHandler: () => vi.fn(),
 	KEYBOARD_MESSAGE_TYPES: {
 		CANCEL: "MAGIC_KEYBOARD_CANCEL",

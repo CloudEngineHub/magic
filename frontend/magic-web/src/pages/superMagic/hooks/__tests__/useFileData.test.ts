@@ -15,6 +15,7 @@ import {
 	resetFileSaveQueueForTests,
 } from "@/pages/superMagic/components/Detail/services/fileSaveQueue"
 import { useFileData } from "../useFileData"
+import { shadow } from "@/utils/shadow"
 
 const isShareRouteState = vi.hoisted(() => ({ current: false }))
 
@@ -96,12 +97,12 @@ describe("useFileData", () => {
 	})
 
 	describe("with an unsynced save draft", () => {
-		function enqueuePendingSave(content: string) {
+		function enqueuePendingSave(content: string, enableShadow = false) {
 			const queue = getFileSaveQueue()
 			queue.enqueue({
 				fileId: "file-1",
 				content,
-				enableShadow: false,
+				enableShadow,
 				persist: () => new Promise(() => undefined),
 			})
 		}
@@ -119,6 +120,38 @@ describe("useFileData", () => {
 			enqueuePendingSave("<html>recovered</html>")
 			const { result } = renderHook(() => useFileData({ file_id: "file-1" }))
 			await waitFor(() => expect(result.current.fileData).toBe("<html>recovered</html>"))
+		})
+
+		it("never exposes a shadowed code draft while reloading after save and exit", async () => {
+			const content = "const value = 42;"
+			enqueuePendingSave(shadow(content), true)
+			let finishDownload: ((value: string) => void) | undefined
+			downloadFileContentMock.mockReturnValue(
+				new Promise<string>((resolve) => {
+					finishDownload = resolve
+				}),
+			)
+			const renderedContent: unknown[] = []
+			const { result, unmount } = renderHook(() => {
+				const data = useFileData({ file_id: "file-1" })
+				renderedContent.push(data.fileData)
+				return data
+			})
+			await waitFor(() => expect(result.current.fileData).toBe(content))
+			await waitFor(() => expect(finishDownload).toBeDefined())
+			await act(async () => {
+				finishDownload?.("const value = 0;")
+			})
+			await waitFor(() => expect(result.current.loadStatus).toBe("ready"))
+			expect(result.current.fileData).toBe(content)
+			expect(
+				renderedContent
+					.filter((value) => typeof value === "string")
+					.every((value) => value === content),
+			).toBe(true)
+			expect(renderedContent).not.toContain(shadow(content))
+			unmount()
+			await getFileSaveQueue().restoreRemote("file-1")
 		})
 	})
 

@@ -4,6 +4,7 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 import TemplateGroupSelector from "@/pages/superMagic/components/MainInputContainer/panels/TemplateGroupSelector"
 import GroupIcon from "@/pages/superMagic/components/MainInputContainer/panels/GroupIcon"
 import type { OptionGroup } from "@/pages/superMagic/components/MainInputContainer/panels/types"
@@ -67,7 +68,15 @@ export default function SlidesTemplatesToolbar({
 	const isMobile = useIsMobile()
 
 	return (
-		<>
+		/*
+		 * One band for the whole toolbar, so the onboarding step that points at it frames the search
+		 * box, the "发现灵感" button and the category tabs together — they are one way of finding a
+		 * template, and the step's wording covers all three.
+		 */
+		<div
+			data-guide-anchor={HomeOnboardingAnchor.SlidesTemplatesToolbar}
+			data-testid="slides-templates-page-toolbar"
+		>
 			<div className={cn("flex min-w-0 items-center gap-3", className)}>
 				<div className="relative min-w-[220px] flex-1">
 					<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/[0.45]" />
@@ -185,6 +194,6 @@ export default function SlidesTemplatesToolbar({
 					data-testid="slides-templates-page-group-selector"
 				/>
 			) : null}
-		</>
+		</div>
 	)
 }

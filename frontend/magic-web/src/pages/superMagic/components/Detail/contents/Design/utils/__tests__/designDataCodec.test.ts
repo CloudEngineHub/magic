@@ -92,6 +92,82 @@ describe("designDataCodec", () => {
 		validateV3CanvasDocument(result.canvas)
 	})
 
+	it("preserves valid media asset bindings and removes invalid ones during migration", () => {
+		const result = upgradeDesignDataToV3({
+			type: "design",
+			name: "image-asset-bindings",
+			version: MAGIC_PROJECT_VERSION_V3,
+			canvas: {
+				elements: [
+					{
+						id: "image-valid",
+						type: ElementTypeEnum.Image,
+						contents: [
+							{
+								contentId: "image-valid-content-1",
+								src: "./images/valid.png",
+								assetId: "960212772906762240",
+							},
+						],
+						activeContentId: "image-valid-content-1",
+						mainContentId: "image-valid-content-1",
+					},
+					{
+						id: "image-invalid",
+						type: ElementTypeEnum.Image,
+						contents: [
+							{
+								contentId: "image-invalid-content-1",
+								src: "./images/invalid.png",
+								assetId: 960212772906762240,
+							},
+						],
+						activeContentId: "image-invalid-content-1",
+						mainContentId: "image-invalid-content-1",
+					},
+					{
+						id: "video-valid",
+						type: ElementTypeEnum.Video,
+						contents: [
+							{
+								contentId: "video-valid-content-1",
+								src: "./videos/valid.mp4",
+								assetId: "asset-video",
+							},
+						],
+						activeContentId: "video-valid-content-1",
+						mainContentId: "video-valid-content-1",
+					},
+					{
+						id: "audio-valid",
+						type: ElementTypeEnum.Audio,
+						contents: [
+							{
+								contentId: "audio-valid-content-1",
+								src: "./audios/valid.mp3",
+								assetId: "asset-audio",
+							},
+						],
+						activeContentId: "audio-valid-content-1",
+						mainContentId: "audio-valid-content-1",
+					},
+				],
+			},
+		})
+
+		expect(result.canvas?.elements?.[0]).toMatchObject({
+			contents: [{ assetId: "960212772906762240" }],
+		})
+		expect(result.canvas?.elements?.[1]?.contents[0]).not.toHaveProperty("assetId")
+		expect(result.canvas?.elements?.[2]).toMatchObject({
+			contents: [{ assetId: "asset-video" }],
+		})
+		expect(result.canvas?.elements?.[3]).toMatchObject({
+			contents: [{ assetId: "asset-audio" }],
+		})
+		validateV3CanvasDocument(result.canvas)
+	})
+
 	it("preserves video generation runtime metadata during V2 to V3 migration", () => {
 		const videoGenerationResultMeta = {
 			runtime: {

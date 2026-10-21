@@ -36,6 +36,7 @@ import { canEditMicroAppMetadata, canPublishMicroApp } from "../utils/microAppPe
 import { getAttachmentId, resolveSelectedHtmlEntry } from "../utils/microAppFiles"
 import { useMicroAppSelectedProjectSync } from "./useMicroAppSelectedProjectSync"
 import { useMicroAppVisit } from "./useMicroAppVisit"
+import { useNamedPageTitle } from "@/pages/superMagic/hooks/useNamedPageTitle"
 
 /**
  * 微应用桌面端和移动端共用的数据控制层。
@@ -66,6 +67,11 @@ export function useMicroAppPageController(appId: string, projectId: string) {
 	// Files, database and publish configuration always belong to the development
 	// project. The active conversation may point at the usage project.
 	const selectedProject = store.developmentConversation.selectedProject
+	// Both layouts use the development app name, even when the usage conversation is active.
+	useNamedPageTitle({
+		entityName: selectedProject?.id === projectId ? selectedProject.project_name : undefined,
+		fallbackName: t("microAppsPage.unnamedApp"),
+	})
 	const selectedTopic = store.developmentConversation.topicStore.selectedTopic
 	const canUseDevelopment = canEditProject(
 		store.developmentConversation.selectedProject?.user_role,

@@ -590,9 +590,15 @@ export function useFilesViewer(props: FilesViewerProps) {
 			"files_viewer_file_list_signature_ms",
 			() =>
 				fileList
-					.map(
-						(file) =>
-							`${file.file_id || ""}:${file.file_name || ""}:${file.updated_at || ""}`,
+					.map((file) =>
+						[
+							file.file_id || "",
+							file.file_name || "",
+							file.updated_at || "",
+							file.parent_id || "",
+							file.relative_file_path || "",
+							file.display_config?.type || "",
+						].join(":"),
 					)
 					.join("|"),
 			(result) => ({

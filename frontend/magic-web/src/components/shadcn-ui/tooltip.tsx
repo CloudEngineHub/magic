@@ -20,9 +20,15 @@ function TooltipProvider({
 	)
 }
 
-function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+function Tooltip({
+	delayDuration,
+	...props
+}: React.ComponentProps<typeof TooltipPrimitive.Root> & {
+	/** 覆盖这一条提示的悬停等待。未传时仍使用全局 700ms。 */
+	delayDuration?: number
+}) {
 	return (
-		<TooltipProvider>
+		<TooltipProvider delayDuration={delayDuration}>
 			<TooltipPrimitive.Root data-slot="tooltip" {...props} />
 		</TooltipProvider>
 	)

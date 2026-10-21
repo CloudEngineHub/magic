@@ -1,3 +1,9 @@
+import {
+	createTaskEndError,
+	getBusinessErrorCode,
+	isTaskEndError,
+	defaultErrorManager,
+} from "./RecordingErrorManager"
 import { SuperMagicApi } from "@/apis"
 import { UploadSource } from "@/pages/superMagic/components/MessageEditor/hooks/useFileUpload"
 import { recordingLogger } from "./utils/RecordingLogger"
@@ -128,6 +134,11 @@ export class RecordingBatchSaveReporter {
 					fileName: file.fileName,
 				},
 			})
+			if (isTaskEndError(error)) {
+				void defaultErrorManager.handleTaskEnd(
+					createTaskEndError(file.sessionId, getBusinessErrorCode(error)),
+				)
+			}
 			if (throwOnError) {
 				throw error
 			}

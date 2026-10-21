@@ -82,7 +82,7 @@ export function TemplateEditorForm({
 									<RequiredMark />
 								</FormLabel>
 								<FormControl>
-									<Input maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name} {...field} data-testid="platform-slides-template-input" />
+									<Input maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name} {...field}  data-testid="platform-slides-template-input" />
 								</FormControl>
 								<FormMessage className="text-xs" />
 							</FormItem>
@@ -98,7 +98,7 @@ export function TemplateEditorForm({
 									<RequiredMark />
 								</FormLabel>
 								<FormControl>
-									<Input maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name} {...field} data-testid="platform-slides-template-input" />
+									<Input maxLength={SLIDES_TEMPLATE_FIELD_LIMITS.name} {...field}  data-testid="platform-slides-template-input" />
 								</FormControl>
 								<FormMessage className="text-xs" />
 							</FormItem>
@@ -326,7 +326,7 @@ export function TemplateEditorForm({
 									<RequiredMark />
 								</FormLabel>
 								<FormControl>
-									<Input readOnly {...field} data-testid="platform-slides-template-input" />
+									<Input readOnly {...field}  data-testid="platform-slides-template-input" />
 								</FormControl>
 								<FormMessage className="text-xs" />
 							</FormItem>
@@ -359,7 +359,7 @@ export function TemplateEditorForm({
 						<FormItem className="flex items-center justify-between rounded-lg border p-4">
 							<FormLabel>{t("slidesTemplate.form.status")}</FormLabel>
 							<FormControl>
-								<Switch checked={field.value} onCheckedChange={field.onChange} data-testid="platform-slides-template-switch" />
+								<Switch checked={field.value} onCheckedChange={field.onChange}  data-testid="platform-slides-template-switch" />
 							</FormControl>
 						</FormItem>
 					)}

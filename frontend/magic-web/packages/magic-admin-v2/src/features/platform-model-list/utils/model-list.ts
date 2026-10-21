@@ -44,6 +44,14 @@ export function createDefaultFilterDraft(keyword = ""): ModelListFilterDraft {
   };
 }
 
+export function getModelListFilterActiveCount(filter: ModelListFilterDraft) {
+  return (
+    Number(Boolean(filter.keyword.trim())) +
+    Number(filter.modelTypes.length > 0) +
+    Number(filter.status !== null)
+  );
+}
+
 export function toQueryParams(
   filterDraft: ModelListFilterDraft,
   activeCategory: ModelCategoryTab,

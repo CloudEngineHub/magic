@@ -27,6 +27,7 @@ import { MarkerManager } from "../interaction/marker/MarkerManager"
 import { SnapGuideManager } from "../interaction/snap/SnapGuideManager"
 import { PermissionManager } from "./PermissionManager"
 import { NameLabelManager } from "../interaction/labels/NameLabelManager"
+import { complianceNameLabelIconResolver } from "../interaction/labels/complianceNameLabelIconResolver"
 import { SizeLabelManager } from "../interaction/labels/SizeLabelManager"
 import type { TFunction } from "../../public/i18n-types"
 import type { CanvasAccessUpdate } from "./CanvasAccessPolicy"
@@ -48,9 +49,15 @@ import { SubmitImageWorkerManager } from "../resources/upload/SubmitImageWorkerM
 import { VideoPlaybackManager } from "../resources/video/VideoPlaybackManager"
 import { VideoResourceManager } from "../resources/video/VideoResourceManager"
 import { VideoCompositionManager } from "../resources/video-composition/VideoCompositionManager"
+import { VideoDraftFinalManager } from "../resources/video-draft-final/VideoDraftFinalManager"
 import { AudioResourceManager } from "../resources/audio/AudioResourceManager"
 import { AudioPlaybackManager } from "../resources/audio/AudioPlaybackManager"
 import { AudioWaveformManager } from "../resources/audio/AudioWaveformManager"
+import { CanvasAssetResourceManager } from "../resources/asset/CanvasAssetResourceManager"
+import { CanvasAssetImportManager } from "../resources/asset/CanvasAssetImportManager"
+import { CanvasAssetCompliancePollingManager } from "../resources/asset/CanvasAssetCompliancePollingManager"
+import { CanvasAssetComplianceTaskManager } from "../resources/asset/CanvasAssetComplianceTaskManager"
+import { reconcileUnverifiedComplianceInDocument } from "../resources/asset/canvasAssetDocumentReconcile"
 import { AudioReplaceController } from "../interaction/audio/AudioReplaceController"
 import { ImageReplaceController } from "../interaction/image/ImageReplaceController"
 import { MediaReplaceController } from "../interaction/media/MediaReplaceController"
@@ -230,10 +237,17 @@ export class Canvas {
 	public videoCompositionManager: VideoCompositionManager
 	/** 当前图片和视频标签是否常驻显示；默认按 hover/选中状态显示。 */
 	private mediaLabelsAlwaysVisible = false
+	public videoDraftFinalManager: VideoDraftFinalManager
+	/** Seedance 合规能力关闭时，画布不展示合规 UI，也不恢复合规轮询。 */
+	private seedanceComplianceEnabled = false
 	public videoPlaybackManager: VideoPlaybackManager
 	public audioResourceManager: AudioResourceManager
 	public audioPlaybackManager: AudioPlaybackManager
 	public audioWaveformManager: AudioWaveformManager
+	public assetResourceManager: CanvasAssetResourceManager
+	public assetCompliancePollingManager: CanvasAssetCompliancePollingManager
+	public assetComplianceTaskManager: CanvasAssetComplianceTaskManager
+	public assetImportManager: CanvasAssetImportManager
 	public audioReplaceController: AudioReplaceController
 	public imageReplaceController: ImageReplaceController
 	public mediaReplaceController: MediaReplaceController
@@ -383,6 +397,11 @@ export class Canvas {
 			canvas: this,
 			config: options.magic,
 		})
+		// asset:// paths resolve through the asset service and must stay separate from
+		// workspace attachment resolution and its persistent media cache.
+		this.assetResourceManager = new CanvasAssetResourceManager(this)
+		this.assetCompliancePollingManager = new CanvasAssetCompliancePollingManager(this)
+		this.assetComplianceTaskManager = new CanvasAssetComplianceTaskManager(this)
 
 		// 初始化 CanvasFileUploadManager（全局文件上传管理器）
 		this.canvasFileUploadManager = new CanvasFileUploadManager({
@@ -475,6 +494,7 @@ export class Canvas {
 		this.connectionAssociationSeedManager = new ConnectionAssociationSeedManager({
 			canvas: this,
 		})
+		this.assetImportManager = new CanvasAssetImportManager(this)
 
 		// 初始化 SelectionManager（使用 Content Layer 用于查询节点）
 		this.selectionManager = new SelectionManager({
@@ -540,6 +560,9 @@ export class Canvas {
 		this.historyManager = new HistoryManager({
 			canvas: this,
 		})
+		// 正片转正需要同时提交临时元素与运行时连线，因此在元素、连线和历史管理器
+		// 都准备完成后再初始化该生命周期管理器。
+		this.videoDraftFinalManager = new VideoDraftFinalManager({ canvas: this })
 
 		// 初始化标记管理器（使用 Markers Layer）
 		this.markerManager = new MarkerManager({
@@ -554,7 +577,7 @@ export class Canvas {
 		// 初始化名称标签管理器（使用共享的 Overlay Layer）
 		this.nameLabelManager = new NameLabelManager({
 			canvas: this,
-			iconResolver: options.nameLabelIconResolver,
+			iconResolver: options.nameLabelIconResolver ?? complianceNameLabelIconResolver,
 		})
 
 		this.elementRenameManager = new ElementRenameManager({
@@ -1128,6 +1151,14 @@ export class Canvas {
 	): void {
 		this.clearPreviewContent()
 		const normalizedDoc = normalizeStoryboardDocument(doc)
+		// Start the asset batch request before URL warmup so legacy asset:// entries
+		// can share the same Canvas-level detail request instead of issuing one call
+		// per media element.
+		void this.assetResourceManager.preloadDocumentAssets(normalizedDoc).finally(() => {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+			this.refreshNameLabelIcons()
+			this.refreshMediaComplianceFailedTags()
+		})
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocument")
 		this.elementDetailsRuntimeManager.replace(options?.elementDetailsProvenance)
 
@@ -1141,6 +1172,8 @@ export class Canvas {
 			// 即使某个加载阶段出现未预期异常，也不能让历史记录永久保持禁用。
 			this.historyManager.enable()
 		}
+
+		reconcileUnverifiedComplianceInDocument(this)
 
 		// 记录初始状态
 		this.historyManager.recordHistoryImmediate()
@@ -1165,6 +1198,11 @@ export class Canvas {
 	): void {
 		this.clearPreviewContent()
 		const normalizedDoc = normalizeStoryboardDocument(doc)
+		void this.assetResourceManager.preloadDocumentAssets(normalizedDoc).finally(() => {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+			this.refreshNameLabelIcons()
+			this.refreshMediaComplianceFailedTags()
+		})
 		this.resourceUrlWarmupManager.warmupDocument(normalizedDoc, "loadDocumentSmart")
 		if (options?.elementDetailsProvenance) {
 			this.elementDetailsRuntimeManager.replace(options.elementDetailsProvenance)
@@ -1189,6 +1227,36 @@ export class Canvas {
 		if (!didEmitDocumentRestored && (didChangeElements || didChangeConnections)) {
 			this.eventEmitter.emit({ type: "document:restored", data: undefined })
 		}
+		reconcileUnverifiedComplianceInDocument(this)
+	}
+
+	/**
+	 * Keeps the compliance refresh entry point used by asset workflows while the
+	 * failure state is represented by the name-label shield instead of an in-element card.
+	 */
+	public refreshMediaComplianceFailedTags(): void {
+		this.refreshNameLabelIcons()
+	}
+
+	public isSeedanceComplianceEnabled(): boolean {
+		return this.seedanceComplianceEnabled
+	}
+
+	public setSeedanceComplianceEnabled(enabled: boolean): void {
+		if (this.seedanceComplianceEnabled === enabled) return
+		this.seedanceComplianceEnabled = enabled
+		if (!enabled) {
+			this.assetComplianceTaskManager.stopAllComplianceWatching()
+		} else {
+			this.assetComplianceTaskManager.resumeDocumentCompliancePolling()
+		}
+		this.refreshNameLabelIcons()
+		this.refreshMediaComplianceFailedTags()
+	}
+
+	/** Refreshes label icon/text state after runtime asset compliance changes. */
+	public refreshNameLabelIcons(elementIds?: readonly string[]): void {
+		this.nameLabelManager?.refreshIcons(elementIds)
 	}
 
 	/**
@@ -1743,6 +1811,7 @@ export class Canvas {
 		this.eraserManager.destroy()
 		this.imageEditingCoordinator.destroy()
 		this.videoCompositionManager?.destroy()
+		this.videoDraftFinalManager?.destroy()
 		this.generationRuntimeManager.destroy()
 		this.elementDetailsRuntimeManager?.setOnChange(undefined)
 		this.mediaPlaybackCoordinator.destroy()
@@ -1754,6 +1823,8 @@ export class Canvas {
 		this.storyboardInteractionManager.destroy()
 		this.videoEditInteractionManager.destroy()
 		this.videoContinuationManager.destroy()
+		this.assetCompliancePollingManager.destroy()
+		this.assetImportManager.destroy()
 
 		// 清理所有事件监听器, 切断 Manager 之间的通信
 		this.eventEmitter.removeAllListeners()
@@ -1797,6 +1868,7 @@ export class Canvas {
 		this.videoPlaybackManager.destroy()
 		this.videoResourceManager.destroy()
 		this.audioResourceManager.destroy()
+		this.assetResourceManager.destroy()
 		this.mediaResourceOfflineCacheManager.destroy()
 		this.pluginManager.destroy()
 		this.stage.destroy()

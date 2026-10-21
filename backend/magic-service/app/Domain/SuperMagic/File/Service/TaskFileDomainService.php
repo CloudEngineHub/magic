@@ -913,8 +913,12 @@ class TaskFileDomainService
             'new_file_size' => $fileInfo['size'],
         ]);
 
-        // Persist to database
-        return $this->updateById($fileEntity);
+        // Content may have changed without changing its size (for example, a rollback).
+        // MagicFS advances the cache version and journals the final snapshot together.
+        return $this->getMagicFSFileDomainService()->updateFile(
+            (string) $fileEntity->getFileId(),
+            ['size' => $fileInfo['size']]
+        );
     }
 
     /**
@@ -3688,9 +3692,11 @@ class TaskFileDomainService
             StorageBucketType::SandBox
         );
 
-        $entity->setFileSize(strlen($content));
-        $entity->setUpdatedAt(date('Y-m-d H:i:s'));
-        return $this->taskFileRepository->updateById($entity);
+        // A successful object overwrite must invalidate sandbox caches, even for equal sizes.
+        return $this->getMagicFSFileDomainService()->updateFile(
+            (string) $entity->getFileId(),
+            ['size' => strlen($content)]
+        );
     }
 
     /**

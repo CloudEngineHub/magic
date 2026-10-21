@@ -15,6 +15,7 @@ use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Service\FileDomainService;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
+use App\Domain\SuperMagic\File\Entity\ValueObject\FileSpaceType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\FileType;
 use App\Domain\SuperMagic\File\Entity\ValueObject\TaskFileSource;
 use App\Domain\SuperMagic\File\Event\FileContentSavedEvent;
@@ -1060,7 +1061,10 @@ class FileProcessAppService extends AbstractAppService
             ['size' => $result['size']]
         );
 
-        if (! $this->taskFileDomainService->isProjectSpaceFile($taskFileEntity)) {
+        // User-space saves must notify too. Long-term memory lives there.
+        $shouldNotify = $this->taskFileDomainService->isProjectSpaceFile($taskFileEntity)
+            || $taskFileEntity->getSpaceType() === FileSpaceType::USER->value;
+        if (! $shouldNotify) {
             return $nextRevision;
         }
 

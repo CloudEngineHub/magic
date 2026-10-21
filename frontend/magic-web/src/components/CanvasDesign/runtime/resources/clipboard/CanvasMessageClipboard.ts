@@ -99,7 +99,14 @@ function getMetadataCandidatesFromData(data: DataTransfer): MessageClipboardMeta
 	return candidates
 }
 
-function mediaType(fileName: string, extension?: unknown): CanvasClipboardMediaType | null {
+function mediaType(
+	fileName: string,
+	extension?: unknown,
+	explicitType?: unknown,
+): CanvasClipboardMediaType | null {
+	if (explicitType === "image" || explicitType === "video" || explicitType === "audio") {
+		return explicitType
+	}
 	const value = String(extension || fileName.split(".").pop() || "").toLowerCase()
 	if (/^(png|jpe?g|gif|webp|bmp|avif|heic|heif|svg)$/.test(value)) return "image"
 	if (/^(mp4|mov|webm|avi|mkv|m4v)$/.test(value)) return "video"
@@ -122,7 +129,7 @@ function normalizeMention(value: unknown): Omit<CanvasClipboardAsset, "key"> | n
 	const sourceProjectId =
 		String(data.source_project_id || data.project_id || "").trim() || undefined
 	const resourceIdentity = sourceFileId || projectPath
-	const type = mediaType(fileName, data.file_extension)
+	const type = mediaType(fileName, data.file_extension, data.media_type)
 	if (!type || !resourceIdentity || !fileName) return null
 	return {
 		type,

@@ -108,6 +108,38 @@ class SkillMarketRepository extends AbstractRepository implements SkillMarketRep
     }
 
     /**
+     * 批量查询市场在架（已发布且未隐藏）的 Skill code.
+     *
+     * 与市场货架列表（queries）保持同一可见口径：publish_status = PUBLISHED 且 is_hidden = false。
+     *
+     * @param array<string> $skillCodes
+     * @return array<string>
+     */
+    public function findPublishedSkillCodes(array $skillCodes): array
+    {
+        $skillCodes = array_values(array_unique(array_filter(
+            $skillCodes,
+            static fn (string $skillCode): bool => $skillCode !== ''
+        )));
+        if ($skillCodes === []) {
+            return [];
+        }
+
+        $models = $this->skillMarketModel::query()
+            ->whereIn('skill_code', $skillCodes)
+            ->where('publish_status', PublishStatus::PUBLISHED->value)
+            ->where('is_hidden', false)
+            ->get();
+
+        $codes = [];
+        foreach ($models as $model) {
+            $codes[] = (string) $model->skill_code;
+        }
+
+        return array_values(array_unique($codes));
+    }
+
+    /**
      * 根据 skill_code 更新所有商店技能的发布状态（不限制当前状态）.
      */
     public function updateAllPublishStatusBySkillCode(string $skillCode, string $publishStatus): bool

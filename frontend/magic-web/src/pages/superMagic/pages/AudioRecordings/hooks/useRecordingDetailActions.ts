@@ -1,3 +1,7 @@
+import {
+	canDeleteRecordingProjects,
+	handleRecordingProjectDeletionError,
+} from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useCallback, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -81,14 +85,15 @@ export function useRecordingDetailActions(input: UseRecordingDetailActionsInput)
 	)
 
 	const deleteProject = useCallback(async () => {
-		if (!projectId) return false
+		if (!projectId || !canDeleteRecordingProjects([projectId])) return false
 		setDeleting(true)
 		try {
 			await deleteAudioRecordingProjects([projectId])
 			toast.success(t("actions.deleteSuccess"))
 			navigate({ name: RouteName.AudioRecordings })
 			return true
-		} catch {
+		} catch (error) {
+			if (handleRecordingProjectDeletionError(error)) return false
 			toast.error(t("actions.deleteFailed"))
 			return false
 		} finally {

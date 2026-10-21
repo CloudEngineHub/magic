@@ -888,6 +888,7 @@ function SkillEditWorkspace({ skillCode }: { skillCode: string }) {
 													onExpandConversationPanel
 												}
 												hideTopicListModeIcon
+												hideTopicTypeFilter
 												onClose={onClose}
 												closeButtonRef={closeButtonRef}
 											/>

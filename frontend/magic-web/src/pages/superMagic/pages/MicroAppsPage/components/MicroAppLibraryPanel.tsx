@@ -141,6 +141,12 @@ export default function MicroAppLibraryPanel({
 		: access
 			? "micro-apps-access"
 			: "micro-apps"
+	/** The scopes this panel offers; a single one renders no tabs. */
+	const scopeTabs = availableScopes.filter((item) =>
+		access
+			? item === "accessible" || item === "recent"
+			: item === "created" || item === "collaborated",
+	)
 	const scrollRef = useRef<HTMLDivElement>(null)
 	useEffect(() => {
 		// Only this panel returns to the top when its filter changes.
@@ -201,11 +207,7 @@ export default function MicroAppLibraryPanel({
 				{!search ? (
 					<MicroAppScopeTabs
 						value={scope}
-						availableScopes={availableScopes.filter((item) =>
-							access
-								? item === "accessible" || item === "recent"
-								: item === "created" || item === "collaborated",
-						)}
+						availableScopes={scopeTabs}
 						onChange={setScope}
 						testIdPrefix={`${testIdPrefix}-scope`}
 						className="w-auto"

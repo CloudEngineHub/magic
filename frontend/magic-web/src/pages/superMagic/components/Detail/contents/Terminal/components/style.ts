@@ -176,5 +176,11 @@ export const useStyles = createStyles(({ css, token, isDarkMode }) => {
 				color: ${token.colorError};
 			}
 		`,
+		warning: css`
+			& svg,
+			& [data-terminal-exit-code] {
+				color: ${token.colorWarning};
+			}
+		`,
 	}
 })

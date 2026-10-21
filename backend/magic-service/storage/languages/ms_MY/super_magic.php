@@ -85,6 +85,7 @@ return [
         'prompt_length_exceeded' => 'Teks input terlalu panjang. Sila muat naik sebagai fail dan rujuk dalam dialog.',
         'sandbox_init_failed' => 'Ralat persekitaran runtime. Sila cuba lagi kemudian.',
         'chat_task_start_failed' => 'Gagal memulakan tugas. Sila cuba lagi kemudian.',
+        'auto_hire_agent_failed' => 'Gagal mengambil pekerja secara automatik. Pastikan pekerja telah diterbitkan dan akaun anda mempunyai kebenaran untuk mengambilnya, atau cuba lagi kemudian.',
         'project_file_count_exceeded' => 'Ruang projek perlu dikemas kini sebelum tugas ini boleh diteruskan. Padam fail yang tidak lagi diperlukan dan cuba lagi.',
         'user_space_file_count_exceeded' => 'Ruang fail peribadi perlu dikemas kini sebelum tugas ini boleh diteruskan. Padam fail yang tidak lagi diperlukan dan cuba lagi.',
     ],

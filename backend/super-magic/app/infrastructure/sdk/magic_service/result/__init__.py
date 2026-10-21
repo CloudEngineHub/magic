@@ -13,7 +13,7 @@ from .message_schedule_result import MessageScheduleResult
 from .oauth2_callback_relay_result import OAuth2CallbackRelayResult
 from .mcp_authorization_credential_result import MCPAuthorizationCredentialResult
 from .agent_openapi_result import AgentOpenApiResult, AgentSkillInfo
-from .update_agent_result import UpdateAgentResult
+from .update_crew_result import UpdateCrewResult
 from .skill_file_urls_result import SkillFileUrlsResult, SkillFileUrlItem
 from .import_skill_result import ImportSkillResult
 from .share_result import ShareResourceIdResult, ShareResult, CancelShareResult, FindSimilarSharesResult, ShareListResult
@@ -43,7 +43,7 @@ __all__ = [  # noqa: RUF022 - 保留既有导出顺序
     'MCPAuthorizationCredentialResult',
     'AgentOpenApiResult',
     'AgentSkillInfo',
-    'UpdateAgentResult',
+    'UpdateCrewResult',
     'SkillFileUrlsResult',
     'SkillFileUrlItem',
     'ImportSkillResult',

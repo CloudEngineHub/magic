@@ -586,8 +586,14 @@ function TopicPage({
 								aria-label={t("topic.moreAria")}
 								data-testid="project-topic-header-more-button"
 							>
-								<span ref={simpleModeAnchorRef} className="inline-flex size-[22px]">
-									<Ellipsis className="h-[22px] w-[22px]" />
+								{/* Ghost Button shrinks SVGs whose class lacks "size-" to 16px.
+								    size-[22px] keeps this ellipsis on the same 22px stroke scale
+								    as the other mobile header more icons, and the anchor centers it. */}
+								<span
+									ref={simpleModeAnchorRef}
+									className="flex size-[22px] items-center justify-center"
+								>
+									<Ellipsis className="size-[22px]" />
 								</span>
 							</Button>
 							<SimpleModeGuide

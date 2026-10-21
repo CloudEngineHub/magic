@@ -58,6 +58,8 @@ export interface SceneEditorContext {
 	selectedTopic: Topic | null
 	selectedProject: ProjectListItem | null
 	selectedWorkspace?: Workspace | null
+	/** Product surface that owns entity creation; do not infer it from the selected agent. */
+	creationScene?: string
 	setSelectedTopic?: (topic: Topic | null) => void
 	/** 话题自动命名完成后，让目标详情页同步话题名称并重新读取项目名称。 */
 	refreshProjectAfterTopicRename?: boolean
@@ -130,6 +132,10 @@ export interface SceneEditorContext {
 	editorModeSwitch?: ({ disabled }: { disabled: boolean }) => ReactNode
 	/** Controls whether recording-summary editors can enter recording mode. */
 	allowRecordingMode?: boolean
+	/** When false, the recording start button cannot choose an existing project. */
+	allowSelectRecordingProject?: boolean
+	/** Topic mode for a project created by the recording start button. */
+	recordingNewProjectTopicMode?: TopicMode
 	modelSwitch?: ReactNode
 	topicStore?: TopicStore
 	/** 挂载后自动聚焦编辑器（移动端弹窗打开时使用） */

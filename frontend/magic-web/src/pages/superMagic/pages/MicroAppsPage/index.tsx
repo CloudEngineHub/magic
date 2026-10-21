@@ -7,6 +7,8 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import GuideTourWrapper from "@/pages/superMagic/components/LazyGuideTour"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 import { RouteName } from "@/routes/constants"
 import useNavigate from "@/routes/hooks/useNavigate"
 import MicroAppCreatePrompt from "./components/MicroAppCreatePrompt"
@@ -144,9 +146,15 @@ const MicroAppsPageDesktop = observer(function MicroAppsPageDesktop() {
 				</div>
 			</section>
 
-			{/* The library fills the outer viewport: its toolbar stays above independent list scrollers. */}
+			{/*
+			 * The library fills the outer viewport: its toolbar stays above independent list scrollers.
+			 * The onboarding tour's last step highlights this whole "应用空间" region — heading,
+			 * search box, create button and both panels — so the anchor goes on the section rather
+			 * than on any control inside it.
+			 */}
 			<main
 				ref={libraryRef}
+				data-guide-anchor={HomeOnboardingAnchor.MicroAppsLibrary}
 				className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col px-6 py-5 [container-type:inline-size]"
 			>
 				<div className="z-10 mb-3 flex shrink-0 flex-wrap items-end justify-between gap-4 bg-background">
@@ -265,5 +273,14 @@ export default function MicroAppsPage({ mobileView = "home" }: MicroAppsPageProp
 		)
 	}
 
-	return <MicroAppsPageDesktop />
+	return (
+		<>
+			<MicroAppsPageDesktop />
+			{/*
+			 * The "了解微应用创建流程" tour highlights the creation prompt and the app library of this
+			 * page, so it is mounted alongside the desktop layout.
+			 */}
+			<GuideTourWrapper isMobile={false} page="micro-apps" />
+		</>
+	)
 }

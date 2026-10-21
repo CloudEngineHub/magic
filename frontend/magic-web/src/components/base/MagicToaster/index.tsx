@@ -50,8 +50,8 @@ export default function MagicToaster({
 			}}
 			toastOptions={{ closeButtonAriaLabel: t("common.close"), ...toastOptions }}
 			className={cn(
-				// Sonner 默认层级会绕过项目层级令牌；统一根层级后，Tooltip 等浮层按项目规则正常叠放。
-				"!z-[var(--z-index-popup)]",
+				// Sonner 默认层级会盖住项目浮层。提示需要高于弹窗遮罩，否则嵌套对话框里的失败提示会被挡住。
+				"!z-[var(--z-index-toast)]",
 				// 只调整表面和内部布局，Sonner 的堆叠、拖拽 transform 与计时仍由原组件管理。
 				"[&_[data-sonner-toast][data-styled=true]]:w-fit [&_[data-sonner-toast][data-styled=true]]:max-w-[min(360px,calc(100vw-24px))] [&_[data-sonner-toast][data-styled=true]]:items-center [&_[data-sonner-toast][data-styled=true]]:gap-2.5 [&_[data-sonner-toast][data-styled=true]]:whitespace-normal [&_[data-sonner-toast][data-styled=true]]:rounded-xl [&_[data-sonner-toast][data-styled=true]]:px-3 [&_[data-sonner-toast][data-styled=true]]:py-2 [&_[data-sonner-toast][data-styled=true]]:shadow-md [&_[data-sonner-toast][data-styled=true]]:[overflow-wrap:anywhere]",
 				"[&_[data-sonner-toast]:has([data-description])_[data-title]]:font-medium [&_[data-sonner-toast][data-styled=true]:has([data-description])]:p-3",

@@ -239,7 +239,6 @@ export class ChatWebSocket extends EventBus {
 		// 创建新的连接 Promise 并缓存
 		this.connectingPromise = new Promise<WebSocket | null>((resolve) => {
 			if (showLoading) interfaceStore.setIsConnecting(true)
-			interfaceStore.setShowReloadButton(false)
 
 			let connectTimer: NodeJS.Timeout | null = null
 

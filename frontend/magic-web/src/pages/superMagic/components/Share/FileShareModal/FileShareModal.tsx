@@ -40,6 +40,7 @@ import { projectStore } from "@/pages/superMagic/stores/core"
 import { userStore } from "@/models/user"
 import { ensureFileSavesSynced } from "@/pages/superMagic/components/Detail/services/fileSaveQueue"
 import { generateShareMessageText } from "../utils/generateShareMessageText"
+import { analyticsService } from "@/services/analytics"
 import { mergeRecordingShareFileIds } from "@/pages/superMagic/pages/AudioRecordings/utils/build-recording-share-selection"
 import FileShareDocumentDependenciesOption from "./FileShareDocumentDependenciesOption"
 import { useFileShareDocumentDependencies } from "./hooks/useFileShareDocumentDependencies"
@@ -779,6 +780,14 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		if (!flushed) return
 
 		setIsSaving(true)
+		// Capture create vs edit before the API; the first successful save marks the resource created.
+		const isNewShare = !hasResourceIdCreated.current
+		if (isNewShare) {
+			analyticsService.report("content_share_attempted", {
+				resourceType: ResourceType.FileCollection,
+				shareProject: effectiveShareProject,
+			})
+		}
 
 		try {
 			let currentResourceId = resourceId

@@ -61,6 +61,7 @@ class GenerationParameters:
     fps: int | None = None
     seed: int | None = None
     watermark: bool | None = None
+    draft: bool | None = None
     audio_policy: str | None = None
     composition: CompositionParameters | None = None
     extensions: JsonObject = field(default_factory=dict)
@@ -95,6 +96,7 @@ class GenerationParameters:
             "fps": self.fps,
             "seed": self.seed,
             "watermark": self.watermark,
+            "draft": self.draft,
             "audio_policy": self.audio_policy,
         }
         values.update({key: value for key, value in optional.items() if value is not None})
@@ -131,6 +133,7 @@ class GenerationParameters:
             fps=_optional_integer(values, "fps"),
             seed=_optional_integer(values, "seed"),
             watermark=_optional_boolean(values, "watermark"),
+            draft=_optional_boolean(values, "draft"),
             audio_policy=_optional_audio_policy(values, "audio_policy"),
             composition=CompositionParameters.from_dict(values.get("composition")),
             extensions=_optional_object(values, "extensions"),

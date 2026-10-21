@@ -1,3 +1,4 @@
+import type { TopicTypeFilterValue } from "@/pages/superMagic/utils/topicTypeFilter"
 import type { ServiceHttpClient, RequestConfig } from "@/infrastructure/network/http/clients"
 import type { SeqRecord } from "@/apis/modules/chat/types"
 import type { FileScope } from "./fileScope"
@@ -628,6 +629,8 @@ export interface GenerateVideoGeneration {
 	resolution?: string
 	/** 时长（秒） */
 	duration_seconds?: number
+	/** 是否以样片模式生成；仅在模型能力声明 draft 时发送 */
+	draft?: boolean
 	/** 预留扩展字段 */
 	[key: string]: unknown
 }
@@ -642,6 +645,27 @@ export interface GenerateVideoRequest {
 	model_id?: string
 	/** 提示词 */
 	prompt?: string
+	/** 视频输入模式；draft_task 为样片成片内部模式。 */
+	input_mode?:
+		| "standard"
+		| "image_reference"
+		| "omni_reference"
+		| "video_edit"
+		| "keyframe_guided"
+		| "draft_task"
+	/** 任务类型；样片成片仍使用 generate。 */
+	task?: "generate" | "extend" | "edit" | "upscale"
+	/** 结构化视频输入。 */
+	inputs?: {
+		frames?: Array<{ role: "start" | "end"; uri: string }>
+		reference_images?: Array<{ uri: string; reference_type?: "asset" | "style" }>
+		reference_videos?: Array<{ uri: string }>
+		reference_audios?: Array<{ uri: string }>
+		video?: { uri: string }
+		mask?: { uri: string }
+		audio?: Array<{ uri: string }>
+		draft_task?: { video_id?: string; uri?: string }
+	}
 	/** 文件目录，一定是本项目存在的目录 */
 	file_dir?: string
 	/** 宽高比 */
@@ -866,6 +890,9 @@ export interface GetConvertHightConfigResponse {
 /** 获取 AI 能力可用性响应数据 */
 export interface AiAbilityAvailabilityResponse {
 	abilities: {
+		volcengine_ark_assets?: {
+			enabled?: boolean
+		}
 		image_convert_high: GetConvertHightConfigResponse
 		image_remove_background: {
 			enabled: boolean
@@ -1687,6 +1714,7 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	getSidebarTopicsByProjectId({
+		topicType,
 		id,
 		page,
 		page_size,
@@ -1696,9 +1724,17 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 		page: number
 		page_size: number
 		q?: string
+		topicType?: TopicTypeFilterValue
 	}) {
 		return fetch.get<WithPage<Topic>>(`/api/v1/super-agent/projects/${id}/sidebar-topics`, {
-			params: { page, page_size, q },
+			params: {
+				page,
+				page_size,
+				q,
+				...(topicType && topicType !== "all"
+					? { topic_types: topicType === "topic" ? 1 : 2 }
+					: {}),
+			},
 		})
 	},
 

@@ -154,6 +154,15 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => navigateMock,
 }))
 
+/**
+ * The page hosts the onboarding tour, which reaches into the account store and the real i18n
+ * instance. This suite is about the page's own layout, so the tour is stubbed out; what it does
+ * with the AI-PPT steps is covered by the tour's own suite.
+ */
+vi.mock("@/pages/superMagic/components/LazyGuideTour", () => ({
+	default: () => null,
+}))
+
 vi.mock(
 	"@/pages/superMagic/components/MainInputContainer/scenes/Slides/useSlidesTemplateCatalogState",
 	() => ({
@@ -613,13 +622,10 @@ describe("SlidesTemplatesPage", () => {
 	it("prefetches a second backend-sized batch for the unfiltered home canvas", async () => {
 		catalogStateMock.hasMore = true
 		catalogStateMock.loadedTemplateCount = 200
-		catalogStateMock.templateOptions = Array.from(
-			{ length: 200 },
-			(_, index): OptionItem => ({
-				value: `PPT-initial-${index}`,
-				label: `Initial Template ${index}`,
-			}),
-		)
+		catalogStateMock.templateOptions = Array.from({ length: 200 }, (_, index): OptionItem => ({
+			value: `PPT-initial-${index}`,
+			label: `Initial Template ${index}`,
+		}))
 
 		render(<SlidesTemplatesPage />)
 
@@ -686,9 +692,12 @@ describe("SlidesTemplatesPage", () => {
 		expect(screen.getByTestId("slides-templates-page-bottom-tools")).not.toHaveTextContent(
 			"common:routes.slidesTemplates",
 		)
+		// The toolbar band — search, inspiration and the category tabs — is what the panel ends on.
+		const toolbar = screen.getByTestId("slides-templates-page-toolbar")
 		expect(screen.getByTestId("slides-templates-page-bottom-tools").lastElementChild).toBe(
-			screen.getByTestId("slides-templates-page-group-selector"),
+			toolbar,
 		)
+		expect(toolbar).toContainElement(screen.getByTestId("slides-templates-page-group-selector"))
 		expect(screen.getByTestId("slides-templates-page-prompt-panel")).toHaveAttribute(
 			"aria-hidden",
 			"true",
@@ -711,7 +720,7 @@ describe("SlidesTemplatesPage", () => {
 			screen.getByTestId("slides-templates-page-prompt-panel"),
 		)
 		expect(screen.getByTestId("slides-templates-page-bottom-tools").lastElementChild).toBe(
-			screen.getByTestId("slides-templates-page-group-selector"),
+			screen.getByTestId("slides-templates-page-toolbar"),
 		)
 		expect(screen.getByTestId("mock-slides-template-prompt-dock")).toHaveTextContent(
 			"PPT-business",
@@ -906,14 +915,11 @@ describe("SlidesTemplatesPage", () => {
 		catalogStateMock.loadedTemplateCount = 200
 		catalogStateMock.templateOptions = [
 			businessTemplate,
-			...Array.from(
-				{ length: 199 },
-				(_, index): OptionItem => ({
-					value: `PPT-blue-${index}`,
-					label: `Blue Template ${index}`,
-					colors: ["#60A5FA"],
-				}),
-			),
+			...Array.from({ length: 199 }, (_, index): OptionItem => ({
+				value: `PPT-blue-${index}`,
+				label: `Blue Template ${index}`,
+				colors: ["#60A5FA"],
+			})),
 		]
 		render(<SlidesTemplatesPage />)
 		vi.clearAllMocks()

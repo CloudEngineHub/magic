@@ -90,7 +90,7 @@ module.exports = (app) => {
 		app.get(routePath, async (req, res, next) => {
 			let htmlTemplate
 			try {
-				htmlTemplate = getHtmlTemplate()
+				htmlTemplate = getHtmlTemplate("index", req.get("user-agent"))
 			} catch (error) {
 				logger.error("nodeServer", "SEOHandler", "Failed to read index.html:", error)
 				return next(error)

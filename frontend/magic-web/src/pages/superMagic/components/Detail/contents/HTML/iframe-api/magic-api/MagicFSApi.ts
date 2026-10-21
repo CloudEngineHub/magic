@@ -11,9 +11,8 @@
  * MagicWorkspaceApi 负责，安装到 window.Magic.uploadFiles 等方法上。
  */
 
-import { BaseRuntimeBridgeApiPlugin } from "@dtyq/html-sandbox/runtime"
+import { BaseRuntimeBridgeApiPlugin, getParentOrigin } from "@dtyq/html-sandbox"
 import { getPreludeVersion, isStaleDocument } from "./prelude-runtime-context"
-import { getParentOrigin } from "@dtyq/html-sandbox/utils/parentOrigin"
 
 function isSingleFileName(name: string): boolean {
 	return (

@@ -283,6 +283,7 @@ describe("ImageManager", () => {
 		)
 		expect(insertedImage).toBeInstanceOf(HTMLImageElement)
 		expect(insertedImage?.getAttribute("src")).toBe("data:image/png;base64,inserted")
+		expect(insertedImage?.hasAttribute("data-magic-source-node")).toBe(true)
 		expect((insertedImage as HTMLImageElement).style.position).toBe("absolute")
 		expect((insertedImage as HTMLImageElement).style.width).toBe("240px")
 		expect(commandHistory.getUndoStackSize()).toBe(1)

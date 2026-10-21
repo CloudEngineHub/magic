@@ -5,8 +5,7 @@
  * 调用后通过 postMessage 通知父窗口重新加载当前 HTML 内容。
  */
 
-import { BaseRuntimeBridgeApiPlugin } from "@dtyq/html-sandbox/runtime"
-import { getParentOrigin } from "@dtyq/html-sandbox/utils/parentOrigin"
+import { BaseRuntimeBridgeApiPlugin, getParentOrigin } from "@dtyq/html-sandbox"
 
 export class MagicReloadApi extends BaseRuntimeBridgeApiPlugin {
 	constructor() {

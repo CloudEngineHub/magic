@@ -208,6 +208,7 @@ function collectVideoContentResourceReferences(
 	)
 	addPath(refs, seen, asRecord(inputs.video)?.uri, ownerSourcePath, resolveResourceReference)
 	addPath(refs, seen, asRecord(inputs.mask)?.uri, ownerSourcePath, resolveResourceReference)
+	addPath(refs, seen, asRecord(inputs.draft_task)?.uri, ownerSourcePath, resolveResourceReference)
 }
 
 function collectElementReferences(
@@ -523,6 +524,16 @@ function rewriteVideoResourceReferences(
 			if (
 				rewritePathField(
 					asRecord(inputs.mask),
+					"uri",
+					pathMap,
+					replacementByIdentity,
+					resolveResourceReference,
+				)
+			)
+				hasChanged = true
+			if (
+				rewritePathField(
+					asRecord(inputs.draft_task),
 					"uri",
 					pathMap,
 					replacementByIdentity,

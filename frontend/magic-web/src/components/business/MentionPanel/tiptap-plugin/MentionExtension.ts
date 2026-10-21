@@ -208,6 +208,7 @@ export const MentionExtension = Mention.extend<MentionPanelPluginOptions>({
 			disableKeyboardShortcuts: false,
 			isAllowedMention: undefined,
 			dataService: undefined,
+			canToggleMultiSelectItem: undefined,
 			nodeViewRenderers: undefined,
 			shouldSkipInsertSync: undefined,
 			shouldSkipMentionValidation: undefined,

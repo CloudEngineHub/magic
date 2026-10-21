@@ -173,6 +173,7 @@ function replaceVideoContentPaths(
 					reference_audios?: Array<{ uri?: string }>
 					video?: { uri?: string }
 					mask?: { uri?: string }
+					draft_task?: { video_id?: string; uri?: string }
 					audio?: Array<{ uri?: string }>
 				}
 		  }
@@ -209,6 +210,15 @@ function replaceVideoContentPaths(
 	if (
 		replacePathField(
 			(generateVideoRequest.inputs?.mask ?? {}) as Record<string, unknown>,
+			"uri",
+			context,
+		)
+	) {
+		hasChanged = true
+	}
+	if (
+		replacePathField(
+			(generateVideoRequest.inputs?.draft_task ?? {}) as Record<string, unknown>,
 			"uri",
 			context,
 		)

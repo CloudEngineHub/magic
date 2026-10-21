@@ -1,36 +1,20 @@
 import type { ColumnDef } from "@tanstack/react-table"
-import { AlertCircle, Filter } from "lucide-react"
-import { useState } from "react"
+import { AlertCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
+import { ListFilterPanel } from "@magic-admin-v2/components/list-filter-panel"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
-import { Button } from "@magic-admin-v2/components/ui/button"
-import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
-import { FieldSearchControl } from "@magic-admin-v2/components/field-search-control"
 import {
-	createLinkedAdvancedFilterDraft,
-	createLinkedAppliedFilterDraft,
-} from "@magic-admin-v2/utils/linked-search-filter-state"
-import {
-	publishReviewSelectAllValue,
 	type PublishReviewFilterDraft,
 	type PublishReviewKind,
-	type PublishReviewSearchField,
 	type PublishReviewVariant,
 } from "@magic-admin-v2/features/platform-publish-review/types"
 import {
 	createDefaultFilterDraft,
-	getSearchFieldOptions,
-	getSearchFieldPlaceholder,
 	type ReviewDraftUpdater,
 } from "@magic-admin-v2/features/platform-publish-review/params"
-import {
-	AdvancedFilterControls,
-	PublishStatusSelect,
-	ReviewStatusSelect,
-} from "@magic-admin-v2/features/platform-publish-review/components/review-filters"
+import { AdvancedFilterControls } from "@magic-admin-v2/features/platform-publish-review/components/review-filters"
 import type { ApiError } from "@magic-admin-v2/api/types"
 
 export function ReviewListPanel<TData>({
@@ -46,9 +30,10 @@ export function ReviewListPanel<TData>({
 	onDraftChange,
 	onPageChange,
 	onPageSizeChange,
-	onSearchValueChange,
 	page,
 	pageSize,
+	mobileFilterOpen,
+	onMobileFilterOpenChange,
 	queryError,
 	total,
 	variant,
@@ -65,160 +50,61 @@ export function ReviewListPanel<TData>({
 	onDraftChange: (value: ReviewDraftUpdater) => void
 	onPageChange: (page: number) => void
 	onPageSizeChange: (pageSize: number) => void
-	onSearchValueChange: (value: string) => void
 	page: number
 	pageSize: number
+	mobileFilterOpen: boolean
+	onMobileFilterOpenChange: (open: boolean) => void
 	queryError: ApiError | null
 	total: number
 	variant: PublishReviewVariant
 }) {
 	const { t } = useTranslation()
-	const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-	const [advancedDraft, setAdvancedDraft] = useState(filterDraft)
-
-	function handleFilterSheetOpenChange(open: boolean) {
-		if (open) {
-			setAdvancedDraft(
-				createLinkedAdvancedFilterDraft(
-					filterDraft,
-					filterDraft.search_field,
-					filterDraft.search_value,
-				),
-			)
-		}
-		setIsFilterSheetOpen(open)
-	}
-
-	function resetAdvancedFilters() {
-		setAdvancedDraft((previous) => ({
-			...createDefaultFilterDraft(kind, variant),
-			search_field: previous.search_field,
-		}))
-	}
-
-	function applyAdvancedFilters() {
-		const nextDraft = {
-			...advancedDraft,
-			name_i18n: kind === "employee" ? advancedDraft.name_i18n : "",
-			organization_code: kind === "employee" ? advancedDraft.organization_code : "",
-			package_name: kind === "skill" ? advancedDraft.package_name : "",
-			source_type: kind === "skill" ? advancedDraft.source_type : publishReviewSelectAllValue,
-			skill_name: kind === "skill" ? advancedDraft.skill_name : "",
-		}
-
-		onDraftChange(
-			createLinkedAppliedFilterDraft(nextDraft, nextDraft.search_field, "search_value"),
-		)
-		setIsFilterSheetOpen(false)
-	}
 
 	return (
-		<div className="flex flex-col gap-4">
-			<div className="sticky top-0 z-40 -mx-4 flex min-w-0 flex-wrap items-end gap-2 bg-background px-4 py-2 lg:-mx-6 lg:px-6">
-				<FilterControlField
-					className="min-w-0 flex-1 md:w-[340px] md:flex-none xl:w-[420px]"
-					label={t("publishReview.filter.searchCondition")}
-				>
-					<FieldSearchControl
-						selectTriggerTestId="platform-publish-review-search-field-trigger"
-						testId="platform-publish-review-search-field"
-						contentTestId="platform-publish-review-search-field-content"
-						optionTestId="platform-publish-review-search-field-option"
-						ariaLabel={t("publishReview.filter.searchField")}
-						clearLabel={t("common.clear")}
-						inputValue={filterDraft.search_value}
-						onInputChange={onSearchValueChange}
-						onValueChange={(value) =>
-							onDraftChange((previous) => ({
-								...previous,
-								search_field: value as PublishReviewSearchField,
-							}))
-						}
-						options={getSearchFieldOptions(kind, t, variant)}
-						placeholder={getSearchFieldPlaceholder(filterDraft.search_field, kind, t)}
-						value={filterDraft.search_field}
-						inputTestId="platform-publish-review-advanced-search-input"
-						clearButtonTestId="platform-publish-review-advanced-search-clear-button"
-					/>
-				</FilterControlField>
-				<div className="hidden items-end gap-2 md:flex">
-					<ReviewStatusSelect
-						className="w-fit"
-						label={t("publishReview.filter.reviewStatus")}
-						onChange={(value) =>
-							onDraftChange((previous) => ({ ...previous, review_status: value }))
-						}
-						value={filterDraft.review_status}
-						variant={variant}
-					/>
-
-					<PublishStatusSelect
-						className="w-fit"
-						label={t("publishReview.filter.publishStatus")}
-						onChange={(value) =>
-							onDraftChange((previous) => ({ ...previous, publish_status: value }))
-						}
-						value={filterDraft.publish_status}
-						variant={variant}
-					/>
-				</div>
-				<Button
-					aria-label={t("publishReview.filter.title")}
-					className="h-9 w-9 px-0 md:w-auto md:px-3"
-					onClick={() => handleFilterSheetOpenChange(true)}
-					type="button"
-					variant="outline"
-					data-testid="platform-publish-review-reset-button"
-				>
-					<Filter className="size-4" aria-hidden="true" />
-					<span className="hidden md:inline">{t("publishReview.filter.title")}</span>
-				</Button>
-			</div>
-
-			<FilterSheet
-				contentTestId="platform-publish-review-filter-sheet"
-				bodyTestId="platform-publish-review-filter-body"
-				resetButtonTestId="platform-publish-review-reset-button"
-				applyButtonTestId="platform-publish-review-apply-button"
-				closeButtonTestId="platform-publish-review-filter-close-button"
+		<div className="space-y-4">
+			<ListFilterPanel
+				desktopResetTestId="platform-publish-review-reset-button"
+				mobileApplyTestId="platform-publish-review-apply-button"
+				mobileBodyTestId="platform-publish-review-filter-body"
+				mobileCloseButtonTestId="platform-publish-review-filter-close-button"
+				mobileContentTestId="platform-publish-review-filter-sheet"
+				mobileResetTestId="platform-publish-review-reset-button"
 				applyLabel={t("publishReview.filter.apply")}
-				onApply={applyAdvancedFilters}
-				onOpenChange={handleFilterSheetOpenChange}
-				onReset={resetAdvancedFilters}
-				open={isFilterSheetOpen}
-				presentation="responsive"
+				createDefaultValue={() => createDefaultFilterDraft(kind, variant)}
+				onChange={(patch) => onDraftChange((previous) => ({ ...previous, ...patch }))}
+				onReset={() => onDraftChange(createDefaultFilterDraft(kind, variant))}
+				mobileOpen={mobileFilterOpen}
+				onMobileOpenChange={onMobileFilterOpenChange}
+				showMobileTrigger={false}
+				renderFields={(props) => (
+					<AdvancedFilterControls {...props} kind={kind} variant={variant} />
+				)}
 				resetLabel={t("publishReview.action.reset")}
 				title={t("publishReview.filter.title")}
-				description={t("publishReview.filter.description")}
-			>
-				<AdvancedFilterControls
-					filterDraft={advancedDraft}
-					kind={kind}
-					onDraftChange={setAdvancedDraft}
-					variant={variant}
-				/>
-			</FilterSheet>
+				value={filterDraft}
+			/>
 
 			{queryError ? (
 				<div className="rounded-lg border border-border/50 p-4">
 					<EmptyState
 						icon={AlertCircle}
+						testId="platform-publish-review-error"
 						title={t("publishReview.error.loadTitle")}
 						description={queryError.message || t("publishReview.error.loadFailed")}
-						testId="platform-publish-review-error"
 					/>
 				</div>
 			) : (
 				<DataTable
 					columns={columns}
+					containerTestId="platform-publish-review-list"
 					data={data}
 					emptyState={
 						<div className="p-4">
 							<EmptyState
 								icon={emptyIcon}
+								testId="platform-publish-review-empty"
 								title={emptyTitle}
 								description={emptyDescription}
-								testId="platform-publish-review-empty"
 							/>
 						</div>
 					}
@@ -228,29 +114,28 @@ export function ReviewListPanel<TData>({
 							: String(index)
 					}
 					isLoading={isFetching && data.length === 0}
-					minWidth={minWidth}
-					stickyRightColumnId="actions"
-					containerTestId="platform-publish-review-list"
 					loadingTestId="platform-publish-review-loading"
+					minWidth={minWidth}
 					rowTestId="platform-publish-review-row"
+					stickyRightColumnId="actions"
 				/>
 			)}
 
 			{!queryError ? (
 				<ListPagination
-					previousButtonTestId="publish-review-previous-button"
-					nextButtonTestId="publish-review-next-button"
-					pageSizeTriggerTestId="publish-review-page-size-trigger"
-					pageSizeOptionTestId="publish-review-page-size-option"
-					jumpInputTestId="publish-review-jump-input"
-					testId="publish-review-pagination"
 					showQuickJumper
 					className="px-1"
+					jumpInputTestId="publish-review-jump-input"
 					loading={isFetching}
+					nextButtonTestId="publish-review-next-button"
 					onPageChange={onPageChange}
 					onPageSizeChange={onPageSizeChange}
 					page={page}
 					pageSize={pageSize}
+					pageSizeOptionTestId="publish-review-page-size-option"
+					pageSizeTriggerTestId="publish-review-page-size-trigger"
+					previousButtonTestId="publish-review-previous-button"
+					testId="publish-review-pagination"
 					total={total}
 				/>
 			) : null}

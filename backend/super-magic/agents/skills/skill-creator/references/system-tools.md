@@ -19,6 +19,30 @@ else:
 
 ---
 
+## Agent Context
+
+### get_user_language
+
+Get the language code for the current Agent task. Skills can call this tool directly when loaded. Code Mode can call the same tool through `sdk.tool`.
+
+**Schema:**
+
+```json
+{}
+```
+
+```python
+from sdk.tool import tool
+
+result = tool.call('get_user_language', {})
+if result.ok and result.data:
+  language = result.data['language']
+```
+
+The returned `data.language` is an open language code such as `zh_CN`, `en_US`, or another language supported by the caller. Do not enforce a fixed allowlist in skills.
+
+---
+
 ## Web Search & Fetch
 
 ### web_search

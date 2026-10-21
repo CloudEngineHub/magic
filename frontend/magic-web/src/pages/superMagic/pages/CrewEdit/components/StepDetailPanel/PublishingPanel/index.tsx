@@ -31,6 +31,8 @@ import {
 	mapAgentPublishTargetTypeToPublishTo,
 } from "./publishPanelData"
 import { useFunctionPermission } from "@/hooks/useFunctionPermission"
+import { useUpload } from "@/hooks/useUploadFiles"
+import { ensureWorkspaceAvatarUploaded } from "../../../utils/publish-avatar"
 
 const CREW_EDIT_PUBLISH_VIEW_QUERY_KEY = "publishView"
 const CREW_EDIT_PUBLISH_VERSION_QUERY_KEY = "publishVersion"
@@ -50,6 +52,10 @@ function PublishingPanel() {
 	const { isAllowed: canPublishAgentTeam } = useFunctionPermission(
 		FUNCTION_PERMISSION_CODE.AgentPublish,
 	)
+	const { upload: uploadPublicAvatar } = useUpload({
+		storageType: "public",
+		useSnowflakeId: true,
+	})
 	const submitDraftRef = useRef<(draft: PublishDraft) => Promise<void>>(async () => undefined)
 	const versionsRef = useRef<AgentVersionItem[]>([])
 	const publishAbortRef = useRef<AbortController | null>(null)
@@ -221,6 +227,16 @@ function PublishingPanel() {
 		publishAbortRef.current = abortController
 
 		try {
+			await ensureWorkspaceAvatarUploaded({
+				crewCode,
+				currentIcon: store.identity.icon,
+				workspaceFiles: store.projectFilesStore.workspaceFilesList,
+				upload: uploadPublicAvatar,
+				onAvatarUploaded: (avatarUrl) => {
+					store.identity.setAvatarUrl(avatarUrl)
+				},
+			})
+
 			await runAsyncPublish({
 				resourceType: "agent",
 				code: crewCode,

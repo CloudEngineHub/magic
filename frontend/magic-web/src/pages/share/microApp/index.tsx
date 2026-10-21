@@ -1,6 +1,8 @@
 import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { useCallback, useEffect, useState } from "react"
 import { useParams } from "react-router"
+import { useTranslation } from "react-i18next"
+import { useNamedPageTitle } from "@/pages/superMagic/hooks/useNamedPageTitle"
 import PublishedMicroAppPreviewSurface from "./components/PublishedMicroAppPreviewSurface"
 import MicroAppInstallDialog from "./components/MicroAppInstallDialog"
 import MicroAppShareHeader from "./components/MicroAppShareHeader"
@@ -11,6 +13,7 @@ import useNavigate from "@/routes/hooks/useNavigate"
 import { resolveShareErrorBackNavigation } from "../utils/share-error-back"
 
 function MicroAppSharePage() {
+	const { t } = useTranslation("super")
 	const { appId = "" } = useParams<{ appId: string }>()
 	useMicroAppManifestLinks(appId)
 	const navigate = useNavigate()
@@ -25,6 +28,10 @@ function MicroAppSharePage() {
 		installFlow,
 		hasConfirmedSafetyNotice,
 	} = preview
+	useNamedPageTitle({
+		entityName: displayAppName,
+		fallbackName: t("microAppsPage.unnamedApp"),
+	})
 
 	useEffect(() => {
 		setPermissionManager(null)

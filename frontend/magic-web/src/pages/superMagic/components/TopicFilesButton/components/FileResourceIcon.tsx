@@ -23,6 +23,7 @@ import { TopicFileIcon } from "./TopicFileIcon"
 import { SkillFileIcon, hasSkillFileIcon } from "./SkillFileIcon"
 import { SlidesTemplateFolderIcon } from "./SlidesTemplateFolderIcon"
 import type { FilePresentation } from "../utils/file-presentation"
+import { isSlidesTemplateFolder } from "../utils/slides-template-folder"
 
 interface FileResourceIconProps {
 	allowRemoteIcon?: boolean
@@ -92,7 +93,8 @@ export function FileResourceIcon({
 			/>
 		)
 	const displayType = item.display_config?.type
-	if (displayType === "slide-template")
+	// 模板类型可能只由预览入口补出；附件快照没有该字段时，仍按同一目录结构识别图标。
+	if (displayType === "slide-template" || isSlidesTemplateFolder(item))
 		return <SlidesTemplateFolderIcon size={size} className={className} />
 	// magic.project.js 描述项目本身，保留代码图标；其它入口沿用自定义远程图与原有缓存。
 	if (

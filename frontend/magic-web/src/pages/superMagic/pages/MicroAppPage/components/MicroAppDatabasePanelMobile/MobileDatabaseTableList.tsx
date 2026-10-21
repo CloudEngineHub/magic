@@ -5,6 +5,7 @@ import { ChevronRight, Loader2, Search, Table2 } from "lucide-react"
 import type { MagicBaseTable } from "@/apis/modules/magicBase"
 import { Button } from "@/components/shadcn-ui/button"
 import { Input } from "@/components/shadcn-ui/input"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import { getMagicBaseTableDisplayName, getMagicBaseTableName } from "../MicroAppDatabasePanel/utils"
 
 interface MobileDatabaseTableListProps {
@@ -15,7 +16,7 @@ interface MobileDatabaseTableListProps {
 	onRetry: () => void
 }
 
-/** 移动端数据库第一层只展示数据表目录，避免与表数据在窄屏中并排。 */
+/** Show the table directory first so table data does not compete for space on narrow screens. */
 export default function MobileDatabaseTableList({
 	tables,
 	loading,
@@ -49,7 +50,11 @@ export default function MobileDatabaseTableList({
 				</div>
 			</div>
 
-			<div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-5">
+			{/* Preserve full-height loading and empty states below the fixed search field. */}
+			<ScrollArea
+				className="grid min-h-0 flex-1"
+				viewportClassName="h-auto min-h-0 px-3 pb-5 [&>div]:!block [&>div]:h-full"
+			>
 				{loading ? (
 					<div className="flex h-full items-center justify-center">
 						<Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -113,7 +118,7 @@ export default function MobileDatabaseTableList({
 						)
 					})}
 				</div>
-			</div>
+			</ScrollArea>
 		</div>
 	)
 }

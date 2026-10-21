@@ -81,6 +81,17 @@ function safeEditorFocus(editor: Editor | null) {
 	})
 }
 
+/**
+ * Focus the editor with the caret at the end of the document.
+ * Prefilled prompts (guide tour cases, presets, console snippets) exist so the user can edit or
+ * extend them, so the caret must land after the inserted text instead of jumping to the beginning.
+ */
+function safeEditorFocusAtEnd(editor: Editor | null) {
+	runActiveEditor(editor, (activeEditor) => {
+		activeEditor.commands.focus("end")
+	})
+}
+
 /** Insert an inspector chip and leave the caret after it for continued typing. */
 function insertInspectorNode(editor: Editor, node: JSONContent) {
 	const position = editor.state.selection.from
@@ -459,7 +470,7 @@ function useMessageEditorPubSub({
 			// JSONContent object — use directly
 			if (typeof message === "object" && !Array.isArray(message) && message !== null) {
 				updateContent(message)
-				safeEditorFocus(activeEditorRef.current)
+				safeEditorFocusAtEnd(activeEditorRef.current)
 				return
 			}
 			const lines = Array.isArray(message) ? message : [message]
@@ -474,7 +485,7 @@ function useMessageEditorPubSub({
 				content: [{ type: "paragraph", content: inlineNodes }],
 			}
 			updateContent(content)
-			safeEditorFocus(activeEditorRef.current)
+			safeEditorFocusAtEnd(activeEditorRef.current)
 		}
 		pubsub.subscribe(PubSubEvents.Set_Input_Message, handleSetInputMessage)
 		return () => {

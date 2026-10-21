@@ -1,4 +1,5 @@
 import { cloneDeep } from "lodash-es"
+import { serializeScriptData } from "./serialize-script-data"
 import { VirtualStorageTransactions, transactionError } from "./virtual-storage-transactions"
 
 export const VIRTUAL_STORAGE_PROTOCOL = "magic-html-virtual-storage/v1"
@@ -1457,7 +1458,8 @@ export function getSerializableVirtualStorageContext(
 }
 
 export function getVirtualStorageBridgeScript(context: VirtualStorageRuntimeContext): string {
-	const serializedContext = JSON.stringify(getSerializableVirtualStorageContext(context))
+	// Cached HTML can contain </script>; keep the snapshot inside its script element.
+	const serializedContext = serializeScriptData(getSerializableVirtualStorageContext(context))
 	const messageTypes = JSON.stringify(VIRTUAL_STORAGE_MESSAGE_TYPES)
 
 	return `

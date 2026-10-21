@@ -556,6 +556,10 @@ class SuperMagicService {
 
 		// 2. 乐观状态更新
 		projectStore.setSelectedProject(resolvedProject)
+		// Clear the previous project's topic list before switching. Read-only
+		// collaboration projects skip topic fetching below, so without this the
+		// topic view would keep rendering the last visited project's topics.
+		this.topicStore.setTopics([])
 
 		// 如果工作区已在缓存中，立即更新
 		let optimisticWorkspaceId: string | null = null
@@ -869,6 +873,8 @@ class SuperMagicService {
 					.createTopic({
 						projectId: project.id,
 						topicName: "",
+						workspaceId: project.workspace_id,
+						mode: project.project_mode,
 					})
 					.catch(() => null)
 				if (newTopic) {
@@ -1355,6 +1361,8 @@ class SuperMagicService {
 			const newTopic = await this.topic.createTopic({
 				projectId: project.id,
 				topicName: topicName || "",
+				workspaceId: project.workspace_id,
+				mode: project.project_mode,
 				sourceTopic,
 			})
 

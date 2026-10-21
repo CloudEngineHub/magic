@@ -47,6 +47,8 @@ vi.mock("../../SuperMagicModeService", () => ({
 		resolveLanguageModelByMode: vi.fn(),
 		resolveImageModelByMode: vi.fn(async () => null),
 		resolveVideoModelByMode: vi.fn(async () => null),
+		// The cascade only waits for the crew list while its availability is unknown.
+		isModeAvailabilityResolved: true,
 	},
 	resolveModeMapKey: (topicMode: string, agentCode?: string | null) =>
 		topicMode === "custom_agent" && agentCode ? agentCode : topicMode,

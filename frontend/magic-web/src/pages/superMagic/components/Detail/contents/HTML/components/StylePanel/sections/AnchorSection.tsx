@@ -10,7 +10,7 @@ import {
 import { cn } from "@/utils/cn"
 import type { SelectedElementInfo } from "../types"
 import { STYLE_PANEL_STYLES } from "../styles"
-import { isSafeHref } from "@dtyq/html-sandbox/utils/safeUrl"
+import { isSafeHref } from "@dtyq/html-sandbox"
 
 interface AnchorSectionProps {
 	selectedElement: SelectedElementInfo

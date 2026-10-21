@@ -2,7 +2,7 @@ import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import type { FilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
-import { memo, useMemo, type MouseEvent } from "react"
+import { memo, useMemo, useRef, type MouseEvent } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
@@ -27,6 +27,10 @@ import {
 	canRenderFinalAttachments,
 	resolveAttachmentList,
 } from "@/pages/superMagic/components/MessageList/message-render-contract"
+import {
+	HomeOnboardingAnchor,
+	startHomeOnboardingDeliverableRunIfDue,
+} from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 
 interface AttachmentSectionProps {
 	node?: Record<string, unknown>
@@ -128,9 +132,48 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 	const { t } = useTranslation("super")
 	const [expanded, setExpanded] = useMessageViewState("file-path-attachments-expanded", false)
 	const downloadFileByPath = useFilePathAttachmentDownload()
+	/**
+	 * The block the new-user guide frames when it is opened from here.
+	 *
+	 * Marked by hand rather than declared in the markup, because the guide has to point at the block
+	 * that was *clicked* and nothing in the markup can tell the blocks apart: the message list holds
+	 * one of these per message, and they all look the same. See the tour's first step — the mark is
+	 * its anchor, and the entry that decides the tour is due is the only thing that knows which
+	 * block it belongs on.
+	 */
+	const sectionRef = useRef<HTMLDivElement>(null)
 	const { permissions: access } = useFileAccess()
 
 	if (attachments.length === 0) return null
+
+	/**
+	 * Opening one of these files — unless this is the first of them a new account has ever asked
+	 * for, in which case the guide takes the click and nothing is opened.
+	 *
+	 * The guide is about these files rather than about the one that was clicked: it says what a
+	 * task's results are and where they are kept, and both of its sentences are about the block the
+	 * user is looking at. Opening the file underneath would put that explanation on a screen the
+	 * user has not been introduced to yet, and the frame the first step draws around the block would
+	 * be over a panel that has just been replaced by the file's contents. So the click buys the
+	 * guide alone; the next one — what the guide's own words invite — opens the file, and every
+	 * click after that behaves as it always did.
+	 *
+	 * The block is still marked as the guide's anchor, and marked before the early return: the mark
+	 * is what the first step points at, and it is the only thing that can tell the guide which of
+	 * the page's attachment blocks was clicked. See `startHomeOnboardingDeliverableRunIfDue`.
+	 */
+	const openAttachment = (
+		attachment: FilePathAttachment & { presentation: FilePresentation },
+	) => {
+		if (startHomeOnboardingDeliverableRunIfDue()) {
+			sectionRef.current?.setAttribute(
+				"data-guide-anchor",
+				HomeOnboardingAnchor.DeliverableAttachment,
+			)
+			return
+		}
+		openFileByPath(attachment)
+	}
 
 	const toggleExpanded = (event: MouseEvent) => {
 		event.stopPropagation()
@@ -140,7 +183,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 		expanded || attachments.length < 4 ? attachments : attachments.slice(0, 4)
 
 	return (
-		<div className={cn("flex w-full flex-col rounded-md", className)}>
+		<div ref={sectionRef} className={cn("flex w-full flex-col rounded-md", className)}>
 			<div
 				className={cn(
 					"flex items-center gap-1",
@@ -168,7 +211,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 							key={attachment.filePath}
 							className="w-full cursor-pointer"
 							onClick={() => {
-								if (access.view && access.preview) openFileByPath(attachment)
+								if (access.view && access.preview) openAttachment(attachment)
 							}}
 							data-testid="open-file-by-path"
 						>
@@ -192,7 +235,7 @@ const FilePathAttachmentList = memo(function FilePathAttachmentList({
 										onClick={(event: MouseEvent) => {
 											event.stopPropagation()
 											if (access.view && access.preview)
-												openFileByPath(attachment)
+												openAttachment(attachment)
 										}}
 										component={IconEye}
 										stroke={2}

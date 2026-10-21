@@ -207,8 +207,7 @@ class SkillsMdSyncService
 
     private function buildBoundSkillEntries(array $codes, array $versions, string $agentCode, bool $strict): array
     {
-        $market = $system = [];
-        $names = [];
+        $boundByPackage = [];
         foreach ($codes as $code) {
             try {
                 $version = $versions[$code] ?? null;
@@ -219,18 +218,32 @@ class SkillsMdSyncService
                 if (! is_string($name) || $name === '' || in_array($name, ['.', '..'], true) || str_contains($name, '/') || str_contains($name, '\\')) {
                     throw new RuntimeException('Invalid bound skill package name: ' . $code);
                 }
-                if (isset($names[$name]) && $names[$name] !== $code) {
-                    throw new RuntimeException('Multiple bound skills use the same package name: ' . $name);
-                }
-                if ($version->getSourceType()->isSystem()) {
-                    $system[] = $name;
-                } else {
+
+                $isSystem = $version->getSourceType()->isSystem();
+                $description = '';
+                if (! $isSystem) {
                     if (empty($version->getFileKey())) {
                         throw new RuntimeException('Bound skill has no downloadable package: ' . $code);
                     }
-                    $market[] = ['name' => $name, 'code' => $code, 'description' => $version->getPackageDescription() ?? ''];
+                    $description = $version->getPackageDescription() ?? '';
                 }
-                $names[$name] = $code;
+
+                if (isset($boundByPackage[$name])) {
+                    $previous = $boundByPackage[$name];
+                    $this->logger->warning('[SkillsMdSyncService] Duplicate bound skill package overridden', [
+                        'agent_code' => $agentCode,
+                        'package_name' => $name,
+                        'previous_skill_code' => $previous['code'],
+                        'skill_code' => $code,
+                    ]);
+                    unset($boundByPackage[$name]);
+                }
+
+                $boundByPackage[$name] = [
+                    'code' => $code,
+                    'is_system' => $isSystem,
+                    'description' => $description,
+                ];
             } catch (RuntimeException $e) {
                 if ($strict) {
                     throw $e;
@@ -242,6 +255,17 @@ class SkillsMdSyncService
                 ]);
             }
         }
+
+        $market = [];
+        $system = [];
+        foreach ($boundByPackage as $name => $entry) {
+            if ($entry['is_system']) {
+                $system[] = $name;
+            } else {
+                $market[] = ['name' => $name, 'code' => $entry['code'], 'description' => $entry['description']];
+            }
+        }
+
         return ['market_skills' => $this->mergeMarketSkills([], $market), 'system_skills' => $system];
     }
 

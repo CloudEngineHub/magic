@@ -4,6 +4,8 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createPortal } from "react-dom"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
+import { Switch } from "@/components/shadcn-ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "../../../primitives/shadcn/select"
 import EditorModelSelect from "./model-config/EditorModelSelect"
 import type {
 	VideoEditorConfig,
@@ -50,6 +52,7 @@ import {
 import { useLinkedMediaSourceListOption } from "../../../editors/connection/useLinkedMediaSourceListOption"
 import LinkedFrameMediaMenu from "./LinkedFrameMediaMenu"
 import type { LinkedFrameRole } from "./LinkedFrameMediaMenu"
+import { resolveLinkedFrameRoleForSlotIndex } from "./linkedFrameBindings"
 
 type ReferencePopoverState = {
 	slotKey: string
@@ -180,6 +183,7 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
 			onSelectSource={onSelectSource}
+			includeAssetsSource
 			maxReferenceFiles={maxReferenceFiles}
 			currentReferenceFiles={currentReferenceFiles}
 			isReferenceFileLimitReached={isReferenceFileLimitReached}
@@ -208,15 +212,6 @@ function assignForwardedRef<T>(ref: ForwardedRef<T>, value: T | null) {
 
 function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }): string {
 	return item.fileName || getCanvasResourceFileName(item.path) || item.path
-}
-
-function resolveFrameRoleForSlotIndex(
-	slotIndex: number,
-	supportsStartFrame: boolean,
-	supportsEndFrame: boolean,
-): LinkedFrameRole {
-	if (supportsStartFrame && slotIndex === 0) return "start"
-	return supportsEndFrame ? "end" : "start"
 }
 
 /** 视频编辑器底部工具区：模型、输入 Tab 与发送区；SourceList 可挂载到顶部。 */
@@ -284,6 +279,9 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 		selectedModelId,
 		selectedInputMode,
 		availableInputModes,
+		selectedResolution,
+		selectedDraft,
+		canEnableDraft,
 		modelOptions,
 		modelOptionGroups,
 		selectedModelOption,
@@ -308,14 +306,41 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 	} = config
 
 	const removeSlotAriaLabel = t("videoEditor.removeSlotResource", "移除该参考资源")
-	/** 文生视频走提示词，不作为模式 Tab 展示；仅展示需切换素材类型的模式 */
-	const inputModesForTabs = useMemo(
-		() => availableInputModes.filter((mode) => mode !== "standard"),
+	/** 文生视频走提示词，不作为模式菜单项展示；仅展示需切换素材类型的模式 */
+	const inputModesForSelect = useMemo(
+		() =>
+			availableInputModes.filter(
+				(mode): mode is Exclude<VideoInputMode, "standard"> => mode !== "standard",
+			),
 		[availableInputModes],
 	)
-	const shouldShowModeTabs =
-		inputModesForTabs.length > 0 &&
-		(inputModesForTabs.length > 1 || availableInputModes.includes("standard"))
+	const shouldShowModeSelect =
+		inputModesForSelect.length > 0 &&
+		(inputModesForSelect.length > 1 || availableInputModes.includes("standard"))
+	const selectedInputModeForSelect = inputModesForSelect.includes(
+		selectedInputMode as Exclude<VideoInputMode, "standard">,
+	)
+		? (selectedInputMode as Exclude<VideoInputMode, "standard">)
+		: inputModesForSelect[0]
+	const inputModeLabels = {
+		framesLabel: t("videoEditor.frames", "首尾帧"),
+		videoEditLabel: t("videoEditor.videoEdit", "视频编辑"),
+		referenceImageLabel: t("videoEditor.referenceImage", "参考图"),
+		referenceAssetLabel: t("videoEditor.referenceAsset", "全能模式"),
+	}
+	const handleInputModeSelect = useCallback(
+		(value: string) => {
+			if (!inputModesForSelect.includes(value as Exclude<VideoInputMode, "standard">)) return
+			handlers.handleInputModeChange(value as VideoInputMode)
+		},
+		[handlers, inputModesForSelect],
+	)
+	// draft 是服务端按模型能力声明的生成开关，不能用模型 ID 做前端推断。
+	// 样片协议固定使用 480p；其他分辨率下不展示该开关，避免用户误以为可提交样片。
+	const draftConfig = selectedModelOption?.model.video_generation_config?.generation?.draft
+	const hasDraft =
+		draftConfig !== undefined && selectedDraft !== undefined && selectedResolution === "480p"
+	const draftLabel = draftConfig?.name || t("videoEditor.draft", "样片模式")
 
 	const getPopoverLimitState = useCallback(
 		(paths: Array<string | undefined>, slotIndex: number, maxCount?: number) => {
@@ -495,6 +520,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				...(path
 					? {
 							resourcePath: path,
+							resourceMediaType: "image",
 							resourceStatusLabel: t("videoEditor.slotLabelFirstFrame", "首帧"),
 							resourceFileName:
 								getLinkedMediaReferenceIdentity(
@@ -528,6 +554,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				...(path
 					? {
 							resourcePath: path,
+							resourceMediaType: "image",
 							resourceStatusLabel: t("videoEditor.slotLabelLastFrame", "尾帧"),
 							resourceFileName:
 								getLinkedMediaReferenceIdentity(
@@ -675,6 +702,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						groupId: kind,
 						resourcePath: info.path,
 						resourceFileName: info.fileName,
+						resourceMediaType: info.assetType,
 						removeResourceAriaLabel: removeSlotAriaLabel,
 						onRemoveResource: () => handlers.handleReferenceImageRemove(info.path),
 					})
@@ -730,6 +758,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					groupId: kind,
 					resourcePath: info.path,
 					resourceFileName: info.fileName,
+					resourceMediaType: info.assetType,
 					removeResourceAriaLabel: removeSlotAriaLabel,
 					onRemoveResource: () => handlers.handleReferenceImageRemove(info.path),
 				})
@@ -929,7 +958,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				} = resolvePopoverState(option)
 				const frameRole: LinkedFrameRole | undefined =
 					inputTab === "frame"
-						? resolveFrameRoleForSlotIndex(
+						? resolveLinkedFrameRoleForSlotIndex(
 								option.slotIndex,
 								supportsStartFrame,
 								supportsEndFrame,
@@ -1194,36 +1223,39 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 							selectedModelOption={selectedModelOption}
 							onModelChange={handlers.handleModelChange}
 						/>
-						{shouldShowModeTabs && (
-							<div className={styles.tabsList} role="tablist">
-								{inputModesForTabs.map((inputMode) => (
-									<button
-										key={inputMode}
-										type="button"
-										role="tab"
-										aria-selected={selectedInputMode === inputMode}
-										className={styles.tabsTrigger}
-										data-state={
-											selectedInputMode === inputMode ? "active" : undefined
-										}
-										data-testid={`video-generate-editor-mode-${inputMode}`}
-										onClick={() => handlers.handleInputModeChange(inputMode)}
-									>
-										{getInputModeLabel(inputMode, {
-											framesLabel: t("videoEditor.frames", "首尾帧"),
-											videoEditLabel: t("videoEditor.videoEdit", "视频编辑"),
-											referenceImageLabel: t(
-												"videoEditor.referenceImage",
-												"参考图",
-											),
-											referenceAssetLabel: t(
-												"videoEditor.referenceAsset",
-												"全能模式",
-											),
-										})}
-									</button>
-								))}
-							</div>
+						{shouldShowModeSelect && selectedInputModeForSelect && (
+							<Select
+								value={selectedInputModeForSelect}
+								onValueChange={handleInputModeSelect}
+							>
+								<SelectTrigger className={styles.modeSelectTrigger}>
+									{getInputModeLabel(selectedInputModeForSelect, inputModeLabels)}
+								</SelectTrigger>
+								<SelectContent className={styles.modeSelectContent}>
+									{inputModesForSelect.map((inputMode) => (
+										<SelectItem
+											key={inputMode}
+											value={inputMode}
+											className={styles.modeSelectItem}
+											data-testid={`video-generate-editor-mode-${inputMode}`}
+										>
+											{getInputModeLabel(inputMode, inputModeLabels)}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						)}
+						{hasDraft && (
+							<Switch
+								className={styles.draftModeSwitch}
+								checked={selectedDraft === true}
+								onCheckedChange={handlers.handleDraftChange}
+								disabled={!canEnableDraft}
+								title={draftConfig?.description}
+								data-testid="video-generate-editor-draft-mode"
+							>
+								<span className={styles.draftModeSwitchLabel}>{draftLabel}</span>
+							</Switch>
 						)}
 					</div>
 					<div className={styles.right}>

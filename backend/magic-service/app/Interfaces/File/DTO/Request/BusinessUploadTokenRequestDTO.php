@@ -28,7 +28,7 @@ class BusinessUploadTokenRequestDTO extends AbstractRequestDTO
     protected static function getHyperfValidationRules(): array
     {
         return [
-            'business_code' => 'required|string|in:SKILL,skill',
+            'business_code' => 'required|string|in:SKILL,skill,ASSET,asset',
             'expires' => 'sometimes|integer|min:900|max:3600',
         ];
     }

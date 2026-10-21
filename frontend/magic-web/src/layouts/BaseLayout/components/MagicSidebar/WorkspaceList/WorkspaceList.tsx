@@ -35,6 +35,7 @@ import { SCROLL_HINT_HEIGHTS } from "@/components/shadcn-ui/scroll-area"
 import { useWorkspaceListDnd } from "./useWorkspaceListDnd"
 import { useProjectPinBoundaryConfirmation } from "./ProjectPinBoundaryConfirmDialog"
 import { subscribeWorkspaceSearchInvalidation } from "@/pages/superMagic/services/workspaceListSearchInvalidation"
+import { isHomeOnboardingSidebarTopMode } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
 
 const SEARCH_PAGE_SIZE = 20
 
@@ -569,6 +570,13 @@ function WorkspaceList({
 
 		const workspaceIdSegment = toTestIdSegment(selectedWorkspaceId)
 		const animationFrameId = window.requestAnimationFrame(() => {
+			if (isHomeOnboardingSidebarTopMode()) {
+				const scrollContainer = workspaceListRef.current?.closest<HTMLElement>(
+					"[data-testid='sidebar-content-root']",
+				)
+				scrollContainer?.scrollTo({ top: 0, behavior: "auto" })
+				return
+			}
 			const workspaceElement = workspaceListRef.current?.querySelector<HTMLElement>(
 				`[data-workspace-id-segment="${workspaceIdSegment}"]`,
 			)
@@ -603,6 +611,7 @@ function WorkspaceList({
 			onDragEnd={handleDragEnd}
 			// Stay in flow when inactive so the shared tree scroll does not clamp.
 			className="relative flex flex-col"
+			data-guide-anchor="sidebar-workspace-list"
 		>
 			{confirmationDialog}
 			<ProjectNavigationToolbar
@@ -704,8 +713,7 @@ function WorkspaceList({
 			<svg
 				ref={dropIndicatorRef}
 				aria-hidden="true"
-				className="pointer-events-none absolute left-0 top-0 z-50 hidden overflow-visible text-[#b9dcff]"
-				style={{ height: 8 }}
+				className="pointer-events-none absolute left-0 top-0 z-50 hidden h-2 overflow-visible text-[#b9dcff]"
 			>
 				<line x1="4" y1="4" x2="100%" y2="4" stroke="currentColor" strokeWidth="2" />
 				<circle cx="4" cy="4" r="4" fill="currentColor" />

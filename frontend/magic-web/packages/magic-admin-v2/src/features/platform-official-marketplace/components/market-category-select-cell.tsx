@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { SearchableMultiSelect } from "@magic-admin-v2/components/searchable-multi-select"
 import type { SearchableMultiSelectOption } from "@magic-admin-v2/components/searchable-multi-select"
-import {
-	MarketCategoryBadges,
-} from "@magic-admin-v2/features/platform-official-marketplace/components/market-table-cells"
+import { MarketCategoryBadges } from "@magic-admin-v2/features/platform-official-marketplace/components/market-table-cells"
 import {
 	areSameCategoryIds,
 	normalizeCategoryIds,
@@ -19,6 +17,7 @@ type MarketCategorySelectCellProps = {
 	emptyLabel: string
 	isLoading: boolean
 	isSaving: boolean
+	disabled?: boolean
 	noMatchingLabel: string
 	onSave: (categoryIds: string[]) => void | Promise<void>
 	searchPlaceholder: string
@@ -36,13 +35,16 @@ export function MarketCategorySelectCell({
 	emptyLabel,
 	isLoading,
 	isSaving,
+	disabled,
 	noMatchingLabel,
 	onSave,
 	searchPlaceholder,
 	selectedCountLabel,
 }: MarketCategorySelectCellProps) {
 	const [open, setOpen] = useState(false)
-	const [draftCategoryIds, setDraftCategoryIds] = useState(() => normalizeCategoryIds(categoryIds))
+	const [draftCategoryIds, setDraftCategoryIds] = useState(() =>
+		normalizeCategoryIds(categoryIds),
+	)
 	const draftCategoryIdsRef = useRef(draftCategoryIds)
 
 	useEffect(() => {
@@ -82,19 +84,27 @@ export function MarketCategorySelectCell({
 		<SearchableMultiSelect
 			ariaLabel={ariaLabel}
 			className="w-[220px]"
+			clearButtonTestId="platform-official-marketplace-multi-select-clear-button"
 			clearLabel={clearLabel}
-			disabled={!canEdit || isSaving || isLoading}
+			contentTestId="platform-official-marketplace-multi-select-content"
+			disabled={disabled ?? (!canEdit || isSaving || isLoading)}
 			emptyLabel={emptyLabel}
+			emptyTestId="platform-official-marketplace-multi-select-empty"
 			isLoading={isSaving || isLoading}
+			loadingTestId="platform-official-marketplace-multi-select-loading"
 			maxVisibleItems={1}
 			noMatchingLabel={noMatchingLabel}
 			onChange={handleChange}
 			onOpenChange={handleOpenChange}
 			open={open}
+			optionTestId="platform-official-marketplace-multi-select-option"
 			options={categoryOptions}
+			searchClearButtonTestId="platform-official-marketplace-multi-select-search-clear-button"
+			searchInputTestId="platform-official-marketplace-multi-select-search-input"
 			searchPlaceholder={searchPlaceholder}
 			selectedCountLabel={selectedCountLabel}
+			triggerTestId="platform-official-marketplace-multi-select-trigger"
 			value={draftCategoryIds}
-		 triggerTestId="platform-official-marketplace-multi-select-trigger" contentTestId="platform-official-marketplace-multi-select-content" searchInputTestId="platform-official-marketplace-multi-select-search-input" searchClearButtonTestId="platform-official-marketplace-multi-select-search-clear-button" optionTestId="platform-official-marketplace-multi-select-option" loadingTestId="platform-official-marketplace-multi-select-loading" emptyTestId="platform-official-marketplace-multi-select-empty" clearButtonTestId="platform-official-marketplace-multi-select-clear-button"/>
+		/>
 	)
 }

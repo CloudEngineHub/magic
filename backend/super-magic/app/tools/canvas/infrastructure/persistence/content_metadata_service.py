@@ -160,6 +160,7 @@ class ContentMetadataService:
                 "fps",
                 "seed",
                 "watermark",
+                "draft",
                 "extensions",
             },
         }.get(element_type)
@@ -541,6 +542,10 @@ def _build_public_video_request(parameters: dict[str, Any], project_path: str | 
         for key in generation_keys
         if parameters.get(key) not in (None, "")
     }
+    # draft 是「这条内容是不是样片」的标记位，只写 true：写成 false 会让所有非样片视频
+    # 凭空多出一个键，而前端的判定是 generation.draft === true，false 不带来任何信息。
+    if parameters.get("draft") is True:
+        generation["draft"] = True
     if generation:
         request["generation"] = generation
     extensions = parameters.get("extensions")

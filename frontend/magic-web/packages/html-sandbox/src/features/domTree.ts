@@ -1,4 +1,5 @@
 import { getElementSelector, isInjectedElement } from "../utils/dom"
+import { isSourceNode, markSourceSubtree, SOURCE_NODE_ATTRIBUTE } from "../utils/sourceNodes"
 import { EditorLogger } from "../utils/EditorLogger"
 
 export const EDITOR_NODE_ID_ATTRIBUTE = "data-magic-editor-node-id"
@@ -226,7 +227,10 @@ function getVisibleElementChildren(element: HTMLElement): HTMLElement[] {
 	return Array.from(element.children)
 		.filter((child): child is HTMLElement => child instanceof HTMLElement)
 		.filter(
-			(child) => !isInjectedElement(child) && !EXCLUDED_TAGS.has(child.tagName.toLowerCase()),
+			(child) =>
+				!isInjectedElement(child) &&
+				isSourceNode(child) &&
+				!EXCLUDED_TAGS.has(child.tagName.toLowerCase()),
 		)
 }
 
@@ -253,7 +257,8 @@ function describeNode(
 ) {
 	const tagName = element.tagName.toLowerCase()
 	const selector = getElementSelector(element)
-	const isExcluded = isInjectedElement(element) || EXCLUDED_TAGS.has(tagName)
+	const isExcluded =
+		isInjectedElement(element) || !isSourceNode(element) || EXCLUDED_TAGS.has(tagName)
 	// The selector path is rooted at body and disambiguates same-tag siblings
 	// with :nth-of-type(). Only duplicate ids can make that path ambiguous, so
 	// count ids once per snapshot instead of querying the whole document per node.
@@ -349,6 +354,9 @@ export function insertAtElementIndex(
 	child: HTMLElement,
 	index?: number,
 ): number {
+	// Parsed editor content has no marker; moving an existing source node must retain
+	// unmarked runtime descendants instead of promoting them to saved content.
+	if (!child.hasAttribute(SOURCE_NODE_ATTRIBUTE)) markSourceSubtree(child)
 	const children = Array.from(parent.children)
 	const targetIndex = Math.max(0, Math.min(index ?? children.length, children.length))
 	const reference = children[targetIndex]

@@ -368,6 +368,7 @@ export function rewriteLayerElementsPathsForMagicProjectSave(
 		}
 		rewriteUri(inputs.video)
 		rewriteUri(inputs.mask)
+		rewriteUri(inputs.draft_task)
 	}
 
 	function walk(element: Record<string, unknown>): void {

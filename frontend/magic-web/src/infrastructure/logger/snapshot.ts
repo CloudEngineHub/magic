@@ -22,7 +22,7 @@ export interface SnapshotOptions {
 	width?: number
 }
 
-/** Bounded traversal never serializes raw objects or calls user getters/toJSON. */
+/** Only Error diagnostics may invoke guarded getters; ordinary objects never do. */
 export function safeSnapshot(input: unknown, options: SnapshotOptions = {}): unknown {
 	const {
 		bytes = normalLimits.payloadBytes,
@@ -75,45 +75,47 @@ export function safeSnapshot(input: unknown, options: SnapshotOptions = {}): unk
 			if (value instanceof RegExp) return "[RegExp]"
 			if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return "[Binary]"
 			const array = Array.isArray(value)
+			const error = value instanceof Error
 			const result: Record<string, unknown> | unknown[] = array ? [] : Object.create(null)
 			let count = 0
-			const keys: Iterable<string> =
-				value instanceof Error
-					? ["name", "message", "stack", "code", "cause"]
-					: (function* () {
-							if (array) {
-								for (let index = 0; index < value.length; index++)
-									yield String(index)
-								return
-							}
-							for (const key in value) {
-								// Older WebViews lack Object.hasOwn; call also supports null prototypes
-								// and objects that shadow their own hasOwnProperty method.
-								if (Object.prototype.hasOwnProperty.call(value, key)) yield key
-							}
-						})()
+			const keys: Iterable<string> = error
+				? ["name", "message", "stack", "code", "cause"]
+				: (function* () {
+						if (array) {
+							for (let index = 0; index < value.length; index++) yield String(index)
+							return
+						}
+						for (const key in value) {
+							// Older WebViews lack Object.hasOwn; call also supports null prototypes
+							// and objects that shadow their own hasOwnProperty method.
+							if (Object.prototype.hasOwnProperty.call(value, key)) yield key
+						}
+					})()
 			for (const key of keys) {
 				if (count++ >= width || remaining < 128) {
 					limited()
 					break
 				}
-				const descriptor = Object.getOwnPropertyDescriptor(value, key)
 				let child: unknown
-				if (!descriptor) {
-					if (array) child = null
-					else if (value instanceof Error && key === "name") {
-						const prototypeName = Object.getOwnPropertyDescriptor(
-							Object.getPrototypeOf(value),
-							"name",
-						)
+				if (error && (key === "name" || key === "message" || key === "stack")) {
+					// Native stacks can be lazy accessors; names/messages may be inherited.
+					// Read only diagnostic strings, then apply the same redaction and budgets.
+					try {
+						const diagnostic: unknown = value[key]
 						child =
-							prototypeName && "value" in prototypeName
-								? prototypeName.value
-								: "Error"
-					} else continue
-				} else if (!("value" in descriptor)) {
-					child = "[Accessor]"
-				} else child = descriptor.value
+							diagnostic === undefined || typeof diagnostic === "string"
+								? diagnostic
+								: "[Invalid Error field]"
+					} catch {
+						child = "[Unreadable]"
+					}
+				} else {
+					const descriptor = Object.getOwnPropertyDescriptor(value, key)
+					if (!descriptor) {
+						if (array) child = null
+						else continue
+					} else child = "value" in descriptor ? descriptor.value : "[Accessor]"
+				}
 				const safeKey = string(key)
 				const safe =
 					secretKey.test(key) || personalKey.test(key) || /^api[_-]?key$/i.test(key)

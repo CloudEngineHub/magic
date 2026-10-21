@@ -20,7 +20,6 @@
 		"login": {}
 	},
 	"notice": {
-		"cancel": "Cancel",
 		"next": "Next"
 	},
 	"preview": {
@@ -32,9 +31,6 @@
 		"pin": "Pin",
 		"remove": "Remove",
 		"unpin": "Unpin"
-	},
-	"userSetting": {
-		"addMember": "Add to"
 	},
 	"voice": {
 		"holdToRecord": "Hold the button to record",

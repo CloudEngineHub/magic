@@ -52,6 +52,7 @@ class GenerationOverrideInput(BaseToolParams):
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
+    draft: bool | None = None
     audio_policy: Literal["auto", "generate", "mute"] | None = Field(
         None,
         alias="audioPolicy",
@@ -95,6 +96,7 @@ class GenerationOverrideInput(BaseToolParams):
             fps=values.get("fps"),
             seed=values.get("seed"),
             watermark=values.get("watermark"),
+            draft=values.get("draft"),
             audio_policy=values.get("audio_policy"),
             _provided_fields=provided_fields,
         )

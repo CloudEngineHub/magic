@@ -33,6 +33,8 @@ readonly class VideoGatewayPayloadBuilder implements VideoGatewayPayloadBuilderI
 
     private const string INPUT_KEY_FRAMES = 'frames';
 
+    private const string INPUT_KEY_DRAFT_TASK = 'draft_task';
+
     private const string FIELD_URI = 'uri';
 
     private const string FIELD_ROLE = 'role';
@@ -207,6 +209,8 @@ readonly class VideoGatewayPayloadBuilder implements VideoGatewayPayloadBuilderI
             self::INPUT_KEY_REFERENCE_VIDEOS => $referenceVideos,
             self::INPUT_KEY_REFERENCE_AUDIOS => $referenceAudios,
             self::INPUT_KEY_FRAMES => $frames,
+            // 样片成片引用已由 Design 层解析成下游样片任务 ID，这里只做透传。
+            self::INPUT_KEY_DRAFT_TASK => $entity->getDraftTask(),
         ], static fn (array $value): bool => $value !== []);
     }
 

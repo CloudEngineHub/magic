@@ -85,6 +85,19 @@ readonly class DesignGenerationTaskDomainService
         );
     }
 
+    /**
+     * 按产物工作区相对路径反查视频任务，供样片成片只拿得到路径的场景使用。
+     */
+    public function findVideoTaskByOutputFilePath(DesignDataIsolation $dataIsolation, int $projectId, string $relativeFilePath): ?DesignGenerationTaskEntity
+    {
+        return $this->repository->findByProjectAndOutputFilePath(
+            $dataIsolation,
+            $projectId,
+            DesignGenerationAssetType::VIDEO,
+            $relativeFilePath,
+        );
+    }
+
     public function deleteTask(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): void
     {
         $this->repository->delete($dataIsolation, $entity);

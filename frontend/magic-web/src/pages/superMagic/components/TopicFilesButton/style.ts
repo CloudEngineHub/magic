@@ -5,7 +5,9 @@ const locateFileBlinkAnimation = keyframes`
 		background-color: transparent;
 	}
 	50% {
-		background-color: #EEF3FD;
+		/* Amber stays distinct from the open file's blue selection. */
+		background-color: #fff1b8;
+		box-shadow: inset 0 0 0 2px #fa8c16;
 	}
 `
 

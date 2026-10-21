@@ -18,7 +18,21 @@ interface ConversationPanelState {
 	lastExpandedSize?: number | null
 }
 
+/** Where the project sider collapse preference lives, and its state before the user chooses. */
+export interface ProjectSiderPanelPersistence {
+	storageKey: string
+	/** Used only when nothing has been saved under `storageKey` yet. */
+	defaultCollapsed: boolean
+}
+
+export const DEFAULT_PROJECT_SIDER_PANEL_PERSISTENCE: ProjectSiderPanelPersistence = {
+	storageKey: PROJECT_SIDER_PANEL_STORAGE_KEY,
+	defaultCollapsed: false,
+}
+
 interface TopicLayoutStoreOptions {
+	/** Lets a page keep its own sider collapse preference instead of the shared project one. */
+	projectSiderPanelPersistence?: ProjectSiderPanelPersistence
 	/** Controls whether the conversation collapse state is shared across page mounts. */
 	persistConversationPanelState?: boolean
 	/** Initial state for temporary layouts that do not restore the shared preference. */
@@ -68,14 +82,17 @@ export class TopicLayoutStore {
 	private readonly persistConversationPanelState: boolean
 	private readonly bufferedMessageCollapse: boolean
 	private allowConversationPanelResize: boolean
+	private readonly projectSiderPanelPersistence: ProjectSiderPanelPersistence
 
 	/** Creates one layout state container with optional conversation-state persistence. */
 	constructor({
+		projectSiderPanelPersistence = DEFAULT_PROJECT_SIDER_PANEL_PERSISTENCE,
 		persistConversationPanelState = true,
 		initialConversationPanelCollapsed = false,
 		bufferedMessageCollapse = false,
 		allowConversationPanelResize = true,
 	}: TopicLayoutStoreOptions = {}) {
+		this.projectSiderPanelPersistence = projectSiderPanelPersistence
 		this.persistConversationPanelState = persistConversationPanelState
 		this.isConversationPanelCollapsed = initialConversationPanelCollapsed
 		this.bufferedMessageCollapse = bufferedMessageCollapse
@@ -114,9 +131,12 @@ export class TopicLayoutStore {
 		})
 		try {
 			const saved = JSON.parse(
-				localStorage.getItem(PROJECT_SIDER_PANEL_STORAGE_KEY) || "null",
+				localStorage.getItem(this.projectSiderPanelPersistence.storageKey) || "null",
 			) as ConversationPanelState | null
-			this.isProjectSiderCollapsed = saved?.collapsed === true
+			this.isProjectSiderCollapsed =
+				typeof saved?.collapsed === "boolean"
+					? saved.collapsed
+					: this.projectSiderPanelPersistence.defaultCollapsed
 			this.lastExpandedProjectSiderWidthPx =
 				typeof saved?.lastExpandedSize === "number" &&
 				Number.isFinite(saved.lastExpandedSize)
@@ -272,7 +292,7 @@ export class TopicLayoutStore {
 	private saveProjectPanelState() {
 		try {
 			localStorage.setItem(
-				PROJECT_SIDER_PANEL_STORAGE_KEY,
+				this.projectSiderPanelPersistence.storageKey,
 				JSON.stringify({
 					collapsed: this.isProjectSiderCollapsed,
 					lastExpandedSize: this.lastExpandedProjectSiderWidthPx,

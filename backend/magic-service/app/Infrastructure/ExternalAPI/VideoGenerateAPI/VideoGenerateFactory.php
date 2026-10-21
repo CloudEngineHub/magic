@@ -14,6 +14,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\DashScope\Adapter\DashScopeV
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Adapter\MiniMaxH3VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\VolcengineArkVideoAdapterRouter;
 
 /**
  * 视频 provider adapter 工厂。
@@ -26,7 +27,7 @@ readonly class VideoGenerateFactory implements VideoGenerationProviderAdapterFac
     public function __construct(
         private CloudswayVideoAdapterRouter $cloudswayVideoAdapterRouter,
         private KelingVideoAdapterRouter $kelingVideoAdapterRouter,
-        private VolcengineArkSeedanceVideoAdapter $volcengineArkSeedanceVideoAdapter,
+        private VolcengineArkVideoAdapterRouter $volcengineArkVideoAdapterRouter,
         private DashScopeVideoAdapterRouter $dashScopeVideoAdapterRouter,
         private MiniMaxH3VideoAdapter $miniMaxH3VideoAdapter,
         private GeminiVideoAdapterRouter $geminiVideoAdapterRouter,
@@ -39,7 +40,7 @@ readonly class VideoGenerateFactory implements VideoGenerationProviderAdapterFac
             VideoGenerateProviderType::Cloudsway => $this->cloudswayVideoAdapterRouter,
             VideoGenerateProviderType::DashScope => $this->dashScopeVideoAdapterRouter,
             VideoGenerateProviderType::Keling => $this->kelingVideoAdapterRouter,
-            VideoGenerateProviderType::VolcengineArk => $this->volcengineArkSeedanceVideoAdapter,
+            VideoGenerateProviderType::VolcengineArk => $this->volcengineArkVideoAdapterRouter,
             VideoGenerateProviderType::MiniMax => $this->miniMaxH3VideoAdapter,
             VideoGenerateProviderType::Gemini => $this->geminiVideoAdapterRouter,
         };

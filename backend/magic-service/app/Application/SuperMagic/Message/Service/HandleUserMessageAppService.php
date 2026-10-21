@@ -12,6 +12,7 @@ use App\Application\MCP\SupperMagicMCP\ProjectMcpConfigService;
 use App\Application\MCP\SupperMagicMCP\SupperMagicAgentSkillInterface;
 use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAccessAppService;
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
+use App\Application\SuperMagic\Message\Assembler\UserMessageDTOAssembler;
 use App\Application\SuperMagic\Message\DTO\TaskMessageDTO;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
 use App\Application\SuperMagic\Task\DTO\InterruptClientNotification;
@@ -104,6 +105,29 @@ class HandleUserMessageAppService extends AbstractAppService
         $this->logger = $loggerFactory->get(get_class($this));
         if (container()->has(SupperMagicAgentSkillInterface::class)) {
             $this->supperMagicAgentSkill = container()->get(SupperMagicAgentSkillInterface::class);
+        }
+    }
+
+    public function handleMessage(
+        DataIsolation $dataIsolation,
+        UserMessageDTO $message,
+        ?UserToolCallMessage $toolReply = null,
+        ?int $existingTaskId = null,
+    ): ?InterruptClientNotification {
+        $toolReply ??= UserMessageDTOAssembler::resolveUserToolCallMessage(null, $message->getDynamicParams());
+        $kind = UserMessageDTOAssembler::classifyMessage($message->getInstruction(), $toolReply);
+        if ($existingTaskId !== null && $kind !== 'chat') {
+            ExceptionBuilder::throw(SuperAgentErrorCode::VALIDATE_FAILED, 'task.open_api.create_messages_only');
+        }
+        switch ($kind) {
+            case 'tool_reply':
+                $this->handleUserToolCallMessage($dataIsolation, $message, $toolReply);
+                return null;
+            case 'interrupt':
+                return $this->handleInternalMessage($dataIsolation, $message);
+            default:
+                $this->handleChatMessage($dataIsolation, $message, $existingTaskId);
+                return null;
         }
     }
 

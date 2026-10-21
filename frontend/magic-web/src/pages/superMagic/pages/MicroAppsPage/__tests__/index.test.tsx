@@ -28,6 +28,14 @@ vi.mock("@/routes/hooks/useNavigate", () => ({
 	default: () => mocks.navigate,
 }))
 
+/**
+ * The page hosts the onboarding tour, which reaches into the account store and the real i18n
+ * instance. This suite is about the page's own layout, so the tour is stubbed out.
+ */
+vi.mock("@/pages/superMagic/components/LazyGuideTour", () => ({
+	default: () => null,
+}))
+
 vi.mock("../hooks/useMicroAppsPage", () => ({
 	useMicroAppsPage: mocks.useMicroAppsPage,
 	shouldOpenPublishedShare: (scope: string, publishStatus: string) =>

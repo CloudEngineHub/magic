@@ -5,8 +5,9 @@ import MagicIcon from "@/components/base/MagicIcon"
 import { createStyles } from "antd-style"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
-// 样式定义
+// Keep dropdown styling consistent with the existing theme tokens.
 const useStyles = createStyles(({ token, css }) => ({
 	dropdown: css`
 		padding: 8px;
@@ -28,20 +29,10 @@ const useStyles = createStyles(({ token, css }) => ({
 	`,
 
 	optionsList: css`
+		height: auto;
 		max-height: 200px;
-		overflow-y: auto;
-
-		&::-webkit-scrollbar {
-			width: 6px;
-		}
-
-		&::-webkit-scrollbar-thumb {
-			background-color: ${token.colorBorderSecondary};
-			border-radius: 3px;
-
-			&:hover {
-				background-color: ${token.colorBorder};
-			}
+		> div {
+			display: block !important;
 		}
 	`,
 
@@ -106,7 +97,7 @@ const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 		const searchPlaceholder = placeholder ?? t("common.searchPlaceholder", { ns: "flow" })
 		const [searchValue, setSearchValue] = useState("")
 
-		// 过滤选项
+		// Filter by the searchable text while retaining the original option labels.
 		const filteredOptions = options.filter((option) => {
 			if (!searchValue) return true
 			const label = option.realLabel
@@ -121,7 +112,7 @@ const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 			setSearchValue(e.target.value)
 		})
 
-		// 重置搜索值
+		// Reset search when the selected value changes.
 		useEffect(() => {
 			setSearchValue("")
 		}, [value])
@@ -143,7 +134,7 @@ const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 				</div>
 			)
 
-			// 如果有包装组件，使用包装组件
+			// Preserve callers' custom option wrappers.
 			if (OptionWrapper) {
 				return (
 					<OptionWrapper key={option.value || index} option={option}>
@@ -173,7 +164,7 @@ const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 					</div>
 				)}
 
-				<div className={styles.optionsList}>
+				<ScrollArea viewportClassName={styles.optionsList}>
 					{filteredOptions.length > 0 ? (
 						filteredOptions.map(renderOption)
 					) : (
@@ -184,7 +175,7 @@ const BaseDropdownRenderer = memo<BaseDropdownRendererProps>(
 							/>
 						</div>
 					)}
-				</div>
+				</ScrollArea>
 			</div>
 		)
 	},

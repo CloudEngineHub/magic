@@ -37,6 +37,7 @@ interface TopicHistoryDropdownProps {
 	onDropdownOpenChange?: (open: boolean) => void
 	/** Hide mode tag icon in each topic list row */
 	hideTopicListModeIcon?: boolean
+	hideTopicTypeFilter?: boolean
 	hideCreateTopicButton?: boolean
 	hideDeleteTopicButton?: boolean
 	children: ReactNode
@@ -67,6 +68,7 @@ function TopicHistoryDropdown({
 	placement = "bottomRight",
 	onDropdownOpenChange,
 	hideTopicListModeIcon = false,
+	hideTopicTypeFilter = false,
 	hideCreateTopicButton = false,
 	hideDeleteTopicButton = false,
 	children,
@@ -167,6 +169,7 @@ function TopicHistoryDropdown({
 						onUnarchiveTopic={onUnarchiveTopic}
 						topicService={topicService}
 						hideTopicListModeIcon={hideTopicListModeIcon}
+						hideTopicTypeFilter={hideTopicTypeFilter}
 						hideCreateTopicButton={hideCreateTopicButton}
 						hideDeleteTopicButton={hideDeleteTopicButton}
 						searchInputRef={searchInputRef}

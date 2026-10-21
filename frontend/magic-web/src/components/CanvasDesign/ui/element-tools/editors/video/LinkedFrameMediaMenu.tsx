@@ -129,6 +129,7 @@ export default function LinkedFrameMediaMenu(props: LinkedFrameMediaMenuProps) {
 										<ReferenceMediaPreview
 											path={item.path}
 											fileName={name}
+											mediaType="image"
 											fillParent
 											objectFit="contain"
 											inlineOriginal

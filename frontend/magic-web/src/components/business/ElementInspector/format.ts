@@ -1,4 +1,4 @@
-import { isNonTextualElementTag } from "@dtyq/html-sandbox/utils/inspectableTextContent"
+import { isNonTextualElementTag } from "@dtyq/html-sandbox"
 import type { TFunction } from "i18next"
 import type { InspectedElementInfo } from "./types"
 

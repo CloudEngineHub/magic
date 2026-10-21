@@ -63,6 +63,9 @@ CanvasElementType = Literal[
     "storyboard",
     "video-edit",
 ]
+# 这里只列画布请求构造器拼得出来的输入模式；模型是否支持由后端按能力声明校验。
+# draft_task 故意不在其中：成片需要 inputs.draft_task 携带样片引用，构造器没有该输入，
+# 成片改由画布 UI 的「出成片」按钮提交，不由 Agent 提交。
 VideoInputMode = Literal[
     "standard",
     "image_reference",
@@ -350,6 +353,11 @@ Reference image paths inside the current Canvas project. Use paths relative to t
     fps: int | None = Field(None, gt=0)
     seed: int | None = None
     watermark: bool | None = None
+    draft: bool | None = Field(
+        None,
+        description="""<!--zh: 样片模式开关。仅当当前模型的 <media_model_info> 声明了 draft 能力时才可用，分辨率与计费规则见该声明。-->
+Draft mode switch. Use it only when the current model's <media_model_info> declares the draft capability; that declaration carries the applicable resolution and billing rules.""",
+    )
     audio_policy: Literal["auto", "generate", "mute"] | None = Field(
         None,
         alias="audioPolicy",
@@ -502,6 +510,7 @@ Reference image paths inside the current Canvas project. Use paths relative to t
             fps=self.fps,
             seed=self.seed,
             watermark=self.watermark,
+            draft=self.draft,
             audio_policy=self.audio_policy,
             composition=(
                 CompositionParameters(

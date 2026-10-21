@@ -103,9 +103,37 @@
         "zh_CN": "操作参数或返回内容不符合要求，请核对后重试。",
         "en_US": "The request or response was invalid. Check the information and try again."
     },
+    "error.confirmation_required": {
+        "zh_CN": "本次操作尚未取得有效确认，请检查确认卡片的状态。",
+        "en_US": "This operation has no valid approval yet. Check the confirmation card's status."
+    },
+    "error.confirmation_mismatch": {
+        "zh_CN": "确认与本次操作不匹配，请检查对应的确认记录。",
+        "en_US": "The confirmation does not match this operation. Check the corresponding confirmation."
+    },
+    "error.confirmation_expired": {
+        "zh_CN": "本次确认已过期，请重新准备并确认。",
+        "en_US": "This confirmation has expired. Prepare and confirm the operation again."
+    },
+    "error.confirmation_pending": {
+        "zh_CN": "本次操作已有关联的确认，请先处理原确认卡片。",
+        "en_US": "This operation already has a confirmation. Resolve the original card first."
+    },
+    "error.confirmation_unavailable": {
+        "zh_CN": "当前无法发起确认，请在交互话题中继续操作。",
+        "en_US": "Confirmation is unavailable here. Continue in an interactive topic."
+    },
+    "error.confirmation_stale": {
+        "zh_CN": "内容或版本已变更，请重新准备并确认。",
+        "en_US": "The content or version has changed. Prepare and confirm the operation again."
+    },
     "error.unexpected_error": {
         "zh_CN": "操作遇到问题，请稍后重试。",
         "en_US": "The operation encountered a problem. Please try again later."
+    },
+    "error.resource_files_unavailable": {
+        "zh_CN": "无法读取所需的项目文件，请检查项目访问权限和文件挂载后重试。",
+        "en_US": "The required project files are unavailable. Check project access and the file mount before retrying."
     },
     "error.duplicate_file_id": {
         "zh_CN": "选择的文件存在重复，请移除重复项后重试。",
@@ -114,6 +142,18 @@
     "field.name": {
         "zh_CN": "名称",
         "en_US": "Name"
+    },
+    "field.job_title": {
+        "zh_CN": "职位",
+        "en_US": "Job title"
+    },
+    "field.departments": {
+        "zh_CN": "所属部门",
+        "en_US": "Departments"
+    },
+    "field.department_path": {
+        "zh_CN": "部门层级",
+        "en_US": "Department path"
     },
     "field.project_name": {
         "zh_CN": "项目名称",
@@ -378,5 +418,101 @@
     "field.location": {
         "zh_CN": "位置",
         "en_US": "Location"
+    },
+    "search.matches": {
+        "zh_CN": "找到 {{count}} 个匹配文件",
+        "en_US": "{{count}} matching files"
+    },
+    "search.scopes": {
+        "zh_CN": "搜索 {{count}} 个项目目录范围",
+        "en_US": "{{count}} project directory scopes"
+    },
+    "search.project": {
+        "zh_CN": "项目 {{number}}",
+        "en_US": "Project {{number}}"
+    },
+    "search.scope.pending": {
+        "zh_CN": "尚未搜索完",
+        "en_US": "Search incomplete"
+    },
+    "search.scope.complete": {
+        "zh_CN": "所选范围已搜索完",
+        "en_US": "Selected scope searched"
+    },
+    "search.scope.failed": {
+        "zh_CN": "查询失败",
+        "en_US": "Search failed"
+    },
+    "search.incomplete_short": {
+        "zh_CN": "部分范围未完成",
+        "en_US": "Incomplete coverage"
+    },
+    "search.incomplete": {
+        "zh_CN": "部分项目或目录尚未搜索完，当前结果不代表全部文件。",
+        "en_US": "Some project or directory scopes remain unsearched. These results do not cover all files."
+    },
+    "search.truncated": {
+        "zh_CN": "部分匹配文件未展示，请缩小关键词或目录范围；继续下一页无法找回本页省略的匹配项。",
+        "en_US": "Some matches were omitted. Narrow the keywords or directory scope; continuing the next page will not recover omitted matches."
+    },
+    "search.names_only": {
+        "zh_CN": "按文件名和路径匹配，未搜索文件正文；内容和年份需要打开文件确认。",
+        "en_US": "Matched file names and paths, not file contents. Open selected files to verify their subject and year."
+    },
+    "error.search_unavailable": {
+        "zh_CN": "此次搜索未能读取任何文件列表，请检查项目访问权限或稍后重试。",
+        "en_US": "No file lists could be read. Check project access or retry later."
+    },
+    "subject.skill": {
+        "zh_CN": "技能",
+        "en_US": "Skill"
+    },
+    "subject.person": {
+        "zh_CN": "用户",
+        "en_US": "Person"
+    },
+    "subject.department": {
+        "zh_CN": "部门",
+        "en_US": "Department"
+    },
+    "contact.bounded": {
+        "zh_CN": "部门搜索最多检查 100 条匹配记录，结果可能不完整。",
+        "en_US": "Department search checks at most 100 matches; results may be incomplete."
+    },
+    "status.published": {
+        "zh_CN": "已发布",
+        "en_US": "Published"
+    },
+    "status.under_review": {
+        "zh_CN": "已提交审核",
+        "en_US": "Submitted for review"
+    },
+    "status.ready": {
+        "zh_CN": "待确认发布",
+        "en_US": "Ready for confirmation"
+    },
+    "status.draft": {
+        "zh_CN": "私有草稿",
+        "en_US": "Private draft"
+    },
+    "skill.confirm": {
+        "zh_CN": "是否发布技能「{{name}}」？\n描述：{{description}}\n版本：{{version}}\n范围：{{audience}}（当前生效范围：{{previous}}）\n共 {{count}} 个文件。\n组织及市场发布需要审核；改为私有会撤下已有市场发布。",
+        "en_US": "Publish skill “{{name}}”?\nDescription: {{description}}\nVersion: {{version}}\nAudience: {{audience}} (current audience: {{previous}})\n{{count}} files.\nOrganization and market submissions require review; changing to private withdraws existing market distribution."
+    },
+    "skill.audience.PRIVATE": {
+        "zh_CN": "私有",
+        "en_US": "Private"
+    },
+    "skill.audience.ORGANIZATION": {
+        "zh_CN": "全组织",
+        "en_US": "Organization"
+    },
+    "skill.audience.MARKET": {
+        "zh_CN": "技能市场",
+        "en_US": "Skill market"
+    },
+    "skill.audience.none": {
+        "zh_CN": "尚未发布",
+        "en_US": "No published version"
     }
 }

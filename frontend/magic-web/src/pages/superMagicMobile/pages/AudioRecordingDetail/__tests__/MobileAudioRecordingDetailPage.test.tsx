@@ -721,6 +721,7 @@ describe("MobileAudioRecordingDetailPage", () => {
 		expect(screen.queryByTestId("mobile-recording-audio-player")).toBeNull()
 		expect(screen.queryByText("Topics")).toBeNull()
 		expect(screen.queryByText("New topic")).toBeNull()
+		expect(screen.queryByRole("button", { name: "topicTypeFilter.label" })).toBeNull()
 
 		const topicsContainer = screen.getByTestId("mobile-recording-detail-ai-topics")
 		expect(topicsContainer.className).toContain("px-3")
@@ -1182,3 +1183,14 @@ describe("MobileAudioRecordingDetailPage", () => {
 		})
 	})
 })
+
+vi.mock("@/pages/superMagic/hooks/usePaginatedTopics", () => ({
+	default: () => ({
+		displayTopics: [],
+		total: 0,
+		isLoading: false,
+		error: null,
+		hasMore: false,
+		reload: vi.fn(),
+	}),
+}))

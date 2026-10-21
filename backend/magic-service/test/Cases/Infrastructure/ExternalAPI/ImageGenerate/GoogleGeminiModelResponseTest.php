@@ -207,6 +207,7 @@ class GoogleGeminiModelResponseTest extends TestCase
     {
         return [
             'prohibited content' => ['IMAGE_PROHIBITED_CONTENT', 44014],
+            'recitation' => ['IMAGE_RECITATION', 44000],
             'image other' => ['IMAGE_OTHER', 44000],
             'stop' => ['STOP', 44000],
             'unknown' => ['UNKNOWN', 44000],

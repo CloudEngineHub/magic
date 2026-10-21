@@ -1,4 +1,5 @@
 import type { ReferenceResourcePanelItem } from "../../../../public/props"
+import type { CanvasAssetMediaType } from "../../../../public/magic-types"
 import { CANVAS_REFERENCE_MENTION_ITEM_TYPE } from "./canvasReferenceMention.constants"
 import type { ReferenceDropProjectFile } from "./useReferenceResourcePanelDataService"
 
@@ -23,6 +24,7 @@ export interface CreateReferenceResourcePanelItemOptions {
 	sourceProjectId?: string
 	projectId?: string
 	relativeFilePath?: string
+	mediaType?: CanvasAssetMediaType | null
 }
 
 /**
@@ -41,6 +43,7 @@ export function createReferenceResourcePanelItem(
 			file_name: fileName,
 			file_path: path,
 			file_extension: getFileExtension(path || fileName),
+			...(options.mediaType ? { media_type: options.mediaType } : {}),
 			...(options.relativeFilePath ? { relative_file_path: options.relativeFilePath } : {}),
 			...(options.projectId ? { project_id: options.projectId } : {}),
 			...(options.sourceProjectId ? { source_project_id: options.sourceProjectId } : {}),

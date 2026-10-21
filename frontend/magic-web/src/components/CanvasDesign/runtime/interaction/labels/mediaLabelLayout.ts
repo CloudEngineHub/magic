@@ -37,14 +37,6 @@ export interface MediaLabelLayoutOptions {
 	boundsOverride?: MediaLabelRect
 }
 
-/** 缩略图至少容纳四个字高时维持标准字号；再缩小就让文字一起缩小。 */
-const THUMBNAIL_FONT_HEIGHTS = 4
-
-// 屏幕字号在原标签 12px 与界面正文 14px 之间变化；图片继续放大时不再放大文字。
-// 小图仍使用原字号和极小缩略图约束，普通图片约占 24 个字高时进入舒适字号。
-const MAX_SCREEN_FONT_SIZE = 14
-const IMAGE_FONT_HEIGHTS = 24
-
 interface CachedLayout {
 	key: string
 	layout: MediaLabelLayout
@@ -137,11 +129,6 @@ export function getMediaLabelLayout(
 	const nameLeadingHeight = Math.max(0, options.nameLeadingHeight ?? 0)
 	const rowHeight =
 		Math.max(options.name.height, options.size.height, nameLeadingHeight) + options.offsetTop
-	const maxScreenRatio = Math.max(1, MAX_SCREEN_FONT_SIZE / options.fontSize)
-	const desiredScreenRatio = Math.min(
-		maxScreenRatio,
-		Math.max(1, (bounds.height * scale) / (options.fontSize * IMAGE_FONT_HEIGHTS)),
-	)
 	const operationExtraHeight =
 		Math.max(
 			0,
@@ -188,9 +175,7 @@ export function getMediaLabelLayout(
 	if (cachedSpatial?.key === spatialKey) {
 		candidateIds = cachedSpatial.candidateIds
 	} else {
-		const queryHeight =
-			((rowHeight + operationExtraHeight) * maxScreenRatio) /
-			getScaleBandLowerBound(scaleBand)
+		const queryHeight = (rowHeight + operationExtraHeight) / getScaleBandLowerBound(scaleBand)
 		candidateIds = canvas.geometryCacheManager.queryElementIdsByExpandedRect(
 			{
 				x: bounds.x,
@@ -203,7 +188,9 @@ export function getMediaLabelLayout(
 		cache.spatialCandidates.set(element, { key: spatialKey, candidateIds })
 	}
 
-	let availableHeight = ((rowHeight + operationExtraHeight) * desiredScreenRatio) / scale
+	// Labels keep one shared screen size. Vertical overlap is handled by hiding the row,
+	// instead of shrinking the text differently for each media element.
+	let availableHeight = (rowHeight + operationExtraHeight) / scale
 	for (const candidateId of candidateIds) {
 		if (candidateId === elementId) continue
 		const candidate = canvas.elementManager.getElementInstance(candidateId)
@@ -229,15 +216,8 @@ export function getMediaLabelLayout(
 		// 只约束本体不相交的上排媒体；真实叠放仍遵守原有 zIndex 遮挡规则。
 		if (distance >= 0) availableHeight = Math.min(availableHeight, distance)
 	}
-	const screenRatio = Math.max(
-		0,
-		Math.min(
-			desiredScreenRatio,
-			(bounds.height * scale) / (options.fontSize * THUMBNAIL_FONT_HEIGHTS),
-			(availableHeight * scale) / rowHeight,
-		),
-	)
-	if (screenRatio <= 0 || bounds.width <= 0) {
+	const hasSpace = availableHeight * scale >= rowHeight
+	if (!hasSpace || bounds.width <= 0) {
 		const layout = {
 			inverseScale: 1 / scale,
 			nameWidth: 0,
@@ -250,34 +230,37 @@ export function getMediaLabelLayout(
 		return layout
 	}
 	const screenWidth = bounds.width * scale
-	// 操作区保持可点击尺寸；连一个字都留不下时不强塞按钮，优先显示标题。
-	const showOperation =
-		options.operationScreenWidth > 0 &&
-		screenRatio >= 1 &&
-		availableHeight * scale >= (rowHeight + operationExtraHeight) * screenRatio &&
-		screenWidth >=
-			(options.operationScreenWidth + options.fontSize + nameLeadingWidth) * screenRatio
-	const operationWidth = showOperation ? options.operationScreenWidth * screenRatio : 0
-	const localWidth = Math.max(0, (screenWidth - operationWidth) / screenRatio)
+	// The rename action follows the shared permission capability. If the thumbnail is
+	// narrower than the operation area, the label may extend beyond the thumbnail so the
+	// action remains available; the name still receives a minimum ellipsis width.
+	const showOperation = options.operationScreenWidth > 0 && availableHeight > 0
+	const operationWidth = showOperation ? options.operationScreenWidth : 0
+	const localWidth = Math.max(0, screenWidth - operationWidth)
 	const gap = options.name.width > 0 && options.size.width > 0 ? options.gap : 0
 	const minimumTextWidth =
 		options.name.width > 0 ? Math.min(options.name.width, options.fontSize) : 1
 	// The size label is all-or-nothing and lower priority than the complete name (including its
 	// mandatory status suffix). The optional leading icon may still yield independently.
 	const showSize =
-		options.size.width > 0 && options.name.width + gap + options.size.width <= localWidth
+		options.size.width > 0 &&
+		options.name.width + gap + options.size.width <= localWidth &&
+		minimumTextWidth + gap + options.size.width <= localWidth
 	const nameAvailableWidth = Math.max(0, localWidth - (showSize ? options.size.width + gap : 0))
 	// If the icon would leave no room for text, hide the icon and give its space back to the
 	// name. This keeps the icon optional while preserving the name-first layout rule.
 	const minimumNameWidth = nameLeadingWidth + minimumTextWidth
 	const leadingFits = nameLeadingWidth === 0 || nameAvailableWidth >= minimumNameWidth
 	const effectiveLeadingWidth = leadingFits ? nameLeadingWidth : 0
+	const minimumOperationNameWidth = showOperation ? minimumTextWidth : 0
 	const layout = {
-		inverseScale: screenRatio / scale,
-		nameWidth: Math.min(options.name.width + effectiveLeadingWidth, nameAvailableWidth),
+		inverseScale: 1 / scale,
+		nameWidth: Math.max(
+			Math.min(options.name.width + effectiveLeadingWidth, nameAvailableWidth),
+			minimumOperationNameWidth + effectiveLeadingWidth,
+		),
 		showSize,
 		showOperation,
-		hasSpace: true,
+		hasSpace,
 		candidateIds,
 	}
 	cache.layouts.set(element, { key, layout })

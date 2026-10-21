@@ -9,7 +9,6 @@ import CollaborationWorkspace from "./components/CollaborationWorkspace"
 import { isCollaborationWorkspace } from "../../constants"
 import { observer } from "mobx-react-lite"
 import { useMemoizedFn } from "ahooks"
-import { GuideTourElementId } from "@/pages/superMagic/components/LazyGuideTour"
 import { getWorkspaceRouteUrl } from "../../utils/route"
 import { useWorkspaceEditing } from "../../hooks/useWorkspaceEditing"
 import { useWorkspaceActionMenu } from "../../hooks/useWorkspaceActionMenu"
@@ -20,6 +19,7 @@ import { preloadCreateWorkspaceModal, preloadWorkspaceProjectsPanel } from "./pr
 import { cn } from "@/utils/cn"
 import { useCreateWorkspace } from "../CreateWorkspaceModal/useCreateWorkspace"
 import { useWorkspaceDelete } from "./useWorkspaceDelete"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 const WorkspaceProjectsPanel = lazy(() => import("./components/WorkspaceProjectsPanel"))
 
@@ -162,21 +162,21 @@ function WorkspacesMenu() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open])
 
-	// 处理input的键盘事件，确保导航键能正常工作
+	// Keep text navigation keys within the workspace name input.
 	const handleInputKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLInputElement>) => {
-			// 对于左右键、Home、End等导航键，让它们正常工作
+			// Avoid forwarding cursor navigation to the dropdown menu.
 			if (
 				e.key === "ArrowLeft" ||
 				e.key === "ArrowRight" ||
 				e.key === "Home" ||
 				e.key === "End"
 			) {
-				e.stopPropagation() // 阻止事件冒泡到Dropdown
-				return // 让默认行为正常执行
+				e.stopPropagation()
+				return
 			}
 
-			// 对于其他键，调用原来的处理函数
+			// Delegate other keys to the workspace editing hook.
 			handleWorkspaceInputKeyDown(e)
 		},
 		[handleWorkspaceInputKeyDown],
@@ -189,7 +189,7 @@ function WorkspacesMenu() {
 		},
 	)
 
-	// 当进入编辑模式时，自动选中全部文本
+	// Select the entire name when editing begins.
 	useEffect(() => {
 		if (editingWorkspaceId && inputRef.current) {
 			inputRef.current.focus()
@@ -197,14 +197,34 @@ function WorkspacesMenu() {
 		}
 	}, [editingWorkspaceId])
 
-	// 工作区dropdown的items
+	// Workspace dropdown entries.
 	const workspaceItems = useMemo(() => {
 		const items = [
 			{
 				key: "workspaceList",
 				className: "[--magic-control-item-bg-hover:transparent]",
 				label: (
-					<div className="mx-[10px] mt-[10px] max-h-[275px] overflow-y-auto rounded bg-muted p-[5px] [scrollbar-color:rgb(var(--fill-secondary-rgb)_/_var(--fill-secondary-alpha))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb]:border-none [&::-webkit-scrollbar-thumb]:bg-fill-secondary hover:[&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:rounded-sm [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1">
+					<ScrollArea
+						className="mx-[10px] mt-[10px] rounded bg-muted"
+						viewportClassName="max-h-[275px] p-[5px] [&>div]:!block"
+						viewportProps={{
+							// Let the focused viewport scroll instead of navigating the outer menu.
+							onKeyDown: (event) => {
+								if (
+									event.target === event.currentTarget &&
+									[
+										"ArrowUp",
+										"ArrowDown",
+										"PageUp",
+										"PageDown",
+										"Home",
+										"End",
+									].includes(event.key)
+								)
+									event.stopPropagation()
+							},
+						}}
+					>
 						{loading
 							? Array.from({ length: 3 }).map((_, index) => (
 									<SkeletonInput
@@ -291,7 +311,7 @@ function WorkspacesMenu() {
 										</a>
 									)
 								})}
-					</div>
+					</ScrollArea>
 				),
 			},
 			{
@@ -357,7 +377,7 @@ function WorkspacesMenu() {
 		return selectedWorkspace?.name || t("workspace.unnamedWorkspace")
 	}, [selectedWorkspace, t])
 
-	/** 点击工作区面包屑 */
+	/** Keep workspace breadcrumb clicks within the dropdown. */
 	const handleWorkspaceClick = useMemoizedFn((e: React.MouseEvent<HTMLAnchorElement>) => {
 		e.preventDefault()
 		e.stopPropagation()
@@ -373,7 +393,6 @@ function WorkspacesMenu() {
 				onOpenChange={setOpen}
 			>
 				<a
-					id={GuideTourElementId.WorkspaceBreadcrumb}
 					href={selectedWorkspace ? getWorkspaceRouteUrl(selectedWorkspace.id) : "#"}
 					className={cn(
 						"flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-foreground",

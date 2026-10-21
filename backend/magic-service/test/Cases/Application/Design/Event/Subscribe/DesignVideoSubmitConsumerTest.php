@@ -142,6 +142,15 @@ class SubmitConsumerInMemoryRepository implements DesignGenerationTaskRepository
         return $this->entity;
     }
 
+    public function findByProjectAndOutputFilePath(
+        DesignDataIsolation $dataIsolation,
+        int $projectId,
+        DesignGenerationAssetType $assetType,
+        string $relativeFilePath
+    ): ?DesignGenerationTaskEntity {
+        return null;
+    }
+
     public function findProcessingTasksAfterId(int $cursorId, int $limit): array
     {
         return [];

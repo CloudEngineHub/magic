@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@magic-admin-v2/components/ui/tooltip";
 import { cn } from "@magic-admin-v2/utils/cn";
 
 type StatusCardProps = {
@@ -34,15 +35,20 @@ export function StatusCard({
           <div className="flex min-w-0 items-center gap-1.5">
             <p className="truncate text-sm font-medium text-muted-foreground">{title}</p>
             {tooltip ? (
-              <span className="group relative inline-flex shrink-0 items-center">
-                <CircleHelp className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                <span
-                  className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 hidden w-64 -translate-x-1/2 rounded-md border bg-popover px-3 py-2 text-left text-xs font-normal leading-5 text-popover-foreground shadow-md group-hover:block"
-                  role="tooltip"
-                >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    aria-label={title}
+                    className="inline-flex shrink-0 items-center rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    type="button"
+                  >
+                    <CircleHelp className="size-3.5" aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent align="center" className="w-64 text-left" collisionPadding={8} side="top">
                   {tooltip}
-                </span>
-              </span>
+                </TooltipContent>
+              </Tooltip>
             ) : null}
           </div>
           <p className="mt-2 text-2xl font-semibold tracking-normal text-foreground">{value}</p>

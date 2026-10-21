@@ -631,7 +631,7 @@ class ThirdPartyAuthService {
 			})
 			await service
 				.get<ConfigService>("configService")
-				.setClusterConfig(deployCode, targetConfig.config)
+				.setClusterConfig(deployCode, targetConfig.config, { waitForPersistence: false })
 
 			const identityRequestOptions = {
 				...options,

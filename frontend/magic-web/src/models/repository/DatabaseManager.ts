@@ -411,6 +411,11 @@ export class DatabaseManager {
 		// 个人标签按现有账号身份独立保存；其余表沿用前一版本。
 		db.version(7).stores({ "super-user-file-tabs": "&id" })
 
+		// 首次 UTM 归因按固定记录 ID 存储；不再为已移除的创建交接状态维护冗余索引。
+		db.version(8).stores({
+			"analytics-state": "&id",
+		})
+
 		this.globalDatabase = db
 		return this.globalDatabase
 	}

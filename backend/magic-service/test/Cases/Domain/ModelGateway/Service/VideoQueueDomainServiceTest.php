@@ -657,6 +657,20 @@ class VideoQueueDomainServiceTest extends TestCase
         $this->assertTrue($operation->getRawRequest()['generation']['generate_audio']);
     }
 
+    public function testCreateOperationKeepsDraftWhenModelDeclaresDraftSwitch(): void
+    {
+        $operation = $this->createDraftOperation(true);
+
+        $this->assertTrue($operation->getRawRequest()['generation']['draft']);
+    }
+
+    public function testCreateOperationPrunesDraftWhenModelDoesNotDeclareIt(): void
+    {
+        $operation = $this->createDraftOperation(false);
+
+        $this->assertArrayNotHasKey('draft', $operation->getRawRequest()['generation']);
+    }
+
     public function testCreateOperationPreservesEnhancePromptWhenModelSupportsIt(): void
     {
         $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
@@ -1634,6 +1648,49 @@ class VideoQueueDomainServiceTest extends TestCase
             'generation' => [],
             'constraints' => [],
         ]);
+    }
+
+    /**
+     * 用同一份请求分别配「声明了 draft 开关」与「未声明」的能力配置，
+     * 验证领域层按能力裁剪样片模式参数。
+     */
+    private function createDraftOperation(bool $declareDraft): VideoQueueOperationEntity
+    {
+        $service = new VideoQueueDomainService($this->createMock(VideoQueueOperationRepositoryInterface::class));
+        $requestDTO = new CreateVideoDTO([
+            'model_id' => 'doubao-seedance-2-5-260xxx',
+            'task' => 'generate',
+            'prompt' => 'make a draft video',
+            'generation' => [
+                'draft' => true,
+            ],
+        ]);
+        $requestDTO->valid();
+
+        $generation = [
+            'duration_type' => 'range',
+            'durations' => ['min' => 4, 'max' => 30, 'step' => 1],
+            'default_duration_seconds' => 5,
+            'resolutions' => ['480p', '720p', '1080p'],
+            'default_resolution' => '720p',
+        ];
+        if ($declareDraft) {
+            $generation['draft'] = ['type' => 'switch', 'default' => false];
+        }
+
+        return $service->createOperation(
+            ModelGatewayDataIsolation::create('org-test', 'user-test'),
+            'LCnVzCkkMnVulyrz',
+            'provider-model-seedance-v25',
+            ProviderCode::VolcengineArk,
+            $requestDTO,
+            new VideoGenerationConfig([
+                'supported_inputs' => ['text_prompt'],
+                'reference_images' => ['max_count' => 0, 'reference_types' => [], 'style_supported' => false],
+                'generation' => $generation,
+                'constraints' => [],
+            ]),
+        );
     }
 
     private function createCloudswayVeoFastConfig(): VideoGenerationConfig

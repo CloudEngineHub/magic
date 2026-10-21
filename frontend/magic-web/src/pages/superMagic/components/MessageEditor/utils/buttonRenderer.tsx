@@ -76,6 +76,7 @@ export interface ButtonRendererContext {
 	selectedTopic?: Topic | null
 	selectedProject?: ProjectListItem | null
 	topicMode?: TopicMode
+	agentCode?: string | null
 	mentionPanelStore: MentionPanelStore
 	mcpButtonConfig: MCPButtonRenderConfig
 
@@ -155,6 +156,7 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 				selectedTopic={ctx.selectedTopic}
 				selectedProject={ctx.selectedProject}
 				topicMode={ctx.topicMode}
+				agentCode={ctx.agentCode}
 				showName
 				showBorder={false}
 				placement="top"
@@ -266,6 +268,7 @@ export const BUTTON_RENDERERS: Record<ToolbarButton, ButtonRenderer> = {
 					data-disabled={ctx.sendButtonDisabled}
 					data-loading={ctx.showLoading || ctx.sendButtonLoading}
 					data-queue-editing={ctx.isEditingQueueItem}
+					data-guide-anchor="message-editor-send-button"
 				>
 					{ctx.sendButtonLoading ? (
 						<Spinner className="animate-spin" size={16} />

@@ -999,7 +999,7 @@ describe("ElementManager generation target commit", () => {
 		)
 		expect(emit).toHaveBeenLastCalledWith({
 			type: "element:batchupdated",
-			data: undefined,
+			data: { elementIds: ["image-1", "image-2"] },
 		})
 	})
 

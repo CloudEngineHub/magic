@@ -5,6 +5,8 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'project_binding_conflict' => 'This project is linked to multiple skills. Repair the binding before continuing.',
+    'publish_preparation_stale' => 'The prepared skill has expired or changed. Prepare and confirm it again.',
     'import_concurrent_error' => 'Skill import concurrent error, please try again later',
     'invalid_file_format' => 'Invalid file format, only .skill or .zip formats are supported',
     'file_too_large' => 'File too large, file size cannot exceed :max_size bytes',

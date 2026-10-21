@@ -1086,6 +1086,41 @@ async def async_stat(path: Union[str, Path]) -> os.stat_result:
         raise
 
 
+async def async_lstat(path: Union[str, Path]) -> os.stat_result:
+    """
+    异步获取路径自身的状态信息，不跟随软链
+
+    与 async_stat 的区别：路径本身是软链时返回软链自己的 stat，而不是目标
+    文件的 stat。因此一次调用就能用 st_mode 判定三种状态——软链
+    （S_ISLNK）、真实文件/目录、以及由 FileNotFoundError 表示的缺失。
+    在 AGFS 这类网络挂载上，这把"是否存在 / 是否软链 / 指向哪里"的多次探测
+    收敛成一次 syscall。
+
+    例：/app/.user/.lark-cli/cache 在一次挂载上分别是"缺失"、"已是指向
+    target 的软链"或"被真实目录占用"，调用方据此决定创建、保留还是先清理。
+
+    Args:
+        path: 路径
+
+    Returns:
+        os.stat_result: 路径自身的状态信息
+
+    Raises:
+        FileNotFoundError: 路径不存在
+        OSError: 系统错误
+    """
+    try:
+        # aiofiles 未提供 lstat，按 async_readlink 的既有方式走线程池。
+        return await asyncio.to_thread(os.lstat, str(path))
+    except FileNotFoundError:
+        # 路径缺失是需要与"被真实文件占用"区分开的正常状态，交由调用方判断。
+        logger.debug(f"路径不存在: {path}")
+        raise
+    except Exception as e:
+        logger.error(f"获取路径状态失败 {path}: {e}")
+        raise
+
+
 async def async_chmod(path: Union[str, Path], mode: int) -> None:
     """
     异步修改路径权限。

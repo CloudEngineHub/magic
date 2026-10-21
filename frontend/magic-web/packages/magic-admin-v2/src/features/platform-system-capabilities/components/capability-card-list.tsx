@@ -4,24 +4,24 @@ import type { AiPower } from "@magic-admin-v2/features/platform-system-capabilit
 
 export function CapabilityCardList({
 	canEdit,
+	cardTestId,
+	configButtonTestId,
 	items,
 	listTestId,
 	onConfig,
 	onStatusChange,
-	cardTestId,
-	configButtonTestId,
-	statusSwitchTestId,
 	statusPendingIds,
+	statusSwitchTestId,
 }: {
 	canEdit: boolean
+	cardTestId?: string
+	configButtonTestId?: string
 	items: AiPower[]
 	listTestId?: string
 	onConfig: (item: AiPower) => void
 	onStatusChange: (item: AiPower, checked: boolean) => void
-	cardTestId?: string
-	configButtonTestId?: string
-	statusSwitchTestId?: string
 	statusPendingIds: ReadonlySet<string>
+	statusSwitchTestId?: string
 }) {
 	const { t } = useTranslation()
 
@@ -37,8 +37,8 @@ export function CapabilityCardList({
 						key={item.id}
 						onConfig={onConfig}
 						onStatusChange={onStatusChange}
-						statusSwitchTestId={statusSwitchTestId}
 						statusPending={statusPendingIds.has(item.code)}
+						statusSwitchTestId={statusSwitchTestId}
 					/>
 				))}
 			</div>

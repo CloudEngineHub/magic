@@ -13,6 +13,7 @@ import type { MediaResourceFullscreenPreviewItem } from "../../../fullscreen/med
 import type { LinkedEditorInputsState } from "../../../editors/connection/useLinkedEditorInputs"
 import { buildImageRequestWithLinkedEditorInputs } from "../../../editors/connection/linkedImageRequest"
 import { isImageElementContent } from "../../../../runtime/document/elementContent"
+import type { MediaEditorSubmissionController } from "../shared/useMediaEditorSubmission"
 
 interface ImageMessageEditorRenderProps {
 	readOnly?: boolean
@@ -23,6 +24,7 @@ interface ImageMessageEditorRenderProps {
 	autoFocusAtDocumentEnd?: boolean
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	isMediaResourcePreviewOpen?: boolean
+	submissionController: MediaEditorSubmissionController
 }
 
 export default function ImageMessageEditorRender(props: ImageMessageEditorRenderProps) {
@@ -34,7 +36,9 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 		autoFocusAtDocumentEnd = false,
 		onPreviewMediaResource,
 		isMediaResourcePreviewOpen = false,
+		submissionController,
 	} = props
+	const runSubmission = submissionController.run
 
 	const { t } = useCanvasDesignI18n()
 	const { selectedElements } = useCanvasSelectionUI()
@@ -111,21 +115,32 @@ export default function ImageMessageEditorRender(props: ImageMessageEditorRender
 			try {
 				config.handlers.cancelPendingDraftPersistence()
 				config.handlers.saveDraftRequest(requestParams)
-				const activeContent = elementInstance.getActiveContentData()
-				if (
-					isImageElementContent(elementInstance.getData()) &&
-					activeContent.status === "failed"
-				) {
-					await elementInstance.submitContentGeneration(generateRequest)
-				} else {
-					await elementInstance.submitGeneration(generateRequest)
-				}
+				await runSubmission({
+					initialPhase: "submitting",
+					execute: async () => {
+						const activeContent = elementInstance.getActiveContentData()
+						const submitted =
+							isImageElementContent(elementInstance.getData()) &&
+							activeContent.status === "failed"
+								? await elementInstance.submitContentGeneration(generateRequest)
+								: await elementInstance.submitGeneration(generateRequest)
+						return { accepted: submitted }
+					},
+				})
 			} finally {
 				sendingRef.current = false
 				setIsSending(false)
 			}
 		},
-		[canvas, config.handlers, config.prompt, config.selectedModelId, imageElement.id, readOnly],
+		[
+			canvas,
+			config.handlers,
+			config.prompt,
+			config.selectedModelId,
+			imageElement.id,
+			readOnly,
+			runSubmission,
+		],
 	)
 
 	useUpdateEffect(() => {

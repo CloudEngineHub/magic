@@ -26,7 +26,10 @@ export function buildDefaultAgentOptions(
   language: LanguageCode = "zh_CN",
 ): DefaultAgentOption[] {
   const options: DefaultAgentOption[] = staffList
-    .filter((staff) => staff.status && staff.is_default !== 1)
+    .filter(
+      (staff) =>
+        staff.status && staff.is_default !== 1 && staff.identifier.length > 0,
+    )
     .map((staff) => ({
       label: `${getOfficialStaffDisplayName(staff, language)} (${staff.identifier})`,
       value: staff.identifier,

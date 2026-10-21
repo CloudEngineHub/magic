@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import AudioFullscreenOverlay from "../audio/index"
 import ImageFullscreenOverlay from "../image/index"
+import VideoFullscreenPlayerOverlay from "../video/VideoFullscreenPlayerOverlay"
 import VideoPreviewContent from "./VideoPreviewContent"
 import type { MediaResourceFullscreenPreviewItem } from "./types"
 import { useCanvas } from "../../../app/providers/CanvasProvider"
@@ -26,6 +27,19 @@ export default function MediaResourceFullscreenPreview(props: MediaResourceFulls
 	}
 
 	if (resource.kind === "video") {
+		// 资产库等场景已有可直播 URL，跳过 videoPlaybackManager 的 path 解析。
+		if (resource.previewSrc) {
+			return (
+				<VideoFullscreenPlayerOverlay
+					src={resource.previewSrc}
+					isOpen
+					playbackEnabled={playbackEnabled}
+					onClose={onClose}
+					fileName={resource.fileName}
+					resourcePath={resource.path}
+				/>
+			)
+		}
 		return (
 			<VideoPreviewContent
 				resource={resource}
@@ -41,6 +55,7 @@ export default function MediaResourceFullscreenPreview(props: MediaResourceFulls
 				path={resource.path}
 				fileName={resource.fileName}
 				crop={resource.crop}
+				src={resource.previewSrc}
 				isOpen
 				onClose={onClose}
 			/>

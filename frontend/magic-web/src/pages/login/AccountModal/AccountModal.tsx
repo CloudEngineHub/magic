@@ -22,6 +22,10 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { RouteName } from "@/routes/constants"
 import { isNil } from "lodash-es"
 import { refreshAccountContextPage } from "@/broadcastChannel/eventFactory/accountContextRefresh"
+import {
+	holdHomeOnboardingPrelude,
+	releaseHomeOnboardingPrelude,
+} from "@/pages/superMagic/components/LazyGuideTour/onboardingPrelude"
 
 interface AccountModalProps {
 	onClose: () => void
@@ -79,6 +83,24 @@ function AccountModal(props: AccountModalProps) {
 			}
 
 			setLoading(true)
+
+			/*
+			 * Signing in here does not only set a token: it makes the newly added account the
+			 * active one for a page that is about to be reloaded, so that every account-scoped
+			 * store can be rebuilt from it. The new-user onboarding hangs off exactly that — the
+			 * moment the account flips, a first visit that still owes its introduction is one the
+			 * automatic run is eligible to open on — while the reload is still a network round trip
+			 * away. Its introduction spends itself on the frame it is painted, so a dialog opened
+			 * in that gap would be destroyed by the reload having been shown once and never
+			 * usable, and it could not come back: the flag that showing it writes is the same flag
+			 * that suppresses it from then on.
+			 *
+			 * Held from before the sign-in rather than at the reload, because by the reload the
+			 * dialog may already be up — the step that flips the account is several awaits earlier.
+			 * A login that fails releases it again, so nothing is left held for the session; a
+			 * login that succeeds never has to, because the reload below is what ends this module.
+			 */
+			holdHomeOnboardingPrelude("account-context-switch")
 
 			try {
 				const userService = service.get<UserService>("userService")
@@ -144,6 +166,13 @@ function AccountModal(props: AccountModalProps) {
 				refreshAccountContextPage()
 			} catch (error: unknown) {
 				console.error("login error", error)
+				/*
+				 * This login is not going to reload the page — the account context never changed —
+				 * so the onboarding has to be given the screen back. Without this, one failed
+				 * attempt would keep the introduction (and the benefits card behind it) off for the
+				 * rest of the session.
+				 */
+				releaseHomeOnboardingPrelude("account-context-switch")
 				if (
 					error &&
 					typeof error === "object" &&

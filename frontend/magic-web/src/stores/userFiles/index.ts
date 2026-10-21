@@ -38,6 +38,16 @@ interface ProjectNamesRequest {
 	promise: Promise<void>
 }
 
+export interface UserFileChangeInput {
+	operation: "add" | "delete" | "update" | string
+	file_id: string
+	file?: {
+		file_id?: string
+		parent_id?: string | number | null
+		[key: string]: unknown
+	}
+}
+
 const EMPTY_ATTACHMENTS: AttachmentItem[] = []
 const ROOT_QUERY = "root"
 const EMPTY_DIRECTORY: UserDirectorySnapshot = {
@@ -341,6 +351,43 @@ export class UserFilesStore {
 			error: null,
 		})
 		this.changeVersion += 1
+	}
+
+	/**
+	 * Apply the safe part of a user-space event and return directories that need
+	 * an authoritative MagicFS read. User events currently carry the legacy task
+	 * file DTO, so additions/updates are deliberately rehydrated instead of
+	 * guessing missing MagicFS version fields.
+	 */
+	applyUserFileChanges(
+		changes: readonly UserFileChangeInput[],
+		refreshParentIds: readonly string[] = [],
+	): { refreshParentIds: string[]; changed: boolean } {
+		const parents = new Set(refreshParentIds.map(String).filter((id) => id && id !== "0"))
+		let changed = false
+		runInAction(() => {
+			for (const change of changes) {
+				const fileId = String(change.file_id || change.file?.file_id || "")
+				if (!fileId) continue
+				const parentId = change.file?.parent_id
+				if (parentId !== undefined && parentId !== null && String(parentId) !== "0")
+					parents.add(String(parentId))
+				if (change.operation !== "delete") continue
+				changed = this.files.delete(fileId) || changed
+				this.directories.delete(fileId)
+				for (const [directoryId, directory] of this.directories) {
+					if (!directory.ids.includes(fileId)) continue
+					this.directories.set(directoryId, {
+						...directory,
+						ids: directory.ids.filter((id) => id !== fileId),
+					})
+					changed = true
+				}
+				this.attachmentViews.delete(fileId)
+			}
+			if (changed) this.changeVersion += 1
+		})
+		return { refreshParentIds: [...parents], changed }
 	}
 
 	/** 只补齐所选子树；任何子目录读取或父子关系校验失败都不返回半棵树。 */

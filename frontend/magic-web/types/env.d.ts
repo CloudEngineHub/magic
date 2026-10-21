@@ -5,6 +5,8 @@ interface ImportMetaEnv {
 	readonly MAGIC_APP_ENV?: "saas-test" | "saas-pre" | "saas-prod" | "international-prod"
 	/** 是否私有化部署 */
 	readonly MAGIC_IS_PRIVATE_DEPLOY?: "true" | "false"
+	/** 微应用开关；未配置时沿用部署默认值 */
+	readonly MAGIC_MICRO_APP_ENABLED?: "true" | "false"
 	/** WebSocket连接地址 */
 	readonly MAGIC_SOCKET_BASE_URL?: string
 	/** SSO登录地址 */

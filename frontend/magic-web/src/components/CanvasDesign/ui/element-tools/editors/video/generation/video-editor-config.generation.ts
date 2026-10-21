@@ -9,6 +9,71 @@ import type { VideoEditorConfig } from "../video-editor-config.types"
 
 type VideoGenerationConfigModel = Pick<VideoModelItem, "video_generation_config">
 
+const DRAFT_VIDEO_RESOLUTION = "480p"
+
+function intersectValues<T>(left: T[] | undefined, right: T[] | undefined): T[] | undefined {
+	if (left === undefined) return right
+	if (right === undefined) return left
+	return left.filter((value) => right.includes(value))
+}
+
+/** 将开关约束继续收窄到当前 mode/variant 的有效范围。 */
+export function intersectVideoGenerationConstraints(
+	base?: VideoGenerationConstraints,
+	restriction?: VideoGenerationConstraints,
+): VideoGenerationConstraints | undefined {
+	if (!base && !restriction) return undefined
+	const resolutions = intersectValues(base?.resolutions, restriction?.resolutions)
+	const aspectRatios = intersectValues(base?.aspect_ratios, restriction?.aspect_ratios)
+	const durations = intersectValues(base?.durations, restriction?.durations)
+	const sizes =
+		base?.sizes === undefined
+			? restriction?.sizes
+			: restriction?.sizes === undefined
+				? base.sizes
+				: base.sizes.filter((size) =>
+						restriction.sizes?.some(
+							(candidate) =>
+								candidate.value === size.value &&
+								candidate.resolution === size.resolution,
+						),
+					)
+
+	return {
+		...(resolutions !== undefined ? { resolutions } : {}),
+		...(aspectRatios !== undefined ? { aspect_ratios: aspectRatios } : {}),
+		...(durations !== undefined ? { durations } : {}),
+		...(sizes !== undefined ? { sizes } : {}),
+	}
+}
+
+/** 样片协议固定为 480p；服务端下发的其他维度约束仍继续生效。 */
+export function resolveDraftVideoGenerationConstraints(
+	constraints?: VideoGenerationConstraints,
+): VideoGenerationConstraints {
+	const declaredResolutions = constraints?.resolutions
+	return {
+		...constraints,
+		resolutions:
+			declaredResolutions === undefined
+				? [DRAFT_VIDEO_RESOLUTION]
+				: declaredResolutions.filter((resolution) => resolution === DRAFT_VIDEO_RESOLUTION),
+	}
+}
+
+export function resolveRestoredVideoResolution(
+	model: VideoGenerationConfigModel | undefined,
+	options: VideoEditorConfig["supportedResolutionOptions"],
+	previous?: string,
+): string | undefined {
+	if (previous && options.some((option) => option.value === previous)) return previous
+	const configuredDefault = model?.video_generation_config?.generation?.default_resolution
+	if (configuredDefault && options.some((option) => option.value === configuredDefault)) {
+		return configuredDefault
+	}
+	return options[0]?.value
+}
+
 function dedupeStringArray(values: string[]): string[] {
 	return Array.from(new Set(values.filter(Boolean)))
 }
@@ -67,6 +132,9 @@ function getFilteredGenerationResolutions(
 	if (generationSizes.length > 0) {
 		return dedupeStringArray(generationSizes.map((size) => size.resolution))
 	}
+	// 非空 sizes 是当前 mode/variant 的精确尺寸白名单；与 draft=480p 求交为空时
+	// 不能回退到模型顶层分辨率，否则会把本应禁用的样片开关重新放开。
+	if (constraints?.sizes && constraints.sizes.length > 0) return []
 
 	const topLevelResolutions = model?.video_generation_config?.generation?.resolutions || []
 	if (constraints?.resolutions === undefined) return dedupeStringArray(topLevelResolutions)

@@ -30,7 +30,8 @@ function TerminalDisplay({
 	const { styles, cx } = useStyles()
 	const { t } = useTranslation("super")
 	const hasExitCode = typeof exitCode === "number" && Number.isFinite(exitCode)
-	const hasError = hasExitCode && exitCode !== 0
+	const hasExecutionError = hasExitCode && exitCode < 0
+	const hasNonzeroExitCode = hasExitCode && exitCode > 0
 	// 详情分开呈现命令与输出；消息内嵌预览沿用完整终端记录和原有高度约束。
 	const content = useMemo(
 		() => (showControls ? output : formatTerminalTranscript(command, output)),
@@ -58,23 +59,25 @@ function TerminalDisplay({
 				className={cx(
 					styles.footer,
 					showControls && styles.detailFooter,
-					hasError && styles.error,
+					hasExecutionError && styles.error,
+					hasNonzeroExitCode && styles.warning,
 				)}
 				role="status"
 			>
 				{hasExitCode && (
 					<>
-						{/* Exit code 根据结果显示不同颜色 */}
-						{/* 这里只解释本次返回；后台命令仍运行时，工具也可能正常返回。 */}
+						{/* 负值是工具异常哨兵；正值表示命令已返回，仍需结合输出判断。 */}
 						<span className={styles.status}>
-							{hasError ? (
+							{hasExecutionError || hasNonzeroExitCode ? (
 								<CircleAlert size={16} aria-hidden />
 							) : (
 								<CircleCheck size={16} aria-hidden />
 							)}
-							{hasError
+							{hasExecutionError
 								? t("terminal.returnedWithError")
-								: t("terminal.returnedNormally")}
+								: hasNonzeroExitCode
+									? t("terminal.returnedWithNonzeroExitCode")
+									: t("terminal.returnedNormally")}
 						</span>
 						<span
 							className={cx(styles.exitCode, showControls && styles.detailExitCode)}

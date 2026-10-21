@@ -45,8 +45,8 @@ vi.mock("@/components/base", () => ({
 	MagicDatePicker: () => <div data-testid="date-picker" />,
 }))
 
-vi.mock("@/components/base/MagicSwitch", () => ({
-	MagicSwitch: ({
+vi.mock("@/components/business/AccountSetting/pages/ScheduledTasks/components/FormSwitch", () => ({
+	FormSwitch: ({
 		checked,
 		onChange,
 	}: {

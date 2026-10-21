@@ -32,6 +32,16 @@ interface SkillMarketRepositoryInterface
     public function findLatestPublishedBySkillCodes(array $skillCodes): array;
 
     /**
+     * 批量查询市场在架（已发布且未隐藏）的 Skill code.
+     *
+     * 与市场货架列表保持同一可见口径：publish_status = PUBLISHED 且 is_hidden = false。
+     *
+     * @param array<string> $skillCodes
+     * @return array<string> 在架的市场 skill_code 列表
+     */
+    public function findPublishedSkillCodes(array $skillCodes): array;
+
+    /**
      * 根据 skill_code 更新所有市场技能的发布状态（不限制当前状态）.
      *
      * @param string $skillCode Skill code

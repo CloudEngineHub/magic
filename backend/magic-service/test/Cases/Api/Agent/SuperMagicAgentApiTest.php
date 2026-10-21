@@ -1226,6 +1226,30 @@ class SuperMagicAgentApiTest extends AbstractApiTest
         $this->assertEquals(1000, $detailResponse['code']);
         $this->assertEquals('agents/updated.zip', $detailResponse['data']['file_key']);
 
+        // 部分更新 Logo 时，未提交的字段必须保持不变。
+        $partialLogoResponse = $this->put(
+            self::BASE_URI . '/' . $agentCode,
+            [
+                'icon' => [
+                    'type' => 'Image',
+                    'value' => 'agents/updated-logo.png',
+                ],
+                'icon_type' => 2,
+            ],
+            $this->getCommonHeaders()
+        );
+        $this->assertEquals(1000, $partialLogoResponse['code'], $partialLogoResponse['message'] ?? '');
+
+        $detailResponse = $this->get(
+            self::BASE_URI . '/' . $agentCode,
+            [],
+            $this->getCommonHeaders()
+        );
+        $this->assertEquals('更新后的员工名称', $detailResponse['data']['name_i18n']['zh_CN']);
+        $this->assertEquals('Updated Agent Description', $detailResponse['data']['description_i18n']['en_US']);
+        $this->assertNotEmpty($detailResponse['data']['prompt']);
+        $this->assertEquals('agents/updated.zip', $detailResponse['data']['file_key']);
+
         // 测试更新不存在的员工
         $notFoundResponse = $this->put(
             self::BASE_URI . '/non_existent_agent_code_12345',

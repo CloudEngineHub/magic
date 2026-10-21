@@ -13,10 +13,8 @@ import {
 import { useTranslation } from "react-i18next"
 import { type Topic, TaskStatus, ProjectListItem } from "../../pages/Workspace/types"
 import TopicSharePopover from "../TopicSharePopover"
-import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { useMemoizedFn, useMount } from "ahooks"
+import { useMemoizedFn } from "ahooks"
 import MagicModal from "@/components/base/MagicModal"
-import { GuideTourElementId } from "../../components/LazyGuideTour"
 import { observer } from "mobx-react-lite"
 import { superMagicStore } from "../../stores"
 import { computed } from "mobx"
@@ -83,6 +81,7 @@ interface MessageHeaderProps {
 	topicActions: MessageHeaderTopicActions
 	/** Hide mode tag in topic history list rows */
 	hideTopicListModeIcon?: boolean
+	hideTopicTypeFilter?: boolean
 	historyTriggerMode?: "dropdown" | "layout"
 	isHistoryPanelOpen?: boolean
 	onToggleHistoryPanel?: () => void
@@ -116,6 +115,7 @@ interface MessageHeaderTopicHistoryPanelProps {
 	onExpandConversationPanel?: () => void
 	/** Hide mode tag in topic history list rows */
 	hideTopicListModeIcon?: boolean
+	hideTopicTypeFilter?: boolean
 	onClose?: () => void
 	closeButtonRef?: RefObject<HTMLButtonElement | null>
 }
@@ -292,6 +292,7 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 	isConversationPanelCollapsed = false,
 	onExpandConversationPanel,
 	hideTopicListModeIcon = false,
+	hideTopicTypeFilter = false,
 	onClose,
 	onCollapse,
 	isPanelVisible,
@@ -345,6 +346,7 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 			onArchiveTopic={topicActions.archiveTopic}
 			onUnarchiveTopic={topicActions.unarchiveTopic}
 			hideTopicListModeIcon={hideTopicListModeIcon}
+			hideTopicTypeFilter={hideTopicTypeFilter}
 			hideCreateTopicButton={shouldHideTopicEntry}
 			hideDeleteTopicButton={shouldHideTopicEntry}
 			onClose={onClose}
@@ -367,6 +369,7 @@ function MessageHeader({
 	topicStore,
 	topicActions,
 	hideTopicListModeIcon = false,
+	hideTopicTypeFilter = false,
 	historyTriggerMode = "dropdown",
 	isHistoryPanelOpen = false,
 	onToggleHistoryPanel,
@@ -547,13 +550,6 @@ function MessageHeader({
 		}
 	})
 
-	useMount(() => {
-		pubsub.publish(
-			PubSubEvents.GuideTourElementReady,
-			GuideTourElementId.MessageHeaderTopicGroup,
-		)
-	})
-
 	function renderHistoryTrigger(placement: "bottomRight" | "leftBottom") {
 		return (
 			<MessageHeaderHistoryControl
@@ -588,6 +584,7 @@ function MessageHeader({
 					placement,
 					onDropdownOpenChange: handleTopicHistoryDropdownOpenChange,
 					hideTopicListModeIcon,
+					hideTopicTypeFilter,
 					hideCreateTopicButton: shouldHideTopicEntry,
 					hideDeleteTopicButton: shouldHideTopicEntry,
 				}}
@@ -776,8 +773,8 @@ function MessageHeader({
 								{!shouldHideTopicEntry ? (
 									<div
 										className="flex items-center gap-1"
-										id={GuideTourElementId.MessageHeaderTopicGroup}
 										data-testid="message-header-topic-group"
+										data-guide-anchor="message-header-topic-group"
 									>
 										<MagicTooltip title={t("messageHeader.newTopic")}>
 											<span>

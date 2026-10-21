@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { Building2, ChevronRight, UsersRound } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@magic-admin-v2/components/ui/popover"
 import { cn } from "@magic-admin-v2/utils/cn"
@@ -18,13 +19,17 @@ import type {
 } from "@magic-admin-v2/features/platform-publish-review/types"
 
 export function NameCell({
+	copyValue,
 	fallbackIcon,
 	name,
 	secondary,
+	secondaryCopyValue,
 }: {
+	copyValue?: string
 	fallbackIcon: ReactNode
 	name: string
 	secondary?: string
+	secondaryCopyValue?: string
 }) {
 	return (
 		<div className="flex h-10 min-w-0 items-center gap-3">
@@ -32,8 +37,22 @@ export function NameCell({
 				{fallbackIcon}
 			</div>
 			<div className="min-w-0">
-				<div className="truncate font-medium text-foreground">{name}</div>
-				{secondary ? (
+				{copyValue ? (
+					<CopyableValue
+						className="max-w-full font-sans text-sm font-medium text-foreground"
+						displayValue={name}
+						value={copyValue}
+					/>
+				) : (
+					<div className="truncate font-medium text-foreground">{name}</div>
+				)}
+				{secondaryCopyValue ? (
+					<CopyableValue
+						className="max-w-full font-sans text-xs text-muted-foreground"
+						displayValue={secondary}
+						value={secondaryCopyValue}
+					/>
+				) : secondary ? (
 					<div className="truncate text-xs text-muted-foreground">{secondary}</div>
 				) : null}
 			</div>
@@ -47,9 +66,11 @@ export function OrganizationCell({ code, name }: { code?: string; name?: string 
 	return (
 		<div className="flex h-10 min-w-0 flex-col justify-center">
 			<div className="truncate text-sm text-foreground">{name || t("common.emptyValue")}</div>
-			<div className="truncate text-xs text-muted-foreground">
-				{t("publishReview.column.organizationCode")}: {code || t("common.emptyValue")}
-			</div>
+			<CopyableValue
+				className="max-w-full font-sans text-xs text-muted-foreground"
+				label={t("publishReview.column.organizationCode")}
+				value={code}
+			/>
 		</div>
 	)
 }
@@ -67,6 +88,16 @@ export function ClampedText({ value }: { value: string }) {
 
 export function TableText({ value }: { value?: string }) {
 	return <span className="text-sm text-muted-foreground">{value || "-"}</span>
+}
+
+export function CopyableTableText({ value }: { value?: string }) {
+	return (
+		<CopyableValue
+			className="max-w-full font-sans text-sm text-muted-foreground"
+			displayValue={value || "-"}
+			value={value}
+		/>
+	)
 }
 
 export function PublishTargetCell({

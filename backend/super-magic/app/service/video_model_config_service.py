@@ -18,6 +18,11 @@ class VideoModelConfigService:
 
     _GENERATION_CONSTRAINT_KEYS = ("duration_type", "durations", "resolutions", "aspect_ratios")
 
+    # generate_audio 也是 switch 型能力，但它已经由 VideoAudioPolicyResolver 翻译成
+    # audio_output / native_mute / mute_fallback 这套专用词汇，不能再按通用 switch 渲染，
+    # 否则同一个能力在上下文里会出现两套说法。
+    _DEDICATED_SWITCH_KEYS = ("generate_audio",)
+
     _INPUT_FIELD_MAP = {
         "reference_images": "reference_image_paths",
         "reference_videos": "reference_video_paths",
@@ -432,6 +437,35 @@ class VideoModelConfigService:
         return lines
 
     @staticmethod
+    def _build_capability_lines(video_generation_config: Dict[str, Any]) -> list[str]:
+        """把 switch 型生成能力渲染成 <capability> 子节点。
+
+        列表型约束（resolutions / aspect_ratios / durations）已能由属性与 <mode> 表达，
+        开关型能力没有对应的列表词汇：能力层声明了、投影却看不见，Agent 就无从知道它存在。
+        规则描述直接取能力层声明的 description，因此新增模型只需改能力层，投影不用动。
+        """
+        generation = VideoModelConfigService._get_generation_config(video_generation_config)
+        lines: list[str] = []
+        for key, capability in generation.items():
+            if key in VideoModelConfigService._DEDICATED_SWITCH_KEYS:
+                continue
+            if not isinstance(capability, dict) or capability.get("type") != "switch":
+                continue
+
+            attrs: dict[str, Any] = {"name": key, "type": "switch"}
+            default = capability.get("default")
+            if isinstance(default, bool):
+                attrs["default"] = str(default).lower()
+            attrs.update(
+                VideoModelConfigService._format_generation_constraint_attrs(capability.get("constraints"))
+            )
+            description = capability.get("description")
+            if isinstance(description, str) and description.strip():
+                attrs["desc"] = description.strip()
+            lines.append(f"    <capability {VideoModelConfigService._format_xml_attrs(attrs)}/>")
+        return lines
+
+    @staticmethod
     def build_video_model_info(video_model_id: str, video_generation_config: Dict[str, Any], changed: bool = False) -> str:
         """构建紧凑视频模型信息，供 horizon 注入。"""
         if not video_model_id:
@@ -463,13 +497,17 @@ class VideoModelConfigService:
         ).items():
             _attr(attr_name, attr_value)
 
-        mode_lines = VideoModelConfigService._build_input_mode_lines(video_generation_config)
-        if not mode_lines:
+        # capability 是生成级开关，mode 是输入模式，前者先输出。
+        child_lines = [
+            *VideoModelConfigService._build_capability_lines(video_generation_config),
+            *VideoModelConfigService._build_input_mode_lines(video_generation_config),
+        ]
+        if not child_lines:
             lines.append("  />")
             return "\n".join(lines)
 
         lines.append("  >")
-        lines.extend(mode_lines)
+        lines.extend(child_lines)
         lines.append("  </video>")
         return "\n".join(lines)
 

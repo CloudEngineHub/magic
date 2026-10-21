@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import type { TFunction } from "../../../public/i18n-types"
 import type { ElementToolResolution } from "../../../runtime/element-tools"
 import type { ElementBottomToolbarSection } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbar"
 import { ElementBottomToolbar } from "../../canvas-editor/element-bottom-toolbar/ElementBottomToolbar"
@@ -7,7 +8,7 @@ import BottomVersionControlsRenderer from "../renderers/BottomVersionControlsRen
 
 interface ElementToolBottomSurfaceProps {
 	tools: readonly ElementToolResolution[]
-	t: (key: string, fallback?: string | { defaultValue?: string }) => string
+	t: TFunction
 	elementId?: string | null
 }
 

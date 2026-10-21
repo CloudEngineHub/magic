@@ -1,4 +1,4 @@
-import { FileAccessProvider } from "@/pages/superMagic/providers/FileAccessProvider"
+import { FileAccessProvider as FilePermissionsProvider } from "@/pages/superMagic/providers/FileAccessProvider"
 import { IconFolder, IconGitFork, IconMaximize } from "@tabler/icons-react"
 import { useMemoizedFn, useDebounceEffect, useDeepCompareEffect, useUpdateEffect } from "ahooks"
 import { useIsMobile } from "@/hooks/useIsMobile"
@@ -52,7 +52,7 @@ import SuperMagicService from "@/pages/superMagic/services"
 import { resolveMobileAudioShareCreatedByBadgeBottom } from "./utils/audio-share-topbar-offset"
 import { resolveShareErrorBackNavigation } from "./utils/share-error-back"
 import usePureShareDocumentFlow from "./hooks/usePureShareDocumentFlow"
-import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
+import { FileAccessProvider as FileAccessIdentityProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
 // import { fixJsonPropertyNames } from "../flow/components/FlowAssistant/utils/streamUtils"
 
@@ -849,7 +849,7 @@ function Share() {
 	}
 
 	return (
-		<FileAccessProvider value={shareAccess}>
+		<FileAccessIdentityProvider value={shareAccess}>
 			<div
 				className={cn(
 					shareDisplayOptions.documentFlowFullscreen
@@ -1130,14 +1130,14 @@ function Share() {
 					style={{ bottom: createdByBadgeBottom }}
 				/>
 			</div>
-		</FileAccessProvider>
+		</FileAccessIdentityProvider>
 	)
 }
 
 export default function FileAccessPage() {
 	return (
-		<FileAccessProvider>
+		<FilePermissionsProvider>
 			<Share />
-		</FileAccessProvider>
+		</FilePermissionsProvider>
 	)
 }

@@ -25,6 +25,11 @@ import {
 import { createElementFromElementConnection } from "../../../runtime/interaction/connection/elementConnectionCreation"
 import { createElementFromSelectionConnection } from "../../../runtime/interaction/connection/selectionConnectionCreation"
 import {
+	canCreateVideoEditFromAudioConnection,
+	createVideoEditFromAudioConnection,
+	getVideoEditConnectionCreateSize,
+} from "../../../runtime/interaction/connection/videoEditConnectionCreation"
+import {
 	getConnectionAssociationTargetKind,
 	registerConnectionMenuAssociationSeed,
 } from "../../../runtime/interaction/connection/connectionMenuAssociationSeed"
@@ -621,6 +626,30 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 				},
 			})
 		}
+		if (canCreateVideoEditFromAudioConnection(canvas, connectionMenuContext.origin)) {
+			items.push({
+				id: "connection-add-merge-storyboard",
+				label: translate("videoEditNode.mergeStoryboard", "合并分镜"),
+				icon: Film,
+				onClick: () => {
+					if (!canvas || connectionMenuContext.origin.kind !== "element") return
+					const currentOrigin = connectionMenuContext.origin
+					if (!canCreateVideoEditFromAudioConnection(canvas, currentOrigin)) {
+						closeConnectionMenu()
+						return
+					}
+					const size = getVideoEditConnectionCreateSize()
+					const point = resolveCreateTopLeftPoint(connectionMenuContext, size)
+					closeConnectionMenu()
+					createVideoEditFromAudioConnection({
+						canvas,
+						origin: currentOrigin,
+						x: point.x,
+						y: point.y,
+					})
+				},
+			})
+		}
 		return items
 	}, [
 		canvas,
@@ -632,6 +661,7 @@ export function ConnectionMenuProvider(props: PropsWithChildren<unknown>) {
 		executeConnectionMenuAction,
 		resolveOriginSnapshot,
 		resolveSelectionSnapshot,
+		resolveCreateTopLeftPoint,
 		t,
 		videoModelList,
 	])

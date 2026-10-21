@@ -32,6 +32,10 @@ vi.mock("@/utils/devices", () => ({
 	isNoHoverCoarsePointer: () => deviceMocks.isNoHoverCoarsePointer,
 }))
 
+vi.mock("@/services/analytics", () => ({
+	analyticsService: { report: vi.fn() },
+}))
+
 vi.mock("@/apis", () => ({
 	FUNCTION_PERMISSION_CODE: {
 		MicroAppSharePassword: "micro_app.share_password",
@@ -45,6 +49,9 @@ vi.mock("@/apis", () => ({
 	},
 	SuperMagicApi: {
 		getShareInfoByCode: vi.fn().mockResolvedValue(null),
+		createShareTopic: vi.fn(),
+		createOrUpdateShareResource: vi.fn(),
+		cancelShareResource: vi.fn(),
 	},
 }))
 

@@ -7,6 +7,7 @@ import { StyleManager } from "../StyleManager"
 import { CommandHistory } from "../../core/CommandHistory"
 import { ElementSelector } from "../../features/ElementSelector"
 import { EditorBridge } from "../../core/EditorBridge"
+import { markSourceNodes, removeRuntimeNodes } from "../../utils/sourceNodes"
 
 describe("StyleManager", () => {
 	let styleManager: StyleManager
@@ -95,6 +96,28 @@ describe("StyleManager", () => {
 			await styleManager.redo()
 			expect(document.querySelector("#source-copy")).toBeTruthy()
 			expect(document.querySelectorAll("[id='source-copy']")).toHaveLength(1)
+		})
+
+		it("does not promote runtime descendants when duplicating a source node", async () => {
+			container.innerHTML = "<section id='source'><span>Content</span></section>"
+			markSourceNodes(document)
+			const source = container.querySelector("#source") as HTMLElement
+			const dynamic = document.createElement("em")
+			dynamic.className = "runtime-child"
+			dynamic.textContent = "Dynamic"
+			source.appendChild(dynamic)
+
+			await styleManager.duplicateElement("#source")
+			const duplicate = container.querySelector("#source-copy") as HTMLElement
+			expect(duplicate.querySelector(".runtime-child")).not.toBeNull()
+			expect(
+				duplicate.querySelector(".runtime-child")?.hasAttribute("data-magic-source-node"),
+			).toBe(false)
+
+			removeRuntimeNodes(document)
+
+			expect(duplicate.querySelector(".runtime-child")).toBeNull()
+			document.documentElement.removeAttribute("data-magic-source-node")
 		})
 	})
 
@@ -713,6 +736,32 @@ describe("StyleManager", () => {
 			const restoredElement = container.querySelector("#test")
 			expect(restoredElement).not.toBeNull()
 			expect(restoredElement?.textContent).toBe("Content")
+		})
+
+		it("keeps runtime descendants unmarked when restoring a deleted node", async () => {
+			container.innerHTML = "<div><span id='test'>Content</span></div>"
+			markSourceNodes(document)
+			const element = container.querySelector("#test") as HTMLElement
+			const dynamic = document.createElement("em")
+			dynamic.className = "runtime-child"
+			dynamic.textContent = "Dynamic"
+			element.appendChild(dynamic)
+
+			await styleManager.deleteElement("span#test")
+			await styleManager.undo()
+
+			const restoredElement = container.querySelector("#test") as HTMLElement
+			expect(restoredElement.querySelector(".runtime-child")).not.toBeNull()
+			expect(
+				restoredElement
+					.querySelector(".runtime-child")
+					?.hasAttribute("data-magic-source-node"),
+			).toBe(false)
+
+			removeRuntimeNodes(document)
+
+			expect(container.querySelector("#test .runtime-child")).toBeNull()
+			document.documentElement.removeAttribute("data-magic-source-node")
 		})
 
 		it.skipIf(typeof window !== "undefined" && !HTMLCanvasElement.prototype.getContext)(

@@ -58,12 +58,12 @@ export type RelativeTimeTabProps = {
 	supportedUnits: readonly RelativeUnit[]
 	/** 当前面板对外的时间范围值，用于判断按月选中状态。 */
 	timeRangeValue: TimeRangeValue | null | undefined
-	/** 是否显示按整点对齐开关；小时精度下范围始终按小时边界处理，无需额外切换。 */
-	showAlignToUnit: boolean
 	/** 切换是否按单位起点对齐。 */
 	onAlignToUnitChange: (value: boolean) => void
 	/** 提交当前自定义相对范围。 */
 	onCustomRelativeApply: () => void
+	/** 关闭 inline 面板且不提交当前编辑。 */
+	onCancel: () => void
 	/** 更新自定义相对范围的时间单位。 */
 	onCustomUnitChange: (unit: RelativeUnit) => void
 	/** 控制自定义时间单位菜单的展开状态。 */
@@ -92,9 +92,9 @@ export function RelativeTimeTab({
 	standardPresetOptions,
 	supportedUnits,
 	timeRangeValue,
-	showAlignToUnit,
 	onAlignToUnitChange,
 	onCustomRelativeApply,
+	onCancel,
 	onCustomUnitChange,
 	onCustomUnitMenuOpenChange,
 	onCustomValueChange,
@@ -121,14 +121,14 @@ export function RelativeTimeTab({
 						{currentRangeText}
 					</div>
 				</div>
-				{!isRelativeDayOnly && showAlignToUnit ? (
+				{!isRelativeDayOnly ? (
 					<div className="flex shrink-0 items-center gap-2">
 						<span className="text-xs font-medium text-muted-foreground">
 							{t("timeFilter.alignToUnit")}
 						</span>
 						<Switch
-							data-testid={testId("align-switch")}
 							checked={alignToUnit}
+							data-testid={testId("align-switch")}
 							onCheckedChange={onAlignToUnitChange}
 						/>
 					</div>
@@ -146,12 +146,11 @@ export function RelativeTimeTab({
 								isInline && "space-y-2",
 								!isInline &&
 									!isRelativeDayOnly &&
-									showAlignToUnit &&
 									"grid gap-2 sm:grid-cols-[56px_1fr] sm:items-start",
 							)}
 							key={group.key}
 						>
-							{!isRelativeDayOnly && showAlignToUnit ? (
+							{!isRelativeDayOnly ? (
 								<div
 									className={cn(
 										"text-sm font-medium text-muted-foreground",
@@ -270,8 +269,8 @@ export function RelativeTimeTab({
 							<button
 								aria-expanded={customUnitMenuOpen}
 								aria-haspopup="listbox"
-								data-testid={testId("custom-unit-trigger")}
 								className="flex h-8 w-28 max-w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-sm shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								data-testid={testId("custom-unit-trigger")}
 								onClick={() => onCustomUnitMenuOpenChange(!customUnitMenuOpen)}
 								type="button"
 							>
@@ -316,14 +315,21 @@ export function RelativeTimeTab({
 							) : null}
 						</div>
 					</div>
-					<Button
-						className="w-fit"
-						data-testid={testId("custom-apply-button")}
-						onClick={onCustomRelativeApply}
-						size="sm"
-					>
-						{t("timeFilter.confirm")}
-					</Button>
+					<div className="flex items-center gap-2">
+						{isInline ? (
+							<Button onClick={onCancel} size="sm" variant="outline">
+								{t("timeFilter.cancel")}
+							</Button>
+						) : null}
+						<Button
+							className="w-fit"
+							data-testid={testId("custom-apply-button")}
+							onClick={onCustomRelativeApply}
+							size="sm"
+						>
+							{t("timeFilter.confirm")}
+						</Button>
+					</div>
 				</div>
 			</section>
 		</div>

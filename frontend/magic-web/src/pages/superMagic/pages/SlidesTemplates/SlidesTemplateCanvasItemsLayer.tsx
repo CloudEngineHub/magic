@@ -1,7 +1,8 @@
 import { useReducedMotion } from "framer-motion"
 import { memo, useMemo, type CSSProperties, type RefObject } from "react"
 import type { OptionItem } from "@/pages/superMagic/components/MainInputContainer/panels/types"
-import type { TemplateCanvasItem } from "./canvasLayout"
+import { HomeOnboardingAnchor } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
+import type { TemplateCanvasGuideAnchor, TemplateCanvasItem } from "./canvasLayout"
 import {
 	EAGER_TEMPLATE_COVER_COUNT,
 	getTemplateKey,
@@ -20,6 +21,7 @@ interface SlidesTemplateCanvasItemsLayerProps {
 	enableIdleLoops: boolean
 	favoritePendingCodes?: ReadonlySet<string>
 	focusedAnchorTileId: string
+	guideAnchor: TemplateCanvasGuideAnchor | null
 	isCanvasFocusSettling: boolean
 	isCanvasMoving: boolean
 	isIdleAnimationActive: boolean
@@ -46,6 +48,7 @@ function SlidesTemplateCanvasItemsLayer({
 	enableIdleLoops,
 	favoritePendingCodes,
 	focusedAnchorTileId,
+	guideAnchor,
 	isCanvasFocusSettling,
 	isCanvasMoving,
 	isIdleAnimationActive,
@@ -114,6 +117,25 @@ function SlidesTemplateCanvasItemsLayer({
 			className="absolute left-1/2 top-1/2 size-0 will-change-transform"
 			style={contentStyle}
 		>
+			{/*
+			 * The box an onboarding run frames. It carries no styling and takes no pointer events —
+			 * it exists only to be measured, and it sits inside the transformed content so its
+			 * measured box already accounts for the pan and the zoom. It is placed exactly like the
+			 * card it stands for, so the tour's frame and the card coincide.
+			 */}
+			{guideAnchor ? (
+				<div
+					aria-hidden="true"
+					data-guide-anchor={HomeOnboardingAnchor.SlidesTemplateFeaturedCard}
+					data-testid="slides-template-canvas-guide-anchor"
+					className="pointer-events-none absolute"
+					style={{
+						height: guideAnchor.height,
+						transform: `translate3d(${guideAnchor.x}px, ${guideAnchor.y}px, 0) translate(-50%, -50%)`,
+						width: guideAnchor.width,
+					}}
+				/>
+			) : null}
 			{Array.from(columnItems.entries()).map(([column, items]) => (
 				<SlidesTemplateCanvasLoopColumn
 					key={column}

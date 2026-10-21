@@ -2,12 +2,7 @@
 
 declare(strict_types=1);
 /**
- * This file is part of Hyperf.
- *
- * @link     https://www.hyperf.io
- * @document https://hyperf.wiki
- * @contact  group@hyperf.io
- * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ * Copyright (c) The Magic , Distributed under the software license
  */
 
 namespace Hyperf\Engine\WebSocket;
@@ -82,12 +77,15 @@ class WebSocket implements WebSocketInterface
                 }
             }
         } finally {
-            $callback = $this->events[static::ON_CLOSE];
-            $callback($this->connection, $this->connection->getFd());
+            try {
+                $callback = $this->events[static::ON_CLOSE];
+                // close 后系统 fd 可能为 -1；Socket ID 仍能定位握手时保存的连接映射。
+                $callback($this->connection, $this->connection->getId());
+            } finally {
+                $this->connection = null;
+                $this->events = [];
+            }
         }
-
-        $this->connection = null;
-        $this->events = [];
     }
 
     /**

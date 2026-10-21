@@ -300,6 +300,7 @@ const MicroAppMobileConversation = observer(function MicroAppMobileConversation(
 			</MagicPopup>
 
 			<MicroAppTopicPicker
+				projectId={selectedProject?.id || ""}
 				open={topicPickerOpen}
 				topics={topicStore.topics}
 				selectedTopicId={selectedTopic?.id}

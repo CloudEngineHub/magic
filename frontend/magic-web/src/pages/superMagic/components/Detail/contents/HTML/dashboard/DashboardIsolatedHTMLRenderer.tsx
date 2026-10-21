@@ -367,7 +367,7 @@ function IsolatedHTMLRenderer({
 				title="HTML Content"
 				src={htmlSandboxShellUrl}
 				sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads allow-pointer-lock allow-orientation-lock allow-presentation"
-				allow="fullscreen; autoplay; picture-in-picture; encrypted-media; web-share; clipboard-write"
+				allow="fullscreen; autoplay; microphone; camera; picture-in-picture; encrypted-media; web-share; clipboard-write"
 				allowFullScreen
 				data-testid="html-content-iframe"
 			/>

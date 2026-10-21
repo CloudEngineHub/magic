@@ -33,6 +33,7 @@ return [
         'weather_forecast' => '天气查询',
         'follow_up_questions' => '追加提问',
         'ai_search_model' => 'AI 搜索模型',
+        'volcengine_ark_assets' => '火山方舟素材服务',
     ],
     'description' => [
         'ocr' => '本能力覆盖平台所有 OCR 应用场景，精准捕捉并提取 PDF、扫描件及各类图片中的文字信息。',
@@ -62,5 +63,6 @@ return [
         'weather_forecast' => '本能力覆盖平台天气数据查询的应用场景，提供精准的天气预报信息，支持多城市、多天数查询。',
         'follow_up_questions' => '本能力覆盖对话场景中根据历史上下文生成后续追问建议的应用场景，用于引导用户继续深入探讨。',
         'ai_search_model' => '本能力统一管理平台 AI 搜索场景中使用的大语言模型。',
+        'volcengine_ark_assets' => '本能力统一管理火山方舟素材库（Assets）接口的访问凭证，用于将参考素材同步为火山方舟素材并复用其素材 ID。',
     ],
 ];

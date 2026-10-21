@@ -103,7 +103,7 @@ const OrganizationItem = observer((props: OrganizationItemProps) => {
 	})
 
 	const currentOrganizationInfo = useMemo(() => {
-		return account.teamshareOrganizations.find(
+		return account.teamshareOrganizations?.find(
 			(_organization) =>
 				_organization.organization_code === organization?.third_platform_organization_code,
 		)

@@ -146,7 +146,7 @@ export interface UploadEvents {
 	onError: (taskId: string, error: Error) => void
 	onRetry: (taskId: string, retryCount: number) => void
 	/** 当任务结束时调用（错误码 43200） */
-	onTaskEnd?: (sessionId: string) => void
+	onTaskEnd?: (sessionId: string, code?: number) => void | Promise<void>
 	/** 当网络离线时调用，提示用户数据已保存 */
 	onNetworkOffline?: (sessionId: string, pendingChunksCount: number) => void
 	/** 当网络恢复在线时调用，包含待上传分片数量 */

@@ -145,6 +145,10 @@ describe("replaceCanvasFilePathReferences", () => {
 								inputs: {
 									frames: [{ uri: "./images/source.png" }],
 									reference_images: [{ uri: "/images/source.png" }],
+									draft_task: {
+										video_id: "draft-video-id",
+										uri: "/画布A/images/source.png",
+									},
 								},
 							},
 						},
@@ -180,6 +184,7 @@ describe("replaceCanvasFilePathReferences", () => {
 					inputs: {
 						frames: Array<{ uri: string }>
 						reference_images: Array<{ uri: string }>
+						draft_task: { video_id: string; uri: string }
 					}
 				}
 			}>
@@ -210,6 +215,10 @@ describe("replaceCanvasFilePathReferences", () => {
 		expect(video.contents[0]?.generateVideoRequest.inputs.reference_images).toEqual([
 			{ uri: "/images/source.png" },
 		])
+		expect(video.contents[0]?.generateVideoRequest.inputs.draft_task).toEqual({
+			video_id: "draft-video-id",
+			uri: "./images/renamed.png",
+		})
 	})
 
 	it("returns the original document when only another workspace resource matches by name", () => {

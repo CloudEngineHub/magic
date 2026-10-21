@@ -215,7 +215,8 @@
 			"browseFiles": "浏览文件",
 			"browseFolder": "浏览文件夹",
 			"browseHint": "或点击浏览文件/文件夹（一次最多导入 1 项，文件仅支持 .zip 或 .skill 格式）",
-			"dragDrop": "拖拽文件或文件夹到此处"
+			"dragDrop": "拖拽文件或文件夹到此处",
+			"fileRequirement": "上传文件须为 .zip 或 .skill 格式"
 		},
 		"identity": {
 			"description": "描述",

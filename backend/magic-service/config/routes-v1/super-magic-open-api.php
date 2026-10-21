@@ -4,6 +4,7 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
+use App\Interfaces\Contact\Facade\Open\MagicContactSandboxApi;
 use App\Interfaces\MCP\Facade\OpenApi\MCPAuthorizationCredentialApi;
 use App\Interfaces\Middleware\Auth\ApiKeyMiddleware;
 use App\Interfaces\Middleware\Auth\SandboxUserAuthMiddleware;
@@ -61,8 +62,13 @@ Router::addGroup(
         Router::get('/version-check', [InternalSandboxApi::class, 'checkSandboxVersion']);
         Router::post('/follow-up-suggestions', [FollowUpSuggestionApi::class, 'report']);
 
+        Router::get('/contact/users/search', [MagicContactSandboxApi::class, 'searchUsers']);
+        Router::get('/contact/departments/search', [MagicContactSandboxApi::class, 'searchDepartments']);
+
         // 文件管理相关
         Router::addGroup('/file', static function () {
+            Router::post('/upload', [OpenFileApi::class, 'uploadProjectFile']);
+            Router::post('/project/batch-save', [OpenFileApi::class, 'batchSaveProjectFiles']);
             // 创建文件版本
             Router::post('/versions', [FileApi::class, 'createFileVersion']);
             // 获取文件最新版本
@@ -140,6 +146,15 @@ Router::addGroup(
 
         // 技能相关
         Router::addGroup('/skills', static function () {
+            Router::post('', [SkillSandboxApi::class, 'create']);
+            Router::get('/by-project/{projectId}', [SkillSandboxApi::class, 'byProject']);
+            Router::get('/{code}', [SkillSandboxApi::class, 'detail']);
+            Router::get('/{code}/publish/prefill', [SkillSandboxApi::class, 'prefill']);
+            Router::get('/{code}/versions', [SkillSandboxApi::class, 'versions']);
+            Router::post('/{code}/publish/prepare', [SkillSandboxApi::class, 'prepare']);
+            Router::get('/{code}/publish/prepare/check', [SkillSandboxApi::class, 'checkPreparation']);
+            Router::post('/{code}/publish', [SkillSandboxApi::class, 'publish']);
+            Router::get('/{code}/publish/check', [SkillSandboxApi::class, 'checkPublish']);
             // 获取用户技能列表
             Router::post('/queries', [SkillSandboxApi::class, 'queries']);
             // 批量查询当前用户技能的最新已发布当前版本
@@ -183,6 +198,10 @@ Router::addGroup(
         // 数字员工相关
         Router::addGroup('/agents', static function () {
             Router::get('/featured/sort-list', [OpenSuperMagicAgentApi::class, 'sortListQueries']);
+            // Hire a digital employee from the market.
+            Router::post('/{code}/hire', [OpenSuperMagicAgentApi::class, 'hireAgent']);
+            // Fire a digital employee using the existing deletion rules.
+            Router::post('/{code}/fire', [OpenSuperMagicAgentApi::class, 'fireAgent']);
             Router::get('/{code}/models', [OpenSuperMagicAgentApi::class, 'getModels']);
             Router::get('/{code}/default-config', [OpenSuperMagicAgentApi::class, 'getDefaultConfig']);
         });

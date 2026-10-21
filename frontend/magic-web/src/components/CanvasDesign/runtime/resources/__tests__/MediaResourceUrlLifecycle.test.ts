@@ -25,6 +25,7 @@ function createEntry(overrides: Partial<MediaResourceUrlEntry> = {}): MediaResou
 
 function createLifecycle(options?: {
 	getFileInfo?: ReturnType<typeof vi.fn>
+	getAssetResourceInfo?: ReturnType<typeof vi.fn>
 	getFileResourceMeta?: ReturnType<typeof vi.fn>
 	getCachedResource?: ReturnType<typeof vi.fn>
 	refreshResource?: ReturnType<typeof vi.fn>
@@ -44,6 +45,14 @@ function createLifecycle(options?: {
 			content_length: 123,
 		})
 	const getCachedResource = options?.getCachedResource ?? vi.fn().mockResolvedValue(null)
+	const getAssetResourceInfo =
+		options?.getAssetResourceInfo ??
+		vi.fn().mockResolvedValue({
+			assetId: "asset-1",
+			mediaType: "image",
+			fileUrl: "https://assets.test/asset-1.png",
+			fileName: "asset-1.png",
+		})
 	const resolveResourceUrl =
 		options?.resolveResourceUrl ?? vi.fn().mockResolvedValue("/virtual/image.png")
 	const incrementDiagnostic = vi.fn()
@@ -65,6 +74,9 @@ function createLifecycle(options?: {
 			resolveResourceUrl,
 			removeCachedResource: vi.fn(),
 			recordVirtualResourceLoadFailure: vi.fn(),
+		},
+		assetResourceManager: {
+			getResource: getAssetResourceInfo,
 		},
 	}
 	const lifecycle = new MediaResourceUrlLifecycle({
@@ -88,11 +100,187 @@ function createLifecycle(options?: {
 		incrementDiagnostic,
 		lifecycle,
 		resolveResourceUrl,
+		getAssetResourceInfo,
 		onResourceDeleted,
 	}
 }
 
 describe("MediaResourceUrlLifecycle", () => {
+	it("resolves asset paths through the asset manager without workspace or offline lookup", async () => {
+		const { getFileInfo, getAssetResourceInfo, lifecycle, resolveResourceUrl } =
+			createLifecycle()
+		const entry = createEntry({
+			referencePath: "asset://asset-1",
+			resourceIdentity: "opaque-asset:asset://asset-1",
+		})
+
+		await expect(lifecycle.exchangeOssSrc("asset://asset-1", entry)).resolves.toBe(
+			"https://assets.test/asset-1.png",
+		)
+		expect(getAssetResourceInfo).toHaveBeenCalledWith("asset-1", {
+			forceRefresh: undefined,
+			priority: undefined,
+		})
+		expect(getFileInfo).not.toHaveBeenCalled()
+		expect(resolveResourceUrl).not.toHaveBeenCalled()
+		expect(entry).toEqual(
+			expect.objectContaining({
+				ossSrc: "https://assets.test/asset-1.png",
+				sourceUrl: "https://assets.test/asset-1.png",
+				fileName: "asset-1.png",
+			}),
+		)
+	})
+
+	it("rejects an asset when its metadata type does not match the media manager", async () => {
+		const getAssetResourceInfo = vi.fn().mockResolvedValue({
+			assetId: "asset-1",
+			mediaType: "video",
+			fileUrl: "https://assets.test/asset-1.mp4",
+		})
+		const { lifecycle } = createLifecycle({ getAssetResourceInfo })
+		const entry = createEntry({ referencePath: "asset://asset-1" })
+
+		await expect(lifecycle.exchangeOssSrc("asset://asset-1", entry)).resolves.toBeNull()
+		expect(entry.lastFailureReason).toBe("load-error")
+	})
+
+	it("does not fall back to the offline cache when an asset has no URL", async () => {
+		const getAssetResourceInfo = vi.fn().mockResolvedValue({
+			assetId: "asset-1",
+			mediaType: "image",
+			fileUrl: null,
+		})
+		const getCachedResource = vi.fn().mockResolvedValue({ url: "/virtual/stale.png" })
+		const { lifecycle } = createLifecycle({ getAssetResourceInfo, getCachedResource })
+		const entry = createEntry({ referencePath: "asset://asset-1" })
+
+		await expect(
+			lifecycle.ensureFreshOssInfo("asset://asset-1", entry, {
+				allowCachedFallback: true,
+			}),
+		).resolves.toBeNull()
+		expect(getCachedResource).not.toHaveBeenCalled()
+	})
+
+	it("bounds legacy asset retries per replacement URL", async () => {
+		const getAssetResourceInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/expired.png",
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/refreshed.png",
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/refreshed-again.png",
+			})
+		const { lifecycle } = createLifecycle({ getAssetResourceInfo })
+		const entry = createEntry({ referencePath: "asset://asset-1" })
+
+		await lifecycle.exchangeOssSrc("asset://asset-1", entry)
+		await expect(
+			lifecycle.resolveVirtualResourceFallbackOssSrc(
+				"asset://asset-1",
+				"https://assets.test/expired.png",
+				entry,
+				0,
+			),
+		).resolves.toBe("https://assets.test/refreshed.png")
+		await expect(
+			lifecycle.resolveVirtualResourceFallbackOssSrc(
+				"asset://asset-1",
+				"https://assets.test/refreshed.png",
+				entry,
+				0,
+			),
+		).resolves.toBe("https://assets.test/refreshed-again.png")
+		await expect(
+			lifecycle.resolveVirtualResourceFallbackOssSrc(
+				"asset://asset-1",
+				"https://assets.test/refreshed-again.png",
+				entry,
+				0,
+			),
+		).resolves.toBeNull()
+		expect(getAssetResourceInfo).toHaveBeenCalledTimes(4)
+	})
+
+	it("refreshes an asset inside the optional expiry safety window", async () => {
+		const getAssetResourceInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/almost-expired.png",
+				expiresAt: new Date(Date.now() + 1_000).toISOString(),
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/fresh.png",
+				expiresAt: new Date(Date.now() + 60_000).toISOString(),
+			})
+		const { lifecycle } = createLifecycle({ getAssetResourceInfo })
+		const entry = createEntry({ referencePath: "asset://asset-1" })
+
+		await lifecycle.exchangeOssSrc("asset://asset-1", entry)
+		await expect(lifecycle.ensureFreshOssInfo("asset://asset-1", entry)).resolves.toMatchObject(
+			{
+				ossSrc: "https://assets.test/fresh.png",
+			},
+		)
+		expect(getAssetResourceInfo).toHaveBeenNthCalledWith(2, "asset-1", {
+			forceRefresh: true,
+			priority: undefined,
+		})
+	})
+
+	it("force-refreshes an asset after its cached URL has expired", async () => {
+		const getAssetResourceInfo = vi
+			.fn()
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/expired.png",
+				expiresAt: new Date(Date.now() - 1_000).toISOString(),
+			})
+			.mockResolvedValueOnce({
+				assetId: "asset-1",
+				mediaType: "image",
+				fileUrl: "https://assets.test/fresh.png",
+				expiresAt: new Date(Date.now() + 60_000).toISOString(),
+			})
+		const { lifecycle } = createLifecycle({ getAssetResourceInfo })
+		const entry = createEntry({ referencePath: "asset://asset-1" })
+
+		await lifecycle.exchangeOssSrc("asset://asset-1", entry)
+		await expect(lifecycle.ensureFreshOssInfo("asset://asset-1", entry)).resolves.toMatchObject(
+			{
+				ossSrc: "https://assets.test/fresh.png",
+			},
+		)
+		expect(getAssetResourceInfo).toHaveBeenNthCalledWith(2, "asset-1", {
+			forceRefresh: true,
+			priority: undefined,
+		})
+	})
+
+	it("does not send malformed asset schemes to workspace getFileInfo", async () => {
+		const { getFileInfo, lifecycle } = createLifecycle()
+		const entry = createEntry({ referencePath: "asset://a/b" })
+
+		await expect(lifecycle.exchangeOssSrc("asset://a/b", entry)).resolves.toBeNull()
+		expect(getFileInfo).not.toHaveBeenCalled()
+		expect(entry.lastFailureReason).toBe("load-error")
+	})
+
 	it("exchanges an OSS URL and stores link metadata", async () => {
 		const { getFileInfo, lifecycle, resolveResourceUrl } = createLifecycle()
 		const entry = createEntry()

@@ -93,7 +93,12 @@ class ImageLLMAppService extends LLMAppService
         }
 
         // Use image edit logic
-        return $this->convertHighWithImageEdit((string) $modelId, $prompt, $imageConvertHighDTO, $modelGatewayDataIsolation);
+        $response = $this->convertHighWithImageEdit((string) $modelId, $prompt, $imageConvertHighDTO, $modelGatewayDataIsolation);
+        if ($response->hasError()) {
+            $response->setProviderErrorMessage(__('image_generate.image_operation_failed'));
+        }
+
+        return $response;
     }
 
     protected function createImageInput(string $input, string $label): ImageInput

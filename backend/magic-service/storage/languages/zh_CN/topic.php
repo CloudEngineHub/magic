@@ -17,4 +17,6 @@ return [
     'delete_failed' => '操作失败',
     'id_required' => '参数不能为空',
     'update_failed' => '操作失败',
+    'target_message_not_found' => '目标消息不存在或不属于该话题',
+    'no_messages_to_copy' => '没有可复制的消息',
 ];

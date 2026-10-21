@@ -655,6 +655,7 @@ function CrewEditInner({ crewId }: { crewId: string }) {
 													onExpandConversationPanel
 												}
 												hideTopicListModeIcon
+												hideTopicTypeFilter
 												onClose={onClose}
 												closeButtonRef={closeButtonRef}
 											/>

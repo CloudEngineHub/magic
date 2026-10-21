@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest"
 import type { AttachmentItem } from "../hooks/types"
 import type { ReactNode } from "react"
 import { MobileAttachmentRowIcon } from "./MobileAttachmentRowIcon"
+import { FileResourceIcon } from "./FileResourceIcon"
+import { getFilePresentationIndex, resolveFilePresentation } from "../utils/file-presentation"
 
 vi.mock("./CustomFolderMagicIcon", () => ({
 	CustomFolderMagicIcon: ({ childrenItems }: { childrenItems?: Array<unknown> }) => (
@@ -63,6 +65,63 @@ describe("MobileAttachmentRowIcon", () => {
 		}
 		render(<MobileAttachmentRowIcon item={item} attachments={[item]} />)
 		expect(screen.getByTestId("slides-template-icon")).toBeInTheDocument()
+	})
+
+	it.each([undefined, null, {}])(
+		"recognizes template structure when display_config is %s",
+		(display_config) => {
+			const item: AttachmentItem = {
+				file_id: "template-root",
+				name: "PPT-example",
+				is_directory: true,
+				display_config,
+				children: [
+					{ name: "template.json", is_directory: false },
+					{ name: "visual-spec.md", is_directory: false },
+					{ name: "theme.css", is_directory: false },
+					{ name: "slides", is_directory: true },
+				],
+			}
+			render(<MobileAttachmentRowIcon item={item} attachments={[item]} />)
+			expect(screen.getByTestId("slides-template-icon")).toBeInTheDocument()
+		},
+	)
+
+	it("uses the template icon for a desktop tree row resolved from the full snapshot", () => {
+		const item: AttachmentItem = {
+			file_id: "template-root",
+			name: "PPT-example",
+			is_directory: true,
+			children: [
+				{ name: "template.json", is_directory: false },
+				{ name: "visual-spec.md", is_directory: false },
+				{ name: "theme.css", is_directory: false },
+				{ name: "slides", is_directory: true },
+			],
+		}
+		const presentation = resolveFilePresentation(
+			{ ...item, children: undefined },
+			{
+				context: { kind: "project", projectId: "example" },
+				index: getFilePresentationIndex([item]),
+			},
+		)
+		render(<FileResourceIcon presentation={presentation} size={16} />)
+		expect(screen.getByTestId("slides-template-icon")).toBeInTheDocument()
+	})
+
+	it("keeps an incomplete template directory as an ordinary folder", () => {
+		const item: AttachmentItem = {
+			file_id: "ordinary-folder",
+			name: "PPT-example",
+			is_directory: true,
+			children: [
+				{ name: "template.json", is_directory: false },
+				{ name: "slides", is_directory: true },
+			],
+		}
+		render(<MobileAttachmentRowIcon item={item} attachments={[item]} />)
+		expect(screen.queryByTestId("slides-template-icon")).not.toBeInTheDocument()
 	})
 
 	it("uses the full attachment tree when a custom folder item is missing children", () => {

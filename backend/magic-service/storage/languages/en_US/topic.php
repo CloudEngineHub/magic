@@ -16,4 +16,6 @@ return [
     'delete_failed' => 'Operation failed',
     'id_required' => 'Value is required',
     'update_failed' => 'Operation failed',
+    'target_message_not_found' => 'The target message does not exist in this topic',
+    'no_messages_to_copy' => 'No messages available to copy',
 ];

@@ -263,7 +263,6 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 					connectionHints={connectionActionHints}
 					onConnectionAction={onConnectionActionHintAction}
 				/>
-				{canWrite && <ElementRenameOverlay />}
 				<ElementToolTopSurface />
 				{canGenerate && <ImageMessageEditor />}
 				{canGenerate && <VideoGenerateEditor />}
@@ -272,6 +271,8 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 				{canWrite && <ImageExtendPanel />}
 				{canWrite && <ImageEraserPanel />}
 				<MessageHistory />
+				{/* Keep rename after editor surfaces so its temporary z-index promotion wins ties. */}
+				{canWrite && <ElementRenameOverlay />}
 				{fullscreenMediaElement?.type === "video" ? (
 					<VideoFullscreenOverlay
 						elementId={fullscreenMediaElement.elementId}

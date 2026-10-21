@@ -1,3 +1,7 @@
+import {
+	canDeleteRecordingProjects,
+	handleRecordingProjectDeletionError,
+} from "@/services/recordSummary/projectDeletionRecordingNotice"
 import { useCallback, useEffect, useState } from "react"
 import type { RefObject } from "react"
 import { Check, Loader2 } from "lucide-react"
@@ -295,7 +299,14 @@ function AudioRecordingsDesktop({ scrollViewportRef }: AudioRecordingsDesktopPro
 	}
 
 	async function handleDeleteConfirm(projectIds: string[]) {
-		const success = await store.batchDeleteProjects(projectIds)
+		if (!canDeleteRecordingProjects(projectIds)) return
+		let success: boolean
+		try {
+			success = await store.batchDeleteProjects(projectIds)
+		} catch (error) {
+			if (handleRecordingProjectDeletionError(error)) return
+			throw error
+		}
 		if (success) {
 			toast.success(t("actions.deleteSuccess"))
 			setDeleteTargetIds(null)

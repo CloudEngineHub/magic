@@ -9,7 +9,9 @@ namespace App\Interfaces\Design\RequestForm;
 
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
 use App\Domain\Design\Entity\ValueObject\DesignGenerationType;
+use App\Domain\ModelGateway\Entity\ValueObject\VideoInputMode;
 use Hyperf\Validation\Request\FormRequest;
+use Hyperf\Validation\Rule;
 
 class GenerateVideoFormRequest extends FormRequest
 {
@@ -68,7 +70,13 @@ class GenerateVideoFormRequest extends FormRequest
             'task_id' => 'nullable|string|max:' . self::MAX_CONTEXT_ID_LENGTH,
             'task' => 'nullable|string|in:' . $taskValues . '|max:' . self::MAX_SHORT_TEXT_LENGTH,
             'input_mode' => 'nullable|string|in:' . $inputModes . '|max:' . self::MAX_OPTION_TEXT_LENGTH,
-            'prompt' => 'required_unless:generation_type,' . DesignGenerationType::CANVAS_COMPOSITION->value . '|string|max:' . self::MAX_PROMPT_LENGTH,
+            // 画布合成与样片成片都不需要提示词：前者由合成参数驱动，后者从样片任务继承。
+            'prompt' => [
+                'string',
+                'max:' . self::MAX_PROMPT_LENGTH,
+                Rule::requiredIf(fn (): bool => $this->input('generation_type') !== DesignGenerationType::CANVAS_COMPOSITION->value
+                    && $this->input('input_mode') !== VideoInputMode::DraftTask->value),
+            ],
             'file_dir' => 'required_unless:generation_type,' . DesignGenerationType::CANVAS_COMPOSITION->value . '|string|max:' . self::MAX_FILE_DIR_LENGTH,
             'file_name' => 'nullable|string|max:' . self::MAX_FILE_NAME_LENGTH,
             'inputs' => 'nullable|array',
@@ -94,6 +102,10 @@ class GenerateVideoFormRequest extends FormRequest
             'inputs.reference_audios.*.uri' => 'required|string|max:' . self::MAX_URI_LENGTH,
             'inputs.mask' => 'nullable|array',
             'inputs.mask.uri' => 'required_with:inputs.mask|string|max:' . self::MAX_URI_LENGTH,
+            // 样片成片引用：uri 为工作区相对路径，video_id 为样片业务 ID，二者必须其一（在 DTO 里校验）。
+            'inputs.draft_task' => 'nullable|array',
+            'inputs.draft_task.uri' => 'nullable|string|max:' . self::MAX_URI_LENGTH,
+            'inputs.draft_task.video_id' => 'nullable|string|max:' . self::MAX_VIDEO_ID_LENGTH,
             'composition' => 'nullable|array',
             'composition.videos' => 'nullable|array|max:' . self::MAX_VIDEO_COUNT,
             'composition.videos.*' => 'required|array',
@@ -114,6 +126,7 @@ class GenerateVideoFormRequest extends FormRequest
             'generation.negative_prompt' => 'nullable|string|max:' . self::MAX_PROMPT_LENGTH,
             'generation.generate_audio' => 'nullable|boolean',
             'generation.web_search' => 'nullable|boolean',
+            'generation.draft' => 'nullable|boolean',
             'generation.person_generation' => 'nullable|string|max:' . self::MAX_OPTION_TEXT_LENGTH,
             'generation.enhance_prompt' => 'nullable|boolean',
             'generation.compression_quality' => 'nullable|string|max:' . self::MAX_OPTION_TEXT_LENGTH,

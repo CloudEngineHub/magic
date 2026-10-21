@@ -20,6 +20,16 @@ vi.mock("@/pages/superMagic/hooks/useFeaturedModeListRefresh", () => ({
 	useFeaturedModeListRefreshOnAgentsPageMount: vi.fn(),
 }))
 vi.mock("../components/Header", () => ({ default: () => <div>workspace header</div> }))
+/**
+ * The home also mounts the new-user benefits card. It is not what this file is about — the card is
+ * told nothing about routes and holds no editor state — but its own graph reaches the admin package
+ * through the user hooks it reads, and that package imports through an alias only the app's build
+ * resolves, not this test's. Standing it in keeps the two halves of the shell under test: the bar
+ * that swaps with the route, and the editor session that is recreated with it.
+ */
+vi.mock("../../../components/NewUserBenefits", () => ({
+	default: () => <div>new user benefits</div>,
+}))
 vi.mock("../../ChatHomePage/components/ChatConversationSwitcher", () => ({
 	default: () => <div>chat header</div>,
 }))

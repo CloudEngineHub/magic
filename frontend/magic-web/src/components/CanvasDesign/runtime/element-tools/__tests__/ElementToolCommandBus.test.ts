@@ -516,6 +516,43 @@ describe("CanvasElementToolCommandBus", () => {
 		expect(listener).toHaveBeenCalledTimes(1)
 	})
 
+	it("publishes a new runtime snapshot when the points estimate changes", async () => {
+		const canvas = createCanvas()
+		const bus = new CanvasElementToolCommandBus(canvas as never)
+		const listener = vi.fn()
+		bus.subscribeElement("image-1", "content-a", listener)
+		const key = {
+			elementId: "image-1",
+			toolId: ElementToolTypeEnum.GenerationGenerateFinal,
+			contentId: "content-a",
+		}
+
+		bus.register(key, vi.fn(), {
+			available: true,
+			data: {
+				videoGenerationEstimate: { resolution: "1080P", points: null },
+			},
+		})
+		await Promise.resolve()
+		listener.mockClear()
+		bus.register(key, vi.fn(), {
+			available: true,
+			data: {
+				videoGenerationEstimate: { resolution: "1080P", points: 3190 },
+			},
+		})
+		await Promise.resolve()
+
+		expect(listener).toHaveBeenCalledTimes(1)
+		expect(
+			bus
+				.getElementToolStates("image-1", "content-a")
+				.get(ElementToolTypeEnum.GenerationGenerateFinal)?.data,
+		).toEqual({
+			videoGenerationEstimate: { resolution: "1080P", points: 3190 },
+		})
+	})
+
 	it("drops a command whose captured Content revision is stale", () => {
 		const canvas = createCanvas()
 		canvas.image.contents = [{ contentId: "content-a", src: "a.png", revision: 2 }]

@@ -12,7 +12,9 @@ export interface NoSendMarkdown {
 
 const TAG = /<\s*(\/?)\s*no_send\s*(\/?)\s*>/gi
 const FENCE = /^ {0,3}(`{3,}|~{3,})/
-const INLINE_CODE = /(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g
+// Consume the non-backtick before the closing delimiter instead of using lookbehind,
+// which prevents this module from loading in Safari versions earlier than 16.4.
+const INLINE_CODE = /(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g
 
 function protectedRanges(text: string): ProtectedRange[] {
 	const ranges: ProtectedRange[] = []

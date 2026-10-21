@@ -9,7 +9,12 @@ const supportsStaticDependenciesMock = vi.fn()
 const startDownloadMock = vi.fn()
 const warningMock = vi.fn()
 const openMessageFileMock = vi.fn()
+const publishMock = vi.fn()
+const getFileTypeMock = vi.fn()
 const useIsMobileMock = vi.hoisted(() => vi.fn(() => false))
+const canvasElementFileIndexesMock = vi.hoisted(() => ({
+	maps: new Map<string, { elementIdsByFileId: Map<string, readonly string[]> }>(),
+}))
 
 const projectFilesStoreMock = {
 	workspaceFilesList: [] as Array<Record<string, unknown>>,
@@ -19,13 +24,20 @@ const projectFilesStoreMock = {
 	filePresentationIndex: undefined,
 }
 
+const messageListContextMock = {
+	projectFilesStore: projectFilesStoreMock,
+	activeFileId: null as string | null,
+	activeDetailTabType: null as null | "file" | "playback",
+	detailPanelVisible: false,
+}
+
 vi.mock("@/pages/superMagic/utils/api", () => ({
 	getTemporaryDownloadUrl: (...args: unknown[]) => getTemporaryDownloadUrlMock(...args),
 }))
 
 vi.mock("@/pages/superMagic/utils/handleFIle", () => ({
 	downloadFileWithAnchor: (...args: unknown[]) => downloadFileWithAnchorMock(...args),
-	getFileType: vi.fn(),
+	getFileType: (...args: unknown[]) => getFileTypeMock(...args),
 }))
 
 vi.mock("@/pages/superMagic/utils/staticDependencies", () => ({
@@ -44,8 +56,25 @@ vi.mock("@/pages/superMagic/hooks/useDownloadProgress", () => ({
 }))
 
 vi.mock("@/pages/superMagic/components/MessageList/context", () => ({
-	useMessageListContext: () => ({ projectFilesStore: projectFilesStoreMock }),
+	useMessageListContext: () => messageListContextMock,
 	useMessageListProjectFilesStore: () => projectFilesStoreMock,
+}))
+
+vi.mock(
+	"@/pages/superMagic/components/Detail/contents/Design/utils/canvasElementFileIndex",
+	() => ({
+		useCanvasElementFileIndex: (designProjectId?: string | null) =>
+			designProjectId ? canvasElementFileIndexesMock.maps.get(designProjectId) : undefined,
+	}),
+)
+
+vi.mock("@/utils/pubsub", () => ({
+	default: {
+		publish: (...args: unknown[]) => publishMock(...args),
+	},
+	PubSubEvents: {
+		Super_Magic_Focus_Canvas_Element: "Super_Magic_Focus_Canvas_Element",
+	},
 }))
 
 vi.mock("@/components/base/MagicToaster/utils", () => ({
@@ -78,6 +107,24 @@ vi.mock("react-i18next", () => ({
 	initReactI18next: { type: "3rdParty", init: vi.fn() },
 }))
 
+/**
+ * The new-user guide's entry, as this block sees it. Held in a flag rather than stubbed per test
+ * because the block reads it inside the click, and because "the guide is due" is the only thing
+ * about it the block knows.
+ */
+const guideState = vi.hoisted(() => ({ deliverableRunDue: false }))
+
+vi.mock("@/pages/superMagic/components/LazyGuideTour/GuideTourManager", async (importOriginal) => {
+	const actual =
+		await importOriginal<
+			typeof import("@/pages/superMagic/components/LazyGuideTour/GuideTourManager")
+		>()
+	return {
+		...actual,
+		startHomeOnboardingDeliverableRunIfDue: () => guideState.deliverableRunDue,
+	}
+})
+
 describe("MessageAttachment", () => {
 	beforeEach(() => {
 		getTemporaryDownloadUrlMock.mockReset()
@@ -87,9 +134,21 @@ describe("MessageAttachment", () => {
 		startDownloadMock.mockReset()
 		warningMock.mockReset()
 		openMessageFileMock.mockReset()
+		publishMock.mockReset()
+		getFileTypeMock.mockReset()
+		getFileTypeMock.mockImplementation((extension: unknown) => {
+			if (extension === "png" || extension === "jpg") return "image"
+			if (extension === "mp4") return "video"
+			return "notSupport"
+		})
 		useIsMobileMock.mockReturnValue(false)
+		guideState.deliverableRunDue = false
 		projectFilesStoreMock.workspaceFilesList = []
 		projectFilesStoreMock.workspaceFileTree = []
+		messageListContextMock.activeFileId = null
+		messageListContextMock.activeDetailTabType = null
+		messageListContextMock.detailPanelVisible = false
+		canvasElementFileIndexesMock.maps.clear()
 		supportsStaticDependenciesMock.mockReturnValue(false)
 	})
 
@@ -327,5 +386,246 @@ describe("MessageAttachment", () => {
 			)
 		})
 		expect(warningMock).toHaveBeenCalledWith("share.documentDependenciesAnalysisFailed")
+	})
+
+	/**
+	 * The one click a new account's guide is allowed to take: the first attachment such an account
+	 * ever opens. The guide explains what these files are, so the file stays shut while it is on
+	 * screen and the user opens it by clicking again — the path every other test in this file
+	 * covers, since the guide is not due in them.
+	 */
+	it("spends the first click on the guide, opens nothing, and marks the block it frames", () => {
+		guideState.deliverableRunDue = true
+		const onFileClick = vi.fn()
+		const onSelectDetail = vi.fn()
+		const file = {
+			file_id: "file-1",
+			file_extension: "md",
+			file_name: "report.md",
+			filename: "report.md",
+			contentLength: 0,
+			url: "",
+		}
+
+		render(
+			<Attachment
+				attachments={[file]}
+				onSelectDetail={onSelectDetail}
+				onFileClick={onFileClick}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("handle-open-file"))
+
+		// Nothing is opened by any of the three routes a click could take.
+		expect(onFileClick).not.toHaveBeenCalled()
+		expect(onSelectDetail).not.toHaveBeenCalled()
+		expect(openMessageFileMock).not.toHaveBeenCalled()
+		// The guide's first step has nothing else to point at: this mark is the only record of which
+		// of the page's blocks the click belonged to.
+		expect(
+			document.querySelector('[data-guide-anchor="deliverable-attachment"]'),
+		).not.toBeNull()
+	})
+
+	it.each([
+		["image", "png", "element-image"],
+		["video", "mp4", "element-video"],
+	])(
+		"locates an active visible Canvas %s attachment by file id",
+		(_case, extension, elementId) => {
+			const fileId = `generated-${_case}`
+			canvasElementFileIndexesMock.maps.set("canvas-project", {
+				elementIdsByFileId: new Map([[fileId, [elementId]]]),
+			})
+			messageListContextMock.activeFileId = "canvas-project"
+			messageListContextMock.activeDetailTabType = "file"
+			messageListContextMock.detailPanelVisible = true
+
+			render(
+				<Attachment
+					attachments={[
+						{
+							file_id: fileId,
+							file_extension: extension,
+							file_name: `generated.${extension}`,
+							filename: `generated.${extension}`,
+							contentLength: 0,
+							url: "",
+							file_tag: "final",
+						},
+					]}
+					onSelectDetail={vi.fn()}
+				/>,
+			)
+
+			fireEvent.click(screen.getByRole("button", { name: "menu.locateProjectFile" }))
+
+			expect(publishMock).toHaveBeenCalledWith("Super_Magic_Focus_Canvas_Element", {
+				canvasDesignId: "canvas-project",
+				elementIds: [elementId],
+				selectElement: false,
+				animated: true,
+			})
+			expect(openMessageFileMock).not.toHaveBeenCalled()
+		},
+	)
+
+	it.each([
+		["hidden panel", "canvas-project", "file", false],
+		["non-file tab", "canvas-project", "playback", true],
+		["different Canvas", "another-project", "file", true],
+		["missing active file", null, "file", true],
+	])("hides the locate button for %s", (_case, activeFileId, tabType, panelVisible) => {
+		canvasElementFileIndexesMock.maps.set("canvas-project", {
+			elementIdsByFileId: new Map([["generated-video", ["element-video"]]]),
+		})
+		messageListContextMock.activeFileId = activeFileId
+		messageListContextMock.activeDetailTabType = tabType as "file" | "playback"
+		messageListContextMock.detailPanelVisible = panelVisible
+
+		render(
+			<Attachment
+				attachments={[
+					{
+						file_id: "generated-video",
+						file_extension: "mp4",
+						file_name: "generated.mp4",
+						filename: "generated.mp4",
+						contentLength: 0,
+						url: "",
+						file_tag: "final",
+					},
+				]}
+				onSelectDetail={vi.fn()}
+			/>,
+		)
+
+		expect(
+			screen.queryByRole("button", { name: "menu.locateProjectFile" }),
+		).not.toBeInTheDocument()
+	})
+
+	it("shows the locate button for a matching historical final attachment only", () => {
+		canvasElementFileIndexesMock.maps.set("canvas-project", {
+			elementIdsByFileId: new Map([
+				["historical-image", ["element-historical"]],
+				["processing-image", ["element-processing"]],
+			]),
+		})
+		messageListContextMock.activeFileId = "canvas-project"
+		messageListContextMock.activeDetailTabType = "file"
+		messageListContextMock.detailPanelVisible = true
+
+		render(
+			<Attachment
+				attachments={[
+					{
+						file_id: "historical-image",
+						file_extension: "png",
+						file_name: "historical.png",
+						filename: "historical.png",
+						contentLength: 0,
+						url: "",
+						file_tag: "final",
+					},
+					{
+						file_id: "processing-image",
+						file_extension: "png",
+						file_name: "processing.png",
+						filename: "processing.png",
+						contentLength: 0,
+						url: "",
+						file_tag: "process",
+					},
+				]}
+				onSelectDetail={vi.fn()}
+			/>,
+		)
+
+		expect(screen.getAllByRole("button", { name: "menu.locateProjectFile" })).toHaveLength(1)
+		fireEvent.click(screen.getAllByTestId("handle-open-file")[0])
+		expect(openMessageFileMock).toHaveBeenCalledWith(
+			expect.objectContaining({ file_id: "historical-image" }),
+		)
+	})
+
+	it("hides ambiguous or missing file matches", () => {
+		canvasElementFileIndexesMock.maps.set("canvas-project", {
+			elementIdsByFileId: new Map([["shared-file", ["element-one", "element-two"]]]),
+		})
+		messageListContextMock.activeFileId = "canvas-project"
+		messageListContextMock.activeDetailTabType = "file"
+		messageListContextMock.detailPanelVisible = true
+
+		render(
+			<Attachment
+				attachments={[
+					{
+						file_id: "shared-file",
+						file_extension: "png",
+						file_name: "shared.png",
+						filename: "shared.png",
+						contentLength: 0,
+						url: "",
+						file_tag: "final",
+					},
+					{
+						file_id: "missing-file",
+						file_extension: "png",
+						file_name: "missing.png",
+						filename: "missing.png",
+						contentLength: 0,
+						url: "",
+						file_tag: "final",
+					},
+					{
+						file_id: "",
+						file_extension: "png",
+						file_name: "anonymous.png",
+						filename: "anonymous.png",
+						contentLength: 0,
+						url: "",
+						file_tag: "final",
+					},
+				]}
+				onSelectDetail={vi.fn()}
+			/>,
+		)
+
+		expect(
+			screen.queryByRole("button", { name: "menu.locateProjectFile" }),
+		).not.toBeInTheDocument()
+	})
+
+	it("locates each batch attachment by its own file id", () => {
+		canvasElementFileIndexesMock.maps.set("canvas-project", {
+			elementIdsByFileId: new Map([
+				["generated-0", ["element-one"]],
+				["generated-1", ["element-two"]],
+			]),
+		})
+		messageListContextMock.activeFileId = "canvas-project"
+		messageListContextMock.activeDetailTabType = "file"
+		messageListContextMock.detailPanelVisible = true
+		const attachments = [0, 1].map((index) => ({
+			file_id: `generated-${index}`,
+			file_extension: "png",
+			file_name: `generated-${index}.png`,
+			filename: `generated-${index}.png`,
+			contentLength: 0,
+			url: "",
+			file_tag: "final" as const,
+		}))
+
+		render(<Attachment attachments={attachments} onSelectDetail={vi.fn()} />)
+		fireEvent.click(screen.getAllByRole("button", { name: "menu.locateProjectFile" })[1])
+
+		expect(publishMock).toHaveBeenLastCalledWith("Super_Magic_Focus_Canvas_Element", {
+			canvasDesignId: "canvas-project",
+			elementIds: ["element-two"],
+			selectElement: false,
+			animated: true,
+		})
 	})
 })

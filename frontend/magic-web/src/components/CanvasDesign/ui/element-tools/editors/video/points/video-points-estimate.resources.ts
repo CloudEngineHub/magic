@@ -76,6 +76,8 @@ export function collectVideoGenerationRequestResourcePaths(
 		}
 		addPath(paths, seen, asRecord(inputs.video)?.uri, resolveResourceReference)
 		addPath(paths, seen, asRecord(inputs.mask)?.uri, resolveResourceReference)
+		// video_id 是业务任务标识，不参与资源等待或路径解析。
+		addPath(paths, seen, asRecord(inputs.draft_task)?.uri, resolveResourceReference)
 	}
 
 	// Tolerate legacy API-shaped request objects if they are passed through this hook.

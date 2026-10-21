@@ -148,10 +148,13 @@ class FileServiceApi
         return $data['platform_path'] ?? $toPath;
     }
 
+    /**
+     * 为本次操作生成随机请求标识，并向文件服务发送请求。
+     */
     private function post(string $path, array $body, array $options): array
     {
         $headers = [
-            'request-id' => uniqid($this->sdkContainer->getConfig()->getSdkName() . '_'),
+            'request-id' => $this->sdkContainer->getConfig()->getSdkName() . '_' . bin2hex(random_bytes(16)),
         ];
         $token = $options['token'] ?? '';
         if (empty($token)) {

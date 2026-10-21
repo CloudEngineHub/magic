@@ -38,7 +38,13 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Capability\MiniMaxH3
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\MiniMaxVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\MiniMax\Transport\ApiKeyMiniMaxTransport;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VideoGenerateFactory;
-use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkSeedanceVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\Seedance20MiniFastVideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\Seedance20VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\Seedance25VideoAdapter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Adapter\VolcengineArkVideoAdapterRouter;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Capability\Seedance20GenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Capability\Seedance20MiniFastGenerationCapabilityProvider;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArk\Capability\Seedance25GenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\VolcengineArkVideoClient;
 use Hyperf\Guzzle\ClientFactory;
 use InvalidArgumentException;
@@ -219,7 +225,7 @@ class VideoGenerationConfigDomainServiceTest extends TestCase
                         )
                     )
                 ),
-                new VolcengineArkSeedanceVideoAdapter(new VolcengineArkVideoClient($this->createMock(ClientFactory::class))),
+                $this->createVolcengineArkRouter($this->createMock(ClientFactory::class)),
                 new DashScopeVideoAdapterRouter(new Wan30VideoAdapter(
                     new Wan30GenerationCapabilityProvider(),
                     $this->createMock(DashScopeTransportInterface::class),
@@ -235,6 +241,24 @@ class VideoGenerationConfigDomainServiceTest extends TestCase
                     ),
                 ),
             )
+        );
+    }
+
+    private function createVolcengineArkRouter(ClientFactory $clientFactory): VolcengineArkVideoAdapterRouter
+    {
+        return new VolcengineArkVideoAdapterRouter(
+            new Seedance20MiniFastVideoAdapter(
+                new Seedance20MiniFastGenerationCapabilityProvider(),
+                new VolcengineArkVideoClient($clientFactory),
+            ),
+            new Seedance20VideoAdapter(
+                new Seedance20GenerationCapabilityProvider(),
+                new VolcengineArkVideoClient($clientFactory),
+            ),
+            new Seedance25VideoAdapter(
+                new Seedance25GenerationCapabilityProvider(),
+                new VolcengineArkVideoClient($clientFactory),
+            ),
         );
     }
 }

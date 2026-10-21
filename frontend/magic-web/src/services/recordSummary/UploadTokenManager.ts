@@ -5,6 +5,7 @@ import { RecordingDirectories, PresetFiles } from "@/types/recordSummary"
 import {
 	defaultErrorManager,
 	isTaskEndError,
+	getBusinessErrorCode,
 	createTaskEndError,
 	type TaskEndError,
 } from "./RecordingErrorManager"
@@ -67,8 +68,8 @@ interface TokenRefreshConfig {
  * 任务结束回调
  */
 export interface TaskEndCallback {
-	/** 当任务结束时调用，参数为 sessionId */
-	(sessionId: string): void
+	/** Receive the failed request session and its original business error code. */
+	(sessionId: string, code?: number): void | Promise<void>
 }
 
 /**
@@ -299,20 +300,21 @@ export class UploadTokenManager {
 				this.clearSession(sessionId)
 
 				// Create task end error with original error code
-				const taskEndError = createTaskEndError(sessionId, taskEndErr.code)
+				const taskEndError = createTaskEndError(sessionId, getBusinessErrorCode(error))
 
-				// Notify callback if registered (legacy support)
+				// Legacy consumers and the unified manager receive the same session/code.
+				// Do not await cleanup here: it can cancel the upload requesting this token.
 				if (this.onTaskEnd) {
-					try {
-						this.onTaskEnd(sessionId)
-					} catch (callbackError) {
-						logger.error({
-							eventKey: "task_failed",
-							errorKind: "permission",
-							error: toSafeTokenError(callbackError),
-							message: "任务结束回调执行失败",
+					void Promise.resolve()
+						.then(() => this.onTaskEnd?.(sessionId, taskEndError.code))
+						.catch((callbackError) => {
+							logger.error({
+								eventKey: "task_failed",
+								errorKind: "permission",
+								error: toSafeTokenError(callbackError),
+								message: "任务结束回调执行失败",
+							})
 						})
-					}
 				}
 
 				// Notify error manager (unified error handling)
