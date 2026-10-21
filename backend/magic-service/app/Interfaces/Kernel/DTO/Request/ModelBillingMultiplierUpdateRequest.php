@@ -31,6 +31,10 @@ class ModelBillingMultiplierUpdateRequest extends FormRequest
             'model_billing_multiplier.input_price' => 'sometimes|nullable|string|max:25',
             'model_billing_multiplier.output_price' => 'sometimes|nullable|string|max:25',
             'model_billing_multiplier.usd_to_cny_rate' => 'sometimes|nullable|string|max:25',
+            'model_billing_multiplier.model_overrides' => 'sometimes|array',
+            'model_billing_multiplier.model_overrides.*' => 'required|array:model_id,multiplier',
+            'model_billing_multiplier.model_overrides.*.model_id' => 'required|string',
+            'model_billing_multiplier.model_overrides.*.multiplier' => 'required|string|max:25',
         ];
     }
 

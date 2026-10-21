@@ -138,6 +138,30 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
         $this->assertSame($result['mock-auto'], $dto->toArray()['billing_multiplier']);
     }
 
+    /** 相同底层模型的逻辑入口独立覆盖，缺价不影响手动值，关闭总开关仍隐藏。 */
+    public function testManualOverridesAreScopedToLogicalModels(): void
+    {
+        $calculator = new ModelBillingMultiplierCalculator();
+        $capabilities = [
+            'mock-auto' => ['resolved_model_id' => 'mock-leaf'],
+            'mock-max' => ['resolved_model_id' => 'mock-leaf'],
+            'mock-leaf' => ['resolved_model_id' => 'mock-leaf'],
+        ];
+        $settings = ModelBillingMultiplierSettings::fromArray([
+            'enabled' => true, 'input_price' => '10', 'output_price' => '0',
+            'model_overrides' => [
+                ['model_id' => 'mock-auto', 'multiplier' => '0.5'],
+                ['model_id' => 'mock-max', 'multiplier' => '1'],
+            ],
+        ]);
+        $groups = ['mock-leaf' => [$this->model(['input_pricing' => '2', 'output_pricing' => '8'])]];
+        $this->assertSame(['mock-auto' => 0.5, 'mock-max' => 1.0, 'mock-leaf' => 0.28], $calculator->calculate($capabilities, $groups, $settings));
+        $this->assertSame(['mock-auto' => 0.5, 'mock-max' => 1.0, 'mock-leaf' => 0.0], $calculator->calculate($capabilities, [], $settings));
+        $this->assertSame(['mock-auto' => null, 'mock-max' => null, 'mock-leaf' => null], $calculator->calculate($capabilities, $groups, $settings->withOverrides(['enabled' => false])));
+        $cleared = $calculator->calculate($capabilities, $groups, $settings->withOverrides(['model_overrides' => []]));
+        $this->assertSame($cleared['mock-auto'], $cleared['mock-leaf']);
+    }
+
     /** 复用列表状态筛选后保留全部启用绑定，排除禁用模型及服务商。 */
     public function testAvailableGroupsKeepAllEnabledBindings(): void
     {
@@ -160,7 +184,7 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
     /** 配置往返不丢金额精度，历史关闭且保留已填内容。 */
     public function testSettingsRoundTripAndDefaults(): void
     {
-        $this->assertSame(['enabled' => false, 'base_price_cny' => null, 'usd_to_cny_rate' => '7', 'currency' => 'CNY', 'input_price' => null, 'output_price' => null], (new PlatformSettings())->toArray()['model_billing_multiplier']);
+        $this->assertSame(['enabled' => false, 'base_price_cny' => null, 'usd_to_cny_rate' => '7', 'currency' => 'CNY', 'input_price' => null, 'output_price' => null, 'model_overrides' => []], (new PlatformSettings())->toArray()['model_billing_multiplier']);
         foreach ([[], ['usd_to_cny_rate' => null], ['usd_to_cny_rate' => '']] as $unconfigured) {
             $this->assertSame('7', ModelBillingMultiplierSettings::fromArray($unconfigured)->toArray()['usd_to_cny_rate']);
         }

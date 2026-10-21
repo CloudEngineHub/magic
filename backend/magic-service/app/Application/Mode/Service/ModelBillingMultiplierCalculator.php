@@ -31,6 +31,12 @@ class ModelBillingMultiplierCalculator
                 $result[$modelId] = null;
                 continue;
             }
+            // 手动值按逻辑模型独立生效，不进入真实模型自动计算缓存。
+            $override = $settings->getModelOverride((string) $modelId);
+            if ($override !== null) {
+                $result[$modelId] = (float) $override;
+                continue;
+            }
             $resolvedId = $capability['resolved_model_id'];
             if (! array_key_exists($resolvedId, $resolvedMultipliers)) {
                 $sum = '0';

@@ -120,6 +120,37 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         }
     }
 
+    /** 覆盖配置持久化往返、局部更新保留，显式空集合才清空。 */
+    public function testModelOverridesSurvivePartialUpdates(): void
+    {
+        $overrides = [['model_id' => 'mock.model', 'multiplier' => '0.500000000001']];
+        $settings = ModelBillingMultiplierSettings::fromArray(['model_overrides' => $overrides]);
+        $this->assertSame($overrides, $settings->toArray()['model_overrides']);
+        $this->assertSame('0.500000000001', $settings->withOverrides(['usd_to_cny_rate' => '6'])->getModelOverride('mock.model'));
+        $this->assertNull($settings->getModelOverride('mock-other'));
+        $this->assertSame([], $settings->withOverrides(['model_overrides' => []])->modelOverrides);
+        $this->assertSame($settings->toArray(), ModelBillingMultiplierSettings::fromArray($settings->toArray())->toArray());
+    }
+
+    /** 空、重复、负数、零及非普通十进制覆盖值整体拒绝。 */
+    public function testInvalidModelOverridesAreRejected(): void
+    {
+        $invalid = [null, 'bad', ['mock' => '1'], [['model_id' => '', 'multiplier' => '1']],
+            [['model_id' => 'mock', 'multiplier' => '1', 'extra' => true]],
+            [['model_id' => 'mock', 'multiplier' => '1'], ['model_id' => 'mock', 'multiplier' => '2']]];
+        foreach (['', '0', '-1', '1e3', 'NaN', 'Infinity', '0.0000000000001', '1000000000000', 1] as $value) {
+            $invalid[] = [['model_id' => 'mock', 'multiplier' => $value]];
+        }
+        foreach ($invalid as $overrides) {
+            try {
+                ModelBillingMultiplierSettings::fromArray(['model_overrides' => $overrides]);
+                $this->fail('Invalid overrides must be rejected');
+            } catch (InvalidArgumentException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+    }
+
     /** 原倍率计算链直接使用派生金额，不需要调整模型装配或实际扣费。 */
     public function testCalculatedBaseFlowsIntoModelMultiplier(): void
     {
@@ -199,7 +230,7 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         });
         $api = new ModelBillingMultiplierApi($service);
         $request = $this->createMock(ModelBillingMultiplierUpdateRequest::class);
-        $request->method('validated')->willReturn(['model_billing_multiplier' => ['enabled' => true, 'input_price' => '2.000000000001', 'output_price' => '3']]);
+        $request->method('validated')->willReturn(['model_billing_multiplier' => ['enabled' => true, 'input_price' => '2.000000000001', 'output_price' => '3', 'model_overrides' => [['model_id' => 'mock-auto', 'multiplier' => '0.5']]]]);
         $response = $api->update($request);
         $this->assertSame('0.02300000000001', $response['model_billing_multiplier']['base_price_cny']);
         $this->assertSame('2.000000000001', $response['model_billing_multiplier']['input_price']);
@@ -209,6 +240,7 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         $api->update($disable);
         $after = $api->show()['model_billing_multiplier'];
         $this->assertFalse($after['enabled']);
+        $this->assertSame([['model_id' => 'mock-auto', 'multiplier' => '0.5']], $after['model_overrides']);
         $this->assertSame('2.000000000001', $after['input_price']);
         $this->assertSame('0.02300000000001', $after['base_price_cny']);
     }

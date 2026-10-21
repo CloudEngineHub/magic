@@ -24,6 +24,7 @@ final readonly class ModelBillingMultiplierSettings
         public string $currency,
         public ?string $inputPrice,
         public ?string $outputPrice,
+        public array $modelOverrides,
     ) {
     }
 
@@ -52,13 +53,13 @@ final readonly class ModelBillingMultiplierSettings
         if ($enabled && $base === null) {
             throw new InvalidArgumentException('Enabled model multiplier requires a positive reference amount');
         }
-        return new self($enabled, $base, $rate, $currency, $input, $output);
+        return new self($enabled, $base, $rate, $currency, $input, $output, self::parseModelOverrides(array_key_exists('model_overrides', $data) ? $data['model_overrides'] : []));
     }
 
     /** 部分更新仅接收标准字段，不允许旧别名或派生金额参与覆盖。 */
     public function withOverrides(array $overrides): self
     {
-        $allowed = ['enabled', 'currency', 'input_price', 'output_price', 'usd_to_cny_rate'];
+        $allowed = ['enabled', 'currency', 'input_price', 'output_price', 'usd_to_cny_rate', 'model_overrides'];
         if (array_diff(array_keys($overrides), $allowed) !== []) {
             throw new InvalidArgumentException('Unsupported model multiplier configuration fields');
         }
@@ -75,7 +76,38 @@ final readonly class ModelBillingMultiplierSettings
             'currency' => $this->currency,
             'input_price' => $this->inputPrice,
             'output_price' => $this->outputPrice,
+            'model_overrides' => $this->modelOverrides,
         ];
+    }
+
+    /** 按前台逻辑标识查询覆盖，不共享动态模型解析后的真实模型标识。 */
+    public function getModelOverride(string $modelId): ?string
+    {
+        foreach ($this->modelOverrides as $override) {
+            if ($override['model_id'] === $modelId) {
+                return $override['multiplier'];
+            }
+        }
+        return null;
+    }
+
+    /** 校验完整覆盖集合，空集合表示清空，非法或重复条目拒绝整次保存。 */
+    private static function parseModelOverrides(mixed $overrides): array
+    {
+        if (! is_array($overrides) || ! array_is_list($overrides)) {
+            throw new InvalidArgumentException('Model overrides must be a list');
+        }
+        $seen = [];
+        foreach ($overrides as $override) {
+            if (! is_array($override) || count($override) !== 2
+                || ! is_string($id = $override['model_id'] ?? null) || trim($id) === '' || trim($id) !== $id
+                || ! is_string($multiplier = $override['multiplier'] ?? null)
+                || self::decimal($multiplier) === null || isset($seen[$id])) {
+                throw new InvalidArgumentException('Model overrides require unique model IDs and positive decimal multipliers');
+            }
+            $seen[$id] = true;
+        }
+        return $overrides;
     }
 
     /** 单价与汇率限制十二位精度，拒绝非法数值。 */
