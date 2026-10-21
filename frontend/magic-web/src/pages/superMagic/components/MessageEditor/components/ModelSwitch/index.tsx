@@ -104,7 +104,9 @@ export const ModelSwitch = observer(function ModelSwitch({
 		getModelDescription,
 	} = useModelSwitchLogic({
 		onModelClick: handleModelChange,
-		shouldCloseOnSelect: true,
+		// 桌面选中模型后保留面板：用户常在选中后接着调整底栏或信息卡里的思考强度。
+		// 移动端弹层仍由 useModelSwitchLogic 在选中后关闭。
+		shouldCloseOnSelect: false,
 		onBeforeOpen,
 	})
 	const previousIsOpenRef = useRef(isOpen)
