@@ -155,17 +155,69 @@ export const useDefaultModelPriceStyles = createStyles(({ css, token }) => ({
 		text-align: right;
 		font-variant-numeric: tabular-nums;
 	`,
+	// 重置按钮始终占据固定列，输入框不会随空值和已填状态横移。
 	manualControl: css`
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 48px;
+		align-items: start;
 		gap: 8px;
+		width: 100%;
+		max-width: 224px;
+		margin-left: auto;
+	`,
+	manualField: css`
+		min-width: 0;
 	`,
 	manualInput: css`
 		width: 100%;
-		max-width: 160px;
+		min-width: 0;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
+		&[aria-invalid="true"] {
+			border-color: ${token.colorError};
+			&:hover {
+				border-color: ${token.colorError};
+			}
+			&:focus {
+				border-color: ${token.colorError};
+				box-shadow: 0 0 0 2px ${token.colorErrorBg};
+			}
+		}
+	`,
+	// 提示限制在输入列内，覆盖数值单元格的右对齐和逐字断行。
+	manualError: css`
+		padding-top: 4px;
+		color: ${token.colorError};
+		font-size: 12px;
+		line-height: 20px;
+		text-align: left;
+		overflow-wrap: normal;
+		word-break: normal;
+		> span {
+			display: block;
+		}
+	`,
+	resetButton: css`
+		min-width: 0;
+		height: 36px;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		color: ${token.colorTextSecondary};
+		font-size: 12px;
+		cursor: pointer;
+		&:hover:not(:disabled) {
+			background: ${token.colorFillTertiary};
+		}
+		&:focus-visible {
+			outline: 2px solid ${token.colorPrimary};
+			outline-offset: 2px;
+		}
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0.4;
+		}
 	`,
 	ratio: css`
 		min-width: 0;

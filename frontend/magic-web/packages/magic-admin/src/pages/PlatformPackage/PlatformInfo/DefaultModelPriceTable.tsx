@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react"
+import { useId, useMemo, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Boxes, ChevronDown, Folder } from "lucide-react"
 import {
@@ -55,6 +55,7 @@ export function DefaultModelPriceTable({
 }) {
 	const { t } = useTranslation("admin/platform/info")
 	const { styles: classes } = useDefaultModelPriceStyles()
+	const fieldId = useId()
 	const snapshot = preview.data
 	const supported = snapshot ? supportsPriceCalculation(snapshot) : true
 	const groups = useMemo(() => (snapshot ? getVisibleModelPriceGroups(snapshot) : []), [snapshot])
@@ -118,6 +119,7 @@ export function DefaultModelPriceTable({
 		const dynamic = model.kind === "dynamic"
 		const manual = overrides?.find((item) => item.model_id === model.model_id)?.multiplier
 		const invalidManual = manual !== undefined && !isValidModelMultiplier(manual)
+		const errorId = `${fieldId}-${row.key}-manual-error`
 		const open = preview.expanded.get(row.key) ?? dynamic
 		const result =
 			model.kind === "normal" ? calculateModelPrice(model, base, rate, supported) : null
@@ -245,48 +247,58 @@ export function DefaultModelPriceTable({
 						{onOverridesChange ? (
 							<div>
 								<div className={classes.manualControl}>
-									<MultiplierInput
-										className={classes.manualInput}
-										aria-label={`${row.name}: ${t("modelPricePreview.manualRatio")}`}
-										aria-invalid={invalidManual}
-										inputMode="decimal"
-										placeholder={t("modelPricePreview.manualPlaceholder")}
-										value={manual ?? ""}
-										onChange={(event) =>
-											onOverridesChange(
-												updateModelMultiplierOverrides(
-													overrides,
-													model.model_id,
-													event.target.value,
-												),
-											)
-										}
-									/>
-									<span>×</span>
-									{manual !== undefined ? (
-										<button
-											type="button"
-											className={classes.button}
-											aria-label={`${row.name}: ${t("modelPricePreview.clearManual")}`}
-											onClick={() =>
+									<div className={classes.manualField}>
+										<MultiplierInput
+											className={classes.manualInput}
+											aria-label={`${row.name}: ${t("modelPricePreview.manualRatio")}`}
+											aria-invalid={invalidManual}
+											aria-describedby={invalidManual ? errorId : undefined}
+											inputMode="decimal"
+											placeholder={t("modelPricePreview.manualPlaceholder")}
+											value={manual ?? ""}
+											onChange={(event) =>
 												onOverridesChange(
 													updateModelMultiplierOverrides(
 														overrides,
 														model.model_id,
-														"",
+														event.target.value,
 													),
 												)
 											}
-										>
-											×
-										</button>
-									) : null}
+										/>
+										{invalidManual ? (
+											<p
+												id={errorId}
+												role="alert"
+												className={classes.manualError}
+											>
+												<span>
+													{t("modelPricePreview.invalidManualValue")}
+												</span>
+												<span>
+													{t("modelPricePreview.invalidManualPrecision")}
+												</span>
+											</p>
+										) : null}
+									</div>
+									<button
+										type="button"
+										className={classes.resetButton}
+										disabled={manual === undefined}
+										aria-label={`${row.name}: ${t("modelPricePreview.clearManual")}`}
+										onClick={() =>
+											onOverridesChange(
+												updateModelMultiplierOverrides(
+													overrides,
+													model.model_id,
+													"",
+												),
+											)
+										}
+									>
+										{t("modelPricePreview.resetManual")}
+									</button>
 								</div>
-								{invalidManual ? (
-									<p role="alert" className={classes.muted}>
-										{t("modelPricePreview.invalidManual")}
-									</p>
-								) : null}
 							</div>
 						) : (
 							(manual ?? "—")
