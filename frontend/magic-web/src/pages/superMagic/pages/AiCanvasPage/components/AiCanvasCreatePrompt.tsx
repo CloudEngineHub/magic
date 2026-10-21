@@ -3,20 +3,13 @@ import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
-import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
+import EditorLayout from "@/pages/superMagic/components/MainInputContainer/scenes/EditorLayout"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
-import { ScenePanelVariant } from "@/pages/superMagic/components/MainInputContainer/components/LazyScenePanel/types"
-import {
-	SceneStateProvider,
-	buildTopicInputScopeKey,
-	createSceneStateStore,
-} from "@/pages/superMagic/components/MainInputContainer/stores"
-import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
-import { ToolbarButton } from "@/pages/superMagic/components/MessageEditor/types"
+import { createSceneStateStore } from "@/pages/superMagic/components/MainInputContainer/stores"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { CreatedProject, Workspace } from "@/pages/superMagic/pages/Workspace/types"
-import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
+import { projectStore, topicStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
 import {
 	buildAiCanvasMention,
@@ -28,26 +21,24 @@ interface AiCanvasCreatePromptProps {
 	workspace: Workspace | null
 }
 
+const noopTopicModeChange = () => undefined
+
 /**
  * "Describe and create" composer of the AI canvas home.
  *
- * Send order: create the ai-canvas project → create its default canvas → bind that canvas as
- * an implicit mention → send with the design mode → open the project. If the canvas cannot be
- * created the send is aborted, so the agent never starts without a canvas path.
+ * Reuses the task home's EditorLayout locked to the design mode, so the design employee's
+ * playbook chips and their scene panels (guide, fields, inspiration) appear exactly as on the
+ * task home. Only creation is overridden:
+ * create the ai-canvas project → create its default canvas → bind that canvas as an implicit
+ * mention → send with the design mode → open the project. If the canvas cannot be created the
+ * send is aborted, so the agent never starts without a canvas path.
  */
 function AiCanvasCreatePrompt({ workspace }: AiCanvasCreatePromptProps) {
 	const { t } = useTranslation("aiCanvas")
-	// Isolated scene state: the home composer must not share playbook state with project pages.
+	// Isolated scene state: the home composer must not share playbook state with other pages.
 	const [sceneStateStore] = useState(() => createSceneStateStore())
 	// Canvas mention per created project, consumed by getImplicitMentionItems in the same send.
 	const canvasMentionsRef = useRef(new Map<string, MentionListItem>())
-
-	useEffect(() => {
-		sceneStateStore.setInputScopeKey(
-			buildTopicInputScopeKey(TopicMode.Design, "", "ai-canvas-create"),
-		)
-		return () => sceneStateStore.setInputScopeKey("")
-	}, [sceneStateStore])
 
 	useEffect(() => {
 		// The home composer always creates a new project; never reuse a previously opened one.
@@ -55,41 +46,17 @@ function AiCanvasCreatePrompt({ workspace }: AiCanvasCreatePromptProps) {
 		topicStore.setSelectedTopic(null)
 	}, [])
 
-	const editorContext = useMemo<SceneEditorContext>(
+	const editorContext = useMemo<Partial<SceneEditorContext>>(
 		() => ({
-			draftKey: createMessageEditorDraftKey({
-				selectedWorkspace: workspace,
-				selectedProject: null,
-				selectedTopic: null,
-			}),
 			selectedWorkspace: workspace,
 			selectedProject: null,
 			selectedTopic: null,
-			setSelectedWorkspace: workspaceStore.setSelectedWorkspace,
-			setSelectedProject: projectStore.setSelectedProject,
-			setSelectedTopic: topicStore.setSelectedTopic,
-			refreshProjectAfterTopicRename: true,
-			topicMode: TopicMode.Design,
+			// The AI canvas always talks to the design employee: mode switching is disabled.
+			setTopicMode: noopTopicModeChange,
+			recoverTopicMode: noopTopicModeChange,
+			showModeToggle: false,
 			modelTopicMode: TopicMode.Design,
 			placeholder: t("home.placeholder"),
-			enableMessageSendByContent: true,
-			skipInitialDraftRestore: true,
-			size: "default",
-			className: "min-h-[92px]",
-			showModeToggle: false,
-			layoutConfig: {
-				topBarLeft: [ToolbarButton.AT],
-				bottomLeft: [ToolbarButton.MODEL_SWITCH],
-				bottomRight: [
-					ToolbarButton.UPLOAD,
-					ToolbarButton.DIVIDER,
-					ToolbarButton.VOICE_INPUT,
-					ToolbarButton.SEND_BUTTON,
-				],
-			},
-			modules: {
-				upload: { confirmDelete: false },
-			},
 			createProject: async ({ workdir }): Promise<CreatedProject | null> => {
 				if (!workspace?.id) return null
 				try {
@@ -126,11 +93,13 @@ function AiCanvasCreatePrompt({ workspace }: AiCanvasCreatePromptProps) {
 	)
 
 	return (
-		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.HomePage}>
-			<div className="w-full" data-testid="ai-canvas-create-prompt">
-				<DefaultMessageEditorContainer editorContext={editorContext} />
-			</div>
-		</SceneStateProvider>
+		<div className="w-full" data-testid="ai-canvas-create-prompt">
+			<EditorLayout
+				mode={TopicMode.Design}
+				editorContext={editorContext}
+				sceneStateStore={sceneStateStore}
+			/>
+		</div>
 	)
 }
 

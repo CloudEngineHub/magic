@@ -1,25 +1,30 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import { runInAction } from "mobx"
 import { useTranslation } from "react-i18next"
 import { useMemoizedFn } from "ahooks"
-import { Loader2, Plus } from "lucide-react"
+import { LayoutGrid, Loader2, Plus } from "lucide-react"
 import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
-import ProjectItem, {
-	ViewMode,
-} from "@/pages/superMagic/components/EmptyWorkspacePanel/components/ProjectItem"
 import useProjectItemActionProps from "@/pages/superMagic/components/EmptyWorkspacePanel/hooks/useProjectItemActionProps"
-import type { Workspace } from "@/pages/superMagic/pages/Workspace/types"
+import type { ProjectListItem, Workspace } from "@/pages/superMagic/pages/Workspace/types"
 import { projectStore } from "@/pages/superMagic/stores/core"
 import SuperMagicService from "@/pages/superMagic/services"
 import { createAiCanvasDocument } from "@/pages/superMagic/pages/TopicPage/utils/aiCanvas"
 import { preloadTopicPage } from "@/pages/superMagic/pages/TopicPage/utils"
 import AiCanvasCreatePrompt from "./components/AiCanvasCreatePrompt"
+import AiCanvasHero from "./components/AiCanvasHero"
+import AiCanvasInspirations from "./components/AiCanvasInspirations"
+import AiCanvasProjectCard from "./components/AiCanvasProjectCard"
+import { useDesignInspirations } from "./hooks/useDesignInspirations"
+import { useCanvasCovers } from "./hooks/useCanvasCovers"
+import { buildBoardArtworks, buildShowcaseInspirationGroups } from "./utils/boardArtworks"
 
 const PAGE_SIZE = 60
+// Stable empty list so memoized derivations do not recompute before the workspace loads.
+const NO_PROJECTS: ProjectListItem[] = []
 
 /**
  * AI canvas home: the project page of the system-managed ai-canvas workspace.
@@ -40,8 +45,25 @@ function AiCanvasPage() {
 	// Latest list request wins; older responses (e.g. a background refresh) are dropped.
 	const listRequestRef = useRef<AbortController | null>(null)
 
-	const projects = workspace ? projectStore.getProjectsByWorkspace(workspace.id) : []
+	const projects = workspace ? projectStore.getProjectsByWorkspace(workspace.id) : NO_PROJECTS
 	const actions = useProjectItemActionProps({ selectedWorkspace: workspace })
+	const viewportRef = useRef<HTMLDivElement>(null)
+	const { groups: configuredInspirationGroups } = useDesignInspirations()
+	const covers = useCanvasCovers(projects)
+	// Configured design inspirations win; the built-in showcase only fills an empty wall.
+	const inspirationGroups = useMemo(
+		() =>
+			configuredInspirationGroups.length > 0
+				? configuredInspirationGroups
+				: buildShowcaseInspirationGroups(t("home.showcaseGroup")),
+		[configuredInspirationGroups, t],
+	)
+	// Static: the hero board only shows the built-in showcase (placeholders until it exists).
+	const boardArtworks = useMemo(() => buildBoardArtworks(), [])
+	// After picking an inspiration the prompt lands in the composer at the top of the page.
+	const scrollToComposer = useMemoizedFn(() => {
+		viewportRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+	})
 
 	const loadWorkspace = useMemoizedFn(async () => {
 		setWorkspaceError(false)
@@ -163,93 +185,128 @@ function AiCanvasPage() {
 	const isInitialLoading = !workspace || (isListLoading && projects.length === 0)
 
 	return (
-		<ScrollArea className="h-full w-full" data-testid="ai-canvas-page">
-			<div className="mx-auto flex w-full max-w-[1040px] flex-col gap-6 px-4 py-10">
-				<header className="flex items-start justify-between gap-4">
-					<div className="flex flex-col gap-1">
-						<h1 className="text-2xl font-semibold text-foreground">
-							{t("home.title")}
-						</h1>
-						<p className="text-sm text-muted-foreground">{t("home.subtitle")}</p>
-					</div>
-					<Button
-						onClick={handleCreateCanvas}
-						disabled={!workspace || isCreating}
-						data-testid="ai-canvas-create-button"
-					>
-						{isCreating ? (
-							<Loader2 size={16} className="animate-spin" aria-hidden="true" />
-						) : (
-							<Plus size={16} aria-hidden="true" />
-						)}
-						{t("home.newCanvas")}
-					</Button>
-				</header>
-
-				<AiCanvasCreatePrompt workspace={workspace} />
-
-				<section className="flex flex-col gap-3">
-					<h2 className="text-base font-medium text-foreground">
-						{t("home.myCanvases")}
-					</h2>
-					{isInitialLoading ? (
-						<div className="flex h-32 items-center justify-center text-muted-foreground">
-							<Loader2 size={16} className="animate-spin" aria-hidden="true" />
-						</div>
-					) : listError && projects.length === 0 ? (
-						<div className="flex h-32 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-							<span>{t("home.loadFailed")}</span>
+		// Same rounded page frame as the micro-app home: an 8px inset card that fills the main area,
+		// with the hero and the sections below sharing one surface.
+		<ScrollArea
+			className="m-2 h-[calc(100%_-_16px)] w-[calc(100%_-_16px)] overflow-hidden rounded-2xl border border-border/70 bg-background shadow-sm"
+			viewportRef={viewportRef}
+			data-testid="ai-canvas-page"
+		>
+			{/* The hero is full-bleed; the sections below keep a centered reading width. */}
+			<div className="flex w-full flex-col">
+				<AiCanvasHero
+					artworks={boardArtworks}
+					footer={
+						<div className="flex flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground">
+							<span>{t("home.or")}</span>
 							<Button
 								variant="outline"
 								size="sm"
-								onClick={() => workspace && loadProjects(workspace, 1)}
+								className="rounded-full bg-background/80 backdrop-blur"
+								onClick={handleCreateCanvas}
+								disabled={!workspace || isCreating}
+								data-testid="ai-canvas-create-button"
 							>
-								{t("home.retry")}
+								{isCreating ? (
+									<Loader2
+										size={16}
+										className="animate-spin"
+										aria-hidden="true"
+									/>
+								) : (
+									<Plus size={16} aria-hidden="true" />
+								)}
+								{t("home.newBlankCanvas")}
 							</Button>
 						</div>
-					) : projects.length === 0 ? (
-						<div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-							{t("home.empty")}
-						</div>
-					) : (
-						<>
-							{/* Same 4-column card grid as the workspace project page. */}
-							<div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 lg:grid-cols-4">
-								{projects.map((project, index) => (
-									<ProjectItem
-										key={project.id}
-										index={index}
-										project={project}
-										viewMode={ViewMode.GRID}
-										onClick={actions.handleProjectClick}
-										onRenameProject={actions.handleRenameProject}
-										onDeleteProject={actions.handleDeleteProjectConfirm}
-										onMouseEnter={preloadTopicPage}
-									/>
-								))}
+					}
+				>
+					<AiCanvasCreatePrompt workspace={workspace} />
+				</AiCanvasHero>
+
+				<div className="mx-auto flex w-full max-w-[1200px] flex-col gap-12 px-6 pb-16 pt-8">
+					<section className="flex flex-col gap-4">
+						<div className="flex items-end justify-between gap-3">
+							<div className="flex flex-col gap-1">
+								<h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+									<LayoutGrid size={16} aria-hidden="true" />
+									{t("home.myCanvases")}
+								</h2>
+								<p className="text-sm text-muted-foreground">
+									{t("home.myCanvasesSubtitle")}
+								</p>
 							</div>
-							{hasMore ? (
+						</div>
+						{isInitialLoading ? (
+							<div className="flex h-32 items-center justify-center text-muted-foreground">
+								<Loader2 size={16} className="animate-spin" aria-hidden="true" />
+							</div>
+						) : listError && projects.length === 0 ? (
+							<div className="flex h-32 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+								<span>{t("home.loadFailed")}</span>
 								<Button
-									variant="ghost"
-									className="self-center"
-									disabled={isListLoading}
-									onClick={() =>
-										workspace && loadProjects(workspace, pageRef.current + 1)
-									}
+									variant="outline"
+									size="sm"
+									onClick={() => workspace && loadProjects(workspace, 1)}
 								>
-									{isListLoading ? (
-										<Loader2
-											size={16}
-											className="animate-spin"
-											aria-hidden="true"
-										/>
-									) : null}
-									{t("home.loadMore")}
+									{t("home.retry")}
 								</Button>
-							) : null}
-						</>
-					)}
-				</section>
+							</div>
+						) : projects.length === 0 ? (
+							// Empty state doubles as the first creation entry point below the fold.
+							<button
+								type="button"
+								onClick={handleCreateCanvas}
+								disabled={!workspace || isCreating}
+								className="flex h-40 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-muted/30 text-sm text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							>
+								<Plus size={16} aria-hidden="true" />
+								{t("home.empty")}
+							</button>
+						) : (
+							<>
+								<div className="grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
+									{projects.map((project) => (
+										<AiCanvasProjectCard
+											key={project.id}
+											project={project}
+											covers={covers[project.id]}
+											onOpen={actions.handleProjectClick}
+											onRename={actions.handleRenameProject}
+											onDelete={actions.handleDeleteProjectConfirm}
+											onHover={preloadTopicPage}
+										/>
+									))}
+								</div>
+								{hasMore ? (
+									<Button
+										variant="ghost"
+										className="self-center"
+										disabled={isListLoading}
+										onClick={() =>
+											workspace &&
+											loadProjects(workspace, pageRef.current + 1)
+										}
+									>
+										{isListLoading ? (
+											<Loader2
+												size={16}
+												className="animate-spin"
+												aria-hidden="true"
+											/>
+										) : null}
+										{t("home.loadMore")}
+									</Button>
+								) : null}
+							</>
+						)}
+					</section>
+
+					<AiCanvasInspirations
+						groups={inspirationGroups}
+						onPromptApplied={scrollToComposer}
+					/>
+				</div>
 			</div>
 			{actions.projectModals}
 		</ScrollArea>
