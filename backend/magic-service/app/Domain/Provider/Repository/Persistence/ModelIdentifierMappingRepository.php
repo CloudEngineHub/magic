@@ -17,7 +17,6 @@ use App\Infrastructure\Core\AbstractRepository;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\Database\Model\Builder as ModelBuilder;
-use Hyperf\Database\Query\Builder as QueryBuilder;
 use Hyperf\DbConnection\Db;
 
 class ModelIdentifierMappingRepository extends AbstractRepository implements ModelIdentifierMappingRepositoryInterface
@@ -167,114 +166,6 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
             $map[(string) $row->source_model_id] = (string) $row->target_model_id;
         }
         return $map;
-    }
-
-    /**
-     * 查询源模型候选项，保留禁用模型供旧标识迁移使用。
-     */
-    public function querySourceOptions(ProviderDataIsolation $dataIsolation, string $keyword, int $limit = 50): array
-    {
-        // 源模型可以已经停用，候选列表不按状态过滤；已删除模型仍可手工输入标识。
-        $query = $this->buildModelOptionsQuery($dataIsolation, $keyword, $limit, null, null, 'model_id', true);
-        $options = [];
-        foreach ($query->get()->all() as $row) {
-            $modelId = (string) $this->getModelOptionValue($row, 'model_id');
-            $options[$modelId] ??= $this->formatModelOption($row, true);
-        }
-        return array_values($options);
-    }
-
-    /**
-     * 查询当前可用且不是动态模型的目标候选项。
-     */
-    public function queryTargetOptions(ProviderDataIsolation $dataIsolation, string $keyword, int $limit = 50): array
-    {
-        $query = $this->buildModelOptionsQuery(
-            $dataIsolation,
-            $keyword,
-            $limit,
-            Status::Enabled->value,
-            'DYNAMIC',
-            'name',
-            false,
-            true,
-        );
-        $options = [];
-        foreach ($query->get()->all() as $row) {
-            $options[(string) $this->getModelOptionValue($row, 'model_id')] = $this->formatModelOption($row);
-        }
-        return array_values($options);
-    }
-
-    /**
-     * 构建模型候选项的公共查询条件。
-     */
-    private function buildModelOptionsQuery(
-        ProviderDataIsolation $dataIsolation,
-        string $keyword,
-        int $limit,
-        ?int $status,
-        ?string $excludedType,
-        string $orderBy,
-        bool $distinct = false,
-        bool $aggregateByModelId = false,
-    ): QueryBuilder {
-        $query = Db::table('service_provider_models')
-            ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
-            ->whereNull('deleted_at');
-        if ($aggregateByModelId) {
-            $query->selectRaw('model_id, MAX(name) as name, MAX(icon) as icon, MAX(status) as status, MAX(type) as type')
-                ->groupBy('model_id')
-                ->whereIn('service_provider_config_id', static function (QueryBuilder $builder) use ($dataIsolation): void {
-                    $builder->from('service_provider_configs')
-                        ->select('id')
-                        ->where('organization_code', $dataIsolation->getCurrentOrganizationCode())
-                        ->where('status', Status::Enabled->value)
-                        ->whereNull('deleted_at');
-                });
-        } else {
-            $query->select('model_id', 'name', 'icon', 'status', 'type');
-        }
-        $query->orderBy($orderBy)->limit($limit);
-        if ($status !== null) {
-            $query->where('status', $status);
-        }
-        if ($excludedType !== null) {
-            $query->where('type', '<>', $excludedType);
-        }
-        if ($distinct) {
-            $query->distinct();
-        }
-        if ($keyword !== '') {
-            $query->where(static function (QueryBuilder $builder) use ($keyword): void {
-                $like = '%' . $keyword . '%';
-                $builder->where('model_id', 'like', $like)->orWhere('name', 'like', $like);
-            });
-        }
-        return $query;
-    }
-
-    /**
-     * 将模型查询记录转换为候选项数据。
-     */
-    private function formatModelOption(object|array $row, bool $fallbackNameToModelId = false): array
-    {
-        $modelId = (string) $this->getModelOptionValue($row, 'model_id');
-        return [
-            'model_id' => $modelId,
-            'name' => $fallbackNameToModelId ? (string) ($this->getModelOptionValue($row, 'name') ?: $modelId) : (string) $this->getModelOptionValue($row, 'name'),
-            'icon' => (string) $this->getModelOptionValue($row, 'icon'),
-            'status' => (int) $this->getModelOptionValue($row, 'status'),
-            'type' => (string) $this->getModelOptionValue($row, 'type'),
-        ];
-    }
-
-    /**
-     * 读取模型候选项字段，兼容查询构造器返回的数组和对象。
-     */
-    private function getModelOptionValue(object|array $row, string $key): mixed
-    {
-        return is_array($row) ? ($row[$key] ?? null) : ($row->{$key} ?? null);
     }
 
     /**

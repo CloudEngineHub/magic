@@ -414,6 +414,49 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
     }
 
     /**
+     * 查询全部可用模型标识候选项，并按模型标识聚合。
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function queryAvailableModelOptions(ProviderDataIsolation $dataIsolation, string $keyword): array
+    {
+        $enabledConfigQuery = $this->createBuilder($dataIsolation, ProviderConfigModel::query())
+            ->where('status', Status::Enabled->value)
+            ->whereNull('deleted_at')
+            ->select('id');
+
+        $builder = $this->createBuilder($dataIsolation, ProviderModelModel::query())
+            ->whereIn('service_provider_config_id', $enabledConfigQuery)
+            ->where('status', Status::Enabled->value)
+            ->whereNull('deleted_at')
+            ->selectRaw('model_id, MAX(name) as name, MAX(icon) as icon, MAX(status) as status, MAX(type) as type')
+            ->groupBy('model_id')
+            ->orderBy('name')
+            ->orderBy('model_id');
+        if ($keyword !== '') {
+            $like = '%' . addcslashes($keyword, '%_') . '%';
+            $builder->where(static function (Builder $builder) use ($like): void {
+                $builder->where('model_id', 'like', $like)
+                    ->orWhere('name', 'like', $like);
+            });
+        }
+
+        $options = [];
+        foreach ($builder->get() as $row) {
+            $modelId = (string) $row->model_id;
+            $options[$modelId] = [
+                'model_id' => $modelId,
+                'name' => (string) ($row->name ?: $modelId),
+                'icon' => (string) $row->icon,
+                'status' => (int) $row->status,
+                'type' => (string) $row->type,
+            ];
+        }
+
+        return array_values($options);
+    }
+
+    /**
      * 根据ID查询模型（不限制组织）.
      */
     public function getModelByIdWithoutOrgFilter(string $id): ?ProviderModelEntity

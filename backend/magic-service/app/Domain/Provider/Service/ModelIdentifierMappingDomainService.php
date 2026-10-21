@@ -23,7 +23,7 @@ use App\Infrastructure\Util\OfficialOrganizationUtil;
 class ModelIdentifierMappingDomainService
 {
     /**
-     * 注入映射仓储和模型仓储，集中承载映射业务规则。
+     * 注入映射仓储和模型仓储，集中编排映射业务规则。
      */
     public function __construct(
         private readonly ModelIdentifierMappingRepositoryInterface $mappingRepository,
@@ -146,21 +146,12 @@ class ModelIdentifierMappingDomainService
     }
 
     /**
-     * 查询源模型候选项，保留禁用模型以支持迁移旧标识。
+     * 查询官方组织下全部可用模型候选项，供源模型和目标模型共用。
      */
-    public function sourceOptions(ProviderDataIsolation $dataIsolation, string $keyword = ''): array
+    public function modelOptions(ProviderDataIsolation $dataIsolation, string $keyword = ''): array
     {
         $this->assertOfficialOrganization($dataIsolation);
-        return $this->mappingRepository->querySourceOptions($dataIsolation, trim($keyword));
-    }
-
-    /**
-     * 查询可作为目标的启用普通模型候选项。
-     */
-    public function targetOptions(ProviderDataIsolation $dataIsolation, string $keyword = ''): array
-    {
-        $this->assertOfficialOrganization($dataIsolation);
-        return $this->mappingRepository->queryTargetOptions($dataIsolation, trim($keyword));
+        return $this->providerModelRepository->queryAvailableModelOptions($dataIsolation, trim($keyword));
     }
 
     /**

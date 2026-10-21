@@ -91,6 +91,13 @@ interface ProviderModelRepositoryInterface
     public function getAvailableByModelIds(ProviderDataIsolation $dataIsolation, array $modelIds): array;
 
     /**
+     * 查询全部可用模型标识候选项，并按模型标识聚合。
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function queryAvailableModelOptions(ProviderDataIsolation $dataIsolation, string $keyword): array;
+
+    /**
      * @return array{total: int, list: ProviderModelEntity[]}
      */
     public function queries(ProviderDataIsolation $dataIsolation, ProviderModelQuery $query, Page $page): array;

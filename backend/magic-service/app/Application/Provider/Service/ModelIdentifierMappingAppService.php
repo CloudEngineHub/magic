@@ -95,19 +95,11 @@ class ModelIdentifierMappingAppService
     }
 
     /**
-     * 查询源模型候选项。
+     * 查询源模型和目标模型共用的候选项。
      */
-    public function sourceOptions(MagicUserAuthorization $authorization, string $keyword = ''): array
+    public function modelOptions(MagicUserAuthorization $authorization, string $keyword = ''): array
     {
-        return $this->domainService->sourceOptions($this->createDataIsolation($authorization), $keyword);
-    }
-
-    /**
-     * 查询目标模型候选项。
-     */
-    public function targetOptions(MagicUserAuthorization $authorization, string $keyword = ''): array
-    {
-        return $this->domainService->targetOptions($this->createDataIsolation($authorization), $keyword);
+        return $this->domainService->modelOptions($this->createDataIsolation($authorization), $keyword);
     }
 
     /**

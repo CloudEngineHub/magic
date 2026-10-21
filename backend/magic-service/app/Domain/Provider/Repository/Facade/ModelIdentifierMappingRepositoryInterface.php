@@ -43,16 +43,6 @@ interface ModelIdentifierMappingRepositoryInterface
     public function getActiveMappingMap(ProviderDataIsolation $dataIsolation): array;
 
     /**
-     * @return array<int, array<string, mixed>>
-     */
-    public function querySourceOptions(ProviderDataIsolation $dataIsolation, string $keyword, int $limit = 50): array;
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    public function queryTargetOptions(ProviderDataIsolation $dataIsolation, string $keyword, int $limit = 50): array;
-
-    /**
      * 保存一个按源模型标识拆分的映射组。
      */
     public function saveGroup(ProviderDataIsolation $dataIsolation, string $groupId, string $groupName, string $targetModelId, array $sourceModelIds): array;

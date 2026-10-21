@@ -110,7 +110,7 @@ class ModelIdentifierMappingApi extends AbstractApi
     #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL, MagicOperationEnum::QUERY)]
     public function sourceOptions(QueryModelIdentifierMappingOptionsRequest $request): array
     {
-        return $this->appService->sourceOptions($this->getAuthorization(), $request->getKeyword());
+        return $this->appService->modelOptions($this->getAuthorization(), $request->getKeyword());
     }
 
     /**
@@ -119,6 +119,6 @@ class ModelIdentifierMappingApi extends AbstractApi
     #[CheckPermission(MagicResourceEnum::PLATFORM_MODEL, MagicOperationEnum::QUERY)]
     public function targetOptions(QueryModelIdentifierMappingOptionsRequest $request): array
     {
-        return $this->appService->targetOptions($this->getAuthorization(), $request->getKeyword());
+        return $this->appService->modelOptions($this->getAuthorization(), $request->getKeyword());
     }
 }
