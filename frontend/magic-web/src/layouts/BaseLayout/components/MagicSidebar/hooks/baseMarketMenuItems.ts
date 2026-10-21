@@ -21,7 +21,7 @@ export const BASE_MARKET_MENU_ITEMS: SidebarMarketMenuItem[] = [
 	{
 		titleKey: "sidebar:aiCanvas.title",
 		routeName: RouteName.AiCanvas,
-		activeRouteNames: [RouteName.AiCanvas],
+		activeRouteNames: [RouteName.AiCanvas, RouteName.AiCanvasProjectState],
 		testId: "sidebar-content-ai-canvas-button",
 		Icon: Palette,
 	},

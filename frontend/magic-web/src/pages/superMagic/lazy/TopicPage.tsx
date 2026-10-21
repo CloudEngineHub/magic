@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { observer } from "mobx-react-lite"
 import { projectStore, topicStore } from "../stores/core"
 import superMagicService from "../services"
+import { useAiCanvasRouteRedirect } from "../hooks/useAiCanvasRouteRedirect"
 
 // 懒加载桌面端与移动端对应的 TopicPage 组件
 const TopicPageDesktop = lazy(() => import("@/pages/superMagic/pages/TopicPage/index.desktop"))
@@ -25,6 +26,9 @@ const TopicPage = observer(function TopicPage() {
 	const isMobile = useIsMobile()
 	const { projectId, topicId } = useParams()
 	const [hasRestoreFailed, setHasRestoreFailed] = useState(false)
+
+	// Old `/super/:projectId/:topicId` links of AI canvas projects move to the canvas address.
+	useAiCanvasRouteRedirect()
 	const selectedTopic = topicStore.selectedTopic
 	const needsTopicDetailRestore =
 		selectedTopic?.id !== topicId ||
